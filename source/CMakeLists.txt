@@ -7,7 +7,14 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_library(${PROJECT_NAME}
   ECS3D.cpp
-  ECS3D.h)
+  ECS3D.h
+  objects/ObjectManager.cpp
+  objects/ObjectManager.h
+  objects/Object.cpp
+  objects/Object.h
+  objects/components/Component.cpp
+  objects/components/Component.h
+)
 
 # Declare VulkanEngine as a dependency
 FetchContent_Declare(

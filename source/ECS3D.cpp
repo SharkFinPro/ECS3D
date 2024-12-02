@@ -1,8 +1,12 @@
 #include "ECS3D.h"
 
+#include "objects/ObjectManager.h"
+
 ECS3D::ECS3D()
+  : previousTime(std::chrono::steady_clock::now())
 {
   initRenderer();
+  objectManager = std::make_shared<ObjectManager>();
 }
 
 bool ECS3D::isActive() const
@@ -12,6 +16,12 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
+  const auto currentTime = std::chrono::steady_clock::now();
+  const float dt = std::chrono::duration<float>(currentTime - previousTime).count();
+  previousTime = currentTime;
+
+  objectManager->update(dt);
+
   renderer->render();
 }
 
