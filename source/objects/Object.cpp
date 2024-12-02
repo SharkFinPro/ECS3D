@@ -2,7 +2,12 @@
 
 #include "components/Component.h"
 
+Object::Object()
+  : manager(nullptr)
+{}
+
 Object::Object(const std::vector<std::shared_ptr<Component>>& components)
+  : manager(nullptr)
 {
   for (const auto& component : components)
   {

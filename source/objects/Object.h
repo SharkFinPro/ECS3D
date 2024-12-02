@@ -12,6 +12,7 @@ class Component;
 
 class Object {
 public:
+  Object();
   explicit Object(const std::vector<std::shared_ptr<Component>>& components);
 
   void addComponent(std::shared_ptr<Component> component);
