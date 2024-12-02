@@ -7,7 +7,7 @@ enum class ComponentType;
 
 class Component {
 public:
-  Component(ComponentType type);
+  explicit Component(ComponentType type);
   virtual ~Component() = default;
 
   [[nodiscard]] ComponentType getType() const;
