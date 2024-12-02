@@ -1,24 +1,31 @@
 cmake_minimum_required(VERSION 3.29)
-include(FetchContent)
+
+option(ECS3D_BUILD_TESTS "Enable building tests for ECS3D" OFF)
 
 project(ECS3D)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
-add_executable(ECS3D main.cpp)
+if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+  set(ECS3D_BUILD_TESTS ON)
 
-# Declare VulkanEngine as a dependency
-FetchContent_Declare(
-  VulkanEngine
-  GIT_REPOSITORY https://github.com/SharkFinPro/VulkanRenderer.git
-  GIT_TAG main
-)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
+endif()
 
-# Make VulkanEngine available to your project
-FetchContent_MakeAvailable(VulkanEngine)
+if (NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+endif()
 
-# Link VulkanEngine to your target
-target_link_libraries(${PROJECT_NAME} PRIVATE VulkanEngine)
+if (MSVC)
+  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
+endif()
 
-# Include VulkanEngine headers
-target_include_directories(${PROJECT_NAME} PRIVATE ${VulkanEngine_SOURCE_DIR}/include)
+add_subdirectory(source)
+
+if (ECS3D_BUILD_TESTS)
+  include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
+
+  add_subdirectory(tests)
+endif()
