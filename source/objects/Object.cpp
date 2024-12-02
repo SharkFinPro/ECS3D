@@ -1,5 +1,7 @@
 #include "Object.h"
 
+#include "components/Component.h"
+
 Object::Object(const std::vector<std::shared_ptr<Component>>& components)
 {
   for (const auto& component : components)
@@ -10,7 +12,8 @@ Object::Object(const std::vector<std::shared_ptr<Component>>& components)
 
 void Object::addComponent(std::shared_ptr<Component> component)
 {
-  // TODO: Insert component into components
+  component->setOwner(this);
+  components.insert({ component->getType(), std::move(component) });
 }
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
@@ -25,17 +28,17 @@ std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 
 void Object::variableUpdate(const float dt)
 {
-  for (const auto& component : components)
+  for (const auto& [componentType, component] : components)
   {
-    // TODO: Execute component variableUpdate
+    component->variableUpdate(dt);
   }
 }
 
 void Object::fixedUpdate(const float dt)
 {
-  for (const auto& component : components)
+  for (const auto& [componentType, component] : components)
   {
-    // TODO: Execute component fixedUpdate
+    component->fixedUpdate(dt);
   }
 }
 
