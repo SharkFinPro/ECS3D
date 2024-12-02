@@ -15,6 +15,9 @@ public:
 private:
   std::vector<std::shared_ptr<Object>> objects;
 
+  const float fixedUpdateDt;
+  float timeAccumulator;
+
   void variableUpdate(float dt);
   void fixedUpdate(float dt);
 };
