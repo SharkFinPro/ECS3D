@@ -1,5 +1,7 @@
 #include "ObjectManager.h"
 
+#include "Object.h"
+
 ObjectManager::ObjectManager()
   : fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
 {}
@@ -14,7 +16,7 @@ void ObjectManager::variableUpdate(const float dt)
 {
   for (const auto& object : objects)
   {
-    // TODO: execute object variableUpdate
+    object->variableUpdate(dt);
   }
 }
 
@@ -26,7 +28,7 @@ void ObjectManager::fixedUpdate(const float dt)
   {
     for (const auto& object : objects)
     {
-      // TODO: execute object fixedUpdate
+      object->fixedUpdate(dt);
     }
 
     timeAccumulator -= fixedUpdateDt;
