@@ -22,6 +22,12 @@ ECS3D* ObjectManager::getECS() const
   return ecs;
 }
 
+void ObjectManager::addObject(std::shared_ptr<Object> object)
+{
+  object->setManager(this);
+  objects.push_back(std::move(object));
+}
+
 void ObjectManager::variableUpdate(const float dt)
 {
   for (const auto& object : objects)

@@ -30,6 +30,11 @@ std::shared_ptr<VulkanEngine> ECS3D::getRenderer() const
   return renderer;
 }
 
+std::shared_ptr<ObjectManager> ECS3D::getObjectManager() const
+{
+  return objectManager;
+}
+
 void ECS3D::initRenderer()
 {
   constexpr VulkanEngineOptions vulkanEngineOptions = {

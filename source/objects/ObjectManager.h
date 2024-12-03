@@ -16,6 +16,8 @@ public:
   void setECS(ECS3D* ecs);
   [[nodiscard]] ECS3D* getECS() const;
 
+  void addObject(std::shared_ptr<Object> object);
+
 private:
   ECS3D* ecs;
 
