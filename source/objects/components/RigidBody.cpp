@@ -7,7 +7,7 @@ RigidBody::RigidBody()
   : Component(ComponentType::rigidBody), velocity(0, 0, 0), doGravity(true), gravity(0, -9.81f, 0)
 {}
 
-void RigidBody::fixedUpdate(float dt)
+void RigidBody::fixedUpdate(const float dt)
 {
   if (transform_ptr.expired())
   {
