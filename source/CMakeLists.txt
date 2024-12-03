@@ -14,6 +14,9 @@ add_library(${PROJECT_NAME}
   objects/Object.h
   objects/components/Component.cpp
   objects/components/Component.h
+  objects/components/Components.h
+  objects/components/Transform.cpp
+  objects/components/Transform.h
 )
 
 # Declare VulkanEngine as a dependency

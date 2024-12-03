@@ -3,7 +3,9 @@
 
 class Object;
 
-enum class ComponentType;
+enum class ComponentType {
+  transform
+};
 
 class Component {
 public:
