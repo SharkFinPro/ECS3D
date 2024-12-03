@@ -6,7 +6,7 @@
 
 #include <glm/glm.hpp>
 
-bool sameDirection(glm::vec3 a, glm::vec3 b)
+bool sameDirection(const glm::vec3& a, const glm::vec3& b)
 {
   return dot(a, b) > 0;
 }
