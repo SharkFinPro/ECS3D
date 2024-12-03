@@ -5,6 +5,7 @@
 #include <memory>
 
 class Object;
+class ECS3D;
 
 class ObjectManager {
 public:
@@ -12,7 +13,12 @@ public:
 
   void update(float dt);
 
+  void setECS(ECS3D* ecs);
+  [[nodiscard]] ECS3D* getECS() const;
+
 private:
+  ECS3D* ecs;
+
   std::vector<std::shared_ptr<Object>> objects;
 
   const float fixedUpdateDt;

@@ -6,7 +6,7 @@ ECS3D::ECS3D()
   : previousTime(std::chrono::steady_clock::now())
 {
   initRenderer();
-  objectManager = std::make_shared<ObjectManager>();
+  initObjectManager();
 }
 
 bool ECS3D::isActive() const
@@ -25,6 +25,11 @@ void ECS3D::update()
   renderer->render();
 }
 
+std::shared_ptr<VulkanEngine> ECS3D::getRenderer() const
+{
+  return renderer;
+}
+
 void ECS3D::initRenderer()
 {
   constexpr VulkanEngineOptions vulkanEngineOptions = {
@@ -34,4 +39,10 @@ void ECS3D::initRenderer()
   };
 
   renderer = std::make_shared<VulkanEngine>(vulkanEngineOptions);
+}
+
+void ECS3D::initObjectManager()
+{
+  objectManager = std::make_shared<ObjectManager>();
+  objectManager->setECS(this);
 }

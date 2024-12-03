@@ -15,6 +15,8 @@ public:
 
   void update();
 
+  [[nodiscard]] std::shared_ptr<VulkanEngine> getRenderer() const;
+
 private:
   std::shared_ptr<VulkanEngine> renderer;
   std::shared_ptr<ObjectManager> objectManager;
@@ -22,6 +24,8 @@ private:
   std::chrono::time_point<std::chrono::steady_clock> previousTime;
 
   void initRenderer();
+
+  void initObjectManager();
 };
 
 

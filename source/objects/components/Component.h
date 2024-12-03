@@ -4,7 +4,8 @@
 class Object;
 
 enum class ComponentType {
-  transform
+  transform,
+  modelRenderer
 };
 
 class Component {

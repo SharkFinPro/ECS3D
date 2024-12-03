@@ -12,6 +12,16 @@ void ObjectManager::update(const float dt)
   variableUpdate(dt);
 }
 
+void ObjectManager::setECS(ECS3D* ecs)
+{
+  this->ecs = ecs;
+}
+
+ECS3D* ObjectManager::getECS() const
+{
+  return ecs;
+}
+
 void ObjectManager::variableUpdate(const float dt)
 {
   for (const auto& object : objects)
