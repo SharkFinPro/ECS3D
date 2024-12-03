@@ -29,5 +29,6 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
   if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
   {
     renderObject->setPosition(transform->getPosition());
+    renderObject->setScale(transform->getScale());
   }
 }
