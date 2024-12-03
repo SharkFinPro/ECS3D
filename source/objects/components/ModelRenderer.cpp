@@ -1,10 +1,6 @@
 #include "ModelRenderer.h"
 
-#include "../Object.h"
-#include "../ObjectManager.h"
-#include "../../ECS3D.h"
-
-ModelRenderer::ModelRenderer()
+ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer)
   : Component(ComponentType::modelRenderer)
 {
   const std::shared_ptr<Texture> texture = renderer->loadTexture("");

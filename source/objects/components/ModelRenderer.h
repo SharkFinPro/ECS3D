@@ -2,12 +2,12 @@
 #define MODELRENDERER_H
 
 #include "Component.h"
-#include <VulkanEngine/objects/RenderObject.h>
+#include <VulkanEngine/VulkanEngine.h>
 #include <memory>
 
 class ModelRenderer final : public Component {
 public:
-  ModelRenderer();
+  explicit ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer);
   ~ModelRenderer() override = default;
 
   void variableUpdate(float dt) override;
