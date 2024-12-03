@@ -16,7 +16,7 @@ int main()
       std::make_shared<ModelRenderer>(ecs.getRenderer(),
                                       "assets/textures/white.png",
                                       "assets/textures/blank_specular.png",
-                                      "assets/models/square.glb"),
+                                      "assets/models/cube_1x1x1.glb"),
       std::make_shared<RigidBody>()
     };
 
