@@ -40,10 +40,14 @@ void ECS3D::initRenderer()
   constexpr VulkanEngineOptions vulkanEngineOptions = {
     .WINDOW_WIDTH = 800,
     .WINDOW_HEIGHT = 600,
-    .WINDOW_TITLE = "ECS3D"
+    .WINDOW_TITLE = "ECS3D",
+    .CAMERA_POSITION = { 0, 0, -30 }
   };
 
   renderer = std::make_shared<VulkanEngine>(vulkanEngineOptions);
+
+  // TODO: Add system to integrate lights into ECS
+  renderer->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.1f, 0.5f, 1.0f);
 }
 
 void ECS3D::initObjectManager()
