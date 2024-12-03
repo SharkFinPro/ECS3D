@@ -3,7 +3,7 @@
 #include "Object.h"
 
 ObjectManager::ObjectManager()
-  : fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
+  : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
 {}
 
 void ObjectManager::update(const float dt)
