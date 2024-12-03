@@ -5,7 +5,8 @@ class Object;
 
 enum class ComponentType {
   transform,
-  modelRenderer
+  modelRenderer,
+  rigidBody
 };
 
 class Component {

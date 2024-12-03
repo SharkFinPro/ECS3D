@@ -3,8 +3,7 @@
 
 #include "source/objects/Object.h"
 #include "source/objects/ObjectManager.h"
-#include "source/objects/components/ModelRenderer.h"
-#include "source/objects/components/Transform.h"
+#include "source/objects/components/Components.h"
 
 int main()
 {
@@ -17,7 +16,8 @@ int main()
       std::make_shared<ModelRenderer>(ecs.getRenderer(),
                                       "assets/textures/white.png",
                                       "assets/textures/blank_specular.png",
-                                      "assets/models/square.glb")
+                                      "assets/models/square.glb"),
+      std::make_shared<RigidBody>()
     };
 
     const auto object = std::make_shared<Object>(components);
