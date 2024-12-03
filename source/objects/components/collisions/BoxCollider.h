@@ -10,14 +10,14 @@ constexpr std::array<glm::vec3, 8> boxVertices = {{
   {-1.0f, 1.0f, 1.0f},
   {-1.0f, 1.0f, -1.0f},
   {1.0f, 1.0f, -1.0f},
-  {1.0f, 0.0f, 1.0f},
-  {-1.0f, 0.0f, 1.0f},
-  {-1.0f, 0.0f, -1.0f},
-  {1.0f, 0.0f, -1.0f}
+  {1.0f, -1.0f, 1.0f},
+  {-1.0f, -1.0f, 1.0f},
+  {-1.0f, -1.0f, -1.0f},
+  {1.0f, -1.0f, -1.0f}
 }};
 
+
 class BoxCollider final : public Collider {
-private:
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 };
 

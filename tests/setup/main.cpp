@@ -42,7 +42,8 @@ std::shared_ptr<Object> createBlock(const ECS3D& ecs, glm::vec3 position, glm::v
                                     "assets/textures/white.png",
                                     "assets/textures/blank_specular.png",
                                     "assets/models/cube_1x1x1.glb"),
-    std::make_shared<RigidBody>()
+    std::make_shared<RigidBody>(),
+    std::make_shared<BoxCollider>()
   };
 
   return std::make_shared<Object>(components);
@@ -55,7 +56,8 @@ std::shared_ptr<Object> createRigidBlock(const ECS3D& ecs, glm::vec3 position, g
     std::make_shared<ModelRenderer>(ecs.getRenderer(),
                                     "assets/textures/white.png",
                                     "assets/textures/blank_specular.png",
-                                    "assets/models/cube_1x1x1.glb")
+                                    "assets/models/cube_1x1x1.glb"),
+    std::make_shared<BoxCollider>()
   };
 
   return std::make_shared<Object>(components);
