@@ -21,6 +21,8 @@ add_library(${PROJECT_NAME}
   objects/components/ModelRenderer.h
   objects/components/RigidBody.cpp
   objects/components/RigidBody.h
+  objects/components/collisions/Simplex.cpp
+  objects/components/collisions/Simplex.h
 )
 
 # Declare VulkanEngine as a dependency
