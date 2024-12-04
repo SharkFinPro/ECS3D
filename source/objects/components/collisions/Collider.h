@@ -75,7 +75,7 @@ private:
 
   static bool isFacingInward(const FaceData& faceData, const Polytope& polytope);
 
-  void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope);
+  static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope);
 
   void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
 

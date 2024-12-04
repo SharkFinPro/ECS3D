@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <limits>
 #include <glm/glm.hpp>
+#include <algorithm>
 
 bool sameDirection(const glm::vec3& a, const glm::vec3& b)
 {
@@ -358,6 +359,43 @@ bool Collider::isFacingInward(const FaceData& faceData, const Polytope& polytope
 
 void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope)
 {
+  FaceData faceData {
+    .aIndex = edge.first,
+    .bIndex = edge.second,
+    .a = polytope.vertices[edge.first],
+    .b = polytope.vertices[edge.second],
+    .c = supportPoint
+  };
+
+  const auto AB = faceData.b - faceData.a;
+  const auto AC = faceData.c - faceData.a;
+
+  faceData.normal = cross(AB, AC);
+
+  if (isFacingInward(faceData, polytope))
+  {
+    faceData.normal *= -1;
+
+    if (isFacingInward(faceData, polytope))
+    {
+      return;
+    }
+  }
+
+  auto closestPoint = closestPointOnPlane(faceData.a, faceData.normal);
+
+  polytope.faces.push_back({
+      .vertices = {
+        faceData.aIndex,
+        faceData.bIndex,
+        static_cast<int>(polytope.vertices.size())
+      },
+      .normal = faceData.normal,
+      .closestPoint = {
+        .point = closestPoint,
+        .distance = dot(closestPoint, closestPoint)
+      }
+  });
 }
 
 void Collider::reconstructPolytope(const glm::vec3 supportPoint, Polytope& polytope)
@@ -372,15 +410,11 @@ void Collider::reconstructPolytope(const glm::vec3 supportPoint, Polytope& polyt
 
 bool Collider::isDuplicateVertex(const glm::vec3 supportPoint, const Polytope& polytope)
 {
-  for (const auto& vertex : polytope.vertices)
-  {
-    if (vertex.x == supportPoint.x &&
-        vertex.y == supportPoint.y &&
-        vertex.z == supportPoint.z)
-    {
-      return true;
-    }
-  }
+  auto isEqual = [&](const glm::vec3& vertex) {
+    return vertex.x == supportPoint.x &&
+           vertex.y == supportPoint.y &&
+           vertex.z == supportPoint.z;
+  };
 
-  return false;
+  return std::ranges::any_of(polytope.vertices, isEqual);
 }
