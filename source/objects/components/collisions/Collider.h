@@ -67,6 +67,8 @@ private:
   static bool closeEnough(float minDistance, const std::optional<float>& previousMinDistance,
                           glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint);
 
+  static glm::vec3 getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope);
+
 protected:
   std::weak_ptr<Transform> transform_ptr;
 };
