@@ -333,3 +333,35 @@ glm::vec3 Collider::getSearchDirection(const ClosestFaceData& closestFaceData, c
 
   return searchDirection;
 }
+
+std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope)
+{
+}
+
+bool Collider::isFacingInward(FaceData& faceData, Polytope& polytope)
+{
+  return false;
+}
+
+void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope)
+{
+}
+
+void Collider::reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope)
+{
+}
+
+bool Collider::isDuplicateVertex(glm::vec3 supportPoint, Polytope& polytope)
+{
+  for (const auto& vertex : polytope.vertices)
+  {
+    if (vertex.x == supportPoint.x &&
+        vertex.y == supportPoint.y &&
+        vertex.z == supportPoint.z)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}

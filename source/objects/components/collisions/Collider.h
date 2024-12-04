@@ -41,6 +41,8 @@ struct FaceData {
   glm::vec3 normal;
 };
 
+using Edge = std::pair<int, int>;
+
 class Collider : public Component {
 public:
   Collider();
@@ -68,6 +70,16 @@ private:
                           glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint);
 
   static glm::vec3 getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope);
+
+  std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+
+  bool isFacingInward(FaceData& faceData, Polytope& polytope);
+
+  void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope);
+
+  void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+
+  bool isDuplicateVertex(glm::vec3 supportPoint, Polytope& polytope);
 
 protected:
   std::weak_ptr<Transform> transform_ptr;
