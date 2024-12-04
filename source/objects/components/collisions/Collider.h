@@ -4,10 +4,26 @@
 #include "../Component.h"
 #include <memory>
 #include <glm/vec3.hpp>
-
+#include <array>
 #include "Simplex.h"
 
 class Transform;
+
+struct ClosestPoint {
+  glm::vec3 point;
+  float distance;
+};
+
+struct Face {
+  std::array<glm::vec3, 3> vertices;
+  glm::vec3 normal;
+  ClosestPoint closestPoint;
+};
+
+struct Polytope {
+  std::array<glm::vec3, 4> vertices;
+  std::array<Face, 4> faces;
+};
 
 class Collider : public Component {
 public:
