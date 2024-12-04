@@ -15,7 +15,7 @@ struct ClosestPoint {
 };
 
 struct Face {
-  std::array<glm::vec3, 3> vertices;
+  std::array<int, 3> vertices;
   glm::vec3 normal;
   ClosestPoint closestPoint;
 };
@@ -39,6 +39,12 @@ private:
   static bool lineCase(const Simplex& simplex, glm::vec3& direction);
   static bool triangleCase(Simplex& simplex, glm::vec3& direction);
   static bool tetrahedronCase(Simplex& simplex, glm::vec3& direction);
+
+  static Polytope generatePolytope(Simplex& simplex);
+
+  static glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal);
+
+  glm::vec3 EPA(Polytope& polytope, const std::shared_ptr<Object>& other);
 
 protected:
   std::weak_ptr<Transform> transform_ptr;

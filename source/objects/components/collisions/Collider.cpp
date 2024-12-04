@@ -1,5 +1,7 @@
 #include "Collider.h"
 
+#include <iostream>
+
 #include "../../Object.h"
 #include "../Transform.h"
 #include <stdexcept>
@@ -54,7 +56,12 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
     simplex.addVertex(support);
   } while (!expandSimplex(simplex, direction));
 
-  // TODO: EPA
+  if (mtv != nullptr)
+  {
+    Polytope polytope = generatePolytope(simplex);
+
+    *mtv = EPA(polytope, other);
+  }
 
   return true;
 }
@@ -174,4 +181,99 @@ bool Collider::tetrahedronCase(Simplex& simplex, glm::vec3& direction)
   }
 
   return true;
+}
+
+Polytope Collider::generatePolytope(Simplex& simplex)
+{
+  const auto A = simplex.getA();
+  const auto B = simplex.getB();
+  const auto C = simplex.getC();
+  const auto D = simplex.getD();
+
+  const auto AB = B - A;
+  const auto AC = C - A;
+  const auto AD = D - A;
+  const auto BC = C - B;
+  const auto BD = D - B;
+
+  auto ABC = cross(AB, AC);
+  auto ACD = cross(AC, AD);
+  auto ADB = cross(AD, AB);
+  auto BCD = cross(BC, BD);
+
+  if (sameDirection(ABC, D))
+  {
+    ABC *= -1;
+  }
+  if (sameDirection(ACD, B))
+  {
+    ACD *= -1;
+  }
+  if (sameDirection(ADB, C))
+  {
+    ADB *= -1;
+  }
+  if (sameDirection(BCD, A))
+  {
+    BCD *= -1;
+  }
+
+  const auto facePointA = closestPointOnPlane(A, ABC);
+  const auto facePointB = closestPointOnPlane(A, ACD);
+  const auto facePointC = closestPointOnPlane(A, ADB);
+  const auto facePointD = closestPointOnPlane(B, BCD);
+
+  return {
+    .vertices = {
+      A, B, C, D
+    },
+    .faces = {{
+      {
+        .vertices = { 0, 1, 2 },
+        .normal = ABC,
+        .closestPoint = {
+          .point = facePointA,
+          .distance = dot(facePointA, facePointA)
+        }
+      },
+      {
+        .vertices = { 0, 2, 3 },
+        .normal = ACD,
+        .closestPoint = {
+          .point = facePointB,
+          .distance = dot(facePointB, facePointB)
+        }
+      },
+      {
+        .vertices = { 0, 1, 3 },
+        .normal = ADB,
+        .closestPoint = {
+          .point = facePointC,
+          .distance = dot(facePointC, facePointC)
+        }
+      },
+      {
+        .vertices = { 1, 2, 3 },
+        .normal = BCD,
+        .closestPoint = {
+          .point = facePointD,
+          .distance = dot(facePointD, facePointD)
+        }
+      },
+    }}
+  };
+}
+
+glm::vec3 Collider::closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal)
+{
+  const auto d = dot(normal, a);
+
+  const auto p = d / dot(normal, normal);
+
+  return normal * p;
+}
+
+glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other)
+{
+  return { 0, 0, 0 };
 }
