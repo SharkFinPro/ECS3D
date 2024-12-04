@@ -338,8 +338,21 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
 {
 }
 
-bool Collider::isFacingInward(FaceData& faceData, Polytope& polytope)
+bool Collider::isFacingInward(const FaceData& faceData, const Polytope& polytope)
 {
+  for (int i = 0; i < polytope.vertices.size(); i++)
+  {
+    if (i == faceData.aIndex || i == faceData.bIndex)
+    {
+      continue;
+    }
+
+    if (const glm::vec3 faceToVertex = polytope.vertices[i] - faceData.a; sameDirection(faceData.normal, faceToVertex))
+    {
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -351,7 +364,7 @@ void Collider::reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope)
 {
 }
 
-bool Collider::isDuplicateVertex(glm::vec3 supportPoint, Polytope& polytope)
+bool Collider::isDuplicateVertex(const glm::vec3 supportPoint, const Polytope& polytope)
 {
   for (const auto& vertex : polytope.vertices)
   {

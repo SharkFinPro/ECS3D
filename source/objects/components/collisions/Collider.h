@@ -73,13 +73,13 @@ private:
 
   std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
 
-  bool isFacingInward(FaceData& faceData, Polytope& polytope);
+  static bool isFacingInward(const FaceData& faceData, const Polytope& polytope);
 
   void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope);
 
   void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
 
-  bool isDuplicateVertex(glm::vec3 supportPoint, Polytope& polytope);
+  static bool isDuplicateVertex(glm::vec3 supportPoint, const Polytope& polytope);
 
 protected:
   std::weak_ptr<Transform> transform_ptr;
