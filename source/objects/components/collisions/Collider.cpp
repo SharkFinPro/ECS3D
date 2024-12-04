@@ -360,8 +360,14 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
 {
 }
 
-void Collider::reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope)
+void Collider::reconstructPolytope(const glm::vec3 supportPoint, Polytope& polytope)
 {
+  for (const auto& edge : deconstructPolytope(supportPoint, polytope))
+  {
+    constructFace(edge, supportPoint, polytope);
+  }
+
+  polytope.vertices.push_back(supportPoint);
 }
 
 bool Collider::isDuplicateVertex(const glm::vec3 supportPoint, const Polytope& polytope)
