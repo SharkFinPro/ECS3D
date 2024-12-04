@@ -400,7 +400,6 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
       edges.emplace_back( faceVertices[1], faceVertices[2] );
       edges.emplace_back( faceVertices[2], faceVertices[0] );
 
-      // TODO: Make sure this works
       polytope.faces.erase(polytope.faces.begin() + i);
     }
   }
@@ -410,7 +409,6 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
   {
     auto sortedEdge = edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first);
 
-    // TODO: Make sure this works
     edgeCount[sortedEdge]++;
   }
 
