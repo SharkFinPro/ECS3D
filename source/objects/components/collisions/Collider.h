@@ -26,6 +26,20 @@ struct Polytope {
   std::vector<Face> faces;
 };
 
+struct ClosestFaceData {
+  glm::vec3 closestPoint;
+  int closestFaceIndex;
+};
+
+struct FaceData {
+  int aIndex;
+  int bIndex;
+  glm::vec3 a;
+  glm::vec3 b;
+  glm::vec3 c;
+  glm::vec3 normal;
+};
+
 class Collider : public Component {
 public:
   Collider();
