@@ -71,7 +71,7 @@ private:
 
   static glm::vec3 getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope);
 
-  std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+  static std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
 
   static bool isFacingInward(const FaceData& faceData, const Polytope& polytope);
 
