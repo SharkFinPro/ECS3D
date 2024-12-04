@@ -6,6 +6,8 @@
 
 class Object;
 class ECS3D;
+class Collider;
+class RigidBody;
 
 class ObjectManager {
 public:
@@ -28,6 +30,13 @@ private:
 
   void variableUpdate(float dt);
   void fixedUpdate(float dt);
+
+  void checkCollisions();
+
+  void findCollisions(const std::shared_ptr<Object>& object, const std::shared_ptr<Collider>& collider, std::vector<std::shared_ptr<Object>>& collidedObjects);
+
+  static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, std::vector<std::shared_ptr<Object>>& collidedObjects);
+
 };
 
 
