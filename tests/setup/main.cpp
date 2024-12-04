@@ -20,7 +20,7 @@ int main()
     ecs.getObjectManager()->addObject(object);
 
     ecs.getObjectManager()->addObject(createBlock(ecs, { 0, -4, 0}));
-    ecs.getObjectManager()->addObject(createSphere(ecs, { -1.5f, 0, 0 }));
+    ecs.getObjectManager()->addObject(createSphere(ecs, { -1.75f, 0, 0 }));
 
     while (ecs.isActive())
     {

@@ -1,7 +1,7 @@
 #include "SphereCollider.h"
-
 #include "../Transform.h"
 #include "../../Object.h"
+#include <stdexcept>
 
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3 &direction)
 {
