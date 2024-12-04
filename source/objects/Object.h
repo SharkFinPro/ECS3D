@@ -16,13 +16,13 @@ public:
   explicit Object(const std::vector<std::shared_ptr<Component>>& components);
 
   void addComponent(std::shared_ptr<Component> component);
-  std::shared_ptr<Component> getComponent(ComponentType type) const;
+  [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 
   void variableUpdate(float dt);
   void fixedUpdate(float dt);
 
   void setManager(ObjectManager* objectManager);
-  ObjectManager* getManager() const;
+  [[nodiscard]] ObjectManager* getManager() const;
 
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> components;

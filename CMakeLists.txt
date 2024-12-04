@@ -27,5 +27,7 @@ add_subdirectory(source)
 if (ECS3D_BUILD_TESTS)
   include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 
+  file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/tests/assets/" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/assets/")
+
   add_subdirectory(tests)
 endif()

@@ -3,7 +3,12 @@
 
 class Object;
 
-enum class ComponentType;
+enum class ComponentType {
+  transform,
+  modelRenderer,
+  rigidBody,
+  collider
+};
 
 class Component {
 public:

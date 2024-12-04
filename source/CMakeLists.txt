@@ -14,6 +14,19 @@ add_library(${PROJECT_NAME}
   objects/Object.h
   objects/components/Component.cpp
   objects/components/Component.h
+  objects/components/Components.h
+  objects/components/Transform.cpp
+  objects/components/Transform.h
+  objects/components/ModelRenderer.cpp
+  objects/components/ModelRenderer.h
+  objects/components/RigidBody.cpp
+  objects/components/RigidBody.h
+  objects/components/collisions/Simplex.cpp
+  objects/components/collisions/Simplex.h
+  objects/components/collisions/Collider.cpp
+  objects/components/collisions/Collider.h
+  objects/components/collisions/BoxCollider.cpp
+  objects/components/collisions/BoxCollider.h
 )
 
 # Declare VulkanEngine as a dependency

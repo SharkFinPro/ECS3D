@@ -1,6 +1,6 @@
 #include "Component.h"
 
-Component::Component(ComponentType type)
+Component::Component(const ComponentType type)
   : type(type), owner(nullptr)
 {}
 
