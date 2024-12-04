@@ -15,11 +15,17 @@ public:
 
   void applyForce(const glm::vec3& force);
 
+  void handleCollision(glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other);
+
 private:
   glm::vec3 velocity;
 
   bool doGravity;
   glm::vec3 gravity;
+
+  bool falling;
+  bool wasFalling;
+  bool wasWasFalling;
 
   std::weak_ptr<Transform> transform_ptr;
 };
