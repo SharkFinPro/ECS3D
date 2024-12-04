@@ -1,11 +1,9 @@
 #include "Collider.h"
 
-#include <iostream>
-
 #include "../../Object.h"
 #include "../Transform.h"
 #include <stdexcept>
-
+#include <limits>
 #include <glm/glm.hpp>
 
 bool sameDirection(const glm::vec3& a, const glm::vec3& b)
@@ -276,4 +274,21 @@ glm::vec3 Collider::closestPointOnPlane(const glm::vec3& a, const glm::vec3& nor
 glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other)
 {
   return { 0, 0, 0 };
+}
+
+float Collider::findClosestFace(ClosestFaceData& closestFaceData, const Polytope& polytope)
+{
+  float minDist = std::numeric_limits<float>::max();
+
+  for (int i = 0; i < polytope.faces.size(); i++)
+  {
+    if (const float dist = polytope.faces[i].closestPoint.distance; dist < minDist)
+    {
+      minDist = dist;
+      closestFaceData.closestPoint = polytope.faces[i].closestPoint.point;
+      closestFaceData.closestFaceIndex = i;
+    }
+  }
+
+  return minDist;
 }

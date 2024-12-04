@@ -61,6 +61,8 @@ private:
 
   glm::vec3 EPA(Polytope& polytope, const std::shared_ptr<Object>& other);
 
+  static float findClosestFace(ClosestFaceData& closestFaceData, const Polytope& polytope);
+
 protected:
   std::weak_ptr<Transform> transform_ptr;
 };
