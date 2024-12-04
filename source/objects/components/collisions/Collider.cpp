@@ -357,8 +357,6 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
     }
   }
 
-  // TODO: The rest of this
-
   std::map<Edge, int> edgeCount;
   for (const auto& edge : edges)
   {
