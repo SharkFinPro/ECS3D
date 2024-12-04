@@ -337,6 +337,27 @@ glm::vec3 Collider::getSearchDirection(const ClosestFaceData& closestFaceData, c
 
 std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope)
 {
+  std::vector<Edge> edges;
+
+  for (int i = 0; i < polytope.faces.size(); i++)
+  {
+    auto [faceVertices, normal, c] = polytope.faces[i];
+
+    auto facePoint = polytope.vertices[faceVertices[0]];
+
+    if (auto vectorToSupportPoint = supportPoint - facePoint; sameDirection(normal, vectorToSupportPoint))
+    {
+      edges.emplace_back( faceVertices[0], faceVertices[1] );
+      edges.emplace_back( faceVertices[1], faceVertices[2] );
+      edges.emplace_back( faceVertices[2], faceVertices[0] );
+
+      // TODO: Make sure this works
+      polytope.faces.erase(polytope.faces.begin() + i);
+    }
+  }
+
+  // TODO: The rest of this
+
 }
 
 bool Collider::isFacingInward(const FaceData& faceData, const Polytope& polytope)
