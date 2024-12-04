@@ -6,6 +6,7 @@
 #include <limits>
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <map>
 
 bool sameDirection(const glm::vec3& a, const glm::vec3& b)
 {
@@ -358,6 +359,25 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
 
   // TODO: The rest of this
 
+  std::map<Edge, int> edgeCount;
+  for (const auto& edge : edges)
+  {
+    auto sortedEdge = edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first);
+
+    // TODO: Make sure this works
+    edgeCount[sortedEdge]++;
+  }
+
+  std::vector<Edge> uniqueEdges;
+  for (const auto& edge : edges)
+  {
+    if (auto sortedEdge = edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first); edgeCount[sortedEdge] == 1)
+    {
+      uniqueEdges.push_back(edge);
+    }
+  }
+
+  return uniqueEdges;
 }
 
 bool Collider::isFacingInward(const FaceData& faceData, const Polytope& polytope)
