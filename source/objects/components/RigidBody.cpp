@@ -27,7 +27,7 @@ void RigidBody::fixedUpdate(const float dt)
     if (doGravity)
     {
       // TODO: Find a way to avoid scaling this, currently in for testing purposes
-      applyForce(gravity * dt * 0.0001f);
+      applyForce(gravity * dt * 0.001f);
     }
 
     transform->move(velocity);

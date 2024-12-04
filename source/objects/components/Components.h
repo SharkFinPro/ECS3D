@@ -5,5 +5,6 @@
 #include "ModelRenderer.h"
 #include "RigidBody.h"
 #include "collisions/BoxCollider.h"
+#include "collisions/SphereCollider.h"
 
 #endif //COMPONENTS_H
