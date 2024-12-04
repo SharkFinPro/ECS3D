@@ -5,6 +5,7 @@
 #include <memory>
 #include <glm/vec3.hpp>
 #include <array>
+#include <vector>
 #include "Simplex.h"
 
 class Transform;
@@ -21,8 +22,8 @@ struct Face {
 };
 
 struct Polytope {
-  std::array<glm::vec3, 4> vertices;
-  std::array<Face, 4> faces;
+  std::vector<glm::vec3> vertices;
+  std::vector<Face> faces;
 };
 
 class Collider : public Component {
