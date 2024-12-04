@@ -60,7 +60,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   {
     Polytope polytope = generatePolytope(simplex);
 
-    *mtv = EPA(polytope, other);
+    *mtv = -EPA(polytope, other);
   }
 
   return true;
@@ -275,7 +275,55 @@ glm::vec3 Collider::closestPointOnPlane(const glm::vec3& a, const glm::vec3& nor
 
 glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other)
 {
-  return { 0, 0, 0 };
+  if (transform_ptr.expired())
+  {
+    transform_ptr = dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+
+    if (transform_ptr.expired())
+    {
+      throw std::runtime_error("Collider::EPA::Missing Transform");
+    }
+  }
+
+  const auto otherTransform = dynamic_pointer_cast<Transform>(other->getComponent(ComponentType::transform));
+  const auto otherCollider = dynamic_pointer_cast<Collider>(other->getComponent(ComponentType::collider));
+  if (!otherTransform || !otherCollider)
+  {
+    throw std::runtime_error("Collider::EPA::Missing Transform/Collider");
+  }
+
+  std::optional<glm::vec3> previousClosestPoint;
+  std::optional<float> previousMinDist;
+  ClosestFaceData closestFaceData{};
+
+  constexpr int maxIterations = 25;
+  int iteration = 0;
+  while (iteration < maxIterations)
+  {
+    iteration++;
+    auto currentMinDist = findClosestFace(closestFaceData, polytope);
+
+    if (closeEnough(currentMinDist, previousMinDist, closestFaceData.closestPoint, previousClosestPoint))
+    {
+      break;
+    }
+
+    auto searchDirection = getSearchDirection(closestFaceData, polytope);
+
+    const auto supportPoint = getSupport(otherCollider, normalize(searchDirection));
+
+    if (isDuplicateVertex(supportPoint, polytope))
+    {
+      break;
+    }
+
+    reconstructPolytope(supportPoint, polytope);
+
+    previousMinDist = currentMinDist;
+    previousClosestPoint = closestFaceData.closestPoint;
+  }
+
+  return closestFaceData.closestPoint;
 }
 
 float Collider::findClosestFace(ClosestFaceData& closestFaceData, const Polytope& polytope)
