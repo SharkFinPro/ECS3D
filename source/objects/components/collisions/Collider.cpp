@@ -292,3 +292,32 @@ float Collider::findClosestFace(ClosestFaceData& closestFaceData, const Polytope
 
   return minDist;
 }
+
+bool Collider::closeEnough(const float minDistance, const std::optional<float>& previousMinDistance,
+                           const glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint)
+{
+  constexpr float minDist = 0.01f;
+
+  if (!previousClosestPoint.has_value())
+  {
+    return false;
+  }
+
+  if (std::fabs(minDistance - previousMinDistance.value()) >= minDist)
+  {
+    return false;
+  }
+
+  if (length(currentClosestPoint) < minDist)
+  {
+    return false;
+  }
+
+  const float deltaX = std::fabs(currentClosestPoint.x - previousClosestPoint.value().x);
+  const float deltaY = std::fabs(currentClosestPoint.y - previousClosestPoint.value().y);
+  const float deltaZ = std::fabs(currentClosestPoint.z - previousClosestPoint.value().z);
+
+  return (deltaX + deltaY + deltaZ) < minDist;
+
+
+}

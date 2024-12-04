@@ -7,6 +7,7 @@
 #include <array>
 #include <vector>
 #include "Simplex.h"
+#include <optional>
 
 class Transform;
 
@@ -62,6 +63,9 @@ private:
   glm::vec3 EPA(Polytope& polytope, const std::shared_ptr<Object>& other);
 
   static float findClosestFace(ClosestFaceData& closestFaceData, const Polytope& polytope);
+
+  static bool closeEnough(float minDistance, const std::optional<float>& previousMinDistance,
+                          glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint);
 
 protected:
   std::weak_ptr<Transform> transform_ptr;
