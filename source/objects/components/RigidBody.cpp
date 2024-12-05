@@ -26,7 +26,7 @@ void RigidBody::fixedUpdate(const float dt)
   {
     if (doGravity)
     {
-      applyForce(gravity * dt);
+      applyForce(gravity * dt * 0.1f);
     }
 
     limitMovement();
