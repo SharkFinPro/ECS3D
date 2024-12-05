@@ -501,7 +501,7 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
     }
   }
 
-  auto closestPoint = closestPointOnPlane(faceData.a, faceData.normal);
+  const auto closestPoint = closestPointOnPlane(faceData.a, faceData.normal);
 
   polytope.faces.push_back({
       .vertices = {
