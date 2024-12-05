@@ -19,6 +19,8 @@ int main()
   {
     ECS3D ecs;
 
+    ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
+
     const auto object = createRigidBlock(ecs, { 0, -10, 0 }, { 10, 1, 10 });
     ecs.getObjectManager()->addObject(object);
 
