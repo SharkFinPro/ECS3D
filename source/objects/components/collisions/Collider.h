@@ -86,7 +86,7 @@ private:
 
   static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope);
 
-  void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+  static void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
 
   static bool isDuplicateVertex(glm::vec3 supportPoint, const Polytope& polytope);
 
