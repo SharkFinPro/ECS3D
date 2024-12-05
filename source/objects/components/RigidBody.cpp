@@ -26,9 +26,10 @@ void RigidBody::fixedUpdate(const float dt)
   {
     if (doGravity)
     {
-      // TODO: Find a way to avoid scaling this, currently in for testing purposes
-      applyForce(gravity * dt * 0.001f);
+      applyForce(gravity * dt);
     }
+
+    limitMovement();
 
     transform->move(velocity);
   }
@@ -77,4 +78,9 @@ void RigidBody::handleCollision(glm::vec3 minimumTranslationVector, const std::s
 
     transform->move(minimumTranslationVector);
   }
+}
+
+void RigidBody::limitMovement()
+{
+  applyForce({ -velocity.x * 0.05f, 0, -velocity.z * 0.05f });
 }

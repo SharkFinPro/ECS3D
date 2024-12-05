@@ -4,6 +4,7 @@
 #include "Component.h"
 #include <VulkanEngine/VulkanEngine.h>
 #include <memory>
+#include <unordered_map>
 
 class Transform;
 
@@ -18,6 +19,10 @@ public:
 private:
   std::shared_ptr<RenderObject> renderObject;
   std::weak_ptr<Transform> transform_ptr;
+
+  std::unordered_map<const char*, std::shared_ptr<Texture>> textures;
+  std::unordered_map<const char*, std::shared_ptr<Texture>> specularMaps;
+  std::unordered_map<const char*, std::shared_ptr<Model>> models;
 };
 
 

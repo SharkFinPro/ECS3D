@@ -20,7 +20,7 @@ void ECS3D::update()
   const float dt = std::chrono::duration<float>(currentTime - previousTime).count();
   previousTime = currentTime;
 
-  objectManager->update(dt);
+  objectManager->update(std::min(dt, 0.01f));
 
   renderer->render();
 }
@@ -41,7 +41,7 @@ void ECS3D::initRenderer()
     .WINDOW_WIDTH = 800,
     .WINDOW_HEIGHT = 600,
     .WINDOW_TITLE = "ECS3D",
-    .CAMERA_POSITION = { 0, 0, -30 }
+    .CAMERA_POSITION = { 0, 0, -50 }
   };
 
   renderer = std::make_shared<VulkanEngine>(vulkanEngineOptions);
