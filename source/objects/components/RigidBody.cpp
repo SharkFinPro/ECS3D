@@ -40,7 +40,7 @@ void RigidBody::applyForce(const glm::vec3& force)
   velocity += force;
 }
 
-void RigidBody::handleCollision(glm::vec3 minimumTranslationVector, const std::shared_ptr<Object> &other)
+void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other)
 {
   if (transform_ptr.expired())
   {
