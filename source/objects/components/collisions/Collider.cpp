@@ -52,17 +52,26 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
   direction *= -1.0f;
 
+  constexpr int maxIterations = 50;
+  int iteration = 0;
   do
   {
+    iteration++;
+
     support = getSupport(otherCollider, glm::normalize(direction));
 
-    if (dot(support, direction) < 1.0f)
+    if (dot(support, direction) < 0.2f)
     {
       return false;
     }
 
     simplex.addVertex(support);
-  } while (!expandSimplex(simplex, direction));
+  } while (iteration < maxIterations && !expandSimplex(simplex, direction));
+
+  if (iteration == maxIterations)
+  {
+    return false;
+  }
 
   if (mtv != nullptr)
   {
