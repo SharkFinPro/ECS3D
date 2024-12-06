@@ -24,6 +24,12 @@ void RigidBody::fixedUpdate(const float dt)
 
   if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
   {
+    wasWasFalling = wasFalling;
+
+    wasFalling = true;
+
+    falling = true;
+
     if (doGravity)
     {
       applyForce(gravity * dt * 0.1f);
@@ -54,7 +60,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
   {
-    if (minimumTranslationVector.y < 0 && minimumTranslationVector.y > -0.001f)
+    if (minimumTranslationVector.y > 0 && minimumTranslationVector.y > 0.001f)
     {
       if (!wasWasFalling)
       {
@@ -78,6 +84,16 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
     transform->move(minimumTranslationVector);
   }
+}
+
+bool RigidBody::isFalling() const
+{
+  return falling;
+}
+
+void RigidBody::setVelocity(const glm::vec3& velocity)
+{
+  this->velocity = velocity;
 }
 
 void RigidBody::limitMovement()

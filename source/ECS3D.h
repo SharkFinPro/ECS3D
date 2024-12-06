@@ -19,6 +19,8 @@ public:
 
   [[nodiscard]] std::shared_ptr<ObjectManager> getObjectManager() const;
 
+  [[nodiscard]] bool keyIsPressed(int key) const;
+
 private:
   std::shared_ptr<VulkanEngine> renderer;
   std::shared_ptr<ObjectManager> objectManager;

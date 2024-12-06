@@ -35,6 +35,11 @@ std::shared_ptr<ObjectManager> ECS3D::getObjectManager() const
   return objectManager;
 }
 
+bool ECS3D::keyIsPressed(const int key) const
+{
+  return renderer->keyIsPressed(key);
+}
+
 void ECS3D::initRenderer()
 {
   constexpr VulkanEngineOptions vulkanEngineOptions = {

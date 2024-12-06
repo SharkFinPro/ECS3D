@@ -7,7 +7,8 @@ enum class ComponentType {
   transform,
   modelRenderer,
   rigidBody,
-  collider
+  collider,
+  player
 };
 
 class Component {
