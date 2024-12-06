@@ -18,6 +18,10 @@ constexpr std::array<glm::vec3, 8> boxVertices = {{
 
 
 class BoxCollider final : public Collider {
+public:
+  BoxCollider();
+
+private:
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 };
 

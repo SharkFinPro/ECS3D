@@ -43,13 +43,22 @@ struct FaceData {
 
 using Edge = std::pair<int, int>;
 
+enum class ColliderType {
+  boxCollider,
+  sphereCollider
+};
+
 class Collider : public Component {
 public:
-  Collider();
+  explicit Collider(ColliderType type);
 
   bool collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv);
 
 private:
+  bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
+                                     const std::shared_ptr<Transform>& otherTransform,
+                                     glm::vec3* mtv);
+
   glm::vec3 getSupport(const std::shared_ptr<Collider>& other, const glm::vec3& direction);
   virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
 
@@ -77,12 +86,14 @@ private:
 
   static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope);
 
-  void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+  static void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
 
   static bool isDuplicateVertex(glm::vec3 supportPoint, const Polytope& polytope);
 
 protected:
   std::weak_ptr<Transform> transform_ptr;
+
+  ColliderType colliderType;
 };
 
 

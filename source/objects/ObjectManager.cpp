@@ -48,7 +48,7 @@ void ObjectManager::fixedUpdate(const float dt)
   {
     for (const auto& object : objects)
     {
-      object->fixedUpdate(dt);
+      object->fixedUpdate(fixedUpdateDt);
     }
 
     checkCollisions();

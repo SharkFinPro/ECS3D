@@ -1,8 +1,8 @@
 #include "Transform.h"
 
-Transform::Transform(const glm::vec3& position, const glm::vec3& scale)
+Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
   : Component(ComponentType::transform), initialPosition(position), position(initialPosition),
-    initialScale(scale), scale(initialScale)
+    initialScale(scale), scale(initialScale), initialRotation(rotation), rotation(initialRotation)
 {}
 
 glm::vec3 Transform::getPosition() const
@@ -13,6 +13,11 @@ glm::vec3 Transform::getPosition() const
 glm::vec3 Transform::getScale() const
 {
   return scale;
+}
+
+glm::vec3 Transform::getRotation() const
+{
+  return rotation;
 }
 
 void Transform::move(const glm::vec3& direction)

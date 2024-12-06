@@ -7,11 +7,30 @@ ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, cons
                              const char* specularMapPath, const char* modelPath)
   : Component(ComponentType::modelRenderer)
 {
-  const std::shared_ptr<Texture> texture = renderer->loadTexture(texturePath);
-  const std::shared_ptr<Texture> specularMap = renderer->loadTexture(specularMapPath);
-  const std::shared_ptr<Model> model = renderer->loadModel(modelPath);
+  if (!textures.contains(texturePath))
+  {
+    textures.emplace(texturePath, renderer->loadTexture(texturePath));
+  }
 
-  renderObject = renderer->loadRenderObject(texture, specularMap, model);
+  if (!specularMaps.contains(specularMapPath))
+  {
+    specularMaps.emplace(specularMapPath, renderer->loadTexture(specularMapPath));
+  }
+
+  if (!models.contains(modelPath))
+  {
+    models.emplace(modelPath, renderer->loadModel(modelPath));
+  }
+
+  renderObject = renderer->loadRenderObject(textures.at(texturePath),
+                                            specularMaps.at(specularMapPath),
+                                            models.at(modelPath));
+
+  // const std::shared_ptr<Texture> texture = renderer->loadTexture(texturePath);
+  // const std::shared_ptr<Texture> specularMap = renderer->loadTexture(specularMapPath);
+  // const std::shared_ptr<Model> model = renderer->loadModel(modelPath);
+  //
+  // renderObject = renderer->loadRenderObject(texture, specularMap, model);
 }
 
 void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
@@ -30,5 +49,6 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
   {
     renderObject->setPosition(transform->getPosition());
     renderObject->setScale(transform->getScale());
+    renderObject->setRotation(transform->getRotation());
   }
 }

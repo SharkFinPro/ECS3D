@@ -7,14 +7,17 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <map>
+#include <ranges>
+
+#include "SphereCollider.h"
 
 bool sameDirection(const glm::vec3& a, const glm::vec3& b)
 {
   return dot(a, b) > 0;
 }
 
-Collider::Collider()
-  : Component(ComponentType::collider)
+Collider::Collider(const ColliderType type)
+  : Component(ComponentType::collider), colliderType(type)
 {}
 
 bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv)
@@ -34,6 +37,11 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   if (!otherTransform || !otherCollider)
   {
     return false;
+  }
+
+  if (colliderType == ColliderType::sphereCollider && otherCollider->colliderType == ColliderType::sphereCollider)
+  {
+    return handleSphereToSphereCollision(otherCollider, otherTransform, mtv);
   }
 
   Simplex simplex;
@@ -64,6 +72,32 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   }
 
   return true;
+}
+
+bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
+                                             const std::shared_ptr<Transform>& otherTransform,
+                                             glm::vec3* mtv)
+{
+  if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
+  {
+    const auto sphereA = dynamic_cast<SphereCollider*>(this);
+    const auto sphereB = std::dynamic_pointer_cast<SphereCollider>(otherCollider);
+
+    const auto combinedRadius = sphereA->getRadius() + sphereB->getRadius();
+    const auto delta = otherTransform->getPosition() - transform->getPosition();
+
+    if (const float dist = length(delta); dist < combinedRadius)
+    {
+      if (mtv != nullptr)
+      {
+        *mtv = -(normalize(delta) * (combinedRadius - dist));
+      }
+
+      return true;
+    }
+  }
+
+  return false;
 }
 
 glm::vec3 Collider::getSupport(const std::shared_ptr<Collider>& other, const glm::vec3& direction)
@@ -467,7 +501,7 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
     }
   }
 
-  auto closestPoint = closestPointOnPlane(faceData.a, faceData.normal);
+  const auto closestPoint = closestPointOnPlane(faceData.a, faceData.normal);
 
   polytope.faces.push_back({
       .vertices = {

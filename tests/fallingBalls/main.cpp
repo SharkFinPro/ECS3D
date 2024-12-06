@@ -5,6 +5,12 @@
 #include "source/objects/ObjectManager.h"
 #include "source/objects/components/Components.h"
 
+#include <random>
+
+constexpr int gridSize = 5;
+constexpr int gridHeight = 5;
+constexpr int ballSpacing = 3;
+
 std::shared_ptr<Object> createBlock(const ECS3D& ecs, glm::vec3 position = { 0, 0, 0 },
                                     glm::vec3 scale = { 1, 1, 1 }, glm::vec3 rotation = { 0, 0, 0 });
 std::shared_ptr<Object> createRigidBlock(const ECS3D& ecs, glm::vec3 position = { 0, 0, 0 },
@@ -19,35 +25,24 @@ int main()
   {
     ECS3D ecs;
 
-    ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
+    ecs.getObjectManager()->addObject(createRigidBlock(ecs, {0, -15, 0}, {100, 3, 100}));
 
-    const auto object = createRigidBlock(ecs, { 0, -10, 0 }, { 10, 1, 10 });
-    ecs.getObjectManager()->addObject(object);
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
 
-    const auto object2 = createRigidBlock(ecs, { 0, 5, 0});
-    ecs.getObjectManager()->addObject(object2);
-
-    ecs.getObjectManager()->addObject(createRigidBlock(ecs, { 15, -15, 0 }, {10, 0.25, 10}, {0, 0, 30}));
-
-    ecs.getObjectManager()->addObject(createSphere(ecs, { 0, 0, 0 }));
-    ecs.getObjectManager()->addObject(createSphere(ecs, { 0, 2, 0 }));
-    ecs.getObjectManager()->addObject(createSphere(ecs, { 0, -2, 0 }));
-
-    const auto transform = std::dynamic_pointer_cast<Transform>(object2->getComponent(ComponentType::transform));
+    for (int i = 0; i < gridHeight; i++)
+      for (int j = 0; j < gridSize; j++)
+        for (int k = 0; k < gridSize; k++)
+          ecs.getObjectManager()->addObject(createSphere(ecs,
+        {
+          j * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
+          i * ballSpacing,
+          k * ballSpacing + dist(gen)
+        }));
 
     while (ecs.isActive())
     {
-      glm::vec3 position = transform->getPosition();
-
-      ImGui::Begin("Object");
-      ImGui::Text("Control Position:");
-      ImGui::SliderFloat("x", &position.x, -30.0f, 30.0f);
-      ImGui::SliderFloat("y", &position.y, -30.0f, 30.0f);
-      ImGui::SliderFloat("z", &position.z, -30.0f, 30.0f);
-      ImGui::End();
-
-      transform->move(position - transform->getPosition());
-
       ecs.update();
     }
   }

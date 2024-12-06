@@ -28,6 +28,8 @@ private:
   bool wasWasFalling;
 
   std::weak_ptr<Transform> transform_ptr;
+
+  void limitMovement();
 };
 
 
