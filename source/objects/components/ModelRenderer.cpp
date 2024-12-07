@@ -22,15 +22,11 @@ ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, cons
     models.emplace(modelPath, renderer->loadModel(modelPath));
   }
 
-  renderObject = renderer->loadRenderObject(textures.at(texturePath),
-                                            specularMaps.at(specularMapPath),
-                                            models.at(modelPath));
-
-  // const std::shared_ptr<Texture> texture = renderer->loadTexture(texturePath);
-  // const std::shared_ptr<Texture> specularMap = renderer->loadTexture(specularMapPath);
-  // const std::shared_ptr<Model> model = renderer->loadModel(modelPath);
-  //
-  // renderObject = renderer->loadRenderObject(texture, specularMap, model);
+  renderObject = renderer->loadRenderObject(
+    textures.at(texturePath),
+    specularMaps.at(specularMapPath),
+    models.at(modelPath)
+  );
 }
 
 void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
@@ -51,4 +47,14 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
     renderObject->setScale(transform->getScale());
     renderObject->setRotation(transform->getRotation());
   }
+}
+
+void ModelRenderer::enableRendering() const
+{
+  renderObject->enableRendering();
+}
+
+void ModelRenderer::disableRendering() const
+{
+  renderObject->disableRendering();
 }

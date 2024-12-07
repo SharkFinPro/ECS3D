@@ -20,6 +20,12 @@ public:
 
   void addObject(std::shared_ptr<Object> object);
 
+  void enableRendering() const;
+
+  void disableRendering();
+
+  void resetObjects();
+
 private:
   ECS3D* ecs;
 

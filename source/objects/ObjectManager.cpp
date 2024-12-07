@@ -6,6 +6,9 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
+#include "components/ModelRenderer.h"
+#include "components/Transform.h"
+
 ObjectManager::ObjectManager()
   : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
 {}
@@ -30,6 +33,48 @@ void ObjectManager::addObject(std::shared_ptr<Object> object)
 {
   object->setManager(this);
   objects.push_back(std::move(object));
+}
+
+void ObjectManager::enableRendering() const
+{
+  for (const auto& object : objects)
+  {
+    const auto modelRenderer = std::dynamic_pointer_cast<ModelRenderer>(object->getComponent(ComponentType::modelRenderer));
+    if (modelRenderer != nullptr)
+    {
+      modelRenderer->enableRendering();
+    }
+  }
+}
+
+void ObjectManager::disableRendering()
+{
+  for (const auto& object : objects)
+  {
+    const auto modelRenderer = std::dynamic_pointer_cast<ModelRenderer>(object->getComponent(ComponentType::modelRenderer));
+    if (modelRenderer != nullptr)
+    {
+      modelRenderer->disableRendering();
+    }
+  }
+}
+
+void ObjectManager::resetObjects()
+{
+  for (const auto& object : objects)
+  {
+    const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
+    if (transform != nullptr)
+    {
+      transform->reset();
+    }
+
+    const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
+    if (rigidBody != nullptr)
+    {
+      rigidBody->setVelocity({ 0.0f, 0.0f, 0.0f });
+    }
+  }
 }
 
 void ObjectManager::variableUpdate(const float dt)

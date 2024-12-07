@@ -16,6 +16,10 @@ public:
 
   void variableUpdate(float dt) override;
 
+  void enableRendering() const;
+
+  void disableRendering() const;
+
 private:
   std::shared_ptr<RenderObject> renderObject;
   std::weak_ptr<Transform> transform_ptr;

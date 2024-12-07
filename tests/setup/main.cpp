@@ -2,16 +2,14 @@
 #include <iostream>
 
 #include "source/objects/Object.h"
-#include "source/objects/ObjectManager.h"
 #include "source/objects/components/Components.h"
 
-std::shared_ptr<Object> createBlock(const ECS3D& ecs, glm::vec3 position = { 0, 0, 0 },
-                                    glm::vec3 scale = { 1, 1, 1 }, glm::vec3 rotation = { 0, 0, 0 });
-std::shared_ptr<Object> createRigidBlock(const ECS3D& ecs, glm::vec3 position = { 0, 0, 0 },
-                                         glm::vec3 scale = { 1, 1, 1 }, glm::vec3 rotation = { 0, 0, 0 });
+#include "source/scenes/SceneManager.h"
+#include "source/scenes/Scene.h"
 
-std::shared_ptr<Object> createSphere(const ECS3D& ecs, glm::vec3 position = { 0, 0, 0 },
-                                     glm::vec3 scale = { 1, 1, 1 }, glm::vec3 rotation = { 0, 0, 0 });
+void loadScene1(const std::shared_ptr<Scene>& scene);
+
+void loadScene2(const std::shared_ptr<Scene>& scene);
 
 int main()
 {
@@ -21,32 +19,26 @@ int main()
 
     ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
 
-    const auto object = createRigidBlock(ecs, { 0, -10, 0 }, { 10, 1, 10 });
-    ecs.getObjectManager()->addObject(object);
+    SceneManager sceneManager(&ecs);
 
-    const auto object2 = createRigidBlock(ecs, { 0, 5, 0});
-    ecs.getObjectManager()->addObject(object2);
+    const auto scene1 = sceneManager.createScene();
+    loadScene1(scene1);
 
-    ecs.getObjectManager()->addObject(createRigidBlock(ecs, { 15, -15, 0 }, {10, 0.25, 10}, {0, 0, 30}));
+    const auto scene2 = sceneManager.createScene();
+    loadScene2(scene2);
 
-    ecs.getObjectManager()->addObject(createSphere(ecs, { 0, 0, 0 }));
-    ecs.getObjectManager()->addObject(createSphere(ecs, { 0, 2, 0 }));
-    ecs.getObjectManager()->addObject(createSphere(ecs, { 0, -2, 0 }));
-
-    const auto transform = std::dynamic_pointer_cast<Transform>(object2->getComponent(ComponentType::transform));
+    sceneManager.loadScene(1);
 
     while (ecs.isActive())
     {
-      glm::vec3 position = transform->getPosition();
-
-      ImGui::Begin("Object");
-      ImGui::Text("Control Position:");
-      ImGui::SliderFloat("x", &position.x, -30.0f, 30.0f);
-      ImGui::SliderFloat("y", &position.y, -30.0f, 30.0f);
-      ImGui::SliderFloat("z", &position.z, -30.0f, 30.0f);
-      ImGui::End();
-
-      transform->move(position - transform->getPosition());
+      if (ecs.keyIsPressed(GLFW_KEY_1))
+      {
+        sceneManager.loadScene(1);
+      }
+      if (ecs.keyIsPressed(GLFW_KEY_2))
+      {
+        sceneManager.loadScene(2);
+      }
 
       ecs.update();
     }
@@ -60,46 +52,28 @@ int main()
   return EXIT_SUCCESS;
 }
 
-std::shared_ptr<Object> createBlock(const ECS3D& ecs, glm::vec3 position, glm::vec3 scale, glm::vec3 rotation)
+void loadScene1(const std::shared_ptr<Scene>& scene)
 {
-  const std::vector<std::shared_ptr<Component>> components {
-    std::make_shared<Transform>(position, scale, rotation),
-    std::make_shared<ModelRenderer>(ecs.getRenderer(),
-                                    "assets/textures/white.png",
-                                    "assets/textures/blank_specular.png",
-                                    "assets/models/cube_1x1x1.glb"),
-    std::make_shared<RigidBody>(),
-    std::make_shared<BoxCollider>()
-  };
+  scene->createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }});
 
-  return std::make_shared<Object>(components);
+  scene->createBlock({{ 5, 5, 0}});
+
+  scene->createRigidBlock({{ 15, -15, 0 }, {10, 0.25, 10}, {0, 0, 30}});
+
+  scene->createSphere({{ 2, 0, 0 }});
+  scene->createSphere({{ 0, 2, 0 }});
+  scene->createSphere({{ 0, -2, 2 }});
+
+  scene->createPlayer({{ 5, 0, 5 }});
 }
 
-std::shared_ptr<Object> createRigidBlock(const ECS3D& ecs, glm::vec3 position, glm::vec3 scale, glm::vec3 rotation)
+void loadScene2(const std::shared_ptr<Scene>& scene)
 {
-  const std::vector<std::shared_ptr<Component>> components {
-    std::make_shared<Transform>(position, scale, rotation),
-    std::make_shared<ModelRenderer>(ecs.getRenderer(),
-                                    "assets/textures/white.png",
-                                    "assets/textures/blank_specular.png",
-                                    "assets/models/cube_1x1x1.glb"),
-    std::make_shared<BoxCollider>()
-  };
+  scene->createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }});
 
-  return std::make_shared<Object>(components);
-}
+  scene->createRigidBlock({{ 18, -5, 0 }, { 10, 1, 10 }, { 0, 0, 30}});
+  scene->createRigidBlock({{ -18, -5, 0 }, { 10, 1, 10 }, { 0, 0, -30}});
 
-std::shared_ptr<Object> createSphere(const ECS3D& ecs, glm::vec3 position, glm::vec3 scale, glm::vec3 rotation)
-{
-  const std::vector<std::shared_ptr<Component>> components {
-    std::make_shared<Transform>(position, scale, rotation),
-    std::make_shared<ModelRenderer>(ecs.getRenderer(),
-                                    "assets/textures/white.png",
-                                    "assets/textures/blank_specular.png",
-                                    "assets/models/sphere_3.glb"),
-    std::make_shared<RigidBody>(),
-    std::make_shared<SphereCollider>()
-  };
-
-  return std::make_shared<Object>(components);
+  scene->createSphere({{ 2, 0, 0 }});
+  scene->createPlayer({{ 5, 0, 5 }});
 }
