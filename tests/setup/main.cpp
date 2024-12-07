@@ -71,7 +71,9 @@ void loadScene2(const std::shared_ptr<Scene>& scene)
 {
   scene->createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }});
 
-  // scene->createRigidBlock({{ 5, 1, 0 }, { 10, 2, 10 }});
+  scene->createRigidBlock({{ 18, -5, 0 }, { 10, 1, 10 }, { 0, 0, 30}});
+  scene->createRigidBlock({{ -18, -5, 0 }, { 10, 1, 10 }, { 0, 0, -30}});
+
   scene->createSphere({{ 2, 0, 0 }});
   scene->createPlayer({{ 5, 0, 5 }});
 }
