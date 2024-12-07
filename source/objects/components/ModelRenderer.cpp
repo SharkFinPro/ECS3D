@@ -53,12 +53,12 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
   }
 }
 
-void ModelRenderer::enableRendering()
+void ModelRenderer::enableRendering() const
 {
   renderObject->enableRendering();
 }
 
-void ModelRenderer::disableRendering()
+void ModelRenderer::disableRendering() const
 {
   renderObject->disableRendering();
 }

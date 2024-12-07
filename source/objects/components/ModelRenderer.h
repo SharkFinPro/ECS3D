@@ -16,9 +16,9 @@ public:
 
   void variableUpdate(float dt) override;
 
-  void enableRendering();
+  void enableRendering() const;
 
-  void disableRendering();
+  void disableRendering() const;
 
 private:
   std::shared_ptr<RenderObject> renderObject;
