@@ -45,11 +45,10 @@ bool ECS3D::keyIsPressed(const int key) const
 void ECS3D::initRenderer()
 {
   constexpr VulkanEngineOptions vulkanEngineOptions = {
-    .WINDOW_WIDTH = 800,
-    .WINDOW_HEIGHT = 600,
+    .WINDOW_WIDTH = 1280,
+    .WINDOW_HEIGHT = 720,
     .WINDOW_TITLE = "ECS3D",
-    .CAMERA_POSITION = { 0, 0, -50 },
-    .FULLSCREEN = true
+    .CAMERA_POSITION = { 0, 0, -50 }
   };
 
   renderer = std::make_shared<VulkanEngine>(vulkanEngineOptions);
