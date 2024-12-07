@@ -17,19 +17,18 @@ public:
 
   [[nodiscard]] std::shared_ptr<VulkanEngine> getRenderer() const;
 
-  [[nodiscard]] std::shared_ptr<ObjectManager> getObjectManager() const;
+  void setObjectManager(const std::shared_ptr<ObjectManager> &objectManager);
 
   [[nodiscard]] bool keyIsPressed(int key) const;
 
 private:
   std::shared_ptr<VulkanEngine> renderer;
-  std::shared_ptr<ObjectManager> objectManager;
 
   std::chrono::time_point<std::chrono::steady_clock> previousTime;
 
-  void initRenderer();
+  std::shared_ptr<ObjectManager> objectManager;
 
-  void initObjectManager();
+  void initRenderer();
 };
 
 

@@ -6,6 +6,8 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
+#include "components/ModelRenderer.h"
+
 ObjectManager::ObjectManager()
   : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
 {}
@@ -30,6 +32,30 @@ void ObjectManager::addObject(std::shared_ptr<Object> object)
 {
   object->setManager(this);
   objects.push_back(std::move(object));
+}
+
+void ObjectManager::enableRendering() const
+{
+  for (const auto& object : objects)
+  {
+    const auto modelRenderer = std::dynamic_pointer_cast<ModelRenderer>(object->getComponent(ComponentType::modelRenderer));
+    if (modelRenderer != nullptr)
+    {
+      modelRenderer->enableRendering();
+    }
+  }
+}
+
+void ObjectManager::disableRendering()
+{
+  for (const auto& object : objects)
+  {
+    const auto modelRenderer = std::dynamic_pointer_cast<ModelRenderer>(object->getComponent(ComponentType::modelRenderer));
+    if (modelRenderer != nullptr)
+    {
+      modelRenderer->disableRendering();
+    }
+  }
 }
 
 void ObjectManager::variableUpdate(const float dt)

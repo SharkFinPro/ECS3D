@@ -52,3 +52,13 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
     renderObject->setRotation(transform->getRotation());
   }
 }
+
+void ModelRenderer::enableRendering()
+{
+  renderObject->enableRendering();
+}
+
+void ModelRenderer::disableRendering()
+{
+  renderObject->disableRendering();
+}
