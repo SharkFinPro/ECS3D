@@ -16,6 +16,7 @@ void Scene::load() const
 {
   sceneManager->getECS()->setObjectManager(objectManager);
   objectManager->enableRendering();
+  objectManager->resetObjects();
 }
 
 void Scene::unload() const

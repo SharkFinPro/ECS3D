@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "components/ModelRenderer.h"
+#include "components/Transform.h"
 
 ObjectManager::ObjectManager()
   : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
@@ -54,6 +55,24 @@ void ObjectManager::disableRendering()
     if (modelRenderer != nullptr)
     {
       modelRenderer->disableRendering();
+    }
+  }
+}
+
+void ObjectManager::resetObjects()
+{
+  for (const auto& object : objects)
+  {
+    const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
+    if (transform != nullptr)
+    {
+      transform->reset();
+    }
+
+    const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
+    if (rigidBody != nullptr)
+    {
+      rigidBody->setVelocity({ 0.0f, 0.0f, 0.0f });
     }
   }
 }

@@ -24,6 +24,8 @@ public:
 
   void disableRendering();
 
+  void resetObjects();
+
 private:
   ECS3D* ecs;
 
