@@ -25,6 +25,11 @@ int main()
 
     while (ecs.isActive())
     {
+      if (ecs.keyIsPressed(GLFW_KEY_1))
+      {
+        sceneManager.loadScene(1);
+      }
+      
       ecs.update();
     }
   }
