@@ -24,11 +24,11 @@ public:
 
   void createBlock(TransformData transformData, std::shared_ptr<Object>* object = nullptr) const;
 
-  void createRigidBlock(TransformData transformData) const;
+  void createRigidBlock(TransformData transformData, std::shared_ptr<Object>* object = nullptr) const;
 
-  void createSphere(TransformData transformData) const;
+  void createSphere(TransformData transformData, std::shared_ptr<Object>* object = nullptr) const;
 
-  void createPlayer(TransformData transformData) const;
+  void createPlayer(TransformData transformData, std::shared_ptr<Object>* object = nullptr) const;
 
 private:
   SceneManager* sceneManager;

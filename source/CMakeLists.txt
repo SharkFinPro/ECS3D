@@ -52,3 +52,8 @@ target_link_libraries(${PROJECT_NAME} PUBLIC VulkanEngine)
 
 # Include VulkanEngine headers
 target_include_directories(${PROJECT_NAME} PUBLIC ${VulkanEngine_SOURCE_DIR}/include)
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
+endif()

@@ -13,6 +13,9 @@ public:
   [[nodiscard]] glm::vec3 getScale() const;
   [[nodiscard]] glm::vec3 getRotation() const;
 
+  void setScale(glm::vec3 scale);
+  void setRotation(glm::vec3 rotation);
+
   void move(const glm::vec3& direction);
 
   void reset();

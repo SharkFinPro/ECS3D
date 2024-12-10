@@ -9,6 +9,8 @@
 #include "components/ModelRenderer.h"
 #include "components/Transform.h"
 
+#include <omp.h>
+
 ObjectManager::ObjectManager()
   : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
 {}
@@ -104,8 +106,12 @@ void ObjectManager::fixedUpdate(const float dt)
 
 void ObjectManager::checkCollisions()
 {
-  for (const auto& object : objects)
+#pragma omp parallel for default(none) num_threads(24)
+  for (int i = 0; i < objects.size(); i++)
+  // for (const auto& object : objects)
   {
+    const auto object = objects[i];
+
     auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
     auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
 
