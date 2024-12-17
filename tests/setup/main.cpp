@@ -1,11 +1,16 @@
 #include "source/ECS3D.h"
 #include <iostream>
+#include <random>
 
 #include "source/objects/Object.h"
 #include "source/objects/components/Components.h"
 
 #include "source/scenes/SceneManager.h"
 #include "source/scenes/Scene.h"
+
+constexpr int gridSize = 6;
+constexpr int gridHeight = 10;
+constexpr int ballSpacing = 5;
 
 std::shared_ptr<Object> loadScene1(const std::shared_ptr<Scene>& scene);
 
@@ -140,11 +145,6 @@ void loadScene2(const std::shared_ptr<Scene>& scene)
   scene->createPlayer({{ 5, 0, 5 }});
 }
 
-#include <random>
-constexpr int gridSize = 6;
-constexpr int gridHeight = 10;
-constexpr int ballSpacing = 5;
-
 void loadScene3(const std::shared_ptr<Scene>& scene)
 {
   scene->createRigidBlock({{0, -15, 0}, {100, 10, 100}});
@@ -153,7 +153,7 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
   std::mt19937 gen(rd());
   std::uniform_real_distribution<float> dist(-0.75f, 0.75f);
   std::uniform_real_distribution<float> sphereSize(0.25f, 1.5f);
-  std::uniform_int_distribution<int> zeroOrOne(0, 1);
+  std::uniform_int_distribution<int> shouldUseSphere(0, 1);
 
   std::uniform_real_distribution<float> rot(0.0f, 360.0f);
 
@@ -163,32 +163,37 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
     {
       for (int k = 0; k < gridSize; k++)
       {
-        std::shared_ptr<Object> object;
+        if (shouldUseSphere(gen))
+        {
+          scene->createSphere({
+            .position = {
+              static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
+              static_cast<float>(i) * ballSpacing,
+              static_cast<float>(k) * ballSpacing + dist(gen)
+            },
+            .scale = glm::vec3(sphereSize(gen))
+          }, nullptr);
 
-        if (zeroOrOne(gen))
-        {
-          scene->createSphere({{
-            static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
-            static_cast<float>(i) * ballSpacing,
-            static_cast<float>(k) * ballSpacing + dist(gen)
-          }, glm::vec3(sphereSize(gen)) }, &object);
+          continue;
         }
-        else
-        {
-          scene->createBlock({{
+
+        scene->createBlock({
+          .position = {
             static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
             static_cast<float>(i) * ballSpacing,
             static_cast<float>(k) * ballSpacing + dist(gen)
-          }, {
+          },
+          .scale = {
             sphereSize(gen),
             sphereSize(gen),
             sphereSize(gen)
-          }, {
+          },
+          .rotation = {
             rot(gen),
             rot(gen),
             rot(gen)
-          }}, &object);
-        }
+          }
+        }, nullptr);
       }
     }
   }
