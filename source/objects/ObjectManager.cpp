@@ -106,9 +106,8 @@ void ObjectManager::fixedUpdate(const float dt)
 
 void ObjectManager::checkCollisions()
 {
-#pragma omp parallel for default(none) num_threads(24)
+#pragma omp parallel for default(none) num_threads(6)
   for (int i = 0; i < objects.size(); i++)
-  // for (const auto& object : objects)
   {
     const auto object = objects[i];
 

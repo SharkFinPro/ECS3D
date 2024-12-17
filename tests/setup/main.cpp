@@ -120,7 +120,7 @@ void loadScene2(const std::shared_ptr<Scene>& scene)
 
 #include <random>
 constexpr int gridSize = 6;
-constexpr int gridHeight = 30;
+constexpr int gridHeight = 10;
 constexpr int ballSpacing = 5;
 
 void loadScene3(const std::shared_ptr<Scene>& scene)

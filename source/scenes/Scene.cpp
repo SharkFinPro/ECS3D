@@ -70,8 +70,8 @@ void Scene::createSphere(TransformData transformData, std::shared_ptr<Object>* o
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
-                                    "assets/textures/s.png",
-                                    "assets/textures/white.png",
+                                    "assets/textures/earth.png",
+                                    "assets/textures/earth_specular.png",
                                     "assets/models/sphere_3.glb"),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>()
