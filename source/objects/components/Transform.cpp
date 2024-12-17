@@ -38,4 +38,6 @@ void Transform::move(const glm::vec3& direction)
 void Transform::reset()
 {
   position = initialPosition;
+  scale = initialScale;
+  rotation = initialRotation;
 }
