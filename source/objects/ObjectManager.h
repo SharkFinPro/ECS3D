@@ -37,9 +37,9 @@ private:
   void variableUpdate(float dt) const;
   void fixedUpdate(float dt);
 
-  void checkCollisions();
+  void checkCollisions() const;
 
-  void findCollisions(const std::shared_ptr<Object>& object, const std::shared_ptr<Collider>& collider, std::vector<std::shared_ptr<Object>>& collidedObjects);
+  void findCollisions(const std::shared_ptr<Object>& object, const std::shared_ptr<Collider>& collider, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, std::vector<std::shared_ptr<Object>>& collidedObjects);
 

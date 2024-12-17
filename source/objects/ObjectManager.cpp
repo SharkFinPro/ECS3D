@@ -9,8 +9,6 @@
 #include "components/ModelRenderer.h"
 #include "components/Transform.h"
 
-#include <omp.h>
-
 ObjectManager::ObjectManager()
   : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
 {}
@@ -104,7 +102,7 @@ void ObjectManager::fixedUpdate(const float dt)
   }
 }
 
-void ObjectManager::checkCollisions()
+void ObjectManager::checkCollisions() const
 {
 #pragma omp parallel for default(none) num_threads(6)
   for (int i = 0; i < objects.size(); i++)
@@ -131,7 +129,7 @@ void ObjectManager::checkCollisions()
 
 void ObjectManager::findCollisions(const std::shared_ptr<Object>& object,
                                    const std::shared_ptr<Collider>& collider,
-                                   std::vector<std::shared_ptr<Object>>& collidedObjects)
+                                   std::vector<std::shared_ptr<Object>>& collidedObjects) const
 {
   for (const auto& other : objects)
   {
