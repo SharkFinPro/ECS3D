@@ -173,7 +173,7 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
             static_cast<float>(k) * ballSpacing + dist(gen)
           }}, &object);
 
-          auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
+          const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
           transform->setScale(glm::vec3(sphereSize(gen)));
         }
         else
