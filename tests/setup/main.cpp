@@ -24,9 +24,9 @@ int main()
     SceneManager sceneManager(&ecs);
 
     const auto scene1 = sceneManager.createScene();
-    auto object = loadScene1(scene1);
-    auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
-    auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
+    const auto object = loadScene1(scene1);
+    const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
+    const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
 
     const auto scene2 = sceneManager.createScene();
     loadScene2(scene2);
@@ -158,7 +158,9 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
   std::uniform_real_distribution<float> rot(0.0f, 360.0f);
 
   for (int i = 0; i < gridHeight; i++)
+  {
     for (int j = 0; j < gridSize; j++)
+    {
       for (int k = 0; k < gridSize; k++)
       {
         std::shared_ptr<Object> object;
@@ -166,9 +168,9 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
         if (zeroOrOne(gen))
         {
           scene->createSphere({{
-            j * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
-            i * ballSpacing,
-            k * ballSpacing + dist(gen)
+            static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
+            static_cast<float>(i) * ballSpacing,
+            static_cast<float>(k) * ballSpacing + dist(gen)
           }}, &object);
 
           auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
@@ -177,17 +179,16 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
         else
         {
           scene->createBlock({{
-            j * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
-            i * ballSpacing,
-            k * ballSpacing + dist(gen)
+            static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
+            static_cast<float>(i) * ballSpacing,
+            static_cast<float>(k) * ballSpacing + dist(gen)
           }}, &object);
 
-          auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
+          const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
           transform->setScale(glm::vec3(sphereSize(gen), sphereSize(gen), sphereSize(gen)));
           transform->setRotation(glm::vec3(rot(gen), rot(gen), rot(gen)));
         }
-
-
       }
-
+    }
+  }
 }
