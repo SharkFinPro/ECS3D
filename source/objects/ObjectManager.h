@@ -22,9 +22,9 @@ public:
 
   void enableRendering() const;
 
-  void disableRendering();
+  void disableRendering() const;
 
-  void resetObjects();
+  void resetObjects() const;
 
 private:
   ECS3D* ecs;
@@ -34,7 +34,7 @@ private:
   const float fixedUpdateDt;
   float timeAccumulator;
 
-  void variableUpdate(float dt);
+  void variableUpdate(float dt) const;
   void fixedUpdate(float dt);
 
   void checkCollisions();

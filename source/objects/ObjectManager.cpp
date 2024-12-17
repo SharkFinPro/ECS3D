@@ -49,7 +49,7 @@ void ObjectManager::enableRendering() const
   }
 }
 
-void ObjectManager::disableRendering()
+void ObjectManager::disableRendering() const
 {
   for (const auto& object : objects)
   {
@@ -61,7 +61,7 @@ void ObjectManager::disableRendering()
   }
 }
 
-void ObjectManager::resetObjects()
+void ObjectManager::resetObjects() const
 {
   for (const auto& object : objects)
   {
@@ -79,7 +79,7 @@ void ObjectManager::resetObjects()
   }
 }
 
-void ObjectManager::variableUpdate(const float dt)
+void ObjectManager::variableUpdate(const float dt) const
 {
   for (const auto& object : objects)
   {
