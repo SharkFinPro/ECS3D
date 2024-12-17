@@ -1,6 +1,7 @@
 #ifndef SCENEMANAGER_H
 #define SCENEMANAGER_H
 
+#include <string>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -20,8 +21,8 @@ public:
 
   [[nodiscard]] ECS3D* getECS() const;
 
-  std::shared_ptr<Texture> getTexture(const char* path);
-  std::shared_ptr<Model> getModel(const char* path);
+  std::shared_ptr<Texture> getTexture(const std::string& path);
+  std::shared_ptr<Model> getModel(const std::string& path);
 
 private:
   ECS3D* ecs;
@@ -30,9 +31,9 @@ private:
 
   int currentScene;
 
-  std::unordered_map<const char*, std::shared_ptr<Texture>> textures;
-  std::unordered_map<const char*, std::shared_ptr<Texture>> specularMaps;
-  std::unordered_map<const char*, std::shared_ptr<Model>> models;
+  std::unordered_map<std::string, std::shared_ptr<Texture>> textures;
+  std::unordered_map<std::string, std::shared_ptr<Texture>> specularMaps;
+  std::unordered_map<std::string, std::shared_ptr<Model>> models;
 };
 
 

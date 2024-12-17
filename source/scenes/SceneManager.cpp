@@ -32,21 +32,21 @@ ECS3D* SceneManager::getECS() const
   return ecs;
 }
 
-std::shared_ptr<Texture> SceneManager::getTexture(const char* path)
+std::shared_ptr<Texture> SceneManager::getTexture(const std::string& path)
 {
   if (!textures.contains(path))
   {
-    textures.emplace(path, ecs->getRenderer()->loadTexture(path));
+    textures.emplace(path, ecs->getRenderer()->loadTexture(path.c_str()));
   }
 
   return textures.at(path);
 }
 
-std::shared_ptr<Model> SceneManager::getModel(const char* path)
+std::shared_ptr<Model> SceneManager::getModel(const std::string& path)
 {
   if (!models.contains(path))
   {
-    models.emplace(path, ecs->getRenderer()->loadModel(path));
+    models.emplace(path, ecs->getRenderer()->loadModel(path.c_str()));
   }
 
   return models.at(path);
