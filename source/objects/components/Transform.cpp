@@ -20,6 +20,16 @@ glm::vec3 Transform::getRotation() const
   return rotation;
 }
 
+void Transform::setScale(const glm::vec3 scale)
+{
+  this->scale = scale;
+}
+
+void Transform::setRotation(const glm::vec3 rotation)
+{
+  this->rotation = rotation;
+}
+
 void Transform::move(const glm::vec3& direction)
 {
   position += direction;
@@ -28,4 +38,6 @@ void Transform::move(const glm::vec3& direction)
 void Transform::reset()
 {
   position = initialPosition;
+  scale = initialScale;
+  rotation = initialRotation;
 }

@@ -47,7 +47,7 @@ void ObjectManager::enableRendering() const
   }
 }
 
-void ObjectManager::disableRendering()
+void ObjectManager::disableRendering() const
 {
   for (const auto& object : objects)
   {
@@ -59,7 +59,7 @@ void ObjectManager::disableRendering()
   }
 }
 
-void ObjectManager::resetObjects()
+void ObjectManager::resetObjects() const
 {
   for (const auto& object : objects)
   {
@@ -77,7 +77,7 @@ void ObjectManager::resetObjects()
   }
 }
 
-void ObjectManager::variableUpdate(const float dt)
+void ObjectManager::variableUpdate(const float dt) const
 {
   for (const auto& object : objects)
   {
@@ -102,10 +102,13 @@ void ObjectManager::fixedUpdate(const float dt)
   }
 }
 
-void ObjectManager::checkCollisions()
+void ObjectManager::checkCollisions() const
 {
-  for (const auto& object : objects)
+#pragma omp parallel for default(none) num_threads(6)
+  for (int i = 0; i < objects.size(); i++)
   {
+    const auto object = objects[i];
+
     auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
     auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
 
@@ -126,7 +129,7 @@ void ObjectManager::checkCollisions()
 
 void ObjectManager::findCollisions(const std::shared_ptr<Object>& object,
                                    const std::shared_ptr<Collider>& collider,
-                                   std::vector<std::shared_ptr<Object>>& collidedObjects)
+                                   std::vector<std::shared_ptr<Object>>& collidedObjects) const
 {
   for (const auto& other : objects)
   {

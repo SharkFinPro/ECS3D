@@ -48,11 +48,16 @@ void ECS3D::initRenderer()
     .WINDOW_WIDTH = 1280,
     .WINDOW_HEIGHT = 720,
     .WINDOW_TITLE = "ECS3D",
-    .CAMERA_POSITION = { 0, 0, -50 }
+    .CAMERA_POSITION = { 0, 0, -50 },
+    .FULLSCREEN = false
   };
 
   renderer = std::make_shared<VulkanEngine>(vulkanEngineOptions);
 
   // TODO: Add system to integrate lights into ECS
-  renderer->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.1f, 0.5f, 1.0f);
+  renderer->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
+
+  renderer->createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
+
+  renderer->createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
 }
