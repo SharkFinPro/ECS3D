@@ -3,31 +3,10 @@
 #include "Transform.h"
 #include "../Object.h"
 
-ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const char* texturePath,
-                             const char* specularMapPath, const char* modelPath)
-  : Component(ComponentType::modelRenderer)
-{
-  if (!textures.contains(texturePath))
-  {
-    textures.emplace(texturePath, renderer->loadTexture(texturePath));
-  }
-
-  if (!specularMaps.contains(specularMapPath))
-  {
-    specularMaps.emplace(specularMapPath, renderer->loadTexture(specularMapPath));
-  }
-
-  if (!models.contains(modelPath))
-  {
-    models.emplace(modelPath, renderer->loadModel(modelPath));
-  }
-
-  renderObject = renderer->loadRenderObject(
-    textures.at(texturePath),
-    specularMaps.at(specularMapPath),
-    models.at(modelPath)
-  );
-}
+ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
+                             const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model)
+  : Component(ComponentType::modelRenderer), renderObject(renderer->loadRenderObject(texture, specularMap, model))
+{}
 
 void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
 {
