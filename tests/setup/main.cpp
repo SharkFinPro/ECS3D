@@ -171,10 +171,7 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
             static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
             static_cast<float>(i) * ballSpacing,
             static_cast<float>(k) * ballSpacing + dist(gen)
-          }}, &object);
-
-          const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
-          transform->setScale(glm::vec3(sphereSize(gen)));
+          }, glm::vec3(sphereSize(gen)) }, &object);
         }
         else
         {
@@ -182,11 +179,15 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
             static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
             static_cast<float>(i) * ballSpacing,
             static_cast<float>(k) * ballSpacing + dist(gen)
+          }, {
+            sphereSize(gen),
+            sphereSize(gen),
+            sphereSize(gen)
+          }, {
+            rot(gen),
+            rot(gen),
+            rot(gen)
           }}, &object);
-
-          const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
-          transform->setScale(glm::vec3(sphereSize(gen), sphereSize(gen), sphereSize(gen)));
-          transform->setRotation(glm::vec3(rot(gen), rot(gen), rot(gen)));
         }
       }
     }
