@@ -15,7 +15,7 @@ ObjectManager::ObjectManager()
 
 void ObjectManager::update(const float dt)
 {
-  ImGui::Begin("Objects");
+  ImGui::Begin("Scene");
   for (const auto& object : objects)
   {
     ImGui::PushID(&object);
