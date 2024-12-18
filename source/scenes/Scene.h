@@ -20,8 +20,6 @@ public:
 
   void load() const;
 
-  void unload() const;
-
   void createBlock(TransformData transformData, std::shared_ptr<Object>* object = nullptr) const;
 
   void createRigidBlock(TransformData transformData, std::shared_ptr<Object>* object = nullptr) const;

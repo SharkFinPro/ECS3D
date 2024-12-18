@@ -17,11 +17,6 @@ std::shared_ptr<Scene> SceneManager::createScene()
 
 void SceneManager::loadScene(const int scene)
 {
-  if (currentScene != -1)
-  {
-    scenes[currentScene]->unload();
-  }
-
   currentScene = scene - 1;
 
   scenes[currentScene]->load();

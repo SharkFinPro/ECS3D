@@ -20,10 +20,6 @@ public:
 
   void addObject(std::shared_ptr<Object> object);
 
-  void enableRendering() const;
-
-  void disableRendering() const;
-
   void resetObjects() const;
 
 private:

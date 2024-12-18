@@ -95,30 +95,6 @@ void ObjectManager::addObject(std::shared_ptr<Object> object)
   objects.push_back(std::move(object));
 }
 
-void ObjectManager::enableRendering() const
-{
-  for (const auto& object : objects)
-  {
-    const auto modelRenderer = std::dynamic_pointer_cast<ModelRenderer>(object->getComponent(ComponentType::modelRenderer));
-    if (modelRenderer != nullptr)
-    {
-      modelRenderer->enableRendering();
-    }
-  }
-}
-
-void ObjectManager::disableRendering() const
-{
-  for (const auto& object : objects)
-  {
-    const auto modelRenderer = std::dynamic_pointer_cast<ModelRenderer>(object->getComponent(ComponentType::modelRenderer));
-    if (modelRenderer != nullptr)
-    {
-      modelRenderer->disableRendering();
-    }
-  }
-}
-
 void ObjectManager::resetObjects() const
 {
   for (const auto& object : objects)

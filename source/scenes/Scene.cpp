@@ -15,13 +15,7 @@ Scene::Scene(SceneManager* sceneManager)
 void Scene::load() const
 {
   sceneManager->getECS()->setObjectManager(objectManager);
-  objectManager->enableRendering();
   objectManager->resetObjects();
-}
-
-void Scene::unload() const
-{
-  objectManager->disableRendering();
 }
 
 void Scene::createBlock(TransformData transformData, std::shared_ptr<Object>* object) const
