@@ -34,6 +34,8 @@ private:
   const float fixedUpdateDt;
   float timeAccumulator;
 
+  std::shared_ptr<Object> selectedObject;
+
   void variableUpdate(float dt) const;
   void fixedUpdate(float dt);
 
@@ -42,7 +44,6 @@ private:
   void findCollisions(const std::shared_ptr<Object>& object, const std::shared_ptr<Collider>& collider, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, std::vector<std::shared_ptr<Object>>& collidedObjects);
-
 };
 
 
