@@ -46,3 +46,8 @@ std::shared_ptr<Model> SceneManager::getModel(const std::string& path)
 
   return models.at(path);
 }
+
+void SceneManager::update(const float dt) const
+{
+  scenes[currentScene]->update(dt);
+}

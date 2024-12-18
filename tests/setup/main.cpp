@@ -23,22 +23,21 @@ int main()
   try
   {
     ECS3D ecs;
+    const auto sceneManager = ecs.getSceneManager();
 
     ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
 
-    SceneManager sceneManager(&ecs);
-
-    const auto scene1 = sceneManager.createScene();
+    const auto scene1 = sceneManager->createScene();
     const auto object = loadScene1(scene1);
 
-    const auto scene2 = sceneManager.createScene();
+    const auto scene2 = sceneManager->createScene();
     loadScene2(scene2);
 
-    const auto scene3 = sceneManager.createScene();
+    const auto scene3 = sceneManager->createScene();
     loadScene3(scene3);
 
     int currentScene = 1;
-    sceneManager.loadScene(currentScene);
+    sceneManager->loadScene(currentScene);
 
     while (ecs.isActive())
     {
@@ -47,17 +46,17 @@ int main()
         if (ecs.keyIsPressed(GLFW_KEY_1))
         {
           currentScene = 1;
-          sceneManager.loadScene(currentScene);
+          sceneManager->loadScene(currentScene);
         }
         else if (ecs.keyIsPressed(GLFW_KEY_2))
         {
           currentScene = 2;
-          sceneManager.loadScene(currentScene);
+          sceneManager->loadScene(currentScene);
         }
         else if (ecs.keyIsPressed(GLFW_KEY_3))
         {
           currentScene = 3;
-          sceneManager.loadScene(currentScene);
+          sceneManager->loadScene(currentScene);
         }
       }
 
