@@ -63,8 +63,10 @@ void ObjectManager::update(const float dt)
     {
       transform->reset();
 
-      const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(selectedObject->getComponent(ComponentType::rigidBody));
-      rigidBody->setVelocity({ 0, 0, 0 });
+      if (const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(selectedObject->getComponent(ComponentType::rigidBody)))
+      {
+        rigidBody->setVelocity({ 0, 0, 0 });
+      }
     }
     else
     {
