@@ -17,7 +17,7 @@ public:
 
   std::shared_ptr<Scene> createScene();
 
-  void loadScene(int scene);
+  void loadScene(const std::shared_ptr<Scene>& scene);
 
   [[nodiscard]] ECS3D* getECS() const;
 
@@ -31,7 +31,7 @@ private:
 
   std::vector<std::shared_ptr<Scene>> scenes;
 
-  int currentScene;
+  std::shared_ptr<Scene> currentScene;
 
   std::unordered_map<std::string, std::shared_ptr<Texture>> textures;
   std::unordered_map<std::string, std::shared_ptr<Texture>> specularMaps;

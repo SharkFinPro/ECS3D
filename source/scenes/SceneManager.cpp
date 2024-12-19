@@ -3,7 +3,7 @@
 #include "../ECS3D.h"
 
 SceneManager::SceneManager(ECS3D* ecs)
-  : ecs(ecs), currentScene(0)
+  : ecs(ecs), currentScene(nullptr)
 {}
 
 std::shared_ptr<Scene> SceneManager::createScene()
@@ -12,14 +12,19 @@ std::shared_ptr<Scene> SceneManager::createScene()
 
   scenes.push_back(scene);
 
+  if (!currentScene)
+  {
+    loadScene(scene);
+  }
+
   return scene;
 }
 
-void SceneManager::loadScene(const int scene)
+void SceneManager::loadScene(const std::shared_ptr<Scene> &scene)
 {
   currentScene = scene;
 
-  scenes[currentScene]->load();
+  currentScene->load();
 }
 
 ECS3D* SceneManager::getECS() const
@@ -52,17 +57,17 @@ void SceneManager::update(const float dt)
   ImGui::Begin("Scene Selector");
   for (int i = 0; i < scenes.size(); i++)
   {
-    if (ImGui::Selectable(("Scene " + std::to_string(i + 1)).c_str(), currentScene == i))
+    if (ImGui::Selectable(("Scene " + std::to_string(i + 1)).c_str(), currentScene == scenes[i]))
     {
-      loadScene(i);
+      loadScene(scenes[i]);
     }
   }
   ImGui::End();
 
-  if (scenes.empty())
+  if (!currentScene)
   {
     return;
   }
 
-  scenes[currentScene]->update(dt);
+  currentScene->update(dt);
 }
