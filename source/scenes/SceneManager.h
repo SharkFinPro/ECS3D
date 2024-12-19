@@ -24,7 +24,7 @@ public:
   std::shared_ptr<Texture> getTexture(const std::string& path);
   std::shared_ptr<Model> getModel(const std::string& path);
 
-  void update(float dt) const;
+  void update(float dt);
 
 private:
   ECS3D* ecs;

@@ -2,8 +2,6 @@
 #include <iostream>
 #include <random>
 
-#include "source/objects/Object.h"
-
 #include "source/scenes/SceneManager.h"
 #include "source/scenes/Scene.h"
 
@@ -11,7 +9,7 @@ constexpr int gridSize = 6;
 constexpr int gridHeight = 10;
 constexpr int ballSpacing = 5;
 
-std::shared_ptr<Object> loadScene1(const std::shared_ptr<Scene>& scene);
+void loadScene1(const std::shared_ptr<Scene>& scene);
 
 void loadScene2(const std::shared_ptr<Scene>& scene);
 
@@ -24,35 +22,12 @@ int main()
     ECS3D ecs;
     const auto sceneManager = ecs.getSceneManager();
 
-    const auto scene1 = sceneManager->createScene();
-    const auto object = loadScene1(scene1);
-
-    const auto scene2 = sceneManager->createScene();
-    loadScene2(scene2);
-
-    const auto scene3 = sceneManager->createScene();
-    loadScene3(scene3);
-
-    sceneManager->loadScene(1);
+    loadScene1(sceneManager->createScene());
+    loadScene2(sceneManager->createScene());
+    loadScene3(sceneManager->createScene());
 
     while (ecs.isActive())
     {
-      if (ecs.getRenderer()->sceneIsFocused())
-      {
-        if (ecs.keyIsPressed(GLFW_KEY_1))
-        {
-          sceneManager->loadScene(1);
-        }
-        else if (ecs.keyIsPressed(GLFW_KEY_2))
-        {
-          sceneManager->loadScene(2);
-        }
-        else if (ecs.keyIsPressed(GLFW_KEY_3))
-        {
-          sceneManager->loadScene(3);
-        }
-      }
-
       ecs.update();
     }
   }
@@ -65,12 +40,11 @@ int main()
   return EXIT_SUCCESS;
 }
 
-std::shared_ptr<Object> loadScene1(const std::shared_ptr<Scene>& scene)
+void loadScene1(const std::shared_ptr<Scene>& scene)
 {
   scene->createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }});
 
-  std::shared_ptr<Object> obj;
-  scene->createBlock({{ 5, 5, 0}}, &obj);
+  scene->createBlock({{ 5, 5, 0}});
 
   scene->createRigidBlock({{ 15, -15, 0 }, {10, 0.25, 10}, {0, 0, 30}});
 
@@ -79,8 +53,6 @@ std::shared_ptr<Object> loadScene1(const std::shared_ptr<Scene>& scene)
   scene->createSphere({{ 0, -2, 2 }});
 
   scene->createPlayer({{ 5, 0, 5 }});
-
-  return obj;
 }
 
 void loadScene2(const std::shared_ptr<Scene>& scene)
@@ -122,7 +94,7 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
               static_cast<float>(k) * ballSpacing + dist(gen)
             },
             .scale = glm::vec3(sphereSize(gen))
-          }, nullptr);
+          });
 
           continue;
         }
@@ -143,7 +115,7 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
             rot(gen),
             rot(gen)
           }
-        }, nullptr);
+        });
       }
     }
   }
