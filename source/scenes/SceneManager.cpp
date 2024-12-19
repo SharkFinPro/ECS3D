@@ -54,6 +54,18 @@ std::shared_ptr<Model> SceneManager::getModel(const std::string& path)
 
 void SceneManager::update(const float dt)
 {
+  sceneSelector();
+
+  if (!currentScene)
+  {
+    return;
+  }
+
+  currentScene->update(dt);
+}
+
+void SceneManager::sceneSelector()
+{
   ImGui::Begin("Scene Selector");
   for (int i = 0; i < scenes.size(); i++)
   {
@@ -63,11 +75,4 @@ void SceneManager::update(const float dt)
     }
   }
   ImGui::End();
-
-  if (!currentScene)
-  {
-    return;
-  }
-
-  currentScene->update(dt);
 }

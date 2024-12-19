@@ -36,6 +36,8 @@ private:
   std::unordered_map<std::string, std::shared_ptr<Texture>> textures;
   std::unordered_map<std::string, std::shared_ptr<Texture>> specularMaps;
   std::unordered_map<std::string, std::shared_ptr<Model>> models;
+
+  void sceneSelector();
 };
 
 
