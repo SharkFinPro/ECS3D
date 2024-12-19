@@ -3,7 +3,6 @@
 #include <random>
 
 #include "source/objects/Object.h"
-#include "source/objects/components/Components.h"
 
 #include "source/scenes/SceneManager.h"
 #include "source/scenes/Scene.h"
