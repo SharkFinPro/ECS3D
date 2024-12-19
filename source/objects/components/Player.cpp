@@ -39,7 +39,6 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
     }
   }
 
-
   if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
   {
     if (const std::shared_ptr<RigidBody> rigidBody = rigidBody_ptr.lock())

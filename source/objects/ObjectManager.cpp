@@ -63,8 +63,10 @@ void ObjectManager::update(const float dt)
     {
       transform->reset();
 
-      const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(selectedObject->getComponent(ComponentType::rigidBody));
-      rigidBody->setVelocity({ 0, 0, 0 });
+      if (const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(selectedObject->getComponent(ComponentType::rigidBody)))
+      {
+        rigidBody->setVelocity({ 0, 0, 0 });
+      }
     }
     else
     {
@@ -183,7 +185,7 @@ void ObjectManager::findCollisions(const std::shared_ptr<Object>& object,
 
 void ObjectManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody,
                                      const std::shared_ptr<Collider>& collider,
-                                     std::vector<std::shared_ptr<Object>>& collidedObjects)
+                                     const std::vector<std::shared_ptr<Object>>& collidedObjects)
 {
   std::vector<bool> chosenFlags(collidedObjects.size(), false);
   std::vector<float> distances;

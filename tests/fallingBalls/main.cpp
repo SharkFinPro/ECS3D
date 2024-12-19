@@ -17,18 +17,10 @@ int main()
     ECS3D ecs;
     const auto sceneManager = ecs.getSceneManager();
 
-    const auto scene1 = sceneManager->createScene();
-    loadScene1(scene1);
-
-    sceneManager->loadScene(1);
+    loadScene1(sceneManager->createScene());
 
     while (ecs.isActive())
     {
-      if (ecs.keyIsPressed(GLFW_KEY_1))
-      {
-        sceneManager->loadScene(1);
-      }
-      
       ecs.update();
     }
   }
@@ -50,11 +42,17 @@ void loadScene1(const std::shared_ptr<Scene>& scene)
   std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
 
   for (int i = 0; i < gridHeight; i++)
+  {
     for (int j = 0; j < gridSize; j++)
+    {
       for (int k = 0; k < gridSize; k++)
+      {
         scene->createSphere({{
-          j * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
-          i * ballSpacing,
-          k * ballSpacing + dist(gen)
+          static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
+          static_cast<float>(i) * ballSpacing,
+          static_cast<float>(k) * ballSpacing + dist(gen)
         }});
+      }
+    }
+  }
 }

@@ -40,7 +40,7 @@ void Scene::update(const float dt) const
   objectManager->update(dt);
 }
 
-void Scene::createBlock(TransformData transformData, std::shared_ptr<Object>* object) const
+void Scene::createBlock(TransformData transformData) const
 {
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
@@ -54,14 +54,9 @@ void Scene::createBlock(TransformData transformData, std::shared_ptr<Object>* ob
 
   const auto newObject = std::make_shared<Object>(components);
   objectManager->addObject(newObject);
-
-  if (object)
-  {
-    *object = newObject;
-  }
 }
 
-void Scene::createRigidBlock(TransformData transformData, std::shared_ptr<Object>* object) const
+void Scene::createRigidBlock(TransformData transformData) const
 {
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
@@ -74,14 +69,9 @@ void Scene::createRigidBlock(TransformData transformData, std::shared_ptr<Object
 
   const auto newObject = std::make_shared<Object>(components);
   objectManager->addObject(newObject);
-
-  if (object)
-  {
-    *object = newObject;
-  }
 }
 
-void Scene::createSphere(TransformData transformData, std::shared_ptr<Object>* object) const
+void Scene::createSphere(TransformData transformData) const
 {
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
@@ -95,14 +85,9 @@ void Scene::createSphere(TransformData transformData, std::shared_ptr<Object>* o
 
   const auto newObject = std::make_shared<Object>(components);
   objectManager->addObject(newObject);
-
-  if (object)
-  {
-    *object = newObject;
-  }
 }
 
-void Scene::createPlayer(TransformData transformData, std::shared_ptr<Object>* object) const
+void Scene::createPlayer(TransformData transformData) const
 {
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
@@ -117,11 +102,6 @@ void Scene::createPlayer(TransformData transformData, std::shared_ptr<Object>* o
 
   const auto newObject = std::make_shared<Object>(components);
   objectManager->addObject(newObject);
-
-  if (object)
-  {
-    *object = newObject;
-  }
 }
 
 void Scene::displayLightGui(const std::shared_ptr<Light>& light, const int id)
