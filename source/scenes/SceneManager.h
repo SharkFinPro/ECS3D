@@ -8,7 +8,6 @@
 #include <VulkanEngine/VulkanEngine.h>
 
 class ECS3D;
-
 class Scene;
 
 class SceneManager {
