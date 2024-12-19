@@ -36,8 +36,7 @@ int main()
     const auto scene3 = sceneManager->createScene();
     loadScene3(scene3);
 
-    int currentScene = 1;
-    sceneManager->loadScene(currentScene);
+    sceneManager->loadScene(1);
 
     while (ecs.isActive())
     {
@@ -45,18 +44,15 @@ int main()
       {
         if (ecs.keyIsPressed(GLFW_KEY_1))
         {
-          currentScene = 1;
-          sceneManager->loadScene(currentScene);
+          sceneManager->loadScene(1);
         }
         else if (ecs.keyIsPressed(GLFW_KEY_2))
         {
-          currentScene = 2;
-          sceneManager->loadScene(currentScene);
+          sceneManager->loadScene(2);
         }
         else if (ecs.keyIsPressed(GLFW_KEY_3))
         {
-          currentScene = 3;
-          sceneManager->loadScene(currentScene);
+          sceneManager->loadScene(3);
         }
       }
 
