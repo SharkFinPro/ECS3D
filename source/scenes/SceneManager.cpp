@@ -1,6 +1,7 @@
 #include "SceneManager.h"
 #include "Scene.h"
 #include "../ECS3D.h"
+#include <stdexcept>
 
 SceneManager::SceneManager(ECS3D* ecs)
   : ecs(ecs), currentScene(nullptr)
@@ -20,8 +21,13 @@ std::shared_ptr<Scene> SceneManager::createScene()
   return scene;
 }
 
-void SceneManager::loadScene(const std::shared_ptr<Scene> &scene)
+void SceneManager::loadScene(const std::shared_ptr<Scene>& scene)
 {
+  if (!scene)
+  {
+    throw std::runtime_error("Attempted to load a scene that does not exist!");
+  }
+
   currentScene = scene;
 
   currentScene->load();
