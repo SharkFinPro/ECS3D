@@ -52,7 +52,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 {
   respondToCollision(minimumTranslationVector);
 
-  if (other == nullptr)
+  if (!other)
   {
     return;
   }
