@@ -71,6 +71,11 @@ void Player::handleInput()
 
   const auto ecs = owner->getManager()->getECS();
 
+  if (!ecs->getRenderer()->sceneIsFocused())
+  {
+    return;
+  }
+
   float xForce = 0;
   if (ecs->keyIsPressed(GLFW_KEY_LEFT))
   {

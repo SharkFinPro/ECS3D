@@ -17,11 +17,6 @@ std::shared_ptr<Scene> SceneManager::createScene()
 
 void SceneManager::loadScene(const int scene)
 {
-  if (currentScene != -1)
-  {
-    scenes[currentScene]->unload();
-  }
-
   currentScene = scene - 1;
 
   scenes[currentScene]->load();
@@ -50,4 +45,9 @@ std::shared_ptr<Model> SceneManager::getModel(const std::string& path)
   }
 
   return models.at(path);
+}
+
+void SceneManager::update(const float dt) const
+{
+  scenes[currentScene]->update(dt);
 }

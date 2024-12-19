@@ -3,7 +3,6 @@
 #include <random>
 
 #include "source/objects/Object.h"
-#include "source/objects/components/Components.h"
 
 #include "source/scenes/SceneManager.h"
 #include "source/scenes/Scene.h"
@@ -23,84 +22,35 @@ int main()
   try
   {
     ECS3D ecs;
+    const auto sceneManager = ecs.getSceneManager();
 
-    ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
-
-    SceneManager sceneManager(&ecs);
-
-    const auto scene1 = sceneManager.createScene();
+    const auto scene1 = sceneManager->createScene();
     const auto object = loadScene1(scene1);
-    const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform));
-    const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
 
-    const auto scene2 = sceneManager.createScene();
+    const auto scene2 = sceneManager->createScene();
     loadScene2(scene2);
 
-    const auto scene3 = sceneManager.createScene();
+    const auto scene3 = sceneManager->createScene();
     loadScene3(scene3);
 
-    int currentScene = 1;
-    sceneManager.loadScene(currentScene);
+    sceneManager->loadScene(1);
 
     while (ecs.isActive())
     {
-      if (ecs.keyIsPressed(GLFW_KEY_1))
+      if (ecs.getRenderer()->sceneIsFocused())
       {
-        currentScene = 1;
-        sceneManager.loadScene(currentScene);
-      }
-      else if (ecs.keyIsPressed(GLFW_KEY_2))
-      {
-        currentScene = 2;
-        sceneManager.loadScene(currentScene);
-      }
-      else if (ecs.keyIsPressed(GLFW_KEY_3))
-      {
-        currentScene = 3;
-        sceneManager.loadScene(currentScene);
-      }
-
-      if (currentScene == 1)
-      {
-        glm::vec3 position = transform->getPosition();
-        glm::vec3 rotation = transform->getRotation();
-        glm::vec3 scale = transform->getScale();
-
-        ImGui::Begin("Object");
-
-        ImGui::PushID(1);
-        ImGui::Text("Control Position:");
-        ImGui::SliderFloat("x", &position.x, -30.0f, 30.0f);
-        ImGui::SliderFloat("y", &position.y, -30.0f, 30.0f);
-        ImGui::SliderFloat("z", &position.z, -30.0f, 30.0f);
-        ImGui::PopID();
-
-        ImGui::PushID(2);
-        ImGui::Text("Control Rotation:");
-        ImGui::SliderFloat("x", &rotation.x, 0.0f, 360.0f);
-        ImGui::SliderFloat("y", &rotation.y, 0.0f, 360.0f);
-        ImGui::SliderFloat("z", &rotation.z, 0.0f, 360.0f);
-        ImGui::PopID();
-
-        ImGui::PushID(3);
-        ImGui::Text("Control Scale:");
-        ImGui::SliderFloat("x", &scale.x, 0.1f, 10.0f);
-        ImGui::SliderFloat("y", &scale.y, 0.1f, 10.0f);
-        ImGui::SliderFloat("z", &scale.z, 0.1f, 10.0f);
-        ImGui::PopID();
-
-        if (ImGui::Button("Reset"))
+        if (ecs.keyIsPressed(GLFW_KEY_1))
         {
-          transform->reset();
-          rigidBody->setVelocity({ 0, 0, 0 });
+          sceneManager->loadScene(1);
         }
-        else
+        else if (ecs.keyIsPressed(GLFW_KEY_2))
         {
-          transform->move(position - transform->getPosition());
-          transform->setRotation(rotation);
-          transform->setScale(scale);
+          sceneManager->loadScene(2);
         }
-        ImGui::End();
+        else if (ecs.keyIsPressed(GLFW_KEY_3))
+        {
+          sceneManager->loadScene(3);
+        }
       }
 
       ecs.update();

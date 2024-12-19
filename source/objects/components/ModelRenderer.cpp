@@ -2,6 +2,8 @@
 
 #include "Transform.h"
 #include "../Object.h"
+#include "../ObjectManager.h"
+#include "../../ECS3D.h"
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
                              const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model)
@@ -26,14 +28,6 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
     renderObject->setScale(transform->getScale());
     renderObject->setRotation(transform->getRotation());
   }
-}
 
-void ModelRenderer::enableRendering() const
-{
-  renderObject->enableRendering();
-}
-
-void ModelRenderer::disableRendering() const
-{
-  renderObject->disableRendering();
+  owner->getManager()->getECS()->getRenderer()->renderObject(renderObject);
 }
