@@ -15,19 +15,18 @@ int main()
   try
   {
     ECS3D ecs;
+    const auto sceneManager = ecs.getSceneManager();
 
-    SceneManager sceneManager(&ecs);
-
-    const auto scene1 = sceneManager.createScene();
+    const auto scene1 = sceneManager->createScene();
     loadScene1(scene1);
 
-    sceneManager.loadScene(1);
+    sceneManager->loadScene(1);
 
     while (ecs.isActive())
     {
       if (ecs.keyIsPressed(GLFW_KEY_1))
       {
-        sceneManager.loadScene(1);
+        sceneManager->loadScene(1);
       }
       
       ecs.update();

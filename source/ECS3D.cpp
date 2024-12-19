@@ -6,6 +6,8 @@ ECS3D::ECS3D()
   : previousTime(std::chrono::steady_clock::now()), sceneManager(std::make_shared<SceneManager>(this))
 {
   initRenderer();
+  
+  ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
 }
 
 bool ECS3D::isActive() const

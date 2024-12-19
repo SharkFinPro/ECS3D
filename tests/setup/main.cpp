@@ -24,8 +24,6 @@ int main()
     ECS3D ecs;
     const auto sceneManager = ecs.getSceneManager();
 
-    ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
-
     const auto scene1 = sceneManager->createScene();
     const auto object = loadScene1(scene1);
 
