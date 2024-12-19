@@ -5,6 +5,8 @@
 #include "../Object.h"
 #include "Transform.h"
 
+#include <glm/glm.hpp>
+
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody), velocity(0, 0, 0), doGravity(true), gravity(0, -9.81f, 0),
     falling(doGravity), wasFalling(doGravity), wasWasFalling(doGravity)
@@ -48,6 +50,37 @@ void RigidBody::applyForce(const glm::vec3& force)
 
 void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other)
 {
+  respondToCollision(minimumTranslationVector);
+
+  if (other == nullptr)
+  {
+    return;
+  }
+
+  const auto collisionNormal = normalize(minimumTranslationVector);
+
+  const auto otherRb = dynamic_pointer_cast<RigidBody>(other->getComponent(ComponentType::rigidBody));
+
+  if (!otherRb)
+  {
+    const auto impulse = dot(-velocity, collisionNormal) * collisionNormal;
+    applyForce(impulse);
+
+    return;
+  }
+
+  otherRb->respondToCollision(-minimumTranslationVector);
+
+  const auto velocityDiff = otherRb->velocity - velocity;
+
+  const auto impulse = dot(velocityDiff, collisionNormal) * collisionNormal;
+
+  applyForce(impulse);
+  otherRb->applyForce(-impulse);
+}
+
+void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
+{
   if (transform_ptr.expired())
   {
     transform_ptr = dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
@@ -60,7 +93,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
   {
-    if (minimumTranslationVector.y > 0 && minimumTranslationVector.y > 0.001f)
+    if (minimumTranslationVector.y > 0.001f)
     {
       if (!wasWasFalling)
       {
@@ -71,16 +104,6 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
         wasFalling = false;
       }
     }
-
-    if (other != nullptr)
-    {
-      if (const auto otherRb = dynamic_pointer_cast<RigidBody>(other->getComponent(ComponentType::rigidBody)))
-      {
-        otherRb->handleCollision(-minimumTranslationVector, nullptr);
-      }
-    }
-
-    velocity += minimumTranslationVector;
 
     transform->move(minimumTranslationVector);
   }
