@@ -42,6 +42,10 @@ int main()
 
 void loadScene1(const std::shared_ptr<Scene>& scene)
 {
+  scene->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
+  scene->createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
+  scene->createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
+
   scene->createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }});
 
   scene->createBlock({{ 5, 5, 0}});
@@ -57,6 +61,10 @@ void loadScene1(const std::shared_ptr<Scene>& scene)
 
 void loadScene2(const std::shared_ptr<Scene>& scene)
 {
+  scene->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
+  scene->createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
+  scene->createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
+
   scene->createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }});
 
   scene->createRigidBlock({{ 18, -5, 0 }, { 10, 1, 10 }, { 0, 0, 30}});
@@ -69,6 +77,10 @@ void loadScene2(const std::shared_ptr<Scene>& scene)
 
 void loadScene3(const std::shared_ptr<Scene>& scene)
 {
+  scene->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
+  scene->createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
+  scene->createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
+  
   scene->createRigidBlock({{0, -15, 0}, {100, 10, 100}});
 
   std::random_device rd;

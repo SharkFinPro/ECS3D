@@ -10,12 +10,6 @@ Scene::Scene(SceneManager* sceneManager)
   : sceneManager(sceneManager), objectManager(std::make_shared<ObjectManager>())
 {
   objectManager->setECS(sceneManager->getECS());
-
-  const auto renderer = sceneManager->getECS()->getRenderer();
-
-  createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
-  createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
-  createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
 }
 
 void Scene::load() const
