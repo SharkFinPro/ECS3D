@@ -43,47 +43,9 @@ void ObjectManager::update(const float dt)
   ImGui::Begin("Transform");
   if (selectedObject)
   {
-    const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform));
-
-    glm::vec3 position = transform->getPosition();
-    glm::vec3 rotation = transform->getRotation();
-    glm::vec3 scale = transform->getScale();
-
-    ImGui::PushID(1);
-    ImGui::Text("Control Position:");
-    ImGui::SliderFloat("x", &position.x, -30.0f, 30.0f);
-    ImGui::SliderFloat("y", &position.y, -30.0f, 30.0f);
-    ImGui::SliderFloat("z", &position.z, -30.0f, 30.0f);
-    ImGui::PopID();
-
-    ImGui::PushID(2);
-    ImGui::Text("Control Rotation:");
-    ImGui::SliderFloat("x", &rotation.x, 0.0f, 360.0f);
-    ImGui::SliderFloat("y", &rotation.y, 0.0f, 360.0f);
-    ImGui::SliderFloat("z", &rotation.z, 0.0f, 360.0f);
-    ImGui::PopID();
-
-    ImGui::PushID(3);
-    ImGui::Text("Control Scale:");
-    ImGui::SliderFloat("x", &scale.x, 0.1f, 10.0f);
-    ImGui::SliderFloat("y", &scale.y, 0.1f, 10.0f);
-    ImGui::SliderFloat("z", &scale.z, 0.1f, 10.0f);
-    ImGui::PopID();
-
-    if (ImGui::Button("Reset"))
+    if (const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform)))
     {
-      transform->reset();
-
-      if (const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(selectedObject->getComponent(ComponentType::rigidBody)))
-      {
-        rigidBody->setVelocity({ 0, 0, 0 });
-      }
-    }
-    else
-    {
-      transform->move(position - transform->getPosition());
-      transform->setRotation(rotation);
-      transform->setScale(scale);
+      transform->displayGui();
     }
   }
   ImGui::End();
