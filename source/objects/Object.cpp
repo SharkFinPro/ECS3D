@@ -1,13 +1,13 @@
 #include "Object.h"
-
 #include "components/Component.h"
+#include <utility>
 
-Object::Object()
-  : manager(nullptr)
+Object::Object(std::string name)
+  : manager(nullptr), name(std::move(name))
 {}
 
-Object::Object(const std::vector<std::shared_ptr<Component>>& components)
-  : manager(nullptr)
+Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)
+  : manager(nullptr), name(std::move(name))
 {
   for (const auto& component : components)
   {
@@ -55,4 +55,14 @@ void Object::setManager(ObjectManager* objectManager)
 ObjectManager* Object::getManager() const
 {
   return manager;
+}
+
+std::string Object::getName() const
+{
+  return name;
+}
+
+void Object::setName(const std::string& name)
+{
+  this->name = name;
 }

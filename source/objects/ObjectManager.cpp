@@ -170,7 +170,7 @@ void ObjectManager::displayGui()
   {
     ImGui::PushID(&object);
 
-    if (ImGui::Selectable("Object", selectedObject == object))
+    if (ImGui::Selectable(object->getName().c_str(), selectedObject == object))
     {
       selectedObject = object;
     }
