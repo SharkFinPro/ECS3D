@@ -16,39 +16,7 @@ ObjectManager::ObjectManager()
 
 void ObjectManager::update(const float dt)
 {
-  ImGui::Begin("Objects");
-  for (const auto& object : objects)
-  {
-    ImGui::PushID(&object);
-
-    if (ImGui::Selectable("Object", selectedObject == object))
-    {
-      selectedObject = object;
-    }
-
-    ImGui::PopID();
-  }
-  ImGui::End();
-
-  ImGui::Begin("Light");
-  if (selectedObject)
-  {
-    if (const auto lightRenderer = std::dynamic_pointer_cast<LightRenderer>(selectedObject->getComponent(ComponentType::lightRenderer)))
-    {
-      lightRenderer->displayGui();
-    }
-  }
-  ImGui::End();
-
-  ImGui::Begin("Transform");
-  if (selectedObject)
-  {
-    if (const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform)))
-    {
-      transform->displayGui();
-    }
-  }
-  ImGui::End();
+  displayGui();
 
   fixedUpdate(dt);
   variableUpdate(dt);
@@ -193,4 +161,41 @@ void ObjectManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody
       }
     }
   }
+}
+
+void ObjectManager::displayGui()
+{
+  ImGui::Begin("Objects");
+  for (const auto& object : objects)
+  {
+    ImGui::PushID(&object);
+
+    if (ImGui::Selectable("Object", selectedObject == object))
+    {
+      selectedObject = object;
+    }
+
+    ImGui::PopID();
+  }
+  ImGui::End();
+
+  ImGui::Begin("Light");
+  if (selectedObject)
+  {
+    if (const auto lightRenderer = std::dynamic_pointer_cast<LightRenderer>(selectedObject->getComponent(ComponentType::lightRenderer)))
+    {
+      lightRenderer->displayGui();
+    }
+  }
+  ImGui::End();
+
+  ImGui::Begin("Transform");
+  if (selectedObject)
+  {
+    if (const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform)))
+    {
+      transform->displayGui();
+    }
+  }
+  ImGui::End();
 }
