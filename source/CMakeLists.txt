@@ -35,6 +35,8 @@ add_library(${PROJECT_NAME}
   scenes/SceneManager.h
   scenes/Scene.cpp
   scenes/Scene.h
+  objects/components/LightRenderer.cpp
+  objects/components/LightRenderer.h
 )
 
 # Declare VulkanEngine as a dependency

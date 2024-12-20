@@ -8,7 +8,8 @@ enum class ComponentType {
   modelRenderer,
   rigidBody,
   collider,
-  player
+  player,
+  lightRenderer
 };
 
 class Component {

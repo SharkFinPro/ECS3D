@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
+#include "components/LightRenderer.h"
 #include "components/ModelRenderer.h"
 #include "components/Transform.h"
 
@@ -29,8 +30,18 @@ void ObjectManager::update(const float dt)
   }
   ImGui::End();
 
+  ImGui::Begin("Light");
+  if (selectedObject)
+  {
+    if (const auto lightRenderer = std::dynamic_pointer_cast<LightRenderer>(selectedObject->getComponent(ComponentType::lightRenderer)))
+    {
+      lightRenderer->displayGui();
+    }
+  }
+  ImGui::End();
+
   ImGui::Begin("Transform");
-  if (selectedObject != nullptr)
+  if (selectedObject)
   {
     const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform));
 
