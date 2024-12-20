@@ -17,6 +17,8 @@ public:
 
   void handleCollision(glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other);
 
+  void respondToCollision(glm::vec3 minimumTranslationVector);
+
   [[nodiscard]] bool isFalling() const;
 
   void setVelocity(const glm::vec3& velocity);
@@ -28,8 +30,7 @@ private:
   glm::vec3 gravity;
 
   bool falling;
-  bool wasFalling;
-  bool wasWasFalling;
+  bool nextFalling;
 
   std::weak_ptr<Transform> transform_ptr;
 

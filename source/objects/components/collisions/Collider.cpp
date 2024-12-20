@@ -11,9 +11,9 @@
 
 #include "SphereCollider.h"
 
-bool sameDirection(const glm::vec3& a, const glm::vec3& b)
+bool sameDirection(const glm::vec3& first, const glm::vec3& second)
 {
-  return dot(a, b) > 0;
+  return dot(first, second) > 0;
 }
 
 Collider::Collider(const ColliderType type)
@@ -47,7 +47,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   Simplex simplex;
   glm::vec3 direction{1, 0, 0};
 
-  glm::vec3 support = getSupport(otherCollider, glm::normalize(direction));
+  auto support = getSupport(otherCollider, normalize(direction));
   simplex.addVertex(support);
 
   direction *= -1.0f;
@@ -58,7 +58,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   {
     iteration++;
 
-    support = getSupport(otherCollider, glm::normalize(direction));
+    support = getSupport(otherCollider, normalize(direction));
 
     if (dot(support, direction) < 0.2f)
     {
@@ -119,9 +119,11 @@ bool Collider::expandSimplex(Simplex& simplex, glm::vec3& direction)
   switch (simplex.size())
   {
     case 2:
-      return lineCase(simplex, direction);
+      lineCase(simplex, direction);
+      return false;
     case 3:
-      return triangleCase(simplex, direction);
+      triangleCase(simplex, direction);
+      return false;
     case 4:
       return tetrahedronCase(simplex, direction);
     default:
@@ -129,7 +131,7 @@ bool Collider::expandSimplex(Simplex& simplex, glm::vec3& direction)
   }
 }
 
-bool Collider::lineCase(const Simplex& simplex, glm::vec3& direction)
+void Collider::lineCase(const Simplex& simplex, glm::vec3& direction)
 {
   const auto AB = simplex.getB() - simplex.getA();
   const auto AO = -simplex.getA();
@@ -140,11 +142,9 @@ bool Collider::lineCase(const Simplex& simplex, glm::vec3& direction)
   {
     direction = cross(AB, {0, 0, 1});
   }
-
-  return false;
 }
 
-bool Collider::triangleCase(Simplex& simplex, glm::vec3& direction)
+void Collider::triangleCase(Simplex& simplex, glm::vec3& direction)
 {
   const auto AB = simplex.getB() - simplex.getA();
   const auto AC = simplex.getC() - simplex.getA();
@@ -157,20 +157,18 @@ bool Collider::triangleCase(Simplex& simplex, glm::vec3& direction)
   {
     simplex.removeC();
     direction = ABperp;
-    return false;
+    return;
   }
 
   if (sameDirection(ACperp, AO))
   {
     simplex.removeB();
     direction = ACperp;
-    return false;
+    return;
   }
 
   glm::vec3 normal = cross(AB, AC);
   direction = sameDirection(normal, AO) ? normal : -normal;
-
-  return false;
 }
 
 bool Collider::tetrahedronCase(Simplex& simplex, glm::vec3& direction)
@@ -410,9 +408,7 @@ bool Collider::closeEnough(const float minDistance, const std::optional<float>& 
   const float deltaY = std::fabs(currentClosestPoint.y - previousClosestPoint.value().y);
   const float deltaZ = std::fabs(currentClosestPoint.z - previousClosestPoint.value().z);
 
-  return (deltaX + deltaY + deltaZ) < minDist;
-
-
+  return deltaX + deltaY + deltaZ < minDist;
 }
 
 glm::vec3 Collider::getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope)

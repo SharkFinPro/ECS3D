@@ -32,17 +32,16 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
     const auto scale = transform->getScale();
     const auto position = transform->getPosition();
 
-    const auto transformationMatrix = glm::translate(glm::mat4(1.0f), position)
-        * glm::rotate(glm::mat4(1.0f), glm::radians(rotation.z), glm::vec3(0, 0, 1)) // Z-axis rotation
-        * glm::rotate(glm::mat4(1.0f), glm::radians(rotation.y), glm::vec3(0, 1, 0)) // Y-axis rotation
-        * glm::rotate(glm::mat4(1.0f), glm::radians(rotation.x), glm::vec3(1, 0, 0)) // X-axis rotation
+    const auto transformationMatrix = translate(glm::mat4(1.0f), position)
+        * rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1}) // Z-axis rotation
+        * rotate(glm::mat4(1.0f), glm::radians(rotation.y), {0, 1, 0}) // Y-axis rotation
+        * rotate(glm::mat4(1.0f), glm::radians(rotation.x), {1, 0, 0}) // X-axis rotation
         * glm::scale(glm::mat4(1.0f), scale);
 
     for (auto& vertex : boxVertices)
     {
-      const glm::vec4 homogenousVertex = glm::vec4(vertex, 1.0f); // Convert to vec4 with w = 1.0
-      const glm::vec4 transformedVertex4 = transformationMatrix * homogenousVertex;
-      const auto transformedVertex = glm::vec3(transformedVertex4); // Convert back to vec3, discard w
+      const auto transformedVertex4 = transformationMatrix * glm::vec4(vertex, 1.0f);
+      const auto transformedVertex = glm::vec3(transformedVertex4);
 
       if (const float distance = dot(transformedVertex, direction); distance > furthestDistance)
       {

@@ -1,7 +1,4 @@
 #include "Player.h"
-
-#include <iostream>
-
 #include "../Object.h"
 #include "../ObjectManager.h"
 #include "../../ECS3D.h"
@@ -9,7 +6,7 @@
 #include "Transform.h"
 
 Player::Player()
-  : Component(ComponentType::player), speed(1.0f), jumpHeight(15.0f), appliedForce(0)
+  : Component(ComponentType::player), speed(1.0f), jumpHeight(9.0f), appliedForce(0)
 {}
 
 void Player::variableUpdate([[maybe_unused]] const float dt)
