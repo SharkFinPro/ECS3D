@@ -387,7 +387,7 @@ float Collider::findClosestFace(ClosestFaceData& closestFaceData, const Polytope
 bool Collider::closeEnough(const float minDistance, const std::optional<float>& previousMinDistance,
                            const glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint)
 {
-  constexpr float minDist = 0.01f;
+  constexpr float minDist = 1e-5f;
 
   if (!previousClosestPoint.has_value())
   {
