@@ -53,6 +53,15 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
   appliedForce *= 0;
 }
 
+void Player::displayGui()
+{
+  if (ImGui::CollapsingHeader("Player"))
+  {
+    ImGui::InputFloat("Speed", &speed);
+    ImGui::InputFloat("Jump Height", &jumpHeight);
+  }
+}
+
 void Player::handleInput()
 {
   if (rigidBody_ptr.expired())

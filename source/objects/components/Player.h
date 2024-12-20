@@ -16,6 +16,8 @@ public:
 
   void fixedUpdate(float dt) override;
 
+  void displayGui() override;
+
 private:
   float speed;
   float jumpHeight;
