@@ -40,8 +40,7 @@ void Scene::createBlock(TransformData transformData) const
     std::make_shared<BoxCollider>()
   };
 
-  const auto newObject = std::make_shared<Object>(components);
-  objectManager->addObject(newObject);
+  objectManager->addObject(std::make_shared<Object>(components));
 }
 
 void Scene::createRigidBlock(TransformData transformData) const
@@ -55,8 +54,7 @@ void Scene::createRigidBlock(TransformData transformData) const
     std::make_shared<BoxCollider>()
   };
 
-  const auto newObject = std::make_shared<Object>(components);
-  objectManager->addObject(newObject);
+  objectManager->addObject(std::make_shared<Object>(components));
 }
 
 void Scene::createSphere(TransformData transformData) const
@@ -71,8 +69,7 @@ void Scene::createSphere(TransformData transformData) const
     std::make_shared<SphereCollider>()
   };
 
-  const auto newObject = std::make_shared<Object>(components);
-  objectManager->addObject(newObject);
+  objectManager->addObject(std::make_shared<Object>(components));
 }
 
 void Scene::createPlayer(TransformData transformData) const
@@ -88,8 +85,7 @@ void Scene::createPlayer(TransformData transformData) const
     std::make_shared<SphereCollider>(),
   };
 
-  const auto newObject = std::make_shared<Object>(components);
-  objectManager->addObject(newObject);
+  objectManager->addObject(std::make_shared<Object>(components));
 }
 
 void Scene::createLight(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular) const
@@ -99,6 +95,5 @@ void Scene::createLight(glm::vec3 position, glm::vec3 color, float ambient, floa
     std::make_shared<LightRenderer>(position, color, ambient, diffuse, specular)
   };
 
-  const auto newObject = std::make_shared<Object>(components);
-  objectManager->addObject(newObject);
+  objectManager->addObject(std::make_shared<Object>(components));
 }
