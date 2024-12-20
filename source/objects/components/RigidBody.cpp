@@ -9,7 +9,7 @@
 
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody), velocity(0, 0, 0), doGravity(true), gravity(0, -9.81f, 0),
-    falling(doGravity), wasFalling(doGravity), wasWasFalling(doGravity)
+    falling(true), nextFalling(true)
 {}
 
 void RigidBody::fixedUpdate(const float dt)
@@ -26,11 +26,8 @@ void RigidBody::fixedUpdate(const float dt)
 
   if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
   {
-    wasWasFalling = wasFalling;
-
-    wasFalling = true;
-
-    falling = true;
+    falling = nextFalling;
+    nextFalling = true;
 
     if (doGravity)
     {
@@ -55,6 +52,12 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
   if (!other)
   {
     return;
+  }
+
+  if (minimumTranslationVector.y > 0.001f)
+  {
+    falling = false;
+    nextFalling = false;
   }
 
   const auto collisionNormal = normalize(minimumTranslationVector);
@@ -93,18 +96,6 @@ void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
 
   if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
   {
-    if (minimumTranslationVector.y > 0.001f)
-    {
-      if (!wasWasFalling)
-      {
-        falling = false;
-      }
-      else
-      {
-        wasFalling = false;
-      }
-    }
-
     transform->move(minimumTranslationVector);
   }
 }

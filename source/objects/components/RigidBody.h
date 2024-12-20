@@ -30,8 +30,7 @@ private:
   glm::vec3 gravity;
 
   bool falling;
-  bool wasFalling;
-  bool wasWasFalling;
+  bool nextFalling;
 
   std::weak_ptr<Transform> transform_ptr;
 
