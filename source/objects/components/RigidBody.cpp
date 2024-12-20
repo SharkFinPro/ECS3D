@@ -76,10 +76,12 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   const auto velocityDiff = otherRb->velocity - velocity;
 
-  const auto impulse = dot(velocityDiff, collisionNormal) * collisionNormal;
-
-  applyForce(impulse);
-  otherRb->applyForce(-impulse);
+  if (dot(velocityDiff, collisionNormal) > 0)
+  {
+    const auto impulse = dot(velocityDiff, collisionNormal) * collisionNormal;
+    applyForce(impulse);
+    otherRb->applyForce(-impulse);
+  }
 }
 
 void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)

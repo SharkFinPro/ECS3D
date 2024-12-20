@@ -9,7 +9,7 @@ class Transform;
 
 class ModelRenderer final : public Component {
 public:
-  explicit ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
+  ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
                          const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model);
 
   ~ModelRenderer() override = default;

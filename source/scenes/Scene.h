@@ -32,12 +32,12 @@ public:
 
   void createPlayer(TransformData transformData) const;
 
+  void createLight(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular) const;
+
 private:
   SceneManager* sceneManager;
   std::shared_ptr<ObjectManager> objectManager;
   std::vector<std::shared_ptr<Light>> lights;
-
-  static void displayLightGui(const std::shared_ptr<Light>& light, int id);
 };
 
 

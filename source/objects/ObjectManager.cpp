@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
+#include "components/LightRenderer.h"
 #include "components/ModelRenderer.h"
 #include "components/Transform.h"
 
@@ -15,67 +16,7 @@ ObjectManager::ObjectManager()
 
 void ObjectManager::update(const float dt)
 {
-  ImGui::Begin("Objects");
-  for (const auto& object : objects)
-  {
-    ImGui::PushID(&object);
-
-    if (ImGui::Selectable("Object", selectedObject == object))
-    {
-      selectedObject = object;
-    }
-
-    ImGui::PopID();
-  }
-  ImGui::End();
-
-  ImGui::Begin("Transform");
-  if (selectedObject != nullptr)
-  {
-    const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform));
-
-    glm::vec3 position = transform->getPosition();
-    glm::vec3 rotation = transform->getRotation();
-    glm::vec3 scale = transform->getScale();
-
-    ImGui::PushID(1);
-    ImGui::Text("Control Position:");
-    ImGui::SliderFloat("x", &position.x, -30.0f, 30.0f);
-    ImGui::SliderFloat("y", &position.y, -30.0f, 30.0f);
-    ImGui::SliderFloat("z", &position.z, -30.0f, 30.0f);
-    ImGui::PopID();
-
-    ImGui::PushID(2);
-    ImGui::Text("Control Rotation:");
-    ImGui::SliderFloat("x", &rotation.x, 0.0f, 360.0f);
-    ImGui::SliderFloat("y", &rotation.y, 0.0f, 360.0f);
-    ImGui::SliderFloat("z", &rotation.z, 0.0f, 360.0f);
-    ImGui::PopID();
-
-    ImGui::PushID(3);
-    ImGui::Text("Control Scale:");
-    ImGui::SliderFloat("x", &scale.x, 0.1f, 10.0f);
-    ImGui::SliderFloat("y", &scale.y, 0.1f, 10.0f);
-    ImGui::SliderFloat("z", &scale.z, 0.1f, 10.0f);
-    ImGui::PopID();
-
-    if (ImGui::Button("Reset"))
-    {
-      transform->reset();
-
-      if (const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(selectedObject->getComponent(ComponentType::rigidBody)))
-      {
-        rigidBody->setVelocity({ 0, 0, 0 });
-      }
-    }
-    else
-    {
-      transform->move(position - transform->getPosition());
-      transform->setRotation(rotation);
-      transform->setScale(scale);
-    }
-  }
-  ImGui::End();
+  displayGui();
 
   fixedUpdate(dt);
   variableUpdate(dt);
@@ -220,4 +161,41 @@ void ObjectManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody
       }
     }
   }
+}
+
+void ObjectManager::displayGui()
+{
+  ImGui::Begin("Objects");
+  for (const auto& object : objects)
+  {
+    ImGui::PushID(&object);
+
+    if (ImGui::Selectable(object->getName().c_str(), selectedObject == object))
+    {
+      selectedObject = object;
+    }
+
+    ImGui::PopID();
+  }
+  ImGui::End();
+
+  ImGui::Begin("Light");
+  if (selectedObject)
+  {
+    if (const auto lightRenderer = std::dynamic_pointer_cast<LightRenderer>(selectedObject->getComponent(ComponentType::lightRenderer)))
+    {
+      lightRenderer->displayGui();
+    }
+  }
+  ImGui::End();
+
+  ImGui::Begin("Transform");
+  if (selectedObject)
+  {
+    if (const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform)))
+    {
+      transform->displayGui();
+    }
+  }
+  ImGui::End();
 }

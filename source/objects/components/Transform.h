@@ -20,6 +20,8 @@ public:
 
   void reset();
 
+  void displayGui();
+
 private:
   glm::vec3 initialPosition;
   glm::vec3 position;
