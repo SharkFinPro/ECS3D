@@ -85,7 +85,7 @@ void Scene::createPlayer(TransformData transformData) const
     std::make_shared<SphereCollider>(),
   };
 
-  objectManager->addObject(std::make_shared<Object>(components));
+  objectManager->addObject(std::make_shared<Object>(components, "Player"));
 }
 
 void Scene::createLight(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular) const
