@@ -1,6 +1,7 @@
 #include "RigidBody.h"
 
 #include <cmath>
+#include <imgui.h>
 
 #include "../Object.h"
 #include "Transform.h"
@@ -110,6 +111,19 @@ bool RigidBody::isFalling() const
 void RigidBody::setVelocity(const glm::vec3& velocity)
 {
   this->velocity = velocity;
+}
+
+void RigidBody::displayGui()
+{
+  if (ImGui::CollapsingHeader("Rigid Body"))
+  {
+    float newGravity = gravity.y;
+
+    ImGui::Checkbox("Do Gravity", &doGravity);
+    ImGui::InputFloat("Gravity", &newGravity);
+
+    gravity.y = newGravity;
+  }
 }
 
 void RigidBody::limitMovement()

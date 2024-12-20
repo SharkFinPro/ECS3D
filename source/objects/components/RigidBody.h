@@ -23,6 +23,8 @@ public:
 
   void setVelocity(const glm::vec3& velocity);
 
+  void displayGui() override;
+
 private:
   glm::vec3 velocity;
 
