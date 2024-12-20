@@ -1,9 +1,9 @@
 #include "Scene.h"
 #include "SceneManager.h"
+#include "../ECS3D.h"
 #include "../objects/Object.h"
 #include "../objects/ObjectManager.h"
 #include "../objects/components/Components.h"
-#include "../ECS3D.h"
 #include "../objects/components/LightRenderer.h"
 
 Scene::Scene(SceneManager* sceneManager)
