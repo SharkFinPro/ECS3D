@@ -40,7 +40,6 @@ void LightRenderer::displayGui() const
   ImGui::SliderFloat("Ambient", &ambient, 0.0f, 1.0f);
   ImGui::SliderFloat("Diffuse", &diffuse, 0.0f, 1.0f);
   ImGui::SliderFloat("Specular", &specular, 0.0f, 1.0f);
-  ImGui::Separator();
 
   light->setColor(color);
   light->setAmbient(ambient);
