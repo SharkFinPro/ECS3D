@@ -19,7 +19,7 @@ public:
 
   [[nodiscard]] bool keyIsPressed(int key) const;
 
-  std::shared_ptr<SceneManager> getSceneManager() const;
+  [[nodiscard]] std::shared_ptr<SceneManager> getSceneManager() const;
 
 private:
   std::shared_ptr<VulkanEngine> renderer;

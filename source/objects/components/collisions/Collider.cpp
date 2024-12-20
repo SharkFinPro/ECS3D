@@ -11,9 +11,9 @@
 
 #include "SphereCollider.h"
 
-bool sameDirection(const glm::vec3& a, const glm::vec3& b)
+bool sameDirection(const glm::vec3& first, const glm::vec3& second)
 {
-  return dot(a, b) > 0;
+  return dot(first, second) > 0;
 }
 
 Collider::Collider(const ColliderType type)
@@ -47,7 +47,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   Simplex simplex;
   glm::vec3 direction{1, 0, 0};
 
-  glm::vec3 support = getSupport(otherCollider, glm::normalize(direction));
+  auto support = getSupport(otherCollider, normalize(direction));
   simplex.addVertex(support);
 
   direction *= -1.0f;
@@ -58,7 +58,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   {
     iteration++;
 
-    support = getSupport(otherCollider, glm::normalize(direction));
+    support = getSupport(otherCollider, normalize(direction));
 
     if (dot(support, direction) < 0.2f)
     {
@@ -408,9 +408,7 @@ bool Collider::closeEnough(const float minDistance, const std::optional<float>& 
   const float deltaY = std::fabs(currentClosestPoint.y - previousClosestPoint.value().y);
   const float deltaZ = std::fabs(currentClosestPoint.z - previousClosestPoint.value().z);
 
-  return (deltaX + deltaY + deltaZ) < minDist;
-
-
+  return deltaX + deltaY + deltaZ < minDist;
 }
 
 glm::vec3 Collider::getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope)
