@@ -63,8 +63,8 @@ private:
   virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
 
   static bool expandSimplex(Simplex& simplex, glm::vec3& direction);
-  static bool lineCase(const Simplex& simplex, glm::vec3& direction);
-  static bool triangleCase(Simplex& simplex, glm::vec3& direction);
+  static void lineCase(const Simplex& simplex, glm::vec3& direction);
+  static void triangleCase(Simplex& simplex, glm::vec3& direction);
   static bool tetrahedronCase(Simplex& simplex, glm::vec3& direction);
 
   static Polytope generatePolytope(Simplex& simplex);

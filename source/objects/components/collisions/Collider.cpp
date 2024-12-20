@@ -119,9 +119,11 @@ bool Collider::expandSimplex(Simplex& simplex, glm::vec3& direction)
   switch (simplex.size())
   {
     case 2:
-      return lineCase(simplex, direction);
+      lineCase(simplex, direction);
+      return false;
     case 3:
-      return triangleCase(simplex, direction);
+      triangleCase(simplex, direction);
+      return false;
     case 4:
       return tetrahedronCase(simplex, direction);
     default:
@@ -129,7 +131,7 @@ bool Collider::expandSimplex(Simplex& simplex, glm::vec3& direction)
   }
 }
 
-bool Collider::lineCase(const Simplex& simplex, glm::vec3& direction)
+void Collider::lineCase(const Simplex& simplex, glm::vec3& direction)
 {
   const auto AB = simplex.getB() - simplex.getA();
   const auto AO = -simplex.getA();
@@ -140,11 +142,9 @@ bool Collider::lineCase(const Simplex& simplex, glm::vec3& direction)
   {
     direction = cross(AB, {0, 0, 1});
   }
-
-  return false;
 }
 
-bool Collider::triangleCase(Simplex& simplex, glm::vec3& direction)
+void Collider::triangleCase(Simplex& simplex, glm::vec3& direction)
 {
   const auto AB = simplex.getB() - simplex.getA();
   const auto AC = simplex.getC() - simplex.getA();
@@ -157,20 +157,18 @@ bool Collider::triangleCase(Simplex& simplex, glm::vec3& direction)
   {
     simplex.removeC();
     direction = ABperp;
-    return false;
+    return;
   }
 
   if (sameDirection(ACperp, AO))
   {
     simplex.removeB();
     direction = ACperp;
-    return false;
+    return;
   }
 
   glm::vec3 normal = cross(AB, AC);
   direction = sameDirection(normal, AO) ? normal : -normal;
-
-  return false;
 }
 
 bool Collider::tetrahedronCase(Simplex& simplex, glm::vec3& direction)
