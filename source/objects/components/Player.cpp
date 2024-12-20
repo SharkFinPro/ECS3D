@@ -1,7 +1,4 @@
 #include "Player.h"
-
-#include <iostream>
-
 #include "../Object.h"
 #include "../ObjectManager.h"
 #include "../../ECS3D.h"
