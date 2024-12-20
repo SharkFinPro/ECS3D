@@ -40,7 +40,7 @@ void Scene::createBlock(TransformData transformData) const
     std::make_shared<BoxCollider>()
   };
 
-  objectManager->addObject(std::make_shared<Object>(components));
+  objectManager->addObject(std::make_shared<Object>(components, "Block"));
 }
 
 void Scene::createRigidBlock(TransformData transformData) const
@@ -54,7 +54,7 @@ void Scene::createRigidBlock(TransformData transformData) const
     std::make_shared<BoxCollider>()
   };
 
-  objectManager->addObject(std::make_shared<Object>(components));
+  objectManager->addObject(std::make_shared<Object>(components, "Rigid Block"));
 }
 
 void Scene::createSphere(TransformData transformData) const
@@ -69,7 +69,7 @@ void Scene::createSphere(TransformData transformData) const
     std::make_shared<SphereCollider>()
   };
 
-  objectManager->addObject(std::make_shared<Object>(components));
+  objectManager->addObject(std::make_shared<Object>(components, "Sphere"));
 }
 
 void Scene::createPlayer(TransformData transformData) const
