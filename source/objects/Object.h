@@ -28,6 +28,8 @@ public:
   [[nodiscard]] std::string getName() const;
   void setName(const std::string& name);
 
+  void displayGui() const;
+
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> components;
   ObjectManager* manager;

@@ -24,3 +24,6 @@ void Component::variableUpdate([[maybe_unused]] float dt)
 
 void Component::fixedUpdate([[maybe_unused]] float dt)
 {}
+
+void Component::displayGui()
+{}

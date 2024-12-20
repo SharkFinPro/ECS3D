@@ -66,3 +66,11 @@ void Object::setName(const std::string& name)
 {
   this->name = name;
 }
+
+void Object::displayGui() const
+{
+  for (const auto& [type, component] : components)
+  {
+    component->displayGui();
+  }
+}

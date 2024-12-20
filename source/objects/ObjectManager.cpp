@@ -179,23 +179,12 @@ void ObjectManager::displayGui()
   }
   ImGui::End();
 
-  ImGui::Begin("Light");
-  if (selectedObject)
-  {
-    if (const auto lightRenderer = std::dynamic_pointer_cast<LightRenderer>(selectedObject->getComponent(ComponentType::lightRenderer)))
-    {
-      lightRenderer->displayGui();
-    }
-  }
-  ImGui::End();
+  ImGui::Begin("Selected Object");
 
-  ImGui::Begin("Transform");
   if (selectedObject)
   {
-    if (const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform)))
-    {
-      transform->displayGui();
-    }
+    selectedObject->displayGui();
   }
+
   ImGui::End();
 }

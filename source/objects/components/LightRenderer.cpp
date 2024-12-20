@@ -29,20 +29,23 @@ void LightRenderer::variableUpdate([[maybe_unused]] const float dt)
   owner->getManager()->getECS()->getRenderer()->renderLight(light);
 }
 
-void LightRenderer::displayGui() const
+void LightRenderer::displayGui()
 {
-  glm::vec3 color = light->getColor();
-  float ambient = light->getAmbient();
-  float diffuse = light->getDiffuse();
-  float specular = light->getSpecular();
+  if (ImGui::CollapsingHeader("Light Renderer"))
+  {
+    glm::vec3 color = light->getColor();
+    float ambient = light->getAmbient();
+    float diffuse = light->getDiffuse();
+    float specular = light->getSpecular();
 
-  ImGui::ColorEdit3("Color", value_ptr(color));
-  ImGui::SliderFloat("Ambient", &ambient, 0.0f, 1.0f);
-  ImGui::SliderFloat("Diffuse", &diffuse, 0.0f, 1.0f);
-  ImGui::SliderFloat("Specular", &specular, 0.0f, 1.0f);
+    ImGui::ColorEdit3("Color", value_ptr(color));
+    ImGui::SliderFloat("Ambient", &ambient, 0.0f, 1.0f);
+    ImGui::SliderFloat("Diffuse", &diffuse, 0.0f, 1.0f);
+    ImGui::SliderFloat("Specular", &specular, 0.0f, 1.0f);
 
-  light->setColor(color);
-  light->setAmbient(ambient);
-  light->setDiffuse(diffuse);
-  light->setSpecular(specular);
+    light->setColor(color);
+    light->setAmbient(ambient);
+    light->setDiffuse(diffuse);
+    light->setSpecular(specular);
+  }
 }

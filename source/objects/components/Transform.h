@@ -20,7 +20,7 @@ public:
 
   void reset();
 
-  void displayGui();
+  void displayGui() override;
 
 private:
   glm::vec3 initialPosition;

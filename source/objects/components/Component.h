@@ -25,6 +25,8 @@ public:
   virtual void variableUpdate(float dt);
   virtual void fixedUpdate(float dt);
 
+  virtual void displayGui();
+
 protected:
   ComponentType type;
   Object* owner;

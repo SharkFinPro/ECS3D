@@ -15,7 +15,7 @@ public:
 
   void variableUpdate(float dt) override;
 
-  void displayGui() const;
+  void displayGui() override;
 
 private:
   std::shared_ptr<Light> light;
