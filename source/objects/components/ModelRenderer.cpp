@@ -26,7 +26,7 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
   {
     renderObject->setPosition(transform->getPosition());
     renderObject->setScale(transform->getScale());
-    renderObject->setRotation(transform->getRotation());
+    renderObject->setOrientationEuler(transform->getRotation());
   }
 
   owner->getManager()->getECS()->getRenderer()->renderObject(renderObject);
