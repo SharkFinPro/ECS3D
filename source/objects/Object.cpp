@@ -1,10 +1,13 @@
 #include "Object.h"
 #include "components/Component.h"
 #include <utility>
+#include <imgui.h>
 
 Object::Object(std::string name)
   : manager(nullptr), name(std::move(name))
-{}
+{
+  name.resize(MAX_CHARACTERS);
+}
 
 Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)
   : manager(nullptr), name(std::move(name))
@@ -18,17 +21,14 @@ Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::s
 void Object::addComponent(std::shared_ptr<Component> component)
 {
   component->setOwner(this);
-  components.insert({ component->getType(), std::move(component) });
+  components.emplace(component->getType(), std::move(component));
 }
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
-  if (const auto component = components.find(type); component != components.end())
-  {
-    return component->second;
-  }
+  const auto component = components.find(type);
 
-  return nullptr;
+  return component != components.end() ? component->second : nullptr;
 }
 
 void Object::variableUpdate(const float dt)
@@ -65,4 +65,29 @@ std::string Object::getName() const
 void Object::setName(const std::string& name)
 {
   this->name = name;
+}
+
+void Object::displayGui()
+{
+  ImGui::InputText("Name", name.data(), name.capacity());
+
+  if (ImGui::Button("Reset Components"))
+  {
+    reset();
+  }
+
+  for (const auto& [type, component] : components)
+  {
+    ImGui::PushID(&component);
+    component->displayGui();
+    ImGui::PopID();
+  }
+}
+
+void Object::reset()
+{
+  for (const auto& [type, component] : components)
+  {
+    component->reset();
+  }
 }

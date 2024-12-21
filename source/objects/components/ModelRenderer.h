@@ -16,9 +16,15 @@ public:
 
   void variableUpdate(float dt) override;
 
+  void displayGui() override;
+
+  void reset() override;
+
 private:
   std::shared_ptr<RenderObject> renderObject;
   std::weak_ptr<Transform> transform_ptr;
+
+  bool shouldRender;
 };
 
 

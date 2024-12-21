@@ -42,15 +42,7 @@ void ObjectManager::resetObjects() const
 {
   for (const auto& object : objects)
   {
-    if (const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform)))
-    {
-      transform->reset();
-    }
-
-    if (const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody)))
-    {
-      rigidBody->setVelocity({ 0.0f, 0.0f, 0.0f });
-    }
+    object->reset();
   }
 }
 
@@ -66,8 +58,11 @@ void ObjectManager::fixedUpdate(const float dt)
 {
   timeAccumulator += dt;
 
-  while (timeAccumulator >= fixedUpdateDt)
+  uint8_t steps = 1;
+  while (timeAccumulator >= fixedUpdateDt && steps <= 3)
   {
+    steps++;
+
     for (const auto& object : objects)
     {
       object->fixedUpdate(fixedUpdateDt);
@@ -179,23 +174,12 @@ void ObjectManager::displayGui()
   }
   ImGui::End();
 
-  ImGui::Begin("Light");
-  if (selectedObject)
-  {
-    if (const auto lightRenderer = std::dynamic_pointer_cast<LightRenderer>(selectedObject->getComponent(ComponentType::lightRenderer)))
-    {
-      lightRenderer->displayGui();
-    }
-  }
-  ImGui::End();
+  ImGui::Begin("Selected Object");
 
-  ImGui::Begin("Transform");
   if (selectedObject)
   {
-    if (const auto transform = std::dynamic_pointer_cast<Transform>(selectedObject->getComponent(ComponentType::transform)))
-    {
-      transform->displayGui();
-    }
+    selectedObject->displayGui();
   }
+
   ImGui::End();
 }

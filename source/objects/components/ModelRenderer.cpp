@@ -7,11 +7,17 @@
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
                              const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model)
-  : Component(ComponentType::modelRenderer), renderObject(renderer->loadRenderObject(texture, specularMap, model))
+  : Component(ComponentType::modelRenderer), renderObject(renderer->loadRenderObject(texture, specularMap, model)),
+    shouldRender(true)
 {}
 
 void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
 {
+  if (!shouldRender)
+  {
+    return;
+  }
+
   if (transform_ptr.expired())
   {
     transform_ptr = std::dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
@@ -30,4 +36,22 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
   }
 
   owner->getManager()->getECS()->getRenderer()->renderObject(renderObject);
+}
+
+void ModelRenderer::displayGui()
+{
+  if (ImGui::CollapsingHeader("Model Renderer"))
+  {
+    ImGui::Checkbox("Render", &shouldRender);
+
+    if (ImGui::Button("Reset"))
+    {
+      reset();
+    }
+  }
+}
+
+void ModelRenderer::reset()
+{
+  shouldRender = true;
 }
