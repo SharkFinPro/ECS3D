@@ -21,7 +21,7 @@ Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::s
 void Object::addComponent(std::shared_ptr<Component> component)
 {
   component->setOwner(this);
-  components.insert({ component->getType(), std::move(component) });
+  components.emplace(component->getType(), std::move(component));
 }
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
