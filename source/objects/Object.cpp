@@ -26,12 +26,9 @@ void Object::addComponent(std::shared_ptr<Component> component)
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
-  if (const auto component = components.find(type); component != components.end())
-  {
-    return component->second;
-  }
+  const auto component = components.find(type);
 
-  return nullptr;
+  return component != components.end() ? component->second : nullptr;
 }
 
 void Object::variableUpdate(const float dt)
