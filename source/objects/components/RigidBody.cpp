@@ -9,8 +9,8 @@
 #include <glm/glm.hpp>
 
 RigidBody::RigidBody()
-  : Component(ComponentType::rigidBody), velocity(0), doGravity(true), gravity(0, -GRAVITY, 0),
-    falling(true), nextFalling(true)
+  : Component(ComponentType::rigidBody), velocity(0), doGravity(true), friction(0.1f),
+    gravity(0, -GRAVITY, 0), falling(true), nextFalling(true)
 {}
 
 void RigidBody::fixedUpdate(const float dt)
@@ -124,6 +124,8 @@ void RigidBody::displayGui()
 
     gravity.y = newGravity;
 
+    ImGui::SliderFloat("Friction", &friction, 0.001f, 1.0f);
+
     if (ImGui::Button("Reset"))
     {
       reset();
@@ -133,6 +135,7 @@ void RigidBody::displayGui()
 
 void RigidBody::reset()
 {
+  friction = 0.1f;
   velocity = glm::vec3(0);
   gravity = glm::vec3(0, -GRAVITY, 0);
   doGravity = true;
@@ -140,5 +143,13 @@ void RigidBody::reset()
 
 void RigidBody::limitMovement()
 {
-  applyForce({ -velocity.x * 0.05f, 0, -velocity.z * 0.05f });
+  if (glm::length(velocity) < 1e-5f)
+  {
+    return;
+  }
+
+  const glm::vec2 horizontalVelocity(velocity.x, velocity.z);
+  const glm::vec2 frictionForce = -horizontalVelocity * friction;
+
+  applyForce({ frictionForce.x, 0.0f, frictionForce.y });
 }

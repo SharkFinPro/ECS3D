@@ -32,6 +32,8 @@ public:
 private:
   glm::vec3 velocity;
 
+  float friction;
+
   bool doGravity;
   glm::vec3 gravity;
 
