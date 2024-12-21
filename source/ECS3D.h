@@ -29,6 +29,8 @@ private:
   std::shared_ptr<SceneManager> sceneManager;
 
   void initRenderer();
+
+  static void setupImGuiStyle();
 };
 
 
