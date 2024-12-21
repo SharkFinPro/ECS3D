@@ -58,8 +58,11 @@ void ObjectManager::fixedUpdate(const float dt)
 {
   timeAccumulator += dt;
 
-  while (timeAccumulator >= fixedUpdateDt)
+  uint8_t steps = 1;
+  while (timeAccumulator >= fixedUpdateDt && steps <= 3)
   {
+    steps++;
+
     for (const auto& object : objects)
     {
       object->fixedUpdate(fixedUpdateDt);

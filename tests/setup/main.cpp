@@ -5,7 +5,7 @@
 #include "source/scenes/SceneManager.h"
 #include "source/scenes/Scene.h"
 
-constexpr int gridSize = 4;
+constexpr int gridSize = 6;
 constexpr int gridHeight = 10;
 constexpr int ballSpacing = 5;
 
