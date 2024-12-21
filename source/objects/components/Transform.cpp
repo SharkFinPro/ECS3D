@@ -69,6 +69,13 @@ void Transform::displayGui()
     ImGui::SliderFloat("x", &scale.x, 0.1f, 10.0f);
     ImGui::SliderFloat("y", &scale.y, 0.1f, 10.0f);
     ImGui::SliderFloat("z", &scale.z, 0.1f, 10.0f);
+
+    float combinedScale = (scale.x + scale.y + scale.z) / 3.0f;
+    if (ImGui::SliderFloat("Combined", &combinedScale, 0.1f, 10.0f))
+    {
+      scale.x = scale.y = scale.z = combinedScale;
+    }
+
     ImGui::PopID();
 
     if (ImGui::Button("Reset"))
