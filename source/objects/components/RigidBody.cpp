@@ -9,7 +9,7 @@
 #include <glm/glm.hpp>
 
 RigidBody::RigidBody()
-  : Component(ComponentType::rigidBody), velocity(0, 0, 0), doGravity(true), gravity(0, -9.81f, 0),
+  : Component(ComponentType::rigidBody), velocity(0), doGravity(true), gravity(0, -GRAVITY, 0),
     falling(true), nextFalling(true)
 {}
 
@@ -123,7 +123,19 @@ void RigidBody::displayGui()
     ImGui::InputFloat("Gravity", &newGravity);
 
     gravity.y = newGravity;
+
+    if (ImGui::Button("Reset"))
+    {
+      reset();
+    }
   }
+}
+
+void RigidBody::reset()
+{
+  velocity = glm::vec3(0);
+  gravity = glm::vec3(0, -GRAVITY, 0);
+  doGravity = true;
 }
 
 void RigidBody::limitMovement()

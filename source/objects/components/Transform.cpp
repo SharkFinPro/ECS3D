@@ -39,13 +39,6 @@ void Transform::move(const glm::vec3& direction)
   position += direction;
 }
 
-void Transform::reset()
-{
-  position = initialPosition;
-  scale = initialScale;
-  rotation = initialRotation;
-}
-
 void Transform::displayGui()
 {
   if (ImGui::CollapsingHeader("Transform"))
@@ -81,11 +74,13 @@ void Transform::displayGui()
     if (ImGui::Button("Reset"))
     {
       reset();
-
-      if (const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(owner->getComponent(ComponentType::rigidBody)))
-      {
-        rigidBody->setVelocity({ 0, 0, 0 });
-      }
     }
   }
+}
+
+void Transform::reset()
+{
+  position = initialPosition;
+  scale = initialScale;
+  rotation = initialRotation;
 }

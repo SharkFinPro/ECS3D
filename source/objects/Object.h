@@ -32,6 +32,8 @@ public:
 
   void displayGui();
 
+  void reset();
+
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> components;
   ObjectManager* manager;

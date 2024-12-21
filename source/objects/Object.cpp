@@ -74,9 +74,23 @@ void Object::displayGui()
 {
   ImGui::InputText("Name", name.data(), name.capacity());
 
+  if (ImGui::Button("Reset Components"))
+  {
+    reset();
+  }
 
   for (const auto& [type, component] : components)
   {
+    ImGui::PushID(&component);
     component->displayGui();
+    ImGui::PopID();
+  }
+}
+
+void Object::reset()
+{
+  for (const auto& [type, component] : components)
+  {
+    component->reset();
   }
 }

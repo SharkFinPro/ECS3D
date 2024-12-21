@@ -27,6 +27,8 @@ public:
 
   virtual void displayGui();
 
+  virtual void reset();
+
 protected:
   ComponentType type;
   Object* owner;

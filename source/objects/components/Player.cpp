@@ -6,7 +6,8 @@
 #include "Transform.h"
 
 Player::Player()
-  : Component(ComponentType::player), speed(1.0f), jumpHeight(9.0f), appliedForce(0)
+  : Component(ComponentType::player), initialSpeed(1.0f), speed(initialSpeed),
+    initialJumpHeight(9.0f), jumpHeight(initialJumpHeight), appliedForce(0)
 {}
 
 void Player::variableUpdate([[maybe_unused]] const float dt)
@@ -59,7 +60,18 @@ void Player::displayGui()
   {
     ImGui::InputFloat("Speed", &speed);
     ImGui::InputFloat("Jump Height", &jumpHeight);
+
+    if (ImGui::Button("Reset"))
+    {
+      reset();
+    }
   }
+}
+
+void Player::reset()
+{
+  speed = initialSpeed;
+  jumpHeight = initialJumpHeight;
 }
 
 void Player::handleInput()

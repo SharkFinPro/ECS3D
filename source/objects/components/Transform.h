@@ -18,9 +18,9 @@ public:
 
   void move(const glm::vec3& direction);
 
-  void reset();
-
   void displayGui() override;
+
+  void reset() override;
 
 private:
   glm::vec3 initialPosition;

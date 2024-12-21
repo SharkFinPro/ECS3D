@@ -18,8 +18,13 @@ public:
 
   void displayGui() override;
 
+  void reset() override;
+
 private:
+  float initialSpeed;
   float speed;
+
+  float initialJumpHeight;
   float jumpHeight;
 
   glm::vec3 appliedForce;

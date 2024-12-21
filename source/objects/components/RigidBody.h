@@ -5,6 +5,8 @@
 #include <glm/vec3.hpp>
 #include <memory>
 
+constexpr float GRAVITY = 9.81f;
+
 class Transform;
 
 class RigidBody final : public Component {
@@ -24,6 +26,8 @@ public:
   void setVelocity(const glm::vec3& velocity);
 
   void displayGui() override;
+
+  void reset() override;
 
 private:
   glm::vec3 velocity;

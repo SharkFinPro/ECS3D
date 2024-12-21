@@ -42,15 +42,7 @@ void ObjectManager::resetObjects() const
 {
   for (const auto& object : objects)
   {
-    if (const auto transform = std::dynamic_pointer_cast<Transform>(object->getComponent(ComponentType::transform)))
-    {
-      transform->reset();
-    }
-
-    if (const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody)))
-    {
-      rigidBody->setVelocity({ 0.0f, 0.0f, 0.0f });
-    }
+    object->reset();
   }
 }
 
