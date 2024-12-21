@@ -16,7 +16,7 @@ bool ECS3D::isActive() const
 void ECS3D::update()
 {
   const auto currentTime = std::chrono::steady_clock::now();
-  const float dt = std::min(0.01f, std::chrono::duration<float>(currentTime - previousTime).count());
+  const float dt = std::chrono::duration<float>(currentTime - previousTime).count();
   previousTime = currentTime;
 
   sceneManager->update(dt);
