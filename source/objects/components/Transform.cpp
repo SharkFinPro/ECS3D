@@ -71,7 +71,7 @@ void Transform::displayGui()
     ImGui::SliderFloat("z", &scale.z, 0.1f, 10.0f);
 
     float combinedScale = (scale.x + scale.y + scale.z) / 3.0f;
-    if (ImGui::SliderFloat("Combined", &combinedScale, 0.1f, 10.0f))
+    if (ImGui::SliderFloat("xyz", &combinedScale, 0.1f, 10.0f))
     {
       scale.x = scale.y = scale.z = combinedScale;
     }
