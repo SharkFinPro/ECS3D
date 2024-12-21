@@ -1,10 +1,13 @@
 #include "Object.h"
 #include "components/Component.h"
 #include <utility>
+#include <imgui.h>
 
 Object::Object(std::string name)
   : manager(nullptr), name(std::move(name))
-{}
+{
+  name.resize(MAX_CHARACTERS);
+}
 
 Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)
   : manager(nullptr), name(std::move(name))
@@ -67,8 +70,11 @@ void Object::setName(const std::string& name)
   this->name = name;
 }
 
-void Object::displayGui() const
+void Object::displayGui()
 {
+  ImGui::InputText("Name", name.data(), name.capacity());
+
+
   for (const auto& [type, component] : components)
   {
     component->displayGui();
