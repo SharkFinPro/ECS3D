@@ -83,6 +83,26 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   return true;
 }
 
+glm::vec3 Collider::getRoughFurthestPoint(const glm::vec3 direction)
+{
+  if (transform_ptr.expired())
+  {
+    transform_ptr = std::dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+
+    if (transform_ptr.expired())
+    {
+      throw std::runtime_error("Collider::collidesWith::Missing Transform");
+    }
+  }
+
+  if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
+  {
+    return direction * 2.0f * transform->getScale() + transform->getPosition();
+  }
+
+  return {0, 0, 0};
+}
+
 bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
                                              const std::shared_ptr<Transform>& otherTransform,
                                              glm::vec3* mtv)
