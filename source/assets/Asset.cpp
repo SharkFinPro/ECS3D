@@ -14,6 +14,11 @@ void Asset::setManager(AssetManager* assetManager)
   this->assetManager = assetManager;
 }
 
+std::string Asset::getName() const
+{
+  return name;
+}
+
 void Asset::displayGui()
 {
   ImGui::SeparatorText(name.c_str());

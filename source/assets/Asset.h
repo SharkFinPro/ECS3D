@@ -12,6 +12,8 @@ public:
 
   void setManager(AssetManager* assetManager);
 
+  [[nodiscard]] std::string getName() const;
+
   virtual void displayGui();
 
   virtual void load() = 0;
