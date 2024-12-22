@@ -4,18 +4,19 @@
 #include <vector>
 #include <memory>
 
+class ECS3D;
 class Asset;
 
 class AssetManager {
 public:
-  AssetManager() = default;
-  explicit AssetManager(const std::vector<std::shared_ptr<Asset>>& assets);
+  void setECS(ECS3D* ecs);
 
-  void loadAsset(std::shared_ptr<Asset> asset);
+  [[nodiscard]] ECS3D* getECS() const;
 
   void displayGui();
 
 private:
+  ECS3D* ecs;
   std::vector<std::shared_ptr<Asset>> assets;
 };
 

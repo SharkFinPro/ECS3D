@@ -2,18 +2,14 @@
 #include "Asset.h"
 #include <imgui.h>
 
-AssetManager::AssetManager(const std::vector<std::shared_ptr<Asset>>& assets)
+void AssetManager::setECS(ECS3D* ecs)
 {
-  for (const auto& asset : assets)
-  {
-    loadAsset(asset);
-  }
+  this->ecs = ecs;
 }
 
-void AssetManager::loadAsset(std::shared_ptr<Asset> asset)
+ECS3D * AssetManager::getECS() const
 {
-  asset->setManager(this);
-  assets.push_back(asset);
+  return ecs;
 }
 
 void AssetManager::displayGui()
