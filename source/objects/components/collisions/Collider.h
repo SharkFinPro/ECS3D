@@ -54,6 +54,8 @@ public:
 
   bool collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv);
 
+  glm::vec3 getRoughFurthestPoint(glm::vec3 direction);
+
 private:
   bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
                                      const std::shared_ptr<Transform>& otherTransform,
@@ -94,6 +96,8 @@ protected:
   std::weak_ptr<Transform> transform_ptr;
 
   ColliderType colliderType;
+
+  float roughMaxDistance;
 };
 
 

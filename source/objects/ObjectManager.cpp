@@ -5,10 +5,10 @@
 #include "components/collisions/Collider.h"
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <set>
+#include <unordered_set>
 
-#include "components/LightRenderer.h"
 #include "components/ModelRenderer.h"
-#include "components/Transform.h"
 
 ObjectManager::ObjectManager()
   : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
@@ -32,10 +32,18 @@ ECS3D* ObjectManager::getECS() const
   return ecs;
 }
 
-void ObjectManager::addObject(std::shared_ptr<Object> object)
+void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 {
   object->setManager(this);
-  objects.push_back(std::move(object));
+
+  if (object->getComponent(ComponentType::collider))
+  {
+    const auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
+
+    collisionEdges.push_back({object, collider, 0.0f});
+  }
+
+  objects.push_back(object);
 }
 
 void ObjectManager::resetObjects() const
@@ -74,45 +82,73 @@ void ObjectManager::fixedUpdate(const float dt)
   }
 }
 
-void ObjectManager::checkCollisions() const
+void ObjectManager::checkCollisions()
 {
-#pragma omp parallel for default(none) num_threads(6)
-  for (int i = 0; i < objects.size(); i++)
+  for (auto& edge : collisionEdges)
   {
-    const auto object = objects[i];
+    edge.position = edge.collider->getRoughFurthestPoint({-1, 0, 0}).x;
+  }
 
-    auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
-    auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
+  std::ranges::sort(collisionEdges, [](const LeftEdge& a, const LeftEdge& b)
+  {
+    return a.position < b.position;
+  });
 
-    if (!rigidBody || !collider)
+#pragma omp parallel for default(none) num_threads(6)
+  for (int i = 0; i < collisionEdges.size(); i++)
+  {
+    const auto edge = collisionEdges[i];
+
+    auto rigidBody = std::dynamic_pointer_cast<RigidBody>(edge.object->getComponent(ComponentType::rigidBody));
+
+    if (!rigidBody)
     {
       continue;
     }
 
     std::vector<std::shared_ptr<Object>> collidedObjects;
-    findCollisions(object, collider, collidedObjects);
+    findCollisions(edge, collidedObjects);
 
     if (!collidedObjects.empty())
     {
-      handleCollisions(rigidBody, collider, collidedObjects);
+      handleCollisions(rigidBody, edge.collider, collidedObjects);
     }
   }
 }
 
-void ObjectManager::findCollisions(const std::shared_ptr<Object>& object,
-                                   const std::shared_ptr<Collider>& collider,
+void ObjectManager::findCollisions(const LeftEdge& edge,
                                    std::vector<std::shared_ptr<Object>>& collidedObjects) const
 {
-  for (const auto& other : objects)
+  for (const auto& other : collisionEdges)
   {
-    if (other == object)
+    if (other.object == edge.object)
     {
       continue;
     }
 
-    if (collider->collidesWith(other, nullptr))
+    glm::vec3 direction = { -1, 0, 0 };
+    if (other.collider->getRoughFurthestPoint(direction).x > edge.collider->getRoughFurthestPoint(-direction).x)
     {
-      collidedObjects.emplace_back(other);
+      break;
+    }
+
+    direction = {0, 0, -1};
+    if (edge.collider->getRoughFurthestPoint(direction).z > other.collider->getRoughFurthestPoint(-direction).z ||
+        edge.collider->getRoughFurthestPoint(-direction).z < other.collider->getRoughFurthestPoint(direction).z)
+    {
+      continue;
+    }
+
+    direction = {0, -1, 0};
+    if (edge.collider->getRoughFurthestPoint(direction).y > other.collider->getRoughFurthestPoint(-direction).y ||
+        edge.collider->getRoughFurthestPoint(-direction).y < other.collider->getRoughFurthestPoint(direction).y)
+    {
+      continue;
+    }
+
+    if (edge.collider->collidesWith(other.object, nullptr))
+    {
+      collidedObjects.emplace_back(other.object);
     }
   }
 }

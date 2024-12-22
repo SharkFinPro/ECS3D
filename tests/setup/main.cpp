@@ -6,7 +6,7 @@
 #include "source/scenes/Scene.h"
 
 constexpr int gridSize = 6;
-constexpr int gridHeight = 10;
+constexpr int gridHeight = 15;
 constexpr int ballSpacing = 5;
 
 void loadScene1(const std::shared_ptr<Scene>& scene);
