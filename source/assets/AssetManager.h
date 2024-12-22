@@ -13,6 +13,8 @@ public:
 
   void loadAsset(std::shared_ptr<Asset> asset);
 
+  void displayGui();
+
 private:
   std::vector<std::shared_ptr<Asset>> assets;
 };
