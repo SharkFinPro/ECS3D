@@ -3,17 +3,20 @@
 
 #include <vector>
 #include <memory>
+#include <string>
 
 class ECS3D;
 class Asset;
 
 class AssetManager {
 public:
-  void setECS(ECS3D* ecs);
+  explicit AssetManager(ECS3D* ecs);
 
   [[nodiscard]] ECS3D* getECS() const;
 
   void displayGui();
+
+  void loadTexture(const std::string& path);
 
 private:
   ECS3D* ecs;

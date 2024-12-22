@@ -16,6 +16,8 @@ public:
 
   virtual void displayGui();
 
+  virtual void load() = 0;
+
 protected:
   AssetManager* assetManager;
 

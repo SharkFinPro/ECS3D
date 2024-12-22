@@ -2,12 +2,13 @@
 #include "Asset.h"
 #include <imgui.h>
 
-void AssetManager::setECS(ECS3D* ecs)
-{
-  this->ecs = ecs;
-}
+#include "TextureAsset.h"
 
-ECS3D * AssetManager::getECS() const
+AssetManager::AssetManager(ECS3D* ecs)
+  : ecs(ecs)
+{}
+
+ECS3D* AssetManager::getECS() const
 {
   return ecs;
 }
@@ -22,4 +23,13 @@ void AssetManager::displayGui()
   }
 
   ImGui::End();
+}
+
+void AssetManager::loadTexture(const std::string& path)
+{
+  const auto texture = std::make_shared<TextureAsset>(path);
+  texture->setManager(this);
+  texture->load();
+
+  assets.push_back(texture);
 }

@@ -1,9 +1,10 @@
 #include "ECS3D.h"
-
 #include "scenes/SceneManager.h"
+#include "assets/AssetManager.h"
 
 ECS3D::ECS3D()
-  : previousTime(std::chrono::steady_clock::now()), sceneManager(std::make_shared<SceneManager>(this))
+  : previousTime(std::chrono::steady_clock::now()), sceneManager(std::make_shared<SceneManager>(this)),
+		assetManager(std::make_shared<AssetManager>(this))
 {
   initRenderer();
 }
@@ -18,6 +19,8 @@ void ECS3D::update()
   const auto currentTime = std::chrono::steady_clock::now();
   const float dt = std::chrono::duration<float>(currentTime - previousTime).count();
   previousTime = currentTime;
+
+	assetManager->displayGui();
 
   sceneManager->update(dt);
 
@@ -37,6 +40,11 @@ bool ECS3D::keyIsPressed(const int key) const
 std::shared_ptr<SceneManager> ECS3D::getSceneManager() const
 {
   return sceneManager;
+}
+
+std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
+{
+	return assetManager;
 }
 
 void ECS3D::initRenderer()
