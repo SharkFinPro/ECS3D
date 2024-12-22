@@ -127,7 +127,8 @@ void ObjectManager::findCollisions(const LeftEdge& edge,
     }
 
     glm::vec3 direction = { -1, 0, 0 };
-    if (other.collider->getRoughFurthestPoint(direction).x > edge.collider->getRoughFurthestPoint(-direction).x) {
+    if (other.collider->getRoughFurthestPoint(direction).x > edge.collider->getRoughFurthestPoint(-direction).x)
+    {
       break;
     }
 
