@@ -32,7 +32,7 @@ ECS3D* ObjectManager::getECS() const
   return ecs;
 }
 
-void ObjectManager::addObject(const std::shared_ptr<Object>& object)
+void ObjectManager::addObject(std::shared_ptr<Object> object)
 {
   object->setManager(this);
 
