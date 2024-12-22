@@ -86,11 +86,6 @@ void ObjectManager::checkCollisions()
     const auto c1 = std::dynamic_pointer_cast<Collider>(a->getComponent(ComponentType::collider));
     const auto c2 = std::dynamic_pointer_cast<Collider>(b->getComponent(ComponentType::collider));
 
-    if (!c1 || !c2)
-    {
-      return false;
-    }
-
     constexpr glm::vec3 direction = { -1, 0, 0 };
 
     return c1->getRoughFurthestPoint(direction).x < c2->getRoughFurthestPoint(direction).x;
