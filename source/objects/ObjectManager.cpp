@@ -97,11 +97,32 @@ void sortEdges(std::vector<ObjectEdge>& edges)
   });
 }
 
+void sweep(const std::vector<ObjectEdge>& edges, std::set<PotentialCollision>& potentialCollisions)
+{
+  std::unordered_set<std::shared_ptr<Object>> touching;
+  for (const auto& edge : edges)
+  {
+    if (edge.isMin)
+    {
+      for (auto& object : touching)
+      {
+        potentialCollisions.emplace(edge.object, object);
+      }
+
+      touching.insert(edge.object);
+    }
+    else
+    {
+      touching.erase(edge.object);
+    }
+  }
+}
+
 void ObjectManager::checkCollisions()
 {
   std::set<PotentialCollision> xSet, ySet, zSet;
 
-#pragma omp parallel sections num_threads(3)
+#pragma omp parallel sections
   {
   #pragma omp section
     {
@@ -112,23 +133,7 @@ void ObjectManager::checkCollisions()
 
       sortEdges(xEdges);
 
-      std::unordered_set<std::shared_ptr<Object>> touching;
-      for (const auto& edge : xEdges)
-      {
-        if (edge.isMin)
-        {
-          for (auto& object : touching)
-          {
-            xSet.emplace(edge.object, object);
-          }
-
-          touching.insert(edge.object);
-        }
-        else
-        {
-          touching.erase(edge.object);
-        }
-      }
+      sweep(xEdges, xSet);
     }
 
   #pragma omp section
@@ -140,23 +145,7 @@ void ObjectManager::checkCollisions()
 
       sortEdges(yEdges);
 
-      std::unordered_set<std::shared_ptr<Object>> touching;
-      for (const auto& edge : yEdges)
-      {
-        if (edge.isMin)
-        {
-          for (auto& object : touching)
-          {
-            ySet.emplace(edge.object, object);
-          }
-
-          touching.insert(edge.object);
-        }
-        else
-        {
-          touching.erase(edge.object);
-        }
-      }
+      sweep(yEdges, ySet);
     }
 
   #pragma omp section
@@ -168,23 +157,7 @@ void ObjectManager::checkCollisions()
 
       sortEdges(zEdges);
 
-      std::unordered_set<std::shared_ptr<Object>> touching;
-      for (const auto& edge : zEdges)
-      {
-        if (edge.isMin)
-        {
-          for (auto& object : touching)
-          {
-            zSet.emplace(edge.object, object);
-          }
-
-          touching.insert(edge.object);
-        }
-        else
-        {
-          touching.erase(edge.object);
-        }
-      }
+      sweep(zEdges, zSet);
     }
   }
 
