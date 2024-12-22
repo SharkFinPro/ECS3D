@@ -25,7 +25,7 @@ public:
   void setECS(ECS3D* ecs);
   [[nodiscard]] ECS3D* getECS() const;
 
-  void addObject(std::shared_ptr<Object> object);
+  void addObject(const std::shared_ptr<Object>& object);
 
   void resetObjects() const;
 
@@ -34,9 +34,7 @@ private:
 
   std::vector<std::shared_ptr<Object>> objects;
 
-  std::vector<ObjectEdge> xEdges;
-  std::vector<ObjectEdge> yEdges;
-  std::vector<ObjectEdge> zEdges;
+  std::vector<std::shared_ptr<Object>> collisionObjects;
 
   const float fixedUpdateDt;
   float timeAccumulator;
