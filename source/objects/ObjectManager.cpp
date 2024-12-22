@@ -40,7 +40,7 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   {
     const auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
 
-    collisionEdges.emplace_back(object, collider, 0);
+    collisionEdges.emplace_back(object, collider, 0.0f);
   }
 
   objects.push_back(object);
