@@ -17,9 +17,16 @@ void AssetManager::displayGui()
 {
   ImGui::Begin("Assets");
 
+  constexpr int cellSize = 200;
+  const int width = static_cast<int>(ImGui::GetContentRegionAvail().x);
+
+  ImGui::Columns(width / cellSize, 0, false);
+
   for (const auto& [name, asset] : assets)
   {
     asset->displayGui();
+
+    ImGui::NextColumn();
   }
 
   ImGui::End();
