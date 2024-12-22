@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <set>
+#include <unordered_set>
 
 #include "components/ModelRenderer.h"
 
@@ -89,6 +90,13 @@ void ObjectManager::fixedUpdate(const float dt)
 
 using PotentialCollision = std::pair<std::shared_ptr<Object>, std::shared_ptr<Object>>;
 
+void sortEdges(std::vector<ObjectEdge>& edges)
+{
+  std::ranges::sort(edges, [](const ObjectEdge& a, const ObjectEdge& b) {
+    return a.position < b.position;
+  });
+}
+
 void ObjectManager::checkCollisions()
 {
   std::set<PotentialCollision> xSet, ySet, zSet;
@@ -97,15 +105,14 @@ void ObjectManager::checkCollisions()
   {
   #pragma omp section
     {
-      for (auto& edge : xEdges) {
+      for (auto& edge : xEdges)
+      {
         edge.position = edge.collider->getRoughFurthestPoint({edge.isMin ? -1 : 1, 0, 0}).x;
       }
 
-      std::ranges::sort(xEdges, [](const ObjectEdge& a, const ObjectEdge& b) {
-        return a.position < b.position;
-      });
+      sortEdges(xEdges);
 
-      std::vector<std::shared_ptr<Object>> touching;
+      std::unordered_set<std::shared_ptr<Object>> touching;
       for (const auto& edge : xEdges)
       {
         if (edge.isMin)
@@ -115,26 +122,25 @@ void ObjectManager::checkCollisions()
             xSet.emplace(edge.object, object);
           }
 
-          touching.push_back(edge.object);
+          touching.insert(edge.object);
         }
         else
         {
-          std::erase(touching, edge.object);
+          touching.erase(edge.object);
         }
       }
     }
 
   #pragma omp section
     {
-      for (auto& edge : yEdges) {
+      for (auto& edge : yEdges)
+      {
         edge.position = edge.collider->getRoughFurthestPoint({0, edge.isMin ? -1 : 1, 0}).y;
       }
 
-      std::ranges::sort(yEdges, [](const ObjectEdge& a, const ObjectEdge& b) {
-        return a.position < b.position;
-      });
+      sortEdges(yEdges);
 
-      std::vector<std::shared_ptr<Object>> touching;
+      std::unordered_set<std::shared_ptr<Object>> touching;
       for (const auto& edge : yEdges)
       {
         if (edge.isMin)
@@ -144,26 +150,25 @@ void ObjectManager::checkCollisions()
             ySet.emplace(edge.object, object);
           }
 
-          touching.push_back(edge.object);
+          touching.insert(edge.object);
         }
         else
         {
-          std::erase(touching, edge.object);
+          touching.erase(edge.object);
         }
       }
     }
 
   #pragma omp section
     {
-      for (auto& edge : zEdges) {
+      for (auto& edge : zEdges)
+      {
         edge.position = edge.collider->getRoughFurthestPoint({0, 0, edge.isMin ? -1 : 1}).z;
       }
 
-      std::ranges::sort(zEdges, [](const ObjectEdge& a, const ObjectEdge& b) {
-        return a.position < b.position;
-      });
+      sortEdges(zEdges);
 
-      std::vector<std::shared_ptr<Object>> touching;
+      std::unordered_set<std::shared_ptr<Object>> touching;
       for (const auto& edge : zEdges)
       {
         if (edge.isMin)
@@ -173,11 +178,11 @@ void ObjectManager::checkCollisions()
             zSet.emplace(edge.object, object);
           }
 
-          touching.push_back(edge.object);
+          touching.insert(edge.object);
         }
         else
         {
-          std::erase(touching, edge.object);
+          touching.erase(edge.object);
         }
       }
     }
@@ -211,20 +216,20 @@ void ObjectManager::checkCollisions()
   }
 }
 
-  // std::ranges::sort(objects, [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
-  //   const auto c1 = std::dynamic_pointer_cast<Collider>(a->getComponent(ComponentType::collider));
-  //   const auto c2 = std::dynamic_pointer_cast<Collider>(b->getComponent(ComponentType::collider));
-  //
-  //   if (!c1 || !c2)
-  //   {
-  //     return false;
-  //   }
-  //
-  //   constexpr glm::vec3 direction = { -1, 0, 0 };
-  //
-  //   return c1->getRoughFurthestPoint(direction).x < c2->getRoughFurthestPoint(direction).x;
-  // });
-
+//   std::ranges::sort(objects, [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
+//     const auto c1 = std::dynamic_pointer_cast<Collider>(a->getComponent(ComponentType::collider));
+//     const auto c2 = std::dynamic_pointer_cast<Collider>(b->getComponent(ComponentType::collider));
+//
+//     if (!c1 || !c2)
+//     {
+//       return false;
+//     }
+//
+//     constexpr glm::vec3 direction = { -1, 0, 0 };
+//
+//     return c1->getRoughFurthestPoint(direction).x < c2->getRoughFurthestPoint(direction).x;
+//   });
+//
 // #pragma omp parallel for default(none) num_threads(6)
 //   for (int i = 0; i < objects.size(); i++)
 //   {
@@ -259,30 +264,30 @@ void ObjectManager::findCollisions(const std::shared_ptr<Object>& object,
       continue;
     }
 
-    const auto c2 = std::dynamic_pointer_cast<Collider>(other->getComponent(ComponentType::collider));
-    if (!c2)
-    {
-      continue;
-    }
-
-    glm::vec3 direction = { -1, 0, 0 };
-    if (c2->getRoughFurthestPoint(direction).x > collider->getRoughFurthestPoint(-direction).x) {
-      break;
-    }
-
-    direction = {0, 0, -1};
-    if (collider->getRoughFurthestPoint(direction).z > c2->getRoughFurthestPoint(-direction).z ||
-        collider->getRoughFurthestPoint(-direction).z < c2->getRoughFurthestPoint(direction).z)
-    {
-      continue;
-    }
-
-    direction = {0, -1, 0};
-    if (collider->getRoughFurthestPoint(direction).y > c2->getRoughFurthestPoint(-direction).y ||
-        collider->getRoughFurthestPoint(-direction).y < c2->getRoughFurthestPoint(direction).y)
-    {
-      continue;
-    }
+    // const auto c2 = std::dynamic_pointer_cast<Collider>(other->getComponent(ComponentType::collider));
+    // if (!c2)
+    // {
+    //   continue;
+    // }
+    //
+    // glm::vec3 direction = { -1, 0, 0 };
+    // if (c2->getRoughFurthestPoint(direction).x > collider->getRoughFurthestPoint(-direction).x) {
+    //   break;
+    // }
+    //
+    // direction = {0, 0, -1};
+    // if (collider->getRoughFurthestPoint(direction).z > c2->getRoughFurthestPoint(-direction).z ||
+    //     collider->getRoughFurthestPoint(-direction).z < c2->getRoughFurthestPoint(direction).z)
+    // {
+    //   continue;
+    // }
+    //
+    // direction = {0, -1, 0};
+    // if (collider->getRoughFurthestPoint(direction).y > c2->getRoughFurthestPoint(-direction).y ||
+    //     collider->getRoughFurthestPoint(-direction).y < c2->getRoughFurthestPoint(direction).y)
+    // {
+    //   continue;
+    // }
 
     if (collider->collidesWith(other, nullptr))
     {
