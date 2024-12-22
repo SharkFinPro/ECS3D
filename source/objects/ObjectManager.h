@@ -9,6 +9,12 @@ class ECS3D;
 class Collider;
 class RigidBody;
 
+struct LeftEdge {
+  std::shared_ptr<Object> object;
+  std::shared_ptr<Collider> collider;
+  float position;
+};
+
 class ObjectManager {
 public:
   ObjectManager();
@@ -27,7 +33,7 @@ private:
 
   std::vector<std::shared_ptr<Object>> objects;
 
-  std::vector<std::shared_ptr<Object>> collisionObjects;
+  std::vector<LeftEdge> collisionEdges;
 
   const float fixedUpdateDt;
   float timeAccumulator;
@@ -39,7 +45,7 @@ private:
 
   void checkCollisions();
 
-  void findCollisions(const std::shared_ptr<Object>& object, const std::shared_ptr<Collider>& collider, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+  void findCollisions(const LeftEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, const std::vector<std::shared_ptr<Object>>& collidedObjects);
 

@@ -38,7 +38,9 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 
   if (object->getComponent(ComponentType::collider))
   {
-    collisionObjects.push_back(object);
+    const auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
+
+    collisionEdges.emplace_back(object, collider, 0);
   }
 
   objects.push_back(object);
@@ -82,77 +84,70 @@ void ObjectManager::fixedUpdate(const float dt)
 
 void ObjectManager::checkCollisions()
 {
-  std::ranges::sort(collisionObjects, [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
-    const auto c1 = std::dynamic_pointer_cast<Collider>(a->getComponent(ComponentType::collider));
-    const auto c2 = std::dynamic_pointer_cast<Collider>(b->getComponent(ComponentType::collider));
+  for (auto& edge : collisionEdges)
+  {
+    edge.position = edge.collider->getRoughFurthestPoint({-1, 0, 0}).x;
+  }
 
-    constexpr glm::vec3 direction = { -1, 0, 0 };
-
-    return c1->getRoughFurthestPoint(direction).x < c2->getRoughFurthestPoint(direction).x;
+  std::ranges::sort(collisionEdges, [](const LeftEdge& a, const LeftEdge& b)
+  {
+    return a.position < b.position;
   });
 
 #pragma omp parallel for default(none) num_threads(6)
-  for (int i = 0; i < collisionObjects.size(); i++)
+  for (int i = 0; i < collisionEdges.size(); i++)
   {
-    const auto object = collisionObjects[i];
+    const auto edge = collisionEdges[i];
 
-    auto rigidBody = std::dynamic_pointer_cast<RigidBody>(object->getComponent(ComponentType::rigidBody));
-    auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
+    auto rigidBody = std::dynamic_pointer_cast<RigidBody>(edge.object->getComponent(ComponentType::rigidBody));
 
-    if (!rigidBody || !collider)
+    if (!rigidBody)
     {
       continue;
     }
 
     std::vector<std::shared_ptr<Object>> collidedObjects;
-    findCollisions(object, collider, collidedObjects);
+    findCollisions(edge, collidedObjects);
 
     if (!collidedObjects.empty())
     {
-      handleCollisions(rigidBody, collider, collidedObjects);
+      handleCollisions(rigidBody, edge.collider, collidedObjects);
     }
   }
 }
 
-void ObjectManager::findCollisions(const std::shared_ptr<Object>& object,
-                                   const std::shared_ptr<Collider>& collider,
+void ObjectManager::findCollisions(const LeftEdge& edge,
                                    std::vector<std::shared_ptr<Object>>& collidedObjects) const
 {
-  for (const auto& other : collisionObjects)
+  for (const auto& other : collisionEdges)
   {
-    if (other == object)
-    {
-      continue;
-    }
-
-    const auto c2 = std::dynamic_pointer_cast<Collider>(other->getComponent(ComponentType::collider));
-    if (!c2)
+    if (other.object == edge.object)
     {
       continue;
     }
 
     glm::vec3 direction = { -1, 0, 0 };
-    if (c2->getRoughFurthestPoint(direction).x > collider->getRoughFurthestPoint(-direction).x) {
+    if (other.collider->getRoughFurthestPoint(direction).x > edge.collider->getRoughFurthestPoint(-direction).x) {
       break;
     }
 
     direction = {0, 0, -1};
-    if (collider->getRoughFurthestPoint(direction).z > c2->getRoughFurthestPoint(-direction).z ||
-        collider->getRoughFurthestPoint(-direction).z < c2->getRoughFurthestPoint(direction).z)
+    if (edge.collider->getRoughFurthestPoint(direction).z > other.collider->getRoughFurthestPoint(-direction).z ||
+        edge.collider->getRoughFurthestPoint(-direction).z < other.collider->getRoughFurthestPoint(direction).z)
     {
       continue;
     }
 
     direction = {0, -1, 0};
-    if (collider->getRoughFurthestPoint(direction).y > c2->getRoughFurthestPoint(-direction).y ||
-        collider->getRoughFurthestPoint(-direction).y < c2->getRoughFurthestPoint(direction).y)
+    if (edge.collider->getRoughFurthestPoint(direction).y > other.collider->getRoughFurthestPoint(-direction).y ||
+        edge.collider->getRoughFurthestPoint(-direction).y < other.collider->getRoughFurthestPoint(direction).y)
     {
       continue;
     }
 
-    if (collider->collidesWith(other, nullptr))
+    if (edge.collider->collidesWith(other.object, nullptr))
     {
-      collidedObjects.emplace_back(other);
+      collidedObjects.emplace_back(other.object);
     }
   }
 }
