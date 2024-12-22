@@ -24,7 +24,7 @@ public:
   void setECS(ECS3D* ecs);
   [[nodiscard]] ECS3D* getECS() const;
 
-  void addObject(std::shared_ptr<Object> object);
+  void addObject(const std::shared_ptr<Object>& object);
 
   void resetObjects() const;
 
