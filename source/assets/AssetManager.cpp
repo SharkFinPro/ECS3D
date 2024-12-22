@@ -17,9 +17,11 @@ void AssetManager::displayGui()
 {
   ImGui::Begin("Assets");
 
-  for (const auto& asset : assets)
+  for (const auto& [name, asset] : assets)
   {
     asset->displayGui();
+
+    // ImGui::Separator();
   }
 
   ImGui::End();
@@ -31,5 +33,15 @@ void AssetManager::loadTexture(const std::string& path)
   texture->setManager(this);
   texture->load();
 
-  assets.push_back(texture);
+  assets.emplace(path, texture);
+}
+
+std::shared_ptr<Asset> AssetManager::getAsset(const std::string& path)
+{
+  return assets.at(path);
+}
+
+std::shared_ptr<TextureAsset> AssetManager::getTexture(const std::string &path)
+{
+  return std::dynamic_pointer_cast<TextureAsset>(getAsset(path));
 }

@@ -1,12 +1,13 @@
 #ifndef ASSETMANAGER_H
 #define ASSETMANAGER_H
 
-#include <vector>
+#include <unordered_map>
 #include <memory>
 #include <string>
 
 class ECS3D;
 class Asset;
+class TextureAsset;
 
 class AssetManager {
 public:
@@ -18,9 +19,13 @@ public:
 
   void loadTexture(const std::string& path);
 
+  std::shared_ptr<Asset> getAsset(const std::string& path);
+
+  std::shared_ptr<TextureAsset> getTexture(const std::string& path);
+
 private:
   ECS3D* ecs;
-  std::vector<std::shared_ptr<Asset>> assets;
+  std::unordered_map<std::string, std::shared_ptr<Asset>> assets;
 };
 
 

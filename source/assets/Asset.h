@@ -3,8 +3,6 @@
 
 #include <string>
 
-constexpr int MAX_CHARACTERS = 30;
-
 class AssetManager;
 
 class Asset {

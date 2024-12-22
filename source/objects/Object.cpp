@@ -3,6 +3,8 @@
 #include <utility>
 #include <imgui.h>
 
+constexpr int MAX_CHARACTERS = 30;
+
 Object::Object(std::string name)
   : manager(nullptr), name(std::move(name))
 {

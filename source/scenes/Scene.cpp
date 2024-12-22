@@ -1,5 +1,7 @@
 #include "Scene.h"
 #include "SceneManager.h"
+#include "../assets/AssetManager.h"
+#include "../assets/TextureAsset.h"
 #include "../ECS3D.h"
 #include "../objects/Object.h"
 #include "../objects/ObjectManager.h"
@@ -7,9 +9,14 @@
 #include "../objects/components/LightRenderer.h"
 
 Scene::Scene(SceneManager* sceneManager)
-  : sceneManager(sceneManager), objectManager(std::make_shared<ObjectManager>())
+  : sceneManager(sceneManager), assetManager(sceneManager->getECS()->getAssetManager()),
+    objectManager(std::make_shared<ObjectManager>())
 {
   objectManager->setECS(sceneManager->getECS());
+
+  assetManager->loadTexture("assets/textures/white.png");
+  assetManager->loadTexture("assets/textures/earth.png");
+  assetManager->loadTexture("assets/textures/earth_specular.png");
 }
 
 void Scene::load() const
@@ -27,8 +34,8 @@ void Scene::createBlock(TransformData transformData) const
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
-                                    sceneManager->getTexture("assets/textures/white.png"),
-                                    sceneManager->getTexture("assets/textures/white.png"),
+                                    assetManager->getTexture("assets/textures/white.png")->getTexture(),
+                                    assetManager->getTexture("assets/textures/white.png")->getTexture(),
                                     sceneManager->getModel("assets/models/cube_1x1x1.glb")),
     std::make_shared<RigidBody>(),
     std::make_shared<BoxCollider>()
@@ -42,8 +49,8 @@ void Scene::createRigidBlock(TransformData transformData) const
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
-                                    sceneManager->getTexture("assets/textures/white.png"),
-                                    sceneManager->getTexture("assets/textures/white.png"),
+                                    assetManager->getTexture("assets/textures/white.png")->getTexture(),
+                                    assetManager->getTexture("assets/textures/white.png")->getTexture(),
                                     sceneManager->getModel("assets/models/cube_1x1x1.glb")),
     std::make_shared<BoxCollider>()
   };
@@ -56,8 +63,8 @@ void Scene::createSphere(TransformData transformData) const
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
-                                    sceneManager->getTexture("assets/textures/earth.png"),
-                                    sceneManager->getTexture("assets/textures/earth_specular.png"),
+                                    assetManager->getTexture("assets/textures/earth.png")->getTexture(),
+                                    assetManager->getTexture("assets/textures/earth_specular.png")->getTexture(),
                                     sceneManager->getModel("assets/models/sphere_3.glb")),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>()
@@ -71,8 +78,8 @@ void Scene::createPlayer(TransformData transformData) const
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
-                                    sceneManager->getTexture("assets/textures/white.png"),
-                                    sceneManager->getTexture("assets/textures/white.png"),
+                                    assetManager->getTexture("assets/textures/white.png")->getTexture(),
+                                    assetManager->getTexture("assets/textures/white.png")->getTexture(),
                                     sceneManager->getModel("assets/models/sphere.glb")),
     std::make_shared<Player>(),
     std::make_shared<RigidBody>(),

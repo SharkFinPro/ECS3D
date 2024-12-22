@@ -54,7 +54,8 @@ void ECS3D::initRenderer()
     .WINDOW_HEIGHT = 720,
     .WINDOW_TITLE = "ECS3D",
     .CAMERA_POSITION = { 0, 0, -50 },
-    .FULLSCREEN = false
+    .FULLSCREEN = false,
+  	.MAX_IMGUI_TEXTURES = 100
   };
 
   renderer = std::make_shared<VulkanEngine>(vulkanEngineOptions);

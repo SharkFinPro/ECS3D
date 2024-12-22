@@ -20,7 +20,6 @@ public:
 
   [[nodiscard]] ECS3D* getECS() const;
 
-  std::shared_ptr<Texture> getTexture(const std::string& path);
   std::shared_ptr<Model> getModel(const std::string& path);
 
   void update(float dt);
@@ -32,8 +31,6 @@ private:
 
   std::shared_ptr<Scene> currentScene;
 
-  std::unordered_map<std::string, std::shared_ptr<Texture>> textures;
-  std::unordered_map<std::string, std::shared_ptr<Texture>> specularMaps;
   std::unordered_map<std::string, std::shared_ptr<Model>> models;
 
   void sceneSelector();

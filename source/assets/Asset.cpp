@@ -1,6 +1,8 @@
 #include "Asset.h"
 #include <imgui.h>
 
+constexpr int MAX_CHARACTERS = 30;
+
 Asset::Asset(std::string name)
   : assetManager(nullptr), name(name)
 {
@@ -14,5 +16,5 @@ void Asset::setManager(AssetManager* assetManager)
 
 void Asset::displayGui()
 {
-  ImGui::Text(name.c_str());
+  ImGui::SeparatorText(name.c_str());
 }
