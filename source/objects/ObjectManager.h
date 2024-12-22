@@ -9,13 +9,6 @@ class ECS3D;
 class Collider;
 class RigidBody;
 
-struct ObjectEdge {
-  std::shared_ptr<Object> object;
-  std::shared_ptr<Collider> collider;
-  float position;
-  bool isMin;
-};
-
 class ObjectManager {
 public:
   ObjectManager();
