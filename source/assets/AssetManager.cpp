@@ -20,8 +20,6 @@ void AssetManager::displayGui()
   for (const auto& [name, asset] : assets)
   {
     asset->displayGui();
-
-    // ImGui::Separator();
   }
 
   ImGui::End();
