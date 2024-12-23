@@ -17,6 +17,7 @@ Scene::Scene(SceneManager* sceneManager)
 
   assetManager->loadAsset<ModelAsset>("assets/models/cube_1x1x1.glb");
   assetManager->loadAsset<ModelAsset>("assets/models/sphere.glb");
+  assetManager->loadAsset<ModelAsset>("assets/models/sphere_2.glb");
   assetManager->loadAsset<ModelAsset>("assets/models/sphere_3.glb");
 
   assetManager->loadAsset<TextureAsset>("assets/textures/white.png");
