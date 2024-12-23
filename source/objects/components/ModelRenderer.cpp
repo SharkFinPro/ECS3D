@@ -68,9 +68,7 @@ void ModelRenderer::displayDragDrop(const char* label,
   constexpr int widgetHeight = 50;
 
   ImGui::BeginChild(label, {ImGui::GetContentRegionAvail().x, widgetHeight});
-  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
-  ImGui::Selectable(label, false, 0, {ImGui::GetContentRegionAvail().x, widgetHeight});
-  ImGui::PopStyleVar();
+  ImGui::Button(label, {ImGui::GetContentRegionAvail().x, widgetHeight});
 
   if (ImGui::BeginDragDropTarget())
   {
