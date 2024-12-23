@@ -30,6 +30,10 @@ private:
   std::shared_ptr<Model> model;
 
   bool shouldRender;
+
+  void displayTextureDragDrop();
+  void displaySpecularDragDrop();
+  void displayModelDragDrop();
 };
 
 

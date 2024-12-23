@@ -48,82 +48,9 @@ void ModelRenderer::displayGui()
   {
     ImGui::Checkbox("Render", &shouldRender);
 
-    ///////////////
-
-    ImGui::BeginChild("Texture", {300, 30});
-    ImGui::Text("Texture");
-
-    if (ImGui::BeginDragDropTarget())
-    {
-      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
-      {
-        const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
-
-        if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
-        {
-          texture = textureAsset->getTexture();
-
-          renderObject.reset();
-          renderObject = renderer->loadRenderObject(texture, specularMap, model);
-        }
-      }
-
-      ImGui::EndDragDropTarget();
-    }
-
-    ImGui::EndChild();
-
-    /////////////////////
-
-    ImGui::BeginChild("Specular Map", {300, 30});
-    ImGui::Text("Specular Map");
-
-    if (ImGui::BeginDragDropTarget())
-    {
-      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
-      {
-        const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
-
-        if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
-        {
-          specularMap = textureAsset->getTexture();
-
-          renderObject.reset();
-          renderObject = renderer->loadRenderObject(texture, specularMap, model);
-        }
-      }
-
-      ImGui::EndDragDropTarget();
-    }
-
-    ImGui::EndChild();
-
-    /////////////////////
-
-    ImGui::BeginChild("Model", {300, 30});
-    ImGui::Text("Model");
-
-    if (ImGui::BeginDragDropTarget())
-    {
-      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
-      {
-        const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
-
-        if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
-        {
-          model = modelAsset->getModel();
-
-          renderObject.reset();
-          renderObject = renderer->loadRenderObject(texture, specularMap, model);
-        }
-      }
-
-      ImGui::EndDragDropTarget();
-    }
-
-    ImGui::EndChild();
-
-    //////////////////
+    displayTextureDragDrop();
+    displaySpecularDragDrop();
+    displayModelDragDrop();
 
     if (ImGui::Button("Reset"))
     {
@@ -135,4 +62,82 @@ void ModelRenderer::displayGui()
 void ModelRenderer::reset()
 {
   shouldRender = true;
+}
+
+void ModelRenderer::displayTextureDragDrop()
+{
+  ImGui::BeginChild("Texture", {300, 30});
+  ImGui::Text("Texture");
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+    {
+      const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+
+      if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
+      {
+        texture = textureAsset->getTexture();
+
+        renderObject.reset();
+        renderObject = renderer->loadRenderObject(texture, specularMap, model);
+      }
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
+  ImGui::EndChild();
+}
+
+void ModelRenderer::displaySpecularDragDrop()
+{
+  ImGui::BeginChild("Specular Map", {300, 30});
+  ImGui::Text("Specular Map");
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+    {
+      const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+
+      if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
+      {
+        specularMap = textureAsset->getTexture();
+
+        renderObject.reset();
+        renderObject = renderer->loadRenderObject(texture, specularMap, model);
+      }
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
+  ImGui::EndChild();
+}
+
+void ModelRenderer::displayModelDragDrop()
+{
+  ImGui::BeginChild("Model", {300, 30});
+  ImGui::Text("Model");
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+    {
+      const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+
+      if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
+      {
+        model = modelAsset->getModel();
+
+        renderObject.reset();
+        renderObject = renderer->loadRenderObject(texture, specularMap, model);
+      }
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
+  ImGui::EndChild();
 }
