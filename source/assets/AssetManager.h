@@ -22,7 +22,7 @@ public:
   void loadAsset(const std::string& path);
 
   template <typename T>
-  std::shared_ptr<T> getAsset(const std::string& path);
+  std::shared_ptr<T> getAsset(const std::string& path) const;
 
 private:
   ECS3D* ecs;
@@ -45,7 +45,7 @@ void AssetManager::loadAsset(const std::string &path)
 }
 
 template<typename T>
-std::shared_ptr<T> AssetManager::getAsset(const std::string &path)
+std::shared_ptr<T> AssetManager::getAsset(const std::string &path) const
 {
   const auto asset = assets.find(path);
 
