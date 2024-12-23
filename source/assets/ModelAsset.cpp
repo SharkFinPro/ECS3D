@@ -28,5 +28,7 @@ void ModelAsset::displayGui()
 {
   Asset::displayGui();
 
-  ImGui::Selectable("Model");
+  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.5f, 0.5f));
+  ImGui::Selectable("Model", false, 0, {150, 150});
+  ImGui::PopStyleVar();
 }
