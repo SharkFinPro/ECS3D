@@ -47,7 +47,9 @@ void ModelRenderer::displayGui()
   {
     ImGui::Checkbox("Render", &shouldRender);
 
-    ImGui::BeginChild("Texture");
+    ///////////////
+
+    ImGui::BeginChild("Texture", {300, 30});
     ImGui::Text("Texture");
 
     if (ImGui::BeginDragDropTarget())
@@ -69,6 +71,35 @@ void ModelRenderer::displayGui()
     }
 
     ImGui::EndChild();
+
+    /////////////////////
+
+    // Specular Map Drag-Drop
+    ImGui::BeginChild("Specular Map", {300, 30});
+    ImGui::Text("Specular Map");
+
+    // Drag-and-drop for the specular map
+    if (ImGui::BeginDragDropTarget())
+    {
+      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+      {
+        const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+
+        if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
+        {
+          specularMap = textureAsset->getTexture();
+
+          renderObject.reset();
+          renderObject = renderer->loadRenderObject(texture, specularMap, model);
+        }
+      }
+
+      ImGui::EndDragDropTarget();
+    }
+
+    ImGui::EndChild();
+
+    //////////////////
 
     if (ImGui::Button("Reset"))
     {
