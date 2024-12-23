@@ -66,8 +66,10 @@ void ModelRenderer::reset()
 
 void ModelRenderer::displayTextureDragDrop()
 {
-  ImGui::BeginChild("Texture", {ImGui::GetContentRegionAvail().x, 30});
-  ImGui::Selectable("Texture");
+  ImGui::BeginChild("Texture", {ImGui::GetContentRegionAvail().x, 50});
+  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
+  ImGui::Selectable("Texture", false, 0, {ImGui::GetContentRegionAvail().x, 50});
+  ImGui::PopStyleVar();
 
   if (ImGui::BeginDragDropTarget())
   {
@@ -92,8 +94,10 @@ void ModelRenderer::displayTextureDragDrop()
 
 void ModelRenderer::displaySpecularDragDrop()
 {
-  ImGui::BeginChild("Specular Map", {ImGui::GetContentRegionAvail().x, 30});
-  ImGui::Selectable("Specular Map");
+  ImGui::BeginChild("Specular Map", {ImGui::GetContentRegionAvail().x, 50});
+  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
+  ImGui::Selectable("Specular Map", false, 0, {ImGui::GetContentRegionAvail().x, 50});
+  ImGui::PopStyleVar();
 
   if (ImGui::BeginDragDropTarget())
   {
@@ -118,8 +122,10 @@ void ModelRenderer::displaySpecularDragDrop()
 
 void ModelRenderer::displayModelDragDrop()
 {
-  ImGui::BeginChild("Model", {ImGui::GetContentRegionAvail().x, 30});
-  ImGui::Selectable("Model");
+  ImGui::BeginChild("Model", {ImGui::GetContentRegionAvail().x, 50});
+  ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
+  ImGui::Selectable("Model", false, 0, {ImGui::GetContentRegionAvail().x, 50});
+  ImGui::PopStyleVar();
 
   if (ImGui::BeginDragDropTarget())
   {
