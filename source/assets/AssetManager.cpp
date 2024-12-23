@@ -73,7 +73,9 @@ void AssetManager::loadModel(const std::string& path)
 
 std::shared_ptr<Asset> AssetManager::getAsset(const std::string& path)
 {
-  return assets.at(path);
+  const auto asset = assets.find(path);
+
+  return asset != assets.end() ? asset->second : nullptr;
 }
 
 std::shared_ptr<TextureAsset> AssetManager::getTexture(const std::string& path)
