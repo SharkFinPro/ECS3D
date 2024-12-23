@@ -6,6 +6,7 @@
 #include <memory>
 
 class Transform;
+class Asset;
 
 class ModelRenderer final : public Component {
 public:
@@ -30,6 +31,8 @@ private:
   std::shared_ptr<Model> model;
 
   bool shouldRender;
+
+  void displayDragDrop(const char* label, const std::function<bool(const std::shared_ptr<Asset>&)>& setter);
 
   void displayTextureDragDrop();
   void displaySpecularDragDrop();
