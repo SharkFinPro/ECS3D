@@ -30,7 +30,7 @@ private:
 };
 
 template<typename T>
-void AssetManager::loadAsset(const std::string &path)
+void AssetManager::loadAsset(const std::string& path)
 {
   if (assets.contains(path))
   {
@@ -45,7 +45,7 @@ void AssetManager::loadAsset(const std::string &path)
 }
 
 template<typename T>
-std::shared_ptr<T> AssetManager::getAsset(const std::string &path) const
+std::shared_ptr<T> AssetManager::getAsset(const std::string& path) const
 {
   const auto asset = assets.find(path);
 
