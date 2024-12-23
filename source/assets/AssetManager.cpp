@@ -45,6 +45,11 @@ void AssetManager::displayGui()
 
 void AssetManager::loadTexture(const std::string& path)
 {
+  if (assets.contains(path))
+  {
+    return;
+  }
+
   const auto texture = std::make_shared<TextureAsset>(path);
   texture->setManager(this);
   texture->load();

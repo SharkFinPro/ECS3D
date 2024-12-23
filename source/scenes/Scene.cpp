@@ -15,6 +15,7 @@ Scene::Scene(SceneManager* sceneManager)
   objectManager->setECS(sceneManager->getECS());
 
   assetManager->loadTexture("assets/textures/white.png");
+  assetManager->loadTexture("assets/textures/black.png");
   assetManager->loadTexture("assets/textures/earth.png");
   assetManager->loadTexture("assets/textures/earth_specular.png");
 }
