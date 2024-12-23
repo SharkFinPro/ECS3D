@@ -28,5 +28,5 @@ void TextureAsset::displayGui()
 {
   Asset::displayGui();
 
-  ImGui::Image(texture->getImGuiTexture(), {150, 150});
+  ImGui::ImageButton("img", texture->getImGuiTexture(), {150, 150});
 }
