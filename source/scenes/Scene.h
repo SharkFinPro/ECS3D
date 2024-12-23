@@ -6,6 +6,7 @@
 #include <glm/vec3.hpp>
 
 class SceneManager;
+class AssetManager;
 class ObjectManager;
 class Object;
 class Light;
@@ -36,6 +37,7 @@ public:
 
 private:
   SceneManager* sceneManager;
+  std::shared_ptr<AssetManager> assetManager;
   std::shared_ptr<ObjectManager> objectManager;
   std::vector<std::shared_ptr<Light>> lights;
 };

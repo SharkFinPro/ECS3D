@@ -6,8 +6,6 @@
 #include <memory>
 #include <string>
 
-constexpr int MAX_CHARACTERS = 30;
-
 class ObjectManager;
 
 enum class ComponentType;

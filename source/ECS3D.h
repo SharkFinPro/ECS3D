@@ -6,6 +6,7 @@
 #include <VulkanEngine/VulkanEngine.h>
 
 class SceneManager;
+class AssetManager;
 
 class ECS3D {
 public:
@@ -21,12 +22,16 @@ public:
 
   [[nodiscard]] std::shared_ptr<SceneManager> getSceneManager() const;
 
+  [[nodiscard]] std::shared_ptr<AssetManager> getAssetManager() const;
+
 private:
   std::shared_ptr<VulkanEngine> renderer;
 
   std::chrono::time_point<std::chrono::steady_clock> previousTime;
 
   std::shared_ptr<SceneManager> sceneManager;
+
+  std::shared_ptr<AssetManager> assetManager;
 
   void initRenderer();
 
