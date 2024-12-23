@@ -8,6 +8,7 @@
 class ECS3D;
 class Asset;
 class TextureAsset;
+class ModelAsset;
 
 class AssetManager {
 public:
@@ -19,9 +20,13 @@ public:
 
   void loadTexture(const std::string& path);
 
+  void loadModel(const std::string& path);
+
   std::shared_ptr<Asset> getAsset(const std::string& path);
 
   std::shared_ptr<TextureAsset> getTexture(const std::string& path);
+
+  std::shared_ptr<ModelAsset> getModel(const std::string& path);
 
 private:
   ECS3D* ecs;

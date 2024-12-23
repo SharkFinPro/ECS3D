@@ -2,6 +2,7 @@
 #include "SceneManager.h"
 #include "../assets/AssetManager.h"
 #include "../assets/TextureAsset.h"
+#include "../assets/ModelAsset.h"
 #include "../ECS3D.h"
 #include "../objects/Object.h"
 #include "../objects/ObjectManager.h"
@@ -13,6 +14,10 @@ Scene::Scene(SceneManager* sceneManager)
     objectManager(std::make_shared<ObjectManager>())
 {
   objectManager->setECS(sceneManager->getECS());
+
+  assetManager->loadModel("assets/models/cube_1x1x1.glb");
+  assetManager->loadModel("assets/models/sphere.glb");
+  assetManager->loadModel("assets/models/sphere_3.glb");
 
   assetManager->loadTexture("assets/textures/white.png");
   assetManager->loadTexture("assets/textures/black.png");
@@ -37,7 +42,7 @@ void Scene::createBlock(TransformData transformData) const
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
                                     assetManager->getTexture("assets/textures/white.png")->getTexture(),
                                     assetManager->getTexture("assets/textures/white.png")->getTexture(),
-                                    sceneManager->getModel("assets/models/cube_1x1x1.glb")),
+                                    assetManager->getModel("assets/models/cube_1x1x1.glb")->getModel()),
     std::make_shared<RigidBody>(),
     std::make_shared<BoxCollider>()
   };
@@ -52,7 +57,7 @@ void Scene::createRigidBlock(TransformData transformData) const
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
                                     assetManager->getTexture("assets/textures/white.png")->getTexture(),
                                     assetManager->getTexture("assets/textures/white.png")->getTexture(),
-                                    sceneManager->getModel("assets/models/cube_1x1x1.glb")),
+                                    assetManager->getModel("assets/models/cube_1x1x1.glb")->getModel()),
     std::make_shared<BoxCollider>()
   };
 
@@ -66,7 +71,7 @@ void Scene::createSphere(TransformData transformData) const
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
                                     assetManager->getTexture("assets/textures/earth.png")->getTexture(),
                                     assetManager->getTexture("assets/textures/earth_specular.png")->getTexture(),
-                                    sceneManager->getModel("assets/models/sphere_3.glb")),
+                                    assetManager->getModel("assets/models/sphere_3.glb")->getModel()),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>()
   };
@@ -81,7 +86,7 @@ void Scene::createPlayer(TransformData transformData) const
     std::make_shared<ModelRenderer>(sceneManager->getECS()->getRenderer(),
                                     assetManager->getTexture("assets/textures/white.png")->getTexture(),
                                     assetManager->getTexture("assets/textures/white.png")->getTexture(),
-                                    sceneManager->getModel("assets/models/sphere.glb")),
+                                    assetManager->getModel("assets/models/sphere.glb")->getModel()),
     std::make_shared<Player>(),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>(),

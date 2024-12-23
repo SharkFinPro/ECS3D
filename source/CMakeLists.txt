@@ -43,6 +43,8 @@ add_library(${PROJECT_NAME}
   assets/Asset.h
   assets/TextureAsset.cpp
   assets/TextureAsset.h
+  assets/ModelAsset.cpp
+  assets/ModelAsset.h
 )
 
 # Declare VulkanEngine as a dependency

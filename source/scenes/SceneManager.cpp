@@ -38,16 +38,6 @@ ECS3D* SceneManager::getECS() const
   return ecs;
 }
 
-std::shared_ptr<Model> SceneManager::getModel(const std::string& path)
-{
-  if (!models.contains(path))
-  {
-    models.emplace(path, ecs->getRenderer()->loadModel(path.c_str()));
-  }
-
-  return models.at(path);
-}
-
 void SceneManager::update(const float dt)
 {
   sceneSelector();
