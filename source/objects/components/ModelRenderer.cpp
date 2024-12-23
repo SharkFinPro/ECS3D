@@ -7,6 +7,7 @@
 
 #include "../../assets/Asset.h"
 #include "../../assets/TextureAsset.h"
+#include "../../assets/ModelAsset.h"
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
                              const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model)
@@ -74,11 +75,9 @@ void ModelRenderer::displayGui()
 
     /////////////////////
 
-    // Specular Map Drag-Drop
     ImGui::BeginChild("Specular Map", {300, 30});
     ImGui::Text("Specular Map");
 
-    // Drag-and-drop for the specular map
     if (ImGui::BeginDragDropTarget())
     {
       if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
@@ -88,6 +87,31 @@ void ModelRenderer::displayGui()
         if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
         {
           specularMap = textureAsset->getTexture();
+
+          renderObject.reset();
+          renderObject = renderer->loadRenderObject(texture, specularMap, model);
+        }
+      }
+
+      ImGui::EndDragDropTarget();
+    }
+
+    ImGui::EndChild();
+
+    /////////////////////
+
+    ImGui::BeginChild("Model", {300, 30});
+    ImGui::Text("Model");
+
+    if (ImGui::BeginDragDropTarget())
+    {
+      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+      {
+        const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+
+        if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
+        {
+          model = modelAsset->getModel();
 
           renderObject.reset();
           renderObject = renderer->loadRenderObject(texture, specularMap, model);
