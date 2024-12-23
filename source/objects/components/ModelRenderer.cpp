@@ -1,10 +1,8 @@
 #include "ModelRenderer.h"
-
 #include "Transform.h"
 #include "../Object.h"
 #include "../ObjectManager.h"
 #include "../../ECS3D.h"
-
 #include "../../assets/Asset.h"
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
