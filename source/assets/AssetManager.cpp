@@ -24,7 +24,11 @@ void AssetManager::displayGui()
 
   for (const auto& [name, asset] : assets)
   {
+    ImGui::PushID(&asset);
+
     asset->displayGui();
+
+    ImGui::PopID();
 
     ImGui::NextColumn();
   }

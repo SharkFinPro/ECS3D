@@ -21,5 +21,5 @@ std::string Asset::getName() const
 
 void Asset::displayGui()
 {
-  ImGui::Text(name.substr(name.find_last_of('/') + 1).c_str());
+  ImGui::TextWrapped(name.c_str());
 }
