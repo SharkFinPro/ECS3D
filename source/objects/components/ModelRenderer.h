@@ -24,6 +24,11 @@ private:
   std::shared_ptr<RenderObject> renderObject;
   std::weak_ptr<Transform> transform_ptr;
 
+  std::shared_ptr<VulkanEngine> renderer;
+  std::shared_ptr<Texture> texture;
+  std::shared_ptr<Texture> specularMap;
+  std::shared_ptr<Model> model;
+
   bool shouldRender;
 };
 

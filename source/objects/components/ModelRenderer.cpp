@@ -5,10 +5,13 @@
 #include "../ObjectManager.h"
 #include "../../ECS3D.h"
 
+#include "../../assets/Asset.h"
+#include "../../assets/TextureAsset.h"
+
 ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
                              const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model)
   : Component(ComponentType::modelRenderer), renderObject(renderer->loadRenderObject(texture, specularMap, model)),
-    shouldRender(true)
+    renderer(renderer), texture(texture), specularMap(specularMap), model(model), shouldRender(true)
 {}
 
 void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
@@ -43,6 +46,29 @@ void ModelRenderer::displayGui()
   if (ImGui::CollapsingHeader("Model Renderer"))
   {
     ImGui::Checkbox("Render", &shouldRender);
+
+    ImGui::BeginChild("Texture");
+    ImGui::Text("Texture");
+
+    if (ImGui::BeginDragDropTarget())
+    {
+      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+      {
+        const auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+
+        if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
+        {
+          texture = textureAsset->getTexture();
+
+          renderObject.reset();
+          renderObject = renderer->loadRenderObject(texture, specularMap, model);
+        }
+      }
+
+      ImGui::EndDragDropTarget();
+    }
+
+    ImGui::EndChild();
 
     if (ImGui::Button("Reset"))
     {
