@@ -28,6 +28,13 @@ void AssetManager::displayGui()
 
     asset->displayGui();
 
+    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+    {
+      ImGui::SetDragDropPayload("asset", &asset, sizeof(std::shared_ptr<Asset>*));
+      ImGui::Text(name.c_str());
+      ImGui::EndDragDropSource();
+    }
+
     ImGui::PopID();
 
     ImGui::NextColumn();
