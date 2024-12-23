@@ -1,7 +1,5 @@
 #include "AssetManager.h"
 #include "Asset.h"
-#include "TextureAsset.h"
-#include "ModelAsset.h"
 #include <imgui.h>
 
 AssetManager::AssetManager(ECS3D* ecs)
@@ -41,49 +39,4 @@ void AssetManager::displayGui()
   }
 
   ImGui::End();
-}
-
-void AssetManager::loadTexture(const std::string& path)
-{
-  if (assets.contains(path))
-  {
-    return;
-  }
-
-  const auto texture = std::make_shared<TextureAsset>(path);
-  texture->setManager(this);
-  texture->load();
-
-  assets.emplace(path, texture);
-}
-
-void AssetManager::loadModel(const std::string& path)
-{
-  if (assets.contains(path))
-  {
-    return;
-  }
-
-  const auto model = std::make_shared<ModelAsset>(path);
-  model->setManager(this);
-  model->load();
-
-  assets.emplace(path, model);
-}
-
-std::shared_ptr<Asset> AssetManager::getAsset(const std::string& path)
-{
-  const auto asset = assets.find(path);
-
-  return asset != assets.end() ? asset->second : nullptr;
-}
-
-std::shared_ptr<TextureAsset> AssetManager::getTexture(const std::string& path)
-{
-  return std::dynamic_pointer_cast<TextureAsset>(getAsset(path));
-}
-
-std::shared_ptr<ModelAsset> AssetManager::getModel(const std::string& path)
-{
-  return std::dynamic_pointer_cast<ModelAsset>(getAsset(path));
 }

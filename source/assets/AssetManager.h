@@ -18,21 +18,38 @@ public:
 
   void displayGui();
 
-  void loadTexture(const std::string& path);
+  template <typename T>
+  void loadAsset(const std::string& path);
 
-  void loadModel(const std::string& path);
-
-  std::shared_ptr<Asset> getAsset(const std::string& path);
-
-  std::shared_ptr<TextureAsset> getTexture(const std::string& path);
-
-  std::shared_ptr<ModelAsset> getModel(const std::string& path);
+  template <typename T>
+  std::shared_ptr<T> getAsset(const std::string& path);
 
 private:
   ECS3D* ecs;
   std::unordered_map<std::string, std::shared_ptr<Asset>> assets;
 };
 
+template<typename T>
+void AssetManager::loadAsset(const std::string &path)
+{
+  if (assets.contains(path))
+  {
+    return;
+  }
 
+  const auto texture = std::make_shared<T>(path);
+  texture->setManager(this);
+  texture->load();
+
+  assets.emplace(path, texture);
+}
+
+template<typename T>
+std::shared_ptr<T> AssetManager::getAsset(const std::string &path)
+{
+  const auto asset = assets.find(path);
+
+  return asset != assets.end() ? std::dynamic_pointer_cast<T>(asset->second) : nullptr;
+}
 
 #endif //ASSETMANAGER_H
