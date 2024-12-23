@@ -27,5 +27,6 @@ void ModelAsset::load()
 void ModelAsset::displayGui()
 {
   Asset::displayGui();
+
   ImGui::Selectable("Model");
 }
