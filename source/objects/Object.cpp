@@ -155,7 +155,7 @@ void Object::displayGui()
                 {
                   addComponent(std::make_shared<BoxCollider>());
                 }
-                else
+                else if (name == "Sphere Collider")
                 {
                   addComponent(std::make_shared<SphereCollider>());
                 }
@@ -170,6 +170,8 @@ void Object::displayGui()
                 break;
               default: ;
             }
+
+            showComponentSelector = false;
           }
         }
       }
