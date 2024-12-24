@@ -24,8 +24,6 @@ public:
 
   void addComponent(const std::shared_ptr<Component>& component, bool setOwner = true);
 
-  void removeComponent(ComponentType componentType);
-
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 
   void variableUpdate(float dt);

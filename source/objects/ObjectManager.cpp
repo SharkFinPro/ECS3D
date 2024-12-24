@@ -59,6 +59,15 @@ void ObjectManager::addObjectToCollisions(const std::shared_ptr<Object> &object)
   collisionEdges.push_back({object, collider, 0.0f});
 }
 
+void ObjectManager::removeObjectFromCollisions(const std::shared_ptr<Object>& object)
+{
+  collisionEdges.erase(std::ranges::remove_if(collisionEdges,
+                       [&object](const auto& edge)
+                       {
+                         return edge.object == object;
+                       }).begin(), collisionEdges.end());
+}
+
 void ObjectManager::resetObjects() const
 {
   for (const auto& object : objects)

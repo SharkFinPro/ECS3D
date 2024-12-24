@@ -2,6 +2,7 @@
 #include "components/Component.h"
 #include <utility>
 #include <imgui.h>
+#include <ranges>
 
 #include "../ECS3D.h"
 #include "components/LightRenderer.h"
@@ -57,11 +58,6 @@ void Object::addComponent(const std::shared_ptr<Component>& component, const boo
   }
 
   components.emplace(component->getType(), component);
-}
-
-void Object::removeComponent(const ComponentType componentType)
-{
-  components.erase(componentType);
 }
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
@@ -122,11 +118,29 @@ void Object::displayGui()
     reset();
   }
 
-  for (const auto& [type, component] : components)
+  for (auto it = components.begin(); it != components.end();)
   {
+    auto component = it->second;
+
     ImGui::PushID(&component);
     component->displayGui();
     ImGui::PopID();
+
+    if (component->markedAsDeleted())
+    {
+      if (component->getType() == ComponentType::collider)
+      {
+        manager->removeObjectFromCollisions(std::shared_ptr<Object>(this));
+      }
+
+      component.reset();
+
+      it = components.erase(it);
+    }
+    else
+    {
+      ++it;
+    }
   }
 
   if (ImGui::Button("Add Component"))

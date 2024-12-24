@@ -43,11 +43,17 @@ public:
 
   virtual void reset();
 
+  [[nodiscard]] bool markedAsDeleted() const;
+
+  void markAsDeleted();
+
 protected:
   ComponentType type;
   Object* owner;
 
-  [[nodiscard]] bool displayGuiHeader() const;
+  bool shouldDelete;
+
+  [[nodiscard]] bool displayGuiHeader();
 };
 
 
