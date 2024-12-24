@@ -130,7 +130,7 @@ void Object::displayGui()
     {
       if (component->getType() == ComponentType::collider)
       {
-        manager->removeObjectFromCollisions(std::shared_ptr<Object>(this));
+        manager->removeObjectFromCollisions(this);
       }
 
       component.reset();
