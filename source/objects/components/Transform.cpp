@@ -41,7 +41,7 @@ void Transform::move(const glm::vec3& direction)
 
 void Transform::displayGui()
 {
-  if (ImGui::CollapsingHeader("Transform"))
+  if (displayGuiHeader())
   {
     ImGui::PushID(1);
     ImGui::Text("Control Position:");

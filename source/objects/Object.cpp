@@ -59,6 +59,11 @@ void Object::addComponent(const std::shared_ptr<Component>& component, const boo
   components.emplace(component->getType(), component);
 }
 
+void Object::removeComponent(const ComponentType componentType)
+{
+  components.erase(componentType);
+}
+
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
   const auto component = components.find(type);
@@ -133,7 +138,7 @@ void Object::displayGui()
   {
     if (ImGui::BeginCombo("##combo", "Select Component"))
     {
-      for (const auto& [type, name] : allComponentTypes)
+      for (const auto& [type, name] : componentTypeToString)
       {
         if (!getComponent(type))
         {

@@ -31,7 +31,7 @@ void LightRenderer::variableUpdate([[maybe_unused]] const float dt)
 
 void LightRenderer::displayGui()
 {
-  if (ImGui::CollapsingHeader("Light Renderer"))
+  if (displayGuiHeader())
   {
     glm::vec3 color = light->getColor();
     float ambient = light->getAmbient();

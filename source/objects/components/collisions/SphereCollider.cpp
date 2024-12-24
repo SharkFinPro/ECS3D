@@ -32,7 +32,7 @@ float SphereCollider::getRadius()
 
 void SphereCollider::displayGui()
 {
-  if (ImGui::CollapsingHeader("Box Collider"))
+  if (displayGuiHeader())
   {}
 }
 

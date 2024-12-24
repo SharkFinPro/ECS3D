@@ -56,7 +56,7 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
 
 void Player::displayGui()
 {
-  if (ImGui::CollapsingHeader("Player"))
+  if (displayGuiHeader())
   {
     ImGui::InputFloat("Speed", &speed);
     ImGui::InputFloat("Jump Height", &jumpHeight);

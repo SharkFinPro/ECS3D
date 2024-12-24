@@ -52,7 +52,7 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
 
 void ModelRenderer::displayGui()
 {
-  if (ImGui::CollapsingHeader("Model Renderer"))
+  if (displayGuiHeader())
   {
     ImGui::Checkbox("Render", &shouldRender);
 

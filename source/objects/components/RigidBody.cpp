@@ -115,7 +115,7 @@ void RigidBody::setVelocity(const glm::vec3& velocity)
 
 void RigidBody::displayGui()
 {
-  if (ImGui::CollapsingHeader("Rigid Body"))
+  if (displayGuiHeader())
   {
     float newGravity = gravity.y;
 

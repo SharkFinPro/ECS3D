@@ -3,6 +3,7 @@
 
 #include <array>
 #include <string>
+#include <unordered_map>
 
 class Object;
 
@@ -15,14 +16,14 @@ enum class ComponentType {
   lightRenderer
 };
 
-inline std::array<std::pair<ComponentType, std::string>, 7> allComponentTypes {
-  std::make_pair(ComponentType::transform, "Transform"),
-  std::make_pair(ComponentType::modelRenderer, "Model Renderer"),
-  std::make_pair(ComponentType::rigidBody, "Rigid Body"),
-  std::make_pair(ComponentType::collider, "Box Collider"),
-  std::make_pair(ComponentType::collider, "Sphere Collider"),
-  std::make_pair(ComponentType::player, "Player"),
-  std::make_pair(ComponentType::lightRenderer, "Light Renderer")
+inline std::unordered_map<ComponentType, std::string> componentTypeToString {
+  {ComponentType::transform, "Transform"},
+  {ComponentType::modelRenderer, "Model Renderer"},
+  {ComponentType::rigidBody, "Rigid Body"},
+  {ComponentType::collider, "Box Collider"},
+  {ComponentType::collider, "Sphere Collider"},
+  {ComponentType::player, "Player"},
+  {ComponentType::lightRenderer, "Light Renderer"}
 };
 
 class Component {
@@ -45,6 +46,8 @@ public:
 protected:
   ComponentType type;
   Object* owner;
+
+  [[nodiscard]] bool displayGuiHeader() const;
 };
 
 

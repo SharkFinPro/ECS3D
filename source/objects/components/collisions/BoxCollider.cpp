@@ -13,7 +13,7 @@ BoxCollider::BoxCollider()
 
 void BoxCollider::displayGui()
 {
-  if (ImGui::CollapsingHeader("Box Collider"))
+  if (displayGuiHeader())
   {}
 }
 

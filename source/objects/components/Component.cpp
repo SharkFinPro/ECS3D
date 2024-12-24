@@ -1,4 +1,5 @@
 #include "Component.h"
+#include <imgui.h>
 
 Component::Component(const ComponentType type)
   : type(type), owner(nullptr)
@@ -30,3 +31,8 @@ void Component::displayGui()
 
 void Component::reset()
 {}
+
+bool Component::displayGuiHeader() const
+{
+  return ImGui::CollapsingHeader(componentTypeToString.at(type).c_str());
+}
