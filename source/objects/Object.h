@@ -20,7 +20,7 @@ public:
   [[nodiscard]] std::shared_ptr<Object> getParent() const;
 
   void setUINode(const std::shared_ptr<ObjectUINode> &uiNode);
-  std::shared_ptr<ObjectUINode> getUINode() const;
+  [[nodiscard]] std::shared_ptr<ObjectUINode> getUINode() const;
 
   void addComponent(std::shared_ptr<Component> component);
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
