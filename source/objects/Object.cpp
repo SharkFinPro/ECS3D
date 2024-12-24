@@ -20,6 +20,26 @@ Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::s
   }
 }
 
+void Object::setParent(const std::shared_ptr<Object>& parent)
+{
+  this->parent = parent;
+}
+
+std::shared_ptr<Object> Object::getParent() const
+{
+  return parent;
+}
+
+void Object::setUINode(const std::shared_ptr<ObjectUINode> &uiNode)
+{
+  this->uiNode = uiNode;
+}
+
+std::shared_ptr<ObjectUINode> Object::getUINode() const
+{
+  return uiNode;
+}
+
 void Object::addComponent(std::shared_ptr<Component> component)
 {
   component->setOwner(this);

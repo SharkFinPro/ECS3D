@@ -1,14 +1,10 @@
 #include "ObjectManager.h"
-
 #include "Object.h"
 #include "components/RigidBody.h"
 #include "components/collisions/Collider.h"
+#include "components/ModelRenderer.h"
 #include <glm/glm.hpp>
 #include <algorithm>
-#include <set>
-#include <unordered_set>
-
-#include "components/ModelRenderer.h"
 
 ObjectManager::ObjectManager()
   : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
@@ -44,6 +40,18 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   }
 
   objects.push_back(object);
+
+  const auto uiNode = std::make_shared<ObjectUINode>(object);
+  object->setUINode(uiNode);
+
+  if (!object->getParent())
+  {
+    objectUINodes.push_back(uiNode);
+  }
+  else
+  {
+    object->getParent()->getUINode()->children.push_back(uiNode);
+  }
 }
 
 void ObjectManager::resetObjects() const
@@ -193,26 +201,52 @@ void ObjectManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody
   }
 }
 
+void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
+{
+  ImGui::PushID(&node);
+
+  if (ImGui::TreeNodeEx(node->object->getName().c_str(),
+                        (node->children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
+                        (selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0)))
+  {
+    if (ImGui::IsItemClicked())
+    {
+      selectedObject = node->object;
+    }
+
+    for (const auto& child : node->children)
+    {
+      displayObjectGui(child);
+    }
+
+    ImGui::TreePop();
+  }
+
+  ImGui::SameLine();
+
+  const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+  if (ImGui::Button("+"))
+  {
+    const auto newObj = std::make_shared<Object>();
+    newObj->setParent(node->object);
+    addObject(newObj);
+  }
+
+  ImGui::PopID();
+}
+
 void ObjectManager::displayGui()
 {
   ImGui::Begin("Objects");
-  for (const auto& object : objects)
+
+  for (const auto& node : objectUINodes)
   {
-    ImGui::PushID(&object);
-
-    if (ImGui::TreeNodeEx(object->getName().c_str(),
-                          ImGuiTreeNodeFlags_Leaf | (selectedObject == object ? ImGuiTreeNodeFlags_Selected : 0)))
-    {
-      if (ImGui::IsItemClicked())
-      {
-        selectedObject = object;
-      }
-
-      ImGui::TreePop();
-    }
-
-    ImGui::PopID();
+    displayObjectGui(node);
   }
+
   ImGui::End();
 
   ImGui::Begin("Selected Object");

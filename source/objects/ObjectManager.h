@@ -17,7 +17,7 @@ struct LeftEdge {
 
 struct ObjectUINode {
   std::shared_ptr<Object> object;
-  std::vector<std::shared_ptr<Object>> children;
+  std::vector<std::shared_ptr<ObjectUINode>> children;
 };
 
 class ObjectManager {
@@ -40,6 +40,8 @@ private:
 
   std::vector<LeftEdge> collisionEdges;
 
+  std::vector<std::shared_ptr<ObjectUINode>> objectUINodes;
+
   const float fixedUpdateDt;
   float timeAccumulator;
 
@@ -53,6 +55,8 @@ private:
   void findCollisions(const LeftEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, const std::vector<std::shared_ptr<Object>>& collidedObjects);
+
+  void displayObjectGui(const std::shared_ptr<ObjectUINode> &node);
 
   void displayGui();
 };
