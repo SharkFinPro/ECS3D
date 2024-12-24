@@ -20,9 +20,17 @@ void ECS3D::update()
   const float dt = std::chrono::duration<float>(currentTime - previousTime).count();
   previousTime = currentTime;
 
-	assetManager->displayGui();
+	try {
+		assetManager->displayGui();
 
-  sceneManager->update(dt);
+		sceneManager->update(dt);
+	}
+	catch(const std::exception& e)
+	{
+		logMessage("Error", e.what());
+	}
+
+	displayMessageLog();
 
   renderer->render();
 }
@@ -45,6 +53,28 @@ std::shared_ptr<SceneManager> ECS3D::getSceneManager() const
 std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
 {
 	return assetManager;
+}
+
+void ECS3D::logMessage(const std::string& level, const std::string& message)
+{
+	errorMessages.push_back("[" + level + "] " + message);
+}
+
+void ECS3D::displayMessageLog()
+{
+	ImGui::Begin("Project Errors");
+
+	if (ImGui::Button("Clear"))
+	{
+		errorMessages.clear();
+	}
+
+	for (const auto& message : errorMessages)
+	{
+		ImGui::TextWrapped(message.c_str());
+	}
+
+	ImGui::End();
 }
 
 void ECS3D::initRenderer()
