@@ -3,7 +3,7 @@
 #include "../Object.h"
 #include "../ObjectManager.h"
 #include "../../ECS3D.h"
-#include "glm/gtc/type_ptr.hpp"
+#include <glm/gtc/type_ptr.hpp>
 
 LightRenderer::LightRenderer(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular)
   : Component(ComponentType::lightRenderer), light(std::make_shared<Light>(position, color, ambient, diffuse, specular))
