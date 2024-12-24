@@ -236,11 +236,16 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
       selectedObject = node->object;
     }
 
+    const bool hasChildren = !node->children.empty();
+
     displayCreateObjectChildButton(node);
 
-    for (const auto& child : node->children)
+    if (hasChildren)
     {
-      displayObjectGui(child);
+      for (const auto& child : node->children)
+      {
+        displayObjectGui(child);
+      }
     }
 
     ImGui::TreePop();
