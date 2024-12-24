@@ -207,12 +207,12 @@ void ObjectManager::displayCreateObjectChildButton(const std::shared_ptr<ObjectU
 {
   ImGui::SameLine();
 
-  const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+  const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 4.0f;
   const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
 
   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
-
-  if (ImGui::Button("+"))
+  
+  if (ImGui::Button("+", {buttonWidth, 0}))
   {
     const auto newObj = std::make_shared<Object>();
     newObj->setParent(node->object);
@@ -262,7 +262,7 @@ void ObjectManager::displayGui()
 {
   ImGui::Begin("Objects");
 
-  if (ImGui::Button("Create New Object"))
+  if (ImGui::Button("Create New Object", {ImGui::GetContentRegionAvail().x, 45}))
   {
     addObject(std::make_shared<Object>());
   }
