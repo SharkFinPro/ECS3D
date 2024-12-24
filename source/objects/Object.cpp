@@ -107,7 +107,7 @@ void Object::setName(const std::string& name)
 {
   this->name = name;
 }
-#include <iostream>
+
 void Object::displayGui()
 {
   ImGui::InputText("Name", name.data(), name.capacity());
