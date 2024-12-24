@@ -210,11 +210,25 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
   if (ImGui::TreeNodeEx(node->object->getName().c_str(),
                         (node->children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
                         (selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0) |
-                        ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth))
+                        ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth |
+                        ImGuiTreeNodeFlags_AllowOverlap))
   {
     if (ImGui::IsItemClicked())
     {
       selectedObject = node->object;
+    }
+
+    ImGui::SameLine();
+
+    const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+    if (ImGui::Button("+"))
+    {
+      const auto newObj = std::make_shared<Object>();
+      newObj->setParent(node->object);
+      addObject(newObj);
     }
 
     for (const auto& child : node->children)
@@ -224,18 +238,20 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
 
     ImGui::TreePop();
   }
-
-  ImGui::SameLine();
-
-  const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
-
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
-  if (ImGui::Button("+"))
+  else
   {
-    const auto newObj = std::make_shared<Object>();
-    newObj->setParent(node->object);
-    addObject(newObj);
+    ImGui::SameLine();
+
+    const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+    if (ImGui::Button("+"))
+    {
+      const auto newObj = std::make_shared<Object>();
+      newObj->setParent(node->object);
+      addObject(newObj);
+    }
   }
 
   ImGui::PopID();
