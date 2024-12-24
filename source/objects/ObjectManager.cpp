@@ -2,9 +2,9 @@
 #include "Object.h"
 #include "components/RigidBody.h"
 #include "components/collisions/Collider.h"
-#include "components/ModelRenderer.h"
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <imgui.h>
 
 ObjectManager::ObjectManager()
   : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
