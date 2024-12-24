@@ -15,6 +15,11 @@ struct LeftEdge {
   float position;
 };
 
+struct ObjectUINode {
+  std::shared_ptr<Object> object;
+  std::vector<std::shared_ptr<Object>> children;
+};
+
 class ObjectManager {
 public:
   ObjectManager();
