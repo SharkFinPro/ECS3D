@@ -209,7 +209,8 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
 
   if (ImGui::TreeNodeEx(node->object->getName().c_str(),
                         (node->children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
-                        (selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0)))
+                        (selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0) |
+                        ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth))
   {
     if (ImGui::IsItemClicked())
     {
