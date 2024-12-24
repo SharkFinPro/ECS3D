@@ -56,6 +56,8 @@ private:
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, const std::vector<std::shared_ptr<Object>>& collidedObjects);
 
+  void displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node);
+
   void displayObjectGui(const std::shared_ptr<ObjectUINode> &node);
 
   void displayGui();

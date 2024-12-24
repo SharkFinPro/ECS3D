@@ -203,6 +203,24 @@ void ObjectManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody
   }
 }
 
+void ObjectManager::displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node)
+{
+  ImGui::SameLine();
+
+  const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+
+  if (ImGui::Button("+"))
+  {
+    const auto newObj = std::make_shared<Object>();
+    newObj->setParent(node->object);
+
+    addObject(newObj);
+  }
+}
+
 void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
 {
   ImGui::PushID(&node);
@@ -218,18 +236,7 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
       selectedObject = node->object;
     }
 
-    ImGui::SameLine();
-
-    const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-    const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
-
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
-    if (ImGui::Button("+"))
-    {
-      const auto newObj = std::make_shared<Object>();
-      newObj->setParent(node->object);
-      addObject(newObj);
-    }
+    displayCreateObjectChildButton(node);
 
     for (const auto& child : node->children)
     {
@@ -240,18 +247,7 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
   }
   else
   {
-    ImGui::SameLine();
-
-    const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-    const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
-
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
-    if (ImGui::Button("+"))
-    {
-      const auto newObj = std::make_shared<Object>();
-      newObj->setParent(node->object);
-      addObject(newObj);
-    }
+    displayCreateObjectChildButton(node);
   }
 
   ImGui::PopID();
