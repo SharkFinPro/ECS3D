@@ -37,11 +37,11 @@ void AssetManager::loadAsset(const std::string& path)
     return;
   }
 
-  const auto texture = std::make_shared<T>(path);
-  texture->setManager(this);
-  texture->load();
+  const auto asset = std::make_shared<T>(path);
+  asset->setManager(this);
+  asset->load();
 
-  assets.emplace(path, texture);
+  assets.emplace(path, asset);
 }
 
 template<typename T>
