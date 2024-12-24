@@ -262,6 +262,15 @@ void ObjectManager::displayGui()
 {
   ImGui::Begin("Objects");
 
+  if (ImGui::Button("Create New Object"))
+  {
+    addObject(std::make_shared<Object>());
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
   for (const auto& node : objectUINodes)
   {
     displayObjectGui(node);
