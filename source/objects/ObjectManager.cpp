@@ -129,7 +129,9 @@ void ObjectManager::findCollisions(const LeftEdge& edge,
 {
   for (const auto& other : collisionEdges)
   {
-    if (other.object == edge.object)
+    if (other.object == edge.object ||
+        other.object->getParent() == edge.object ||
+        other.object == edge.object->getParent())
     {
       continue;
     }

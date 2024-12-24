@@ -40,14 +40,14 @@ std::shared_ptr<ObjectUINode> Object::getUINode() const
   return uiNode;
 }
 
-void Object::addComponent(std::shared_ptr<Component> component, const bool setOwner)
+void Object::addComponent(const std::shared_ptr<Component>& component, const bool setOwner)
 {
   if (setOwner)
   {
     component->setOwner(this);
   }
 
-  components.emplace(component->getType(), std::move(component));
+  components.emplace(component->getType(), component);
 }
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
@@ -61,7 +61,10 @@ void Object::variableUpdate(const float dt)
 {
   for (const auto& [componentType, component] : components)
   {
-    component->variableUpdate(dt);
+    if (component->getOwner() == this)
+    {
+      component->variableUpdate(dt);
+    }
   }
 }
 
@@ -69,7 +72,10 @@ void Object::fixedUpdate(const float dt)
 {
   for (const auto& [componentType, component] : components)
   {
-    component->fixedUpdate(dt);
+    if (component->getOwner() == this)
+    {
+      component->fixedUpdate(dt);
+    }
   }
 }
 
