@@ -200,9 +200,15 @@ void ObjectManager::displayGui()
   {
     ImGui::PushID(&object);
 
-    if (ImGui::Selectable(object->getName().c_str(), selectedObject == object))
+    if (ImGui::TreeNodeEx(object->getName().c_str(),
+                          ImGuiTreeNodeFlags_Leaf | (selectedObject == object ? ImGuiTreeNodeFlags_Selected : 0)))
     {
-      selectedObject = object;
+      if (ImGui::IsItemClicked())
+      {
+        selectedObject = object;
+      }
+
+      ImGui::TreePop();
     }
 
     ImGui::PopID();
