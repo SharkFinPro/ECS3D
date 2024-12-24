@@ -1,8 +1,9 @@
 #include "SphereCollider.h"
 #include "../Transform.h"
 #include "../../Object.h"
+#include <glm/gtx/component_wise.inl>
+#include <imgui.h>
 #include <stdexcept>
-#include "glm/gtx/component_wise.inl"
 
 SphereCollider::SphereCollider()
   : Collider(ColliderType::sphereCollider)
@@ -27,6 +28,12 @@ float SphereCollider::getRadius()
   }
 
   return 0;
+}
+
+void SphereCollider::displayGui()
+{
+  if (ImGui::CollapsingHeader("Box Collider"))
+  {}
 }
 
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
