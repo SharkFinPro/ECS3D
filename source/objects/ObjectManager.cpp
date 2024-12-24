@@ -229,7 +229,7 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
                         (node->children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
                         (selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0) |
                         ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth |
-                        ImGuiTreeNodeFlags_AllowOverlap))
+                        ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_OpenOnDoubleClick))
   {
     if (ImGui::IsItemClicked())
     {
