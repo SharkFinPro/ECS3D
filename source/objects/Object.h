@@ -22,7 +22,7 @@ public:
   void setUINode(const std::shared_ptr<ObjectUINode> &uiNode);
   [[nodiscard]] std::shared_ptr<ObjectUINode> getUINode() const;
 
-  void addComponent(std::shared_ptr<Component> component);
+  void addComponent(std::shared_ptr<Component> component, bool setOwner = true);
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 
   void variableUpdate(float dt);

@@ -40,9 +40,13 @@ std::shared_ptr<ObjectUINode> Object::getUINode() const
   return uiNode;
 }
 
-void Object::addComponent(std::shared_ptr<Component> component)
+void Object::addComponent(std::shared_ptr<Component> component, const bool setOwner)
 {
-  component->setOwner(this);
+  if (setOwner)
+  {
+    component->setOwner(this);
+  }
+
   components.emplace(component->getType(), std::move(component));
 }
 
