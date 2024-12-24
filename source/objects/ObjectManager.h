@@ -31,6 +31,8 @@ public:
 
   void addObject(const std::shared_ptr<Object>& object);
 
+  void addObjectToCollisions(const std::shared_ptr<Object>& object);
+
   void resetObjects() const;
 
 private:

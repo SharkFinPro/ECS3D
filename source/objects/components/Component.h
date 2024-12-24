@@ -1,6 +1,9 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
 
+#include <array>
+#include <string>
+
 class Object;
 
 enum class ComponentType {
@@ -10,6 +13,16 @@ enum class ComponentType {
   collider,
   player,
   lightRenderer
+};
+
+inline std::array<std::pair<ComponentType, std::string>, 7> allComponentTypes {
+  std::make_pair(ComponentType::transform, "Transform"),
+  std::make_pair(ComponentType::modelRenderer, "Model Renderer"),
+  std::make_pair(ComponentType::rigidBody, "Rigid Body"),
+  std::make_pair(ComponentType::collider, "Box Collider"),
+  std::make_pair(ComponentType::collider, "Sphere Collider"),
+  std::make_pair(ComponentType::player, "Player"),
+  std::make_pair(ComponentType::lightRenderer, "Light Renderer")
 };
 
 class Component {

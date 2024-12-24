@@ -34,9 +34,7 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 
   if (object->getComponent(ComponentType::collider))
   {
-    const auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
-
-    collisionEdges.push_back({object, collider, 0.0f});
+    addObjectToCollisions(object);
   }
 
   objects.push_back(object);
@@ -52,6 +50,13 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   {
     object->getParent()->getUINode()->children.push_back(uiNode);
   }
+}
+
+void ObjectManager::addObjectToCollisions(const std::shared_ptr<Object> &object)
+{
+  const auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
+
+  collisionEdges.push_back({object, collider, 0.0f});
 }
 
 void ObjectManager::resetObjects() const

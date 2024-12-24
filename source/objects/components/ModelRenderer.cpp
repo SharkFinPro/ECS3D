@@ -13,8 +13,18 @@ ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, cons
     renderer(renderer), texture(texture), specularMap(specularMap), model(model), shouldRender(true)
 {}
 
+ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine> &renderer)
+  : Component(ComponentType::modelRenderer), renderObject(nullptr), renderer(renderer), texture(nullptr),
+    specularMap(nullptr), model(nullptr), shouldRender(false)
+{}
+
 void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
 {
+  if (!canRender())
+  {
+    shouldRender = false;
+  }
+
   if (!shouldRender)
   {
     return;
@@ -59,7 +69,7 @@ void ModelRenderer::displayGui()
 
 void ModelRenderer::reset()
 {
-  shouldRender = true;
+  shouldRender = canRender();
 }
 
 void ModelRenderer::displayDragDrop(const char* label,
@@ -76,7 +86,7 @@ void ModelRenderer::displayDragDrop(const char* label,
   {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
     {
-      if (setter(*static_cast<std::shared_ptr<Asset>*>(payload->Data)))
+      if (setter(*static_cast<std::shared_ptr<Asset>*>(payload->Data)) && canRender())
       {
         renderObject.reset();
         renderObject = renderer->loadRenderObject(texture, specularMap, model);
@@ -132,4 +142,9 @@ void ModelRenderer::displayModelDragDrop()
 
     return false;
   });
+}
+
+bool ModelRenderer::canRender() const
+{
+  return texture && specularMap && model;
 }

@@ -3,16 +3,25 @@
 #include <utility>
 #include <imgui.h>
 
+#include "../ECS3D.h"
+#include "components/LightRenderer.h"
+#include "components/ModelRenderer.h"
+#include "components/Player.h"
+#include "components/RigidBody.h"
+#include "components/Transform.h"
+#include "components/collisions/BoxCollider.h"
+#include "components/collisions/SphereCollider.h"
+
 constexpr int MAX_CHARACTERS = 30;
 
 Object::Object(std::string name)
-  : manager(nullptr), name(std::move(name))
+  : manager(nullptr), name(std::move(name)), showComponentSelector(false)
 {
   name.resize(MAX_CHARACTERS);
 }
 
 Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)
-  : manager(nullptr), name(std::move(name))
+  : manager(nullptr), name(std::move(name)), showComponentSelector(false)
 {
   for (const auto& component : components)
   {
@@ -98,7 +107,7 @@ void Object::setName(const std::string& name)
 {
   this->name = name;
 }
-
+#include <iostream>
 void Object::displayGui()
 {
   ImGui::InputText("Name", name.data(), name.capacity());
@@ -113,6 +122,60 @@ void Object::displayGui()
     ImGui::PushID(&component);
     component->displayGui();
     ImGui::PopID();
+  }
+
+  if (ImGui::Button("Add Component"))
+  {
+    showComponentSelector = true;
+  }
+
+  if (showComponentSelector)
+  {
+    if (ImGui::BeginCombo("##combo", "Select Component"))
+    {
+      for (const auto& [type, name] : allComponentTypes)
+      {
+        if (!getComponent(type))
+        {
+          if (ImGui::Selectable(name.data()))
+          {
+            switch (type)
+            {
+              case ComponentType::transform:
+                addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
+                break;
+              case ComponentType::modelRenderer:
+                addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
+                break;
+              case ComponentType::rigidBody:
+                addComponent(std::make_shared<RigidBody>());
+                break;
+              case ComponentType::collider:
+                if (name == "Box Collider")
+                {
+                  addComponent(std::make_shared<BoxCollider>());
+                }
+                else
+                {
+                  addComponent(std::make_shared<SphereCollider>());
+                }
+
+                manager->addObjectToCollisions(std::shared_ptr<Object>(this));
+                break;
+              case ComponentType::player:
+                addComponent(std::make_shared<Player>());
+                break;
+              case ComponentType::lightRenderer:
+                addComponent(std::make_shared<LightRenderer>(glm::vec3(0), glm::vec3(0), 0, 0, 0));
+                break;
+              default: ;
+            }
+          }
+        }
+      }
+
+      ImGui::EndCombo();
+    }
   }
 }
 

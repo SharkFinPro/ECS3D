@@ -46,6 +46,8 @@ private:
   std::shared_ptr<ObjectUINode> uiNode;
 
   std::string name;
+
+  bool showComponentSelector;
 };
 
 
