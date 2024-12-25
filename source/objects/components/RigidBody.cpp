@@ -9,8 +9,12 @@
 #include <glm/glm.hpp>
 
 RigidBody::RigidBody()
-  : Component(ComponentType::rigidBody), velocity(0), doGravity(true), friction(0.1f),
-    gravity(0, -GRAVITY, 0), falling(true), nextFalling(true)
+  : Component(ComponentType::rigidBody),
+    initialVelocity(0), liveVelocity(initialVelocity), currentVelocity(&initialVelocity),
+    initialFriction(0.1f), liveFriction(initialFriction), currentFriction(&initialFriction),
+    initialDoGravity(true), liveDoGravity(initialDoGravity), currentDoGravity(&initialDoGravity),
+    initialGravity(0, -GRAVITY, 0), liveGravity(initialGravity), currentGravity(&initialGravity),
+    falling(true), nextFalling(true)
 {}
 
 void RigidBody::fixedUpdate(const float dt)
@@ -30,20 +34,20 @@ void RigidBody::fixedUpdate(const float dt)
     falling = nextFalling;
     nextFalling = true;
 
-    if (doGravity)
+    if (currentDoGravity)
     {
-      applyForce(gravity * dt * 0.1f);
+      applyForce(*currentGravity * dt * 0.1f);
     }
 
     limitMovement();
 
-    transform->move(velocity);
+    transform->move(*currentVelocity);
   }
 }
 
 void RigidBody::applyForce(const glm::vec3& force)
 {
-  velocity += force;
+  *currentVelocity += force;
 }
 
 void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other)
@@ -67,7 +71,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   if (!otherRb)
   {
-    const auto impulse = dot(-velocity, collisionNormal) * collisionNormal;
+    const auto impulse = dot(-*currentVelocity, collisionNormal) * collisionNormal;
     applyForce(impulse);
 
     return;
@@ -75,7 +79,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   otherRb->respondToCollision(-minimumTranslationVector);
 
-  const auto velocityDiff = otherRb->velocity - velocity;
+  const auto velocityDiff = *otherRb->currentVelocity - *currentVelocity;
 
   if (dot(velocityDiff, collisionNormal) > 0)
   {
@@ -110,33 +114,33 @@ bool RigidBody::isFalling() const
 
 void RigidBody::setVelocity(const glm::vec3& velocity)
 {
-  this->velocity = velocity;
+  *currentVelocity = velocity;
 }
 
 void RigidBody::displayGui()
 {
   if (displayGuiHeader())
   {
-    float newGravity = gravity.y;
+    float newGravity = currentGravity->y;
 
-    ImGui::Checkbox("Do Gravity", &doGravity);
+    ImGui::Checkbox("Do Gravity", currentDoGravity);
     ImGui::InputFloat("Gravity", &newGravity);
 
-    gravity.y = newGravity;
+    currentGravity->y = newGravity;
 
-    ImGui::SliderFloat("Friction", &friction, 0.001f, 1.0f);
+    ImGui::SliderFloat("Friction", currentFriction, 0.001f, 1.0f);
   }
 }
 
 void RigidBody::limitMovement()
 {
-  if (glm::length(velocity) < 1e-5f)
+  if (glm::length(*currentVelocity) < 1e-5f)
   {
     return;
   }
 
-  const glm::vec2 horizontalVelocity(velocity.x, velocity.z);
-  const glm::vec2 frictionForce = -horizontalVelocity * friction;
+  const glm::vec2 horizontalVelocity(currentVelocity->x, currentVelocity->z);
+  const glm::vec2 frictionForce = -horizontalVelocity * *currentFriction;
 
   applyForce({ frictionForce.x, 0.0f, frictionForce.y });
 }

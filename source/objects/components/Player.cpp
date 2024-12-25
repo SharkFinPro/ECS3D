@@ -6,8 +6,10 @@
 #include "Transform.h"
 
 Player::Player()
-  : Component(ComponentType::player), initialSpeed(1.0f), speed(initialSpeed),
-    initialJumpHeight(9.0f), jumpHeight(initialJumpHeight), appliedForce(0)
+  : Component(ComponentType::player),
+    initialSpeed(1.0f), liveSpeed(initialSpeed), currentSpeed(&initialSpeed),
+    initialJumpHeight(9.0f), liveJumpHeight(initialJumpHeight), currentJumpHeight(&initialJumpHeight),
+    initialAppliedForce(0), liveAppliedForce(initialAppliedForce), currentAppliedForce(&initialAppliedForce)
 {}
 
 void Player::variableUpdate([[maybe_unused]] const float dt)
@@ -47,19 +49,19 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
         rigidBody->setVelocity({0, 0, 0});
       }
 
-      rigidBody->applyForce(appliedForce * dt);
+      rigidBody->applyForce(*currentAppliedForce * dt);
     }
   }
 
-  appliedForce *= 0;
+  *currentAppliedForce *= 0;
 }
 
 void Player::displayGui()
 {
   if (displayGuiHeader())
   {
-    ImGui::InputFloat("Speed", &speed);
-    ImGui::InputFloat("Jump Height", &jumpHeight);
+    ImGui::InputFloat("Speed", currentSpeed);
+    ImGui::InputFloat("Jump Height", currentJumpHeight);
   }
 }
 
@@ -85,36 +87,36 @@ void Player::handleInput()
   float xForce = 0;
   if (ecs->keyIsPressed(GLFW_KEY_LEFT))
   {
-    xForce += speed;
+    xForce += *currentSpeed;
   }
   if (ecs->keyIsPressed(GLFW_KEY_RIGHT))
   {
-    xForce -= speed;
+    xForce -= *currentSpeed;
   }
   if (xForce!= 0)
   {
-    appliedForce.x = xForce;
+    currentAppliedForce->x = xForce;
   }
 
   float zForce = 0;
   if (ecs->keyIsPressed(GLFW_KEY_UP))
   {
-    zForce += speed;
+    zForce += *currentSpeed;
   }
   if (ecs->keyIsPressed(GLFW_KEY_DOWN))
   {
-    zForce -= speed;
+    zForce -= *currentSpeed;
   }
   if (zForce != 0)
   {
-    appliedForce.z = zForce;
+    currentAppliedForce->z = zForce;
   }
 
   if (const std::shared_ptr<RigidBody> rigidBody = rigidBody_ptr.lock())
   {
     if (!rigidBody->isFalling() && ecs->keyIsPressed(GLFW_KEY_X))
     {
-      appliedForce.y = jumpHeight;
+      currentAppliedForce->y = *currentJumpHeight;
     }
   }
 }

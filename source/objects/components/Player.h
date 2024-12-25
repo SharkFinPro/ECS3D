@@ -20,12 +20,16 @@ public:
 
 private:
   float initialSpeed;
-  float speed;
+  float liveSpeed;
+  float* currentSpeed;
 
   float initialJumpHeight;
-  float jumpHeight;
+  float liveJumpHeight;
+  float* currentJumpHeight;
 
-  glm::vec3 appliedForce;
+  glm::vec3 initialAppliedForce;
+  glm::vec3 liveAppliedForce;
+  glm::vec3* currentAppliedForce;
 
   std::weak_ptr<Transform> transform_ptr;
   std::weak_ptr<RigidBody> rigidBody_ptr;
