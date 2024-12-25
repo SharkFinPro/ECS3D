@@ -11,16 +11,40 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
 
 glm::vec3 Transform::getPosition() const
 {
+  if (owner->getParent())
+  {
+    if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
+    {
+      return parentTransform->position + position;
+    }
+  }
+
   return position;
 }
 
 glm::vec3 Transform::getScale() const
 {
+  if (owner->getParent())
+  {
+    if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
+    {
+      return parentTransform->scale + scale;
+    }
+  }
+
   return scale;
 }
 
 glm::vec3 Transform::getRotation() const
 {
+  if (owner->getParent())
+  {
+    if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
+    {
+      return parentTransform->rotation + rotation;
+    }
+  }
+
   return rotation;
 }
 
