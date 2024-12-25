@@ -41,8 +41,6 @@ public:
 
   void removeObjectFromCollisions(const std::shared_ptr<Object>& object);
 
-  void resetObjects() const;
-
   void startScene();
 
   void pauseScene();

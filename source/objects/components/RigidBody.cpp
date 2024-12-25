@@ -125,20 +125,7 @@ void RigidBody::displayGui()
     gravity.y = newGravity;
 
     ImGui::SliderFloat("Friction", &friction, 0.001f, 1.0f);
-
-    if (ImGui::Button("Reset"))
-    {
-      reset();
-    }
   }
-}
-
-void RigidBody::reset()
-{
-  friction = 0.1f;
-  velocity = glm::vec3(0);
-  gravity = glm::vec3(0, -GRAVITY, 0);
-  doGravity = true;
 }
 
 void RigidBody::limitMovement()

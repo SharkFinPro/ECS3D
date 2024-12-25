@@ -27,8 +27,6 @@ public:
 
   void displayGui() override;
 
-  void reset() override;
-
 private:
   glm::vec3 velocity;
 

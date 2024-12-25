@@ -18,8 +18,6 @@ public:
 
   void displayGui() override;
 
-  void reset() override;
-
 private:
   float initialSpeed;
   float speed;

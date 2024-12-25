@@ -68,14 +68,6 @@ void ObjectManager::removeObjectFromCollisions(const std::shared_ptr<Object>& ob
                        }).begin(), collisionEdges.end());
 }
 
-void ObjectManager::resetObjects() const
-{
-  for (const auto& object : objects)
-  {
-    object->reset();
-  }
-}
-
 void ObjectManager::startScene()
 {
   if (sceneStatus == SceneStatus::running)

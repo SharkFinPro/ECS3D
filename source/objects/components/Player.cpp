@@ -43,7 +43,7 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
     {
       if (transform->getPosition().y < -250.0f)
       {
-        transform->reset();
+        // TODO: Reset Transform position
         rigidBody->setVelocity({0, 0, 0});
       }
 
@@ -60,18 +60,7 @@ void Player::displayGui()
   {
     ImGui::InputFloat("Speed", &speed);
     ImGui::InputFloat("Jump Height", &jumpHeight);
-
-    if (ImGui::Button("Reset"))
-    {
-      reset();
-    }
   }
-}
-
-void Player::reset()
-{
-  speed = initialSpeed;
-  jumpHeight = initialJumpHeight;
 }
 
 void Player::handleInput()

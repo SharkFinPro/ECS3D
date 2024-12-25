@@ -20,17 +20,18 @@ public:
 
   void displayGui() override;
 
-  void reset() override;
-
 private:
   glm::vec3 initialPosition;
-  glm::vec3 position;
+  glm::vec3 livePosition;
+  glm::vec3* currentPosition;
 
   glm::vec3 initialScale;
-  glm::vec3 scale;
+  glm::vec3 liveScale;
+  glm::vec3* currentScale;
 
   glm::vec3 initialRotation;
-  glm::vec3 rotation;
+  glm::vec3 liveRotation;
+  glm::vec3* currentRotation;
 };
 
 

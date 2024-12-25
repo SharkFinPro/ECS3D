@@ -50,8 +50,6 @@ public:
 
   virtual void displayGui();
 
-  virtual void reset();
-
   [[nodiscard]] bool markedAsDeleted() const;
 
   void markAsDeleted();

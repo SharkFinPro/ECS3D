@@ -126,11 +126,6 @@ void Object::displayGui()
 {
   ImGui::InputText("Name", name.data(), name.capacity());
 
-  if (ImGui::Button("Reset Components"))
-  {
-    reset();
-  }
-
   for (auto it = components.begin(); it != components.end();)
   {
     auto component = it->second;
@@ -208,13 +203,5 @@ void Object::displayGui()
 
       ImGui::EndCombo();
     }
-  }
-}
-
-void Object::reset()
-{
-  for (const auto& [type, component] : components)
-  {
-    component->reset();
   }
 }
