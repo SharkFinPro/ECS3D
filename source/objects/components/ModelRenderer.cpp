@@ -59,17 +59,7 @@ void ModelRenderer::displayGui()
     displayTextureDragDrop();
     displaySpecularDragDrop();
     displayModelDragDrop();
-
-    if (ImGui::Button("Reset"))
-    {
-      reset();
-    }
   }
-}
-
-void ModelRenderer::reset()
-{
-  shouldRender = canRender();
 }
 
 void ModelRenderer::displayDragDrop(const char* label,
