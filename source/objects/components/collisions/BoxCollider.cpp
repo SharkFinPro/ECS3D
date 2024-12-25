@@ -8,7 +8,7 @@
 #include <limits>
 
 BoxCollider::BoxCollider()
-  : Collider(ColliderType::boxCollider)
+  : Collider(ColliderType::boxCollider, ComponentType::SubComponentType_boxCollider)
 {}
 
 void BoxCollider::displayGui()

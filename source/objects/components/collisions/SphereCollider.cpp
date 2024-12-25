@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 SphereCollider::SphereCollider()
-  : Collider(ColliderType::sphereCollider)
+  : Collider(ColliderType::sphereCollider, ComponentType::SubComponentType_sphereCollider)
 {}
 
 float SphereCollider::getRadius()

@@ -3,9 +3,14 @@
 
 #include "../Object.h"
 
-Component::Component(const ComponentType type)
-  : type(type), owner(nullptr), shouldDelete(false)
+Component::Component(const ComponentType type, const ComponentType subType)
+  : type(type), subType(subType), owner(nullptr), shouldDelete(false)
 {}
+
+ComponentType Component::getSubType() const
+{
+  return subType;
+}
 
 ComponentType Component::getType() const
 {
@@ -46,8 +51,10 @@ void Component::markAsDeleted()
 
 bool Component::displayGuiHeader()
 {
-  const bool open = ImGui::CollapsingHeader(componentTypeToString.at(type).c_str(),
-                                            ImGuiTreeNodeFlags_AllowOverlap);
+  const char* componentDisplayName = componentTypeToString.at(subType != ComponentType::SubComponentType_none
+                                                              ? subType : type).c_str();
+
+  const bool open = ImGui::CollapsingHeader(componentDisplayName, ImGuiTreeNodeFlags_AllowOverlap);
 
   ImGui::SameLine();
 

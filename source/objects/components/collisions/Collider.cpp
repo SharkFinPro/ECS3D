@@ -16,8 +16,8 @@ bool sameDirection(const glm::vec3& first, const glm::vec3& second)
   return dot(first, second) > 0;
 }
 
-Collider::Collider(const ColliderType type)
-  : Component(ComponentType::collider), colliderType(type)
+Collider::Collider(const ColliderType type, const ComponentType subType)
+  : Component(ComponentType::collider, subType), colliderType(type), roughMaxDistance(0)
 {}
 
 bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv)

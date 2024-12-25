@@ -1,7 +1,6 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
 
-#include <array>
 #include <string>
 #include <unordered_map>
 
@@ -13,25 +12,30 @@ enum class ComponentType {
   rigidBody,
   collider,
   player,
-  lightRenderer
+  lightRenderer,
+  SubComponentType_none,
+  SubComponentType_boxCollider,
+  SubComponentType_sphereCollider
 };
 
-inline std::unordered_map<ComponentType, std::string> componentTypeToString {
+const std::unordered_map<ComponentType, std::string> componentTypeToString {
   {ComponentType::transform, "Transform"},
   {ComponentType::modelRenderer, "Model Renderer"},
   {ComponentType::rigidBody, "Rigid Body"},
-  {ComponentType::collider, "Box Collider"},
-  {ComponentType::collider, "Sphere Collider"},
+  {ComponentType::SubComponentType_boxCollider, "Box Collider"},
+  {ComponentType::SubComponentType_sphereCollider, "Sphere Collider"},
   {ComponentType::player, "Player"},
   {ComponentType::lightRenderer, "Light Renderer"}
 };
 
 class Component {
 public:
-  explicit Component(ComponentType type);
+  explicit Component(ComponentType type, ComponentType subType = ComponentType::SubComponentType_none);
   virtual ~Component() = default;
 
   [[nodiscard]] ComponentType getType() const;
+
+  [[nodiscard]] ComponentType getSubType() const;
 
   void setOwner(Object* owner);
   [[nodiscard]] Object* getOwner() const;
@@ -49,6 +53,7 @@ public:
 
 protected:
   ComponentType type;
+  ComponentType subType;
   Object* owner;
 
   bool shouldDelete;
