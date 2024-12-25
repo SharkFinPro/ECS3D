@@ -28,7 +28,7 @@ glm::vec3 Transform::getScale() const
   {
     if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
     {
-      return parentTransform->scale + scale;
+      return parentTransform->scale * scale;
     }
   }
 
