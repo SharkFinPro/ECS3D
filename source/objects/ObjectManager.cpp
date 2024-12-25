@@ -70,42 +70,33 @@ void ObjectManager::removeObjectFromCollisions(const std::shared_ptr<Object>& ob
 
 void ObjectManager::startScene()
 {
-  if (sceneStatus == SceneStatus::running)
+  if (sceneStatus == SceneStatus::stopped)
   {
-    return;
+    for (const auto& object : objects)
+    {
+      object->start();
+    }
   }
 
   sceneStatus = SceneStatus::running;
-
-  for (const auto& object : objects)
-  {
-    object->start();
-  }
 }
 
 void ObjectManager::pauseScene()
 {
-  if (sceneStatus == SceneStatus::paused)
-  {
-    return;
-  }
-
   sceneStatus = SceneStatus::paused;
 }
 
 void ObjectManager::resetScene()
 {
-  if (sceneStatus == SceneStatus::stopped)
+  if (sceneStatus == SceneStatus::running || sceneStatus == SceneStatus::paused)
   {
-    return;
+    for (const auto& object : objects)
+    {
+      object->stop();
+    }
   }
 
   sceneStatus = SceneStatus::stopped;
-
-  for (const auto& object : objects)
-  {
-    object->stop();
-  }
 }
 
 void ObjectManager::variableUpdate(const float dt) const
