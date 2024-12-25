@@ -334,19 +334,19 @@ void ObjectManager::displayGui()
 
   ImGui::Begin("Scene Status");
 
+  constexpr int sceneStatusButtonWidth = 150;
+
   if (sceneStatus != SceneStatus::running)
   {
-    if (ImGui::Button("Start"))
+    if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
     {
       startScene();
     }
   }
 
-  ImGui::SameLine();
-
   if (sceneStatus == SceneStatus::running || sceneStatus == SceneStatus::paused)
   {
-    if (ImGui::Button("Stop"))
+    if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
     {
       resetScene();
     }
@@ -356,7 +356,7 @@ void ObjectManager::displayGui()
 
   if (sceneStatus == SceneStatus::running)
   {
-    if (ImGui::Button("Pause"))
+    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
     {
       pauseScene();
     }
