@@ -267,6 +267,7 @@ void ObjectManager::displayCreateObjectChildButton(const std::shared_ptr<ObjectU
     newObj->setParent(node->object);
 
     addObject(newObj);
+    selectedObject = newObj;
   }
 }
 
@@ -313,7 +314,9 @@ void ObjectManager::displayGui()
 
   if (ImGui::Button("Create New Object", {ImGui::GetContentRegionAvail().x, 45}))
   {
-    addObject(std::make_shared<Object>());
+    const auto newObject = std::make_shared<Object>();
+    addObject(newObject);
+    selectedObject = newObject;
   }
 
   ImGui::Spacing();
