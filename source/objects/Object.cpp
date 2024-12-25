@@ -64,7 +64,20 @@ std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
   const auto component = components.find(type);
 
-  return component != components.end() ? component->second : nullptr;
+  if (component == components.end())
+  {
+    if (parent != nullptr)
+    {
+      if (type == ComponentType::rigidBody)
+      {
+        return parent->getComponent(type);
+      }
+    }
+
+    return nullptr;
+  }
+
+  return component->second;
 }
 
 void Object::variableUpdate(const float dt)
