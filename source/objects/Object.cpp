@@ -130,7 +130,7 @@ void Object::displayGui()
     {
       if (component->getType() == ComponentType::collider)
       {
-        manager->removeObjectFromCollisions(this);
+        manager->removeObjectFromCollisions(shared_from_this());
       }
 
       component.reset();
@@ -179,7 +179,7 @@ void Object::displayGui()
                   addComponent(std::make_shared<SphereCollider>());
                 }
 
-                manager->addObjectToCollisions(std::shared_ptr<Object>(this));
+                manager->addObjectToCollisions(shared_from_this());
                 break;
               case ComponentType::player:
                 addComponent(std::make_shared<Player>());

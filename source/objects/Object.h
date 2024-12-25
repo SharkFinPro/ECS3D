@@ -11,7 +11,7 @@
 enum class ComponentType;
 class Component;
 
-class Object {
+class Object : public std::enable_shared_from_this<Object> {
 public:
   explicit Object(std::string name = "Object");
   explicit Object(const std::vector<std::shared_ptr<Component>>& components, std::string name = "Object");
