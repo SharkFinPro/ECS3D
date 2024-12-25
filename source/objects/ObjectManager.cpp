@@ -334,7 +334,7 @@ void ObjectManager::displayGui()
 
   ImGui::Begin("Scene Status");
 
-  constexpr int sceneStatusButtonWidth = 150;
+  constexpr int sceneStatusButtonWidth = 125;
 
   if (sceneStatus != SceneStatus::running)
   {
