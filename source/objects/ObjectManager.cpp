@@ -7,7 +7,7 @@
 #include <imgui.h>
 
 ObjectManager::ObjectManager()
-  : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
+  : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f), sceneStatus(SceneStatus::stopped)
 {}
 
 void ObjectManager::update(const float dt)
@@ -76,6 +76,36 @@ void ObjectManager::resetObjects() const
   }
 }
 
+void ObjectManager::startScene()
+{
+  if (sceneStatus == SceneStatus::running)
+  {
+    return;
+  }
+
+  sceneStatus = SceneStatus::running;
+}
+
+void ObjectManager::pauseScene()
+{
+  if (sceneStatus == SceneStatus::paused)
+  {
+    return;
+  }
+
+  sceneStatus = SceneStatus::paused;
+}
+
+void ObjectManager::resetScene()
+{
+  if (sceneStatus == SceneStatus::stopped)
+  {
+    return;
+  }
+
+  sceneStatus = SceneStatus::stopped;
+}
+
 void ObjectManager::variableUpdate(const float dt) const
 {
   for (const auto& object : objects)
@@ -86,6 +116,11 @@ void ObjectManager::variableUpdate(const float dt) const
 
 void ObjectManager::fixedUpdate(const float dt)
 {
+  if (sceneStatus != SceneStatus::running)
+  {
+    return;
+  }
+
   timeAccumulator += dt;
 
   uint8_t steps = 1;
@@ -297,6 +332,29 @@ void ObjectManager::displayGui()
   if (selectedObject)
   {
     selectedObject->displayGui();
+  }
+
+  ImGui::End();
+
+  ImGui::Begin("Scene Status");
+
+  if (ImGui::Button("Start"))
+  {
+    startScene();
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("Stop"))
+  {
+    resetScene();
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("Pause"))
+  {
+    pauseScene();
   }
 
   ImGui::End();

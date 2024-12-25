@@ -20,6 +20,12 @@ struct ObjectUINode {
   std::vector<std::shared_ptr<ObjectUINode>> children;
 };
 
+enum class SceneStatus {
+  running,
+  stopped,
+  paused
+};
+
 class ObjectManager {
 public:
   ObjectManager();
@@ -37,6 +43,12 @@ public:
 
   void resetObjects() const;
 
+  void startScene();
+
+  void pauseScene();
+
+  void resetScene();
+
 private:
   ECS3D* ecs;
 
@@ -50,6 +62,8 @@ private:
   float timeAccumulator;
 
   std::shared_ptr<Object> selectedObject;
+
+  SceneStatus sceneStatus;
 
   void variableUpdate(float dt) const;
   void fixedUpdate(float dt);
