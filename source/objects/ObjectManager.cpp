@@ -346,16 +346,21 @@ void ObjectManager::displayGui()
 
   if (sceneStatus == SceneStatus::running || sceneStatus == SceneStatus::paused)
   {
+    if (sceneStatus == SceneStatus::paused)
+    {
+      ImGui::SameLine();
+    }
+
     if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
     {
       resetScene();
     }
   }
 
-  ImGui::SameLine();
-
   if (sceneStatus == SceneStatus::running)
   {
+    ImGui::SameLine();
+
     if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
     {
       pauseScene();
