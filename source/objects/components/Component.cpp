@@ -46,6 +46,12 @@ void Component::markAsDeleted()
   shouldDelete = true;
 }
 
+void Component::start()
+{}
+
+void Component::stop()
+{}
+
 bool Component::displayGuiHeader()
 {
   const char* componentDisplayName = componentTypeToString.at(subType != ComponentType::SubComponentType_none

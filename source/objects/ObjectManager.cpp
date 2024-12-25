@@ -76,6 +76,11 @@ void ObjectManager::startScene()
   }
 
   sceneStatus = SceneStatus::running;
+
+  for (const auto& object : objects)
+  {
+    object->start();
+  }
 }
 
 void ObjectManager::pauseScene()
@@ -96,6 +101,11 @@ void ObjectManager::resetScene()
   }
 
   sceneStatus = SceneStatus::stopped;
+
+  for (const auto& object : objects)
+  {
+    object->stop();
+  }
 }
 
 void ObjectManager::variableUpdate(const float dt) const

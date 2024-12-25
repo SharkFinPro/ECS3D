@@ -28,7 +28,7 @@ Scene::Scene(SceneManager* sceneManager)
 
 void Scene::load() const
 {
-  // TODO: Reset ObjectManager objects to a stopped state
+  objectManager->resetScene();
 }
 
 void Scene::update(const float dt) const

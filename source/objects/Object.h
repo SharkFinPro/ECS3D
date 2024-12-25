@@ -37,6 +37,10 @@ public:
 
   void displayGui();
 
+  void start() const;
+
+  void stop() const;
+
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> components;
   ObjectManager* manager;

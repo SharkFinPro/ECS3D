@@ -54,6 +54,10 @@ public:
 
   void markAsDeleted();
 
+  virtual void start();
+
+  virtual void stop();
+
 protected:
   ComponentType type;
   ComponentType subType;

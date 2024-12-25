@@ -132,6 +132,27 @@ void RigidBody::displayGui()
   }
 }
 
+void RigidBody::start()
+{
+  liveVelocity = initialVelocity;
+  liveFriction = initialFriction;
+  liveDoGravity = initialDoGravity;
+  liveGravity = initialGravity;
+
+  currentVelocity = &liveVelocity;
+  currentFriction = &liveFriction;
+  currentDoGravity = &liveDoGravity;
+  currentGravity = &liveGravity;
+}
+
+void RigidBody::stop()
+{
+  currentVelocity = &initialVelocity;
+  currentFriction = &initialFriction;
+  currentDoGravity = &initialDoGravity;
+  currentGravity = &initialGravity;
+}
+
 void RigidBody::limitMovement()
 {
   if (glm::length(*currentVelocity) < 1e-5f)

@@ -98,3 +98,21 @@ void Transform::displayGui()
     ImGui::PopID();
   }
 }
+
+void Transform::start()
+{
+  livePosition = initialPosition;
+  liveScale = initialScale;
+  liveRotation = initialRotation;
+
+  currentPosition = &livePosition;
+  currentScale = &liveScale;
+  currentRotation = &liveRotation;
+}
+
+void Transform::stop()
+{
+  currentPosition = &initialPosition;
+  currentScale = &initialScale;
+  currentRotation = &initialRotation;
+}

@@ -205,3 +205,19 @@ void Object::displayGui()
     }
   }
 }
+
+void Object::start() const
+{
+  for (const auto& [type, component] : components)
+  {
+    component->start();
+  }
+}
+
+void Object::stop() const
+{
+  for (const auto& [type, component] : components)
+  {
+    component->stop();
+  }
+}

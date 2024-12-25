@@ -20,6 +20,10 @@ public:
 
   void displayGui() override;
 
+  void start() override;
+
+  void stop() override;
+
 private:
   glm::vec3 initialPosition;
   glm::vec3 livePosition;
