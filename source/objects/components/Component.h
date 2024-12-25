@@ -28,6 +28,11 @@ const std::unordered_map<ComponentType, std::string> componentTypeToString {
   {ComponentType::lightRenderer, "Light Renderer"}
 };
 
+const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent {
+  {ComponentType::SubComponentType_boxCollider, ComponentType::collider},
+  {ComponentType::SubComponentType_sphereCollider, ComponentType::collider}
+};
+
 class Component {
 public:
   explicit Component(ComponentType type, ComponentType subType = ComponentType::SubComponentType_none);

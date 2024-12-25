@@ -154,7 +154,8 @@ void Object::displayGui()
     {
       for (const auto& [type, name] : componentTypeToString)
       {
-        if (!getComponent(type))
+        const auto parentType = subComponentTypeToParent.find(type);
+        if (!getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type))
         {
           if (ImGui::Selectable(name.data()))
           {
@@ -169,16 +170,12 @@ void Object::displayGui()
               case ComponentType::rigidBody:
                 addComponent(std::make_shared<RigidBody>());
                 break;
-              case ComponentType::collider:
-                if (name == "Box Collider")
-                {
-                  addComponent(std::make_shared<BoxCollider>());
-                }
-                else if (name == "Sphere Collider")
-                {
-                  addComponent(std::make_shared<SphereCollider>());
-                }
-
+              case ComponentType::SubComponentType_boxCollider:
+                addComponent(std::make_shared<BoxCollider>());
+                manager->addObjectToCollisions(shared_from_this());
+                break;
+              case ComponentType::SubComponentType_sphereCollider:
+                addComponent(std::make_shared<SphereCollider>());
                 manager->addObjectToCollisions(shared_from_this());
                 break;
               case ComponentType::player:
