@@ -64,11 +64,13 @@ void ObjectManager::addObjectToCollisions(const std::shared_ptr<Object> &object)
 
 void ObjectManager::removeObjectFromCollisions(const std::shared_ptr<Object>& object)
 {
-  collisionEdges.erase(std::ranges::remove_if(collisionEdges,
-                       [&object](const auto& edge)
-                       {
-                         return edge.object == object;
-                       }).begin(), collisionEdges.end());
+  for (auto it = collisionEdges.begin(); it != collisionEdges.end(); ++it)
+  {
+    if (it->object == object)
+    {
+      collisionEdges.erase(it);
+    }
+  }
 }
 
 void ObjectManager::startScene()
