@@ -412,6 +412,19 @@ void ObjectManager::displayObjectListGui()
     ImGui::EndChild();
   }
 
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("objectUINode"))
+    {
+      const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
+
+      objectNode->newParent = nullptr;
+      objectUINodesSetForReassignment.push_back(objectNode);
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
   ImGui::End();
 }
 
