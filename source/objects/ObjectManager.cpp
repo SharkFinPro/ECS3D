@@ -213,7 +213,7 @@ void ObjectManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody
                                      const std::shared_ptr<Collider>& collider,
                                      const std::vector<std::shared_ptr<Object>>& collidedObjects)
 {
-  std::vector<bool> chosenFlags(collidedObjects.size(), false);
+  std::vector chosenFlags(collidedObjects.size(), false);
   std::vector<float> distances;
 
   for (const auto& collidedObject : collidedObjects)
