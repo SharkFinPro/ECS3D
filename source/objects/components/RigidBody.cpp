@@ -151,7 +151,7 @@ void RigidBody::stop()
 
 void RigidBody::limitMovement()
 {
-  if (glm::length(*currentVelocity) < 1e-5f)
+  if (length(*currentVelocity) < 1e-5f)
   {
     return;
   }
