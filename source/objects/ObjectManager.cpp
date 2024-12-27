@@ -402,9 +402,14 @@ void ObjectManager::displayObjectListGui()
   ImGui::Separator();
   ImGui::Spacing();
 
-  for (const auto& node : objectUINodes)
+  if (ImGui::BeginChild("##"))
   {
-    displayObjectGui(node);
+    for (const auto& node : objectUINodes)
+    {
+      displayObjectGui(node);
+    }
+
+    ImGui::EndChild();
   }
 
   ImGui::End();
