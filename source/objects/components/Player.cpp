@@ -45,7 +45,8 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
     {
       if (transform->getPosition().y < -250.0f)
       {
-        // TODO: Reset Transform position
+        transform->stop();
+        transform->start();
         rigidBody->setVelocity({0, 0, 0});
       }
 

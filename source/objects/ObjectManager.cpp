@@ -41,7 +41,9 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object, const std::
 
   objects.push_back(object);
 
-  const auto uiNode = std::make_shared<ObjectUINode>(object, parentUINode);
+  const auto uiNode = std::make_shared<ObjectUINode>();
+  uiNode->object = object;
+  uiNode->parent = parentUINode;
 
   if (parentUINode)
   {
