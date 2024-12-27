@@ -67,19 +67,19 @@ void ObjectGUIManager::reorderObjectGui()
   {
     std::erase(node->parent ? node->parent->children : objectUINodes, node);
 
-    node->parent = node->newParent;
-    node->object->setParent(node->newParent->object);
-
     if (node->newParent)
     {
+      node->parent = node->newParent;
+      node->object->setParent(node->newParent->object);
       node->newParent->children.push_back(node);
+      node->newParent = nullptr;
     }
     else
     {
+      node->parent = nullptr;
+      node->object->setParent(nullptr);
       objectUINodes.push_back(node);
     }
-
-    node->newParent = nullptr;
   }
 
   objectUINodesSetForReassignment.clear();
