@@ -9,13 +9,7 @@ class ECS3D;
 class Collider;
 class RigidBody;
 class CollisionManager;
-
-struct ObjectUINode {
-  std::shared_ptr<Object> object;
-  std::shared_ptr<ObjectUINode> parent = nullptr;
-  std::vector<std::shared_ptr<ObjectUINode>> children;
-  std::shared_ptr<ObjectUINode> newParent = nullptr;
-};
+class ObjectGUIManager;
 
 enum class SceneStatus {
   running,
@@ -34,7 +28,7 @@ public:
 
   [[nodiscard]] std::shared_ptr<CollisionManager> getCollisionManager() const;
 
-  void addObject(const std::shared_ptr<Object>& object, const std::shared_ptr<ObjectUINode>& parentUINode = nullptr);
+  void addObject(const std::shared_ptr<Object>& object, bool createUI = true);
 
   void startScene();
 
@@ -49,34 +43,17 @@ private:
 
   std::shared_ptr<CollisionManager> collisionManager;
 
-  std::vector<std::shared_ptr<ObjectUINode>> objectUINodes;
-  std::vector<std::shared_ptr<ObjectUINode>> objectUINodesSetForReassignment;
+  std::shared_ptr<ObjectGUIManager> objectGUIManager;
+
+  SceneStatus sceneStatus;
 
   const float fixedUpdateDt;
   float timeAccumulator;
 
-  std::shared_ptr<Object> selectedObject;
-
-  SceneStatus sceneStatus;
-
-  void variableUpdate(float dt) const;
+  void variableUpdate(float dt);
   void fixedUpdate(float dt);
 
-  void reorderObjectGui();
-
-  void displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node);
-
-  void displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node);
-
-  void displayObjectGui(const std::shared_ptr<ObjectUINode>& node);
-
-  void displayObjectListGui();
-
-  void displaySelectedObjectGui() const;
-
   void displaySceneStatusGui();
-
-  void displayGui();
 };
 
 
