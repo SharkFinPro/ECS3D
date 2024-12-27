@@ -6,8 +6,6 @@
 
 class Object;
 class ECS3D;
-class Collider;
-class RigidBody;
 class CollisionManager;
 class ObjectGUIManager;
 
