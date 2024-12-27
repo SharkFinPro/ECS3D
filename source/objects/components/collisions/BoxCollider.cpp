@@ -38,10 +38,10 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
     const auto position = transform->getPosition();
 
     const auto transformationMatrix = translate(glm::mat4(1.0f), position)
-        * rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1}) // Z-axis rotation
-        * rotate(glm::mat4(1.0f), glm::radians(rotation.y), {0, 1, 0}) // Y-axis rotation
-        * rotate(glm::mat4(1.0f), glm::radians(rotation.x), {1, 0, 0}) // X-axis rotation
-        * glm::scale(glm::mat4(1.0f), scale);
+      * rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1})
+      * rotate(glm::mat4(1.0f), glm::radians(rotation.y), {0, 1, 0})
+      * rotate(glm::mat4(1.0f), glm::radians(rotation.x), {1, 0, 0})
+      * glm::scale(glm::mat4(1.0f), scale);
 
     for (auto& vertex : boxVertices)
     {
