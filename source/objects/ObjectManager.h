@@ -50,7 +50,7 @@ private:
   const float fixedUpdateDt;
   float timeAccumulator;
 
-  void variableUpdate(float dt);
+  void variableUpdate(float dt) const;
   void fixedUpdate(float dt);
 
   void displaySceneStatusGui();

@@ -13,6 +13,10 @@ ObjectManager::ObjectManager()
 
 void ObjectManager::update(const float dt)
 {
+  displaySceneStatusGui();
+
+  objectGUIManager->update();
+  
   fixedUpdate(dt);
   variableUpdate(dt);
 }
@@ -80,12 +84,8 @@ void ObjectManager::resetScene()
   sceneStatus = SceneStatus::stopped;
 }
 
-void ObjectManager::variableUpdate(const float dt)
+void ObjectManager::variableUpdate(const float dt) const
 {
-  displaySceneStatusGui();
-
-  objectGUIManager->update();
-
   for (const auto& object : objects)
   {
     object->variableUpdate(dt);
