@@ -150,12 +150,12 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
 
   if (ImGui::Button("+", {buttonWidth, 0}))
   {
-    const auto newObj = std::make_shared<Object>();
-    newObj->setParent(node->object);
+    const auto newObject = std::make_shared<Object>();
+    newObject->setParent(node->object);
 
-    addObject(newObj, node);
-    objectManager->addObject(newObj);
-    selectedObject = newObj;
+    addObject(newObject, node);
+    objectManager->addObject(newObject);
+    selectedObject = newObject;
   }
 }
 
