@@ -35,7 +35,7 @@ std::shared_ptr<CollisionManager> ObjectManager::getCollisionManager() const
   return collisionManager;
 }
 
-void ObjectManager::addObject(const std::shared_ptr<Object>& object, bool createUI)
+void ObjectManager::addObject(const std::shared_ptr<Object>& object, const bool createUI)
 {
   object->setManager(this);
 
