@@ -21,6 +21,8 @@ class BoxCollider final : public Collider {
 public:
   BoxCollider();
 
+  void displayGui() override;
+
 private:
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 };

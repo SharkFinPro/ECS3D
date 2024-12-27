@@ -18,7 +18,7 @@ void AssetManager::displayGui()
   constexpr int cellSize = 200;
   const int width = static_cast<int>(ImGui::GetContentRegionAvail().x);
 
-  ImGui::Columns(width / cellSize, 0, false);
+  ImGui::Columns(std::max(1, width / cellSize), 0, false);
 
   for (const auto& [name, asset] : assets)
   {

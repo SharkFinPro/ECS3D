@@ -10,6 +10,8 @@ public:
 
   float getRadius();
 
+  void displayGui() override;
+
 private:
   float radius = 1.0f;
 

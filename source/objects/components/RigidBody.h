@@ -27,15 +27,26 @@ public:
 
   void displayGui() override;
 
-  void reset() override;
+  void start() override;
+
+  void stop() override;
 
 private:
-  glm::vec3 velocity;
+  glm::vec3 initialVelocity;
+  glm::vec3 liveVelocity;
+  glm::vec3* currentVelocity;
 
-  float friction;
+  float initialFriction;
+  float liveFriction;
+  float* currentFriction;
 
-  bool doGravity;
-  glm::vec3 gravity;
+  bool initialDoGravity;
+  bool liveDoGravity;
+  bool* currentDoGravity;
+
+  glm::vec3 initialGravity;
+  glm::vec3 liveGravity;
+  glm::vec3* currentGravity;
 
   bool falling;
   bool nextFalling;

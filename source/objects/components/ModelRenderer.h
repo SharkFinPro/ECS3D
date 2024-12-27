@@ -13,13 +13,13 @@ public:
   ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
                          const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model);
 
+  explicit ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer);
+
   ~ModelRenderer() override = default;
 
   void variableUpdate(float dt) override;
 
   void displayGui() override;
-
-  void reset() override;
 
 private:
   std::shared_ptr<RenderObject> renderObject;
@@ -37,6 +37,8 @@ private:
   void displayTextureDragDrop();
   void displaySpecularDragDrop();
   void displayModelDragDrop();
+
+  [[nodiscard]] bool canRender() const;
 };
 
 

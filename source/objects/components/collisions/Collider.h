@@ -50,7 +50,7 @@ enum class ColliderType {
 
 class Collider : public Component {
 public:
-  explicit Collider(ColliderType type);
+  explicit Collider(ColliderType type, ComponentType subType);
 
   bool collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv);
 

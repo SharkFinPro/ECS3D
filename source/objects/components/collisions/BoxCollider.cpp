@@ -1,15 +1,21 @@
 #include "BoxCollider.h"
 #include "../../Object.h"
 #include "../Transform.h"
-#include <stdexcept>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <imgui.h>
+#include <stdexcept>
 #include <limits>
 
-#include "glm/gtc/matrix_transform.hpp"
-
 BoxCollider::BoxCollider()
-  : Collider(ColliderType::boxCollider)
+  : Collider(ColliderType::boxCollider, ComponentType::SubComponentType_boxCollider)
 {}
+
+void BoxCollider::displayGui()
+{
+  if (displayGuiHeader())
+  {}
+}
 
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 {

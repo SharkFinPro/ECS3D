@@ -1,11 +1,12 @@
 #include "SphereCollider.h"
 #include "../Transform.h"
 #include "../../Object.h"
+#include <glm/gtx/component_wise.inl>
+#include <imgui.h>
 #include <stdexcept>
-#include "glm/gtx/component_wise.inl"
 
 SphereCollider::SphereCollider()
-  : Collider(ColliderType::sphereCollider)
+  : Collider(ColliderType::sphereCollider, ComponentType::SubComponentType_sphereCollider)
 {}
 
 float SphereCollider::getRadius()
@@ -27,6 +28,12 @@ float SphereCollider::getRadius()
   }
 
   return 0;
+}
+
+void SphereCollider::displayGui()
+{
+  if (displayGuiHeader())
+  {}
 }
 
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)

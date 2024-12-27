@@ -1,22 +1,20 @@
 #include "ObjectManager.h"
-
 #include "Object.h"
 #include "components/RigidBody.h"
 #include "components/collisions/Collider.h"
 #include <glm/glm.hpp>
 #include <algorithm>
-#include <set>
-#include <unordered_set>
-
-#include "components/ModelRenderer.h"
+#include <imgui.h>
 
 ObjectManager::ObjectManager()
-  : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
+  : ecs(nullptr), fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f), sceneStatus(SceneStatus::stopped)
 {}
 
 void ObjectManager::update(const float dt)
 {
   displayGui();
+
+  reorderObjectGui();
 
   fixedUpdate(dt);
   variableUpdate(dt);
@@ -32,26 +30,78 @@ ECS3D* ObjectManager::getECS() const
   return ecs;
 }
 
-void ObjectManager::addObject(const std::shared_ptr<Object>& object)
+void ObjectManager::addObject(const std::shared_ptr<Object>& object, const std::shared_ptr<ObjectUINode>& parentUINode)
 {
   object->setManager(this);
 
   if (object->getComponent(ComponentType::collider))
   {
-    const auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
-
-    collisionEdges.push_back({object, collider, 0.0f});
+    addObjectToCollisions(object);
   }
 
   objects.push_back(object);
+
+  const auto uiNode = std::make_shared<ObjectUINode>();
+  uiNode->object = object;
+  uiNode->parent = parentUINode;
+
+  if (parentUINode)
+  {
+    parentUINode->children.push_back(uiNode);
+  }
+  else
+  {
+    objectUINodes.push_back(uiNode);
+  }
 }
 
-void ObjectManager::resetObjects() const
+void ObjectManager::addObjectToCollisions(const std::shared_ptr<Object> &object)
 {
-  for (const auto& object : objects)
+  const auto collider = std::dynamic_pointer_cast<Collider>(object->getComponent(ComponentType::collider));
+
+  collisionEdges.push_back({object, collider, 0.0f});
+}
+
+void ObjectManager::removeObjectFromCollisions(const std::shared_ptr<Object>& object)
+{
+  for (auto it = collisionEdges.begin(); it != collisionEdges.end(); ++it)
   {
-    object->reset();
+    if (it->object == object)
+    {
+      collisionEdges.erase(it);
+    }
   }
+}
+
+void ObjectManager::startScene()
+{
+  if (sceneStatus == SceneStatus::stopped)
+  {
+    for (const auto& object : objects)
+    {
+      object->start();
+    }
+  }
+
+  sceneStatus = SceneStatus::running;
+}
+
+void ObjectManager::pauseScene()
+{
+  sceneStatus = SceneStatus::paused;
+}
+
+void ObjectManager::resetScene()
+{
+  if (sceneStatus == SceneStatus::running || sceneStatus == SceneStatus::paused)
+  {
+    for (const auto& object : objects)
+    {
+      object->stop();
+    }
+  }
+
+  sceneStatus = SceneStatus::stopped;
 }
 
 void ObjectManager::variableUpdate(const float dt) const
@@ -64,6 +114,11 @@ void ObjectManager::variableUpdate(const float dt) const
 
 void ObjectManager::fixedUpdate(const float dt)
 {
+  if (sceneStatus != SceneStatus::running)
+  {
+    return;
+  }
+
   timeAccumulator += dt;
 
   uint8_t steps = 1;
@@ -121,7 +176,9 @@ void ObjectManager::findCollisions(const LeftEdge& edge,
 {
   for (const auto& other : collisionEdges)
   {
-    if (other.object == edge.object)
+    if (other.object == edge.object ||
+        other.object->getParent() == edge.object ||
+        other.object == edge.object->getParent())
     {
       continue;
     }
@@ -193,22 +250,190 @@ void ObjectManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody
   }
 }
 
-void ObjectManager::displayGui()
+void ObjectManager::reorderObjectGui()
 {
-  ImGui::Begin("Objects");
-  for (const auto& object : objects)
+  for (const auto& node : objectUINodesSetForReassignment)
   {
-    ImGui::PushID(&object);
-
-    if (ImGui::Selectable(object->getName().c_str(), selectedObject == object))
+    bool isAncestor = false;
+    auto parent = node->newParent;
+    while (parent)
     {
-      selectedObject = object;
+      if (node == parent)
+      {
+        isAncestor = true;
+        break;
+      }
+
+      parent = parent->parent;
     }
 
-    ImGui::PopID();
-  }
-  ImGui::End();
+    if (!isAncestor)
+    {
+      continue;
+    }
 
+    for (auto& child : node->children)
+    {
+      child->newParent = node->parent;
+      objectUINodesSetForReassignment.push_back(child);
+    }
+  }
+
+  for (size_t i = objectUINodesSetForReassignment.size(); i > 0; i--)
+  {
+    auto node = objectUINodesSetForReassignment[i - 1];
+
+    std::erase(node->parent ? node->parent->children : objectUINodes, node);
+
+    if (node->newParent)
+    {
+      node->parent = node->newParent;
+      node->object->setParent(node->newParent->object);
+      node->newParent->children.push_back(node);
+      node->newParent = nullptr;
+    }
+    else
+    {
+      node->parent = nullptr;
+      node->object->setParent(nullptr);
+      objectUINodes.push_back(node);
+    }
+
+    objectUINodesSetForReassignment.pop_back();
+  }
+}
+
+void ObjectManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
+{
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("objectUINode"))
+    {
+      const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
+
+      objectNode->newParent = node;
+      objectUINodesSetForReassignment.push_back(objectNode);
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
+  if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+  {
+    ImGui::SetDragDropPayload("objectUINode", &node, sizeof(node));
+    ImGui::Text("Object");
+    ImGui::EndDragDropSource();
+  }
+}
+
+void ObjectManager::displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node)
+{
+  ImGui::SameLine();
+
+  const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+  
+  if (ImGui::Button("+", {buttonWidth, 0}))
+  {
+    const auto newObj = std::make_shared<Object>();
+    newObj->setParent(node->object);
+
+    addObject(newObj, node);
+    selectedObject = newObj;
+  }
+}
+
+void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
+{
+  ImGui::PushID(&node->object);
+
+  if (ImGui::TreeNodeEx(node->object->getName().c_str(),
+                        (node->children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
+                        (selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0) |
+                        ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth |
+                        ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_OpenOnDoubleClick))
+  {
+    if (ImGui::IsItemClicked())
+    {
+      selectedObject = node->object;
+    }
+
+    displayObjectDragDrop(node);
+
+    const bool hasChildren = !node->children.empty();
+
+    displayCreateObjectChildButton(node);
+
+    if (hasChildren)
+    {
+      for (const auto& child : node->children)
+      {
+        displayObjectGui(child);
+      }
+    }
+
+    ImGui::TreePop();
+  }
+  else
+  {
+    if (ImGui::IsItemClicked())
+    {
+      selectedObject = node->object;
+    }
+
+    displayObjectDragDrop(node);
+
+    displayCreateObjectChildButton(node);
+  }
+
+  ImGui::PopID();
+}
+
+void ObjectManager::displayObjectListGui()
+{
+  ImGui::Begin("Objects");
+
+  if (ImGui::Button("Create New Object", {ImGui::GetContentRegionAvail().x, 45}))
+  {
+    const auto newObject = std::make_shared<Object>();
+    addObject(newObject);
+    selectedObject = newObject;
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  if (ImGui::BeginChild("##"))
+  {
+    for (const auto& node : objectUINodes)
+    {
+      displayObjectGui(node);
+    }
+
+    ImGui::EndChild();
+  }
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("objectUINode"))
+    {
+      const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
+
+      objectNode->newParent = nullptr;
+      objectUINodesSetForReassignment.push_back(objectNode);
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
+  ImGui::End();
+}
+
+void ObjectManager::displaySelectedObjectGui() const
+{
   ImGui::Begin("Selected Object");
 
   if (selectedObject)
@@ -217,4 +442,53 @@ void ObjectManager::displayGui()
   }
 
   ImGui::End();
+}
+
+void ObjectManager::displaySceneStatusGui()
+{
+  ImGui::Begin("Scene Status");
+
+  constexpr int sceneStatusButtonWidth = 125;
+
+  if (sceneStatus != SceneStatus::running)
+  {
+    if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
+    {
+      startScene();
+    }
+  }
+
+  if (sceneStatus == SceneStatus::running || sceneStatus == SceneStatus::paused)
+  {
+    if (sceneStatus == SceneStatus::paused)
+    {
+      ImGui::SameLine();
+    }
+
+    if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
+    {
+      resetScene();
+    }
+  }
+
+  if (sceneStatus == SceneStatus::running)
+  {
+    ImGui::SameLine();
+
+    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
+    {
+      pauseScene();
+    }
+  }
+
+  ImGui::End();
+}
+
+void ObjectManager::displayGui()
+{
+  displayObjectListGui();
+
+  displaySelectedObjectGui();
+
+  displaySceneStatusGui();
 }

@@ -2,17 +2,27 @@
 #include "components/Component.h"
 #include <utility>
 #include <imgui.h>
+#include <ranges>
+
+#include "../ECS3D.h"
+#include "components/LightRenderer.h"
+#include "components/ModelRenderer.h"
+#include "components/Player.h"
+#include "components/RigidBody.h"
+#include "components/Transform.h"
+#include "components/collisions/BoxCollider.h"
+#include "components/collisions/SphereCollider.h"
 
 constexpr int MAX_CHARACTERS = 30;
 
 Object::Object(std::string name)
-  : manager(nullptr), name(std::move(name))
+  : manager(nullptr), name(std::move(name)), showComponentSelector(false)
 {
   name.resize(MAX_CHARACTERS);
 }
 
 Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)
-  : manager(nullptr), name(std::move(name))
+  : manager(nullptr), name(std::move(name)), showComponentSelector(false)
 {
   for (const auto& component : components)
   {
@@ -20,24 +30,54 @@ Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::s
   }
 }
 
-void Object::addComponent(std::shared_ptr<Component> component)
+void Object::setParent(const std::shared_ptr<Object>& parent)
 {
-  component->setOwner(this);
-  components.emplace(component->getType(), std::move(component));
+  this->parent = parent;
+}
+
+std::shared_ptr<Object> Object::getParent() const
+{
+  return parent;
+}
+
+void Object::addComponent(const std::shared_ptr<Component>& component, const bool setOwner)
+{
+  if (setOwner)
+  {
+    component->setOwner(this);
+  }
+
+  components.emplace(component->getType(), component);
 }
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
   const auto component = components.find(type);
 
-  return component != components.end() ? component->second : nullptr;
+  if (component == components.end())
+  {
+    if (parent != nullptr)
+    {
+      if (type == ComponentType::rigidBody)
+      {
+        return parent->getComponent(type);
+      }
+    }
+
+    return nullptr;
+  }
+
+  return component->second;
 }
 
 void Object::variableUpdate(const float dt)
 {
   for (const auto& [componentType, component] : components)
   {
-    component->variableUpdate(dt);
+    if (component->getOwner() == this)
+    {
+      component->variableUpdate(dt);
+    }
   }
 }
 
@@ -45,7 +85,10 @@ void Object::fixedUpdate(const float dt)
 {
   for (const auto& [componentType, component] : components)
   {
-    component->fixedUpdate(dt);
+    if (component->getOwner() == this)
+    {
+      component->fixedUpdate(dt);
+    }
   }
 }
 
@@ -73,23 +116,98 @@ void Object::displayGui()
 {
   ImGui::InputText("Name", name.data(), name.capacity());
 
-  if (ImGui::Button("Reset Components"))
+  for (auto it = components.begin(); it != components.end();)
   {
-    reset();
-  }
+    auto component = it->second;
 
-  for (const auto& [type, component] : components)
-  {
     ImGui::PushID(&component);
     component->displayGui();
     ImGui::PopID();
+
+    if (component->markedAsDeleted())
+    {
+      if (component->getType() == ComponentType::collider)
+      {
+        manager->removeObjectFromCollisions(shared_from_this());
+      }
+
+      component.reset();
+
+      it = components.erase(it);
+    }
+    else
+    {
+      ++it;
+    }
+  }
+
+  if (ImGui::Button("Add Component"))
+  {
+    showComponentSelector = true;
+  }
+
+  if (showComponentSelector)
+  {
+    if (ImGui::BeginCombo("##combo", "Select Component"))
+    {
+      for (const auto& [type, name] : componentTypeToString)
+      {
+        const auto parentType = subComponentTypeToParent.find(type);
+        if (!getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type))
+        {
+          if (ImGui::Selectable(name.data()))
+          {
+            switch (type)
+            {
+              case ComponentType::transform:
+                addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
+                break;
+              case ComponentType::modelRenderer:
+                addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
+                break;
+              case ComponentType::rigidBody:
+                addComponent(std::make_shared<RigidBody>());
+                break;
+              case ComponentType::SubComponentType_boxCollider:
+                addComponent(std::make_shared<BoxCollider>());
+                manager->addObjectToCollisions(shared_from_this());
+                break;
+              case ComponentType::SubComponentType_sphereCollider:
+                addComponent(std::make_shared<SphereCollider>());
+                manager->addObjectToCollisions(shared_from_this());
+                break;
+              case ComponentType::player:
+                addComponent(std::make_shared<Player>());
+                break;
+              case ComponentType::lightRenderer:
+                addComponent(std::make_shared<LightRenderer>(glm::vec3(0), glm::vec3(0),
+                                                             0.0f, 0.0f, 0.0f));
+                break;
+              default: ;
+            }
+
+            showComponentSelector = false;
+          }
+        }
+      }
+
+      ImGui::EndCombo();
+    }
   }
 }
 
-void Object::reset()
+void Object::start() const
 {
   for (const auto& [type, component] : components)
   {
-    component->reset();
+    component->start();
+  }
+}
+
+void Object::stop() const
+{
+  for (const auto& [type, component] : components)
+  {
+    component->stop();
   }
 }

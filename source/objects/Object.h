@@ -6,17 +6,21 @@
 #include <memory>
 #include <string>
 
-class ObjectManager;
+#include "ObjectManager.h"
 
 enum class ComponentType;
 class Component;
 
-class Object {
+class Object : public std::enable_shared_from_this<Object> {
 public:
   explicit Object(std::string name = "Object");
   explicit Object(const std::vector<std::shared_ptr<Component>>& components, std::string name = "Object");
 
-  void addComponent(std::shared_ptr<Component> component);
+  void setParent(const std::shared_ptr<Object>& parent);
+  [[nodiscard]] std::shared_ptr<Object> getParent() const;
+
+  void addComponent(const std::shared_ptr<Component>& component, bool setOwner = true);
+
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 
   void variableUpdate(float dt);
@@ -30,13 +34,19 @@ public:
 
   void displayGui();
 
-  void reset();
+  void start() const;
+
+  void stop() const;
 
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> components;
   ObjectManager* manager;
 
+  std::shared_ptr<Object> parent;
+
   std::string name;
+
+  bool showComponentSelector;
 };
 
 

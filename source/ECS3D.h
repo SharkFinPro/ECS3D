@@ -24,6 +24,8 @@ public:
 
   [[nodiscard]] std::shared_ptr<AssetManager> getAssetManager() const;
 
+  void logMessage(const std::string& level, const std::string& message);
+
 private:
   std::shared_ptr<VulkanEngine> renderer;
 
@@ -32,6 +34,10 @@ private:
   std::shared_ptr<SceneManager> sceneManager;
 
   std::shared_ptr<AssetManager> assetManager;
+
+  std::vector<std::string> errorMessages;
+
+  void displayMessageLog();
 
   void initRenderer();
 

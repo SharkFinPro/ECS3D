@@ -5,82 +5,114 @@
 #include "RigidBody.h"
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
-  : Component(ComponentType::transform), initialPosition(position), position(initialPosition),
-    initialScale(scale), scale(initialScale), initialRotation(rotation), rotation(initialRotation)
+  : Component(ComponentType::transform),
+    initialPosition(position), livePosition(initialPosition), currentPosition(&initialPosition),
+    initialScale(scale), liveScale(initialScale), currentScale(&initialScale),
+    initialRotation(rotation), liveRotation(initialRotation), currentRotation(&initialRotation)
 {}
 
 glm::vec3 Transform::getPosition() const
 {
-  return position;
+  if (owner->getParent())
+  {
+    if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
+    {
+      return parentTransform->getPosition() + *currentPosition;
+    }
+  }
+
+  return *currentPosition;
 }
 
 glm::vec3 Transform::getScale() const
 {
-  return scale;
+  if (owner->getParent())
+  {
+    if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
+    {
+      return parentTransform->getScale() * *currentScale;
+    }
+  }
+
+  return *currentScale;
 }
 
 glm::vec3 Transform::getRotation() const
 {
-  return rotation;
+  if (owner->getParent())
+  {
+    if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
+    {
+      return parentTransform->getRotation() + *currentRotation;
+    }
+  }
+
+  return *currentRotation;
 }
 
-void Transform::setScale(const glm::vec3 scale)
+void Transform::setScale(const glm::vec3 scale) const
 {
-  this->scale = scale;
+  *currentScale = scale;
 }
 
-void Transform::setRotation(const glm::vec3 rotation)
+void Transform::setRotation(const glm::vec3 rotation) const
 {
-  this->rotation = rotation;
+  *currentRotation = rotation;
 }
 
-void Transform::move(const glm::vec3& direction)
+void Transform::move(const glm::vec3& direction) const
 {
-  position += direction;
+  *currentPosition += direction;
 }
 
 void Transform::displayGui()
 {
-  if (ImGui::CollapsingHeader("Transform"))
+  if (displayGuiHeader())
   {
     ImGui::PushID(1);
     ImGui::Text("Control Position:");
-    ImGui::SliderFloat("x", &position.x, -30.0f, 30.0f);
-    ImGui::SliderFloat("y", &position.y, -30.0f, 30.0f);
-    ImGui::SliderFloat("z", &position.z, -30.0f, 30.0f);
+    ImGui::SliderFloat("x", &currentPosition->x, -30.0f, 30.0f);
+    ImGui::SliderFloat("y", &currentPosition->y, -30.0f, 30.0f);
+    ImGui::SliderFloat("z", &currentPosition->z, -30.0f, 30.0f);
     ImGui::PopID();
 
     ImGui::PushID(2);
     ImGui::Text("Control Rotation:");
-    ImGui::SliderFloat("x", &rotation.x, 0.0f, 360.0f);
-    ImGui::SliderFloat("y", &rotation.y, 0.0f, 360.0f);
-    ImGui::SliderFloat("z", &rotation.z, 0.0f, 360.0f);
+    ImGui::SliderFloat("x", &currentRotation->x, 0.0f, 360.0f);
+    ImGui::SliderFloat("y", &currentRotation->y, 0.0f, 360.0f);
+    ImGui::SliderFloat("z", &currentRotation->z, 0.0f, 360.0f);
     ImGui::PopID();
 
     ImGui::PushID(3);
     ImGui::Text("Control Scale:");
-    ImGui::SliderFloat("x", &scale.x, 0.1f, 10.0f);
-    ImGui::SliderFloat("y", &scale.y, 0.1f, 10.0f);
-    ImGui::SliderFloat("z", &scale.z, 0.1f, 10.0f);
+    ImGui::SliderFloat("x", &currentScale->x, 0.1f, 10.0f);
+    ImGui::SliderFloat("y", &currentScale->y, 0.1f, 10.0f);
+    ImGui::SliderFloat("z", &currentScale->z, 0.1f, 10.0f);
 
-    float combinedScale = (scale.x + scale.y + scale.z) / 3.0f;
+    float combinedScale = (currentScale->x + currentScale->y + currentScale->z) / 3.0f;
     if (ImGui::SliderFloat("xyz", &combinedScale, 0.1f, 10.0f))
     {
-      scale.x = scale.y = scale.z = combinedScale;
+      currentScale->x = currentScale->y = currentScale->z = combinedScale;
     }
 
     ImGui::PopID();
-
-    if (ImGui::Button("Reset"))
-    {
-      reset();
-    }
   }
 }
 
-void Transform::reset()
+void Transform::start()
 {
-  position = initialPosition;
-  scale = initialScale;
-  rotation = initialRotation;
+  livePosition = initialPosition;
+  liveScale = initialScale;
+  liveRotation = initialRotation;
+
+  currentPosition = &livePosition;
+  currentScale = &liveScale;
+  currentRotation = &liveRotation;
+}
+
+void Transform::stop()
+{
+  currentPosition = &initialPosition;
+  currentScale = &initialScale;
+  currentRotation = &initialRotation;
 }
