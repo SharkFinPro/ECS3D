@@ -41,7 +41,7 @@ void RigidBody::fixedUpdate(const float dt)
   }
 }
 
-void RigidBody::applyForce(const glm::vec3& force)
+void RigidBody::applyForce(const glm::vec3& force) const
 {
   *currentVelocity += force;
 }
@@ -108,7 +108,7 @@ bool RigidBody::isFalling() const
   return falling;
 }
 
-void RigidBody::setVelocity(const glm::vec3& velocity)
+void RigidBody::setVelocity(const glm::vec3& velocity) const
 {
   *currentVelocity = velocity;
 }

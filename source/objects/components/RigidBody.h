@@ -15,7 +15,7 @@ public:
 
   void fixedUpdate(float dt) override;
 
-  void applyForce(const glm::vec3& force);
+  void applyForce(const glm::vec3& force) const;
 
   void handleCollision(glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other);
 
@@ -23,7 +23,7 @@ public:
 
   [[nodiscard]] bool isFalling() const;
 
-  void setVelocity(const glm::vec3& velocity);
+  void setVelocity(const glm::vec3& velocity) const;
 
   void displayGui() override;
 
