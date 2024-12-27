@@ -78,8 +78,10 @@ bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
 
 void ObjectGUIManager::reorderObjectGui()
 {
-  for (const auto& node : objectUINodesSetForReassignment)
+  for (int i = 0; i < objectUINodesSetForReassignment.size(); i++)
   {
+    const auto node = objectUINodesSetForReassignment[i];
+
     if (!isAncestor(node->newParent, node))
     {
       continue;
