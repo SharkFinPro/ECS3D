@@ -81,7 +81,13 @@ private:
 
   void displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node);
 
-  void displayObjectGui(const std::shared_ptr<ObjectUINode> &node);
+  void displayObjectGui(const std::shared_ptr<ObjectUINode>& node);
+
+  void displayObjectListGui();
+
+  void displaySelectedObjectGui() const;
+
+  void displaySceneStatusGui();
 
   void displayGui();
 };

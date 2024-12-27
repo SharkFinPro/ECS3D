@@ -14,6 +14,8 @@ void ObjectManager::update(const float dt)
 {
   displayGui();
 
+  reorderObjectGui();
+
   fixedUpdate(dt);
   variableUpdate(dt);
 }
@@ -385,7 +387,7 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
   ImGui::PopID();
 }
 
-void ObjectManager::displayGui()
+void ObjectManager::displayObjectListGui()
 {
   ImGui::Begin("Objects");
 
@@ -406,9 +408,10 @@ void ObjectManager::displayGui()
   }
 
   ImGui::End();
+}
 
-  reorderObjectGui();
-
+void ObjectManager::displaySelectedObjectGui() const
+{
   ImGui::Begin("Selected Object");
 
   if (selectedObject)
@@ -417,7 +420,10 @@ void ObjectManager::displayGui()
   }
 
   ImGui::End();
+}
 
+void ObjectManager::displaySceneStatusGui()
+{
   ImGui::Begin("Scene Status");
 
   constexpr int sceneStatusButtonWidth = 125;
@@ -454,4 +460,13 @@ void ObjectManager::displayGui()
   }
 
   ImGui::End();
+}
+
+void ObjectManager::displayGui()
+{
+  displayObjectListGui();
+
+  displaySelectedObjectGui();
+
+  displaySceneStatusGui();
 }
