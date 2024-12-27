@@ -2,7 +2,6 @@
 #include "../Transform.h"
 #include "../../Object.h"
 #include <glm/gtx/component_wise.inl>
-#include <imgui.h>
 #include <stdexcept>
 
 SphereCollider::SphereCollider()

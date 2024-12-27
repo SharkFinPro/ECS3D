@@ -2,7 +2,6 @@
 #include "components/Component.h"
 #include <utility>
 #include <imgui.h>
-#include <ranges>
 
 #include "../ECS3D.h"
 #include "components/LightRenderer.h"
