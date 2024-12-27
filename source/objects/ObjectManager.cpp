@@ -16,7 +16,7 @@ void ObjectManager::update(const float dt)
   displaySceneStatusGui();
 
   objectGUIManager->update();
-  
+
   fixedUpdate(dt);
   variableUpdate(dt);
 }

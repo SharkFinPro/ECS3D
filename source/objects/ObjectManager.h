@@ -24,6 +24,7 @@ public:
   void update(float dt);
 
   void setECS(ECS3D* ecs);
+  
   [[nodiscard]] ECS3D* getECS() const;
 
   [[nodiscard]] std::shared_ptr<CollisionManager> getCollisionManager() const;
