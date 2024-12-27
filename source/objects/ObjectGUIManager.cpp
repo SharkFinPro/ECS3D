@@ -30,24 +30,28 @@ void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
   }
 }
 
+bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
+                                  const std::shared_ptr<ObjectUINode>& target)
+{
+  auto current = source;
+  while (current)
+  {
+    if (target == current)
+    {
+      return true;
+    }
+
+    current = current->parent;
+  }
+
+  return false;
+}
+
 void ObjectGUIManager::reorderObjectGui()
 {
   for (const auto& node : objectUINodesSetForReassignment)
   {
-    bool isAncestor = false;
-    auto parent = node->newParent;
-    while (parent)
-    {
-      if (node == parent)
-      {
-        isAncestor = true;
-        break;
-      }
-
-      parent = parent->parent;
-    }
-
-    if (!isAncestor)
+    if (!isAncestor(node->newParent, node))
     {
       continue;
     }
