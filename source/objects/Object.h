@@ -5,7 +5,6 @@
 #include <unordered_map>
 #include <memory>
 #include <string>
-
 #include "ObjectManager.h"
 
 enum class ComponentType;
