@@ -7,15 +7,10 @@
 
 void CollisionManager::addObject(const std::shared_ptr<Object>& object)
 {
-  const auto colliderComponent = object->getComponent(ComponentType::collider);
-  if (!colliderComponent)
+  if (const auto collider = object->getComponent<Collider>(ComponentType::collider))
   {
-    return;
+    collisionEdges.push_back({object, collider, 0.0f});
   }
-
-  const auto collider = std::dynamic_pointer_cast<Collider>(colliderComponent);
-
-  collisionEdges.push_back({object, collider, 0.0f});
 }
 
 void CollisionManager::removeObject(const std::shared_ptr<Object>& object)

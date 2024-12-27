@@ -55,7 +55,9 @@ private:
 template<typename T>
 std::shared_ptr<T> Object::getComponent(const ComponentType type) const
 {
-  return std::dynamic_pointer_cast<T>(getComponent(type));
+  const auto component = getComponent(type);
+
+  return component ? std::dynamic_pointer_cast<T>(component) : nullptr;
 }
 
 #endif //OBJECT_H
