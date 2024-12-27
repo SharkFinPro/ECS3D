@@ -11,6 +11,8 @@ void ObjectGUIManager::update()
   displayObjectListGui();
 
   reorderObjectGui();
+
+  displaySelectedObjectGui();
 }
 
 void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
@@ -28,6 +30,18 @@ void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
   {
     objectUINodes.push_back(uiNode);
   }
+}
+
+void ObjectGUIManager::displaySelectedObjectGui() const
+{
+  ImGui::Begin("Selected Object");
+
+  if (selectedObject)
+  {
+    selectedObject->displayGui();
+  }
+
+  ImGui::End();
 }
 
 bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
@@ -211,18 +225,6 @@ void ObjectGUIManager::displayObjectListGui()
     }
 
     ImGui::EndDragDropTarget();
-  }
-
-  ImGui::End();
-}
-
-void ObjectGUIManager::displaySelectedObjectGui() const
-{
-  ImGui::Begin("Selected Object");
-
-  if (selectedObject)
-  {
-    selectedObject->displayGui();
   }
 
   ImGui::End();

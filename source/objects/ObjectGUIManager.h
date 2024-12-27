@@ -31,6 +31,8 @@ private:
 
   std::shared_ptr<Object> selectedObject;
 
+  void displaySelectedObjectGui() const;
+
   static bool isAncestor(const std::shared_ptr<ObjectUINode>& source, const std::shared_ptr<ObjectUINode>& target);
 
   void reorderObjectGui();
@@ -42,8 +44,6 @@ private:
   void displayObjectGui(const std::shared_ptr<ObjectUINode>& node);
 
   void displayObjectListGui();
-
-  void displaySelectedObjectGui() const;
 };
 
 
