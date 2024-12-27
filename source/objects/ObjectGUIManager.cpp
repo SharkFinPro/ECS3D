@@ -1,9 +1,7 @@
 #include "ObjectGUIManager.h"
-
-#include <algorithm>
-
 #include "Object.h"
 #include <imgui.h>
+#include <algorithm>
 
 ObjectGUIManager::ObjectGUIManager(ObjectManager* objectManager)
   : objectManager(objectManager)
