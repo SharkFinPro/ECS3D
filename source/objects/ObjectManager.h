@@ -8,12 +8,7 @@ class Object;
 class ECS3D;
 class Collider;
 class RigidBody;
-
-struct LeftEdge {
-  std::shared_ptr<Object> object;
-  std::shared_ptr<Collider> collider;
-  float position;
-};
+class CollisionManager;
 
 struct ObjectUINode {
   std::shared_ptr<Object> object;
@@ -37,11 +32,9 @@ public:
   void setECS(ECS3D* ecs);
   [[nodiscard]] ECS3D* getECS() const;
 
+  [[nodiscard]] std::shared_ptr<CollisionManager> getCollisionManager() const;
+
   void addObject(const std::shared_ptr<Object>& object, const std::shared_ptr<ObjectUINode>& parentUINode = nullptr);
-
-  void addObjectToCollisions(const std::shared_ptr<Object>& object);
-
-  void removeObjectFromCollisions(const std::shared_ptr<Object>& object);
 
   void startScene();
 
@@ -54,7 +47,7 @@ private:
 
   std::vector<std::shared_ptr<Object>> objects;
 
-  std::vector<LeftEdge> collisionEdges;
+  std::shared_ptr<CollisionManager> collisionManager;
 
   std::vector<std::shared_ptr<ObjectUINode>> objectUINodes;
   std::vector<std::shared_ptr<ObjectUINode>> objectUINodesSetForReassignment;
@@ -68,12 +61,6 @@ private:
 
   void variableUpdate(float dt) const;
   void fixedUpdate(float dt);
-
-  void checkCollisions();
-
-  void findCollisions(const LeftEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
-
-  static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, const std::vector<std::shared_ptr<Object>>& collidedObjects);
 
   void reorderObjectGui();
 

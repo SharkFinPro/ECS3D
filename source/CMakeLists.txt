@@ -45,6 +45,8 @@ add_library(${PROJECT_NAME}
   assets/TextureAsset.h
   assets/ModelAsset.cpp
   assets/ModelAsset.h
+  objects/CollisionManager.cpp
+  objects/CollisionManager.h
 )
 
 # Declare VulkanEngine as a dependency
