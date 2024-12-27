@@ -33,6 +33,9 @@ private:
 
   void displaySelectedObjectGui() const;
 
+  static bool containsObjectUINode(const std::vector<std::shared_ptr<ObjectUINode>>& rootNodes,
+                                   const std::shared_ptr<Object>& object);
+
   static bool isAncestor(const std::shared_ptr<ObjectUINode>& source, const std::shared_ptr<ObjectUINode>& target);
 
   void reorderObjectGui();

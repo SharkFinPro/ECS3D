@@ -27,7 +27,7 @@ public:
 
   [[nodiscard]] std::shared_ptr<CollisionManager> getCollisionManager() const;
 
-  void addObject(const std::shared_ptr<Object>& object, bool createUI = true);
+  void addObject(const std::shared_ptr<Object>& object);
 
   void startScene();
 

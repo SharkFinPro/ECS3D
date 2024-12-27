@@ -18,6 +18,11 @@ void ObjectGUIManager::update()
 void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
                                  const std::shared_ptr<ObjectUINode>& parentUINode)
 {
+  if (containsObjectUINode(objectUINodes, object))
+  {
+    return;
+  }
+
   const auto uiNode = std::make_shared<ObjectUINode>();
   uiNode->object = object;
   uiNode->parent = parentUINode;
@@ -42,6 +47,20 @@ void ObjectGUIManager::displaySelectedObjectGui() const
   }
 
   ImGui::End();
+}
+
+bool ObjectGUIManager::containsObjectUINode(const std::vector<std::shared_ptr<ObjectUINode>>& rootNodes,
+                                            const std::shared_ptr<Object>& object)
+{
+  for (const auto& node : rootNodes)
+  {
+    if (node->object == object || containsObjectUINode(node->children, object))
+    {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
@@ -136,8 +155,8 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
     const auto newObj = std::make_shared<Object>();
     newObj->setParent(node->object);
 
-    objectManager->addObject(newObj, false);
     addObject(newObj, node);
+    objectManager->addObject(newObj);
     selectedObject = newObj;
   }
 }
@@ -195,8 +214,8 @@ void ObjectGUIManager::displayObjectListGui()
   if (ImGui::Button("Create New Object", {ImGui::GetContentRegionAvail().x, 45}))
   {
     const auto newObject = std::make_shared<Object>();
-    objectManager->addObject(newObject, false);
     addObject(newObject);
+    objectManager->addObject(newObject);
     selectedObject = newObject;
   }
 
