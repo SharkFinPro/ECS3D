@@ -13,10 +13,10 @@ public:
   [[nodiscard]] glm::vec3 getScale() const;
   [[nodiscard]] glm::vec3 getRotation() const;
 
-  void setScale(glm::vec3 scale);
-  void setRotation(glm::vec3 rotation);
+  void setScale(glm::vec3 scale) const;
+  void setRotation(glm::vec3 rotation) const;
 
-  void move(const glm::vec3& direction);
+  void move(const glm::vec3& direction) const;
 
   void displayGui() override;
 

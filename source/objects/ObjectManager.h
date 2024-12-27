@@ -17,7 +17,9 @@ struct LeftEdge {
 
 struct ObjectUINode {
   std::shared_ptr<Object> object;
+  std::shared_ptr<ObjectUINode> parent = nullptr;
   std::vector<std::shared_ptr<ObjectUINode>> children;
+  std::shared_ptr<ObjectUINode> newParent = nullptr;
 };
 
 enum class SceneStatus {
@@ -35,7 +37,7 @@ public:
   void setECS(ECS3D* ecs);
   [[nodiscard]] ECS3D* getECS() const;
 
-  void addObject(const std::shared_ptr<Object>& object);
+  void addObject(const std::shared_ptr<Object>& object, const std::shared_ptr<ObjectUINode>& parentUINode = nullptr);
 
   void addObjectToCollisions(const std::shared_ptr<Object>& object);
 
@@ -55,6 +57,7 @@ private:
   std::vector<LeftEdge> collisionEdges;
 
   std::vector<std::shared_ptr<ObjectUINode>> objectUINodes;
+  std::vector<std::shared_ptr<ObjectUINode>> objectUINodesSetForReassignment;
 
   const float fixedUpdateDt;
   float timeAccumulator;
@@ -71,6 +74,10 @@ private:
   void findCollisions(const LeftEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, const std::vector<std::shared_ptr<Object>>& collidedObjects);
+
+  void reorderObjectGui();
+
+  void displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node);
 
   void displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node);
 

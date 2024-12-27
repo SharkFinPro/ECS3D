@@ -40,16 +40,6 @@ std::shared_ptr<Object> Object::getParent() const
   return parent;
 }
 
-void Object::setUINode(const std::shared_ptr<ObjectUINode> &uiNode)
-{
-  this->uiNode = uiNode;
-}
-
-std::shared_ptr<ObjectUINode> Object::getUINode() const
-{
-  return uiNode;
-}
-
 void Object::addComponent(const std::shared_ptr<Component>& component, const bool setOwner)
 {
   if (setOwner)

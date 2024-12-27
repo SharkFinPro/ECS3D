@@ -28,7 +28,7 @@ ECS3D* ObjectManager::getECS() const
   return ecs;
 }
 
-void ObjectManager::addObject(const std::shared_ptr<Object>& object)
+void ObjectManager::addObject(const std::shared_ptr<Object>& object, const std::shared_ptr<ObjectUINode>& parentUINode)
 {
   object->setManager(this);
 
@@ -39,16 +39,15 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 
   objects.push_back(object);
 
-  const auto uiNode = std::make_shared<ObjectUINode>(object);
-  object->setUINode(uiNode);
+  const auto uiNode = std::make_shared<ObjectUINode>(object, parentUINode);
 
-  if (!object->getParent())
+  if (parentUINode)
   {
-    objectUINodes.push_back(uiNode);
+    parentUINode->children.push_back(uiNode);
   }
   else
   {
-    object->getParent()->getUINode()->children.push_back(uiNode);
+    objectUINodes.push_back(uiNode);
   }
 }
 
@@ -245,6 +244,82 @@ void ObjectManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody
   }
 }
 
+void ObjectManager::reorderObjectGui()
+{
+  for (const auto& node : objectUINodesSetForReassignment)
+  {
+    bool isAncestor = false;
+    auto parent = node->newParent;
+    while (parent)
+    {
+      if (node == parent)
+      {
+        isAncestor = true;
+        break;
+      }
+
+      parent = parent->parent;
+    }
+
+    if (!isAncestor)
+    {
+      continue;
+    }
+
+    for (auto& child : node->children)
+    {
+      child->newParent = node->parent;
+      objectUINodesSetForReassignment.push_back(child);
+    }
+  }
+
+  for (size_t i = objectUINodesSetForReassignment.size(); i > 0; i--)
+  {
+    auto node = objectUINodesSetForReassignment[i - 1];
+
+    std::erase(node->parent ? node->parent->children : objectUINodes, node);
+
+    if (node->newParent)
+    {
+      node->parent = node->newParent;
+      node->object->setParent(node->newParent->object);
+      node->newParent->children.push_back(node);
+      node->newParent = nullptr;
+    }
+    else
+    {
+      node->parent = nullptr;
+      node->object->setParent(nullptr);
+      objectUINodes.push_back(node);
+    }
+
+    objectUINodesSetForReassignment.pop_back();
+  }
+}
+
+void ObjectManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
+{
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("objectUINode"))
+    {
+      const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
+
+      objectNode->newParent = node;
+      objectUINodesSetForReassignment.push_back(objectNode);
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
+  if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+  {
+    ImGui::SetDragDropPayload("objectUINode", &node, sizeof(node));
+    ImGui::Text("Object");
+    ImGui::EndDragDropSource();
+  }
+}
+
 void ObjectManager::displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node)
 {
   ImGui::SameLine();
@@ -259,14 +334,14 @@ void ObjectManager::displayCreateObjectChildButton(const std::shared_ptr<ObjectU
     const auto newObj = std::make_shared<Object>();
     newObj->setParent(node->object);
 
-    addObject(newObj);
+    addObject(newObj, node);
     selectedObject = newObj;
   }
 }
 
 void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
 {
-  ImGui::PushID(&node);
+  ImGui::PushID(&node->object);
 
   if (ImGui::TreeNodeEx(node->object->getName().c_str(),
                         (node->children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
@@ -278,6 +353,8 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
     {
       selectedObject = node->object;
     }
+
+    displayObjectDragDrop(node);
 
     const bool hasChildren = !node->children.empty();
 
@@ -295,6 +372,13 @@ void ObjectManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
   }
   else
   {
+    if (ImGui::IsItemClicked())
+    {
+      selectedObject = node->object;
+    }
+
+    displayObjectDragDrop(node);
+
     displayCreateObjectChildButton(node);
   }
 
@@ -322,6 +406,8 @@ void ObjectManager::displayGui()
   }
 
   ImGui::End();
+
+  reorderObjectGui();
 
   ImGui::Begin("Selected Object");
 

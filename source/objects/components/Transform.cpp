@@ -17,7 +17,7 @@ glm::vec3 Transform::getPosition() const
   {
     if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
     {
-      return *parentTransform->currentPosition + *currentPosition;
+      return parentTransform->getPosition() + *currentPosition;
     }
   }
 
@@ -30,7 +30,7 @@ glm::vec3 Transform::getScale() const
   {
     if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
     {
-      return *parentTransform->currentScale * *currentScale;
+      return parentTransform->getScale() * *currentScale;
     }
   }
 
@@ -43,24 +43,24 @@ glm::vec3 Transform::getRotation() const
   {
     if (const auto& parentTransform = std::dynamic_pointer_cast<Transform>(owner->getParent()->getComponent(ComponentType::transform)))
     {
-      return *parentTransform->currentRotation + *currentRotation;
+      return parentTransform->getRotation() + *currentRotation;
     }
   }
 
   return *currentRotation;
 }
 
-void Transform::setScale(const glm::vec3 scale)
+void Transform::setScale(const glm::vec3 scale) const
 {
   *currentScale = scale;
 }
 
-void Transform::setRotation(const glm::vec3 rotation)
+void Transform::setRotation(const glm::vec3 rotation) const
 {
   *currentRotation = rotation;
 }
 
-void Transform::move(const glm::vec3& direction)
+void Transform::move(const glm::vec3& direction) const
 {
   *currentPosition += direction;
 }
