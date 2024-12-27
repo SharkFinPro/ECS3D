@@ -17,7 +17,7 @@ void RigidBody::fixedUpdate(const float dt)
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = std::dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {
@@ -63,7 +63,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   const auto collisionNormal = normalize(minimumTranslationVector);
 
-  const auto otherRb = dynamic_pointer_cast<RigidBody>(other->getComponent(ComponentType::rigidBody));
+  const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
 
   if (!otherRb)
   {
@@ -89,7 +89,7 @@ void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {

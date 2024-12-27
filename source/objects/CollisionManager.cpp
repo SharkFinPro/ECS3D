@@ -51,7 +51,7 @@ void CollisionManager::checkCollisions()
   {
     const auto edge = collisionEdges[i];
 
-    auto rigidBody = std::dynamic_pointer_cast<RigidBody>(edge.object->getComponent(ComponentType::rigidBody));
+    auto rigidBody = edge.object->getComponent<RigidBody>(ComponentType::rigidBody);
 
     if (!rigidBody)
     {

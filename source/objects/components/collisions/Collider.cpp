@@ -24,7 +24,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = std::dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {
@@ -32,8 +32,8 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
     }
   }
 
-  const auto otherTransform = std::dynamic_pointer_cast<Transform>(other->getComponent(ComponentType::transform));
-  const auto otherCollider = std::dynamic_pointer_cast<Collider>(other->getComponent(ComponentType::collider));
+  const auto otherTransform = other->getComponent<Transform>(ComponentType::transform);
+  const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
   if (!otherTransform || !otherCollider)
   {
     return false;
@@ -87,7 +87,7 @@ glm::vec3 Collider::getRoughFurthestPoint(const glm::vec3 direction)
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = std::dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {
@@ -338,7 +338,7 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {
@@ -346,8 +346,8 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
     }
   }
 
-  const auto otherTransform = dynamic_pointer_cast<Transform>(other->getComponent(ComponentType::transform));
-  const auto otherCollider = dynamic_pointer_cast<Collider>(other->getComponent(ComponentType::collider));
+  const auto otherTransform = other->getComponent<Transform>(ComponentType::transform);
+  const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
   if (!otherTransform || !otherCollider)
   {
     throw std::runtime_error("Collider::EPA::Missing Transform/Collider");

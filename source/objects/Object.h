@@ -22,6 +22,9 @@ public:
 
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 
+  template<typename T>
+  [[nodiscard]] std::shared_ptr<T> getComponent(ComponentType type) const;
+
   void variableUpdate(float dt);
   void fixedUpdate(float dt);
 
@@ -49,5 +52,10 @@ private:
 };
 
 
+template<typename T>
+std::shared_ptr<T> Object::getComponent(const ComponentType type) const
+{
+  return std::dynamic_pointer_cast<T>(getComponent(type));
+}
 
 #endif //OBJECT_H
