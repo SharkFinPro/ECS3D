@@ -1,11 +1,7 @@
 #include "RigidBody.h"
-
-#include <cmath>
-#include <imgui.h>
-
-#include "../Object.h"
 #include "Transform.h"
-
+#include "../Object.h"
+#include <imgui.h>
 #include <glm/glm.hpp>
 
 RigidBody::RigidBody()
