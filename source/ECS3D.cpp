@@ -71,7 +71,7 @@ void ECS3D::displayMessageLog()
 
 	for (const auto& message : errorMessages)
 	{
-		ImGui::TextWrapped(message.c_str());
+		ImGui::TextWrapped("%s", message.c_str());
 	}
 
 	ImGui::End();
