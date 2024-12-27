@@ -63,28 +63,26 @@ void ObjectGUIManager::reorderObjectGui()
     }
   }
 
-  for (size_t i = objectUINodesSetForReassignment.size(); i > 0; i--)
+  for (auto& node : objectUINodesSetForReassignment)
   {
-    auto node = objectUINodesSetForReassignment[i - 1];
-
     std::erase(node->parent ? node->parent->children : objectUINodes, node);
+
+    node->parent = node->newParent;
+    node->object->setParent(node->newParent->object);
 
     if (node->newParent)
     {
-      node->parent = node->newParent;
-      node->object->setParent(node->newParent->object);
       node->newParent->children.push_back(node);
-      node->newParent = nullptr;
     }
     else
     {
-      node->parent = nullptr;
-      node->object->setParent(nullptr);
       objectUINodes.push_back(node);
     }
 
-    objectUINodesSetForReassignment.pop_back();
+    node->newParent = nullptr;
   }
+
+  objectUINodesSetForReassignment.clear();
 }
 
 void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
