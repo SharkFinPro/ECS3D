@@ -149,7 +149,7 @@ void RigidBody::stop()
   currentGravity = &initialGravity;
 }
 
-void RigidBody::limitMovement()
+void RigidBody::limitMovement() const
 {
   if (length(*currentVelocity) < 1e-5f)
   {
