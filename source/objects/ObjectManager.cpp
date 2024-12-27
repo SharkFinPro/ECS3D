@@ -1,6 +1,5 @@
 #include "ObjectManager.h"
 #include "Object.h"
-#include "components/Component.h"
 #include "CollisionManager.h"
 #include "ObjectGUIManager.h"
 #include <imgui.h>
@@ -40,10 +39,7 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object, bool create
 {
   object->setManager(this);
 
-  if (object->getComponent(ComponentType::collider))
-  {
-    collisionManager->addObject(object);
-  }
+  collisionManager->addObject(object);
 
   objects.push_back(object);
 
