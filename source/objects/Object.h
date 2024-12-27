@@ -20,8 +20,6 @@ public:
 
   void addComponent(const std::shared_ptr<Component>& component, bool setOwner = true);
 
-  [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
-
   template<typename T>
   [[nodiscard]] std::shared_ptr<T> getComponent(ComponentType type) const;
 
@@ -49,6 +47,8 @@ private:
   std::string name;
 
   bool showComponentSelector;
+
+  [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 };
 
 
