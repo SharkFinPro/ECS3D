@@ -1,4 +1,7 @@
 #include "ObjectGUIManager.h"
+
+#include <algorithm>
+
 #include "Object.h"
 #include <imgui.h>
 
@@ -52,15 +55,10 @@ void ObjectGUIManager::displaySelectedObjectGui() const
 bool ObjectGUIManager::containsObjectUINode(const std::vector<std::shared_ptr<ObjectUINode>>& rootNodes,
                                             const std::shared_ptr<Object>& object)
 {
-  for (const auto& node : rootNodes)
+  return std::ranges::any_of(rootNodes, [&](const auto& node)
   {
-    if (node->object == object || containsObjectUINode(node->children, object))
-    {
-      return true;
-    }
-  }
-
-  return false;
+    return node->object == object || containsObjectUINode(node->children, object);
+  });
 }
 
 bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
