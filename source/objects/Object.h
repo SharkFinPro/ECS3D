@@ -5,7 +5,6 @@
 #include <unordered_map>
 #include <memory>
 #include <string>
-
 #include "ObjectManager.h"
 
 enum class ComponentType;
@@ -21,7 +20,8 @@ public:
 
   void addComponent(const std::shared_ptr<Component>& component, bool setOwner = true);
 
-  [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
+  template<typename T>
+  [[nodiscard]] std::shared_ptr<T> getComponent(ComponentType type) const;
 
   void variableUpdate(float dt);
   void fixedUpdate(float dt);
@@ -47,8 +47,17 @@ private:
   std::string name;
 
   bool showComponentSelector;
+
+  [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 };
 
 
+template<typename T>
+std::shared_ptr<T> Object::getComponent(const ComponentType type) const
+{
+  const auto component = getComponent(type);
+
+  return component ? std::dynamic_pointer_cast<T>(component) : nullptr;
+}
 
 #endif //OBJECT_H

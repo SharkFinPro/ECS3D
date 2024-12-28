@@ -1,10 +1,7 @@
 #include "Object.h"
-#include "components/Component.h"
-#include <utility>
-#include <imgui.h>
-#include <ranges>
-
 #include "../ECS3D.h"
+#include "CollisionManager.h"
+#include "components/Component.h"
 #include "components/LightRenderer.h"
 #include "components/ModelRenderer.h"
 #include "components/Player.h"
@@ -12,6 +9,8 @@
 #include "components/Transform.h"
 #include "components/collisions/BoxCollider.h"
 #include "components/collisions/SphereCollider.h"
+#include <imgui.h>
+#include <utility>
 
 constexpr int MAX_CHARACTERS = 30;
 
@@ -48,26 +47,6 @@ void Object::addComponent(const std::shared_ptr<Component>& component, const boo
   }
 
   components.emplace(component->getType(), component);
-}
-
-std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
-{
-  const auto component = components.find(type);
-
-  if (component == components.end())
-  {
-    if (parent != nullptr)
-    {
-      if (type == ComponentType::rigidBody)
-      {
-        return parent->getComponent(type);
-      }
-    }
-
-    return nullptr;
-  }
-
-  return component->second;
 }
 
 void Object::variableUpdate(const float dt)
@@ -128,7 +107,7 @@ void Object::displayGui()
     {
       if (component->getType() == ComponentType::collider)
       {
-        manager->removeObjectFromCollisions(shared_from_this());
+        manager->getCollisionManager()->addObject(shared_from_this());
       }
 
       component.reset();
@@ -170,11 +149,11 @@ void Object::displayGui()
                 break;
               case ComponentType::SubComponentType_boxCollider:
                 addComponent(std::make_shared<BoxCollider>());
-                manager->addObjectToCollisions(shared_from_this());
+                manager->getCollisionManager()->addObject(shared_from_this());
                 break;
               case ComponentType::SubComponentType_sphereCollider:
                 addComponent(std::make_shared<SphereCollider>());
-                manager->addObjectToCollisions(shared_from_this());
+                manager->getCollisionManager()->addObject(shared_from_this());
                 break;
               case ComponentType::player:
                 addComponent(std::make_shared<Player>());
@@ -210,4 +189,24 @@ void Object::stop() const
   {
     component->stop();
   }
+}
+
+std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
+{
+  const auto component = components.find(type);
+
+  if (component == components.end())
+  {
+    if (parent != nullptr)
+    {
+      if (type == ComponentType::rigidBody)
+      {
+        return parent->getComponent(type);
+      }
+    }
+
+    return nullptr;
+  }
+
+  return component->second;
 }

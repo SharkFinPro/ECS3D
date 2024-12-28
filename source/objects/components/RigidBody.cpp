@@ -1,11 +1,7 @@
 #include "RigidBody.h"
-
-#include <cmath>
-#include <imgui.h>
-
-#include "../Object.h"
 #include "Transform.h"
-
+#include "../Object.h"
+#include <imgui.h>
 #include <glm/glm.hpp>
 
 RigidBody::RigidBody()
@@ -21,7 +17,7 @@ void RigidBody::fixedUpdate(const float dt)
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = std::dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {
@@ -45,7 +41,7 @@ void RigidBody::fixedUpdate(const float dt)
   }
 }
 
-void RigidBody::applyForce(const glm::vec3& force)
+void RigidBody::applyForce(const glm::vec3& force) const
 {
   *currentVelocity += force;
 }
@@ -67,7 +63,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   const auto collisionNormal = normalize(minimumTranslationVector);
 
-  const auto otherRb = dynamic_pointer_cast<RigidBody>(other->getComponent(ComponentType::rigidBody));
+  const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
 
   if (!otherRb)
   {
@@ -93,7 +89,7 @@ void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {
@@ -112,7 +108,7 @@ bool RigidBody::isFalling() const
   return falling;
 }
 
-void RigidBody::setVelocity(const glm::vec3& velocity)
+void RigidBody::setVelocity(const glm::vec3& velocity) const
 {
   *currentVelocity = velocity;
 }
@@ -153,9 +149,9 @@ void RigidBody::stop()
   currentGravity = &initialGravity;
 }
 
-void RigidBody::limitMovement()
+void RigidBody::limitMovement() const
 {
-  if (glm::length(*currentVelocity) < 1e-5f)
+  if (length(*currentVelocity) < 1e-5f)
   {
     return;
   }

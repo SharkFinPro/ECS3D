@@ -1,15 +1,12 @@
 #ifndef SCENE_H
 #define SCENE_H
 
-#include <vector>
 #include <memory>
 #include <glm/vec3.hpp>
 
 class SceneManager;
 class AssetManager;
 class ObjectManager;
-class Object;
-class Light;
 
 struct TransformData {
   glm::vec3 position = { 0, 0, 0 };
@@ -39,7 +36,6 @@ private:
   SceneManager* sceneManager;
   std::shared_ptr<AssetManager> assetManager;
   std::shared_ptr<ObjectManager> objectManager;
-  std::vector<std::shared_ptr<Light>> lights;
 };
 
 

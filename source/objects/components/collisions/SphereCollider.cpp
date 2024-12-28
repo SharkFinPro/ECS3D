@@ -2,7 +2,6 @@
 #include "../Transform.h"
 #include "../../Object.h"
 #include <glm/gtx/component_wise.inl>
-#include <imgui.h>
 #include <stdexcept>
 
 SphereCollider::SphereCollider()
@@ -13,7 +12,7 @@ float SphereCollider::getRadius()
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = std::dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {
@@ -40,7 +39,7 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = std::dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {

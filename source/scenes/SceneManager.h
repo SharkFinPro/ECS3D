@@ -1,11 +1,8 @@
 #ifndef SCENEMANAGER_H
 #define SCENEMANAGER_H
 
-#include <string>
 #include <memory>
 #include <vector>
-#include <unordered_map>
-#include <VulkanEngine/VulkanEngine.h>
 
 class ECS3D;
 class Scene;

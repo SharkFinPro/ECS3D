@@ -21,7 +21,7 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
 {
   if (transform_ptr.expired())
   {
-    transform_ptr = dynamic_pointer_cast<Transform>(owner->getComponent(ComponentType::transform));
+    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
 
     if (transform_ptr.expired())
     {
@@ -31,7 +31,7 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
 
   if (rigidBody_ptr.expired())
   {
-    rigidBody_ptr = dynamic_pointer_cast<RigidBody>(getOwner()->getComponent(ComponentType::rigidBody));
+    rigidBody_ptr = owner->getComponent<RigidBody>(ComponentType::rigidBody);
 
     if (rigidBody_ptr.expired())
     {
@@ -70,7 +70,7 @@ void Player::handleInput()
 {
   if (rigidBody_ptr.expired())
   {
-    rigidBody_ptr = dynamic_pointer_cast<RigidBody>(getOwner()->getComponent(ComponentType::rigidBody));
+    rigidBody_ptr = owner->getComponent<RigidBody>(ComponentType::rigidBody);
 
     if (rigidBody_ptr.expired())
     {
