@@ -99,7 +99,7 @@ glm::vec3 Collider::getRoughFurthestPoint(const glm::vec3 direction)
   {
     const auto transformScale = transform->getScale();
     const float scale = std::max({transformScale.x, transformScale.y, transformScale.z});
-    return direction * 5.0f * scale + transform->getPosition();
+    return direction * 2.0f * scale + transform->getPosition();
   }
 
   return {0, 0, 0};
