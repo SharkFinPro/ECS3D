@@ -60,7 +60,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
     support = getSupport(otherCollider, normalize(direction));
 
-    if (dot(support, direction) < 0.2f)
+    if (dot(support, direction) < 0)
     {
       return false;
     }
