@@ -36,14 +36,14 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
     }
   }
 
-  float furthestDistance = std::numeric_limits<float>::lowest();
+  float largestDot = std::numeric_limits<float>::lowest();
   glm::vec3 furthestVertex{ 0, 0, 0 };
 
   for (auto& vertex : transformedBoxVertices)
   {
-    if (const float distance = dot(vertex, direction); distance > furthestDistance)
+    if (const float currentDot = dot(vertex, direction); currentDot > largestDot)
     {
-      furthestDistance = distance;
+      largestDot = currentDot;
       furthestVertex = vertex;
     }
   }
