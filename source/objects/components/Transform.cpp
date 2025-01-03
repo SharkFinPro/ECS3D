@@ -58,19 +58,19 @@ glm::vec3 Transform::getRotation() const
 void Transform::setScale(const glm::vec3 scale)
 {
   *currentScale = scale;
-  updateID++;
+  ++updateID;
 }
 
 void Transform::setRotation(const glm::vec3 rotation)
 {
   *currentRotation = rotation;
-  updateID++;
+  ++updateID;
 }
 
 void Transform::move(const glm::vec3& direction)
 {
   *currentPosition += direction;
-  updateID++;
+  ++updateID;
 }
 
 void Transform::displayGui()
@@ -103,7 +103,7 @@ void Transform::displayGui()
       currentScale->x = currentScale->y = currentScale->z = combinedScale;
     }
 
-    updateID++;
+    ++updateID;
 
     ImGui::PopID();
   }
@@ -119,7 +119,7 @@ void Transform::start()
   currentScale = &liveScale;
   currentRotation = &liveRotation;
 
-  updateID++;
+  ++updateID;
 }
 
 void Transform::stop()
@@ -128,5 +128,5 @@ void Transform::stop()
   currentScale = &initialScale;
   currentRotation = &initialRotation;
 
-  updateID++;
+  ++updateID;
 }
