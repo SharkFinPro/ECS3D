@@ -55,7 +55,7 @@ void Simplex::removeD()
   --length;
 }
 
-void Simplex::addVertex(const glm::vec3 vertex)
+void Simplex::addVertex(const glm::vec3& vertex)
 {
   for (auto i = length; i > 0; --i)
   {
