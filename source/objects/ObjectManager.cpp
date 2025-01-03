@@ -97,7 +97,7 @@ void ObjectManager::fixedUpdate(const float dt)
   uint8_t steps = 1;
   while (timeAccumulator >= fixedUpdateDt && steps <= 3)
   {
-    steps++;
+    ++steps;
 
     for (const auto& object : objects)
     {

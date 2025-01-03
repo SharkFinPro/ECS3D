@@ -484,7 +484,7 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
   {
     auto sortedEdge = edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first);
 
-    edgeCount[sortedEdge]++;
+    ++edgeCount[sortedEdge];
   }
 
   std::vector<Edge> uniqueEdges;

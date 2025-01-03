@@ -72,5 +72,5 @@ void Simplex::addVertex(const glm::vec3 vertex)
   }
 
   vertices[0] = vertex;
-  length++;
+  ++length;
 }
