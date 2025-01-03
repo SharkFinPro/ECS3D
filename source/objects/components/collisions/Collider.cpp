@@ -363,7 +363,6 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
   uint8_t iteration = 0;
   while (iteration < maxIterations)
   {
-    iteration++;
     auto currentMinDist = findClosestFace(closestFaceData, polytope);
 
     if (closeEnough(currentMinDist, previousMinDist, closestFaceData.closestPoint, previousClosestPoint))
@@ -384,6 +383,8 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
 
     previousMinDist = currentMinDist;
     previousClosestPoint = closestFaceData.closestPoint;
+
+    iteration++;
   }
 
   return closestFaceData.closestPoint;
