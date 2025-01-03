@@ -124,26 +124,21 @@ void ObjectManager::displaySceneStatusGui()
     }
   }
 
-  if (sceneStatus == SceneStatus::running || sceneStatus == SceneStatus::paused)
+  if (sceneStatus == SceneStatus::running)
   {
-    if (sceneStatus == SceneStatus::paused)
+    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
     {
-      ImGui::SameLine();
+      pauseScene();
     }
+  }
+
+  if (sceneStatus != SceneStatus::stopped)
+  {
+    ImGui::SameLine();
 
     if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
     {
       resetScene();
-    }
-  }
-
-  if (sceneStatus == SceneStatus::running)
-  {
-    ImGui::SameLine();
-
-    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
-    {
-      pauseScene();
     }
   }
 
