@@ -9,22 +9,22 @@ size_t Simplex::size() const
   return length;
 }
 
-const glm::vec3 & Simplex::getA() const
+const glm::vec3& Simplex::getA() const
 {
   return vertices[0];
 }
 
-const glm::vec3 & Simplex::getB() const
+const glm::vec3& Simplex::getB() const
 {
   return vertices[1];
 }
 
-const glm::vec3 & Simplex::getC() const
+const glm::vec3& Simplex::getC() const
 {
   return vertices[2];
 }
 
-const glm::vec3 & Simplex::getD() const
+const glm::vec3& Simplex::getD() const
 {
   return vertices[3];
 }
