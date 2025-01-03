@@ -9,14 +9,16 @@ public:
   explicit Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation);
   ~Transform() override = default;
 
+  [[nodiscard]] uint8_t getUpdateID() const;
+
   [[nodiscard]] glm::vec3 getPosition() const;
   [[nodiscard]] glm::vec3 getScale() const;
   [[nodiscard]] glm::vec3 getRotation() const;
 
-  void setScale(glm::vec3 scale) const;
-  void setRotation(glm::vec3 rotation) const;
+  void setScale(glm::vec3 scale);
+  void setRotation(glm::vec3 rotation);
 
-  void move(const glm::vec3& direction) const;
+  void move(const glm::vec3& direction);
 
   void displayGui() override;
 
@@ -25,6 +27,8 @@ public:
   void stop() override;
 
 private:
+  uint8_t updateID;
+
   glm::vec3 initialPosition;
   glm::vec3 livePosition;
   glm::vec3* currentPosition;
