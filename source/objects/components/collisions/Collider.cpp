@@ -52,8 +52,8 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
   direction *= -1.0f;
 
-  constexpr int maxIterations = 50;
-  int iteration = 0;
+  constexpr uint8_t maxIterations = 50;
+  uint8_t iteration = 0;
   do
   {
     iteration++;
@@ -359,8 +359,8 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
   std::optional<float> previousMinDist;
   ClosestFaceData closestFaceData{};
 
-  constexpr int maxIterations = 25;
-  int iteration = 0;
+  constexpr uint8_t maxIterations = 25;
+  uint8_t iteration = 0;
   while (iteration < maxIterations)
   {
     iteration++;
@@ -534,7 +534,7 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
       .vertices = {
         faceData.aIndex,
         faceData.bIndex,
-        static_cast<int>(polytope.vertices.size())
+        static_cast<uint8_t>(polytope.vertices.size())
       },
       .normal = faceData.normal,
       .closestPoint = {

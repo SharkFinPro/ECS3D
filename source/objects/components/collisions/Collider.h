@@ -17,7 +17,7 @@ struct ClosestPoint {
 };
 
 struct Face {
-  std::array<int, 3> vertices;
+  std::array<uint8_t, 3> vertices;
   glm::vec3 normal;
   ClosestPoint closestPoint;
 };
@@ -29,19 +29,19 @@ struct Polytope {
 
 struct ClosestFaceData {
   glm::vec3 closestPoint;
-  int closestFaceIndex;
+  uint8_t closestFaceIndex;
 };
 
 struct FaceData {
-  int aIndex;
-  int bIndex;
+  uint8_t aIndex;
+  uint8_t bIndex;
   glm::vec3 a;
   glm::vec3 b;
   glm::vec3 c;
   glm::vec3 normal;
 };
 
-using Edge = std::pair<int, int>;
+using Edge = std::pair<uint8_t, uint8_t>;
 
 enum class ColliderType {
   boxCollider,
