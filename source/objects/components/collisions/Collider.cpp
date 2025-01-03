@@ -544,13 +544,13 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
   }
 
   const auto closestPoint = closestPointOnPlane(faceData.a, faceData.normal);
+  float distance = dot(closestPoint, closestPoint);
 
-  uint8_t faceIndex = polytope.vertices.size();
-  if (const float dist = polytope.faces[faceIndex].closestPoint.distance; dist < currentMinDist)
+  if (distance < currentMinDist)
   {
-    currentMinDist = dist;
-    closestFaceData.closestPoint = polytope.faces[faceIndex].closestPoint.point;
-    closestFaceData.closestFaceIndex = faceIndex;
+    currentMinDist = distance;
+    closestFaceData.closestPoint = closestPoint;
+    closestFaceData.closestFaceIndex = polytope.faces.size();
   }
 
   polytope.faces.push_back({
@@ -562,7 +562,7 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
       .normal = faceData.normal,
       .closestPoint = {
         .point = closestPoint,
-        .distance = dot(closestPoint, closestPoint)
+        .distance = distance
       }
   });
 }
