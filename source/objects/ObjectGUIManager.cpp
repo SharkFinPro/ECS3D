@@ -78,7 +78,7 @@ bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
 
 void ObjectGUIManager::reorderObjectGui()
 {
-  for (int i = 0; i < objectUINodesSetForReassignment.size(); i++)
+  for (int i = 0; i < objectUINodesSetForReassignment.size(); ++i)
   {
     const auto node = objectUINodesSetForReassignment[i];
 

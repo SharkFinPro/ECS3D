@@ -42,7 +42,7 @@ void CollisionManager::checkCollisions()
   });
 
 #pragma omp parallel for default(none) num_threads(6)
-  for (int i = 0; i < collisionEdges.size(); i++)
+  for (int i = 0; i < collisionEdges.size(); ++i)
   {
     const auto edge = collisionEdges[i];
 

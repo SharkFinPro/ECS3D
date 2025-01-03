@@ -395,7 +395,7 @@ float Collider::findClosestFace(ClosestFaceData& closestFaceData, const Polytope
 {
   float minDist = std::numeric_limits<float>::max();
 
-  for (int i = 0; i < polytope.faces.size(); i++)
+  for (int i = 0; i < polytope.faces.size(); ++i)
   {
     if (const float dist = polytope.faces[i].closestPoint.distance; dist < minDist)
     {
@@ -501,7 +501,7 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
 
 bool Collider::isFacingInward(const FaceData& faceData, const Polytope& polytope)
 {
-  for (int i = 0; i < polytope.vertices.size(); i++)
+  for (int i = 0; i < polytope.vertices.size(); ++i)
   {
     if (i == faceData.aIndex || i == faceData.bIndex)
     {
