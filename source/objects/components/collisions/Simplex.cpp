@@ -36,7 +36,7 @@ void Simplex::removeB()
   vertices[1] = vertices[2];
   vertices[2] = vertices[3];
 
-  length--;
+  --length;
 }
 
 void Simplex::removeC()
@@ -45,14 +45,14 @@ void Simplex::removeC()
 
   vertices[2] = vertices[3];
 
-  length--;
+  --length;
 }
 
 void Simplex::removeD()
 {
   assert(length >= 4);
 
-  length--;
+  --length;
 }
 
 void Simplex::addVertex(const glm::vec3 vertex)
