@@ -82,13 +82,16 @@ private:
 
   static glm::vec3 getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope);
 
-  static std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+  static std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
+                                               ClosestFaceData& closestFaceData);
 
   static bool isFacingInward(const FaceData& faceData, const Polytope& polytope);
 
-  static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope);
+  static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
+                            ClosestFaceData& closestFaceData);
 
-  static void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+  static void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
+                                  ClosestFaceData& closestFaceData);
 
   static bool isDuplicateVertex(glm::vec3 supportPoint, const Polytope& polytope);
 
