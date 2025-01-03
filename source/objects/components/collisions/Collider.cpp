@@ -56,7 +56,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   uint8_t iteration = 0;
   do
   {
-    iteration++;
+    ++iteration;
 
     support = getSupport(otherCollider, normalize(direction));
 
@@ -385,7 +385,7 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
     currentMinDist = std::numeric_limits<float>::max();
     reconstructPolytope(supportPoint, polytope, currentMinDist, closestFaceData);
 
-    iteration++;
+    ++iteration;
   }
 
   return closestFaceData.closestPoint;
