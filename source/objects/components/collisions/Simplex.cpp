@@ -31,10 +31,7 @@ const glm::vec3& Simplex::getD() const
 
 void Simplex::removeB()
 {
-  if (length < 1)
-  {
-    return;
-  }
+  assert(length >= 2);
 
   vertices[1] = vertices[2];
   vertices[2] = vertices[3];
@@ -44,10 +41,7 @@ void Simplex::removeB()
 
 void Simplex::removeC()
 {
-  if (length < 2)
-  {
-    return;
-  }
+  assert(length >= 3);
 
   vertices[2] = vertices[3];
 
@@ -56,10 +50,7 @@ void Simplex::removeC()
 
 void Simplex::removeD()
 {
-  if (length < 3)
-  {
-    return;
-  }
+  assert(length >= 4);
 
   length--;
 }
