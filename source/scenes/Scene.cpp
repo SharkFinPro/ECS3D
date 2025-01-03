@@ -88,9 +88,9 @@ void Scene::createPlayer(TransformData transformData) const
                                     assetManager->getAsset<TextureAsset>("assets/textures/white.png")->getTexture(),
                                     assetManager->getAsset<TextureAsset>("assets/textures/white.png")->getTexture(),
                                     assetManager->getAsset<ModelAsset>("assets/models/sphere.glb")->getModel()),
-    std::make_shared<Player>(),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>(),
+    std::make_shared<Player>()
   };
 
   objectManager->addObject(std::make_shared<Object>(components, "Player"));
