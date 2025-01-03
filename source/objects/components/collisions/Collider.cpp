@@ -437,7 +437,7 @@ glm::vec3 Collider::getSearchDirection(const ClosestFaceData& closestFaceData, c
 {
   glm::vec3 searchDirection = closestFaceData.closestPoint;
 
-  if (dot(searchDirection, searchDirection) < 0.01f)
+  if (dot(searchDirection, searchDirection) < 1e-5f)
   {
     searchDirection = polytope.faces[closestFaceData.closestFaceIndex].normal;
   }
