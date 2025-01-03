@@ -379,10 +379,10 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
       break;
     }
 
-    reconstructPolytope(supportPoint, polytope);
-
     previousMinDist = currentMinDist;
     previousClosestPoint = closestFaceData.closestPoint;
+
+    reconstructPolytope(supportPoint, polytope);
 
     iteration++;
   }
