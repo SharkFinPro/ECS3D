@@ -41,9 +41,15 @@ void RigidBody::fixedUpdate(const float dt)
   }
 }
 
-void RigidBody::applyForce(const glm::vec3& force) const
+void RigidBody::applyForce(const glm::vec3& force)
 {
   *currentVelocity += force;
+
+  if (currentVelocity->y > 0 && currentVelocity->y - force.y < 0)
+  {
+    falling = true;
+    nextFalling = true;
+  }
 }
 
 void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other)
@@ -81,7 +87,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
 void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
 {
-  if (minimumTranslationVector.y > 1e-5f)
+  if (minimumTranslationVector.y > 1e-5f && currentVelocity->y <= 1e-5f)
   {
     falling = false;
     nextFalling = false;
@@ -149,7 +155,7 @@ void RigidBody::stop()
   currentGravity = &initialGravity;
 }
 
-void RigidBody::limitMovement() const
+void RigidBody::limitMovement()
 {
   if (length(*currentVelocity) < 1e-5f)
   {
