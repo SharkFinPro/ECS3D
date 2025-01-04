@@ -30,7 +30,7 @@ void RigidBody::fixedUpdate(const float dt)
     falling = nextFalling;
     nextFalling = true;
 
-    if (currentDoGravity)
+    if (*currentDoGravity)
     {
       applyForce(*currentGravity * dt * 0.1f);
     }
