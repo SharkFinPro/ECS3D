@@ -82,7 +82,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
   auto minimumTranslationVector = EPA(polytope, other);
 
-  if (minimumTranslationVector.x != 0 || minimumTranslationVector.y != 0 || minimumTranslationVector.z != 0)
+  if (minimumTranslationVector.y != 0 || minimumTranslationVector.x != 0 || minimumTranslationVector.z != 0)
   {
     *mtv = -EPA(polytope, other);
 
