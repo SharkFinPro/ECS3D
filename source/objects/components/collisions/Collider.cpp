@@ -73,14 +73,23 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
     return false;
   }
 
-  if (mtv != nullptr)
+  if (mtv == nullptr)
   {
-    Polytope polytope = generatePolytope(simplex);
-
-    *mtv = -EPA(polytope, other);
+    return true;
   }
 
-  return true;
+  Polytope polytope = generatePolytope(simplex);
+
+  auto minimumTranslationVector = EPA(polytope, other);
+
+  if (minimumTranslationVector.x != 0 || minimumTranslationVector.y != 0 || minimumTranslationVector.z != 0)
+  {
+    *mtv = -EPA(polytope, other);
+
+    return true;
+  }
+
+  return false;
 }
 
 glm::vec3 Collider::getRoughFurthestPoint(const glm::vec3 direction)
