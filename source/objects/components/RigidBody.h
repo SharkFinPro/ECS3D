@@ -15,7 +15,7 @@ public:
 
   void fixedUpdate(float dt) override;
 
-  void applyForce(const glm::vec3& force) const;
+  void applyForce(const glm::vec3& force);
 
   void handleCollision(glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other);
 
@@ -53,7 +53,7 @@ private:
 
   std::weak_ptr<Transform> transform_ptr;
 
-  void limitMovement() const;
+  void limitMovement();
 };
 
 

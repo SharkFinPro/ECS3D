@@ -8,7 +8,7 @@
 Player::Player()
   : Component(ComponentType::player),
     initialSpeed(1.0f), liveSpeed(initialSpeed), currentSpeed(&initialSpeed),
-    initialJumpHeight(9.0f), liveJumpHeight(initialJumpHeight), currentJumpHeight(&initialJumpHeight),
+    initialJumpHeight(15.0f), liveJumpHeight(initialJumpHeight), currentJumpHeight(&initialJumpHeight),
     initialAppliedForce(0), liveAppliedForce(initialAppliedForce), currentAppliedForce(&initialAppliedForce)
 {}
 
