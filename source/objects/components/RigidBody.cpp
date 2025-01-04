@@ -81,7 +81,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
 void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
 {
-  if (minimumTranslationVector.y > 0.001f)
+  if (minimumTranslationVector.y > 1e-5f)
   {
     falling = false;
     nextFalling = false;
