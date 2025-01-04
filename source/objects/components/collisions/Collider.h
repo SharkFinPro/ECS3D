@@ -17,7 +17,7 @@ struct ClosestPoint {
 };
 
 struct Face {
-  std::array<int, 3> vertices;
+  std::array<uint8_t, 3> vertices;
   glm::vec3 normal;
   ClosestPoint closestPoint;
 };
@@ -29,19 +29,19 @@ struct Polytope {
 
 struct ClosestFaceData {
   glm::vec3 closestPoint;
-  int closestFaceIndex;
+  uint8_t closestFaceIndex;
 };
 
 struct FaceData {
-  int aIndex;
-  int bIndex;
+  uint8_t aIndex;
+  uint8_t bIndex;
   glm::vec3 a;
   glm::vec3 b;
   glm::vec3 c;
   glm::vec3 normal;
 };
 
-using Edge = std::pair<int, int>;
+using Edge = std::pair<uint8_t, uint8_t>;
 
 enum class ColliderType {
   boxCollider,
@@ -82,13 +82,16 @@ private:
 
   static glm::vec3 getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope);
 
-  static std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+  static std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
+                                               ClosestFaceData& closestFaceData);
 
   static bool isFacingInward(const FaceData& faceData, const Polytope& polytope);
 
-  static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope);
+  static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
+                            ClosestFaceData& closestFaceData);
 
-  static void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope);
+  static void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
+                                  ClosestFaceData& closestFaceData);
 
   static bool isDuplicateVertex(glm::vec3 supportPoint, const Polytope& polytope);
 

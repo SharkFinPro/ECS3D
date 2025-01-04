@@ -53,7 +53,7 @@ void SceneManager::update(const float dt)
 void SceneManager::sceneSelector()
 {
   ImGui::Begin("Scene Selector");
-  for (int i = 0; i < scenes.size(); i++)
+  for (int i = 0; i < scenes.size(); ++i)
   {
     if (ImGui::Selectable(("Scene " + std::to_string(i + 1)).c_str(), currentScene == scenes[i]))
     {

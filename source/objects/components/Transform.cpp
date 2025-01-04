@@ -5,11 +5,16 @@
 #include "RigidBody.h"
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
-  : Component(ComponentType::transform),
+  : Component(ComponentType::transform), updateID(0),
     initialPosition(position), livePosition(initialPosition), currentPosition(&initialPosition),
     initialScale(scale), liveScale(initialScale), currentScale(&initialScale),
     initialRotation(rotation), liveRotation(initialRotation), currentRotation(&initialRotation)
 {}
+
+uint8_t Transform::getUpdateID() const
+{
+  return updateID;
+}
 
 glm::vec3 Transform::getPosition() const
 {
@@ -50,19 +55,22 @@ glm::vec3 Transform::getRotation() const
   return *currentRotation;
 }
 
-void Transform::setScale(const glm::vec3 scale) const
+void Transform::setScale(const glm::vec3 scale)
 {
   *currentScale = scale;
+  ++updateID;
 }
 
-void Transform::setRotation(const glm::vec3 rotation) const
+void Transform::setRotation(const glm::vec3 rotation)
 {
   *currentRotation = rotation;
+  ++updateID;
 }
 
-void Transform::move(const glm::vec3& direction) const
+void Transform::move(const glm::vec3& direction)
 {
   *currentPosition += direction;
+  ++updateID;
 }
 
 void Transform::displayGui()
@@ -95,6 +103,8 @@ void Transform::displayGui()
       currentScale->x = currentScale->y = currentScale->z = combinedScale;
     }
 
+    ++updateID;
+
     ImGui::PopID();
   }
 }
@@ -108,6 +118,8 @@ void Transform::start()
   currentPosition = &livePosition;
   currentScale = &liveScale;
   currentRotation = &liveRotation;
+
+  ++updateID;
 }
 
 void Transform::stop()
@@ -115,4 +127,6 @@ void Transform::stop()
   currentPosition = &initialPosition;
   currentScale = &initialScale;
   currentRotation = &initialRotation;
+
+  ++updateID;
 }

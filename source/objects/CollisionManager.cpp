@@ -42,7 +42,7 @@ void CollisionManager::checkCollisions()
   });
 
 #pragma omp parallel for default(none) num_threads(6)
-  for (int i = 0; i < collisionEdges.size(); i++)
+  for (int i = 0; i < collisionEdges.size(); ++i)
   {
     const auto edge = collisionEdges[i];
 
@@ -105,6 +105,17 @@ void CollisionManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidB
                                         const std::shared_ptr<Collider>& collider,
                                         const std::vector<std::shared_ptr<Object>>& collidedObjects)
 {
+  if (collidedObjects.size() == 1)
+  {
+    glm::vec3 mtv;
+    if (collider->collidesWith(collidedObjects[0], &mtv))
+    {
+      rigidBody->handleCollision(mtv, collidedObjects[0]);
+    }
+
+    return;
+  }
+
   std::vector chosenFlags(collidedObjects.size(), false);
   std::vector<float> distances;
 
