@@ -55,12 +55,6 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
     return;
   }
 
-  if (minimumTranslationVector.y > 0.001f)
-  {
-    falling = false;
-    nextFalling = false;
-  }
-
   const auto collisionNormal = normalize(minimumTranslationVector);
 
   const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -87,6 +81,12 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
 void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
 {
+  if (minimumTranslationVector.y > 0.001f)
+  {
+    falling = false;
+    nextFalling = false;
+  }
+
   if (transform_ptr.expired())
   {
     transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
