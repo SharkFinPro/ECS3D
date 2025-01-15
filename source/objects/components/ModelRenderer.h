@@ -30,6 +30,8 @@ private:
   std::shared_ptr<Texture> specularMap;
   std::shared_ptr<Model> model;
 
+  bool useStandardPipeline = true;
+
   bool shouldRender;
 
   void displayDragDrop(const char* label, const std::function<bool(const std::shared_ptr<Asset>&)>& setter);
