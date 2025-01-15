@@ -2,11 +2,15 @@
 #define MODELRENDERER_H
 
 #include "Component.h"
-#include <VulkanEngine/VulkanEngine.h>
 #include <memory>
+#include <functional>
 
 class Transform;
 class Asset;
+class VulkanEngine;
+class Texture;
+class Model;
+class RenderObject;
 
 class ModelRenderer final : public Component {
 public:

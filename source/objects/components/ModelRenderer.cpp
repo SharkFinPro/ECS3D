@@ -6,6 +6,7 @@
 #include "../../assets/Asset.h"
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
+#include <VulkanEngine/VulkanEngine.h>
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
                              const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model)
