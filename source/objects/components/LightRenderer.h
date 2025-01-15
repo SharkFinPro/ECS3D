@@ -2,10 +2,11 @@
 #define LIGHTRENDERER_H
 
 #include "Component.h"
-#include <VulkanEngine/VulkanEngine.h>
 #include <memory>
+#include <glm/glm.hpp>
 
 class Transform;
+class Light;
 
 class LightRenderer final : public Component {
 public:
