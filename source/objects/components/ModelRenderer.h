@@ -2,11 +2,15 @@
 #define MODELRENDERER_H
 
 #include "Component.h"
-#include <VulkanEngine/VulkanEngine.h>
 #include <memory>
+#include <functional>
 
 class Transform;
 class Asset;
+class VulkanEngine;
+class Texture;
+class Model;
+class RenderObject;
 
 class ModelRenderer final : public Component {
 public:
@@ -29,6 +33,8 @@ private:
   std::shared_ptr<Texture> texture;
   std::shared_ptr<Texture> specularMap;
   std::shared_ptr<Model> model;
+
+  bool useStandardPipeline = true;
 
   bool shouldRender;
 

@@ -6,6 +6,7 @@
 #include "../../assets/Asset.h"
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
+#include <VulkanEngine/VulkanEngine.h>
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
                              const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model)
@@ -47,13 +48,14 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
     renderObject->setOrientationEuler(transform->getRotation());
   }
 
-  owner->getManager()->getECS()->getRenderer()->renderObject(renderObject);
+  owner->getManager()->getECS()->getRenderer()->renderObject(renderObject, useStandardPipeline ? PipelineType::object : PipelineType::ellipticalDots);
 }
 
 void ModelRenderer::displayGui()
 {
   if (displayGuiHeader())
   {
+    ImGui::Checkbox("Use Standard Pipeline", &useStandardPipeline);
     ImGui::Checkbox("Render", &shouldRender);
 
     displayTextureDragDrop();
