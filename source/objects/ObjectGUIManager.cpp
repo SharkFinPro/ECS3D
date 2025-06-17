@@ -221,15 +221,12 @@ void ObjectGUIManager::displayObjectListGui()
   ImGui::Separator();
   ImGui::Spacing();
 
-  if (ImGui::BeginChild("##"))
+  ImGui::BeginChild("##");
+  for (const auto& node : objectUINodes)
   {
-    for (const auto& node : objectUINodes)
-    {
-      displayObjectGui(node);
-    }
-
-    ImGui::EndChild();
+    displayObjectGui(node);
   }
+  ImGui::EndChild();
 
   if (ImGui::BeginDragDropTarget())
   {
