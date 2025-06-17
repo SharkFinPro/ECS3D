@@ -66,7 +66,7 @@ void CollisionManager::checkCollisions()
 void CollisionManager::findCollisions(const LeftEdge& edge,
                                       std::vector<std::shared_ptr<Object>>& collidedObjects) const
 {
-  float furthestX = edge.collider->getRoughFurthestPoint({0, 0, 1}).x;
+  const float furthestX = edge.collider->getRoughFurthestPoint({-1, 0, 0}).x;
 
   for (const auto& other : collisionEdges)
   {

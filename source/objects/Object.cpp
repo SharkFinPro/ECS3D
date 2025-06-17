@@ -17,7 +17,7 @@ constexpr int MAX_CHARACTERS = 30;
 Object::Object(std::string name)
   : manager(nullptr), name(std::move(name)), showComponentSelector(false)
 {
-  name.resize(MAX_CHARACTERS);
+  this->name.resize(MAX_CHARACTERS);
 }
 
 Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)

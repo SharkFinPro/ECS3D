@@ -92,6 +92,22 @@ void ECS3D::initRenderer()
 
   ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
 	setupImGuiStyle();
+
+	const auto gui = renderer->getImGuiInstance();
+
+	gui->dockCenter("SceneView");
+
+	gui->dockLeft("Objects");
+	gui->dockLeft("Scene Selector");
+
+	gui->dockRight("Selected Object");
+
+	gui->dockTop("Scene Status");
+
+	gui->dockBottom("Assets");
+	gui->dockBottom("Project Errors");
+	gui->dockBottom("Smoke");
+	gui->dockBottom("Elliptical Dots");
 }
 
 void ECS3D::setupImGuiStyle()
