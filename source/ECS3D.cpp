@@ -107,6 +107,7 @@ void ECS3D::initRenderer()
 	gui->dockBottom("Assets");
 	gui->dockBottom("Project Errors");
 	gui->dockBottom("Smoke");
+	gui->dockBottom("Elliptical Dots");
 }
 
 void ECS3D::setupImGuiStyle()
