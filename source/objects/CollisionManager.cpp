@@ -98,7 +98,14 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
 {
   const auto a = edge.object->getComponent<Transform>(ComponentType::transform);
 
-  const float furthestX = edge.collider->getRoughFurthestPoint({-1, 0, 0}).x;
+  const float furthestX = edge.collider->getRoughFurthestPoint({1, 0, 0}).x;
+  const float furthestNegX = edge.collider->getRoughFurthestPoint({-1, 0, 0}).x;
+
+  const float furthestY = edge.collider->getRoughFurthestPoint({0, 1, 0}).y;
+  const float furthestNegY = edge.collider->getRoughFurthestPoint({0, -1, 0}).y;
+
+  const float furthestZ = edge.collider->getRoughFurthestPoint({0, 0, 1}).z;
+  const float furthestNegZ = edge.collider->getRoughFurthestPoint({0, 0, -1}).z;
 
   for (const auto& other : collisionEdges)
   {
@@ -109,28 +116,28 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
       continue;
     }
 
-    if (other.position > furthestX)
+    if (other.position > furthestNegX)
     {
       break;
     }
 
     glm::vec3 direction = {-1, 0, 0};
-    if (edge.collider->getRoughFurthestPoint(direction).x > other.collider->getRoughFurthestPoint(-direction).x ||
-        edge.collider->getRoughFurthestPoint(-direction).x < other.collider->getRoughFurthestPoint(direction).x)
+    if (furthestNegX > other.collider->getRoughFurthestPoint(-direction).x ||
+        furthestX < other.collider->getRoughFurthestPoint(direction).x)
     {
       continue;
     }
 
     direction = {0, 0, -1};
-    if (edge.collider->getRoughFurthestPoint(direction).z > other.collider->getRoughFurthestPoint(-direction).z ||
-        edge.collider->getRoughFurthestPoint(-direction).z < other.collider->getRoughFurthestPoint(direction).z)
+    if (furthestNegZ > other.collider->getRoughFurthestPoint(-direction).z ||
+        furthestZ < other.collider->getRoughFurthestPoint(direction).z)
     {
       continue;
     }
 
     direction = {0, -1, 0};
-    if (edge.collider->getRoughFurthestPoint(direction).y > other.collider->getRoughFurthestPoint(-direction).y ||
-        edge.collider->getRoughFurthestPoint(-direction).y < other.collider->getRoughFurthestPoint(direction).y)
+    if (furthestNegY > other.collider->getRoughFurthestPoint(-direction).y ||
+        furthestY < other.collider->getRoughFurthestPoint(direction).y)
     {
       continue;
     }
