@@ -114,7 +114,14 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
       break;
     }
 
-    glm::vec3 direction = {0, 0, -1};
+    glm::vec3 direction = {-1, 0, 0};
+    if (edge.collider->getRoughFurthestPoint(direction).x > other.collider->getRoughFurthestPoint(-direction).x ||
+        edge.collider->getRoughFurthestPoint(-direction).x < other.collider->getRoughFurthestPoint(direction).x)
+    {
+      continue;
+    }
+
+    direction = {0, 0, -1};
     if (edge.collider->getRoughFurthestPoint(direction).z > other.collider->getRoughFurthestPoint(-direction).z ||
         edge.collider->getRoughFurthestPoint(-direction).z < other.collider->getRoughFurthestPoint(direction).z)
     {
@@ -130,7 +137,8 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
 
 
     const auto b = other.object->getComponent<Transform>(ComponentType::transform);
-    if (edge.object->getName() != "Rigid Block" && other.object->getName() != "Rigid Block" && threadLine.size() < 1'500)
+    // if (edge.object->getName() != "Rigid Block" && other.object->getName() != "Rigid Block" && threadLine.size() < 1'500)
+    if (threadLine.size() < 1'500)
     {
       threadLine.push_back({ a->getPosition(), b->getPosition() });
     }
