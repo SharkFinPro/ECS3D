@@ -83,6 +83,8 @@ void ObjectManager::variableUpdate(const float dt) const
   {
     object->variableUpdate(dt);
   }
+
+  collisionManager->variableUpdate();
 }
 
 void ObjectManager::fixedUpdate(const float dt)
