@@ -106,21 +106,23 @@ const BoundingBox& Collider::getBoundingBox()
   }
 
   const std::shared_ptr<Transform> transform = transform_ptr.lock();
+  const uint8_t transformUpdateID = transform->getUpdateID();
 
-  if (boundingBox.lastUpdateID != transform->getUpdateID())
+  if (boundingBox.lastUpdateID == transformUpdateID)
   {
-    boundingBox.lastUpdateID = transform->getUpdateID();
-
-    boundingBox.minX = findFurthestPoint({-1, 0, 0}).x;
-    boundingBox.maxX = findFurthestPoint({1, 0, 0}).x;
-
-    boundingBox.minY = findFurthestPoint({0, -1, 0}).y;
-    boundingBox.maxY = findFurthestPoint({0, 1, 0}).y;
-
-    boundingBox.minZ = findFurthestPoint({0, 0, -1}).z;
-    boundingBox.maxZ = findFurthestPoint({0, 0, 1}).z;
+    return boundingBox;
   }
 
+  boundingBox.lastUpdateID = transformUpdateID;
+
+  boundingBox.minX = findFurthestPoint({-1, 0, 0}).x;
+  boundingBox.maxX = findFurthestPoint({1, 0, 0}).x;
+
+  boundingBox.minY = findFurthestPoint({0, -1, 0}).y;
+  boundingBox.maxY = findFurthestPoint({0, 1, 0}).y;
+
+  boundingBox.minZ = findFurthestPoint({0, 0, -1}).z;
+  boundingBox.maxZ = findFurthestPoint({0, 0, 1}).z;
 
   return boundingBox;
 }
