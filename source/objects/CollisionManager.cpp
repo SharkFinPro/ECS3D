@@ -5,9 +5,11 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
+#ifdef COLLISION_DEBUG
 #include "../ECS3D.h"
 #include "components/Transform.h"
 #include <omp.h>
+#endif
 
 void CollisionManager::addObject(const std::shared_ptr<Object>& object)
 {
