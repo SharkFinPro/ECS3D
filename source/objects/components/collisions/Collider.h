@@ -1,6 +1,9 @@
 #ifndef COLLIDER_H
 #define COLLIDER_H
 
+// Enable to draw collision bounding box lines
+// #define COLLISION_BBOX_DEBUG
+
 #include "../Component.h"
 #include <memory>
 #include <glm/vec3.hpp>
@@ -43,6 +46,16 @@ struct FaceData {
 
 using Edge = std::pair<uint8_t, uint8_t>;
 
+struct BoundingBox {
+  uint8_t lastUpdateID = 0;
+  float minX{};
+  float maxX{};
+  float minY{};
+  float maxY{};
+  float minZ{};
+  float maxZ{};
+};
+
 enum class ColliderType {
   boxCollider,
   sphereCollider
@@ -54,7 +67,13 @@ public:
 
   bool collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv);
 
-  glm::vec3 getRoughFurthestPoint(glm::vec3 direction);
+  const BoundingBox& getBoundingBox();
+
+#ifdef COLLISION_BBOX_DEBUG
+  void fixedUpdate(float dt) override;
+
+  void variableUpdate(float dt) override;
+#endif
 
 private:
   bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
@@ -62,6 +81,7 @@ private:
                                      glm::vec3* mtv);
 
   glm::vec3 getSupport(const std::shared_ptr<Collider>& other, const glm::vec3& direction);
+
   virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
 
   static bool expandSimplex(Simplex& simplex, glm::vec3& direction);
@@ -99,6 +119,8 @@ protected:
   std::weak_ptr<Transform> transform_ptr;
 
   ColliderType colliderType;
+
+  BoundingBox boundingBox;
 
   float roughMaxDistance;
 };
