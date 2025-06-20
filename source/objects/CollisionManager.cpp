@@ -33,6 +33,7 @@ void CollisionManager::update()
   checkCollisions();
 }
 
+#ifdef COLLISION_DEBUG
 void CollisionManager::variableUpdate()
 {
   const auto renderer = collisionEdges[0].object->getManager()->getECS()->getRenderer();
@@ -51,7 +52,7 @@ void CollisionManager::variableUpdate()
     }
   }
 }
-
+#endif
 
 void CollisionManager::checkCollisions()
 {
@@ -65,10 +66,12 @@ void CollisionManager::checkCollisions()
     return a.position < b.position;
   });
 
+#ifdef COLLISION_DEBUG
   for (auto& threadLineVector : threadLines)
   {
     threadLineVector.clear();
   }
+#endif
 
 #pragma omp parallel for default(none) num_threads(6)
   for (int i = 0; i < collisionEdges.size(); ++i)
@@ -83,7 +86,11 @@ void CollisionManager::checkCollisions()
     }
 
     std::vector<std::shared_ptr<Object>> collidedObjects;
+#ifdef COLLISION_DEBUG
     findCollisions(edge, collidedObjects, threadLines[omp_get_thread_num()]);
+#else
+    findCollisions(edge, collidedObjects);
+#endif
 
     if (!collidedObjects.empty())
     {
@@ -92,11 +99,18 @@ void CollisionManager::checkCollisions()
   }
 }
 
+#ifdef COLLISION_DEBUG
 void CollisionManager::findCollisions(const LeftEdge& edge,
                                       std::vector<std::shared_ptr<Object>>& collidedObjects,
                                       std::vector<LineToRender>& threadLine) const
+#else
+void CollisionManager::findCollisions(const LeftEdge& edge,
+                                      std::vector<std::shared_ptr<Object>>& collidedObjects) const
+#endif
 {
+#ifdef COLLISION_DEBUG
   const auto a = edge.object->getComponent<Transform>(ComponentType::transform);
+#endif
 
   const float furthestX = edge.collider->getRoughFurthestPoint({1, 0, 0}).x;
   const float furthestNegX = edge.collider->getRoughFurthestPoint({-1, 0, 0}).x;
@@ -142,14 +156,13 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
       continue;
     }
 
-
+#ifdef COLLISION_DEBUG
     const auto b = other.object->getComponent<Transform>(ComponentType::transform);
-    // if (edge.object->getName() != "Rigid Block" && other.object->getName() != "Rigid Block" && threadLine.size() < 1'500)
     if (threadLine.size() < 1'500)
     {
       threadLine.push_back({ a->getPosition(), b->getPosition() });
     }
-
+#endif
 
     if (edge.collider->collidesWith(other.object, nullptr))
     {

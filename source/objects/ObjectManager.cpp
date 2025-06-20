@@ -84,7 +84,9 @@ void ObjectManager::variableUpdate(const float dt) const
     object->variableUpdate(dt);
   }
 
+#ifdef COLLISION_DEBUG
   collisionManager->variableUpdate();
+#endif
 }
 
 void ObjectManager::fixedUpdate(const float dt)
