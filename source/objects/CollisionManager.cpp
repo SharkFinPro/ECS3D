@@ -116,7 +116,7 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
       continue;
     }
 
-    if (other.position > furthestNegX)
+    if (other.position > furthestX)
     {
       break;
     }
