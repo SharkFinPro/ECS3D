@@ -60,7 +60,7 @@ void CollisionManager::checkCollisions()
 {
   for (auto& edge : collisionEdges)
   {
-    edge.position = edge.collider->getRoughFurthestPoint({-1, 0, 0}).x;
+    edge.position = edge.collider->getBoundingBox().minX;
   }
 
   std::ranges::sort(collisionEdges, [](const LeftEdge& a, const LeftEdge& b)
@@ -114,14 +114,7 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
   const auto a = edge.object->getComponent<Transform>(ComponentType::transform);
 #endif
 
-  const float furthestX = edge.collider->getRoughFurthestPoint({1, 0, 0}).x;
-  const float furthestNegX = edge.collider->getRoughFurthestPoint({-1, 0, 0}).x;
-
-  const float furthestY = edge.collider->getRoughFurthestPoint({0, 1, 0}).y;
-  const float furthestNegY = edge.collider->getRoughFurthestPoint({0, -1, 0}).y;
-
-  const float furthestZ = edge.collider->getRoughFurthestPoint({0, 0, 1}).z;
-  const float furthestNegZ = edge.collider->getRoughFurthestPoint({0, 0, -1}).z;
+  const auto bbox = edge.collider->getBoundingBox();
 
   for (const auto& other : collisionEdges)
   {
@@ -132,28 +125,16 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
       continue;
     }
 
-    if (other.position > furthestX)
+    if (other.position > bbox.maxX)
     {
       break;
     }
 
-    glm::vec3 direction = {-1, 0, 0};
-    if (furthestNegX > other.collider->getRoughFurthestPoint(-direction).x ||
-        furthestX < other.collider->getRoughFurthestPoint(direction).x)
-    {
-      continue;
-    }
+    const auto otherBbox = other.collider->getBoundingBox();
 
-    direction = {0, 0, -1};
-    if (furthestNegZ > other.collider->getRoughFurthestPoint(-direction).z ||
-        furthestZ < other.collider->getRoughFurthestPoint(direction).z)
-    {
-      continue;
-    }
-
-    direction = {0, -1, 0};
-    if (furthestNegY > other.collider->getRoughFurthestPoint(-direction).y ||
-        furthestY < other.collider->getRoughFurthestPoint(direction).y)
+    if (bbox.maxX < otherBbox.minX || bbox.minX > otherBbox.maxX ||
+        bbox.maxY < otherBbox.minY || bbox.minY > otherBbox.maxY ||
+        bbox.maxZ < otherBbox.minZ || bbox.minZ > otherBbox.maxZ)
     {
       continue;
     }

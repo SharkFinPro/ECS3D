@@ -10,6 +10,7 @@
 #include <ranges>
 
 #include "SphereCollider.h"
+#include "../../../ECS3D.h"
 
 bool sameDirection(const glm::vec3& first, const glm::vec3& second)
 {
@@ -92,7 +93,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   return false;
 }
 
-glm::vec3 Collider::getRoughFurthestPoint(const glm::vec3 direction)
+const BoundingBox& Collider::getBoundingBox()
 {
   if (transform_ptr.expired())
   {
@@ -104,15 +105,66 @@ glm::vec3 Collider::getRoughFurthestPoint(const glm::vec3 direction)
     }
   }
 
-  if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
+  const std::shared_ptr<Transform> transform = transform_ptr.lock();
+
+  if (boundingBox.lastUpdateID != transform->getUpdateID())
   {
-    const auto transformScale = transform->getScale();
-    const float scale = std::max({transformScale.x, transformScale.y, transformScale.z});
-    return direction * 1.25f * scale + transform->getPosition();
+    boundingBox.lastUpdateID = transform->getUpdateID();
+
+    boundingBox.minX = findFurthestPoint({-1, 0, 0}).x;
+    boundingBox.maxX = findFurthestPoint({1, 0, 0}).x;
+
+    boundingBox.minY = findFurthestPoint({0, -1, 0}).y;
+    boundingBox.maxY = findFurthestPoint({0, 1, 0}).y;
+
+    boundingBox.minZ = findFurthestPoint({0, 0, -1}).z;
+    boundingBox.maxZ = findFurthestPoint({0, 0, 1}).z;
   }
 
-  return {0, 0, 0};
+
+  return boundingBox;
 }
+
+#ifdef COLLISION_BBOX_DEBUG
+void Collider::fixedUpdate(float dt)
+{
+  getBoundingBox();
+}
+
+void Collider::variableUpdate(float dt)
+{
+  const auto renderer = getOwner()->getManager()->getECS()->getRenderer();
+
+  const glm::vec3 corners[8] = {
+    {boundingBox.minX, boundingBox.minY, boundingBox.minZ},
+    {boundingBox.maxX, boundingBox.minY, boundingBox.minZ},
+    {boundingBox.maxX, boundingBox.maxY, boundingBox.minZ},
+    {boundingBox.minX, boundingBox.maxY, boundingBox.minZ},
+    {boundingBox.minX, boundingBox.minY, boundingBox.maxZ},
+    {boundingBox.maxX, boundingBox.minY, boundingBox.maxZ},
+    {boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ},
+    {boundingBox.minX, boundingBox.maxY, boundingBox.maxZ}
+  };
+
+  // Bottom face
+  renderer->renderLine(corners[0], corners[1]); // min to +X
+  renderer->renderLine(corners[1], corners[2]); // +X to +X+Y
+  renderer->renderLine(corners[2], corners[3]); // +X+Y to +Y
+  renderer->renderLine(corners[3], corners[0]); // +Y to min
+    
+  // Top face
+  renderer->renderLine(corners[4], corners[5]); // +Z to +X+Z
+  renderer->renderLine(corners[5], corners[6]); // +X+Z to max
+  renderer->renderLine(corners[6], corners[7]); // max to +Y+Z
+  renderer->renderLine(corners[7], corners[4]); // +Y+Z to +Z
+    
+  // Vertical edges connecting bottom to top
+  renderer->renderLine(corners[0], corners[4]); // min to +Z
+  renderer->renderLine(corners[1], corners[5]); // +X to +X+Z
+  renderer->renderLine(corners[2], corners[6]); // +X+Y to max
+  renderer->renderLine(corners[3], corners[7]); // +Y to +Y+Z
+}
+#endif
 
 bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
                                              const std::shared_ptr<Transform>& otherTransform,
