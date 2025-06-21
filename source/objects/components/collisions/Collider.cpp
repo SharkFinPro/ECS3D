@@ -85,7 +85,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
   if (minimumTranslationVector.y != 0 || minimumTranslationVector.x != 0 || minimumTranslationVector.z != 0)
   {
-    *mtv = -EPA(polytope, other);
+    *mtv = -minimumTranslationVector;
 
     return true;
   }
@@ -479,25 +479,38 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
     ++iteration;
   }
 
-  auto face = polytope.faces[closestFaceData.closestFaceIndex];
+  glm::vec3 pointOfCollision;
 
-  auto a = otherCollider->findFurthestPoint(-polytope.vertices[face.vertices[0]].direction);
-  auto b = otherCollider->findFurthestPoint(-polytope.vertices[face.vertices[1]].direction);
-  auto c = otherCollider->findFurthestPoint(-polytope.vertices[face.vertices[2]].direction);
+  if (colliderType == ColliderType::sphereCollider)
+  {
+    auto direction = glm::normalize(closestFaceData.closestPoint);
 
+    pointOfCollision = transform_ptr.lock()->getPosition() + direction * dynamic_cast<SphereCollider*>(this)->getRadius();
+  }
+  else if (otherCollider->colliderType == ColliderType::sphereCollider)
+  {
+    auto direction = glm::normalize(closestFaceData.closestPoint);
 
-  auto p = computeBarycentric(polytope.vertices[face.vertices[0]].vertex,
-                                   polytope.vertices[face.vertices[1]].vertex,
-                                   polytope.vertices[face.vertices[2]].vertex,
-                                   closestFaceData.closestPoint);
+    pointOfCollision = otherTransform->getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
+  }
+  else
+  {
+    auto face = polytope.faces[closestFaceData.closestFaceIndex];
+    auto [vertex0, direction0] = polytope.vertices[face.vertices[0]];
+    auto [vertex1, direction1] = polytope.vertices[face.vertices[1]];
+    auto [vertex2, direction2] = polytope.vertices[face.vertices[2]];
 
-  auto b_x = a * p.z;
-  auto b_y = c * p.x;
-  auto b_z = b * p.y;
+    auto a = otherCollider->findFurthestPoint(-direction0);
+    auto b = otherCollider->findFurthestPoint(-direction1);
+    auto c = otherCollider->findFurthestPoint(-direction2);
 
-  auto bar = b_x + b_y + b_z;
+    auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestFaceData.closestPoint);
 
-  linesToDraw.emplace_back(otherTransform->getPosition(), bar);
+    pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+  }
+
+  linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
+  linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
 
   return closestFaceData.closestPoint;
 }
