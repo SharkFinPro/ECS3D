@@ -2,7 +2,7 @@
 #define COLLIDER_H
 
 // Enable to draw collision bounding box lines
-// #define COLLISION_BBOX_DEBUG
+#define COLLISION_BBOX_DEBUG
 
 #include "../Component.h"
 #include <memory>
@@ -11,6 +11,11 @@
 #include <vector>
 #include "Simplex.h"
 #include <optional>
+
+struct Line {
+  glm::vec3 start;
+  glm::vec3 end;
+};
 
 class Transform;
 
@@ -76,6 +81,9 @@ public:
 #endif
 
 private:
+
+  std::vector<Line> linesToDraw;
+
   bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
                                      const std::shared_ptr<Transform>& otherTransform,
                                      glm::vec3* mtv);

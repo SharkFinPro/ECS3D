@@ -131,40 +131,46 @@ const BoundingBox& Collider::getBoundingBox()
 void Collider::fixedUpdate(float dt)
 {
   getBoundingBox();
+  linesToDraw.clear();
 }
 
 void Collider::variableUpdate(float dt)
 {
   const auto renderer = getOwner()->getManager()->getECS()->getRenderer();
 
-  const glm::vec3 corners[8] = {
-    {boundingBox.minX, boundingBox.minY, boundingBox.minZ},
-    {boundingBox.maxX, boundingBox.minY, boundingBox.minZ},
-    {boundingBox.maxX, boundingBox.maxY, boundingBox.minZ},
-    {boundingBox.minX, boundingBox.maxY, boundingBox.minZ},
-    {boundingBox.minX, boundingBox.minY, boundingBox.maxZ},
-    {boundingBox.maxX, boundingBox.minY, boundingBox.maxZ},
-    {boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ},
-    {boundingBox.minX, boundingBox.maxY, boundingBox.maxZ}
-  };
+  for (const auto& line : linesToDraw)
+  {
+    renderer->renderLine(line.start, line.end);
+  }
 
-  // Bottom face
-  renderer->renderLine(corners[0], corners[1]); // min to +X
-  renderer->renderLine(corners[1], corners[2]); // +X to +X+Y
-  renderer->renderLine(corners[2], corners[3]); // +X+Y to +Y
-  renderer->renderLine(corners[3], corners[0]); // +Y to min
-    
-  // Top face
-  renderer->renderLine(corners[4], corners[5]); // +Z to +X+Z
-  renderer->renderLine(corners[5], corners[6]); // +X+Z to max
-  renderer->renderLine(corners[6], corners[7]); // max to +Y+Z
-  renderer->renderLine(corners[7], corners[4]); // +Y+Z to +Z
-    
-  // Vertical edges connecting bottom to top
-  renderer->renderLine(corners[0], corners[4]); // min to +Z
-  renderer->renderLine(corners[1], corners[5]); // +X to +X+Z
-  renderer->renderLine(corners[2], corners[6]); // +X+Y to max
-  renderer->renderLine(corners[3], corners[7]); // +Y to +Y+Z
+  // const glm::vec3 corners[8] = {
+  //   {boundingBox.minX, boundingBox.minY, boundingBox.minZ},
+  //   {boundingBox.maxX, boundingBox.minY, boundingBox.minZ},
+  //   {boundingBox.maxX, boundingBox.maxY, boundingBox.minZ},
+  //   {boundingBox.minX, boundingBox.maxY, boundingBox.minZ},
+  //   {boundingBox.minX, boundingBox.minY, boundingBox.maxZ},
+  //   {boundingBox.maxX, boundingBox.minY, boundingBox.maxZ},
+  //   {boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ},
+  //   {boundingBox.minX, boundingBox.maxY, boundingBox.maxZ}
+  // };
+  //
+  // // Bottom face
+  // renderer->renderLine(corners[0], corners[1]); // min to +X
+  // renderer->renderLine(corners[1], corners[2]); // +X to +X+Y
+  // renderer->renderLine(corners[2], corners[3]); // +X+Y to +Y
+  // renderer->renderLine(corners[3], corners[0]); // +Y to min
+  //
+  // // Top face
+  // renderer->renderLine(corners[4], corners[5]); // +Z to +X+Z
+  // renderer->renderLine(corners[5], corners[6]); // +X+Z to max
+  // renderer->renderLine(corners[6], corners[7]); // max to +Y+Z
+  // renderer->renderLine(corners[7], corners[4]); // +Y+Z to +Z
+  //
+  // // Vertical edges connecting bottom to top
+  // renderer->renderLine(corners[0], corners[4]); // min to +Z
+  // renderer->renderLine(corners[1], corners[5]); // +X to +X+Z
+  // renderer->renderLine(corners[2], corners[6]); // +X+Y to max
+  // renderer->renderLine(corners[3], corners[7]); // +Y to +Y+Z
 }
 #endif
 
@@ -402,6 +408,25 @@ glm::vec3 Collider::closestPointOnPlane(const glm::vec3& a, const glm::vec3& nor
   return normal * p;
 }
 
+glm::vec3 computeBarycentric(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& p) {
+  glm::vec3 v0 = c - a;
+  glm::vec3 v1 = b - a;
+  glm::vec3 v2 = p - a;
+
+  float dot00 = glm::dot(v0, v0);
+  float dot01 = glm::dot(v0, v1);
+  float dot02 = glm::dot(v0, v2);
+  float dot11 = glm::dot(v1, v1);
+  float dot12 = glm::dot(v1, v2);
+
+  float invDenom = 1.0f / (dot00 * dot11 - dot01 * dot01);
+  float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+  float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+  float w = 1.0f - u - v;
+
+  return glm::vec3(u, v, w);
+}
+
 glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other)
 {
   if (transform_ptr.expired())
@@ -453,6 +478,26 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
 
     ++iteration;
   }
+
+  auto face = polytope.faces[closestFaceData.closestFaceIndex];
+
+  auto a = otherCollider->findFurthestPoint(-polytope.vertices[face.vertices[0]].direction);
+  auto b = otherCollider->findFurthestPoint(-polytope.vertices[face.vertices[1]].direction);
+  auto c = otherCollider->findFurthestPoint(-polytope.vertices[face.vertices[2]].direction);
+
+
+  auto p = computeBarycentric(polytope.vertices[face.vertices[0]].vertex,
+                                   polytope.vertices[face.vertices[1]].vertex,
+                                   polytope.vertices[face.vertices[2]].vertex,
+                                   closestFaceData.closestPoint);
+
+  auto b_x = a * p.z;
+  auto b_y = c * p.x;
+  auto b_z = b * p.y;
+
+  auto bar = b_x + b_y + b_z;
+
+  linesToDraw.emplace_back(otherTransform->getPosition(), bar);
 
   return closestFaceData.closestPoint;
 }
