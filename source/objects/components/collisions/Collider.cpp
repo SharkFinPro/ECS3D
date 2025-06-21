@@ -351,7 +351,10 @@ Polytope Collider::generatePolytope(Simplex& simplex)
 
   return {
     .vertices = {
-      A, B, C, D
+      simplex.getSupportA(),
+      simplex.getSupportB(),
+      simplex.getSupportC(),
+      simplex.getSupportD()
     },
     .faces = {{
       {
@@ -446,7 +449,7 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
     previousClosestPoint = closestFaceData.closestPoint;
 
     currentMinDist = std::numeric_limits<float>::max();
-    reconstructPolytope(supportPoint, polytope, currentMinDist, closestFaceData);
+    reconstructPolytope(supportPoint, searchDirection, polytope, currentMinDist, closestFaceData);
 
     ++iteration;
   }
@@ -519,7 +522,7 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
   {
     auto [faceVertices, normal, c] = polytope.faces[i];
 
-    auto facePoint = polytope.vertices[faceVertices[0]];
+    auto facePoint = polytope.vertices[faceVertices[0]].vertex;
 
     if (auto vectorToSupportPoint = supportPoint - facePoint; sameDirection(normal, vectorToSupportPoint))
     {
@@ -571,7 +574,7 @@ bool Collider::isFacingInward(const FaceData& faceData, const Polytope& polytope
       continue;
     }
 
-    if (const glm::vec3 faceToVertex = polytope.vertices[i] - faceData.a; sameDirection(faceData.normal, faceToVertex))
+    if (const glm::vec3 faceToVertex = polytope.vertices[i].vertex - faceData.a; sameDirection(faceData.normal, faceToVertex))
     {
       return true;
     }
@@ -586,8 +589,8 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
   FaceData faceData {
     .aIndex = edge.first,
     .bIndex = edge.second,
-    .a = polytope.vertices[edge.first],
-    .b = polytope.vertices[edge.second],
+    .a = polytope.vertices[edge.first].vertex,
+    .b = polytope.vertices[edge.second].vertex,
     .c = supportPoint
   };
 
@@ -630,23 +633,23 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
   });
 }
 
-void Collider::reconstructPolytope(const glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
-                                   ClosestFaceData& closestFaceData)
+void Collider::reconstructPolytope(const glm::vec3 supportPoint, const glm::vec3 direction, Polytope& polytope,
+                                   float& currentMinDist, ClosestFaceData& closestFaceData)
 {
   for (const auto& edge : deconstructPolytope(supportPoint, polytope, currentMinDist, closestFaceData))
   {
     constructFace(edge, supportPoint, polytope, currentMinDist, closestFaceData);
   }
 
-  polytope.vertices.push_back(supportPoint);
+  polytope.vertices.push_back({supportPoint, direction});
 }
 
 bool Collider::isDuplicateVertex(const glm::vec3 supportPoint, const Polytope& polytope)
 {
-  auto isEqual = [&](const glm::vec3& vertex) {
-    return vertex.x == supportPoint.x &&
-           vertex.y == supportPoint.y &&
-           vertex.z == supportPoint.z;
+  auto isEqual = [&](const SupportVertex& support) {
+    return support.vertex.x == supportPoint.x &&
+           support.vertex.y == supportPoint.y &&
+           support.vertex.z == supportPoint.z;
   };
 
   return std::ranges::any_of(polytope.vertices, isEqual);

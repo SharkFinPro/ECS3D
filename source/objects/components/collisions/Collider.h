@@ -26,7 +26,7 @@ struct Face {
 };
 
 struct Polytope {
-  std::vector<glm::vec3> vertices;
+  std::vector<SupportVertex> vertices;
   std::vector<Face> faces;
 };
 
@@ -110,7 +110,7 @@ private:
   static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
                             ClosestFaceData& closestFaceData);
 
-  static void reconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
+  static void reconstructPolytope(glm::vec3 supportPoint, glm::vec3 direction, Polytope& polytope, float& currentMinDist,
                                   ClosestFaceData& closestFaceData);
 
   static bool isDuplicateVertex(glm::vec3 supportPoint, const Polytope& polytope);
