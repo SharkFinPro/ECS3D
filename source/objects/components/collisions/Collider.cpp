@@ -49,7 +49,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
   glm::vec3 direction{1, 0, 0};
 
   auto support = getSupport(otherCollider, normalize(direction));
-  simplex.addVertex(support);
+  simplex.addVertex({support, direction});
 
   direction *= -1.0f;
 
@@ -66,7 +66,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
       return false;
     }
 
-    simplex.addVertex(support);
+    simplex.addVertex({support, direction});
   } while (iteration < maxIterations && !expandSimplex(simplex, direction));
 
   if (iteration == maxIterations)
