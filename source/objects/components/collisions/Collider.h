@@ -2,7 +2,7 @@
 #define COLLIDER_H
 
 // Enable to draw collision bounding box lines
-#define COLLISION_BBOX_DEBUG
+// #define COLLISION_BBOX_DEBUG
 
 #include "../Component.h"
 #include <memory>
@@ -48,22 +48,21 @@ public:
 
   glm::vec3 getSupport(const std::shared_ptr<Collider>& other, const glm::vec3& direction);
 
-private:
+  [[nodiscard]] ColliderType getColliderType() const;
 
+  virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
+
+private:
   std::vector<Line> linesToDraw;
 
   bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
                                      const std::shared_ptr<Transform>& otherTransform,
                                      glm::vec3* mtv);
 
-  virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
-
   static bool expandSimplex(Simplex& simplex, glm::vec3& direction);
   static void lineCase(const Simplex& simplex, glm::vec3& direction);
   static void triangleCase(Simplex& simplex, glm::vec3& direction);
   static bool tetrahedronCase(Simplex& simplex, glm::vec3& direction);
-
-  // glm::vec3 findCollisionPoint(const Polytope& polytope, const std::shared_ptr<Object>& other);
 
 protected:
   std::weak_ptr<Transform> transform_ptr;

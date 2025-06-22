@@ -44,6 +44,8 @@ public:
 
   [[nodiscard]] glm::vec3 getMinimumTranslationVector() const;
 
+  [[nodiscard]] glm::vec3 findCollisionPoint() const;
+
 private:
   Collider* collider;
   std::shared_ptr<Collider> otherCollider;

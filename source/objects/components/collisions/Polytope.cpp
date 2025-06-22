@@ -1,8 +1,12 @@
 #include "Polytope.h"
 #include "Collider.h"
 #include "Simplex.h"
+#include "SphereCollider.h"
+#include "../Transform.h"
+#include "../../Object.h"
 #include <algorithm>
 #include <map>
+#include <stdexcept>
 #include <utility>
 
 glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal)
@@ -111,6 +115,87 @@ Polytope::Polytope(Collider* collider, std::shared_ptr<Collider> otherCollider, 
 glm::vec3 Polytope::getMinimumTranslationVector() const
 {
   return closestFaceData.closestPoint;
+}
+
+glm::vec3 Polytope::findCollisionPoint() const
+{
+  const auto transform = collider->getOwner()->getComponent<Transform>(ComponentType::transform);
+  const auto otherTransform = otherCollider->getOwner()->getComponent<Transform>(ComponentType::transform);
+  if (!transform || !otherTransform)
+  {
+    throw std::runtime_error("Collider::EPA::Missing Transform");
+  }
+
+  auto closestPoint = closestFaceData.closestPoint;
+
+  glm::vec3 pointOfCollision;
+
+  if (collider->getColliderType() == ColliderType::sphereCollider)
+  {
+    auto direction = glm::normalize(closestPoint);
+
+    pointOfCollision = transform->getPosition() + direction * dynamic_cast<SphereCollider*>(collider)->getRadius();
+
+    return pointOfCollision;
+  }
+
+  if (otherCollider->getColliderType() == ColliderType::sphereCollider)
+  {
+    auto direction = glm::normalize(closestPoint);
+
+    pointOfCollision = otherTransform->getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
+
+    return pointOfCollision;
+  }
+
+  auto face = faces[closestFaceData.closestFaceIndex];
+  auto [vertex0, direction0] = vertices[face.vertices[0]];
+  auto [vertex1, direction1] = vertices[face.vertices[1]];
+  auto [vertex2, direction2] = vertices[face.vertices[2]];
+
+  auto a = otherCollider->findFurthestPoint(-direction0);
+  auto b = otherCollider->findFurthestPoint(-direction1);
+  auto c = otherCollider->findFurthestPoint(-direction2);
+
+  if (a == b && b == c)
+  {
+    pointOfCollision = a;
+
+    return pointOfCollision;
+  }
+
+  auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
+
+  pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+
+  if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform->getPosition(), otherTransform->getPosition()))
+  {
+    a = collider->findFurthestPoint(direction0);
+    b = collider->findFurthestPoint(direction1);
+    c = collider->findFurthestPoint(direction2);
+
+    pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+  }
+
+  // TODO: Better handle the case where the closestFaceData.closestPoint is not within the closest face itself
+  if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform->getPosition(), otherTransform->getPosition()))
+  {
+    closestPoint = closestPointOnTriangleToOrigin(vertex0, vertex1, vertex2);
+    barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
+
+    pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+
+    if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform->getPosition(), otherTransform->getPosition()))
+    {
+      a = otherCollider->findFurthestPoint(-direction0);
+      b = otherCollider->findFurthestPoint(-direction1);
+      c = otherCollider->findFurthestPoint(-direction2);
+
+      pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+    }
+  }
+
+  return pointOfCollision;
 }
 
 void Polytope::EPA()
