@@ -1,16 +1,14 @@
 #include "Collider.h"
-
-#include "../../Object.h"
+#include "SphereCollider.h"
 #include "../Transform.h"
+#include "../../Object.h"
+#include "../../../ECS3D.h"
+#include <glm/glm.hpp>
 #include <stdexcept>
 #include <limits>
-#include <glm/glm.hpp>
 #include <algorithm>
 #include <map>
 #include <ranges>
-
-#include "SphereCollider.h"
-#include "../../../ECS3D.h"
 
 bool sameDirection(const glm::vec3& first, const glm::vec3& second)
 {
@@ -408,25 +406,6 @@ glm::vec3 Collider::closestPointOnPlane(const glm::vec3& a, const glm::vec3& nor
   return normal * p;
 }
 
-glm::vec3 computeBarycentric(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& p) {
-  glm::vec3 v0 = c - a;
-  glm::vec3 v1 = b - a;
-  glm::vec3 v2 = p - a;
-
-  float dot00 = glm::dot(v0, v0);
-  float dot01 = glm::dot(v0, v1);
-  float dot02 = glm::dot(v0, v2);
-  float dot11 = glm::dot(v1, v1);
-  float dot12 = glm::dot(v1, v2);
-
-  float invDenom = 1.0f / (dot00 * dot11 - dot01 * dot01);
-  float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-  float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-  float w = 1.0f - u - v;
-
-  return glm::vec3(u, v, w);
-}
-
 glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other)
 {
   if (transform_ptr.expired())
@@ -479,38 +458,7 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
     ++iteration;
   }
 
-  glm::vec3 pointOfCollision;
-
-  if (colliderType == ColliderType::sphereCollider)
-  {
-    auto direction = glm::normalize(closestFaceData.closestPoint);
-
-    pointOfCollision = transform_ptr.lock()->getPosition() + direction * dynamic_cast<SphereCollider*>(this)->getRadius();
-  }
-  else if (otherCollider->colliderType == ColliderType::sphereCollider)
-  {
-    auto direction = glm::normalize(closestFaceData.closestPoint);
-
-    pointOfCollision = otherTransform->getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
-  }
-  else
-  {
-    auto face = polytope.faces[closestFaceData.closestFaceIndex];
-    auto [vertex0, direction0] = polytope.vertices[face.vertices[0]];
-    auto [vertex1, direction1] = polytope.vertices[face.vertices[1]];
-    auto [vertex2, direction2] = polytope.vertices[face.vertices[2]];
-
-    auto a = otherCollider->findFurthestPoint(-direction0);
-    auto b = otherCollider->findFurthestPoint(-direction1);
-    auto c = otherCollider->findFurthestPoint(-direction2);
-
-    auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestFaceData.closestPoint);
-
-    pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
-  }
-
-  linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
-  linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
+  findCollisionPoint(polytope, other, closestFaceData);
 
   return closestFaceData.closestPoint;
 }
@@ -711,4 +659,181 @@ bool Collider::isDuplicateVertex(const glm::vec3 supportPoint, const Polytope& p
   };
 
   return std::ranges::any_of(polytope.vertices, isEqual);
+}
+
+glm::vec3 computeBarycentric(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& p)
+{
+  const glm::vec3 v0 = c - a;
+  const glm::vec3 v1 = b - a;
+  const glm::vec3 v2 = p - a;
+
+  const float dot00 = glm::dot(v0, v0);
+  const float dot01 = glm::dot(v0, v1);
+  const float dot02 = glm::dot(v0, v2);
+  const float dot11 = glm::dot(v1, v1);
+  const float dot12 = glm::dot(v1, v2);
+
+  const float invDenom = 1.0f / (dot00 * dot11 - dot01 * dot01);
+  const float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+  const float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+  const float w = 1.0f - u - v;
+
+  return { u, v, w };
+}
+
+glm::vec3 closestPointOnTriangleToOrigin(glm::vec3 a, glm::vec3 b, glm::vec3 c)
+{
+  // Edge vectors
+  glm::vec3 ab = b - a;
+  glm::vec3 ac = c - a;
+  glm::vec3 ap = -a; // Vector from A to origin (P = origin = (0,0,0))
+
+  // Compute dot products
+  float d1 = dot(ab, ap);
+  float d2 = dot(ac, ap);
+
+  // Check if P is in vertex region outside A
+  if (d1 <= 0.0f && d2 <= 0.0f)
+  {
+    return a; // Barycentric coordinates (1,0,0)
+  }
+
+  // Check if P is in vertex region outside B
+  glm::vec3 bp = -b;
+  float d3 = dot(ab, bp);
+  float d4 = dot(ac, bp);
+  if (d3 >= 0.0f && d4 <= d3)
+  {
+    return b; // Barycentric coordinates (0,1,0)
+  }
+
+  // Check if P is in edge region of AB
+  float vc = d1 * d4 - d3 * d2;
+  if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
+  {
+    float v = d1 / (d1 - d3);
+    return a + v * ab; // Barycentric coordinates (1-v,v,0)
+  }
+
+  // Check if P is in vertex region outside C
+  glm::vec3 cp = -c;
+  float d5 = dot(ab, cp);
+  float d6 = dot(ac, cp);
+  if (d6 >= 0.0f && d5 <= d6)
+  {
+    return c; // Barycentric coordinates (0,0,1)
+  }
+
+  // Check if P is in edge region of AC
+  float vb = d5 * d2 - d1 * d6;
+  if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
+  {
+    float w = d2 / (d2 - d6);
+    return a + w * ac; // Barycentric coordinates (1-w,0,w)
+  }
+
+  // Check if P is in edge region of BC
+  float va = d3 * d6 - d5 * d4;
+  if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
+  {
+    float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+    return b + w * (c - b); // Barycentric coordinates (0,1-w,w)
+  }
+
+  // P is inside face region. Compute projection onto triangle plane
+  float denom = 1.0f / (va + vb + vc);
+  float v = vb * denom;
+  float w = vc * denom;
+  return a + ab * v + ac * w; // Barycentric coordinates (1-v-w,v,w)
+}
+
+glm::vec3 Collider::findCollisionPoint(const Polytope& polytope, const std::shared_ptr<Object>& other,
+                                  const ClosestFaceData& closestFaceData)
+{
+  const auto otherTransform = other->getComponent<Transform>(ComponentType::transform);
+  const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
+  if (!otherTransform || !otherCollider)
+  {
+    throw std::runtime_error("Collider::EPA::Missing Transform/Collider");
+  }
+
+  auto closestPoint = closestFaceData.closestPoint;
+
+  glm::vec3 pointOfCollision;
+
+  if (colliderType == ColliderType::sphereCollider)
+  {
+    auto direction = glm::normalize(closestPoint);
+
+    pointOfCollision = transform_ptr.lock()->getPosition() + direction * dynamic_cast<SphereCollider*>(this)->getRadius();
+
+    linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
+    linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
+
+    return pointOfCollision;
+  }
+
+  if (otherCollider->colliderType == ColliderType::sphereCollider)
+  {
+    auto direction = glm::normalize(closestPoint);
+
+    pointOfCollision = otherTransform->getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
+
+    linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
+    linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
+
+    return pointOfCollision;
+  }
+
+  auto face = polytope.faces[closestFaceData.closestFaceIndex];
+  auto [vertex0, direction0] = polytope.vertices[face.vertices[0]];
+  auto [vertex1, direction1] = polytope.vertices[face.vertices[1]];
+  auto [vertex2, direction2] = polytope.vertices[face.vertices[2]];
+
+  auto a = otherCollider->findFurthestPoint(-direction0);
+  auto b = otherCollider->findFurthestPoint(-direction1);
+  auto c = otherCollider->findFurthestPoint(-direction2);
+
+  auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
+
+  if (a == b && b == c)
+  {
+    pointOfCollision = a;
+  }
+  else
+  {
+    pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+
+    if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform_ptr.lock()->getPosition(), otherTransform->getPosition()))
+    {
+      a = findFurthestPoint(direction0);
+      b = findFurthestPoint(direction1);
+      c = findFurthestPoint(direction2);
+
+      pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+    }
+  }
+
+  // TODO: Better handle the case where the closestFaceData.closestPoint is not within the closest face itself
+  if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform_ptr.lock()->getPosition(), otherTransform->getPosition()))
+  {
+    closestPoint = closestPointOnTriangleToOrigin(vertex0, vertex1, vertex2);
+    barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
+
+    pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+
+    if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform_ptr.lock()->getPosition(), otherTransform->getPosition()))
+    {
+      a = otherCollider->findFurthestPoint(-direction0);
+      b = otherCollider->findFurthestPoint(-direction1);
+      c = otherCollider->findFurthestPoint(-direction2);
+
+      pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+    }
+  }
+
+  linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
+  linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
+
+  return pointOfCollision;
 }

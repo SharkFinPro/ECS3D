@@ -123,6 +123,8 @@ private:
 
   static bool isDuplicateVertex(glm::vec3 supportPoint, const Polytope& polytope);
 
+  glm::vec3 findCollisionPoint(const Polytope& polytope, const std::shared_ptr<Object>& other, const ClosestFaceData& closestFaceData);
+
 protected:
   std::weak_ptr<Transform> transform_ptr;
 
