@@ -7,7 +7,6 @@
 #include "../Component.h"
 #include <memory>
 #include <glm/vec3.hpp>
-#include <vector>
 #include "Simplex.h"
 
 struct Line {
