@@ -73,24 +73,24 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
   const auto minimumTranslationVector = polytope.getMinimumTranslationVector();
 
-  if (minimumTranslationVector.y != 0 || minimumTranslationVector.x != 0 || minimumTranslationVector.z != 0)
+  if (minimumTranslationVector.y == 0 && minimumTranslationVector.x == 0 && minimumTranslationVector.z == 0)
   {
-    *mtv = -minimumTranslationVector;
-
-    const auto pointOfCollision = polytope.findCollisionPoint();
-
-    linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
-    linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
-
-    if (collisionPoint != nullptr)
-    {
-      *collisionPoint = pointOfCollision;
-    }
-
-    return true;
+    return false;
   }
 
-  return false;
+  *mtv = -minimumTranslationVector;
+
+  const auto pointOfCollision = polytope.findCollisionPoint();
+
+  linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
+  linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
+
+  if (collisionPoint != nullptr)
+  {
+    *collisionPoint = pointOfCollision;
+  }
+
+  return true;
 }
 
 const BoundingBox& Collider::getBoundingBox()
