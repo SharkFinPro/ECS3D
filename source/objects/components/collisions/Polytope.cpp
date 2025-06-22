@@ -11,9 +11,9 @@
 
 glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal)
 {
-  const auto d = dot(normal, a);
+  const auto d = glm::dot(normal, a);
 
-  const auto p = d / dot(normal, normal);
+  const auto p = d / glm::dot(normal, normal);
 
   return normal * p;
 }
@@ -46,8 +46,8 @@ glm::vec3 closestPointOnTriangleToOrigin(glm::vec3 a, glm::vec3 b, glm::vec3 c)
   glm::vec3 ap = -a; // Vector from A to origin (P = origin = (0,0,0))
 
   // Compute dot products
-  float d1 = dot(ab, ap);
-  float d2 = dot(ac, ap);
+  float d1 = glm::dot(ab, ap);
+  float d2 = glm::dot(ac, ap);
 
   // Check if P is in vertex region outside A
   if (d1 <= 0.0f && d2 <= 0.0f)
@@ -57,8 +57,8 @@ glm::vec3 closestPointOnTriangleToOrigin(glm::vec3 a, glm::vec3 b, glm::vec3 c)
 
   // Check if P is in vertex region outside B
   glm::vec3 bp = -b;
-  float d3 = dot(ab, bp);
-  float d4 = dot(ac, bp);
+  float d3 = glm::dot(ab, bp);
+  float d4 = glm::dot(ac, bp);
   if (d3 >= 0.0f && d4 <= d3)
   {
     return b; // Barycentric coordinates (0,1,0)
@@ -74,8 +74,8 @@ glm::vec3 closestPointOnTriangleToOrigin(glm::vec3 a, glm::vec3 b, glm::vec3 c)
 
   // Check if P is in vertex region outside C
   glm::vec3 cp = -c;
-  float d5 = dot(ab, cp);
-  float d6 = dot(ac, cp);
+  float d5 = glm::dot(ab, cp);
+  float d6 = glm::dot(ac, cp);
   if (d6 >= 0.0f && d5 <= d6)
   {
     return c; // Barycentric coordinates (0,0,1)
@@ -467,7 +467,7 @@ void Polytope::constructFace(Edge edge, glm::vec3 supportPoint, float& currentMi
   }
 
   const auto closestPoint = closestPointOnPlane(faceData.a, faceData.normal);
-  float distance = dot(closestPoint, closestPoint);
+  float distance = glm::dot(closestPoint, closestPoint);
 
   if (distance < currentMinDist)
   {
