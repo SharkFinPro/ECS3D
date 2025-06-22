@@ -49,6 +49,8 @@ add_library(${PROJECT_NAME}
   objects/CollisionManager.h
   objects/ObjectGUIManager.cpp
   objects/ObjectGUIManager.h
+  objects/components/collisions/Polytope.cpp
+  objects/components/collisions/Polytope.h
 )
 
 # Declare VulkanEngine as a dependency

@@ -1,12 +1,17 @@
 #ifndef SIMPLEX_H
 #define SIMPLEX_H
 
-#include <glm/vec3.hpp>
+#include <glm/glm.hpp>
 
 struct SupportVertex {
   glm::vec3 vertex;
   glm::vec3 direction;
 };
+
+inline bool sameDirection(const glm::vec3& first, const glm::vec3& second)
+{
+  return glm::dot(first, second) > 0;
+}
 
 class Simplex {
 public:
