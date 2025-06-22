@@ -134,34 +134,34 @@ void Collider::variableUpdate(float dt)
     renderer->renderLine(line.start, line.end);
   }
 
-  // const glm::vec3 corners[8] = {
-  //   {boundingBox.minX, boundingBox.minY, boundingBox.minZ},
-  //   {boundingBox.maxX, boundingBox.minY, boundingBox.minZ},
-  //   {boundingBox.maxX, boundingBox.maxY, boundingBox.minZ},
-  //   {boundingBox.minX, boundingBox.maxY, boundingBox.minZ},
-  //   {boundingBox.minX, boundingBox.minY, boundingBox.maxZ},
-  //   {boundingBox.maxX, boundingBox.minY, boundingBox.maxZ},
-  //   {boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ},
-  //   {boundingBox.minX, boundingBox.maxY, boundingBox.maxZ}
-  // };
-  //
-  // // Bottom face
-  // renderer->renderLine(corners[0], corners[1]); // min to +X
-  // renderer->renderLine(corners[1], corners[2]); // +X to +X+Y
-  // renderer->renderLine(corners[2], corners[3]); // +X+Y to +Y
-  // renderer->renderLine(corners[3], corners[0]); // +Y to min
-  //
-  // // Top face
-  // renderer->renderLine(corners[4], corners[5]); // +Z to +X+Z
-  // renderer->renderLine(corners[5], corners[6]); // +X+Z to max
-  // renderer->renderLine(corners[6], corners[7]); // max to +Y+Z
-  // renderer->renderLine(corners[7], corners[4]); // +Y+Z to +Z
-  //
-  // // Vertical edges connecting bottom to top
-  // renderer->renderLine(corners[0], corners[4]); // min to +Z
-  // renderer->renderLine(corners[1], corners[5]); // +X to +X+Z
-  // renderer->renderLine(corners[2], corners[6]); // +X+Y to max
-  // renderer->renderLine(corners[3], corners[7]); // +Y to +Y+Z
+  const glm::vec3 corners[8] = {
+    {boundingBox.minX, boundingBox.minY, boundingBox.minZ},
+    {boundingBox.maxX, boundingBox.minY, boundingBox.minZ},
+    {boundingBox.maxX, boundingBox.maxY, boundingBox.minZ},
+    {boundingBox.minX, boundingBox.maxY, boundingBox.minZ},
+    {boundingBox.minX, boundingBox.minY, boundingBox.maxZ},
+    {boundingBox.maxX, boundingBox.minY, boundingBox.maxZ},
+    {boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ},
+    {boundingBox.minX, boundingBox.maxY, boundingBox.maxZ}
+  };
+
+  // Bottom face
+  renderer->renderLine(corners[0], corners[1]); // min to +X
+  renderer->renderLine(corners[1], corners[2]); // +X to +X+Y
+  renderer->renderLine(corners[2], corners[3]); // +X+Y to +Y
+  renderer->renderLine(corners[3], corners[0]); // +Y to min
+
+  // Top face
+  renderer->renderLine(corners[4], corners[5]); // +Z to +X+Z
+  renderer->renderLine(corners[5], corners[6]); // +X+Z to max
+  renderer->renderLine(corners[6], corners[7]); // max to +Y+Z
+  renderer->renderLine(corners[7], corners[4]); // +Y+Z to +Z
+
+  // Vertical edges connecting bottom to top
+  renderer->renderLine(corners[0], corners[4]); // min to +Z
+  renderer->renderLine(corners[1], corners[5]); // +X to +X+Z
+  renderer->renderLine(corners[2], corners[6]); // +X+Y to max
+  renderer->renderLine(corners[3], corners[7]); // +Y to +Y+Z
 }
 #endif
 
