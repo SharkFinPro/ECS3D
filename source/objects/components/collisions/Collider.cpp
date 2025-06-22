@@ -794,24 +794,27 @@ glm::vec3 Collider::findCollisionPoint(const Polytope& polytope, const std::shar
   auto b = otherCollider->findFurthestPoint(-direction1);
   auto c = otherCollider->findFurthestPoint(-direction2);
 
-  auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
-
   if (a == b && b == c)
   {
     pointOfCollision = a;
+
+    linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
+    linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
+
+    return pointOfCollision;
   }
-  else
+
+  auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
+
+  pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+
+  if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform_ptr.lock()->getPosition(), otherTransform->getPosition()))
   {
+    a = findFurthestPoint(direction0);
+    b = findFurthestPoint(direction1);
+    c = findFurthestPoint(direction2);
+
     pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
-
-    if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform_ptr.lock()->getPosition(), otherTransform->getPosition()))
-    {
-      a = findFurthestPoint(direction0);
-      b = findFurthestPoint(direction1);
-      c = findFurthestPoint(direction2);
-
-      pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
-    }
   }
 
   // TODO: Better handle the case where the closestFaceData.closestPoint is not within the closest face itself
