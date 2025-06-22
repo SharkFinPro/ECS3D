@@ -11,20 +11,40 @@ size_t Simplex::size() const
 
 const glm::vec3& Simplex::getA() const
 {
-  return vertices[0];
+  return vertices[0].vertex;
 }
 
 const glm::vec3& Simplex::getB() const
 {
-  return vertices[1];
+  return vertices[1].vertex;
 }
 
 const glm::vec3& Simplex::getC() const
 {
-  return vertices[2];
+  return vertices[2].vertex;
 }
 
 const glm::vec3& Simplex::getD() const
+{
+  return vertices[3].vertex;
+}
+
+const SupportVertex& Simplex::getSupportA() const
+{
+  return vertices[0];
+}
+
+const SupportVertex& Simplex::getSupportB() const
+{
+  return vertices[1];
+}
+
+const SupportVertex& Simplex::getSupportC() const
+{
+  return vertices[2];
+}
+
+const SupportVertex& Simplex::getSupportD() const
 {
   return vertices[3];
 }
@@ -55,7 +75,7 @@ void Simplex::removeD()
   --length;
 }
 
-void Simplex::addVertex(const glm::vec3& vertex)
+void Simplex::addVertex(const SupportVertex& vertex)
 {
   for (auto i = length; i > 0; --i)
   {
