@@ -82,8 +82,10 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
   const auto pointOfCollision = polytope.findCollisionPoint();
 
+#ifdef COLLISION_BBOX_DEBUG
   linesToDraw.emplace_back(otherTransform->getPosition(), pointOfCollision);
   linesToDraw.emplace_back(transform_ptr.lock()->getPosition(), pointOfCollision);
+#endif
 
   if (collisionPoint != nullptr)
   {

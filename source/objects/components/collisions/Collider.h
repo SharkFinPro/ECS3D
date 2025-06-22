@@ -53,7 +53,9 @@ public:
   virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
 
 private:
+#ifdef COLLISION_BBOX_DEBUG
   std::vector<Line> linesToDraw;
+#endif
 
   bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
                                      const std::shared_ptr<Transform>& otherTransform,
