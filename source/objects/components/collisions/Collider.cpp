@@ -51,7 +51,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
     support = getSupport(otherCollider, normalize(direction));
 
-    if (dot(support, direction) < 0)
+    if (glm::dot(support, direction) < 0)
     {
       return false;
     }
@@ -234,7 +234,7 @@ void Collider::lineCase(const Simplex& simplex, glm::vec3& direction)
 
   direction = cross(cross(AB, AO), AB);
 
-  if (dot(direction, direction) == 0)
+  if (glm::dot(direction, direction) == 0)
   {
     direction = cross(AB, {0, 0, 1});
   }
