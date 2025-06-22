@@ -17,7 +17,8 @@ public:
 
   void applyForce(const glm::vec3& force);
 
-  void handleCollision(glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other);
+  void handleCollision(glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other,
+                       glm::vec3 collisionPoint);
 
   void respondToCollision(glm::vec3 minimumTranslationVector);
 

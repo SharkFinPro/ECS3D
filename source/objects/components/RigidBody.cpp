@@ -52,7 +52,8 @@ void RigidBody::applyForce(const glm::vec3& force)
   }
 }
 
-void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other)
+void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other,
+                                const glm::vec3 collisionPoint)
 {
   respondToCollision(minimumTranslationVector);
 
@@ -62,7 +63,6 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
   }
 
   const auto collisionNormal = normalize(minimumTranslationVector);
-
   const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
 
   if (!otherRb)

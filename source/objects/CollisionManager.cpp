@@ -147,7 +147,7 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
     }
 #endif
 
-    if (edge.collider->collidesWith(other.object, nullptr))
+    if (edge.collider->collidesWith(other.object, nullptr, nullptr))
     {
       collidedObjects.emplace_back(other.object);
     }
@@ -161,9 +161,10 @@ void CollisionManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidB
   if (collidedObjects.size() == 1)
   {
     glm::vec3 mtv;
-    if (collider->collidesWith(collidedObjects[0], &mtv))
+    glm::vec3 collisionPoint;
+    if (collider->collidesWith(collidedObjects[0], &mtv, &collisionPoint))
     {
-      rigidBody->handleCollision(mtv, collidedObjects[0]);
+      rigidBody->handleCollision(mtv, collidedObjects[0], collisionPoint);
     }
 
     return;
@@ -175,7 +176,7 @@ void CollisionManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidB
   for (const auto& collidedObject : collidedObjects)
   {
     glm::vec3 mtv;
-    collider->collidesWith(collidedObject, &mtv);
+    collider->collidesWith(collidedObject, &mtv, nullptr);
 
     distances.push_back(dot(mtv, mtv));
   }
@@ -197,9 +198,10 @@ void CollisionManager::handleCollisions(const std::shared_ptr<RigidBody>& rigidB
         chosenFlags[j] = true;
 
         glm::vec3 mtv;
-        if (collider->collidesWith(collidedObjects[j], &mtv))
+        glm::vec3 collisionPoint;
+        if (collider->collidesWith(collidedObjects[j], &mtv, &collisionPoint))
         {
-          rigidBody->handleCollision(mtv, collidedObjects[j]);
+          rigidBody->handleCollision(mtv, collidedObjects[j], collisionPoint);
         }
       }
     }

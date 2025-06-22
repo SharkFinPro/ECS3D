@@ -19,7 +19,7 @@ Collider::Collider(const ColliderType type, const ComponentType subType)
   : Component(ComponentType::collider, subType), colliderType(type), roughMaxDistance(0)
 {}
 
-bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv)
+bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv, glm::vec3* collisionPoint)
 {
   if (transform_ptr.expired())
   {
@@ -79,7 +79,9 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
   Polytope polytope = generatePolytope(simplex);
 
-  auto minimumTranslationVector = EPA(polytope, other);
+  EPA(polytope, other);
+
+  auto minimumTranslationVector = polytope.closestFaceData.closestPoint;
 
   if (minimumTranslationVector.y != 0 || minimumTranslationVector.x != 0 || minimumTranslationVector.z != 0)
   {
@@ -406,7 +408,7 @@ glm::vec3 Collider::closestPointOnPlane(const glm::vec3& a, const glm::vec3& nor
   return normal * p;
 }
 
-glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other)
+void Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other)
 {
   if (transform_ptr.expired())
   {
@@ -428,19 +430,18 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
   std::optional<glm::vec3> previousClosestPoint;
   std::optional<float> previousMinDist;
 
-  ClosestFaceData closestFaceData{};
-  auto currentMinDist = findClosestFace(closestFaceData, polytope);
+  auto currentMinDist = findClosestFace(polytope);
 
   constexpr uint8_t maxIterations = 25;
   uint8_t iteration = 0;
   while (iteration < maxIterations)
   {
-    if (closeEnough(currentMinDist, previousMinDist, closestFaceData.closestPoint, previousClosestPoint))
+    if (closeEnough(currentMinDist, previousMinDist, polytope.closestFaceData.closestPoint, previousClosestPoint))
     {
       break;
     }
 
-    auto searchDirection = getSearchDirection(closestFaceData, polytope);
+    auto searchDirection = getSearchDirection(polytope);
 
     const auto supportPoint = getSupport(otherCollider, normalize(searchDirection));
 
@@ -450,20 +451,18 @@ glm::vec3 Collider::EPA(Polytope& polytope, const std::shared_ptr<Object>& other
     }
 
     previousMinDist = currentMinDist;
-    previousClosestPoint = closestFaceData.closestPoint;
+    previousClosestPoint = polytope.closestFaceData.closestPoint;
 
     currentMinDist = std::numeric_limits<float>::max();
-    reconstructPolytope(supportPoint, searchDirection, polytope, currentMinDist, closestFaceData);
+    reconstructPolytope(supportPoint, searchDirection, polytope, currentMinDist);
 
     ++iteration;
   }
 
-  findCollisionPoint(polytope, other, closestFaceData);
-
-  return closestFaceData.closestPoint;
+  findCollisionPoint(polytope, other);
 }
 
-float Collider::findClosestFace(ClosestFaceData& closestFaceData, const Polytope& polytope)
+float Collider::findClosestFace(Polytope& polytope)
 {
   float minDist = std::numeric_limits<float>::max();
 
@@ -472,8 +471,8 @@ float Collider::findClosestFace(ClosestFaceData& closestFaceData, const Polytope
     if (const float dist = polytope.faces[i].closestPoint.distance; dist < minDist)
     {
       minDist = dist;
-      closestFaceData.closestPoint = polytope.faces[i].closestPoint.point;
-      closestFaceData.closestFaceIndex = i;
+      polytope.closestFaceData.closestPoint = polytope.faces[i].closestPoint.point;
+      polytope.closestFaceData.closestFaceIndex = i;
     }
   }
 
@@ -507,20 +506,19 @@ bool Collider::closeEnough(const float minDistance, const std::optional<float>& 
   return deltaX + deltaY + deltaZ < minDist;
 }
 
-glm::vec3 Collider::getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope)
+glm::vec3 Collider::getSearchDirection(const Polytope& polytope)
 {
-  glm::vec3 searchDirection = closestFaceData.closestPoint;
+  glm::vec3 searchDirection = polytope.closestFaceData.closestPoint;
 
   if (dot(searchDirection, searchDirection) < 1e-5f)
   {
-    searchDirection = polytope.faces[closestFaceData.closestFaceIndex].normal;
+    searchDirection = polytope.faces[polytope.closestFaceData.closestFaceIndex].normal;
   }
 
   return searchDirection;
 }
 
-std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
-                                                ClosestFaceData& closestFaceData)
+std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist)
 {
   std::vector<Edge> edges;
 
@@ -544,8 +542,8 @@ std::vector<Edge> Collider::deconstructPolytope(glm::vec3 supportPoint, Polytope
     if (const float dist = polytope.faces[i].closestPoint.distance; dist < currentMinDist)
     {
       currentMinDist = dist;
-      closestFaceData.closestPoint = polytope.faces[i].closestPoint.point;
-      closestFaceData.closestFaceIndex = i;
+      polytope.closestFaceData.closestPoint = polytope.faces[i].closestPoint.point;
+      polytope.closestFaceData.closestFaceIndex = i;
     }
 
     ++i;
@@ -589,8 +587,7 @@ bool Collider::isFacingInward(const FaceData& faceData, const Polytope& polytope
   return false;
 }
 
-void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
-                             ClosestFaceData& closestFaceData)
+void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist)
 {
   FaceData faceData {
     .aIndex = edge.first,
@@ -621,8 +618,8 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
   if (distance < currentMinDist)
   {
     currentMinDist = distance;
-    closestFaceData.closestPoint = closestPoint;
-    closestFaceData.closestFaceIndex = polytope.faces.size();
+    polytope.closestFaceData.closestPoint = closestPoint;
+    polytope.closestFaceData.closestFaceIndex = polytope.faces.size();
   }
 
   polytope.faces.push_back({
@@ -640,11 +637,11 @@ void Collider::constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polyto
 }
 
 void Collider::reconstructPolytope(const glm::vec3 supportPoint, const glm::vec3 direction, Polytope& polytope,
-                                   float& currentMinDist, ClosestFaceData& closestFaceData)
+                                   float& currentMinDist)
 {
-  for (const auto& edge : deconstructPolytope(supportPoint, polytope, currentMinDist, closestFaceData))
+  for (const auto& edge : deconstructPolytope(supportPoint, polytope, currentMinDist))
   {
-    constructFace(edge, supportPoint, polytope, currentMinDist, closestFaceData);
+    constructFace(edge, supportPoint, polytope, currentMinDist);
   }
 
   polytope.vertices.push_back({supportPoint, direction});
@@ -747,8 +744,7 @@ glm::vec3 closestPointOnTriangleToOrigin(glm::vec3 a, glm::vec3 b, glm::vec3 c)
   return a + ab * v + ac * w; // Barycentric coordinates (1-v-w,v,w)
 }
 
-glm::vec3 Collider::findCollisionPoint(const Polytope& polytope, const std::shared_ptr<Object>& other,
-                                  const ClosestFaceData& closestFaceData)
+glm::vec3 Collider::findCollisionPoint(const Polytope& polytope, const std::shared_ptr<Object>& other)
 {
   const auto otherTransform = other->getComponent<Transform>(ComponentType::transform);
   const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
@@ -757,7 +753,7 @@ glm::vec3 Collider::findCollisionPoint(const Polytope& polytope, const std::shar
     throw std::runtime_error("Collider::EPA::Missing Transform/Collider");
   }
 
-  auto closestPoint = closestFaceData.closestPoint;
+  auto closestPoint = polytope.closestFaceData.closestPoint;
 
   glm::vec3 pointOfCollision;
 
@@ -785,7 +781,7 @@ glm::vec3 Collider::findCollisionPoint(const Polytope& polytope, const std::shar
     return pointOfCollision;
   }
 
-  auto face = polytope.faces[closestFaceData.closestFaceIndex];
+  auto face = polytope.faces[polytope.closestFaceData.closestFaceIndex];
   auto [vertex0, direction0] = polytope.vertices[face.vertices[0]];
   auto [vertex1, direction1] = polytope.vertices[face.vertices[1]];
   auto [vertex2, direction2] = polytope.vertices[face.vertices[2]];

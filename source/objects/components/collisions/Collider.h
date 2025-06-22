@@ -30,14 +30,15 @@ struct Face {
   ClosestPoint closestPoint;
 };
 
-struct Polytope {
-  std::vector<SupportVertex> vertices;
-  std::vector<Face> faces;
-};
-
 struct ClosestFaceData {
   glm::vec3 closestPoint;
   uint8_t closestFaceIndex;
+};
+
+struct Polytope {
+  std::vector<SupportVertex> vertices;
+  std::vector<Face> faces;
+  ClosestFaceData closestFaceData{};
 };
 
 struct FaceData {
@@ -70,7 +71,7 @@ class Collider : public Component {
 public:
   explicit Collider(ColliderType type, ComponentType subType);
 
-  bool collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv);
+  bool collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv, glm::vec3* collisionPoint);
 
   const BoundingBox& getBoundingBox();
 
@@ -101,29 +102,26 @@ private:
 
   static glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal);
 
-  glm::vec3 EPA(Polytope& polytope, const std::shared_ptr<Object>& other);
+  void EPA(Polytope& polytope, const std::shared_ptr<Object>& other);
 
-  static float findClosestFace(ClosestFaceData& closestFaceData, const Polytope& polytope);
+  static float findClosestFace(Polytope& polytope);
 
   static bool closeEnough(float minDistance, const std::optional<float>& previousMinDistance,
                           glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint);
 
-  static glm::vec3 getSearchDirection(const ClosestFaceData& closestFaceData, const Polytope& polytope);
+  static glm::vec3 getSearchDirection(const Polytope& polytope);
 
-  static std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
-                                               ClosestFaceData& closestFaceData);
+  static std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist);
 
   static bool isFacingInward(const FaceData& faceData, const Polytope& polytope);
 
-  static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist,
-                            ClosestFaceData& closestFaceData);
+  static void constructFace(Edge edge, glm::vec3 supportPoint, Polytope& polytope, float& currentMinDist);
 
-  static void reconstructPolytope(glm::vec3 supportPoint, glm::vec3 direction, Polytope& polytope, float& currentMinDist,
-                                  ClosestFaceData& closestFaceData);
+  static void reconstructPolytope(glm::vec3 supportPoint, glm::vec3 direction, Polytope& polytope, float& currentMinDist);
 
   static bool isDuplicateVertex(glm::vec3 supportPoint, const Polytope& polytope);
 
-  glm::vec3 findCollisionPoint(const Polytope& polytope, const std::shared_ptr<Object>& other, const ClosestFaceData& closestFaceData);
+  glm::vec3 findCollisionPoint(const Polytope& polytope, const std::shared_ptr<Object>& other);
 
 protected:
   std::weak_ptr<Transform> transform_ptr;
