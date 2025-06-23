@@ -50,7 +50,7 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
         rigidBody->setVelocity({0, 0, 0});
       }
 
-      rigidBody->applyForce(*currentAppliedForce * dt);
+      rigidBody->applyForce(*currentAppliedForce * dt, transform->getPosition());
       transform->move(*currentAppliedForce * dt);
     }
   }

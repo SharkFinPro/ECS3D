@@ -9,13 +9,20 @@ constexpr float GRAVITY = 9.81f;
 
 class Transform;
 
+struct LineSegment {
+  glm::vec3 start;
+  glm::vec3 end;
+};
+
 class RigidBody final : public Component {
 public:
   RigidBody();
 
+  void variableUpdate(float dt) override;
+
   void fixedUpdate(float dt) override;
 
-  void applyForce(const glm::vec3& force);
+  void applyForce(const glm::vec3& force, const glm::vec3& position);
 
   void handleCollision(glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other,
                        glm::vec3 collisionPoint);
@@ -33,6 +40,8 @@ public:
   void stop() override;
 
 private:
+  std::vector<LineSegment> linesToDraw;
+
   glm::vec3 initialVelocity;
   glm::vec3 liveVelocity;
   glm::vec3* currentVelocity;
@@ -48,6 +57,8 @@ private:
   glm::vec3 initialGravity;
   glm::vec3 liveGravity;
   glm::vec3* currentGravity;
+
+  glm::vec3 angularVelocity = glm::vec3(0.0f);
 
   bool falling;
   bool nextFalling;

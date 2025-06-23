@@ -4,6 +4,8 @@
 #include <imgui.h>
 #include <glm/glm.hpp>
 
+#include "../../ECS3D.h"
+
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody),
     initialVelocity(0), liveVelocity(initialVelocity), currentVelocity(&initialVelocity),
@@ -13,8 +15,20 @@ RigidBody::RigidBody()
     falling(true), nextFalling(true)
 {}
 
+void RigidBody::variableUpdate(float dt)
+{
+  const auto renderer = getOwner()->getManager()->getECS()->getRenderer();
+
+  for (const auto&[start, end] : linesToDraw)
+  {
+    renderer->renderLine(start, end);
+  }
+}
+
 void RigidBody::fixedUpdate(const float dt)
 {
+  linesToDraw.clear();
+
   if (transform_ptr.expired())
   {
     transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
@@ -32,16 +46,30 @@ void RigidBody::fixedUpdate(const float dt)
 
     if (*currentDoGravity)
     {
-      applyForce(*currentGravity * dt * 0.1f);
+      applyForce(*currentGravity * dt * 0.1f, transform->getPosition());
     }
 
     limitMovement();
 
     transform->move(*currentVelocity);
+
+    const auto rotation = transform->getRotation();
+    const auto newRotation = rotation + angularVelocity * dt;
+    transform->setRotation(newRotation);
+
+    angularVelocity *= 0.85f;
+
+    float angularSpeed = glm::length(angularVelocity);
+
+    // Stop very small angular velocities to prevent jitter
+    if (angularSpeed < 0.01f)
+    {
+      angularVelocity = glm::vec3(0.0f);
+    }
   }
 }
 
-void RigidBody::applyForce(const glm::vec3& force)
+void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
 {
   *currentVelocity += force;
 
@@ -50,11 +78,21 @@ void RigidBody::applyForce(const glm::vec3& force)
     falling = true;
     nextFalling = true;
   }
+
+  auto r = position - transform_ptr.lock()->getPosition();
+
+  if (glm::length(r) > 0.01f)
+  {
+    auto angularImpulse = glm::cross(r, force);
+    angularVelocity += angularImpulse * 200.0f;
+  }
 }
 
 void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other,
                                 const glm::vec3 collisionPoint)
 {
+  linesToDraw.emplace_back(collisionPoint, transform_ptr.lock()->getPosition());
+
   respondToCollision(minimumTranslationVector);
 
   if (!other)
@@ -68,7 +106,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
   if (!otherRb)
   {
     const auto impulse = dot(-*currentVelocity, collisionNormal) * collisionNormal;
-    applyForce(impulse);
+    applyForce(impulse, collisionPoint);
 
     return;
   }
@@ -80,8 +118,8 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
   if (dot(velocityDiff, collisionNormal) > 0)
   {
     const auto impulse = dot(velocityDiff, collisionNormal) * collisionNormal;
-    applyForce(impulse);
-    otherRb->applyForce(-impulse);
+    applyForce(impulse, collisionPoint);
+    otherRb->applyForce(-impulse, collisionPoint);
   }
 }
 
@@ -165,5 +203,5 @@ void RigidBody::limitMovement()
   const glm::vec2 horizontalVelocity(currentVelocity->x, currentVelocity->z);
   const glm::vec2 frictionForce = -horizontalVelocity * *currentFriction;
 
-  applyForce({ frictionForce.x, 0.0f, frictionForce.y });
+  applyForce({ frictionForce.x, 0.0f, frictionForce.y }, transform_ptr.lock()->getPosition());
 }
