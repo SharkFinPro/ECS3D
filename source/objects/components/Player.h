@@ -19,17 +19,10 @@ public:
   void displayGui() override;
 
 private:
-  float initialSpeed;
-  float liveSpeed;
-  float* currentSpeed;
+  ComponentVariable<float> m_speed;
+  ComponentVariable<float> m_jumpHeight;
 
-  float initialJumpHeight;
-  float liveJumpHeight;
-  float* currentJumpHeight;
-
-  glm::vec3 initialAppliedForce;
-  glm::vec3 liveAppliedForce;
-  glm::vec3* currentAppliedForce;
+  glm::vec3 appliedForce;
 
   std::weak_ptr<Transform> transform_ptr;
   std::weak_ptr<RigidBody> rigidBody_ptr;

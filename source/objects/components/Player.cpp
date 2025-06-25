@@ -7,10 +7,13 @@
 
 Player::Player()
   : Component(ComponentType::player),
-    initialSpeed(1.0f), liveSpeed(initialSpeed), currentSpeed(&initialSpeed),
-    initialJumpHeight(15.0f), liveJumpHeight(initialJumpHeight), currentJumpHeight(&initialJumpHeight),
-    initialAppliedForce(0), liveAppliedForce(initialAppliedForce), currentAppliedForce(&initialAppliedForce)
-{}
+    m_speed(1.0f),
+    m_jumpHeight(15.0f),
+    appliedForce(0)
+{
+  loadVariable(m_speed);
+  loadVariable(m_jumpHeight);
+}
 
 void Player::variableUpdate([[maybe_unused]] const float dt)
 {
@@ -50,20 +53,20 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
         rigidBody->setVelocity({0, 0, 0});
       }
 
-      rigidBody->applyForce(*currentAppliedForce * dt, transform->getPosition());
-      transform->move(*currentAppliedForce * dt);
+      rigidBody->applyForce(appliedForce * dt, transform->getPosition());
+      transform->move(appliedForce * dt);
     }
   }
 
-  *currentAppliedForce *= 0;
+  appliedForce *= 0;
 }
 
 void Player::displayGui()
 {
   if (displayGuiHeader())
   {
-    ImGui::InputFloat("Speed", currentSpeed);
-    ImGui::InputFloat("Jump Height", currentJumpHeight);
+    ImGui::InputFloat("Speed", &m_speed.value());
+    ImGui::InputFloat("Jump Height", &m_jumpHeight.value());
   }
 }
 
@@ -89,36 +92,36 @@ void Player::handleInput()
   float xForce = 0;
   if (ecs->keyIsPressed(GLFW_KEY_LEFT))
   {
-    xForce += *currentSpeed;
+    xForce += m_speed.get();
   }
   if (ecs->keyIsPressed(GLFW_KEY_RIGHT))
   {
-    xForce -= *currentSpeed;
+    xForce -= m_speed.get();
   }
   if (xForce!= 0)
   {
-    currentAppliedForce->x = xForce;
+    appliedForce.x = xForce;
   }
 
   float zForce = 0;
   if (ecs->keyIsPressed(GLFW_KEY_UP))
   {
-    zForce += *currentSpeed;
+    zForce += m_speed.get();
   }
   if (ecs->keyIsPressed(GLFW_KEY_DOWN))
   {
-    zForce -= *currentSpeed;
+    zForce -= m_speed.get();
   }
   if (zForce != 0)
   {
-    currentAppliedForce->z = zForce;
+    appliedForce.z = zForce;
   }
 
   if (const std::shared_ptr<RigidBody> rigidBody = rigidBody_ptr.lock())
   {
     if (!rigidBody->isFalling() && ecs->keyIsPressed(GLFW_KEY_X))
     {
-      currentAppliedForce->y = *currentJumpHeight;
+      appliedForce.y = m_jumpHeight.get();
     }
   }
 }
