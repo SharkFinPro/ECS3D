@@ -64,15 +64,8 @@ void RigidBody::fixedUpdate(const float dt)
     const auto newRotation = rotation + m_angularVelocity.get() * dt;
     transform->setRotation(newRotation);
 
-    m_angularVelocity.value() *= 0.85f;
-
-    float angularSpeed = glm::length(m_angularVelocity.get());
-
-    // Stop very small angular velocities to prevent jitter
-    if (angularSpeed < 0.01f)
-    {
-      m_angularVelocity.set(glm::vec3(0.0f));
-    }
+    constexpr float damping = 0.98f;
+    m_angularVelocity.value() *= damping;
   }
 }
 
@@ -86,13 +79,14 @@ void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
     nextFalling = true;
   }
 
-  auto r = position - transform_ptr.lock()->getPosition();
-
-  if (glm::length(r) > 0.01f)
+  const auto r = position - transform_ptr.lock()->getPosition();
+  if (glm::length(r) <= 0.01f)
   {
-    const auto angularImpulse = glm::cross(r, force);
-    m_angularVelocity.value() += angularImpulse * 200.0f;
+    return;
   }
+
+  const auto angularImpulse = glm::cross(r, force);
+  m_angularVelocity.value() += angularImpulse * 50.0f;
 }
 
 void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other,
