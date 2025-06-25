@@ -42,8 +42,7 @@ private:
   ComponentVariable<float> m_friction;
   ComponentVariable<bool> m_doGravity;
   ComponentVariable<float> m_gravity;
-
-  glm::vec3 angularVelocity = glm::vec3(0.0f);
+  ComponentVariable<glm::vec3> m_angularVelocity;
 
   bool falling;
   bool nextFalling;

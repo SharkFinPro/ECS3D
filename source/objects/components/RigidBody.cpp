@@ -11,12 +11,14 @@ RigidBody::RigidBody()
     m_friction(0.1f),
     m_doGravity(true),
     m_gravity(-GRAVITY),
+    m_angularVelocity(glm::vec3(0)),
     falling(true), nextFalling(true)
 {
   loadVariable(m_velocity);
   loadVariable(m_friction);
   loadVariable(m_doGravity);
   loadVariable(m_gravity);
+  loadVariable(m_angularVelocity);
 }
 
 void RigidBody::variableUpdate(float dt)
@@ -59,17 +61,17 @@ void RigidBody::fixedUpdate(const float dt)
     transform->move(m_velocity.get());
 
     const auto rotation = transform->getRotation();
-    const auto newRotation = rotation + angularVelocity * dt;
+    const auto newRotation = rotation + m_angularVelocity.get() * dt;
     transform->setRotation(newRotation);
 
-    angularVelocity *= 0.85f;
+    m_angularVelocity.value() *= 0.85f;
 
-    float angularSpeed = glm::length(angularVelocity);
+    float angularSpeed = glm::length(m_angularVelocity.get());
 
     // Stop very small angular velocities to prevent jitter
     if (angularSpeed < 0.01f)
     {
-      angularVelocity = glm::vec3(0.0f);
+      m_angularVelocity.set(glm::vec3(0.0f));
     }
   }
 }
@@ -88,8 +90,8 @@ void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
 
   if (glm::length(r) > 0.01f)
   {
-    auto angularImpulse = glm::cross(r, force);
-    angularVelocity += angularImpulse * 200.0f;
+    const auto angularImpulse = glm::cross(r, force);
+    m_angularVelocity.value() += angularImpulse * 200.0f;
   }
 }
 
