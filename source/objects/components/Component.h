@@ -48,7 +48,7 @@ public:
   }
 
 protected:
-  bool m_live = true;
+  bool m_live = false;
 };
 
 template <typename T>
