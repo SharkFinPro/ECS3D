@@ -72,8 +72,6 @@ protected:
   ColliderType colliderType;
 
   BoundingBox boundingBox;
-
-  float roughMaxDistance;
 };
 
 

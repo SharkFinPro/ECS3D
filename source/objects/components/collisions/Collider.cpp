@@ -8,7 +8,7 @@
 #include <stdexcept>
 
 Collider::Collider(const ColliderType type, const ComponentType subType)
-  : Component(ComponentType::collider, subType), colliderType(type), roughMaxDistance(0)
+  : Component(ComponentType::collider, subType), colliderType(type)
 {}
 
 bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv, glm::vec3* collisionPoint)
