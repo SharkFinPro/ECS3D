@@ -22,24 +22,12 @@ public:
 
   void displayGui() override;
 
-  void start() override;
-
-  void stop() override;
-
 private:
   uint8_t updateID;
 
-  glm::vec3 initialPosition;
-  glm::vec3 livePosition;
-  glm::vec3* currentPosition;
-
-  glm::vec3 initialScale;
-  glm::vec3 liveScale;
-  glm::vec3* currentScale;
-
-  glm::vec3 initialRotation;
-  glm::vec3 liveRotation;
-  glm::vec3* currentRotation;
+  ComponentVariable<glm::vec3> m_position;
+  ComponentVariable<glm::vec3> m_scale;
+  ComponentVariable<glm::vec3> m_rotation;
 };
 
 

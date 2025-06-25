@@ -1,19 +1,23 @@
 #include "RigidBody.h"
 #include "Transform.h"
 #include "../Object.h"
+#include "../../ECS3D.h"
 #include <imgui.h>
 #include <glm/glm.hpp>
 
-#include "../../ECS3D.h"
-
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody),
-    initialVelocity(0), liveVelocity(initialVelocity), currentVelocity(&initialVelocity),
-    initialFriction(0.1f), liveFriction(initialFriction), currentFriction(&initialFriction),
-    initialDoGravity(true), liveDoGravity(initialDoGravity), currentDoGravity(&initialDoGravity),
-    initialGravity(0, -GRAVITY, 0), liveGravity(initialGravity), currentGravity(&initialGravity),
+    m_velocity(glm::vec3(0)),
+    m_friction(0.1f),
+    m_doGravity(true),
+    m_gravity(-GRAVITY),
     falling(true), nextFalling(true)
-{}
+{
+  loadVariable(m_velocity);
+  loadVariable(m_friction);
+  loadVariable(m_doGravity);
+  loadVariable(m_gravity);
+}
 
 void RigidBody::variableUpdate(float dt)
 {
@@ -44,14 +48,15 @@ void RigidBody::fixedUpdate(const float dt)
     falling = nextFalling;
     nextFalling = true;
 
-    if (*currentDoGravity)
+    if (m_doGravity.get())
     {
-      applyForce(*currentGravity * dt * 0.1f, transform->getPosition());
+      const glm::vec3 gravity = { 0, m_gravity.get() * dt * 0.1f, 0 };
+      applyForce(gravity, transform->getPosition());
     }
 
     limitMovement();
 
-    transform->move(*currentVelocity);
+    transform->move(m_velocity.get());
 
     const auto rotation = transform->getRotation();
     const auto newRotation = rotation + angularVelocity * dt;
@@ -71,9 +76,9 @@ void RigidBody::fixedUpdate(const float dt)
 
 void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
 {
-  *currentVelocity += force;
+  m_velocity.value() += force;
 
-  if (currentVelocity->y > 0 && currentVelocity->y - force.y < 0)
+  if (m_velocity.get().y > 0 && m_velocity.get().y - force.y < 0)
   {
     falling = true;
     nextFalling = true;
@@ -105,7 +110,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   if (!otherRb)
   {
-    const auto impulse = dot(-*currentVelocity, collisionNormal) * collisionNormal;
+    const auto impulse = dot(-m_velocity.get(), collisionNormal) * collisionNormal;
     applyForce(impulse, collisionPoint);
 
     return;
@@ -113,7 +118,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
   otherRb->respondToCollision(-minimumTranslationVector);
 
-  const auto velocityDiff = *otherRb->currentVelocity - *currentVelocity;
+  const auto velocityDiff = otherRb->m_velocity.get() - m_velocity.get();
 
   if (dot(velocityDiff, collisionNormal) > 0)
   {
@@ -125,7 +130,7 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
 
 void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
 {
-  if (minimumTranslationVector.y > 1e-5f && currentVelocity->y <= 1e-5f)
+  if (minimumTranslationVector.y > 1e-5f && m_velocity.get().y <= 1e-5f)
   {
     falling = false;
     nextFalling = false;
@@ -152,56 +157,31 @@ bool RigidBody::isFalling() const
   return falling;
 }
 
-void RigidBody::setVelocity(const glm::vec3& velocity) const
+void RigidBody::setVelocity(const glm::vec3& velocity)
 {
-  *currentVelocity = velocity;
+  m_velocity.set(velocity);
 }
 
 void RigidBody::displayGui()
 {
   if (displayGuiHeader())
   {
-    float newGravity = currentGravity->y;
+    ImGui::Checkbox("Do Gravity", &m_doGravity.value());
+    ImGui::InputFloat("Gravity", &m_gravity.value());
 
-    ImGui::Checkbox("Do Gravity", currentDoGravity);
-    ImGui::InputFloat("Gravity", &newGravity);
-
-    currentGravity->y = newGravity;
-
-    ImGui::SliderFloat("Friction", currentFriction, 0.001f, 1.0f);
+    ImGui::SliderFloat("Friction", &m_friction.value(), 0.001f, 1.0f);
   }
-}
-
-void RigidBody::start()
-{
-  liveVelocity = initialVelocity;
-  liveFriction = initialFriction;
-  liveDoGravity = initialDoGravity;
-  liveGravity = initialGravity;
-
-  currentVelocity = &liveVelocity;
-  currentFriction = &liveFriction;
-  currentDoGravity = &liveDoGravity;
-  currentGravity = &liveGravity;
-}
-
-void RigidBody::stop()
-{
-  currentVelocity = &initialVelocity;
-  currentFriction = &initialFriction;
-  currentDoGravity = &initialDoGravity;
-  currentGravity = &initialGravity;
 }
 
 void RigidBody::limitMovement()
 {
-  if (length(*currentVelocity) < 1e-5f)
+  if (glm::length(m_velocity.get()) < 1e-5f)
   {
     return;
   }
 
-  const glm::vec2 horizontalVelocity(currentVelocity->x, currentVelocity->z);
-  const glm::vec2 frictionForce = -horizontalVelocity * *currentFriction;
+  const glm::vec2 horizontalVelocity(m_velocity.get().x, m_velocity.get().z);
+  const glm::vec2 frictionForce = -horizontalVelocity * m_friction.get();
 
   applyForce({ frictionForce.x, 0.0f, frictionForce.y }, transform_ptr.lock()->getPosition());
 }

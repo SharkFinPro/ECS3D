@@ -31,32 +31,17 @@ public:
 
   [[nodiscard]] bool isFalling() const;
 
-  void setVelocity(const glm::vec3& velocity) const;
+  void setVelocity(const glm::vec3& velocity);
 
   void displayGui() override;
-
-  void start() override;
-
-  void stop() override;
 
 private:
   std::vector<LineSegment> linesToDraw;
 
-  glm::vec3 initialVelocity;
-  glm::vec3 liveVelocity;
-  glm::vec3* currentVelocity;
-
-  float initialFriction;
-  float liveFriction;
-  float* currentFriction;
-
-  bool initialDoGravity;
-  bool liveDoGravity;
-  bool* currentDoGravity;
-
-  glm::vec3 initialGravity;
-  glm::vec3 liveGravity;
-  glm::vec3* currentGravity;
+  ComponentVariable<glm::vec3> m_velocity;
+  ComponentVariable<float> m_friction;
+  ComponentVariable<bool> m_doGravity;
+  ComponentVariable<float> m_gravity;
 
   glm::vec3 angularVelocity = glm::vec3(0.0f);
 

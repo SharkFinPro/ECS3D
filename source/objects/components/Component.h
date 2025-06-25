@@ -33,6 +33,65 @@ const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent 
   {ComponentType::SubComponentType_sphereCollider, ComponentType::collider}
 };
 
+class ComponentVariableBase {
+public:
+  virtual ~ComponentVariableBase() = default;
+
+  virtual void start()
+  {
+    live = true;
+  }
+
+  void stop()
+  {
+    live = false;
+  }
+
+protected:
+  bool live = true;
+};
+
+template <typename T>
+class ComponentVariable final : public ComponentVariableBase {
+public:
+  explicit ComponentVariable(const T& value)
+    : m_initialValue(value), m_value(value)
+  {}
+
+  void start() override
+  {
+    ComponentVariableBase::start();
+
+    m_value = m_initialValue;
+  }
+
+  [[nodiscard]] T& value()
+  {
+    return live ? m_value : m_initialValue;
+  }
+
+  [[nodiscard]] T get() const
+  {
+    return live ? m_value : m_initialValue;
+  }
+
+  void set(const T& value)
+  {
+    if (live)
+    {
+      m_value = value;
+    }
+    else
+    {
+      m_initialValue = value;
+    }
+  }
+
+private:
+  T m_initialValue;
+  T m_value;
+};
+
 class Component {
 public:
   explicit Component(ComponentType type, ComponentType subType = ComponentType::SubComponentType_none);
@@ -54,9 +113,9 @@ public:
 
   void markAsDeleted();
 
-  virtual void start();
+  void start() const;
 
-  virtual void stop();
+  void stop() const;
 
 protected:
   ComponentType type;
@@ -65,7 +124,11 @@ protected:
 
   bool shouldDelete;
 
+  std::vector<ComponentVariableBase*> m_variables;
+
   [[nodiscard]] bool displayGuiHeader();
+
+  void loadVariable(ComponentVariableBase& variable);
 };
 
 
