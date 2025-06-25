@@ -150,10 +150,8 @@ void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
     }
   }
 
-  if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
-  {
-    transform->move(minimumTranslationVector);
-  }
+  const auto transform = transform_ptr.lock();
+  transform->move(minimumTranslationVector);
 }
 
 bool RigidBody::isFalling() const
