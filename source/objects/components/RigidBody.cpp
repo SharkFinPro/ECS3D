@@ -98,14 +98,14 @@ void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
 void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other,
                                 const glm::vec3 collisionPoint)
 {
+  if (!other)
+  {
+    throw std::runtime_error("RigidBody::handleCollision missing other object!");
+  }
+
   linesToDraw.emplace_back(collisionPoint, transform_ptr.lock()->getPosition());
 
   respondToCollision(minimumTranslationVector);
-
-  if (!other)
-  {
-    return;
-  }
 
   const auto collisionNormal = normalize(minimumTranslationVector);
   const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
