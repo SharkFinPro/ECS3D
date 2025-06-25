@@ -21,6 +21,7 @@ RigidBody::RigidBody()
   loadVariable(m_angularVelocity);
 }
 
+#ifdef COLLISION_LOCATION_DEBUG
 void RigidBody::variableUpdate(float dt)
 {
   const auto renderer = getOwner()->getManager()->getECS()->getRenderer();
@@ -30,10 +31,13 @@ void RigidBody::variableUpdate(float dt)
     renderer->renderLine(start, end);
   }
 }
+#endif
 
 void RigidBody::fixedUpdate(const float dt)
 {
+#ifdef COLLISION_LOCATION_DEBUG
   linesToDraw.clear();
+#endif
 
   if (transform_ptr.expired())
   {
@@ -97,7 +101,9 @@ void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const 
     throw std::runtime_error("RigidBody::handleCollision missing other object!");
   }
 
+#ifdef COLLISION_LOCATION_DEBUG
   linesToDraw.emplace_back(collisionPoint, transform_ptr.lock()->getPosition());
+#endif
 
   respondToCollision(minimumTranslationVector);
 

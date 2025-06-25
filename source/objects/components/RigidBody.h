@@ -1,6 +1,9 @@
 #ifndef RIGIDBODY_H
 #define RIGIDBODY_H
 
+// Enable to draw collision location lines
+// #define COLLISION_LOCATION_DEBUG
+
 #include "Component.h"
 #include <glm/vec3.hpp>
 #include <memory>
@@ -18,7 +21,9 @@ class RigidBody final : public Component {
 public:
   RigidBody();
 
+#ifdef COLLISION_LOCATION_DEBUG
   void variableUpdate(float dt) override;
+#endif
 
   void fixedUpdate(float dt) override;
 
@@ -36,7 +41,9 @@ public:
   void displayGui() override;
 
 private:
+#ifdef COLLISION_LOCATION_DEBUG
   std::vector<LineSegment> linesToDraw;
+#endif
 
   ComponentVariable<glm::vec3> m_velocity;
   ComponentVariable<float> m_friction;
