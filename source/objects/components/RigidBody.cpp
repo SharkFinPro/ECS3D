@@ -12,7 +12,8 @@ RigidBody::RigidBody()
     m_doGravity(true),
     m_gravity(-GRAVITY),
     m_angularVelocity(glm::vec3(0)),
-    falling(true), nextFalling(true)
+    falling(true),
+    nextFalling(true)
 {
   loadVariable(m_velocity);
   loadVariable(m_friction);
