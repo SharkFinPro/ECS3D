@@ -1,7 +1,6 @@
 #include "Component.h"
-#include <imgui.h>
-
 #include "../Object.h"
+#include <imgui.h>
 
 Component::Component(const ComponentType type, const ComponentType subType)
   : type(type), subType(subType), owner(nullptr), shouldDelete(false)
@@ -46,11 +45,21 @@ void Component::markAsDeleted()
   shouldDelete = true;
 }
 
-void Component::start()
-{}
+void Component::start() const
+{
+  for (auto* variable : m_variables)
+  {
+    variable->start();
+  }
+}
 
-void Component::stop()
-{}
+void Component::stop() const
+{
+  for (auto* variable : m_variables)
+  {
+    variable->stop();
+  }
+}
 
 bool Component::displayGuiHeader()
 {
@@ -74,4 +83,9 @@ bool Component::displayGuiHeader()
   ImGui::PopID();
 
   return open;
+}
+
+void Component::loadVariable(ComponentVariableBase& variable)
+{
+  m_variables.emplace_back(&variable);
 }

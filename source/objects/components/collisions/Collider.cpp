@@ -8,7 +8,7 @@
 #include <stdexcept>
 
 Collider::Collider(const ColliderType type, const ComponentType subType)
-  : Component(ComponentType::collider, subType), colliderType(type), roughMaxDistance(0)
+  : Component(ComponentType::collider, subType), colliderType(type)
 {}
 
 bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv, glm::vec3* collisionPoint)
@@ -32,7 +32,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
   if (colliderType == ColliderType::sphereCollider && otherCollider->colliderType == ColliderType::sphereCollider)
   {
-    return handleSphereToSphereCollision(otherCollider, otherTransform, mtv);
+    return handleSphereToSphereCollision(otherCollider, otherTransform, mtv, collisionPoint);
   }
 
   Simplex simplex;
@@ -178,7 +178,8 @@ void Collider::variableUpdate(float dt)
 
 bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
                                              const std::shared_ptr<Transform>& otherTransform,
-                                             glm::vec3* mtv)
+                                             glm::vec3* mtv,
+                                             glm::vec3* collisionPoint)
 {
   if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
   {
@@ -190,9 +191,19 @@ bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& ot
 
     if (const float dist = length(delta); dist < combinedRadius)
     {
+      const auto minimumTranslationVector = -(normalize(delta) * (combinedRadius - dist));
+
       if (mtv != nullptr)
       {
-        *mtv = -(normalize(delta) * (combinedRadius - dist));
+        *mtv = minimumTranslationVector;
+      }
+
+      if (collisionPoint != nullptr)
+      {
+        const auto direction = -glm::normalize(minimumTranslationVector);
+        const auto pointOfCollision = transform->getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
+
+        *collisionPoint = pointOfCollision;
       }
 
       return true;

@@ -58,7 +58,8 @@ private:
 
   bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
                                      const std::shared_ptr<Transform>& otherTransform,
-                                     glm::vec3* mtv);
+                                     glm::vec3* mtv,
+                                     glm::vec3* collisionPoint);
 
   static bool expandSimplex(Simplex& simplex, glm::vec3& direction);
   static void lineCase(const Simplex& simplex, glm::vec3& direction);
@@ -71,8 +72,6 @@ protected:
   ColliderType colliderType;
 
   BoundingBox boundingBox;
-
-  float roughMaxDistance;
 };
 
 

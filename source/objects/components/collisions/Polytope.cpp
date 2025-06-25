@@ -38,72 +38,6 @@ glm::vec3 computeBarycentric(const glm::vec3& a, const glm::vec3& b, const glm::
   return { u, v, w };
 }
 
-glm::vec3 closestPointOnTriangleToOrigin(glm::vec3 a, glm::vec3 b, glm::vec3 c)
-{
-  // Edge vectors
-  glm::vec3 ab = b - a;
-  glm::vec3 ac = c - a;
-  glm::vec3 ap = -a; // Vector from A to origin (P = origin = (0,0,0))
-
-  // Compute dot products
-  float d1 = glm::dot(ab, ap);
-  float d2 = glm::dot(ac, ap);
-
-  // Check if P is in vertex region outside A
-  if (d1 <= 0.0f && d2 <= 0.0f)
-  {
-    return a; // Barycentric coordinates (1,0,0)
-  }
-
-  // Check if P is in vertex region outside B
-  glm::vec3 bp = -b;
-  float d3 = glm::dot(ab, bp);
-  float d4 = glm::dot(ac, bp);
-  if (d3 >= 0.0f && d4 <= d3)
-  {
-    return b; // Barycentric coordinates (0,1,0)
-  }
-
-  // Check if P is in edge region of AB
-  float vc = d1 * d4 - d3 * d2;
-  if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
-  {
-    float v = d1 / (d1 - d3);
-    return a + v * ab; // Barycentric coordinates (1-v,v,0)
-  }
-
-  // Check if P is in vertex region outside C
-  glm::vec3 cp = -c;
-  float d5 = glm::dot(ab, cp);
-  float d6 = glm::dot(ac, cp);
-  if (d6 >= 0.0f && d5 <= d6)
-  {
-    return c; // Barycentric coordinates (0,0,1)
-  }
-
-  // Check if P is in edge region of AC
-  float vb = d5 * d2 - d1 * d6;
-  if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
-  {
-    float w = d2 / (d2 - d6);
-    return a + w * ac; // Barycentric coordinates (1-w,0,w)
-  }
-
-  // Check if P is in edge region of BC
-  float va = d3 * d6 - d5 * d4;
-  if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
-  {
-    float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-    return b + w * (c - b); // Barycentric coordinates (0,1-w,w)
-  }
-
-  // P is inside face region. Compute projection onto triangle plane
-  float denom = 1.0f / (va + vb + vc);
-  float v = vb * denom;
-  float w = vc * denom;
-  return a + ab * v + ac * w; // Barycentric coordinates (1-v-w,v,w)
-}
-
 Polytope::Polytope(Collider* collider, std::shared_ptr<Collider> otherCollider, Simplex &simplex)
   : collider(collider), otherCollider(std::move(otherCollider))
 {
@@ -159,41 +93,20 @@ glm::vec3 Polytope::findCollisionPoint() const
 
   if (a == b && b == c)
   {
-    pointOfCollision = a;
+    return a;
+  }
 
-    return pointOfCollision;
+  a = collider->findFurthestPoint(direction0);
+  b = collider->findFurthestPoint(direction1);
+  c = collider->findFurthestPoint(direction2);
+
+  if (a == b && b == c)
+  {
+    return a;
   }
 
   auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
-
   pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
-
-  if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform->getPosition(), otherTransform->getPosition()))
-  {
-    a = collider->findFurthestPoint(direction0);
-    b = collider->findFurthestPoint(direction1);
-    c = collider->findFurthestPoint(direction2);
-
-    pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
-  }
-
-  // TODO: Better handle the case where the closestFaceData.closestPoint is not within the closest face itself
-  if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform->getPosition(), otherTransform->getPosition()))
-  {
-    closestPoint = closestPointOnTriangleToOrigin(vertex0, vertex1, vertex2);
-    barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
-
-    pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
-
-    if (glm::distance(otherTransform->getPosition(), pointOfCollision) > glm::distance(transform->getPosition(), otherTransform->getPosition()))
-    {
-      a = otherCollider->findFurthestPoint(-direction0);
-      b = otherCollider->findFurthestPoint(-direction1);
-      c = otherCollider->findFurthestPoint(-direction2);
-
-      pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
-    }
-  }
 
   return pointOfCollision;
 }
