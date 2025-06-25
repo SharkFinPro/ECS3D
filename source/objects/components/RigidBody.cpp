@@ -12,6 +12,7 @@ RigidBody::RigidBody()
     m_doGravity(true),
     m_gravity(-GRAVITY),
     m_angularVelocity(glm::vec3(0)),
+    m_mass(10.0f),
     falling(true),
     nextFalling(true)
 {
@@ -20,6 +21,7 @@ RigidBody::RigidBody()
   loadVariable(m_doGravity);
   loadVariable(m_gravity);
   loadVariable(m_angularVelocity);
+  loadVariable(m_mass);
 }
 
 #ifdef COLLISION_LOCATION_DEBUG
@@ -69,7 +71,7 @@ void RigidBody::fixedUpdate(const float dt)
     const auto newRotation = rotation + m_angularVelocity.get() * dt;
     transform->setRotation(newRotation);
 
-    constexpr float damping = 0.98f;
+    constexpr float damping = 0.99f;
     m_angularVelocity.value() *= damping;
   }
 }
@@ -91,7 +93,8 @@ void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
   }
 
   const auto angularImpulse = glm::cross(r, force);
-  m_angularVelocity.value() += angularImpulse * 50.0f;
+
+  m_angularVelocity.value() += angularImpulse / getInertiaTensor();
 }
 
 void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other,
@@ -173,6 +176,8 @@ void RigidBody::displayGui()
     ImGui::InputFloat("Gravity", &m_gravity.value());
 
     ImGui::SliderFloat("Friction", &m_friction.value(), 0.001f, 1.0f);
+
+    ImGui::SliderFloat("Mass", &m_mass.value(), 1.0f, 50.0f);
   }
 }
 
@@ -187,4 +192,25 @@ void RigidBody::limitMovement()
   const glm::vec2 frictionForce = -horizontalVelocity * m_friction.get();
 
   applyForce({ frictionForce.x, 0.0f, frictionForce.y }, transform_ptr.lock()->getPosition());
+}
+
+glm::mat3x3 RigidBody::getInertiaTensor() const
+{
+  const auto scale = transform_ptr.lock()->getScale();
+
+  const auto widthSquared = scale.x * scale.x;
+  const auto heightSquared = scale.y * scale.y;
+  const auto depthSquared = scale.z * scale.z;
+
+  const float factor = 1.0f / 12.0f * m_mass.get() * 0.1f;
+
+  const float Ixx = factor * (heightSquared + depthSquared);
+  const float Iyy = factor * (widthSquared + depthSquared);
+  const float Izz = factor * (widthSquared + heightSquared);
+
+  return {
+    Ixx, 0.0f, 0.0f,
+    0.0f, Iyy, 0.0f,
+    0.0f, 0.0f, Izz
+  };
 }

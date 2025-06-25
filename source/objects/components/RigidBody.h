@@ -5,6 +5,7 @@
 // #define COLLISION_LOCATION_DEBUG
 
 #include "Component.h"
+#include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
 
@@ -50,6 +51,7 @@ private:
   ComponentVariable<bool> m_doGravity;
   ComponentVariable<float> m_gravity;
   ComponentVariable<glm::vec3> m_angularVelocity;
+  ComponentVariable<float> m_mass;
 
   bool falling;
   bool nextFalling;
@@ -57,6 +59,8 @@ private:
   std::weak_ptr<Transform> transform_ptr;
 
   void limitMovement();
+
+  [[nodiscard]] glm::mat3x3 getInertiaTensor() const;
 };
 
 
