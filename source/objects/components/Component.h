@@ -39,57 +39,57 @@ public:
 
   virtual void start()
   {
-    live = true;
+    m_live = true;
   }
 
   void stop()
   {
-    live = false;
+    m_live = false;
   }
 
 protected:
-  bool live = true;
+  bool m_live = true;
 };
 
 template <typename T>
 class ComponentVariable final : public ComponentVariableBase {
 public:
-  explicit ComponentVariable(const T& value)
-    : m_initialValue(value), m_value(value)
+  explicit ComponentVariable(const T& initialValue)
+    : m_initialValue(initialValue), m_liveValue(initialValue)
   {}
 
   void start() override
   {
     ComponentVariableBase::start();
 
-    m_value = m_initialValue;
+    m_liveValue = m_initialValue;
   }
 
   [[nodiscard]] T& value()
   {
-    return live ? m_value : m_initialValue;
+    return m_live ? m_liveValue : m_initialValue;
   }
 
   [[nodiscard]] T get() const
   {
-    return live ? m_value : m_initialValue;
+    return m_live ? m_liveValue : m_initialValue;
   }
 
-  void set(const T& value)
+  void set(const T& newValue)
   {
-    if (live)
+    if (m_live)
     {
-      m_value = value;
+      m_liveValue = newValue;
     }
     else
     {
-      m_initialValue = value;
+      m_initialValue = newValue;
     }
   }
 
 private:
   T m_initialValue;
-  T m_value;
+  T m_liveValue;
 };
 
 class Component {
