@@ -38,17 +38,22 @@ void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
   }
 }
 
-void ObjectGUIManager::displaySelectedObjectGui() const
+void ObjectGUIManager::displaySelectedObjectGui()
 {
   ImGui::Begin("Selected Object");
+
+  ImGui::Checkbox("Highlight Object", &m_highlightSelectedObject);
 
   if (selectedObject)
   {
     selectedObject->displayGui();
 
-    if (const auto modelRenderer = selectedObject->getComponent<ModelRenderer>(ComponentType::modelRenderer))
+    if (m_highlightSelectedObject)
     {
-      modelRenderer->renderHighlight();
+      if (const auto modelRenderer = selectedObject->getComponent<ModelRenderer>(ComponentType::modelRenderer))
+      {
+        modelRenderer->renderHighlight();
+      }
     }
   }
 
