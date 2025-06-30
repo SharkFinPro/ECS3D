@@ -174,10 +174,16 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
   const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
   const auto renderer = objectManager->getECS()->getRenderer();
 
-  if (modelRenderer && renderer->canMousePick() && renderer->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT) &&
-      modelRenderer->selectedByRenderer())
+  if (renderer->canMousePick() && renderer->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
   {
-    selectedObject = node->object;
+    if (modelRenderer && modelRenderer->selectedByRenderer())
+    {
+      selectedObject = node->object;
+    }
+    else if (selectedObject == node->object)
+    {
+      selectedObject = nullptr;
+    }
   }
 
   ImGui::PushID(&node->object);
