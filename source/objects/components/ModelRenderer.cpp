@@ -73,6 +73,11 @@ bool ModelRenderer::selectedByRenderer() const
   return m_selectedByRenderer;
 }
 
+void ModelRenderer::renderHighlight() const
+{
+  getOwner()->getManager()->getECS()->getRenderer()->renderObject(renderObject, PipelineType::objectHighlight);
+}
+
 void ModelRenderer::displayDragDrop(const char* label,
                                     const std::function<bool(const std::shared_ptr<Asset>&)>& setter)
 {

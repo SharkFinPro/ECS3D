@@ -23,6 +23,8 @@ public:
 
   void addObject(const std::shared_ptr<Object>& object, const std::shared_ptr<ObjectUINode>& parentUINode = nullptr);
 
+  void displaySelectedObjectGui() const;
+
 private:
   ObjectManager* objectManager;
 
@@ -30,8 +32,6 @@ private:
   std::vector<std::shared_ptr<ObjectUINode>> objectUINodesSetForReassignment;
 
   std::shared_ptr<Object> selectedObject;
-
-  void displaySelectedObjectGui() const;
 
   static bool containsObjectUINode(const std::vector<std::shared_ptr<ObjectUINode>>& rootNodes,
                                    const std::shared_ptr<Object>& object);

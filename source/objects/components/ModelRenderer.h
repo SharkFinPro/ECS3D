@@ -27,6 +27,8 @@ public:
 
   [[nodiscard]] bool selectedByRenderer() const;
 
+  void renderHighlight() const;
+
 private:
   std::shared_ptr<RenderObject> renderObject;
   std::weak_ptr<Transform> transform_ptr;

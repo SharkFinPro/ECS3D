@@ -18,6 +18,8 @@ void ObjectManager::update(const float dt)
 
   fixedUpdate(dt);
   variableUpdate(dt);
+
+  objectGUIManager->displaySelectedObjectGui();
 }
 
 void ObjectManager::setECS(ECS3D* ecs)
