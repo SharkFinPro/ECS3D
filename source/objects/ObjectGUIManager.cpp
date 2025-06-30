@@ -3,6 +3,9 @@
 #include <imgui.h>
 #include <algorithm>
 
+#include "../ECS3D.h"
+#include "components/ModelRenderer.h"
+
 ObjectGUIManager::ObjectGUIManager(ObjectManager* objectManager)
   : objectManager(objectManager)
 {}
@@ -161,6 +164,13 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
 
 void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
 {
+  const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
+  if (objectManager->getECS()->getRenderer()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT) && modelRenderer &&
+      modelRenderer->selectedByRenderer())
+  {
+    selectedObject = node->object;
+  }
+
   ImGui::PushID(&node->object);
 
   if (ImGui::TreeNodeEx(node->object->getName().c_str(),

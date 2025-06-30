@@ -48,7 +48,11 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
     renderObject->setOrientationEuler(transform->getRotation());
   }
 
-  owner->getManager()->getECS()->getRenderer()->renderObject(renderObject, useStandardPipeline ? PipelineType::object : PipelineType::ellipticalDots);
+  owner->getManager()->getECS()->getRenderer()->renderObject(
+    renderObject,
+    useStandardPipeline ? PipelineType::object : PipelineType::ellipticalDots,
+    &m_selectedByRenderer
+  );
 }
 
 void ModelRenderer::displayGui()
@@ -62,6 +66,11 @@ void ModelRenderer::displayGui()
     displaySpecularDragDrop();
     displayModelDragDrop();
   }
+}
+
+bool ModelRenderer::selectedByRenderer() const
+{
+  return m_selectedByRenderer;
 }
 
 void ModelRenderer::displayDragDrop(const char* label,
