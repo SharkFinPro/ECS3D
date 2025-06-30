@@ -23,6 +23,8 @@ public:
 
   void addObject(const std::shared_ptr<Object>& object, const std::shared_ptr<ObjectUINode>& parentUINode = nullptr);
 
+  void displaySelectedObjectGui();
+
 private:
   ObjectManager* objectManager;
 
@@ -31,7 +33,7 @@ private:
 
   std::shared_ptr<Object> selectedObject;
 
-  void displaySelectedObjectGui() const;
+  bool m_highlightSelectedObject = true;
 
   static bool containsObjectUINode(const std::vector<std::shared_ptr<ObjectUINode>>& rootNodes,
                                    const std::shared_ptr<Object>& object);

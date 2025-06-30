@@ -25,6 +25,10 @@ public:
 
   void displayGui() override;
 
+  [[nodiscard]] bool selectedByRenderer() const;
+
+  void renderHighlight() const;
+
 private:
   std::shared_ptr<RenderObject> renderObject;
   std::weak_ptr<Transform> transform_ptr;
@@ -37,6 +41,8 @@ private:
   bool useStandardPipeline = true;
 
   bool shouldRender;
+
+  bool m_selectedByRenderer = false;
 
   void displayDragDrop(const char* label, const std::function<bool(const std::shared_ptr<Asset>&)>& setter);
 

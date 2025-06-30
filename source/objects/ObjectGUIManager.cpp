@@ -1,5 +1,7 @@
 #include "ObjectGUIManager.h"
 #include "Object.h"
+#include "components/ModelRenderer.h"
+#include "../ECS3D.h"
 #include <imgui.h>
 #include <algorithm>
 
@@ -12,8 +14,6 @@ void ObjectGUIManager::update()
   displayObjectListGui();
 
   reorderObjectGui();
-
-  displaySelectedObjectGui();
 }
 
 void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
@@ -38,13 +38,23 @@ void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
   }
 }
 
-void ObjectGUIManager::displaySelectedObjectGui() const
+void ObjectGUIManager::displaySelectedObjectGui()
 {
   ImGui::Begin("Selected Object");
+
+  ImGui::Checkbox("Highlight Object", &m_highlightSelectedObject);
 
   if (selectedObject)
   {
     selectedObject->displayGui();
+
+    if (m_highlightSelectedObject)
+    {
+      if (const auto modelRenderer = selectedObject->getComponent<ModelRenderer>(ComponentType::modelRenderer))
+      {
+        modelRenderer->renderHighlight();
+      }
+    }
   }
 
   ImGui::End();
@@ -161,6 +171,21 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
 
 void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
 {
+  const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
+  const auto renderer = objectManager->getECS()->getRenderer();
+
+  if (renderer->canMousePick() && renderer->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
+  {
+    if (modelRenderer && modelRenderer->selectedByRenderer())
+    {
+      selectedObject = node->object;
+    }
+    else if (selectedObject == node->object)
+    {
+      selectedObject = nullptr;
+    }
+  }
+
   ImGui::PushID(&node->object);
 
   if (ImGui::TreeNodeEx(node->object->getName().c_str(),
