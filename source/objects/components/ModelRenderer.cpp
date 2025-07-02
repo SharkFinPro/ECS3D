@@ -75,6 +75,11 @@ bool ModelRenderer::selectedByRenderer() const
 
 void ModelRenderer::renderHighlight() const
 {
+  if (!shouldRender)
+  {
+    return;
+  }
+
   getOwner()->getManager()->getECS()->getRenderer()->renderObject(renderObject, PipelineType::objectHighlight);
 }
 
