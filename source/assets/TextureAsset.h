@@ -2,7 +2,7 @@
 #define TEXTUREASSET_H
 
 #include "Asset.h"
-#include <VulkanEngine/objects/Texture.h>
+#include <VulkanEngine/components/textures/Texture2D.h>
 
 class TextureAsset final : public Asset {
 public:
@@ -11,7 +11,7 @@ public:
 
   std::string getPath();
 
-  std::shared_ptr<Texture> getTexture();
+  std::shared_ptr<Texture2D> getTexture();
 
   void load() override;
 
@@ -20,7 +20,7 @@ public:
 private:
   std::string path;
 
-  std::shared_ptr<Texture> texture;
+  std::shared_ptr<Texture2D> texture;
 };
 
 
