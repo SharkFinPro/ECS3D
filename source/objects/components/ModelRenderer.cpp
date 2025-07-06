@@ -8,8 +8,8 @@
 #include "../../assets/ModelAsset.h"
 #include <VulkanEngine/VulkanEngine.h>
 
-ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
-                             const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model)
+ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture2D>& texture,
+                             const std::shared_ptr<Texture2D>& specularMap, const std::shared_ptr<Model>& model)
   : Component(ComponentType::modelRenderer), renderObject(renderer->loadRenderObject(texture, specularMap, model)),
     renderer(renderer), texture(texture), specularMap(specularMap), model(model), shouldRender(true)
 {}

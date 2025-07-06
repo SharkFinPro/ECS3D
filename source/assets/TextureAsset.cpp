@@ -12,7 +12,7 @@ std::string TextureAsset::getPath()
   return path;
 }
 
-std::shared_ptr<Texture> TextureAsset::getTexture()
+std::shared_ptr<Texture2D> TextureAsset::getTexture()
 {
   return texture;
 }

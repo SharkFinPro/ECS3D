@@ -8,14 +8,14 @@
 class Transform;
 class Asset;
 class VulkanEngine;
-class Texture;
+class Texture2D;
 class Model;
 class RenderObject;
 
 class ModelRenderer final : public Component {
 public:
-  ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture>& texture,
-                         const std::shared_ptr<Texture>& specularMap, const std::shared_ptr<Model>& model);
+  ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture2D>& texture,
+                         const std::shared_ptr<Texture2D>& specularMap, const std::shared_ptr<Model>& model);
 
   explicit ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer);
 
@@ -34,8 +34,8 @@ private:
   std::weak_ptr<Transform> transform_ptr;
 
   std::shared_ptr<VulkanEngine> renderer;
-  std::shared_ptr<Texture> texture;
-  std::shared_ptr<Texture> specularMap;
+  std::shared_ptr<Texture2D> texture;
+  std::shared_ptr<Texture2D> specularMap;
   std::shared_ptr<Model> model;
 
   bool useStandardPipeline = true;
