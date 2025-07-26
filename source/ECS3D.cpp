@@ -1,6 +1,7 @@
 #include "ECS3D.h"
 #include "scenes/SceneManager.h"
 #include "assets/AssetManager.h"
+#include <VulkanEngine/components/ImGuiInstance.h>
 
 ECS3D::ECS3D()
   : previousTime(std::chrono::steady_clock::now()), sceneManager(std::make_shared<SceneManager>(this)),
