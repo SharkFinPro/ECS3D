@@ -4,7 +4,7 @@
 #include "../ObjectManager.h"
 #include "../../ECS3D.h"
 #include <glm/gtc/type_ptr.hpp>
-#include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/lighting/Light.h>
 
 LightRenderer::LightRenderer(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular)
   : Component(ComponentType::lightRenderer), light(std::make_shared<Light>(position, color, ambient, diffuse, specular))
