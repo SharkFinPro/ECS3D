@@ -3,6 +3,8 @@
 
 #include <chrono>
 #include <memory>
+#include <string>
+#include <vector>
 #include <VulkanEngine/VulkanEngine.h>
 
 class SceneManager;
