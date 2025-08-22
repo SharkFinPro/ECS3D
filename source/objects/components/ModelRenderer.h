@@ -2,22 +2,22 @@
 #define MODELRENDERER_H
 
 #include "Component.h"
+#include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/objects/RenderObject.h>
+#include <VulkanEngine/components/objects/Model.h>
+#include <VulkanEngine/components/textures/Texture2D.h>
 #include <memory>
 #include <functional>
 
-class Transform;
 class Asset;
-class VulkanEngine;
-class Texture2D;
-class Model;
-class RenderObject;
+class Transform;
 
 class ModelRenderer final : public Component {
 public:
-  ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture2D>& texture,
-                         const std::shared_ptr<Texture2D>& specularMap, const std::shared_ptr<Model>& model);
+  ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer, const std::shared_ptr<vke::Texture2D>& texture,
+                         const std::shared_ptr<vke::Texture2D>& specularMap, const std::shared_ptr<vke::Model>& model);
 
-  explicit ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer);
+  explicit ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer);
 
   ~ModelRenderer() override = default;
 
@@ -30,13 +30,13 @@ public:
   void renderHighlight() const;
 
 private:
-  std::shared_ptr<RenderObject> renderObject;
+  std::shared_ptr<vke::RenderObject> renderObject;
   std::weak_ptr<Transform> transform_ptr;
 
-  std::shared_ptr<VulkanEngine> renderer;
-  std::shared_ptr<Texture2D> texture;
-  std::shared_ptr<Texture2D> specularMap;
-  std::shared_ptr<Model> model;
+  std::shared_ptr<vke::VulkanEngine> renderer;
+  std::shared_ptr<vke::Texture2D> texture;
+  std::shared_ptr<vke::Texture2D> specularMap;
+  std::shared_ptr<vke::Model> model;
 
   bool useStandardPipeline = true;
 

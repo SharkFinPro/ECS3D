@@ -3,6 +3,8 @@
 #include "components/ModelRenderer.h"
 #include "../ECS3D.h"
 #include <imgui.h>
+#include <VulkanEngine/components/MousePicker.h>
+#include <VulkanEngine/components/window/Window.h>
 #include <algorithm>
 
 ObjectGUIManager::ObjectGUIManager(ObjectManager* objectManager)
@@ -174,7 +176,7 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
   const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
   const auto renderer = objectManager->getECS()->getRenderer();
 
-  if (renderer->canMousePick() && renderer->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
+  if (renderer->getMousePicker()->canMousePick() && renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
   {
     if (modelRenderer && modelRenderer->selectedByRenderer())
     {

@@ -2,6 +2,8 @@
 #include "AssetManager.h"
 #include "../ECS3D.h"
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/AssetManager.h>
+#include <imgui.h>
 
 ModelAsset::ModelAsset(const std::string& path)
   : Asset(path), path(path)
@@ -12,7 +14,7 @@ std::string ModelAsset::getPath()
   return path;
 }
 
-std::shared_ptr<Model> ModelAsset::getModel()
+std::shared_ptr<vke::Model> ModelAsset::getModel()
 {
   return model;
 }
@@ -21,7 +23,7 @@ void ModelAsset::load()
 {
   const auto renderer = assetManager->getECS()->getRenderer();
 
-  model = renderer->loadModel(path.c_str());
+  model = renderer->getAssetManager()->loadModel(path.c_str());
 }
 
 void ModelAsset::displayGui()

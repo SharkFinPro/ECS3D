@@ -6,15 +6,17 @@
 #include "../../assets/Asset.h"
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
-#include <VulkanEngine/objects/RenderObject.h>
+#include <VulkanEngine/components/AssetManager.h>
+#include <VulkanEngine/components/PipelineManager.h>
+#include <VulkanEngine/pipelines/custom/config/PipelineTypes.h>
 
-ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine>& renderer, const std::shared_ptr<Texture2D>& texture,
-                             const std::shared_ptr<Texture2D>& specularMap, const std::shared_ptr<Model>& model)
-  : Component(ComponentType::modelRenderer), renderObject(renderer->loadRenderObject(texture, specularMap, model)),
+ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer, const std::shared_ptr<vke::Texture2D>& texture,
+                             const std::shared_ptr<vke::Texture2D>& specularMap, const std::shared_ptr<vke::Model>& model)
+  : Component(ComponentType::modelRenderer), renderObject(renderer->getAssetManager()->loadRenderObject(texture, specularMap, model)),
     renderer(renderer), texture(texture), specularMap(specularMap), model(model), shouldRender(true)
 {}
 
-ModelRenderer::ModelRenderer(const std::shared_ptr<VulkanEngine> &renderer)
+ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine> &renderer)
   : Component(ComponentType::modelRenderer), renderObject(nullptr), renderer(renderer), texture(nullptr),
     specularMap(nullptr), model(nullptr), shouldRender(false)
 {}
@@ -48,9 +50,9 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
     renderObject->setOrientationEuler(transform->getRotation());
   }
 
-  owner->getManager()->getECS()->getRenderer()->renderObject(
+  owner->getManager()->getECS()->getRenderer()->getPipelineManager()->renderObject(
     renderObject,
-    useStandardPipeline ? PipelineType::object : PipelineType::ellipticalDots,
+    useStandardPipeline ? vke::PipelineType::object : vke::PipelineType::ellipticalDots,
     &m_selectedByRenderer
   );
 }
@@ -80,7 +82,7 @@ void ModelRenderer::renderHighlight() const
     return;
   }
 
-  getOwner()->getManager()->getECS()->getRenderer()->renderObject(renderObject, PipelineType::objectHighlight);
+  getOwner()->getManager()->getECS()->getRenderer()->getPipelineManager()->renderObject(renderObject, vke::PipelineType::objectHighlight);
 }
 
 void ModelRenderer::displayDragDrop(const char* label,
@@ -100,7 +102,7 @@ void ModelRenderer::displayDragDrop(const char* label,
       if (setter(*static_cast<std::shared_ptr<Asset>*>(payload->Data)) && canRender())
       {
         renderObject.reset();
-        renderObject = renderer->loadRenderObject(texture, specularMap, model);
+        renderObject = renderer->getAssetManager()->loadRenderObject(texture, specularMap, model);
       }
     }
 

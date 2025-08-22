@@ -3,7 +3,7 @@
 
 #include "Asset.h"
 #include <memory>
-#include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/objects/Model.h>
 
 class ModelAsset final : public Asset {
 public:
@@ -12,7 +12,7 @@ public:
 
   std::string getPath();
 
-  std::shared_ptr<Model> getModel();
+  std::shared_ptr<vke::Model> getModel();
 
   void load() override;
 
@@ -21,7 +21,7 @@ public:
 private:
   std::string path;
 
-  std::shared_ptr<Model> model;
+  std::shared_ptr<vke::Model> model;
 };
 
 
