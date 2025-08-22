@@ -2,11 +2,11 @@
 #define LIGHTRENDERER_H
 
 #include "Component.h"
-#include <memory>
 #include <glm/glm.hpp>
+#include <VulkanEngine/components/lighting/Light.h>
+#include <memory>
 
 class Transform;
-class Light;
 
 class LightRenderer final : public Component {
 public:
@@ -19,7 +19,7 @@ public:
   void displayGui() override;
 
 private:
-  std::shared_ptr<Light> light;
+  std::shared_ptr<vke::Light> light;
   std::weak_ptr<Transform> transform_ptr;
 };
 

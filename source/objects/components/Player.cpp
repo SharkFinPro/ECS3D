@@ -4,6 +4,9 @@
 #include "../../ECS3D.h"
 #include "RigidBody.h"
 #include "Transform.h"
+#include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
 
 Player::Player()
   : Component(ComponentType::player),
@@ -84,7 +87,7 @@ void Player::handleInput()
 
   const auto ecs = owner->getManager()->getECS();
 
-  if (!ecs->getRenderer()->sceneIsFocused())
+  if (!ecs->getRenderer()->getRenderingManager()->isSceneFocused())
   {
     return;
   }

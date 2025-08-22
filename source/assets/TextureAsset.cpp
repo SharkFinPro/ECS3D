@@ -2,6 +2,7 @@
 #include "AssetManager.h"
 #include "../ECS3D.h"
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/AssetManager.h>
 
 TextureAsset::TextureAsset(const std::string& path)
   : Asset(path), path(path)
@@ -12,7 +13,7 @@ std::string TextureAsset::getPath()
   return path;
 }
 
-std::shared_ptr<Texture2D> TextureAsset::getTexture()
+std::shared_ptr<vke::Texture2D> TextureAsset::getTexture()
 {
   return texture;
 }
@@ -21,7 +22,7 @@ void TextureAsset::load()
 {
   const auto renderer = assetManager->getECS()->getRenderer();
 
-  texture = renderer->loadTexture(path.c_str());
+  texture = renderer->getAssetManager()->loadTexture(path.c_str());
 }
 
 void TextureAsset::displayGui()

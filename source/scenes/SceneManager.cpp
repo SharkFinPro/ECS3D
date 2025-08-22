@@ -1,6 +1,7 @@
 #include "SceneManager.h"
 #include "Scene.h"
 #include "../ECS3D.h"
+#include <imgui.h>
 #include <stdexcept>
 
 SceneManager::SceneManager(ECS3D* ecs)

@@ -16,7 +16,7 @@ public:
 
   void update();
 
-  [[nodiscard]] std::shared_ptr<VulkanEngine> getRenderer() const;
+  [[nodiscard]] std::shared_ptr<vke::VulkanEngine> getRenderer() const;
 
   [[nodiscard]] bool keyIsPressed(int key) const;
 
@@ -27,7 +27,7 @@ public:
   void logMessage(const std::string& level, const std::string& message);
 
 private:
-  std::shared_ptr<VulkanEngine> renderer;
+  std::shared_ptr<vke::VulkanEngine> renderer;
 
   std::chrono::time_point<std::chrono::steady_clock> previousTime;
 

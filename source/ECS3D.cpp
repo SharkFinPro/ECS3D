@@ -2,6 +2,7 @@
 #include "scenes/SceneManager.h"
 #include "assets/AssetManager.h"
 #include <VulkanEngine/components/ImGuiInstance.h>
+#include <VulkanEngine/components/window/Window.h>
 
 ECS3D::ECS3D()
   : previousTime(std::chrono::steady_clock::now()), sceneManager(std::make_shared<SceneManager>(this)),
@@ -36,14 +37,14 @@ void ECS3D::update()
   renderer->render();
 }
 
-std::shared_ptr<VulkanEngine> ECS3D::getRenderer() const
+std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const
 {
   return renderer;
 }
 
 bool ECS3D::keyIsPressed(const int key) const
 {
-  return renderer->keyIsPressed(key);
+  return renderer->getWindow()->keyIsPressed(key);
 }
 
 std::shared_ptr<SceneManager> ECS3D::getSceneManager() const
@@ -80,7 +81,7 @@ void ECS3D::displayMessageLog()
 
 void ECS3D::initRenderer()
 {
-  constexpr VulkanEngineOptions vulkanEngineOptions = {
+  constexpr vke::VulkanEngineOptions vulkanEngineOptions = {
     .WINDOW_WIDTH = 1280,
     .WINDOW_HEIGHT = 720,
     .WINDOW_TITLE = "ECS3D",
@@ -89,9 +90,9 @@ void ECS3D::initRenderer()
   	.MAX_IMGUI_TEXTURES = 100
   };
 
-  renderer = std::make_shared<VulkanEngine>(vulkanEngineOptions);
+  renderer = std::make_shared<vke::VulkanEngine>(vulkanEngineOptions);
 
-  ImGui::SetCurrentContext(VulkanEngine::getImGuiContext());
+  ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 	setupImGuiStyle();
 
 	const auto gui = renderer->getImGuiInstance();

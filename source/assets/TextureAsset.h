@@ -11,7 +11,7 @@ public:
 
   std::string getPath();
 
-  std::shared_ptr<Texture2D> getTexture();
+  std::shared_ptr<vke::Texture2D> getTexture();
 
   void load() override;
 
@@ -20,7 +20,7 @@ public:
 private:
   std::string path;
 
-  std::shared_ptr<Texture2D> texture;
+  std::shared_ptr<vke::Texture2D> texture;
 };
 
 
