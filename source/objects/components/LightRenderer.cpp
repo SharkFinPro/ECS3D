@@ -36,19 +36,28 @@ void LightRenderer::displayGui()
 {
   if (displayGuiHeader())
   {
+    bool isSpotLight = light->isSpotLight();
     glm::vec3 color = light->getColor();
     float ambient = light->getAmbient();
     float diffuse = light->getDiffuse();
     float specular = light->getSpecular();
+    glm::vec3 direction = light->getDirection();
+    float coneAngle = light->getConeAngle();
 
+    ImGui::Checkbox("Spot Light", &isSpotLight);
     ImGui::ColorEdit3("Color", value_ptr(color));
     ImGui::SliderFloat("Ambient", &ambient, 0.0f, 1.0f);
     ImGui::SliderFloat("Diffuse", &diffuse, 0.0f, 1.0f);
     ImGui::SliderFloat("Specular", &specular, 0.0f, 1.0f);
+    ImGui::SliderFloat3("Direction", value_ptr(direction), -1.0f, 1.0f);
+    ImGui::SliderFloat("Cone Angle", &coneAngle, 0.0f, 180.0f);
 
+    light->setSpotLight(isSpotLight);
     light->setColor(color);
     light->setAmbient(ambient);
     light->setDiffuse(diffuse);
     light->setSpecular(specular);
+    light->setDirection(direction);
+    light->setConeAngle(coneAngle);
   }
 }
