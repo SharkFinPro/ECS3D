@@ -6,9 +6,9 @@
 #include "../../assets/Asset.h"
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
-#include <VulkanEngine/components/AssetManager.h>
-#include <VulkanEngine/components/PipelineManager.h>
-#include <VulkanEngine/pipelines/custom/config/PipelineTypes.h>
+#include <VulkanEngine/components/assets/AssetManager.h>
+#include <VulkanEngine/components/pipelines/pipelineManager/PipelineManager.h>
+#include <VulkanEngine/components/pipelines/implementations/common/PipelineTypes.h>
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer, const std::shared_ptr<vke::Texture2D>& texture,
                              const std::shared_ptr<vke::Texture2D>& specularMap, const std::shared_ptr<vke::Model>& model)

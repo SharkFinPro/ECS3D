@@ -3,9 +3,9 @@
 
 #include "Component.h"
 #include <VulkanEngine/VulkanEngine.h>
-#include <VulkanEngine/components/objects/RenderObject.h>
-#include <VulkanEngine/components/objects/Model.h>
-#include <VulkanEngine/components/textures/Texture2D.h>
+#include <VulkanEngine/components/assets/objects/RenderObject.h>
+#include <VulkanEngine/components/assets/objects/Model.h>
+#include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <memory>
 #include <functional>
 

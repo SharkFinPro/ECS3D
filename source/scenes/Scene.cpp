@@ -100,7 +100,7 @@ void Scene::createLight(glm::vec3 position, glm::vec3 color, float ambient, floa
 {
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(position, glm::vec3(1), glm::vec3(0)),
-    std::make_shared<LightRenderer>(position, color, ambient, diffuse, specular)
+    std::make_shared<LightRenderer>(sceneManager->getECS()->getRenderer(), position, color, ambient, diffuse, specular)
   };
 
   objectManager->addObject(std::make_shared<Object>(components, "Light"));
