@@ -8,12 +8,13 @@
 #include <VulkanEngine/components/lighting/LightingManager.h>
 
 LightRenderer::LightRenderer(std::shared_ptr<vke::VulkanEngine> renderer, glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular)
-  : Component(ComponentType::lightRenderer)//, light(renderer->getAstd::make_shared<vke::PointLight>(position, color, ambient, diffuse, specular))
+  : Component(ComponentType::lightRenderer)
 {
-  auto a = renderer->getLightingManager();
+  const auto lightingManager = renderer->getLightingManager();
 
-  m_pointLight = std::dynamic_pointer_cast<vke::PointLight>(a->createPointLight(position, color, ambient, diffuse, specular));
-  m_spotLight = std::dynamic_pointer_cast<vke::SpotLight>(a->createSpotLight(position, color, ambient, diffuse, specular));
+  m_pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(position, color, ambient, diffuse, specular));
+
+  m_spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(position, color, ambient, diffuse, specular));
 }
 
 void LightRenderer::variableUpdate([[maybe_unused]] const float dt)
@@ -38,7 +39,6 @@ void LightRenderer::variableUpdate([[maybe_unused]] const float dt)
     {
       m_pointLight->setPosition(transform->getPosition());
     }
-
   }
 
   if (m_isSpotLight)
