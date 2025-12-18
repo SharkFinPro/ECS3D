@@ -2,7 +2,7 @@
 #define TEXTUREASSET_H
 
 #include "Asset.h"
-#include <VulkanEngine/components/textures/Texture2D.h>
+#include <VulkanEngine/components/assets/textures/Texture2D.h>
 
 class TextureAsset final : public Asset {
 public:

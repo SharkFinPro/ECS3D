@@ -2,7 +2,7 @@
 #include "AssetManager.h"
 #include "../ECS3D.h"
 #include <VulkanEngine/VulkanEngine.h>
-#include <VulkanEngine/components/AssetManager.h>
+#include <VulkanEngine/components/assets/AssetManager.h>
 
 TextureAsset::TextureAsset(const std::string& path)
   : Asset(path), path(path)

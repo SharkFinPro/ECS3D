@@ -3,14 +3,16 @@
 
 #include "Component.h"
 #include <glm/glm.hpp>
-#include <VulkanEngine/components/lighting/Light.h>
+#include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/lighting/lights/PointLight.h>
+#include <VulkanEngine/components/lighting/lights/SpotLight.h>
 #include <memory>
 
 class Transform;
 
 class LightRenderer final : public Component {
 public:
-  LightRenderer(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular);
+  LightRenderer(std::shared_ptr<vke::VulkanEngine> renderer, glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular);
 
   ~LightRenderer() override = default;
 
@@ -19,7 +21,10 @@ public:
   void displayGui() override;
 
 private:
-  std::shared_ptr<vke::Light> light;
+  bool m_isSpotLight = false;
+
+  std::shared_ptr<vke::PointLight> m_pointLight;
+  std::shared_ptr<vke::SpotLight> m_spotLight;
   std::weak_ptr<Transform> transform_ptr;
 };
 

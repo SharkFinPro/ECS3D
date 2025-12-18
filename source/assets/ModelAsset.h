@@ -3,7 +3,7 @@
 
 #include "Asset.h"
 #include <memory>
-#include <VulkanEngine/components/objects/Model.h>
+#include <VulkanEngine/components/assets/objects/Model.h>
 
 class ModelAsset final : public Asset {
 public:

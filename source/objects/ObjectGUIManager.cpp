@@ -3,7 +3,7 @@
 #include "components/ModelRenderer.h"
 #include "../ECS3D.h"
 #include <imgui.h>
-#include <VulkanEngine/components/MousePicker.h>
+#include <VulkanEngine/components/mousePicker/MousePicker.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <algorithm>
 

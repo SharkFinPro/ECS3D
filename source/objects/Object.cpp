@@ -159,7 +159,8 @@ void Object::displayGui()
                 addComponent(std::make_shared<Player>());
                 break;
               case ComponentType::lightRenderer:
-                addComponent(std::make_shared<LightRenderer>(glm::vec3(0), glm::vec3(0),
+                addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
+                                                             glm::vec3(0), glm::vec3(0),
                                                              0.0f, 0.0f, 0.0f));
                 break;
               default: ;

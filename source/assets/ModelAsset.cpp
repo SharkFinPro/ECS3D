@@ -2,7 +2,7 @@
 #include "AssetManager.h"
 #include "../ECS3D.h"
 #include <VulkanEngine/VulkanEngine.h>
-#include <VulkanEngine/components/AssetManager.h>
+#include <VulkanEngine/components/assets/AssetManager.h>
 #include <imgui.h>
 
 ModelAsset::ModelAsset(const std::string& path)

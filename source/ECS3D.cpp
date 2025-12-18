@@ -1,7 +1,7 @@
 #include "ECS3D.h"
 #include "scenes/SceneManager.h"
 #include "assets/AssetManager.h"
-#include <VulkanEngine/components/ImGuiInstance.h>
+#include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/window/Window.h>
 
 ECS3D::ECS3D()
