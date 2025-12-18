@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/lighting/lights/PointLight.h>
+#include <VulkanEngine/components/lighting/lights/SpotLight.h>
 #include <memory>
 
 class Transform;
@@ -20,7 +21,10 @@ public:
   void displayGui() override;
 
 private:
-  std::shared_ptr<vke::PointLight> light;
+  bool m_isSpotLight = false;
+
+  std::shared_ptr<vke::PointLight> m_pointLight;
+  std::shared_ptr<vke::SpotLight> m_spotLight;
   std::weak_ptr<Transform> transform_ptr;
 };
 
