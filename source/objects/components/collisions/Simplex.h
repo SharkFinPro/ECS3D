@@ -15,8 +15,6 @@ inline bool sameDirection(const glm::vec3& first, const glm::vec3& second)
 
 class Simplex {
 public:
-  Simplex();
-
   [[nodiscard]] size_t size() const;
 
   [[nodiscard]] const glm::vec3& getA() const;
@@ -36,8 +34,8 @@ public:
   void addVertex(const SupportVertex& vertex);
 
 private:
-  SupportVertex vertices[4]{};
-  size_t length;
+  SupportVertex m_vertices[4]{};
+  size_t m_length = 0;
 };
 
 

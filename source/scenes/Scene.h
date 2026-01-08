@@ -33,9 +33,11 @@ public:
   void createLight(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular) const;
 
 private:
-  SceneManager* sceneManager;
-  std::shared_ptr<AssetManager> assetManager;
-  std::shared_ptr<ObjectManager> objectManager;
+  SceneManager* m_sceneManager;
+
+  std::shared_ptr<AssetManager> m_assetManager;
+
+  std::shared_ptr<ObjectManager> m_objectManager;
 };
 
 

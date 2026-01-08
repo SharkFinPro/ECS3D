@@ -3,27 +3,27 @@
 #include <imgui.h>
 
 Component::Component(const ComponentType type, const ComponentType subType)
-  : type(type), subType(subType), owner(nullptr), shouldDelete(false)
+  : m_type(type), m_subType(subType)
 {}
 
 ComponentType Component::getSubType() const
 {
-  return subType;
+  return m_subType;
 }
 
 ComponentType Component::getType() const
 {
-  return type;
+  return m_type;
 }
 
 void Component::setOwner(Object* owner)
 {
-  this->owner = owner;
+  m_owner = owner;
 }
 
 Object* Component::getOwner() const
 {
-  return owner;
+  return m_owner;
 }
 
 void Component::variableUpdate([[maybe_unused]] float dt)
@@ -37,12 +37,12 @@ void Component::displayGui()
 
 bool Component::markedAsDeleted() const
 {
-  return shouldDelete;
+  return m_shouldDelete;
 }
 
 void Component::markAsDeleted()
 {
-  shouldDelete = true;
+  m_shouldDelete = true;
 }
 
 void Component::start() const
@@ -63,8 +63,8 @@ void Component::stop() const
 
 bool Component::displayGuiHeader()
 {
-  const char* componentDisplayName = componentTypeToString.at(subType != ComponentType::SubComponentType_none
-                                                              ? subType : type).c_str();
+  const char* componentDisplayName = componentTypeToString.at(m_subType != ComponentType::SubComponentType_none
+                                                              ? m_subType : m_type).c_str();
 
   const bool open = ImGui::CollapsingHeader(componentDisplayName, ImGuiTreeNodeFlags_AllowOverlap);
 

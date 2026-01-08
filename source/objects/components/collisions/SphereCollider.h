@@ -13,7 +13,7 @@ public:
   void displayGui() override;
 
 private:
-  float radius = 1.0f;
+  float m_radius = 1.0f;
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 };

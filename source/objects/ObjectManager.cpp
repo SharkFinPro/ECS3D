@@ -5,83 +5,82 @@
 #include <imgui.h>
 
 ObjectManager::ObjectManager()
-  : ecs(nullptr), collisionManager(std::make_shared<CollisionManager>()),
-    objectGUIManager(std::make_shared<ObjectGUIManager>(this)), sceneStatus(SceneStatus::stopped),
-    fixedUpdateDt(1.0f / 50.0f), timeAccumulator(0.0f)
+  : m_collisionManager(std::make_shared<CollisionManager>()),
+    m_objectGUIManager(std::make_shared<ObjectGUIManager>(this))
 {}
 
 void ObjectManager::update(const float dt)
 {
   displaySceneStatusGui();
 
-  objectGUIManager->update();
+  m_objectGUIManager->update();
 
   fixedUpdate(dt);
   variableUpdate(dt);
 
-  objectGUIManager->displaySelectedObjectGui();
+  m_objectGUIManager->displaySelectedObjectGui();
 }
 
 void ObjectManager::setECS(ECS3D* ecs)
 {
-  this->ecs = ecs;
+  m_ecs = ecs;
 }
 
 ECS3D* ObjectManager::getECS() const
 {
-  return ecs;
+  return m_ecs;
 }
 
 std::shared_ptr<CollisionManager> ObjectManager::getCollisionManager() const
 {
-  return collisionManager;
+  return m_collisionManager;
 }
 
 void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 {
   object->setManager(this);
 
-  collisionManager->addObject(object);
+  m_collisionManager->addObject(object);
 
-  objects.push_back(object);
+  m_objects.push_back(object);
 
-  objectGUIManager->addObject(object);
+  m_objectGUIManager->addObject(object);
 }
 
 void ObjectManager::startScene()
 {
-  if (sceneStatus == SceneStatus::stopped)
+  if (m_sceneStatus == SceneStatus::stopped)
   {
-    for (const auto& object : objects)
+    for (const auto& object : m_objects)
     {
       object->start();
     }
   }
 
-  sceneStatus = SceneStatus::running;
+  m_sceneStatus = SceneStatus::running;
 }
 
 void ObjectManager::pauseScene()
 {
-  sceneStatus = SceneStatus::paused;
+  m_sceneStatus = SceneStatus::paused;
 }
 
 void ObjectManager::resetScene()
 {
-  if (sceneStatus == SceneStatus::running || sceneStatus == SceneStatus::paused)
+  if (m_sceneStatus == SceneStatus::running || m_sceneStatus == SceneStatus::paused)
   {
-    for (const auto& object : objects)
+    for (const auto& object : m_objects)
     {
       object->stop();
     }
   }
 
-  sceneStatus = SceneStatus::stopped;
+  m_sceneStatus = SceneStatus::stopped;
 }
 
 void ObjectManager::variableUpdate(const float dt) const
 {
-  for (const auto& object : objects)
+  for (const auto& object : m_objects)
   {
     object->variableUpdate(dt);
   }
@@ -93,26 +92,26 @@ void ObjectManager::variableUpdate(const float dt) const
 
 void ObjectManager::fixedUpdate(const float dt)
 {
-  if (sceneStatus != SceneStatus::running)
+  if (m_sceneStatus != SceneStatus::running)
   {
     return;
   }
 
-  timeAccumulator += dt;
+  m_timeAccumulator += dt;
 
   uint8_t steps = 1;
-  while (timeAccumulator >= fixedUpdateDt && steps <= 3)
+  while (m_timeAccumulator >= m_fixedUpdateDt && steps <= 3)
   {
     ++steps;
 
-    for (const auto& object : objects)
+    for (const auto& object : m_objects)
     {
-      object->fixedUpdate(fixedUpdateDt);
+      object->fixedUpdate(m_fixedUpdateDt);
     }
 
-    collisionManager->update();
+    m_collisionManager->update();
 
-    timeAccumulator -= fixedUpdateDt;
+    m_timeAccumulator -= m_fixedUpdateDt;
   }
 }
 
@@ -122,7 +121,7 @@ void ObjectManager::displaySceneStatusGui()
 
   constexpr int sceneStatusButtonWidth = 125;
 
-  if (sceneStatus != SceneStatus::running)
+  if (m_sceneStatus != SceneStatus::running)
   {
     if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
     {
@@ -130,7 +129,7 @@ void ObjectManager::displaySceneStatusGui()
     }
   }
 
-  if (sceneStatus == SceneStatus::running)
+  if (m_sceneStatus == SceneStatus::running)
   {
     if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
     {
@@ -138,7 +137,7 @@ void ObjectManager::displaySceneStatusGui()
     }
   }
 
-  if (sceneStatus != SceneStatus::stopped)
+  if (m_sceneStatus != SceneStatus::stopped)
   {
     ImGui::SameLine();
 

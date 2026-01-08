@@ -20,11 +20,11 @@ public:
   void update(float dt);
 
 private:
-  ECS3D* ecs;
+  ECS3D* m_ecs;
 
-  std::vector<std::shared_ptr<Scene>> scenes;
+  std::vector<std::shared_ptr<Scene>> m_scenes;
 
-  std::shared_ptr<Scene> currentScene;
+  std::shared_ptr<Scene> m_currentScene = nullptr;
 
   void sceneSelector();
 };

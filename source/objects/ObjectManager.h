@@ -36,18 +36,18 @@ public:
   void resetScene();
 
 private:
-  ECS3D* ecs;
+  ECS3D* m_ecs = nullptr;
 
-  std::vector<std::shared_ptr<Object>> objects;
+  std::vector<std::shared_ptr<Object>> m_objects;
 
-  std::shared_ptr<CollisionManager> collisionManager;
+  std::shared_ptr<CollisionManager> m_collisionManager;
 
-  std::shared_ptr<ObjectGUIManager> objectGUIManager;
+  std::shared_ptr<ObjectGUIManager> m_objectGUIManager;
 
-  SceneStatus sceneStatus;
+  SceneStatus m_sceneStatus = SceneStatus::stopped;
 
-  const float fixedUpdateDt;
-  float timeAccumulator;
+  const float m_fixedUpdateDt = 1.0f / 50.0f;
+  float m_timeAccumulator = 0.0f;
 
   void variableUpdate(float dt) const;
   void fixedUpdate(float dt);

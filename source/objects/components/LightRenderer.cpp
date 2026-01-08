@@ -7,7 +7,12 @@
 #include <imgui.h>
 #include <VulkanEngine/components/lighting/LightingManager.h>
 
-LightRenderer::LightRenderer(std::shared_ptr<vke::VulkanEngine> renderer, glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular)
+LightRenderer::LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
+                             const glm::vec3 position,
+                             const glm::vec3 color,
+                             const float ambient,
+                             const float diffuse,
+                             const float specular)
   : Component(ComponentType::lightRenderer)
 {
   const auto lightingManager = renderer->getLightingManager();
@@ -19,17 +24,17 @@ LightRenderer::LightRenderer(std::shared_ptr<vke::VulkanEngine> renderer, glm::v
 
 void LightRenderer::variableUpdate([[maybe_unused]] const float dt)
 {
-  if (transform_ptr.expired())
+  if (m_transform_ptr.expired())
   {
-    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
-    if (transform_ptr.expired())
+    if (m_transform_ptr.expired())
     {
       return;
     }
   }
 
-  if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
+  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
     if (m_isSpotLight)
     {
@@ -43,11 +48,11 @@ void LightRenderer::variableUpdate([[maybe_unused]] const float dt)
 
   if (m_isSpotLight)
   {
-    owner->getManager()->getECS()->getRenderer()->getLightingManager()->renderLight(m_spotLight);
+    m_owner->getManager()->getECS()->getRenderer()->getLightingManager()->renderLight(m_spotLight);
   }
   else
   {
-    owner->getManager()->getECS()->getRenderer()->getLightingManager()->renderLight(m_pointLight);
+    m_owner->getManager()->getECS()->getRenderer()->getLightingManager()->renderLight(m_pointLight);
   }
 }
 

@@ -5,16 +5,16 @@
 #include <stdexcept>
 
 SceneManager::SceneManager(ECS3D* ecs)
-  : ecs(ecs), currentScene(nullptr)
+  : m_ecs(ecs)
 {}
 
 std::shared_ptr<Scene> SceneManager::createScene()
 {
   auto scene = std::make_shared<Scene>(this);
 
-  scenes.push_back(scene);
+  m_scenes.push_back(scene);
 
-  if (!currentScene)
+  if (!m_currentScene)
   {
     loadScene(scene);
   }
@@ -29,36 +29,36 @@ void SceneManager::loadScene(const std::shared_ptr<Scene>& scene)
     throw std::runtime_error("Attempted to load a scene that does not exist!");
   }
 
-  currentScene = scene;
+  m_currentScene = scene;
 
-  currentScene->load();
+  m_currentScene->load();
 }
 
 ECS3D* SceneManager::getECS() const
 {
-  return ecs;
+  return m_ecs;
 }
 
 void SceneManager::update(const float dt)
 {
   sceneSelector();
 
-  if (!currentScene)
+  if (!m_currentScene)
   {
     return;
   }
 
-  currentScene->update(dt);
+  m_currentScene->update(dt);
 }
 
 void SceneManager::sceneSelector()
 {
   ImGui::Begin("Scene Selector");
-  for (int i = 0; i < scenes.size(); ++i)
+  for (int i = 0; i < m_scenes.size(); ++i)
   {
-    if (ImGui::Selectable(("Scene " + std::to_string(i + 1)).c_str(), currentScene == scenes[i]))
+    if (ImGui::Selectable(("Scene " + std::to_string(i + 1)).c_str(), m_currentScene == m_scenes[i]))
     {
-      loadScene(scenes[i]);
+      loadScene(m_scenes[i]);
     }
   }
   ImGui::End();

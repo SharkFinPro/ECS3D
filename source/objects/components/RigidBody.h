@@ -9,8 +9,6 @@
 #include <glm/vec3.hpp>
 #include <memory>
 
-constexpr float GRAVITY = 9.81f;
-
 class Transform;
 
 struct LineSegment {
@@ -43,20 +41,20 @@ public:
 
 private:
 #ifdef COLLISION_LOCATION_DEBUG
-  std::vector<LineSegment> linesToDraw;
+  std::vector<LineSegment> m_linesToDraw;
 #endif
 
-  ComponentVariable<glm::vec3> m_velocity;
-  ComponentVariable<float> m_friction;
-  ComponentVariable<bool> m_doGravity;
-  ComponentVariable<float> m_gravity;
-  ComponentVariable<glm::vec3> m_angularVelocity;
-  ComponentVariable<float> m_mass;
+  ComponentVariable<glm::vec3> m_velocity{glm::vec3(0)};
+  ComponentVariable<float> m_friction{0.1f};
+  ComponentVariable<bool> m_doGravity{true};
+  ComponentVariable<float> m_gravity{-9.81f};
+  ComponentVariable<glm::vec3> m_angularVelocity{glm::vec3(0)};
+  ComponentVariable<float> m_mass{10.0f};
 
-  bool falling;
-  bool nextFalling;
+  bool m_falling = true;
+  bool m_nextFalling = true;
 
-  std::weak_ptr<Transform> transform_ptr;
+  std::weak_ptr<Transform> m_transform_ptr;
 
   void limitMovement();
 

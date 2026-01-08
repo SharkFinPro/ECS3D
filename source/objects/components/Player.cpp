@@ -9,10 +9,7 @@
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 
 Player::Player()
-  : Component(ComponentType::player),
-    m_speed(1.0f),
-    m_jumpHeight(15.0f),
-    appliedForce(0)
+  : Component(ComponentType::player)
 {
   loadVariable(m_speed);
   loadVariable(m_jumpHeight);
@@ -25,29 +22,29 @@ void Player::variableUpdate([[maybe_unused]] const float dt)
 
 void Player::fixedUpdate([[maybe_unused]] const float dt)
 {
-  if (transform_ptr.expired())
+  if (m_transform_ptr.expired())
   {
-    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
-    if (transform_ptr.expired())
+    if (m_transform_ptr.expired())
     {
       return;
     }
   }
 
-  if (rigidBody_ptr.expired())
+  if (m_rigidBody_ptr.expired())
   {
-    rigidBody_ptr = owner->getComponent<RigidBody>(ComponentType::rigidBody);
+    m_rigidBody_ptr = m_owner->getComponent<RigidBody>(ComponentType::rigidBody);
 
-    if (rigidBody_ptr.expired())
+    if (m_rigidBody_ptr.expired())
     {
       return;
     }
   }
 
-  if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
+  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    if (const std::shared_ptr<RigidBody> rigidBody = rigidBody_ptr.lock())
+    if (const std::shared_ptr<RigidBody> rigidBody = m_rigidBody_ptr.lock())
     {
       if (transform->getPosition().y < -250.0f)
       {
@@ -56,12 +53,12 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
         rigidBody->setVelocity({0, 0, 0});
       }
 
-      rigidBody->applyForce(appliedForce * dt, transform->getPosition());
-      transform->move(appliedForce * dt);
+      rigidBody->applyForce(m_appliedForce * dt, transform->getPosition());
+      transform->move(m_appliedForce * dt);
     }
   }
 
-  appliedForce *= 0;
+  m_appliedForce *= 0;
 }
 
 void Player::displayGui()
@@ -75,17 +72,17 @@ void Player::displayGui()
 
 void Player::handleInput()
 {
-  if (rigidBody_ptr.expired())
+  if (m_rigidBody_ptr.expired())
   {
-    rigidBody_ptr = owner->getComponent<RigidBody>(ComponentType::rigidBody);
+    m_rigidBody_ptr = m_owner->getComponent<RigidBody>(ComponentType::rigidBody);
 
-    if (rigidBody_ptr.expired())
+    if (m_rigidBody_ptr.expired())
     {
       return;
     }
   }
 
-  const auto ecs = owner->getManager()->getECS();
+  const auto ecs = m_owner->getManager()->getECS();
 
   if (!ecs->getRenderer()->getRenderingManager()->isSceneFocused())
   {
@@ -103,7 +100,7 @@ void Player::handleInput()
   }
   if (xForce!= 0)
   {
-    appliedForce.x = xForce;
+    m_appliedForce.x = xForce;
   }
 
   float zForce = 0;
@@ -117,14 +114,14 @@ void Player::handleInput()
   }
   if (zForce != 0)
   {
-    appliedForce.z = zForce;
+    m_appliedForce.z = zForce;
   }
 
-  if (const std::shared_ptr<RigidBody> rigidBody = rigidBody_ptr.lock())
+  if (const std::shared_ptr<RigidBody> rigidBody = m_rigidBody_ptr.lock())
   {
     if (!rigidBody->isFalling() && ecs->keyIsPressed(GLFW_KEY_X))
     {
-      appliedForce.y = m_jumpHeight.get();
+      m_appliedForce.y = m_jumpHeight.get();
     }
   }
 }

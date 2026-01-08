@@ -15,13 +15,13 @@
 constexpr int MAX_CHARACTERS = 30;
 
 Object::Object(std::string name)
-  : manager(nullptr), name(std::move(name)), showComponentSelector(false)
+  : m_name(std::move(name))
 {
-  this->name.resize(MAX_CHARACTERS);
+  m_name.resize(MAX_CHARACTERS);
 }
 
 Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)
-  : manager(nullptr), name(std::move(name)), showComponentSelector(false)
+  : m_name(std::move(name))
 {
   for (const auto& component : components)
   {
@@ -31,12 +31,12 @@ Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::s
 
 void Object::setParent(const std::shared_ptr<Object>& parent)
 {
-  this->parent = parent;
+  m_parent = parent;
 }
 
 std::shared_ptr<Object> Object::getParent() const
 {
-  return parent;
+  return m_parent;
 }
 
 void Object::addComponent(const std::shared_ptr<Component>& component, const bool setOwner)
@@ -46,12 +46,12 @@ void Object::addComponent(const std::shared_ptr<Component>& component, const boo
     component->setOwner(this);
   }
 
-  components.emplace(component->getType(), component);
+  m_components.emplace(component->getType(), component);
 }
 
 void Object::variableUpdate(const float dt)
 {
-  for (const auto& [componentType, component] : components)
+  for (const auto& [componentType, component] : m_components)
   {
     if (component->getOwner() == this)
     {
@@ -62,7 +62,7 @@ void Object::variableUpdate(const float dt)
 
 void Object::fixedUpdate(const float dt)
 {
-  for (const auto& [componentType, component] : components)
+  for (const auto& [componentType, component] : m_components)
   {
     if (component->getOwner() == this)
     {
@@ -73,29 +73,29 @@ void Object::fixedUpdate(const float dt)
 
 void Object::setManager(ObjectManager* objectManager)
 {
-  manager = objectManager;
+  m_manager = objectManager;
 }
 
 ObjectManager* Object::getManager() const
 {
-  return manager;
+  return m_manager;
 }
 
 std::string Object::getName() const
 {
-  return name;
+  return m_name;
 }
 
 void Object::setName(const std::string& name)
 {
-  this->name = name;
+  m_name = name;
 }
 
 void Object::displayGui()
 {
-  ImGui::InputText("Name", name.data(), name.capacity());
+  ImGui::InputText("Name", m_name.data(), m_name.capacity());
 
-  for (auto it = components.begin(); it != components.end();)
+  for (auto it = m_components.begin(); it != m_components.end();)
   {
     auto component = it->second;
 
@@ -107,12 +107,12 @@ void Object::displayGui()
     {
       if (component->getType() == ComponentType::collider)
       {
-        manager->getCollisionManager()->addObject(shared_from_this());
+        m_manager->getCollisionManager()->addObject(shared_from_this());
       }
 
       component.reset();
 
-      it = components.erase(it);
+      it = m_components.erase(it);
     }
     else
     {
@@ -122,10 +122,10 @@ void Object::displayGui()
 
   if (ImGui::Button("Add Component"))
   {
-    showComponentSelector = true;
+    m_showComponentSelector = true;
   }
 
-  if (showComponentSelector)
+  if (m_showComponentSelector)
   {
     if (ImGui::BeginCombo("##combo", "Select Component"))
     {
@@ -149,11 +149,11 @@ void Object::displayGui()
                 break;
               case ComponentType::SubComponentType_boxCollider:
                 addComponent(std::make_shared<BoxCollider>());
-                manager->getCollisionManager()->addObject(shared_from_this());
+                m_manager->getCollisionManager()->addObject(shared_from_this());
                 break;
               case ComponentType::SubComponentType_sphereCollider:
                 addComponent(std::make_shared<SphereCollider>());
-                manager->getCollisionManager()->addObject(shared_from_this());
+                m_manager->getCollisionManager()->addObject(shared_from_this());
                 break;
               case ComponentType::player:
                 addComponent(std::make_shared<Player>());
@@ -166,7 +166,7 @@ void Object::displayGui()
               default: ;
             }
 
-            showComponentSelector = false;
+            m_showComponentSelector = false;
           }
         }
       }
@@ -178,7 +178,7 @@ void Object::displayGui()
 
 void Object::start() const
 {
-  for (const auto& [type, component] : components)
+  for (const auto& [type, component] : m_components)
   {
     component->start();
   }
@@ -186,7 +186,7 @@ void Object::start() const
 
 void Object::stop() const
 {
-  for (const auto& [type, component] : components)
+  for (const auto& [type, component] : m_components)
   {
     component->stop();
   }
@@ -194,15 +194,15 @@ void Object::stop() const
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
-  const auto component = components.find(type);
+  const auto component = m_components.find(type);
 
-  if (component == components.end())
+  if (component == m_components.end())
   {
-    if (parent != nullptr)
+    if (m_parent != nullptr)
     {
       if (type == ComponentType::rigidBody)
       {
-        return parent->getComponent(type);
+        return m_parent->getComponent(type);
       }
     }
 

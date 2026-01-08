@@ -25,14 +25,14 @@ public:
   std::shared_ptr<T> getAsset(const std::string& path) const;
 
 private:
-  ECS3D* ecs;
-  std::unordered_map<std::string, std::shared_ptr<Asset>> assets;
+  ECS3D* m_ecs;
+  std::unordered_map<std::string, std::shared_ptr<Asset>> m_assets;
 };
 
 template<typename T>
 void AssetManager::loadAsset(const std::string& path)
 {
-  if (assets.contains(path))
+  if (m_assets.contains(path))
   {
     return;
   }
@@ -41,15 +41,15 @@ void AssetManager::loadAsset(const std::string& path)
   asset->setManager(this);
   asset->load();
 
-  assets.emplace(path, asset);
+  m_assets.emplace(path, asset);
 }
 
 template<typename T>
 std::shared_ptr<T> AssetManager::getAsset(const std::string& path) const
 {
-  const auto asset = assets.find(path);
+  const auto asset = m_assets.find(path);
 
-  return asset != assets.end() ? std::dynamic_pointer_cast<T>(asset->second) : nullptr;
+  return asset != m_assets.end() ? std::dynamic_pointer_cast<T>(asset->second) : nullptr;
 }
 
 #endif //ASSETMANAGER_H

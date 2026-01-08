@@ -3,12 +3,12 @@
 #include <imgui.h>
 
 AssetManager::AssetManager(ECS3D* ecs)
-  : ecs(ecs)
+  : m_ecs(ecs)
 {}
 
 ECS3D* AssetManager::getECS() const
 {
-  return ecs;
+  return m_ecs;
 }
 
 void AssetManager::displayGui()
@@ -20,7 +20,7 @@ void AssetManager::displayGui()
 
   ImGui::Columns(std::max(1, width / cellSize), 0, false);
 
-  for (const auto& [name, asset] : assets)
+  for (const auto& [name, asset] : m_assets)
   {
     ImGui::PushID(&asset);
 

@@ -30,17 +30,17 @@ public:
   void renderHighlight() const;
 
 private:
-  std::shared_ptr<vke::RenderObject> renderObject;
-  std::weak_ptr<Transform> transform_ptr;
+  std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
+  std::weak_ptr<Transform> m_transform_ptr;
 
-  std::shared_ptr<vke::VulkanEngine> renderer;
-  std::shared_ptr<vke::Texture2D> texture;
-  std::shared_ptr<vke::Texture2D> specularMap;
-  std::shared_ptr<vke::Model> model;
+  std::shared_ptr<vke::VulkanEngine> m_renderer;
+  std::shared_ptr<vke::Texture2D> m_texture = nullptr;
+  std::shared_ptr<vke::Texture2D> m_specularMap = nullptr;
+  std::shared_ptr<vke::Model> m_model = nullptr;
 
-  bool useStandardPipeline = true;
+  bool m_useStandardPipeline = true;
 
-  bool shouldRender;
+  bool m_shouldRender = false;
 
   bool m_selectedByRenderer = false;
 

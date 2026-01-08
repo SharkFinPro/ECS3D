@@ -24,9 +24,9 @@ public:
   void displayGui() override;
 
 private:
-  std::array<glm::vec3, boxVertices.size()> transformedBoxVertices{};
+  std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
 
-  uint8_t currentTransformUpdateID;
+  uint8_t m_currentTransformUpdateID = 255;
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 

@@ -52,13 +52,17 @@ private:
 
   void checkCollisions();
 #ifdef COLLISION_DEBUG
-  void findCollisions(const LeftEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects, std::vector<LineToRender>& threadLine) const;
+  void findCollisions(const LeftEdge& edge,
+                      std::vector<std::shared_ptr<Object>>& collidedObjects,
+                      std::vector<LineToRender>& threadLine) const;
 #else
-  void findCollisions(const LeftEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+  void findCollisions(const LeftEdge& edge,
+                      std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 #endif
 
-  static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider, const std::vector<std::shared_ptr<Object>>& collidedObjects);
-
+  static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody,
+                               const std::shared_ptr<Collider>& collider,
+                               const std::vector<std::shared_ptr<Object>>& collidedObjects);
 };
 
 

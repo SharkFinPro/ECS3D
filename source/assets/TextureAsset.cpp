@@ -5,29 +5,27 @@
 #include <VulkanEngine/components/assets/AssetManager.h>
 
 TextureAsset::TextureAsset(const std::string& path)
-  : Asset(path), path(path)
+  : Asset(path), m_path(path)
 {}
 
 std::string TextureAsset::getPath()
 {
-  return path;
+  return m_path;
 }
 
 std::shared_ptr<vke::Texture2D> TextureAsset::getTexture()
 {
-  return texture;
+  return m_texture;
 }
 
 void TextureAsset::load()
 {
-  const auto renderer = assetManager->getECS()->getRenderer();
-
-  texture = renderer->getAssetManager()->loadTexture(path.c_str());
+  m_texture = m_assetManager->getECS()->getRenderer()->getAssetManager()->loadTexture(m_path.c_str());
 }
 
 void TextureAsset::displayGui()
 {
   Asset::displayGui();
 
-  ImGui::ImageButton("img", texture->getImGuiTexture(), {150, 150});
+  ImGui::ImageButton("img", m_texture->getImGuiTexture(), {150, 150});
 }

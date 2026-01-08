@@ -119,11 +119,12 @@ public:
   void stop() const;
 
 protected:
-  ComponentType type;
-  ComponentType subType;
-  Object* owner;
+  ComponentType m_type;
+  ComponentType m_subType;
 
-  bool shouldDelete;
+  Object* m_owner = nullptr;
+
+  bool m_shouldDelete = false;
 
   std::vector<ComponentVariableBase*> m_variables;
 
