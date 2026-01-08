@@ -6,7 +6,6 @@
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
   : Component(ComponentType::transform),
-    updateID(1),
     m_position(position),
     m_scale(scale),
     m_rotation(rotation)
@@ -18,14 +17,14 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
 
 uint8_t Transform::getUpdateID() const
 {
-  return updateID;
+  return m_updateID;
 }
 
 glm::vec3 Transform::getPosition() const
 {
-  if (owner->getParent())
+  if (m_owner->getParent())
   {
-    if (const auto& parentTransform = owner->getParent()->getComponent<Transform>(ComponentType::transform))
+    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
     {
       return parentTransform->getPosition() + m_position.get();
     }
@@ -36,9 +35,9 @@ glm::vec3 Transform::getPosition() const
 
 glm::vec3 Transform::getScale() const
 {
-  if (owner->getParent())
+  if (m_owner->getParent())
   {
-    if (const auto& parentTransform = owner->getParent()->getComponent<Transform>(ComponentType::transform))
+    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
     {
       return parentTransform->getScale() * m_scale.get();
     }
@@ -49,9 +48,9 @@ glm::vec3 Transform::getScale() const
 
 glm::vec3 Transform::getRotation() const
 {
-  if (owner->getParent())
+  if (m_owner->getParent())
   {
-    if (const auto& parentTransform = owner->getParent()->getComponent<Transform>(ComponentType::transform))
+    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
     {
       return parentTransform->getRotation() + m_rotation.get();
     }
@@ -63,19 +62,19 @@ glm::vec3 Transform::getRotation() const
 void Transform::setScale(const glm::vec3 scale)
 {
   m_scale.set(scale);
-  ++updateID;
+  ++m_updateID;
 }
 
 void Transform::setRotation(const glm::vec3 rotation)
 {
   m_rotation.set(rotation);
-  ++updateID;
+  ++m_updateID;
 }
 
 void Transform::move(const glm::vec3& direction)
 {
   m_position.value() += direction;
-  ++updateID;
+  ++m_updateID;
 }
 
 void Transform::displayGui()
@@ -108,7 +107,7 @@ void Transform::displayGui()
       m_scale.value().x = m_scale.value().y = m_scale.value().z = combinedScale;
     }
 
-    ++updateID;
+    ++m_updateID;
 
     ImGui::PopID();
   }

@@ -22,10 +22,10 @@ private:
   ComponentVariable<float> m_speed;
   ComponentVariable<float> m_jumpHeight;
 
-  glm::vec3 appliedForce;
+  glm::vec3 m_appliedForce = glm::vec3(0.0f);
 
-  std::weak_ptr<Transform> transform_ptr;
-  std::weak_ptr<RigidBody> rigidBody_ptr;
+  std::weak_ptr<Transform> m_transform_ptr;
+  std::weak_ptr<RigidBody> m_rigidBody_ptr;
 
   void handleInput();
 };

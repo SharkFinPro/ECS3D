@@ -15,7 +15,7 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 {
   if (m_transform_ptr.expired())
   {
-    m_transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
     if (m_transform_ptr.expired())
     {
@@ -99,7 +99,7 @@ const BoundingBox& Collider::getBoundingBox()
 {
   if (m_transform_ptr.expired())
   {
-    m_transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
     if (m_transform_ptr.expired())
     {

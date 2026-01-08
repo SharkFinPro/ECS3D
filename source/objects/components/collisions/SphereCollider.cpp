@@ -12,7 +12,7 @@ float SphereCollider::getRadius()
 {
   if (m_transform_ptr.expired())
   {
-    m_transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
     if (m_transform_ptr.expired())
     {
@@ -39,7 +39,7 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 {
   if (m_transform_ptr.expired())
   {
-    m_transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
     if (m_transform_ptr.expired())
     {

@@ -12,9 +12,7 @@ RigidBody::RigidBody()
     m_doGravity(true),
     m_gravity(-GRAVITY),
     m_angularVelocity(glm::vec3(0)),
-    m_mass(10.0f),
-    falling(true),
-    nextFalling(true)
+    m_mass(10.0f)
 {
   loadVariable(m_velocity);
   loadVariable(m_friction);
@@ -42,20 +40,20 @@ void RigidBody::fixedUpdate(const float dt)
   linesToDraw.clear();
 #endif
 
-  if (transform_ptr.expired())
+  if (m_transform_ptr.expired())
   {
-    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
-    if (transform_ptr.expired())
+    if (m_transform_ptr.expired())
     {
       return;
     }
   }
 
-  if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
+  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    falling = nextFalling;
-    nextFalling = true;
+    m_falling = m_nextFalling;
+    m_nextFalling = true;
 
     if (m_doGravity.get())
     {
@@ -82,11 +80,11 @@ void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
 
   if (m_velocity.get().y > 0 && m_velocity.get().y - force.y < 0)
   {
-    falling = true;
-    nextFalling = true;
+    m_falling = true;
+    m_nextFalling = true;
   }
 
-  const auto r = position - transform_ptr.lock()->getPosition();
+  const auto r = position - m_transform_ptr.lock()->getPosition();
   if (glm::length(r) <= 0.01f)
   {
     return;
@@ -140,27 +138,27 @@ void RigidBody::respondToCollision(const glm::vec3 minimumTranslationVector)
 {
   if (minimumTranslationVector.y > 1e-5f && m_velocity.get().y <= 1e-5f)
   {
-    falling = false;
-    nextFalling = false;
+    m_falling = false;
+    m_nextFalling = false;
   }
 
-  if (transform_ptr.expired())
+  if (m_transform_ptr.expired())
   {
-    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
-    if (transform_ptr.expired())
+    if (m_transform_ptr.expired())
     {
       return;
     }
   }
 
-  const auto transform = transform_ptr.lock();
+  const auto transform = m_transform_ptr.lock();
   transform->move(minimumTranslationVector);
 }
 
 bool RigidBody::isFalling() const
 {
-  return falling;
+  return m_falling;
 }
 
 void RigidBody::setVelocity(const glm::vec3& velocity)
@@ -191,12 +189,12 @@ void RigidBody::limitMovement()
   const glm::vec2 horizontalVelocity(m_velocity.get().x, m_velocity.get().z);
   const glm::vec2 frictionForce = -horizontalVelocity * m_friction.get();
 
-  applyForce({ frictionForce.x, 0.0f, frictionForce.y }, transform_ptr.lock()->getPosition());
+  applyForce({ frictionForce.x, 0.0f, frictionForce.y }, m_transform_ptr.lock()->getPosition());
 }
 
 glm::mat3x3 RigidBody::getInertiaTensor() const
 {
-  const auto scale = transform_ptr.lock()->getScale();
+  const auto scale = m_transform_ptr.lock()->getScale();
 
   const auto widthSquared = scale.x * scale.x;
   const auto heightSquared = scale.y * scale.y;

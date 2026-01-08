@@ -12,7 +12,12 @@ class Transform;
 
 class LightRenderer final : public Component {
 public:
-  LightRenderer(std::shared_ptr<vke::VulkanEngine> renderer, glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular);
+  LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
+                glm::vec3 position,
+                glm::vec3 color,
+                float ambient,
+                float diffuse,
+                float specular);
 
   ~LightRenderer() override = default;
 
@@ -25,7 +30,7 @@ private:
 
   std::shared_ptr<vke::PointLight> m_pointLight;
   std::shared_ptr<vke::SpotLight> m_spotLight;
-  std::weak_ptr<Transform> transform_ptr;
+  std::weak_ptr<Transform> m_transform_ptr;
 };
 
 

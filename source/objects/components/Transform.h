@@ -23,7 +23,7 @@ public:
   void displayGui() override;
 
 private:
-  uint8_t updateID;
+  uint8_t m_updateID = 1;
 
   ComponentVariable<glm::vec3> m_position;
   ComponentVariable<glm::vec3> m_scale;

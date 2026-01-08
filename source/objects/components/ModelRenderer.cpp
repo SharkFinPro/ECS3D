@@ -13,47 +13,46 @@
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer, const std::shared_ptr<vke::Texture2D>& texture,
                              const std::shared_ptr<vke::Texture2D>& specularMap, const std::shared_ptr<vke::Model>& model)
-  : Component(ComponentType::modelRenderer), renderObject(renderer->getAssetManager()->loadRenderObject(texture, specularMap, model)),
-    renderer(renderer), texture(texture), specularMap(specularMap), model(model), shouldRender(true)
+  : Component(ComponentType::modelRenderer), m_renderObject(renderer->getAssetManager()->loadRenderObject(texture, specularMap, model)),
+    m_renderer(renderer), m_texture(texture), m_specularMap(specularMap), m_model(model), m_shouldRender(true)
 {}
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine> &renderer)
-  : Component(ComponentType::modelRenderer), renderObject(nullptr), renderer(renderer), texture(nullptr),
-    specularMap(nullptr), model(nullptr), shouldRender(false)
+  : Component(ComponentType::modelRenderer), m_renderer(renderer)
 {}
 
 void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
 {
   if (!canRender())
   {
-    shouldRender = false;
+    m_shouldRender = false;
   }
 
-  if (!shouldRender)
+  if (!m_shouldRender)
   {
     return;
   }
 
-  if (transform_ptr.expired())
+  if (m_transform_ptr.expired())
   {
-    transform_ptr = owner->getComponent<Transform>(ComponentType::transform);
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
 
-    if (transform_ptr.expired())
+    if (m_transform_ptr.expired())
     {
       return;
     }
   }
 
-  if (const std::shared_ptr<Transform> transform = transform_ptr.lock())
+  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    renderObject->setPosition(transform->getPosition());
-    renderObject->setScale(transform->getScale());
-    renderObject->setOrientationEuler(transform->getRotation());
+    m_renderObject->setPosition(transform->getPosition());
+    m_renderObject->setScale(transform->getScale());
+    m_renderObject->setOrientationEuler(transform->getRotation());
   }
 
-  owner->getManager()->getECS()->getRenderer()->getRenderingManager()->getRenderer3D()->renderObject(
-    renderObject,
-    useStandardPipeline ? vke::PipelineType::object : vke::PipelineType::ellipticalDots,
+  m_owner->getManager()->getECS()->getRenderer()->getRenderingManager()->getRenderer3D()->renderObject(
+    m_renderObject,
+    m_useStandardPipeline ? vke::PipelineType::object : vke::PipelineType::ellipticalDots,
     &m_selectedByRenderer
   );
 }
@@ -62,8 +61,8 @@ void ModelRenderer::displayGui()
 {
   if (displayGuiHeader())
   {
-    ImGui::Checkbox("Use Standard Pipeline", &useStandardPipeline);
-    ImGui::Checkbox("Render", &shouldRender);
+    ImGui::Checkbox("Use Standard Pipeline", &m_useStandardPipeline);
+    ImGui::Checkbox("Render", &m_shouldRender);
 
     displayTextureDragDrop();
     displaySpecularDragDrop();
@@ -78,12 +77,12 @@ bool ModelRenderer::selectedByRenderer() const
 
 void ModelRenderer::renderHighlight() const
 {
-  if (!shouldRender)
+  if (!m_shouldRender)
   {
     return;
   }
 
-  getOwner()->getManager()->getECS()->getRenderer()->getRenderingManager()->getRenderer3D()->renderObject(renderObject, vke::PipelineType::objectHighlight);
+  getOwner()->getManager()->getECS()->getRenderer()->getRenderingManager()->getRenderer3D()->renderObject(m_renderObject, vke::PipelineType::objectHighlight);
 }
 
 void ModelRenderer::displayDragDrop(const char* label,
@@ -102,8 +101,8 @@ void ModelRenderer::displayDragDrop(const char* label,
     {
       if (setter(*static_cast<std::shared_ptr<Asset>*>(payload->Data)) && canRender())
       {
-        renderObject.reset();
-        renderObject = renderer->getAssetManager()->loadRenderObject(texture, specularMap, model);
+        m_renderObject.reset();
+        m_renderObject = m_renderer->getAssetManager()->loadRenderObject(m_texture, m_specularMap, m_model);
       }
     }
 
@@ -119,7 +118,7 @@ void ModelRenderer::displayTextureDragDrop()
   {
     if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
     {
-      texture = textureAsset->getTexture();
+      m_texture = textureAsset->getTexture();
 
       return true;
     }
@@ -134,7 +133,7 @@ void ModelRenderer::displaySpecularDragDrop()
   {
     if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
     {
-      specularMap = textureAsset->getTexture();
+      m_specularMap = textureAsset->getTexture();
 
       return true;
     }
@@ -149,7 +148,7 @@ void ModelRenderer::displayModelDragDrop()
   {
     if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
     {
-      model = modelAsset->getModel();
+      m_model = modelAsset->getModel();
 
       return true;
     }
@@ -160,5 +159,5 @@ void ModelRenderer::displayModelDragDrop()
 
 bool ModelRenderer::canRender() const
 {
-  return texture && specularMap && model;
+  return m_texture && m_specularMap && m_model;
 }

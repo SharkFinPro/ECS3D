@@ -43,7 +43,7 @@ public:
 
 private:
 #ifdef COLLISION_LOCATION_DEBUG
-  std::vector<LineSegment> linesToDraw;
+  std::vector<LineSegment> m_linesToDraw;
 #endif
 
   ComponentVariable<glm::vec3> m_velocity;
@@ -53,10 +53,10 @@ private:
   ComponentVariable<glm::vec3> m_angularVelocity;
   ComponentVariable<float> m_mass;
 
-  bool falling;
-  bool nextFalling;
+  bool m_falling = true;
+  bool m_nextFalling = true;
 
-  std::weak_ptr<Transform> transform_ptr;
+  std::weak_ptr<Transform> m_transform_ptr;
 
   void limitMovement();
 
