@@ -10,7 +10,7 @@
 #include <algorithm>
 
 ObjectGUIManager::ObjectGUIManager(ObjectManager* objectManager)
-  : objectManager(objectManager)
+  : m_objectManager(objectManager)
 {}
 
 void ObjectGUIManager::update()
@@ -23,7 +23,7 @@ void ObjectGUIManager::update()
 void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
                                  const std::shared_ptr<ObjectUINode>& parentUINode)
 {
-  if (containsObjectUINode(objectUINodes, object))
+  if (containsObjectUINode(m_objectUINodes, object))
   {
     return;
   }
@@ -38,7 +38,7 @@ void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
   }
   else
   {
-    objectUINodes.push_back(uiNode);
+    m_objectUINodes.push_back(uiNode);
   }
 }
 
@@ -48,13 +48,13 @@ void ObjectGUIManager::displaySelectedObjectGui()
 
   ImGui::Checkbox("Highlight Object", &m_highlightSelectedObject);
 
-  if (selectedObject)
+  if (m_selectedObject)
   {
-    selectedObject->displayGui();
+    m_selectedObject->displayGui();
 
     if (m_highlightSelectedObject)
     {
-      if (const auto modelRenderer = selectedObject->getComponent<ModelRenderer>(ComponentType::modelRenderer))
+      if (const auto modelRenderer = m_selectedObject->getComponent<ModelRenderer>(ComponentType::modelRenderer))
       {
         modelRenderer->renderHighlight();
       }
@@ -92,9 +92,9 @@ bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
 
 void ObjectGUIManager::reorderObjectGui()
 {
-  for (int i = 0; i < objectUINodesSetForReassignment.size(); ++i)
+  for (int i = 0; i < m_objectUINodesSetForReassignment.size(); ++i)
   {
-    const auto node = objectUINodesSetForReassignment[i];
+    const auto node = m_objectUINodesSetForReassignment[i];
 
     if (!isAncestor(node->newParent, node))
     {
@@ -104,13 +104,13 @@ void ObjectGUIManager::reorderObjectGui()
     for (auto& child : node->children)
     {
       child->newParent = node->parent;
-      objectUINodesSetForReassignment.push_back(child);
+      m_objectUINodesSetForReassignment.push_back(child);
     }
   }
 
-  for (auto& node : objectUINodesSetForReassignment)
+  for (auto& node : m_objectUINodesSetForReassignment)
   {
-    std::erase(node->parent ? node->parent->children : objectUINodes, node);
+    std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
 
     if (node->newParent)
     {
@@ -123,11 +123,11 @@ void ObjectGUIManager::reorderObjectGui()
     {
       node->parent = nullptr;
       node->object->setParent(nullptr);
-      objectUINodes.push_back(node);
+      m_objectUINodes.push_back(node);
     }
   }
 
-  objectUINodesSetForReassignment.clear();
+  m_objectUINodesSetForReassignment.clear();
 }
 
 void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
@@ -139,7 +139,7 @@ void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>
       const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
 
       objectNode->newParent = node;
-      objectUINodesSetForReassignment.push_back(objectNode);
+      m_objectUINodesSetForReassignment.push_back(objectNode);
     }
 
     ImGui::EndDragDropTarget();
@@ -168,25 +168,25 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
     newObject->setParent(node->object);
 
     addObject(newObject, node);
-    objectManager->addObject(newObject);
-    selectedObject = newObject;
+    m_objectManager->addObject(newObject);
+    m_selectedObject = newObject;
   }
 }
 
 void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
 {
   const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
-  const auto renderer = objectManager->getECS()->getRenderer();
+  const auto renderer = m_objectManager->getECS()->getRenderer();
 
   if (renderer->getRenderingManager()->getRenderer3D()->getMousePicker()->canMousePick() && renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
   {
     if (modelRenderer && modelRenderer->selectedByRenderer())
     {
-      selectedObject = node->object;
+      m_selectedObject = node->object;
     }
-    else if (selectedObject == node->object)
+    else if (m_selectedObject == node->object)
     {
-      selectedObject = nullptr;
+      m_selectedObject = nullptr;
     }
   }
 
@@ -194,13 +194,13 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
 
   if (ImGui::TreeNodeEx(node->object->getName().c_str(),
                         (node->children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
-                        (selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0) |
+                        (m_selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0) |
                         ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth |
                         ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_OpenOnDoubleClick))
   {
     if (ImGui::IsItemClicked())
     {
-      selectedObject = node->object;
+      m_selectedObject = node->object;
     }
 
     displayObjectDragDrop(node);
@@ -223,7 +223,7 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
   {
     if (ImGui::IsItemClicked())
     {
-      selectedObject = node->object;
+      m_selectedObject = node->object;
     }
 
     displayObjectDragDrop(node);
@@ -242,8 +242,8 @@ void ObjectGUIManager::displayObjectListGui()
   {
     const auto newObject = std::make_shared<Object>();
     addObject(newObject);
-    objectManager->addObject(newObject);
-    selectedObject = newObject;
+    m_objectManager->addObject(newObject);
+    m_selectedObject = newObject;
   }
 
   ImGui::Spacing();
@@ -251,7 +251,7 @@ void ObjectGUIManager::displayObjectListGui()
   ImGui::Spacing();
 
   ImGui::BeginChild("##");
-  for (const auto& node : objectUINodes)
+  for (const auto& node : m_objectUINodes)
   {
     displayObjectGui(node);
   }
@@ -264,7 +264,7 @@ void ObjectGUIManager::displayObjectListGui()
       const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
 
       objectNode->newParent = nullptr;
-      objectUINodesSetForReassignment.push_back(objectNode);
+      m_objectUINodesSetForReassignment.push_back(objectNode);
     }
 
     ImGui::EndDragDropTarget();

@@ -39,14 +39,14 @@ public:
   void stop() const;
 
 private:
-  std::unordered_map<ComponentType, std::shared_ptr<Component>> components;
-  ObjectManager* manager;
+  std::unordered_map<ComponentType, std::shared_ptr<Component>> m_components;
+  ObjectManager* m_manager = nullptr;
 
-  std::shared_ptr<Object> parent;
+  std::shared_ptr<Object> m_parent;
 
-  std::string name;
+  std::string m_name;
 
-  bool showComponentSelector;
+  bool m_showComponentSelector = false;
 
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 };

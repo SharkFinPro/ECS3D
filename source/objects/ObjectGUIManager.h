@@ -26,12 +26,12 @@ public:
   void displaySelectedObjectGui();
 
 private:
-  ObjectManager* objectManager;
+  ObjectManager* m_objectManager;
 
-  std::vector<std::shared_ptr<ObjectUINode>> objectUINodes;
-  std::vector<std::shared_ptr<ObjectUINode>> objectUINodesSetForReassignment;
+  std::vector<std::shared_ptr<ObjectUINode>> m_objectUINodes;
+  std::vector<std::shared_ptr<ObjectUINode>> m_objectUINodesSetForReassignment;
 
-  std::shared_ptr<Object> selectedObject;
+  std::shared_ptr<Object> m_selectedObject;
 
   bool m_highlightSelectedObject = true;
 
