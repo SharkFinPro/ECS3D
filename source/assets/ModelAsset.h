@@ -19,9 +19,9 @@ public:
   void displayGui() override;
 
 private:
-  std::string path;
+  std::string m_path;
 
-  std::shared_ptr<vke::Model> model;
+  std::shared_ptr<vke::Model> m_model;
 };
 
 

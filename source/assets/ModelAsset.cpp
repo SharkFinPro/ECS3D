@@ -6,24 +6,22 @@
 #include <imgui.h>
 
 ModelAsset::ModelAsset(const std::string& path)
-  : Asset(path), path(path)
+  : Asset(path), m_path(path)
 {}
 
 std::string ModelAsset::getPath()
 {
-  return path;
+  return m_path;
 }
 
 std::shared_ptr<vke::Model> ModelAsset::getModel()
 {
-  return model;
+  return m_model;
 }
 
 void ModelAsset::load()
 {
-  const auto renderer = assetManager->getECS()->getRenderer();
-
-  model = renderer->getAssetManager()->loadModel(path.c_str());
+  m_model = assetManager->getECS()->getRenderer()->getAssetManager()->loadModel(m_path.c_str());
 }
 
 void ModelAsset::displayGui()

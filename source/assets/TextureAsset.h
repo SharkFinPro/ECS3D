@@ -18,9 +18,9 @@ public:
   void displayGui() override;
 
 private:
-  std::string path;
+  std::string m_path;
 
-  std::shared_ptr<vke::Texture2D> texture;
+  std::shared_ptr<vke::Texture2D> m_texture;
 };
 
 
