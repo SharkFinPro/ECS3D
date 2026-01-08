@@ -9,9 +9,7 @@
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 
 Player::Player()
-  : Component(ComponentType::player),
-    m_speed(1.0f),
-    m_jumpHeight(15.0f)
+  : Component(ComponentType::player)
 {
   loadVariable(m_speed);
   loadVariable(m_jumpHeight);

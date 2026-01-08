@@ -3,7 +3,7 @@
 #include <imgui.h>
 
 Component::Component(const ComponentType type, const ComponentType subType)
-  : m_type(type), m_subType(subType), m_owner(nullptr), m_shouldDelete(false)
+  : m_type(type), m_subType(subType)
 {}
 
 ComponentType Component::getSubType() const

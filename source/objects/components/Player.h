@@ -19,8 +19,8 @@ public:
   void displayGui() override;
 
 private:
-  ComponentVariable<float> m_speed;
-  ComponentVariable<float> m_jumpHeight;
+  ComponentVariable<float> m_speed{1.0f};
+  ComponentVariable<float> m_jumpHeight{15.0f};
 
   glm::vec3 m_appliedForce = glm::vec3(0.0f);
 

@@ -6,13 +6,7 @@
 #include <glm/glm.hpp>
 
 RigidBody::RigidBody()
-  : Component(ComponentType::rigidBody),
-    m_velocity(glm::vec3(0)),
-    m_friction(0.1f),
-    m_doGravity(true),
-    m_gravity(-GRAVITY),
-    m_angularVelocity(glm::vec3(0)),
-    m_mass(10.0f)
+  : Component(ComponentType::rigidBody)
 {
   loadVariable(m_velocity);
   loadVariable(m_friction);

@@ -4,7 +4,7 @@
 constexpr int MAX_CHARACTERS = 30;
 
 Asset::Asset(std::string name)
-  : m_assetManager(nullptr), m_name(name)
+  : m_name(std::move(name))
 {
   name.resize(MAX_CHARACTERS);
 }

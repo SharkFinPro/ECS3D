@@ -121,9 +121,10 @@ public:
 protected:
   ComponentType m_type;
   ComponentType m_subType;
-  Object* m_owner;
 
-  bool m_shouldDelete;
+  Object* m_owner = nullptr;
+
+  bool m_shouldDelete = false;
 
   std::vector<ComponentVariableBase*> m_variables;
 

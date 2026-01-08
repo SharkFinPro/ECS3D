@@ -19,7 +19,7 @@ public:
   virtual void load() = 0;
 
 protected:
-  AssetManager* m_assetManager;
+  AssetManager* m_assetManager = nullptr;
 
   std::string m_name;
 };

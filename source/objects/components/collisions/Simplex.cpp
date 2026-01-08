@@ -1,9 +1,5 @@
 #include "Simplex.h"
 
-Simplex::Simplex()
-  : m_length(0)
-{}
-
 size_t Simplex::size() const
 {
   return m_length;

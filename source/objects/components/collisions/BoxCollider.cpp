@@ -7,7 +7,7 @@
 #include <limits>
 
 BoxCollider::BoxCollider()
-  : Collider(ColliderType::boxCollider, ComponentType::SubComponentType_boxCollider), m_currentTransformUpdateID(255)
+  : Collider(ColliderType::boxCollider, ComponentType::SubComponentType_boxCollider)
 {}
 
 void BoxCollider::displayGui()
