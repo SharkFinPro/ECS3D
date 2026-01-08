@@ -3,7 +3,9 @@
 #include "components/ModelRenderer.h"
 #include "../ECS3D.h"
 #include <imgui.h>
-#include <VulkanEngine/components/mousePicker/MousePicker.h>
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/MousePicker.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <algorithm>
 
@@ -176,7 +178,7 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
   const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
   const auto renderer = objectManager->getECS()->getRenderer();
 
-  if (renderer->getMousePicker()->canMousePick() && renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
+  if (renderer->getRenderingManager()->getRenderer3D()->getMousePicker()->canMousePick() && renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
   {
     if (modelRenderer && modelRenderer->selectedByRenderer())
     {

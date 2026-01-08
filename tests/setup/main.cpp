@@ -78,10 +78,10 @@ void loadScene2(const std::shared_ptr<Scene>& scene)
 void loadScene3(const std::shared_ptr<Scene>& scene)
 {
   scene->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
-  scene->createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
-  scene->createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
+  scene->createLight({-25, 25.0f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
+  scene->createLight({25, 25.0f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
 
-  scene->createRigidBlock({{0, -15, 0}, {100, 10, 100}});
+  scene->createRigidBlock({{0, -9, 0}, {100, 10, 100}});
 
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -97,13 +97,16 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
     {
       for (int k = 0; k < gridSize; k++)
       {
+        constexpr float bottomY = 6.0f;
+        constexpr float offsetXZ = (gridSize - 1) * ballSpacing / 2.0f;
+
         if (shouldUseSphere(gen))
         {
           scene->createSphere({
             .position = {
-              static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
-              static_cast<float>(i) * ballSpacing,
-              static_cast<float>(k) * ballSpacing + dist(gen)
+              static_cast<float>(j) * ballSpacing + dist(gen) - offsetXZ,
+              static_cast<float>(i) * ballSpacing + bottomY,
+              static_cast<float>(k) * ballSpacing + dist(gen) - offsetXZ
             },
             .scale = glm::vec3(sphereSize(gen))
           });
@@ -113,9 +116,9 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
 
         scene->createBlock({
           .position = {
-            static_cast<float>(j) * ballSpacing + dist(gen) - (gridSize * ballSpacing / 2.0f),
-            static_cast<float>(i) * ballSpacing,
-            static_cast<float>(k) * ballSpacing + dist(gen)
+            static_cast<float>(j) * ballSpacing + dist(gen) - offsetXZ,
+            static_cast<float>(i) * ballSpacing + bottomY,
+            static_cast<float>(k) * ballSpacing + dist(gen) - offsetXZ
           },
           .scale = {
             sphereSize(gen),

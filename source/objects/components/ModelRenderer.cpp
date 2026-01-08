@@ -7,8 +7,9 @@
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
 #include <VulkanEngine/components/assets/AssetManager.h>
-#include <VulkanEngine/components/pipelines/pipelineManager/PipelineManager.h>
 #include <VulkanEngine/components/pipelines/implementations/common/PipelineTypes.h>
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 
 ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer, const std::shared_ptr<vke::Texture2D>& texture,
                              const std::shared_ptr<vke::Texture2D>& specularMap, const std::shared_ptr<vke::Model>& model)
@@ -50,7 +51,7 @@ void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
     renderObject->setOrientationEuler(transform->getRotation());
   }
 
-  owner->getManager()->getECS()->getRenderer()->getPipelineManager()->renderObject(
+  owner->getManager()->getECS()->getRenderer()->getRenderingManager()->getRenderer3D()->renderObject(
     renderObject,
     useStandardPipeline ? vke::PipelineType::object : vke::PipelineType::ellipticalDots,
     &m_selectedByRenderer
@@ -82,7 +83,7 @@ void ModelRenderer::renderHighlight() const
     return;
   }
 
-  getOwner()->getManager()->getECS()->getRenderer()->getPipelineManager()->renderObject(renderObject, vke::PipelineType::objectHighlight);
+  getOwner()->getManager()->getECS()->getRenderer()->getRenderingManager()->getRenderer3D()->renderObject(renderObject, vke::PipelineType::objectHighlight);
 }
 
 void ModelRenderer::displayDragDrop(const char* label,

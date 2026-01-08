@@ -81,23 +81,28 @@ void ECS3D::displayMessageLog()
 
 void ECS3D::initRenderer()
 {
-  constexpr vke::VulkanEngineOptions vulkanEngineOptions = {
-    .WINDOW_WIDTH = 1280,
-    .WINDOW_HEIGHT = 720,
-    .WINDOW_TITLE = "ECS3D",
-    .CAMERA_POSITION = { 0, 0, -50 },
-    .FULLSCREEN = false,
-  	.MAX_IMGUI_TEXTURES = 100
-  };
+	const vke::EngineConfig engineConfig {
+		.window {
+			.width = 1280,
+			.height = 720,
+			.title = "ECS3D"
+		},
+		.camera {
+			.position = { 0, 5, -50 }
+		},
+		.imGui {
+			.maxTextures = 100
+		}
+	};
 
-  renderer = std::make_shared<vke::VulkanEngine>(vulkanEngineOptions);
+  renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
 
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 	setupImGuiStyle();
 
 	const auto gui = renderer->getImGuiInstance();
 
-	gui->dockCenter("SceneView");
+	gui->dockCenter(engineConfig.imGui.sceneViewName.c_str());
 
 	gui->dockLeft("Objects");
 	gui->dockLeft("Scene Selector");
