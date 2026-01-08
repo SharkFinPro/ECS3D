@@ -47,12 +47,12 @@ public:
   [[nodiscard]] glm::vec3 findCollisionPoint() const;
 
 private:
-  Collider* collider;
-  std::shared_ptr<Collider> otherCollider;
+  Collider* m_collider;
+  std::shared_ptr<Collider> m_otherCollider;
 
-  std::vector<SupportVertex> vertices;
-  std::vector<Face> faces;
-  ClosestFaceData closestFaceData{};
+  std::vector<SupportVertex> m_vertices;
+  std::vector<Face> m_faces;
+  ClosestFaceData m_closestFaceData{};
 
   void EPA();
 
@@ -67,7 +67,7 @@ private:
 
   std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist);
 
-  bool isFacingInward(const FaceData& faceData);
+  bool isFacingInward(const FaceData& faceData) const;
 
   void constructFace(Edge edge, glm::vec3 supportPoint, float& currentMinDist);
 

@@ -20,7 +20,7 @@ std::shared_ptr<vke::Texture2D> TextureAsset::getTexture()
 
 void TextureAsset::load()
 {
-  m_texture =  assetManager->getECS()->getRenderer()->getAssetManager()->loadTexture(m_path.c_str());
+  m_texture = m_assetManager->getECS()->getRenderer()->getAssetManager()->loadTexture(m_path.c_str());
 }
 
 void TextureAsset::displayGui()

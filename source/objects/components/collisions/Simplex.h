@@ -36,8 +36,8 @@ public:
   void addVertex(const SupportVertex& vertex);
 
 private:
-  SupportVertex vertices[4]{};
-  size_t length;
+  SupportVertex m_vertices[4]{};
+  size_t m_length;
 };
 
 

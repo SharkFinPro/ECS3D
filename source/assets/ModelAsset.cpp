@@ -21,7 +21,7 @@ std::shared_ptr<vke::Model> ModelAsset::getModel()
 
 void ModelAsset::load()
 {
-  m_model = assetManager->getECS()->getRenderer()->getAssetManager()->loadModel(m_path.c_str());
+  m_model = m_assetManager->getECS()->getRenderer()->getAssetManager()->loadModel(m_path.c_str());
 }
 
 void ModelAsset::displayGui()

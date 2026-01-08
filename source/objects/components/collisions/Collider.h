@@ -4,10 +4,10 @@
 // Enable to draw collision bounding box lines
 // #define COLLISION_BBOX_DEBUG
 
-#include "../Component.h"
-#include <memory>
-#include <glm/vec3.hpp>
 #include "Simplex.h"
+#include "../Component.h"
+#include <glm/vec3.hpp>
+#include <memory>
 
 struct Line {
   glm::vec3 start;
@@ -67,11 +67,11 @@ private:
   static bool tetrahedronCase(Simplex& simplex, glm::vec3& direction);
 
 protected:
-  std::weak_ptr<Transform> transform_ptr;
+  std::weak_ptr<Transform> m_transform_ptr;
 
-  ColliderType colliderType;
+  ColliderType m_colliderType;
 
-  BoundingBox boundingBox;
+  BoundingBox m_boundingBox;
 };
 
 
