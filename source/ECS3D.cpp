@@ -88,7 +88,7 @@ void ECS3D::initRenderer()
 			.title = "ECS3D"
 		},
 		.camera {
-			.position = { 0, 0, -50 }
+			.position = { 0, 5, -50 }
 		},
 		.imGui {
 			.maxTextures = 100
