@@ -5,27 +5,27 @@
 #include <VulkanEngine/components/window/Window.h>
 
 ECS3D::ECS3D()
-  : previousTime(std::chrono::steady_clock::now()), sceneManager(std::make_shared<SceneManager>(this)),
-		assetManager(std::make_shared<AssetManager>(this))
+  : m_previousTime(std::chrono::steady_clock::now()), m_sceneManager(std::make_shared<SceneManager>(this)),
+		m_assetManager(std::make_shared<AssetManager>(this))
 {
   initRenderer();
 }
 
 bool ECS3D::isActive() const
 {
-  return renderer->isActive();
+  return m_renderer->isActive();
 }
 
 void ECS3D::update()
 {
   const auto currentTime = std::chrono::steady_clock::now();
-  const float dt = std::chrono::duration<float>(currentTime - previousTime).count();
-  previousTime = currentTime;
+  const float dt = std::chrono::duration<float>(currentTime - m_previousTime).count();
+  m_previousTime = currentTime;
 
 	try {
-		assetManager->displayGui();
+		m_assetManager->displayGui();
 
-		sceneManager->update(dt);
+		m_sceneManager->update(dt);
 	}
 	catch(const std::exception& e)
 	{
@@ -34,32 +34,32 @@ void ECS3D::update()
 
 	displayMessageLog();
 
-  renderer->render();
+  m_renderer->render();
 }
 
 std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const
 {
-  return renderer;
+  return m_renderer;
 }
 
 bool ECS3D::keyIsPressed(const int key) const
 {
-  return renderer->getWindow()->keyIsPressed(key);
+  return m_renderer->getWindow()->keyIsPressed(key);
 }
 
 std::shared_ptr<SceneManager> ECS3D::getSceneManager() const
 {
-  return sceneManager;
+  return m_sceneManager;
 }
 
 std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
 {
-	return assetManager;
+	return m_assetManager;
 }
 
 void ECS3D::logMessage(const std::string& level, const std::string& message)
 {
-	errorMessages.push_back("[" + level + "] " + message);
+	m_errorMessages.push_back("[" + level + "] " + message);
 }
 
 void ECS3D::displayMessageLog()
@@ -68,10 +68,10 @@ void ECS3D::displayMessageLog()
 
 	if (ImGui::Button("Clear"))
 	{
-		errorMessages.clear();
+		m_errorMessages.clear();
 	}
 
-	for (const auto& message : errorMessages)
+	for (const auto& message : m_errorMessages)
 	{
 		ImGui::TextWrapped("%s", message.c_str());
 	}
@@ -95,12 +95,12 @@ void ECS3D::initRenderer()
 		}
 	};
 
-  renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
+  m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
 
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 	setupImGuiStyle();
 
-	const auto gui = renderer->getImGuiInstance();
+	const auto gui = m_renderer->getImGuiInstance();
 
 	gui->dockCenter(engineConfig.imGui.sceneViewName.c_str());
 
