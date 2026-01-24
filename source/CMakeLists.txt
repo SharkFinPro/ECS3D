@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD 20)
 add_library(${PROJECT_NAME}
   ECS3D.cpp
   ECS3D.h
+  SaveManager.cpp
+  SaveManager.h
   objects/ObjectManager.cpp
   objects/ObjectManager.h
   objects/Object.cpp
