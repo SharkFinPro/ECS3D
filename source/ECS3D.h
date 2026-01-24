@@ -7,8 +7,9 @@
 #include <vector>
 #include <VulkanEngine/VulkanEngine.h>
 
-class SceneManager;
 class AssetManager;
+class SaveManager;
+class SceneManager;
 
 class ECS3D {
 public:
@@ -36,6 +37,8 @@ private:
   std::shared_ptr<SceneManager> m_sceneManager;
 
   std::shared_ptr<AssetManager> m_assetManager;
+
+  std::unique_ptr<SaveManager> m_saveManager;
 
   std::vector<std::string> m_errorMessages;
 

@@ -4,6 +4,8 @@
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/window/Window.h>
 
+#include "SaveManager.h"
+
 ECS3D::ECS3D()
   : m_previousTime(std::chrono::steady_clock::now()), m_sceneManager(std::make_shared<SceneManager>(this)),
 		m_assetManager(std::make_shared<AssetManager>(this))
@@ -115,6 +117,10 @@ void ECS3D::initRenderer()
 	gui->dockBottom("Project Errors");
 	gui->dockBottom("Smoke");
 	gui->dockBottom("Elliptical Dots");
+
+	m_saveManager = std::make_unique<SaveManager>();
+
+	m_saveManager->test();
 }
 
 void ECS3D::setupImGuiStyle()

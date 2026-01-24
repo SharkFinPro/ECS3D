@@ -4,7 +4,7 @@
 
 class SaveManager {
 public:
-  
+  void test() const;
 };
 
 
