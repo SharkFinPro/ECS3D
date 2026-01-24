@@ -10,7 +10,9 @@ public:
 private:
   nlohmann::json m_saveData;
 
-  void readSaveData();
+  void readSaveDataFile();
+
+  static void createSaveDataFile();
 };
 
 
