@@ -3,6 +3,8 @@
 
 
 class SaveManager {
+public:
+  
 };
 
 

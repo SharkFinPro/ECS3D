@@ -55,21 +55,31 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/Polytope.h
 )
 
-# Declare VulkanEngine as a dependency
+FetchContent_Declare(
+  json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.12.0
+)
+
 FetchContent_Declare(
   VulkanEngine
   GIT_REPOSITORY https://github.com/SharkFinPro/VulkanRenderer.git
   GIT_TAG main
 )
 
-# Make VulkanEngine available to your project
-FetchContent_MakeAvailable(VulkanEngine)
+FetchContent_MakeAvailable(
+  json
+  VulkanEngine
+)
 
-# Link VulkanEngine to your target
-target_link_libraries(${PROJECT_NAME} PUBLIC VulkanEngine)
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  nlohmann_json::nlohmann_json
+  VulkanEngine
+)
 
-# Include VulkanEngine headers
-target_include_directories(${PROJECT_NAME} PUBLIC ${VulkanEngine_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME} PUBLIC
+  ${VulkanEngine_SOURCE_DIR}/include
+)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
