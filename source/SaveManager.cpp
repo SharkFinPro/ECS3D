@@ -1,6 +1,19 @@
 #include "SaveManager.h"
-#include <nlohmann/json.hpp>
+#include <fstream>
+#include <iostream>
 
-void SaveManager::test() const
+SaveManager::SaveManager()
 {
+  readSaveData();
+}
+
+void SaveManager::readSaveData()
+{
+  std::ifstream f("ECSData.json");
+
+  m_saveData = nlohmann::json::parse(f);
+
+  f.close();
+
+  std::cout << m_saveData << std::endl;
 }

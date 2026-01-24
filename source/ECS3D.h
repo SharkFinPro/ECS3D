@@ -38,7 +38,7 @@ private:
 
   std::shared_ptr<AssetManager> m_assetManager;
 
-  std::unique_ptr<SaveManager> m_saveManager;
+  std::shared_ptr<SaveManager> m_saveManager;
 
   std::vector<std::string> m_errorMessages;
 

@@ -1,10 +1,16 @@
 #ifndef ECS3D_SAVEMANAGER_H
 #define ECS3D_SAVEMANAGER_H
 
+#include <nlohmann/json.hpp>
 
 class SaveManager {
 public:
-  void test() const;
+  SaveManager();
+
+private:
+  nlohmann::json m_saveData;
+
+  void readSaveData();
 };
 
 
