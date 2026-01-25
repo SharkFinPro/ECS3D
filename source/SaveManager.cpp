@@ -15,14 +15,10 @@ SaveManager::SaveManager(ECS3D* ecs)
 
 void SaveManager::save() const
 {
-  nlohmann::json data;
-
-  auto serializedAssetManager = m_ecs->getAssetManager()->serialize();
-  data["assets"] = serializedAssetManager["assets"];
-
-  auto serializedSceneManager = m_ecs->getSceneManager()->serialize();
-  data["scenes"] = serializedSceneManager["scenes"];
-
+  const nlohmann::json data = {
+    { "assets", m_ecs->getAssetManager()->serialize() },
+    { "scenes", m_ecs->getSceneManager()->serialize() }
+  };
 
   std::ofstream outFile(FILE_NAME);
   outFile << data.dump(2);

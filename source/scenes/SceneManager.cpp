@@ -54,13 +54,11 @@ void SceneManager::update(const float dt)
 
 nlohmann::json SceneManager::serialize() const
 {
-  nlohmann::json data = {
-    { "scenes", nlohmann::json::array() }
-  };
+  nlohmann::json data = nlohmann::json::array();
 
   for (const auto& scene : m_scenes)
   {
-    data["scenes"].push_back(scene->serialize());
+    data.push_back(scene->serialize());
   }
 
   return data;
