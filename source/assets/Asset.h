@@ -1,6 +1,7 @@
 #ifndef ASSET_H
 #define ASSET_H
 
+#include <nlohmann/json_fwd.hpp>
 #include <string>
 
 class AssetManager;
@@ -17,6 +18,8 @@ public:
   virtual void displayGui();
 
   virtual void load() = 0;
+
+  [[nodiscard]] virtual nlohmann::json serialize() = 0;
 
 protected:
   AssetManager* m_assetManager = nullptr;

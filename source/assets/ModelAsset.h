@@ -18,6 +18,8 @@ public:
 
   void displayGui() override;
 
+  [[nodiscard]] nlohmann::json serialize() override;
+
 private:
   std::string m_path;
 

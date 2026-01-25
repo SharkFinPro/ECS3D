@@ -1,9 +1,10 @@
 #include "ModelAsset.h"
 #include "AssetManager.h"
 #include "../ECS3D.h"
+#include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
-#include <imgui.h>
 
 ModelAsset::ModelAsset(const std::string& path)
   : Asset(path), m_path(path)
@@ -29,4 +30,15 @@ void ModelAsset::displayGui()
   Asset::displayGui();
 
   ImGui::Button("Model", {150, 150});
+}
+
+nlohmann::json ModelAsset::serialize()
+{
+  const nlohmann::json data = {
+    { "name", m_path },
+    { "filePath", m_path },
+    { "id", 0 },
+  };
+
+  return data;
 }

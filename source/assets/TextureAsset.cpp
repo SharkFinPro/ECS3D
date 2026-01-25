@@ -1,6 +1,7 @@
 #include "TextureAsset.h"
 #include "AssetManager.h"
 #include "../ECS3D.h"
+#include <nlohmann/json.hpp>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
 
@@ -28,4 +29,15 @@ void TextureAsset::displayGui()
   Asset::displayGui();
 
   ImGui::ImageButton("img", m_texture->getImGuiTexture(), {150, 150});
+}
+
+nlohmann::json TextureAsset::serialize()
+{
+  const nlohmann::json data = {
+    { "name", m_path },
+    { "filePath", m_path },
+    { "id", 0 },
+  };
+
+  return data;
 }
