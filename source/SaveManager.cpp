@@ -48,8 +48,6 @@ void SaveManager::readSaveDataFile()
   std::cout << m_saveData["assets"]["models"].size() << " model asset(s) found" << std::endl;
   std::cout << m_saveData["assets"]["textures"].size() << " texture asset(s) found" << std::endl;
   std::cout << m_saveData["scenes"].size() << " scene(s) found" << std::endl;
-
-  std::cout << m_saveData << std::endl;
 }
 
 void SaveManager::createSaveDataFile()
