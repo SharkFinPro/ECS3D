@@ -72,6 +72,11 @@ void ECS3D::displayMessageLog()
 		m_errorMessages.clear();
 	}
 
+	if (ImGui::Button("Save All Data"))
+	{
+		m_saveManager->save();
+	}
+
 	for (const auto& message : m_errorMessages)
 	{
 		ImGui::TextWrapped("%s", message.c_str());
@@ -117,7 +122,7 @@ void ECS3D::initRenderer()
 	gui->dockBottom("Smoke");
 	gui->dockBottom("Elliptical Dots");
 
-	m_saveManager = std::make_shared<SaveManager>();
+	m_saveManager = std::make_shared<SaveManager>(this);
 }
 
 void ECS3D::setupImGuiStyle()

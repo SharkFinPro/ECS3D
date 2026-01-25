@@ -1,12 +1,36 @@
 #include "SaveManager.h"
+#include "ECS3D.h"
+#include "assets/AssetManager.h"
+#include "scenes/SceneManager.h"
 #include <fstream>
 #include <iostream>
 
-const std::string FILE_NAME = "ECSData.json";
+const std::string FILE_NAME = "ECSData3.json";
 
-SaveManager::SaveManager()
+SaveManager::SaveManager(ECS3D* ecs)
+  : m_ecs(ecs)
 {
   readSaveDataFile();
+}
+
+void SaveManager::save() const
+{
+  nlohmann::json data = {
+    {"prefabs", {
+        {"objects", nlohmann::json::array()}
+    }}
+  };
+
+  auto serializedAssetManager = m_ecs->getAssetManager()->serialize();
+  data["assets"] = serializedAssetManager["assets"];
+
+  auto serializedSceneManager = m_ecs->getSceneManager()->serialize();
+  data["scenes"] = serializedSceneManager["scenes"];
+
+
+  std::ofstream outFile(FILE_NAME);
+  outFile << data.dump(2);
+  outFile.close();
 }
 
 void SaveManager::readSaveDataFile()

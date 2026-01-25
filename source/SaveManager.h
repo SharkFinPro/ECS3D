@@ -3,11 +3,16 @@
 
 #include <nlohmann/json.hpp>
 
+class ECS3D;
+
 class SaveManager {
 public:
-  SaveManager();
+  explicit SaveManager(ECS3D* ecs);
+
+  void save() const;
 
 private:
+  ECS3D* m_ecs;
   nlohmann::json m_saveData;
 
   void readSaveDataFile();
