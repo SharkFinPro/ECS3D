@@ -1,8 +1,9 @@
 #ifndef SCENE_H
 #define SCENE_H
 
-#include <memory>
 #include <glm/vec3.hpp>
+#include <nlohmann/json_fwd.hpp>
+#include <memory>
 
 class SceneManager;
 class AssetManager;
@@ -31,6 +32,8 @@ public:
   void createPlayer(TransformData transformData) const;
 
   void createLight(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular) const;
+
+  [[nodiscard]] nlohmann::json serialize() const;
 
 private:
   SceneManager* m_sceneManager;

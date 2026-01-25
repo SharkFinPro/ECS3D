@@ -2,6 +2,7 @@
 #include "Scene.h"
 #include "../ECS3D.h"
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 
 SceneManager::SceneManager(ECS3D* ecs)
@@ -49,6 +50,20 @@ void SceneManager::update(const float dt)
   }
 
   m_currentScene->update(dt);
+}
+
+nlohmann::json SceneManager::serialize() const
+{
+  nlohmann::json data = {
+    { "scenes", nlohmann::json::array() }
+  };
+
+  for (const auto& scene : m_scenes)
+  {
+    data["scenes"].push_back(scene->serialize());
+  }
+
+  return data;
 }
 
 void SceneManager::sceneSelector()

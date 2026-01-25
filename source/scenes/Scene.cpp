@@ -8,6 +8,7 @@
 #include "../objects/ObjectManager.h"
 #include "../objects/components/Components.h"
 #include "../objects/components/LightRenderer.h"
+#include <nlohmann/json.hpp>
 
 Scene::Scene(SceneManager* sceneManager)
   : m_sceneManager(sceneManager), m_assetManager(sceneManager->getECS()->getAssetManager()),
@@ -104,4 +105,15 @@ void Scene::createLight(glm::vec3 position, glm::vec3 color, float ambient, floa
   };
 
   m_objectManager->addObject(std::make_shared<Object>(components, "Light"));
+}
+
+nlohmann::json Scene::serialize() const
+{
+  const auto serializedObjects = m_objectManager->serialize();
+  nlohmann::json data = {
+    { "name", "scene" },
+    { "objects", serializedObjects["objects"] }
+  };
+
+  return data;
 }
