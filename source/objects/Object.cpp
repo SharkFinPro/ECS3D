@@ -10,6 +10,7 @@
 #include "components/collisions/BoxCollider.h"
 #include "components/collisions/SphereCollider.h"
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <utility>
 
 constexpr int MAX_CHARACTERS = 30;
@@ -190,6 +191,21 @@ void Object::stop() const
   {
     component->stop();
   }
+}
+
+nlohmann::json Object::serialize()
+{
+  nlohmann::json data = {
+    { "name", m_name },
+    { "components", nlohmann::json::array() }
+  };
+
+  for (const auto& [_, component] : m_components)
+  {
+    data["components"].push_back(component->serialize());
+  }
+
+  return data;
 }
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
