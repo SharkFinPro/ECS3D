@@ -195,8 +195,11 @@ void Object::stop() const
 
 nlohmann::json Object::serialize()
 {
+  std::string cleanName = m_name;
+  cleanName.erase(std::ranges::find(cleanName, '\0'), cleanName.end());
+
   nlohmann::json data = {
-    { "name", m_name },
+    { "name", cleanName },
     { "components", nlohmann::json::array() }
   };
 
