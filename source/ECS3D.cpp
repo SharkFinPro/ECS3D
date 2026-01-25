@@ -36,6 +36,8 @@ void ECS3D::update()
 	displayMessageLog();
 
   m_renderer->render();
+
+	m_saveManager->update();
 }
 
 std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const
@@ -70,11 +72,6 @@ void ECS3D::displayMessageLog()
 	if (ImGui::Button("Clear"))
 	{
 		m_errorMessages.clear();
-	}
-
-	if (ImGui::Button("Save All Data"))
-	{
-		m_saveManager->save();
 	}
 
 	for (const auto& message : m_errorMessages)

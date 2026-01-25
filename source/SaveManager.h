@@ -9,11 +9,16 @@ class SaveManager {
 public:
   explicit SaveManager(ECS3D* ecs);
 
-  void save() const;
+  void update();
 
 private:
   ECS3D* m_ecs;
+
   nlohmann::json m_saveData;
+
+  bool m_wasSaving = false;
+
+  void save() const;
 
   void readSaveDataFile();
 

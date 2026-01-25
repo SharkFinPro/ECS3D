@@ -2,6 +2,7 @@
 #include "ECS3D.h"
 #include "assets/AssetManager.h"
 #include "scenes/SceneManager.h"
+#include <GLFW/glfw3.h>
 #include <fstream>
 #include <iostream>
 
@@ -11,6 +12,27 @@ SaveManager::SaveManager(ECS3D* ecs)
   : m_ecs(ecs)
 {
   readSaveDataFile();
+}
+
+void SaveManager::update()
+{
+  const auto shouldSave = m_ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && m_ecs->keyIsPressed(GLFW_KEY_S);
+
+  if (!shouldSave && m_wasSaving)
+  {
+    m_wasSaving = false;
+  }
+
+  if (!shouldSave || m_wasSaving)
+  {
+    return;
+  }
+
+  m_wasSaving = true;
+
+  save();
+
+  std::cout << "Saved data to " << FILE_NAME << std::endl;
 }
 
 void SaveManager::save() const
