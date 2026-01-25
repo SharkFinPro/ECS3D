@@ -49,7 +49,7 @@ void SaveManager::createSaveDataFile()
   std::ofstream outFile(FILE_NAME);
   if (outFile.is_open())
   {
-    outFile << defaultData.dump(2); // Pretty print with 2-space indent
+    outFile << defaultData.dump(2);
     outFile.close();
     std::cout << "Created default " << FILE_NAME << " file" << std::endl;
   }
