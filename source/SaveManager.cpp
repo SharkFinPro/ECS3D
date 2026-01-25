@@ -38,11 +38,11 @@ void SaveManager::createSaveDataFile()
   const nlohmann::json defaultData = {
     {"scenes", nlohmann::json::array()},
     {"prefabs", {
-        {"objects", nlohmann::json::array()}
+      {"objects", nlohmann::json::array()}
     }},
     {"assets", {
-        {"models", nlohmann::json::array()},
-        {"textures", nlohmann::json::array()}
+      {"models", nlohmann::json::array()},
+      {"textures", nlohmann::json::array()}
     }}
   };
 
