@@ -1,6 +1,9 @@
 #include "AssetManager.h"
 #include "Asset.h"
+#include "ModelAsset.h"
+#include "TextureAsset.h"
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
 AssetManager::AssetManager(ECS3D* ecs)
   : m_ecs(ecs)
@@ -39,4 +42,26 @@ void AssetManager::displayGui()
   }
 
   ImGui::End();
+}
+
+nlohmann::json AssetManager::serialize()
+{
+  nlohmann::json data = {
+    { "models", nlohmann::json::array() },
+    { "textures", nlohmann::json::array() }
+  };
+
+  for (const auto& [_, asset] : m_assets)
+  {
+    if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
+    {
+      data["textures"].push_back(textureAsset->serialize());
+    }
+    else if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
+    {
+      data["models"].push_back(modelAsset->serialize());
+    }
+  }
+
+  return data;
 }

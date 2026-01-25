@@ -1,9 +1,10 @@
 #ifndef ASSETMANAGER_H
 #define ASSETMANAGER_H
 
-#include <unordered_map>
+#include <nlohmann/json_fwd.hpp>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 class ECS3D;
 class Asset;
@@ -23,6 +24,8 @@ public:
 
   template <typename T>
   std::shared_ptr<T> getAsset(const std::string& path) const;
+
+  [[nodiscard]] nlohmann::json serialize();
 
 private:
   ECS3D* m_ecs;
