@@ -27,6 +27,9 @@ nlohmann::json BoxCollider::serialize()
   return data;
 }
 
+void BoxCollider::loadFromJSON(const nlohmann::json& componentData)
+{}
+
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 {
   if (m_transform_ptr.expired())

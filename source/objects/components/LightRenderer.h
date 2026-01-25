@@ -12,6 +12,8 @@ class Transform;
 
 class LightRenderer final : public Component {
 public:
+  explicit LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer);
+
   LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
                 glm::vec3 color,
                 float ambient,
@@ -25,6 +27,8 @@ public:
   void displayGui() override;
 
   [[nodiscard]] nlohmann::json serialize() override;
+
+  void loadFromJSON(const nlohmann::json& componentData) override;
 
 private:
   bool m_isSpotLight = false;

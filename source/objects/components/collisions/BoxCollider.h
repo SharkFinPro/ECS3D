@@ -25,6 +25,8 @@ public:
 
   [[nodiscard]] nlohmann::json serialize() override;
 
+  void loadFromJSON(const nlohmann::json& componentData) override;
+
 private:
   std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
 

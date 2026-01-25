@@ -121,6 +121,8 @@ public:
 
   [[nodiscard]] virtual nlohmann::json serialize() = 0;
 
+  virtual void loadFromJSON(const nlohmann::json& componentData) = 0;
+
 protected:
   ComponentType m_type;
   ComponentType m_subType;

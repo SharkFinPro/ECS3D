@@ -47,6 +47,11 @@ nlohmann::json SphereCollider::serialize()
   return data;
 }
 
+void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_radius = componentData["radius"];
+}
+
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 {
   if (m_transform_ptr.expired())

@@ -33,6 +33,8 @@ public:
 
   [[nodiscard]] nlohmann::json serialize() override;
 
+  void loadFromJSON(const nlohmann::json& componentData) override;
+
 private:
   std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
   std::weak_ptr<Transform> m_transform_ptr;

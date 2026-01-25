@@ -5,6 +5,10 @@
 #include <nlohmann/json.hpp>
 #include <memory>
 
+Transform::Transform()
+  : Component(ComponentType::transform)
+{}
+
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
   : Component(ComponentType::transform),
     m_position(position),
@@ -128,4 +132,11 @@ nlohmann::json Transform::serialize()
   };
 
   return data;
+}
+
+void Transform::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_position.set(glm::vec3(componentData["position"][0], componentData["position"][1], componentData["position"][2]));
+  m_scale.set(glm::vec3(componentData["scale"][0], componentData["scale"][1], componentData["scale"][2]));
+  m_rotation.set(glm::vec3(componentData["rotation"][0], componentData["rotation"][1], componentData["rotation"][2]));
 }

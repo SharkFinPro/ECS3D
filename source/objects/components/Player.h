@@ -20,6 +20,8 @@ public:
 
   [[nodiscard]] nlohmann::json serialize() override;
 
+  void loadFromJSON(const nlohmann::json& componentData) override;
+
 private:
   ComponentVariable<float> m_speed{1.0f};
   ComponentVariable<float> m_jumpHeight{15.0f};

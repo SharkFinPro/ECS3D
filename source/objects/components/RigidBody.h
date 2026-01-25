@@ -41,6 +41,8 @@ public:
 
   [[nodiscard]] nlohmann::json serialize() override;
 
+  void loadFromJSON(const nlohmann::json& componentData) override;
+
 private:
 #ifdef COLLISION_LOCATION_DEBUG
   std::vector<LineSegment> m_linesToDraw;

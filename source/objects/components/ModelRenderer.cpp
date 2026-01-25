@@ -68,6 +68,11 @@ void ModelRenderer::displayGui()
     displayTextureDragDrop();
     displaySpecularDragDrop();
     displayModelDragDrop();
+
+    if (!canRender())
+    {
+      m_shouldRender = false;
+    }
   }
 }
 
@@ -97,6 +102,11 @@ nlohmann::json ModelRenderer::serialize()
   };
 
   return data;
+}
+
+void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_shouldRender = componentData["shouldRender"];
 }
 
 void ModelRenderer::displayDragDrop(const char* label,

@@ -192,6 +192,26 @@ nlohmann::json RigidBody::serialize()
   return data;
 }
 
+void RigidBody::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_velocity.set(glm::vec3(
+    componentData["velocity"][0],
+    componentData["velocity"][1],
+    componentData["velocity"][2]
+  ));
+
+  m_angularVelocity.set(glm::vec3(
+    componentData["angularVelocity"][0],
+    componentData["angularVelocity"][1],
+    componentData["angularVelocity"][2]
+  ));
+
+  m_friction.set(componentData["friction"]);
+  m_doGravity.set(componentData["doGravity"]);
+  m_gravity.set(componentData["gravity"]);
+  m_mass.set(componentData["mass"]);
+}
+
 void RigidBody::limitMovement()
 {
   if (glm::length(m_velocity.get()) < 1e-5f)
