@@ -5,6 +5,7 @@
 #include "../../ECS3D.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <VulkanEngine/components/lighting/LightingManager.h>
 
 LightRenderer::LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
@@ -93,4 +94,25 @@ void LightRenderer::displayGui()
     m_spotLight->setDirection(direction);
     m_spotLight->setConeAngle(coneAngle);
   }
+}
+
+nlohmann::json LightRenderer::serialize()
+{
+  const auto light = m_spotLight;
+
+  const auto color = light->getColor();
+  const auto direction = light->getDirection();
+
+  const nlohmann::json data = {
+    { "type", "LightRenderer" },
+    { "color", { color.x, color.y, color.z } },
+    { "direction", { direction.x, direction.y, direction.z } },
+    { "iSpotlight", m_isSpotLight },
+    { "ambient", light->getAmbient() },
+    { "diffuse", light->getDiffuse() },
+    { "specular", light->getSpecular() },
+    { "coneAngle", light->getConeAngle() }
+  };
+
+  return data;
 }

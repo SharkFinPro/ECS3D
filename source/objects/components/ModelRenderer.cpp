@@ -6,6 +6,7 @@
 #include "../../assets/Asset.h"
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
+#include <nlohmann/json.hpp>
 #include <VulkanEngine/components/assets/AssetManager.h>
 #include <VulkanEngine/components/pipelines/implementations/common/PipelineTypes.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
@@ -83,6 +84,19 @@ void ModelRenderer::renderHighlight() const
   }
 
   getOwner()->getManager()->getECS()->getRenderer()->getRenderingManager()->getRenderer3D()->renderObject(m_renderObject, vke::PipelineType::objectHighlight);
+}
+
+nlohmann::json ModelRenderer::serialize()
+{
+  const nlohmann::json data = {
+    { "type", "ModelRenderer" },
+    { "shouldRender", m_shouldRender },
+    { "modelId", 0 },
+    { "textureId", 0 },
+    { "specularMapId", 0 }
+  };
+
+  return data;
 }
 
 void ModelRenderer::displayDragDrop(const char* label,

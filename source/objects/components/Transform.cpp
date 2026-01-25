@@ -2,6 +2,7 @@
 #include "RigidBody.h"
 #include "../Object.h"
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <memory>
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
@@ -111,4 +112,20 @@ void Transform::displayGui()
 
     ImGui::PopID();
   }
+}
+
+nlohmann::json Transform::serialize()
+{
+  const auto position = m_position.value();
+  const auto rotation = m_rotation.value();
+  const auto scale = m_scale.value();
+
+  const nlohmann::json data = {
+    { "type", "Transform" },
+    { "position", { position.x, position.y, position.z } },
+    { "rotation", { rotation.x, rotation.y, rotation.z } },
+    { "scale", { scale.x, scale.y, scale.z } }
+  };
+
+  return data;
 }

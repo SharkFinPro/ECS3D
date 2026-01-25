@@ -22,6 +22,8 @@ public:
 
   void displayGui() override;
 
+  [[nodiscard]] nlohmann::json serialize() override;
+
 private:
   uint8_t m_updateID = 1;
 

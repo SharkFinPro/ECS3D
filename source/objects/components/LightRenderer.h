@@ -25,6 +25,8 @@ public:
 
   void displayGui() override;
 
+  [[nodiscard]] nlohmann::json serialize() override;
+
 private:
   bool m_isSpotLight = false;
 

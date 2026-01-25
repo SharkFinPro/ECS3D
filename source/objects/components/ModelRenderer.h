@@ -29,6 +29,8 @@ public:
 
   void renderHighlight() const;
 
+  [[nodiscard]] nlohmann::json serialize() override;
+
 private:
   std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
   std::weak_ptr<Transform> m_transform_ptr;

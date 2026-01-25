@@ -39,6 +39,8 @@ public:
 
   void displayGui() override;
 
+  [[nodiscard]] nlohmann::json serialize() override;
+
 private:
 #ifdef COLLISION_LOCATION_DEBUG
   std::vector<LineSegment> m_linesToDraw;

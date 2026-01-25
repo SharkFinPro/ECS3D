@@ -12,6 +12,8 @@ public:
 
   void displayGui() override;
 
+  [[nodiscard]] nlohmann::json serialize() override;
+
 private:
   float m_radius = 1.0f;
 

@@ -1,6 +1,7 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
 
+#include <nlohmann/json_fwd.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -117,6 +118,8 @@ public:
   void start() const;
 
   void stop() const;
+
+  [[nodiscard]] virtual nlohmann::json serialize() = 0;
 
 protected:
   ComponentType m_type;

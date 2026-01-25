@@ -23,6 +23,8 @@ public:
 
   void displayGui() override;
 
+  [[nodiscard]] nlohmann::json serialize() override;
+
 private:
   std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
 
