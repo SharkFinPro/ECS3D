@@ -17,7 +17,7 @@ void SaveManager::save() const
 {
   nlohmann::json data = {
     {"prefabs", {
-        {"objects", nlohmann::json::array()}
+      {"objects", nlohmann::json::array()}
     }}
   };
 
