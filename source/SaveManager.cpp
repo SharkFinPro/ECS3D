@@ -15,11 +15,7 @@ SaveManager::SaveManager(ECS3D* ecs)
 
 void SaveManager::save() const
 {
-  nlohmann::json data = {
-    {"prefabs", {
-      {"objects", nlohmann::json::array()}
-    }}
-  };
+  nlohmann::json data;
 
   auto serializedAssetManager = m_ecs->getAssetManager()->serialize();
   data["assets"] = serializedAssetManager["assets"];
@@ -51,7 +47,6 @@ void SaveManager::readSaveDataFile()
 
   std::cout << m_saveData["assets"]["models"].size() << " model asset(s) found" << std::endl;
   std::cout << m_saveData["assets"]["textures"].size() << " texture asset(s) found" << std::endl;
-  std::cout << m_saveData["prefabs"]["objects"].size() << " object prefab(s) found" << std::endl;
   std::cout << m_saveData["scenes"].size() << " scene(s) found" << std::endl;
 
   std::cout << m_saveData << std::endl;
@@ -61,9 +56,6 @@ void SaveManager::createSaveDataFile()
 {
   const nlohmann::json defaultData = {
     {"scenes", nlohmann::json::array()},
-    {"prefabs", {
-      {"objects", nlohmann::json::array()}
-    }},
     {"assets", {
       {"models", nlohmann::json::array()},
       {"textures", nlohmann::json::array()}
