@@ -64,6 +64,16 @@ nlohmann::json SceneManager::serialize() const
   return data;
 }
 
+void SceneManager::loadFromJSON(const nlohmann::json& scenesData)
+{
+  for (const auto& sceneData : scenesData)
+  {
+    const auto scene = createScene();
+
+    scene->loadFromJSON(sceneData);
+  }
+}
+
 void SceneManager::sceneSelector()
 {
   ImGui::Begin("Scene Selector");

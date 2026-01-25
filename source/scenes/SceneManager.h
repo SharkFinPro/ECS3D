@@ -22,6 +22,8 @@ public:
 
   [[nodiscard]] nlohmann::json serialize() const;
 
+  void loadFromJSON(const nlohmann::json& scenesData);
+
 private:
   ECS3D* m_ecs;
 

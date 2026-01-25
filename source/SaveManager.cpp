@@ -12,6 +12,8 @@ SaveManager::SaveManager(ECS3D* ecs)
   : m_ecs(ecs)
 {
   readSaveDataFile();
+
+  m_ecs->getSceneManager()->loadFromJSON(m_saveData["scenes"]);
 }
 
 void SaveManager::update()

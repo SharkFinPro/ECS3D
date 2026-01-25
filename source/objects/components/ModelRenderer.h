@@ -14,8 +14,10 @@ class Transform;
 
 class ModelRenderer final : public Component {
 public:
-  ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer, const std::shared_ptr<vke::Texture2D>& texture,
-                         const std::shared_ptr<vke::Texture2D>& specularMap, const std::shared_ptr<vke::Model>& model);
+  ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
+                const std::shared_ptr<vke::Texture2D>& texture,
+                const std::shared_ptr<vke::Texture2D>& specularMap,
+                const std::shared_ptr<vke::Model>& model);
 
   explicit ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer);
 

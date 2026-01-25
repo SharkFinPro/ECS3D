@@ -13,7 +13,6 @@ class Transform;
 class LightRenderer final : public Component {
 public:
   LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
-                glm::vec3 position,
                 glm::vec3 color,
                 float ambient,
                 float diffuse,
