@@ -2,7 +2,7 @@
 #include <fstream>
 #include <iostream>
 
-const std::string FILE_NAME = "ECSDatas.json";
+const std::string FILE_NAME = "ECSData.json";
 
 SaveManager::SaveManager()
 {
@@ -24,6 +24,13 @@ void SaveManager::readSaveDataFile()
   m_saveData = nlohmann::json::parse(f);
 
   f.close();
+
+  std::cout << m_saveData["assets"]["models"].size() << " model asset(s) found" << std::endl;
+  std::cout << m_saveData["assets"]["textures"].size() << " texture asset(s) found" << std::endl;
+  std::cout << m_saveData["prefabs"]["objects"].size() << " object prefab(s) found" << std::endl;
+  std::cout << m_saveData["scenes"].size() << " scene(s) found" << std::endl;
+
+  std::cout << m_saveData << std::endl;
 }
 
 void SaveManager::createSaveDataFile()
