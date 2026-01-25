@@ -5,9 +5,10 @@
 #include <nlohmann/json_fwd.hpp>
 #include <memory>
 
-class SceneManager;
 class AssetManager;
+class Component;
 class ObjectManager;
+class SceneManager;
 
 struct TransformData {
   glm::vec3 position = { 0, 0, 0 };
@@ -43,6 +44,8 @@ private:
   std::shared_ptr<AssetManager> m_assetManager;
 
   std::shared_ptr<ObjectManager> m_objectManager;
+
+  [[nodiscard]] std::shared_ptr<Component> loadComponentFromJSON(const nlohmann::json& componentData) const;
 };
 
 

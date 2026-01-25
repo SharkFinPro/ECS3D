@@ -126,55 +126,61 @@ void Scene::loadFromJSON(const nlohmann::json& sceneData) const
 
     for (const auto& componentData : objectData["components"])
     {
-      if (componentData["type"] == "Collider")
-      {
-        if (componentData["subType"] == "Box")
-        {
-          components.push_back(std::make_shared<BoxCollider>());
-        }
-        else if (componentData["subType"] == "Sphere")
-        {
-          components.push_back(std::make_shared<SphereCollider>());
-        }
-      }
-      else if (componentData["type"] == "LightRenderer")
-      {
-        components.push_back(std::make_shared<LightRenderer>(
-          m_sceneManager->getECS()->getRenderer(),
-          glm::vec3(componentData["color"][0], componentData["color"][1], componentData["color"][2]),
-          componentData["ambient"],
-          componentData["diffuse"],
-          componentData["specular"]
-        ));
-      }
-      else if (componentData["type"] == "ModelRenderer")
-      {
-        components.push_back(std::make_shared<ModelRenderer>(
-          m_sceneManager->getECS()->getRenderer(),
-          nullptr,
-          nullptr,
-          nullptr
-        ));
-
-      }
-      else if (componentData["type"] == "Player")
-      {
-        components.push_back(std::make_shared<Player>());
-      }
-      else if (componentData["type"] == "RigidBody")
-      {
-        components.push_back(std::make_shared<RigidBody>());
-      }
-      else if (componentData["type"] == "Transform")
-      {
-        components.push_back(std::make_shared<Transform>(
-          glm::vec3(componentData["position"][0], componentData["position"][1], componentData["position"][2]),
-          glm::vec3(componentData["scale"][0], componentData["scale"][1], componentData["scale"][2]),
-          glm::vec3(componentData["rotation"][0], componentData["rotation"][1], componentData["rotation"][2])
-        ));
-      }
+      components.push_back(loadComponentFromJSON(componentData));
     }
 
     m_objectManager->addObject(std::make_shared<Object>(components, objectData["name"]));
   }
+}
+
+std::shared_ptr<Component> Scene::loadComponentFromJSON(const nlohmann::json& componentData) const
+{
+  if (componentData["type"] == "Collider")
+  {
+    if (componentData["subType"] == "Box")
+    {
+      return std::make_shared<BoxCollider>();
+    }
+    if (componentData["subType"] == "Sphere")
+    {
+      return std::make_shared<SphereCollider>();
+    }
+  }
+  else if (componentData["type"] == "LightRenderer")
+  {
+    return std::make_shared<LightRenderer>(
+      m_sceneManager->getECS()->getRenderer(),
+      glm::vec3(componentData["color"][0], componentData["color"][1], componentData["color"][2]),
+      componentData["ambient"],
+      componentData["diffuse"],
+      componentData["specular"]
+    );
+  }
+  else if (componentData["type"] == "ModelRenderer")
+  {
+    return std::make_shared<ModelRenderer>(
+      m_sceneManager->getECS()->getRenderer(),
+      nullptr,
+      nullptr,
+      nullptr
+    );
+  }
+  else if (componentData["type"] == "Player")
+  {
+    return std::make_shared<Player>();
+  }
+  else if (componentData["type"] == "RigidBody")
+  {
+    return std::make_shared<RigidBody>();
+  }
+  else if (componentData["type"] == "Transform")
+  {
+    return std::make_shared<Transform>(
+      glm::vec3(componentData["position"][0], componentData["position"][1], componentData["position"][2]),
+      glm::vec3(componentData["scale"][0], componentData["scale"][1], componentData["scale"][2]),
+      glm::vec3(componentData["rotation"][0], componentData["rotation"][1], componentData["rotation"][2])
+    );
+  }
+
+  return nullptr;
 }
