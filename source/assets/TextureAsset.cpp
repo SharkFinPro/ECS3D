@@ -8,7 +8,7 @@
 
 TextureAsset::TextureAsset(const uuids::uuid uuid,
                            std::string path)
-  : Asset(uuid, path), m_path(std::move(path))
+  : Asset(uuid, path.substr(path.find_last_of('/') + 1)), m_path(std::move(path))
 {}
 
 std::string TextureAsset::getPath()
