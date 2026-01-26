@@ -2,8 +2,9 @@
 #include "Transform.h"
 #include "../Object.h"
 #include "../../ECS3D.h"
-#include <imgui.h>
 #include <glm/glm.hpp>
+#include <imgui.h>
+#include <nlohmann/json.hpp>
 
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody)
@@ -171,6 +172,44 @@ void RigidBody::displayGui()
 
     ImGui::SliderFloat("Mass", &m_mass.value(), 1.0f, 50.0f);
   }
+}
+
+nlohmann::json RigidBody::serialize()
+{
+  const auto velocity = m_velocity.value();
+  const auto angularVelocity = m_angularVelocity.value();
+
+  const nlohmann::json data = {
+    { "type", "RigidBody" },
+    { "velocity", { velocity.x, velocity.y, velocity.z } },
+    { "angularVelocity", { angularVelocity.x, angularVelocity.y, angularVelocity.z } },
+    { "friction", m_friction.value() },
+    { "doGravity", m_doGravity.value() },
+    { "gravity", m_gravity.value() },
+    { "mass", m_mass.value() }
+  };
+
+  return data;
+}
+
+void RigidBody::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_velocity.set(glm::vec3(
+    componentData["velocity"][0],
+    componentData["velocity"][1],
+    componentData["velocity"][2]
+  ));
+
+  m_angularVelocity.set(glm::vec3(
+    componentData["angularVelocity"][0],
+    componentData["angularVelocity"][1],
+    componentData["angularVelocity"][2]
+  ));
+
+  m_friction.set(componentData["friction"]);
+  m_doGravity.set(componentData["doGravity"]);
+  m_gravity.set(componentData["gravity"]);
+  m_mass.set(componentData["mass"]);
 }
 
 void RigidBody::limitMovement()

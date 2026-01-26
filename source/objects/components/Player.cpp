@@ -6,6 +6,7 @@
 #include "Transform.h"
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 
 Player::Player()
@@ -68,6 +69,23 @@ void Player::displayGui()
     ImGui::InputFloat("Speed", &m_speed.value());
     ImGui::InputFloat("Jump Height", &m_jumpHeight.value());
   }
+}
+
+nlohmann::json Player::serialize()
+{
+  const nlohmann::json data = {
+    { "type", "Player" },
+    { "speed", m_speed.value() },
+    { "jumpHeight", m_jumpHeight.value() }
+  };
+
+  return data;
+}
+
+void Player::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_speed.set(componentData["speed"]);
+  m_jumpHeight.set(componentData["jumpHeight"]);
 }
 
 void Player::handleInput()

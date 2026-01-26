@@ -1,6 +1,7 @@
 #ifndef OBJECTMANAGER_H
 #define OBJECTMANAGER_H
 
+#include <nlohmann/json_fwd.hpp>
 #include <vector>
 #include <memory>
 
@@ -34,6 +35,8 @@ public:
   void pauseScene();
 
   void resetScene();
+
+  [[nodiscard]] nlohmann::json serialize() const;
 
 private:
   ECS3D* m_ecs = nullptr;

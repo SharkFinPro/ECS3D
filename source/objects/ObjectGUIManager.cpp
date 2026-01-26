@@ -18,6 +18,8 @@ void ObjectGUIManager::update()
   displayObjectListGui();
 
   reorderObjectGui();
+
+  m_mouseWasPressed = m_objectManager->getECS()->getRenderer()->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
 }
 
 void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
@@ -178,7 +180,9 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
   const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
   const auto renderer = m_objectManager->getECS()->getRenderer();
 
-  if (renderer->getRenderingManager()->getRenderer3D()->getMousePicker()->canMousePick() && renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
+  if (!m_mouseWasPressed &&
+      renderer->getRenderingManager()->getRenderer3D()->getMousePicker()->canMousePick() &&
+      renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
   {
     if (modelRenderer && modelRenderer->selectedByRenderer())
     {

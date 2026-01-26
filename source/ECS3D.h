@@ -7,12 +7,13 @@
 #include <vector>
 #include <VulkanEngine/VulkanEngine.h>
 
-class SceneManager;
 class AssetManager;
+class SaveManager;
+class SceneManager;
 
 class ECS3D {
 public:
-  ECS3D();
+  explicit ECS3D(std::string saveFile = "ECSData.json");
 
   [[nodiscard]] bool isActive() const;
 
@@ -36,6 +37,8 @@ private:
   std::shared_ptr<SceneManager> m_sceneManager;
 
   std::shared_ptr<AssetManager> m_assetManager;
+
+  std::shared_ptr<SaveManager> m_saveManager;
 
   std::vector<std::string> m_errorMessages;
 

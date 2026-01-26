@@ -4,21 +4,29 @@
 #include "../ObjectManager.h"
 #include "../../ECS3D.h"
 #include "../../assets/Asset.h"
+#include "../../assets/AssetManager.h"
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
+#include <nlohmann/json.hpp>
+#include <uuid.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
+#include <VulkanEngine/components/assets/objects/Model.h>
 #include <VulkanEngine/components/pipelines/implementations/common/PipelineTypes.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 
-ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer, const std::shared_ptr<vke::Texture2D>& texture,
-                             const std::shared_ptr<vke::Texture2D>& specularMap, const std::shared_ptr<vke::Model>& model)
-  : Component(ComponentType::modelRenderer), m_renderObject(renderer->getAssetManager()->loadRenderObject(texture, specularMap, model)),
-    m_renderer(renderer), m_texture(texture), m_specularMap(specularMap), m_model(model), m_shouldRender(true)
+ModelRenderer::ModelRenderer(std::shared_ptr<vke::VulkanEngine> renderer,
+                             std::shared_ptr<TextureAsset> texture,
+                             std::shared_ptr<TextureAsset> specularMap,
+                             std::shared_ptr<ModelAsset> model)
+  : Component(ComponentType::modelRenderer),
+    m_renderObject(renderer->getAssetManager()->loadRenderObject(texture->getTexture(), specularMap->getTexture(), model->getModel())),
+    m_renderer(std::move(renderer)), m_texture(std::move(texture)), m_specularMap(std::move(specularMap)),
+    m_model(std::move(model)), m_shouldRender(true)
 {}
 
-ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine> &renderer)
-  : Component(ComponentType::modelRenderer), m_renderer(renderer)
+ModelRenderer::ModelRenderer(std::shared_ptr<vke::VulkanEngine> renderer)
+  : Component(ComponentType::modelRenderer), m_renderer(std::move(renderer))
 {}
 
 void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
@@ -67,6 +75,11 @@ void ModelRenderer::displayGui()
     displayTextureDragDrop();
     displaySpecularDragDrop();
     displayModelDragDrop();
+
+    if (!canRender())
+    {
+      m_shouldRender = false;
+    }
   }
 }
 
@@ -83,6 +96,58 @@ void ModelRenderer::renderHighlight() const
   }
 
   getOwner()->getManager()->getECS()->getRenderer()->getRenderingManager()->getRenderer3D()->renderObject(m_renderObject, vke::PipelineType::objectHighlight);
+}
+
+nlohmann::json ModelRenderer::serialize()
+{
+  const nlohmann::json data = {
+    { "type", "ModelRenderer" },
+    { "shouldRender", m_shouldRender },
+    { "modelUUID", uuids::to_string(m_model->getUUID()) },
+    { "textureUUID", uuids::to_string(m_texture->getUUID()) },
+    { "specularMapUUID", uuids::to_string(m_specularMap->getUUID()) }
+  };
+
+  return data;
+}
+
+void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_shouldRender = componentData["shouldRender"];
+
+  const auto modelUUID = uuids::uuid::from_string(std::string(componentData["modelUUID"]));
+  const auto textureUUID = uuids::uuid::from_string(std::string(componentData["textureUUID"]));
+  const auto specularMapUUID = uuids::uuid::from_string(std::string(componentData["specularMapUUID"]));
+
+  if (modelUUID.has_value())
+  {
+    if (const auto modelAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<ModelAsset>(modelUUID.value()))
+    {
+      m_model = modelAsset;
+    }
+  }
+
+  if (textureUUID.has_value())
+  {
+    if (const auto textureAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<TextureAsset>(textureUUID.value()))
+    {
+      m_texture = textureAsset;
+    }
+  }
+
+  if (specularMapUUID.has_value())
+  {
+    if (const auto specularMapAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<TextureAsset>(specularMapUUID.value()))
+    {
+      m_specularMap = specularMapAsset;
+    }
+  }
+
+  if (canRender())
+  {
+    m_renderObject.reset();
+    m_renderObject = m_renderer->getAssetManager()->loadRenderObject(m_texture->getTexture(), m_specularMap->getTexture(), m_model->getModel());
+  }
 }
 
 void ModelRenderer::displayDragDrop(const char* label,
@@ -102,7 +167,7 @@ void ModelRenderer::displayDragDrop(const char* label,
       if (setter(*static_cast<std::shared_ptr<Asset>*>(payload->Data)) && canRender())
       {
         m_renderObject.reset();
-        m_renderObject = m_renderer->getAssetManager()->loadRenderObject(m_texture, m_specularMap, m_model);
+        m_renderObject = m_renderer->getAssetManager()->loadRenderObject(m_texture->getTexture(), m_specularMap->getTexture(), m_model->getModel());
       }
     }
 
@@ -118,7 +183,7 @@ void ModelRenderer::displayTextureDragDrop()
   {
     if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
     {
-      m_texture = textureAsset->getTexture();
+      m_texture = textureAsset;
 
       return true;
     }
@@ -133,7 +198,7 @@ void ModelRenderer::displaySpecularDragDrop()
   {
     if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
     {
-      m_specularMap = textureAsset->getTexture();
+      m_specularMap = textureAsset;
 
       return true;
     }
@@ -148,7 +213,7 @@ void ModelRenderer::displayModelDragDrop()
   {
     if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
     {
-      m_model = modelAsset->getModel();
+      m_model = modelAsset;
 
       return true;
     }

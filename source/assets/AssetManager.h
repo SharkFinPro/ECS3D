@@ -1,9 +1,11 @@
 #ifndef ASSETMANAGER_H
 #define ASSETMANAGER_H
 
-#include <unordered_map>
+#include <nlohmann/json_fwd.hpp>
+#include <uuid.h>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 class ECS3D;
 class Asset;
@@ -24,30 +26,61 @@ public:
   template <typename T>
   std::shared_ptr<T> getAsset(const std::string& path) const;
 
+  template <typename T>
+  std::shared_ptr<T> getAsset(uuids::uuid uuid) const;
+
+  [[nodiscard]] nlohmann::json serialize();
+
+  void loadFromJSON(const nlohmann::json& assetsData);
+
 private:
   ECS3D* m_ecs;
-  std::unordered_map<std::string, std::shared_ptr<Asset>> m_assets;
+
+  std::unordered_map<uuids::uuid, std::shared_ptr<Asset>> m_assets;
+
+  std::unordered_map<std::string, uuids::uuid> m_loadedPaths;
+
+  std::mt19937 m_rng;
+  uuids::uuid_random_generator m_uuidGenerator;
 };
 
 template<typename T>
 void AssetManager::loadAsset(const std::string& path)
 {
-  if (m_assets.contains(path))
+  if (m_loadedPaths.contains(path))
   {
     return;
   }
 
-  const auto asset = std::make_shared<T>(path);
+  const uuids::uuid uuid = m_uuidGenerator();
+
+  const auto asset = std::make_shared<T>(uuid, path);
   asset->setManager(this);
   asset->load();
 
-  m_assets.emplace(path, asset);
+  m_assets.emplace(uuid, asset);
+
+  m_loadedPaths.emplace(path, uuid);
 }
 
 template<typename T>
 std::shared_ptr<T> AssetManager::getAsset(const std::string& path) const
 {
-  const auto asset = m_assets.find(path);
+  const auto uuid = m_loadedPaths.find(path);
+  if (uuid == m_loadedPaths.end())
+  {
+    return nullptr;
+  }
+
+  const auto asset = m_assets.find(uuid->second);
+
+  return asset != m_assets.end() ? std::dynamic_pointer_cast<T>(asset->second) : nullptr;
+}
+
+template<typename T>
+std::shared_ptr<T> AssetManager::getAsset(const uuids::uuid uuid) const
+{
+  const auto asset = m_assets.find(uuid);
 
   return asset != m_assets.end() ? std::dynamic_pointer_cast<T>(asset->second) : nullptr;
 }

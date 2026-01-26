@@ -35,6 +35,8 @@ private:
 
   bool m_highlightSelectedObject = true;
 
+  bool m_mouseWasPressed = false;
+
   static bool containsObjectUINode(const std::vector<std::shared_ptr<ObjectUINode>>& rootNodes,
                                    const std::shared_ptr<Object>& object);
 

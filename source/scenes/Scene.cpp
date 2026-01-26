@@ -8,6 +8,7 @@
 #include "../objects/ObjectManager.h"
 #include "../objects/components/Components.h"
 #include "../objects/components/LightRenderer.h"
+#include <nlohmann/json.hpp>
 
 Scene::Scene(SceneManager* sceneManager)
   : m_sceneManager(sceneManager), m_assetManager(sceneManager->getECS()->getAssetManager()),
@@ -41,9 +42,9 @@ void Scene::createBlock(TransformData transformData) const
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(m_sceneManager->getECS()->getRenderer(),
-                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png")->getTexture(),
-                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png")->getTexture(),
-                                    m_assetManager->getAsset<ModelAsset>("assets/models/cube_1x1x1.glb")->getModel()),
+                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png"),
+                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png"),
+                                    m_assetManager->getAsset<ModelAsset>("assets/models/cube_1x1x1.glb")),
     std::make_shared<RigidBody>(),
     std::make_shared<BoxCollider>()
   };
@@ -56,9 +57,9 @@ void Scene::createRigidBlock(TransformData transformData) const
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(m_sceneManager->getECS()->getRenderer(),
-                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png")->getTexture(),
-                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png")->getTexture(),
-                                    m_assetManager->getAsset<ModelAsset>("assets/models/cube_1x1x1.glb")->getModel()),
+                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png"),
+                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png"),
+                                    m_assetManager->getAsset<ModelAsset>("assets/models/cube_1x1x1.glb")),
     std::make_shared<BoxCollider>()
   };
 
@@ -70,9 +71,9 @@ void Scene::createSphere(TransformData transformData) const
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(m_sceneManager->getECS()->getRenderer(),
-                                    m_assetManager->getAsset<TextureAsset>("assets/textures/earth.png")->getTexture(),
-                                    m_assetManager->getAsset<TextureAsset>("assets/textures/earth_specular.png")->getTexture(),
-                                    m_assetManager->getAsset<ModelAsset>("assets/models/sphere_3.glb")->getModel()),
+                                    m_assetManager->getAsset<TextureAsset>("assets/textures/earth.png"),
+                                    m_assetManager->getAsset<TextureAsset>("assets/textures/earth_specular.png"),
+                                    m_assetManager->getAsset<ModelAsset>("assets/models/sphere_3.glb")),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>()
   };
@@ -85,9 +86,9 @@ void Scene::createPlayer(TransformData transformData) const
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(m_sceneManager->getECS()->getRenderer(),
-                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png")->getTexture(),
-                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png")->getTexture(),
-                                    m_assetManager->getAsset<ModelAsset>("assets/models/sphere.glb")->getModel()),
+                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png"),
+                                    m_assetManager->getAsset<TextureAsset>("assets/textures/white.png"),
+                                    m_assetManager->getAsset<ModelAsset>("assets/models/sphere.glb")),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>(),
     std::make_shared<Player>()
@@ -100,8 +101,81 @@ void Scene::createLight(glm::vec3 position, glm::vec3 color, float ambient, floa
 {
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(position, glm::vec3(1), glm::vec3(0)),
-    std::make_shared<LightRenderer>(m_sceneManager->getECS()->getRenderer(), position, color, ambient, diffuse, specular)
+    std::make_shared<LightRenderer>(m_sceneManager->getECS()->getRenderer(), color, ambient, diffuse, specular)
   };
 
   m_objectManager->addObject(std::make_shared<Object>(components, "Light"));
+}
+
+nlohmann::json Scene::serialize() const
+{
+  const auto serializedObjects = m_objectManager->serialize();
+  nlohmann::json data = {
+    { "name", "scene" },
+    { "objects", serializedObjects["objects"] }
+  };
+
+  return data;
+}
+
+void Scene::loadFromJSON(const nlohmann::json& sceneData) const
+{
+  for (const auto& objectData : sceneData["objects"])
+  {
+    const auto object = std::make_shared<Object>(objectData["name"]);
+    object->setManager(m_objectManager.get());
+
+    for (const auto& componentData : objectData["components"])
+    {
+      const auto component = loadComponentFromJSON(componentData);
+      object->addComponent(component);
+      component->loadFromJSON(componentData);
+    }
+
+    m_objectManager->addObject(object);
+  }
+}
+
+std::shared_ptr<Component> Scene::loadComponentFromJSON(const nlohmann::json& componentData) const
+{
+  std::shared_ptr<Component> component = nullptr;
+
+  if (componentData["type"] == "Collider")
+  {
+    if (componentData["subType"] == "Box")
+    {
+      component = std::make_shared<BoxCollider>();
+    }
+    else if (componentData["subType"] == "Sphere")
+    {
+      component = std::make_shared<SphereCollider>();
+    }
+  }
+  else if (componentData["type"] == "LightRenderer")
+  {
+    component = std::make_shared<LightRenderer>(m_sceneManager->getECS()->getRenderer());
+  }
+  else if (componentData["type"] == "ModelRenderer")
+  {
+    component = std::make_shared<ModelRenderer>(m_sceneManager->getECS()->getRenderer());
+  }
+  else if (componentData["type"] == "Player")
+  {
+    component = std::make_shared<Player>();
+  }
+  else if (componentData["type"] == "RigidBody")
+  {
+    component = std::make_shared<RigidBody>();
+  }
+  else if (componentData["type"] == "Transform")
+  {
+    component = std::make_shared<Transform>();
+  }
+
+  if (!component)
+  {
+    throw std::runtime_error("Unknown component type: " + std::string(componentData["type"]));
+  }
+
+  return component;
 }

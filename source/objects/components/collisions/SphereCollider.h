@@ -12,6 +12,10 @@ public:
 
   void displayGui() override;
 
+  [[nodiscard]] nlohmann::json serialize() override;
+
+  void loadFromJSON(const nlohmann::json& componentData) override;
+
 private:
   float m_radius = 1.0f;
 

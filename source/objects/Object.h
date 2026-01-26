@@ -1,11 +1,12 @@
 #ifndef OBJECT_H
 #define OBJECT_H
 
+#include "ObjectManager.h"
+#include <nlohmann/json_fwd.hpp>
 #include <vector>
 #include <unordered_map>
 #include <memory>
 #include <string>
-#include "ObjectManager.h"
 
 enum class ComponentType;
 class Component;
@@ -37,6 +38,8 @@ public:
   void start() const;
 
   void stop() const;
+
+  [[nodiscard]] nlohmann::json serialize();
 
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> m_components;

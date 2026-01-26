@@ -2,7 +2,16 @@
 #include "RigidBody.h"
 #include "../Object.h"
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <memory>
+
+Transform::Transform()
+  : Component(ComponentType::transform)
+{
+  loadVariable(m_position);
+  loadVariable(m_scale);
+  loadVariable(m_rotation);
+}
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
   : Component(ComponentType::transform),
@@ -111,4 +120,27 @@ void Transform::displayGui()
 
     ImGui::PopID();
   }
+}
+
+nlohmann::json Transform::serialize()
+{
+  const auto position = m_position.value();
+  const auto rotation = m_rotation.value();
+  const auto scale = m_scale.value();
+
+  const nlohmann::json data = {
+    { "type", "Transform" },
+    { "position", { position.x, position.y, position.z } },
+    { "rotation", { rotation.x, rotation.y, rotation.z } },
+    { "scale", { scale.x, scale.y, scale.z } }
+  };
+
+  return data;
+}
+
+void Transform::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_position.set(glm::vec3(componentData["position"][0], componentData["position"][1], componentData["position"][2]));
+  m_scale.set(glm::vec3(componentData["scale"][0], componentData["scale"][1], componentData["scale"][2]));
+  m_rotation.set(glm::vec3(componentData["rotation"][0], componentData["rotation"][1], componentData["rotation"][2]));
 }

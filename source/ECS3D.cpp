@@ -1,14 +1,17 @@
 #include "ECS3D.h"
+#include "SaveManager.h"
 #include "scenes/SceneManager.h"
 #include "assets/AssetManager.h"
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/window/Window.h>
 
-ECS3D::ECS3D()
+ECS3D::ECS3D(std::string saveFile)
   : m_previousTime(std::chrono::steady_clock::now()), m_sceneManager(std::make_shared<SceneManager>(this)),
 		m_assetManager(std::make_shared<AssetManager>(this))
 {
   initRenderer();
+
+	m_saveManager = std::make_shared<SaveManager>(this, std::move(saveFile));
 }
 
 bool ECS3D::isActive() const
@@ -35,6 +38,8 @@ void ECS3D::update()
 	displayMessageLog();
 
   m_renderer->render();
+
+	m_saveManager->update();
 }
 
 std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const

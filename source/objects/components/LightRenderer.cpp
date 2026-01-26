@@ -5,10 +5,20 @@
 #include "../../ECS3D.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <VulkanEngine/components/lighting/LightingManager.h>
 
+LightRenderer::LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer)
+  : Component(ComponentType::lightRenderer)
+{
+  const auto lightingManager = renderer->getLightingManager();
+
+  m_pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(glm::vec3(0), glm::vec3(0), 0, 0, 0));
+
+  m_spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(glm::vec3(0), glm::vec3(0), 0, 0, 0));
+}
+
 LightRenderer::LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
-                             const glm::vec3 position,
                              const glm::vec3 color,
                              const float ambient,
                              const float diffuse,
@@ -17,9 +27,9 @@ LightRenderer::LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
 {
   const auto lightingManager = renderer->getLightingManager();
 
-  m_pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(position, color, ambient, diffuse, specular));
+  m_pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(glm::vec3(0), color, ambient, diffuse, specular));
 
-  m_spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(position, color, ambient, diffuse, specular));
+  m_spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(glm::vec3(0), color, ambient, diffuse, specular));
 }
 
 void LightRenderer::variableUpdate([[maybe_unused]] const float dt)
@@ -93,4 +103,52 @@ void LightRenderer::displayGui()
     m_spotLight->setDirection(direction);
     m_spotLight->setConeAngle(coneAngle);
   }
+}
+
+nlohmann::json LightRenderer::serialize()
+{
+  const auto light = m_spotLight;
+
+  const auto color = light->getColor();
+  const auto direction = light->getDirection();
+
+  const nlohmann::json data = {
+    { "type", "LightRenderer" },
+    { "color", { color.x, color.y, color.z } },
+    { "direction", { direction.x, direction.y, direction.z } },
+    { "iSpotlight", m_isSpotLight },
+    { "ambient", light->getAmbient() },
+    { "diffuse", light->getDiffuse() },
+    { "specular", light->getSpecular() },
+    { "coneAngle", light->getConeAngle() }
+  };
+
+  return data;
+}
+
+void LightRenderer::loadFromJSON(const nlohmann::json& componentData)
+{
+  m_spotLight->setColor(glm::vec3(
+    componentData["color"][0],
+    componentData["color"][1],
+    componentData["color"][2]
+  ));
+
+  m_spotLight->setDirection(glm::vec3(
+    componentData["direction"][0],
+    componentData["direction"][1],
+    componentData["direction"][2]
+  ));
+
+  m_spotLight->setAmbient(componentData["ambient"]);
+  m_spotLight->setDiffuse(componentData["diffuse"]);
+  m_spotLight->setSpecular(componentData["specular"]);
+  m_spotLight->setConeAngle(componentData["coneAngle"]);
+
+  m_pointLight->setColor(m_spotLight->getColor());
+  m_pointLight->setAmbient(m_spotLight->getAmbient());
+  m_pointLight->setDiffuse(m_spotLight->getDiffuse());
+  m_pointLight->setSpecular(m_spotLight->getSpecular());
+
+  m_isSpotLight = componentData["iSpotlight"];
 }

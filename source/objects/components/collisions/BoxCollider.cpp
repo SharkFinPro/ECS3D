@@ -3,8 +3,9 @@
 #include "../Transform.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <stdexcept>
+#include <nlohmann/json.hpp>
 #include <limits>
+#include <stdexcept>
 
 BoxCollider::BoxCollider()
   : Collider(ColliderType::boxCollider, ComponentType::SubComponentType_boxCollider)
@@ -15,6 +16,19 @@ void BoxCollider::displayGui()
   if (displayGuiHeader())
   {}
 }
+
+nlohmann::json BoxCollider::serialize()
+{
+  const nlohmann::json data = {
+    { "type", "Collider" },
+    { "subType", "Box" },
+  };
+
+  return data;
+}
+
+void BoxCollider::loadFromJSON(const nlohmann::json& componentData)
+{}
 
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 {

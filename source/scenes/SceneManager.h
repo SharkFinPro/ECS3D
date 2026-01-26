@@ -1,6 +1,7 @@
 #ifndef SCENEMANAGER_H
 #define SCENEMANAGER_H
 
+#include <nlohmann/json_fwd.hpp>
 #include <memory>
 #include <vector>
 
@@ -18,6 +19,12 @@ public:
   [[nodiscard]] ECS3D* getECS() const;
 
   void update(float dt);
+
+  [[nodiscard]] nlohmann::json serialize() const;
+
+  void loadFromJSON(const nlohmann::json& scenesData);
+
+  [[nodiscard]] std::shared_ptr<Scene> getCurrentScene() const;
 
 private:
   ECS3D* m_ecs;

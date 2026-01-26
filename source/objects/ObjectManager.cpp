@@ -3,6 +3,7 @@
 #include "CollisionManager.h"
 #include "ObjectGUIManager.h"
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
 ObjectManager::ObjectManager()
   : m_collisionManager(std::make_shared<CollisionManager>()),
@@ -76,6 +77,20 @@ void ObjectManager::resetScene()
   }
 
   m_sceneStatus = SceneStatus::stopped;
+}
+
+nlohmann::json ObjectManager::serialize() const
+{
+  nlohmann::json data = {
+    { "objects", nlohmann::json::array() }
+  };
+
+  for (const auto& object : m_objects)
+  {
+    data["objects"].push_back(object->serialize());
+  }
+
+  return data;
 }
 
 void ObjectManager::variableUpdate(const float dt) const

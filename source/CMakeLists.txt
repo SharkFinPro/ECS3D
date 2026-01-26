@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD 20)
 add_library(${PROJECT_NAME}
   ECS3D.cpp
   ECS3D.h
+  SaveManager.cpp
+  SaveManager.h
   objects/ObjectManager.cpp
   objects/ObjectManager.h
   objects/Object.cpp
@@ -53,21 +55,39 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/Polytope.h
 )
 
-# Declare VulkanEngine as a dependency
+FetchContent_Declare(
+  json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.12.0
+)
+
+FetchContent_Declare(
+  uuid
+  GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
+  GIT_TAG v1.2.3
+)
+
 FetchContent_Declare(
   VulkanEngine
   GIT_REPOSITORY https://github.com/SharkFinPro/VulkanRenderer.git
   GIT_TAG main
 )
 
-# Make VulkanEngine available to your project
-FetchContent_MakeAvailable(VulkanEngine)
+FetchContent_MakeAvailable(
+  json
+  uuid
+  VulkanEngine
+)
 
-# Link VulkanEngine to your target
-target_link_libraries(${PROJECT_NAME} PUBLIC VulkanEngine)
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  nlohmann_json::nlohmann_json
+  stduuid
+  VulkanEngine
+)
 
-# Include VulkanEngine headers
-target_include_directories(${PROJECT_NAME} PUBLIC ${VulkanEngine_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME} PUBLIC
+  ${VulkanEngine_SOURCE_DIR}/include
+)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

@@ -1,12 +1,14 @@
 #ifndef SCENE_H
 #define SCENE_H
 
-#include <memory>
 #include <glm/vec3.hpp>
+#include <nlohmann/json_fwd.hpp>
+#include <memory>
 
-class SceneManager;
 class AssetManager;
+class Component;
 class ObjectManager;
+class SceneManager;
 
 struct TransformData {
   glm::vec3 position = { 0, 0, 0 };
@@ -32,12 +34,18 @@ public:
 
   void createLight(glm::vec3 position, glm::vec3 color, float ambient, float diffuse, float specular) const;
 
+  [[nodiscard]] nlohmann::json serialize() const;
+
+  void loadFromJSON(const nlohmann::json& sceneData) const;
+
 private:
   SceneManager* m_sceneManager;
 
   std::shared_ptr<AssetManager> m_assetManager;
 
   std::shared_ptr<ObjectManager> m_objectManager;
+
+  [[nodiscard]] std::shared_ptr<Component> loadComponentFromJSON(const nlohmann::json& componentData) const;
 };
 
 
