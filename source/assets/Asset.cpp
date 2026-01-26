@@ -20,3 +20,8 @@ void Asset::displayGui()
 {
   ImGui::Text(m_name.c_str());
 }
+
+uuids::uuid Asset::getUUID() const
+{
+  return m_uuid;
+}

@@ -22,6 +22,8 @@ public:
 
   virtual void load() = 0;
 
+  [[nodiscard]] uuids::uuid getUUID() const;
+
   [[nodiscard]] virtual nlohmann::json serialize() = 0;
 
 protected:

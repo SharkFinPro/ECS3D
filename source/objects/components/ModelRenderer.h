@@ -4,22 +4,22 @@
 #include "Component.h"
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
-#include <VulkanEngine/components/assets/objects/Model.h>
-#include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <memory>
 #include <functional>
 
 class Asset;
+class ModelAsset;
+class TextureAsset;
 class Transform;
 
 class ModelRenderer final : public Component {
 public:
-  ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
-                const std::shared_ptr<vke::Texture2D>& texture,
-                const std::shared_ptr<vke::Texture2D>& specularMap,
-                const std::shared_ptr<vke::Model>& model);
+  ModelRenderer(std::shared_ptr<vke::VulkanEngine> renderer,
+                std::shared_ptr<TextureAsset> texture,
+                std::shared_ptr<TextureAsset> specularMap,
+                std::shared_ptr<ModelAsset> model);
 
-  explicit ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer);
+  explicit ModelRenderer(std::shared_ptr<vke::VulkanEngine> renderer);
 
   ~ModelRenderer() override = default;
 
@@ -40,9 +40,10 @@ private:
   std::weak_ptr<Transform> m_transform_ptr;
 
   std::shared_ptr<vke::VulkanEngine> m_renderer;
-  std::shared_ptr<vke::Texture2D> m_texture = nullptr;
-  std::shared_ptr<vke::Texture2D> m_specularMap = nullptr;
-  std::shared_ptr<vke::Model> m_model = nullptr;
+
+  std::shared_ptr<TextureAsset> m_texture = nullptr;
+  std::shared_ptr<TextureAsset> m_specularMap = nullptr;
+  std::shared_ptr<ModelAsset> m_model = nullptr;
 
   bool m_useStandardPipeline = true;
 
