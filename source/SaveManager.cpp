@@ -14,7 +14,6 @@ SaveManager::SaveManager(ECS3D* ecs,
 
   if (saveData.empty())
   {
-    std::cout << "No save data found" << std::endl;
     return;
   }
 
