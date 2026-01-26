@@ -31,7 +31,9 @@ public:
 private:
   ECS3D* m_ecs;
 
-  std::unordered_map<std::string, std::shared_ptr<Asset>> m_assets;
+  std::unordered_map<uuids::uuid, std::shared_ptr<Asset>> m_assets;
+
+  std::unordered_map<std::string, uuids::uuid> m_loadedPaths;
 
   std::mt19937 m_rng;
   uuids::uuid_random_generator m_uuidGenerator;
@@ -40,7 +42,7 @@ private:
 template<typename T>
 void AssetManager::loadAsset(const std::string& path)
 {
-  if (m_assets.contains(path))
+  if (m_loadedPaths.contains(path))
   {
     return;
   }
@@ -51,13 +53,21 @@ void AssetManager::loadAsset(const std::string& path)
   asset->setManager(this);
   asset->load();
 
-  m_assets.emplace(path, asset);
+  m_assets.emplace(uuid, asset);
+
+  m_loadedPaths.emplace(path, uuid);
 }
 
 template<typename T>
 std::shared_ptr<T> AssetManager::getAsset(const std::string& path) const
 {
-  const auto asset = m_assets.find(path);
+  const auto uuid = m_loadedPaths.find(path);
+  if (uuid == m_loadedPaths.end())
+  {
+    return nullptr;
+  }
+
+  const auto asset = m_assets.find(uuid->second);
 
   return asset != m_assets.end() ? std::dynamic_pointer_cast<T>(asset->second) : nullptr;
 }
