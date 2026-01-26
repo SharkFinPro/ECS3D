@@ -4,17 +4,22 @@
 #include "../ObjectManager.h"
 #include "../../ECS3D.h"
 #include "../../assets/Asset.h"
+#include "../../assets/AssetManager.h"
 #include "../../assets/TextureAsset.h"
 #include "../../assets/ModelAsset.h"
 #include <nlohmann/json.hpp>
+#include <uuid.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
 #include <VulkanEngine/components/pipelines/implementations/common/PipelineTypes.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 
-ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer, const std::shared_ptr<vke::Texture2D>& texture,
-                             const std::shared_ptr<vke::Texture2D>& specularMap, const std::shared_ptr<vke::Model>& model)
-  : Component(ComponentType::modelRenderer), m_renderObject(renderer->getAssetManager()->loadRenderObject(texture, specularMap, model)),
+ModelRenderer::ModelRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
+                             const std::shared_ptr<vke::Texture2D>& texture,
+                             const std::shared_ptr<vke::Texture2D>& specularMap,
+                             const std::shared_ptr<vke::Model>& model)
+  : Component(ComponentType::modelRenderer),
+    m_renderObject(renderer->getAssetManager()->loadRenderObject(texture, specularMap, model)),
     m_renderer(renderer), m_texture(texture), m_specularMap(specularMap), m_model(model), m_shouldRender(true)
 {}
 
@@ -96,9 +101,9 @@ nlohmann::json ModelRenderer::serialize()
   const nlohmann::json data = {
     { "type", "ModelRenderer" },
     { "shouldRender", m_shouldRender },
-    { "modelId", 0 },
-    { "textureId", 0 },
-    { "specularMapId", 0 }
+    { "modelUUID", "" },
+    { "textureUUID", "" },
+    { "specularMapUUID", "" }
   };
 
   return data;
@@ -107,6 +112,35 @@ nlohmann::json ModelRenderer::serialize()
 void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
 {
   m_shouldRender = componentData["shouldRender"];
+
+  const auto modelUUID = uuids::uuid::from_string(std::string(componentData["modelUUID"]));
+  const auto textureUUID = uuids::uuid::from_string(std::string(componentData["textureUUID"]));
+  const auto specularMapUUID = uuids::uuid::from_string(std::string(componentData["specularMapUUID"]));
+
+
+  if (modelUUID.has_value())
+  {
+    if (const auto modelAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<ModelAsset>(modelUUID.value()))
+    {
+      m_model = modelAsset->getModel();
+    }
+  }
+
+  if (textureUUID.has_value())
+  {
+    if (const auto textureAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<TextureAsset>(textureUUID.value()))
+    {
+      m_texture = textureAsset->getTexture();
+    }
+  }
+
+  if (specularMapUUID.has_value())
+  {
+    if (const auto specularMapAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<TextureAsset>(specularMapUUID.value()))
+    {
+      m_specularMap = specularMapAsset->getTexture();
+    }
+  }
 }
 
 void ModelRenderer::displayDragDrop(const char* label,

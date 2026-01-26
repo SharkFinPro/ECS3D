@@ -26,6 +26,9 @@ public:
   template <typename T>
   std::shared_ptr<T> getAsset(const std::string& path) const;
 
+  template <typename T>
+  std::shared_ptr<T> getAsset(uuids::uuid uuid) const;
+
   [[nodiscard]] nlohmann::json serialize();
 
   void loadFromJSON(const nlohmann::json& assetsData);
@@ -70,6 +73,14 @@ std::shared_ptr<T> AssetManager::getAsset(const std::string& path) const
   }
 
   const auto asset = m_assets.find(uuid->second);
+
+  return asset != m_assets.end() ? std::dynamic_pointer_cast<T>(asset->second) : nullptr;
+}
+
+template<typename T>
+std::shared_ptr<T> AssetManager::getAsset(const uuids::uuid uuid) const
+{
+  const auto asset = m_assets.find(uuid);
 
   return asset != m_assets.end() ? std::dynamic_pointer_cast<T>(asset->second) : nullptr;
 }
