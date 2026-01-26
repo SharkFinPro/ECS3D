@@ -7,7 +7,11 @@
 
 Transform::Transform()
   : Component(ComponentType::transform)
-{}
+{
+  loadVariable(m_position);
+  loadVariable(m_scale);
+  loadVariable(m_rotation);
+}
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
   : Component(ComponentType::transform),
