@@ -40,7 +40,7 @@ void AssetManager::displayGui()
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
     {
       ImGui::SetDragDropPayload("asset", &asset, sizeof(asset));
-      ImGui::Text(name.c_str());
+      ImGui::Text(asset->getName().c_str());
       ImGui::EndDragDropSource();
     }
 
