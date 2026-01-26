@@ -178,7 +178,11 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
   const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
   const auto renderer = m_objectManager->getECS()->getRenderer();
 
-  if (renderer->getRenderingManager()->getRenderer3D()->getMousePicker()->canMousePick() && renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
+  static bool mouseWasPressed = false;
+
+  if (!mouseWasPressed &&
+      renderer->getRenderingManager()->getRenderer3D()->getMousePicker()->canMousePick() &&
+      renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
   {
     if (modelRenderer && modelRenderer->selectedByRenderer())
     {
@@ -189,6 +193,8 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
       m_selectedObject = nullptr;
     }
   }
+
+  mouseWasPressed = renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
 
   ImGui::PushID(&node->object);
 
