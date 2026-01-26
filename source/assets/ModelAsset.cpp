@@ -6,8 +6,9 @@
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
 
-ModelAsset::ModelAsset(const std::string& path)
-  : Asset(path), m_path(path)
+ModelAsset::ModelAsset(const uuids::uuid uuid,
+                       std::string path)
+  : Asset(uuid, path), m_path(std::move(path))
 {}
 
 std::string ModelAsset::getPath()
@@ -37,7 +38,7 @@ nlohmann::json ModelAsset::serialize()
   const nlohmann::json data = {
     { "name", m_path },
     { "filePath", m_path },
-    { "id", 0 },
+    { "uuid", uuids::to_string(m_uuid) }
   };
 
   return data;

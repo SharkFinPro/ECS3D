@@ -62,6 +62,12 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
+  uuid
+  GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
+  GIT_TAG v1.2.3
+)
+
+FetchContent_Declare(
   VulkanEngine
   GIT_REPOSITORY https://github.com/SharkFinPro/VulkanRenderer.git
   GIT_TAG main
@@ -69,11 +75,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(
   json
+  uuid
   VulkanEngine
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
   nlohmann_json::nlohmann_json
+  stduuid
   VulkanEngine
 )
 

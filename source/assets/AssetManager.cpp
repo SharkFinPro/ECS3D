@@ -6,7 +6,15 @@
 #include <nlohmann/json.hpp>
 
 AssetManager::AssetManager(ECS3D* ecs)
-  : m_ecs(ecs)
+  : m_ecs(ecs),
+    m_rng([] {
+      std::random_device rd;
+      auto seed_data = std::array<int, std::mt19937::state_size>{};
+      std::ranges::generate(seed_data, std::ref(rd));
+      std::seed_seq seq(std::begin(seed_data), std::end(seed_data));
+      return std::mt19937(seq);
+    }()),
+    m_uuidGenerator(m_rng)
 {}
 
 ECS3D* AssetManager::getECS() const

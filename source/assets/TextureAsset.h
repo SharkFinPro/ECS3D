@@ -2,11 +2,14 @@
 #define TEXTUREASSET_H
 
 #include "Asset.h"
+#include <uuid.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
 
 class TextureAsset final : public Asset {
 public:
-  explicit TextureAsset(const std::string& path);
+  explicit TextureAsset(uuids::uuid uuid,
+                        std::string path);
+
   ~TextureAsset() override = default;
 
   std::string getPath();

@@ -3,10 +3,11 @@
 
 constexpr int MAX_CHARACTERS = 30;
 
-Asset::Asset(std::string name)
-  : m_name(std::move(name))
+Asset::Asset(const uuids::uuid uuid,
+             std::string name)
+  : m_uuid(uuid), m_name(std::move(name))
 {
-  name.resize(MAX_CHARACTERS);
+  m_name.resize(MAX_CHARACTERS);
 }
 
 void Asset::setManager(AssetManager* assetManager)
@@ -21,5 +22,5 @@ std::string Asset::getName() const
 
 void Asset::displayGui()
 {
-  ImGui::Text(m_name.substr(m_name.find_last_of('/') + 1).c_str());
+  ImGui::Text(m_name.c_str());
 }

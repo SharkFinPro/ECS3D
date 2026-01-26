@@ -2,11 +2,13 @@
 #include "AssetManager.h"
 #include "../ECS3D.h"
 #include <nlohmann/json.hpp>
+#include <uuid.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
 
-TextureAsset::TextureAsset(const std::string& path)
-  : Asset(path), m_path(path)
+TextureAsset::TextureAsset(const uuids::uuid uuid,
+                           std::string path)
+  : Asset(uuid, path), m_path(std::move(path))
 {}
 
 std::string TextureAsset::getPath()
@@ -36,7 +38,7 @@ nlohmann::json TextureAsset::serialize()
   const nlohmann::json data = {
     { "name", m_path },
     { "filePath", m_path },
-    { "id", 0 },
+    { "uuid", uuids::to_string(m_uuid) }
   };
 
   return data;

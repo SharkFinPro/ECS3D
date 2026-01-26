@@ -2,13 +2,16 @@
 #define ASSET_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <uuid.h>
 #include <string>
 
 class AssetManager;
 
 class Asset {
 public:
-  explicit Asset(std::string name = "Asset");
+  explicit Asset(uuids::uuid uuid,
+                 std::string name);
+
   virtual ~Asset() = default;
 
   void setManager(AssetManager* assetManager);
@@ -23,6 +26,8 @@ public:
 
 protected:
   AssetManager* m_assetManager = nullptr;
+
+  uuids::uuid m_uuid;
 
   std::string m_name;
 };

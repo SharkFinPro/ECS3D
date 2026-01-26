@@ -3,12 +3,13 @@
 
 #include "Asset.h"
 #include <memory>
+#include <uuid.h>
 #include <VulkanEngine/components/assets/objects/Model.h>
 
 class ModelAsset final : public Asset {
 public:
-  explicit ModelAsset(const std::string& path);
-  ~ModelAsset() override = default;
+  explicit ModelAsset(uuids::uuid uuid,
+                      std::string path);
 
   std::string getPath();
 
