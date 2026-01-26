@@ -6,7 +6,7 @@
 #include <fstream>
 #include <iostream>
 
-const std::string FILE_NAME = "ECSData3.json";
+const std::string FILE_NAME = "ECSData.json";
 
 SaveManager::SaveManager(ECS3D* ecs)
   : m_ecs(ecs)

@@ -15,9 +15,11 @@ int main()
   try
   {
     ECS3D ecs;
-    const auto sceneManager = ecs.getSceneManager();
 
-    loadScene1(sceneManager->createScene());
+    if (const auto sceneManager = ecs.getSceneManager(); !sceneManager->getCurrentScene())
+    {
+      loadScene1(sceneManager->createScene());
+    }
 
     while (ecs.isActive())
     {

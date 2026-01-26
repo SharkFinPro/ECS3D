@@ -74,6 +74,11 @@ void SceneManager::loadFromJSON(const nlohmann::json& scenesData)
   }
 }
 
+std::shared_ptr<Scene> SceneManager::getCurrentScene() const
+{
+  return m_currentScene;
+}
+
 void SceneManager::sceneSelector()
 {
   ImGui::Begin("Scene Selector");

@@ -24,6 +24,8 @@ public:
 
   void loadFromJSON(const nlohmann::json& scenesData);
 
+  [[nodiscard]] std::shared_ptr<Scene> getCurrentScene() const;
+
 private:
   ECS3D* m_ecs;
 
