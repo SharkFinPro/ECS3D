@@ -28,6 +28,8 @@ public:
 
   [[nodiscard]] nlohmann::json serialize();
 
+  void loadFromJSON(const nlohmann::json& assetsData);
+
 private:
   ECS3D* m_ecs;
 

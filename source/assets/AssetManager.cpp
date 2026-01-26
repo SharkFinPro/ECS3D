@@ -73,3 +73,34 @@ nlohmann::json AssetManager::serialize()
 
   return data;
 }
+
+void AssetManager::loadFromJSON(const nlohmann::json& assetsData)
+{
+  for (const auto& assetData : assetsData["models"])
+  {
+    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData["uuid"])).value();
+    const auto path = assetData["filePath"];
+
+    const auto asset = std::make_shared<ModelAsset>(uuid, path);
+    asset->setManager(this);
+    asset->load();
+
+    m_assets.emplace(uuid, asset);
+
+    m_loadedPaths.emplace(path, uuid);
+  }
+
+  for (const auto& assetData : assetsData["textures"])
+  {
+    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData["uuid"])).value();
+    const auto path = assetData["filePath"];
+
+    const auto asset = std::make_shared<TextureAsset>(uuid, path);
+    asset->setManager(this);
+    asset->load();
+
+    m_assets.emplace(uuid, asset);
+
+    m_loadedPaths.emplace(path, uuid);
+  }
+}

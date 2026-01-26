@@ -13,6 +13,8 @@ SaveManager::SaveManager(ECS3D* ecs)
 {
   readSaveDataFile();
 
+  m_ecs->getAssetManager()->loadFromJSON(m_saveData["assets"]);
+
   m_ecs->getSceneManager()->loadFromJSON(m_saveData["scenes"]);
 }
 
