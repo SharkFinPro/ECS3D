@@ -5,11 +5,13 @@
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/window/Window.h>
 
-ECS3D::ECS3D()
+ECS3D::ECS3D(std::string saveFile)
   : m_previousTime(std::chrono::steady_clock::now()), m_sceneManager(std::make_shared<SceneManager>(this)),
 		m_assetManager(std::make_shared<AssetManager>(this))
 {
   initRenderer();
+
+	m_saveManager = std::make_shared<SaveManager>(this, std::move(saveFile));
 }
 
 bool ECS3D::isActive() const
@@ -118,8 +120,6 @@ void ECS3D::initRenderer()
 	gui->dockBottom("Project Errors");
 	gui->dockBottom("Smoke");
 	gui->dockBottom("Elliptical Dots");
-
-	m_saveManager = std::make_shared<SaveManager>(this);
 }
 
 void ECS3D::setupImGuiStyle()

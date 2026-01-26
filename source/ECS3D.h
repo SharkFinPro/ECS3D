@@ -13,7 +13,7 @@ class SceneManager;
 
 class ECS3D {
 public:
-  ECS3D();
+  explicit ECS3D(std::string saveFile = "ECSData.json");
 
   [[nodiscard]] bool isActive() const;
 

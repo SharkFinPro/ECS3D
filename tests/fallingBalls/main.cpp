@@ -14,7 +14,7 @@ int main()
 {
   try
   {
-    ECS3D ecs;
+    ECS3D ecs("FallingBallsTest.json");
 
     if (const auto sceneManager = ecs.getSceneManager(); !sceneManager->getCurrentScene())
     {

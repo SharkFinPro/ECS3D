@@ -6,16 +6,21 @@
 #include <fstream>
 #include <iostream>
 
-const std::string FILE_NAME = "ECSData.json";
-
-SaveManager::SaveManager(ECS3D* ecs)
-  : m_ecs(ecs)
+SaveManager::SaveManager(ECS3D* ecs,
+                         std::string saveFile)
+  : m_ecs(ecs), m_saveFile(std::move(saveFile))
 {
-  readSaveDataFile();
+  const auto saveData = readSaveDataFile();
 
-  m_ecs->getAssetManager()->loadFromJSON(m_saveData["assets"]);
+  if (saveData.empty())
+  {
+    std::cout << "No save data found" << std::endl;
+    return;
+  }
 
-  m_ecs->getSceneManager()->loadFromJSON(m_saveData["scenes"]);
+  m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
+
+  m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
 }
 
 void SaveManager::update()
@@ -36,7 +41,7 @@ void SaveManager::update()
 
   save();
 
-  std::cout << "Saved data to " << FILE_NAME << std::endl;
+  std::cout << "Saved data to " << m_saveFile << std::endl;
 }
 
 void SaveManager::save() const
@@ -46,51 +51,25 @@ void SaveManager::save() const
     { "scenes", m_ecs->getSceneManager()->serialize() }
   };
 
-  std::ofstream outFile(FILE_NAME);
+  std::ofstream outFile(m_saveFile);
   outFile << data.dump(2);
   outFile.close();
 }
 
-void SaveManager::readSaveDataFile()
+nlohmann::json SaveManager::readSaveDataFile() const
 {
-  std::ifstream f(FILE_NAME);
+  std::ifstream f(m_saveFile);
 
   if (!f.is_open())
   {
     f.close();
-    createSaveDataFile();
 
-    f = std::ifstream(FILE_NAME);
+    return nlohmann::json{};
   }
 
-  m_saveData = nlohmann::json::parse(f);
+  nlohmann::json saveData = nlohmann::json::parse(f);
 
   f.close();
 
-  std::cout << m_saveData["assets"]["models"].size() << " model asset(s) found" << std::endl;
-  std::cout << m_saveData["assets"]["textures"].size() << " texture asset(s) found" << std::endl;
-  std::cout << m_saveData["scenes"].size() << " scene(s) found" << std::endl;
-}
-
-void SaveManager::createSaveDataFile()
-{
-  const nlohmann::json defaultData = {
-    {"scenes", nlohmann::json::array()},
-    {"assets", {
-      {"models", nlohmann::json::array()},
-      {"textures", nlohmann::json::array()}
-    }}
-  };
-
-  std::ofstream outFile(FILE_NAME);
-  if (outFile.is_open())
-  {
-    outFile << defaultData.dump(2);
-    outFile.close();
-    std::cout << "Created default " << FILE_NAME << " file" << std::endl;
-  }
-  else
-  {
-    std::cerr << "Failed to create " << FILE_NAME << " file" << std::endl;
-  }
+  return saveData;
 }

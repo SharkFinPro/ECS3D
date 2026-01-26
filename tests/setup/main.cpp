@@ -19,7 +19,7 @@ int main()
 {
   try
   {
-    ECS3D ecs;
+    ECS3D ecs("SetupTest.json");
 
     if (const auto sceneManager = ecs.getSceneManager(); !sceneManager->getCurrentScene())
     {

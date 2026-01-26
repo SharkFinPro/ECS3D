@@ -7,22 +7,21 @@ class ECS3D;
 
 class SaveManager {
 public:
-  explicit SaveManager(ECS3D* ecs);
+  SaveManager(ECS3D* ecs,
+              std::string saveFile);
 
   void update();
 
 private:
   ECS3D* m_ecs;
 
-  nlohmann::json m_saveData;
+  std::string m_saveFile;
 
   bool m_wasSaving = false;
 
   void save() const;
 
-  void readSaveDataFile();
-
-  static void createSaveDataFile();
+  [[nodiscard]] nlohmann::json readSaveDataFile() const;
 };
 
 
