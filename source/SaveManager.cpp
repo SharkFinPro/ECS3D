@@ -181,7 +181,7 @@ void SaveManager::registerSaveHotkeys()
   });
 }
 
-void SaveManager::loadFromSaveFile() const
+void SaveManager::loadFromSaveFile()
 {
   const auto saveData = readSaveDataFile();
 
@@ -200,6 +200,7 @@ void SaveManager::loadFromSaveFile() const
   } catch (const std::exception& e)
   {
     std::cerr << e.what() << std::endl;
+    m_saveFile = "";
     m_ecs->reset();
   }
 }

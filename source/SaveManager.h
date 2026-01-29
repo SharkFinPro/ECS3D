@@ -30,7 +30,7 @@ private:
 
   void registerSaveHotkeys();
 
-  void loadFromSaveFile() const;
+  void loadFromSaveFile();
 };
 
 
