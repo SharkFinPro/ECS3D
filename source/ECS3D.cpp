@@ -38,8 +38,6 @@ void ECS3D::update()
 	displayMessageLog();
 
   m_renderer->render();
-
-	m_saveManager->update();
 }
 
 std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const
