@@ -116,7 +116,7 @@ nlohmann::json LightRenderer::serialize()
     { "type", "LightRenderer" },
     { "color", { color.x, color.y, color.z } },
     { "direction", { direction.x, direction.y, direction.z } },
-    { "iSpotlight", m_isSpotLight },
+    { "isSpotlight", m_isSpotLight },
     { "ambient", light->getAmbient() },
     { "diffuse", light->getDiffuse() },
     { "specular", light->getSpecular() },
@@ -152,5 +152,5 @@ void LightRenderer::loadFromJSON(const nlohmann::json& componentData)
   m_pointLight->setDiffuse(m_spotLight->getDiffuse());
   m_pointLight->setSpecular(m_spotLight->getSpecular());
 
-  m_isSpotLight = componentData.at("iSpotlight");
+  m_isSpotLight = componentData.at("isSpotlight");
 }
