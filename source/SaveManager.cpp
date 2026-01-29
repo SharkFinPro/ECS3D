@@ -3,6 +3,7 @@
 #include "assets/AssetManager.h"
 #include "scenes/SceneManager.h"
 #include <GLFW/glfw3.h>
+#include <nfd.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <fstream>
 #include <iostream>
@@ -22,16 +23,16 @@ SaveManager::SaveManager(ECS3D* ecs,
 
   m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
 
-  m_ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
-    if (e.action == GLFW_PRESS && m_ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && m_ecs->keyIsPressed(GLFW_KEY_S))
-    {
-      save();
-    }
-  });
+  registerSaveHotkeys();
 }
 
-void SaveManager::save() const
+void SaveManager::save()
 {
+  if (m_saveFile.empty() && !chooseSaveFile())
+  {
+    return;
+  }
+
   const nlohmann::json data = {
     { "assets", m_ecs->getAssetManager()->serialize() },
     { "scenes", m_ecs->getSceneManager()->serialize() }
@@ -42,6 +43,14 @@ void SaveManager::save() const
   outFile.close();
 
   std::cout << "Saved data to " << m_saveFile << std::endl;
+}
+
+void SaveManager::saveAs()
+{
+  if (chooseSaveFile())
+  {
+    save();
+  }
 }
 
 nlohmann::json SaveManager::readSaveDataFile() const
@@ -60,4 +69,59 @@ nlohmann::json SaveManager::readSaveDataFile() const
   f.close();
 
   return saveData;
+}
+
+bool SaveManager::chooseSaveFile()
+{
+  if (NFD_Init() != NFD_OKAY)
+  {
+    throw std::runtime_error("NFD_Init failed");
+  }
+
+  nfdu8char_t* outPath = nullptr;
+  const std::vector<nfdu8filteritem_t> filters {
+    { "ECS3D Project Files", "json" }
+  };
+
+  const nfdopendialogu8args_t args {
+    .filterList = filters.data(),
+    .filterCount = static_cast<nfdfiltersize_t>(filters.size())
+  };
+
+  const nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+
+  if (result == NFD_ERROR)
+  {
+    NFD_Quit();
+    throw std::runtime_error("NFD_OpenDialogU8_With failed");
+  }
+
+  if (result == NFD_CANCEL)
+  {
+    NFD_Quit();
+    return false;
+  }
+
+  m_saveFile = std::string(outPath);
+  NFD_FreePathU8(outPath);
+  NFD_Quit();
+
+  return true;
+}
+
+void SaveManager::registerSaveHotkeys()
+{
+  m_ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
+    if (e.action == GLFW_PRESS && m_ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && m_ecs->keyIsPressed(GLFW_KEY_S))
+    {
+      if (m_ecs->keyIsPressed(GLFW_KEY_LEFT_SHIFT))
+      {
+        saveAs();
+      }
+      else
+      {
+        save();
+      }
+    }
+  });
 }
