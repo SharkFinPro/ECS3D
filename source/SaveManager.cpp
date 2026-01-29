@@ -8,22 +8,10 @@
 #include <fstream>
 #include <iostream>
 
-SaveManager::SaveManager(ECS3D* ecs,
-                         std::string saveFile)
-  : m_ecs(ecs), m_saveFile(std::move(saveFile))
+SaveManager::SaveManager(ECS3D* ecs)
+  : m_ecs(ecs)
 {
   registerSaveHotkeys();
-
-  const auto saveData = readSaveDataFile();
-
-  if (saveData.empty())
-  {
-    return;
-  }
-
-  m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
-
-  m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
 }
 
 void SaveManager::save()
@@ -51,6 +39,22 @@ void SaveManager::saveAs()
   {
     save();
   }
+}
+
+void SaveManager::loadSaveFile(const std::string& saveFile)
+{
+  m_saveFile = saveFile;
+
+  const auto saveData = readSaveDataFile();
+
+  if (saveData.empty())
+  {
+    return;
+  }
+
+  m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
+
+  m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
 }
 
 nlohmann::json SaveManager::readSaveDataFile() const

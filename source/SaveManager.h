@@ -7,12 +7,13 @@ class ECS3D;
 
 class SaveManager {
 public:
-  SaveManager(ECS3D* ecs,
-              std::string saveFile);
+  explicit SaveManager(ECS3D* ecs);
 
   void save();
 
   void saveAs();
+
+  void loadSaveFile(const std::string& saveFile);
 
 private:
   ECS3D* m_ecs;

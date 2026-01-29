@@ -13,7 +13,7 @@ class SceneManager;
 
 class ECS3D {
 public:
-  explicit ECS3D(std::string saveFile = "ECSData.json");
+  ECS3D();
 
   [[nodiscard]] bool isActive() const;
 
@@ -26,6 +26,8 @@ public:
   [[nodiscard]] std::shared_ptr<SceneManager> getSceneManager() const;
 
   [[nodiscard]] std::shared_ptr<AssetManager> getAssetManager() const;
+
+  [[nodiscard]] std::shared_ptr<SaveManager> getSaveManager() const;
 
   void logMessage(const std::string& level, const std::string& message);
 
