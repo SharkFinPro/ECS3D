@@ -28,7 +28,7 @@ SaveManager::SaveManager(ECS3D* ecs,
 
 void SaveManager::save()
 {
-  if (m_saveFile.empty() && !chooseSaveFile())
+  if (m_saveFile.empty() && !createSaveFile())
   {
     return;
   }
@@ -47,7 +47,7 @@ void SaveManager::save()
 
 void SaveManager::saveAs()
 {
-  if (chooseSaveFile())
+  if (createSaveFile())
   {
     save();
   }
@@ -94,6 +94,45 @@ bool SaveManager::chooseSaveFile()
   {
     NFD_Quit();
     throw std::runtime_error("NFD_OpenDialogU8_With failed");
+  }
+
+  if (result == NFD_CANCEL)
+  {
+    NFD_Quit();
+    return false;
+  }
+
+  m_saveFile = std::string(outPath);
+  NFD_FreePathU8(outPath);
+  NFD_Quit();
+
+  return true;
+}
+
+bool SaveManager::createSaveFile()
+{
+  if (NFD_Init() != NFD_OKAY)
+  {
+    throw std::runtime_error("NFD_Init failed");
+  }
+
+  nfdu8char_t* outPath = nullptr;
+  const std::vector<nfdu8filteritem_t> filters {
+    { "ECS3D Project Files", "json" }
+  };
+
+  const nfdsavedialogu8args_t args {
+    .filterList = filters.data(),
+    .filterCount = static_cast<nfdfiltersize_t>(filters.size()),
+    .defaultName = "project.json"
+  };
+
+  const nfdresult_t result = NFD_SaveDialogU8_With(&outPath, &args);
+
+  if (result == NFD_ERROR)
+  {
+    NFD_Quit();
+    throw std::runtime_error("NFD_SaveDialogU8_With failed");
   }
 
   if (result == NFD_CANCEL)

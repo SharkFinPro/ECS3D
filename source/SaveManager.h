@@ -23,6 +23,8 @@ private:
 
   bool chooseSaveFile();
 
+  bool createSaveFile();
+
   void registerSaveHotkeys();
 };
 
