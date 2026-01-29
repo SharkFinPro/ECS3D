@@ -28,7 +28,7 @@ private:
 
   [[nodiscard]] bool createSaveFile();
 
-  void registerSaveHotkeys();
+  void registerWindowEvents();
 
   void loadFromSaveFile();
 };

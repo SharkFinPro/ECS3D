@@ -11,7 +11,7 @@
 SaveManager::SaveManager(ECS3D* ecs)
   : m_ecs(ecs)
 {
-  registerSaveHotkeys();
+  registerWindowEvents();
 }
 
 void SaveManager::save()
@@ -164,7 +164,7 @@ bool SaveManager::createSaveFile()
   return true;
 }
 
-void SaveManager::registerSaveHotkeys()
+void SaveManager::registerWindowEvents()
 {
   m_ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
     if (e.action == GLFW_PRESS && m_ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && m_ecs->keyIsPressed(GLFW_KEY_S))
@@ -177,6 +177,13 @@ void SaveManager::registerSaveHotkeys()
       {
         save();
       }
+    }
+  });
+
+  m_ecs->getRenderer()->getWindow()->on<vke::DropEvent>([this](const vke::DropEvent& e) {
+    if (e.paths.size() == 1)
+    {
+      loadSaveFile(e.paths.front());
     }
   });
 }
