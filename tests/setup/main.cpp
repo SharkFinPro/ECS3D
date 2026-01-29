@@ -1,9 +1,9 @@
 #include "source/ECS3D.h"
-#include <iostream>
-#include <random>
-
+#include "source/SaveManager.h"
 #include "source/scenes/SceneManager.h"
 #include "source/scenes/Scene.h"
+#include <iostream>
+#include <random>
 
 constexpr int gridSize = 6;
 constexpr int gridHeight = 15;
@@ -19,7 +19,8 @@ int main()
 {
   try
   {
-    ECS3D ecs("SetupTest.json");
+    ECS3D ecs;
+    ecs.getSaveManager()->loadSaveFile("SetupTest.json");
 
     if (const auto sceneManager = ecs.getSceneManager(); !sceneManager->getCurrentScene())
     {

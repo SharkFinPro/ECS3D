@@ -1,4 +1,5 @@
 #include "source/ECS3D.h"
+#include "source/SaveManager.h"
 #include "source/scenes/SceneManager.h"
 #include "source/scenes/Scene.h"
 #include <iostream>
@@ -14,7 +15,8 @@ int main()
 {
   try
   {
-    ECS3D ecs("FallingBallsTest.json");
+    ECS3D ecs;
+    ecs.getSaveManager()->loadSaveFile("FallingBallsTest.json");
 
     if (const auto sceneManager = ecs.getSceneManager(); !sceneManager->getCurrentScene())
     {

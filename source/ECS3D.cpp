@@ -5,13 +5,22 @@
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/window/Window.h>
 
-ECS3D::ECS3D(std::string saveFile)
+ECS3D::ECS3D()
   : m_previousTime(std::chrono::steady_clock::now()), m_sceneManager(std::make_shared<SceneManager>(this)),
 		m_assetManager(std::make_shared<AssetManager>(this))
 {
   initRenderer();
 
-	m_saveManager = std::make_shared<SaveManager>(this, std::move(saveFile));
+	m_saveManager = std::make_shared<SaveManager>(this);
+}
+
+void ECS3D::reset()
+{
+	m_sceneManager.reset();
+	m_assetManager.reset();
+
+	m_sceneManager = std::make_shared<SceneManager>(this);
+	m_assetManager = std::make_shared<AssetManager>(this);
 }
 
 bool ECS3D::isActive() const
@@ -21,6 +30,8 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
+	displayMenuBar();
+
   const auto currentTime = std::chrono::steady_clock::now();
   const float dt = std::chrono::duration<float>(currentTime - m_previousTime).count();
   m_previousTime = currentTime;
@@ -38,8 +49,6 @@ void ECS3D::update()
 	displayMessageLog();
 
   m_renderer->render();
-
-	m_saveManager->update();
 }
 
 std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const
@@ -60,6 +69,11 @@ std::shared_ptr<SceneManager> ECS3D::getSceneManager() const
 std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
 {
 	return m_assetManager;
+}
+
+std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
+{
+	return m_saveManager;
 }
 
 void ECS3D::logMessage(const std::string& level, const std::string& message)
@@ -120,6 +134,38 @@ void ECS3D::initRenderer()
 	gui->dockBottom("Project Errors");
 	gui->dockBottom("Smoke");
 	gui->dockBottom("Elliptical Dots");
+}
+
+void ECS3D::displayMenuBar() const
+{
+	if (ImGui::BeginMainMenuBar())
+	{
+		m_renderer->getImGuiInstance()->setMenuBarHeight(ImGui::GetWindowSize().y);
+
+		if (ImGui::BeginMenu("File"))
+		{
+			if (ImGui::MenuItem("Open"))
+			{
+				m_saveManager->loadSaveFile();
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Save", "Ctrl+S"))
+			{
+				m_saveManager->save();
+			}
+
+			if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
+			{
+				m_saveManager->saveAs();
+			}
+
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndMainMenuBar();
+	}
 }
 
 void ECS3D::setupImGuiStyle()
