@@ -197,17 +197,22 @@ void SaveManager::loadFromSaveFile()
     return;
   }
 
-  m_ecs->reset();
+  m_ecs->prepareForReset();
 
   try
   {
     m_ecs->getAssetManager()->loadFromJSON(saveData.at("assets"));
 
     m_ecs->getSceneManager()->loadFromJSON(saveData.at("scenes"));
+
+    m_ecs->completeReset();
   } catch (const std::exception& e)
   {
-    std::cerr << e.what() << std::endl;
+    m_ecs->logMessage("Error", e.what());
+    m_ecs->logMessage("Error", "Failed to load save file: " + m_saveFile);
+
     m_saveFile = "";
-    m_ecs->reset();
+
+    m_ecs->cancelReset();
   }
 }
