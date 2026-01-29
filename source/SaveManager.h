@@ -15,6 +15,8 @@ public:
 
   void loadSaveFile(const std::string& saveFile);
 
+  void loadSaveFile();
+
 private:
   ECS3D* m_ecs;
 
@@ -27,6 +29,8 @@ private:
   bool createSaveFile();
 
   void registerSaveHotkeys();
+
+  void loadFromSaveFile() const;
 };
 
 

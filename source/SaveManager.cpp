@@ -45,16 +45,14 @@ void SaveManager::loadSaveFile(const std::string& saveFile)
 {
   m_saveFile = saveFile;
 
-  const auto saveData = readSaveDataFile();
+  loadFromSaveFile();
+}
 
-  if (saveData.empty())
-  {
-    return;
-  }
+void SaveManager::loadSaveFile()
+{
+  chooseSaveFile();
 
-  m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
-
-  m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
+  loadFromSaveFile();
 }
 
 nlohmann::json SaveManager::readSaveDataFile() const
@@ -167,4 +165,18 @@ void SaveManager::registerSaveHotkeys()
       }
     }
   });
+}
+
+void SaveManager::loadFromSaveFile() const
+{
+  const auto saveData = readSaveDataFile();
+
+  if (saveData.empty())
+  {
+    return;
+  }
+
+  m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
+
+  m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
 }
