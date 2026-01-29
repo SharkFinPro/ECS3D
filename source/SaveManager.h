@@ -24,9 +24,9 @@ private:
 
   [[nodiscard]] nlohmann::json readSaveDataFile() const;
 
-  bool chooseSaveFile();
+  [[nodiscard]] bool chooseSaveFile();
 
-  bool createSaveFile();
+  [[nodiscard]] bool createSaveFile();
 
   void registerSaveHotkeys();
 

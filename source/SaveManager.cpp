@@ -50,7 +50,10 @@ void SaveManager::loadSaveFile(const std::string& saveFile)
 
 void SaveManager::loadSaveFile()
 {
-  chooseSaveFile();
+  if (!chooseSaveFile())
+  {
+    return;
+  }
 
   loadFromSaveFile();
 }
@@ -72,7 +75,7 @@ nlohmann::json SaveManager::readSaveDataFile() const
   {
     saveData = nlohmann::json::parse(f);
   }
-  catch (const std::exception& e)
+  catch ([[maybe_unused]] const std::exception& e)
   {
     f.close();
 
