@@ -4,6 +4,11 @@ option(ECS3D_BUILD_TESTS "Enable building tests for ECS3D" OFF)
 
 project(ECS3D)
 
+# Enable Objective-C support on macOS
+if(APPLE)
+  enable_language(OBJC)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 
 if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
