@@ -165,6 +165,11 @@ void ECS3D::displayMenuBar() const
 
 		if (ImGui::BeginMenu("File"))
 		{
+			if (ImGui::MenuItem("New"))
+			{
+				m_saveManager->createNewProject();
+			}
+
 			if (ImGui::MenuItem("Open"))
 			{
 				m_saveManager->loadSaveFile();

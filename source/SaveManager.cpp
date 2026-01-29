@@ -58,6 +58,20 @@ void SaveManager::loadSaveFile()
   loadFromSaveFile();
 }
 
+void SaveManager::createNewProject()
+{
+  m_ecs->prepareForReset();
+
+  if (!createSaveFile())
+  {
+    m_ecs->cancelReset();
+
+    return;
+  }
+
+  m_ecs->completeReset();
+}
+
 nlohmann::json SaveManager::readSaveDataFile() const
 {
   std::ifstream f(m_saveFile);

@@ -17,6 +17,8 @@ public:
 
   void loadSaveFile();
 
+  void createNewProject();
+
 private:
   ECS3D* m_ecs;
 
