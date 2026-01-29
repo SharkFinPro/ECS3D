@@ -176,6 +176,8 @@ void SaveManager::loadFromSaveFile() const
     return;
   }
 
+  m_ecs->reset();
+
   m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
 
   m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);

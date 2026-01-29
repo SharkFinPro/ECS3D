@@ -15,6 +15,8 @@ class ECS3D {
 public:
   ECS3D();
 
+  void reset();
+
   [[nodiscard]] bool isActive() const;
 
   void update();
@@ -47,6 +49,8 @@ private:
   void displayMessageLog();
 
   void initRenderer();
+
+  void displayMenuBar() const;
 
   static void setupImGuiStyle();
 };

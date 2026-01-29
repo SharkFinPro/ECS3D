@@ -14,6 +14,15 @@ ECS3D::ECS3D()
 	m_saveManager = std::make_shared<SaveManager>(this);
 }
 
+void ECS3D::reset()
+{
+	m_sceneManager.reset();
+	m_assetManager.reset();
+
+	m_sceneManager = std::make_shared<SceneManager>(this);
+	m_assetManager = std::make_shared<AssetManager>(this);
+}
+
 bool ECS3D::isActive() const
 {
   return m_renderer->isActive();
@@ -21,6 +30,8 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
+	displayMenuBar();
+
   const auto currentTime = std::chrono::steady_clock::now();
   const float dt = std::chrono::duration<float>(currentTime - m_previousTime).count();
   m_previousTime = currentTime;
@@ -123,6 +134,38 @@ void ECS3D::initRenderer()
 	gui->dockBottom("Project Errors");
 	gui->dockBottom("Smoke");
 	gui->dockBottom("Elliptical Dots");
+}
+
+void ECS3D::displayMenuBar() const
+{
+	if (ImGui::BeginMainMenuBar())
+	{
+		m_renderer->getImGuiInstance()->setMenuBarHeight(ImGui::GetWindowSize().y);
+
+		if (ImGui::BeginMenu("File"))
+		{
+			if (ImGui::MenuItem("Open"))
+			{
+				m_saveManager->loadSaveFile();
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Save", "Ctrl+S"))
+			{
+				m_saveManager->save();
+			}
+
+			if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
+			{
+				m_saveManager->saveAs();
+			}
+
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndMainMenuBar();
+	}
 }
 
 void ECS3D::setupImGuiStyle()
