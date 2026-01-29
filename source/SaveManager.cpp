@@ -66,7 +66,18 @@ nlohmann::json SaveManager::readSaveDataFile() const
     return nlohmann::json{};
   }
 
-  nlohmann::json saveData = nlohmann::json::parse(f);
+  nlohmann::json saveData{};
+
+  try
+  {
+    saveData = nlohmann::json::parse(f);
+  }
+  catch (const std::exception& e)
+  {
+    f.close();
+
+    return nlohmann::json{};
+  }
 
   f.close();
 
