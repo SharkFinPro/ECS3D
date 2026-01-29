@@ -10,16 +10,12 @@ public:
   SaveManager(ECS3D* ecs,
               std::string saveFile);
 
-  void update();
+  void save() const;
 
 private:
   ECS3D* m_ecs;
 
   std::string m_saveFile;
-
-  bool m_wasSaving = false;
-
-  void save() const;
 
   [[nodiscard]] nlohmann::json readSaveDataFile() const;
 };

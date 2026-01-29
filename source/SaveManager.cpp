@@ -3,6 +3,7 @@
 #include "assets/AssetManager.h"
 #include "scenes/SceneManager.h"
 #include <GLFW/glfw3.h>
+#include <VulkanEngine/components/window/Window.h>
 #include <fstream>
 #include <iostream>
 
@@ -20,27 +21,13 @@ SaveManager::SaveManager(ECS3D* ecs,
   m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
 
   m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
-}
 
-void SaveManager::update()
-{
-  const auto shouldSave = m_ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && m_ecs->keyIsPressed(GLFW_KEY_S);
-
-  if (!shouldSave && m_wasSaving)
-  {
-    m_wasSaving = false;
-  }
-
-  if (!shouldSave || m_wasSaving)
-  {
-    return;
-  }
-
-  m_wasSaving = true;
-
-  save();
-
-  std::cout << "Saved data to " << m_saveFile << std::endl;
+  m_ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
+    if (e.action == GLFW_PRESS && m_ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && m_ecs->keyIsPressed(GLFW_KEY_S))
+    {
+      save();
+    }
+  });
 }
 
 void SaveManager::save() const
@@ -53,6 +40,8 @@ void SaveManager::save() const
   std::ofstream outFile(m_saveFile);
   outFile << data.dump(2);
   outFile.close();
+
+  std::cout << "Saved data to " << m_saveFile << std::endl;
 }
 
 nlohmann::json SaveManager::readSaveDataFile() const
