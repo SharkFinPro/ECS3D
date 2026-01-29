@@ -194,22 +194,24 @@ nlohmann::json RigidBody::serialize()
 
 void RigidBody::loadFromJSON(const nlohmann::json& componentData)
 {
+  const auto& velocity = componentData.at("velocity");
   m_velocity.set(glm::vec3(
-    componentData["velocity"][0],
-    componentData["velocity"][1],
-    componentData["velocity"][2]
+    velocity.at(0),
+    velocity.at(1),
+    velocity.at(2)
   ));
 
+  const auto& angularVelocity = componentData.at("angularVelocity");
   m_angularVelocity.set(glm::vec3(
-    componentData["angularVelocity"][0],
-    componentData["angularVelocity"][1],
-    componentData["angularVelocity"][2]
+    angularVelocity.at(0),
+    angularVelocity.at(1),
+    angularVelocity.at(2)
   ));
 
-  m_friction.set(componentData["friction"]);
-  m_doGravity.set(componentData["doGravity"]);
-  m_gravity.set(componentData["gravity"]);
-  m_mass.set(componentData["mass"]);
+  m_friction.set(componentData.at("friction"));
+  m_doGravity.set(componentData.at("doGravity"));
+  m_gravity.set(componentData.at("gravity"));
+  m_mass.set(componentData.at("mass"));
 }
 
 void RigidBody::limitMovement()

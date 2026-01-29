@@ -84,8 +84,8 @@ nlohmann::json Player::serialize()
 
 void Player::loadFromJSON(const nlohmann::json& componentData)
 {
-  m_speed.set(componentData["speed"]);
-  m_jumpHeight.set(componentData["jumpHeight"]);
+  m_speed.set(componentData.at("speed"));
+  m_jumpHeight.set(componentData.at("jumpHeight"));
 }
 
 void Player::handleInput()

@@ -113,11 +113,11 @@ nlohmann::json ModelRenderer::serialize()
 
 void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
 {
-  m_shouldRender = componentData["shouldRender"];
+  m_shouldRender = componentData.at("shouldRender");
 
-  const auto modelUUID = uuids::uuid::from_string(std::string(componentData["modelUUID"]));
-  const auto textureUUID = uuids::uuid::from_string(std::string(componentData["textureUUID"]));
-  const auto specularMapUUID = uuids::uuid::from_string(std::string(componentData["specularMapUUID"]));
+  const auto modelUUID = uuids::uuid::from_string(std::string(componentData.at("modelUUID")));
+  const auto textureUUID = uuids::uuid::from_string(std::string(componentData.at("textureUUID")));
+  const auto specularMapUUID = uuids::uuid::from_string(std::string(componentData.at("specularMapUUID")));
 
   if (modelUUID.has_value())
   {

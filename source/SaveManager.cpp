@@ -192,7 +192,14 @@ void SaveManager::loadFromSaveFile() const
 
   m_ecs->reset();
 
-  m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
+  try
+  {
+    m_ecs->getAssetManager()->loadFromJSON(saveData.at("assets"));
 
-  m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
+    m_ecs->getSceneManager()->loadFromJSON(saveData.at("scenes"));
+  } catch (const std::exception& e)
+  {
+    std::cerr << e.what() << std::endl;
+    m_ecs->reset();
+  }
 }
