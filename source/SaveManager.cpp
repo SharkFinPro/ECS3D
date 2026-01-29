@@ -12,6 +12,8 @@ SaveManager::SaveManager(ECS3D* ecs,
                          std::string saveFile)
   : m_ecs(ecs), m_saveFile(std::move(saveFile))
 {
+  registerSaveHotkeys();
+
   const auto saveData = readSaveDataFile();
 
   if (saveData.empty())
@@ -22,8 +24,6 @@ SaveManager::SaveManager(ECS3D* ecs,
   m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
 
   m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
-
-  registerSaveHotkeys();
 }
 
 void SaveManager::save()
