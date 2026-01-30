@@ -81,7 +81,7 @@ std::shared_ptr<Scene> SceneManager::getCurrentScene() const
 
 void SceneManager::sceneSelector()
 {
-  ImGui::Begin("Scene Selector");
+  ImGui::Begin("Scenes");
 
   if (ImGui::Button("Create New Scene", {ImGui::GetContentRegionAvail().x, 45}))
   {

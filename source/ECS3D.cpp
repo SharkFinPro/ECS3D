@@ -145,7 +145,7 @@ void ECS3D::initRenderer()
 	gui->dockCenter(engineConfig.imGui.sceneViewName.c_str());
 
 	gui->dockLeft("Objects");
-	gui->dockLeft("Scene Selector");
+	gui->dockLeft("Scenes");
 
 	gui->dockRight("Selected Object");
 
