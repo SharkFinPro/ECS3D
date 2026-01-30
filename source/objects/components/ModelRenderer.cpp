@@ -103,9 +103,9 @@ nlohmann::json ModelRenderer::serialize()
   const nlohmann::json data = {
     { "type", "ModelRenderer" },
     { "shouldRender", m_shouldRender },
-    { "modelUUID", uuids::to_string(m_model->getUUID()) },
-    { "textureUUID", uuids::to_string(m_texture->getUUID()) },
-    { "specularMapUUID", uuids::to_string(m_specularMap->getUUID()) }
+    { "modelUUID", m_model ? uuids::to_string(m_model->getUUID()) : "" },
+    { "textureUUID", m_texture ? uuids::to_string(m_texture->getUUID()) : "" },
+    { "specularMapUUID", m_specularMap ? uuids::to_string(m_specularMap->getUUID()) : "" }
   };
 
   return data;
