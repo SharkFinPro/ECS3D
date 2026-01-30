@@ -83,12 +83,14 @@ void SceneManager::sceneSelector()
 {
   ImGui::Begin("Scene Selector");
 
-  if (ImGui::Button("Create New Scene"))
+  if (ImGui::Button("Create New Scene", {ImGui::GetContentRegionAvail().x, 45}))
   {
     createScene();
   }
 
+  ImGui::Spacing();
   ImGui::Separator();
+  ImGui::Spacing();
 
   for (int i = 0; i < m_scenes.size(); ++i)
   {
