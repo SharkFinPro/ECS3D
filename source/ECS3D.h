@@ -52,11 +52,15 @@ private:
 
   std::vector<std::string> m_errorMessages;
 
+  std::string m_sceneViewName;
+
   void displayMessageLog();
 
   void initRenderer();
 
   void displayMenuBar() const;
+
+  void updateDockSpace() const;
 
   static void setupImGuiStyle();
 };

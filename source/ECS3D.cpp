@@ -51,6 +51,8 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
+	updateDockSpace();
+
 	displayMenuBar();
 
   const auto currentTime = std::chrono::steady_clock::now();
@@ -140,21 +142,7 @@ void ECS3D::initRenderer()
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 	setupImGuiStyle();
 
-	const auto gui = m_renderer->getImGuiInstance();
-
-	gui->dockCenter(engineConfig.imGui.sceneViewName.c_str());
-
-	gui->dockLeft("Objects");
-	gui->dockLeft("Scenes");
-
-	gui->dockRight("Selected Object");
-
-	gui->dockTop("Scene Status");
-
-	gui->dockBottom("Assets");
-	gui->dockBottom("Project Errors");
-	gui->dockBottom("Smoke");
-	gui->dockBottom("Elliptical Dots");
+	m_sceneViewName = engineConfig.imGui.sceneViewName;
 }
 
 void ECS3D::displayMenuBar() const
@@ -192,6 +180,31 @@ void ECS3D::displayMenuBar() const
 
 		ImGui::EndMainMenuBar();
 	}
+}
+
+void ECS3D::updateDockSpace() const
+{
+	const auto gui = m_renderer->getImGuiInstance();
+
+	gui->setTopDockPercent(0.09);
+	gui->setBottomDockPercent(0.28);
+
+	gui->setLeftDockPercent(0.2);
+	gui->setRightDockPercent(0.3);
+
+	gui->dockCenter(m_sceneViewName.c_str());
+
+	gui->dockLeft("Objects");
+	gui->dockLeft("Scenes");
+
+	gui->dockRight("Selected Object");
+
+	gui->dockTop("Scene Status");
+
+	gui->dockBottom("Assets");
+	gui->dockBottom("Project Errors");
+	gui->dockBottom("Smoke");
+	gui->dockBottom("Elliptical Dots");
 }
 
 void ECS3D::setupImGuiStyle()
