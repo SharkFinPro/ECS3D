@@ -1,8 +1,8 @@
 #ifndef ASSETMANAGER_H
 #define ASSETMANAGER_H
 
+#include "../ECS3D.h"
 #include <nlohmann/json_fwd.hpp>
-#include <uuid.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -39,9 +39,6 @@ private:
   std::unordered_map<uuids::uuid, std::shared_ptr<Asset>> m_assets;
 
   std::unordered_map<std::string, uuids::uuid> m_loadedPaths;
-
-  std::mt19937 m_rng;
-  uuids::uuid_random_generator m_uuidGenerator;
 };
 
 template<typename T>
@@ -52,7 +49,7 @@ void AssetManager::loadAsset(const std::string& path)
     return;
   }
 
-  const uuids::uuid uuid = m_uuidGenerator();
+  const uuids::uuid uuid = m_ecs->getUUID();
 
   const auto asset = std::make_shared<T>(uuid, path);
   asset->setManager(this);

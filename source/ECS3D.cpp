@@ -6,8 +6,17 @@
 #include <VulkanEngine/components/window/Window.h>
 
 ECS3D::ECS3D()
-  : m_previousTime(std::chrono::steady_clock::now()), m_sceneManager(std::make_shared<SceneManager>(this)),
-		m_assetManager(std::make_shared<AssetManager>(this))
+  : m_previousTime(std::chrono::steady_clock::now()),
+		m_sceneManager(std::make_shared<SceneManager>(this)),
+		m_assetManager(std::make_shared<AssetManager>(this)),
+		m_rng([] {
+			std::random_device rd;
+			auto seed_data = std::array<int, std::mt19937::state_size>{};
+			std::ranges::generate(seed_data, std::ref(rd));
+			std::seed_seq seq(std::begin(seed_data), std::end(seed_data));
+			return std::mt19937(seq);
+		}()),
+		m_uuidGenerator(m_rng)
 {
   initRenderer();
 
@@ -102,6 +111,11 @@ std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 void ECS3D::logMessage(const std::string& level, const std::string& message)
 {
 	m_errorMessages.push_back("[" + level + "] " + message);
+}
+
+uuids::uuid ECS3D::getUUID()
+{
+	return m_uuidGenerator();
 }
 
 void ECS3D::displayMessageLog()
