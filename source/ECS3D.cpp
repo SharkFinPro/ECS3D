@@ -14,13 +14,34 @@ ECS3D::ECS3D()
 	m_saveManager = std::make_shared<SaveManager>(this);
 }
 
-void ECS3D::reset()
+void ECS3D::prepareForReset()
 {
+	m_previousSceneManager = m_sceneManager;
+	m_previousAssetManager = m_assetManager;
+
 	m_sceneManager.reset();
 	m_assetManager.reset();
 
 	m_sceneManager = std::make_shared<SceneManager>(this);
 	m_assetManager = std::make_shared<AssetManager>(this);
+}
+
+void ECS3D::cancelReset()
+{
+	m_sceneManager.reset();
+	m_assetManager.reset();
+
+	m_sceneManager = m_previousSceneManager;
+	m_assetManager = m_previousAssetManager;
+
+	m_previousSceneManager.reset();
+	m_previousAssetManager.reset();
+}
+
+void ECS3D::completeReset()
+{
+	m_previousSceneManager.reset();
+	m_previousAssetManager.reset();
 }
 
 bool ECS3D::isActive() const
@@ -144,6 +165,11 @@ void ECS3D::displayMenuBar() const
 
 		if (ImGui::BeginMenu("File"))
 		{
+			if (ImGui::MenuItem("New"))
+			{
+				m_saveManager->createNewProject();
+			}
+
 			if (ImGui::MenuItem("Open"))
 			{
 				m_saveManager->loadSaveFile();

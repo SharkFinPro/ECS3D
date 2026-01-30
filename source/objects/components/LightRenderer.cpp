@@ -116,7 +116,7 @@ nlohmann::json LightRenderer::serialize()
     { "type", "LightRenderer" },
     { "color", { color.x, color.y, color.z } },
     { "direction", { direction.x, direction.y, direction.z } },
-    { "iSpotlight", m_isSpotLight },
+    { "isSpotlight", m_isSpotLight },
     { "ambient", light->getAmbient() },
     { "diffuse", light->getDiffuse() },
     { "specular", light->getSpecular() },
@@ -128,27 +128,29 @@ nlohmann::json LightRenderer::serialize()
 
 void LightRenderer::loadFromJSON(const nlohmann::json& componentData)
 {
+  const auto& color = componentData.at("color");
   m_spotLight->setColor(glm::vec3(
-    componentData["color"][0],
-    componentData["color"][1],
-    componentData["color"][2]
+    color.at(0),
+    color.at(1),
+    color.at(2)
   ));
 
+  const auto& direction = componentData.at("direction");
   m_spotLight->setDirection(glm::vec3(
-    componentData["direction"][0],
-    componentData["direction"][1],
-    componentData["direction"][2]
+    direction.at(0),
+    direction.at(1),
+    direction.at(2)
   ));
 
-  m_spotLight->setAmbient(componentData["ambient"]);
-  m_spotLight->setDiffuse(componentData["diffuse"]);
-  m_spotLight->setSpecular(componentData["specular"]);
-  m_spotLight->setConeAngle(componentData["coneAngle"]);
+  m_spotLight->setAmbient(componentData.at("ambient"));
+  m_spotLight->setDiffuse(componentData.at("diffuse"));
+  m_spotLight->setSpecular(componentData.at("specular"));
+  m_spotLight->setConeAngle(componentData.at("coneAngle"));
 
   m_pointLight->setColor(m_spotLight->getColor());
   m_pointLight->setAmbient(m_spotLight->getAmbient());
   m_pointLight->setDiffuse(m_spotLight->getDiffuse());
   m_pointLight->setSpecular(m_spotLight->getSpecular());
 
-  m_isSpotLight = componentData["iSpotlight"];
+  m_isSpotLight = componentData.at("isSpotlight");
 }

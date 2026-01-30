@@ -11,7 +11,7 @@
 SaveManager::SaveManager(ECS3D* ecs)
   : m_ecs(ecs)
 {
-  registerSaveHotkeys();
+  registerWindowEvents();
 }
 
 void SaveManager::save()
@@ -56,6 +56,20 @@ void SaveManager::loadSaveFile()
   }
 
   loadFromSaveFile();
+}
+
+void SaveManager::createNewProject()
+{
+  m_ecs->prepareForReset();
+
+  if (!createSaveFile())
+  {
+    m_ecs->cancelReset();
+
+    return;
+  }
+
+  m_ecs->completeReset();
 }
 
 nlohmann::json SaveManager::readSaveDataFile() const
@@ -164,7 +178,7 @@ bool SaveManager::createSaveFile()
   return true;
 }
 
-void SaveManager::registerSaveHotkeys()
+void SaveManager::registerWindowEvents()
 {
   m_ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
     if (e.action == GLFW_PRESS && m_ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && m_ecs->keyIsPressed(GLFW_KEY_S))
@@ -179,9 +193,16 @@ void SaveManager::registerSaveHotkeys()
       }
     }
   });
+
+  m_ecs->getRenderer()->getWindow()->on<vke::DropEvent>([this](const vke::DropEvent& e) {
+    if (e.paths.size() == 1)
+    {
+      loadSaveFile(e.paths.front());
+    }
+  });
 }
 
-void SaveManager::loadFromSaveFile() const
+void SaveManager::loadFromSaveFile()
 {
   const auto saveData = readSaveDataFile();
 
@@ -190,9 +211,22 @@ void SaveManager::loadFromSaveFile() const
     return;
   }
 
-  m_ecs->reset();
+  m_ecs->prepareForReset();
 
-  m_ecs->getAssetManager()->loadFromJSON(saveData["assets"]);
+  try
+  {
+    m_ecs->getAssetManager()->loadFromJSON(saveData.at("assets"));
 
-  m_ecs->getSceneManager()->loadFromJSON(saveData["scenes"]);
+    m_ecs->getSceneManager()->loadFromJSON(saveData.at("scenes"));
+
+    m_ecs->completeReset();
+  } catch (const std::exception& e)
+  {
+    m_ecs->logMessage("Error", e.what());
+    m_ecs->logMessage("Error", "Failed to load save file: " + m_saveFile);
+
+    m_saveFile = "";
+
+    m_ecs->cancelReset();
+  }
 }

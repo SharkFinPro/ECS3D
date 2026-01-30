@@ -17,6 +17,8 @@ public:
 
   void loadSaveFile();
 
+  void createNewProject();
+
 private:
   ECS3D* m_ecs;
 
@@ -28,9 +30,9 @@ private:
 
   [[nodiscard]] bool createSaveFile();
 
-  void registerSaveHotkeys();
+  void registerWindowEvents();
 
-  void loadFromSaveFile() const;
+  void loadFromSaveFile();
 };
 
 

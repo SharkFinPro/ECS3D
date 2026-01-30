@@ -140,7 +140,11 @@ nlohmann::json Transform::serialize()
 
 void Transform::loadFromJSON(const nlohmann::json& componentData)
 {
-  m_position.set(glm::vec3(componentData["position"][0], componentData["position"][1], componentData["position"][2]));
-  m_scale.set(glm::vec3(componentData["scale"][0], componentData["scale"][1], componentData["scale"][2]));
-  m_rotation.set(glm::vec3(componentData["rotation"][0], componentData["rotation"][1], componentData["rotation"][2]));
+  const auto& position = componentData.at("position");
+  const auto& rotation = componentData.at("rotation");
+  const auto& scale = componentData.at("scale");
+  
+  m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
+  m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
+  m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
 }

@@ -15,7 +15,11 @@ class ECS3D {
 public:
   ECS3D();
 
-  void reset();
+  void prepareForReset();
+
+  void cancelReset();
+
+  void completeReset();
 
   [[nodiscard]] bool isActive() const;
 
@@ -39,8 +43,10 @@ private:
   std::chrono::time_point<std::chrono::steady_clock> m_previousTime;
 
   std::shared_ptr<SceneManager> m_sceneManager;
+  std::shared_ptr<SceneManager> m_previousSceneManager = nullptr;
 
   std::shared_ptr<AssetManager> m_assetManager;
+  std::shared_ptr<AssetManager> m_previousAssetManager = nullptr;
 
   std::shared_ptr<SaveManager> m_saveManager;
 
