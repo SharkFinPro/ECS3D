@@ -94,9 +94,17 @@ void SceneManager::sceneSelector()
 
   for (int i = 0; i < m_scenes.size(); ++i)
   {
-    if (ImGui::Selectable(("Scene " + std::to_string(i + 1)).c_str(), m_currentScene == m_scenes[i]))
+    if (ImGui::TreeNodeEx(("Scene " + std::to_string(i + 1)).c_str(),
+                          ImGuiTreeNodeFlags_Leaf |
+                          (m_currentScene == m_scenes[i] ? ImGuiTreeNodeFlags_Selected : 0) |
+                          ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth))
     {
-      loadScene(m_scenes[i]);
+      if (ImGui::IsItemClicked())
+      {
+        loadScene(m_scenes[i]);
+      }
+
+      ImGui::TreePop();
     }
   }
 
