@@ -1,6 +1,7 @@
 #ifndef SCENE_H
 #define SCENE_H
 
+#include "../ECS3D.h"
 #include <glm/vec3.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <memory>
@@ -18,7 +19,8 @@ struct TransformData {
 
 class Scene {
 public:
-  explicit Scene(SceneManager* sceneManager);
+  Scene(SceneManager* sceneManager,
+        std::string name);
 
   void load() const;
 
@@ -38,12 +40,18 @@ public:
 
   void loadFromJSON(const nlohmann::json& sceneData) const;
 
+  [[nodiscard]] std::string getName() const;
+
 private:
   SceneManager* m_sceneManager;
 
   std::shared_ptr<AssetManager> m_assetManager;
 
   std::shared_ptr<ObjectManager> m_objectManager;
+
+  uuids::uuid m_uuid;
+
+  std::string m_name;
 
   [[nodiscard]] std::shared_ptr<Component> loadComponentFromJSON(const nlohmann::json& componentData) const;
 };

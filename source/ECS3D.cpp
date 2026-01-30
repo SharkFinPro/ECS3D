@@ -113,7 +113,7 @@ void ECS3D::logMessage(const std::string& level, const std::string& message)
 	m_errorMessages.push_back("[" + level + "] " + message);
 }
 
-uuids::uuid ECS3D::getUUID()
+uuids::uuid ECS3D::createUUID()
 {
 	return m_uuidGenerator();
 }

@@ -11,7 +11,7 @@ SceneManager::SceneManager(ECS3D* ecs)
 
 std::shared_ptr<Scene> SceneManager::createScene()
 {
-  auto scene = std::make_shared<Scene>(this);
+  auto scene = std::make_shared<Scene>(this, "Scene " + std::to_string(m_scenes.size() + 1));
 
   m_scenes.push_back(scene);
 
@@ -92,16 +92,16 @@ void SceneManager::sceneSelector()
   ImGui::Separator();
   ImGui::Spacing();
 
-  for (int i = 0; i < m_scenes.size(); ++i)
+  for (const auto& scene : m_scenes)
   {
-    if (ImGui::TreeNodeEx(("Scene " + std::to_string(i + 1)).c_str(),
+    if (ImGui::TreeNodeEx(scene->getName().c_str(),
                           ImGuiTreeNodeFlags_Leaf |
-                          (m_currentScene == m_scenes[i] ? ImGuiTreeNodeFlags_Selected : 0) |
+                          (m_currentScene == scene ? ImGuiTreeNodeFlags_Selected : 0) |
                           ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth))
     {
       if (ImGui::IsItemClicked())
       {
-        loadScene(m_scenes[i]);
+        loadScene(scene);
       }
 
       ImGui::TreePop();

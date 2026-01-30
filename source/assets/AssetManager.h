@@ -49,7 +49,7 @@ void AssetManager::loadAsset(const std::string& path)
     return;
   }
 
-  const uuids::uuid uuid = m_ecs->getUUID();
+  const uuids::uuid uuid = m_ecs->createUUID();
 
   const auto asset = std::make_shared<T>(uuid, path);
   asset->setManager(this);

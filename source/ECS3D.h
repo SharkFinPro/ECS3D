@@ -38,7 +38,7 @@ public:
 
   void logMessage(const std::string& level, const std::string& message);
 
-  [[nodiscard]] uuids::uuid getUUID();
+  [[nodiscard]] uuids::uuid createUUID();
 
 private:
   std::shared_ptr<vke::VulkanEngine> m_renderer;
