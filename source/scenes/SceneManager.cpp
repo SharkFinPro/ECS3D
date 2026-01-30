@@ -82,6 +82,14 @@ std::shared_ptr<Scene> SceneManager::getCurrentScene() const
 void SceneManager::sceneSelector()
 {
   ImGui::Begin("Scene Selector");
+
+  if (ImGui::Button("Create New Scene"))
+  {
+    createScene();
+  }
+
+  ImGui::Separator();
+
   for (int i = 0; i < m_scenes.size(); ++i)
   {
     if (ImGui::Selectable(("Scene " + std::to_string(i + 1)).c_str(), m_currentScene == m_scenes[i]))
@@ -89,5 +97,6 @@ void SceneManager::sceneSelector()
       loadScene(m_scenes[i]);
     }
   }
+
   ImGui::End();
 }
