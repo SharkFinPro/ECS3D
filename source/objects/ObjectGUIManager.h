@@ -48,6 +48,8 @@ private:
 
   void displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node);
 
+  void displayDeleteObjectButton(const std::shared_ptr<Object>& object) const;
+
   void displayObjectGui(const std::shared_ptr<ObjectUINode>& node);
 
   void displayObjectListGui();
