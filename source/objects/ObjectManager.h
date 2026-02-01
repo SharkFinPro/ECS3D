@@ -38,10 +38,14 @@ public:
 
   [[nodiscard]] nlohmann::json serialize() const;
 
+  void removeObject(const std::shared_ptr<Object>& object);
+
 private:
   ECS3D* m_ecs = nullptr;
 
   std::vector<std::shared_ptr<Object>> m_objects;
+
+  std::vector<std::shared_ptr<Object>> m_objectsToRemove;
 
   std::shared_ptr<CollisionManager> m_collisionManager;
 
@@ -56,6 +60,8 @@ private:
   void fixedUpdate(float dt);
 
   void displaySceneStatusGui();
+
+  void deleteObjectsMarkedForDeletion();
 };
 
 

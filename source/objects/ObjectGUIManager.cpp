@@ -17,6 +17,8 @@ void ObjectGUIManager::update()
 {
   displayObjectListGui();
 
+  deleteUINodesToRemove();
+
   reorderObjectGui();
 
   m_mouseWasPressed = m_objectManager->getECS()->getRenderer()->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
@@ -132,6 +134,27 @@ void ObjectGUIManager::reorderObjectGui()
   m_objectUINodesSetForReassignment.clear();
 }
 
+void ObjectGUIManager::deleteUINodesToRemove()
+{
+  if (m_objectUINodesToRemove.empty())
+  {
+    return;
+  }
+
+  for (const auto& node : m_objectUINodesToRemove)
+  {
+    for (const auto& child : node->children)
+    {
+      child->newParent = node->parent;
+      m_objectUINodesSetForReassignment.push_back(child);
+    }
+
+    std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
+  }
+
+  m_objectUINodesToRemove.clear();
+}
+
 void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
 {
   if (ImGui::BeginDragDropTarget())
@@ -162,7 +185,7 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
   const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 4.0f;
   const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
 
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth * 2.0f - 5.0f);
 
   if (ImGui::Button("+", {buttonWidth, 0}))
   {
@@ -172,6 +195,52 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
     addObject(newObject, node);
     m_objectManager->addObject(newObject);
     m_selectedObject = newObject;
+  }
+}
+
+void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<ObjectUINode>& node)
+{
+  ImGui::SameLine();
+
+  const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+
+  if (ImGui::Button("-", {buttonWidth, 0}))
+  {
+    ImGui::OpenPopup("Delete Object?");
+  }
+
+  if (ImGui::BeginPopupModal("Delete Object?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    ImGui::Text("Are you sure you want to delete");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", node->object->getName().c_str());
+    ImGui::SameLine();
+    ImGui::Text("?");
+
+    ImGui::Text("This action cannot be undone.");
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Yes", ImVec2(120, 0)))
+    {
+      m_objectManager->removeObject(node->object);
+
+      m_objectUINodesToRemove.push_back(node);
+
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("No", ImVec2(120, 0)))
+    {
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
   }
 }
 
@@ -212,6 +281,8 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
     const bool hasChildren = !node->children.empty();
 
     displayCreateObjectChildButton(node);
+
+    displayDeleteObjectButton(node);
 
     if (hasChildren)
     {

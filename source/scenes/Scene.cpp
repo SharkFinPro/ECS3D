@@ -124,65 +124,11 @@ void Scene::loadFromJSON(const nlohmann::json& sceneData) const
 {
   for (const auto& objectData : sceneData["objects"])
   {
-    const auto object = std::make_shared<Object>(objectData["name"]);
-    object->setManager(m_objectManager.get());
-
-    for (const auto& componentData : objectData["components"])
-    {
-      const auto component = loadComponentFromJSON(componentData);
-      object->addComponent(component);
-      component->loadFromJSON(componentData);
-    }
-
-    m_objectManager->addObject(object);
+    m_objectManager->addObject(std::make_shared<Object>(objectData, m_objectManager.get()));
   }
 }
 
 std::string Scene::getName() const
 {
   return m_name;
-}
-
-std::shared_ptr<Component> Scene::loadComponentFromJSON(const nlohmann::json& componentData) const
-{
-  std::shared_ptr<Component> component = nullptr;
-
-  if (componentData["type"] == "Collider")
-  {
-    if (componentData["subType"] == "Box")
-    {
-      component = std::make_shared<BoxCollider>();
-    }
-    else if (componentData["subType"] == "Sphere")
-    {
-      component = std::make_shared<SphereCollider>();
-    }
-  }
-  else if (componentData["type"] == "LightRenderer")
-  {
-    component = std::make_shared<LightRenderer>(m_sceneManager->getECS()->getRenderer());
-  }
-  else if (componentData["type"] == "ModelRenderer")
-  {
-    component = std::make_shared<ModelRenderer>(m_sceneManager->getECS()->getRenderer());
-  }
-  else if (componentData["type"] == "Player")
-  {
-    component = std::make_shared<Player>();
-  }
-  else if (componentData["type"] == "RigidBody")
-  {
-    component = std::make_shared<RigidBody>();
-  }
-  else if (componentData["type"] == "Transform")
-  {
-    component = std::make_shared<Transform>();
-  }
-
-  if (!component)
-  {
-    throw std::runtime_error("Unknown component type: " + std::string(componentData["type"]));
-  }
-
-  return component;
 }

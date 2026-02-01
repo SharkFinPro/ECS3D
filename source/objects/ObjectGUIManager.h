@@ -30,6 +30,7 @@ private:
 
   std::vector<std::shared_ptr<ObjectUINode>> m_objectUINodes;
   std::vector<std::shared_ptr<ObjectUINode>> m_objectUINodesSetForReassignment;
+  std::vector<std::shared_ptr<ObjectUINode>> m_objectUINodesToRemove;
 
   std::shared_ptr<Object> m_selectedObject;
 
@@ -44,9 +45,13 @@ private:
 
   void reorderObjectGui();
 
+  void deleteUINodesToRemove();
+
   void displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node);
 
   void displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node);
+
+  void displayDeleteObjectButton(const std::shared_ptr<ObjectUINode>& node);
 
   void displayObjectGui(const std::shared_ptr<ObjectUINode>& node);
 

@@ -16,6 +16,8 @@ void ObjectManager::update(const float dt)
 
   m_objectGUIManager->update();
 
+  deleteObjectsMarkedForDeletion();
+
   fixedUpdate(dt);
   variableUpdate(dt);
 
@@ -93,6 +95,11 @@ nlohmann::json ObjectManager::serialize() const
   return data;
 }
 
+void ObjectManager::removeObject(const std::shared_ptr<Object>& object)
+{
+  m_objectsToRemove.push_back(object);
+}
+
 void ObjectManager::variableUpdate(const float dt) const
 {
   for (const auto& object : m_objects)
@@ -163,4 +170,19 @@ void ObjectManager::displaySceneStatusGui()
   }
 
   ImGui::End();
+}
+
+void ObjectManager::deleteObjectsMarkedForDeletion()
+{
+  if (m_objectsToRemove.empty())
+  {
+    return;
+  }
+
+  for (const auto& object : m_objectsToRemove)
+  {
+    std::erase(m_objects, object);
+  }
+
+  m_objectsToRemove.clear();
 }
