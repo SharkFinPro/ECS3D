@@ -40,6 +40,8 @@ private:
   void displayRemoveSceneButton(const std::shared_ptr<Scene>& scene);
 
   void deleteScenesToRemove();
+
+  [[nodiscard]] uint32_t findValidSceneIndex() const;
 };
 
 

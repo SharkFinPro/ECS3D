@@ -11,7 +11,7 @@ SceneManager::SceneManager(ECS3D* ecs)
 
 std::shared_ptr<Scene> SceneManager::createScene()
 {
-  auto scene = std::make_shared<Scene>(this, "Scene " + std::to_string(m_scenes.size() + 1));
+  auto scene = std::make_shared<Scene>(this, "Scene " + std::to_string(findValidSceneIndex()));
 
   m_scenes.push_back(scene);
 
@@ -148,4 +148,27 @@ void SceneManager::deleteScenesToRemove()
   }
 
   m_scenesToRemove.clear();
+}
+
+uint32_t SceneManager::findValidSceneIndex() const
+{
+  uint32_t sceneIndex = m_scenes.size();
+
+  bool validIndex = false;
+  while (!validIndex)
+  {
+    validIndex = true;
+    sceneIndex++;
+
+    for (const auto& scene : m_scenes)
+    {
+      if (scene->getName() == "Scene " + std::to_string(sceneIndex))
+      {
+        validIndex = false;
+        break;
+      }
+    }
+  }
+
+  return sceneIndex;
 }
