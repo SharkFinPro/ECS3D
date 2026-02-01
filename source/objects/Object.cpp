@@ -13,13 +13,9 @@
 #include <nlohmann/json.hpp>
 #include <utility>
 
-constexpr int MAX_CHARACTERS = 30;
-
 Object::Object(std::string name)
   : m_name(std::move(name))
-{
-  m_name.resize(MAX_CHARACTERS);
-}
+{}
 
 Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)
   : m_name(std::move(name))
@@ -28,6 +24,13 @@ Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::s
   {
     addComponent(component);
   }
+}
+
+Object::Object(const nlohmann::json& objectData,
+               ObjectManager* manager)
+  : m_manager(manager)
+{
+  loadFromJSON(objectData);
 }
 
 void Object::setParent(const std::shared_ptr<Object>& parent)
@@ -40,7 +43,8 @@ std::shared_ptr<Object> Object::getParent() const
   return m_parent;
 }
 
-void Object::addComponent(const std::shared_ptr<Component>& component, const bool setOwner)
+void Object::addComponent(const std::shared_ptr<Component>& component,
+                          const bool setOwner)
 {
   if (setOwner)
   {
@@ -199,7 +203,8 @@ nlohmann::json Object::serialize()
 
   nlohmann::json data = {
     { "name", cleanName },
-    { "components", nlohmann::json::array() }
+    { "components", nlohmann::json::array() },
+    { "uuid", uuids::to_string(m_uuid) }
   };
 
   for (const auto& [_, component] : m_components)
@@ -228,4 +233,61 @@ std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
   }
 
   return component->second;
+}
+
+void Object::loadFromJSON(const nlohmann::json& objectData)
+{
+  m_uuid = uuids::uuid::from_string(std::string(objectData.at("uuid"))).value();
+  m_name = objectData.at("name");
+
+  for (const auto& componentData : objectData["components"])
+  {
+    const auto component = loadComponentFromJSON(componentData);
+    addComponent(component);
+    component->loadFromJSON(componentData);
+  }
+}
+
+std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& componentData) const
+{
+  std::shared_ptr<Component> component = nullptr;
+
+  if (componentData["type"] == "Collider")
+  {
+    if (componentData["subType"] == "Box")
+    {
+      component = std::make_shared<BoxCollider>();
+    }
+    else if (componentData["subType"] == "Sphere")
+    {
+      component = std::make_shared<SphereCollider>();
+    }
+  }
+  else if (componentData["type"] == "LightRenderer")
+  {
+    component = std::make_shared<LightRenderer>(m_manager->getECS()->getRenderer());
+  }
+  else if (componentData["type"] == "ModelRenderer")
+  {
+    component = std::make_shared<ModelRenderer>(m_manager->getECS()->getRenderer());
+  }
+  else if (componentData["type"] == "Player")
+  {
+    component = std::make_shared<Player>();
+  }
+  else if (componentData["type"] == "RigidBody")
+  {
+    component = std::make_shared<RigidBody>();
+  }
+  else if (componentData["type"] == "Transform")
+  {
+    component = std::make_shared<Transform>();
+  }
+
+  if (!component)
+  {
+    throw std::runtime_error("Unknown component type: " + std::string(componentData["type"]));
+  }
+
+  return component;
 }

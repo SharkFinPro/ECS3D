@@ -52,8 +52,6 @@ private:
   uuids::uuid m_uuid;
 
   std::string m_name;
-
-  [[nodiscard]] std::shared_ptr<Component> loadComponentFromJSON(const nlohmann::json& componentData) const;
 };
 
 
