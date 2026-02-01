@@ -17,6 +17,8 @@ void ObjectGUIManager::update()
 {
   displayObjectListGui();
 
+  deleteUINodesToRemove();
+
   reorderObjectGui();
 
   m_mouseWasPressed = m_objectManager->getECS()->getRenderer()->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
@@ -132,6 +134,27 @@ void ObjectGUIManager::reorderObjectGui()
   m_objectUINodesSetForReassignment.clear();
 }
 
+void ObjectGUIManager::deleteUINodesToRemove()
+{
+  if (m_objectUINodesToRemove.empty())
+  {
+    return;
+  }
+
+  for (const auto& node : m_objectUINodesToRemove)
+  {
+    for (const auto& child : node->children)
+    {
+      child->newParent = node->parent;
+      m_objectUINodesSetForReassignment.push_back(child);
+    }
+
+    std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
+  }
+
+  m_objectUINodesToRemove.clear();
+}
+
 void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
 {
   if (ImGui::BeginDragDropTarget())
@@ -175,7 +198,7 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
   }
 }
 
-void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<Object>& object) const
+void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<ObjectUINode>& node)
 {
   ImGui::SameLine();
 
@@ -193,7 +216,7 @@ void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<Object>& 
   {
     ImGui::Text("Are you sure you want to delete");
     ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", object->getName().c_str());
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", node->object->getName().c_str());
     ImGui::SameLine();
     ImGui::Text("?");
 
@@ -203,7 +226,10 @@ void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<Object>& 
 
     if (ImGui::Button("Yes", ImVec2(120, 0)))
     {
-      m_objectManager->removeObject(object);
+      m_objectManager->removeObject(node->object);
+
+      m_objectUINodesToRemove.push_back(node);
+
       ImGui::CloseCurrentPopup();
     }
 
@@ -256,7 +282,7 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
 
     displayCreateObjectChildButton(node);
 
-    displayDeleteObjectButton(node->object);
+    displayDeleteObjectButton(node);
 
     if (hasChildren)
     {
