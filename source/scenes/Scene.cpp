@@ -10,9 +10,10 @@
 #include "../objects/components/LightRenderer.h"
 #include <nlohmann/json.hpp>
 
-Scene::Scene(SceneManager* sceneManager)
+Scene::Scene(SceneManager* sceneManager,
+             std::string name)
   : m_sceneManager(sceneManager), m_assetManager(sceneManager->getECS()->getAssetManager()),
-    m_objectManager(std::make_shared<ObjectManager>())
+    m_objectManager(std::make_shared<ObjectManager>()), m_name(std::move(name)), m_uuid(m_sceneManager->getECS()->createUUID())
 {
   m_objectManager->setECS(sceneManager->getECS());
 
@@ -111,8 +112,9 @@ nlohmann::json Scene::serialize() const
 {
   const auto serializedObjects = m_objectManager->serialize();
   nlohmann::json data = {
-    { "name", "scene" },
-    { "objects", serializedObjects["objects"] }
+    { "name", m_name },
+    { "objects", serializedObjects["objects"] },
+    { "uuid", uuids::to_string(m_uuid) }
   };
 
   return data;
@@ -134,6 +136,11 @@ void Scene::loadFromJSON(const nlohmann::json& sceneData) const
 
     m_objectManager->addObject(object);
   }
+}
+
+std::string Scene::getName() const
+{
+  return m_name;
 }
 
 std::shared_ptr<Component> Scene::loadComponentFromJSON(const nlohmann::json& componentData) const

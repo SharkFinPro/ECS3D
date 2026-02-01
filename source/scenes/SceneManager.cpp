@@ -11,7 +11,7 @@ SceneManager::SceneManager(ECS3D* ecs)
 
 std::shared_ptr<Scene> SceneManager::createScene()
 {
-  auto scene = std::make_shared<Scene>(this);
+  auto scene = std::make_shared<Scene>(this, "Scene " + std::to_string(findValidSceneIndex()));
 
   m_scenes.push_back(scene);
 
@@ -43,6 +43,8 @@ ECS3D* SceneManager::getECS() const
 void SceneManager::update(const float dt)
 {
   sceneSelector();
+
+  deleteScenesToRemove();
 
   if (!m_currentScene)
   {
@@ -81,13 +83,120 @@ std::shared_ptr<Scene> SceneManager::getCurrentScene() const
 
 void SceneManager::sceneSelector()
 {
-  ImGui::Begin("Scene Selector");
-  for (int i = 0; i < m_scenes.size(); ++i)
+  ImGui::Begin("Scenes");
+
+  if (ImGui::Button("Create New Scene", {ImGui::GetContentRegionAvail().x, 45}))
   {
-    if (ImGui::Selectable(("Scene " + std::to_string(i + 1)).c_str(), m_currentScene == m_scenes[i]))
+    createScene();
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  for (const auto& scene : m_scenes)
+  {
+    if (ImGui::TreeNodeEx(scene->getName().c_str(),
+                          ImGuiTreeNodeFlags_Leaf |
+                          (m_currentScene == scene ? ImGuiTreeNodeFlags_Selected : 0) |
+                          ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap))
     {
-      loadScene(m_scenes[i]);
+      if (ImGui::IsItemClicked())
+      {
+        loadScene(scene);
+      }
+
+      displayRemoveSceneButton(scene);
+
+      ImGui::TreePop();
     }
   }
+
   ImGui::End();
+}
+
+void SceneManager::displayRemoveSceneButton(const std::shared_ptr<Scene>& scene)
+{
+  ImGui::SameLine();
+
+  const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+
+  if (ImGui::Button("-", {buttonWidth, 0}))
+  {
+    ImGui::OpenPopup("Delete Scene?");
+  }
+
+  if (ImGui::BeginPopupModal("Delete Scene?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    ImGui::Text("Are you sure you want to delete");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", scene->getName().c_str());
+    ImGui::SameLine();
+    ImGui::Text("?");
+
+    ImGui::Text("This action cannot be undone.");
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Yes", ImVec2(120, 0)))
+    {
+      m_scenesToRemove.push_back(scene);
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("No", ImVec2(120, 0)))
+    {
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
+}
+
+void SceneManager::deleteScenesToRemove()
+{
+  if (m_scenesToRemove.empty())
+  {
+    return;
+  }
+
+  for (const auto& scene : m_scenesToRemove)
+  {
+    if (scene == m_currentScene)
+    {
+      m_currentScene = nullptr;
+    }
+
+    std::erase(m_scenes, scene);
+  }
+
+  m_scenesToRemove.clear();
+}
+
+uint32_t SceneManager::findValidSceneIndex() const
+{
+  uint32_t sceneIndex = m_scenes.size();
+
+  bool validIndex = false;
+  while (!validIndex)
+  {
+    validIndex = true;
+    sceneIndex++;
+
+    for (const auto& scene : m_scenes)
+    {
+      if (scene->getName() == "Scene " + std::to_string(sceneIndex))
+      {
+        validIndex = false;
+        break;
+      }
+    }
+  }
+
+  return sceneIndex;
 }

@@ -1,11 +1,12 @@
 #ifndef ECS3D_H
 #define ECS3D_H
 
+#include <uuid.h>
+#include <VulkanEngine/VulkanEngine.h>
 #include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
-#include <VulkanEngine/VulkanEngine.h>
 
 class AssetManager;
 class SaveManager;
@@ -37,6 +38,8 @@ public:
 
   void logMessage(const std::string& level, const std::string& message);
 
+  [[nodiscard]] uuids::uuid createUUID();
+
 private:
   std::shared_ptr<vke::VulkanEngine> m_renderer;
 
@@ -52,11 +55,18 @@ private:
 
   std::vector<std::string> m_errorMessages;
 
+  std::string m_sceneViewName;
+
+  std::mt19937 m_rng;
+  uuids::uuid_random_generator m_uuidGenerator;
+
   void displayMessageLog();
 
   void initRenderer();
 
   void displayMenuBar() const;
+
+  void updateDockSpace() const;
 
   static void setupImGuiStyle();
 };

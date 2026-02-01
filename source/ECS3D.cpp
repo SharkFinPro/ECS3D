@@ -6,8 +6,17 @@
 #include <VulkanEngine/components/window/Window.h>
 
 ECS3D::ECS3D()
-  : m_previousTime(std::chrono::steady_clock::now()), m_sceneManager(std::make_shared<SceneManager>(this)),
-		m_assetManager(std::make_shared<AssetManager>(this))
+  : m_previousTime(std::chrono::steady_clock::now()),
+		m_sceneManager(std::make_shared<SceneManager>(this)),
+		m_assetManager(std::make_shared<AssetManager>(this)),
+		m_rng([] {
+			std::random_device rd;
+			auto seed_data = std::array<int, std::mt19937::state_size>{};
+			std::ranges::generate(seed_data, std::ref(rd));
+			std::seed_seq seq(std::begin(seed_data), std::end(seed_data));
+			return std::mt19937(seq);
+		}()),
+		m_uuidGenerator(m_rng)
 {
   initRenderer();
 
@@ -51,6 +60,8 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
+	updateDockSpace();
+
 	displayMenuBar();
 
   const auto currentTime = std::chrono::steady_clock::now();
@@ -102,6 +113,11 @@ void ECS3D::logMessage(const std::string& level, const std::string& message)
 	m_errorMessages.push_back("[" + level + "] " + message);
 }
 
+uuids::uuid ECS3D::createUUID()
+{
+	return m_uuidGenerator();
+}
+
 void ECS3D::displayMessageLog()
 {
 	ImGui::Begin("Project Errors");
@@ -140,21 +156,7 @@ void ECS3D::initRenderer()
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 	setupImGuiStyle();
 
-	const auto gui = m_renderer->getImGuiInstance();
-
-	gui->dockCenter(engineConfig.imGui.sceneViewName.c_str());
-
-	gui->dockLeft("Objects");
-	gui->dockLeft("Scene Selector");
-
-	gui->dockRight("Selected Object");
-
-	gui->dockTop("Scene Status");
-
-	gui->dockBottom("Assets");
-	gui->dockBottom("Project Errors");
-	gui->dockBottom("Smoke");
-	gui->dockBottom("Elliptical Dots");
+	m_sceneViewName = engineConfig.imGui.sceneViewName;
 }
 
 void ECS3D::displayMenuBar() const
@@ -192,6 +194,31 @@ void ECS3D::displayMenuBar() const
 
 		ImGui::EndMainMenuBar();
 	}
+}
+
+void ECS3D::updateDockSpace() const
+{
+	const auto gui = m_renderer->getImGuiInstance();
+
+	gui->setTopDockPercent(0.09);
+	gui->setBottomDockPercent(0.28);
+
+	gui->setLeftDockPercent(0.2);
+	gui->setRightDockPercent(0.3);
+
+	gui->dockCenter(m_sceneViewName.c_str());
+
+	gui->dockLeft("Objects");
+	gui->dockLeft("Scenes");
+
+	gui->dockRight("Selected Object");
+
+	gui->dockTop("Scene Status");
+
+	gui->dockBottom("Assets");
+	gui->dockBottom("Project Errors");
+	gui->dockBottom("Smoke");
+	gui->dockBottom("Elliptical Dots");
 }
 
 void ECS3D::setupImGuiStyle()

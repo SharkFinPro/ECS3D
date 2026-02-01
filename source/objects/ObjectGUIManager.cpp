@@ -223,17 +223,6 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
 
     ImGui::TreePop();
   }
-  else
-  {
-    if (ImGui::IsItemClicked())
-    {
-      m_selectedObject = node->object;
-    }
-
-    displayObjectDragDrop(node);
-
-    displayCreateObjectChildButton(node);
-  }
 
   ImGui::PopID();
 }
