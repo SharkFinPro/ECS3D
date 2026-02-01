@@ -38,7 +38,7 @@ public:
 
   [[nodiscard]] nlohmann::json serialize() const;
 
-  void loadFromJSON(const nlohmann::json& sceneData) const;
+  void loadFromJSON(const nlohmann::json& sceneData);
 
   [[nodiscard]] std::string getName() const;
 
