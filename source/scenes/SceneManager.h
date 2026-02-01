@@ -31,9 +31,15 @@ private:
 
   std::vector<std::shared_ptr<Scene>> m_scenes;
 
+  std::vector<std::shared_ptr<Scene>> m_scenesToRemove;
+
   std::shared_ptr<Scene> m_currentScene = nullptr;
 
   void sceneSelector();
+
+  void displayRemoveSceneButton(const std::shared_ptr<Scene>& scene);
+
+  void deleteScenesToRemove();
 };
 
 

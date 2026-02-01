@@ -44,6 +44,8 @@ void SceneManager::update(const float dt)
 {
   sceneSelector();
 
+  deleteScenesToRemove();
+
   if (!m_currentScene)
   {
     return;
@@ -97,16 +99,53 @@ void SceneManager::sceneSelector()
     if (ImGui::TreeNodeEx(scene->getName().c_str(),
                           ImGuiTreeNodeFlags_Leaf |
                           (m_currentScene == scene ? ImGuiTreeNodeFlags_Selected : 0) |
-                          ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth))
+                          ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap))
     {
       if (ImGui::IsItemClicked())
       {
         loadScene(scene);
       }
 
+      displayRemoveSceneButton(scene);
+
       ImGui::TreePop();
     }
   }
 
   ImGui::End();
+}
+
+void SceneManager::displayRemoveSceneButton(const std::shared_ptr<Scene>& scene)
+{
+  ImGui::SameLine();
+
+  const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+
+  if (ImGui::Button("-", {buttonWidth, 0}))
+  {
+    m_scenesToRemove.push_back(scene);
+  }
+}
+
+void SceneManager::deleteScenesToRemove()
+{
+  if (m_scenesToRemove.empty())
+  {
+    return;
+  }
+
+  for (const auto& scene : m_scenesToRemove)
+  {
+    if (scene == m_currentScene)
+    {
+      m_currentScene = nullptr;
+    }
+
+    std::erase(m_scenes, scene);
+  }
+
+  m_scenesToRemove.clear();
 }
