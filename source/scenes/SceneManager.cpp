@@ -126,10 +126,10 @@ void SceneManager::displayRemoveSceneButton(const std::shared_ptr<Scene>& scene)
 
   if (ImGui::Button("-", {buttonWidth, 0}))
   {
-    ImGui::OpenPopup("DeleteScene?");
+    ImGui::OpenPopup("Delete Scene?");
   }
 
-  if (ImGui::BeginPopupModal("DeleteScene?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  if (ImGui::BeginPopupModal("Delete Scene?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
   {
     ImGui::Text("Are you sure you want to delete");
     ImGui::SameLine();
