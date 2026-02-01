@@ -79,6 +79,11 @@ void Object::fixedUpdate(const float dt)
 void Object::setManager(ObjectManager* objectManager)
 {
   m_manager = objectManager;
+
+  if (m_uuid.is_nil())
+  {
+    m_uuid = m_manager->getECS()->createUUID();
+  }
 }
 
 ObjectManager* Object::getManager() const
