@@ -120,8 +120,11 @@ nlohmann::json Scene::serialize() const
   return data;
 }
 
-void Scene::loadFromJSON(const nlohmann::json& sceneData) const
+void Scene::loadFromJSON(const nlohmann::json& sceneData)
 {
+  m_uuid = uuids::uuid::from_string(std::string(sceneData.at("uuid"))).value();
+  m_name = sceneData.at("name");
+
   for (const auto& objectData : sceneData["objects"])
   {
     m_objectManager->addObject(std::make_shared<Object>(objectData, m_objectManager.get()));
