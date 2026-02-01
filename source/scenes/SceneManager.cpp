@@ -126,7 +126,35 @@ void SceneManager::displayRemoveSceneButton(const std::shared_ptr<Scene>& scene)
 
   if (ImGui::Button("-", {buttonWidth, 0}))
   {
-    m_scenesToRemove.push_back(scene);
+    ImGui::OpenPopup("DeleteScene?");
+  }
+
+  if (ImGui::BeginPopupModal("DeleteScene?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    ImGui::Text("Are you sure you want to delete");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", scene->getName().c_str());
+    ImGui::SameLine();
+    ImGui::Text("?");
+
+    ImGui::Text("This action cannot be undone.");
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Yes", ImVec2(120, 0)))
+    {
+      m_scenesToRemove.push_back(scene);
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("No", ImVec2(120, 0)))
+    {
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
   }
 }
 
