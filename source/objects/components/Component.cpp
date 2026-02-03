@@ -71,19 +71,22 @@ bool Component::displayGuiHeader()
     ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DefaultOpen
   );
 
-  ImGui::SameLine();
-
-  const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
-  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
-
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
-
-  ImGui::PushID(this);
-  if (ImGui::Button("-", {buttonWidth, 0}))
+  if (m_type != ComponentType::transform)
   {
-    markAsDeleted();
+    ImGui::SameLine();
+
+    const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+    const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+
+    ImGui::PushID(this);
+    if (ImGui::Button("-", {buttonWidth, 0}))
+    {
+      markAsDeleted();
+    }
+    ImGui::PopID();
   }
-  ImGui::PopID();
 
   return open;
 }
