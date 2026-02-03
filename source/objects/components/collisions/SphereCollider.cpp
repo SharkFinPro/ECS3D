@@ -2,6 +2,7 @@
 #include "../Transform.h"
 #include "../../Object.h"
 #include "../../../ECS3D.h"
+#include "../../../GuiComponents.h"
 #include "../../../assets/AssetManager.h"
 #include "../../../assets/ModelAsset.h"
 #include "../../../assets/TextureAsset.h"
@@ -17,6 +18,7 @@ SphereCollider::SphereCollider()
   : Collider(ColliderType::sphereCollider, ComponentType::SubComponentType_sphereCollider)
 {
   loadVariable(m_radius);
+  loadVariable(m_position);
 }
 
 float SphereCollider::getRadius()
@@ -46,16 +48,23 @@ void SphereCollider::displayGui()
   {
     ImGui::Checkbox("Render Collider", &m_renderCollider);
     ImGui::DragFloat("Radius", &m_radius.value(), 0.01f);
+
+    ImGui::PushID("SphereColliderPosition");
+    gc::xyzGui("Position", &m_position.value().x, &m_position.value().y, &m_position.value().z);
+    ImGui::PopID();
   }
 }
 
 nlohmann::json SphereCollider::serialize()
 {
+  const auto position = m_position.value();
+
   const nlohmann::json data = {
     { "type", "Collider" },
     { "subType", "Sphere" },
     { "radius", m_radius.value() },
-    { "renderCollider", m_renderCollider }
+    { "renderCollider", m_renderCollider },
+    { "position", { position.x, position.y, position.z } }
   };
 
   return data;
@@ -63,6 +72,9 @@ nlohmann::json SphereCollider::serialize()
 
 void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
 {
+  const auto& position = componentData.at("position");
+  m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
+
   m_radius.set(componentData.at("radius"));
   m_renderCollider = componentData.at("renderCollider");
 }
@@ -98,9 +110,8 @@ void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    m_renderObject->setPosition(transform->getPosition());
+    m_renderObject->setPosition(transform->getPosition() + m_position.value());
     m_renderObject->setScale(transform->getScale() * m_radius.value());
-    m_renderObject->setOrientationEuler(transform->getRotation());
   }
 
   renderer->getRenderingManager()->getRenderer3D()->renderObject(
@@ -124,7 +135,7 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    return direction * m_radius.value() * transform->getScale() + transform->getPosition();
+    return direction * m_radius.value() * transform->getScale() + transform->getPosition() + m_position.value();
   }
 
   return { 0, 0, 0 };

@@ -26,6 +26,8 @@ private:
 
   ComponentVariable<float> m_radius = ComponentVariable(1.0f);
 
+  ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
+
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 };
 
