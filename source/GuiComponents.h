@@ -7,7 +7,8 @@ namespace gc {
   inline void xyzGui(const char* label,
                      float* x,
                      float* y,
-                     float* z)
+                     float* z,
+                     const float sensitivity = 0.1f)
   {
     constexpr float DRAG_WIDTH = 80.0f;
 
@@ -20,16 +21,19 @@ namespace gc {
 
     ImGui::PushItemWidth(DRAG_WIDTH);
 
-    ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "X"); ImGui::SameLine();
-    ImGui::DragFloat("##X", x, 0.1f);
+    ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "X");
+    ImGui::SameLine();
+    ImGui::DragFloat("##X", x, sensitivity);
     ImGui::SameLine();
 
-    ImGui::TextColored(ImVec4(0.3f,1,0.3f,1), "Y"); ImGui::SameLine();
-    ImGui::DragFloat("##Y", y, 0.1f);
+    ImGui::TextColored(ImVec4(0.3f,1,0.3f,1), "Y");
+    ImGui::SameLine();
+    ImGui::DragFloat("##Y", y, sensitivity);
     ImGui::SameLine();
 
-    ImGui::TextColored(ImVec4(0.3f,0.6f,1,1), "Z"); ImGui::SameLine();
-    ImGui::DragFloat("##Z", z, 0.1f);
+    ImGui::TextColored(ImVec4(0.3f,0.6f,1,1), "Z");
+    ImGui::SameLine();
+    ImGui::DragFloat("##Z", z, sensitivity);
 
     ImGui::PopItemWidth();
   }
