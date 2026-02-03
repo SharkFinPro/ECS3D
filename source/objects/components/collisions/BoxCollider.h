@@ -3,6 +3,7 @@
 
 #include "Collider.h"
 #include <glm/vec3.hpp>
+#include <VulkanEngine/components/assets/objects/RenderObject.h>
 #include <array>
 
 constexpr std::array<glm::vec3, 8> boxVertices = {{
@@ -27,7 +28,13 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
+  void variableUpdate(float dt) override;
+
 private:
+  std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
+
+  bool m_renderCollider = false;
+
   std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
 
   uint8_t m_currentTransformUpdateID = 255;
