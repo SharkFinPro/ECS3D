@@ -66,21 +66,27 @@ bool Component::displayGuiHeader()
   const char* componentDisplayName = componentTypeToString.at(m_subType != ComponentType::SubComponentType_none
                                                               ? m_subType : m_type).c_str();
 
-  const bool open = ImGui::CollapsingHeader(componentDisplayName, ImGuiTreeNodeFlags_AllowOverlap);
+  const bool open = ImGui::CollapsingHeader(
+    componentDisplayName,
+    ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DefaultOpen
+  );
 
-  ImGui::SameLine();
-
-  const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
-  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
-
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
-
-  ImGui::PushID(this);
-  if (ImGui::Button("-", {buttonWidth, 0}))
+  if (m_type != ComponentType::transform)
   {
-    markAsDeleted();
+    ImGui::SameLine();
+
+    const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+    const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+
+    ImGui::PushID(this);
+    if (ImGui::Button("-", {buttonWidth, 0}))
+    {
+      markAsDeleted();
+    }
+    ImGui::PopID();
   }
-  ImGui::PopID();
 
   return open;
 }

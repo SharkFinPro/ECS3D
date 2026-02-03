@@ -3,6 +3,7 @@
 
 #include "Collider.h"
 #include <glm/vec3.hpp>
+#include <VulkanEngine/components/assets/objects/RenderObject.h>
 
 class SphereCollider final : public Collider {
 public:
@@ -16,8 +17,14 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
+  void variableUpdate(float dt) override;
+
 private:
+  std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
+
   float m_radius = 1.0f;
+
+  bool m_renderCollider = false;
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 };

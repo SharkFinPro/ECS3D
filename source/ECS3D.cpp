@@ -204,7 +204,7 @@ void ECS3D::updateDockSpace() const
 	gui->setBottomDockPercent(0.28);
 
 	gui->setLeftDockPercent(0.2);
-	gui->setRightDockPercent(0.3);
+	gui->setRightDockPercent(0.35);
 
 	gui->dockCenter(m_sceneViewName.c_str());
 

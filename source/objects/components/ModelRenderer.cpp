@@ -179,7 +179,8 @@ void ModelRenderer::displayDragDrop(const char* label,
 
 void ModelRenderer::displayTextureDragDrop()
 {
-  displayDragDrop("Texture", [this](const std::shared_ptr<Asset>& asset) -> bool
+  const auto label = "Texture: " + std::string(m_texture ? m_texture->getName() : "");
+  displayDragDrop(label.c_str(), [this](const std::shared_ptr<Asset>& asset) -> bool
   {
     if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
     {
@@ -194,7 +195,8 @@ void ModelRenderer::displayTextureDragDrop()
 
 void ModelRenderer::displaySpecularDragDrop()
 {
-  displayDragDrop("Specular Map", [this](const std::shared_ptr<Asset>& asset) -> bool
+  const auto label = "Specular Map: " + std::string(m_specularMap ? m_specularMap->getName() : "");
+  displayDragDrop(label.c_str(), [this](const std::shared_ptr<Asset>& asset) -> bool
   {
     if (const auto textureAsset = std::dynamic_pointer_cast<TextureAsset>(asset))
     {
@@ -209,7 +211,8 @@ void ModelRenderer::displaySpecularDragDrop()
 
 void ModelRenderer::displayModelDragDrop()
 {
-  displayDragDrop("Model", [this](const std::shared_ptr<Asset>& asset) -> bool
+  const auto label = "Model: " + std::string(m_model ? m_model->getName() : "");
+  displayDragDrop(label.c_str(), [this](const std::shared_ptr<Asset>& asset) -> bool
   {
     if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
     {
