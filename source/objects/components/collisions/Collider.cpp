@@ -13,8 +13,6 @@ Collider::Collider(const ColliderType type, const ComponentType subType)
 
 bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv, glm::vec3* collisionPoint)
 {
-  updateTransformPointer();
-
   const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
   if (!otherCollider)
   {
@@ -88,7 +86,15 @@ bool Collider::collidesWith(const std::shared_ptr<Object>& other, glm::vec3* mtv
 
 const BoundingBox& Collider::getBoundingBox()
 {
-  updateTransformPointer();
+  if (m_transform_ptr.expired())
+  {
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
+
+    if (m_transform_ptr.expired())
+    {
+      throw std::runtime_error("Collider::getBoundingBox::Missing Transform");
+    }
+  }
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
   const uint8_t transformUpdateID = transform->getUpdateID();
@@ -310,17 +316,4 @@ bool Collider::tetrahedronCase(Simplex& simplex, glm::vec3& direction)
   }
 
   return true;
-}
-
-void Collider::updateTransformPointer()
-{
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("Collider::updateTransformPointer::Missing Transform");
-    }
-  }
 }
