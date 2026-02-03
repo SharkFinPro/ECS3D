@@ -8,6 +8,8 @@
 #ifdef COLLISION_DEBUG
 #include "../ECS3D.h"
 #include "components/Transform.h"
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 #include <omp.h>
 #endif
 
@@ -46,7 +48,7 @@ void CollisionManager::variableUpdate()
   {
     for (const auto& line : threadLineVector)
     {
-      renderer->renderLine(line.start, line.end);
+      renderer->getRenderingManager()->getRenderer3D()->renderLine(line.start, line.end);
       linesRendered++;
       if (linesRendered > 20'000)
       {
