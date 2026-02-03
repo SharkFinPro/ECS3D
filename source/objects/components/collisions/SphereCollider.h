@@ -31,6 +31,8 @@ private:
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
+
+  void updateTransformPointer();
 };
 
 

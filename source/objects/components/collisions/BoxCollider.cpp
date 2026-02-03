@@ -88,15 +88,7 @@ void BoxCollider::variableUpdate([[maybe_unused]] const float dt)
     return;
   }
 
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      return;
-    }
-  }
+  updateTransformPointer();
 
   const auto renderer = m_owner->getManager()->getECS()->getRenderer();
 
@@ -126,15 +118,7 @@ void BoxCollider::variableUpdate([[maybe_unused]] const float dt)
 
 glm::vec3 BoxCollider::getPosition()
 {
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("BoxCollider::getPosition::Missing transform component");
-    }
-  }
+  updateTransformPointer();
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
@@ -143,15 +127,7 @@ glm::vec3 BoxCollider::getPosition()
 
 glm::vec3 BoxCollider::getScale()
 {
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("BoxCollider::getPosition::Missing transform component");
-    }
-  }
+  updateTransformPointer();
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
@@ -160,15 +136,7 @@ glm::vec3 BoxCollider::getScale()
 
 glm::vec3 BoxCollider::getRotation()
 {
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("BoxCollider::getPosition::Missing transform component");
-    }
-  }
+  updateTransformPointer();
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
@@ -177,15 +145,7 @@ glm::vec3 BoxCollider::getRotation()
 
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 {
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("BoxCollider::findFurthestPoint::Missing transform component");
-    }
-  }
+  updateTransformPointer();
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
@@ -230,4 +190,17 @@ void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& tran
   }
 
   m_currentTransformUpdateID = transform->getUpdateID();
+}
+
+void BoxCollider::updateTransformPointer()
+{
+  if (m_transform_ptr.expired())
+  {
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
+
+    if (m_transform_ptr.expired())
+    {
+      throw std::runtime_error("BoxCollider::updateTransformPointer::Missing transform component");
+    }
+  }
 }

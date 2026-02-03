@@ -50,6 +50,8 @@ private:
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
   void generateTransformedMesh(const std::shared_ptr<Transform>& transform);
+
+  void updateTransformPointer();
 };
 
 

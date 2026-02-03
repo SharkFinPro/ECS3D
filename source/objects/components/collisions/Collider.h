@@ -75,6 +75,9 @@ protected:
   ColliderType m_colliderType;
 
   BoundingBox m_boundingBox;
+
+private:
+  void updateTransformPointer();
 };
 
 

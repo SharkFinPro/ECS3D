@@ -23,15 +23,7 @@ SphereCollider::SphereCollider()
 
 float SphereCollider::getRadius()
 {
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("SphereCollider::getRadius::Missing transform component");
-    }
-  }
+  updateTransformPointer();
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
@@ -86,15 +78,7 @@ void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
     return;
   }
 
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      return;
-    }
-  }
+  updateTransformPointer();
 
   const auto renderer = m_owner->getManager()->getECS()->getRenderer();
 
@@ -123,15 +107,7 @@ void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
 
 glm::vec3 SphereCollider::getPosition()
 {
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("SphereCollider::getPosition::Missing transform component");
-    }
-  }
+  updateTransformPointer();
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
@@ -140,15 +116,7 @@ glm::vec3 SphereCollider::getPosition()
 
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 {
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("SphereCollider::findFurthestPoint::Missing transform component");
-    }
-  }
+  updateTransformPointer();
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
@@ -156,4 +124,17 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
   }
 
   return { 0, 0, 0 };
+}
+
+void SphereCollider::updateTransformPointer()
+{
+  if (m_transform_ptr.expired())
+  {
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
+
+    if (m_transform_ptr.expired())
+    {
+      throw std::runtime_error("SphereCollider::updateTransformPointer::Missing transform component");
+    }
+  }
 }
