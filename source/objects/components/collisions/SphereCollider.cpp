@@ -53,6 +53,7 @@ nlohmann::json SphereCollider::serialize()
     { "type", "Collider" },
     { "subType", "Sphere" },
     { "radius", m_radius },
+    { "renderCollider", m_renderCollider }
   };
 
   return data;
@@ -61,6 +62,7 @@ nlohmann::json SphereCollider::serialize()
 void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
 {
   m_radius = componentData.at("radius");
+  m_renderCollider = componentData.at("renderCollider");
 }
 
 void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
