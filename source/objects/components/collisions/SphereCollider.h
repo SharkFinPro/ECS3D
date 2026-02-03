@@ -18,6 +18,8 @@ public:
   void loadFromJSON(const nlohmann::json& componentData) override;
 
   void variableUpdate(float dt) override;
+  
+  [[nodiscard]] glm::vec3 getPosition() override;
 
 private:
   std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;

@@ -124,6 +124,57 @@ void BoxCollider::variableUpdate([[maybe_unused]] const float dt)
   );
 }
 
+glm::vec3 BoxCollider::getPosition()
+{
+  if (m_transform_ptr.expired())
+  {
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
+
+    if (m_transform_ptr.expired())
+    {
+      throw std::runtime_error("BoxCollider::getPosition::Missing transform component");
+    }
+  }
+
+  const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
+
+  return m_position.value() + transform->getPosition();
+}
+
+glm::vec3 BoxCollider::getScale()
+{
+  if (m_transform_ptr.expired())
+  {
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
+
+    if (m_transform_ptr.expired())
+    {
+      throw std::runtime_error("BoxCollider::getPosition::Missing transform component");
+    }
+  }
+
+  const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
+
+  return m_scale.value() + transform->getScale();
+}
+
+glm::vec3 BoxCollider::getRotation()
+{
+  if (m_transform_ptr.expired())
+  {
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
+
+    if (m_transform_ptr.expired())
+    {
+      throw std::runtime_error("BoxCollider::getPosition::Missing transform component");
+    }
+  }
+
+  const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
+
+  return m_rotation.value() + transform->getRotation();
+}
+
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 {
   if (m_transform_ptr.expired())
@@ -132,7 +183,7 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 
     if (m_transform_ptr.expired())
     {
-      throw std::runtime_error("MeshCollider::findFurthestPoint::Missing transform component");
+      throw std::runtime_error("BoxCollider::findFurthestPoint::Missing transform component");
     }
   }
 

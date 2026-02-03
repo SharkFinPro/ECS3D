@@ -30,6 +30,10 @@ public:
 
   void variableUpdate(float dt) override;
 
+  [[nodiscard]] glm::vec3 getPosition() override;
+  [[nodiscard]] glm::vec3 getScale() override;
+  [[nodiscard]] glm::vec3 getRotation() override;
+
 private:
   std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
 

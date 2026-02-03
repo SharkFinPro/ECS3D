@@ -51,6 +51,10 @@ public:
 
   virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
 
+  [[nodiscard]] virtual glm::vec3 getPosition() { return glm::vec3(0); }
+  [[nodiscard]] virtual glm::vec3 getScale() { return glm::vec3(1); }
+  [[nodiscard]] virtual glm::vec3 getRotation() { return glm::vec3(0); }
+
 private:
 #ifdef COLLISION_BBOX_DEBUG
   std::vector<Line> linesToDraw;
