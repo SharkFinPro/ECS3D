@@ -8,6 +8,8 @@
 #ifdef COLLISION_DEBUG
 #include "../ECS3D.h"
 #include "components/Transform.h"
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 #include <omp.h>
 #endif
 
@@ -26,6 +28,7 @@ void CollisionManager::removeObject(const std::shared_ptr<Object>& object)
     if (it->object == object)
     {
       collisionEdges.erase(it);
+      return;
     }
   }
 }
@@ -45,7 +48,7 @@ void CollisionManager::variableUpdate()
   {
     for (const auto& line : threadLineVector)
     {
-      renderer->renderLine(line.start, line.end);
+      renderer->getRenderingManager()->getRenderer3D()->renderLine(line.start, line.end);
       linesRendered++;
       if (linesRendered > 20'000)
       {
@@ -110,10 +113,6 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
                                       std::vector<std::shared_ptr<Object>>& collidedObjects) const
 #endif
 {
-#ifdef COLLISION_DEBUG
-  const auto a = edge.object->getComponent<Transform>(ComponentType::transform);
-#endif
-
   const auto bbox = edge.collider->getBoundingBox();
 
   for (const auto& other : collisionEdges)
@@ -140,7 +139,8 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
     }
 
 #ifdef COLLISION_DEBUG
-    const auto b = other.object->getComponent<Transform>(ComponentType::transform);
+    const auto a = edge.collider;
+    const auto b = other.object->getComponent<Collider>(ComponentType::collider);
     if (threadLine.size() < 1'500)
     {
       threadLine.push_back({ a->getPosition(), b->getPosition() });
