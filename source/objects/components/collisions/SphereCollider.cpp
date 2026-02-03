@@ -41,7 +41,10 @@ float SphereCollider::getRadius()
 void SphereCollider::displayGui()
 {
   if (displayGuiHeader())
-  {}
+  {
+    ImGui::Checkbox("Render Collider", &m_renderCollider);
+    ImGui::DragFloat("Radius", &m_radius);
+  }
 }
 
 nlohmann::json SphereCollider::serialize()
