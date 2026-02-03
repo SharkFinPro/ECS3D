@@ -108,7 +108,7 @@ void ObjectManager::variableUpdate(const float dt) const
   }
 
 #ifdef COLLISION_DEBUG
-  collisionManager->variableUpdate();
+  m_collisionManager->variableUpdate();
 #endif
 }
 
