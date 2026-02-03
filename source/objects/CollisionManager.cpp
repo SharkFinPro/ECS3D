@@ -26,6 +26,7 @@ void CollisionManager::removeObject(const std::shared_ptr<Object>& object)
     if (it->object == object)
     {
       collisionEdges.erase(it);
+      return;
     }
   }
 }

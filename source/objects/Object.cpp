@@ -119,7 +119,7 @@ void Object::displayGui()
     {
       if (component->getType() == ComponentType::collider)
       {
-        m_manager->getCollisionManager()->addObject(shared_from_this());
+        m_manager->getCollisionManager()->removeObject(shared_from_this());
       }
 
       component.reset();
