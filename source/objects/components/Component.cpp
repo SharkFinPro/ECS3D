@@ -66,7 +66,10 @@ bool Component::displayGuiHeader()
   const char* componentDisplayName = componentTypeToString.at(m_subType != ComponentType::SubComponentType_none
                                                               ? m_subType : m_type).c_str();
 
-  const bool open = ImGui::CollapsingHeader(componentDisplayName, ImGuiTreeNodeFlags_AllowOverlap);
+  const bool open = ImGui::CollapsingHeader(
+    componentDisplayName,
+    ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DefaultOpen
+  );
 
   ImGui::SameLine();
 
