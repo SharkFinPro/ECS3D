@@ -22,9 +22,9 @@ public:
 private:
   std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
 
-  float m_radius = 1.0f;
-
   bool m_renderCollider = false;
+
+  ComponentVariable<float> m_radius = ComponentVariable(1.0f);
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 };

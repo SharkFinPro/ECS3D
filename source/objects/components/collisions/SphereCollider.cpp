@@ -15,7 +15,9 @@
 
 SphereCollider::SphereCollider()
   : Collider(ColliderType::sphereCollider, ComponentType::SubComponentType_sphereCollider)
-{}
+{
+  loadVariable(m_radius);
+}
 
 float SphereCollider::getRadius()
 {
@@ -32,7 +34,7 @@ float SphereCollider::getRadius()
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
     const float maxScale = compMax(transform->getScale());
-    return m_radius * maxScale;
+    return m_radius.value() * maxScale;
   }
 
   return 0;
@@ -43,7 +45,7 @@ void SphereCollider::displayGui()
   if (displayGuiHeader())
   {
     ImGui::Checkbox("Render Collider", &m_renderCollider);
-    ImGui::DragFloat("Radius", &m_radius);
+    ImGui::DragFloat("Radius", &m_radius.value(), 0.01f);
   }
 }
 
@@ -52,7 +54,7 @@ nlohmann::json SphereCollider::serialize()
   const nlohmann::json data = {
     { "type", "Collider" },
     { "subType", "Sphere" },
-    { "radius", m_radius },
+    { "radius", m_radius.value() },
     { "renderCollider", m_renderCollider }
   };
 
@@ -61,7 +63,7 @@ nlohmann::json SphereCollider::serialize()
 
 void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
 {
-  m_radius = componentData.at("radius");
+  m_radius.set(componentData.at("radius"));
   m_renderCollider = componentData.at("renderCollider");
 }
 
@@ -97,7 +99,7 @@ void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
     m_renderObject->setPosition(transform->getPosition());
-    m_renderObject->setScale(transform->getScale() * m_radius);
+    m_renderObject->setScale(transform->getScale() * m_radius.value());
     m_renderObject->setOrientationEuler(transform->getRotation());
   }
 
@@ -122,7 +124,7 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    return direction * m_radius * transform->getScale() + transform->getPosition();
+    return direction * m_radius.value() * transform->getScale() + transform->getPosition();
   }
 
   return { 0, 0, 0 };
