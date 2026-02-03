@@ -61,7 +61,6 @@ private:
 #endif
 
   bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
-                                     const std::shared_ptr<Transform>& otherTransform,
                                      glm::vec3* mtv,
                                      glm::vec3* collisionPoint);
 

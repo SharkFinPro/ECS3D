@@ -177,37 +177,33 @@ void Collider::variableUpdate(float dt)
 #endif
 
 bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& otherCollider,
-                                             const std::shared_ptr<Transform>& otherTransform,
                                              glm::vec3* mtv,
                                              glm::vec3* collisionPoint)
 {
-  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
+  const auto sphereA = dynamic_cast<SphereCollider*>(this);
+  const auto sphereB = std::dynamic_pointer_cast<SphereCollider>(otherCollider);
+
+  const auto combinedRadius = sphereA->getRadius() + sphereB->getRadius();
+  const auto delta = otherCollider->getPosition() - getPosition();
+
+  if (const float dist = length(delta); dist < combinedRadius)
   {
-    const auto sphereA = dynamic_cast<SphereCollider*>(this);
-    const auto sphereB = std::dynamic_pointer_cast<SphereCollider>(otherCollider);
+    const auto minimumTranslationVector = -(normalize(delta) * (combinedRadius - dist));
 
-    const auto combinedRadius = sphereA->getRadius() + sphereB->getRadius();
-    const auto delta = otherTransform->getPosition() - transform->getPosition();
-
-    if (const float dist = length(delta); dist < combinedRadius)
+    if (mtv != nullptr)
     {
-      const auto minimumTranslationVector = -(normalize(delta) * (combinedRadius - dist));
-
-      if (mtv != nullptr)
-      {
-        *mtv = minimumTranslationVector;
-      }
-
-      if (collisionPoint != nullptr)
-      {
-        const auto direction = -glm::normalize(minimumTranslationVector);
-        const auto pointOfCollision = transform->getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
-
-        *collisionPoint = pointOfCollision;
-      }
-
-      return true;
+      *mtv = minimumTranslationVector;
     }
+
+    if (collisionPoint != nullptr)
+    {
+      const auto direction = -glm::normalize(minimumTranslationVector);
+      const auto pointOfCollision = getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
+
+      *collisionPoint = pointOfCollision;
+    }
+
+    return true;
   }
 
   return false;
