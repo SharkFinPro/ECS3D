@@ -1,6 +1,7 @@
 #include "Transform.h"
 #include "RigidBody.h"
 #include "../Object.h"
+#include "../../GuiComponents.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <memory>
@@ -86,50 +87,20 @@ void Transform::move(const glm::vec3& direction)
   ++m_updateID;
 }
 
-void xyzGui(const char* label,
-            float* x,
-            float* y,
-            float* z)
-{
-  constexpr float DRAG_WIDTH = 80.0f;
-
-  ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted(label);
-
-  const float xyzWidth = 3 * (DRAG_WIDTH + ImGui::CalcTextSize("X ").x + ImGui::GetStyle().ItemSpacing.x);
-
-  ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - xyzWidth);
-
-  ImGui::PushItemWidth(DRAG_WIDTH);
-
-  ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "X"); ImGui::SameLine();
-  ImGui::DragFloat("##X", x, 0.1f);
-  ImGui::SameLine();
-
-  ImGui::TextColored(ImVec4(0.3f,1,0.3f,1), "Y"); ImGui::SameLine();
-  ImGui::DragFloat("##Y", y, 0.1f);
-  ImGui::SameLine();
-
-  ImGui::TextColored(ImVec4(0.3f,0.6f,1,1), "Z"); ImGui::SameLine();
-  ImGui::DragFloat("##Z", z, 0.1f);
-
-  ImGui::PopItemWidth();
-}
-
 void Transform::displayGui()
 {
   if (displayGuiHeader())
   {
     ImGui::PushID(1);
-    xyzGui("Position", &m_position.value().x, &m_position.value().y, &m_position.value().z);
+    gc::xyzGui("Position", &m_position.value().x, &m_position.value().y, &m_position.value().z);
     ImGui::PopID();
 
     ImGui::PushID(2);
-    xyzGui("Rotation", &m_rotation.value().x, &m_rotation.value().y, &m_rotation.value().z);
+    gc::xyzGui("Rotation", &m_rotation.value().x, &m_rotation.value().y, &m_rotation.value().z);
     ImGui::PopID();
 
     ImGui::PushID(3);
-    xyzGui("Scale", &m_scale.value().x, &m_scale.value().y, &m_scale.value().z);
+    gc::xyzGui("Scale", &m_scale.value().x, &m_scale.value().y, &m_scale.value().z);
 
     float combinedScale = (m_scale.value().x + m_scale.value().y + m_scale.value().z) / 3.0f;
     ImGui::AlignTextToFramePadding();

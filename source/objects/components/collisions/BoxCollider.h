@@ -39,6 +39,10 @@ private:
 
   uint8_t m_currentTransformUpdateID = 255;
 
+  ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
+  ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(1));
+  ComponentVariable<glm::vec3> m_rotation = ComponentVariable(glm::vec3(0));
+
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
   void generateTransformedMesh(const std::shared_ptr<Transform>& transform);
