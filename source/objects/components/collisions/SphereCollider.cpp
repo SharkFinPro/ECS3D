@@ -2,6 +2,7 @@
 #include "../Transform.h"
 #include "../../Object.h"
 #include "../../../ECS3D.h"
+#include "../../../GuiComponents.h"
 #include "../../../assets/AssetManager.h"
 #include "../../../assets/ModelAsset.h"
 #include "../../../assets/TextureAsset.h"
@@ -15,24 +16,19 @@
 
 SphereCollider::SphereCollider()
   : Collider(ColliderType::sphereCollider, ComponentType::SubComponentType_sphereCollider)
-{}
+{
+  loadVariable(m_radius);
+  loadVariable(m_position);
+}
 
 float SphereCollider::getRadius()
 {
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      throw std::runtime_error("MeshCollider::findFurthestPoint::Missing transform component");
-    }
-  }
+  updateTransformPointer();
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
     const float maxScale = compMax(transform->getScale());
-    return m_radius * maxScale;
+    return m_radius.value() * maxScale;
   }
 
   return 0;
@@ -43,17 +39,24 @@ void SphereCollider::displayGui()
   if (displayGuiHeader())
   {
     ImGui::Checkbox("Render Collider", &m_renderCollider);
-    ImGui::DragFloat("Radius", &m_radius);
+    ImGui::DragFloat("Radius", &m_radius.value(), 0.01f);
+
+    ImGui::PushID("SphereColliderPosition");
+    gc::xyzGui("Position", &m_position.value().x, &m_position.value().y, &m_position.value().z);
+    ImGui::PopID();
   }
 }
 
 nlohmann::json SphereCollider::serialize()
 {
+  const auto position = m_position.value();
+
   const nlohmann::json data = {
     { "type", "Collider" },
     { "subType", "Sphere" },
-    { "radius", m_radius },
-    { "renderCollider", m_renderCollider }
+    { "radius", m_radius.value() },
+    { "renderCollider", m_renderCollider },
+    { "position", { position.x, position.y, position.z } }
   };
 
   return data;
@@ -61,7 +64,10 @@ nlohmann::json SphereCollider::serialize()
 
 void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
 {
-  m_radius = componentData.at("radius");
+  const auto& position = componentData.at("position");
+  m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
+
+  m_radius.set(componentData.at("radius"));
   m_renderCollider = componentData.at("renderCollider");
 }
 
@@ -72,15 +78,7 @@ void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
     return;
   }
 
-  if (m_transform_ptr.expired())
-  {
-    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
-
-    if (m_transform_ptr.expired())
-    {
-      return;
-    }
-  }
+  updateTransformPointer();
 
   const auto renderer = m_owner->getManager()->getECS()->getRenderer();
 
@@ -96,9 +94,8 @@ void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    m_renderObject->setPosition(transform->getPosition());
-    m_renderObject->setScale(transform->getScale() * m_radius);
-    m_renderObject->setOrientationEuler(transform->getRotation());
+    m_renderObject->setPosition(transform->getPosition() + m_position.value());
+    m_renderObject->setScale(transform->getScale() * m_radius.value());
   }
 
   renderer->getRenderingManager()->getRenderer3D()->renderObject(
@@ -108,7 +105,28 @@ void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
   );
 }
 
+glm::vec3 SphereCollider::getPosition()
+{
+  updateTransformPointer();
+
+  const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
+
+  return m_position.value() + transform->getPosition();
+}
+
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
+{
+  updateTransformPointer();
+
+  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
+  {
+    return direction * m_radius.value() * transform->getScale() + transform->getPosition() + m_position.value();
+  }
+
+  return { 0, 0, 0 };
+}
+
+void SphereCollider::updateTransformPointer()
 {
   if (m_transform_ptr.expired())
   {
@@ -116,14 +134,7 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 
     if (m_transform_ptr.expired())
     {
-      throw std::runtime_error("MeshCollider::findFurthestPoint::Missing transform component");
+      throw std::runtime_error("SphereCollider::updateTransformPointer::Missing transform component");
     }
   }
-
-  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
-  {
-    return direction * m_radius * transform->getScale() + transform->getPosition();
-  }
-
-  return { 0, 0, 0 };
 }
