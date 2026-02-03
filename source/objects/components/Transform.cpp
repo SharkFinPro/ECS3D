@@ -91,15 +91,15 @@ void Transform::displayGui()
 {
   if (displayGuiHeader())
   {
-    ImGui::PushID(1);
+    ImGui::PushID("TransformPosition");
     gc::xyzGui("Position", &m_position.value().x, &m_position.value().y, &m_position.value().z);
     ImGui::PopID();
 
-    ImGui::PushID(2);
+    ImGui::PushID("TransformRotation");
     gc::xyzGui("Rotation", &m_rotation.value().x, &m_rotation.value().y, &m_rotation.value().z);
     ImGui::PopID();
 
-    ImGui::PushID(3);
+    ImGui::PushID("TransformScale");
     gc::xyzGui("Scale", &m_scale.value().x, &m_scale.value().y, &m_scale.value().z);
 
     float combinedScale = (m_scale.value().x + m_scale.value().y + m_scale.value().z) / 3.0f;
