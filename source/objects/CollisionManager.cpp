@@ -113,10 +113,6 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
                                       std::vector<std::shared_ptr<Object>>& collidedObjects) const
 #endif
 {
-#ifdef COLLISION_DEBUG
-  const auto a = edge.object->getComponent<Transform>(ComponentType::transform);
-#endif
-
   const auto bbox = edge.collider->getBoundingBox();
 
   for (const auto& other : collisionEdges)
@@ -143,7 +139,8 @@ void CollisionManager::findCollisions(const LeftEdge& edge,
     }
 
 #ifdef COLLISION_DEBUG
-    const auto b = other.object->getComponent<Transform>(ComponentType::transform);
+    const auto a = edge.collider;
+    const auto b = other.object->getComponent<Collider>(ComponentType::collider);
     if (threadLine.size() < 1'500)
     {
       threadLine.push_back({ a->getPosition(), b->getPosition() });
