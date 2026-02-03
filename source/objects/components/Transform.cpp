@@ -86,39 +86,63 @@ void Transform::move(const glm::vec3& direction)
   ++m_updateID;
 }
 
+void xyzGui(const char* label,
+            float* x,
+            float* y,
+            float* z)
+{
+  constexpr float DRAG_WIDTH = 80.0f;
+
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted(label);
+
+  const float xyzWidth = 3 * (DRAG_WIDTH + ImGui::CalcTextSize("X ").x + ImGui::GetStyle().ItemSpacing.x);
+
+  ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - xyzWidth);
+
+  ImGui::PushItemWidth(DRAG_WIDTH);
+
+  ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "X"); ImGui::SameLine();
+  ImGui::DragFloat("##X", x, 0.1f);
+  ImGui::SameLine();
+
+  ImGui::TextColored(ImVec4(0.3f,1,0.3f,1), "Y"); ImGui::SameLine();
+  ImGui::DragFloat("##Y", y, 0.1f);
+  ImGui::SameLine();
+
+  ImGui::TextColored(ImVec4(0.3f,0.6f,1,1), "Z"); ImGui::SameLine();
+  ImGui::DragFloat("##Z", z, 0.1f);
+
+  ImGui::PopItemWidth();
+}
+
 void Transform::displayGui()
 {
   if (displayGuiHeader())
   {
     ImGui::PushID(1);
-    ImGui::Text("Control Position:");
-    ImGui::SliderFloat("x", &m_position.value().x, -30.0f, 30.0f);
-    ImGui::SliderFloat("y", &m_position.value().y, -30.0f, 30.0f);
-    ImGui::SliderFloat("z", &m_position.value().z, -30.0f, 30.0f);
+    xyzGui("Position", &m_position.value().x, &m_position.value().y, &m_position.value().z);
     ImGui::PopID();
 
     ImGui::PushID(2);
-    ImGui::Text("Control Rotation:");
-    ImGui::SliderFloat("x", &m_rotation.value().x, 0.0f, 360.0f);
-    ImGui::SliderFloat("y", &m_rotation.value().y, 0.0f, 360.0f);
-    ImGui::SliderFloat("z", &m_rotation.value().z, 0.0f, 360.0f);
+    xyzGui("Rotation", &m_rotation.value().x, &m_rotation.value().y, &m_rotation.value().z);
     ImGui::PopID();
 
     ImGui::PushID(3);
-    ImGui::Text("Control Scale:");
-    ImGui::SliderFloat("x", &m_scale.value().x, 0.1f, 10.0f);
-    ImGui::SliderFloat("y", &m_scale.value().y, 0.1f, 10.0f);
-    ImGui::SliderFloat("z", &m_scale.value().z, 0.1f, 10.0f);
+    xyzGui("Scale", &m_scale.value().x, &m_scale.value().y, &m_scale.value().z);
 
     float combinedScale = (m_scale.value().x + m_scale.value().y + m_scale.value().z) / 3.0f;
-    if (ImGui::SliderFloat("xyz", &combinedScale, 0.1f, 10.0f))
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Scale All");
+    ImGui::SameLine(110.0f);
+    if (ImGui::DragFloat("##Scale All", &combinedScale, 0.1f))
     {
       m_scale.value().x = m_scale.value().y = m_scale.value().z = combinedScale;
     }
 
-    ++m_updateID;
-
     ImGui::PopID();
+
+    ++m_updateID;
   }
 }
 
