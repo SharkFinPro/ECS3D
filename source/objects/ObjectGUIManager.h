@@ -34,6 +34,10 @@ private:
 
   std::shared_ptr<Object> m_selectedObject;
 
+  std::shared_ptr<ObjectUINode> m_focusedNode;
+
+  std::shared_ptr<ObjectUINode> m_nodeCheckingForDeletion;
+
   bool m_highlightSelectedObject = true;
 
   bool m_mouseWasPressed = false;
@@ -56,6 +60,10 @@ private:
   void displayObjectGui(const std::shared_ptr<ObjectUINode>& node);
 
   void displayObjectListGui();
+
+  void registerWindowEvents();
+
+  void deleteObjectUserQuery();
 };
 
 

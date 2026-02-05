@@ -18,11 +18,9 @@ enum class SceneStatus {
 
 class ObjectManager {
 public:
-  ObjectManager();
+  explicit ObjectManager(ECS3D* ecs);
 
   void update(float dt);
-
-  void setECS(ECS3D* ecs);
 
   [[nodiscard]] ECS3D* getECS() const;
 

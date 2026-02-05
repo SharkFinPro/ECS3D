@@ -11,11 +11,15 @@
 
 ObjectGUIManager::ObjectGUIManager(ObjectManager* objectManager)
   : m_objectManager(objectManager)
-{}
+{
+  registerWindowEvents();
+}
 
 void ObjectGUIManager::update()
 {
   displayObjectListGui();
+
+  deleteObjectUserQuery();
 
   deleteUINodesToRemove();
 
@@ -149,6 +153,16 @@ void ObjectGUIManager::deleteUINodesToRemove()
       m_objectUINodesSetForReassignment.push_back(child);
     }
 
+    if (m_focusedNode == node)
+    {
+      m_focusedNode = nullptr;
+    }
+
+    if (m_selectedObject == node->object)
+    {
+      m_selectedObject = nullptr;
+    }
+
     std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
   }
 
@@ -209,38 +223,7 @@ void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<ObjectUIN
 
   if (ImGui::Button("-", {buttonWidth, 0}))
   {
-    ImGui::OpenPopup("Delete Object?");
-  }
-
-  if (ImGui::BeginPopupModal("Delete Object?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-  {
-    ImGui::Text("Are you sure you want to delete");
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", node->object->getName().c_str());
-    ImGui::SameLine();
-    ImGui::Text("?");
-
-    ImGui::Text("This action cannot be undone.");
-
-    ImGui::Separator();
-
-    if (ImGui::Button("Yes", ImVec2(120, 0)))
-    {
-      m_objectManager->removeObject(node->object);
-
-      m_objectUINodesToRemove.push_back(node);
-
-      ImGui::CloseCurrentPopup();
-    }
-
-    ImGui::SameLine();
-
-    if (ImGui::Button("No", ImVec2(120, 0)))
-    {
-      ImGui::CloseCurrentPopup();
-    }
-
-    ImGui::EndPopup();
+    m_nodeCheckingForDeletion = node;
   }
 }
 
@@ -271,6 +254,16 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
                         ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth |
                         ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_OpenOnDoubleClick))
   {
+
+    if (ImGui::IsItemFocused())
+    {
+      m_focusedNode = node;
+    }
+    else if (m_focusedNode == node)
+    {
+      m_focusedNode = nullptr;
+    }
+
     if (ImGui::IsItemClicked())
     {
       m_selectedObject = node->object;
@@ -349,4 +342,66 @@ void ObjectGUIManager::displayObjectListGui()
   }
 
   ImGui::End();
+}
+
+void ObjectGUIManager::registerWindowEvents()
+{
+  const auto ecs = m_objectManager->getECS();
+  ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this, ecs](const vke::KeyCallbackEvent& e) {
+  if (e.action == GLFW_PRESS && ecs->keyIsPressed(GLFW_KEY_DELETE))
+  {
+    if (m_focusedNode)
+    {
+      m_nodeCheckingForDeletion = m_focusedNode;
+    }
+  }
+  });
+}
+
+void ObjectGUIManager::deleteObjectUserQuery()
+{
+  if (!m_nodeCheckingForDeletion)
+  {
+    return;
+  }
+
+  bool shouldDelete = false;
+
+  ImGui::OpenPopup("Delete Object?");
+
+  if (ImGui::BeginPopupModal("Delete Object?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    ImGui::Text("Are you sure you want to delete");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", m_nodeCheckingForDeletion->object->getName().c_str());
+    ImGui::SameLine();
+    ImGui::Text("?");
+
+    ImGui::Text("This action cannot be undone.");
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Yes", ImVec2(120, 0)))
+    {
+      shouldDelete = true;
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("No", ImVec2(120, 0)))
+    {
+      m_nodeCheckingForDeletion = nullptr;
+    }
+
+    ImGui::EndPopup();
+  }
+
+  if (shouldDelete)
+  {
+    m_objectManager->removeObject(m_nodeCheckingForDeletion->object);
+
+    m_objectUINodesToRemove.push_back(m_nodeCheckingForDeletion);
+
+    m_nodeCheckingForDeletion = nullptr;
+  }
 }
