@@ -276,6 +276,20 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
       m_selectedObject = node->object;
     }
 
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+    {
+      ImGui::OpenPopup("ItemContextMenu");
+    }
+
+    if (ImGui::BeginPopup("ItemContextMenu"))
+    {
+      if (ImGui::MenuItem("Duplicate"))
+      {
+        m_objectManager->duplicateObject(node->object);
+      }
+      ImGui::EndPopup();
+    }
+
     displayObjectDragDrop(node);
 
     const bool hasChildren = !node->children.empty();

@@ -50,6 +50,14 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   m_objectGUIManager->addObject(object);
 }
 
+void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
+{
+  auto objectData = object->serialize();
+  objectData.at("name") = std::string(objectData.at("name")) + " - Copy";
+
+  addObject(std::make_shared<Object>(objectData, this));
+}
+
 void ObjectManager::startScene()
 {
   if (m_sceneStatus == SceneStatus::stopped)
