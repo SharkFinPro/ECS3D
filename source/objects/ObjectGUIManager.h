@@ -1,6 +1,8 @@
 #ifndef OBJECTGUIMANAGER_H
 #define OBJECTGUIMANAGER_H
 
+#include <VulkanEngine/utilities/EventSystem.h>
+#include <VulkanEngine/components/window/Window.h>
 #include <vector>
 #include <memory>
 
@@ -17,7 +19,8 @@ struct ObjectUINode {
 class ObjectGUIManager {
 public:
   explicit ObjectGUIManager(ObjectManager* objectManager);
-  ~ObjectGUIManager() = default;
+
+  ~ObjectGUIManager();
 
   void update();
 
@@ -41,6 +44,8 @@ private:
   bool m_highlightSelectedObject = true;
 
   bool m_mouseWasPressed = false;
+
+  vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
 
   static bool containsObjectUINode(const std::vector<std::shared_ptr<ObjectUINode>>& rootNodes,
                                    const std::shared_ptr<Object>& object);
