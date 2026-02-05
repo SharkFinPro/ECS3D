@@ -13,10 +13,9 @@
 Scene::Scene(SceneManager* sceneManager,
              std::string name)
   : m_sceneManager(sceneManager), m_assetManager(sceneManager->getECS()->getAssetManager()),
-    m_objectManager(std::make_shared<ObjectManager>()), m_name(std::move(name)), m_uuid(m_sceneManager->getECS()->createUUID())
+    m_objectManager(std::make_shared<ObjectManager>(sceneManager->getECS())),
+    m_uuid(m_sceneManager->getECS()->createUUID()), m_name(std::move(name))
 {
-  m_objectManager->setECS(sceneManager->getECS());
-
   m_assetManager->loadAsset<ModelAsset>("assets/models/cube_1x1x1.glb");
   m_assetManager->loadAsset<ModelAsset>("assets/models/sphere.glb");
   m_assetManager->loadAsset<ModelAsset>("assets/models/sphere_2.glb");

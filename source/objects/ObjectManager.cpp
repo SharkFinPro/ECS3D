@@ -5,8 +5,9 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 
-ObjectManager::ObjectManager()
-  : m_collisionManager(std::make_shared<CollisionManager>()),
+ObjectManager::ObjectManager(ECS3D* ecs)
+  : m_ecs(ecs),
+    m_collisionManager(std::make_shared<CollisionManager>()),
     m_objectGUIManager(std::make_shared<ObjectGUIManager>(this))
 {}
 
@@ -22,11 +23,6 @@ void ObjectManager::update(const float dt)
   variableUpdate(dt);
 
   m_objectGUIManager->displaySelectedObjectGui();
-}
-
-void ObjectManager::setECS(ECS3D* ecs)
-{
-  m_ecs = ecs;
 }
 
 ECS3D* ObjectManager::getECS() const
@@ -48,6 +44,14 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   m_objects.push_back(object);
 
   m_objectGUIManager->addObject(object);
+}
+
+void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
+{
+  auto objectData = object->serialize();
+  objectData.at("name") = std::string(objectData.at("name")) + " - Copy";
+
+  addObject(std::make_shared<Object>(objectData, this));
 }
 
 void ObjectManager::startScene()

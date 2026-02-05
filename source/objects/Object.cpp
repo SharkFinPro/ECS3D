@@ -105,7 +105,10 @@ void Object::setName(const std::string& name)
 
 void Object::displayGui()
 {
-  ImGui::InputText("Name", m_name.data(), m_name.capacity());
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextUnformatted("Name");
+  ImGui::SameLine();
+  ImGui::InputText(("##"+ uuids::to_string(m_uuid) + "Name").c_str(), m_name.data(), m_name.capacity());
 
   for (auto it = m_components.begin(); it != m_components.end();)
   {

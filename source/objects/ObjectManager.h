@@ -18,17 +18,17 @@ enum class SceneStatus {
 
 class ObjectManager {
 public:
-  ObjectManager();
+  explicit ObjectManager(ECS3D* ecs);
 
   void update(float dt);
-
-  void setECS(ECS3D* ecs);
 
   [[nodiscard]] ECS3D* getECS() const;
 
   [[nodiscard]] std::shared_ptr<CollisionManager> getCollisionManager() const;
 
   void addObject(const std::shared_ptr<Object>& object);
+
+  void duplicateObject(const std::shared_ptr<Object>& object);
 
   void startScene();
 

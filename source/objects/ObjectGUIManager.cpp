@@ -11,15 +11,19 @@
 
 ObjectGUIManager::ObjectGUIManager(ObjectManager* objectManager)
   : m_objectManager(objectManager)
-{}
+{
+  registerWindowEvents();
+}
 
 void ObjectGUIManager::update()
 {
   displayObjectListGui();
 
-  deleteUINodesToRemove();
+  displayDeleteConfirmationModal();
 
-  reorderObjectGui();
+  processDeletions();
+
+  processReassignments();
 
   m_mouseWasPressed = m_objectManager->getECS()->getRenderer()->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
 }
@@ -94,11 +98,16 @@ bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
   return false;
 }
 
-void ObjectGUIManager::reorderObjectGui()
+void ObjectGUIManager::processReassignments()
 {
-  for (int i = 0; i < m_objectUINodesSetForReassignment.size(); ++i)
+  if (m_pendingReassignments.empty())
   {
-    const auto node = m_objectUINodesSetForReassignment[i];
+    return;
+  }
+
+  for (int i = 0; i < m_pendingReassignments.size(); ++i)
+  {
+    const auto node = m_pendingReassignments[i];
 
     if (!isAncestor(node->newParent, node))
     {
@@ -108,11 +117,11 @@ void ObjectGUIManager::reorderObjectGui()
     for (auto& child : node->children)
     {
       child->newParent = node->parent;
-      m_objectUINodesSetForReassignment.push_back(child);
+      m_pendingReassignments.push_back(child);
     }
   }
 
-  for (auto& node : m_objectUINodesSetForReassignment)
+  for (auto& node : m_pendingReassignments)
   {
     std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
 
@@ -131,28 +140,38 @@ void ObjectGUIManager::reorderObjectGui()
     }
   }
 
-  m_objectUINodesSetForReassignment.clear();
+  m_pendingReassignments.clear();
 }
 
-void ObjectGUIManager::deleteUINodesToRemove()
+void ObjectGUIManager::processDeletions()
 {
-  if (m_objectUINodesToRemove.empty())
+  if (m_pendingDeletions.empty())
   {
     return;
   }
 
-  for (const auto& node : m_objectUINodesToRemove)
+  for (const auto& node : m_pendingDeletions)
   {
     for (const auto& child : node->children)
     {
       child->newParent = node->parent;
-      m_objectUINodesSetForReassignment.push_back(child);
+      m_pendingReassignments.push_back(child);
+    }
+
+    if (m_focusedNode == node)
+    {
+      m_focusedNode = nullptr;
+    }
+
+    if (m_selectedObject == node->object)
+    {
+      m_selectedObject = nullptr;
     }
 
     std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
   }
 
-  m_objectUINodesToRemove.clear();
+  m_pendingDeletions.clear();
 }
 
 void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
@@ -164,7 +183,7 @@ void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>
       const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
 
       objectNode->newParent = node;
-      m_objectUINodesSetForReassignment.push_back(objectNode);
+      m_pendingReassignments.push_back(objectNode);
     }
 
     ImGui::EndDragDropTarget();
@@ -209,38 +228,7 @@ void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<ObjectUIN
 
   if (ImGui::Button("-", {buttonWidth, 0}))
   {
-    ImGui::OpenPopup("Delete Object?");
-  }
-
-  if (ImGui::BeginPopupModal("Delete Object?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-  {
-    ImGui::Text("Are you sure you want to delete");
-    ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", node->object->getName().c_str());
-    ImGui::SameLine();
-    ImGui::Text("?");
-
-    ImGui::Text("This action cannot be undone.");
-
-    ImGui::Separator();
-
-    if (ImGui::Button("Yes", ImVec2(120, 0)))
-    {
-      m_objectManager->removeObject(node->object);
-
-      m_objectUINodesToRemove.push_back(node);
-
-      ImGui::CloseCurrentPopup();
-    }
-
-    ImGui::SameLine();
-
-    if (ImGui::Button("No", ImVec2(120, 0)))
-    {
-      ImGui::CloseCurrentPopup();
-    }
-
-    ImGui::EndPopup();
+    m_nodeCheckingForDeletion = node;
   }
 }
 
@@ -271,9 +259,33 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
                         ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth |
                         ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_OpenOnDoubleClick))
   {
+
+    if (ImGui::IsItemFocused())
+    {
+      m_focusedNode = node;
+    }
+    else if (m_focusedNode == node)
+    {
+      m_focusedNode = nullptr;
+    }
+
     if (ImGui::IsItemClicked())
     {
       m_selectedObject = node->object;
+    }
+
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+    {
+      ImGui::OpenPopup("ItemContextMenu");
+    }
+
+    if (ImGui::BeginPopup("ItemContextMenu"))
+    {
+      if (ImGui::MenuItem("Duplicate"))
+      {
+        m_objectManager->duplicateObject(node->object);
+      }
+      ImGui::EndPopup();
     }
 
     displayObjectDragDrop(node);
@@ -328,11 +340,96 @@ void ObjectGUIManager::displayObjectListGui()
       const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
 
       objectNode->newParent = nullptr;
-      m_objectUINodesSetForReassignment.push_back(objectNode);
+      m_pendingReassignments.push_back(objectNode);
     }
 
     ImGui::EndDragDropTarget();
   }
 
   ImGui::End();
+}
+
+void ObjectGUIManager::registerWindowEvents()
+{
+  const auto ecs = m_objectManager->getECS();
+
+  ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this, ecs](const vke::KeyCallbackEvent& e) {
+    if (e.action != GLFW_PRESS)
+    {
+      return;
+    }
+
+    if (m_focusedNode &&
+        ecs->keyIsPressed(GLFW_KEY_DELETE))
+    {
+      m_nodeCheckingForDeletion = m_focusedNode;
+    }
+
+    if (m_focusedNode &&
+        ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) &&
+        ecs->keyIsPressed(GLFW_KEY_LEFT_SHIFT) &&
+        ecs->keyIsPressed(GLFW_KEY_D))
+    {
+      m_objectManager->duplicateObject(m_focusedNode->object);
+    }
+
+    if (m_nodeCheckingForDeletion &&
+        ecs->keyIsPressed(GLFW_KEY_ENTER))
+    {
+      deleteNodeQueriedForDeletion();
+    }
+  });
+}
+
+void ObjectGUIManager::displayDeleteConfirmationModal()
+{
+  if (!m_nodeCheckingForDeletion)
+  {
+    return;
+  }
+
+  bool shouldDelete = false;
+
+  ImGui::OpenPopup("Delete Object?");
+
+  if (ImGui::BeginPopupModal("Delete Object?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    ImGui::Text("Are you sure you want to delete");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", m_nodeCheckingForDeletion->object->getName().c_str());
+    ImGui::SameLine();
+    ImGui::Text("?");
+
+    ImGui::Text("This action cannot be undone.");
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Yes", ImVec2(120, 0)))
+    {
+      shouldDelete = true;
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("No", ImVec2(120, 0)))
+    {
+      m_nodeCheckingForDeletion = nullptr;
+    }
+
+    ImGui::EndPopup();
+  }
+
+  if (shouldDelete)
+  {
+    deleteNodeQueriedForDeletion();
+  }
+}
+
+void ObjectGUIManager::deleteNodeQueriedForDeletion()
+{
+  m_objectManager->removeObject(m_nodeCheckingForDeletion->object);
+
+  m_pendingDeletions.push_back(m_nodeCheckingForDeletion);
+
+  m_nodeCheckingForDeletion = nullptr;
 }
