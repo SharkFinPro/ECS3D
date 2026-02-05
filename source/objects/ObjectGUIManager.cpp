@@ -100,6 +100,11 @@ bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
 
 void ObjectGUIManager::processReassignments()
 {
+  if (m_pendingReassignments.empty())
+  {
+    return;
+  }
+
   for (int i = 0; i < m_pendingReassignments.size(); ++i)
   {
     const auto node = m_pendingReassignments[i];
