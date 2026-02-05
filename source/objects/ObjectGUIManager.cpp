@@ -352,24 +352,31 @@ void ObjectGUIManager::displayObjectListGui()
 void ObjectGUIManager::registerWindowEvents()
 {
   const auto ecs = m_objectManager->getECS();
-  
+
   ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this, ecs](const vke::KeyCallbackEvent& e) {
-    if (e.action == GLFW_PRESS)
+    if (e.action != GLFW_PRESS)
     {
-      if (m_focusedNode && ecs->keyIsPressed(GLFW_KEY_DELETE))
-      {
-        m_nodeCheckingForDeletion = m_focusedNode;
-      }
+      return;
+    }
 
-      if (m_focusedNode && ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && ecs->keyIsPressed(GLFW_KEY_LEFT_SHIFT) && ecs->keyIsPressed(GLFW_KEY_D))
-      {
-        m_objectManager->duplicateObject(m_focusedNode->object);
-      }
+    if (m_focusedNode &&
+        ecs->keyIsPressed(GLFW_KEY_DELETE))
+    {
+      m_nodeCheckingForDeletion = m_focusedNode;
+    }
 
-      if (m_nodeCheckingForDeletion && ecs->keyIsPressed(GLFW_KEY_ENTER))
-      {
-        deleteNodeQueriedForDeletion();
-      }
+    if (m_focusedNode &&
+        ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) &&
+        ecs->keyIsPressed(GLFW_KEY_LEFT_SHIFT) &&
+        ecs->keyIsPressed(GLFW_KEY_D))
+    {
+      m_objectManager->duplicateObject(m_focusedNode->object);
+    }
+
+    if (m_nodeCheckingForDeletion &&
+        ecs->keyIsPressed(GLFW_KEY_ENTER))
+    {
+      deleteNodeQueriedForDeletion();
     }
   });
 }
