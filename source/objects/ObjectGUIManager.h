@@ -29,8 +29,8 @@ private:
   ObjectManager* m_objectManager;
 
   std::vector<std::shared_ptr<ObjectUINode>> m_objectUINodes;
-  std::vector<std::shared_ptr<ObjectUINode>> m_objectUINodesSetForReassignment;
-  std::vector<std::shared_ptr<ObjectUINode>> m_objectUINodesToRemove;
+  std::vector<std::shared_ptr<ObjectUINode>> m_pendingReassignments;
+  std::vector<std::shared_ptr<ObjectUINode>> m_pendingDeletions;
 
   std::shared_ptr<Object> m_selectedObject;
 
@@ -47,9 +47,9 @@ private:
 
   static bool isAncestor(const std::shared_ptr<ObjectUINode>& source, const std::shared_ptr<ObjectUINode>& target);
 
-  void reorderObjectGui();
+  void processReassignments();
 
-  void deleteUINodesToRemove();
+  void processDeletions();
 
   void displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node);
 
@@ -63,7 +63,7 @@ private:
 
   void registerWindowEvents();
 
-  void deleteObjectUserQuery();
+  void displayDeleteConfirmationModal();
 
   void deleteNodeQueriedForDeletion();
 };

@@ -19,11 +19,11 @@ void ObjectGUIManager::update()
 {
   displayObjectListGui();
 
-  deleteObjectUserQuery();
+  displayDeleteConfirmationModal();
 
-  deleteUINodesToRemove();
+  processDeletions();
 
-  reorderObjectGui();
+  processReassignments();
 
   m_mouseWasPressed = m_objectManager->getECS()->getRenderer()->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
 }
@@ -98,11 +98,11 @@ bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
   return false;
 }
 
-void ObjectGUIManager::reorderObjectGui()
+void ObjectGUIManager::processReassignments()
 {
-  for (int i = 0; i < m_objectUINodesSetForReassignment.size(); ++i)
+  for (int i = 0; i < m_pendingReassignments.size(); ++i)
   {
-    const auto node = m_objectUINodesSetForReassignment[i];
+    const auto node = m_pendingReassignments[i];
 
     if (!isAncestor(node->newParent, node))
     {
@@ -112,11 +112,11 @@ void ObjectGUIManager::reorderObjectGui()
     for (auto& child : node->children)
     {
       child->newParent = node->parent;
-      m_objectUINodesSetForReassignment.push_back(child);
+      m_pendingReassignments.push_back(child);
     }
   }
 
-  for (auto& node : m_objectUINodesSetForReassignment)
+  for (auto& node : m_pendingReassignments)
   {
     std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
 
@@ -135,22 +135,22 @@ void ObjectGUIManager::reorderObjectGui()
     }
   }
 
-  m_objectUINodesSetForReassignment.clear();
+  m_pendingReassignments.clear();
 }
 
-void ObjectGUIManager::deleteUINodesToRemove()
+void ObjectGUIManager::processDeletions()
 {
-  if (m_objectUINodesToRemove.empty())
+  if (m_pendingDeletions.empty())
   {
     return;
   }
 
-  for (const auto& node : m_objectUINodesToRemove)
+  for (const auto& node : m_pendingDeletions)
   {
     for (const auto& child : node->children)
     {
       child->newParent = node->parent;
-      m_objectUINodesSetForReassignment.push_back(child);
+      m_pendingReassignments.push_back(child);
     }
 
     if (m_focusedNode == node)
@@ -166,7 +166,7 @@ void ObjectGUIManager::deleteUINodesToRemove()
     std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
   }
 
-  m_objectUINodesToRemove.clear();
+  m_pendingDeletions.clear();
 }
 
 void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
@@ -178,7 +178,7 @@ void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>
       const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
 
       objectNode->newParent = node;
-      m_objectUINodesSetForReassignment.push_back(objectNode);
+      m_pendingReassignments.push_back(objectNode);
     }
 
     ImGui::EndDragDropTarget();
@@ -335,7 +335,7 @@ void ObjectGUIManager::displayObjectListGui()
       const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
 
       objectNode->newParent = nullptr;
-      m_objectUINodesSetForReassignment.push_back(objectNode);
+      m_pendingReassignments.push_back(objectNode);
     }
 
     ImGui::EndDragDropTarget();
@@ -369,7 +369,7 @@ void ObjectGUIManager::registerWindowEvents()
   });
 }
 
-void ObjectGUIManager::deleteObjectUserQuery()
+void ObjectGUIManager::displayDeleteConfirmationModal()
 {
   if (!m_nodeCheckingForDeletion)
   {
@@ -417,7 +417,7 @@ void ObjectGUIManager::deleteNodeQueriedForDeletion()
 {
   m_objectManager->removeObject(m_nodeCheckingForDeletion->object);
 
-  m_objectUINodesToRemove.push_back(m_nodeCheckingForDeletion);
+  m_pendingDeletions.push_back(m_nodeCheckingForDeletion);
 
   m_nodeCheckingForDeletion = nullptr;
 }
