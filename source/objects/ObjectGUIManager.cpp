@@ -352,8 +352,8 @@ void ObjectGUIManager::displayObjectListGui()
 void ObjectGUIManager::registerWindowEvents()
 {
   const auto ecs = m_objectManager->getECS();
+  
   ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this, ecs](const vke::KeyCallbackEvent& e) {
-
     if (e.action == GLFW_PRESS)
     {
       if (m_focusedNode && ecs->keyIsPressed(GLFW_KEY_DELETE))
