@@ -14,6 +14,13 @@ SaveManager::SaveManager(ECS3D* ecs)
   registerWindowEvents();
 }
 
+SaveManager::~SaveManager()
+{
+  const auto window = m_ecs->getRenderer()->getWindow();
+  window->removeListener(m_keyCallbackEventListener);
+  window->removeListener(m_dropEventListener);
+}
+
 void SaveManager::save()
 {
   if (m_saveFile.empty() && !createSaveFile())
@@ -180,7 +187,9 @@ bool SaveManager::createSaveFile()
 
 void SaveManager::registerWindowEvents()
 {
-  m_ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
+  const auto window = m_ecs->getRenderer()->getWindow();
+
+  m_keyCallbackEventListener = window->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
     if (e.action == GLFW_PRESS && m_ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && m_ecs->keyIsPressed(GLFW_KEY_S))
     {
       if (m_ecs->keyIsPressed(GLFW_KEY_LEFT_SHIFT))
@@ -194,7 +203,7 @@ void SaveManager::registerWindowEvents()
     }
   });
 
-  m_ecs->getRenderer()->getWindow()->on<vke::DropEvent>([this](const vke::DropEvent& e) {
+  m_dropEventListener = window->on<vke::DropEvent>([this](const vke::DropEvent& e) {
     if (e.paths.size() == 1)
     {
       loadSaveFile(e.paths.front());
