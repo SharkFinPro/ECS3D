@@ -16,6 +16,7 @@ ObjectGUIManager::ObjectGUIManager(ObjectManager* objectManager)
 }
 
 ObjectGUIManager::~ObjectGUIManager()
+{
   m_objectManager->getECS()->getRenderer()->getWindow()->removeListener(m_keyCallbackEventListener);
 }
 
