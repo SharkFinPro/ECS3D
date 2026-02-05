@@ -408,10 +408,15 @@ void ObjectGUIManager::deleteObjectUserQuery()
 
   if (shouldDelete)
   {
-    m_objectManager->removeObject(m_nodeCheckingForDeletion->object);
-
-    m_objectUINodesToRemove.push_back(m_nodeCheckingForDeletion);
-
-    m_nodeCheckingForDeletion = nullptr;
+    deleteNodeQueriedForDeletion();
   }
+}
+
+void ObjectGUIManager::deleteNodeQueriedForDeletion()
+{
+  m_objectManager->removeObject(m_nodeCheckingForDeletion->object);
+
+  m_objectUINodesToRemove.push_back(m_nodeCheckingForDeletion);
+
+  m_nodeCheckingForDeletion = nullptr;
 }

@@ -64,6 +64,8 @@ private:
   void registerWindowEvents();
 
   void deleteObjectUserQuery();
+
+  void deleteNodeQueriedForDeletion();
 };
 
 
