@@ -348,21 +348,22 @@ void ObjectGUIManager::registerWindowEvents()
 {
   const auto ecs = m_objectManager->getECS();
   ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this, ecs](const vke::KeyCallbackEvent& e) {
-    if (!m_focusedNode)
-    {
-      return;
-    }
 
     if (e.action == GLFW_PRESS)
     {
-      if (ecs->keyIsPressed(GLFW_KEY_DELETE))
+      if (m_focusedNode && ecs->keyIsPressed(GLFW_KEY_DELETE))
       {
         m_nodeCheckingForDeletion = m_focusedNode;
       }
 
-      if (ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && ecs->keyIsPressed(GLFW_KEY_LEFT_SHIFT) && ecs->keyIsPressed(GLFW_KEY_D))
+      if (m_focusedNode && ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && ecs->keyIsPressed(GLFW_KEY_LEFT_SHIFT) && ecs->keyIsPressed(GLFW_KEY_D))
       {
         m_objectManager->duplicateObject(m_focusedNode->object);
+      }
+
+      if (m_nodeCheckingForDeletion && ecs->keyIsPressed(GLFW_KEY_ENTER))
+      {
+        deleteNodeQueriedForDeletion();
       }
     }
   });
