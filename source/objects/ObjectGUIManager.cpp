@@ -15,6 +15,10 @@ ObjectGUIManager::ObjectGUIManager(ObjectManager* objectManager)
   registerWindowEvents();
 }
 
+ObjectGUIManager::~ObjectGUIManager()
+  m_objectManager->getECS()->getRenderer()->getWindow()->removeListener(m_keyCallbackEventListener);
+}
+
 void ObjectGUIManager::update()
 {
   displayObjectListGui();
@@ -353,7 +357,7 @@ void ObjectGUIManager::registerWindowEvents()
 {
   const auto ecs = m_objectManager->getECS();
 
-  ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this, ecs](const vke::KeyCallbackEvent& e) {
+  m_keyCallbackEventListener = ecs->getRenderer()->getWindow()->on<vke::KeyCallbackEvent>([this, ecs](const vke::KeyCallbackEvent& e) {
     if (e.action != GLFW_PRESS)
     {
       return;
