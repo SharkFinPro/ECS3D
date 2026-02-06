@@ -2,7 +2,6 @@
 #include "Object.h"
 #include "CollisionManager.h"
 #include "ObjectGUIManager.h"
-#include <imgui.h>
 #include <nlohmann/json.hpp>
 
 ObjectManager::ObjectManager(ECS3D* ecs)
@@ -11,15 +10,18 @@ ObjectManager::ObjectManager(ECS3D* ecs)
     m_objectGUIManager(std::make_shared<ObjectGUIManager>(this))
 {}
 
-void ObjectManager::update(const float dt)
+void ObjectManager::update(const float dt,
+                           const bool isPaused)
 {
-  displaySceneStatusGui();
-
   m_objectGUIManager->update();
 
   deleteObjectsMarkedForDeletion();
 
-  fixedUpdate(dt);
+  if (!isPaused)
+  {
+    fixedUpdate(dt);
+  }
+
   variableUpdate(dt);
 
   m_objectGUIManager->displaySelectedObjectGui();
@@ -54,45 +56,24 @@ void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
   addObject(std::make_shared<Object>(objectData, this));
 }
 
-void ObjectManager::start() const
+void ObjectManager::start()
 {
+  m_isRunning = true;
+
   for (const auto& object : m_objects)
   {
     object->start();
   }
 }
 
-void ObjectManager::stop() const
+void ObjectManager::stop()
 {
+  m_isRunning = false;
+
   for (const auto& object : m_objects)
   {
     object->stop();
   }
-}
-
-void ObjectManager::startScene()
-{
-  if (m_sceneStatus == SceneStatus::stopped)
-  {
-    start();
-  }
-
-  m_sceneStatus = SceneStatus::running;
-}
-
-void ObjectManager::pauseScene()
-{
-  m_sceneStatus = SceneStatus::paused;
-}
-
-void ObjectManager::resetScene()
-{
-  if (m_sceneStatus == SceneStatus::running || m_sceneStatus == SceneStatus::paused)
-  {
-    stop();
-  }
-
-  m_sceneStatus = SceneStatus::stopped;
 }
 
 nlohmann::json ObjectManager::serialize() const
@@ -128,7 +109,7 @@ void ObjectManager::variableUpdate(const float dt) const
 
 void ObjectManager::fixedUpdate(const float dt)
 {
-  if (m_sceneStatus != SceneStatus::running)
+  if (!m_isRunning)
   {
     return;
   }
@@ -149,41 +130,6 @@ void ObjectManager::fixedUpdate(const float dt)
 
     m_timeAccumulator -= m_fixedUpdateDt;
   }
-}
-
-void ObjectManager::displaySceneStatusGui()
-{
-  ImGui::Begin("Scene Status");
-
-  constexpr int sceneStatusButtonWidth = 125;
-
-  if (m_sceneStatus != SceneStatus::running)
-  {
-    if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
-    {
-      startScene();
-    }
-  }
-
-  if (m_sceneStatus == SceneStatus::running)
-  {
-    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
-    {
-      pauseScene();
-    }
-  }
-
-  if (m_sceneStatus != SceneStatus::stopped)
-  {
-    ImGui::SameLine();
-
-    if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
-    {
-      resetScene();
-    }
-  }
-
-  ImGui::End();
 }
 
 void ObjectManager::deleteObjectsMarkedForDeletion()

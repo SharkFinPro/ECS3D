@@ -10,17 +10,12 @@ class ECS3D;
 class CollisionManager;
 class ObjectGUIManager;
 
-enum class SceneStatus {
-  running,
-  stopped,
-  paused
-};
-
 class ObjectManager {
 public:
   explicit ObjectManager(ECS3D* ecs);
 
-  void update(float dt);
+  void update(float dt,
+              bool isPaused);
 
   [[nodiscard]] ECS3D* getECS() const;
 
@@ -30,15 +25,9 @@ public:
 
   void duplicateObject(const std::shared_ptr<Object>& object);
 
-  void start() const;
+  void start();
 
-  void stop() const;
-
-  void startScene();
-
-  void pauseScene();
-
-  void resetScene();
+  void stop();
 
   [[nodiscard]] nlohmann::json serialize() const;
 
@@ -55,15 +44,13 @@ private:
 
   std::shared_ptr<ObjectGUIManager> m_objectGUIManager;
 
-  SceneStatus m_sceneStatus = SceneStatus::stopped;
-
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
 
+  bool m_isRunning = false;
+
   void variableUpdate(float dt) const;
   void fixedUpdate(float dt);
-
-  void displaySceneStatusGui();
 
   void deleteObjectsMarkedForDeletion();
 };
