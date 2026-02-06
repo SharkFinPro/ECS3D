@@ -22,8 +22,6 @@ public:
   Scene(SceneManager* sceneManager,
         std::string name);
 
-  void load() const;
-
   void update(float dt) const;
 
   void createBlock(TransformData transformData) const;
@@ -41,6 +39,10 @@ public:
   void loadFromJSON(const nlohmann::json& sceneData);
 
   [[nodiscard]] std::string getName() const;
+
+  void start() const;
+
+  void stop() const;
 
 private:
   SceneManager* m_sceneManager;

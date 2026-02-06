@@ -27,14 +27,9 @@ Scene::Scene(SceneManager* sceneManager,
   m_assetManager->loadAsset<TextureAsset>("assets/textures/earth_specular.png");
 }
 
-void Scene::load() const
-{
-  m_objectManager->resetScene();
-}
-
 void Scene::update(const float dt) const
 {
-  m_objectManager->update(dt);
+  m_objectManager->update(dt, m_sceneManager->getSceneStatus() == SceneStatus::running);
 }
 
 void Scene::createBlock(TransformData transformData) const
@@ -133,4 +128,14 @@ void Scene::loadFromJSON(const nlohmann::json& sceneData)
 std::string Scene::getName() const
 {
   return m_name;
+}
+
+void Scene::start() const
+{
+  m_objectManager->start();
+}
+
+void Scene::stop() const
+{
+  m_objectManager->stop();
 }

@@ -8,6 +8,12 @@
 class ECS3D;
 class Scene;
 
+enum class SceneStatus {
+  running,
+  stopped,
+  paused
+};
+
 class SceneManager {
 public:
   explicit SceneManager(ECS3D* ecs);
@@ -26,6 +32,14 @@ public:
 
   [[nodiscard]] std::shared_ptr<Scene> getCurrentScene() const;
 
+  void startScene();
+
+  void pauseScene();
+
+  void resetScene();
+
+  [[nodiscard]] SceneStatus getSceneStatus() const;
+
 private:
   ECS3D* m_ecs;
 
@@ -35,6 +49,8 @@ private:
 
   std::shared_ptr<Scene> m_currentScene = nullptr;
 
+  SceneStatus m_sceneStatus = SceneStatus::stopped;
+
   void sceneSelector();
 
   void displayRemoveSceneButton(const std::shared_ptr<Scene>& scene);
@@ -42,6 +58,8 @@ private:
   void deleteScenesToRemove();
 
   [[nodiscard]] uint32_t findValidSceneIndex() const;
+
+  void displaySceneStatusGui();
 };
 
 
