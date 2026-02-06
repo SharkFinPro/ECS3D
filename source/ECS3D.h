@@ -26,10 +26,6 @@ public:
 
   void update();
 
-  void fixedUpdate();
-
-  void variableUpdate();
-
   [[nodiscard]] std::shared_ptr<vke::VulkanEngine> getRenderer() const;
 
   [[nodiscard]] bool keyIsPressed(int key) const;
@@ -66,6 +62,10 @@ private:
 
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
+
+  void fixedUpdate();
+
+  void variableUpdate();
 
   void displayMessageLog();
 

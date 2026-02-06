@@ -65,6 +65,31 @@ void ECS3D::update()
 	variableUpdate();
 }
 
+std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const
+{
+  return m_renderer;
+}
+
+bool ECS3D::keyIsPressed(const int key) const
+{
+  return m_renderer->getWindow()->keyIsPressed(key);
+}
+
+std::shared_ptr<SceneManager> ECS3D::getSceneManager() const
+{
+  return m_sceneManager;
+}
+
+std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
+{
+	return m_assetManager;
+}
+
+std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
+{
+	return m_saveManager;
+}
+
 void ECS3D::fixedUpdate()
 {
 	const auto currentTime = std::chrono::steady_clock::now();
@@ -109,31 +134,6 @@ void ECS3D::variableUpdate()
 	displayMessageLog();
 
 	m_renderer->render();
-}
-
-std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const
-{
-  return m_renderer;
-}
-
-bool ECS3D::keyIsPressed(const int key) const
-{
-  return m_renderer->getWindow()->keyIsPressed(key);
-}
-
-std::shared_ptr<SceneManager> ECS3D::getSceneManager() const
-{
-  return m_sceneManager;
-}
-
-std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
-{
-	return m_assetManager;
-}
-
-std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
-{
-	return m_saveManager;
 }
 
 void ECS3D::logMessage(const std::string& level, const std::string& message)
