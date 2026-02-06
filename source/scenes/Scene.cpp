@@ -29,7 +29,7 @@ Scene::Scene(SceneManager* sceneManager,
 
 void Scene::update(const float dt) const
 {
-  m_objectManager->update(dt, m_sceneManager->getSceneStatus() == SceneStatus::paused);
+  m_objectManager->update(dt, m_sceneManager->getSceneStatus() == SceneStatus::running);
 }
 
 void Scene::createBlock(TransformData transformData) const

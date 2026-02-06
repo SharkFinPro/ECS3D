@@ -11,13 +11,13 @@ ObjectManager::ObjectManager(ECS3D* ecs)
 {}
 
 void ObjectManager::update(const float dt,
-                           const bool isPaused)
+                           const bool shouldDoFixedUpdate)
 {
   m_objectGUIManager->update();
 
   deleteObjectsMarkedForDeletion();
 
-  if (!isPaused)
+  if (shouldDoFixedUpdate)
   {
     fixedUpdate(dt);
   }
@@ -56,20 +56,16 @@ void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
   addObject(std::make_shared<Object>(objectData, this));
 }
 
-void ObjectManager::start()
+void ObjectManager::start() const
 {
-  m_isRunning = true;
-
   for (const auto& object : m_objects)
   {
     object->start();
   }
 }
 
-void ObjectManager::stop()
+void ObjectManager::stop() const
 {
-  m_isRunning = false;
-
   for (const auto& object : m_objects)
   {
     object->stop();
@@ -109,11 +105,6 @@ void ObjectManager::variableUpdate(const float dt) const
 
 void ObjectManager::fixedUpdate(const float dt)
 {
-  if (!m_isRunning)
-  {
-    return;
-  }
-
   m_timeAccumulator += dt;
 
   uint8_t steps = 1;

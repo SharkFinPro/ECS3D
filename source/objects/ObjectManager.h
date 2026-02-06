@@ -15,7 +15,7 @@ public:
   explicit ObjectManager(ECS3D* ecs);
 
   void update(float dt,
-              bool isPaused);
+              bool shouldDoFixedUpdate);
 
   [[nodiscard]] ECS3D* getECS() const;
 
@@ -25,9 +25,9 @@ public:
 
   void duplicateObject(const std::shared_ptr<Object>& object);
 
-  void start();
+  void start() const;
 
-  void stop();
+  void stop() const;
 
   [[nodiscard]] nlohmann::json serialize() const;
 
@@ -46,8 +46,6 @@ private:
 
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
-
-  bool m_isRunning = false;
 
   void variableUpdate(float dt) const;
   void fixedUpdate(float dt);
