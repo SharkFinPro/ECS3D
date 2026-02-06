@@ -17,7 +17,7 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
-  void variableUpdate(float dt) override;
+  void variableUpdate() override;
   
   [[nodiscard]] glm::vec3 getPosition() override;
 

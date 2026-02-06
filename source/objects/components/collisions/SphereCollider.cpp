@@ -71,7 +71,7 @@ void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
   m_renderCollider = componentData.at("renderCollider");
 }
 
-void SphereCollider::variableUpdate([[maybe_unused]] const float dt)
+void SphereCollider::variableUpdate()
 {
   if (!m_renderCollider)
   {

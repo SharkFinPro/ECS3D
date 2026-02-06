@@ -125,7 +125,7 @@ void Collider::fixedUpdate(float dt)
   linesToDraw.clear();
 }
 
-void Collider::variableUpdate(float dt)
+void Collider::variableUpdate()
 {
   const auto renderer = getOwner()->getManager()->getECS()->getRenderer();
 

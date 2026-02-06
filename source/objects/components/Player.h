@@ -12,7 +12,7 @@ class Player final : public Component {
 public:
   Player();
 
-  void variableUpdate(float dt) override;
+  void variableUpdate() override;
 
   void fixedUpdate(float dt) override;
 

@@ -22,7 +22,9 @@ public:
   Scene(SceneManager* sceneManager,
         std::string name);
 
-  void update(float dt) const;
+  void fixedUpdate(float dt) const;
+
+  void variableUpdate() const;
 
   void createBlock(TransformData transformData) const;
 

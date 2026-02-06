@@ -16,7 +16,7 @@ Player::Player()
   loadVariable(m_jumpHeight);
 }
 
-void Player::variableUpdate([[maybe_unused]] const float dt)
+void Player::variableUpdate()
 {
   handleInput();
 }

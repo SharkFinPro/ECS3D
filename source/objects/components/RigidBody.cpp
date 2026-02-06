@@ -18,7 +18,7 @@ RigidBody::RigidBody()
 }
 
 #ifdef COLLISION_LOCATION_DEBUG
-void RigidBody::variableUpdate(float dt)
+void RigidBody::variableUpdate()
 {
   const auto renderer = getOwner()->getManager()->getECS()->getRenderer();
 

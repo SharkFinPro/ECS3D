@@ -32,7 +32,7 @@ LightRenderer::LightRenderer(const std::shared_ptr<vke::VulkanEngine>& renderer,
   m_spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(glm::vec3(0), color, ambient, diffuse, specular));
 }
 
-void LightRenderer::variableUpdate([[maybe_unused]] const float dt)
+void LightRenderer::variableUpdate()
 {
   if (m_transform_ptr.expired())
   {

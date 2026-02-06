@@ -60,6 +60,13 @@ private:
   std::mt19937 m_rng;
   uuids::uuid_random_generator m_uuidGenerator;
 
+  const float m_fixedUpdateDt = 1.0f / 50.0f;
+  float m_timeAccumulator = 0.0f;
+
+  void fixedUpdate();
+
+  void variableUpdate();
+
   void displayMessageLog();
 
   void initRenderer();

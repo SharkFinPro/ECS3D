@@ -24,7 +24,9 @@ public:
 
   [[nodiscard]] ECS3D* getECS() const;
 
-  void update(float dt);
+  void fixedUpdate(float dt) const;
+
+  void variableUpdate();
 
   [[nodiscard]] nlohmann::json serialize() const;
 

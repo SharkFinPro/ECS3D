@@ -60,27 +60,9 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
-	updateDockSpace();
+	fixedUpdate();
 
-	displayMenuBar();
-
-  const auto currentTime = std::chrono::steady_clock::now();
-  const float dt = std::chrono::duration<float>(currentTime - m_previousTime).count();
-  m_previousTime = currentTime;
-
-	try {
-		m_assetManager->displayGui();
-
-		m_sceneManager->update(dt);
-	}
-	catch(const std::exception& e)
-	{
-		logMessage("Error", e.what());
-	}
-
-	displayMessageLog();
-
-  m_renderer->render();
+	variableUpdate();
 }
 
 std::shared_ptr<vke::VulkanEngine> ECS3D::getRenderer() const
@@ -106,6 +88,52 @@ std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
 std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 {
 	return m_saveManager;
+}
+
+void ECS3D::fixedUpdate()
+{
+	const auto currentTime = std::chrono::steady_clock::now();
+	const float dt = std::chrono::duration<float>(currentTime - m_previousTime).count();
+	m_previousTime = currentTime;
+
+	m_timeAccumulator += dt;
+
+	uint8_t steps = 1;
+	while (m_timeAccumulator >= m_fixedUpdateDt && steps <= 3)
+	{
+		++steps;
+
+		try {
+			m_sceneManager->fixedUpdate(m_fixedUpdateDt);
+		}
+		catch(const std::exception& e)
+		{
+			logMessage("Error", e.what());
+		}
+
+		m_timeAccumulator -= m_fixedUpdateDt;
+	}
+}
+
+void ECS3D::variableUpdate()
+{
+	updateDockSpace();
+
+	displayMenuBar();
+
+	try {
+		m_assetManager->displayGui();
+
+		m_sceneManager->variableUpdate();
+	}
+	catch(const std::exception& e)
+	{
+		logMessage("Error", e.what());
+	}
+
+	displayMessageLog();
+
+	m_renderer->render();
 }
 
 void ECS3D::logMessage(const std::string& level, const std::string& message)
