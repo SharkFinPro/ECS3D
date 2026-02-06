@@ -27,9 +27,19 @@ Scene::Scene(SceneManager* sceneManager,
   m_assetManager->loadAsset<TextureAsset>("assets/textures/earth_specular.png");
 }
 
-void Scene::update(const float dt) const
+void Scene::fixedUpdate(const float dt) const
 {
-  m_objectManager->update(dt, m_sceneManager->getSceneStatus() == SceneStatus::running);
+  if (m_sceneManager->getSceneStatus() != SceneStatus::running)
+  {
+    return;
+  }
+
+  m_objectManager->fixedUpdate(dt);
+}
+
+void Scene::variableUpdate() const
+{
+  m_objectManager->variableUpdate();
 }
 
 void Scene::createBlock(TransformData transformData) const

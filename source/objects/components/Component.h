@@ -106,7 +106,7 @@ public:
   void setOwner(Object* owner);
   [[nodiscard]] Object* getOwner() const;
 
-  virtual void variableUpdate(float dt);
+  virtual void variableUpdate();
   virtual void fixedUpdate(float dt);
 
   virtual void displayGui();

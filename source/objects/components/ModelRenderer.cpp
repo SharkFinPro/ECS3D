@@ -29,7 +29,7 @@ ModelRenderer::ModelRenderer(std::shared_ptr<vke::VulkanEngine> renderer)
   : Component(ComponentType::modelRenderer), m_renderer(std::move(renderer))
 {}
 
-void ModelRenderer::variableUpdate([[maybe_unused]] const float dt)
+void ModelRenderer::variableUpdate()
 {
   if (!canRender())
   {

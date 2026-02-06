@@ -26,7 +26,7 @@ Object* Component::getOwner() const
   return m_owner;
 }
 
-void Component::variableUpdate([[maybe_unused]] float dt)
+void Component::variableUpdate()
 {}
 
 void Component::fixedUpdate([[maybe_unused]] float dt)

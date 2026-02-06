@@ -40,7 +40,15 @@ ECS3D* SceneManager::getECS() const
   return m_ecs;
 }
 
-void SceneManager::update(const float dt)
+void SceneManager::fixedUpdate(const float dt) const
+{
+  if (m_currentScene)
+  {
+    m_currentScene->fixedUpdate(dt);
+  }
+}
+
+void SceneManager::variableUpdate()
 {
   displaySceneStatusGui();
 
@@ -48,12 +56,10 @@ void SceneManager::update(const float dt)
 
   deleteScenesToRemove();
 
-  if (!m_currentScene)
+  if (m_currentScene)
   {
-    return;
+    m_currentScene->variableUpdate();
   }
-
-  m_currentScene->update(dt);
 }
 
 nlohmann::json SceneManager::serialize() const

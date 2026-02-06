@@ -14,8 +14,9 @@ class ObjectManager {
 public:
   explicit ObjectManager(ECS3D* ecs);
 
-  void update(float dt,
-              bool shouldDoFixedUpdate);
+  void fixedUpdate(float dt) const;
+
+  void variableUpdate();
 
   [[nodiscard]] ECS3D* getECS() const;
 
@@ -43,12 +44,6 @@ private:
   std::shared_ptr<CollisionManager> m_collisionManager;
 
   std::shared_ptr<ObjectGUIManager> m_objectGUIManager;
-
-  const float m_fixedUpdateDt = 1.0f / 50.0f;
-  float m_timeAccumulator = 0.0f;
-
-  void variableUpdate(float dt) const;
-  void fixedUpdate(float dt);
 
   void deleteObjectsMarkedForDeletion();
 };

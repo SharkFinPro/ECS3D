@@ -81,7 +81,7 @@ void BoxCollider::loadFromJSON(const nlohmann::json& componentData)
   m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
 }
 
-void BoxCollider::variableUpdate([[maybe_unused]] const float dt)
+void BoxCollider::variableUpdate()
 {
   if (!m_renderCollider)
   {

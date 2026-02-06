@@ -10,21 +10,32 @@ ObjectManager::ObjectManager(ECS3D* ecs)
     m_objectGUIManager(std::make_shared<ObjectGUIManager>(this))
 {}
 
-void ObjectManager::update(const float dt,
-                           const bool shouldDoFixedUpdate)
+void ObjectManager::fixedUpdate(const float dt) const
+{
+  for (const auto& object : m_objects)
+  {
+    object->fixedUpdate(dt);
+  }
+
+  m_collisionManager->update();
+}
+
+void ObjectManager::variableUpdate()
 {
   m_objectGUIManager->update();
 
   deleteObjectsMarkedForDeletion();
 
-  if (shouldDoFixedUpdate)
+  m_objectGUIManager->displaySelectedObjectGui();
+
+  for (const auto& object : m_objects)
   {
-    fixedUpdate(dt);
+    object->variableUpdate();
   }
 
-  variableUpdate(dt);
-
-  m_objectGUIManager->displaySelectedObjectGui();
+  #ifdef COLLISION_DEBUG
+    m_collisionManager->variableUpdate();
+  #endif
 }
 
 ECS3D* ObjectManager::getECS() const
@@ -89,38 +100,6 @@ nlohmann::json ObjectManager::serialize() const
 void ObjectManager::removeObject(const std::shared_ptr<Object>& object)
 {
   m_objectsToRemove.push_back(object);
-}
-
-void ObjectManager::variableUpdate(const float dt) const
-{
-  for (const auto& object : m_objects)
-  {
-    object->variableUpdate(dt);
-  }
-
-#ifdef COLLISION_DEBUG
-  m_collisionManager->variableUpdate();
-#endif
-}
-
-void ObjectManager::fixedUpdate(const float dt)
-{
-  m_timeAccumulator += dt;
-
-  uint8_t steps = 1;
-  while (m_timeAccumulator >= m_fixedUpdateDt && steps <= 3)
-  {
-    ++steps;
-
-    for (const auto& object : m_objects)
-    {
-      object->fixedUpdate(m_fixedUpdateDt);
-    }
-
-    m_collisionManager->update();
-
-    m_timeAccumulator -= m_fixedUpdateDt;
-  }
 }
 
 void ObjectManager::deleteObjectsMarkedForDeletion()

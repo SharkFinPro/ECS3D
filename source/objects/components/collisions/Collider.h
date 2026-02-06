@@ -42,7 +42,7 @@ public:
 #ifdef COLLISION_BBOX_DEBUG
   void fixedUpdate(float dt) override;
 
-  void variableUpdate(float dt) override;
+  void variableUpdate() override;
 #endif
 
   glm::vec3 getSupport(const std::shared_ptr<Collider>& other, const glm::vec3& direction);

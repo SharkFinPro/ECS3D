@@ -56,13 +56,13 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
   m_components.emplace(component->getType(), component);
 }
 
-void Object::variableUpdate(const float dt)
+void Object::variableUpdate()
 {
   for (const auto& [componentType, component] : m_components)
   {
     if (component->getOwner() == this)
     {
-      component->variableUpdate(dt);
+      component->variableUpdate();
     }
   }
 }

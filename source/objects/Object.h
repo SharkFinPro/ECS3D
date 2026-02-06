@@ -31,7 +31,7 @@ public:
   template<typename T>
   [[nodiscard]] std::shared_ptr<T> getComponent(ComponentType type) const;
 
-  void variableUpdate(float dt);
+  void variableUpdate();
   void fixedUpdate(float dt);
 
   void setManager(ObjectManager* objectManager);

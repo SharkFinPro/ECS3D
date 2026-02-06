@@ -21,7 +21,7 @@ public:
   RigidBody();
 
 #ifdef COLLISION_LOCATION_DEBUG
-  void variableUpdate(float dt) override;
+  void variableUpdate() override;
 #endif
 
   void fixedUpdate(float dt) override;

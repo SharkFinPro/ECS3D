@@ -22,7 +22,7 @@ public:
 
   ~LightRenderer() override = default;
 
-  void variableUpdate(float dt) override;
+  void variableUpdate() override;
 
   void displayGui() override;
 
