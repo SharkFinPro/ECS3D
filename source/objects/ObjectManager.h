@@ -30,6 +30,10 @@ public:
 
   void duplicateObject(const std::shared_ptr<Object>& object);
 
+  void start() const;
+
+  void stop() const;
+
   void startScene();
 
   void pauseScene();

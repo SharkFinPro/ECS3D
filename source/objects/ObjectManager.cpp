@@ -54,14 +54,27 @@ void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
   addObject(std::make_shared<Object>(objectData, this));
 }
 
+void ObjectManager::start() const
+{
+  for (const auto& object : m_objects)
+  {
+    object->start();
+  }
+}
+
+void ObjectManager::stop() const
+{
+  for (const auto& object : m_objects)
+  {
+    object->stop();
+  }
+}
+
 void ObjectManager::startScene()
 {
   if (m_sceneStatus == SceneStatus::stopped)
   {
-    for (const auto& object : m_objects)
-    {
-      object->start();
-    }
+    start();
   }
 
   m_sceneStatus = SceneStatus::running;
@@ -76,10 +89,7 @@ void ObjectManager::resetScene()
 {
   if (m_sceneStatus == SceneStatus::running || m_sceneStatus == SceneStatus::paused)
   {
-    for (const auto& object : m_objects)
-    {
-      object->stop();
-    }
+    stop();
   }
 
   m_sceneStatus = SceneStatus::stopped;
