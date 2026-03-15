@@ -23,6 +23,8 @@ add_library(${PROJECT_NAME}
   objects/components/ModelRenderer.h
   objects/components/RigidBody.cpp
   objects/components/RigidBody.h
+  objects/components/Script.cpp
+  objects/components/Script.h
   objects/components/collisions/Simplex.cpp
   objects/components/collisions/Simplex.h
   objects/components/collisions/Collider.cpp
