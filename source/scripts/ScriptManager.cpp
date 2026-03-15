@@ -19,8 +19,7 @@ static ScriptsSnapshot snapshot(const std::filesystem::path& dir)
 static bool changed(const std::filesystem::path& dir,
                     ScriptsSnapshot& prev)
 {
-  auto now = snapshot(dir);
-  if (now != prev)
+  if (auto now = snapshot(dir); now != prev)
   {
     prev = std::move(now);
     return true;
