@@ -1,7 +1,8 @@
 #include "ECS3D.h"
 #include "SaveManager.h"
-#include "scenes/SceneManager.h"
 #include "assets/AssetManager.h"
+#include "scenes/SceneManager.h"
+#include "scripts/ScriptManager.h"
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/window/Window.h>
 
@@ -21,6 +22,8 @@ ECS3D::ECS3D()
   initRenderer();
 
 	m_saveManager = std::make_shared<SaveManager>(this);
+
+	m_scriptManager = std::make_shared<ScriptManager>(this);
 }
 
 void ECS3D::prepareForReset()
@@ -60,6 +63,8 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
+	m_scriptManager->checkForScriptChanges();
+
 	fixedUpdate();
 
 	variableUpdate();
@@ -104,6 +109,8 @@ void ECS3D::fixedUpdate()
 		++steps;
 
 		try {
+			m_scriptManager->fixedUpdate(m_fixedUpdateDt);
+
 			m_sceneManager->fixedUpdate(m_fixedUpdateDt);
 		}
 		catch(const std::exception& e)
@@ -123,6 +130,8 @@ void ECS3D::variableUpdate()
 
 	try {
 		m_assetManager->displayGui();
+
+		m_scriptManager->variableUpdate();
 
 		m_sceneManager->variableUpdate();
 	}

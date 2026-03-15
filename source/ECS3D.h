@@ -11,6 +11,7 @@
 class AssetManager;
 class SaveManager;
 class SceneManager;
+class ScriptManager;
 
 class ECS3D {
 public:
@@ -62,6 +63,8 @@ private:
 
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
+
+  std::shared_ptr<ScriptManager> m_scriptManager;
 
   void fixedUpdate();
 
