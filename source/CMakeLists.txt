@@ -37,6 +37,10 @@ add_library(${PROJECT_NAME}
   scenes/SceneManager.h
   scenes/Scene.cpp
   scenes/Scene.h
+  scripts/ScriptEngine.cpp
+  scripts/ScriptEngine.h
+  scripts/ScriptManager.cpp
+  scripts/ScriptManager.h
   objects/components/LightRenderer.cpp
   objects/components/LightRenderer.h
   assets/AssetManager.cpp
@@ -101,3 +105,5 @@ find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
   target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
 endif()
+
+include(cmake/loadCS.cmake)
