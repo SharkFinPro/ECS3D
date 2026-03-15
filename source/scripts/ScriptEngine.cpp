@@ -46,7 +46,7 @@ void* ScriptEngine::GetSymbol(void* lib, const char* name)
 #endif
 }
 
-void ScriptEngine::Init(const std::string& bridgeDir, const std::string& scriptDir)
+void ScriptEngine::init(const std::string& bridgeDir, const std::string& scriptDir)
 {
     char_t hostfxr_path[4096] = {};
     size_t path_size = sizeof(hostfxr_path) / sizeof(char_t);
@@ -156,9 +156,10 @@ void ScriptEngine::Init(const std::string& bridgeDir, const std::string& scriptD
     };
 
     InitBridgeFn initBridgeFn = nullptr;
-    loadFn("Init",          reinterpret_cast<void**>(&initBridgeFn));
-    loadFn("UpdateAll",     reinterpret_cast<void**>(&m_updateAll));
-    loadFn("ReloadScripts", reinterpret_cast<void**>(&m_reload));
+    loadFn("init",          reinterpret_cast<void**>(&initBridgeFn));
+    loadFn("reloadScripts", reinterpret_cast<void**>(&m_reload));
+    loadFn("fixedUpdate",     reinterpret_cast<void**>(&m_fixedUpdate));
+    loadFn("variableUpdate",     reinterpret_cast<void**>(&m_variableUpdate));
 
     std::cout << "[ScriptEngine] Initializing bridge, script dir: " << scriptDir << "\n";
     initBridgeFn(scriptDir.c_str());
@@ -167,15 +168,7 @@ void ScriptEngine::Init(const std::string& bridgeDir, const std::string& scriptD
     std::cout << "[ScriptEngine] Initialized successfully.\n";
 }
 
-void ScriptEngine::Update(const float dt, int& counter) const
-{
-    if (m_updateAll)
-    {
-        m_updateAll(dt, &counter);
-    }
-}
-
-void ScriptEngine::ReloadScripts() const
+void ScriptEngine::reloadScripts() const
 {
     if (m_reload)
     {
@@ -185,7 +178,7 @@ void ScriptEngine::ReloadScripts() const
     }
 }
 
-void ScriptEngine::Shutdown()
+void ScriptEngine::shutdown()
 {
     if (!m_initialized)
     {
@@ -221,7 +214,23 @@ void ScriptEngine::Shutdown()
     std::cout << "[ScriptEngine] Shutdown complete.\n";
 }
 
+void ScriptEngine::fixedUpdate(const float dt) const
+{
+    if (m_fixedUpdate)
+    {
+        m_fixedUpdate(dt);
+    }
+}
+
+void ScriptEngine::variableUpdate() const
+{
+    if (m_variableUpdate)
+    {
+        m_variableUpdate();
+    }
+}
+
 ScriptEngine::~ScriptEngine()
 {
-    Shutdown();
+    shutdown();
 }

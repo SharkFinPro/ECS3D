@@ -15,7 +15,7 @@ public static class Bridge
     private static ScriptContext? _ctx;
 
     [UnmanagedCallersOnly]
-    public static void Init(IntPtr scriptDirPtr)
+    public static void init(IntPtr scriptDirPtr)
     {
         _scriptDir = Marshal.PtrToStringUTF8(scriptDirPtr)
                      ?? throw new ArgumentNullException(nameof(scriptDirPtr));
@@ -25,36 +25,13 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
-    public static unsafe void UpdateAll(float dt, int* counter)
-    {
-        (*counter)++;
-
-        if (_ctx is null)
-        {
-            return;
-        }
-
-        foreach (var script in _ctx.Scripts)
-        {
-            try
-            {
-                script.OnUpdate(dt);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[Bridge] OnUpdate error in {script.GetType().Name}: {ex.Message}");
-            }
-        }
-    }
-
-    [UnmanagedCallersOnly]
-    public static void ReloadScripts()
+    public static void reloadScripts()
     {
         if (_ctx is { } ctx)
         {
             foreach (var s in ctx.Scripts)
             {
-                try { s.OnStop(); } catch { }
+                try { s.stop(); } catch { }
             }
 
             ctx.Unload();
@@ -65,6 +42,48 @@ public static class Bridge
         }
 
         CompileAndLoad();
+    }
+
+    [UnmanagedCallersOnly]
+    public static void fixedUpdate(float dt)
+    {
+        if (_ctx is null)
+        {
+            return;
+        }
+
+        foreach (var script in _ctx.Scripts)
+        {
+            try
+            {
+                script.fixedUpdate(dt);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Bridge] OnUpdate error in {script.GetType().Name}: {ex.Message}");
+            }
+        }
+    }
+
+    [UnmanagedCallersOnly]
+    public static void variableUpdate(float dt)
+    {
+        if (_ctx is null)
+        {
+            return;
+        }
+
+        foreach (var script in _ctx.Scripts)
+        {
+            try
+            {
+                script.variableUpdate();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Bridge] OnUpdate error in {script.GetType().Name}: {ex.Message}");
+            }
+        }
     }
 
     private static void CompileAndLoad()
@@ -133,7 +152,7 @@ public static class Bridge
             Console.WriteLine($"  + {s.GetType().Name}");
             try
             {
-                s.OnStart();
+                s.start();
             }
             catch (Exception ex)
             {

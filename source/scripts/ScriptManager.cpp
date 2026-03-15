@@ -25,13 +25,14 @@ static bool changed(const std::filesystem::path& dir,
     prev = std::move(now);
     return true;
   }
+
   return false;
 }
 
 ScriptManager::ScriptManager(ECS3D* ecs)
   : m_ecs(ecs)
 {
-  m_scriptEngine.Init(m_scriptBridgeDir, m_userScriptsDir);
+  m_scriptEngine.init(m_scriptBridgeDir, m_userScriptsDir);
 
   m_scriptTimes = snapshot(m_userScriptsDir);
 }
@@ -43,7 +44,7 @@ void ScriptManager::checkForScriptChanges()
     std::cout << "\n[hot-reload] Change detected - reloading scripts..." << std::endl;
     try
     {
-      m_scriptEngine.ReloadScripts();
+      m_scriptEngine.reloadScripts();
       std::cout << "[hot-reload] Reload successful." << std::endl;
     }
     catch (const std::exception& ex)
@@ -53,12 +54,12 @@ void ScriptManager::checkForScriptChanges()
   }
 }
 
-void ScriptManager::fixedUpdate(float dt)
+void ScriptManager::fixedUpdate(const float dt) const
 {
-  // m_scriptEngine->fixedUpdate(dt);
+  m_scriptEngine.fixedUpdate(dt);
 }
 
-void ScriptManager::variableUpdate()
+void ScriptManager::variableUpdate() const
 {
-  // m_scriptEngine->variableUpdate();
+  m_scriptEngine.variableUpdate();
 }

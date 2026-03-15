@@ -2,7 +2,8 @@ namespace ScriptBridge;
 
 public abstract class ScriptBase
 {
-    public virtual void OnStart() { }
-    public virtual void OnUpdate(float dt) { }
-    public virtual void OnStop() { }
+    public virtual void start() { }
+    public virtual void fixedUpdate(float dt) { }
+    public virtual void variableUpdate() { }
+    public virtual void stop() { }
 }

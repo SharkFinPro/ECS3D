@@ -11,16 +11,20 @@ public:
     ScriptEngine(const ScriptEngine&)            = delete;
     ScriptEngine& operator=(const ScriptEngine&) = delete;
 
-    void Init(const std::string& bridgeDir, const std::string& scriptDir);
-    void Update(float dt, int& counter) const;
-    void ReloadScripts() const;
-    void Shutdown();
+    void init(const std::string& bridgeDir, const std::string& scriptDir);
+    void update(float dt, int& counter) const;
+    void reloadScripts() const;
+    void shutdown();
+
+    void fixedUpdate(float dt) const;
+    void variableUpdate() const;
 
 private:
     static void* LoadLib(const std::string& path);
     static void* GetSymbol(void* lib, const char* name);
 
-    using UpdateAllFn  = void(*)(float, int*);
+    using fixedUpdateFn  = void(*)(float);
+    using variableUpdateFn  = void(*)();
     using VoidFn       = void(*)();
     using InitBridgeFn = void(*)(const char*);
 
@@ -28,6 +32,7 @@ private:
     void* m_hostContext = nullptr;
     bool  m_initialized = false;
 
-    UpdateAllFn m_updateAll = nullptr;
+    fixedUpdateFn m_fixedUpdate = nullptr;
+    variableUpdateFn m_variableUpdate = nullptr;
     VoidFn      m_reload    = nullptr;
 };

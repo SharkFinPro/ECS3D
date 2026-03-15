@@ -16,8 +16,8 @@ public:
 
   void checkForScriptChanges();
 
-  void fixedUpdate(float dt);
-  void variableUpdate();
+  void fixedUpdate(float dt) const;
+  void variableUpdate() const;
 
 private:
   ECS3D* m_ecs;
