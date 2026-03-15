@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ECS3D_SCRIPTENGINE_H
+#define ECS3D_SCRIPTENGINE_H
 
 #include <string>
 
@@ -35,3 +36,5 @@ private:
   variableUpdateFn m_variableUpdate = nullptr;
   VoidFn m_reload = nullptr;
 };
+
+#endif //ECS3D_SCRIPTENGINE_H
