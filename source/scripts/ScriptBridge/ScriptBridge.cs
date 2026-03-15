@@ -11,7 +11,7 @@ namespace ScriptBridge;
 
 public static class Bridge
 {
-  private static string     _scriptDir = "";
+  private static string _scriptDir = "";
   private static ScriptContext? _ctx;
 
   [UnmanagedCallersOnly]
@@ -109,7 +109,7 @@ public static class Bridge
 
     var compilation = CSharpCompilation.Create(
       assemblyName: "UserScripts_" + Guid.NewGuid().ToString("N")[..8],
-      syntaxTrees:  syntaxTrees,
+      syntaxTrees: syntaxTrees,
       references: Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
               .Where(dll => {
                 try { System.Reflection.AssemblyName.GetAssemblyName(dll); return true; }

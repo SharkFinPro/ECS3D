@@ -26,7 +26,7 @@ private:
   ScriptsSnapshot m_scriptTimes;
 
   const std::string m_scriptBridgeDir = "scripts/ScriptBridge";
-  const std::string m_userScriptsDir  = "scripts/UserScripts";
+  const std::string m_userScriptsDir = "scripts/UserScripts";
 };
 
 

@@ -8,10 +8,10 @@
 #include <stdexcept>
 
 #if defined(_WIN32)
-#   define WIN32_LEAN_AND_MEAN
-#   include <windows.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
   using char_t = wchar_t;
-#   define STR(s) L##s
+#define STR(s) L##s
   static std::wstring ToNative(const std::string& s)
   {
     const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
@@ -20,9 +20,9 @@
     return w;
   }
 #else
-#   include <dlfcn.h>
+#include <dlfcn.h>
   using char_t = char;
-#   define STR(s) s
+#define STR(s) s
   static std::string ToNative(const std::string& s) { return s; }
 #endif
 
@@ -129,7 +129,7 @@ void ScriptEngine::init(const std::string& bridgeDir, const std::string& scriptD
     throw std::runtime_error("[ScriptEngine] ScriptBridge.dll not found: " + dllPath.string());
   }
 
-  const auto dll_native    = ToNative(dllPath.string());
+  const auto dll_native = ToNative(dllPath.string());
   const auto bridgeType_native = ToNative("ScriptBridge.Bridge, ScriptBridge");
 
   auto loadFn = [&](const char* method, void** out)
@@ -154,10 +154,10 @@ void ScriptEngine::init(const std::string& bridgeDir, const std::string& scriptD
   };
 
   InitBridgeFn initBridgeFn = nullptr;
-  loadFn("init",      reinterpret_cast<void**>(&initBridgeFn));
+  loadFn("init", reinterpret_cast<void**>(&initBridgeFn));
   loadFn("reloadScripts", reinterpret_cast<void**>(&m_reload));
-  loadFn("fixedUpdate",   reinterpret_cast<void**>(&m_fixedUpdate));
-  loadFn("variableUpdate",   reinterpret_cast<void**>(&m_variableUpdate));
+  loadFn("fixedUpdate", reinterpret_cast<void**>(&m_fixedUpdate));
+  loadFn("variableUpdate", reinterpret_cast<void**>(&m_variableUpdate));
 
   std::cout << "[ScriptEngine] Initializing bridge, script dir: " << scriptDir << "\n";
   initBridgeFn(scriptDir.c_str());
@@ -206,7 +206,7 @@ void ScriptEngine::shutdown()
   }
 #endif
 
-  m_hostfxrLib  = nullptr;
+  m_hostfxrLib = nullptr;
   m_initialized = false;
 
   std::cout << "[ScriptEngine] Shutdown complete.\n";
