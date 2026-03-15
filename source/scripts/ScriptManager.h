@@ -24,7 +24,7 @@ private:
 
   ScriptsSnapshot m_scriptsSnapshot;
 
-  static [[nodiscard]] ScriptsSnapshot takeSnapshot() ;
+  [[nodiscard]] static ScriptsSnapshot takeSnapshot();
 };
 
 
