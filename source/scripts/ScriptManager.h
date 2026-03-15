@@ -7,8 +7,6 @@
 
 class ECS3D;
 
-using ScriptsSnapshot = std::unordered_map<std::string, std::filesystem::file_time_type>;
-
 class ScriptManager {
 public:
   explicit ScriptManager(ECS3D* ecs);
@@ -21,6 +19,8 @@ public:
 private:
   ECS3D* m_ecs;
   ScriptEngine m_scriptEngine;
+
+  using ScriptsSnapshot = std::unordered_map<std::string, std::filesystem::file_time_type>;
 
   ScriptsSnapshot m_scriptsSnapshot;
 

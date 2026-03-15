@@ -44,7 +44,7 @@ void ScriptManager::variableUpdate() const
   m_scriptEngine.variableUpdate();
 }
 
-ScriptsSnapshot ScriptManager::takeSnapshot()
+ScriptManager::ScriptsSnapshot ScriptManager::takeSnapshot()
 {
   ScriptsSnapshot times;
   std::error_code ec;
