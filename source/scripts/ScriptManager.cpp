@@ -1,17 +1,22 @@
 #include "ScriptManager.h"
 #include <iostream>
+#include <string>
+
+const std::string SCRIPT_BRIDGE_DIR = "scripts/ScriptBridge";
+const std::string USER_SCRIPTS_DIR = "scripts/UserScripts";
 
 ScriptManager::ScriptManager(ECS3D* ecs)
   : m_ecs(ecs)
 {
-  m_scriptEngine.init(m_scriptBridgeDir, m_userScriptsDir);
+  m_scriptEngine.init(SCRIPT_BRIDGE_DIR, USER_SCRIPTS_DIR);
 
   m_scriptsSnapshot = takeSnapshot();
 }
 
 void ScriptManager::checkForScriptChanges()
 {
-  if (isSnapshotCurrent())
+  auto now = takeSnapshot();
+  if (now == m_scriptsSnapshot)
   {
     return;
   }
@@ -20,6 +25,7 @@ void ScriptManager::checkForScriptChanges()
   try
   {
     m_scriptEngine.reloadScripts();
+    m_scriptsSnapshot = std::move(now);
     std::cout << "[hot-reload] Reload successful." << std::endl;
   }
   catch (const std::exception& ex)
@@ -38,11 +44,11 @@ void ScriptManager::variableUpdate() const
   m_scriptEngine.variableUpdate();
 }
 
-ScriptsSnapshot ScriptManager::takeSnapshot() const
+ScriptsSnapshot ScriptManager::takeSnapshot()
 {
   ScriptsSnapshot times;
   std::error_code ec;
-  for (auto& entry : std::filesystem::recursive_directory_iterator(m_userScriptsDir, ec))
+  for (auto& entry : std::filesystem::recursive_directory_iterator(USER_SCRIPTS_DIR, ec))
   {
     if (entry.is_regular_file(ec))
     {
@@ -51,15 +57,4 @@ ScriptsSnapshot ScriptManager::takeSnapshot() const
   }
 
   return times;
-}
-
-bool ScriptManager::isSnapshotCurrent()
-{
-  if (auto now = takeSnapshot(); now != m_scriptsSnapshot)
-  {
-    m_scriptsSnapshot = std::move(now);
-    return false;
-  }
-
-  return true;
 }
