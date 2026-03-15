@@ -58,7 +58,7 @@ add_dependencies(${PROJECT_NAME} ScriptBridge)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
   "${CMAKE_CURRENT_SOURCE_DIR}/scripts/UserScripts"
-  "$<TARGET_FILE_DIR:${PROJECT_NAME}>/scripts/UserScripts"
+  "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/scripts/UserScripts"
   COMMENT "Copying user scripts"
 )
 
@@ -69,7 +69,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${NETHOST_DLL}"
-      "$<TARGET_FILE_DIR:${PROJECT_NAME}>/nethost.dll"
+      "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/nethost.dll"
       COMMENT "Copying nethost.dll"
     )
   endif()
