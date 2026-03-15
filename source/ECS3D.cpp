@@ -155,6 +155,11 @@ uuids::uuid ECS3D::createUUID()
 	return m_uuidGenerator();
 }
 
+std::shared_ptr<ScriptManager> ECS3D::getScriptManager() const
+{
+	return m_scriptManager;
+}
+
 void ECS3D::displayMessageLog()
 {
 	ImGui::Begin("Project Errors");

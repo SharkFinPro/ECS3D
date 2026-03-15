@@ -41,6 +41,8 @@ public:
 
   [[nodiscard]] uuids::uuid createUUID();
 
+  [[nodiscard]] std::shared_ptr<ScriptManager> getScriptManager() const;
+
 private:
   std::shared_ptr<vke::VulkanEngine> m_renderer;
 
