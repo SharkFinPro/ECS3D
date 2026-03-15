@@ -23,10 +23,14 @@ private:
   ECS3D* m_ecs;
   ScriptEngine m_scriptEngine;
 
-  ScriptsSnapshot m_scriptTimes;
+  ScriptsSnapshot m_scriptsSnapshot;
 
   const std::string m_scriptBridgeDir = "scripts/ScriptBridge";
   const std::string m_userScriptsDir = "scripts/UserScripts";
+
+  [[nodiscard]] ScriptsSnapshot takeSnapshot() const;
+
+  [[nodiscard]] bool isSnapshotCurrent();
 };
 
 
