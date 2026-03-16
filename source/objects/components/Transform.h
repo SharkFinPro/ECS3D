@@ -14,6 +14,8 @@ struct TransformBindings
   void(*setScale)(const char* uuid, float x, float y, float z);
   void(*setRotation)(const char* uuid, float x, float y, float z);
   void(*move)(const char* uuid, float x, float y, float z);
+  void(*start)(const char* uuid);
+  void(*stop)(const char* uuid);
 };
 
 class Transform final : public Component {
@@ -60,6 +62,9 @@ private:
   static void bindSetRotation(const char* uuid, float x, float y, float z);
 
   static void bindMove(const char* uuid, float x, float y, float z);
+
+  static void bindStart(const char* uuid);
+  static void bindStop(const char* uuid);
 };
 
 

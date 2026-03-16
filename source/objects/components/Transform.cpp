@@ -163,6 +163,8 @@ TransformBindings Transform::getBindings()
     .setScale = &bindSetScale,
     .setRotation = &bindSetRotation,
     .move = &bindMove,
+    .start = &bindStart,
+    .stop = &bindStop
   };
 }
 
@@ -256,4 +258,26 @@ void Transform::bindMove(const char* uuid, float x, float y, float z)
   }
 
   transform->move({ x, y, z });
+}
+
+void Transform::bindStart(const char *uuid)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  transform->start();
+}
+
+void Transform::bindStop(const char *uuid)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  transform->stop();
 }

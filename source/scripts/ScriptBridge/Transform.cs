@@ -55,4 +55,8 @@ public unsafe class Transform
 
   public void move(float x, float y, float z) =>
     NativeBindings.Transform.move(_uuid, x, y, z);
+
+  public void start() => NativeBindings.Transform.start(_uuid);
+
+  public void stop() => NativeBindings.Transform.stop(_uuid);
 }
