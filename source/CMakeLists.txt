@@ -65,24 +65,28 @@ FetchContent_Declare(
   json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
   GIT_TAG v3.12.0
+  GIT_SHALLOW TRUE
 )
 
 FetchContent_Declare(
   nfd
   GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
   GIT_TAG v1.3.0
+  GIT_SHALLOW TRUE
 )
 
 FetchContent_Declare(
   uuid
   GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
   GIT_TAG v1.2.3
+  GIT_SHALLOW TRUE
 )
 
 FetchContent_Declare(
   VulkanEngine
   GIT_REPOSITORY https://github.com/SharkFinPro/VulkanRenderer.git
   GIT_TAG main
+  GIT_SHALLOW TRUE
 )
 
 FetchContent_MakeAvailable(
