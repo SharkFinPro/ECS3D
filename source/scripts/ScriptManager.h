@@ -14,11 +14,18 @@ public:
 
   void checkForScriptChanges();
 
-  void attachScript(uuids::uuid uuid, const char* className) const;
-  void detachScript(uuids::uuid uuid, const char* className) const;
+  void attachScript(uuids::uuid uuid,
+                    const char* className) const;
 
-  void fixedUpdate(uuids::uuid uuid, const char* className, float dt) const;
-  void variableUpdate(uuids::uuid uuid, const char* className) const;
+  void detachScript(uuids::uuid uuid,
+                    const char* className) const;
+
+  void fixedUpdate(uuids::uuid uuid,
+                   const char* className,
+                   float dt) const;
+
+  void variableUpdate(uuids::uuid uuid,
+                      const char* className) const;
 
 private:
   ECS3D* m_ecs;
