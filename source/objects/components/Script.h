@@ -3,9 +3,15 @@
 
 #include "Component.h"
 
+class ScriptManager;
+
 class Script final : public Component {
 public:
   explicit Script(std::string className);
+
+  void start() const override;
+
+  void stop() const override;
 
   void variableUpdate() override;
 
@@ -18,6 +24,8 @@ public:
   void loadFromJSON(const nlohmann::json& componentData) override;
 
 private:
+  std::shared_ptr<ScriptManager> m_scriptManager;
+
   std::string m_className;
 };
 
