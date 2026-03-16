@@ -15,6 +15,6 @@ public class PlayerScript : ScriptBase
 
   public override void stop()
   {
-    Console.WriteLine("[PlayerScript] Stopping).");
+    Console.WriteLine("[PlayerScript] Stopping.");
   }
 }

@@ -8,6 +8,7 @@
 #include "../objects/ObjectManager.h"
 #include "../objects/components/Components.h"
 #include "../objects/components/LightRenderer.h"
+#include "../objects/components/Script.h"
 #include <nlohmann/json.hpp>
 
 Scene::Scene(SceneManager* sceneManager,
@@ -96,7 +97,8 @@ void Scene::createPlayer(TransformData transformData) const
                                     m_assetManager->getAsset<ModelAsset>("assets/models/sphere.glb")),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>(),
-    std::make_shared<Player>()
+    std::make_shared<Player>(),
+    std::make_shared<Script>("PlayerScript")
   };
 
   m_objectManager->addObject(std::make_shared<Object>(components, "Player"));

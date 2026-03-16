@@ -6,31 +6,49 @@
 
 Script::Script(std::string className)
   : Component(ComponentType::script), m_className(std::move(className))
-{
-  m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-}
+{}
 
-void Script::start() const
+void Script::start()
 {
   Component::start();
 
+  if (!m_scriptManager)
+  {
+    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
+  }
+
   m_scriptManager->attachScript(m_owner->getUUID(), m_className.c_str());
 }
 
-void Script::stop() const
+void Script::stop()
 {
   Component::stop();
 
-  m_scriptManager->attachScript(m_owner->getUUID(), m_className.c_str());
+  if (!m_scriptManager)
+  {
+    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
+  }
+
+  m_scriptManager->detachScript(m_owner->getUUID(), m_className.c_str());
 }
 
 void Script::variableUpdate()
 {
+  if (!m_scriptManager)
+  {
+    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
+  }
+
   m_scriptManager->variableUpdate(m_owner->getUUID(), m_className.c_str());
 }
 
-void Script::fixedUpdate(float dt)
+void Script::fixedUpdate(const float dt)
 {
+  if (!m_scriptManager)
+  {
+    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
+  }
+
   m_scriptManager->fixedUpdate(m_owner->getUUID(), m_className.c_str(), dt);
 }
 
