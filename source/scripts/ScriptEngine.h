@@ -22,9 +22,6 @@ public:
   void variableUpdate() const;
 
 private:
-  static void* LoadLib(const std::string& path);
-  static void* GetSymbol(void* lib, const char* name);
-
   using fixedUpdateFn = void(*)(float);
   using variableUpdateFn = void(*)();
   using VoidFn = void(*)();
@@ -37,6 +34,9 @@ private:
   fixedUpdateFn m_fixedUpdate = nullptr;
   variableUpdateFn m_variableUpdate = nullptr;
   VoidFn m_reload = nullptr;
+
+  static void* LoadLib(const std::string& path);
+  static void* GetSymbol(void* lib, const char* name);
 };
 
 #endif //ECS3D_SCRIPTENGINE_H
