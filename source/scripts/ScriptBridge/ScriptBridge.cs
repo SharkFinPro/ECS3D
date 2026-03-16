@@ -160,6 +160,12 @@ public static class Bridge
       }
     }
   }
+
+  [UnmanagedCallersOnly]
+  public static unsafe void registerTransformBindings(TransformBindings bindings)
+  {
+    NativeBindings.Transform = bindings;
+  }
 }
 
 internal sealed class ScriptContext : AssemblyLoadContext

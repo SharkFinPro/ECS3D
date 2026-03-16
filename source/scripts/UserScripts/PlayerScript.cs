@@ -11,6 +11,8 @@ public class PlayerScript : ScriptBase
     Console.WriteLine("[PlayerScript] Player is ready!");
     _elapsed = 0f;
     _ticks = 0;
+
+    Console.WriteLine($"positionX = {transform.positionX}");
   }
 
   public override void fixedUpdate(float dt)

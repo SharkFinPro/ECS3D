@@ -17,7 +17,8 @@ enum class ComponentType {
   lightRenderer,
   SubComponentType_none,
   SubComponentType_boxCollider,
-  SubComponentType_sphereCollider
+  SubComponentType_sphereCollider,
+  script
 };
 
 const std::unordered_map<ComponentType, std::string> componentTypeToString {

@@ -1,4 +1,5 @@
 #include "ScriptEngine.h"
+#include "ScriptBindings.h"
 #include <coreclr_delegates.h>
 #include <hostfxr.h>
 #include <nethost.h>
@@ -160,6 +161,10 @@ void ScriptEngine::init(const std::string& bridgeDir, const std::string& scriptD
   loadFn("variableUpdate", reinterpret_cast<void**>(&m_variableUpdate));
 
   std::cout << "[ScriptEngine] Initializing bridge, script dir: " << scriptDir << "\n";
+
+  ScriptBindings::init();
+  ScriptBindings::registerAll(loadFn);
+
   initBridgeFn(scriptDir.c_str());
 
   m_initialized = true;
