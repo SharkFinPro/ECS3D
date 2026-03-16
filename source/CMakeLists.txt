@@ -39,6 +39,8 @@ add_library(${PROJECT_NAME}
   scenes/SceneManager.h
   scenes/Scene.cpp
   scenes/Scene.h
+  scripts/InputUtils.cpp
+  scripts/InputUtils.h
   scripts/ScriptEngine.cpp
   scripts/ScriptEngine.h
   scripts/ScriptManager.cpp

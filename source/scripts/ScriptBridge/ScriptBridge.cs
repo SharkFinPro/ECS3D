@@ -128,6 +128,12 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static unsafe void registerInputUtilsBindings(InputUtilsBindings bindings)
+    {
+        NativeBindings.InputUtils = bindings;
+    }
+
+    [UnmanagedCallersOnly]
     public static unsafe void registerRigidBodyBindings(RigidBodyBindings bindings)
     {
         NativeBindings.RigidBody = bindings;
