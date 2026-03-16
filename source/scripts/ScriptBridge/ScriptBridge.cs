@@ -18,6 +18,19 @@ public static class Bridge
   private static readonly Dictionary<string, ScriptBase> _instances = new();
   private static string Key(string uuid, string className) => $"{uuid}_{className}";
 
+  private static string ReadFileSafe(string path)
+  {
+    using var fs = new FileStream(
+      path,
+      FileMode.Open,
+      FileAccess.Read,
+      FileShare.ReadWrite | FileShare.Delete
+    );
+
+    using var reader = new StreamReader(fs);
+    return reader.ReadToEnd();
+  }
+
   [UnmanagedCallersOnly]
   public static void init(IntPtr scriptDirPtr)
   {
@@ -65,7 +78,7 @@ public static class Bridge
     Console.WriteLine($"[Bridge] Compiling {sourceFiles.Length} script file(s)...");
 
     var syntaxTrees = sourceFiles
-      .Select(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), path: path))
+      .Select(path => CSharpSyntaxTree.ParseText(ReadFileSafe(path), path: path))
       .ToArray();
 
     var compilation = CSharpCompilation.Create(
@@ -112,6 +125,12 @@ public static class Bridge
     {
       Console.WriteLine($"  + {t.Name}");
     }
+  }
+
+  [UnmanagedCallersOnly]
+  public static unsafe void registerRigidBodyBindings(RigidBodyBindings bindings)
+  {
+    NativeBindings.RigidBody = bindings;
   }
 
   [UnmanagedCallersOnly]

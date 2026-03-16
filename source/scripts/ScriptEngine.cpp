@@ -1,4 +1,5 @@
 #include "ScriptEngine.h"
+#include "../objects/components/RigidBody.h"
 #include "../objects/components/Transform.h"
 #include <coreclr_delegates.h>
 #include <hostfxr.h>
@@ -264,13 +265,20 @@ ScriptEngine::~ScriptEngine()
 void ScriptEngine::initBindings(ECS3D* ecs)
 {
   Transform::initBindings(ecs);
+  RigidBody::initBindings(ecs);
 }
 
 void ScriptEngine::registerBindings(const std::function<void(const char*, void**)>& loadFn)
 {
   using RegisterTransformFn = void(*)(TransformBindings);
 
-  RegisterTransformFn fn = nullptr;
-  loadFn("registerTransformBindings", reinterpret_cast<void**>(&fn));
-  fn(Transform::getBindings());
+  RegisterTransformFn transformFn = nullptr;
+  loadFn("registerTransformBindings", reinterpret_cast<void**>(&transformFn));
+  transformFn(Transform::getBindings());
+
+  using RegisterRigidBodyFn = void(*)(RigidBodyBindings);
+
+  RegisterRigidBodyFn rigidBodyFn = nullptr;
+  loadFn("registerRigidBodyBindings", reinterpret_cast<void**>(&rigidBodyFn));
+  rigidBodyFn(RigidBody::getBindings());
 }

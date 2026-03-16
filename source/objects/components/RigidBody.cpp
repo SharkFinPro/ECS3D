@@ -2,9 +2,13 @@
 #include "Transform.h"
 #include "../Object.h"
 #include "../../ECS3D.h"
+#include "../../scenes/Scene.h"
+#include "../../scenes/SceneManager.h"
 #include <glm/glm.hpp>
 #include <imgui.h>
 #include <nlohmann/json.hpp>
+
+static ECS3D* s_ecs = nullptr;
 
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody)
@@ -71,6 +75,16 @@ void RigidBody::fixedUpdate(const float dt)
 
 void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
 {
+  if (m_transform_ptr.expired())
+  {
+    m_transform_ptr = m_owner->getComponent<Transform>(ComponentType::transform);
+
+    if (m_transform_ptr.expired())
+    {
+      return;
+    }
+  }
+
   m_velocity.value() += force;
 
   if (m_velocity.get().y > 0 && m_velocity.get().y - force.y < 0)
@@ -214,6 +228,19 @@ void RigidBody::loadFromJSON(const nlohmann::json& componentData)
   m_mass.set(componentData.at("mass"));
 }
 
+void RigidBody::initBindings(ECS3D* ecs)
+{
+  s_ecs = ecs;
+}
+
+RigidBodyBindings RigidBody::getBindings()
+{
+  return RigidBodyBindings {
+    .applyForce = &bindApplyForce,
+    .setVelocity = &bindSetVelocity
+  };
+}
+
 void RigidBody::limitMovement()
 {
   if (glm::length(m_velocity.get()) < 1e-5f)
@@ -246,4 +273,43 @@ glm::mat3x3 RigidBody::getInertiaTensor() const
     0.0f, Iyy, 0.0f,
     0.0f, 0.0f, Izz
   };
+}
+
+std::shared_ptr<RigidBody> RigidBody::find(const char* uuid)
+{
+  const auto scene = s_ecs->getSceneManager()->getCurrentScene();
+  if (!scene)
+  {
+    return nullptr;
+  }
+
+  const auto objectManager = scene->getObjectManager();
+
+  const auto object = objectManager->getObjectByUUID(uuids::uuid::from_string(std::string(uuid)).value());
+
+  const auto component = object->getComponent<RigidBody>(ComponentType::rigidBody);
+
+  return component;
+}
+
+void RigidBody::bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz)
+{
+  const auto rigidBody = find(uuid);
+  if (!rigidBody)
+  {
+    return;
+  }
+
+  rigidBody->applyForce({ x, y, z }, { px, py, pz });
+}
+
+void RigidBody::bindSetVelocity(const char* uuid, float x, float y, float z)
+{
+  const auto rigidBody = find(uuid);
+  if (!rigidBody)
+  {
+    return;
+  }
+
+  rigidBody->setVelocity({ x, y, z });
 }

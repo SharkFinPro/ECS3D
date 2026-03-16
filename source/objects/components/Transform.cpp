@@ -176,8 +176,7 @@ std::shared_ptr<Transform> Transform::find(const char* uuid)
 
   const auto objectManager = scene->getObjectManager();
 
-  // const auto object = objectManager->getObjectByUUID(uuids::uuid::from_string(std::string(uuid)).value());
-  const auto object = objectManager->getObjectByUUID({});
+  const auto object = objectManager->getObjectByUUID(uuids::uuid::from_string(std::string(uuid)).value());
 
   const auto component = object->getComponent<Transform>(ComponentType::transform);
 
