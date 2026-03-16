@@ -28,25 +28,14 @@
   static std::string ToNative(const std::string& s) { return s; }
 #endif
 
-void* ScriptEngine::LoadLib(const std::string& path)
+ScriptEngine::~ScriptEngine()
 {
-#if defined(_WIN32)
-  return (void*)LoadLibraryW(ToNative(path).c_str());
-#else
-  return dlopen(path.c_str(), RTLD_LAZY | RTLD_LOCAL);
-#endif
+  shutdown();
 }
 
-void* ScriptEngine::GetSymbol(void* lib, const char* name)
-{
-#if defined(_WIN32)
-  return (void*)GetProcAddress(static_cast<HMODULE>(lib), name);
-#else
-  return dlsym(lib, name);
-#endif
-}
-
-void ScriptEngine::init(ECS3D* ecs, const std::string& bridgeDir, const std::string& scriptDir)
+void ScriptEngine::init(ECS3D* ecs,
+                        const std::string& bridgeDir,
+                        const std::string& scriptDir)
 {
   char_t hostfxr_path[4096] = {};
   size_t path_size = sizeof(hostfxr_path) / sizeof(char_t);
@@ -257,9 +246,23 @@ void ScriptEngine::variableUpdate(const char* uuid,
   }
 }
 
-ScriptEngine::~ScriptEngine()
+void* ScriptEngine::LoadLib(const std::string& path)
 {
-  shutdown();
+#if defined(_WIN32)
+  return (void*)LoadLibraryW(ToNative(path).c_str());
+#else
+  return dlopen(path.c_str(), RTLD_LAZY | RTLD_LOCAL);
+#endif
+}
+
+void* ScriptEngine::GetSymbol(void* lib,
+                              const char* name)
+{
+#if defined(_WIN32)
+  return (void*)GetProcAddress(static_cast<HMODULE>(lib), name);
+#else
+  return dlsym(lib, name);
+#endif
 }
 
 void ScriptEngine::initBindings(ECS3D* ecs)

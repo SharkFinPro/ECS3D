@@ -10,20 +10,31 @@ class ScriptEngine
 {
 public:
   ScriptEngine() = default;
-  ~ScriptEngine();
-
   ScriptEngine(const ScriptEngine&) = delete;
   ScriptEngine& operator=(const ScriptEngine&) = delete;
 
-  void init(ECS3D* ecs, const std::string& bridgeDir, const std::string& scriptDir);
+  ~ScriptEngine();
+
+  void init(ECS3D* ecs,
+            const std::string& bridgeDir,
+            const std::string& scriptDir);
+
   void reloadScripts() const;
+
   void shutdown();
 
-  void attachScript(const char* uuid, const char* className) const;
-  void detachScript(const char* uuid, const char* className) const;
+  void attachScript(const char* uuid,
+                    const char* className) const;
 
-  void fixedUpdate(const char* uuid, const char* className, float dt) const;
-  void variableUpdate(const char* uuid, const char* className) const;
+  void detachScript(const char* uuid,
+                    const char* className) const;
+
+  void fixedUpdate(const char* uuid,
+                   const char* className,
+                   float dt) const;
+
+  void variableUpdate(const char* uuid,
+                      const char* className) const;
 
 private:
   using attachScriptFn = void(*)(const char*, const char*);
@@ -45,7 +56,9 @@ private:
   VoidFn m_reload = nullptr;
 
   static void* LoadLib(const std::string& path);
-  static void* GetSymbol(void* lib, const char* name);
+
+  static void* GetSymbol(void* lib,
+                         const char* name);
 
   static void initBindings(ECS3D* ecs);
   static void registerBindings(const std::function<void(const char*, void**)>& loadFn);
