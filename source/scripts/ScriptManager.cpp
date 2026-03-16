@@ -1,0 +1,79 @@
+#include "ScriptManager.h"
+#include <iostream>
+#include <string>
+
+const std::string SCRIPT_BRIDGE_DIR = "scripts/ScriptBridge";
+const std::string USER_SCRIPTS_DIR = "scripts/UserScripts";
+
+ScriptManager::ScriptManager(ECS3D* ecs)
+  : m_ecs(ecs)
+{
+  m_scriptEngine.init(ecs, SCRIPT_BRIDGE_DIR, USER_SCRIPTS_DIR);
+
+  m_scriptsSnapshot = takeSnapshot();
+}
+
+void ScriptManager::checkForScriptChanges()
+{
+  auto now = takeSnapshot();
+  if (now == m_scriptsSnapshot)
+  {
+    return;
+  }
+
+  std::cout << "\n[hot-reload] Change detected - reloading scripts..." << std::endl;
+  try
+  {
+    m_scriptEngine.reloadScripts();
+    m_scriptsSnapshot = std::move(now);
+    std::cout << "[hot-reload] Reload successful." << std::endl;
+  }
+  catch (const std::exception& ex)
+  {
+    std::cerr << "[hot-reload] Reload failed: " << ex.what() << " - continuing with previous scripts." << std::endl;
+  }
+}
+
+void ScriptManager::attachScript(const uuids::uuid uuid,
+                                 const char* className) const
+{
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.attachScript(uuidStr.c_str(), className);
+}
+
+void ScriptManager::detachScript(const uuids::uuid uuid,
+                                 const char* className) const
+{
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.detachScript(uuidStr.c_str(), className);
+}
+
+void ScriptManager::fixedUpdate(const uuids::uuid uuid,
+                                const char* className,
+                                const float dt) const
+{
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.fixedUpdate(uuidStr.c_str(), className, dt);
+}
+
+void ScriptManager::variableUpdate(const uuids::uuid uuid,
+                                   const char* className) const
+{
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.variableUpdate(uuidStr.c_str(), className);
+}
+
+ScriptManager::ScriptsSnapshot ScriptManager::takeSnapshot()
+{
+  ScriptsSnapshot times;
+  std::error_code ec;
+  for (auto& entry : std::filesystem::recursive_directory_iterator(USER_SCRIPTS_DIR, ec))
+  {
+    if (entry.is_regular_file(ec))
+    {
+      times[entry.path().string()] = entry.last_write_time(ec);
+    }
+  }
+
+  return times;
+}

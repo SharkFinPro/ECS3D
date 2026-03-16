@@ -47,13 +47,6 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
   {
     if (const std::shared_ptr<RigidBody> rigidBody = m_rigidBody_ptr.lock())
     {
-      if (transform->getPosition().y < -250.0f)
-      {
-        transform->stop();
-        transform->start();
-        rigidBody->setVelocity({0, 0, 0});
-      }
-
       rigidBody->applyForce(m_appliedForce * dt, transform->getPosition());
       transform->move(m_appliedForce * dt);
     }

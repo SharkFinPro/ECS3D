@@ -4,6 +4,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <vector>
 #include <memory>
+#include <uuid.h>
 
 class Object;
 class ECS3D;
@@ -33,6 +34,8 @@ public:
   [[nodiscard]] nlohmann::json serialize() const;
 
   void removeObject(const std::shared_ptr<Object>& object);
+
+  std::shared_ptr<Object> getObjectByUUID(uuids::uuid uuid) const;
 
 private:
   ECS3D* m_ecs = nullptr;

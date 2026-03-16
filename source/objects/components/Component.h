@@ -17,7 +17,8 @@ enum class ComponentType {
   lightRenderer,
   SubComponentType_none,
   SubComponentType_boxCollider,
-  SubComponentType_sphereCollider
+  SubComponentType_sphereCollider,
+  script
 };
 
 const std::unordered_map<ComponentType, std::string> componentTypeToString {
@@ -115,9 +116,9 @@ public:
 
   void markAsDeleted();
 
-  void start() const;
+  virtual void start();
 
-  void stop() const;
+  virtual void stop();
 
   [[nodiscard]] virtual nlohmann::json serialize() = 0;
 

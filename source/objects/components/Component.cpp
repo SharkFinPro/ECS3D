@@ -45,7 +45,7 @@ void Component::markAsDeleted()
   m_shouldDelete = true;
 }
 
-void Component::start() const
+void Component::start()
 {
   for (auto* variable : m_variables)
   {
@@ -53,7 +53,7 @@ void Component::start() const
   }
 }
 
-void Component::stop() const
+void Component::stop()
 {
   for (auto* variable : m_variables)
   {

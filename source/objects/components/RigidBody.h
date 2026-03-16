@@ -9,11 +9,18 @@
 #include <glm/vec3.hpp>
 #include <memory>
 
+class ECS3D;
 class Transform;
 
 struct LineSegment {
   glm::vec3 start;
   glm::vec3 end;
+};
+
+struct RigidBodyBindings
+{
+  void(*applyForce)(const char* uuid, float x, float y, float z, float px, float py, float pz);
+  void(*setVelocity)(const char* uuid, float x, float y, float z);
 };
 
 class RigidBody final : public Component {
@@ -43,6 +50,10 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
+  static void initBindings(ECS3D* ecs);
+
+  [[nodiscard]] static RigidBodyBindings getBindings();
+
 private:
 #ifdef COLLISION_LOCATION_DEBUG
   std::vector<LineSegment> m_linesToDraw;
@@ -63,6 +74,11 @@ private:
   void limitMovement();
 
   [[nodiscard]] glm::mat3x3 getInertiaTensor() const;
+
+  [[nodiscard]] static std::shared_ptr<RigidBody> find(const char* uuid);
+
+  static void bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz);
+  static void bindSetVelocity(const char* uuid, float x, float y, float z);
 };
 
 

@@ -46,6 +46,8 @@ public:
 
   void stop() const;
 
+  [[nodiscard]] std::shared_ptr<ObjectManager> getObjectManager() const;
+
 private:
   SceneManager* m_sceneManager;
 

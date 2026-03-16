@@ -4,6 +4,20 @@
 #include "Component.h"
 #include <glm/vec3.hpp>
 
+class ECS3D;
+
+struct TransformBindings
+{
+  void(*getPosition)(const char* uuid, float* x, float* y, float* z);
+  void(*getScale)(const char* uuid, float* x, float* y, float* z);
+  void(*getRotation)(const char* uuid, float* x, float* y, float* z);
+  void(*setScale)(const char* uuid, float x, float y, float z);
+  void(*setRotation)(const char* uuid, float x, float y, float z);
+  void(*move)(const char* uuid, float x, float y, float z);
+  void(*start)(const char* uuid);
+  void(*stop)(const char* uuid);
+};
+
 class Transform final : public Component {
 public:
   Transform();
@@ -27,12 +41,30 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
+  static void initBindings(ECS3D* ecs);
+
+  [[nodiscard]] static TransformBindings getBindings();
+
 private:
   uint8_t m_updateID = 1;
 
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
   ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(0));
   ComponentVariable<glm::vec3> m_rotation = ComponentVariable(glm::vec3(0));
+
+  [[nodiscard]] static std::shared_ptr<Transform> find(const char* uuid);
+
+  static void bindGetPosition(const char* uuid, float* x, float* y, float* z);
+  static void bindGetScale(const char* uuid, float* x, float* y, float* z);
+  static void bindGetRotation(const char* uuid, float* x, float* y, float* z);
+
+  static void bindSetScale(const char* uuid, float x, float y, float z);
+  static void bindSetRotation(const char* uuid, float x, float y, float z);
+
+  static void bindMove(const char* uuid, float x, float y, float z);
+
+  static void bindStart(const char* uuid);
+  static void bindStop(const char* uuid);
 };
 
 
