@@ -10,16 +10,20 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: read
+
     runs-on: ${{ matrix.os }}
 
     strategy:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
 
-      # Set up a matrix to run the following 3 configurations:
+      # Set up a matrix to run the following 4 configurations:
       # 1. <Windows, Release, latest MSVC compiler toolchain on the default runner image, default generator>
       # 2. <Linux, Release, latest GCC compiler toolchain on the default runner image, default generator>
       # 3. <Linux, Release, latest Clang compiler toolchain on the default runner image, default generator>
+      # 4. <macOS, Release, latest Clang compiler toolchain on the default runner image, default generator>
       #
       # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
       matrix:
@@ -65,7 +69,19 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-22.04' }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libwayland-dev libxkbcommon-dev libgl1-mesa-dev libgtk-3-dev
+          sudo apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libwayland-dev libxkbcommon-dev libgl1-mesa-dev libgtk-3-dev ninja-build
+
+      - name: Install Ninja (macOS)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: brew install ninja
+
+      - name: Install Ninja (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: choco install ninja
+
+      - name: Set up MSVC environment (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Prepare Vulkan SDK
         uses: humbletim/install-vulkan-sdk@main
@@ -73,17 +89,17 @@ jobs:
           version: 1.4.309.0
           cache: true
 
-
       - name: Configure CMake
         run: >
           cmake -B ${{ steps.strings.outputs.build-output-dir }}
+          -G Ninja
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -S ${{ github.workspace }}
 
       - name: Build
-        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
 
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
