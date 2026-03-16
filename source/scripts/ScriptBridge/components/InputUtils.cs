@@ -21,6 +21,7 @@ public enum Key
 public unsafe struct InputUtilsBindings
 {
     public delegate* unmanaged<int, bool> keyIsPressed;
+    public delegate* unmanaged<bool> windowIsFocused;
 }
 
 public static unsafe class InputUtils
@@ -28,4 +29,6 @@ public static unsafe class InputUtils
     private static bool keyIsPressed(int key) => NativeBindings.InputUtils.keyIsPressed(key);
 
     public static bool keyIsPressed(Key key) => keyIsPressed((int)key);
+
+    public static bool windowIsFocused() => NativeBindings.InputUtils.windowIsFocused();
 }

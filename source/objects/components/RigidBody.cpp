@@ -237,7 +237,8 @@ RigidBodyBindings RigidBody::getBindings()
 {
   return RigidBodyBindings {
     .applyForce = &bindApplyForce,
-    .setVelocity = &bindSetVelocity
+    .setVelocity = &bindSetVelocity,
+    .isFalling = &bindIsFalling
   };
 }
 
@@ -312,4 +313,15 @@ void RigidBody::bindSetVelocity(const char* uuid, float x, float y, float z)
   }
 
   rigidBody->setVelocity({ x, y, z });
+}
+
+bool RigidBody::bindIsFalling(const char* uuid)
+{
+  const auto rigidBody = find(uuid);
+  if (!rigidBody)
+  {
+    return false;
+  }
+
+  return rigidBody->isFalling();
 }

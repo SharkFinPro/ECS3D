@@ -6,6 +6,7 @@ class ECS3D;
 struct InputUtilsBindings
 {
   bool(*keyIsPressed)(int key);
+  bool(*windowIsFocused)();
 };
 
 class InputUtils {
@@ -16,6 +17,8 @@ public:
 
 private:
   static bool bindKeyIsPressed(int key);
+
+  static bool bindWindowIsFocused();
 };
 
 

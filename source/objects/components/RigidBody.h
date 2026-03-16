@@ -21,6 +21,7 @@ struct RigidBodyBindings
 {
   void(*applyForce)(const char* uuid, float x, float y, float z, float px, float py, float pz);
   void(*setVelocity)(const char* uuid, float x, float y, float z);
+  bool(*isFalling)(const char* uuid);
 };
 
 class RigidBody final : public Component {
@@ -79,6 +80,8 @@ private:
 
   static void bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz);
   static void bindSetVelocity(const char* uuid, float x, float y, float z);
+
+  static bool bindIsFalling(const char* uuid);
 };
 
 

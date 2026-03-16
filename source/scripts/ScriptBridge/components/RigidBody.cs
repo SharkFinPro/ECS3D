@@ -8,6 +8,7 @@ public unsafe struct RigidBodyBindings
 {
     public delegate* unmanaged<IntPtr, float, float, float, float, float, float, void> applyForce;
     public delegate* unmanaged<IntPtr, float, float, float, void> setVelocity;
+    public delegate* unmanaged<IntPtr, bool> isFalling;
 }
 
 public unsafe class RigidBody
@@ -29,4 +30,6 @@ public unsafe class RigidBody
 
     public void setVelocity(float x, float y, float z) =>
         NativeBindings.RigidBody.setVelocity(_uuid, x, y, z);
+
+    public bool isFalling() => NativeBindings.RigidBody.isFalling(_uuid);
 }
