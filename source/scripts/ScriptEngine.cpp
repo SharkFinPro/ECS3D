@@ -1,4 +1,5 @@
 #include "ScriptEngine.h"
+#include "InputUtils.h"
 #include "../objects/components/RigidBody.h"
 #include "../objects/components/Transform.h"
 #include <coreclr_delegates.h>
@@ -267,20 +268,24 @@ void* ScriptEngine::GetSymbol(void* lib,
 
 void ScriptEngine::initBindings(ECS3D* ecs)
 {
+  InputUtils::initBindings(ecs);
   Transform::initBindings(ecs);
   RigidBody::initBindings(ecs);
 }
 
 void ScriptEngine::registerBindings(const std::function<void(const char*, void**)>& loadFn)
 {
-  using RegisterTransformFn = void(*)(TransformBindings);
+  using RegisterInputUtilsFn = void(*)(InputUtilsBindings);
+  RegisterInputUtilsFn inputUtilsFn = nullptr;
+  loadFn("registerInputUtilsBindings", reinterpret_cast<void**>(&inputUtilsFn));
+  inputUtilsFn(InputUtils::getBindings());
 
+  using RegisterTransformFn = void(*)(TransformBindings);
   RegisterTransformFn transformFn = nullptr;
   loadFn("registerTransformBindings", reinterpret_cast<void**>(&transformFn));
   transformFn(Transform::getBindings());
 
   using RegisterRigidBodyFn = void(*)(RigidBodyBindings);
-
   RegisterRigidBodyFn rigidBodyFn = nullptr;
   loadFn("registerRigidBodyBindings", reinterpret_cast<void**>(&rigidBodyFn));
   rigidBodyFn(RigidBody::getBindings());
