@@ -24,14 +24,12 @@ public class PlayerScript : ScriptBase
             return;
         }
 
-        var pos = transform.getPosition();
-        m_appliedForce *= dt;
-        rigidBody.applyForce(m_appliedForce.X, m_appliedForce.Y, m_appliedForce.Z, pos.X, pos.Y, pos.Z);
-
         if (m_appliedForce.Y == 0)
         {
             m_wasJumping = false;
         }
+
+        rigidBody.applyForce(m_appliedForce * dt, transform.getPosition());
 
         m_appliedForce *= 0;
     }
