@@ -48,6 +48,8 @@ public:
 
   [[nodiscard]] nlohmann::json serialize();
 
+  [[nodiscard]] uuids::uuid getUUID() const;
+
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> m_components;
   ObjectManager* m_manager = nullptr;

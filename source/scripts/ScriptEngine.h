@@ -3,6 +3,8 @@
 
 #include <string>
 
+class ECS3D;
+
 class ScriptEngine
 {
 public:
@@ -12,7 +14,7 @@ public:
   ScriptEngine(const ScriptEngine&) = delete;
   ScriptEngine& operator=(const ScriptEngine&) = delete;
 
-  void init(const std::string& bridgeDir, const std::string& scriptDir);
+  void init(ECS3D* ecs, const std::string& bridgeDir, const std::string& scriptDir);
   void reloadScripts() const;
   void shutdown();
 

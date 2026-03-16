@@ -225,6 +225,11 @@ nlohmann::json Object::serialize()
   return data;
 }
 
+uuids::uuid Object::getUUID() const
+{
+  return m_uuid;
+}
+
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
   const auto component = m_components.find(type);

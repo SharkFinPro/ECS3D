@@ -102,6 +102,20 @@ void ObjectManager::removeObject(const std::shared_ptr<Object>& object)
   m_objectsToRemove.push_back(object);
 }
 
+std::shared_ptr<Object> ObjectManager::getObjectByUUID(const uuids::uuid uuid) const
+{
+  return m_objects.front();
+  // for (const auto& object : m_objects)
+  // {
+  //   if (object->getUUID() == uuid)
+  //   {
+  //     return object;
+  //   }
+  // }
+  //
+  // return nullptr;
+}
+
 void ObjectManager::deleteObjectsMarkedForDeletion()
 {
   if (m_objectsToRemove.empty())

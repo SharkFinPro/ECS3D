@@ -1,17 +1,16 @@
 #include "ScriptBindings.h"
+#include "../objects/components/Transform.h"
 
-static float getPositionX()
+using RegisterTransformFn = void(*)(TransformBindings);
+
+void ScriptBindings::init(ECS3D* ecs)
 {
-  return 21.0f;
+  Transform::initBindings(ecs);
 }
-
-void ScriptBindings::init() {}
 
 void ScriptBindings::registerAll(const std::function<void(const char*, void**)>& loadFn)
 {
   RegisterTransformFn fn = nullptr;
   loadFn("registerTransformBindings", reinterpret_cast<void**>(&fn));
-  fn(TransformBindings {
-    .getPositionX = &getPositionX,
-  });
+  fn(Transform::getBindings());
 }

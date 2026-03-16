@@ -3,17 +3,12 @@
 
 #include <functional>
 
-struct TransformBindings
-{
-  float(*getPositionX)();
-};
-
-using RegisterTransformFn = void(*)(TransformBindings);
+class ECS3D;
 
 class ScriptBindings
 {
 public:
-  static void init();
+  static void init(ECS3D* ecs);
   static void registerAll(const std::function<void(const char*, void**)>& loadFn);
 };
 

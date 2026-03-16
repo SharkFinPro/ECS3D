@@ -45,7 +45,7 @@ void* ScriptEngine::GetSymbol(void* lib, const char* name)
 #endif
 }
 
-void ScriptEngine::init(const std::string& bridgeDir, const std::string& scriptDir)
+void ScriptEngine::init(ECS3D* ecs, const std::string& bridgeDir, const std::string& scriptDir)
 {
   char_t hostfxr_path[4096] = {};
   size_t path_size = sizeof(hostfxr_path) / sizeof(char_t);
@@ -162,7 +162,7 @@ void ScriptEngine::init(const std::string& bridgeDir, const std::string& scriptD
 
   std::cout << "[ScriptEngine] Initializing bridge, script dir: " << scriptDir << "\n";
 
-  ScriptBindings::init();
+  ScriptBindings::init(ecs);
   ScriptBindings::registerAll(loadFn);
 
   initBridgeFn(scriptDir.c_str());

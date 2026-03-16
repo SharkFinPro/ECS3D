@@ -1,10 +1,15 @@
 #include "Transform.h"
 #include "RigidBody.h"
 #include "../Object.h"
+#include "../../ECS3D.h"
 #include "../../GuiComponents.h"
+#include "../../scenes/Scene.h"
+#include "../../scenes/SceneManager.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <memory>
+
+static ECS3D* s_ecs = nullptr;
 
 Transform::Transform()
   : Component(ComponentType::transform)
@@ -142,4 +147,114 @@ void Transform::loadFromJSON(const nlohmann::json& componentData)
   m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
   m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
   m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
+}
+
+void Transform::initBindings(ECS3D* ecs)
+{
+  s_ecs = ecs;
+}
+
+TransformBindings Transform::getBindings()
+{
+  return TransformBindings {
+    .getPosition = &bindGetPosition,
+    .getScale = &bindGetScale,
+    .getRotation = &bindGetRotation,
+    .setScale = &bindSetScale,
+    .setRotation = &bindSetRotation,
+    .move = &bindMove,
+  };
+}
+
+std::shared_ptr<Transform> Transform::find(const char* uuid)
+{
+  const auto scene = s_ecs->getSceneManager()->getCurrentScene();
+  if (!scene)
+  {
+    return nullptr;
+  }
+
+  const auto objectManager = scene->getObjectManager();
+
+  // const auto object = objectManager->getObjectByUUID(uuids::uuid::from_string(std::string(uuid)).value());
+  const auto object = objectManager->getObjectByUUID({});
+
+  const auto component = object->getComponent<Transform>(ComponentType::transform);
+
+  return component;
+}
+
+void Transform::bindGetPosition(const char* uuid, float* x, float* y, float* z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  const auto position = transform->getPosition();
+  *x = position.x;
+  *y = position.y;
+  *z = position.z;
+}
+
+void Transform::bindGetScale(const char* uuid, float* x, float* y, float* z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  const auto scale = transform->getScale();
+  *x = scale.x;
+  *y = scale.y;
+  *z = scale.z;
+}
+
+void Transform::bindGetRotation(const char* uuid, float* x, float* y, float* z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  const auto rotation = transform->getRotation();
+  *x = rotation.x;
+  *y = rotation.y;
+  *z = rotation.z;
+}
+
+void Transform::bindSetScale(const char* uuid, float x, float y, float z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  transform->setScale({ x, y, z });
+}
+
+void Transform::bindSetRotation(const char* uuid, float x, float y, float z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  transform->setRotation({ x, y, z });
+}
+
+void Transform::bindMove(const char* uuid, float x, float y, float z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  transform->move({ x, y, z });
 }

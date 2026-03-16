@@ -8,7 +8,7 @@ const std::string USER_SCRIPTS_DIR = "scripts/UserScripts";
 ScriptManager::ScriptManager(ECS3D* ecs)
   : m_ecs(ecs)
 {
-  m_scriptEngine.init(SCRIPT_BRIDGE_DIR, USER_SCRIPTS_DIR);
+  m_scriptEngine.init(ecs, SCRIPT_BRIDGE_DIR, USER_SCRIPTS_DIR);
 
   m_scriptsSnapshot = takeSnapshot();
 }

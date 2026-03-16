@@ -149,3 +149,8 @@ void Scene::stop() const
 {
   m_objectManager->stop();
 }
+
+std::shared_ptr<ObjectManager> Scene::getObjectManager() const
+{
+  return m_objectManager;
+}
