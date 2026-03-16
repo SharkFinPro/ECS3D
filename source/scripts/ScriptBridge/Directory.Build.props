@@ -1,5 +1,5 @@
 <Project>
-  <PropertyGroup>
-    <BaseIntermediateOutputPath>$(BuildRoot)obj/</BaseIntermediateOutputPath>
-  </PropertyGroup>
+    <PropertyGroup>
+        <BaseIntermediateOutputPath>$(BuildRoot)obj/</BaseIntermediateOutputPath>
+    </PropertyGroup>
 </Project>
