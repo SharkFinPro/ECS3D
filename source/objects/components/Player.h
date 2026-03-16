@@ -21,9 +21,6 @@ public:
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
-  
-  void start() const override;
-  void stop() const override;
 
 private:
   ComponentVariable<float> m_speed{1.0f};

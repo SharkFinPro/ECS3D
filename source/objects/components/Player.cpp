@@ -9,8 +9,6 @@
 #include <nlohmann/json.hpp>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 
-#include "../../scripts/ScriptManager.h"
-
 Player::Player()
   : Component(ComponentType::player)
 {
@@ -62,9 +60,6 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
   }
 
   m_appliedForce *= 0;
-
-  auto scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-  scriptManager->fixedUpdate(m_owner->getUUID(), "PlayerScript", dt);
 }
 
 void Player::displayGui()
@@ -91,22 +86,6 @@ void Player::loadFromJSON(const nlohmann::json& componentData)
 {
   m_speed.set(componentData.at("speed"));
   m_jumpHeight.set(componentData.at("jumpHeight"));
-}
-
-void Player::start() const
-{
-  Component::start();
-
-  auto scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-  scriptManager->attachScript(m_owner->getUUID(), "PlayerScript");
-}
-
-void Player::stop() const
-{
-  Component::stop();
-
-  auto scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-  scriptManager->detachScript(m_owner->getUUID(), "PlayerScript");
 }
 
 void Player::handleInput()
