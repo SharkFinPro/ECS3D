@@ -100,39 +100,39 @@ void Player::handleInput()
     return;
   }
 
-  float xForce = 0;
-  if (ecs->keyIsPressed(GLFW_KEY_LEFT))
-  {
-    xForce += m_speed.get();
-  }
-  if (ecs->keyIsPressed(GLFW_KEY_RIGHT))
-  {
-    xForce -= m_speed.get();
-  }
-  if (xForce!= 0)
-  {
-    m_appliedForce.x = xForce;
-  }
-
-  float zForce = 0;
-  if (ecs->keyIsPressed(GLFW_KEY_UP))
-  {
-    zForce += m_speed.get();
-  }
-  if (ecs->keyIsPressed(GLFW_KEY_DOWN))
-  {
-    zForce -= m_speed.get();
-  }
-  if (zForce != 0)
-  {
-    m_appliedForce.z = zForce;
-  }
-
-  if (const std::shared_ptr<RigidBody> rigidBody = m_rigidBody_ptr.lock())
-  {
-    if (!rigidBody->isFalling() && ecs->keyIsPressed(GLFW_KEY_X))
-    {
-      m_appliedForce.y = m_jumpHeight.get();
-    }
-  }
+  // float xForce = 0;
+  // if (ecs->keyIsPressed(GLFW_KEY_LEFT))
+  // {
+  //   xForce += m_speed.get();
+  // }
+  // if (ecs->keyIsPressed(GLFW_KEY_RIGHT))
+  // {
+  //   xForce -= m_speed.get();
+  // }
+  // if (xForce!= 0)
+  // {
+  //   m_appliedForce.x = xForce;
+  // }
+  //
+  // float zForce = 0;
+  // if (ecs->keyIsPressed(GLFW_KEY_UP))
+  // {
+  //   zForce += m_speed.get();
+  // }
+  // if (ecs->keyIsPressed(GLFW_KEY_DOWN))
+  // {
+  //   zForce -= m_speed.get();
+  // }
+  // if (zForce != 0)
+  // {
+  //   m_appliedForce.z = zForce;
+  // }
+  //
+  // if (const std::shared_ptr<RigidBody> rigidBody = m_rigidBody_ptr.lock())
+  // {
+  //   if (!rigidBody->isFalling() && ecs->keyIsPressed(GLFW_KEY_X))
+  //   {
+  //     m_appliedForce.y = m_jumpHeight.get();
+  //   }
+  // }
 }
