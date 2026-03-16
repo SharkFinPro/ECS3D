@@ -1,6 +1,7 @@
 #ifndef ECS3D_SCRIPTENGINE_H
 #define ECS3D_SCRIPTENGINE_H
 
+#include <functional>
 #include <string>
 
 class ECS3D;
@@ -37,6 +38,9 @@ private:
 
   static void* LoadLib(const std::string& path);
   static void* GetSymbol(void* lib, const char* name);
+
+  static void initBindings(ECS3D* ecs);
+  static void registerBindings(const std::function<void(const char*, void**)>& loadFn);
 };
 
 #endif //ECS3D_SCRIPTENGINE_H

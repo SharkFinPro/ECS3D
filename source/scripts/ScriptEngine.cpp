@@ -1,5 +1,5 @@
 #include "ScriptEngine.h"
-#include "ScriptBindings.h"
+#include "../objects/components/Transform.h"
 #include <coreclr_delegates.h>
 #include <hostfxr.h>
 #include <nethost.h>
@@ -162,8 +162,8 @@ void ScriptEngine::init(ECS3D* ecs, const std::string& bridgeDir, const std::str
 
   std::cout << "[ScriptEngine] Initializing bridge, script dir: " << scriptDir << "\n";
 
-  ScriptBindings::init(ecs);
-  ScriptBindings::registerAll(loadFn);
+  initBindings(ecs);
+  registerBindings(loadFn);
 
   initBridgeFn(scriptDir.c_str());
 
@@ -236,4 +236,18 @@ void ScriptEngine::variableUpdate() const
 ScriptEngine::~ScriptEngine()
 {
   shutdown();
+}
+
+void ScriptEngine::initBindings(ECS3D* ecs)
+{
+  Transform::initBindings(ecs);
+}
+
+void ScriptEngine::registerBindings(const std::function<void(const char*, void**)>& loadFn)
+{
+  using RegisterTransformFn = void(*)(TransformBindings);
+
+  RegisterTransformFn fn = nullptr;
+  loadFn("registerTransformBindings", reinterpret_cast<void**>(&fn));
+  fn(Transform::getBindings());
 }
