@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Runtime.InteropServices;
 
 namespace ScriptBridge;
@@ -17,34 +18,28 @@ public unsafe class Transform
     Marshal.FreeCoTaskMem(_uuid);
   }
 
-  public (float x, float y, float z) position
+  public Vector3 getPosition()
   {
-    get
-    {
-      float x = 0, y = 0, z = 0;
-      NativeBindings.Transform.getPosition(_uuid, &x, &y, &z);
-      return (x, y, z);
-    }
+    float x = 0, y = 0, z = 0;
+    NativeBindings.Transform.getPosition(_uuid, &x, &y, &z);
+
+    return new Vector3(x, y, z);
   }
 
-  public (float x, float y, float z) scale
+  public Vector3 getScale()
   {
-    get
-    {
-      float x = 0, y = 0, z = 0;
-      NativeBindings.Transform.getScale(_uuid, &x, &y, &z);
-      return (x, y, z);
-    }
+    float x = 0, y = 0, z = 0;
+    NativeBindings.Transform.getScale(_uuid, &x, &y, &z);
+
+    return new Vector3(x, y, z);
   }
 
-  public (float x, float y, float z) rotation
+  public Vector3 getRotation()
   {
-    get
-    {
-      float x = 0, y = 0, z = 0;
-      NativeBindings.Transform.getRotation(_uuid, &x, &y, &z);
-      return (x, y, z);
-    }
+    float x = 0, y = 0, z = 0;
+    NativeBindings.Transform.getRotation(_uuid, &x, &y, &z);
+
+    return new Vector3(x, y, z);
   }
 
   public void setScale(float x, float y, float z) =>
