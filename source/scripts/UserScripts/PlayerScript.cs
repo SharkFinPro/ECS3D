@@ -9,6 +9,8 @@ public class PlayerScript : ScriptBase
 
     private Vector3 m_appliedForce = new Vector3(0, 0, 0);
 
+    private bool m_wasJumping = true;
+
     public override void start()
     {
         Console.WriteLine("[PlayerScript] Player is ready!");
@@ -25,7 +27,11 @@ public class PlayerScript : ScriptBase
         var pos = transform.getPosition();
         m_appliedForce *= dt;
         rigidBody.applyForce(m_appliedForce.X, m_appliedForce.Y, m_appliedForce.Z, pos.X, pos.Y, pos.Z);
-        transform.move(m_appliedForce.X, m_appliedForce.Y, m_appliedForce.Z);
+
+        if (m_appliedForce.Y == 0)
+        {
+            m_wasJumping = false;
+        }
 
         m_appliedForce *= 0;
     }
@@ -91,9 +97,10 @@ public class PlayerScript : ScriptBase
             m_appliedForce.Z = zForce;
         }
 
-        if (!rigidBody.isFalling() && InputUtils.keyIsPressed(Key.X))
+        if (!m_wasJumping && !rigidBody.isFalling() && InputUtils.keyIsPressed(Key.X))
         {
             m_appliedForce.Y = m_jumpForce;
+            m_wasJumping = true;
         }
     }
 }
