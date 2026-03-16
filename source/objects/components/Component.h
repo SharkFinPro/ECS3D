@@ -116,9 +116,9 @@ public:
 
   void markAsDeleted();
 
-  void start() const;
+  virtual void start() const;
 
-  void stop() const;
+  virtual void stop() const;
 
   [[nodiscard]] virtual nlohmann::json serialize() = 0;
 
