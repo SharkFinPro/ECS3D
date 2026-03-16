@@ -157,6 +157,8 @@ void ScriptEngine::init(ECS3D* ecs, const std::string& bridgeDir, const std::str
   InitBridgeFn initBridgeFn = nullptr;
   loadFn("init", reinterpret_cast<void**>(&initBridgeFn));
   loadFn("reloadScripts", reinterpret_cast<void**>(&m_reload));
+  loadFn("attachScript", reinterpret_cast<void**>(&m_attachScript));
+  loadFn("detachScript", reinterpret_cast<void**>(&m_detachScript));
   loadFn("fixedUpdate", reinterpret_cast<void**>(&m_fixedUpdate));
   loadFn("variableUpdate", reinterpret_cast<void**>(&m_variableUpdate));
 
@@ -217,19 +219,40 @@ void ScriptEngine::shutdown()
   std::cout << "[ScriptEngine] Shutdown complete.\n";
 }
 
-void ScriptEngine::fixedUpdate(const float dt) const
+void ScriptEngine::attachScript(const char* uuid,
+                                const char* className) const
 {
-  if (m_fixedUpdate)
+  if (m_attachScript)
   {
-    m_fixedUpdate(dt);
+    m_attachScript(uuid, className);
   }
 }
 
-void ScriptEngine::variableUpdate() const
+void ScriptEngine::detachScript(const char* uuid,
+                                const char* className) const
+{
+  if (m_detachScript)
+  {
+    m_detachScript(uuid, className);
+  }
+}
+
+void ScriptEngine::fixedUpdate(const char* uuid,
+                               const char* className,
+                               const float dt) const
+{
+  if (m_fixedUpdate)
+  {
+    m_fixedUpdate(uuid, className, dt);
+  }
+}
+
+void ScriptEngine::variableUpdate(const char* uuid,
+                                  const char* className) const
 {
   if (m_variableUpdate)
   {
-    m_variableUpdate();
+    m_variableUpdate(uuid, className);
   }
 }
 

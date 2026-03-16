@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -14,6 +15,9 @@ public static class Bridge
   private static string _scriptDir = "";
   private static ScriptContext? _ctx;
 
+  private static readonly Dictionary<string, ScriptBase> _instances = new();
+  private static string Key(string uuid, string className) => $"{uuid}_{className}";
+
   [UnmanagedCallersOnly]
   public static void init(IntPtr scriptDirPtr)
   {
@@ -27,63 +31,20 @@ public static class Bridge
   [UnmanagedCallersOnly]
   public static void reloadScripts()
   {
-    if (_ctx is { } ctx)
+    foreach (var instance in _instances.Values)
     {
-      foreach (var s in ctx.Scripts)
-      {
-        try { s.stop(); } catch { }
-      }
-
-      ctx.Unload();
-      _ctx = null;
-
-      GC.Collect();
-      GC.WaitForPendingFinalizers();
+      try { instance.stop(); } catch {}
     }
+
+    _instances.Clear();
+
+    _ctx?.Unload();
+    _ctx = null;
+
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
 
     CompileAndLoad();
-  }
-
-  [UnmanagedCallersOnly]
-  public static void fixedUpdate(float dt)
-  {
-    if (_ctx is null)
-    {
-      return;
-    }
-
-    foreach (var script in _ctx.Scripts)
-    {
-      try
-      {
-        script.fixedUpdate(dt);
-      }
-      catch (Exception ex)
-      {
-        Console.Error.WriteLine($"[Bridge] OnUpdate error in {script.GetType().Name}: {ex.Message}");
-      }
-    }
-  }
-
-  [UnmanagedCallersOnly]
-  public static void variableUpdate(float dt)
-  {
-    if (_ctx is null)
-    {
-      return;
-    }
-
-    foreach (var script in _ctx.Scripts)
-    {
-      try
-      {
-        script.variableUpdate();
-      }
-      catch (Exception ex)
-      {
-        Console.Error.WriteLine($"[Bridge] OnUpdate error in {script.GetType().Name}: {ex.Message}");
-      }
-    }
   }
 
   private static void CompileAndLoad()
@@ -146,18 +107,10 @@ public static class Bridge
     ms.Seek(0, SeekOrigin.Begin);
     _ctx = new ScriptContext(ms);
 
-    Console.WriteLine($"[Bridge] Loaded {_ctx.Scripts.Length} script(s):");
-    foreach (var s in _ctx.Scripts)
+    Console.WriteLine($"[Bridge] {_ctx.ScriptTypes.Length} script type(s) available.");
+    foreach (var t in _ctx.ScriptTypes)
     {
-      Console.WriteLine($"  + {s.GetType().Name}");
-      try
-      {
-        s.start();
-      }
-      catch (Exception ex)
-      {
-        Console.Error.WriteLine($"[Bridge] OnStart error in {s.GetType().Name}: {ex.Message}");
-      }
+      Console.WriteLine($"  + {t.Name}");
     }
   }
 
@@ -166,11 +119,64 @@ public static class Bridge
   {
     NativeBindings.Transform = bindings;
   }
+
+  [UnmanagedCallersOnly]
+  public static void attachScript(IntPtr uuidPtr, IntPtr classNamePtr)
+  {
+    var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+    var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+    var type = _ctx?.FindType(className);
+    if (type is null)
+    {
+      return;
+    }
+
+    var instance = (ScriptBase)Activator.CreateInstance(type)!;
+    instance.EntityId = uuid;
+    instance.initComponents();
+    _instances[Key(uuid, className)] = instance;
+    instance.start();
+  }
+
+  [UnmanagedCallersOnly]
+  public static void detachScript(IntPtr uuidPtr, IntPtr classNamePtr)
+  {
+    var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+    if (!_instances.TryGetValue(key, out var instance))
+    {
+      return;
+    }
+
+    instance.stop();
+    _instances.Remove(key);
+  }
+
+  [UnmanagedCallersOnly]
+  public static void fixedUpdate(IntPtr uuidPtr, IntPtr classNamePtr, float dt)
+  {
+    var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+    if (_instances.TryGetValue(key, out var instance))
+    {
+      instance.fixedUpdate(dt);
+    }
+  }
+
+  [UnmanagedCallersOnly]
+  public static void variableUpdate(IntPtr uuidPtr, IntPtr classNamePtr)
+  {
+    var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+    if (_instances.TryGetValue(key, out var instance))
+    {
+      instance.variableUpdate();
+    }
+  }
 }
 
 internal sealed class ScriptContext : AssemblyLoadContext
 {
-  public ScriptBase[] Scripts { get; }
+  public Type[] ScriptTypes { get; }
+
+  public Type? FindType(string name) => ScriptTypes.FirstOrDefault(t => t.Name == name);
 
   protected override Assembly? Load(AssemblyName name)
   {
@@ -186,10 +192,8 @@ internal sealed class ScriptContext : AssemblyLoadContext
   {
     var asm = LoadFromStream(dll);
 
-    Scripts = asm.GetTypes()
+    ScriptTypes = asm.GetTypes()
       .Where(t => t.IsSubclassOf(typeof(ScriptBase)) && !t.IsAbstract && t.IsPublic)
-      .Select(t => Activator.CreateInstance(t) as ScriptBase)
-      .OfType<ScriptBase>()
       .ToArray();
   }
 }

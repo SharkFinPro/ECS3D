@@ -9,6 +9,8 @@
 #include <nlohmann/json.hpp>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 
+#include "../../scripts/ScriptManager.h"
+
 Player::Player()
   : Component(ComponentType::player)
 {
@@ -60,6 +62,11 @@ void Player::fixedUpdate([[maybe_unused]] const float dt)
   }
 
   m_appliedForce *= 0;
+
+  auto scriptManager = m_owner->getManager()->getECS()->getScriptManager();
+  scriptManager->attachScript(m_owner->getUUID(), "PlayerScript");
+  scriptManager->fixedUpdate(m_owner->getUUID(), "PlayerScript", dt);
+  scriptManager->detachScript(m_owner->getUUID(), "PlayerScript");
 }
 
 void Player::displayGui()

@@ -10,6 +10,7 @@ public class PlayerScript : ScriptBase
 
   public override void fixedUpdate(float dt)
   {
+    Console.WriteLine("[PlayerScript] Fixed Update!");
   }
 
   public override void stop()

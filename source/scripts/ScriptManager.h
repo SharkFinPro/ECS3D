@@ -2,6 +2,7 @@
 #define ECS3D_SCRIPTMANAGER_H
 
 #include "ScriptEngine.h"
+#include <uuid.h>
 #include <filesystem>
 #include <unordered_map>
 
@@ -13,8 +14,11 @@ public:
 
   void checkForScriptChanges();
 
-  void fixedUpdate(float dt) const;
-  void variableUpdate() const;
+  void attachScript(uuids::uuid uuid, const char* className) const;
+  void detachScript(uuids::uuid uuid, const char* className) const;
+
+  void fixedUpdate(uuids::uuid uuid, const char* className, float dt) const;
+  void variableUpdate(uuids::uuid uuid, const char* className) const;
 
 private:
   ECS3D* m_ecs;

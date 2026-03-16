@@ -109,8 +109,6 @@ void ECS3D::fixedUpdate()
 		++steps;
 
 		try {
-			m_scriptManager->fixedUpdate(m_fixedUpdateDt);
-
 			m_sceneManager->fixedUpdate(m_fixedUpdateDt);
 		}
 		catch(const std::exception& e)
@@ -130,8 +128,6 @@ void ECS3D::variableUpdate()
 
 	try {
 		m_assetManager->displayGui();
-
-		m_scriptManager->variableUpdate();
 
 		m_sceneManager->variableUpdate();
 	}

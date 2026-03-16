@@ -34,14 +34,33 @@ void ScriptManager::checkForScriptChanges()
   }
 }
 
-void ScriptManager::fixedUpdate(const float dt) const
+void ScriptManager::attachScript(const uuids::uuid uuid,
+                                 const char* className) const
 {
-  m_scriptEngine.fixedUpdate(dt);
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.attachScript(uuidStr.c_str(), className);
 }
 
-void ScriptManager::variableUpdate() const
+void ScriptManager::detachScript(const uuids::uuid uuid,
+                                 const char* className) const
 {
-  m_scriptEngine.variableUpdate();
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.detachScript(uuidStr.c_str(), className);
+}
+
+void ScriptManager::fixedUpdate(const uuids::uuid uuid,
+                                const char* className,
+                                const float dt) const
+{
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.fixedUpdate(uuidStr.c_str(), className, dt);
+}
+
+void ScriptManager::variableUpdate(const uuids::uuid uuid,
+                                   const char* className) const
+{
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.variableUpdate(uuidStr.c_str(), className);
 }
 
 ScriptManager::ScriptsSnapshot ScriptManager::takeSnapshot()
