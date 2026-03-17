@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class ECS3D;
@@ -16,11 +17,14 @@ public:
 
   void checkForScriptChanges();
 
+  [[nodiscard]] bool isScriptAttached(uuids::uuid uuid,
+                                      const char* className) const;
+
   void attachScript(uuids::uuid uuid,
-                    const char* className) const;
+                    const char* className);
 
   void detachScript(uuids::uuid uuid,
-                    const char* className) const;
+                    const char* className);
 
   void fixedUpdate(uuids::uuid uuid,
                    const char* className,
@@ -68,6 +72,8 @@ public:
 private:
   ECS3D* m_ecs;
   ScriptEngine m_scriptEngine;
+
+  std::unordered_set<std::string> m_attachedScripts;
 
   using ScriptsSnapshot = std::unordered_map<std::string, std::filesystem::file_time_type>;
 

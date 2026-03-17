@@ -25,6 +25,7 @@ void ScriptManager::checkForScriptChanges()
   std::cout << "\n[hot-reload] Change detected - reloading scripts..." << std::endl;
   try
   {
+    m_attachedScripts.clear();
     m_fieldCache.clear();
     m_scriptEngine.reloadScripts();
     m_scriptsSnapshot = std::move(now);
@@ -36,14 +37,24 @@ void ScriptManager::checkForScriptChanges()
   }
 }
 
+bool ScriptManager::isScriptAttached(const uuids::uuid uuid,
+                                     const char* className) const
+{
+  return m_attachedScripts.contains(cacheKey(uuid, className));
+}
+
 void ScriptManager::attachScript(const uuids::uuid uuid,
-                                 const char* className) const
+                                 const char* className)
 {
   const auto uuidStr = uuids::to_string(uuid);
   m_scriptEngine.attachScript(uuidStr.c_str(), className);
 
+  const auto key = cacheKey(uuid, className);
+
+  m_attachedScripts.insert(key);
+
   auto json = nlohmann::json::parse(m_scriptEngine.getExposedFields(uuidStr.c_str(), className));
-  auto& fields = m_fieldCache[cacheKey(uuid, className)];
+  auto& fields = m_fieldCache[key];
   fields.clear();
   for (const auto& f : json)
   {
@@ -52,12 +63,16 @@ void ScriptManager::attachScript(const uuids::uuid uuid,
 }
 
 void ScriptManager::detachScript(const uuids::uuid uuid,
-                                 const char* className) const
+                                 const char* className)
 {
   const auto uuidStr = uuids::to_string(uuid);
   m_scriptEngine.detachScript(uuidStr.c_str(), className);
 
-  m_fieldCache.erase(cacheKey(uuid, className));
+  const auto key = cacheKey(uuid, className);
+
+  m_fieldCache.erase(key);
+
+  m_attachedScripts.erase(key);
 }
 
 void ScriptManager::fixedUpdate(const uuids::uuid uuid,

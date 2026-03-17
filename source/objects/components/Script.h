@@ -9,9 +9,7 @@ class Script final : public Component {
 public:
   explicit Script(std::string className);
 
-  void start() override;
-
-  void stop() override;
+  ~Script() override;
 
   void variableUpdate() override;
 
