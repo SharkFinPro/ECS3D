@@ -4,9 +4,9 @@
 #include "ScriptEngine.h"
 #include <uuid.h>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 class ECS3D;
@@ -21,7 +21,9 @@ public:
                                       const char* className) const;
 
   void attachScript(uuids::uuid uuid,
-                    const char* className);
+                    const char* className,
+                    const std::function<void()> &preReload,
+                    const std::function<void()> &postReload);
 
   void detachScript(uuids::uuid uuid,
                     const char* className);
@@ -73,7 +75,12 @@ private:
   ECS3D* m_ecs;
   ScriptEngine m_scriptEngine;
 
-  std::unordered_set<std::string> m_attachedScripts;
+  struct ReloadCallbacks {
+    std::function<void()> preReload;
+    std::function<void()> postReload;
+  };
+
+  std::unordered_map<std::string, ReloadCallbacks> m_attachedScripts;
 
   using ScriptsSnapshot = std::unordered_map<std::string, std::filesystem::file_time_type>;
 

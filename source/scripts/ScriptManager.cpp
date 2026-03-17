@@ -25,10 +25,24 @@ void ScriptManager::checkForScriptChanges()
   std::cout << "\n[hot-reload] Change detected - reloading scripts..." << std::endl;
   try
   {
+    for (auto& [_, callbacks] : m_attachedScripts)
+    {
+      callbacks.preReload();
+    }
+
+    const auto oldAttachedScripts = m_attachedScripts;
+
     m_attachedScripts.clear();
+
     m_fieldCache.clear();
     m_scriptEngine.reloadScripts();
     m_scriptsSnapshot = std::move(now);
+
+    for (auto& [key, callbacks] : oldAttachedScripts)
+    {
+      callbacks.postReload();
+    }
+
     std::cout << "[hot-reload] Reload successful." << std::endl;
   }
   catch (const std::exception& ex)
@@ -44,14 +58,16 @@ bool ScriptManager::isScriptAttached(const uuids::uuid uuid,
 }
 
 void ScriptManager::attachScript(const uuids::uuid uuid,
-                                 const char* className)
+                                 const char* className,
+                                 const std::function<void()>& preReload,
+                                 const std::function<void()>& postReload)
 {
   const auto uuidStr = uuids::to_string(uuid);
   m_scriptEngine.attachScript(uuidStr.c_str(), className);
 
   const auto key = cacheKey(uuid, className);
 
-  m_attachedScripts.insert(key);
+  m_attachedScripts[key] = ReloadCallbacks { preReload, postReload };
 
   auto json = nlohmann::json::parse(m_scriptEngine.getExposedFields(uuidStr.c_str(), className));
   auto& fields = m_fieldCache[key];

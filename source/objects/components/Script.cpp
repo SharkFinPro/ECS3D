@@ -26,10 +26,7 @@ void Script::variableUpdate()
     m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
   }
 
-  if (!m_scriptManager->isScriptAttached(m_owner->getUUID(), m_className.c_str()))
-  {
-    m_scriptManager->attachScript(m_owner->getUUID(), m_className.c_str());
-  }
+  attachScript();
 
   m_scriptManager->variableUpdate(m_owner->getUUID(), m_className.c_str());
 }
@@ -41,10 +38,7 @@ void Script::fixedUpdate(const float dt)
     m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
   }
 
-  if (!m_scriptManager->isScriptAttached(m_owner->getUUID(), m_className.c_str()))
-  {
-    m_scriptManager->attachScript(m_owner->getUUID(), m_className.c_str());
-  }
+  attachScript();
 
   m_scriptManager->fixedUpdate(m_owner->getUUID(), m_className.c_str(), dt);
 }
@@ -165,10 +159,7 @@ void Script::loadFromJSON(const nlohmann::json& componentData)
   const auto uuid = m_owner->getUUID();
   const auto className = m_className.c_str();
 
-  if (!m_scriptManager->isScriptAttached(uuid, className))
-  {
-    m_scriptManager->attachScript(uuid, className);
-  }
+  attachScript();
 
   if (!componentData.contains("fields"))
   {
@@ -197,5 +188,30 @@ void Script::loadFromJSON(const nlohmann::json& componentData)
       const bool v = field["value"];
       m_scriptManager->setFieldBool(uuid, className, fieldName, v);
     }
+  }
+}
+
+void Script::preReload()
+{
+  m_tempData = serialize();
+}
+
+void Script::postReload()
+{
+  loadFromJSON(m_tempData);
+
+  m_tempData = nlohmann::json();
+}
+
+void Script::attachScript()
+{
+  if (!m_scriptManager->isScriptAttached(m_owner->getUUID(), m_className.c_str()))
+  {
+    m_scriptManager->attachScript(
+      m_owner->getUUID(),
+      m_className.c_str(),
+      [this] { preReload (); },
+      [this] { postReload(); }
+    );
   }
 }

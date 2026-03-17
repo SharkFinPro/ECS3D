@@ -2,6 +2,7 @@
 #define ECS3D_SCRIPT_H
 
 #include "Component.h"
+#include <nlohmann/json.hpp>
 
 class ScriptManager;
 
@@ -21,10 +22,18 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
+  void preReload();
+
+  void postReload();
+
 private:
   std::shared_ptr<ScriptManager> m_scriptManager;
 
   std::string m_className;
+
+  nlohmann::json m_tempData = nlohmann::json();
+
+  void attachScript();
 };
 
 
