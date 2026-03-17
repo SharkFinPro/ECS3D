@@ -158,6 +158,13 @@ void Object::displayGui()
     }
   }
 
+  if (ImGui::Button("Add Component"))
+  {
+    m_showComponentSelector = true;
+  }
+
+  displayComponentSelector();
+
   ImGui::SeparatorText("Scripts");
 
   for (auto script : m_scripts)
@@ -165,57 +172,6 @@ void Object::displayGui()
     ImGui::PushID(&script);
     script->displayGui();
     ImGui::PopID();
-  }
-
-  if (ImGui::Button("Add Component"))
-  {
-    m_showComponentSelector = true;
-  }
-
-  if (m_showComponentSelector)
-  {
-    if (ImGui::BeginCombo("##combo", "Select Component"))
-    {
-      for (const auto& [type, name] : componentTypeToString)
-      {
-        const auto parentType = subComponentTypeToParent.find(type);
-        if (!getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type))
-        {
-          if (ImGui::Selectable(name.data()))
-          {
-            switch (type)
-            {
-              case ComponentType::transform:
-                addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
-                break;
-              case ComponentType::modelRenderer:
-                addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
-                break;
-              case ComponentType::rigidBody:
-                addComponent(std::make_shared<RigidBody>());
-                break;
-              case ComponentType::SubComponentType_boxCollider:
-                addComponent(std::make_shared<BoxCollider>());
-                m_manager->getCollisionManager()->addObject(shared_from_this());
-                break;
-              case ComponentType::SubComponentType_sphereCollider:
-                addComponent(std::make_shared<SphereCollider>());
-                m_manager->getCollisionManager()->addObject(shared_from_this());
-                break;
-              case ComponentType::lightRenderer:
-                addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
-                                                             glm::vec3(0), 0.0f, 0.0f, 0.0f));
-                break;
-              default: ;
-            }
-
-            m_showComponentSelector = false;
-          }
-        }
-      }
-
-      ImGui::EndCombo();
-    }
   }
 }
 
@@ -353,4 +309,60 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   }
 
   return component;
+}
+
+void Object::displayComponentSelector()
+{
+  if (!m_showComponentSelector)
+  {
+    return;
+  }
+  
+  if (ImGui::BeginCombo("##combo", "Select Component"))
+  {
+    for (const auto& [type, name] : componentTypeToString)
+    {
+      if (type == ComponentType::script)
+      {
+        continue;
+      }
+
+      const auto parentType = subComponentTypeToParent.find(type);
+      if (!getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type))
+      {
+        if (ImGui::Selectable(name.data()))
+        {
+          switch (type)
+          {
+            case ComponentType::transform:
+              addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
+              break;
+            case ComponentType::modelRenderer:
+              addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
+              break;
+            case ComponentType::rigidBody:
+              addComponent(std::make_shared<RigidBody>());
+              break;
+            case ComponentType::SubComponentType_boxCollider:
+              addComponent(std::make_shared<BoxCollider>());
+              m_manager->getCollisionManager()->addObject(shared_from_this());
+              break;
+            case ComponentType::SubComponentType_sphereCollider:
+              addComponent(std::make_shared<SphereCollider>());
+              m_manager->getCollisionManager()->addObject(shared_from_this());
+              break;
+            case ComponentType::lightRenderer:
+              addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
+                                                           glm::vec3(0), 0.0f, 0.0f, 0.0f));
+              break;
+            default: ;
+          }
+
+          m_showComponentSelector = false;
+        }
+      }
+    }
+
+    ImGui::EndCombo();
+  }
 }

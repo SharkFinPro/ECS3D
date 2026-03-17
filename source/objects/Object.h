@@ -69,6 +69,8 @@ private:
   void loadFromJSON(const nlohmann::json& objectData);
 
   [[nodiscard]] std::shared_ptr<Component> loadComponentFromJSON(const nlohmann::json& componentData) const;
+
+  void displayComponentSelector();
 };
 
 
