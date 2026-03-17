@@ -24,7 +24,6 @@ public class PlayerScript : ScriptBase
         if (isRespawnNeeded())
         {
             respawn();
-            return;
         }
 
         if (m_appliedForce.Y == 0)
