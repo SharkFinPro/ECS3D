@@ -6,6 +6,7 @@
 #include "components/ModelRenderer.h"
 #include "components/Player.h"
 #include "components/RigidBody.h"
+#include "components/Script.h"
 #include "components/Transform.h"
 #include "components/collisions/BoxCollider.h"
 #include "components/collisions/SphereCollider.h"
@@ -297,6 +298,10 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   else if (componentData["type"] == "Transform")
   {
     component = std::make_shared<Transform>();
+  }
+  else if (componentData["type"] == "Script")
+  {
+    component = std::make_shared<Script>(componentData["className"]);
   }
 
   if (!component)

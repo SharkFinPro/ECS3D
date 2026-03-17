@@ -53,6 +53,11 @@ void Script::displayGui()
 {
   if (displayGuiHeader())
   {
+    if (!m_scriptManager)
+    {
+      m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
+    }
+
     const auto fields = m_scriptManager->getExposedFields(m_owner->getUUID(), m_className.c_str());
     if (!fields)
     {
@@ -95,12 +100,102 @@ void Script::displayGui()
 
 nlohmann::json Script::serialize()
 {
-  // TODO
+  nlohmann::json data = {
+    { "type", "Script" },
+    { "className", m_className },
+    { "fields", nlohmann::json::array() }
+  };
 
-  return {};
+  if (!m_scriptManager)
+  {
+    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
+  }
+
+  if (const auto fields = m_scriptManager->getExposedFields(m_owner->getUUID(), m_className.c_str()))
+  {
+    for (const auto& field : *fields)
+    {
+      const auto uuid = m_owner->getUUID();
+      const auto className = m_className.c_str();
+      const auto fieldName = field.name.c_str();
+
+      if (field.type == "float")
+      {
+        float v = m_scriptManager->getFieldFloat(uuid, className, fieldName);
+
+        data["fields"].push_back({
+          { "name", fieldName },
+          { "type", "float" },
+          { "value", v }
+        });
+      }
+      else if (field.type == "int")
+      {
+        int v = m_scriptManager->getFieldInt(uuid, className, fieldName);
+
+        data["fields"].push_back({
+          { "name", fieldName },
+          { "type", "int" },
+          { "value", v }
+        });
+      }
+      else if (field.type == "bool")
+      {
+        bool v = m_scriptManager->getFieldBool(uuid, className, fieldName);
+
+        data["fields"].push_back({
+          { "name", fieldName },
+          { "type", "bool" },
+          { "value", v }
+        });
+      }
+    }
+  }
+
+  return data;
 }
 
 void Script::loadFromJSON(const nlohmann::json& componentData)
 {
-  // TODO
+  if (!m_scriptManager)
+  {
+    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
+  }
+
+  const auto uuid = m_owner->getUUID();
+  const auto className = m_className.c_str();
+
+  if (!m_scriptManager->isScriptAttached(uuid, className))
+  {
+    m_scriptManager->attachScript(uuid, className);
+  }
+
+  if (!componentData.contains("fields"))
+  {
+    return;
+  }
+
+  for (const auto& field : componentData["fields"])
+  {
+    const std::string name = field["name"];
+    const std::string type = field["type"];
+
+    const auto fieldName = name.c_str();
+
+    if (type == "float")
+    {
+      const float v = field["value"];
+      m_scriptManager->setFieldFloat(uuid, className, fieldName, v);
+    }
+    else if (type == "int")
+    {
+      const int v = field["value"];
+      m_scriptManager->setFieldInt(uuid, className, fieldName, v);
+    }
+    else if (type == "bool")
+    {
+      const bool v = field["value"];
+      m_scriptManager->setFieldBool(uuid, className, fieldName, v);
+    }
+  }
 }
