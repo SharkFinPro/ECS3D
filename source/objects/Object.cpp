@@ -4,8 +4,8 @@
 #include "components/Component.h"
 #include "components/LightRenderer.h"
 #include "components/ModelRenderer.h"
-#include "components/Player.h"
 #include "components/RigidBody.h"
+#include "components/Script.h"
 #include "components/Transform.h"
 #include "components/collisions/BoxCollider.h"
 #include "components/collisions/SphereCollider.h"
@@ -170,9 +170,6 @@ void Object::displayGui()
                 addComponent(std::make_shared<SphereCollider>());
                 m_manager->getCollisionManager()->addObject(shared_from_this());
                 break;
-              case ComponentType::player:
-                addComponent(std::make_shared<Player>());
-                break;
               case ComponentType::lightRenderer:
                 addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
                                                              glm::vec3(0), 0.0f, 0.0f, 0.0f));
@@ -286,10 +283,6 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   {
     component = std::make_shared<ModelRenderer>(m_manager->getECS()->getRenderer());
   }
-  else if (componentData["type"] == "Player")
-  {
-    component = std::make_shared<Player>();
-  }
   else if (componentData["type"] == "RigidBody")
   {
     component = std::make_shared<RigidBody>();
@@ -297,6 +290,10 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   else if (componentData["type"] == "Transform")
   {
     component = std::make_shared<Transform>();
+  }
+  else if (componentData["type"] == "Script")
+  {
+    component = std::make_shared<Script>(componentData["className"]);
   }
 
   if (!component)

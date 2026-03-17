@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
+using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -125,6 +126,113 @@ public static class Bridge
         {
             Console.WriteLine($"    + {t.Name}");
         }
+    }
+
+    [UnmanagedCallersOnly]
+    public static IntPtr getExposedFields(IntPtr uuidPtr, IntPtr classNamePtr)
+    {
+        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+        if (!_instances.TryGetValue(key, out var instance))
+        {
+            return Marshal.StringToCoTaskMemUTF8("[]");
+        }
+
+        var fields = instance.GetType()
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null)
+            .Select(f => new {
+                name        = f.Name,
+                displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
+                type        = MapTypeName(f.FieldType)!
+            })
+            .ToArray();
+
+        return Marshal.StringToCoTaskMemUTF8(JsonSerializer.Serialize(fields));
+    }
+
+    [UnmanagedCallersOnly]
+    public static void freeString(IntPtr ptr) => Marshal.FreeCoTaskMem(ptr);
+
+    [UnmanagedCallersOnly]
+    public static float getFieldFloat(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
+        => (float)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? 0f);
+
+    [UnmanagedCallersOnly]
+    public static int getFieldInt(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
+        => (int)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? 0);
+
+    [UnmanagedCallersOnly]
+    public static bool getFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
+        => (bool)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? false);
+
+    private static object? GetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
+    {
+        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+        var fieldName = Marshal.PtrToStringUTF8(fieldNamePtr)!;
+
+        if (!_instances.TryGetValue(key, out var instance))
+        {
+            return null;
+        }
+
+        return instance.GetType()
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null)
+            ?.GetValue(instance);
+    }
+
+    [UnmanagedCallersOnly]
+    public static void setFieldFloat(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, float value)
+        => SetField(uuidPtr, classNamePtr, fieldNamePtr, value);
+
+    [UnmanagedCallersOnly]
+    public static void setFieldInt(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, int value)
+        => SetField(uuidPtr, classNamePtr, fieldNamePtr, value);
+
+    [UnmanagedCallersOnly]
+    public static void setFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
+                                    [MarshalAs(UnmanagedType.U1)] bool value)
+        => SetField(uuidPtr, classNamePtr, fieldNamePtr, value);
+
+    private static void SetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, object value)
+    {
+        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+        var fieldName = Marshal.PtrToStringUTF8(fieldNamePtr)!;
+
+        if (!_instances.TryGetValue(key, out var instance))
+        {
+            return;
+        }
+        var field = instance.GetType()
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null);
+
+        field?.SetValue(instance, Convert.ChangeType(value, field.FieldType));
+    }
+
+    private static string? MapTypeName(Type t)
+    {
+        if (t == typeof(float))
+        {
+            return "float";
+        }
+
+        if (t == typeof(int))
+        {
+            return "int";
+        }
+
+        if (t == typeof(bool))
+        {
+            return "bool";
+        }
+
+        if (t == typeof(string))
+        {
+            return "string";
+        }
+
+        return null;
     }
 
     [UnmanagedCallersOnly]

@@ -153,6 +153,17 @@ void ScriptEngine::init(ECS3D* ecs,
   loadFn("fixedUpdate", reinterpret_cast<void**>(&m_fixedUpdate));
   loadFn("variableUpdate", reinterpret_cast<void**>(&m_variableUpdate));
 
+  loadFn("getExposedFields", reinterpret_cast<void**>(&m_getExposedFields));
+  loadFn("freeString", reinterpret_cast<void**>(&m_freeString));
+
+  loadFn("getFieldFloat", reinterpret_cast<void**>(&m_getFieldFloat));
+  loadFn("getFieldInt", reinterpret_cast<void**>(&m_getFieldInt));
+  loadFn("getFieldBool", reinterpret_cast<void**>(&m_getFieldBool));
+
+  loadFn("setFieldFloat", reinterpret_cast<void**>(&m_setFieldFloat));
+  loadFn("setFieldInt", reinterpret_cast<void**>(&m_setFieldInt));
+  loadFn("setFieldBool", reinterpret_cast<void**>(&m_setFieldBool));
+
   std::cout << "[ScriptEngine] Initializing bridge, script dir: " << scriptDir << "\n";
 
   initBindings(ecs);
@@ -244,6 +255,83 @@ void ScriptEngine::variableUpdate(const char* uuid,
   if (m_variableUpdate)
   {
     m_variableUpdate(uuid, className);
+  }
+}
+
+std::string ScriptEngine::getExposedFields(const char* uuid,
+                                           const char* className) const
+{
+  if (!m_getExposedFields)
+  {
+    return "[]";
+  }
+
+  char* raw = m_getExposedFields(uuid, className);
+  if (!raw)
+  {
+    return "[]";
+  }
+
+  std::string result(raw);
+  if (m_freeString)
+  {
+    m_freeString(raw);
+  }
+
+  return result;
+}
+
+float ScriptEngine::getFieldFloat(const char* uuid,
+                                  const char* className,
+                                  const char* fieldName) const
+{
+  return m_getFieldFloat ? m_getFieldFloat(uuid, className, fieldName) : 0.0f;
+}
+
+int ScriptEngine::getFieldInt(const char* uuid,
+                              const char* className,
+                              const char* fieldName) const
+{
+  return m_getFieldInt ? m_getFieldInt(uuid, className, fieldName) : 0;
+}
+
+bool ScriptEngine::getFieldBool(const char* uuid,
+                                const char* className,
+                                const char* fieldName) const
+{
+  return m_getFieldBool ? m_getFieldBool(uuid, className, fieldName) : false;
+}
+
+void ScriptEngine::setFieldFloat(const char* uuid,
+                                 const char* className,
+                                 const char* fieldName,
+                                 const float value) const
+{
+  if (m_setFieldFloat)
+  {
+    m_setFieldFloat(uuid, className, fieldName, value);
+  }
+}
+
+void ScriptEngine::setFieldInt(const char* uuid,
+                               const char* className,
+                               const char* fieldName,
+                               const int value) const
+{
+  if (m_setFieldInt)
+  {
+    m_setFieldInt(uuid, className, fieldName, value);
+  }
+}
+
+void ScriptEngine::setFieldBool(const char* uuid,
+                                const char* className,
+                                const char* fieldName,
+                                const bool value) const
+{
+  if (m_setFieldBool)
+  {
+    m_setFieldBool(uuid, className, fieldName, value);
   }
 }
 

@@ -13,7 +13,6 @@ enum class ComponentType {
   modelRenderer,
   rigidBody,
   collider,
-  player,
   lightRenderer,
   SubComponentType_none,
   SubComponentType_boxCollider,
@@ -27,8 +26,8 @@ const std::unordered_map<ComponentType, std::string> componentTypeToString {
   {ComponentType::rigidBody, "Rigid Body"},
   {ComponentType::SubComponentType_boxCollider, "Box Collider"},
   {ComponentType::SubComponentType_sphereCollider, "Sphere Collider"},
-  {ComponentType::player, "Player"},
-  {ComponentType::lightRenderer, "Light Renderer"}
+  {ComponentType::lightRenderer, "Light Renderer"},
+  {ComponentType::script, "Script"}
 };
 
 const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent {
