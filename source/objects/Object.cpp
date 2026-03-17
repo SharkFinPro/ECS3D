@@ -317,7 +317,7 @@ void Object::displayComponentSelector()
   {
     return;
   }
-  
+
   if (ImGui::BeginCombo("##combo", "Select Component"))
   {
     for (const auto& [type, name] : componentTypeToString)
