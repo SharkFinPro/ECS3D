@@ -4,7 +4,10 @@ using ScriptBridge;
 
 public class PlayerScript : ScriptBase
 {
+    [ExposeToEditor("Movement Speed")]
     private float m_speed = 1.0f;
+
+    [ExposeToEditor("Jump Force")]
     private float m_jumpForce = 15.0f;
 
     private Vector3 m_appliedForce = new Vector3(0, 0, 0);

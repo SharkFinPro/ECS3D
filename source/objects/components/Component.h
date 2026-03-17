@@ -28,7 +28,8 @@ const std::unordered_map<ComponentType, std::string> componentTypeToString {
   {ComponentType::SubComponentType_boxCollider, "Box Collider"},
   {ComponentType::SubComponentType_sphereCollider, "Sphere Collider"},
   {ComponentType::player, "Player"},
-  {ComponentType::lightRenderer, "Light Renderer"}
+  {ComponentType::lightRenderer, "Light Renderer"},
+  {ComponentType::script, "Script"}
 };
 
 const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent {
