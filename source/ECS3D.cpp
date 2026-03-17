@@ -63,8 +63,6 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
-	m_scriptManager->checkForScriptChanges();
-
 	fixedUpdate();
 
 	variableUpdate();
@@ -100,6 +98,8 @@ void ECS3D::fixedUpdate()
 	const auto currentTime = std::chrono::steady_clock::now();
 	const float dt = std::chrono::duration<float>(currentTime - m_previousTime).count();
 	m_previousTime = currentTime;
+
+	m_scriptManager->checkForScriptChanges(dt);
 
 	m_timeAccumulator += dt;
 

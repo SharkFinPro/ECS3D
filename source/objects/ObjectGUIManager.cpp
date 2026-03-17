@@ -244,7 +244,8 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
 
   if (!m_mouseWasPressed &&
       renderer->getRenderingManager()->getRenderer3D()->getMousePicker()->canMousePick() &&
-      renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT))
+      renderer->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT) &&
+      renderer->getWindow()->keyIsPressed(GLFW_KEY_LEFT_CONTROL))
   {
     if (modelRenderer && modelRenderer->selectedByRenderer())
     {

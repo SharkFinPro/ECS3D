@@ -53,11 +53,26 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
     component->setOwner(this);
   }
 
-  m_components.emplace(component->getType(), component);
+  if (component->getType() == ComponentType::script)
+  {
+    m_scripts.push_back(component);
+  }
+  else
+  {
+    m_components.emplace(component->getType(), component);
+  }
 }
 
 void Object::variableUpdate()
 {
+  for (const auto& script : m_scripts)
+  {
+    if (script->getOwner() == this)
+    {
+      script->variableUpdate();
+    }
+  }
+
   for (const auto& [componentType, component] : m_components)
   {
     if (component->getOwner() == this)
@@ -69,6 +84,14 @@ void Object::variableUpdate()
 
 void Object::fixedUpdate(const float dt)
 {
+  for (const auto& script : m_scripts)
+  {
+    if (script->getOwner() == this)
+    {
+      script->fixedUpdate(dt);
+    }
+  }
+
   for (const auto& [componentType, component] : m_components)
   {
     if (component->getOwner() == this)
@@ -140,50 +163,15 @@ void Object::displayGui()
     m_showComponentSelector = true;
   }
 
-  if (m_showComponentSelector)
+  displayComponentSelector();
+
+  ImGui::SeparatorText("Scripts");
+
+  for (auto script : m_scripts)
   {
-    if (ImGui::BeginCombo("##combo", "Select Component"))
-    {
-      for (const auto& [type, name] : componentTypeToString)
-      {
-        const auto parentType = subComponentTypeToParent.find(type);
-        if (!getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type))
-        {
-          if (ImGui::Selectable(name.data()))
-          {
-            switch (type)
-            {
-              case ComponentType::transform:
-                addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
-                break;
-              case ComponentType::modelRenderer:
-                addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
-                break;
-              case ComponentType::rigidBody:
-                addComponent(std::make_shared<RigidBody>());
-                break;
-              case ComponentType::SubComponentType_boxCollider:
-                addComponent(std::make_shared<BoxCollider>());
-                m_manager->getCollisionManager()->addObject(shared_from_this());
-                break;
-              case ComponentType::SubComponentType_sphereCollider:
-                addComponent(std::make_shared<SphereCollider>());
-                m_manager->getCollisionManager()->addObject(shared_from_this());
-                break;
-              case ComponentType::lightRenderer:
-                addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
-                                                             glm::vec3(0), 0.0f, 0.0f, 0.0f));
-                break;
-              default: ;
-            }
-
-            m_showComponentSelector = false;
-          }
-        }
-      }
-
-      ImGui::EndCombo();
-    }
+    ImGui::PushID(&script);
+    script->displayGui();
+    ImGui::PopID();
   }
 }
 
@@ -193,6 +181,11 @@ void Object::start() const
   {
     component->start();
   }
+
+  for (const auto& script : m_scripts)
+  {
+    script->start();
+  }
 }
 
 void Object::stop() const
@@ -200,6 +193,11 @@ void Object::stop() const
   for (const auto& [type, component] : m_components)
   {
     component->stop();
+  }
+
+  for (const auto& script : m_scripts)
+  {
+    script->stop();
   }
 }
 
@@ -211,12 +209,18 @@ nlohmann::json Object::serialize()
   nlohmann::json data = {
     { "name", cleanName },
     { "components", nlohmann::json::array() },
+    { "scripts", nlohmann::json::array() },
     { "uuid", uuids::to_string(m_uuid) }
   };
 
   for (const auto& [_, component] : m_components)
   {
     data["components"].push_back(component->serialize());
+  }
+
+  for (const auto& script : m_scripts)
+  {
+    data["scripts"].push_back(script->serialize());
   }
 
   return data;
@@ -258,6 +262,13 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     addComponent(component);
     component->loadFromJSON(componentData);
   }
+
+  for (const auto& scriptData : objectData["scripts"])
+  {
+    const auto script = std::make_shared<Script>(scriptData["className"]);
+    addComponent(script);
+    script->loadFromJSON(scriptData);
+  }
 }
 
 std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& componentData) const
@@ -291,10 +302,6 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   {
     component = std::make_shared<Transform>();
   }
-  else if (componentData["type"] == "Script")
-  {
-    component = std::make_shared<Script>(componentData["className"]);
-  }
 
   if (!component)
   {
@@ -302,4 +309,60 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   }
 
   return component;
+}
+
+void Object::displayComponentSelector()
+{
+  if (!m_showComponentSelector)
+  {
+    return;
+  }
+
+  if (ImGui::BeginCombo("##combo", "Select Component"))
+  {
+    for (const auto& [type, name] : componentTypeToString)
+    {
+      if (type == ComponentType::script)
+      {
+        continue;
+      }
+
+      const auto parentType = subComponentTypeToParent.find(type);
+      if (!getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type))
+      {
+        if (ImGui::Selectable(name.data()))
+        {
+          switch (type)
+          {
+            case ComponentType::transform:
+              addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
+              break;
+            case ComponentType::modelRenderer:
+              addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
+              break;
+            case ComponentType::rigidBody:
+              addComponent(std::make_shared<RigidBody>());
+              break;
+            case ComponentType::SubComponentType_boxCollider:
+              addComponent(std::make_shared<BoxCollider>());
+              m_manager->getCollisionManager()->addObject(shared_from_this());
+              break;
+            case ComponentType::SubComponentType_sphereCollider:
+              addComponent(std::make_shared<SphereCollider>());
+              m_manager->getCollisionManager()->addObject(shared_from_this());
+              break;
+            case ComponentType::lightRenderer:
+              addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
+                                                           glm::vec3(0), 0.0f, 0.0f, 0.0f));
+              break;
+            default: ;
+          }
+
+          m_showComponentSelector = false;
+        }
+      }
+    }
+
+    ImGui::EndCombo();
+  }
 }
