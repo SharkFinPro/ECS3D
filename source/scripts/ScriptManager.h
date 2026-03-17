@@ -15,7 +15,7 @@ class ScriptManager {
 public:
   explicit ScriptManager(ECS3D* ecs);
 
-  void checkForScriptChanges();
+  void checkForScriptChanges(float dt);
 
   [[nodiscard]] bool isScriptAttached(uuids::uuid uuid,
                                       const char* className) const;
@@ -85,6 +85,8 @@ private:
   using ScriptsSnapshot = std::unordered_map<std::string, std::filesystem::file_time_type>;
 
   ScriptsSnapshot m_scriptsSnapshot;
+
+  float m_timeSinceLastSnapshot = 0.0f;
 
   mutable std::unordered_map<std::string, std::vector<ExposedField>> m_fieldCache;
 

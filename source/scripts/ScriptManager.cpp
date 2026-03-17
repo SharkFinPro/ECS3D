@@ -14,8 +14,19 @@ ScriptManager::ScriptManager(ECS3D* ecs)
   m_scriptsSnapshot = takeSnapshot();
 }
 
-void ScriptManager::checkForScriptChanges()
+void ScriptManager::checkForScriptChanges(const float dt)
 {
+  constexpr float minimumSnapshotInterval = 1.0f / 2.0f; // 2 checks every second
+
+  m_timeSinceLastSnapshot += dt;
+
+  if (m_timeSinceLastSnapshot < minimumSnapshotInterval)
+  {
+    return;
+  }
+
+  m_timeSinceLastSnapshot = 0.0f;
+
   auto now = takeSnapshot();
   if (now == m_scriptsSnapshot)
   {
