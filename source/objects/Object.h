@@ -52,6 +52,8 @@ public:
 
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> m_components;
+  std::vector<std::shared_ptr<Component>> m_scripts;
+
   ObjectManager* m_manager = nullptr;
 
   std::shared_ptr<Object> m_parent;

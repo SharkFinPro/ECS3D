@@ -53,7 +53,14 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
     component->setOwner(this);
   }
 
-  m_components.emplace(component->getType(), component);
+  if (component->getType() == ComponentType::script)
+  {
+    m_scripts.push_back(component);
+  }
+  else
+  {
+    m_components.emplace(component->getType(), component);
+  }
 }
 
 void Object::variableUpdate()
@@ -65,6 +72,14 @@ void Object::variableUpdate()
       component->variableUpdate();
     }
   }
+
+  for (const auto& script : m_scripts)
+  {
+    if (script->getOwner() == this)
+    {
+      script->variableUpdate();
+    }
+  }
 }
 
 void Object::fixedUpdate(const float dt)
@@ -74,6 +89,14 @@ void Object::fixedUpdate(const float dt)
     if (component->getOwner() == this)
     {
       component->fixedUpdate(dt);
+    }
+  }
+
+  for (const auto& script : m_scripts)
+  {
+    if (script->getOwner() == this)
+    {
+      script->fixedUpdate(dt);
     }
   }
 }
@@ -135,6 +158,15 @@ void Object::displayGui()
     }
   }
 
+  ImGui::SeparatorText("Scripts");
+
+  for (auto script : m_scripts)
+  {
+    ImGui::PushID(&script);
+    script->displayGui();
+    ImGui::PopID();
+  }
+
   if (ImGui::Button("Add Component"))
   {
     m_showComponentSelector = true;
@@ -193,6 +225,11 @@ void Object::start() const
   {
     component->start();
   }
+
+  for (const auto& script : m_scripts)
+  {
+    script->start();
+  }
 }
 
 void Object::stop() const
@@ -200,6 +237,11 @@ void Object::stop() const
   for (const auto& [type, component] : m_components)
   {
     component->stop();
+  }
+
+  for (const auto& script : m_scripts)
+  {
+    script->stop();
   }
 }
 
@@ -211,12 +253,18 @@ nlohmann::json Object::serialize()
   nlohmann::json data = {
     { "name", cleanName },
     { "components", nlohmann::json::array() },
+    { "scripts", nlohmann::json::array() },
     { "uuid", uuids::to_string(m_uuid) }
   };
 
   for (const auto& [_, component] : m_components)
   {
     data["components"].push_back(component->serialize());
+  }
+
+  for (const auto& script : m_scripts)
+  {
+    data["scripts"].push_back(script->serialize());
   }
 
   return data;
@@ -258,6 +306,13 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     addComponent(component);
     component->loadFromJSON(componentData);
   }
+
+  for (const auto& scriptData : objectData["scripts"])
+  {
+    const auto script = std::make_shared<Script>(scriptData["className"]);
+    addComponent(script);
+    script->loadFromJSON(scriptData);
+  }
 }
 
 std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& componentData) const
@@ -290,10 +345,6 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   else if (componentData["type"] == "Transform")
   {
     component = std::make_shared<Transform>();
-  }
-  else if (componentData["type"] == "Script")
-  {
-    component = std::make_shared<Script>(componentData["className"]);
   }
 
   if (!component)
