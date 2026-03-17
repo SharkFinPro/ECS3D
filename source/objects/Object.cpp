@@ -4,7 +4,6 @@
 #include "components/Component.h"
 #include "components/LightRenderer.h"
 #include "components/ModelRenderer.h"
-#include "components/Player.h"
 #include "components/RigidBody.h"
 #include "components/Script.h"
 #include "components/Transform.h"
@@ -171,9 +170,6 @@ void Object::displayGui()
                 addComponent(std::make_shared<SphereCollider>());
                 m_manager->getCollisionManager()->addObject(shared_from_this());
                 break;
-              case ComponentType::player:
-                addComponent(std::make_shared<Player>());
-                break;
               case ComponentType::lightRenderer:
                 addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
                                                              glm::vec3(0), 0.0f, 0.0f, 0.0f));
@@ -286,10 +282,6 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   else if (componentData["type"] == "ModelRenderer")
   {
     component = std::make_shared<ModelRenderer>(m_manager->getECS()->getRenderer());
-  }
-  else if (componentData["type"] == "Player")
-  {
-    component = std::make_shared<Player>();
   }
   else if (componentData["type"] == "RigidBody")
   {
