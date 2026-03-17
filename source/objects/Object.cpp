@@ -65,14 +65,6 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
 
 void Object::variableUpdate()
 {
-  for (const auto& [componentType, component] : m_components)
-  {
-    if (component->getOwner() == this)
-    {
-      component->variableUpdate();
-    }
-  }
-
   for (const auto& script : m_scripts)
   {
     if (script->getOwner() == this)
@@ -80,23 +72,31 @@ void Object::variableUpdate()
       script->variableUpdate();
     }
   }
-}
 
-void Object::fixedUpdate(const float dt)
-{
   for (const auto& [componentType, component] : m_components)
   {
     if (component->getOwner() == this)
     {
-      component->fixedUpdate(dt);
+      component->variableUpdate();
     }
   }
+}
 
+void Object::fixedUpdate(const float dt)
+{
   for (const auto& script : m_scripts)
   {
     if (script->getOwner() == this)
     {
       script->fixedUpdate(dt);
+    }
+  }
+
+  for (const auto& [componentType, component] : m_components)
+  {
+    if (component->getOwner() == this)
+    {
+      component->fixedUpdate(dt);
     }
   }
 }
