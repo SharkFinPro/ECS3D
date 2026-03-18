@@ -97,7 +97,7 @@ void Scene::createPlayer(TransformData transformData) const
                                     m_assetManager->getAsset<ModelAsset>("assets/models/sphere.glb")),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>(),
-    std::make_shared<Script>("PlayerScript")
+    std::make_shared<Script>("PlayerScript", m_sceneManager->getECS()->getScriptManager())
   };
 
   m_objectManager->addObject(std::make_shared<Object>(components, "Player"));

@@ -8,7 +8,8 @@ class ScriptManager;
 
 class Script final : public Component {
 public:
-  explicit Script(std::string className);
+  Script(std::string className,
+         std::shared_ptr<ScriptManager> scriptManager);
 
   ~Script() override;
 
