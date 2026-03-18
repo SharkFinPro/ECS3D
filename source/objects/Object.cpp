@@ -1,5 +1,4 @@
 #include "Object.h"
-#include "../ECS3D.h"
 #include "CollisionManager.h"
 #include "components/Component.h"
 #include "components/LightRenderer.h"
@@ -9,6 +8,8 @@
 #include "components/Transform.h"
 #include "components/collisions/BoxCollider.h"
 #include "components/collisions/SphereCollider.h"
+#include "../ECS3D.h"
+#include "../assets/ScriptAsset.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <utility>
@@ -207,7 +208,11 @@ void Object::displayGui()
   {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
     {
-      
+      auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+      if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
+      {
+        addComponent(scriptAsset->createScript());
+      }
     }
 
     ImGui::EndDragDropTarget();
