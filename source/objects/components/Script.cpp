@@ -1,6 +1,5 @@
 #include "Script.h"
 #include "../Object.h"
-#include "../../ECS3D.h"
 #include "../../scripts/ScriptManager.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
