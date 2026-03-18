@@ -20,7 +20,7 @@ public:
 
   virtual void displayGui();
 
-  virtual void load() {};
+  virtual void load() = 0;
 
   [[nodiscard]] uuids::uuid getUUID() const;
 

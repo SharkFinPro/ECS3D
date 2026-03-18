@@ -1,9 +1,10 @@
 #include "Scene.h"
 #include "SceneManager.h"
-#include "../assets/AssetManager.h"
-#include "../assets/TextureAsset.h"
-#include "../assets/ModelAsset.h"
 #include "../ECS3D.h"
+#include "../assets/AssetManager.h"
+#include "../assets/ModelAsset.h"
+#include "../assets/ScriptAsset.h"
+#include "../assets/TextureAsset.h"
 #include "../objects/Object.h"
 #include "../objects/ObjectManager.h"
 #include "../objects/components/Components.h"
@@ -26,6 +27,8 @@ Scene::Scene(SceneManager* sceneManager,
   m_assetManager->loadAsset<TextureAsset>("assets/textures/black.png");
   m_assetManager->loadAsset<TextureAsset>("assets/textures/earth.png");
   m_assetManager->loadAsset<TextureAsset>("assets/textures/earth_specular.png");
+
+  m_assetManager->loadScriptAsset("scripts/userScripts/PlayerScript.cs", "PlayerScript");
 }
 
 void Scene::fixedUpdate(const float dt) const
@@ -89,6 +92,7 @@ void Scene::createSphere(TransformData transformData) const
 
 void Scene::createPlayer(TransformData transformData) const
 {
+  const auto playerScript = m_assetManager->getAsset<ScriptAsset>("scripts/userScripts/PlayerScript.cs");
   const std::vector<std::shared_ptr<Component>> components {
     std::make_shared<Transform>(transformData.position, transformData.scale, transformData.rotation),
     std::make_shared<ModelRenderer>(m_sceneManager->getECS()->getRenderer(),
@@ -97,7 +101,7 @@ void Scene::createPlayer(TransformData transformData) const
                                     m_assetManager->getAsset<ModelAsset>("assets/models/sphere.glb")),
     std::make_shared<RigidBody>(),
     std::make_shared<SphereCollider>(),
-    std::make_shared<Script>("PlayerScript", m_sceneManager->getECS()->getScriptManager())
+    playerScript->createScript()
   };
 
   m_objectManager->addObject(std::make_shared<Object>(components, "Player"));

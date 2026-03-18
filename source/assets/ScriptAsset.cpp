@@ -1,14 +1,18 @@
 #include "ScriptAsset.h"
+#include "AssetManager.h"
 #include "../objects/components/Script.h"
 #include <imgui.h>
 
 ScriptAsset::ScriptAsset(const uuids::uuid uuid,
                          std::string path,
-                         std::string className,
-                         std::shared_ptr<ScriptManager> scriptManager)
-  : Asset(uuid, std::move(className)), m_scriptManager(std::move(scriptManager)), m_path(std::move(path)),
-    m_className(std::move(className))
+                         std::string className)
+  : Asset(uuid, className), m_path(std::move(path)), m_className(std::move(className))
 {}
+
+void ScriptAsset::load()
+{
+  m_scriptManager = m_assetManager->getECS()->getScriptManager();
+}
 
 void ScriptAsset::displayGui()
 {

@@ -1,6 +1,7 @@
 #include "AssetManager.h"
 #include "Asset.h"
 #include "ModelAsset.h"
+#include "ScriptAsset.h"
 #include "TextureAsset.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
@@ -44,11 +45,31 @@ void AssetManager::displayGui()
   ImGui::End();
 }
 
+void AssetManager::loadScriptAsset(std::string path,
+                                   std::string className)
+{
+  if (m_loadedPaths.contains(path))
+  {
+    return;
+  }
+
+  const uuids::uuid uuid = m_ecs->createUUID();
+
+  const auto asset = std::make_shared<ScriptAsset>(uuid, path, std::move(className));
+  asset->setManager(this);
+  asset->load();
+
+  m_assets.emplace(uuid, asset);
+
+  m_loadedPaths.emplace(path, uuid);
+}
+
 nlohmann::json AssetManager::serialize()
 {
   nlohmann::json data = {
     { "models", nlohmann::json::array() },
-    { "textures", nlohmann::json::array() }
+    { "textures", nlohmann::json::array() },
+    { "scripts", nlohmann::json::array() }
   };
 
   for (const auto& [_, asset] : m_assets)
@@ -60,6 +81,10 @@ nlohmann::json AssetManager::serialize()
     else if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
     {
       data["models"].push_back(modelAsset->serialize());
+    }
+    else if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
+    {
+      data["scripts"].push_back(modelAsset->serialize());
     }
   }
 
@@ -94,5 +119,20 @@ void AssetManager::loadFromJSON(const nlohmann::json& assetsData)
     m_assets.emplace(uuid, asset);
 
     m_loadedPaths.emplace(path, uuid);
+  }
+
+  for (const auto& assetData : assetsData.at("scripts"))
+  {
+    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value();
+    const auto& className = assetData.at("className");
+    const auto& filePath = assetData.at("filePath");
+
+    const auto asset = std::make_shared<ScriptAsset>(uuid, filePath, className);
+    asset->setManager(this);
+    asset->load();
+
+    m_assets.emplace(uuid, asset);
+
+    m_loadedPaths.emplace(filePath, uuid);
   }
 }
