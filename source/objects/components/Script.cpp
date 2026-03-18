@@ -87,35 +87,23 @@ nlohmann::json Script::serialize()
       const auto className = m_className.c_str();
       const auto fieldName = field.name.c_str();
 
+      data["fields"].push_back({
+        { "name", fieldName },
+        { "type", field.type },
+        { "value", "" }
+      });
+
       if (field.type == "float")
       {
-        float v = m_scriptManager->getFieldFloat(uuid, className, fieldName);
-
-        data["fields"].push_back({
-          { "name", fieldName },
-          { "type", "float" },
-          { "value", v }
-        });
+        data["fields"].back()["value"] = m_scriptManager->getFieldFloat(uuid, className, fieldName);
       }
       else if (field.type == "int")
       {
-        int v = m_scriptManager->getFieldInt(uuid, className, fieldName);
-
-        data["fields"].push_back({
-          { "name", fieldName },
-          { "type", "int" },
-          { "value", v }
-        });
+        data["fields"].back()["value"] = m_scriptManager->getFieldInt(uuid, className, fieldName);
       }
       else if (field.type == "bool")
       {
-        bool v = m_scriptManager->getFieldBool(uuid, className, fieldName);
-
-        data["fields"].push_back({
-          { "name", fieldName },
-          { "type", "bool" },
-          { "value", v }
-        });
+        data["fields"].back()["value"] = m_scriptManager->getFieldBool(uuid, className, fieldName);
       }
     }
   }
