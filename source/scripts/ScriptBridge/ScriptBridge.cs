@@ -162,8 +162,8 @@ public static class Bridge
         => (int)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? 0);
 
     [UnmanagedCallersOnly]
-    public static bool getFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
-        => (bool)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? false);
+    public static byte getFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
+        => (byte)(((bool)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? false)) ? 1 : 0);
 
     private static object? GetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
     {
@@ -190,9 +190,8 @@ public static class Bridge
         => SetField(uuidPtr, classNamePtr, fieldNamePtr, value);
 
     [UnmanagedCallersOnly]
-    public static void setFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
-                                    [MarshalAs(UnmanagedType.U1)] bool value)
-        => SetField(uuidPtr, classNamePtr, fieldNamePtr, value);
+    public static void setFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, byte value)
+        => SetField(uuidPtr, classNamePtr, fieldNamePtr, value != 0);
 
     private static void SetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, object value)
     {
