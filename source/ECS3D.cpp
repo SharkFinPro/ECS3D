@@ -185,14 +185,12 @@ void ECS3D::initRenderer()
 			.position = { 0, 5, -50 }
 		},
 		.imGui {
-			.maxTextures = 100
+			.maxTextures = 100,
+			.styleSetup = setupImGuiStyle
 		}
 	};
 
   m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
-
-  ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
-	setupImGuiStyle();
 
 	m_sceneViewName = engineConfig.imGui.sceneViewName;
 }
@@ -261,6 +259,8 @@ void ECS3D::updateDockSpace() const
 
 void ECS3D::setupImGuiStyle()
 {
+	ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
+
 	// Future Dark style by rewrking from ImThemes
 	ImGuiStyle& style = ImGui::GetStyle();
 
