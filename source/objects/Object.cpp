@@ -49,18 +49,29 @@ std::shared_ptr<Object> Object::getParent() const
 void Object::addComponent(const std::shared_ptr<Component>& component,
                           const bool setOwner)
 {
-  if (setOwner)
-  {
-    component->setOwner(this);
-  }
-
   if (component->getType() == ComponentType::script)
   {
+    const auto newScriptComponent = std::dynamic_pointer_cast<Script>(component);
+
+    for (const auto& script : m_scripts)
+    {
+      auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
+      if (scriptComponent && scriptComponent->getClassName() == newScriptComponent->getClassName())
+      {
+        return;
+      }
+    }
+
     m_scripts.push_back(component);
   }
   else
   {
     m_components.emplace(component->getType(), component);
+  }
+
+  if (setOwner)
+  {
+    component->setOwner(this);
   }
 }
 

@@ -11,7 +11,10 @@ Script::Script(std::string className,
 
 Script::~Script()
 {
-  m_scriptManager->detachScript(m_owner->getUUID(), m_className.c_str());
+  if (m_owner && m_scriptManager->isScriptAttached(m_owner->getUUID(), m_className.c_str()))
+  {
+    m_scriptManager->detachScript(m_owner->getUUID(), m_className.c_str());
+  }
 }
 
 void Script::variableUpdate()
@@ -159,6 +162,11 @@ void Script::postReload()
   loadFromJSON(m_tempData);
 
   m_tempData = nlohmann::json();
+}
+
+std::string Script::getClassName() const
+{
+  return m_className;
 }
 
 void Script::attachScript()

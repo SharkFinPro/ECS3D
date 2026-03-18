@@ -27,6 +27,8 @@ public:
 
   void postReload();
 
+  [[nodiscard]] std::string getClassName() const;
+
 private:
   std::shared_ptr<ScriptManager> m_scriptManager;
 
