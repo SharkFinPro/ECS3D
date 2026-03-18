@@ -49,10 +49,12 @@ add_library(${PROJECT_NAME}
   assets/AssetManager.h
   assets/Asset.cpp
   assets/Asset.h
-  assets/TextureAsset.cpp
-  assets/TextureAsset.h
   assets/ModelAsset.cpp
   assets/ModelAsset.h
+  assets/ScriptAsset.cpp
+  assets/ScriptAsset.h
+  assets/TextureAsset.cpp
+  assets/TextureAsset.h
   objects/CollisionManager.cpp
   objects/CollisionManager.h
   objects/ObjectGUIManager.cpp
