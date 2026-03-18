@@ -135,9 +135,9 @@ void Object::displayGui()
 
   for (auto it = m_components.begin(); it != m_components.end();)
   {
-    auto component = it->second;
+    auto& component = it->second;
 
-    ImGui::PushID(&component);
+    ImGui::PushID(component.get());
     component->displayGui();
     ImGui::PopID();
 
@@ -147,8 +147,6 @@ void Object::displayGui()
       {
         m_manager->getCollisionManager()->removeObject(shared_from_this());
       }
-
-      component.reset();
 
       it = m_components.erase(it);
     }
@@ -171,14 +169,12 @@ void Object::displayGui()
   {
     auto& script = *it;
 
-    ImGui::PushID(&script);
+    ImGui::PushID(script.get());
     script->displayGui();
     ImGui::PopID();
 
     if (script->markedAsDeleted())
     {
-      script.reset();
-
       it = m_scripts.erase(it);
     }
     else
