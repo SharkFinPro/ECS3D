@@ -1,31 +1,21 @@
 #include "Script.h"
 #include "../Object.h"
-#include "../../ECS3D.h"
 #include "../../scripts/ScriptManager.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 
-Script::Script(std::string className)
-  : Component(ComponentType::script), m_className(std::move(className))
+Script::Script(std::string className,
+               std::shared_ptr<ScriptManager> scriptManager)
+  : Component(ComponentType::script), m_scriptManager(std::move(scriptManager)), m_className(std::move(className))
 {}
 
 Script::~Script()
 {
-  if (!m_scriptManager)
-  {
-    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-  }
-
   m_scriptManager->detachScript(m_owner->getUUID(), m_className.c_str());
 }
 
 void Script::variableUpdate()
 {
-  if (!m_scriptManager)
-  {
-    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-  }
-
   attachScript();
 
   m_scriptManager->variableUpdate(m_owner->getUUID(), m_className.c_str());
@@ -33,11 +23,6 @@ void Script::variableUpdate()
 
 void Script::fixedUpdate(const float dt)
 {
-  if (!m_scriptManager)
-  {
-    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-  }
-
   attachScript();
 
   m_scriptManager->fixedUpdate(m_owner->getUUID(), m_className.c_str(), dt);
@@ -47,11 +32,6 @@ void Script::displayGui()
 {
   if (displayGuiHeader())
   {
-    if (!m_scriptManager)
-    {
-      m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-    }
-
     const auto fields = m_scriptManager->getExposedFields(m_owner->getUUID(), m_className.c_str());
     if (!fields)
     {
@@ -100,11 +80,6 @@ nlohmann::json Script::serialize()
     { "fields", nlohmann::json::array() }
   };
 
-  if (!m_scriptManager)
-  {
-    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-  }
-
   if (const auto fields = m_scriptManager->getExposedFields(m_owner->getUUID(), m_className.c_str()))
   {
     for (const auto& field : *fields)
@@ -113,35 +88,23 @@ nlohmann::json Script::serialize()
       const auto className = m_className.c_str();
       const auto fieldName = field.name.c_str();
 
+      data["fields"].push_back({
+        { "name", fieldName },
+        { "type", field.type },
+        { "value", "" }
+      });
+
       if (field.type == "float")
       {
-        float v = m_scriptManager->getFieldFloat(uuid, className, fieldName);
-
-        data["fields"].push_back({
-          { "name", fieldName },
-          { "type", "float" },
-          { "value", v }
-        });
+        data["fields"].back()["value"] = m_scriptManager->getFieldFloat(uuid, className, fieldName);
       }
       else if (field.type == "int")
       {
-        int v = m_scriptManager->getFieldInt(uuid, className, fieldName);
-
-        data["fields"].push_back({
-          { "name", fieldName },
-          { "type", "int" },
-          { "value", v }
-        });
+        data["fields"].back()["value"] = m_scriptManager->getFieldInt(uuid, className, fieldName);
       }
       else if (field.type == "bool")
       {
-        bool v = m_scriptManager->getFieldBool(uuid, className, fieldName);
-
-        data["fields"].push_back({
-          { "name", fieldName },
-          { "type", "bool" },
-          { "value", v }
-        });
+        data["fields"].back()["value"] = m_scriptManager->getFieldBool(uuid, className, fieldName);
       }
     }
   }
@@ -151,11 +114,6 @@ nlohmann::json Script::serialize()
 
 void Script::loadFromJSON(const nlohmann::json& componentData)
 {
-  if (!m_scriptManager)
-  {
-    m_scriptManager = m_owner->getManager()->getECS()->getScriptManager();
-  }
-
   const auto uuid = m_owner->getUUID();
   const auto className = m_className.c_str();
 
@@ -205,13 +163,15 @@ void Script::postReload()
 
 void Script::attachScript()
 {
-  if (!m_scriptManager->isScriptAttached(m_owner->getUUID(), m_className.c_str()))
+  if (m_scriptManager->isScriptAttached(m_owner->getUUID(), m_className.c_str()))
   {
-    m_scriptManager->attachScript(
-      m_owner->getUUID(),
-      m_className.c_str(),
-      [this] { preReload (); },
-      [this] { postReload(); }
-    );
+    return;
   }
+
+  m_scriptManager->attachScript(
+    m_owner->getUUID(),
+    m_className.c_str(),
+    [this] { preReload (); },
+    [this] { postReload(); }
+  );
 }

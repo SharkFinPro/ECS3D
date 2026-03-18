@@ -265,7 +265,7 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
 
   for (const auto& scriptData : objectData["scripts"])
   {
-    const auto script = std::make_shared<Script>(scriptData["className"]);
+    const auto script = std::make_shared<Script>(scriptData["className"], m_manager->getECS()->getScriptManager());
     addComponent(script);
     script->loadFromJSON(scriptData);
   }
