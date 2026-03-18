@@ -167,11 +167,24 @@ void Object::displayGui()
 
   ImGui::SeparatorText("Scripts");
 
-  for (auto script : m_scripts)
+  for (auto it = m_scripts.begin(); it != m_scripts.end();)
   {
+    auto& script = *it;
+
     ImGui::PushID(&script);
     script->displayGui();
     ImGui::PopID();
+
+    if (script->markedAsDeleted())
+    {
+      script.reset();
+
+      it = m_scripts.erase(it);
+    }
+    else
+    {
+      ++it;
+    }
   }
 }
 
