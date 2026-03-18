@@ -84,7 +84,7 @@ nlohmann::json AssetManager::serialize()
     }
     else if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
     {
-      data["scripts"].push_back(modelAsset->serialize());
+      data["scripts"].push_back(scriptAsset->serialize());
     }
   }
 
