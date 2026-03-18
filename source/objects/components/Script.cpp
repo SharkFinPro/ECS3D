@@ -4,7 +4,8 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 
-Script::Script(std::string className, std::shared_ptr<ScriptManager> scriptManager)
+Script::Script(std::string className,
+               std::shared_ptr<ScriptManager> scriptManager)
   : Component(ComponentType::script), m_scriptManager(std::move(scriptManager)), m_className(std::move(className))
 {}
 
