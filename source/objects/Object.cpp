@@ -131,7 +131,7 @@ void Object::displayGui()
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Name");
   ImGui::SameLine();
-  ImGui::InputText(("##"+ uuids::to_string(m_uuid) + "Name").c_str(), m_name.data(), m_name.capacity());
+  ImGui::InputText(("##" + uuids::to_string(m_uuid) + "Name").c_str(), m_name.data(), m_name.capacity());
 
   for (auto it = m_components.begin(); it != m_components.end();)
   {
@@ -163,24 +163,54 @@ void Object::displayGui()
 
   displayComponentSelector();
 
+  const float dropZoneStartY = ImGui::GetCursorScreenPos().y;
+
   ImGui::SeparatorText("Scripts");
 
-  for (auto it = m_scripts.begin(); it != m_scripts.end();)
+  if (m_scripts.empty())
   {
-    auto& script = *it;
-
-    ImGui::PushID(script.get());
-    script->displayGui();
-    ImGui::PopID();
-
-    if (script->markedAsDeleted())
+    ImGui::Dummy({ ImGui::GetContentRegionAvail().x, 60.0f });
+  }
+  else
+  {
+    for (auto it = m_scripts.begin(); it != m_scripts.end();)
     {
-      it = m_scripts.erase(it);
+      auto& script = *it;
+
+      ImGui::PushID(script.get());
+      script->displayGui();
+      ImGui::PopID();
+
+      if (script->markedAsDeleted())
+      {
+        it = m_scripts.erase(it);
+      }
+      else
+      {
+        ++it;
+      }
     }
-    else
+  }
+
+  const ImVec2 windowPos     = ImGui::GetWindowPos();
+  const float  windowRight   = windowPos.x + ImGui::GetWindowWidth();
+  const float  contentBottom = windowPos.y + ImGui::GetWindowHeight() - ImGui::GetStyle().WindowPadding.y;
+
+  ImGui::SetCursorScreenPos({ windowPos.x, dropZoneStartY });
+  ImGui::SetNextItemAllowOverlap();   // let the scripts render on top visually
+  ImGui::InvisibleButton(
+      "##assetDropZone",
+      { windowRight - windowPos.x, contentBottom - dropZoneStartY }
+  );
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
     {
-      ++it;
+      
     }
+
+    ImGui::EndDragDropTarget();
   }
 }
 
