@@ -43,7 +43,7 @@ void Script::displayGui()
 
     for (const auto& field : *fields)
     {
-      const auto uuid      = m_owner->getUUID();
+      const auto uuid = m_owner->getUUID();
       const auto className = m_className.c_str();
       const auto fieldName = field.name.c_str();
 
