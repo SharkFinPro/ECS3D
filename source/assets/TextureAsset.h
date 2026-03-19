@@ -18,7 +18,7 @@ public:
 
   void load() override;
 
-  void displayGui() override;
+  void displayGui(float cellSize) override;
 
   [[nodiscard]] nlohmann::json serialize() override;
 

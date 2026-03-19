@@ -5,6 +5,7 @@
 #include "TextureAsset.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
+#include <VulkanEngine/components/window/Window.h>
 
 AssetManager::AssetManager(ECS3D* ecs)
   : m_ecs(ecs)
@@ -19,16 +20,17 @@ void AssetManager::displayGui()
 {
   ImGui::Begin("Assets");
 
-  constexpr int cellSize = 200;
+  constexpr int cellSize = 150;
+  const int scaledCellSize = cellSize * m_ecs->getRenderer()->getWindow()->getContentScale();
   const int width = static_cast<int>(ImGui::GetContentRegionAvail().x);
 
-  ImGui::Columns(std::max(1, width / cellSize), 0, false);
+  ImGui::Columns(std::max(1, width / scaledCellSize), 0, false);
 
   for (const auto& [name, asset] : m_assets)
   {
     ImGui::PushID(&asset);
 
-    asset->displayGui();
+    asset->displayGui(scaledCellSize * 0.75f);
 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
     {

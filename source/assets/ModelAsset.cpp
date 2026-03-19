@@ -26,11 +26,11 @@ void ModelAsset::load()
   m_model = m_assetManager->getECS()->getRenderer()->getAssetManager()->loadModel(m_path.c_str());
 }
 
-void ModelAsset::displayGui()
+void ModelAsset::displayGui(const float cellSize)
 {
-  Asset::displayGui();
+  Asset::displayGui(cellSize);
 
-  ImGui::Button("Model", {150, 150});
+  ImGui::Button("Model", { cellSize, cellSize });
 }
 
 nlohmann::json ModelAsset::serialize()

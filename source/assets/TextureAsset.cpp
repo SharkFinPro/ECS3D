@@ -26,11 +26,11 @@ void TextureAsset::load()
   m_texture = m_assetManager->getECS()->getRenderer()->getAssetManager()->loadTexture(m_path.c_str());
 }
 
-void TextureAsset::displayGui()
+void TextureAsset::displayGui(const float cellSize)
 {
-  Asset::displayGui();
+  Asset::displayGui(cellSize);
 
-  ImGui::ImageButton("img", m_texture->getImGuiTexture(), {150, 150});
+  ImGui::ImageButton("img", m_texture->getImGuiTexture(), { cellSize, cellSize });
 }
 
 nlohmann::json TextureAsset::serialize()
