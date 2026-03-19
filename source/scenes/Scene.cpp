@@ -29,6 +29,7 @@ Scene::Scene(SceneManager* sceneManager,
   m_assetManager->loadAsset<TextureAsset>("assets/textures/earth_specular.png");
 
   m_assetManager->loadScriptAsset("scripts/userScripts/PlayerScript.cs", "PlayerScript");
+  m_assetManager->loadScriptAsset("scripts/userScripts/BlockScript.cs", "BlockScript");
 }
 
 void Scene::fixedUpdate(const float dt) const
