@@ -55,9 +55,9 @@ void BoxCollider::displayGui()
 
 nlohmann::json BoxCollider::serialize()
 {
-  const auto position = m_position.value();
-  const auto rotation = m_rotation.value();
-  const auto scale = m_scale.value();
+  const auto position = m_position.getInitialValue();
+  const auto rotation = m_rotation.getInitialValue();
+  const auto scale = m_scale.getInitialValue();
 
   const nlohmann::json data = {
     { "type", "Collider" },
