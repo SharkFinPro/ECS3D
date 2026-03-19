@@ -120,7 +120,8 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    return direction * m_radius.value() * transform->getScale() + transform->getPosition() + m_position.value();
+    const float maxScale = compMax(transform->getScale());
+    return direction * m_radius.value() * maxScale + transform->getPosition() + m_position.value();
   }
 
   return { 0, 0, 0 };
