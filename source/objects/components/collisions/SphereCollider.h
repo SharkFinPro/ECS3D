@@ -33,6 +33,8 @@ private:
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
   void updateTransformPointer();
+
+  [[nodiscard]] float getScaledRadius(const std::shared_ptr<Transform>& transform);
 };
 
 

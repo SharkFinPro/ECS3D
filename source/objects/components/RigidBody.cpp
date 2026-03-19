@@ -101,7 +101,7 @@ void RigidBody::applyForce(const glm::vec3& force, const glm::vec3& position)
 
   const auto angularImpulse = glm::cross(r, force);
 
-  m_angularVelocity.value() += angularImpulse / getInertiaTensor();
+  m_angularVelocity.value() += angularImpulse * glm::inverse(getInertiaTensor());
 }
 
 void RigidBody::handleCollision(const glm::vec3 minimumTranslationVector, const std::shared_ptr<Object>& other,

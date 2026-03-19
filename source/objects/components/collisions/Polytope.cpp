@@ -301,7 +301,8 @@ std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& c
       edges.emplace_back( faceVertices[1], faceVertices[2] );
       edges.emplace_back( faceVertices[2], faceVertices[0] );
 
-      m_faces.erase(m_faces.begin() + i);
+      std::swap(m_faces[i], m_faces.back());
+      m_faces.pop_back();
 
       continue;
     }

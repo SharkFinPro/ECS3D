@@ -27,8 +27,7 @@ float SphereCollider::getRadius()
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    const float maxScale = compMax(transform->getScale());
-    return m_radius.value() * maxScale;
+    return getScaledRadius(transform);
   }
 
   return 0;
@@ -120,7 +119,7 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    return direction * m_radius.value() * transform->getScale() + transform->getPosition() + m_position.value();
+    return direction * getScaledRadius(transform) + transform->getPosition() + m_position.value();
   }
 
   return { 0, 0, 0 };
@@ -137,4 +136,11 @@ void SphereCollider::updateTransformPointer()
       throw std::runtime_error("SphereCollider::updateTransformPointer::Missing transform component");
     }
   }
+}
+
+float SphereCollider::getScaledRadius(const std::shared_ptr<Transform>& transform)
+{
+  const auto maxScale = compMax(transform->getScale());
+
+  return maxScale * m_radius.value();
 }
