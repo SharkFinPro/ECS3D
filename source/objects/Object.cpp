@@ -1,5 +1,4 @@
 #include "Object.h"
-#include "../ECS3D.h"
 #include "CollisionManager.h"
 #include "components/Component.h"
 #include "components/LightRenderer.h"
@@ -9,6 +8,8 @@
 #include "components/Transform.h"
 #include "components/collisions/BoxCollider.h"
 #include "components/collisions/SphereCollider.h"
+#include "../ECS3D.h"
+#include "../assets/ScriptAsset.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <utility>
@@ -48,18 +49,29 @@ std::shared_ptr<Object> Object::getParent() const
 void Object::addComponent(const std::shared_ptr<Component>& component,
                           const bool setOwner)
 {
-  if (setOwner)
-  {
-    component->setOwner(this);
-  }
-
   if (component->getType() == ComponentType::script)
   {
+    const auto newScriptComponent = std::dynamic_pointer_cast<Script>(component);
+
+    for (const auto& script : m_scripts)
+    {
+      auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
+      if (scriptComponent && scriptComponent->getClassName() == newScriptComponent->getClassName())
+      {
+        return;
+      }
+    }
+
     m_scripts.push_back(component);
   }
   else
   {
     m_components.emplace(component->getType(), component);
+  }
+
+  if (setOwner)
+  {
+    component->setOwner(this);
   }
 }
 
@@ -131,13 +143,13 @@ void Object::displayGui()
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted("Name");
   ImGui::SameLine();
-  ImGui::InputText(("##"+ uuids::to_string(m_uuid) + "Name").c_str(), m_name.data(), m_name.capacity());
+  ImGui::InputText(("##" + uuids::to_string(m_uuid) + "Name").c_str(), m_name.data(), m_name.capacity());
 
   for (auto it = m_components.begin(); it != m_components.end();)
   {
-    auto component = it->second;
+    auto& component = it->second;
 
-    ImGui::PushID(&component);
+    ImGui::PushID(component.get());
     component->displayGui();
     ImGui::PopID();
 
@@ -147,8 +159,6 @@ void Object::displayGui()
       {
         m_manager->getCollisionManager()->removeObject(shared_from_this());
       }
-
-      component.reset();
 
       it = m_components.erase(it);
     }
@@ -165,13 +175,58 @@ void Object::displayGui()
 
   displayComponentSelector();
 
+  const float dropZoneStartY = ImGui::GetCursorScreenPos().y;
+
   ImGui::SeparatorText("Scripts");
 
-  for (auto script : m_scripts)
+  if (m_scripts.empty())
   {
-    ImGui::PushID(&script);
-    script->displayGui();
-    ImGui::PopID();
+    ImGui::Dummy({ ImGui::GetContentRegionAvail().x, 60.0f });
+  }
+  else
+  {
+    for (auto it = m_scripts.begin(); it != m_scripts.end();)
+    {
+      auto& script = *it;
+
+      ImGui::PushID(script.get());
+      script->displayGui();
+      ImGui::PopID();
+
+      if (script->markedAsDeleted())
+      {
+        it = m_scripts.erase(it);
+      }
+      else
+      {
+        ++it;
+      }
+    }
+  }
+
+  const ImVec2 windowPos     = ImGui::GetWindowPos();
+  const float  windowRight   = windowPos.x + ImGui::GetWindowWidth();
+  const float  contentBottom = windowPos.y + ImGui::GetWindowHeight() - ImGui::GetStyle().WindowPadding.y;
+
+  ImGui::SetCursorScreenPos({ windowPos.x, dropZoneStartY });
+  ImGui::SetNextItemAllowOverlap();   // let the scripts render on top visually
+  ImGui::InvisibleButton(
+      "##assetDropZone",
+      { windowRight - windowPos.x, contentBottom - dropZoneStartY }
+  );
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+    {
+      auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+      if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
+      {
+        addComponent(scriptAsset->createScript());
+      }
+    }
+
+    ImGui::EndDragDropTarget();
   }
 }
 

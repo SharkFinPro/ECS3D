@@ -20,6 +20,9 @@ public:
 
   void displayGui();
 
+  void loadScriptAsset(std::string path,
+                       std::string className);
+
   template <typename T>
   void loadAsset(const std::string& path);
 
