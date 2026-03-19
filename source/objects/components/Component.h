@@ -77,6 +77,11 @@ public:
     return m_live ? m_liveValue : m_initialValue;
   }
 
+  [[nodiscard]] T getInitialValue() const
+  {
+    return m_initialValue;
+  }
+
   void set(const T& newValue)
   {
     if (m_live)

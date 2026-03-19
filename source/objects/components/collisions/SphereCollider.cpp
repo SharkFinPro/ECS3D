@@ -48,12 +48,12 @@ void SphereCollider::displayGui()
 
 nlohmann::json SphereCollider::serialize()
 {
-  const auto position = m_position.value();
+  const auto position = m_position.getInitialValue();
 
   const nlohmann::json data = {
     { "type", "Collider" },
     { "subType", "Sphere" },
-    { "radius", m_radius.value() },
+    { "radius", m_radius.getInitialValue() },
     { "renderCollider", m_renderCollider },
     { "position", { position.x, position.y, position.z } }
   };

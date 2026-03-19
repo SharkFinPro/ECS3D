@@ -190,17 +190,17 @@ void RigidBody::displayGui()
 
 nlohmann::json RigidBody::serialize()
 {
-  const auto velocity = m_velocity.value();
-  const auto angularVelocity = m_angularVelocity.value();
+  const auto velocity = m_velocity.getInitialValue();
+  const auto angularVelocity = m_angularVelocity.getInitialValue();
 
   const nlohmann::json data = {
     { "type", "RigidBody" },
     { "velocity", { velocity.x, velocity.y, velocity.z } },
     { "angularVelocity", { angularVelocity.x, angularVelocity.y, angularVelocity.z } },
-    { "friction", m_friction.value() },
-    { "doGravity", m_doGravity.value() },
-    { "gravity", m_gravity.value() },
-    { "mass", m_mass.value() }
+    { "friction", m_friction.getInitialValue() },
+    { "doGravity", m_doGravity.getInitialValue() },
+    { "gravity", m_gravity.getInitialValue() },
+    { "mass", m_mass.getInitialValue() }
   };
 
   return data;
