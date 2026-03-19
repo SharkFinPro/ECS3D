@@ -21,10 +21,10 @@ void AssetManager::displayGui()
   ImGui::Begin("Assets");
 
   constexpr int cellSize = 150;
-  const int scaledCellSize = cellSize * m_ecs->getRenderer()->getWindow()->getContentScale();
-  const int width = static_cast<int>(ImGui::GetContentRegionAvail().x);
+  const float scaledCellSize = cellSize * m_ecs->getRenderer()->getWindow()->getContentScale();
+  const float width = ImGui::GetContentRegionAvail().x;
 
-  ImGui::Columns(std::max(1, width / scaledCellSize), 0, false);
+  ImGui::Columns(std::max(1, static_cast<int>(width / scaledCellSize)), 0, false);
 
   for (const auto& [name, asset] : m_assets)
   {
