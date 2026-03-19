@@ -18,7 +18,7 @@ public:
 
   [[nodiscard]] std::string getName() const;
 
-  virtual void displayGui();
+  virtual void displayGui(float cellSize);
 
   virtual void load() = 0;
 

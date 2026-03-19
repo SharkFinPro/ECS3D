@@ -16,7 +16,7 @@ std::string Asset::getName() const
   return m_name;
 }
 
-void Asset::displayGui()
+void Asset::displayGui([[maybe_unused]] const float cellSize)
 {
   ImGui::Text(m_name.c_str());
 }

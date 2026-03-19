@@ -14,11 +14,11 @@ void ScriptAsset::load()
   m_scriptManager = m_assetManager->getECS()->getScriptManager();
 }
 
-void ScriptAsset::displayGui()
+void ScriptAsset::displayGui(const float cellSize)
 {
-  Asset::displayGui();
+  Asset::displayGui(cellSize);
 
-  ImGui::Button("Script", {150, 150});
+  ImGui::Button("Script", { cellSize, cellSize });
 }
 
 std::shared_ptr<Script> ScriptAsset::createScript() const
