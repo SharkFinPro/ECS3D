@@ -175,7 +175,7 @@ void Object::displayGui()
 
   displayComponentSelector();
 
-  const float dropZoneStartY = ImGui::GetCursorScreenPos().y;
+  const float scriptDropZoneStartY = ImGui::GetCursorScreenPos().y;
 
   ImGui::SeparatorText("Scripts");
 
@@ -204,30 +204,7 @@ void Object::displayGui()
     }
   }
 
-  const ImVec2 windowPos     = ImGui::GetWindowPos();
-  const float  windowRight   = windowPos.x + ImGui::GetWindowWidth();
-  const float  contentBottom = windowPos.y + ImGui::GetWindowHeight() - ImGui::GetStyle().WindowPadding.y;
-
-  ImGui::SetCursorScreenPos({ windowPos.x, dropZoneStartY });
-  ImGui::SetNextItemAllowOverlap();   // let the scripts render on top visually
-  ImGui::InvisibleButton(
-      "##assetDropZone",
-      { windowRight - windowPos.x, contentBottom - dropZoneStartY }
-  );
-
-  if (ImGui::BeginDragDropTarget())
-  {
-    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
-    {
-      auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
-      if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
-      {
-        addComponent(scriptAsset->createScript());
-      }
-    }
-
-    ImGui::EndDragDropTarget();
-  }
+  displayScriptDragDropArea(scriptDropZoneStartY);
 }
 
 void Object::start() const
@@ -419,5 +396,38 @@ void Object::displayComponentSelector()
     }
 
     ImGui::EndCombo();
+  }
+}
+
+void Object::displayScriptDragDropArea(const float dropZoneStartY)
+{
+  if (ImGui::GetDragDropPayload() == nullptr)
+  {
+    return;
+  }
+
+  const ImVec2 windowPos     = ImGui::GetWindowPos();
+  const float  windowRight   = windowPos.x + ImGui::GetWindowWidth();
+  const float  contentBottom = windowPos.y + ImGui::GetWindowHeight() - ImGui::GetStyle().WindowPadding.y;
+
+  ImGui::SetCursorScreenPos({ windowPos.x, dropZoneStartY });
+  ImGui::SetNextItemAllowOverlap();
+  ImGui::InvisibleButton(
+      "##assetDropZone",
+      { windowRight - windowPos.x, contentBottom - dropZoneStartY }
+  );
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+    {
+      auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+      if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
+      {
+        addComponent(scriptAsset->createScript());
+      }
+    }
+
+    ImGui::EndDragDropTarget();
   }
 }
