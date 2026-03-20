@@ -33,7 +33,7 @@ void Script::fixedUpdate(const float dt)
 
 void Script::displayGui()
 {
-  if (displayGuiHeader())
+  if (displayGuiHeader(m_className))
   {
     displayFieldsGui();
   }

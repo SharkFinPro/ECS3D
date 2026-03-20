@@ -61,13 +61,18 @@ void Component::stop()
   }
 }
 
-bool Component::displayGuiHeader()
+bool Component::displayGuiHeader(const std::string& componentName)
 {
-  const char* componentDisplayName = componentTypeToString.at(m_subType != ComponentType::SubComponentType_none
-                                                              ? m_subType : m_type).c_str();
+  auto componentDisplayName = componentTypeToString.at(
+    m_subType != ComponentType::SubComponentType_none ? m_subType : m_type);
+
+  if (!componentName.empty())
+  {
+    componentDisplayName = componentName;
+  }
 
   const bool open = ImGui::CollapsingHeader(
-    componentDisplayName,
+    componentDisplayName.c_str(),
     ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DefaultOpen
   );
 
