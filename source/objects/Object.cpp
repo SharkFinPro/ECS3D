@@ -145,66 +145,9 @@ void Object::displayGui()
   ImGui::SameLine();
   ImGui::InputText(("##" + uuids::to_string(m_uuid) + "Name").c_str(), m_name.data(), m_name.capacity());
 
-  for (auto it = m_components.begin(); it != m_components.end();)
-  {
-    auto& component = it->second;
+  displayComponentsGui();
 
-    ImGui::PushID(component.get());
-    component->displayGui();
-    ImGui::PopID();
-
-    if (component->markedAsDeleted())
-    {
-      if (component->getType() == ComponentType::collider)
-      {
-        m_manager->getCollisionManager()->removeObject(shared_from_this());
-      }
-
-      it = m_components.erase(it);
-    }
-    else
-    {
-      ++it;
-    }
-  }
-
-  if (ImGui::Button("Add Component"))
-  {
-    m_showComponentSelector = true;
-  }
-
-  displayComponentSelector();
-
-  const float scriptDropZoneStartY = ImGui::GetCursorScreenPos().y;
-
-  ImGui::SeparatorText("Scripts");
-
-  if (m_scripts.empty())
-  {
-    ImGui::Dummy({ ImGui::GetContentRegionAvail().x, 60.0f });
-  }
-  else
-  {
-    for (auto it = m_scripts.begin(); it != m_scripts.end();)
-    {
-      auto& script = *it;
-
-      ImGui::PushID(script.get());
-      script->displayGui();
-      ImGui::PopID();
-
-      if (script->markedAsDeleted())
-      {
-        it = m_scripts.erase(it);
-      }
-      else
-      {
-        ++it;
-      }
-    }
-  }
-
-  displayScriptDragDropArea(scriptDropZoneStartY);
+  displayScriptsGui();
 }
 
 void Object::start() const
@@ -341,6 +284,73 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   }
 
   return component;
+}
+
+void Object::displayComponentsGui()
+{
+  for (auto it = m_components.begin(); it != m_components.end();)
+  {
+    auto& component = it->second;
+
+    ImGui::PushID(component.get());
+    component->displayGui();
+    ImGui::PopID();
+
+    if (component->markedAsDeleted())
+    {
+      if (component->getType() == ComponentType::collider)
+      {
+        m_manager->getCollisionManager()->removeObject(shared_from_this());
+      }
+
+      it = m_components.erase(it);
+    }
+    else
+    {
+      ++it;
+    }
+  }
+
+  if (ImGui::Button("Add Component"))
+  {
+    m_showComponentSelector = true;
+  }
+
+  displayComponentSelector();
+}
+
+void Object::displayScriptsGui()
+{
+  const float scriptDropZoneStartY = ImGui::GetCursorScreenPos().y;
+
+  ImGui::SeparatorText("Scripts");
+
+  if (m_scripts.empty())
+  {
+    ImGui::Dummy({ ImGui::GetContentRegionAvail().x, 60.0f });
+  }
+  else
+  {
+    for (auto it = m_scripts.begin(); it != m_scripts.end();)
+    {
+      auto& script = *it;
+
+      ImGui::PushID(script.get());
+      script->displayGui();
+      ImGui::PopID();
+
+      if (script->markedAsDeleted())
+      {
+        it = m_scripts.erase(it);
+      }
+      else
+      {
+        ++it;
+      }
+    }
+  }
+
+  displayScriptDragDropArea(scriptDropZoneStartY);
 }
 
 void Object::displayComponentSelector()

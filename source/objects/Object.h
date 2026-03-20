@@ -70,6 +70,10 @@ private:
 
   [[nodiscard]] std::shared_ptr<Component> loadComponentFromJSON(const nlohmann::json& componentData) const;
 
+  void displayComponentsGui();
+
+  void displayScriptsGui();
+
   void displayComponentSelector();
 
   void displayScriptDragDropArea(float dropZoneStartY);
