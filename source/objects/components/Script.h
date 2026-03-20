@@ -19,6 +19,10 @@ public:
 
   void displayGui() override;
 
+  void start() override;
+
+  void stop() override;
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;

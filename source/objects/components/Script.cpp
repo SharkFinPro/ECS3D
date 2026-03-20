@@ -75,6 +75,20 @@ void Script::displayGui()
   }
 }
 
+void Script::start()
+{
+  Component::start();
+
+  m_scriptManager->start(m_owner->getUUID(), m_className.c_str());
+}
+
+void Script::stop()
+{
+  Component::stop();
+
+  m_scriptManager->stop(m_owner->getUUID(), m_className.c_str());
+}
+
 nlohmann::json Script::serialize()
 {
   nlohmann::json data = {
