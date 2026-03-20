@@ -311,7 +311,7 @@ void Object::displayComponentsGui()
     }
   }
 
-  if (ImGui::Button("Add Component"))
+  if (!m_showComponentSelector && ImGui::Button("Add Component"))
   {
     m_showComponentSelector = true;
   }
