@@ -364,45 +364,42 @@ void Object::displayComponentSelector()
   {
     for (const auto& [type, name] : componentTypeToString)
     {
-      if (type == ComponentType::script)
+      const auto parentType = subComponentTypeToParent.find(type);
+
+      if (type == ComponentType::script ||
+          getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type) ||
+          !ImGui::Selectable(name.data()))
       {
         continue;
       }
 
-      const auto parentType = subComponentTypeToParent.find(type);
-      if (!getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type))
+      switch (type)
       {
-        if (ImGui::Selectable(name.data()))
-        {
-          switch (type)
-          {
-            case ComponentType::transform:
-              addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
-              break;
-            case ComponentType::modelRenderer:
-              addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
-              break;
-            case ComponentType::rigidBody:
-              addComponent(std::make_shared<RigidBody>());
-              break;
-            case ComponentType::SubComponentType_boxCollider:
-              addComponent(std::make_shared<BoxCollider>());
-              m_manager->getCollisionManager()->addObject(shared_from_this());
-              break;
-            case ComponentType::SubComponentType_sphereCollider:
-              addComponent(std::make_shared<SphereCollider>());
-              m_manager->getCollisionManager()->addObject(shared_from_this());
-              break;
-            case ComponentType::lightRenderer:
-              addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
-                                                           glm::vec3(0), 0.0f, 0.0f, 0.0f));
-              break;
-            default: ;
-          }
-
-          m_showComponentSelector = false;
-        }
+        case ComponentType::transform:
+          addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
+          break;
+        case ComponentType::modelRenderer:
+          addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
+          break;
+        case ComponentType::rigidBody:
+          addComponent(std::make_shared<RigidBody>());
+          break;
+        case ComponentType::SubComponentType_boxCollider:
+          addComponent(std::make_shared<BoxCollider>());
+          m_manager->getCollisionManager()->addObject(shared_from_this());
+          break;
+        case ComponentType::SubComponentType_sphereCollider:
+          addComponent(std::make_shared<SphereCollider>());
+          m_manager->getCollisionManager()->addObject(shared_from_this());
+          break;
+        case ComponentType::lightRenderer:
+          addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
+                                                       glm::vec3(0), 0.0f, 0.0f, 0.0f));
+          break;
+        default: ;
       }
+
+      m_showComponentSelector = false;
     }
 
     ImGui::EndCombo();
