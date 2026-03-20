@@ -267,20 +267,36 @@ public static class Bridge
         instance.EntityId = uuid;
         instance.initComponents();
         _instances[Key(uuid, className)] = instance;
-        instance.start();
     }
 
     [UnmanagedCallersOnly]
     public static void detachScript(IntPtr uuidPtr, IntPtr classNamePtr)
     {
         var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        if (!_instances.TryGetValue(key, out var instance))
+        if (_instances.TryGetValue(key, out var instance))
         {
-            return;
+            _instances.Remove(key);
         }
+    }
 
-        instance.stop();
-        _instances.Remove(key);
+    [UnmanagedCallersOnly]
+    public static void start(IntPtr uuidPtr, IntPtr classNamePtr)
+    {
+        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+        if (_instances.TryGetValue(key, out var instance))
+        {
+            instance.start();
+        }
+    }
+
+    [UnmanagedCallersOnly]
+    public static void stop(IntPtr uuidPtr, IntPtr classNamePtr)
+    {
+        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+        if (_instances.TryGetValue(key, out var instance))
+        {
+            instance.stop();
+        }
     }
 
     [UnmanagedCallersOnly]

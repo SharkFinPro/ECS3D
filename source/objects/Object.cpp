@@ -145,89 +145,9 @@ void Object::displayGui()
   ImGui::SameLine();
   ImGui::InputText(("##" + uuids::to_string(m_uuid) + "Name").c_str(), m_name.data(), m_name.capacity());
 
-  for (auto it = m_components.begin(); it != m_components.end();)
-  {
-    auto& component = it->second;
+  displayComponentsGui();
 
-    ImGui::PushID(component.get());
-    component->displayGui();
-    ImGui::PopID();
-
-    if (component->markedAsDeleted())
-    {
-      if (component->getType() == ComponentType::collider)
-      {
-        m_manager->getCollisionManager()->removeObject(shared_from_this());
-      }
-
-      it = m_components.erase(it);
-    }
-    else
-    {
-      ++it;
-    }
-  }
-
-  if (ImGui::Button("Add Component"))
-  {
-    m_showComponentSelector = true;
-  }
-
-  displayComponentSelector();
-
-  const float dropZoneStartY = ImGui::GetCursorScreenPos().y;
-
-  ImGui::SeparatorText("Scripts");
-
-  if (m_scripts.empty())
-  {
-    ImGui::Dummy({ ImGui::GetContentRegionAvail().x, 60.0f });
-  }
-  else
-  {
-    for (auto it = m_scripts.begin(); it != m_scripts.end();)
-    {
-      auto& script = *it;
-
-      ImGui::PushID(script.get());
-      script->displayGui();
-      ImGui::PopID();
-
-      if (script->markedAsDeleted())
-      {
-        it = m_scripts.erase(it);
-      }
-      else
-      {
-        ++it;
-      }
-    }
-  }
-
-  const ImVec2 windowPos     = ImGui::GetWindowPos();
-  const float  windowRight   = windowPos.x + ImGui::GetWindowWidth();
-  const float  contentBottom = windowPos.y + ImGui::GetWindowHeight() - ImGui::GetStyle().WindowPadding.y;
-
-  ImGui::SetCursorScreenPos({ windowPos.x, dropZoneStartY });
-  ImGui::SetNextItemAllowOverlap();   // let the scripts render on top visually
-  ImGui::InvisibleButton(
-      "##assetDropZone",
-      { windowRight - windowPos.x, contentBottom - dropZoneStartY }
-  );
-
-  if (ImGui::BeginDragDropTarget())
-  {
-    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
-    {
-      auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
-      if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
-      {
-        addComponent(scriptAsset->createScript());
-      }
-    }
-
-    ImGui::EndDragDropTarget();
-  }
+  displayScriptsGui();
 }
 
 void Object::start() const
@@ -330,30 +250,34 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
 {
   std::shared_ptr<Component> component = nullptr;
 
-  if (componentData["type"] == "Collider")
+  const auto componentType = componentData["type"];
+
+  if (componentType == "Collider")
   {
-    if (componentData["subType"] == "Box")
+    const auto componentSubType = componentData["subType"];
+
+    if (componentSubType == "Box")
     {
       component = std::make_shared<BoxCollider>();
     }
-    else if (componentData["subType"] == "Sphere")
+    else if (componentSubType == "Sphere")
     {
       component = std::make_shared<SphereCollider>();
     }
   }
-  else if (componentData["type"] == "LightRenderer")
+  else if (componentType == "LightRenderer")
   {
     component = std::make_shared<LightRenderer>(m_manager->getECS()->getRenderer());
   }
-  else if (componentData["type"] == "ModelRenderer")
+  else if (componentType == "ModelRenderer")
   {
     component = std::make_shared<ModelRenderer>(m_manager->getECS()->getRenderer());
   }
-  else if (componentData["type"] == "RigidBody")
+  else if (componentType == "RigidBody")
   {
     component = std::make_shared<RigidBody>();
   }
-  else if (componentData["type"] == "Transform")
+  else if (componentType == "Transform")
   {
     component = std::make_shared<Transform>();
   }
@@ -364,6 +288,73 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
   }
 
   return component;
+}
+
+void Object::displayComponentsGui()
+{
+  for (auto it = m_components.begin(); it != m_components.end();)
+  {
+    auto& component = it->second;
+
+    ImGui::PushID(component.get());
+    component->displayGui();
+    ImGui::PopID();
+
+    if (component->markedAsDeleted())
+    {
+      if (component->getType() == ComponentType::collider)
+      {
+        m_manager->getCollisionManager()->removeObject(shared_from_this());
+      }
+
+      it = m_components.erase(it);
+    }
+    else
+    {
+      ++it;
+    }
+  }
+
+  if (!m_showComponentSelector && ImGui::Button("Add Component"))
+  {
+    m_showComponentSelector = true;
+  }
+
+  displayComponentSelector();
+}
+
+void Object::displayScriptsGui()
+{
+  const float scriptDropZoneStartY = ImGui::GetCursorScreenPos().y;
+
+  ImGui::SeparatorText("Scripts");
+
+  if (m_scripts.empty())
+  {
+    ImGui::Dummy({ ImGui::GetContentRegionAvail().x, 60.0f });
+  }
+  else
+  {
+    for (auto it = m_scripts.begin(); it != m_scripts.end();)
+    {
+      auto& script = *it;
+
+      ImGui::PushID(script.get());
+      script->displayGui();
+      ImGui::PopID();
+
+      if (script->markedAsDeleted())
+      {
+        it = m_scripts.erase(it);
+      }
+      else
+      {
+        ++it;
+      }
+    }
+  }
+
+  displayScriptDragDropArea(scriptDropZoneStartY);
 }
 
 void Object::displayComponentSelector()
@@ -377,47 +368,77 @@ void Object::displayComponentSelector()
   {
     for (const auto& [type, name] : componentTypeToString)
     {
-      if (type == ComponentType::script)
+      const auto parentType = subComponentTypeToParent.find(type);
+
+      if (type == ComponentType::script ||
+          getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type) ||
+          !ImGui::Selectable(name.data()))
       {
         continue;
       }
 
-      const auto parentType = subComponentTypeToParent.find(type);
-      if (!getComponent(parentType != subComponentTypeToParent.end() ? parentType->second : type))
+      switch (type)
       {
-        if (ImGui::Selectable(name.data()))
-        {
-          switch (type)
-          {
-            case ComponentType::transform:
-              addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
-              break;
-            case ComponentType::modelRenderer:
-              addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
-              break;
-            case ComponentType::rigidBody:
-              addComponent(std::make_shared<RigidBody>());
-              break;
-            case ComponentType::SubComponentType_boxCollider:
-              addComponent(std::make_shared<BoxCollider>());
-              m_manager->getCollisionManager()->addObject(shared_from_this());
-              break;
-            case ComponentType::SubComponentType_sphereCollider:
-              addComponent(std::make_shared<SphereCollider>());
-              m_manager->getCollisionManager()->addObject(shared_from_this());
-              break;
-            case ComponentType::lightRenderer:
-              addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
-                                                           glm::vec3(0), 0.0f, 0.0f, 0.0f));
-              break;
-            default: ;
-          }
-
-          m_showComponentSelector = false;
-        }
+        case ComponentType::transform:
+          addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
+          break;
+        case ComponentType::modelRenderer:
+          addComponent(std::make_shared<ModelRenderer>(getManager()->getECS()->getRenderer()));
+          break;
+        case ComponentType::rigidBody:
+          addComponent(std::make_shared<RigidBody>());
+          break;
+        case ComponentType::SubComponentType_boxCollider:
+          addComponent(std::make_shared<BoxCollider>());
+          m_manager->getCollisionManager()->addObject(shared_from_this());
+          break;
+        case ComponentType::SubComponentType_sphereCollider:
+          addComponent(std::make_shared<SphereCollider>());
+          m_manager->getCollisionManager()->addObject(shared_from_this());
+          break;
+        case ComponentType::lightRenderer:
+          addComponent(std::make_shared<LightRenderer>(getManager()->getECS()->getRenderer(),
+                                                       glm::vec3(0), 0.0f, 0.0f, 0.0f));
+          break;
+        default: ;
       }
+
+      m_showComponentSelector = false;
     }
 
     ImGui::EndCombo();
+  }
+}
+
+void Object::displayScriptDragDropArea(const float dropZoneStartY)
+{
+  if (ImGui::GetDragDropPayload() == nullptr)
+  {
+    return;
+  }
+
+  const ImVec2 windowPos     = ImGui::GetWindowPos();
+  const float  windowRight   = windowPos.x + ImGui::GetWindowWidth();
+  const float  contentBottom = windowPos.y + ImGui::GetWindowHeight() - ImGui::GetStyle().WindowPadding.y;
+
+  ImGui::SetCursorScreenPos({ windowPos.x, dropZoneStartY });
+  ImGui::SetNextItemAllowOverlap();
+  ImGui::InvisibleButton(
+      "##assetDropZone",
+      { windowRight - windowPos.x, contentBottom - dropZoneStartY }
+  );
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("asset"))
+    {
+      auto asset = *static_cast<std::shared_ptr<Asset>*>(payload->Data);
+      if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
+      {
+        addComponent(scriptAsset->createScript());
+      }
+    }
+
+    ImGui::EndDragDropTarget();
   }
 }

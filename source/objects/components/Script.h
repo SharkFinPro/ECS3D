@@ -19,6 +19,10 @@ public:
 
   void displayGui() override;
 
+  void start() override;
+
+  void stop() override;
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -37,6 +41,8 @@ private:
   nlohmann::json m_tempData = nlohmann::json();
 
   void attachScript();
+
+  void displayFieldsGui() const;
 };
 
 

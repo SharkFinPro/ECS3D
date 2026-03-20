@@ -29,6 +29,12 @@ public:
   void detachScript(const char* uuid,
                     const char* className) const;
 
+  void start(const char* uuid,
+             const char* className) const;
+
+  void stop(const char* uuid,
+            const char* className) const;
+
   void fixedUpdate(const char* uuid,
                    const char* className,
                    float dt) const;
@@ -69,6 +75,10 @@ public:
 private:
   using attachScriptFn = void(*)(const char*, const char*);
   using detachScriptFn = void(*)(const char*, const char*);
+
+  using startFn = void(*)(const char*, const char*);
+  using stopFn = void(*)(const char*, const char*);
+
   using fixedUpdateFn = void(*)(const char*, const char*, float);
   using variableUpdateFn = void(*)(const char*, const char*);
   using VoidFn = void(*)();
@@ -91,6 +101,9 @@ private:
 
   attachScriptFn m_attachScript = nullptr;
   detachScriptFn m_detachScript = nullptr;
+
+  startFn m_start = nullptr;
+  stopFn m_stop = nullptr;
 
   fixedUpdateFn m_fixedUpdate = nullptr;
   variableUpdateFn m_variableUpdate = nullptr;

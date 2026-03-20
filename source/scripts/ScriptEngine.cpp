@@ -150,6 +150,10 @@ void ScriptEngine::init(ECS3D* ecs,
   loadFn("reloadScripts", reinterpret_cast<void**>(&m_reload));
   loadFn("attachScript", reinterpret_cast<void**>(&m_attachScript));
   loadFn("detachScript", reinterpret_cast<void**>(&m_detachScript));
+
+  loadFn("start", reinterpret_cast<void**>(&m_start));
+  loadFn("stop", reinterpret_cast<void**>(&m_stop));
+
   loadFn("fixedUpdate", reinterpret_cast<void**>(&m_fixedUpdate));
   loadFn("variableUpdate", reinterpret_cast<void**>(&m_variableUpdate));
 
@@ -236,6 +240,24 @@ void ScriptEngine::detachScript(const char* uuid,
   if (m_detachScript)
   {
     m_detachScript(uuid, className);
+  }
+}
+
+void ScriptEngine::start(const char* uuid,
+                         const char* className) const
+{
+  if (m_start)
+  {
+    m_start(uuid, className);
+  }
+}
+
+void ScriptEngine::stop(const char* uuid,
+                        const char* className) const
+{
+  if (m_stop)
+  {
+    m_stop(uuid, className);
   }
 }
 

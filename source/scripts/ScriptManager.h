@@ -28,6 +28,12 @@ public:
   void detachScript(uuids::uuid uuid,
                     const char* className);
 
+  void start(uuids::uuid uuid,
+             const char* className) const;
+
+  void stop(uuids::uuid uuid,
+            const char* className) const;
+
   void fixedUpdate(uuids::uuid uuid,
                    const char* className,
                    float dt) const;

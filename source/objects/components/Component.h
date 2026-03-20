@@ -138,7 +138,7 @@ protected:
 
   std::vector<ComponentVariableBase*> m_variables;
 
-  [[nodiscard]] bool displayGuiHeader();
+  [[nodiscard]] bool displayGuiHeader(const std::string& componentName = "");
 
   void loadVariable(ComponentVariableBase& variable);
 };

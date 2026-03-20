@@ -102,6 +102,20 @@ void ScriptManager::detachScript(const uuids::uuid uuid,
   m_attachedScripts.erase(key);
 }
 
+void ScriptManager::start(const uuids::uuid uuid,
+                          const char* className) const
+{
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.start(uuidStr.c_str(), className);
+}
+
+void ScriptManager::stop(const uuids::uuid uuid,
+                         const char* className) const
+{
+  const auto uuidStr = uuids::to_string(uuid);
+  m_scriptEngine.stop(uuidStr.c_str(), className);
+}
+
 void ScriptManager::fixedUpdate(const uuids::uuid uuid,
                                 const char* className,
                                 const float dt) const
