@@ -35,43 +35,7 @@ void Script::displayGui()
 {
   if (displayGuiHeader())
   {
-    const auto fields = m_scriptManager->getExposedFields(m_owner->getUUID(), m_className.c_str());
-    if (!fields)
-    {
-      return;
-    }
-
-    for (const auto& field : *fields)
-    {
-      const auto uuid = m_owner->getUUID();
-      const auto className = m_className.c_str();
-      const auto fieldName = field.name.c_str();
-
-      if (field.type == "float")
-      {
-        float fieldValue = m_scriptManager->getFieldFloat(uuid, className, fieldName);
-        if (ImGui::InputFloat(field.displayName.c_str(), &fieldValue))
-        {
-          m_scriptManager->setFieldFloat(uuid, className, fieldName, fieldValue);
-        }
-      }
-      else if (field.type == "int")
-      {
-        int fieldValue = m_scriptManager->getFieldInt(uuid, className, fieldName);
-        if (ImGui::InputInt(field.displayName.c_str(), &fieldValue))
-        {
-          m_scriptManager->setFieldInt(uuid, className, fieldName, fieldValue);
-        }
-      }
-      else if (field.type == "bool")
-      {
-        bool fieldValue = m_scriptManager->getFieldBool(uuid, className, fieldName);
-        if (ImGui::Checkbox(field.displayName.c_str(), &fieldValue))
-        {
-          m_scriptManager->setFieldBool(uuid, className, fieldName, fieldValue);
-        }
-      }
-    }
+    displayFieldsGui();
   }
 }
 
@@ -196,4 +160,45 @@ void Script::attachScript()
     [this] { preReload (); },
     [this] { postReload(); }
   );
+}
+
+void Script::displayFieldsGui() const
+{
+  const auto fields = m_scriptManager->getExposedFields(m_owner->getUUID(), m_className.c_str());
+  if (!fields)
+  {
+    return;
+  }
+
+  for (const auto& field : *fields)
+  {
+    const auto uuid = m_owner->getUUID();
+    const auto className = m_className.c_str();
+    const auto fieldName = field.name.c_str();
+
+    if (field.type == "float")
+    {
+      float fieldValue = m_scriptManager->getFieldFloat(uuid, className, fieldName);
+      if (ImGui::InputFloat(field.displayName.c_str(), &fieldValue))
+      {
+        m_scriptManager->setFieldFloat(uuid, className, fieldName, fieldValue);
+      }
+    }
+    else if (field.type == "int")
+    {
+      int fieldValue = m_scriptManager->getFieldInt(uuid, className, fieldName);
+      if (ImGui::InputInt(field.displayName.c_str(), &fieldValue))
+      {
+        m_scriptManager->setFieldInt(uuid, className, fieldName, fieldValue);
+      }
+    }
+    else if (field.type == "bool")
+    {
+      bool fieldValue = m_scriptManager->getFieldBool(uuid, className, fieldName);
+      if (ImGui::Checkbox(field.displayName.c_str(), &fieldValue))
+      {
+        m_scriptManager->setFieldBool(uuid, className, fieldName, fieldValue);
+      }
+    }
+  }
 }

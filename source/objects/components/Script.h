@@ -41,6 +41,8 @@ private:
   nlohmann::json m_tempData = nlohmann::json();
 
   void attachScript();
+
+  void displayFieldsGui() const;
 };
 
 
