@@ -250,30 +250,34 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
 {
   std::shared_ptr<Component> component = nullptr;
 
-  if (componentData["type"] == "Collider")
+  const auto componentType = componentData["type"];
+
+  if (componentType == "Collider")
   {
-    if (componentData["subType"] == "Box")
+    const auto componentSubType = componentData["subType"];
+
+    if (componentSubType == "Box")
     {
       component = std::make_shared<BoxCollider>();
     }
-    else if (componentData["subType"] == "Sphere")
+    else if (componentSubType == "Sphere")
     {
       component = std::make_shared<SphereCollider>();
     }
   }
-  else if (componentData["type"] == "LightRenderer")
+  else if (componentType == "LightRenderer")
   {
     component = std::make_shared<LightRenderer>(m_manager->getECS()->getRenderer());
   }
-  else if (componentData["type"] == "ModelRenderer")
+  else if (componentType == "ModelRenderer")
   {
     component = std::make_shared<ModelRenderer>(m_manager->getECS()->getRenderer());
   }
-  else if (componentData["type"] == "RigidBody")
+  else if (componentType == "RigidBody")
   {
     component = std::make_shared<RigidBody>();
   }
-  else if (componentData["type"] == "Transform")
+  else if (componentType == "Transform")
   {
     component = std::make_shared<Transform>();
   }
