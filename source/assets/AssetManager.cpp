@@ -68,6 +68,8 @@ void AssetManager::loadScriptAsset(std::string path,
   m_assets.emplace(uuid, asset);
 
   m_loadedPaths.emplace(path, uuid);
+
+  m_shouldComputeFilteredAssets = true;
 }
 
 nlohmann::json AssetManager::serialize()
@@ -141,6 +143,8 @@ void AssetManager::loadFromJSON(const nlohmann::json& assetsData)
 
     m_loadedPaths.emplace(filePath, uuid);
   }
+
+  m_shouldComputeFilteredAssets = true;
 }
 
 void AssetManager::displayAssetsFilterGui()

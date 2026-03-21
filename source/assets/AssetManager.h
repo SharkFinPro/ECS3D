@@ -86,6 +86,8 @@ void AssetManager::loadAsset(const std::string& path)
   m_assets.emplace(uuid, asset);
 
   m_loadedPaths.emplace(path, uuid);
+
+  m_shouldComputeFilteredAssets = true;
 }
 
 template<typename T>
