@@ -149,7 +149,8 @@ void AssetManager::displayAssetsFilterGui()
   {
     ImGui::Spacing();
 
-    ImGui::Text("Filter: ");
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Filter: ");
     for (const auto& [type, typeStr] : assetTypeToString)
     {
       bool selected = m_filteredAssetType == type;
@@ -167,7 +168,8 @@ void AssetManager::displayAssetsFilterGui()
     char searchBuf[64] = {};
     m_searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
 
-    ImGui::Text("Search: ");
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Search: ");
     ImGui::SameLine();
     if (ImGui::InputText("##Search", searchBuf, sizeof(searchBuf)))
     {
@@ -176,7 +178,8 @@ void AssetManager::displayAssetsFilterGui()
       m_shouldComputeFilteredAssets = true;
     }
 
-    ImGui::Text("Sort: ");
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Sort: ");
     ImGui::SameLine();
     if (ImGui::BeginCombo("##SortCombo", sortTypeToString.at(m_sortType).c_str()))
     {
