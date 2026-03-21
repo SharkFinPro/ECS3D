@@ -6,6 +6,7 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <VulkanEngine/components/window/Window.h>
+#include <ranges>
 
 AssetManager::AssetManager(ECS3D* ecs)
   : m_ecs(ecs)
