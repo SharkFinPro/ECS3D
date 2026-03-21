@@ -47,6 +47,14 @@ private:
   AssetType m_filteredAssetType = AssetType::Unknown;
 
   std::string m_searchQuery;
+
+  std::vector<std::shared_ptr<Asset>> m_filteredAssets;
+
+  bool m_shouldComputeFilteredAssets = true;
+
+  void displayAssetsFilterGui();
+
+  void computeFilteredAssets();
 };
 
 template<typename T>

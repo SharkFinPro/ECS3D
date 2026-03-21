@@ -20,31 +20,9 @@ void AssetManager::displayGui()
 {
   ImGui::Begin("Assets");
 
-  ImGui::Text("Filter: ");
+  displayAssetsFilterGui();
 
-  for (const auto& [type, typeStr] : assetTypeToString)
-  {
-    bool selected = m_filteredAssetType == type;
-
-    ImGui::SameLine();
-
-    if (ImGui::Checkbox(typeStr.c_str(), &selected))
-    {
-      m_filteredAssetType = selected ? type : AssetType::Unknown;
-    }
-  }
-
-  char searchBuf[64] = {};
-  m_searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
-
-  ImGui::Text("Search: ");
-  ImGui::SameLine();
-  if (ImGui::InputText("##Search", searchBuf, sizeof(searchBuf)))
-  {
-    m_searchQuery = searchBuf;
-  }
-
-  ImGui::Separator();
+  computeFilteredAssets();
 
   constexpr int cellSize = 150;
   const float scaledCellSize = cellSize * m_ecs->getRenderer()->getWindow()->getContentScale();
@@ -52,26 +30,8 @@ void AssetManager::displayGui()
 
   ImGui::Columns(std::max(1, static_cast<int>(width / scaledCellSize)), 0, false);
 
-  for (const auto& [name, asset] : m_assets)
+  for (const auto& asset : m_filteredAssets)
   {
-    if (m_filteredAssetType != AssetType::Unknown && asset->getAssetType() != m_filteredAssetType)
-    {
-      continue;
-    }
-
-    if (!m_searchQuery.empty())
-    {
-      const std::string& assetName = asset->getName();
-      const bool match = std::ranges::search(assetName, m_searchQuery, [](const char a, const char b){
-        return std::tolower(a) == std::tolower(b);
-      }).begin() != assetName.end();
-
-      if (!match)
-      {
-        continue;
-      }
-    }
-
     ImGui::PushID(&asset);
 
     asset->displayGui(scaledCellSize * 0.75f);
@@ -181,4 +141,72 @@ void AssetManager::loadFromJSON(const nlohmann::json& assetsData)
 
     m_loadedPaths.emplace(filePath, uuid);
   }
+}
+
+void AssetManager::displayAssetsFilterGui()
+{
+  ImGui::Text("Filter: ");
+
+  for (const auto& [type, typeStr] : assetTypeToString)
+  {
+    bool selected = m_filteredAssetType == type;
+
+    ImGui::SameLine();
+
+    if (ImGui::Checkbox(typeStr.c_str(), &selected))
+    {
+      m_filteredAssetType = selected ? type : AssetType::Unknown;
+
+      m_shouldComputeFilteredAssets = true;
+    }
+  }
+
+  char searchBuf[64] = {};
+  m_searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
+
+  ImGui::Text("Search: ");
+  ImGui::SameLine();
+  if (ImGui::InputText("##Search", searchBuf, sizeof(searchBuf)))
+  {
+    m_searchQuery = searchBuf;
+
+    m_shouldComputeFilteredAssets = true;
+  }
+
+  ImGui::Separator();
+}
+
+void AssetManager::computeFilteredAssets()
+{
+  if (!m_shouldComputeFilteredAssets)
+  {
+    return;
+  }
+
+  m_filteredAssets.clear();
+
+  for (const auto& [_, asset] : m_assets)
+  {
+    if (m_filteredAssetType != AssetType::Unknown && asset->getAssetType() != m_filteredAssetType)
+    {
+      continue;
+    }
+
+    if (!m_searchQuery.empty())
+    {
+      const std::string& assetName = asset->getName();
+      const bool match = std::ranges::search(assetName, m_searchQuery, [](const char a, const char b){
+        return std::tolower(a) == std::tolower(b);
+      }).begin() != assetName.end();
+
+      if (!match)
+      {
+        continue;
+      }
+    }
+
+    m_filteredAssets.emplace_back(asset);
+  }
+
+  m_shouldComputeFilteredAssets = false;
 }
