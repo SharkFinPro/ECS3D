@@ -1,6 +1,7 @@
 #ifndef ASSETMANAGER_H
 #define ASSETMANAGER_H
 
+#include "Asset.h"
 #include "../ECS3D.h"
 #include <nlohmann/json_fwd.hpp>
 #include <memory>
@@ -42,6 +43,8 @@ private:
   std::unordered_map<uuids::uuid, std::shared_ptr<Asset>> m_assets;
 
   std::unordered_map<std::string, uuids::uuid> m_loadedPaths;
+
+  AssetType m_filteredAssetType = AssetType::Unknown;
 };
 
 template<typename T>

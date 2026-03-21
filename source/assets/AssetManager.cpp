@@ -20,6 +20,24 @@ void AssetManager::displayGui()
 {
   ImGui::Begin("Assets");
 
+  ImGui::Text("Filter: ");
+
+  ImGui::SameLine();
+
+  for (const auto& [type, typeStr] : assetTypeToString)
+  {
+    bool selected = m_filteredAssetType == type;
+
+    ImGui::SameLine();
+
+    if (ImGui::Checkbox(typeStr.c_str(), &selected))
+    {
+      m_filteredAssetType = selected ? type : AssetType::Unknown;
+    }
+  }
+
+  ImGui::Separator();
+
   constexpr int cellSize = 150;
   const float scaledCellSize = cellSize * m_ecs->getRenderer()->getWindow()->getContentScale();
   const float width = ImGui::GetContentRegionAvail().x;
@@ -28,6 +46,11 @@ void AssetManager::displayGui()
 
   for (const auto& [name, asset] : m_assets)
   {
+    if (m_filteredAssetType != AssetType::Unknown && asset->getAssetType() != m_filteredAssetType)
+    {
+      continue;
+    }
+
     ImGui::PushID(&asset);
 
     asset->displayGui(scaledCellSize * 0.75f);

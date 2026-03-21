@@ -8,6 +8,7 @@
 class AssetManager;
 
 enum class AssetType {
+  Unknown,
   Model,
   Script,
   Texture
@@ -44,7 +45,7 @@ public:
 protected:
   AssetManager* m_assetManager = nullptr;
 
-  AssetType m_assetType;
+  AssetType m_assetType = AssetType::Unknown;
 
   uuids::uuid m_uuid;
 
