@@ -13,6 +13,12 @@ enum class AssetType {
   Texture
 };
 
+const std::unordered_map<AssetType, std::string> assetTypeToString {
+  { AssetType::Model, "Model" },
+  { AssetType::Script, "Script" },
+  { AssetType::Texture, "Texture" }
+};
+
 class Asset {
 public:
   explicit Asset(AssetType assetType,
