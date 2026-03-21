@@ -7,14 +7,23 @@
 
 class AssetManager;
 
+enum class AssetType {
+  Model,
+  Script,
+  Texture
+};
+
 class Asset {
 public:
-  explicit Asset(uuids::uuid uuid,
+  explicit Asset(AssetType assetType,
+                 uuids::uuid uuid,
                  std::string name);
 
   virtual ~Asset() = default;
 
   void setManager(AssetManager* assetManager);
+
+  [[nodiscard]] AssetType getAssetType() const;
 
   [[nodiscard]] std::string getName() const;
 
@@ -28,6 +37,8 @@ public:
 
 protected:
   AssetManager* m_assetManager = nullptr;
+
+  AssetType m_assetType;
 
   uuids::uuid m_uuid;
 

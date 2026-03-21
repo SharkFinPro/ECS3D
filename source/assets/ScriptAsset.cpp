@@ -6,7 +6,7 @@
 ScriptAsset::ScriptAsset(const uuids::uuid uuid,
                          std::string path,
                          std::string className)
-  : Asset(uuid, className), m_path(std::move(path)), m_className(std::move(className))
+  : Asset(AssetType::Script, uuid, className), m_path(std::move(path)), m_className(std::move(className))
 {}
 
 void ScriptAsset::load()
