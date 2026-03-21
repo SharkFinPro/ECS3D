@@ -40,7 +40,7 @@ void AssetManager::displayGui()
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
     {
       ImGui::SetDragDropPayload("asset", &asset, sizeof(asset));
-      ImGui::Text(asset->getName().c_str());
+      ImGui::Text("%s", asset->getName().c_str());
       ImGui::EndDragDropSource();
     }
 
@@ -228,9 +228,11 @@ void AssetManager::computeFilteredAssets()
     if (!m_searchQuery.empty())
     {
       const std::string& assetName = asset->getName();
-      const bool match = std::ranges::search(assetName, m_searchQuery, [](const char a, const char b){
+
+      const bool match = std::search(assetName.begin(), assetName.end(), m_searchQuery.begin(),
+                                     m_searchQuery.end(), [](char a, char b) {
         return std::tolower(a) == std::tolower(b);
-      }).begin() != assetName.end();
+      }) != assetName.end();
 
       if (!match)
       {
