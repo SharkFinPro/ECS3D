@@ -6,6 +6,7 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <VulkanEngine/components/window/Window.h>
+#include <ranges>
 
 AssetManager::AssetManager(ECS3D* ecs)
   : m_ecs(ecs)
@@ -20,13 +21,17 @@ void AssetManager::displayGui()
 {
   ImGui::Begin("Assets");
 
+  displayAssetsFilterGui();
+
+  computeFilteredAssets();
+
   constexpr int cellSize = 150;
   const float scaledCellSize = cellSize * m_ecs->getRenderer()->getWindow()->getContentScale();
   const float width = ImGui::GetContentRegionAvail().x;
 
   ImGui::Columns(std::max(1, static_cast<int>(width / scaledCellSize)), 0, false);
 
-  for (const auto& [name, asset] : m_assets)
+  for (const auto& asset : m_filteredAssets)
   {
     ImGui::PushID(&asset);
 
@@ -35,7 +40,7 @@ void AssetManager::displayGui()
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
     {
       ImGui::SetDragDropPayload("asset", &asset, sizeof(asset));
-      ImGui::Text(asset->getName().c_str());
+      ImGui::Text("%s", asset->getName().c_str());
       ImGui::EndDragDropSource();
     }
 
@@ -64,6 +69,8 @@ void AssetManager::loadScriptAsset(std::string path,
   m_assets.emplace(uuid, asset);
 
   m_loadedPaths.emplace(path, uuid);
+
+  m_shouldComputeFilteredAssets = true;
 }
 
 nlohmann::json AssetManager::serialize()
@@ -137,4 +144,120 @@ void AssetManager::loadFromJSON(const nlohmann::json& assetsData)
 
     m_loadedPaths.emplace(filePath, uuid);
   }
+
+  m_shouldComputeFilteredAssets = true;
+}
+
+void AssetManager::displayAssetsFilterGui()
+{
+  if (ImGui::CollapsingHeader("Options"))
+  {
+    ImGui::Spacing();
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Filter: ");
+    for (const auto& [type, typeStr] : assetTypeToString)
+    {
+      bool selected = m_filteredAssetType == type;
+
+      ImGui::SameLine();
+
+      if (ImGui::Checkbox(typeStr.c_str(), &selected))
+      {
+        m_filteredAssetType = selected ? type : AssetType::Unknown;
+
+        m_shouldComputeFilteredAssets = true;
+      }
+    }
+
+    char searchBuf[64] = {};
+    m_searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Search: ");
+    ImGui::SameLine();
+    if (ImGui::InputText("##Search", searchBuf, sizeof(searchBuf)))
+    {
+      m_searchQuery = searchBuf;
+
+      m_shouldComputeFilteredAssets = true;
+    }
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Sort: ");
+    ImGui::SameLine();
+    if (ImGui::BeginCombo("##SortCombo", sortTypeToString.at(m_sortType).c_str()))
+    {
+      if (ImGui::Selectable(sortTypeToString.at(SortType::nameAscending).c_str(), m_sortType == SortType::nameAscending))
+      {
+        m_sortType = SortType::nameAscending;
+
+        m_shouldComputeFilteredAssets = true;
+      }
+
+      if (ImGui::Selectable(sortTypeToString.at(SortType::nameDescending).c_str(), m_sortType == SortType::nameDescending))
+      {
+        m_sortType = SortType::nameDescending;
+
+        m_shouldComputeFilteredAssets = true;
+      }
+
+      ImGui::EndCombo();
+    }
+  }
+
+  ImGui::Separator();
+}
+
+void AssetManager::computeFilteredAssets()
+{
+  if (!m_shouldComputeFilteredAssets)
+  {
+    return;
+  }
+
+  m_filteredAssets.clear();
+
+  for (const auto& [_, asset] : m_assets)
+  {
+    if (m_filteredAssetType != AssetType::Unknown && asset->getAssetType() != m_filteredAssetType)
+    {
+      continue;
+    }
+
+    if (!m_searchQuery.empty())
+    {
+      const std::string& assetName = asset->getName();
+
+      const bool match = std::search(assetName.begin(), assetName.end(), m_searchQuery.begin(),
+                                     m_searchQuery.end(), [](char a, char b) {
+        return std::tolower(a) == std::tolower(b);
+      }) != assetName.end();
+
+      if (!match)
+      {
+        continue;
+      }
+    }
+
+    m_filteredAssets.emplace_back(asset);
+  }
+
+  std::ranges::sort(m_filteredAssets, [this](const auto& a, const auto& b) {
+    return std::ranges::lexicographical_compare(a->getName(), b->getName(), [this](const char x, const char y) {
+      if (m_sortType == SortType::nameAscending)
+      {
+        return std::tolower(x) < std::tolower(y);
+      }
+
+      if (m_sortType == SortType::nameDescending)
+      {
+        return std::tolower(x) > std::tolower(y);
+      }
+
+      return true;
+    });
+  });
+
+  m_shouldComputeFilteredAssets = false;
 }

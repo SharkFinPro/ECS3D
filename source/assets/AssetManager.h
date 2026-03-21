@@ -1,6 +1,7 @@
 #ifndef ASSETMANAGER_H
 #define ASSETMANAGER_H
 
+#include "Asset.h"
 #include "../ECS3D.h"
 #include <nlohmann/json_fwd.hpp>
 #include <memory>
@@ -11,6 +12,16 @@ class ECS3D;
 class Asset;
 class TextureAsset;
 class ModelAsset;
+
+enum class SortType {
+  nameAscending,
+  nameDescending
+};
+
+const std::unordered_map<SortType, std::string> sortTypeToString {
+  { SortType::nameAscending, "Name (A-Z)" },
+  { SortType::nameDescending, "Name (Z-A)" },
+};
 
 class AssetManager {
 public:
@@ -42,6 +53,20 @@ private:
   std::unordered_map<uuids::uuid, std::shared_ptr<Asset>> m_assets;
 
   std::unordered_map<std::string, uuids::uuid> m_loadedPaths;
+
+  AssetType m_filteredAssetType = AssetType::Unknown;
+
+  std::string m_searchQuery;
+
+  std::vector<std::shared_ptr<Asset>> m_filteredAssets;
+
+  SortType m_sortType = SortType::nameAscending;
+
+  bool m_shouldComputeFilteredAssets = true;
+
+  void displayAssetsFilterGui();
+
+  void computeFilteredAssets();
 };
 
 template<typename T>
@@ -61,6 +86,8 @@ void AssetManager::loadAsset(const std::string& path)
   m_assets.emplace(uuid, asset);
 
   m_loadedPaths.emplace(path, uuid);
+
+  m_shouldComputeFilteredAssets = true;
 }
 
 template<typename T>

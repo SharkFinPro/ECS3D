@@ -7,14 +7,30 @@
 
 class AssetManager;
 
+enum class AssetType {
+  Unknown,
+  Model,
+  Script,
+  Texture
+};
+
+const std::unordered_map<AssetType, std::string> assetTypeToString {
+  { AssetType::Model, "Model" },
+  { AssetType::Script, "Script" },
+  { AssetType::Texture, "Texture" }
+};
+
 class Asset {
 public:
-  explicit Asset(uuids::uuid uuid,
+  explicit Asset(AssetType assetType,
+                 uuids::uuid uuid,
                  std::string name);
 
   virtual ~Asset() = default;
 
   void setManager(AssetManager* assetManager);
+
+  [[nodiscard]] AssetType getAssetType() const;
 
   [[nodiscard]] std::string getName() const;
 
@@ -28,6 +44,8 @@ public:
 
 protected:
   AssetManager* m_assetManager = nullptr;
+
+  AssetType m_assetType = AssetType::Unknown;
 
   uuids::uuid m_uuid;
 
