@@ -145,32 +145,57 @@ void AssetManager::loadFromJSON(const nlohmann::json& assetsData)
 
 void AssetManager::displayAssetsFilterGui()
 {
-  ImGui::Text("Filter: ");
-
-  for (const auto& [type, typeStr] : assetTypeToString)
+  if (ImGui::CollapsingHeader("Options"))
   {
-    bool selected = m_filteredAssetType == type;
+    ImGui::Spacing();
 
-    ImGui::SameLine();
-
-    if (ImGui::Checkbox(typeStr.c_str(), &selected))
+    ImGui::Text("Filter: ");
+    for (const auto& [type, typeStr] : assetTypeToString)
     {
-      m_filteredAssetType = selected ? type : AssetType::Unknown;
+      bool selected = m_filteredAssetType == type;
+
+      ImGui::SameLine();
+
+      if (ImGui::Checkbox(typeStr.c_str(), &selected))
+      {
+        m_filteredAssetType = selected ? type : AssetType::Unknown;
+
+        m_shouldComputeFilteredAssets = true;
+      }
+    }
+
+    char searchBuf[64] = {};
+    m_searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
+
+    ImGui::Text("Search: ");
+    ImGui::SameLine();
+    if (ImGui::InputText("##Search", searchBuf, sizeof(searchBuf)))
+    {
+      m_searchQuery = searchBuf;
 
       m_shouldComputeFilteredAssets = true;
     }
-  }
 
-  char searchBuf[64] = {};
-  m_searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
+    ImGui::Text("Sort: ");
+    ImGui::SameLine();
+    if (ImGui::BeginCombo("##SortCombo", sortTypeToString.at(m_sortType).c_str()))
+    {
+      if (ImGui::Selectable(sortTypeToString.at(SortType::nameAscending).c_str(), m_sortType == SortType::nameAscending))
+      {
+        m_sortType = SortType::nameAscending;
 
-  ImGui::Text("Search: ");
-  ImGui::SameLine();
-  if (ImGui::InputText("##Search", searchBuf, sizeof(searchBuf)))
-  {
-    m_searchQuery = searchBuf;
+        m_shouldComputeFilteredAssets = true;
+      }
 
-    m_shouldComputeFilteredAssets = true;
+      if (ImGui::Selectable(sortTypeToString.at(SortType::nameDescending).c_str(), m_sortType == SortType::nameDescending))
+      {
+        m_sortType = SortType::nameDescending;
+
+        m_shouldComputeFilteredAssets = true;
+      }
+
+      ImGui::EndCombo();
+    }
   }
 
   ImGui::Separator();
@@ -207,6 +232,22 @@ void AssetManager::computeFilteredAssets()
 
     m_filteredAssets.emplace_back(asset);
   }
+
+  std::ranges::sort(m_filteredAssets, [this](const auto& a, const auto& b) {
+    return std::ranges::lexicographical_compare(a->getName(), b->getName(), [this](const char x, const char y) {
+      if (m_sortType == SortType::nameAscending)
+      {
+        return std::tolower(x) < std::tolower(y);
+      }
+
+      if (m_sortType == SortType::nameDescending)
+      {
+        return std::tolower(x) > std::tolower(y);
+      }
+
+      return true;
+    });
+  });
 
   m_shouldComputeFilteredAssets = false;
 }

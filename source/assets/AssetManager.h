@@ -13,6 +13,16 @@ class Asset;
 class TextureAsset;
 class ModelAsset;
 
+enum class SortType {
+  nameAscending,
+  nameDescending
+};
+
+const std::unordered_map<SortType, std::string> sortTypeToString {
+  { SortType::nameAscending, "Name (A-Z)" },
+  { SortType::nameDescending, "Name (Z-A)" },
+};
+
 class AssetManager {
 public:
   explicit AssetManager(ECS3D* ecs);
@@ -49,6 +59,8 @@ private:
   std::string m_searchQuery;
 
   std::vector<std::shared_ptr<Asset>> m_filteredAssets;
+
+  SortType m_sortType = SortType::nameAscending;
 
   bool m_shouldComputeFilteredAssets = true;
 
