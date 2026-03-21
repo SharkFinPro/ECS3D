@@ -22,8 +22,6 @@ void AssetManager::displayGui()
 
   ImGui::Text("Filter: ");
 
-  ImGui::SameLine();
-
   for (const auto& [type, typeStr] : assetTypeToString)
   {
     bool selected = m_filteredAssetType == type;
@@ -34,6 +32,16 @@ void AssetManager::displayGui()
     {
       m_filteredAssetType = selected ? type : AssetType::Unknown;
     }
+  }
+
+  char searchBuf[64] = {};
+  m_searchQuery.copy(searchBuf, sizeof(searchBuf) - 1);
+
+  ImGui::Text("Search: ");
+  ImGui::SameLine();
+  if (ImGui::InputText("##Search", searchBuf, sizeof(searchBuf)))
+  {
+    m_searchQuery = searchBuf;
   }
 
   ImGui::Separator();
@@ -49,6 +57,19 @@ void AssetManager::displayGui()
     if (m_filteredAssetType != AssetType::Unknown && asset->getAssetType() != m_filteredAssetType)
     {
       continue;
+    }
+
+    if (!m_searchQuery.empty())
+    {
+      const std::string& assetName = asset->getName();
+      const bool match = std::ranges::search(assetName, m_searchQuery, [](const char a, const char b){
+        return std::tolower(a) == std::tolower(b);
+      }).begin() != assetName.end();
+
+      if (!match)
+      {
+        continue;
+      }
     }
 
     ImGui::PushID(&asset);

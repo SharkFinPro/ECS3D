@@ -45,6 +45,8 @@ private:
   std::unordered_map<std::string, uuids::uuid> m_loadedPaths;
 
   AssetType m_filteredAssetType = AssetType::Unknown;
+
+  std::string m_searchQuery;
 };
 
 template<typename T>
