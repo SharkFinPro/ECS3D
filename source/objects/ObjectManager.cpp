@@ -12,7 +12,7 @@ ObjectManager::ObjectManager(ECS3D* ecs)
 
 void ObjectManager::fixedUpdate(const float dt) const
 {
-  for (const auto& object : m_objects)
+  for (const auto& object : m_allObjects)
   {
     object->fixedUpdate(dt);
   }
@@ -28,7 +28,7 @@ void ObjectManager::variableUpdate()
 
   m_objectGUIManager->displaySelectedObjectGui();
 
-  for (const auto& object : m_objects)
+  for (const auto& object : m_allObjects)
   {
     object->variableUpdate();
   }
@@ -53,6 +53,8 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   object->setManager(this);
 
   m_collisionManager->addObject(object);
+
+  m_allObjects.push_back(object);
 
   if (object->getParent() == nullptr)
   {
@@ -87,7 +89,7 @@ void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
 
 void ObjectManager::start() const
 {
-  for (const auto& object : m_objects)
+  for (const auto& object : m_allObjects)
   {
     object->start();
   }
@@ -95,7 +97,7 @@ void ObjectManager::start() const
 
 void ObjectManager::stop() const
 {
-  for (const auto& object : m_objects)
+  for (const auto& object : m_allObjects)
   {
     object->stop();
   }
@@ -122,7 +124,7 @@ void ObjectManager::removeObject(const std::shared_ptr<Object>& object)
 
 std::shared_ptr<Object> ObjectManager::getObjectByUUID(const uuids::uuid uuid) const
 {
-  for (const auto& object : m_objects)
+  for (const auto& object : m_allObjects)
   {
     if (object->getUUID() == uuid)
     {
@@ -152,6 +154,10 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
     {
       parent->removeChild(object);
     }
+    else
+    {
+      removeObjectFromRoot(object);
+    }
 
     const auto children = object->getChildren();
     for (const auto& child : children)
@@ -170,7 +176,8 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
     }
 
     m_collisionManager->removeObject(object);
-    std::erase(m_objects, object);
+
+    std::erase(m_allObjects, object);
   }
 
   m_objectsToRemove.clear();

@@ -48,6 +48,8 @@ private:
 
   std::vector<std::shared_ptr<Object>> m_objects;
 
+  std::vector<std::shared_ptr<Object>> m_allObjects;
+
   std::vector<std::shared_ptr<Object>> m_objectsToRemove;
 
   std::shared_ptr<CollisionManager> m_collisionManager;
