@@ -153,8 +153,10 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
       parent->removeChild(object);
     }
 
-    for (const auto& child : object->getChildren())
+    const auto children = object->getChildren();
+    for (const auto& child : children)
     {
+      object->removeChild(child);
       child->setParent(parent);
 
       if (parent)
@@ -167,6 +169,7 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
       }
     }
 
+    m_collisionManager->removeObject(object);
     std::erase(m_objects, object);
   }
 

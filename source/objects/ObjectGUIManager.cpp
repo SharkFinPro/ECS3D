@@ -308,6 +308,16 @@ void ObjectGUIManager::displayDeleteConfirmationModal()
 
 void ObjectGUIManager::deleteNodeQueriedForDeletion()
 {
+  if (m_focusedObject == m_objectCheckingForDeletion)
+  {
+    m_focusedObject = nullptr;
+  }
+
+  if (m_selectedObject == m_objectCheckingForDeletion)
+  {
+    m_selectedObject = nullptr;
+  }
+
   m_objectManager->removeObject(m_objectCheckingForDeletion);
 
   m_objectCheckingForDeletion = nullptr;
