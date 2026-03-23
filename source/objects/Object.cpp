@@ -303,11 +303,11 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
 {
   std::shared_ptr<Component> component = nullptr;
 
-  const auto componentType = componentData["type"];
+  const auto& componentType = componentData["type"];
 
   if (componentType == "Collider")
   {
-    const auto componentSubType = componentData["subType"];
+    const auto& componentSubType = componentData["subType"];
 
     if (componentSubType == "Box")
     {
