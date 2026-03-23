@@ -322,7 +322,7 @@ void ObjectGUIManager::processReassignment()
   }
 
   const auto parent = m_pendingReassignment.newParent;
-  if (object->isAncestorOf(parent))
+  if (object == parent || object->isAncestorOf(parent))
   {
     m_pendingReassignment = {};
 
