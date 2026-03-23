@@ -22,6 +22,8 @@ public:
   Object(const nlohmann::json& objectData,
          ObjectManager* manager);
 
+  void loadChildren(const nlohmann::json& childrenData);
+
   void setParent(const std::shared_ptr<Object>& parent);
   [[nodiscard]] std::shared_ptr<Object> getParent() const;
 

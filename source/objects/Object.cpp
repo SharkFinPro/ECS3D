@@ -36,6 +36,22 @@ Object::Object(const nlohmann::json& objectData,
   loadFromJSON(objectData);
 }
 
+void Object::loadChildren(const nlohmann::json& childrenData)
+{
+  for (const auto& childData : childrenData)
+  {
+    const auto child = std::make_shared<Object>(childData, m_manager);
+    child->setParent(shared_from_this());
+
+    m_manager->addObject(child);
+
+    if (childData.contains("children"))
+    {
+      child->loadChildren(childData["children"]);
+    }
+  }
+}
+
 void Object::setParent(const std::shared_ptr<Object>& parent)
 {
   m_parent = parent;
@@ -198,6 +214,7 @@ nlohmann::json Object::serialize()
 
   nlohmann::json data = {
     { "name", cleanName },
+    { "children", nlohmann::json::array() },
     { "components", nlohmann::json::array() },
     { "scripts", nlohmann::json::array() },
     { "uuid", uuids::to_string(m_uuid) }
@@ -211,6 +228,11 @@ nlohmann::json Object::serialize()
   for (const auto& script : m_scripts)
   {
     data["scripts"].push_back(script->serialize());
+  }
+
+  for (const auto& child : m_children)
+  {
+    data["children"].push_back(child->serialize());
   }
 
   return data;
