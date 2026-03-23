@@ -22,8 +22,17 @@ public:
   Object(const nlohmann::json& objectData,
          ObjectManager* manager);
 
+  void loadChildren(const nlohmann::json& childrenData);
+
   void setParent(const std::shared_ptr<Object>& parent);
+
   [[nodiscard]] std::shared_ptr<Object> getParent() const;
+
+  void addChild(std::shared_ptr<Object> child);
+
+  void removeChild(const std::shared_ptr<Object>& child);
+
+  [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getChildren() const;
 
   void addComponent(const std::shared_ptr<Component>& component,
                     bool setOwner = true);
@@ -50,13 +59,17 @@ public:
 
   [[nodiscard]] uuids::uuid getUUID() const;
 
+  [[nodiscard]] bool isAncestorOf(const std::shared_ptr<Object>& object) const;
+
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> m_components;
   std::vector<std::shared_ptr<Component>> m_scripts;
 
   ObjectManager* m_manager = nullptr;
 
-  std::shared_ptr<Object> m_parent;
+  std::weak_ptr<Object> m_parent;
+
+  std::vector<std::shared_ptr<Object>> m_children;
 
   uuids::uuid m_uuid;
 

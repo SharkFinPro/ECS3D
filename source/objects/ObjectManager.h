@@ -25,6 +25,10 @@ public:
 
   void addObject(const std::shared_ptr<Object>& object);
 
+  void addObjectToRoot(const std::shared_ptr<Object>& object);
+
+  void removeObjectFromRoot(const std::shared_ptr<Object>& object);
+
   void duplicateObject(const std::shared_ptr<Object>& object);
 
   void start() const;
@@ -35,12 +39,16 @@ public:
 
   void removeObject(const std::shared_ptr<Object>& object);
 
-  std::shared_ptr<Object> getObjectByUUID(uuids::uuid uuid) const;
+  [[nodiscard]] std::shared_ptr<Object> getObjectByUUID(uuids::uuid uuid) const;
+
+  [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getObjects() const;
 
 private:
   ECS3D* m_ecs = nullptr;
 
   std::vector<std::shared_ptr<Object>> m_objects;
+
+  std::vector<std::shared_ptr<Object>> m_allObjects;
 
   std::vector<std::shared_ptr<Object>> m_objectsToRemove;
 

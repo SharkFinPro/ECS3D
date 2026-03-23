@@ -137,7 +137,13 @@ void Scene::loadFromJSON(const nlohmann::json& sceneData)
 
   for (const auto& objectData : sceneData["objects"])
   {
-    m_objectManager->addObject(std::make_shared<Object>(objectData, m_objectManager.get()));
+    auto object = std::make_shared<Object>(objectData, m_objectManager.get());
+    m_objectManager->addObject(object);
+
+    if (objectData.contains("children"))
+    {
+      object->loadChildren(objectData["children"]);
+    }
   }
 }
 

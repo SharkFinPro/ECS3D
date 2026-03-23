@@ -26,33 +26,9 @@ void ObjectGUIManager::update()
 
   displayDeleteConfirmationModal();
 
-  processDeletions();
-
-  processReassignments();
+  processReassignment();
 
   m_mouseWasPressed = m_objectManager->getECS()->getRenderer()->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
-}
-
-void ObjectGUIManager::addObject(const std::shared_ptr<Object>& object,
-                                 const std::shared_ptr<ObjectUINode>& parentUINode)
-{
-  if (containsObjectUINode(m_objectUINodes, object))
-  {
-    return;
-  }
-
-  const auto uiNode = std::make_shared<ObjectUINode>();
-  uiNode->object = object;
-  uiNode->parent = parentUINode;
-
-  if (parentUINode)
-  {
-    parentUINode->children.push_back(uiNode);
-  }
-  else
-  {
-    m_objectUINodes.push_back(uiNode);
-  }
 }
 
 void ObjectGUIManager::displaySelectedObjectGui()
@@ -77,118 +53,20 @@ void ObjectGUIManager::displaySelectedObjectGui()
   ImGui::End();
 }
 
-bool ObjectGUIManager::containsObjectUINode(const std::vector<std::shared_ptr<ObjectUINode>>& rootNodes,
-                                            const std::shared_ptr<Object>& object)
-{
-  return std::ranges::any_of(rootNodes, [&](const auto& node)
-  {
-    return node->object == object || containsObjectUINode(node->children, object);
-  });
-}
-
-bool ObjectGUIManager::isAncestor(const std::shared_ptr<ObjectUINode>& source,
-                                  const std::shared_ptr<ObjectUINode>& target)
-{
-  auto current = source;
-  while (current)
-  {
-    if (target == current)
-    {
-      return true;
-    }
-
-    current = current->parent;
-  }
-
-  return false;
-}
-
-void ObjectGUIManager::processReassignments()
-{
-  if (m_pendingReassignments.empty())
-  {
-    return;
-  }
-
-  for (int i = 0; i < m_pendingReassignments.size(); ++i)
-  {
-    const auto node = m_pendingReassignments[i];
-
-    if (!isAncestor(node->newParent, node))
-    {
-      continue;
-    }
-
-    for (auto& child : node->children)
-    {
-      child->newParent = node->parent;
-      m_pendingReassignments.push_back(child);
-    }
-  }
-
-  for (auto& node : m_pendingReassignments)
-  {
-    std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
-
-    if (node->newParent)
-    {
-      node->parent = node->newParent;
-      node->object->setParent(node->newParent->object);
-      node->newParent->children.push_back(node);
-      node->newParent = nullptr;
-    }
-    else
-    {
-      node->parent = nullptr;
-      node->object->setParent(nullptr);
-      m_objectUINodes.push_back(node);
-    }
-  }
-
-  m_pendingReassignments.clear();
-}
-
-void ObjectGUIManager::processDeletions()
-{
-  if (m_pendingDeletions.empty())
-  {
-    return;
-  }
-
-  for (const auto& node : m_pendingDeletions)
-  {
-    for (const auto& child : node->children)
-    {
-      child->newParent = node->parent;
-      m_pendingReassignments.push_back(child);
-    }
-
-    if (m_focusedNode == node)
-    {
-      m_focusedNode = nullptr;
-    }
-
-    if (m_selectedObject == node->object)
-    {
-      m_selectedObject = nullptr;
-    }
-
-    std::erase(node->parent ? node->parent->children : m_objectUINodes, node);
-  }
-
-  m_pendingDeletions.clear();
-}
-
-void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>& node)
+void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<Object>& object)
 {
   if (ImGui::BeginDragDropTarget())
   {
-    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("objectUINode"))
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
     {
-      const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
-
-      objectNode->newParent = node;
-      m_pendingReassignments.push_back(objectNode);
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto uuid = uuids::uuid::from_string(uuidStr))
+      {
+        m_pendingReassignment = {
+          .object = m_objectManager->getObjectByUUID(uuid.value()),
+          .newParent = object
+        };
+      }
     }
 
     ImGui::EndDragDropTarget();
@@ -196,13 +74,14 @@ void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<ObjectUINode>
 
   if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
   {
-    ImGui::SetDragDropPayload("objectUINode", &node, sizeof(node));
+    const std::string uuidStr = uuids::to_string(object->getUUID());
+    ImGui::SetDragDropPayload("object", uuidStr.c_str(), uuidStr.size());
     ImGui::Text("Object");
     ImGui::EndDragDropSource();
   }
 }
 
-void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<ObjectUINode>& node)
+void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Object>& object)
 {
   ImGui::SameLine();
 
@@ -214,15 +93,15 @@ void ObjectGUIManager::displayCreateObjectChildButton(const std::shared_ptr<Obje
   if (ImGui::Button("+", {buttonWidth, 0}))
   {
     const auto newObject = std::make_shared<Object>();
-    newObject->setParent(node->object);
+    newObject->setParent(object);
 
-    addObject(newObject, node);
     m_objectManager->addObject(newObject);
+
     m_selectedObject = newObject;
   }
 }
 
-void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<ObjectUINode>& node)
+void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<Object>& object)
 {
   ImGui::SameLine();
 
@@ -233,13 +112,15 @@ void ObjectGUIManager::displayDeleteObjectButton(const std::shared_ptr<ObjectUIN
 
   if (ImGui::Button("-", {buttonWidth, 0}))
   {
-    m_nodeCheckingForDeletion = node;
+    m_objectCheckingForDeletion = object;
   }
 }
 
-void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& node)
+void ObjectGUIManager::displayObjectGui(const std::shared_ptr<Object>& object)
 {
-  const auto modelRenderer = node->object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
+  const auto& children = object->getChildren();
+
+  const auto modelRenderer = object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
   const auto renderer = m_objectManager->getECS()->getRenderer();
 
   if (!m_mouseWasPressed &&
@@ -249,35 +130,34 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
   {
     if (modelRenderer && modelRenderer->selectedByRenderer())
     {
-      m_selectedObject = node->object;
+      m_selectedObject = object;
     }
-    else if (m_selectedObject == node->object)
+    else if (m_selectedObject == object)
     {
       m_selectedObject = nullptr;
     }
   }
 
-  ImGui::PushID(&node->object);
+  ImGui::PushID(object.get());
 
-  if (ImGui::TreeNodeEx(node->object->getName().c_str(),
-                        (node->children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
-                        (m_selectedObject == node->object ? ImGuiTreeNodeFlags_Selected : 0) |
+  if (ImGui::TreeNodeEx(object->getName().c_str(),
+                        (children.empty() ? ImGuiTreeNodeFlags_Leaf : 0) |
+                        (m_selectedObject == object ? ImGuiTreeNodeFlags_Selected : 0) |
                         ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth |
                         ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_OpenOnDoubleClick))
   {
-
     if (ImGui::IsItemFocused())
     {
-      m_focusedNode = node;
+      m_focusedObject = object;
     }
-    else if (m_focusedNode == node)
+    else if (m_focusedObject == object)
     {
-      m_focusedNode = nullptr;
+      m_focusedObject = nullptr;
     }
 
     if (ImGui::IsItemClicked())
     {
-      m_selectedObject = node->object;
+      m_selectedObject = object;
     }
 
     if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -289,25 +169,20 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<ObjectUINode>& nod
     {
       if (ImGui::MenuItem("Duplicate"))
       {
-        m_objectManager->duplicateObject(node->object);
+        m_objectManager->duplicateObject(object);
       }
       ImGui::EndPopup();
     }
 
-    displayObjectDragDrop(node);
+    displayObjectDragDrop(object);
 
-    const bool hasChildren = !node->children.empty();
+    displayCreateObjectChildButton(object);
 
-    displayCreateObjectChildButton(node);
+    displayDeleteObjectButton(object);
 
-    displayDeleteObjectButton(node);
-
-    if (hasChildren)
+    for (const auto& child : children)
     {
-      for (const auto& child : node->children)
-      {
-        displayObjectGui(child);
-      }
+      displayObjectGui(child);
     }
 
     ImGui::TreePop();
@@ -323,8 +198,9 @@ void ObjectGUIManager::displayObjectListGui()
   if (ImGui::Button("Create New Object", {ImGui::GetContentRegionAvail().x, 45}))
   {
     const auto newObject = std::make_shared<Object>();
-    addObject(newObject);
+
     m_objectManager->addObject(newObject);
+
     m_selectedObject = newObject;
   }
 
@@ -333,20 +209,24 @@ void ObjectGUIManager::displayObjectListGui()
   ImGui::Spacing();
 
   ImGui::BeginChild("##");
-  for (const auto& node : m_objectUINodes)
+  for (const auto& object : m_objectManager->getObjects())
   {
-    displayObjectGui(node);
+    displayObjectGui(object);
   }
   ImGui::EndChild();
 
   if (ImGui::BeginDragDropTarget())
   {
-    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("objectUINode"))
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
     {
-      const auto objectNode = *static_cast<std::shared_ptr<ObjectUINode>*>(payload->Data);
-
-      objectNode->newParent = nullptr;
-      m_pendingReassignments.push_back(objectNode);
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto uuid = uuids::uuid::from_string(uuidStr))
+      {
+        m_pendingReassignment = {
+          .object = m_objectManager->getObjectByUUID(uuid.value()),
+          .newParent = nullptr
+        };
+      }
     }
 
     ImGui::EndDragDropTarget();
@@ -365,21 +245,21 @@ void ObjectGUIManager::registerWindowEvents()
       return;
     }
 
-    if (m_focusedNode &&
+    if (m_focusedObject &&
         ecs->keyIsPressed(GLFW_KEY_DELETE))
     {
-      m_nodeCheckingForDeletion = m_focusedNode;
+      m_objectCheckingForDeletion = m_focusedObject;
     }
 
-    if (m_focusedNode &&
+    if (m_focusedObject &&
         ecs->keyIsPressed(GLFW_KEY_LEFT_CONTROL) &&
         ecs->keyIsPressed(GLFW_KEY_LEFT_SHIFT) &&
         ecs->keyIsPressed(GLFW_KEY_D))
     {
-      m_objectManager->duplicateObject(m_focusedNode->object);
+      m_objectManager->duplicateObject(m_focusedObject);
     }
 
-    if (m_nodeCheckingForDeletion &&
+    if (m_objectCheckingForDeletion &&
         ecs->keyIsPressed(GLFW_KEY_ENTER))
     {
       deleteNodeQueriedForDeletion();
@@ -389,7 +269,7 @@ void ObjectGUIManager::registerWindowEvents()
 
 void ObjectGUIManager::displayDeleteConfirmationModal()
 {
-  if (!m_nodeCheckingForDeletion)
+  if (!m_objectCheckingForDeletion)
   {
     return;
   }
@@ -402,7 +282,7 @@ void ObjectGUIManager::displayDeleteConfirmationModal()
   {
     ImGui::Text("Are you sure you want to delete");
     ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", m_nodeCheckingForDeletion->object->getName().c_str());
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", m_objectCheckingForDeletion->getName().c_str());
     ImGui::SameLine();
     ImGui::Text("?");
 
@@ -419,7 +299,7 @@ void ObjectGUIManager::displayDeleteConfirmationModal()
 
     if (ImGui::Button("No", ImVec2(120, 0)))
     {
-      m_nodeCheckingForDeletion = nullptr;
+      m_objectCheckingForDeletion = nullptr;
     }
 
     ImGui::EndPopup();
@@ -433,9 +313,56 @@ void ObjectGUIManager::displayDeleteConfirmationModal()
 
 void ObjectGUIManager::deleteNodeQueriedForDeletion()
 {
-  m_objectManager->removeObject(m_nodeCheckingForDeletion->object);
+  if (m_focusedObject == m_objectCheckingForDeletion)
+  {
+    m_focusedObject = nullptr;
+  }
 
-  m_pendingDeletions.push_back(m_nodeCheckingForDeletion);
+  if (m_selectedObject == m_objectCheckingForDeletion)
+  {
+    m_selectedObject = nullptr;
+  }
 
-  m_nodeCheckingForDeletion = nullptr;
+  m_objectManager->removeObject(m_objectCheckingForDeletion);
+
+  m_objectCheckingForDeletion = nullptr;
+}
+
+void ObjectGUIManager::processReassignment()
+{
+  const auto object = m_pendingReassignment.object;
+  if (!object)
+  {
+    return;
+  }
+
+  const auto parent = m_pendingReassignment.newParent;
+  if (object == parent || object->isAncestorOf(parent))
+  {
+    m_pendingReassignment = {};
+
+    return;
+  }
+
+  if (object->getParent())
+  {
+    object->getParent()->removeChild(object);
+  }
+  else
+  {
+    m_objectManager->removeObjectFromRoot(object);
+  }
+
+  object->setParent(parent);
+
+  if (parent)
+  {
+    parent->addChild(object);
+  }
+  else
+  {
+    m_objectManager->addObjectToRoot(object);
+  }
+
+  m_pendingReassignment = {};
 }

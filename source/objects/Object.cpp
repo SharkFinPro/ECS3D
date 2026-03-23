@@ -36,6 +36,22 @@ Object::Object(const nlohmann::json& objectData,
   loadFromJSON(objectData);
 }
 
+void Object::loadChildren(const nlohmann::json& childrenData)
+{
+  for (const auto& childData : childrenData)
+  {
+    const auto child = std::make_shared<Object>(childData, m_manager);
+    child->setParent(shared_from_this());
+
+    m_manager->addObject(child);
+
+    if (childData.contains("children"))
+    {
+      child->loadChildren(childData["children"]);
+    }
+  }
+}
+
 void Object::setParent(const std::shared_ptr<Object>& parent)
 {
   m_parent = parent;
@@ -43,7 +59,22 @@ void Object::setParent(const std::shared_ptr<Object>& parent)
 
 std::shared_ptr<Object> Object::getParent() const
 {
-  return m_parent;
+  return m_parent.lock();
+}
+
+void Object::addChild(std::shared_ptr<Object> child)
+{
+  m_children.emplace_back(std::move(child));
+}
+
+void Object::removeChild(const std::shared_ptr<Object>& child)
+{
+  std::erase(m_children, child);
+}
+
+const std::vector<std::shared_ptr<Object>>& Object::getChildren() const
+{
+  return m_children;
 }
 
 void Object::addComponent(const std::shared_ptr<Component>& component,
@@ -183,6 +214,7 @@ nlohmann::json Object::serialize()
 
   nlohmann::json data = {
     { "name", cleanName },
+    { "children", nlohmann::json::array() },
     { "components", nlohmann::json::array() },
     { "scripts", nlohmann::json::array() },
     { "uuid", uuids::to_string(m_uuid) }
@@ -198,6 +230,11 @@ nlohmann::json Object::serialize()
     data["scripts"].push_back(script->serialize());
   }
 
+  for (const auto& child : m_children)
+  {
+    data["children"].push_back(child->serialize());
+  }
+
   return data;
 }
 
@@ -206,17 +243,33 @@ uuids::uuid Object::getUUID() const
   return m_uuid;
 }
 
+bool Object::isAncestorOf(const std::shared_ptr<Object>& object) const
+{
+  auto current = getParent();
+  while (current)
+  {
+    if (object == current)
+    {
+      return true;
+    }
+
+    current = current->getParent();
+  }
+
+  return false;
+}
+
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
   const auto component = m_components.find(type);
 
   if (component == m_components.end())
   {
-    if (m_parent != nullptr)
+    if (const auto parent = getParent())
     {
       if (type == ComponentType::rigidBody)
       {
-        return m_parent->getComponent(type);
+        return parent->getComponent(type);
       }
     }
 
@@ -250,11 +303,11 @@ std::shared_ptr<Component> Object::loadComponentFromJSON(const nlohmann::json& c
 {
   std::shared_ptr<Component> component = nullptr;
 
-  const auto componentType = componentData["type"];
+  const auto& componentType = componentData["type"];
 
   if (componentType == "Collider")
   {
-    const auto componentSubType = componentData["subType"];
+    const auto& componentSubType = componentData["subType"];
 
     if (componentSubType == "Box")
     {
