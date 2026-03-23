@@ -29,6 +29,8 @@ public:
 
   void removeChild(const std::shared_ptr<Object>& child);
 
+  [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getChildren() const;
+
   void addComponent(const std::shared_ptr<Component>& component,
                     bool setOwner = true);
 
