@@ -59,12 +59,14 @@ void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<Object>& obje
   {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
     {
-      const auto objectPayload = *static_cast<std::shared_ptr<Object>*>(payload->Data);
-
-      m_pendingReassignment = {
-        .object = objectPayload,
-        .newParent = object
-      };
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto uuid = uuids::uuid::from_string(uuidStr))
+      {
+        m_pendingReassignment = {
+          .object = m_objectManager->getObjectByUUID(uuid.value()),
+          .newParent = object
+        };
+      }
     }
 
     ImGui::EndDragDropTarget();
@@ -72,7 +74,8 @@ void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<Object>& obje
 
   if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
   {
-    ImGui::SetDragDropPayload("object", &object, sizeof(object));
+    const std::string uuidStr = uuids::to_string(object->getUUID());
+    ImGui::SetDragDropPayload("object", uuidStr.c_str(), uuidStr.size());
     ImGui::Text("Object");
     ImGui::EndDragDropSource();
   }
@@ -216,12 +219,14 @@ void ObjectGUIManager::displayObjectListGui()
   {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
     {
-      const auto objectPayload = *static_cast<std::shared_ptr<Object>*>(payload->Data);
-
-      m_pendingReassignment = {
-        .object = objectPayload,
-        .newParent = nullptr
-      };
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto uuid = uuids::uuid::from_string(uuidStr))
+      {
+        m_pendingReassignment = {
+          .object = m_objectManager->getObjectByUUID(uuid.value()),
+          .newParent = nullptr
+        };
+      }
     }
 
     ImGui::EndDragDropTarget();
