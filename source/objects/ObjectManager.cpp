@@ -147,6 +147,26 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
 
   for (const auto& object : m_objectsToRemove)
   {
+    const auto parent = object->getParent();
+    if (parent)
+    {
+      parent->removeChild(object);
+    }
+
+    for (const auto& child : object->getChildren())
+    {
+      child->setParent(parent);
+
+      if (parent)
+      {
+        parent->addChild(child);
+      }
+      else
+      {
+        addObjectToRoot(child);
+      }
+    }
+
     std::erase(m_objects, object);
   }
 
