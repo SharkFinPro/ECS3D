@@ -54,9 +54,24 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 
   m_collisionManager->addObject(object);
 
-  m_objects.push_back(object);
+  if (object->getParent() == nullptr)
+  {
+    m_objects.push_back(object);
+  }
+  else
+  {
+    object->getParent()->addChild(object);
+  }
+}
 
-  m_objectGUIManager->addObject(object);
+void ObjectManager::addObjectToRoot(const std::shared_ptr<Object>& object)
+{
+  m_objects.push_back(object);
+}
+
+void ObjectManager::removeObjectFromRoot(const std::shared_ptr<Object>& object)
+{
+  std::erase(m_objects, object);
 }
 
 void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
@@ -64,7 +79,10 @@ void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
   auto objectData = object->serialize();
   objectData.at("name") = std::string(objectData.at("name")) + " - Copy";
 
-  addObject(std::make_shared<Object>(objectData, this));
+  const auto newObject = std::make_shared<Object>(objectData, this);
+  newObject->setParent(object->getParent());
+
+  addObject(newObject);
 }
 
 void ObjectManager::start() const
@@ -113,6 +131,11 @@ std::shared_ptr<Object> ObjectManager::getObjectByUUID(const uuids::uuid uuid) c
   }
 
   return nullptr;
+}
+
+const std::vector<std::shared_ptr<Object>>& ObjectManager::getObjects() const
+{
+  return m_objects;
 }
 
 void ObjectManager::deleteObjectsMarkedForDeletion()
