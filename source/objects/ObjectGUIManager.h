@@ -59,7 +59,7 @@ private:
 
   void deleteNodeQueriedForDeletion();
 
-  void reassignObjectPendingReassignment();
+  void processReassignment();
 };
 
 

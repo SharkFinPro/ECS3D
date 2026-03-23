@@ -26,7 +26,7 @@ void ObjectGUIManager::update()
 
   displayDeleteConfirmationModal();
 
-  reassignObjectPendingReassignment();
+  processReassignment();
 
   m_mouseWasPressed = m_objectManager->getECS()->getRenderer()->getWindow()->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
 }
@@ -160,7 +160,6 @@ void ObjectGUIManager::displayObjectGui(const std::shared_ptr<Object>& object)
                         ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_SpanAvailWidth |
                         ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_OpenOnDoubleClick))
   {
-
     if (ImGui::IsItemFocused())
     {
       m_focusedObject = object;
@@ -331,7 +330,7 @@ void ObjectGUIManager::deleteNodeQueriedForDeletion()
   m_objectCheckingForDeletion = nullptr;
 }
 
-void ObjectGUIManager::reassignObjectPendingReassignment()
+void ObjectGUIManager::processReassignment()
 {
   const auto object = m_pendingReassignment.object;
   if (!object)
