@@ -59,7 +59,7 @@ void Object::setParent(const std::shared_ptr<Object>& parent)
 
 std::shared_ptr<Object> Object::getParent() const
 {
-  return m_parent;
+  return m_parent.lock();
 }
 
 void Object::addChild(std::shared_ptr<Object> child)
@@ -265,11 +265,11 @@ std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 
   if (component == m_components.end())
   {
-    if (m_parent != nullptr)
+    if (const auto parent = getParent())
     {
       if (type == ComponentType::rigidBody)
       {
-        return m_parent->getComponent(type);
+        return parent->getComponent(type);
       }
     }
 

@@ -25,6 +25,7 @@ public:
   void loadChildren(const nlohmann::json& childrenData);
 
   void setParent(const std::shared_ptr<Object>& parent);
+
   [[nodiscard]] std::shared_ptr<Object> getParent() const;
 
   void addChild(std::shared_ptr<Object> child);
@@ -66,7 +67,7 @@ private:
 
   ObjectManager* m_manager = nullptr;
 
-  std::shared_ptr<Object> m_parent;
+  std::weak_ptr<Object> m_parent;
 
   std::vector<std::shared_ptr<Object>> m_children;
 
