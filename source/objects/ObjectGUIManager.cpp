@@ -53,23 +53,6 @@ void ObjectGUIManager::displaySelectedObjectGui()
   ImGui::End();
 }
 
-bool ObjectGUIManager::isAncestor(const std::shared_ptr<Object>& source,
-                                  const std::shared_ptr<Object>& target)
-{
-  auto current = source;
-  while (current)
-  {
-    if (target == current)
-    {
-      return true;
-    }
-
-    current = current->getParent();
-  }
-
-  return false;
-}
-
 void ObjectGUIManager::displayObjectDragDrop(const std::shared_ptr<Object>& object)
 {
   if (ImGui::BeginDragDropTarget())
@@ -339,7 +322,7 @@ void ObjectGUIManager::processReassignment()
   }
 
   const auto parent = m_pendingReassignment.newParent;
-  if (isAncestor(object, parent))
+  if (object->isAncestorOf(parent))
   {
     m_pendingReassignment = {};
 

@@ -243,6 +243,22 @@ uuids::uuid Object::getUUID() const
   return m_uuid;
 }
 
+bool Object::isAncestorOf(const std::shared_ptr<Object>& object) const
+{
+  auto current = shared_from_this();
+  while (current)
+  {
+    if (object == current)
+    {
+      return true;
+    }
+
+    current = current->getParent();
+  }
+
+  return false;
+}
+
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
 {
   const auto component = m_components.find(type);

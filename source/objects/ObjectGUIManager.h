@@ -40,9 +40,6 @@ private:
 
   vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
 
-  static bool isAncestor(const std::shared_ptr<Object>& source,
-                         const std::shared_ptr<Object>& target);
-
   void displayObjectDragDrop(const std::shared_ptr<Object>& object);
 
   void displayCreateObjectChildButton(const std::shared_ptr<Object>& object);
