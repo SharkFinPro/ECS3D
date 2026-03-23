@@ -46,6 +46,16 @@ std::shared_ptr<Object> Object::getParent() const
   return m_parent;
 }
 
+void Object::addChild(std::shared_ptr<Object> child)
+{
+  m_children.emplace_back(std::move(child));
+}
+
+void Object::removeChild(const std::shared_ptr<Object>& child)
+{
+  std::erase(m_children, child);
+}
+
 void Object::addComponent(const std::shared_ptr<Component>& component,
                           const bool setOwner)
 {

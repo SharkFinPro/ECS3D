@@ -25,6 +25,10 @@ public:
   void setParent(const std::shared_ptr<Object>& parent);
   [[nodiscard]] std::shared_ptr<Object> getParent() const;
 
+  void addChild(std::shared_ptr<Object> child);
+
+  void removeChild(const std::shared_ptr<Object>& child);
+
   void addComponent(const std::shared_ptr<Component>& component,
                     bool setOwner = true);
 
@@ -57,6 +61,8 @@ private:
   ObjectManager* m_manager = nullptr;
 
   std::shared_ptr<Object> m_parent;
+
+  std::vector<std::shared_ptr<Object>> m_children;
 
   uuids::uuid m_uuid;
 
