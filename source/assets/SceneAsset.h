@@ -8,8 +8,7 @@ class SceneManager;
 
 class SceneAsset : public Asset {
 public:
-  explicit SceneAsset(SceneManager* sceneManager,
-                      uuids::uuid uuid,
+  explicit SceneAsset(uuids::uuid uuid,
                       std::string name);
 
   void fixedUpdate(float dt) const;
@@ -20,10 +19,12 @@ public:
 
   void stop() const;
 
+  void load() override;
+
   nlohmann::json serialize() override;
 
 private:
-  SceneManager* m_sceneManager;
+  std::shared_ptr<SceneManager> m_sceneManager;
 
   std::shared_ptr<ObjectManager> m_objectManager;
 };

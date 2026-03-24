@@ -3,10 +3,11 @@
 #include "../scenes/SceneManager.h"
 #include <nlohmann/json.hpp>
 
-SceneAsset::SceneAsset(SceneManager* sceneManager,
-                       const uuids::uuid uuid,
+#include "AssetManager.h"
+
+SceneAsset::SceneAsset(const uuids::uuid uuid,
                        std::string name)
-  : Asset(AssetType::Scene, uuid, std::move(name)), m_sceneManager(sceneManager)
+  : Asset(AssetType::Scene, uuid, std::move(name))
 {}
 
 void SceneAsset::fixedUpdate(const float dt) const
@@ -32,6 +33,11 @@ void SceneAsset::start() const
 void SceneAsset::stop() const
 {
   m_objectManager->stop();
+}
+
+void SceneAsset::load()
+{
+  m_sceneManager = m_assetManager->getECS()->getSceneManager();
 }
 
 nlohmann::json SceneAsset::serialize()
