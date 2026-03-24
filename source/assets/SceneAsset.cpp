@@ -1,9 +1,8 @@
 #include "SceneAsset.h"
+#include "AssetManager.h"
 #include "../objects/ObjectManager.h"
 #include "../scenes/SceneManager.h"
 #include <nlohmann/json.hpp>
-
-#include "AssetManager.h"
 
 SceneAsset::SceneAsset(const uuids::uuid uuid,
                        std::string name)
