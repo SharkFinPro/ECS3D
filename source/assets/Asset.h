@@ -10,6 +10,7 @@ class AssetManager;
 enum class AssetType {
   Unknown,
   Model,
+  Scene,
   Script,
   Texture
 };
