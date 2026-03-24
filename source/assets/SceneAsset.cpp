@@ -2,6 +2,7 @@
 #include "AssetManager.h"
 #include "../objects/ObjectManager.h"
 #include "../scenes/SceneManager.h"
+#include <imgui.h>
 #include <nlohmann/json.hpp>
 
 SceneAsset::SceneAsset(const uuids::uuid uuid,
@@ -41,6 +42,13 @@ void SceneAsset::load()
   m_sceneManager = ecs->getSceneManager();
 
   m_objectManager = std::make_shared<ObjectManager>(ecs);
+}
+
+void SceneAsset::displayGui(float cellSize)
+{
+  Asset::displayGui(cellSize);
+
+  ImGui::Button("Scene", { cellSize, cellSize });
 }
 
 nlohmann::json SceneAsset::serialize()

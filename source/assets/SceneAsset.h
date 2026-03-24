@@ -21,6 +21,8 @@ public:
 
   void load() override;
 
+  void displayGui(float cellSize) override;
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   [[nodiscard]] std::shared_ptr<ObjectManager> getObjectManager() const;
