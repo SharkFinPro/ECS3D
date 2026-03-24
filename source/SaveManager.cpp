@@ -1,7 +1,6 @@
 #include "SaveManager.h"
 #include "ECS3D.h"
 #include "assets/AssetManager.h"
-#include "scenes/SceneManager.h"
 #include <GLFW/glfw3.h>
 #include <nfd.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -29,8 +28,7 @@ void SaveManager::save()
   }
 
   const nlohmann::json data = {
-    { "assets", m_ecs->getAssetManager()->serialize() },
-    { "scenes", m_ecs->getSceneManager()->serialize() }
+    { "assets", m_ecs->getAssetManager()->serialize() }
   };
 
   std::ofstream outFile(m_saveFile);
@@ -225,8 +223,6 @@ void SaveManager::loadFromSaveFile()
   try
   {
     m_ecs->getAssetManager()->loadFromJSON(saveData.at("assets"));
-
-    m_ecs->getSceneManager()->loadFromJSON(saveData.at("scenes"));
 
     m_ecs->completeReset();
   } catch (const std::exception& e)

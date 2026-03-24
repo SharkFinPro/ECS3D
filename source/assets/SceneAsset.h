@@ -21,7 +21,9 @@ public:
 
   void load() override;
 
-  nlohmann::json serialize() override;
+  [[nodiscard]] nlohmann::json serialize() override;
+
+  [[nodiscard]] std::shared_ptr<ObjectManager> getObjectManager() const;
 
 private:
   std::shared_ptr<SceneManager> m_sceneManager;

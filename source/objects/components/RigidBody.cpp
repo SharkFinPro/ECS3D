@@ -2,7 +2,7 @@
 #include "Transform.h"
 #include "../Object.h"
 #include "../../ECS3D.h"
-#include "../../scenes/Scene.h"
+#include "../../assets/SceneAsset.h"
 #include "../../scenes/SceneManager.h"
 #include <glm/glm.hpp>
 #include <imgui.h>

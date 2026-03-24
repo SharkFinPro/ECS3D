@@ -1,6 +1,7 @@
 #include "AssetManager.h"
 #include "Asset.h"
 #include "ModelAsset.h"
+#include "SceneAsset.h"
 #include "ScriptAsset.h"
 #include "TextureAsset.h"
 #include <imgui.h>
@@ -50,6 +51,21 @@ void AssetManager::displayGui()
   }
 
   ImGui::End();
+}
+
+std::shared_ptr<SceneAsset> AssetManager::createSceneAsset(std::string name)
+{
+  const uuids::uuid uuid = m_ecs->createUUID();
+
+  const auto asset = std::make_shared<SceneAsset>(uuid, std::move(name));
+  asset->setManager(this);
+  asset->load();
+
+  m_assets.emplace(uuid, asset);
+
+  m_shouldComputeFilteredAssets = true;
+
+  return asset;
 }
 
 void AssetManager::loadScriptAsset(std::string path,

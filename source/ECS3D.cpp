@@ -8,7 +8,7 @@
 
 ECS3D::ECS3D()
   : m_previousTime(std::chrono::steady_clock::now()),
-		m_sceneManager(std::make_shared<SceneManager>(this)),
+		m_sceneManager(std::make_shared<SceneManager>()),
 		m_assetManager(std::make_shared<AssetManager>(this)),
 		m_rng([] {
 			std::random_device rd;
@@ -34,7 +34,7 @@ void ECS3D::prepareForReset()
 	m_sceneManager.reset();
 	m_assetManager.reset();
 
-	m_sceneManager = std::make_shared<SceneManager>(this);
+	m_sceneManager = std::make_shared<SceneManager>();
 	m_assetManager = std::make_shared<AssetManager>(this);
 }
 

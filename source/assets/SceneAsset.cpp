@@ -36,7 +36,11 @@ void SceneAsset::stop() const
 
 void SceneAsset::load()
 {
-  m_sceneManager = m_assetManager->getECS()->getSceneManager();
+  const auto ecs = m_assetManager->getECS();
+
+  m_sceneManager = ecs->getSceneManager();
+
+  m_objectManager = std::make_shared<ObjectManager>(ecs);
 }
 
 nlohmann::json SceneAsset::serialize()
@@ -49,4 +53,9 @@ nlohmann::json SceneAsset::serialize()
   };
 
   return data;
+}
+
+std::shared_ptr<ObjectManager> SceneAsset::getObjectManager() const
+{
+  return m_objectManager;
 }

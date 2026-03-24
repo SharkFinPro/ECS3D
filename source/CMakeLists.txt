@@ -35,8 +35,6 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/SphereCollider.h
   scenes/SceneManager.cpp
   scenes/SceneManager.h
-  scenes/Scene.cpp
-  scenes/Scene.h
   scripts/InputUtils.cpp
   scripts/InputUtils.h
   scripts/ScriptEngine.cpp

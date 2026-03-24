@@ -8,10 +8,11 @@
 #include <string>
 #include <unordered_map>
 
-class ECS3D;
 class Asset;
-class TextureAsset;
+class ECS3D;
 class ModelAsset;
+class SceneAsset;
+class TextureAsset;
 
 enum class SortType {
   nameAscending,
@@ -30,6 +31,8 @@ public:
   [[nodiscard]] ECS3D* getECS() const;
 
   void displayGui();
+
+  [[nodiscard]] std::shared_ptr<SceneAsset> createSceneAsset(std::string name);
 
   void loadScriptAsset(std::string path,
                        std::string className);
