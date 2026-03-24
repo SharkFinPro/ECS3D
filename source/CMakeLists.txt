@@ -51,6 +51,8 @@ add_library(${PROJECT_NAME}
   assets/Asset.h
   assets/ModelAsset.cpp
   assets/ModelAsset.h
+  assets/SceneAsset.cpp
+  assets/SceneAsset.h
   assets/ScriptAsset.cpp
   assets/ScriptAsset.h
   assets/TextureAsset.cpp
