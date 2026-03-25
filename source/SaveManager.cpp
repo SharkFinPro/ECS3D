@@ -260,10 +260,6 @@ void SaveManager::loadCurrentScene(const nlohmann::json& saveData) const
 
   const auto currentSceneUUID = uuids::uuid::from_string(currentSceneUUIDString).value();
   const auto currentSceneAsset = m_ecs->getAssetManager()->getAsset<SceneAsset>(currentSceneUUID);
-  if (!currentSceneAsset)
-  {
-    return;
-  }
 
   m_ecs->getSceneManager()->loadScene(currentSceneAsset);
 }

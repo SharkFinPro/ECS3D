@@ -121,26 +121,20 @@ void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
 
   if (modelUUID.has_value())
   {
-    if (const auto modelAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<ModelAsset>(modelUUID.value()))
-    {
-      m_model = modelAsset;
-    }
+    const auto modelAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<ModelAsset>(modelUUID.value());
+    m_model = modelAsset;
   }
 
   if (textureUUID.has_value())
   {
-    if (const auto textureAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<TextureAsset>(textureUUID.value()))
-    {
-      m_texture = textureAsset;
-    }
+    const auto textureAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<TextureAsset>(textureUUID.value());=
+    m_texture = textureAsset;
   }
 
   if (specularMapUUID.has_value())
   {
-    if (const auto specularMapAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<TextureAsset>(specularMapUUID.value()))
-    {
-      m_specularMap = specularMapAsset;
-    }
+    const auto specularMapAsset = m_owner->getManager()->getECS()->getAssetManager()->getAsset<TextureAsset>(specularMapUUID.value());=
+    m_specularMap = specularMapAsset;
   }
 
   if (canRender())
