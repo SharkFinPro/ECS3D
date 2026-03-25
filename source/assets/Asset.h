@@ -4,6 +4,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <uuid.h>
 #include <string>
+#include <unordered_map>
 
 class AssetManager;
 
