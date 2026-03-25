@@ -2,6 +2,7 @@
 #define ECS3D_SCENEASSET_H
 
 #include "Asset.h"
+#include <memory>
 
 class ObjectManager;
 class SceneManager;
