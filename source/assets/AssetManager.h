@@ -70,6 +70,14 @@ private:
   void displayAssetsFilterGui();
 
   void computeFilteredAssets();
+
+  void loadModelsFromJSON(const nlohmann::json& assetsData);
+
+  void loadTexturesFromJSON(const nlohmann::json& assetsData);
+
+  void loadScenesFromJSON(const nlohmann::json& assetsData);
+
+  void loadScriptsFromJSON(const nlohmann::json& assetsData);
 };
 
 template<typename T>
