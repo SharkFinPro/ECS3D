@@ -6,7 +6,7 @@
 class ObjectManager;
 class SceneManager;
 
-class SceneAsset : public Asset {
+class SceneAsset : public Asset, public std::enable_shared_from_this<SceneAsset> {
 public:
   explicit SceneAsset(uuids::uuid uuid,
                       std::string name);

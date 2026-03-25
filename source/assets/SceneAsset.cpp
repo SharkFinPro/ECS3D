@@ -49,6 +49,11 @@ void SceneAsset::displayGui(float cellSize)
   Asset::displayGui(cellSize);
 
   ImGui::Button("Scene", { cellSize, cellSize });
+
+  if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+  {
+    m_sceneManager->loadScene(shared_from_this());
+  }
 }
 
 nlohmann::json SceneAsset::serialize()
