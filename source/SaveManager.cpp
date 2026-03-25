@@ -252,14 +252,20 @@ void SaveManager::loadCurrentScene(const nlohmann::json& saveData) const
     return;
   }
 
-  const auto currentSceneUUIDString = std::string(saveData.at("currentSceneUUID"));
-  if (currentSceneUUIDString.empty())
+  const auto currentSceneUUID = std::string(saveData.at("currentSceneUUID"));
+  if (currentSceneUUID.empty())
   {
     return;
   }
 
-  const auto currentSceneUUID = uuids::uuid::from_string(currentSceneUUIDString).value();
-  const auto currentSceneAsset = m_ecs->getAssetManager()->getAsset<SceneAsset>(currentSceneUUID);
+  const auto parsedUUID = uuids::uuid::from_string(currentSceneUUID);
+  if (!parsedUUID.has_value())
+  {
+    m_ecs->logMessage("Error", "Invalid currentSceneUUID in save file: " + currentSceneUUID);
+    return;
+  }
+
+  const auto currentSceneAsset = m_ecs->getAssetManager()->getAsset<SceneAsset>(parsedUUID.value());
 
   m_ecs->getSceneManager()->loadScene(currentSceneAsset);
 }
