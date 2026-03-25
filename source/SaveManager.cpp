@@ -5,6 +5,7 @@
 #include "scenes/SceneManager.h"
 #include <GLFW/glfw3.h>
 #include <nfd.h>
+#include <uuid.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <fstream>
 #include <iostream>
@@ -230,6 +231,8 @@ void SaveManager::loadFromSaveFile()
   {
     m_ecs->getAssetManager()->loadFromJSON(saveData.at("assets"));
 
+    loadCurrentScene(saveData);
+
     m_ecs->completeReset();
   } catch (const std::exception& e)
   {
@@ -240,4 +243,18 @@ void SaveManager::loadFromSaveFile()
 
     m_ecs->cancelReset();
   }
+}
+
+void SaveManager::loadCurrentScene(const nlohmann::json& saveData) const
+{
+  const auto currentSceneUUIDString = std::string(saveData.at("currentSceneUUID"));
+  if (currentSceneUUIDString.empty())
+  {
+    return;
+  }
+
+  const auto currentSceneUUID = uuids::uuid::from_string(currentSceneUUIDString).value();
+  const auto currentSceneAsset = m_ecs->getAssetManager()->getAsset<SceneAsset>(currentSceneUUID);
+
+  m_ecs->getSceneManager()->loadScene(currentSceneAsset);
 }

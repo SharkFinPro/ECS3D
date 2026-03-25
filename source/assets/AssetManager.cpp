@@ -4,6 +4,8 @@
 #include "SceneAsset.h"
 #include "ScriptAsset.h"
 #include "TextureAsset.h"
+#include "../objects/Object.h"
+#include "../objects/ObjectManager.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <VulkanEngine/components/window/Window.h>
@@ -149,6 +151,31 @@ void AssetManager::loadFromJSON(const nlohmann::json& assetsData)
     m_assets.emplace(uuid, asset);
 
     m_loadedPaths.emplace(path, uuid);
+  }
+
+  for (const auto& sceneData : assetsData.at("scenes"))
+  {
+    uuids::uuid uuid = uuids::uuid::from_string(std::string(sceneData.at("uuid"))).value();
+    const auto& name = sceneData.at("name");
+
+    const auto asset = std::make_shared<SceneAsset>(uuid, name);
+    asset->setManager(this);
+    asset->load();
+
+    auto objectManager = asset->getObjectManager();
+
+    for (const auto& objectData : sceneData.at("objects"))
+    {
+      auto object = std::make_shared<Object>(objectData, objectManager.get());
+      objectManager->addObject(object);
+
+      if (objectData.contains("children"))
+      {
+        object->loadChildren(objectData.at("children"));
+      }
+    }
+
+    m_assets.emplace(uuid, asset);
   }
 
   for (const auto& assetData : assetsData.at("scripts"))
