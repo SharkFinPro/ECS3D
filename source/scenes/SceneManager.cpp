@@ -17,10 +17,12 @@ void SceneManager::loadScene(const std::shared_ptr<SceneAsset>& scene)
 
 void SceneManager::fixedUpdate(const float dt) const
 {
-  if (m_currentScene)
+  if (!m_currentScene || m_sceneStatus != SceneStatus::running)
   {
-    m_currentScene->fixedUpdate(dt);
+    return;
   }
+
+  m_currentScene->fixedUpdate(dt);
 }
 
 void SceneManager::variableUpdate()

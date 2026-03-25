@@ -28,8 +28,6 @@ public:
   [[nodiscard]] std::shared_ptr<ObjectManager> getObjectManager() const;
 
 private:
-  std::shared_ptr<SceneManager> m_sceneManager;
-
   std::shared_ptr<ObjectManager> m_objectManager;
 };
 

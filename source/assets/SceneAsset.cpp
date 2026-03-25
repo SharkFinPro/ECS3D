@@ -12,11 +12,6 @@ SceneAsset::SceneAsset(const uuids::uuid uuid,
 
 void SceneAsset::fixedUpdate(const float dt) const
 {
-  if (m_sceneManager->getSceneStatus() != SceneStatus::running)
-  {
-    return;
-  }
-
   m_objectManager->fixedUpdate(dt);
 }
 
@@ -39,8 +34,6 @@ void SceneAsset::load()
 {
   const auto ecs = m_assetManager->getECS();
 
-  m_sceneManager = ecs->getSceneManager();
-
   m_objectManager = std::make_shared<ObjectManager>(ecs);
 }
 
@@ -52,7 +45,7 @@ void SceneAsset::displayGui(float cellSize)
 
   if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
   {
-    m_sceneManager->loadScene(shared_from_this());
+    m_assetManager->getECS()->getSceneManager()->loadScene(shared_from_this());
   }
 }
 
