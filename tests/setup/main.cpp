@@ -1,7 +1,9 @@
+#include "../common/Prefabs.h"
 #include "source/ECS3D.h"
 #include "source/SaveManager.h"
+#include "source/assets/AssetManager.h"
 #include "source/scenes/SceneManager.h"
-#include "source/scenes/Scene.h"
+#include "source/assets/SceneAsset.h"
 #include <iostream>
 #include <random>
 
@@ -9,11 +11,14 @@ constexpr int gridSize = 6;
 constexpr int gridHeight = 15;
 constexpr int ballSpacing = 5;
 
-void loadScene1(const std::shared_ptr<Scene>& scene);
+void loadScene1(const std::shared_ptr<SceneAsset>& scene,
+                const ECS3D& ecs);
 
-void loadScene2(const std::shared_ptr<Scene>& scene);
+void loadScene2(const std::shared_ptr<SceneAsset>& scene,
+                const ECS3D& ecs);
 
-void loadScene3(const std::shared_ptr<Scene>& scene);
+void loadScene3(const std::shared_ptr<SceneAsset>& scene,
+                const ECS3D& ecs);
 
 int main()
 {
@@ -24,9 +29,13 @@ int main()
 
     if (const auto sceneManager = ecs.getSceneManager(); !sceneManager->getCurrentScene())
     {
-      loadScene1(sceneManager->createScene());
-      loadScene2(sceneManager->createScene());
-      loadScene3(sceneManager->createScene());
+      const auto assetManager = ecs.getAssetManager();
+      const auto scene1 = assetManager->createSceneAsset("Scene 1");
+      loadScene1(scene1, ecs);
+      loadScene2(assetManager->createSceneAsset("Scene 2"), ecs);
+      loadScene3(assetManager->createSceneAsset("Scene 3"), ecs);
+
+      sceneManager->loadScene(scene1);
     }
 
     while (ecs.isActive())
@@ -43,48 +52,60 @@ int main()
   return EXIT_SUCCESS;
 }
 
-void loadScene1(const std::shared_ptr<Scene>& scene)
+void loadScene1(const std::shared_ptr<SceneAsset>& scene,
+                const ECS3D& ecs)
 {
-  scene->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
-  scene->createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
-  scene->createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
+  const auto assetManager = ecs.getAssetManager();
+  const auto objectManager = scene->getObjectManager();
+  
+  createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f, objectManager);
+  createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f, objectManager);
+  createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f, objectManager);
 
-  scene->createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }});
+  createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }}, assetManager, objectManager);
 
-  scene->createBlock({{ 5, 5, 0}});
+  createBlock({{ 5, 5, 0}}, assetManager, objectManager);
 
-  scene->createRigidBlock({{ 15, -15, 0 }, {10, 0.25, 10}, {0, 0, 30}});
+  createRigidBlock({{ 15, -15, 0 }, {10, 0.25, 10}, {0, 0, 30}}, assetManager, objectManager);
 
-  scene->createSphere({{ 2, 0, 0 }});
-  scene->createSphere({{ 0, 2, 0 }});
-  scene->createSphere({{ 0, -2, 2 }});
+  createSphere({{ 2, 0, 0 }}, assetManager, objectManager);
+  createSphere({{ 0, 2, 0 }}, assetManager, objectManager);
+  createSphere({{ 0, -2, 2 }}, assetManager, objectManager);
 
-  scene->createPlayer({{ 5, 0, 5 }});
+  createPlayer({{ 5, 0, 5 }}, assetManager, objectManager);
 }
 
-void loadScene2(const std::shared_ptr<Scene>& scene)
+void loadScene2(const std::shared_ptr<SceneAsset>& scene,
+                const ECS3D& ecs)
 {
-  scene->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
-  scene->createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
-  scene->createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
+  const auto assetManager = ecs.getAssetManager();
+  const auto objectManager = scene->getObjectManager();
 
-  scene->createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }});
+  createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f, objectManager);
+  createLight({-10, -0.375f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f, objectManager);
+  createLight({10, -0.375f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f, objectManager);
 
-  scene->createRigidBlock({{ 18, -5, 0 }, { 10, 1, 10 }, { 0, 0, 30}});
-  scene->createRigidBlock({{ -18, -5, 0 }, { 10, 1, 10 }, { 0, 0, -30}});
+  createRigidBlock({{ 0, -10, 0 }, { 10, 1, 10 }}, assetManager, objectManager);
 
-  scene->createBlock({{ -22, 10, -3 }});
-  scene->createSphere({{ 2, 0, 3 }});
-  scene->createPlayer({{ 5, 0, 5 }});
+  createRigidBlock({{ 18, -5, 0 }, { 10, 1, 10 }, { 0, 0, 30}}, assetManager, objectManager);
+  createRigidBlock({{ -18, -5, 0 }, { 10, 1, 10 }, { 0, 0, -30}}, assetManager, objectManager);
+
+  createBlock({{ -22, 10, -3 }}, assetManager, objectManager);
+  createSphere({{ 2, 0, 3 }}, assetManager, objectManager);
+  createPlayer({{ 5, 0, 5 }}, assetManager, objectManager);
 }
 
-void loadScene3(const std::shared_ptr<Scene>& scene)
+void loadScene3(const std::shared_ptr<SceneAsset>& scene,
+                const ECS3D& ecs)
 {
-  scene->createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f);
-  scene->createLight({-25, 25.0f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f);
-  scene->createLight({25, 25.0f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f);
+  const auto assetManager = ecs.getAssetManager();
+  const auto objectManager = scene->getObjectManager();
 
-  scene->createRigidBlock({{0, -9, 0}, {100, 10, 100}});
+  createLight({0, 1.0f, 0}, {1.0f, 1.0f, 1.0f}, 0.25f, 0.0f, 0.0f, objectManager);
+  createLight({-25, 25.0f, 3}, {0.0f, 1.0f, 1.0f}, 0.0f, 0.75f, 0.75f, objectManager);
+  createLight({25, 25.0f, 3}, {1.0f, 0.0f, 0.0f}, 0.0f, 0.75f, 0.75f, objectManager);
+
+  createRigidBlock({{0, -9, 0}, {100, 10, 100}}, assetManager, objectManager);
 
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -105,19 +126,19 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
 
         if (shouldUseSphere(gen))
         {
-          scene->createSphere({
+          createSphere({
             .position = {
               static_cast<float>(j) * ballSpacing + dist(gen) - offsetXZ,
               static_cast<float>(i) * ballSpacing + bottomY,
               static_cast<float>(k) * ballSpacing + dist(gen) - offsetXZ
             },
             .scale = glm::vec3(sphereSize(gen))
-          });
+          }, assetManager, objectManager);
 
           continue;
         }
 
-        scene->createBlock({
+        createBlock({
           .position = {
             static_cast<float>(j) * ballSpacing + dist(gen) - offsetXZ,
             static_cast<float>(i) * ballSpacing + bottomY,
@@ -133,7 +154,7 @@ void loadScene3(const std::shared_ptr<Scene>& scene)
             rot(gen),
             rot(gen)
           }
-        });
+        }, assetManager, objectManager);
       }
     }
   }

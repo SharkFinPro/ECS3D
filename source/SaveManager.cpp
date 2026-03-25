@@ -1,9 +1,11 @@
 #include "SaveManager.h"
 #include "ECS3D.h"
 #include "assets/AssetManager.h"
+#include "assets/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include <GLFW/glfw3.h>
 #include <nfd.h>
+#include <uuid.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <fstream>
 #include <iostream>
@@ -28,9 +30,12 @@ void SaveManager::save()
     return;
   }
 
+  const auto currentScene = m_ecs->getSceneManager()->getCurrentScene();
+  const auto currentSceneUUID = currentScene ? uuids::to_string(currentScene->getUUID()) : "";
+
   const nlohmann::json data = {
     { "assets", m_ecs->getAssetManager()->serialize() },
-    { "scenes", m_ecs->getSceneManager()->serialize() }
+    { "currentSceneUUID", currentSceneUUID }
   };
 
   std::ofstream outFile(m_saveFile);
@@ -226,7 +231,7 @@ void SaveManager::loadFromSaveFile()
   {
     m_ecs->getAssetManager()->loadFromJSON(saveData.at("assets"));
 
-    m_ecs->getSceneManager()->loadFromJSON(saveData.at("scenes"));
+    loadCurrentScene(saveData);
 
     m_ecs->completeReset();
   } catch (const std::exception& e)
@@ -238,4 +243,29 @@ void SaveManager::loadFromSaveFile()
 
     m_ecs->cancelReset();
   }
+}
+
+void SaveManager::loadCurrentScene(const nlohmann::json& saveData) const
+{
+  if (!saveData.contains("currentSceneUUID"))
+  {
+    return;
+  }
+
+  const auto currentSceneUUID = std::string(saveData.at("currentSceneUUID"));
+  if (currentSceneUUID.empty())
+  {
+    return;
+  }
+
+  const auto parsedUUID = uuids::uuid::from_string(currentSceneUUID);
+  if (!parsedUUID.has_value())
+  {
+    m_ecs->logMessage("Error", "Invalid currentSceneUUID in save file: " + currentSceneUUID);
+    return;
+  }
+
+  const auto currentSceneAsset = m_ecs->getAssetManager()->getAsset<SceneAsset>(parsedUUID.value());
+
+  m_ecs->getSceneManager()->loadScene(currentSceneAsset);
 }

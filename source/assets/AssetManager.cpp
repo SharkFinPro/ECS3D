@@ -1,8 +1,11 @@
 #include "AssetManager.h"
 #include "Asset.h"
 #include "ModelAsset.h"
+#include "SceneAsset.h"
 #include "ScriptAsset.h"
 #include "TextureAsset.h"
+#include "../objects/Object.h"
+#include "../objects/ObjectManager.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <VulkanEngine/components/window/Window.h>
@@ -52,6 +55,21 @@ void AssetManager::displayGui()
   ImGui::End();
 }
 
+std::shared_ptr<SceneAsset> AssetManager::createSceneAsset(std::string name)
+{
+  const uuids::uuid uuid = m_ecs->createUUID();
+
+  const auto asset = std::make_shared<SceneAsset>(uuid, std::move(name));
+  asset->setManager(this);
+  asset->load();
+
+  m_assets.emplace(uuid, asset);
+
+  m_shouldComputeFilteredAssets = true;
+
+  return asset;
+}
+
 void AssetManager::loadScriptAsset(std::string path,
                                    std::string className)
 {
@@ -78,6 +96,7 @@ nlohmann::json AssetManager::serialize()
   nlohmann::json data = {
     { "models", nlohmann::json::array() },
     { "textures", nlohmann::json::array() },
+    { "scenes", nlohmann::json::array() },
     { "scripts", nlohmann::json::array() }
   };
 
@@ -91,6 +110,10 @@ nlohmann::json AssetManager::serialize()
     {
       data["models"].push_back(modelAsset->serialize());
     }
+    else if (const auto sceneAsset = std::dynamic_pointer_cast<SceneAsset>(asset))
+    {
+      data["scenes"].push_back(sceneAsset->serialize());
+    }
     else if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
     {
       data["scripts"].push_back(scriptAsset->serialize());
@@ -102,48 +125,13 @@ nlohmann::json AssetManager::serialize()
 
 void AssetManager::loadFromJSON(const nlohmann::json& assetsData)
 {
-  for (const auto& assetData : assetsData.at("models"))
-  {
-    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value();
-    const auto& path = assetData.at("filePath");
+  loadModelsFromJSON(assetsData);
 
-    const auto asset = std::make_shared<ModelAsset>(uuid, path);
-    asset->setManager(this);
-    asset->load();
+  loadTexturesFromJSON(assetsData);
 
-    m_assets.emplace(uuid, asset);
+  loadScenesFromJSON(assetsData);
 
-    m_loadedPaths.emplace(path, uuid);
-  }
-
-  for (const auto& assetData : assetsData.at("textures"))
-  {
-    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value();
-    const auto& path = assetData.at("filePath");
-
-    const auto asset = std::make_shared<TextureAsset>(uuid, path);
-    asset->setManager(this);
-    asset->load();
-
-    m_assets.emplace(uuid, asset);
-
-    m_loadedPaths.emplace(path, uuid);
-  }
-
-  for (const auto& assetData : assetsData.at("scripts"))
-  {
-    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value();
-    const auto& className = assetData.at("className");
-    const auto& filePath = assetData.at("filePath");
-
-    const auto asset = std::make_shared<ScriptAsset>(uuid, filePath, className);
-    asset->setManager(this);
-    asset->load();
-
-    m_assets.emplace(uuid, asset);
-
-    m_loadedPaths.emplace(filePath, uuid);
-  }
+  loadScriptsFromJSON(assetsData);
 
   m_shouldComputeFilteredAssets = true;
 }
@@ -260,4 +248,104 @@ void AssetManager::computeFilteredAssets()
   });
 
   m_shouldComputeFilteredAssets = false;
+}
+
+void AssetManager::loadModelsFromJSON(const nlohmann::json& assetsData)
+{
+  if (!assetsData.contains("models"))
+  {
+    return;
+  }
+
+  for (const auto& assetData : assetsData.at("models"))
+  {
+    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value();
+    const auto& path = assetData.at("filePath");
+
+    const auto asset = std::make_shared<ModelAsset>(uuid, path);
+    asset->setManager(this);
+    asset->load();
+
+    m_assets.emplace(uuid, asset);
+
+    m_loadedPaths.emplace(path, uuid);
+  }
+}
+
+void AssetManager::loadTexturesFromJSON(const nlohmann::json& assetsData)
+{
+  if (!assetsData.contains("textures"))
+  {
+    return;
+  }
+
+  for (const auto& assetData : assetsData.at("textures"))
+  {
+    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value();
+    const auto& path = assetData.at("filePath");
+
+    const auto asset = std::make_shared<TextureAsset>(uuid, path);
+    asset->setManager(this);
+    asset->load();
+
+    m_assets.emplace(uuid, asset);
+
+    m_loadedPaths.emplace(path, uuid);
+  }
+}
+
+void AssetManager::loadScenesFromJSON(const nlohmann::json& assetsData)
+{
+  if (!assetsData.contains("scenes"))
+  {
+    return;
+  }
+
+  for (const auto& sceneData : assetsData.at("scenes"))
+  {
+    uuids::uuid uuid = uuids::uuid::from_string(std::string(sceneData.at("uuid"))).value();
+    const auto& name = sceneData.at("name");
+
+    const auto asset = std::make_shared<SceneAsset>(uuid, name);
+    asset->setManager(this);
+    asset->load();
+
+    auto objectManager = asset->getObjectManager();
+
+    for (const auto& objectData : sceneData.at("objects"))
+    {
+      auto object = std::make_shared<Object>(objectData, objectManager.get());
+      objectManager->addObject(object);
+
+      if (objectData.contains("children"))
+      {
+        object->loadChildren(objectData.at("children"));
+      }
+    }
+
+    m_assets.emplace(uuid, asset);
+  }
+}
+
+void AssetManager::loadScriptsFromJSON(const nlohmann::json& assetsData)
+{
+  if (!assetsData.contains("scripts"))
+  {
+    return;
+  }
+
+  for (const auto& assetData : assetsData.at("scripts"))
+  {
+    uuids::uuid uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value();
+    const auto& className = assetData.at("className");
+    const auto& filePath = assetData.at("filePath");
+
+    const auto asset = std::make_shared<ScriptAsset>(uuid, filePath, className);
+    asset->setManager(this);
+    asset->load();
+
+    m_assets.emplace(uuid, asset);
+
+    m_loadedPaths.emplace(filePath, uuid);
+  }
 }

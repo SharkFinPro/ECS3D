@@ -3,7 +3,7 @@
 #include "../Object.h"
 #include "../../ECS3D.h"
 #include "../../GuiComponents.h"
-#include "../../scenes/Scene.h"
+#include "../../assets/SceneAsset.h"
 #include "../../scenes/SceneManager.h"
 #include <imgui.h>
 #include <nlohmann/json.hpp>

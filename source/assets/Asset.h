@@ -4,18 +4,21 @@
 #include <nlohmann/json_fwd.hpp>
 #include <uuid.h>
 #include <string>
+#include <unordered_map>
 
 class AssetManager;
 
 enum class AssetType {
   Unknown,
   Model,
+  Scene,
   Script,
   Texture
 };
 
-const std::unordered_map<AssetType, std::string> assetTypeToString {
+inline const std::unordered_map<AssetType, std::string> assetTypeToString {
   { AssetType::Model, "Model" },
+  { AssetType::Scene, "Scene" },
   { AssetType::Script, "Script" },
   { AssetType::Texture, "Texture" }
 };

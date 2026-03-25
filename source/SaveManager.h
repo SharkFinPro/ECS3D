@@ -40,6 +40,8 @@ private:
   void registerWindowEvents();
 
   void loadFromSaveFile();
+
+  void loadCurrentScene(const nlohmann::json& saveData) const;
 };
 
 
