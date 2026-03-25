@@ -27,20 +27,6 @@ int main()
     ECS3D ecs;
     ecs.getSaveManager()->loadSaveFile("SetupTest.json");
 
-    const auto m_assetManager = ecs.getAssetManager();
-    m_assetManager->loadAsset<ModelAsset>("assets/models/cube_1x1x1.glb");
-    m_assetManager->loadAsset<ModelAsset>("assets/models/sphere.glb");
-    m_assetManager->loadAsset<ModelAsset>("assets/models/sphere_2.glb");
-    m_assetManager->loadAsset<ModelAsset>("assets/models/sphere_3.glb");
-
-    m_assetManager->loadAsset<TextureAsset>("assets/textures/white.png");
-    m_assetManager->loadAsset<TextureAsset>("assets/textures/black.png");
-    m_assetManager->loadAsset<TextureAsset>("assets/textures/earth.png");
-    m_assetManager->loadAsset<TextureAsset>("assets/textures/earth_specular.png");
-
-    m_assetManager->loadScriptAsset("scripts/userScripts/PlayerScript.cs", "PlayerScript");
-    m_assetManager->loadScriptAsset("scripts/userScripts/BlockScript.cs", "BlockScript");
-
     if (const auto sceneManager = ecs.getSceneManager(); !sceneManager->getCurrentScene())
     {
       const auto assetManager = ecs.getAssetManager();

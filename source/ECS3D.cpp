@@ -1,6 +1,8 @@
 #include "ECS3D.h"
 #include "SaveManager.h"
 #include "assets/AssetManager.h"
+#include "assets/ModelAsset.h"
+#include "assets/TextureAsset.h"
 #include "scenes/SceneManager.h"
 #include "scripts/ScriptManager.h"
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
@@ -24,6 +26,19 @@ ECS3D::ECS3D()
 	m_saveManager = std::make_shared<SaveManager>(this);
 
 	m_scriptManager = std::make_shared<ScriptManager>(this);
+
+	m_assetManager->loadAsset<ModelAsset>("assets/models/cube_1x1x1.glb");
+	m_assetManager->loadAsset<ModelAsset>("assets/models/sphere.glb");
+	m_assetManager->loadAsset<ModelAsset>("assets/models/sphere_2.glb");
+	m_assetManager->loadAsset<ModelAsset>("assets/models/sphere_3.glb");
+
+	m_assetManager->loadAsset<TextureAsset>("assets/textures/white.png");
+	m_assetManager->loadAsset<TextureAsset>("assets/textures/black.png");
+	m_assetManager->loadAsset<TextureAsset>("assets/textures/earth.png");
+	m_assetManager->loadAsset<TextureAsset>("assets/textures/earth_specular.png");
+
+	m_assetManager->loadScriptAsset("scripts/userScripts/PlayerScript.cs", "PlayerScript");
+	m_assetManager->loadScriptAsset("scripts/userScripts/BlockScript.cs", "BlockScript");
 }
 
 void ECS3D::prepareForReset()

@@ -24,7 +24,10 @@ int main()
     if (const auto sceneManager = ecs.getSceneManager(); !sceneManager->getCurrentScene())
     {
       const auto assetManager = ecs.getAssetManager();
-      loadScene1(assetManager->createSceneAsset("Scene 1"), ecs);
+      const auto scene1 = assetManager->createSceneAsset("Scene 1");
+      loadScene1(scene1, ecs);
+
+      sceneManager->loadScene(scene1);
     }
 
     while (ecs.isActive())
