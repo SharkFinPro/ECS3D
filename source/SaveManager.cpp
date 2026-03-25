@@ -1,6 +1,8 @@
 #include "SaveManager.h"
 #include "ECS3D.h"
 #include "assets/AssetManager.h"
+#include "assets/SceneAsset.h"
+#include "scenes/SceneManager.h"
 #include <GLFW/glfw3.h>
 #include <nfd.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -27,8 +29,12 @@ void SaveManager::save()
     return;
   }
 
+  const auto currentScene = m_ecs->getSceneManager()->getCurrentScene();
+  const auto currentSceneUUID = currentScene ? uuids::to_string(currentScene->getUUID()) : "";
+
   const nlohmann::json data = {
-    { "assets", m_ecs->getAssetManager()->serialize() }
+    { "assets", m_ecs->getAssetManager()->serialize() },
+    { "currentSceneUUID", currentSceneUUID }
   };
 
   std::ofstream outFile(m_saveFile);

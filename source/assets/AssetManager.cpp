@@ -94,6 +94,7 @@ nlohmann::json AssetManager::serialize()
   nlohmann::json data = {
     { "models", nlohmann::json::array() },
     { "textures", nlohmann::json::array() },
+    { "scenes", nlohmann::json::array() },
     { "scripts", nlohmann::json::array() }
   };
 
@@ -106,6 +107,10 @@ nlohmann::json AssetManager::serialize()
     else if (const auto modelAsset = std::dynamic_pointer_cast<ModelAsset>(asset))
     {
       data["models"].push_back(modelAsset->serialize());
+    }
+    else if (const auto sceneAsset = std::dynamic_pointer_cast<SceneAsset>(asset))
+    {
+      data["scenes"].push_back(sceneAsset->serialize());
     }
     else if (const auto scriptAsset = std::dynamic_pointer_cast<ScriptAsset>(asset))
     {
