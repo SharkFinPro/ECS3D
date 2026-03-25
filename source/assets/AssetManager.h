@@ -5,6 +5,7 @@
 #include "../ECS3D.h"
 #include <nlohmann/json_fwd.hpp>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 
