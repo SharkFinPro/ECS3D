@@ -175,27 +175,29 @@ bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& ot
   const auto combinedRadius = sphereA->getRadius() + sphereB->getRadius();
   const auto delta = otherCollider->getPosition() - getPosition();
 
-  if (const float dist = length(delta); dist < combinedRadius)
+  const float dist = length(delta);
+
+  if (dist >= combinedRadius)
   {
-    const auto minimumTranslationVector = dist != 0.0f ? -(normalize(delta) * (combinedRadius - dist)) : glm::vec3(0, combinedRadius / 2.0f, 0);
-
-    if (mtv != nullptr)
-    {
-      *mtv = minimumTranslationVector;
-    }
-
-    if (collisionPoint != nullptr)
-    {
-      const auto direction = -glm::normalize(minimumTranslationVector);
-      const auto pointOfCollision = getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
-
-      *collisionPoint = pointOfCollision;
-    }
-
-    return true;
+    return false;
   }
 
-  return false;
+  const auto minimumTranslationVector = dist != 0.0f ? -(normalize(delta) * (combinedRadius - dist)) : glm::vec3(0, combinedRadius / 2.0f, 0);
+
+  if (mtv != nullptr)
+  {
+    *mtv = minimumTranslationVector;
+  }
+
+  if (collisionPoint != nullptr)
+  {
+    const auto direction = -glm::normalize(minimumTranslationVector);
+    const auto pointOfCollision = getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
+
+    *collisionPoint = pointOfCollision;
+  }
+
+  return true;
 }
 
 glm::vec3 Collider::getSupport(const std::shared_ptr<Collider>& other, const glm::vec3& direction)
