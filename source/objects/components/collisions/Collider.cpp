@@ -192,7 +192,7 @@ bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& ot
   if (collisionPoint != nullptr)
   {
     const auto direction = -glm::normalize(minimumTranslationVector);
-    const auto pointOfCollision = getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(otherCollider)->getRadius();
+    const auto pointOfCollision = getPosition() + direction * sphereB->getRadius();
 
     *collisionPoint = pointOfCollision;
   }
