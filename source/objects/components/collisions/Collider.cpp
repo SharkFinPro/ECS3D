@@ -177,7 +177,7 @@ bool Collider::handleSphereToSphereCollision(const std::shared_ptr<Collider>& ot
 
   if (const float dist = length(delta); dist < combinedRadius)
   {
-    const auto minimumTranslationVector = -(normalize(delta) * (combinedRadius - dist));
+    const auto minimumTranslationVector = dist != 0.0f ? -(normalize(delta) * (combinedRadius - dist)) : glm::vec3(0, combinedRadius / 2.0f, 0);
 
     if (mtv != nullptr)
     {
