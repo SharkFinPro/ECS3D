@@ -110,11 +110,13 @@ std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 	return m_saveManager;
 }
 
-void ECS3D::updateGui() const
+void ECS3D::updateGui()
 {
 	m_assetManager->displayGui();
 
 	m_sceneManager->updateGui();
+
+	displayMessageLog();
 }
 
 void ECS3D::fixedUpdate()
@@ -157,8 +159,6 @@ void ECS3D::variableUpdate()
 	{
 		logMessage("Error", e.what());
 	}
-
-	displayMessageLog();
 
 	m_renderer->render();
 }
