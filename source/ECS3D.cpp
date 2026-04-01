@@ -27,6 +27,8 @@ ECS3D::ECS3D()
 
 	m_scriptManager = std::make_shared<ScriptManager>(this);
 
+	setupKeybinds();
+
 	m_assetManager->loadAsset<ModelAsset>("assets/models/cube_1x1x1.glb");
 	m_assetManager->loadAsset<ModelAsset>("assets/models/sphere.glb");
 	m_assetManager->loadAsset<ModelAsset>("assets/models/sphere_2.glb");
@@ -112,6 +114,11 @@ std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 
 void ECS3D::updateGui()
 {
+	if (!m_shouldDisplayGui)
+	{
+		return;
+	}
+
 	m_assetManager->displayGui();
 
 	m_sceneManager->updateGui();
@@ -277,6 +284,21 @@ void ECS3D::updateDockSpace() const
 	gui->dockBottom("Project Errors");
 	gui->dockBottom("Smoke");
 	gui->dockBottom("Elliptical Dots");
+}
+
+void ECS3D::setupKeybinds()
+{
+	m_keyCallbackEventListener = m_renderer->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
+		if (e.action != GLFW_PRESS)
+		{
+			return;
+		}
+
+		if (keyIsPressed(GLFW_KEY_F10))
+		{
+			m_shouldDisplayGui = !m_shouldDisplayGui;
+		}
+	});
 }
 
 void ECS3D::setupImGuiStyle()
