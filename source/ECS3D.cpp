@@ -78,6 +78,8 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
+	updateGui();
+
 	fixedUpdate();
 
 	variableUpdate();
@@ -106,6 +108,11 @@ std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
 std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 {
 	return m_saveManager;
+}
+
+void ECS3D::updateGui() const
+{
+	m_assetManager->displayGui();
 }
 
 void ECS3D::fixedUpdate()
@@ -142,8 +149,6 @@ void ECS3D::variableUpdate()
 	displayMenuBar();
 
 	try {
-		m_assetManager->displayGui();
-
 		m_sceneManager->variableUpdate();
 	}
 	catch(const std::exception& e)

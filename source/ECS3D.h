@@ -68,6 +68,8 @@ private:
 
   std::shared_ptr<ScriptManager> m_scriptManager;
 
+  void updateGui() const;
+
   void fixedUpdate();
 
   void variableUpdate();
