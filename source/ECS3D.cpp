@@ -27,6 +27,8 @@ ECS3D::ECS3D()
 
 	m_scriptManager = std::make_shared<ScriptManager>(this);
 
+	setupKeybinds();
+
 	m_assetManager->loadAsset<ModelAsset>("assets/models/cube_1x1x1.glb");
 	m_assetManager->loadAsset<ModelAsset>("assets/models/sphere.glb");
 	m_assetManager->loadAsset<ModelAsset>("assets/models/sphere_2.glb");
@@ -78,6 +80,8 @@ bool ECS3D::isActive() const
 
 void ECS3D::update()
 {
+	updateGui();
+
 	fixedUpdate();
 
 	variableUpdate();
@@ -106,6 +110,24 @@ std::shared_ptr<AssetManager> ECS3D::getAssetManager() const
 std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 {
 	return m_saveManager;
+}
+
+void ECS3D::updateGui()
+{
+	displayMenuBar();
+
+	if (!m_shouldDisplayGui)
+	{
+		return;
+	}
+
+	updateDockSpace();
+
+	displayMessageLog();
+
+	m_assetManager->displayGui();
+
+	m_sceneManager->updateGui();
 }
 
 void ECS3D::fixedUpdate()
@@ -137,21 +159,13 @@ void ECS3D::fixedUpdate()
 
 void ECS3D::variableUpdate()
 {
-	updateDockSpace();
-
-	displayMenuBar();
-
 	try {
-		m_assetManager->displayGui();
-
 		m_sceneManager->variableUpdate();
 	}
 	catch(const std::exception& e)
 	{
 		logMessage("Error", e.what());
 	}
-
-	displayMessageLog();
 
 	m_renderer->render();
 }
@@ -270,6 +284,21 @@ void ECS3D::updateDockSpace() const
 	gui->dockBottom("Project Errors");
 	gui->dockBottom("Smoke");
 	gui->dockBottom("Elliptical Dots");
+}
+
+void ECS3D::setupKeybinds()
+{
+	m_keyCallbackEventListener = m_renderer->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
+		if (e.action != GLFW_PRESS)
+		{
+			return;
+		}
+
+		if (e.key == GLFW_KEY_F10)
+		{
+			m_shouldDisplayGui = !m_shouldDisplayGui;
+		}
+	});
 }
 
 void ECS3D::setupImGuiStyle()

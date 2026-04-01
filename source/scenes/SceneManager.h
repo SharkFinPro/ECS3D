@@ -15,6 +15,8 @@ class SceneManager {
 public:
   void loadScene(const std::shared_ptr<SceneAsset>& scene);
 
+  void updateGui();
+
   void fixedUpdate(float dt) const;
 
   void variableUpdate();

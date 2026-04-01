@@ -3,6 +3,7 @@
 
 #include <uuid.h>
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/window/Window.h>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -68,6 +69,12 @@ private:
 
   std::shared_ptr<ScriptManager> m_scriptManager;
 
+  bool m_shouldDisplayGui = true;
+
+  vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
+
+  void updateGui();
+
   void fixedUpdate();
 
   void variableUpdate();
@@ -79,6 +86,8 @@ private:
   void displayMenuBar() const;
 
   void updateDockSpace() const;
+
+  void setupKeybinds();
 
   static void setupImGuiStyle();
 };
