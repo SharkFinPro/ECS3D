@@ -294,7 +294,7 @@ void ECS3D::setupKeybinds()
 			return;
 		}
 
-		if (keyIsPressed(GLFW_KEY_F10))
+		if (e.key == GLFW_KEY_F10)
 		{
 			m_shouldDisplayGui = !m_shouldDisplayGui;
 		}
