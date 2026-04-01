@@ -15,6 +15,8 @@ class ObjectManager {
 public:
   explicit ObjectManager(ECS3D* ecs);
 
+  void updateGui() const;
+
   void fixedUpdate(float dt) const;
 
   void variableUpdate();

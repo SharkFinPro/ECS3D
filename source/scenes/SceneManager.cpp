@@ -1,5 +1,6 @@
 #include "SceneManager.h"
 #include "../assets/SceneAsset.h"
+#include "../objects/ObjectManager.h"
 #include <imgui.h>
 #include <stdexcept>
 
@@ -18,6 +19,11 @@ void SceneManager::loadScene(const std::shared_ptr<SceneAsset>& scene)
 void SceneManager::updateGui()
 {
   displaySceneStatusGui();
+
+  if (m_currentScene)
+  {
+    m_currentScene->getObjectManager()->updateGui();
+  }
 }
 
 void SceneManager::fixedUpdate(const float dt) const

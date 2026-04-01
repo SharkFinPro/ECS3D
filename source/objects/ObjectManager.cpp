@@ -10,6 +10,13 @@ ObjectManager::ObjectManager(ECS3D* ecs)
     m_objectGUIManager(std::make_shared<ObjectGUIManager>(this))
 {}
 
+void ObjectManager::updateGui() const
+{
+  m_objectGUIManager->update();
+
+  m_objectGUIManager->displaySelectedObjectGui();
+}
+
 void ObjectManager::fixedUpdate(const float dt) const
 {
   for (const auto& object : m_allObjects)
@@ -22,11 +29,7 @@ void ObjectManager::fixedUpdate(const float dt) const
 
 void ObjectManager::variableUpdate()
 {
-  m_objectGUIManager->update();
-
   deleteObjectsMarkedForDeletion();
-
-  m_objectGUIManager->displaySelectedObjectGui();
 
   for (const auto& object : m_allObjects)
   {
