@@ -113,6 +113,8 @@ std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 void ECS3D::updateGui() const
 {
 	m_assetManager->displayGui();
+
+	m_sceneManager->updateGui();
 }
 
 void ECS3D::fixedUpdate()

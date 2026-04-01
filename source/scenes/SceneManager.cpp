@@ -15,6 +15,11 @@ void SceneManager::loadScene(const std::shared_ptr<SceneAsset>& scene)
   m_currentScene = scene;
 }
 
+void SceneManager::updateGui()
+{
+  displaySceneStatusGui();
+}
+
 void SceneManager::fixedUpdate(const float dt) const
 {
   if (!m_currentScene || m_sceneStatus != SceneStatus::running)
@@ -27,8 +32,6 @@ void SceneManager::fixedUpdate(const float dt) const
 
 void SceneManager::variableUpdate()
 {
-  displaySceneStatusGui();
-
   if (m_currentScene)
   {
     m_currentScene->variableUpdate();
