@@ -114,16 +114,20 @@ std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 
 void ECS3D::updateGui()
 {
+	displayMenuBar();
+
 	if (!m_shouldDisplayGui)
 	{
 		return;
 	}
 
+	updateDockSpace();
+
+	displayMessageLog();
+
 	m_assetManager->displayGui();
 
 	m_sceneManager->updateGui();
-
-	displayMessageLog();
 }
 
 void ECS3D::fixedUpdate()
@@ -155,10 +159,6 @@ void ECS3D::fixedUpdate()
 
 void ECS3D::variableUpdate()
 {
-	updateDockSpace();
-
-	displayMenuBar();
-
 	try {
 		m_sceneManager->variableUpdate();
 	}
