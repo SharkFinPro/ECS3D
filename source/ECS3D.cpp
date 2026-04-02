@@ -257,6 +257,8 @@ void ECS3D::displayMenuBar() const
 			ImGui::EndMenu();
 		}
 
+		m_assetManager->displayMenuWidget();
+
 		ImGui::EndMainMenuBar();
 	}
 }
