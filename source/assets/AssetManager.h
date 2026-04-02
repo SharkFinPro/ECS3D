@@ -113,7 +113,8 @@ private:
 
   void loadScriptsFromJSON(const nlohmann::json& assetsData);
 
-  void displayCreateAssetPopup(PendingAsset& pending, std::string& errorMessage);
+  void displayCreateAssetPopup(PendingAsset& pending,
+                               std::string& errorMessage);
 
   static void displayPopupSourcePath(const PendingAsset& pending);
 
