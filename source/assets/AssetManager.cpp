@@ -157,7 +157,8 @@ void AssetManager::displayMenuWidget()
   displayCreateAssetPopup(pending, errorMessage);
 }
 
-void AssetManager::displayCreateAssetPopup(PendingAsset& pending, std::string& errorMessage)
+void AssetManager::displayCreateAssetPopup(PendingAsset& pending,
+                                           std::string& errorMessage)
 {
   const std::string title = " Create " + pending.toString() + "###CreateAssetModal";
 
@@ -218,7 +219,8 @@ void AssetManager::displayPopupSourcePath(const PendingAsset& pending)
   ImGui::Spacing();
 }
 
-void AssetManager::displayPopupNameInput(PendingAsset& pending, std::string& errorMessage)
+void AssetManager::displayPopupNameInput(PendingAsset& pending,
+                                         std::string& errorMessage)
 {
   ImGui::TextColored(kColorSubtle, "Asset Name");
 
@@ -246,7 +248,8 @@ void AssetManager::displayPopupNameInput(PendingAsset& pending, std::string& err
   }
 }
 
-void AssetManager::displayPopupActionButtons(PendingAsset& pending, std::string& errorMessage)
+void AssetManager::displayPopupActionButtons(PendingAsset& pending,
+                                             std::string& errorMessage)
 {
   const bool canCreate = pending.isValid() && nameIsValid(pending.name) &&
                          (!pending.requiresFilePicker() || !pending.path.empty());
@@ -311,7 +314,8 @@ void AssetManager::commitAssetCreation(const PendingAsset& pending)
   m_shouldComputeFilteredAssets = true;
 }
 
-void AssetManager::commitModelAsset(const std::string& name, const std::string& srcPath)
+void AssetManager::commitModelAsset(const std::string& name,
+                                    const std::string& srcPath)
 {
   const std::filesystem::path dstDir = "assets/models/";
   std::filesystem::create_directories(dstDir);
@@ -330,7 +334,8 @@ void AssetManager::commitModelAsset(const std::string& name, const std::string& 
   m_loadedPaths.emplace(finalPath, uuid);
 }
 
-void AssetManager::commitTextureAsset(const std::string& name, const std::string& srcPath)
+void AssetManager::commitTextureAsset(const std::string& name,
+                                      const std::string& srcPath)
 {
   const std::filesystem::path dstDir = "assets/textures/";
   std::filesystem::create_directories(dstDir);

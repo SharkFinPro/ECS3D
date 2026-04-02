@@ -114,13 +114,25 @@ private:
   void loadScriptsFromJSON(const nlohmann::json& assetsData);
 
   void displayCreateAssetPopup(PendingAsset& pending, std::string& errorMessage);
+
   static void displayPopupSourcePath(const PendingAsset& pending);
-  static void displayPopupNameInput(PendingAsset& pending, std::string& errorMessage);
-  void displayPopupActionButtons(PendingAsset& pending, std::string& errorMessage);
+
+  static void displayPopupNameInput(PendingAsset& pending,
+                                    std::string& errorMessage);
+
+  void displayPopupActionButtons(PendingAsset& pending,
+                                 std::string& errorMessage);
+
   void commitAssetCreation(const PendingAsset& pending);
-  void commitModelAsset(const std::string& name, const std::string& srcPath);
-  void commitTextureAsset(const std::string& name, const std::string& srcPath);
+
+  void commitModelAsset(const std::string& name,
+                        const std::string& srcPath);
+
+  void commitTextureAsset(const std::string& name,
+                          const std::string& srcPath);
+
   void commitSceneAsset(const std::string& name);
+
   void commitScriptAsset(const std::string& name);
 };
 
