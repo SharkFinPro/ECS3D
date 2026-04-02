@@ -15,68 +15,70 @@
 #include <fstream>
 #include <ranges>
 
-constexpr ImVec4 kColorSubtle   { 0.55f, 0.55f, 0.55f, 1.00f };
-constexpr ImVec4 kColorAccent   { 0.40f, 0.72f, 1.00f, 1.00f };
-constexpr ImVec4 kColorWarning  { 1.00f, 0.75f, 0.20f, 1.00f };
-constexpr ImVec4 kColorDanger   { 0.95f, 0.35f, 0.35f, 1.00f };
-constexpr ImVec4 kColorSuccess  { 0.35f, 0.85f, 0.55f, 1.00f };
+namespace {
+  constexpr ImVec4 kColorSubtle   { 0.55f, 0.55f, 0.55f, 1.00f };
+  constexpr ImVec4 kColorAccent   { 0.40f, 0.72f, 1.00f, 1.00f };
+  constexpr ImVec4 kColorWarning  { 1.00f, 0.75f, 0.20f, 1.00f };
+  constexpr ImVec4 kColorDanger   { 0.95f, 0.35f, 0.35f, 1.00f };
+  constexpr ImVec4 kColorSuccess  { 0.35f, 0.85f, 0.55f, 1.00f };
 
-void pushButtonStyle(const ImVec4 color)
-{
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(color.x * 0.7f, color.y * 0.7f, color.z * 0.7f, 0.45f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x * 0.9f, color.y * 0.9f, color.z * 0.9f, 0.65f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, color);
-}
-
-void popButtonStyle()
-{
-  ImGui::PopStyleColor(3);
-}
-
-void labeledSeparator(const char* label)
-{
-  ImGui::Spacing();
-  ImGui::TextColored(kColorSubtle, "%s", label);
-  ImGui::Separator();
-  ImGui::Spacing();
-}
-
-std::optional<std::string> openFileDialog(const std::vector<nfdu8filteritem_t>& filters)
-{
-  if (NFD_Init() != NFD_OKAY)
+  void pushButtonStyle(const ImVec4 color)
   {
-    throw std::runtime_error("NFD_Init failed");
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(color.x * 0.7f, color.y * 0.7f, color.z * 0.7f, 0.45f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x * 0.9f, color.y * 0.9f, color.z * 0.9f, 0.65f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, color);
   }
 
-  nfdu8char_t* outPath = nullptr;
-
-  const nfdopendialogu8args_t args {
-    .filterList = filters.data(),
-    .filterCount = static_cast<nfdfiltersize_t>(filters.size())
-  };
-
-  std::optional<std::string> result;
-
-  if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY)
+  void popButtonStyle()
   {
-    result = outPath;
-    NFD_FreePathU8(outPath);
+    ImGui::PopStyleColor(3);
   }
 
-  NFD_Quit();
-  return result;
-}
-
-bool nameIsValid(const std::string& name)
-{
-  if (name.empty())
+  void labeledSeparator(const char* label)
   {
-    return false;
+    ImGui::Spacing();
+    ImGui::TextColored(kColorSubtle, "%s", label);
+    ImGui::Separator();
+    ImGui::Spacing();
   }
 
-  return std::ranges::none_of(name, [](const char c) {
-    return c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|';
-  });
+  std::optional<std::string> openFileDialog(const std::vector<nfdu8filteritem_t>& filters)
+  {
+    if (NFD_Init() != NFD_OKAY)
+    {
+      throw std::runtime_error("NFD_Init failed");
+    }
+
+    nfdu8char_t* outPath = nullptr;
+
+    const nfdopendialogu8args_t args {
+      .filterList = filters.data(),
+      .filterCount = static_cast<nfdfiltersize_t>(filters.size())
+    };
+
+    std::optional<std::string> result;
+
+    if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY)
+    {
+      result = outPath;
+      NFD_FreePathU8(outPath);
+    }
+
+    NFD_Quit();
+    return result;
+  }
+
+  bool nameIsValid(const std::string& name)
+  {
+    if (name.empty())
+    {
+      return false;
+    }
+
+    return std::ranges::none_of(name, [](const char c) {
+      return c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|';
+    });
+  }
 }
 
 AssetManager::AssetManager(ECS3D* ecs)
