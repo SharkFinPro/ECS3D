@@ -546,7 +546,7 @@ void AssetManager::displayAssetsFilterGui()
     ImGui::SameLine();
     if (ImGui::BeginCombo("##SortCombo", sortTypeToString.at(m_sortType).c_str()))
     {
-      for (const auto type : { SortType::nameAscending, SortType::nameDescending })
+      for (const auto type : { SortType::NameAscending, SortType::NameDescending })
       {
         if (ImGui::Selectable(sortTypeToString.at(type).c_str(), m_sortType == type))
         {
@@ -598,8 +598,9 @@ void AssetManager::computeFilteredAssets()
   }
 
   std::ranges::sort(m_filteredAssets, [this](const auto& a, const auto& b) {
-    return std::ranges::lexicographical_compare( a->getName(), b->getName(), [this](char x, char y) {
-      return m_sortType == SortType::nameAscending
+    return std::ranges::lexicographical_compare(a->getName(), b->getName(),
+                                                [this](const char x, const char y) {
+      return m_sortType == SortType::NameAscending
         ? std::tolower(x) < std::tolower(y)
         : std::tolower(x) > std::tolower(y);
     });

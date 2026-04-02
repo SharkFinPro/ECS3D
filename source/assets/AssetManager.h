@@ -47,13 +47,13 @@ struct PendingAsset
 };
 
 enum class SortType {
-  nameAscending,
-  nameDescending
+  NameAscending,
+  NameDescending
 };
 
 inline std::unordered_map<SortType, std::string> sortTypeToString {
-  { SortType::nameAscending, "Name (A-Z)" },
-  { SortType::nameDescending, "Name (Z-A)" },
+  { SortType::NameAscending, "Name (A-Z)" },
+  { SortType::NameDescending, "Name (Z-A)" },
 };
 
 class AssetManager {
@@ -97,7 +97,7 @@ private:
 
   std::vector<std::shared_ptr<Asset>> m_filteredAssets;
 
-  SortType m_sortType = SortType::nameAscending;
+  SortType m_sortType = SortType::NameAscending;
 
   bool m_shouldComputeFilteredAssets = true;
 
