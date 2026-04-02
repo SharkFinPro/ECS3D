@@ -6,6 +6,7 @@
 #include "TextureAsset.h"
 #include "../objects/Object.h"
 #include "../objects/ObjectManager.h"
+#include "../scenes/SceneManager.h"
 #include <imgui.h>
 #include <nfd.h>
 #include <nlohmann/json.hpp>
@@ -354,19 +355,11 @@ void AssetManager::commitTextureAsset(const std::string& name,
   m_loadedPaths.emplace(finalPath, uuid);
 }
 
-void AssetManager::commitSceneAsset(const std::string& name)
+void AssetManager::commitSceneAsset(std::string name)
 {
-  std::filesystem::create_directories("assets/scenes/");
-  const std::filesystem::path path = "assets/scenes/" + name + ".json";
+  const auto scene = createSceneAsset(std::move(name));
 
-  const nlohmann::json data = {
-    { "uuid", uuids::to_string(m_ecs->createUUID()) },
-    { "name", name },
-    { "objects", nlohmann::json::array() }
-  };
-
-  std::ofstream(path) << data.dump(2);
-  createSceneAsset(name);
+  m_ecs->getSceneManager()->loadScene(scene);
 }
 
 void AssetManager::commitScriptAsset(const std::string& name)

@@ -131,7 +131,7 @@ private:
   void commitTextureAsset(const std::string& name,
                           const std::string& srcPath);
 
-  void commitSceneAsset(const std::string& name);
+  void commitSceneAsset(std::string name);
 
   void commitScriptAsset(const std::string& name);
 };
