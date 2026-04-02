@@ -131,7 +131,7 @@ private:
 
   void commitSceneAsset(std::string name);
 
-  void commitScriptAsset(const std::string& name);
+  void commitScriptAsset(std::string name);
 };
 
 template<typename T>

@@ -362,7 +362,7 @@ void AssetManager::commitSceneAsset(std::string name)
   m_ecs->getSceneManager()->loadScene(scene);
 }
 
-void AssetManager::commitScriptAsset(const std::string& name)
+void AssetManager::commitScriptAsset(std::string name)
 {
   std::filesystem::create_directories("scripts/userScripts/");
   const std::filesystem::path path = "scripts/userScripts/" + name + ".cs";
@@ -380,7 +380,7 @@ void AssetManager::commitScriptAsset(const std::string& name)
     "    public override void stop() {}\n"
     "}\n";
 
-  loadScriptAsset(path.string(), name);
+  loadScriptAsset(path.string(), std::move(name));
 }
 
 void AssetManager::displayGui()
