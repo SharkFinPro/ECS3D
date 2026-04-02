@@ -11,9 +11,7 @@
 
 class Asset;
 class ECS3D;
-class ModelAsset;
 class SceneAsset;
-class TextureAsset;
 
 struct PendingAsset {
   enum class Type { None, Model, Texture, Scene, Script };
