@@ -43,7 +43,9 @@ void labeledSeparator(const char* label)
 std::optional<std::string> openFileDialog(const std::vector<nfdu8filteritem_t>& filters)
 {
   if (NFD_Init() != NFD_OKAY)
+  {
     throw std::runtime_error("NFD_Init failed");
+  }
 
   nfdu8char_t* outPath = nullptr;
 
@@ -194,7 +196,10 @@ void AssetManager::displayCreateAssetPopup(PendingAsset& pending, std::string& e
 
 void AssetManager::displayPopupSourcePath(const PendingAsset& pending)
 {
-  if (!pending.requiresFilePicker()) return;
+  if (!pending.requiresFilePicker())
+  {
+    return;
+  }
 
   ImGui::TextColored(kColorSubtle, "Source");
 
@@ -206,10 +211,7 @@ void AssetManager::displayPopupSourcePath(const PendingAsset& pending)
   ImGui::BeginChild("##sourcepath", ImVec2(-1, 28), false);
   ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
 
-  if (pending.path.empty())
-    ImGui::TextColored(kColorWarning, "%s", display.c_str());
-  else
-    ImGui::TextColored(kColorSuccess, "%s", display.c_str());
+  ImGui::TextColored(pending.path.empty() ? kColorWarning : kColorSuccess, "%s", display.c_str());
 
   ImGui::EndChild();
   ImGui::PopStyleColor();
@@ -227,7 +229,9 @@ void AssetManager::displayPopupNameInput(PendingAsset& pending, std::string& err
   const bool nameInvalid = !nameIsValid(pending.name);
 
   if (nameInvalid)
+  {
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.35f, 0.10f, 0.10f, 1.0f));
+  }
 
   ImGui::SetNextItemWidth(-1);
   if (ImGui::InputText("##assetname", nameBuf, sizeof(nameBuf)))
@@ -237,7 +241,9 @@ void AssetManager::displayPopupNameInput(PendingAsset& pending, std::string& err
   }
 
   if (nameInvalid)
+  {
     ImGui::PopStyleColor();
+  }
 }
 
 void AssetManager::displayPopupActionButtons(PendingAsset& pending, std::string& errorMessage)
@@ -246,7 +252,9 @@ void AssetManager::displayPopupActionButtons(PendingAsset& pending, std::string&
                          (!pending.requiresFilePicker() || !pending.path.empty());
 
   if (!canCreate)
+  {
     ImGui::BeginDisabled();
+  }
 
   pushButtonStyle(kColorAccent);
   if (ImGui::Button("Create", ImVec2(180, 0)))
@@ -264,7 +272,9 @@ void AssetManager::displayPopupActionButtons(PendingAsset& pending, std::string&
   popButtonStyle();
 
   if (!canCreate)
+  {
     ImGui::EndDisabled();
+  }
 
   ImGui::SameLine();
 
