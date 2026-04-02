@@ -15,8 +15,7 @@ class ModelAsset;
 class SceneAsset;
 class TextureAsset;
 
-struct PendingAsset
-{
+struct PendingAsset {
   enum class Type { None, Model, Texture, Scene, Script };
 
   Type type = Type::None;
