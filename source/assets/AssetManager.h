@@ -48,7 +48,7 @@ enum class SortType {
   NameDescending
 };
 
-inline std::unordered_map<SortType, std::string> sortTypeToString {
+inline const std::unordered_map<SortType, std::string> sortTypeToString {
   { SortType::NameAscending, "Name (A-Z)" },
   { SortType::NameDescending, "Name (Z-A)" },
 };
