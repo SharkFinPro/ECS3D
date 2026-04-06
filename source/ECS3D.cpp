@@ -265,27 +265,42 @@ void ECS3D::displayMenuBar() const
 
 void ECS3D::updateDockSpace() const
 {
-	const auto gui = m_renderer->getImGuiInstance();
+	static bool dockPercentsSetup = false;
+	static bool dockLocationsSetup = false;
 
-	gui->setTopDockPercent(0.09);
-	gui->setBottomDockPercent(0.28);
+	if (!dockLocationsSetup && dockPercentsSetup)
+	{
+		const auto gui = m_renderer->getImGuiInstance();
 
-	gui->setLeftDockPercent(0.2);
-	gui->setRightDockPercent(0.35);
+		gui->dockCenter(m_sceneViewName.c_str());
 
-	gui->dockCenter(m_sceneViewName.c_str());
+		gui->dockLeft("Objects");
+		gui->dockLeft("Scenes");
 
-	gui->dockLeft("Objects");
-	gui->dockLeft("Scenes");
+		gui->dockRight("Selected Object");
 
-	gui->dockRight("Selected Object");
+		gui->dockTop("Scene Status");
 
-	gui->dockTop("Scene Status");
+		gui->dockBottom("Assets");
+		gui->dockBottom("Project Errors");
+		gui->dockBottom("Smoke");
+		gui->dockBottom("Elliptical Dots");
 
-	gui->dockBottom("Assets");
-	gui->dockBottom("Project Errors");
-	gui->dockBottom("Smoke");
-	gui->dockBottom("Elliptical Dots");
+		dockLocationsSetup = true;
+	}
+
+	if (!dockPercentsSetup)
+	{
+		const auto gui = m_renderer->getImGuiInstance();
+
+		gui->setTopDockPercent(0.09);
+		gui->setBottomDockPercent(0.28);
+
+		gui->setLeftDockPercent(0.2);
+		gui->setRightDockPercent(0.35);
+
+		dockPercentsSetup = true;
+	}
 }
 
 void ECS3D::setupKeybinds()
