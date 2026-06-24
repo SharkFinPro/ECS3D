@@ -36,7 +36,7 @@ void SceneManager::fixedUpdate(const float dt) const
   m_currentScene->fixedUpdate(dt);
 }
 
-void SceneManager::variableUpdate()
+void SceneManager::variableUpdate() const
 {
   if (m_currentScene)
   {

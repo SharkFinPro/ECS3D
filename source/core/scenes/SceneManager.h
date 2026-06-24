@@ -19,7 +19,7 @@ public:
 
   void fixedUpdate(float dt) const;
 
-  void variableUpdate();
+  void variableUpdate() const;
 
   [[nodiscard]] std::shared_ptr<SceneAsset> getCurrentScene() const;
 
