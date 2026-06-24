@@ -1,7 +1,7 @@
-#include "../SaveManager.h"
+#include "SaveManager.h"
 #include "ECS3D.h"
-#include "../assets/AssetManager.h"
-#include "../assets/SceneAsset.h"
+#include "assets/AssetManager.h"
+#include "assets/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include <GLFW/glfw3.h>
 #include <nfd.h>

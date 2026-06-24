@@ -2,7 +2,7 @@
 #define ASSETMANAGER_H
 
 #include "Asset.h"
-#include "../core/ECS3D.h"
+#include "../ECS3D.h"
 #include <nlohmann/json_fwd.hpp>
 #include <memory>
 #include <stdexcept>
