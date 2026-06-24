@@ -1,18 +1,16 @@
 #ifndef RENDERSYSTEM_H
 #define RENDERSYSTEM_H
 
-#include <memory>
-
-class SceneAsset;
+class ObjectManager;
 class RenderContext;
 
 class RenderSystem {
 public:
-  void variableUpdate(const std::shared_ptr<SceneAsset>& scene, RenderContext& context);
+  void variableUpdate(ObjectManager& objectManager, RenderContext& context);
 
 private:
-  // TODO: migrate ModelRenderer::variableUpdate (renderObject) and LightRenderer (PointLight/
-  // TODO:   SpotLight submission). The client/editor run this against its replicated scene view.
+  // The dispatch lifted out of ModelRenderer::variableUpdate / LightRenderer::variableUpdate. The
+  // client/editor run this against their replicated scene view; the server never links it.
 };
 
 

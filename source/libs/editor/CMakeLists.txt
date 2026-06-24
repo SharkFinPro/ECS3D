@@ -9,6 +9,10 @@ add_library(${PROJECT_NAME}
   components/TransformEditor.h
   components/RigidBodyEditor.cpp
   components/RigidBodyEditor.h
+  components/ModelRendererEditor.cpp
+  components/ModelRendererEditor.h
+  components/LightRendererEditor.cpp
+  components/LightRendererEditor.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

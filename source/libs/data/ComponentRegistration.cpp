@@ -2,6 +2,8 @@
 #include "ComponentRegistry.h"
 #include "objects/components/Transform.h"
 #include "objects/components/RigidBody.h"
+#include "objects/components/ModelRenderer.h"
+#include "objects/components/LightRenderer.h"
 #include <memory>
 
 void registerDataComponents(ComponentRegistry& componentRegistry)
@@ -11,8 +13,9 @@ void registerDataComponents(ComponentRegistry& componentRegistry)
   // Only the systems differ per app, not which component data exists.
   componentRegistry.registerComponent("Transform", [] { return std::make_shared<Transform>(); });
   componentRegistry.registerComponent("RigidBody", [] { return std::make_shared<RigidBody>(); });
+  componentRegistry.registerComponent("ModelRenderer", [] { return std::make_shared<ModelRenderer>(); });
+  componentRegistry.registerComponent("LightRenderer", [] { return std::make_shared<LightRenderer>(); });
 
-  // TODO: register the remaining component data factories as they migrate: ModelRenderer,
-  // TODO:   LightRenderer, Box/Sphere Collider (keyed by subType), and Script (with the server's
-  // TODO:   ScriptManager injected by ECS3DScripting).
+  // TODO: register the remaining component data factories as they migrate: Box/Sphere Collider
+  // TODO:   (keyed by subType), and Script (with the server's ScriptManager injected by ECS3DScripting).
 }
