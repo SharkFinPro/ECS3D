@@ -1,19 +1,19 @@
 #ifndef ECS3D_PREFABS_H
 #define ECS3D_PREFABS_H
 
-#include "source/assets/AssetManager.h"
-#include "source/assets/TextureAsset.h"
-#include "source/assets/ModelAsset.h"
-#include "source/assets/ScriptAsset.h"
-#include "source/objects/Object.h"
-#include "source/objects/ObjectManager.h"
-#include "source/objects/components/LightRenderer.h"
-#include "source/objects/components/ModelRenderer.h"
-#include "source/objects/components/RigidBody.h"
-#include "source/objects/components/Script.h"
-#include "source/objects/components/Transform.h"
-#include "source/objects/components/collisions/BoxCollider.h"
-#include "source/objects/components/collisions/SphereCollider.h"
+#include "source/core/assets/AssetManager.h"
+#include "source/core/assets/TextureAsset.h"
+#include "source/core/assets/ModelAsset.h"
+#include "source/core/assets/ScriptAsset.h"
+#include "source/core/objects/Object.h"
+#include "source/core/objects/ObjectManager.h"
+#include "source/core/objects/components/LightRenderer.h"
+#include "source/core/objects/components/ModelRenderer.h"
+#include "source/core/objects/components/RigidBody.h"
+#include "source/core/objects/components/Script.h"
+#include "source/core/objects/components/Transform.h"
+#include "source/core/objects/components/collisions/BoxCollider.h"
+#include "source/core/objects/components/collisions/SphereCollider.h"
 #include <memory>
 
 struct TransformData {

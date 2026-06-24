@@ -1,9 +1,9 @@
 #include "../common/Prefabs.h"
 #include "../../source/core/ECS3D.h"
 #include "../../source/core/SaveManager.h"
-#include "source/assets/AssetManager.h"
-#include "source/scenes/SceneManager.h"
-#include "source/assets/SceneAsset.h"
+#include "source/core/assets/AssetManager.h"
+#include "source/core/scenes/SceneManager.h"
+#include "source/core/assets/SceneAsset.h"
 #include <iostream>
 #include <random>
 
