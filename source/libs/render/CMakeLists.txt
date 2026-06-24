@@ -20,6 +20,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   VulkanEngine
 )
 
-# ModelRenderer rendering is done (RenderSystem + GpuAssetCache).
-# TODO: light submission still lives as a TODO in RenderSystem (LightRenderer -> vke::PointLight/
-# TODO:   SpotLight, cached per component), and the collider debug gizmo needs porting here too.
+# RenderSystem is functionally complete: ModelRenderer drawing (via GpuAssetCache), LightRenderer
+# point/spot light submission (cached per object), and the pick-feedback bool.
+# TODO: only the collider debug gizmo remains (default-off viz) — see the TODO in RenderSystem.cpp.
