@@ -32,15 +32,27 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
+# VulkanEngine: the renderer ECS3DRender (and, transitively, ECS3DEditorLib) builds against. It also
+# pulls glm, but glm is declared above first, so the first-wins FetchContent uses our pinned copy.
+FetchContent_Declare(
+  VulkanEngine
+  GIT_REPOSITORY https://github.com/SharkFinPro/VulkanRenderer.git
+  GIT_TAG main
+  GIT_SHALLOW TRUE
+)
+
 FetchContent_MakeAvailable(
   json
   glm
   uuid
+  VulkanEngine
 )
 
-# TODO: hoist the remaining FetchContent declarations (nfd, VulkanEngine) here too as the
-# TODO:   render/editor types that need them migrate (VulkanEngine for ECS3DRender, nfd for
-# TODO:   ECS3DEditorLib).
+# Captured to cache so the render/editor subdirectories (configured after this) can add the include
+# path the <VulkanEngine/...> headers need.
+set(ECS3D_VULKANENGINE_INCLUDE "${VulkanEngine_SOURCE_DIR}/include" CACHE INTERNAL "VulkanEngine include dir")
+
+# TODO: hoist nfd here too once ECS3DEditorLib's file dialogs (SaveUI / AssetBrowserPanel) migrate.
 
 add_subdirectory(data)
 add_subdirectory(clrHost)

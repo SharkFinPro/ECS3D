@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   ComponentRegistry.h
   ComponentRegistration.cpp
   ComponentRegistration.h
+  assets/AssetRegistry.cpp
+  assets/AssetRegistry.h
   context/SimContext.h
   context/RenderContext.h
   context/EditContext.h

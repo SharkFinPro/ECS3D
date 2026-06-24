@@ -2,11 +2,11 @@
 #define RENDERSYSTEM_H
 
 class ObjectManager;
-class RenderContext;
+class GpuAssetCache;
 
 class RenderSystem {
 public:
-  void variableUpdate(ObjectManager& objectManager, RenderContext& context);
+  void variableUpdate(ObjectManager& objectManager, GpuAssetCache& assetCache);
 
 private:
   // The dispatch lifted out of ModelRenderer::variableUpdate / LightRenderer::variableUpdate. The
