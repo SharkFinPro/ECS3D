@@ -1,8 +1,8 @@
-#include "ECS3D.h"
-#include "SaveManager.h"
-#include "assets/AssetManager.h"
-#include "assets/ModelAsset.h"
-#include "assets/TextureAsset.h"
+#include "../ECS3D.h"
+#include "../SaveManager.h"
+#include "../assets/AssetManager.h"
+#include "../assets/ModelAsset.h"
+#include "../assets/TextureAsset.h"
 #include "scenes/SceneManager.h"
 #include "scripts/ScriptManager.h"
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>

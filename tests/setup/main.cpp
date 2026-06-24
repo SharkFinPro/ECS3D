@@ -1,5 +1,5 @@
 #include "../common/Prefabs.h"
-#include "source/ECS3D.h"
+#include "../../source/core/ECS3D.h"
 #include "source/SaveManager.h"
 #include "source/assets/AssetManager.h"
 #include "source/scenes/SceneManager.h"
