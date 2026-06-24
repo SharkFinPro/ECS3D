@@ -1,18 +1,50 @@
 #ifndef COLLISIONSYSTEM_H
 #define COLLISIONSYSTEM_H
 
+#include <glm/vec3.hpp>
 #include <memory>
+#include <vector>
 
-class SceneAsset;
+class ObjectManager;
+class Object;
+class Collider;
+class RigidBody;
+class Simplex;
+
+struct CollisionEdge {
+  std::shared_ptr<Object> object;
+  std::shared_ptr<Collider> collider;
+  float position;
+};
 
 class CollisionSystem {
 public:
-  void fixedUpdate(const std::shared_ptr<SceneAsset>& scene, float dt);
+  void fixedUpdate(ObjectManager& objectManager);
 
 private:
-  // TODO: migrate CollisionManager sweep-and-prune (LeftEdge/collisionEdges, checkCollisions,
-  // TODO:   handleCollisions) and the GJK/EPA narrow phase from Collider.cpp (collidesWith,
-  // TODO:   getSupport, expandSimplex, line/triangle/tetrahedron cases) + Polytope + Simplex.
+  // Was CollisionManager::collisionEdges. The old add/removeObject maintenance is replaced by a
+  // per-tick rebuild from the ObjectManager (the registration TODO left in ObjectManager).
+  std::vector<CollisionEdge> m_collisionEdges;
+
+  void checkCollisions();
+
+  void findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+
+  void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
+                        const std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+
+  // GJK/EPA narrow phase, lifted out of Collider.
+  [[nodiscard]] bool collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
+                                  glm::vec3* mtv, glm::vec3* collisionPoint) const;
+
+  static bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& collider,
+                                            const std::shared_ptr<Collider>& otherCollider,
+                                            glm::vec3* mtv, glm::vec3* collisionPoint);
+
+  static bool expandSimplex(Simplex& simplex, glm::vec3& direction);
+  static void lineCase(const Simplex& simplex, glm::vec3& direction);
+  static void triangleCase(Simplex& simplex, glm::vec3& direction);
+  static bool tetrahedronCase(Simplex& simplex, glm::vec3& direction);
 };
 
 

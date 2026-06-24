@@ -22,6 +22,12 @@ add_library(${PROJECT_NAME}
   objects/components/ModelRenderer.h
   objects/components/LightRenderer.cpp
   objects/components/LightRenderer.h
+  objects/components/collisions/Collider.cpp
+  objects/components/collisions/Collider.h
+  objects/components/collisions/BoxCollider.cpp
+  objects/components/collisions/BoxCollider.h
+  objects/components/collisions/SphereCollider.cpp
+  objects/components/collisions/SphereCollider.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

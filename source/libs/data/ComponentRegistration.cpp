@@ -4,6 +4,8 @@
 #include "objects/components/RigidBody.h"
 #include "objects/components/ModelRenderer.h"
 #include "objects/components/LightRenderer.h"
+#include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/SphereCollider.h"
 #include <memory>
 
 void registerDataComponents(ComponentRegistry& componentRegistry)
@@ -16,6 +18,10 @@ void registerDataComponents(ComponentRegistry& componentRegistry)
   componentRegistry.registerComponent("ModelRenderer", [] { return std::make_shared<ModelRenderer>(); });
   componentRegistry.registerComponent("LightRenderer", [] { return std::make_shared<LightRenderer>(); });
 
-  // TODO: register the remaining component data factories as they migrate: Box/Sphere Collider
-  // TODO:   (keyed by subType), and Script (with the server's ScriptManager injected by ECS3DScripting).
+  // Colliders serialize as type "Collider" + a subType; they are keyed here by that subType
+  // ("Box"/"Sphere"), which Object::loadFromJSON looks up.
+  componentRegistry.registerComponent("Box", [] { return std::make_shared<BoxCollider>(); });
+  componentRegistry.registerComponent("Sphere", [] { return std::make_shared<SphereCollider>(); });
+
+  // TODO: register Script (with the server's ScriptManager injected by ECS3DScripting).
 }

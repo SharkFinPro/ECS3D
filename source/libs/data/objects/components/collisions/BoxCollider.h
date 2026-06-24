@@ -1,0 +1,57 @@
+#ifndef BOXCOLLIDER_H
+#define BOXCOLLIDER_H
+
+#include "Collider.h"
+#include <glm/vec3.hpp>
+#include <array>
+
+constexpr std::array<glm::vec3, 8> boxVertices = {{
+  {1.0f, 1.0f, 1.0f},
+  {-1.0f, 1.0f, 1.0f},
+  {-1.0f, 1.0f, -1.0f},
+  {1.0f, 1.0f, -1.0f},
+  {1.0f, -1.0f, 1.0f},
+  {-1.0f, -1.0f, 1.0f},
+  {-1.0f, -1.0f, -1.0f},
+  {1.0f, -1.0f, -1.0f}
+}};
+
+
+class BoxCollider final : public Collider {
+public:
+  BoxCollider();
+
+  [[nodiscard]] bool getRenderCollider() const;
+  void setRenderCollider(bool renderCollider);
+
+  [[nodiscard]] nlohmann::json serialize() override;
+
+  void loadFromJSON(const nlohmann::json& componentData) override;
+
+  [[nodiscard]] glm::vec3 getPosition() override;
+  [[nodiscard]] glm::vec3 getScale() override;
+  [[nodiscard]] glm::vec3 getRotation() override;
+
+  glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
+
+private:
+  // The vke::RenderObject + collider gizmo rendering moved to ECS3DRender; m_renderCollider stays as
+  // a plain flag the editor toggles and the render system reads.
+  bool m_renderCollider = false;
+
+  std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
+
+  uint8_t m_currentTransformUpdateID = 255;
+
+  ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
+  ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(1));
+  ComponentVariable<glm::vec3> m_rotation = ComponentVariable(glm::vec3(0));
+
+  void generateTransformedMesh(const std::shared_ptr<Transform>& transform);
+
+  void updateTransformPointer();
+};
+
+
+
+#endif //BOXCOLLIDER_H
