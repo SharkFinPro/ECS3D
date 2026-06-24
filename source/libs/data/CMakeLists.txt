@@ -3,9 +3,15 @@ project(ECS3DData)
 add_library(${PROJECT_NAME}
   ComponentRegistry.cpp
   ComponentRegistry.h
+  ComponentRegistration.cpp
+  ComponentRegistration.h
   context/SimContext.h
   context/RenderContext.h
   context/EditContext.h
+  objects/Object.cpp
+  objects/Object.h
+  objects/ObjectManager.cpp
+  objects/ObjectManager.h
   objects/components/Component.cpp
   objects/components/Component.h
   objects/components/Transform.cpp
@@ -21,12 +27,11 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} PUBLIC
   nlohmann_json::nlohmann_json
   glm::glm
+  stduuid
 )
 
 # TODO: migrate the remaining plain-data + serialize() halves of the core types into this library:
-# TODO:   objects/Object, objects/ObjectManager, the data fields of ModelRenderer/LightRenderer/Script,
-# TODO:   the collider shape data (Collider/BoxCollider/SphereCollider bounds), scenes/SceneManager,
-# TODO:   the asset registry half of AssetManager (-> AssetRegistry), and the load/save-path half of
-# TODO:   SaveManager (-> ProjectSerializer). Each concrete component inherits the data-only Component.
-
-# TODO: link stduuid once Object/ObjectManager move here (they key objects by uuid).
+# TODO:   the data fields of ModelRenderer/LightRenderer/Script, the collider shape data
+# TODO:   (Collider/BoxCollider/SphereCollider bounds), scenes/SceneManager, the asset registry half
+# TODO:   of AssetManager (-> AssetRegistry), and the load/save-path half of SaveManager
+# TODO:   (-> ProjectSerializer). Each concrete component inherits the data-only Component.

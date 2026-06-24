@@ -1,12 +1,30 @@
 #include "PhysicsSystem.h"
+#include <objects/Object.h>
+#include <objects/ObjectManager.h>
+#include <objects/components/Component.h>
+#include <objects/components/RigidBody.h>
+#include <objects/components/Transform.h>
 
-void PhysicsSystem::fixedUpdate(const std::shared_ptr<SceneAsset>& scene, const float dt, SimContext& context)
+void PhysicsSystem::fixedUpdate(ObjectManager& objectManager, const float dt, SimContext& context)
 {
-  // TODO: walk every object in the scene with a RigidBody + Transform and call integrate() on it,
-  // TODO:   resolving collisions reported by CollisionSystem via handleCollision(). This is the loop
-  // TODO:   that used to run inside RigidBody::fixedUpdate through SceneManager::fixedUpdate.
-  (void)scene;
-  (void)dt;
+  // The dispatch that used to be a virtual call inside Object::fixedUpdate now lives here: the system
+  // walks the objects and acts on the concrete RigidBody/Transform data. Only ECS3DSim (server) does.
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    const auto rigidBody = object->getComponent<RigidBody>(ComponentType::rigidBody);
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
+    // getComponent walks to the parent for rigidBody, so guard on ownership to integrate each body
+    // exactly once (the old RigidBody::fixedUpdate ran behind an owner == this check).
+    if (!rigidBody || !transform || rigidBody->getOwner() != object.get())
+    {
+      continue;
+    }
+
+    integrate(*rigidBody, *transform, dt);
+  }
+
+  // TODO: resolve the collisions CollisionSystem found this tick via handleCollision().
   (void)context;
 }
 

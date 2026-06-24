@@ -1,4 +1,5 @@
 #include "Transform.h"
+#include "../Object.h"
 #include <nlohmann/json.hpp>
 
 Transform::Transform()
@@ -27,21 +28,40 @@ uint8_t Transform::getUpdateID() const
 
 glm::vec3 Transform::getPosition() const
 {
-  // TODO: combine with the parent's world position once Object lives in ECS3DData. The original
-  // TODO:   walked m_owner->getParent()->getComponent<Transform>()->getPosition() + local. Returning
-  // TODO:   the local value keeps ECS3DData free of the (still core-side) Object definition for now.
+  if (m_owner->getParent())
+  {
+    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
+    {
+      return parentTransform->getPosition() + m_position.get();
+    }
+  }
+
   return m_position.get();
 }
 
 glm::vec3 Transform::getScale() const
 {
-  // TODO: multiply by the parent's world scale once Object lives in ECS3DData.
+  if (m_owner->getParent())
+  {
+    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
+    {
+      return parentTransform->getScale() * m_scale.get();
+    }
+  }
+
   return m_scale.get();
 }
 
 glm::vec3 Transform::getRotation() const
 {
-  // TODO: add the parent's world rotation once Object lives in ECS3DData.
+  if (m_owner->getParent())
+  {
+    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
+    {
+      return parentTransform->getRotation() + m_rotation.get();
+    }
+  }
+
   return m_rotation.get();
 }
 

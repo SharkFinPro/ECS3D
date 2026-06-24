@@ -24,14 +24,23 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
+# stduuid: Object/ObjectManager key objects by uuid.
+FetchContent_Declare(
+  uuid
+  GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
+  GIT_TAG v1.2.3
+  GIT_SHALLOW TRUE
+)
+
 FetchContent_MakeAvailable(
   json
   glm
+  uuid
 )
 
-# TODO: hoist the remaining FetchContent declarations (nfd, uuid, VulkanEngine) here too as the
-# TODO:   data/render/editor types that need them migrate (uuid for ECS3DData Object, VulkanEngine
-# TODO:   for ECS3DRender, nfd for ECS3DEditorLib).
+# TODO: hoist the remaining FetchContent declarations (nfd, VulkanEngine) here too as the
+# TODO:   render/editor types that need them migrate (VulkanEngine for ECS3DRender, nfd for
+# TODO:   ECS3DEditorLib).
 
 add_subdirectory(data)
 add_subdirectory(clrHost)

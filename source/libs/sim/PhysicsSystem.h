@@ -5,7 +5,7 @@
 #include <glm/vec3.hpp>
 #include <memory>
 
-class SceneAsset;
+class ObjectManager;
 class SimContext;
 class Object;
 class Transform;
@@ -13,7 +13,7 @@ class RigidBody;
 
 class PhysicsSystem {
 public:
-  void fixedUpdate(const std::shared_ptr<SceneAsset>& scene, float dt, SimContext& context);
+  void fixedUpdate(ObjectManager& objectManager, float dt, SimContext& context);
 
 private:
   // The behavior lifted out of RigidBody. Each takes the data it acts on by reference instead of
