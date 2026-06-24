@@ -21,6 +21,8 @@ public:
   
   [[nodiscard]] glm::vec3 getPosition() override;
 
+  glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
+
 private:
   std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
 
@@ -29,8 +31,6 @@ private:
   ComponentVariable<float> m_radius = ComponentVariable(1.0f);
 
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
-
-  glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
   void updateTransformPointer();
 

@@ -34,6 +34,8 @@ public:
   [[nodiscard]] glm::vec3 getScale() override;
   [[nodiscard]] glm::vec3 getRotation() override;
 
+  glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
+
 private:
   std::shared_ptr<vke::RenderObject> m_renderObject = nullptr;
 
@@ -46,8 +48,6 @@ private:
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
   ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(1));
   ComponentVariable<glm::vec3> m_rotation = ComponentVariable(glm::vec3(0));
-
-  glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
   void generateTransformedMesh(const std::shared_ptr<Transform>& transform);
 
