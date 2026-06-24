@@ -6,7 +6,7 @@ int main()
 {
   try
   {
-    ECS3D ecs;
+    ECS3D ecs(false);
     ecs.getSaveManager()->loadSaveFile("SetupTest.json");
 
     while (ecs.isActive())

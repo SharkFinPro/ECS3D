@@ -8,7 +8,7 @@
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/window/Window.h>
 
-ECS3D::ECS3D()
+ECS3D::ECS3D(const bool displayImGui)
   : m_previousTime(std::chrono::steady_clock::now()),
 		m_sceneManager(std::make_shared<SceneManager>()),
 		m_assetManager(std::make_shared<AssetManager>(this)),
@@ -19,7 +19,8 @@ ECS3D::ECS3D()
 			std::seed_seq seq(std::begin(seed_data), std::end(seed_data));
 			return std::mt19937(seq);
 		}()),
-		m_uuidGenerator(m_rng)
+		m_uuidGenerator(m_rng),
+		m_shouldDisplayGui(displayImGui)
 {
   initRenderer();
 
@@ -114,12 +115,12 @@ std::shared_ptr<SaveManager> ECS3D::getSaveManager() const
 
 void ECS3D::updateGui()
 {
-	displayMenuBar();
-
 	if (!m_shouldDisplayGui)
 	{
 		return;
 	}
+
+	displayMenuBar();
 
 	updateDockSpace();
 

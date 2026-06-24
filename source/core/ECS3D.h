@@ -16,7 +16,7 @@ class ScriptManager;
 
 class ECS3D {
 public:
-  ECS3D();
+  explicit ECS3D(bool displayImGui = true);
 
   void prepareForReset();
 
