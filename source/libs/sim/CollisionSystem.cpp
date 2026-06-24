@@ -1,4 +1,5 @@
 #include "CollisionSystem.h"
+#include "PhysicsSystem.h"
 #include "collisions/Simplex.h"
 #include "collisions/Polytope.h"
 #include "collisions/Support.h"
@@ -11,8 +12,10 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
-void CollisionSystem::fixedUpdate(ObjectManager& objectManager)
+void CollisionSystem::fixedUpdate(ObjectManager& objectManager, PhysicsSystem& physicsSystem)
 {
+  m_physicsSystem = &physicsSystem;
+
   m_collisionEdges.clear();
 
   for (const auto& object : objectManager.getAllObjects())
@@ -97,19 +100,13 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
 void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
                                        const std::vector<std::shared_ptr<Object>>& collidedObjects) const
 {
-  // TODO: the collision response now lives in ECS3DSim PhysicsSystem (RigidBody::handleCollision moved
-  // TODO:   there). Give CollisionSystem a PhysicsSystem& (or have it emit collision results the
-  // TODO:   PhysicsSystem consumes) and replace the (void)rigidBody calls below with
-  // TODO:   physicsSystem.handleCollision(*rigidBody, *transform, collidedObject, mtv, collisionPoint).
-  (void)rigidBody;
-
   if (collidedObjects.size() == 1)
   {
     glm::vec3 mtv;
     glm::vec3 collisionPoint;
     if (collidesWith(collider, collidedObjects[0], &mtv, &collisionPoint))
     {
-      // TODO: rigidBody->handleCollision(mtv, collidedObjects[0], collisionPoint);
+      m_physicsSystem->handleCollision(*rigidBody, collidedObjects[0], mtv, collisionPoint);
     }
 
     return;
@@ -146,7 +143,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
         glm::vec3 collisionPoint;
         if (collidesWith(collider, collidedObjects[j], &mtv, &collisionPoint))
         {
-          // TODO: rigidBody->handleCollision(mtv, collidedObjects[j], collisionPoint);
+          m_physicsSystem->handleCollision(*rigidBody, collidedObjects[j], mtv, collisionPoint);
         }
       }
     }
