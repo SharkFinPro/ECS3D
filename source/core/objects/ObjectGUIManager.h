@@ -3,7 +3,6 @@
 
 #include <VulkanEngine/utilities/EventSystem.h>
 #include <VulkanEngine/components/window/Window.h>
-#include <vector>
 #include <memory>
 
 class ObjectManager;
