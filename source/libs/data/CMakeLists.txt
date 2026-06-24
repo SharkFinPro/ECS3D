@@ -5,8 +5,14 @@ add_library(${PROJECT_NAME}
   ComponentRegistry.h
   ComponentRegistration.cpp
   ComponentRegistration.h
+  ProjectSerializer.cpp
+  ProjectSerializer.h
   assets/AssetRegistry.cpp
   assets/AssetRegistry.h
+  scenes/SceneManager.cpp
+  scenes/SceneManager.h
+  scenes/SceneAsset.cpp
+  scenes/SceneAsset.h
   context/SimContext.h
   context/RenderContext.h
   context/EditContext.h
@@ -44,8 +50,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   stduuid
 )
 
-# TODO: migrate the remaining plain-data + serialize() halves of the core types into this library:
-# TODO:   the data fields of ModelRenderer/LightRenderer/Script, the collider shape data
-# TODO:   (Collider/BoxCollider/SphereCollider bounds), scenes/SceneManager, the asset registry half
-# TODO:   of AssetManager (-> AssetRegistry), and the load/save-path half of SaveManager
-# TODO:   (-> ProjectSerializer). Each concrete component inherits the data-only Component.
+# ECS3DData is feature-complete: all component data, Object/ObjectManager, scenes (SceneManager/
+# SceneAsset), the AssetRegistry, and the ProjectSerializer live here, with no Vulkan/imgui includes.
+# The remaining migration work is in the systems/editor/net/clrHost libs and the app wiring.

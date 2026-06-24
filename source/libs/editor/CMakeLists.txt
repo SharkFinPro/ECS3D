@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   ComponentEditor.h
   AssetBrowserPanel.cpp
   AssetBrowserPanel.h
+  SaveUI.cpp
+  SaveUI.h
   components/TransformEditor.cpp
   components/TransformEditor.h
   components/RigidBodyEditor.cpp
