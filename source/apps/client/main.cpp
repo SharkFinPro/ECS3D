@@ -1,18 +1,17 @@
-#include <ECS3D.h>
-#include <SaveManager.h>
+#include "ClientApp.h"
 #include <iostream>
 
-int main()
+int main(int argc, char** argv)
 {
   try
   {
-    ECS3D ecs(false);
-    ecs.getSaveManager()->loadSaveFile("SetupTest.json");
+    // TODO: parse argv for --host, --port, or --singleplayer (launchLocalServer + project).
+    (void)argc;
+    (void)argv;
 
-    while (ecs.isActive())
-    {
-      ecs.update();
-    }
+    ClientApp app({ .launchLocalServer = true, .project = "SetupTest.json" });
+
+    app.run();
   }
   catch (const std::exception& e)
   {

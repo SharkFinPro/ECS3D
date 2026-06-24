@@ -1,18 +1,17 @@
-#include <ECS3D.h>
-#include <SaveManager.h>
+#include "EditorApp.h"
 #include <iostream>
 
-int main()
+int main(int argc, char** argv)
 {
   try
   {
-    ECS3D ecs;
-    ecs.getSaveManager()->loadSaveFile("SetupTest.json");
+    // TODO: parse argv for --project (and optionally --port for the spawned edit server).
+    (void)argc;
+    (void)argv;
 
-    while (ecs.isActive())
-    {
-      ecs.update();
-    }
+    EditorApp app({ .project = "SetupTest.json" });
+
+    app.run();
   }
   catch (const std::exception& e)
   {

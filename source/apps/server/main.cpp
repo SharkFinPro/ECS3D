@@ -1,18 +1,19 @@
-#include <ECS3D.h>
-#include <SaveManager.h>
+#include "ServerApp.h"
 #include <iostream>
 
-int main()
+int main(int argc, char** argv)
 {
   try
   {
-    ECS3D ecs;
-    ecs.getSaveManager()->loadSaveFile("SetupTest.json");
+    // TODO: parse argv for --project, --port, --edit, --token (the ServerLaunch options). --edit
+    // TODO:   is the launch-capability gate that allows editor connections; absent it, the server
+    // TODO:   is a pure play server. The server must still work as a standalone dedicated app.
+    (void)argc;
+    (void)argv;
 
-    while (ecs.isActive())
-    {
-      ecs.update();
-    }
+    ServerApp app({ .project = "SetupTest.json" });
+
+    app.run();
   }
   catch (const std::exception& e)
   {
