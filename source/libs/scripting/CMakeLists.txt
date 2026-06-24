@@ -3,6 +3,8 @@ project(ECS3DScripting)
 add_library(${PROJECT_NAME}
   ScriptSystem.cpp
   ScriptSystem.h
+  bindings/BindingContext.cpp
+  bindings/BindingContext.h
   bindings/TransformBindings.cpp
   bindings/TransformBindings.h
   bindings/RigidBodyBindings.cpp

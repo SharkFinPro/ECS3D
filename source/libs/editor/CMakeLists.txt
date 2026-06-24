@@ -15,6 +15,8 @@ add_library(${PROJECT_NAME}
   components/LightRendererEditor.h
   components/ColliderEditor.cpp
   components/ColliderEditor.h
+  components/ScriptEditor.cpp
+  components/ScriptEditor.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

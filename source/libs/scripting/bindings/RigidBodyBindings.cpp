@@ -1,4 +1,36 @@
 #include "RigidBodyBindings.h"
+#include "BindingContext.h"
+#include <objects/Object.h>
+#include <objects/ObjectManager.h>
+#include <objects/components/Component.h>
+#include <objects/components/RigidBody.h>
+#include <memory>
+#include <string>
+
+namespace {
+  std::shared_ptr<RigidBody> find(const char* uuid)
+  {
+    const auto objectManager = BindingContext::getObjectManager();
+    if (!objectManager)
+    {
+      return nullptr;
+    }
+
+    const auto parsed = uuids::uuid::from_string(std::string(uuid));
+    if (!parsed.has_value())
+    {
+      return nullptr;
+    }
+
+    const auto object = objectManager->getObjectByUUID(parsed.value());
+    if (!object)
+    {
+      return nullptr;
+    }
+
+    return object->getComponent<RigidBody>(ComponentType::rigidBody);
+  }
+}
 
 RigidBodyBindings RigidBodyBindingsProvider::getBindings()
 {
@@ -11,9 +43,15 @@ RigidBodyBindings RigidBodyBindingsProvider::getBindings()
 
 void RigidBodyBindingsProvider::bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz)
 {
-  // TODO: resolve the RigidBody (+ its Transform) for uuid, then forward to
-  // TODO:   PhysicsSystem::applyForce(body, transform, { x, y, z }, { px, py, pz }).
-  (void)uuid;
+  const auto rigidBody = find(uuid);
+  if (!rigidBody)
+  {
+    return;
+  }
+
+  // TODO: applyForce is physics (it lives in ECS3DSim PhysicsSystem now, needs the Transform + inertia
+  // TODO:   tensor). Forward to PhysicsSystem::applyForce(*rigidBody, *transform, { x, y, z },
+  // TODO:   { px, py, pz }) once the bindings can reach the PhysicsSystem via the scripting context.
   (void)x;
   (void)y;
   (void)z;
@@ -24,17 +62,22 @@ void RigidBodyBindingsProvider::bindApplyForce(const char* uuid, float x, float 
 
 void RigidBodyBindingsProvider::bindSetVelocity(const char* uuid, float x, float y, float z)
 {
-  // TODO: resolve the RigidBody for uuid, then body->setVelocity({ x, y, z }).
-  (void)uuid;
-  (void)x;
-  (void)y;
-  (void)z;
+  const auto rigidBody = find(uuid);
+  if (!rigidBody)
+  {
+    return;
+  }
+
+  rigidBody->setVelocity({ x, y, z });
 }
 
 bool RigidBodyBindingsProvider::bindIsFalling(const char* uuid)
 {
-  // TODO: resolve the RigidBody for uuid, then return body->isFalling().
-  (void)uuid;
+  const auto rigidBody = find(uuid);
+  if (!rigidBody)
+  {
+    return false;
+  }
 
-  return false;
+  return rigidBody->isFalling();
 }

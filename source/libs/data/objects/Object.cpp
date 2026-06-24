@@ -2,6 +2,7 @@
 #include "../ComponentRegistry.h"
 #include "components/Component.h"
 #include "components/Transform.h"
+#include "components/Script.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
 #include <stdexcept>
@@ -75,8 +76,17 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
 {
   if (component->getType() == ComponentType::script)
   {
-    // TODO: dedupe by class name (a Script is only added once) like the old addComponent did. That
-    // TODO:   needs Script migrated to ECS3DData so we can read its className without a back-include.
+    const auto newScript = std::dynamic_pointer_cast<Script>(component);
+
+    for (const auto& script : m_scripts)
+    {
+      if (const auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
+          scriptComponent && newScript && scriptComponent->getClassName() == newScript->getClassName())
+      {
+        return;
+      }
+    }
+
     m_scripts.push_back(component);
   }
   else
@@ -251,7 +261,16 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     component->loadFromJSON(componentData);
   }
 
-  // TODO: scripts need ECS3DScripting. The registry's "Script" factory must inject the server's
-  // TODO:   ScriptManager, and Script (className) must migrate to ECS3DData. Until then, scripts on a
-  // TODO:   loaded scene are skipped here (old code did make_shared<Script>(className, scriptManager)).
+  for (const auto& scriptData : objectData["scripts"])
+  {
+    const auto script = registry->create("Script");
+
+    if (!script)
+    {
+      throw std::runtime_error("Script component type is not registered");
+    }
+
+    addComponent(script);
+    script->loadFromJSON(scriptData);
+  }
 }

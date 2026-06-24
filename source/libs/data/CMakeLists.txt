@@ -18,6 +18,8 @@ add_library(${PROJECT_NAME}
   objects/components/Transform.h
   objects/components/RigidBody.cpp
   objects/components/RigidBody.h
+  objects/components/Script.cpp
+  objects/components/Script.h
   objects/components/ModelRenderer.cpp
   objects/components/ModelRenderer.h
   objects/components/LightRenderer.cpp

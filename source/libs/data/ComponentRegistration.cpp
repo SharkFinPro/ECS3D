@@ -6,6 +6,7 @@
 #include "objects/components/LightRenderer.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
+#include "objects/components/Script.h"
 #include <memory>
 
 void registerDataComponents(ComponentRegistry& componentRegistry)
@@ -23,5 +24,7 @@ void registerDataComponents(ComponentRegistry& componentRegistry)
   componentRegistry.registerComponent("Box", [] { return std::make_shared<BoxCollider>(); });
   componentRegistry.registerComponent("Sphere", [] { return std::make_shared<SphereCollider>(); });
 
-  // TODO: register Script (with the server's ScriptManager injected by ECS3DScripting).
+  // Script data is just className + a field blob; the live C# instance is attached by ECS3DScripting
+  // (server only). loadFromJSON sets the className, so the factory is argless like the rest.
+  componentRegistry.registerComponent("Script", [] { return std::make_shared<Script>(); });
 }
