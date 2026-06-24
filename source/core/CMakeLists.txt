@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.29)
 include(FetchContent)
 
-project(ECS3DEngine)
+project(ECS3DCore)
 
 set(CMAKE_CXX_STANDARD 20)
 
