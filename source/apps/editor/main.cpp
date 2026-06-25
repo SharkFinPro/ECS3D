@@ -5,7 +5,7 @@ int main(int argc, char** argv)
 {
   try
   {
-    // TODO: parse argv for --project (and optionally --port for the spawned edit server).
+    // TODO: parse argv for --project (and optionally --host/--port for the spawned edit server).
     (void)argc;
     (void)argv;
 
