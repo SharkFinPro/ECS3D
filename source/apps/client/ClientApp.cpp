@@ -21,7 +21,8 @@ ClientApp::ClientApp(ConnectOptions options)
     m_assetRegistry(std::make_shared<AssetRegistry>()),
     m_sceneManager(std::make_shared<SceneManager>())
 {
-  m_host->init("scripts");
+  // Boot the CLR from the net transport's runtimeconfig (the client only needs the socket assembly).
+  m_host->init("net/Transport");
 
   registerDataComponents(*m_componentRegistry);
 

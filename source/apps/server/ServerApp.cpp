@@ -24,8 +24,9 @@ ServerApp::ServerApp(LaunchOptions options)
     m_sceneManager(std::make_shared<SceneManager>()),
     m_previousTime(std::chrono::steady_clock::now())
 {
-  // TODO: point ManagedHost at the directory holding the net transport + ScriptBridge assemblies.
-  m_host->init("scripts");
+  // Boot the CLR from the net transport's runtimeconfig (ECS3DNet is linked by every app). The
+  // ScriptBridge assembly is loaded on top of the same runtime by ScriptSystem.
+  m_host->init("net/Transport");
 
   registerDataComponents(*m_componentRegistry);
 

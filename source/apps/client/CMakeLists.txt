@@ -15,4 +15,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DClrHost
 )
 
-# TODO: call ecs3d_deploy_clr_runtime(${PROJECT_NAME}) once it exists, to copy nethost.dll.
+# Copy nethost.dll next to the executable so it can boot the CLR (the C# transport).
+ecs3d_deploy_clr_runtime(${PROJECT_NAME})
