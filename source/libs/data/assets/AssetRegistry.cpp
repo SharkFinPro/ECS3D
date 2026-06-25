@@ -16,6 +16,12 @@ void AssetRegistry::registerAsset(const AssetRecord& record)
   }
 }
 
+void AssetRegistry::clear()
+{
+  m_assets.clear();
+  m_loadedPaths.clear();
+}
+
 const AssetRecord* AssetRegistry::getByUUID(const uuids::uuid& uuid) const
 {
   const auto it = m_assets.find(uuid);

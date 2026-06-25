@@ -32,7 +32,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
   ECS3DRender  # pulls imgui transitively via VulkanEngine, which the component editors + GuiComponents use
-  # TODO: nfd (native file dialogs) for the SaveUI half of SaveManager.
+  nfd          # native file dialogs for SaveUI
 )
 
 # DONE: component displayGui() bodies -> ComponentEditor handlers (the central componentEditor),

@@ -18,9 +18,10 @@ enum class MessageType : uint8_t {
   inputState,    // client -> server: local input ({ keys, focused }) for the scripts to read
   editComponent, // editor -> server -> all: a single component value edit (replication::buildComponentEdit)
   sceneEdit,     // editor -> server: a structural edit (add/remove object/component); server re-snapshots
-  sceneControl   // editor -> server: scene lifecycle ({ op: start|pause|stop }); server re-snapshots
+  sceneControl,  // editor -> server: scene lifecycle ({ op: start|pause|stop }); server re-snapshots
+  loadProject    // editor -> server: replace the project with this serialized blob; server re-snapshots
   // TODO: add the auth payload on join (Role::editor needs the server's edit gate + a token).
-  // editComponent/sceneEdit/sceneControl are the editor's mutation path; inputState is the play path.
+  // editComponent/sceneEdit/sceneControl/loadProject are the editor's mutation path; inputState is play.
 };
 
 enum class Role : uint8_t {

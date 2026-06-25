@@ -75,7 +75,15 @@ EditorApp::EditorApp(LaunchOptions options)
   });
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get());
-  m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get());
+
+  m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
+  m_saveUI->setLoadProjectCallback([this](const std::string& projectJson) {
+    // Open/New: the server owns the scene, so send it the project blob; it reloads and re-snapshots.
+    m_netClient->send(net::Message{
+      .type = net::MessageType::loadProject,
+      .payload = std::vector<uint8_t>(projectJson.begin(), projectJson.end())
+    });
+  });
 
   setupKeybinds();
 
@@ -325,8 +333,8 @@ void EditorApp::displayMenuBar()
 
     if (ImGui::BeginMenu("File"))
     {
-      // NOTE: New/Open act on the local replicated project; reconciling them with the authoritative
-      // server is part of the edit-command protocol (TODO). Save serializes the replicated project.
+      // Save serializes the replicated project to disk; New/Open send the project to the server (which
+      // reloads + re-snapshots), since the server owns the scene.
       if (ImGui::MenuItem("New"))
       {
         m_saveUI->createNewProject();

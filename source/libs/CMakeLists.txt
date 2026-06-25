@@ -32,6 +32,15 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
+# nfd (native file dialogs): the editor's SaveUI (and, later, AssetBrowserPanel import) opens OS
+# open/save dialogs. Editor-only, but declared here with the other shared deps.
+FetchContent_Declare(
+  nfd
+  GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
+  GIT_TAG v1.3.0
+  GIT_SHALLOW TRUE
+)
+
 # VulkanEngine: the renderer ECS3DRender (and, transitively, ECS3DEditorLib) builds against. It also
 # pulls glm, but glm is declared above first, so the first-wins FetchContent uses our pinned copy.
 FetchContent_Declare(
@@ -45,14 +54,13 @@ FetchContent_MakeAvailable(
   json
   glm
   uuid
+  nfd
   VulkanEngine
 )
 
 # Captured to cache so the render/editor subdirectories (configured after this) can add the include
 # path the <VulkanEngine/...> headers need.
 set(ECS3D_VULKANENGINE_INCLUDE "${VulkanEngine_SOURCE_DIR}/include" CACHE INTERNAL "VulkanEngine include dir")
-
-# TODO: hoist nfd here too once ECS3DEditorLib's file dialogs (SaveUI / AssetBrowserPanel) migrate.
 
 add_subdirectory(data)
 add_subdirectory(clrHost)

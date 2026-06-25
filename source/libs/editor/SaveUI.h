@@ -1,15 +1,30 @@
 #ifndef SAVEUI_H
 #define SAVEUI_H
 
+#include <VulkanEngine/components/window/Window.h>
+#include <functional>
+#include <memory>
 #include <string>
 
 class ProjectSerializer;
 
-// The editor-only half of the old SaveManager: file dialogs + the Ctrl+S keybind + drag-and-drop
-// loading. It drives the data-side ProjectSerializer once a path is chosen.
+namespace vke {
+  class VulkanEngine;
+}
+
+// The editor-only half of the old SaveManager: native file dialogs + the Ctrl+S keybind + drag-and-drop
+// loading. Save serializes the editor's replicated project straight to disk. Open/New don't load
+// locally (that would desync from the authoritative server) — they hand the project blob to a callback
+// the EditorApp uses to send a loadProject command, after which the server re-snapshots.
 class SaveUI {
 public:
-  explicit SaveUI(ProjectSerializer* projectSerializer);
+  using LoadProjectCallback = std::function<void(const std::string& projectJson)>;
+
+  SaveUI(ProjectSerializer* projectSerializer, std::shared_ptr<vke::VulkanEngine> renderer);
+
+  ~SaveUI();
+
+  void setLoadProjectCallback(LoadProjectCallback callback);
 
   void save();
 
@@ -24,14 +39,20 @@ public:
 private:
   ProjectSerializer* m_projectSerializer;
 
+  std::shared_ptr<vke::VulkanEngine> m_renderer;
+
+  LoadProjectCallback m_onLoadProject;
+
   std::string m_saveFile;
 
-  // TODO: migrate the nfd dialogs (SaveManager::chooseSaveFile / createSaveFile) and the window event
-  // TODO:   listeners (registerWindowEvents: Ctrl+S -> save / Ctrl+Shift+S -> saveAs, drop event ->
-  // TODO:   loadFromFile). Needs nfd linked into ECS3DEditorLib and access to the renderer's window.
+  vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
+  vke::EventListener<vke::DropEvent> m_dropEventListener;
+
   [[nodiscard]] bool chooseSaveFile();
 
   [[nodiscard]] bool createSaveFile();
+
+  void registerWindowEvents();
 };
 
 

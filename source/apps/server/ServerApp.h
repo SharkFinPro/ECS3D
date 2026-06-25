@@ -3,6 +3,7 @@
 
 #include <context/SimContext.h>
 #include <Protocol.h>
+#include <nlohmann/json_fwd.hpp>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -66,6 +67,8 @@ private:
   void handleClientMessage(const net::Message& message);
 
   void applySceneControl(const std::string& op);
+
+  void loadProject(const nlohmann::json& project);
 
   void broadcastSnapshot();
 

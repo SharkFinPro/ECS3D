@@ -7,6 +7,13 @@ void SceneManager::addScene(const std::shared_ptr<SceneAsset>& scene)
   m_scenes.emplace(scene->getUUID(), scene);
 }
 
+void SceneManager::clear()
+{
+  m_scenes.clear();
+  m_currentScene.reset();
+  m_sceneStatus = SceneStatus::stopped;
+}
+
 std::shared_ptr<SceneAsset> SceneManager::getScene(const uuids::uuid& uuid) const
 {
   const auto it = m_scenes.find(uuid);

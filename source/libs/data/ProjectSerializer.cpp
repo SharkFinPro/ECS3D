@@ -49,6 +49,11 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
   // TODO:   loading into fresh AssetRegistry/SceneManager instances and swapping them in on success.
   const auto& assets = saveData.at("assets");
 
+  // Load into a clean slate: a fresh snapshot or a different project must REPLACE the current state,
+  // not merge with it (addScene/registerAsset are keyed and won't overwrite existing entries).
+  m_sceneManager->clear();
+  m_assetRegistry->clear();
+
   m_assetRegistry->loadFromJSON(assets);
 
   if (assets.contains("scenes"))

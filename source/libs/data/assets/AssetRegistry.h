@@ -28,6 +28,9 @@ class AssetRegistry {
 public:
   void registerAsset(const AssetRecord& record);
 
+  // Drop all records (used when (re)loading a project / applying a fresh snapshot).
+  void clear();
+
   [[nodiscard]] const AssetRecord* getByUUID(const uuids::uuid& uuid) const;
 
   [[nodiscard]] const AssetRecord* getByPath(const std::string& path) const;

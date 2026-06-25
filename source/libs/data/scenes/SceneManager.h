@@ -20,6 +20,10 @@ class SceneManager {
 public:
   void addScene(const std::shared_ptr<SceneAsset>& scene);
 
+  // Drop all scenes (used when (re)loading a project / applying a fresh snapshot, so stale scenes
+  // don't linger — addScene is keyed by uuid and won't replace an existing entry).
+  void clear();
+
   [[nodiscard]] std::shared_ptr<SceneAsset> getScene(const uuids::uuid& uuid) const;
 
   [[nodiscard]] const std::unordered_map<uuids::uuid, std::shared_ptr<SceneAsset>>& getScenes() const;

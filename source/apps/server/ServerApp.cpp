@@ -209,6 +209,19 @@ void ServerApp::handleClientMessage(const net::Message& message)
       }
       break;
     }
+    case net::MessageType::loadProject:
+    {
+      // An editor opened a different project: stop the current scripts, swap the project in, restart,
+      // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
+      const std::string payload(message.payload.begin(), message.payload.end());
+
+      const auto json = nlohmann::json::parse(payload, nullptr, false);
+      if (!json.is_discarded())
+      {
+        loadProject(json);
+      }
+      break;
+    }
     case net::MessageType::inputState:
     {
       // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
@@ -282,6 +295,52 @@ void ServerApp::applySceneControl(const std::string& op)
 
   // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
   // every view reflects it immediately.
+  broadcastSnapshot();
+}
+
+void ServerApp::loadProject(const nlohmann::json& project)
+{
+  // Stop the current scripts before the scene is swapped out from under them.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    try
+    {
+      m_scriptSystem->stop(*scene->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      logMessage("Error", e.what());
+    }
+  }
+
+  try
+  {
+    // deserialize clears + rebuilds the AssetRegistry/SceneManager and loads the current scene.
+    m_projectSerializer->deserialize(project);
+  }
+  catch (const std::exception& e)
+  {
+    logMessage("Error", std::string("Failed to load project from editor: ") + e.what());
+    return;
+  }
+
+  m_sceneManager->startScene();
+
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    try
+    {
+      m_scriptSystem->start(*scene->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      logMessage("Error", e.what());
+    }
+
+    logMessage("Info", "Loaded project from editor: scene '" + scene->getName() + "' ("
+      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
+  }
+
   broadcastSnapshot();
 }
 

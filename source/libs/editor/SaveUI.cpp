@@ -1,11 +1,37 @@
 #include "SaveUI.h"
 #include <ProjectSerializer.h>
+#include <VulkanEngine/VulkanEngine.h>
+#include <GLFW/glfw3.h>
+#include <nfd.h>
+#include <nlohmann/json.hpp>
+#include <uuid.h>
+#include <array>
+#include <fstream>
+#include <iostream>
+#include <random>
+#include <sstream>
+#include <vector>
 
-SaveUI::SaveUI(ProjectSerializer* projectSerializer)
-  : m_projectSerializer(projectSerializer)
+SaveUI::SaveUI(ProjectSerializer* projectSerializer, std::shared_ptr<vke::VulkanEngine> renderer)
+  : m_projectSerializer(projectSerializer),
+    m_renderer(std::move(renderer))
 {
-  // TODO: registerWindowEvents() — hook Ctrl+S / Ctrl+Shift+S and the drop event off the renderer
-  // TODO:   window, the same as SaveManager's constructor did.
+  registerWindowEvents();
+}
+
+SaveUI::~SaveUI()
+{
+  if (m_renderer)
+  {
+    const auto window = m_renderer->getWindow();
+    window->removeListener(m_keyCallbackEventListener);
+    window->removeListener(m_dropEventListener);
+  }
+}
+
+void SaveUI::setLoadProjectCallback(LoadProjectCallback callback)
+{
+  m_onLoadProject = std::move(callback);
 }
 
 void SaveUI::save()
@@ -15,14 +41,17 @@ void SaveUI::save()
     return;
   }
 
+  // Serialize the editor's replicated project (kept current by snapshots/deltas) straight to disk.
   m_projectSerializer->save(m_saveFile);
+
+  std::cout << "[SaveUI] Saved project to " << m_saveFile << std::endl;
 }
 
 void SaveUI::saveAs()
 {
   if (createSaveFile())
   {
-    m_projectSerializer->save(m_saveFile);
+    save();
   }
 }
 
@@ -33,30 +62,146 @@ void SaveUI::open()
     return;
   }
 
-  m_projectSerializer->load(m_saveFile);
+  loadFromFile(m_saveFile);
 }
 
 void SaveUI::loadFromFile(const std::string& path)
 {
+  std::ifstream f(path);
+  if (!f.is_open())
+  {
+    std::cerr << "[SaveUI] Could not open project file: " << path << std::endl;
+    return;
+  }
+
+  std::stringstream buffer;
+  buffer << f.rdbuf();
+
   m_saveFile = path;
 
-  m_projectSerializer->load(m_saveFile);
+  // The server owns the scene, so don't load locally (that would desync). Hand the blob to the app,
+  // which sends it as a loadProject command; the server reloads and re-snapshots back to us.
+  if (m_onLoadProject)
+  {
+    m_onLoadProject(buffer.str());
+  }
 }
 
 void SaveUI::createNewProject()
 {
-  // TODO: createSaveFile() then start an empty project. The old createNewProject used the ECS3D
-  // TODO:   reset machinery; with ProjectSerializer this resets the AssetRegistry/SceneManager instead.
+  if (!m_onLoadProject)
+  {
+    return;
+  }
+
+  // A fresh project with a single empty scene to start editing in.
+  std::mt19937 rng{ std::random_device{}() };
+  uuids::uuid_random_generator generator{ rng };
+  const auto sceneUUID = uuids::to_string(generator());
+
+  const nlohmann::json project = {
+    { "assets", {
+      { "models", nlohmann::json::array() },
+      { "textures", nlohmann::json::array() },
+      { "scripts", nlohmann::json::array() },
+      { "scenes", nlohmann::json::array({
+        { { "name", "New Scene" }, { "uuid", sceneUUID }, { "objects", nlohmann::json::array() } }
+      }) }
+    } },
+    { "currentSceneUUID", sceneUUID }
+  };
+
+  m_saveFile = "";
+  m_onLoadProject(project.dump());
 }
 
 bool SaveUI::chooseSaveFile()
 {
-  // TODO: nfd open dialog (SaveManager::chooseSaveFile) -> set m_saveFile, return success.
-  return false;
+  if (NFD_Init() != NFD_OKAY)
+  {
+    std::cerr << "[SaveUI] NFD_Init failed" << std::endl;
+    return false;
+  }
+
+  nfdu8char_t* outPath = nullptr;
+  const std::array<nfdu8filteritem_t, 1> filters { { { "ECS3D Project Files", "json" } } };
+
+  const nfdopendialogu8args_t args {
+    .filterList = filters.data(),
+    .filterCount = static_cast<nfdfiltersize_t>(filters.size())
+  };
+
+  const nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+
+  if (result != NFD_OKAY)
+  {
+    NFD_Quit();
+    return false;
+  }
+
+  m_saveFile = std::string(outPath);
+  NFD_FreePathU8(outPath);
+  NFD_Quit();
+
+  return true;
 }
 
 bool SaveUI::createSaveFile()
 {
-  // TODO: nfd save dialog (SaveManager::createSaveFile) -> set m_saveFile, return success.
-  return false;
+  if (NFD_Init() != NFD_OKAY)
+  {
+    std::cerr << "[SaveUI] NFD_Init failed" << std::endl;
+    return false;
+  }
+
+  nfdu8char_t* outPath = nullptr;
+  const std::array<nfdu8filteritem_t, 1> filters { { { "ECS3D Project Files", "json" } } };
+
+  const nfdsavedialogu8args_t args {
+    .filterList = filters.data(),
+    .filterCount = static_cast<nfdfiltersize_t>(filters.size()),
+    .defaultName = "project.json"
+  };
+
+  const nfdresult_t result = NFD_SaveDialogU8_With(&outPath, &args);
+
+  if (result != NFD_OKAY)
+  {
+    NFD_Quit();
+    return false;
+  }
+
+  m_saveFile = std::string(outPath);
+  NFD_FreePathU8(outPath);
+  NFD_Quit();
+
+  return true;
+}
+
+void SaveUI::registerWindowEvents()
+{
+  const auto window = m_renderer->getWindow();
+
+  // Capture only `this` (not the window shared_ptr) to avoid a window->listener->lambda->window cycle.
+  m_keyCallbackEventListener = window->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
+    const auto window = m_renderer->getWindow();
+    if (e.action == GLFW_PRESS && window->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && window->keyIsPressed(GLFW_KEY_S))
+    {
+      if (window->keyIsPressed(GLFW_KEY_LEFT_SHIFT))
+      {
+        saveAs();
+      }
+      else
+      {
+        save();
+      }
+    }
+  });
+
+  m_dropEventListener = window->on<vke::DropEvent>([this](const vke::DropEvent& e) {
+    if (e.paths.size() == 1)
+    {
+      loadFromFile(e.paths.front());
+    }
+  });
 }
