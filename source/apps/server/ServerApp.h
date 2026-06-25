@@ -66,7 +66,9 @@ private:
 
   void handleClientMessage(const net::Message& message);
 
-  void applySceneControl(const std::string& op);
+  void applySceneControl(const nlohmann::json& control);
+
+  void loadScene(const std::string& sceneUUID);
 
   void loadProject(const nlohmann::json& project);
 

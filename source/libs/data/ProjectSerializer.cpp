@@ -67,6 +67,12 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
       scene->loadObjects(sceneData.at("objects"));
 
       m_sceneManager->addScene(scene);
+
+      // Register the scene as an asset too, so it shows up in the editor's asset browser (where it can
+      // be double-clicked to switch the active scene). The scene DATA stays in the SceneManager; this is
+      // just the metadata record (its path holds the display name). AssetRegistry::serialize ignores
+      // Scene records, so this doesn't double-serialize.
+      m_assetRegistry->registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = name });
     }
   }
 

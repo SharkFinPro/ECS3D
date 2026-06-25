@@ -4,41 +4,41 @@
       {
         "filePath": "assets/models/cube_1x1x1.glb",
         "name": "assets/models/cube_1x1x1.glb",
-        "uuid": "e81f66de-27a8-4123-acfc-2054b94a5bd3"
+        "uuid": "58034695-0495-4cfb-8f75-90cf24a9073b"
       },
       {
         "filePath": "assets/models/sphere.glb",
         "name": "assets/models/sphere.glb",
-        "uuid": "4c798a28-7471-4a09-acd5-430c9bdba65d"
+        "uuid": "bcf01ddf-e82a-4ed1-90a7-b93b4184f647"
       },
       {
         "filePath": "assets/models/sphere_3.glb",
         "name": "assets/models/sphere_3.glb",
-        "uuid": "747b31a1-8c44-4916-bcfc-63e5830a74e2"
+        "uuid": "a4c4a30b-735b-4b1c-9140-19f62ca3c720"
       }
     ],
     "textures": [
       {
         "filePath": "assets/textures/white.png",
         "name": "assets/textures/white.png",
-        "uuid": "0c6af5c5-203b-4995-b4c2-27e66b200f9e"
+        "uuid": "a3628d76-f753-4e27-be83-35744d1ac44d"
       },
       {
         "filePath": "assets/textures/earth.png",
         "name": "assets/textures/earth.png",
-        "uuid": "6419bfec-629c-47aa-9e00-302793b7abbf"
+        "uuid": "2cfcc1b3-86f7-487b-bf37-6255111ab0ca"
       },
       {
         "filePath": "assets/textures/earth_specular.png",
         "name": "assets/textures/earth_specular.png",
-        "uuid": "2d9cb61f-543e-420f-8998-80be02029656"
+        "uuid": "9e4b3267-a29c-43ac-aca4-ccd06f078f5c"
       }
     ],
     "scripts": [
       {
         "className": "PlayerScript",
         "filePath": "scripts/UserScripts/PlayerScript.cs",
-        "uuid": "7f8143ee-4114-4745-b0d1-027805536903"
+        "uuid": "de114693-8cf3-4123-a308-70dbb2af120f"
       }
     ],
     "scenes": [
@@ -87,7 +87,7 @@
               }
             ],
             "scripts": [],
-            "uuid": "cfb43596-ee0d-4fca-b57e-3e050a2487f9"
+            "uuid": "e72b5677-aa9f-454f-8b86-be02e4b22509"
           },
           {
             "name": "Light",
@@ -131,7 +131,7 @@
               }
             ],
             "scripts": [],
-            "uuid": "1df4d608-8491-4515-b8b1-ce5a10726859"
+            "uuid": "16219108-9fb3-4c7c-84e0-24a5bb1dd75d"
           },
           {
             "name": "Light",
@@ -175,7 +175,7 @@
               }
             ],
             "scripts": [],
-            "uuid": "048c3a95-b147-4219-886c-7d01cfa44c0a"
+            "uuid": "2a5eff9b-3a6a-4f3f-895c-6e66bb908c76"
           },
           {
             "name": "Ground",
@@ -202,9 +202,9 @@
               {
                 "type": "ModelRenderer",
                 "shouldRender": true,
-                "modelUUID": "e81f66de-27a8-4123-acfc-2054b94a5bd3",
-                "textureUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e",
-                "specularMapUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e"
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
               },
               {
                 "type": "Collider",
@@ -227,7 +227,7 @@
               }
             ],
             "scripts": [],
-            "uuid": "ec9d8d4f-b3ec-4d79-ba60-7a156e911e36"
+            "uuid": "7e470a06-bce6-4d29-a692-f009d095b07e"
           },
           {
             "name": "Block",
@@ -254,9 +254,9 @@
               {
                 "type": "ModelRenderer",
                 "shouldRender": true,
-                "modelUUID": "e81f66de-27a8-4123-acfc-2054b94a5bd3",
-                "textureUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e",
-                "specularMapUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e"
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
               },
               {
                 "type": "RigidBody",
@@ -296,7 +296,7 @@
               }
             ],
             "scripts": [],
-            "uuid": "09027224-9122-4030-a7a9-90aee5cd7dd0"
+            "uuid": "0421fca2-0195-4fd4-b86c-e95ee00fc3e4"
           },
           {
             "name": "Sphere",
@@ -323,9 +323,9 @@
               {
                 "type": "ModelRenderer",
                 "shouldRender": true,
-                "modelUUID": "747b31a1-8c44-4916-bcfc-63e5830a74e2",
-                "textureUUID": "6419bfec-629c-47aa-9e00-302793b7abbf",
-                "specularMapUUID": "2d9cb61f-543e-420f-8998-80be02029656"
+                "modelUUID": "a4c4a30b-735b-4b1c-9140-19f62ca3c720",
+                "textureUUID": "2cfcc1b3-86f7-487b-bf37-6255111ab0ca",
+                "specularMapUUID": "9e4b3267-a29c-43ac-aca4-ccd06f078f5c"
               },
               {
                 "type": "RigidBody",
@@ -357,7 +357,7 @@
               }
             ],
             "scripts": [],
-            "uuid": "b2a750ed-bd36-40bc-8c7c-d61add2de5eb"
+            "uuid": "ded353bb-c743-4bd3-9059-0dff1c41863b"
           },
           {
             "name": "Sphere",
@@ -384,9 +384,9 @@
               {
                 "type": "ModelRenderer",
                 "shouldRender": true,
-                "modelUUID": "747b31a1-8c44-4916-bcfc-63e5830a74e2",
-                "textureUUID": "6419bfec-629c-47aa-9e00-302793b7abbf",
-                "specularMapUUID": "2d9cb61f-543e-420f-8998-80be02029656"
+                "modelUUID": "a4c4a30b-735b-4b1c-9140-19f62ca3c720",
+                "textureUUID": "2cfcc1b3-86f7-487b-bf37-6255111ab0ca",
+                "specularMapUUID": "9e4b3267-a29c-43ac-aca4-ccd06f078f5c"
               },
               {
                 "type": "RigidBody",
@@ -418,7 +418,7 @@
               }
             ],
             "scripts": [],
-            "uuid": "3dbf29d6-0fc2-43fe-9cc0-ae33e29e137c"
+            "uuid": "3c252ff3-ea76-42aa-b1e0-d384899fa52e"
           },
           {
             "name": "Player",
@@ -445,9 +445,9 @@
               {
                 "type": "ModelRenderer",
                 "shouldRender": true,
-                "modelUUID": "4c798a28-7471-4a09-acd5-430c9bdba65d",
-                "textureUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e",
-                "specularMapUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e"
+                "modelUUID": "bcf01ddf-e82a-4ed1-90a7-b93b4184f647",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
               },
               {
                 "type": "RigidBody",
@@ -496,12 +496,514 @@
                 ]
               }
             ],
-            "uuid": "54ba95de-c17f-4991-8c83-a944aa7dd15a"
+            "uuid": "46a6a70d-4d80-4b80-b3dd-98704d350105"
           }
         ],
-        "uuid": "02154757-86bb-4324-844e-7d6316b4cce4"
+        "uuid": "d25425fc-da0c-4333-833f-e74bb1db6adf"
+      },
+      {
+        "name": "Scene 2",
+        "objects": [
+          {
+            "name": "Light",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  0.0,
+                  1.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "LightRenderer",
+                "color": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "direction": [
+                  0.0,
+                  -1.0,
+                  0.0
+                ],
+                "isSpotlight": false,
+                "ambient": 0.25,
+                "diffuse": 0.0,
+                "specular": 0.0,
+                "coneAngle": 0.0
+              }
+            ],
+            "scripts": [],
+            "uuid": "9fd70a76-b0cb-49bd-a5a0-83f1a0b0157e"
+          },
+          {
+            "name": "Light",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  -10.0,
+                  -0.375,
+                  3.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "LightRenderer",
+                "color": [
+                  0.0,
+                  1.0,
+                  1.0
+                ],
+                "direction": [
+                  0.0,
+                  -1.0,
+                  0.0
+                ],
+                "isSpotlight": false,
+                "ambient": 0.0,
+                "diffuse": 0.75,
+                "specular": 0.75,
+                "coneAngle": 0.0
+              }
+            ],
+            "scripts": [],
+            "uuid": "5da75fa7-74db-4f87-bdba-0e57f0071a52"
+          },
+          {
+            "name": "Light",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  10.0,
+                  -0.375,
+                  3.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "LightRenderer",
+                "color": [
+                  1.0,
+                  0.0,
+                  0.0
+                ],
+                "direction": [
+                  0.0,
+                  -1.0,
+                  0.0
+                ],
+                "isSpotlight": false,
+                "ambient": 0.0,
+                "diffuse": 0.75,
+                "specular": 0.75,
+                "coneAngle": 0.0
+              }
+            ],
+            "scripts": [],
+            "uuid": "ff70c731-7ac5-4b1e-9591-e4d807abeb4c"
+          },
+          {
+            "name": "Ground",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  0.0,
+                  -10.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  10.0,
+                  1.0,
+                  10.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "57e1f21c-a4d9-45ef-8c06-d8b49284c662"
+          },
+          {
+            "name": "Ramp",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  18.0,
+                  -5.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  30.0
+                ],
+                "scale": [
+                  10.0,
+                  1.0,
+                  10.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "d86f32f5-ee1e-45a0-bbd9-6f9344ae0553"
+          },
+          {
+            "name": "Ramp",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  -18.0,
+                  -5.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  -30.0
+                ],
+                "scale": [
+                  10.0,
+                  1.0,
+                  10.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "2979e081-4aa5-4e65-b42d-49002355f0a7"
+          },
+          {
+            "name": "Block",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  -22.0,
+                  10.0,
+                  -3.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "RigidBody",
+                "velocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "angularVelocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "friction": 0.1,
+                "doGravity": true,
+                "gravity": -9.81,
+                "mass": 10.0
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "e09133a2-7b93-4c43-80c8-2d3a683557e4"
+          },
+          {
+            "name": "Sphere",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  2.0,
+                  0.0,
+                  3.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "a4c4a30b-735b-4b1c-9140-19f62ca3c720",
+                "textureUUID": "2cfcc1b3-86f7-487b-bf37-6255111ab0ca",
+                "specularMapUUID": "9e4b3267-a29c-43ac-aca4-ccd06f078f5c"
+              },
+              {
+                "type": "RigidBody",
+                "velocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "angularVelocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "friction": 0.1,
+                "doGravity": true,
+                "gravity": -9.81,
+                "mass": 10.0
+              },
+              {
+                "type": "Collider",
+                "subType": "Sphere",
+                "radius": 1.0,
+                "renderCollider": false,
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "90582acc-301d-439d-8ce2-e23aa49f2fff"
+          },
+          {
+            "name": "Player",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  5.0,
+                  0.0,
+                  5.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "bcf01ddf-e82a-4ed1-90a7-b93b4184f647",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "RigidBody",
+                "velocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "angularVelocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "friction": 0.1,
+                "doGravity": true,
+                "gravity": -9.81,
+                "mass": 10.0
+              },
+              {
+                "type": "Collider",
+                "subType": "Sphere",
+                "radius": 1.0,
+                "renderCollider": false,
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "PlayerScript",
+                "fields": [
+                  {
+                    "name": "m_speed",
+                    "type": "float",
+                    "value": 1.0
+                  },
+                  {
+                    "name": "m_jumpForce",
+                    "type": "float",
+                    "value": 15.0
+                  }
+                ]
+              }
+            ],
+            "uuid": "48dd5c3e-dad5-4cb1-9fbf-3983ab8a397e"
+          }
+        ],
+        "uuid": "d9aa542a-d195-4d8e-a0c2-92d4e6844c40"
       }
     ]
   },
-  "currentSceneUUID": "02154757-86bb-4324-844e-7d6316b4cce4"
+  "currentSceneUUID": "d25425fc-da0c-4333-833f-e74bb1db6adf"
 }

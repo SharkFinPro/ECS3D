@@ -248,7 +248,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
       const auto json = nlohmann::json::parse(payload, nullptr, false);
       if (!json.is_discarded())
       {
-        applySceneControl(json.value("op", std::string{}));
+        applySceneControl(json);
       }
       break;
     }
@@ -257,8 +257,16 @@ void ServerApp::handleClientMessage(const net::Message& message)
   }
 }
 
-void ServerApp::applySceneControl(const std::string& op)
+void ServerApp::applySceneControl(const nlohmann::json& control)
 {
+  const std::string op = control.value("op", std::string{});
+
+  if (op == "loadScene")
+  {
+    loadScene(control.value("scene", std::string{}));
+    return;
+  }
+
   const auto scene = m_sceneManager->getCurrentScene();
   if (!scene)
   {
@@ -301,6 +309,51 @@ void ServerApp::applySceneControl(const std::string& op)
 
   // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
   // every view reflects it immediately.
+  broadcastSnapshot();
+}
+
+void ServerApp::loadScene(const std::string& sceneUUID)
+{
+  const auto parsed = uuids::uuid::from_string(sceneUUID);
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  const auto scene = m_sceneManager->getScene(parsed.value());
+  if (!scene)
+  {
+    return;
+  }
+
+  // Stop the outgoing scene's scripts before switching the active scene.
+  if (const auto current = m_sceneManager->getCurrentScene())
+  {
+    try
+    {
+      m_scriptSystem->stop(*current->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      logMessage("Error", e.what());
+    }
+  }
+
+  m_sceneManager->loadScene(scene);
+  m_sceneManager->startScene();
+
+  try
+  {
+    m_scriptSystem->start(*scene->getObjectManager());
+  }
+  catch (const std::exception& e)
+  {
+    logMessage("Error", e.what());
+  }
+
+  logMessage("Info", "Switched to scene '" + scene->getName() + "' ("
+    + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
+
   broadcastSnapshot();
 }
 

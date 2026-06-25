@@ -74,7 +74,23 @@ EditorApp::EditorApp(LaunchOptions options)
     });
   });
 
-  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get());
+  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
+  m_assetBrowser->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) {
+    // Switch locally for instant feedback (the editor has every scene), and tell the authoritative
+    // server to switch the active scene — it re-snapshots back to keep everyone in sync.
+    if (const auto scene = m_sceneManager->getScene(sceneUUID))
+    {
+      m_sceneManager->loadScene(scene);
+    }
+
+    const nlohmann::json control = { { "op", "loadScene" }, { "scene", uuids::to_string(sceneUUID) } };
+    const auto payload = control.dump();
+
+    m_netClient->send(net::Message{
+      .type = net::MessageType::sceneControl,
+      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+    });
+  });
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this](const std::string& projectJson) {
@@ -323,7 +339,8 @@ void EditorApp::updateGui()
   const auto scene = m_sceneManager->getCurrentScene();
   m_objectGUIManager->displayGui(scene ? scene->getObjectManager().get() : nullptr);
 
-  // TODO: a "Scenes" list panel (switch the active scene) — multi-scene projects aren't selectable yet.
+  // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate
+  // scene-selector widget.
 }
 
 void EditorApp::displayMenuBar()
@@ -379,7 +396,6 @@ void EditorApp::updateDockSpace() const
     gui->dockCenter(m_sceneViewName.c_str());
 
     gui->dockLeft("Objects");
-    gui->dockLeft("Scenes");
 
     gui->dockRight("Selected Object");
 
