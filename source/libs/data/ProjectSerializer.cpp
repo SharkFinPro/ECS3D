@@ -13,11 +13,11 @@ ProjectSerializer::ProjectSerializer(AssetRegistry* assetRegistry,
     m_componentRegistry(std::move(componentRegistry))
 {}
 
-void ProjectSerializer::save(const std::string& path) const
+nlohmann::json ProjectSerializer::serialize() const
 {
   // AssetRegistry serializes the flat file assets (models/textures/scripts); scenes carry the object
   // tree and live in the SceneManager, so they are merged into the same "assets" object here (matching
-  // the old single-blob save format).
+  // the old single-blob save format). The same blob is the network Snapshot sent to a joining client.
   auto assets = m_assetRegistry->serialize();
 
   assets["scenes"] = nlohmann::json::array();
@@ -29,33 +29,14 @@ void ProjectSerializer::save(const std::string& path) const
   const auto currentScene = m_sceneManager->getCurrentScene();
   const auto currentSceneUUID = currentScene ? uuids::to_string(currentScene->getUUID()) : "";
 
-  const nlohmann::json data = {
+  return {
     { "assets", assets },
     { "currentSceneUUID", currentSceneUUID }
   };
-
-  std::ofstream outFile(path);
-  outFile << data.dump(2);
 }
 
-void ProjectSerializer::load(const std::string& path) const
+void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
 {
-  std::ifstream f(path);
-  if (!f.is_open())
-  {
-    return;
-  }
-
-  nlohmann::json saveData;
-  try
-  {
-    saveData = nlohmann::json::parse(f);
-  }
-  catch ([[maybe_unused]] const std::exception& e)
-  {
-    return;
-  }
-
   if (saveData.empty())
   {
     return;
@@ -93,5 +74,29 @@ void ProjectSerializer::load(const std::string& path) const
         m_sceneManager->loadScene(scene);
       }
     }
+  }
+}
+
+void ProjectSerializer::save(const std::string& path) const
+{
+  std::ofstream outFile(path);
+  outFile << serialize().dump(2);
+}
+
+void ProjectSerializer::load(const std::string& path) const
+{
+  std::ifstream f(path);
+  if (!f.is_open())
+  {
+    return;
+  }
+
+  try
+  {
+    deserialize(nlohmann::json::parse(f));
+  }
+  catch ([[maybe_unused]] const std::exception& e)
+  {
+    // A malformed/missing file leaves the project empty.
   }
 }

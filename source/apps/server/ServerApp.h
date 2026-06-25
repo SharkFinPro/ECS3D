@@ -1,21 +1,28 @@
 #ifndef SERVERAPP_H
 #define SERVERAPP_H
 
+#include <context/SimContext.h>
+#include <chrono>
 #include <memory>
 #include <string>
 
 class ManagedHost;
 class ComponentRegistry;
+class AssetRegistry;
 class SceneManager;
+class ProjectSerializer;
 class PhysicsSystem;
 class CollisionSystem;
 class ScriptSystem;
 
 namespace net {
   class NetServer;
+  struct Message;
 }
 
-class ServerApp {
+// The authoritative server. It owns the simulation and is the only thing that links ECS3DSim +
+// ECS3DScripting. It implements SimContext so it can be handed to the systems for logging.
+class ServerApp final : public SimContext {
 public:
   struct LaunchOptions {
     std::string project;
@@ -26,9 +33,13 @@ public:
 
   explicit ServerApp(LaunchOptions options);
 
+  ~ServerApp() override;
+
   [[nodiscard]] bool isActive() const;
 
   void run();
+
+  void logMessage(const std::string& level, const std::string& message) override;
 
 private:
   LaunchOptions m_options;
@@ -37,16 +48,23 @@ private:
   std::shared_ptr<net::NetServer> m_netServer;
 
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
+  std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<SceneManager> m_sceneManager;
+  std::shared_ptr<ProjectSerializer> m_projectSerializer;
 
   std::shared_ptr<PhysicsSystem> m_physicsSystem;
   std::shared_ptr<CollisionSystem> m_collisionSystem;
   std::shared_ptr<ScriptSystem> m_scriptSystem;
 
+  std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
 
   void fixedUpdate(float dt);
+
+  void handleClientMessage(const net::Message& message);
+
+  void broadcastStateDelta();
 };
 
 

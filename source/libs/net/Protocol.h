@@ -7,11 +7,12 @@
 namespace net {
 
 enum class MessageType : uint8_t {
-  snapshot,
-  stateDelta,
-  inputState
-  // TODO: add handshake/auth (carries the role: Role::Editor vs Role::Player), edit commands
-  // TODO:   (editor only), and scene lifecycle events (start/stop/reset).
+  join,        // client -> server: request the initial Snapshot (carries role + auth at handshake)
+  snapshot,    // server -> client: full project/scene state (ProjectSerializer::serialize())
+  stateDelta,  // server -> client: per-tick transform stream (replication::buildStateDelta)
+  inputState   // client -> server: local input for the scripts to read
+  // TODO: add the auth payload on join (Role::editor needs the server's edit gate + a token), edit
+  // TODO:   commands (editor only), and scene lifecycle events (start/stop/reset).
 };
 
 enum class Role : uint8_t {

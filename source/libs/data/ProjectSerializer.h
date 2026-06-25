@@ -1,6 +1,7 @@
 #ifndef PROJECTSERIALIZER_H
 #define PROJECTSERIALIZER_H
 
+#include <nlohmann/json_fwd.hpp>
 #include <memory>
 #include <string>
 
@@ -9,13 +10,17 @@ class SceneManager;
 class ComponentRegistry;
 
 // The load/save half of the old SaveManager (no file dialogs / keybinds — those are the editor's
-// SaveUI). It writes the project JSON by merging the AssetRegistry (model/texture/script records)
-// with the SceneManager's scenes, and loads it back into the same.
+// SaveUI). serialize()/deserialize() are JSON-only so the same project blob is reused as the network
+// Snapshot (full state on join); save()/load() just add file I/O on top.
 class ProjectSerializer {
 public:
   ProjectSerializer(AssetRegistry* assetRegistry,
                     SceneManager* sceneManager,
                     std::shared_ptr<ComponentRegistry> componentRegistry);
+
+  [[nodiscard]] nlohmann::json serialize() const;
+
+  void deserialize(const nlohmann::json& saveData) const;
 
   void save(const std::string& path) const;
 

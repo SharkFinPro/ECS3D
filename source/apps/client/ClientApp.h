@@ -9,13 +9,20 @@ namespace vke {
 }
 
 class ManagedHost;
-class RenderSystem;
+class ComponentRegistry;
+class AssetRegistry;
+class SceneManager;
+class ProjectSerializer;
 class GpuAssetCache;
+class RenderSystem;
 
 namespace net {
   class NetClient;
+  struct Message;
 }
 
+// The lightweight view. It renders + sends input; it never links ECS3DSim/ECS3DScripting. It holds a
+// replicated scene it applies Snapshot/StateDelta into.
 class ClientApp {
 public:
   struct ConnectOptions {
@@ -27,6 +34,8 @@ public:
 
   explicit ClientApp(ConnectOptions options);
 
+  ~ClientApp();
+
   [[nodiscard]] bool isActive() const;
 
   void run();
@@ -37,14 +46,20 @@ private:
   std::shared_ptr<ManagedHost> m_host;
   std::shared_ptr<net::NetClient> m_netClient;
 
+  std::shared_ptr<ComponentRegistry> m_componentRegistry;
+  std::shared_ptr<AssetRegistry> m_assetRegistry;
+  std::shared_ptr<SceneManager> m_sceneManager;
+  std::shared_ptr<ProjectSerializer> m_projectSerializer;
+
   std::shared_ptr<vke::VulkanEngine> m_renderer;
-  std::shared_ptr<RenderSystem> m_renderSystem;
   std::shared_ptr<GpuAssetCache> m_assetCache;
+  std::shared_ptr<RenderSystem> m_renderSystem;
+
+  void createRenderer();
 
   void variableUpdate();
 
-  // TODO: launchLocalServer spawns a child ECS3DServer (no --edit) and connects via localhost,
-  // TODO:   so singleplayer uses the exact same netcode path as remote multiplayer.
+  void applyMessage(const net::Message& message);
 };
 
 

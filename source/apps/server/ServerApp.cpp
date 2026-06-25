@@ -1,33 +1,82 @@
 #include "ServerApp.h"
+#include <ComponentRegistry.h>
+#include <ComponentRegistration.h>
+#include <ProjectSerializer.h>
+#include <Replication.h>
+#include <assets/AssetRegistry.h>
+#include <scenes/SceneManager.h>
+#include <scenes/SceneAsset.h>
+#include <objects/ObjectManager.h>
+#include <PhysicsSystem.h>
+#include <CollisionSystem.h>
+#include <ScriptSystem.h>
+#include <NetServer.h>
+#include <ManagedHost.h>
+#include <nlohmann/json.hpp>
+#include <iostream>
+#include <stdexcept>
 
 ServerApp::ServerApp(LaunchOptions options)
-  : m_options(std::move(options))
+  : m_options(std::move(options)),
+    m_host(std::make_shared<ManagedHost>()),
+    m_componentRegistry(std::make_shared<ComponentRegistry>()),
+    m_assetRegistry(std::make_shared<AssetRegistry>()),
+    m_sceneManager(std::make_shared<SceneManager>()),
+    m_previousTime(std::chrono::steady_clock::now())
 {
-  // TODO: build the authoritative simulation:
-  // TODO:   - ManagedHost: boot the CoreCLR runtime (for the net transport + ScriptBridge).
-  // TODO:   - ComponentRegistry: register every component factory (ECS3DData).
-  // TODO:   - SceneManager: load m_options.project via the project serializer.
-  // TODO:   - PhysicsSystem / CollisionSystem / ScriptSystem: the number crunching.
-  // TODO:   - NetServer: start(m_options.port, m_options.editMode). editMode is the launch gate.
+  // TODO: point ManagedHost at the directory holding the net transport + ScriptBridge assemblies.
+  m_host->init("scripts");
+
+  registerDataComponents(*m_componentRegistry);
+
+  m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
+  m_physicsSystem = std::make_shared<PhysicsSystem>();
+  m_collisionSystem = std::make_shared<CollisionSystem>();
+  m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
+  m_netServer = std::make_shared<net::NetServer>(m_host);
+
+  m_projectSerializer->load(m_options.project);
+
+  m_netServer->start(m_options.port, m_options.editMode);
+
+  // The server is authoritative, so it runs the scene immediately (the old SceneManager started on a
+  // user "Start"; here the server simulates as soon as it is up).
+  m_sceneManager->startScene();
+}
+
+ServerApp::~ServerApp()
+{
+  if (m_netServer)
+  {
+    m_netServer->stop();
+  }
+
+  if (m_host)
+  {
+    m_host->shutdown();
+  }
 }
 
 bool ServerApp::isActive() const
 {
-  // TODO: stay active while at least one client is connected (or always, for a dedicated server).
+  // TODO: a dedicated server runs until killed; an editor/client-spawned server should exit when its
+  // TODO:   last connection drops. There is no exit condition yet, so this is an open-ended loop.
   return true;
 }
 
 void ServerApp::run()
 {
-  // TODO: the server owns the loop that used to live in ECS3D::update/fixedUpdate. Each pass:
-  // TODO:   1. drain NetServer inbox (client input / editor edit commands, auth-gated by role).
-  // TODO:   2. step the accumulator below, running fixedUpdate at the fixed timestep.
-  // TODO:   3. serialize() the changed Transform/velocity state and broadcast StateDeltas;
-  // TODO:      send a full Snapshot to any client that just joined.
   while (isActive())
   {
-    // TODO: float dt = elapsed since last pass (see ECS3D::fixedUpdate accumulator).
-    constexpr float dt = 0.0f;
+    net::Message message;
+    while (m_netServer->poll(message))
+    {
+      handleClientMessage(message);
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    const float dt = std::chrono::duration<float>(now - m_previousTime).count();
+    m_previousTime = now;
 
     m_timeAccumulator += dt;
 
@@ -40,12 +89,79 @@ void ServerApp::run()
 
       m_timeAccumulator -= m_fixedUpdateDt;
     }
+
+    broadcastStateDelta();
   }
 }
 
 void ServerApp::fixedUpdate(const float dt)
 {
-  // TODO: run the systems against the current scene in order: scripts -> physics -> collisions
-  // TODO:   (resolution), passing a SimContext that exposes logging / input / uuids.
-  (void)dt;
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!scene || m_sceneManager->getSceneStatus() != SceneStatus::running)
+  {
+    return;
+  }
+
+  auto& objectManager = *scene->getObjectManager();
+
+  // The number crunching, in order: scripts can apply forces, physics integrates, collisions resolve.
+  try
+  {
+    m_scriptSystem->fixedUpdate(objectManager, dt);
+    m_physicsSystem->fixedUpdate(objectManager, dt, *this);
+    m_collisionSystem->fixedUpdate(objectManager, *m_physicsSystem);
+  }
+  catch (const std::exception& e)
+  {
+    logMessage("Error", e.what());
+  }
+}
+
+void ServerApp::handleClientMessage(const net::Message& message)
+{
+  switch (message.type)
+  {
+    case net::MessageType::join:
+    {
+      // A client joined: send it the full project/scene as a Snapshot.
+      const auto payload = m_projectSerializer->serialize().dump();
+
+      const net::Message snapshot {
+        .type = net::MessageType::snapshot,
+        .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+      };
+
+      m_netServer->broadcast(snapshot);
+      break;
+    }
+    case net::MessageType::inputState:
+      // TODO: decode the input and store it in the networked InputState the scripts read (replacing
+      // TODO:   the old GLFW-window InputUtils on the headless server).
+      break;
+    default:
+      break;
+  }
+}
+
+void ServerApp::broadcastStateDelta()
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!scene)
+  {
+    return;
+  }
+
+  const auto payload = replication::buildStateDelta(*scene->getObjectManager()).dump();
+
+  const net::Message message {
+    .type = net::MessageType::stateDelta,
+    .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+  };
+
+  m_netServer->broadcast(message);
+}
+
+void ServerApp::logMessage(const std::string& level, const std::string& message)
+{
+  std::cerr << "[" << level << "] " << message << std::endl;
 }
