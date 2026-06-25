@@ -43,6 +43,20 @@ ServerApp::ServerApp(LaunchOptions options)
   // The server is authoritative, so it runs the scene immediately (the old SceneManager started on a
   // user "Start"; here the server simulates as soon as it is up).
   m_sceneManager->startScene();
+
+  // Attach + start the managed script instances for the running scene (the old Object::start ->
+  // Script::start path; the data Script no longer reaches the CLR, so the server drives it here).
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    try
+    {
+      m_scriptSystem->start(*scene->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      logMessage("Error", e.what());
+    }
+  }
 }
 
 ServerApp::~ServerApp()
@@ -124,7 +138,14 @@ void ServerApp::handleClientMessage(const net::Message& message)
   {
     case net::MessageType::join:
     {
-      // A client joined: send it the full project/scene as a Snapshot.
+      // A client joined: send it the full project/scene as a Snapshot. Refresh each Script's field
+      // blob from its live instance first so the snapshot carries current values, not just what was
+      // loaded from disk.
+      if (const auto scene = m_sceneManager->getCurrentScene())
+      {
+        m_scriptSystem->syncFieldsToData(*scene->getObjectManager());
+      }
+
       const auto payload = m_projectSerializer->serialize().dump();
 
       const net::Message snapshot {
