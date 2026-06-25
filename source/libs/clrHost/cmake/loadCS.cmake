@@ -2,6 +2,9 @@
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(Dotnet REQUIRED)
 
+# Expose ecs3d_add_managed_assembly / ecs3d_deploy_clr_runtime to all consumers.
+include("${CMAKE_CURRENT_LIST_DIR}/ECS3DManaged.cmake")
+
 # nethost/hostfxr lets native code start the CoreCLR runtime. PUBLIC so anything that links
 # ECS3DClrHost (ECS3DNet, ECS3DScripting) inherits the include + link without finding .NET.
 target_include_directories(${PROJECT_NAME} PUBLIC
