@@ -6,6 +6,6 @@
         <Nullable>enable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <BaseOutputPath>$(BuildRoot)bin/</BaseOutputPath>
-        <BaseIntermediateOutputPath>$(DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH)</BaseIntermediateOutputPath>
+        <BaseIntermediateOutputPath Condition="'$(DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH)' != ''">$(DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH)</BaseIntermediateOutputPath>
     </PropertyGroup>
 </Project>
