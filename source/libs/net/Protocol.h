@@ -10,10 +10,11 @@ enum class MessageType : uint8_t {
   join,         // client -> server: request the initial Snapshot (carries role + auth at handshake)
   snapshot,     // server -> client: full project/scene state (ProjectSerializer::serialize())
   stateDelta,   // server -> client: per-tick transform stream (replication::buildStateDelta)
-  inputState,   // client -> server: local input for the scripts to read
-  editComponent // editor -> server -> all: a single component edit (replication::buildComponentEdit)
+  inputState,    // client -> server: local input for the scripts to read
+  editComponent, // editor -> server -> all: a single component value edit (replication::buildComponentEdit)
+  sceneEdit      // editor -> server: a structural edit (add/remove object/component); server re-snapshots
   // TODO: add the auth payload on join (Role::editor needs the server's edit gate + a token) and scene
-  // TODO:   lifecycle events (start/stop/reset). editComponent is the editor's mutation return path.
+  // TODO:   lifecycle events (start/stop/reset). editComponent/sceneEdit are the editor's mutation path.
 };
 
 enum class Role : uint8_t {

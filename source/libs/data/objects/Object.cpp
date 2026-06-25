@@ -100,6 +100,18 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
   }
 }
 
+void Object::removeComponent(const std::shared_ptr<Component>& component)
+{
+  if (component->getType() == ComponentType::script)
+  {
+    std::erase(m_scripts, component);
+  }
+  else
+  {
+    m_components.erase(component->getType());
+  }
+}
+
 void Object::setManager(ObjectManager* objectManager)
 {
   m_manager = objectManager;

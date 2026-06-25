@@ -8,6 +8,7 @@ add_library(${PROJECT_NAME}
   ObjectGUIManager.h
   AssetBrowserPanel.cpp
   AssetBrowserPanel.h
+  AssetDragDrop.h
   SaveUI.cpp
   SaveUI.h
   components/TransformEditor.cpp

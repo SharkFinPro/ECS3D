@@ -1,8 +1,41 @@
 #include "ModelRendererEditor.h"
 #include "../ComponentEditor.h"
+#include "../AssetDragDrop.h"
 #include <objects/components/ModelRenderer.h>
 #include <imgui.h>
 #include <memory>
+#include <string>
+
+namespace {
+  // A labelled drop target for an asset uuid. Returns true (and fills outUUID) if an asset of the given
+  // payload type was dropped onto it this frame.
+  bool assetDropTarget(const char* label, const uuids::uuid& current, const char* payloadId, uuids::uuid& outUUID)
+  {
+    ImGui::Button(current.is_nil() ? "<none>" : uuids::to_string(current).c_str());
+
+    bool dropped = false;
+
+    if (ImGui::BeginDragDropTarget())
+    {
+      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(payloadId))
+      {
+        const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+        if (const auto parsed = uuids::uuid::from_string(uuidStr))
+        {
+          outUUID = parsed.value();
+          dropped = true;
+        }
+      }
+
+      ImGui::EndDragDropTarget();
+    }
+
+    ImGui::SameLine();
+    ImGui::TextUnformatted(label);
+
+    return dropped;
+  }
+}
 
 void registerModelRendererEditor(ComponentEditor& componentEditor)
 {
@@ -32,14 +65,26 @@ void registerModelRendererEditor(ComponentEditor& componentEditor)
         edited = true;
       }
 
-      // The data holds only asset UUIDs now; show them read-only for reference.
-      ImGui::TextDisabled("Model:    %s", to_string(modelRenderer->getModelUUID()).c_str());
-      ImGui::TextDisabled("Texture:  %s", to_string(modelRenderer->getTextureUUID()).c_str());
-      ImGui::TextDisabled("Specular: %s", to_string(modelRenderer->getSpecularMapUUID()).c_str());
+      // Drag an asset out of the AssetBrowserPanel onto these slots to assign it.
+      uuids::uuid dropped;
 
-      // TODO: the Model/Texture/Specular asset drag-drop targets (setModelUUID/setTextureUUID/
-      // TODO:   setSpecularMapUUID from a uuid dragged out of the AssetBrowserPanel). Needs the asset
-      // TODO:   browser's drag-drop sources migrated first.
+      if (assetDropTarget("Model", modelRenderer->getModelUUID(), assetDragDrop::model, dropped))
+      {
+        modelRenderer->setModelUUID(dropped);
+        edited = true;
+      }
+
+      if (assetDropTarget("Texture", modelRenderer->getTextureUUID(), assetDragDrop::texture, dropped))
+      {
+        modelRenderer->setTextureUUID(dropped);
+        edited = true;
+      }
+
+      if (assetDropTarget("Specular", modelRenderer->getSpecularMapUUID(), assetDragDrop::texture, dropped))
+      {
+        modelRenderer->setSpecularMapUUID(dropped);
+        edited = true;
+      }
     }
 
     return edited;

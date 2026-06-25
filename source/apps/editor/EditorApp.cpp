@@ -59,8 +59,17 @@ EditorApp::EditorApp(LaunchOptions options)
       .payload = std::vector<uint8_t>(payload.begin(), payload.end())
     });
   });
+  m_objectGUIManager->setSceneEditCallback([this](const nlohmann::json& edit) {
+    // A structural change (add/remove object or component): the server applies it and re-snapshots.
+    const auto payload = edit.dump();
 
-  m_assetBrowser = std::make_shared<AssetBrowserPanel>();
+    m_netClient->send(net::Message{
+      .type = net::MessageType::sceneEdit,
+      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+    });
+  });
+
+  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get());
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get());
 
   setupKeybinds();

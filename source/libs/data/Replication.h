@@ -27,6 +27,22 @@ void applyStateDelta(const ObjectManager& objectManager, const nlohmann::json& d
 
 void applyComponentEdit(const ObjectManager& objectManager, const nlohmann::json& edit);
 
+// Structural edits (add/remove object or component). Unlike a value edit these change the scene graph,
+// so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op — the
+// client/editor just rebuild from the snapshot. Each is carried as { op, ... }.
+[[nodiscard]] nlohmann::json buildAddObject(const std::string& name,
+                                            const uuids::uuid* parentUUID = nullptr);
+
+[[nodiscard]] nlohmann::json buildRemoveObject(const uuids::uuid& objectUUID);
+
+[[nodiscard]] nlohmann::json buildAddComponent(const uuids::uuid& objectUUID,
+                                               const std::string& componentKey);
+
+[[nodiscard]] nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
+                                                  const std::shared_ptr<Component>& component);
+
+void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit);
+
 }
 
 

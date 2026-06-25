@@ -1,10 +1,26 @@
 #include "ObjectGUIManager.h"
 #include "ComponentEditor.h"
+#include <Replication.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
+#include <nlohmann/json.hpp>
 #include <imgui.h>
+#include <array>
 #include <string>
+#include <utility>
+
+namespace {
+  // The components the "Add Component" menu can attach, as { display label, ComponentRegistry key }.
+  // Transform is omitted (every object already has one); scripts attach via script assets.
+  constexpr std::array<std::pair<const char*, const char*>, 5> addableComponents {{
+    { "Rigid Body", "RigidBody" },
+    { "Model Renderer", "ModelRenderer" },
+    { "Light Renderer", "LightRenderer" },
+    { "Box Collider", "Box" },
+    { "Sphere Collider", "Sphere" }
+  }};
+}
 
 ObjectGUIManager::ObjectGUIManager(std::shared_ptr<ComponentEditor> componentEditor)
   : m_componentEditor(std::move(componentEditor))
@@ -15,9 +31,21 @@ void ObjectGUIManager::setEditCallback(EditCallback callback)
   m_editCallback = std::move(callback);
 }
 
+void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
+{
+  m_sceneEditCallback = std::move(callback);
+}
+
 void ObjectGUIManager::displayGui(ObjectManager& objectManager)
 {
   ImGui::Begin("Objects");
+
+  if (ImGui::Button("+ Add Object") && m_sceneEditCallback)
+  {
+    m_sceneEditCallback(replication::buildAddObject("Object"));
+  }
+
+  ImGui::Separator();
 
   for (const auto& object : objectManager.getObjects())
   {
@@ -51,6 +79,22 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
   {
     m_selectedObject = object->getUUID();
+  }
+
+  if (ImGui::BeginPopupContextItem())
+  {
+    if (ImGui::MenuItem("Add Child") && m_sceneEditCallback)
+    {
+      const auto parent = object->getUUID();
+      m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+    }
+
+    if (ImGui::MenuItem("Delete") && m_sceneEditCallback)
+    {
+      m_sceneEditCallback(replication::buildRemoveObject(object->getUUID()));
+    }
+
+    ImGui::EndPopup();
   }
 
   if (open && !isLeaf)
@@ -87,9 +131,8 @@ void ObjectGUIManager::displaySelectedObject(ObjectManager& objectManager)
         displayComponent(object->getUUID(), script);
       }
 
-      // TODO: an "Add Component" widget + the per-component "-" delete button currently mutate the
-      // TODO:   local replicated object only; structural edits (add/remove component, add/remove/
-      // TODO:   reparent object) need their own edit-command types to reach the authoritative server.
+      ImGui::Separator();
+      displayAddComponent(object);
     }
     else
     {
@@ -99,6 +142,27 @@ void ObjectGUIManager::displaySelectedObject(ObjectManager& objectManager)
   }
 
   ImGui::End();
+}
+
+void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object)
+{
+  if (ImGui::Button("+ Add Component"))
+  {
+    ImGui::OpenPopup("AddComponentPopup");
+  }
+
+  if (ImGui::BeginPopup("AddComponentPopup"))
+  {
+    for (const auto& [label, key] : addableComponents)
+    {
+      if (ImGui::Selectable(label) && m_sceneEditCallback)
+      {
+        m_sceneEditCallback(replication::buildAddComponent(object->getUUID(), key));
+      }
+    }
+
+    ImGui::EndPopup();
+  }
 }
 
 void ObjectGUIManager::displayComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)
@@ -111,6 +175,14 @@ void ObjectGUIManager::displayComponent(const uuids::uuid& objectUUID, const std
   if (m_componentEditor->displayGui(key, component) && m_editCallback)
   {
     m_editCallback(objectUUID, component);
+  }
+
+  // The header's "-" button marks the component deleted; turn that into a structural removeComponent
+  // (sent once — the next snapshot rebuilds the object without it).
+  if (component->markedAsDeleted() && !m_pendingRemovals.contains(component.get()) && m_sceneEditCallback)
+  {
+    m_pendingRemovals.insert(component.get());
+    m_sceneEditCallback(replication::buildRemoveComponent(objectUUID, component));
   }
 
   ImGui::PopID();

@@ -1,4 +1,5 @@
 #include "Replication.h"
+#include "ComponentRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
@@ -140,6 +141,151 @@ void applyComponentEdit(const ObjectManager& objectManager, const nlohmann::json
     {
       script->loadFromJSON(data);
       return;
+    }
+  }
+}
+
+nlohmann::json buildAddObject(const std::string& name, const uuids::uuid* parentUUID)
+{
+  nlohmann::json edit = {
+    { "op", "addObject" },
+    { "name", name }
+  };
+
+  if (parentUUID)
+  {
+    edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  return edit;
+}
+
+nlohmann::json buildRemoveObject(const uuids::uuid& objectUUID)
+{
+  return {
+    { "op", "removeObject" },
+    { "object", uuids::to_string(objectUUID) }
+  };
+}
+
+nlohmann::json buildAddComponent(const uuids::uuid& objectUUID, const std::string& componentKey)
+{
+  return {
+    { "op", "addComponent" },
+    { "object", uuids::to_string(objectUUID) },
+    { "component", componentKey }
+  };
+}
+
+nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
+                                    const std::shared_ptr<Component>& component)
+{
+  nlohmann::json edit = {
+    { "op", "removeComponent" },
+    { "object", uuids::to_string(objectUUID) },
+    { "type", component->serialize().at("type") }
+  };
+
+  if (const auto script = std::dynamic_pointer_cast<Script>(component))
+  {
+    edit["className"] = script->getClassName();
+  }
+
+  return edit;
+}
+
+void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
+{
+  const std::string op = edit.at("op");
+
+  if (op == "addObject")
+  {
+    const std::string name = edit.value("name", "Object");
+
+    const auto object = std::make_shared<Object>(name);
+
+    if (edit.contains("parent"))
+    {
+      if (const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent"))))
+      {
+        if (const auto parent = objectManager.getObjectByUUID(parsed.value()))
+        {
+          object->setParent(parent);
+        }
+      }
+    }
+
+    objectManager.addObject(object);
+    return;
+  }
+
+  // Every other op targets an existing object.
+  const auto parsed = uuids::uuid::from_string(std::string(edit.at("object")));
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  const auto object = objectManager.getObjectByUUID(parsed.value());
+  if (!object)
+  {
+    return;
+  }
+
+  if (op == "removeObject")
+  {
+    objectManager.removeObject(object);
+    objectManager.deleteObjectsMarkedForDeletion();
+    return;
+  }
+
+  if (op == "addComponent")
+  {
+    const std::string key = edit.at("component");
+
+    if (const auto component = objectManager.getComponentRegistry()->create(key))
+    {
+      object->addComponent(component);
+    }
+
+    return;
+  }
+
+  if (op == "removeComponent")
+  {
+    const std::string type = edit.at("type");
+    const std::string className = edit.contains("className") ? edit.at("className") : "";
+
+    const auto matches = [&](const std::shared_ptr<Component>& component) {
+      if (component->serialize().at("type") != type)
+      {
+        return false;
+      }
+
+      if (const auto script = std::dynamic_pointer_cast<Script>(component))
+      {
+        return script->getClassName() == className;
+      }
+
+      return true;
+    };
+
+    for (const auto& [componentType, component] : object->getComponents())
+    {
+      if (matches(component))
+      {
+        object->removeComponent(component);
+        return;
+      }
+    }
+
+    for (const auto& script : object->getScripts())
+    {
+      if (matches(script))
+      {
+        object->removeComponent(script);
+        return;
+      }
     }
   }
 }
