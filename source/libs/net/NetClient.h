@@ -20,6 +20,8 @@ public:
 
   void send(const Message& message);
 
+  [[nodiscard]] bool isConnected() const { return m_connected; }
+
   [[nodiscard]] bool poll(Message& message);
 
   // Called from the C# socket thread (via the registered native callback) to hand an inbound message

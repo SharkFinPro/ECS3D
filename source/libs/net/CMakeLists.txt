@@ -8,6 +8,8 @@ add_library(${PROJECT_NAME}
   NetServer.h
   NetClient.cpp
   NetClient.h
+  ServerProcess.cpp
+  ServerProcess.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

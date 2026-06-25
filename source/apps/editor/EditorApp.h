@@ -25,6 +25,7 @@ class SaveUI;
 
 namespace net {
   class NetClient;
+  class ServerProcess;
   struct Message;
 }
 
@@ -36,6 +37,7 @@ public:
   struct LaunchOptions {
     std::string host = "127.0.0.1";
     int port = net::defaultPort;
+    bool launchLocalServer = true;  // the editor edits a local project, so it spawns its own server
     std::string project;
   };
 
@@ -53,6 +55,7 @@ private:
   LaunchOptions m_options;
 
   std::shared_ptr<ManagedHost> m_host;
+  std::unique_ptr<net::ServerProcess> m_serverProcess;
   std::shared_ptr<net::NetClient> m_netClient;
 
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
@@ -82,6 +85,8 @@ private:
   vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
 
   void createRenderer();
+
+  void connectToServer();
 
   void registerEditors();
 

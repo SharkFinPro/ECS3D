@@ -11,10 +11,13 @@
 #include <RenderSystem.h>
 #include <InputCapture.h>
 #include <NetClient.h>
+#include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <nlohmann/json.hpp>
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 ClientApp::ClientApp(ConnectOptions options)
   : m_options(std::move(options)),
@@ -37,9 +40,7 @@ ClientApp::ClientApp(ConnectOptions options)
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
 
-  // TODO: if m_options.launchLocalServer, spawn a child ECS3DServer process for m_options.project
-  // TODO:   (no --edit) and point the connection at localhost — same netcode path as remote MP.
-  m_netClient->connect(m_options.host, m_options.port, net::Role::player, "");
+  connectToServer();
 
   // Ask the server for the initial Snapshot.
   m_netClient->send(net::Message{ .type = net::MessageType::join, .payload = {} });
@@ -103,6 +104,39 @@ void ClientApp::sendInput()
     .type = net::MessageType::inputState,
     .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
   });
+}
+
+void ClientApp::connectToServer()
+{
+  using namespace std::chrono_literals;
+
+  // Singleplayer: spawn a local server (same netcode path as remote, just over loopback).
+  if (m_options.launchLocalServer)
+  {
+    m_serverProcess = std::make_unique<net::ServerProcess>();
+    if (!m_serverProcess->launch("ECS3DServer"))
+    {
+      std::cerr << "[Client] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
+    }
+  }
+
+  // The server (especially a just-spawned one) needs a moment to boot the CLR and start listening, so
+  // retry the connection rather than failing on the first refused attempt.
+  const auto deadline = std::chrono::steady_clock::now() + 15s;
+  do
+  {
+    m_netClient->connect(m_options.host, m_options.port, net::Role::player, "");
+
+    if (m_netClient->isConnected())
+    {
+      return;
+    }
+
+    std::this_thread::sleep_for(250ms);
+  }
+  while (std::chrono::steady_clock::now() < deadline);
+
+  std::cerr << "[Client] Could not connect to " << m_options.host << ":" << m_options.port << "." << std::endl;
 }
 
 void ClientApp::createRenderer()

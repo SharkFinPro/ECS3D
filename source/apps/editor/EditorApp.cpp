@@ -22,11 +22,14 @@
 #include <components/ColliderEditor.h>
 #include <components/ScriptEditor.h>
 #include <NetClient.h>
+#include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <nlohmann/json.hpp>
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 EditorApp::EditorApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -78,12 +81,43 @@ EditorApp::EditorApp(LaunchOptions options)
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
 
-  // TODO: spawn a child ECS3DServer with --edit and a generated auth token for m_options.project, then
-  // TODO:   point the connection at localhost — same netcode path as remote MP, just Role::editor.
-  m_netClient->connect(m_options.host, m_options.port, net::Role::editor, "");
+  connectToServer();
 
   // Ask the server for the initial Snapshot.
   m_netClient->send(net::Message{ .type = net::MessageType::join, .payload = {} });
+}
+
+void EditorApp::connectToServer()
+{
+  using namespace std::chrono_literals;
+
+  // The editor edits a local project, so (in singleplayer) it spawns its own server. TODO: pass --edit
+  // + an auth token once the server enforces the edit gate; for now it connects as Role::editor.
+  if (m_options.launchLocalServer)
+  {
+    m_serverProcess = std::make_unique<net::ServerProcess>();
+    if (!m_serverProcess->launch("ECS3DServer"))
+    {
+      std::cerr << "[Editor] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
+    }
+  }
+
+  // The (just-spawned) server needs a moment to boot the CLR and start listening, so retry.
+  const auto deadline = std::chrono::steady_clock::now() + 15s;
+  do
+  {
+    m_netClient->connect(m_options.host, m_options.port, net::Role::editor, "");
+
+    if (m_netClient->isConnected())
+    {
+      return;
+    }
+
+    std::this_thread::sleep_for(250ms);
+  }
+  while (std::chrono::steady_clock::now() < deadline);
+
+  std::cerr << "[Editor] Could not connect to " << m_options.host << ":" << m_options.port << "." << std::endl;
 }
 
 EditorApp::~EditorApp()

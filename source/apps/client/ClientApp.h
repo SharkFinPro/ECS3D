@@ -19,6 +19,7 @@ class RenderSystem;
 
 namespace net {
   class NetClient;
+  class ServerProcess;
   struct Message;
 }
 
@@ -45,6 +46,7 @@ private:
   ConnectOptions m_options;
 
   std::shared_ptr<ManagedHost> m_host;
+  std::unique_ptr<net::ServerProcess> m_serverProcess;
   std::shared_ptr<net::NetClient> m_netClient;
 
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
@@ -63,6 +65,8 @@ private:
   bool m_inputSent = false;
 
   void createRenderer();
+
+  void connectToServer();
 
   void sendInput();
 
