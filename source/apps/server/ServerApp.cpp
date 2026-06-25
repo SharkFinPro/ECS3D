@@ -137,25 +137,9 @@ void ServerApp::handleClientMessage(const net::Message& message)
   switch (message.type)
   {
     case net::MessageType::join:
-    {
-      // A client joined: send it the full project/scene as a Snapshot. Refresh each Script's field
-      // blob from its live instance first so the snapshot carries current values, not just what was
-      // loaded from disk.
-      if (const auto scene = m_sceneManager->getCurrentScene())
-      {
-        m_scriptSystem->syncFieldsToData(*scene->getObjectManager());
-      }
-
-      const auto payload = m_projectSerializer->serialize().dump();
-
-      const net::Message snapshot {
-        .type = net::MessageType::snapshot,
-        .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-      };
-
-      m_netServer->broadcast(snapshot);
+      // A client joined: send it the full project/scene as a Snapshot.
+      broadcastSnapshot();
       break;
-    }
     case net::MessageType::editComponent:
     {
       // An editor changed a component: apply it to the authoritative scene, then re-broadcast so every
@@ -174,6 +158,24 @@ void ServerApp::handleClientMessage(const net::Message& message)
       }
       break;
     }
+    case net::MessageType::sceneEdit:
+    {
+      // An editor changed the scene graph (add/remove object or component): apply it, then re-snapshot
+      // so every view rebuilds (structural changes aren't replicated per-op).
+      if (const auto scene = m_sceneManager->getCurrentScene())
+      {
+        const std::string payload(message.payload.begin(), message.payload.end());
+
+        const auto json = nlohmann::json::parse(payload, nullptr, false);
+        if (!json.is_discarded())
+        {
+          replication::applySceneEdit(*scene->getObjectManager(), json);
+
+          broadcastSnapshot();
+        }
+      }
+      break;
+    }
     case net::MessageType::inputState:
       // TODO: decode the input and store it in the networked InputState the scripts read (replacing
       // TODO:   the old GLFW-window InputUtils on the headless server).
@@ -181,6 +183,25 @@ void ServerApp::handleClientMessage(const net::Message& message)
     default:
       break;
   }
+}
+
+void ServerApp::broadcastSnapshot()
+{
+  // Refresh each Script's field blob from its live C# instance first so the snapshot carries current
+  // values, not just what was loaded from disk.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    m_scriptSystem->syncFieldsToData(*scene->getObjectManager());
+  }
+
+  const auto payload = m_projectSerializer->serialize().dump();
+
+  const net::Message snapshot {
+    .type = net::MessageType::snapshot,
+    .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+  };
+
+  m_netServer->broadcast(snapshot);
 }
 
 void ServerApp::broadcastStateDelta()

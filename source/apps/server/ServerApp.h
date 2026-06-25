@@ -64,6 +64,8 @@ private:
 
   void handleClientMessage(const net::Message& message);
 
+  void broadcastSnapshot();
+
   void broadcastStateDelta();
 };
 

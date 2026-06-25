@@ -262,7 +262,7 @@ void EditorApp::displayMenuBar()
       ImGui::EndMenu();
     }
 
-    // TODO: m_assetBrowser->displayMenuWidget() — the AssetManager File-menu widget (asset creation).
+    m_assetBrowser->displayMenuWidget();
 
     ImGui::EndMainMenuBar();
   }
