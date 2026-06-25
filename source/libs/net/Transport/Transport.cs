@@ -17,8 +17,8 @@ namespace ECS3DNetTransport;
 // C++ MessageQueue it pushes into is thread-safe). Outbound is a direct call from the tick thread.
 public static unsafe class Transport
 {
-  private delegate* unmanaged<byte, byte*, int, void> _serverReceive;
-  private delegate* unmanaged<byte, byte*, int, void> _clientReceive;
+  private static delegate* unmanaged<byte, byte*, int, void> _serverReceive;
+  private static delegate* unmanaged<byte, byte*, int, void> _clientReceive;
 
   // -- Server --
   private static TcpListener? _listener;
@@ -208,6 +208,13 @@ public static unsafe class Transport
   [UnmanagedCallersOnly]
   public static void clientDisconnect()
   {
+    DisconnectClient();
+  }
+
+  // [UnmanagedCallersOnly] methods can't be called from managed code, so the teardown lives here and
+  // both the export and clientSend's error path call it.
+  private static void DisconnectClient()
+  {
     _clientRunning = false;
 
     try { _client?.Close(); } catch { /* already closed */ }
@@ -230,7 +237,7 @@ public static unsafe class Transport
     }
     catch
     {
-      clientDisconnect();
+      DisconnectClient();
     }
   }
 
