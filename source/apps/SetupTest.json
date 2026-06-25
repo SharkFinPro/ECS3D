@@ -1,0 +1,507 @@
+{
+  "assets": {
+    "models": [
+      {
+        "filePath": "assets/models/cube_1x1x1.glb",
+        "name": "assets/models/cube_1x1x1.glb",
+        "uuid": "e81f66de-27a8-4123-acfc-2054b94a5bd3"
+      },
+      {
+        "filePath": "assets/models/sphere.glb",
+        "name": "assets/models/sphere.glb",
+        "uuid": "4c798a28-7471-4a09-acd5-430c9bdba65d"
+      },
+      {
+        "filePath": "assets/models/sphere_3.glb",
+        "name": "assets/models/sphere_3.glb",
+        "uuid": "747b31a1-8c44-4916-bcfc-63e5830a74e2"
+      }
+    ],
+    "textures": [
+      {
+        "filePath": "assets/textures/white.png",
+        "name": "assets/textures/white.png",
+        "uuid": "0c6af5c5-203b-4995-b4c2-27e66b200f9e"
+      },
+      {
+        "filePath": "assets/textures/earth.png",
+        "name": "assets/textures/earth.png",
+        "uuid": "6419bfec-629c-47aa-9e00-302793b7abbf"
+      },
+      {
+        "filePath": "assets/textures/earth_specular.png",
+        "name": "assets/textures/earth_specular.png",
+        "uuid": "2d9cb61f-543e-420f-8998-80be02029656"
+      }
+    ],
+    "scripts": [
+      {
+        "className": "PlayerScript",
+        "filePath": "scripts/UserScripts/PlayerScript.cs",
+        "uuid": "7f8143ee-4114-4745-b0d1-027805536903"
+      }
+    ],
+    "scenes": [
+      {
+        "name": "Scene 1",
+        "objects": [
+          {
+            "name": "Light",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  0.0,
+                  1.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "LightRenderer",
+                "color": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "direction": [
+                  0.0,
+                  -1.0,
+                  0.0
+                ],
+                "isSpotlight": false,
+                "ambient": 0.25,
+                "diffuse": 0.0,
+                "specular": 0.0,
+                "coneAngle": 0.0
+              }
+            ],
+            "scripts": [],
+            "uuid": "cfb43596-ee0d-4fca-b57e-3e050a2487f9"
+          },
+          {
+            "name": "Light",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  -10.0,
+                  -0.375,
+                  3.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "LightRenderer",
+                "color": [
+                  0.0,
+                  1.0,
+                  1.0
+                ],
+                "direction": [
+                  0.0,
+                  -1.0,
+                  0.0
+                ],
+                "isSpotlight": false,
+                "ambient": 0.0,
+                "diffuse": 0.75,
+                "specular": 0.75,
+                "coneAngle": 0.0
+              }
+            ],
+            "scripts": [],
+            "uuid": "1df4d608-8491-4515-b8b1-ce5a10726859"
+          },
+          {
+            "name": "Light",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  10.0,
+                  -0.375,
+                  3.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "LightRenderer",
+                "color": [
+                  1.0,
+                  0.0,
+                  0.0
+                ],
+                "direction": [
+                  0.0,
+                  -1.0,
+                  0.0
+                ],
+                "isSpotlight": false,
+                "ambient": 0.0,
+                "diffuse": 0.75,
+                "specular": 0.75,
+                "coneAngle": 0.0
+              }
+            ],
+            "scripts": [],
+            "uuid": "048c3a95-b147-4219-886c-7d01cfa44c0a"
+          },
+          {
+            "name": "Ground",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  0.0,
+                  -10.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  10.0,
+                  1.0,
+                  10.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "e81f66de-27a8-4123-acfc-2054b94a5bd3",
+                "textureUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e",
+                "specularMapUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "ec9d8d4f-b3ec-4d79-ba60-7a156e911e36"
+          },
+          {
+            "name": "Block",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  5.0,
+                  5.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "e81f66de-27a8-4123-acfc-2054b94a5bd3",
+                "textureUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e",
+                "specularMapUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e"
+              },
+              {
+                "type": "RigidBody",
+                "velocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "angularVelocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "friction": 0.1,
+                "doGravity": true,
+                "gravity": -9.81,
+                "mass": 10.0
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "09027224-9122-4030-a7a9-90aee5cd7dd0"
+          },
+          {
+            "name": "Sphere",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  2.0,
+                  0.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "747b31a1-8c44-4916-bcfc-63e5830a74e2",
+                "textureUUID": "6419bfec-629c-47aa-9e00-302793b7abbf",
+                "specularMapUUID": "2d9cb61f-543e-420f-8998-80be02029656"
+              },
+              {
+                "type": "RigidBody",
+                "velocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "angularVelocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "friction": 0.1,
+                "doGravity": true,
+                "gravity": -9.81,
+                "mass": 10.0
+              },
+              {
+                "type": "Collider",
+                "subType": "Sphere",
+                "radius": 1.0,
+                "renderCollider": false,
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "b2a750ed-bd36-40bc-8c7c-d61add2de5eb"
+          },
+          {
+            "name": "Sphere",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  0.0,
+                  2.0,
+                  0.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "747b31a1-8c44-4916-bcfc-63e5830a74e2",
+                "textureUUID": "6419bfec-629c-47aa-9e00-302793b7abbf",
+                "specularMapUUID": "2d9cb61f-543e-420f-8998-80be02029656"
+              },
+              {
+                "type": "RigidBody",
+                "velocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "angularVelocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "friction": 0.1,
+                "doGravity": true,
+                "gravity": -9.81,
+                "mass": 10.0
+              },
+              {
+                "type": "Collider",
+                "subType": "Sphere",
+                "radius": 1.0,
+                "renderCollider": false,
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              }
+            ],
+            "scripts": [],
+            "uuid": "3dbf29d6-0fc2-43fe-9cc0-ae33e29e137c"
+          },
+          {
+            "name": "Player",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  5.0,
+                  0.0,
+                  5.0
+                ],
+                "rotation": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "4c798a28-7471-4a09-acd5-430c9bdba65d",
+                "textureUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e",
+                "specularMapUUID": "0c6af5c5-203b-4995-b4c2-27e66b200f9e"
+              },
+              {
+                "type": "RigidBody",
+                "velocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "angularVelocity": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "friction": 0.1,
+                "doGravity": true,
+                "gravity": -9.81,
+                "mass": 10.0
+              },
+              {
+                "type": "Collider",
+                "subType": "Sphere",
+                "radius": 1.0,
+                "renderCollider": false,
+                "position": [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "PlayerScript",
+                "fields": [
+                  {
+                    "name": "m_speed",
+                    "type": "float",
+                    "value": 1.0
+                  },
+                  {
+                    "name": "m_jumpForce",
+                    "type": "float",
+                    "value": 15.0
+                  }
+                ]
+              }
+            ],
+            "uuid": "54ba95de-c17f-4991-8c83-a944aa7dd15a"
+          }
+        ],
+        "uuid": "02154757-86bb-4324-844e-7d6316b4cce4"
+      }
+    ]
+  },
+  "currentSceneUUID": "02154757-86bb-4324-844e-7d6316b4cce4"
+}

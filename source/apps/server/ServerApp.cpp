@@ -98,7 +98,16 @@ void ServerApp::run()
     net::Message message;
     while (m_netServer->poll(message))
     {
-      handleClientMessage(message);
+      // A bad/malicious message (or a script-bridge hiccup while building a snapshot) must not take the
+      // whole server down - that would look like "client connected, then nothing".
+      try
+      {
+        handleClientMessage(message);
+      }
+      catch (const std::exception& e)
+      {
+        logMessage("Error", std::string("Failed to handle client message: ") + e.what());
+      }
     }
 
     const auto now = std::chrono::steady_clock::now();
@@ -278,14 +287,29 @@ void ServerApp::applySceneControl(const std::string& op)
 
 void ServerApp::broadcastSnapshot()
 {
-  // Refresh each Script's field blob from its live C# instance first so the snapshot carries current
-  // values, not just what was loaded from disk.
+  // Refresh each Script's field blob from its live C# instance so the snapshot carries current values.
+  // This reaches into the script bridge, so guard it: a field-sync hiccup must NOT stop the snapshot
+  // from going out (that would leave the client with no scene at all).
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    m_scriptSystem->syncFieldsToData(*scene->getObjectManager());
+    try
+    {
+      m_scriptSystem->syncFieldsToData(*scene->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      logMessage("Error", std::string("syncFieldsToData failed, sending snapshot with last-known field values: ") + e.what());
+    }
   }
 
-  const auto payload = m_projectSerializer->serialize().dump();
+  const auto project = m_projectSerializer->serialize();
+  const auto payload = project.dump();
+
+  const auto sceneCount = project.contains("assets") && project.at("assets").contains("scenes")
+    ? project.at("assets").at("scenes").size() : 0;
+  logMessage("Info", "Broadcasting snapshot: " + std::to_string(sceneCount) + " scene(s), "
+    + std::to_string(payload.size()) + " bytes, currentScene='"
+    + project.value("currentSceneUUID", std::string{}) + "'.");
 
   const net::Message snapshot {
     .type = net::MessageType::snapshot,

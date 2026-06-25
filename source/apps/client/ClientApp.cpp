@@ -14,6 +14,7 @@
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <nlohmann/json.hpp>
+#include <iostream>
 
 ClientApp::ClientApp(ConnectOptions options)
   : m_options(std::move(options)),
@@ -147,9 +148,16 @@ void ClientApp::applyMessage(const net::Message& message)
   switch (message.type)
   {
     case net::MessageType::snapshot:
+    {
       // Full state on join: rebuild the replicated scene from the project blob.
       m_projectSerializer->deserialize(json);
+
+      const auto scene = m_sceneManager->getCurrentScene();
+      std::cerr << "[Client] Applied snapshot (" << message.payload.size() << " bytes). Current scene: "
+                << (scene ? scene->getName() : "<none>") << " ("
+                << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
       break;
+    }
     case net::MessageType::stateDelta:
       if (const auto scene = m_sceneManager->getCurrentScene())
       {

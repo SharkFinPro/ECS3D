@@ -26,6 +26,7 @@
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <nlohmann/json.hpp>
+#include <iostream>
 
 EditorApp::EditorApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -229,9 +230,16 @@ void EditorApp::applyMessage(const net::Message& message)
   switch (message.type)
   {
     case net::MessageType::snapshot:
+    {
       // Full state on join: rebuild the replicated scene from the project blob.
       m_projectSerializer->deserialize(json);
+
+      const auto scene = m_sceneManager->getCurrentScene();
+      std::cerr << "[Editor] Applied snapshot (" << message.payload.size() << " bytes). Current scene: "
+                << (scene ? scene->getName() : "<none>") << " ("
+                << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
       break;
+    }
     case net::MessageType::stateDelta:
       if (const auto scene = m_sceneManager->getCurrentScene())
       {
