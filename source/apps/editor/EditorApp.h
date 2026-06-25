@@ -110,8 +110,9 @@ private:
 
   void variableUpdate();
 
-  // TODO: the editor spawns a child ECS3DServer with --edit and an auth token, then connects via
-  // TODO:   localhost as Role::editor. Edits become commands sent to the server, which owns the scene.
+  // The editor spawns a child ECS3DServer (ServerProcess) and connects over localhost as Role::editor;
+  // edits become commands the server applies. TODO: pass --edit + an auth token once the server gates
+  // editor connections (the auth payload on join is still unimplemented).
 
   static void setupImGuiStyle();
 };

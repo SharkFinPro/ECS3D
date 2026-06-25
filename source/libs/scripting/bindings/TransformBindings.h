@@ -18,8 +18,7 @@ public:
   [[nodiscard]] static TransformBindings getBindings();
 
 private:
-  // TODO: replace the old static ECS3D* s_ecs lookup with a scene handle from the SimContext, so
-  // TODO:   find() can resolve a uuid against the server's authoritative ObjectManager.
+  // find() resolves a uuid against the server's ObjectManager via BindingContext (set by ScriptSystem).
   static void bindGetPosition(const char* uuid, float* x, float* y, float* z);
   static void bindGetScale(const char* uuid, float* x, float* y, float* z);
   static void bindGetRotation(const char* uuid, float* x, float* y, float* z);

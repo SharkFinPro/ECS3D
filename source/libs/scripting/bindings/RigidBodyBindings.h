@@ -13,9 +13,8 @@ public:
   [[nodiscard]] static RigidBodyBindings getBindings();
 
 private:
-  // TODO: applyForce/setVelocity are physics operations that now live in ECS3DSim PhysicsSystem,
-  // TODO:   not on RigidBody. The bindings need a handle to the PhysicsSystem (via SimContext) to
-  // TODO:   forward these calls, plus a scene handle to resolve uuid -> RigidBody.
+  // find() resolves uuid -> RigidBody via BindingContext. applyForce queues a force on the RigidBody
+  // data (PhysicsSystem drains it each tick) so scripting stays independent of ECS3DSim.
   static void bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz);
   static void bindSetVelocity(const char* uuid, float x, float y, float z);
 

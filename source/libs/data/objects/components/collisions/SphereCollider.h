@@ -10,6 +10,14 @@ public:
 
   float getRadius();
 
+  // Local (un-scaled) accessors for the editor; getRadius()/getPosition() above are the world values
+  // the collision system uses.
+  [[nodiscard]] float getLocalRadius() const;
+  void setRadius(float radius);
+
+  [[nodiscard]] glm::vec3 getLocalPosition() const;
+  void setPosition(const glm::vec3& position);
+
   [[nodiscard]] bool getRenderCollider() const;
   void setRenderCollider(bool renderCollider);
 

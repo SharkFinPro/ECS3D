@@ -31,8 +31,8 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 {
   object->setManager(this);
 
-  // TODO: collider registration used to happen here (m_collisionManager->addObject). The ECS3DSim
-  // TODO:   CollisionSystem now discovers colliders by scanning the objects each tick instead.
+  // (Collider registration used to happen here via CollisionManager::addObject; the ECS3DSim
+  // CollisionSystem now discovers colliders by scanning the objects each tick instead.)
 
   m_allObjects.push_back(object);
 
@@ -137,7 +137,8 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
       }
     }
 
-    // TODO: tell the ECS3DSim CollisionSystem to drop this object (was m_collisionManager->removeObject).
+    // (No CollisionSystem deregistration needed: it rescans the live objects each tick, so a removed
+    // object naturally drops out.)
 
     std::erase(m_allObjects, object);
   }

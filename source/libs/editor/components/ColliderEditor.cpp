@@ -1,7 +1,9 @@
 #include "ColliderEditor.h"
 #include "../ComponentEditor.h"
+#include "../GuiComponents.h"
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
+#include <glm/vec3.hpp>
 #include <imgui.h>
 #include <memory>
 
@@ -27,8 +29,33 @@ void registerColliderEditors(ComponentEditor& componentEditor)
         edited = true;
       }
 
-      // TODO: gc::xyzGui Position/Rotation/Scale + "Scale All" — needs local position/scale/rotation
-      // TODO:   setters added to BoxCollider (currently only the render flag is editable).
+      glm::vec3 position = box->getLocalPosition();
+      glm::vec3 rotation = box->getLocalRotation();
+      glm::vec3 scale = box->getLocalScale();
+
+      ImGui::PushID("BoxColliderPosition");
+      if (gc::xyzGui("Position", &position.x, &position.y, &position.z))
+      {
+        box->setPosition(position);
+        edited = true;
+      }
+      ImGui::PopID();
+
+      ImGui::PushID("BoxColliderRotation");
+      if (gc::xyzGui("Rotation", &rotation.x, &rotation.y, &rotation.z))
+      {
+        box->setRotation(rotation);
+        edited = true;
+      }
+      ImGui::PopID();
+
+      ImGui::PushID("BoxColliderScale");
+      if (gc::xyzGui("Scale", &scale.x, &scale.y, &scale.z))
+      {
+        box->setScale(scale);
+        edited = true;
+      }
+      ImGui::PopID();
     }
 
     return edited;
@@ -52,8 +79,21 @@ void registerColliderEditors(ComponentEditor& componentEditor)
         edited = true;
       }
 
-      // TODO: "Radius" drag + gc::xyzGui Position — needs local radius/position setters on
-      // TODO:   SphereCollider (currently only the render flag is editable).
+      float radius = sphere->getLocalRadius();
+      if (ImGui::DragFloat("Radius", &radius, 0.1f, 0.0f, 0.0f))
+      {
+        sphere->setRadius(radius);
+        edited = true;
+      }
+
+      glm::vec3 position = sphere->getLocalPosition();
+      ImGui::PushID("SphereColliderPosition");
+      if (gc::xyzGui("Position", &position.x, &position.y, &position.z))
+      {
+        sphere->setPosition(position);
+        edited = true;
+      }
+      ImGui::PopID();
     }
 
     return edited;

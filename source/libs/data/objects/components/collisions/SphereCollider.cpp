@@ -24,6 +24,26 @@ float SphereCollider::getRadius()
   return 0;
 }
 
+float SphereCollider::getLocalRadius() const
+{
+  return m_radius.get();
+}
+
+void SphereCollider::setRadius(const float radius)
+{
+  m_radius.set(radius);
+}
+
+glm::vec3 SphereCollider::getLocalPosition() const
+{
+  return m_position.get();
+}
+
+void SphereCollider::setPosition(const glm::vec3& position)
+{
+  m_position.set(position);
+}
+
 bool SphereCollider::getRenderCollider() const
 {
   return m_renderCollider;

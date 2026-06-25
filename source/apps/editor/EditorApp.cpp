@@ -323,7 +323,7 @@ void EditorApp::updateGui()
   const auto scene = m_sceneManager->getCurrentScene();
   m_objectGUIManager->displayGui(scene ? scene->getObjectManager().get() : nullptr);
 
-  // TODO: the Scene Status start/pause/stop panel (a server lifecycle command) and the "Scenes" list.
+  // TODO: a "Scenes" list panel (switch the active scene) — multi-scene projects aren't selectable yet.
 }
 
 void EditorApp::displayMenuBar()

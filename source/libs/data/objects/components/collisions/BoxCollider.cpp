@@ -25,6 +25,39 @@ void BoxCollider::setRenderCollider(const bool renderCollider)
   m_renderCollider = renderCollider;
 }
 
+glm::vec3 BoxCollider::getLocalPosition() const
+{
+  return m_position.get();
+}
+
+glm::vec3 BoxCollider::getLocalScale() const
+{
+  return m_scale.get();
+}
+
+glm::vec3 BoxCollider::getLocalRotation() const
+{
+  return m_rotation.get();
+}
+
+void BoxCollider::setPosition(const glm::vec3& position)
+{
+  m_position.set(position);
+  m_meshDirty = true;
+}
+
+void BoxCollider::setScale(const glm::vec3& scale)
+{
+  m_scale.set(scale);
+  m_meshDirty = true;
+}
+
+void BoxCollider::setRotation(const glm::vec3& rotation)
+{
+  m_rotation.set(rotation);
+  m_meshDirty = true;
+}
+
 nlohmann::json BoxCollider::serialize()
 {
   const auto position = m_position.getInitialValue();
@@ -51,6 +84,8 @@ void BoxCollider::loadFromJSON(const nlohmann::json& componentData)
   m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
   m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
   m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
+
+  m_meshDirty = true;
 }
 
 glm::vec3 BoxCollider::getPosition()
@@ -86,9 +121,10 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    if (m_currentTransformUpdateID != transform->getUpdateID())
+    if (m_meshDirty || m_currentTransformUpdateID != transform->getUpdateID())
     {
       generateTransformedMesh(transform);
+      m_meshDirty = false;
     }
   }
 

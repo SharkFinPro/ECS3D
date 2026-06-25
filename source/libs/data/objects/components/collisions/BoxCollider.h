@@ -21,6 +21,16 @@ class BoxCollider final : public Collider {
 public:
   BoxCollider();
 
+  // Local (collider-offset) accessors for the editor; getPosition/getScale/getRotation below are the
+  // world values (transform + offset) the collision system uses.
+  [[nodiscard]] glm::vec3 getLocalPosition() const;
+  [[nodiscard]] glm::vec3 getLocalScale() const;
+  [[nodiscard]] glm::vec3 getLocalRotation() const;
+
+  void setPosition(const glm::vec3& position);
+  void setScale(const glm::vec3& scale);
+  void setRotation(const glm::vec3& rotation);
+
   [[nodiscard]] bool getRenderCollider() const;
   void setRenderCollider(bool renderCollider);
 
@@ -42,6 +52,9 @@ private:
   std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
 
   uint8_t m_currentTransformUpdateID = 255;
+
+  // Editing the collider's own offset doesn't bump the transform's update id, so force a mesh rebuild.
+  bool m_meshDirty = true;
 
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
   ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(1));

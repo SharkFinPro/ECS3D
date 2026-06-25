@@ -1,17 +1,37 @@
 #include "ServerApp.h"
 #include <iostream>
+#include <string>
 
 int main(int argc, char** argv)
 {
   try
   {
-    // TODO: parse argv for --project, --port, --edit, --token (the ServerLaunch options). --edit
-    // TODO:   is the launch-capability gate that allows editor connections; absent it, the server
-    // TODO:   is a pure play server. The server must still work as a standalone dedicated app.
-    (void)argc;
-    (void)argv;
+    // --edit is the launch-capability gate that allows editor connections; absent it the server is a
+    // pure play server. (--token is reserved for the auth payload, which isn't enforced yet.)
+    ServerApp::LaunchOptions options { .project = "SetupTest.json" };
 
-    ServerApp app({ .project = "SetupTest.json" });
+    for (int i = 1; i < argc; ++i)
+    {
+      const std::string arg = argv[i];
+      if (arg == "--project" && i + 1 < argc)
+      {
+        options.project = argv[++i];
+      }
+      else if (arg == "--port" && i + 1 < argc)
+      {
+        options.port = std::stoi(argv[++i]);
+      }
+      else if (arg == "--edit")
+      {
+        options.editMode = true;
+      }
+      else if (arg == "--token" && i + 1 < argc)
+      {
+        options.authToken = argv[++i];
+      }
+    }
+
+    ServerApp app(options);
 
     app.run();
   }
