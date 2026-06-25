@@ -78,7 +78,8 @@ EditorApp::EditorApp(LaunchOptions options)
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this](const std::string& projectJson) {
-    // Open/New: the server owns the scene, so send it the project blob; it reloads and re-snapshots.
+    // Open/New: the server owns the running sim, so send it the project blob; it reloads and re-snapshots.
+    std::cerr << "[Editor] Sending loadProject (" << projectJson.size() << " bytes) to server." << std::endl;
     m_netClient->send(net::Message{
       .type = net::MessageType::loadProject,
       .payload = std::vector<uint8_t>(projectJson.begin(), projectJson.end())

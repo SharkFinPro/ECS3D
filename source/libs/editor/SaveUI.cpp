@@ -76,24 +76,44 @@ void SaveUI::loadFromFile(const std::string& path)
 
   std::stringstream buffer;
   buffer << f.rdbuf();
+  const std::string content = buffer.str();
 
   m_saveFile = path;
 
-  // The server owns the scene, so don't load locally (that would desync). Hand the blob to the app,
-  // which sends it as a loadProject command; the server reloads and re-snapshots back to us.
+  loadProjectBlob(content);
+  std::cout << "[SaveUI] Opened project " << path << std::endl;
+}
+
+void SaveUI::loadProjectBlob(const std::string& projectJson)
+{
+  const auto json = nlohmann::json::parse(projectJson, nullptr, false);
+  if (json.is_discarded())
+  {
+    std::cerr << "[SaveUI] Project file is not valid JSON." << std::endl;
+    return;
+  }
+
+  // Apply it locally for immediate feedback (the editor's replicated managers), then hand the blob to
+  // the app to forward to the authoritative server, which reloads + re-snapshots to keep everyone in
+  // sync. Local-only would desync; server-only leaves the editor blank if the round-trip lags.
+  try
+  {
+    m_projectSerializer->deserialize(json);
+  }
+  catch (const std::exception& e)
+  {
+    std::cerr << "[SaveUI] Failed to load project: " << e.what() << std::endl;
+    return;
+  }
+
   if (m_onLoadProject)
   {
-    m_onLoadProject(buffer.str());
+    m_onLoadProject(projectJson);
   }
 }
 
 void SaveUI::createNewProject()
 {
-  if (!m_onLoadProject)
-  {
-    return;
-  }
-
   // A fresh project with a single empty scene to start editing in.
   std::mt19937 rng{ std::random_device{}() };
   uuids::uuid_random_generator generator{ rng };
@@ -112,7 +132,7 @@ void SaveUI::createNewProject()
   };
 
   m_saveFile = "";
-  m_onLoadProject(project.dump());
+  loadProjectBlob(project.dump());
 }
 
 bool SaveUI::chooseSaveFile()

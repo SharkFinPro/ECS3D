@@ -213,12 +213,18 @@ void ServerApp::handleClientMessage(const net::Message& message)
     {
       // An editor opened a different project: stop the current scripts, swap the project in, restart,
       // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
+      logMessage("Info", "Received loadProject (" + std::to_string(message.payload.size()) + " bytes).");
+
       const std::string payload(message.payload.begin(), message.payload.end());
 
       const auto json = nlohmann::json::parse(payload, nullptr, false);
       if (!json.is_discarded())
       {
         loadProject(json);
+      }
+      else
+      {
+        logMessage("Error", "loadProject payload was not valid JSON.");
       }
       break;
     }
