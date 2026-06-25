@@ -1,6 +1,7 @@
 #include "ScriptEngine.h"
 #include "bindings/TransformBindings.h"
 #include "bindings/RigidBodyBindings.h"
+#include "bindings/InputUtilsBindings.h"
 #include <ManagedHost.h>
 #include <filesystem>
 #include <iostream>
@@ -68,10 +69,7 @@ void ScriptEngine::init(const std::string& bridgeDir,
 void ScriptEngine::registerBindings(const std::string& assemblyPath,
                                     const std::string& typeName) const
 {
-  // Hand the managed side the C-ABI bindings it calls back into. InputUtils is intentionally not
-  // registered yet: it needs the networked InputState the headless server has no GLFW window for, so
-  // variableUpdate (the only path that touches input) is not driven on the server.
-  // TODO: register InputUtils bindings once they read the networked InputState.
+  // Hand the managed side the C-ABI bindings it calls back into.
   using RegisterTransformFn = void(*)(TransformBindings);
   const auto registerTransform =
     reinterpret_cast<RegisterTransformFn>(m_host->getDelegate(assemblyPath, typeName, "registerTransformBindings"));
@@ -81,6 +79,13 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerRigidBody =
     reinterpret_cast<RegisterRigidBodyFn>(m_host->getDelegate(assemblyPath, typeName, "registerRigidBodyBindings"));
   registerRigidBody(RigidBodyBindingsProvider::getBindings());
+
+  // InputUtils reads the networked InputState (ServerApp writes it from the client's inputState
+  // messages), since the headless server has no GLFW window of its own.
+  using RegisterInputUtilsFn = void(*)(InputUtilsBindings);
+  const auto registerInputUtils =
+    reinterpret_cast<RegisterInputUtilsFn>(m_host->getDelegate(assemblyPath, typeName, "registerInputUtilsBindings"));
+  registerInputUtils(InputUtilsBindingsProvider::getBindings());
 }
 
 void ScriptEngine::reloadScripts() const

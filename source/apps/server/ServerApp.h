@@ -65,6 +65,8 @@ private:
 
   void handleClientMessage(const net::Message& message);
 
+  void applySceneControl(const std::string& op);
+
   void broadcastSnapshot();
 
   void broadcastStateDelta();

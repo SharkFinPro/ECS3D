@@ -10,6 +10,7 @@
 #include <PhysicsSystem.h>
 #include <CollisionSystem.h>
 #include <ScriptSystem.h>
+#include <bindings/InputState.h>
 #include <NetServer.h>
 #include <ManagedHost.h>
 #include <nlohmann/json.hpp>
@@ -139,9 +140,12 @@ void ServerApp::fixedUpdate(const float dt)
 
   auto& objectManager = *scene->getObjectManager();
 
-  // The number crunching, in order: scripts can apply forces, physics integrates, collisions resolve.
+  // The number crunching, in order: scripts read input (variableUpdate) then queue forces, physics
+  // integrates, collisions resolve. variableUpdate runs before fixedUpdate so input-driven force is
+  // applied the same tick (the server has no render frame to drive it separately).
   try
   {
+    m_scriptSystem->variableUpdate(objectManager);
     m_scriptSystem->fixedUpdate(objectManager, dt);
     m_physicsSystem->fixedUpdate(objectManager, dt, *this);
     m_collisionSystem->fixedUpdate(objectManager, *m_physicsSystem);
@@ -197,12 +201,79 @@ void ServerApp::handleClientMessage(const net::Message& message)
       break;
     }
     case net::MessageType::inputState:
-      // TODO: decode the input and store it in the networked InputState the scripts read (replacing
-      // TODO:   the old GLFW-window InputUtils on the headless server).
+    {
+      // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
+      const std::string payload(message.payload.begin(), message.payload.end());
+
+      const auto json = nlohmann::json::parse(payload, nullptr, false);
+      if (!json.is_discarded())
+      {
+        InputState::setKeysPressed(json.value("keys", std::vector<int>{}));
+        InputState::setFocused(json.value("focused", false));
+      }
       break;
+    }
+    case net::MessageType::sceneControl:
+    {
+      const std::string payload(message.payload.begin(), message.payload.end());
+
+      const auto json = nlohmann::json::parse(payload, nullptr, false);
+      if (!json.is_discarded())
+      {
+        applySceneControl(json.value("op", std::string{}));
+      }
+      break;
+    }
     default:
       break;
   }
+}
+
+void ServerApp::applySceneControl(const std::string& op)
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!scene)
+  {
+    return;
+  }
+
+  auto& objectManager = *scene->getObjectManager();
+  const auto previousStatus = m_sceneManager->getSceneStatus();
+
+  try
+  {
+    if (op == "start")
+    {
+      m_sceneManager->startScene();
+
+      // Only attach + start the scripts on a real stopped -> running transition (resume from pause
+      // keeps the live instances).
+      if (previousStatus == SceneStatus::stopped)
+      {
+        m_scriptSystem->start(objectManager);
+      }
+    }
+    else if (op == "pause")
+    {
+      m_sceneManager->pauseScene();
+    }
+    else if (op == "stop")
+    {
+      if (previousStatus != SceneStatus::stopped)
+      {
+        m_scriptSystem->stop(objectManager);
+        m_sceneManager->resetScene();
+      }
+    }
+  }
+  catch (const std::exception& e)
+  {
+    logMessage("Error", e.what());
+  }
+
+  // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
+  // every view reflects it immediately.
+  broadcastSnapshot();
 }
 
 void ServerApp::broadcastSnapshot()

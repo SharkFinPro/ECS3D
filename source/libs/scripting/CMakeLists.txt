@@ -11,6 +11,10 @@ add_library(${PROJECT_NAME}
   bindings/TransformBindings.h
   bindings/RigidBodyBindings.cpp
   bindings/RigidBodyBindings.h
+  bindings/InputUtilsBindings.cpp
+  bindings/InputUtilsBindings.h
+  bindings/InputState.cpp
+  bindings/InputState.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

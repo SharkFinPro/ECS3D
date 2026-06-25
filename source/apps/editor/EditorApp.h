@@ -73,6 +73,12 @@ private:
   std::string m_sceneViewName;
   bool m_shouldDisplayGui = true;
 
+  // Only resend input when it changes (see ClientApp): keeps an unfocused editor from clobbering a
+  // focused client's keys on the shared server-side InputState.
+  std::vector<int> m_lastInputKeys;
+  bool m_lastInputFocused = false;
+  bool m_inputSent = false;
+
   vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
 
   void createRenderer();
@@ -83,9 +89,15 @@ private:
 
   void applyMessage(const net::Message& message);
 
+  void sendInput();
+
+  void sendSceneControl(const std::string& op);
+
   void updateGui();
 
   void displayMenuBar();
+
+  void displaySceneStatus();
 
   void updateDockSpace() const;
 

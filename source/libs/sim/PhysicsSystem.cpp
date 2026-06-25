@@ -23,6 +23,14 @@ void PhysicsSystem::fixedUpdate(ObjectManager& objectManager, const float dt, Si
       continue;
     }
 
+    // Apply any forces a script queued this tick (e.g. PlayerScript's input-driven movement), then
+    // clear them, before integrating.
+    for (const auto& pending : rigidBody->getPendingForces())
+    {
+      applyForce(*rigidBody, *transform, pending.force, pending.position);
+    }
+    rigidBody->clearPendingForces();
+
     integrate(*rigidBody, *transform, dt);
   }
 

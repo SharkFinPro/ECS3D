@@ -36,6 +36,11 @@ public:
 
   void fixedUpdate(ObjectManager& objectManager, float dt);
 
+  // Drives each script's variableUpdate (where gameplay reads input). The server has no render frame,
+  // so it runs this once per tick from the networked InputState; it must run before fixedUpdate so any
+  // force the script queues from input is applied the same tick.
+  void variableUpdate(ObjectManager& objectManager);
+
   // Refresh every Script's field blob from its live instance so a serialize()/Snapshot carries the
   // current values. Call this before building a Snapshot.
   void syncFieldsToData(ObjectManager& objectManager);

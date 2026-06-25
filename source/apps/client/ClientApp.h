@@ -56,7 +56,15 @@ private:
   std::shared_ptr<GpuAssetCache> m_assetCache;
   std::shared_ptr<RenderSystem> m_renderSystem;
 
+  // Only resend input when it changes, so a second view (e.g. the editor) that isn't focused doesn't
+  // clobber this one's keys on the shared server-side InputState every frame.
+  std::vector<int> m_lastInputKeys;
+  bool m_lastInputFocused = false;
+  bool m_inputSent = false;
+
   void createRenderer();
+
+  void sendInput();
 
   void variableUpdate();
 

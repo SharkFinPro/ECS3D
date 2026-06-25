@@ -3,10 +3,22 @@
 
 #include "Component.h"
 #include <glm/vec3.hpp>
+#include <vector>
 
 class RigidBody final : public Component {
 public:
   RigidBody();
+
+  // A force queued by a script (via the applyForce binding) for the PhysicsSystem to apply next tick.
+  // Buffered on the data so scripting never has to reach into ECS3DSim; the system drains it.
+  struct PendingForce {
+    glm::vec3 force;
+    glm::vec3 position;
+  };
+
+  void addPendingForce(const glm::vec3& force, const glm::vec3& position);
+  [[nodiscard]] const std::vector<PendingForce>& getPendingForces() const;
+  void clearPendingForces();
 
   [[nodiscard]] glm::vec3 getVelocity() const;
   void setVelocity(const glm::vec3& velocity);
@@ -49,6 +61,8 @@ private:
 
   bool m_falling = true;
   bool m_nextFalling = true;
+
+  std::vector<PendingForce> m_pendingForces;
 };
 
 

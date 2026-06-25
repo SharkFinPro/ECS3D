@@ -49,15 +49,9 @@ void RigidBodyBindingsProvider::bindApplyForce(const char* uuid, float x, float 
     return;
   }
 
-  // TODO: applyForce is physics (it lives in ECS3DSim PhysicsSystem now, needs the Transform + inertia
-  // TODO:   tensor). Forward to PhysicsSystem::applyForce(*rigidBody, *transform, { x, y, z },
-  // TODO:   { px, py, pz }) once the bindings can reach the PhysicsSystem via the scripting context.
-  (void)x;
-  (void)y;
-  (void)z;
-  (void)px;
-  (void)py;
-  (void)pz;
+  // Queue the force on the data instead of reaching into ECS3DSim from here; PhysicsSystem drains the
+  // pending forces during its tick (keeping scripting independent of sim).
+  rigidBody->addPendingForce({ x, y, z }, { px, py, pz });
 }
 
 void RigidBodyBindingsProvider::bindSetVelocity(const char* uuid, float x, float y, float z)

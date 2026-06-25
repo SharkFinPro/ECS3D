@@ -9,6 +9,7 @@
 #include <objects/ObjectManager.h>
 #include <GpuAssetCache.h>
 #include <RenderSystem.h>
+#include <InputCapture.h>
 #include <NetClient.h>
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
@@ -71,10 +72,36 @@ void ClientApp::run()
       applyMessage(message);
     }
 
-    // TODO: capture local input and send it as MessageType::inputState for the server's scripts.
+    sendInput();
 
     variableUpdate();
   }
+}
+
+void ClientApp::sendInput()
+{
+  const auto snapshot = input::capture(*m_renderer);
+
+  if (m_inputSent && snapshot.keys == m_lastInputKeys && snapshot.focused == m_lastInputFocused)
+  {
+    return;
+  }
+
+  m_lastInputKeys = snapshot.keys;
+  m_lastInputFocused = snapshot.focused;
+  m_inputSent = true;
+
+  const nlohmann::json payload = {
+    { "keys", snapshot.keys },
+    { "focused", snapshot.focused }
+  };
+
+  const auto dumped = payload.dump();
+
+  m_netClient->send(net::Message{
+    .type = net::MessageType::inputState,
+    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  });
 }
 
 void ClientApp::createRenderer()

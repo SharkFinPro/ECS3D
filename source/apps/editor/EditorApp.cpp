@@ -9,6 +9,7 @@
 #include <objects/ObjectManager.h>
 #include <GpuAssetCache.h>
 #include <RenderSystem.h>
+#include <InputCapture.h>
 #include <ComponentEditor.h>
 #include <ObjectGUIManager.h>
 #include <AssetBrowserPanel.h>
@@ -112,10 +113,57 @@ void EditorApp::run()
       applyMessage(message);
     }
 
+    sendInput();
+
     updateGui();
 
     variableUpdate();
   }
+}
+
+void EditorApp::sendInput()
+{
+  // Don't let typing in an editor panel drive the player: when ImGui wants the keyboard, report no
+  // keys. focused stays true (an unfocused window already reports no keys), so this view never disables
+  // another connected view's input on the shared server-side InputState.
+  input::InputSnapshot snapshot;
+  if (!ImGui::GetIO().WantCaptureKeyboard)
+  {
+    snapshot = input::capture(*m_renderer);
+  }
+
+  if (m_inputSent && snapshot.keys == m_lastInputKeys && snapshot.focused == m_lastInputFocused)
+  {
+    return;
+  }
+
+  m_lastInputKeys = snapshot.keys;
+  m_lastInputFocused = snapshot.focused;
+  m_inputSent = true;
+
+  const nlohmann::json payload = {
+    { "keys", snapshot.keys },
+    { "focused", snapshot.focused }
+  };
+
+  const auto dumped = payload.dump();
+
+  m_netClient->send(net::Message{
+    .type = net::MessageType::inputState,
+    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  });
+}
+
+void EditorApp::sendSceneControl(const std::string& op)
+{
+  const nlohmann::json payload = { { "op", op } };
+
+  const auto dumped = payload.dump();
+
+  m_netClient->send(net::Message{
+    .type = net::MessageType::sceneControl,
+    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  });
 }
 
 void EditorApp::createRenderer()
@@ -214,6 +262,8 @@ void EditorApp::updateGui()
   updateDockSpace();
 
   displayMessageLog();
+
+  displaySceneStatus();
 
   m_assetBrowser->displayGui();
 
@@ -316,6 +366,33 @@ void EditorApp::displayMessageLog()
   for (const auto& message : m_errorMessages)
   {
     ImGui::TextWrapped("%s", message.c_str());
+  }
+
+  ImGui::End();
+}
+
+void EditorApp::displaySceneStatus()
+{
+  ImGui::Begin("Scene Status");
+
+  // The scene lives on the authoritative server, so these are fire-and-forget lifecycle commands. The
+  // server applies them and re-snapshots (it doesn't replicate the running/paused status back yet, so
+  // the buttons aren't disabled by state).
+  if (ImGui::Button("Start"))
+  {
+    sendSceneControl("start");
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Pause"))
+  {
+    sendSceneControl("pause");
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Stop"))
+  {
+    sendSceneControl("stop");
   }
 
   ImGui::End();

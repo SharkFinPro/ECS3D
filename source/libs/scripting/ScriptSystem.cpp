@@ -126,6 +126,36 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
   }
 }
 
+void ScriptSystem::variableUpdate(ObjectManager& objectManager)
+{
+  if (!m_engine)
+  {
+    return;
+  }
+
+  BindingContext::setObjectManager(&objectManager);
+
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    for (const auto& scriptComponent : object->getScripts())
+    {
+      const auto script = std::dynamic_pointer_cast<Script>(scriptComponent);
+      if (!script)
+      {
+        continue;
+      }
+
+      // Only run instances that have already been attached + started (fixedUpdate/start own attachment).
+      if (!isAttached(object->getUUID(), script->getClassName()))
+      {
+        continue;
+      }
+
+      m_engine->variableUpdate(uuids::to_string(object->getUUID()).c_str(), script->getClassName().c_str());
+    }
+  }
+}
+
 void ScriptSystem::syncFieldsToData(ObjectManager& objectManager)
 {
   if (!m_engine)

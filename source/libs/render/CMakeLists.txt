@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   RenderSystem.h
   GpuAssetCache.cpp
   GpuAssetCache.h
+  InputCapture.cpp
+  InputCapture.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
