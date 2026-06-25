@@ -1,30 +1,54 @@
 #include "ComponentEditor.h"
+#include <objects/components/Component.h>
+#include <imgui.h>
 
 void ComponentEditor::registerHandler(const std::string& typeName, GuiHandler handler)
 {
-  // TODO: register the ImGui editing widget for a component type. This is the central place the
-  // TODO:   per-component displayGui() bodies (Transform, RigidBody, ModelRenderer, LightRenderer,
-  // TODO:   Collider, Script) move into, instead of living as virtual methods on Component.
   m_handlers[typeName] = std::move(handler);
 }
 
-void ComponentEditor::displayGui(const std::string& typeName, const std::shared_ptr<Component>& component) const
+bool ComponentEditor::displayGui(const std::string& typeName, const std::shared_ptr<Component>& component) const
 {
-  // TODO: look up the handler for typeName and draw the component's editing widgets.
   if (const auto it = m_handlers.find(typeName); it != m_handlers.end())
   {
-    it->second(component);
+    return it->second(component);
   }
+
+  return false;
 }
 
 bool ComponentEditor::displayHeader(const std::shared_ptr<Component>& component, const std::string& componentName)
 {
-  // TODO: migrate Component::displayGuiHeader here (it left the data-only Component): draw the
-  // TODO:   ImGui::CollapsingHeader for the component's type name, and the "-" delete button that
-  // TODO:   calls component->markAsDeleted() for everything except Transform. Return whether the
-  // TODO:   header is open so the handler knows to draw the body.
-  (void)component;
-  (void)componentName;
+  // Migrated from Component::displayGuiHeader (which left the data-only Component).
+  auto componentDisplayName = componentTypeToString.at(
+    component->getSubType() != ComponentType::SubComponentType_none ? component->getSubType() : component->getType());
 
-  return false;
+  if (!componentName.empty())
+  {
+    componentDisplayName = componentName;
+  }
+
+  const bool open = ImGui::CollapsingHeader(
+    componentDisplayName.c_str(),
+    ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DefaultOpen
+  );
+
+  if (component->getType() != ComponentType::transform)
+  {
+    ImGui::SameLine();
+
+    const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+    const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
+
+    ImGui::PushID(component.get());
+    if (ImGui::Button("-", {buttonWidth, 0}))
+    {
+      component->markAsDeleted();
+    }
+    ImGui::PopID();
+  }
+
+  return open;
 }

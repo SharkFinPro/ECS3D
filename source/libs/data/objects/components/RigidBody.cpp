@@ -37,9 +37,19 @@ float RigidBody::getMass() const
   return m_mass.get();
 }
 
+void RigidBody::setMass(const float mass)
+{
+  m_mass.set(mass);
+}
+
 float RigidBody::getFriction() const
 {
   return m_friction.get();
+}
+
+void RigidBody::setFriction(const float friction)
+{
+  m_friction.set(friction);
 }
 
 float RigidBody::getGravity() const
@@ -47,9 +57,19 @@ float RigidBody::getGravity() const
   return m_gravity.get();
 }
 
+void RigidBody::setGravity(const float gravity)
+{
+  m_gravity.set(gravity);
+}
+
 bool RigidBody::getDoGravity() const
 {
   return m_doGravity.get();
+}
+
+void RigidBody::setDoGravity(const bool doGravity)
+{
+  m_doGravity.set(doGravity);
 }
 
 bool RigidBody::isFalling() const

@@ -18,6 +18,7 @@ class ProjectSerializer;
 class RenderSystem;
 class GpuAssetCache;
 class ComponentEditor;
+class ObjectGUIManager;
 class AssetBrowserPanel;
 class SaveUI;
 
@@ -63,6 +64,7 @@ private:
   std::shared_ptr<RenderSystem> m_renderSystem;
 
   std::shared_ptr<ComponentEditor> m_componentEditor;
+  std::shared_ptr<ObjectGUIManager> m_objectGUIManager;
   std::shared_ptr<AssetBrowserPanel> m_assetBrowser;
   std::shared_ptr<SaveUI> m_saveUI;
 

@@ -65,6 +65,27 @@ glm::vec3 Transform::getRotation() const
   return m_rotation.get();
 }
 
+glm::vec3 Transform::getLocalPosition() const
+{
+  return m_position.get();
+}
+
+glm::vec3 Transform::getLocalScale() const
+{
+  return m_scale.get();
+}
+
+glm::vec3 Transform::getLocalRotation() const
+{
+  return m_rotation.get();
+}
+
+void Transform::setPosition(const glm::vec3 position)
+{
+  m_position.set(position);
+  ++m_updateID;
+}
+
 void Transform::setScale(const glm::vec3 scale)
 {
   m_scale.set(scale);

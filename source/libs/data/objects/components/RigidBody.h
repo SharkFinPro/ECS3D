@@ -15,9 +15,16 @@ public:
   void setAngularVelocity(const glm::vec3& angularVelocity);
 
   [[nodiscard]] float getMass() const;
+  void setMass(float mass);
+
   [[nodiscard]] float getFriction() const;
+  void setFriction(float friction);
+
   [[nodiscard]] float getGravity() const;
+  void setGravity(float gravity);
+
   [[nodiscard]] bool getDoGravity() const;
+  void setDoGravity(bool doGravity);
 
   [[nodiscard]] bool isFalling() const;
   void setFalling(bool falling);

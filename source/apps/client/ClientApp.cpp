@@ -129,6 +129,13 @@ void ClientApp::applyMessage(const net::Message& message)
         replication::applyStateDelta(*scene->getObjectManager(), json);
       }
       break;
+    case net::MessageType::editComponent:
+      // The server applied an editor's component change; mirror it into the replicated scene.
+      if (const auto scene = m_sceneManager->getCurrentScene())
+      {
+        replication::applyComponentEdit(*scene->getObjectManager(), json);
+      }
+      break;
     default:
       break;
   }

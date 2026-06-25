@@ -156,6 +156,24 @@ void ServerApp::handleClientMessage(const net::Message& message)
       m_netServer->broadcast(snapshot);
       break;
     }
+    case net::MessageType::editComponent:
+    {
+      // An editor changed a component: apply it to the authoritative scene, then re-broadcast so every
+      // other view (and the editing client, idempotently) converges.
+      if (const auto scene = m_sceneManager->getCurrentScene())
+      {
+        const std::string payload(message.payload.begin(), message.payload.end());
+
+        const auto json = nlohmann::json::parse(payload, nullptr, false);
+        if (!json.is_discarded())
+        {
+          replication::applyComponentEdit(*scene->getObjectManager(), json);
+
+          m_netServer->broadcast(message);
+        }
+      }
+      break;
+    }
     case net::MessageType::inputState:
       // TODO: decode the input and store it in the networked InputState the scripts read (replacing
       // TODO:   the old GLFW-window InputUtils on the headless server).

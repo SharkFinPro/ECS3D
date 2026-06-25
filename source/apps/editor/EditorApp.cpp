@@ -10,8 +10,10 @@
 #include <GpuAssetCache.h>
 #include <RenderSystem.h>
 #include <ComponentEditor.h>
+#include <ObjectGUIManager.h>
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
+#include <objects/components/Component.h>
 #include <components/TransformEditor.h>
 #include <components/RigidBodyEditor.h>
 #include <components/ModelRendererEditor.h>
@@ -46,6 +48,17 @@ EditorApp::EditorApp(LaunchOptions options)
 
   m_componentEditor = std::make_shared<ComponentEditor>();
   registerEditors();
+
+  m_objectGUIManager = std::make_shared<ObjectGUIManager>(m_componentEditor);
+  m_objectGUIManager->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
+    // A widget changed: send the component's new state to the authoritative server as an edit command.
+    const auto payload = replication::buildComponentEdit(objectUUID, component).dump();
+
+    m_netClient->send(net::Message{
+      .type = net::MessageType::editComponent,
+      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+    });
+  });
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>();
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get());
@@ -168,6 +181,13 @@ void EditorApp::applyMessage(const net::Message& message)
         replication::applyStateDelta(*scene->getObjectManager(), json);
       }
       break;
+    case net::MessageType::editComponent:
+      // Another editor (or this one, echoed by the server) changed a component.
+      if (const auto scene = m_sceneManager->getCurrentScene())
+      {
+        replication::applyComponentEdit(*scene->getObjectManager(), json);
+      }
+      break;
     default:
       break;
   }
@@ -188,9 +208,14 @@ void EditorApp::updateGui()
 
   m_assetBrowser->displayGui();
 
-  // TODO: ObjectGUIManager (the "Objects"/"Scenes" tree + the "Selected Object" panel that draws the
-  // TODO:   selected object's components via m_componentEditor->displayGui(type, component)) and the
-  // TODO:   Scene Status start/pause/stop panel. Mutations become edit commands sent to the server.
+  // The object tree + selected-object component panels. Edits fire the callback wired in the ctor,
+  // which sends an editComponent to the authoritative server.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    m_objectGUIManager->displayGui(*scene->getObjectManager());
+  }
+
+  // TODO: the Scene Status start/pause/stop panel (a server lifecycle command) and the "Scenes" list.
 }
 
 void EditorApp::displayMenuBar()

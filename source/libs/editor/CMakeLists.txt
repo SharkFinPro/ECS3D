@@ -3,6 +3,9 @@ project(ECS3DEditorLib)
 add_library(${PROJECT_NAME}
   ComponentEditor.cpp
   ComponentEditor.h
+  GuiComponents.h
+  ObjectGUIManager.cpp
+  ObjectGUIManager.h
   AssetBrowserPanel.cpp
   AssetBrowserPanel.h
   SaveUI.cpp
@@ -27,10 +30,11 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
-  ECS3DRender
-  # TODO: nfd (native file dialogs) for the SaveUI half of SaveManager, plus imgui via VulkanEngine.
+  ECS3DRender  # pulls imgui transitively via VulkanEngine, which the component editors + GuiComponents use
+  # TODO: nfd (native file dialogs) for the SaveUI half of SaveManager.
 )
 
-# TODO: migrate every component's displayGui() into ComponentEditor (the central componentEditor),
-# TODO:   ObjectGUIManager, the GUI half of AssetManager (-> AssetBrowserPanel), GuiComponents.h,
-# TODO:   and the file-dialog/keybind half of SaveManager (-> SaveUI). Editor only.
+# DONE: component displayGui() bodies -> ComponentEditor handlers (the central componentEditor),
+# ObjectGUIManager (object tree + selected-object panel), and GuiComponents.h all live here now.
+# TODO: still to migrate — the GUI half of AssetManager (-> AssetBrowserPanel: browser/creation popups/
+# TODO:   drag-drop sources/menu widget) and the file-dialog/keybind half of SaveManager (-> SaveUI).
