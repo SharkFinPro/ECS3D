@@ -36,20 +36,25 @@ void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
   m_sceneEditCallback = std::move(callback);
 }
 
-void ObjectGUIManager::displayGui(ObjectManager& objectManager)
+void ObjectGUIManager::displayGui(ObjectManager* objectManager)
 {
   ImGui::Begin("Objects");
 
-  if (ImGui::Button("+ Add Object") && m_sceneEditCallback)
+  ImGui::BeginDisabled(objectManager == nullptr);
+  if (ImGui::Button("+ Add Object") && objectManager && m_sceneEditCallback)
   {
     m_sceneEditCallback(replication::buildAddObject("Object"));
   }
+  ImGui::EndDisabled();
 
   ImGui::Separator();
 
-  for (const auto& object : objectManager.getObjects())
+  if (objectManager)
   {
-    displayObjectTree(object);
+    for (const auto& object : objectManager->getObjects())
+    {
+      displayObjectTree(object);
+    }
   }
 
   ImGui::End();
@@ -110,13 +115,13 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::PopID();
 }
 
-void ObjectGUIManager::displaySelectedObject(ObjectManager& objectManager)
+void ObjectGUIManager::displaySelectedObject(ObjectManager* objectManager)
 {
   ImGui::Begin("Selected Object");
 
-  if (m_selectedObject.has_value())
+  if (objectManager && m_selectedObject.has_value())
   {
-    if (const auto object = objectManager.getObjectByUUID(m_selectedObject.value()))
+    if (const auto object = objectManager->getObjectByUUID(m_selectedObject.value()))
     {
       ImGui::TextUnformatted(object->getName().c_str());
       ImGui::Separator();

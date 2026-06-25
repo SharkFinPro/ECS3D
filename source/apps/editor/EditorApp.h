@@ -2,6 +2,7 @@
 #define EDITORAPP_H
 
 #include <VulkanEngine/components/window/Window.h>
+#include <Protocol.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -34,7 +35,7 @@ class EditorApp {
 public:
   struct LaunchOptions {
     std::string host = "127.0.0.1";
-    int port = 0;
+    int port = net::defaultPort;
     std::string project;
   };
 

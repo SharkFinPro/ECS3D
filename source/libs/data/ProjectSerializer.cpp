@@ -3,7 +3,9 @@
 #include "scenes/SceneManager.h"
 #include "scenes/SceneAsset.h"
 #include <nlohmann/json.hpp>
+#include <filesystem>
 #include <fstream>
+#include <iostream>
 
 ProjectSerializer::ProjectSerializer(AssetRegistry* assetRegistry,
                                      SceneManager* sceneManager,
@@ -83,20 +85,26 @@ void ProjectSerializer::save(const std::string& path) const
   outFile << serialize().dump(2);
 }
 
-void ProjectSerializer::load(const std::string& path) const
+bool ProjectSerializer::load(const std::string& path) const
 {
   std::ifstream f(path);
   if (!f.is_open())
   {
-    return;
+    // Don't fail silently — the server would otherwise just idle with no scene and no clue why. The
+    // path is relative to the working directory, which is the usual culprit (run from the bin dir).
+    std::cerr << "[ProjectSerializer] Could not open project file: " << path
+              << " (cwd: " << std::filesystem::current_path().string() << ")" << std::endl;
+    return false;
   }
 
   try
   {
     deserialize(nlohmann::json::parse(f));
+    return true;
   }
-  catch ([[maybe_unused]] const std::exception& e)
+  catch (const std::exception& e)
   {
-    // A malformed/missing file leaves the project empty.
+    std::cerr << "[ProjectSerializer] Failed to load project '" << path << "': " << e.what() << std::endl;
+    return false;
   }
 }

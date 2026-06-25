@@ -217,12 +217,10 @@ void EditorApp::updateGui()
 
   m_assetBrowser->displayGui();
 
-  // The object tree + selected-object component panels. Edits fire the callback wired in the ctor,
-  // which sends an editComponent to the authoritative server.
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    m_objectGUIManager->displayGui(*scene->getObjectManager());
-  }
+  // The object tree + selected-object component panels (always drawn so they stay present/dockable;
+  // empty when no scene is loaded yet). Edits fire the callbacks wired in the ctor.
+  const auto scene = m_sceneManager->getCurrentScene();
+  m_objectGUIManager->displayGui(scene ? scene->getObjectManager().get() : nullptr);
 
   // TODO: the Scene Status start/pause/stop panel (a server lifecycle command) and the "Scenes" list.
 }

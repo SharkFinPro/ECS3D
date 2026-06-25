@@ -1,6 +1,7 @@
 #ifndef CLIENTAPP_H
 #define CLIENTAPP_H
 
+#include <Protocol.h>
 #include <memory>
 #include <string>
 
@@ -27,7 +28,7 @@ class ClientApp {
 public:
   struct ConnectOptions {
     std::string host = "127.0.0.1";
-    int port = 0;
+    int port = net::defaultPort;
     bool launchLocalServer = false;
     std::string project;
   };

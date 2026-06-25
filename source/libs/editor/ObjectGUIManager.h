@@ -29,7 +29,9 @@ public:
 
   void setSceneEditCallback(SceneEditCallback callback);
 
-  void displayGui(ObjectManager& objectManager);
+  // objectManager may be null (no scene loaded yet): the windows are still drawn, just empty, so they
+  // stay present/dockable instead of popping in and out.
+  void displayGui(ObjectManager* objectManager);
 
 private:
   std::shared_ptr<ComponentEditor> m_componentEditor;
@@ -45,7 +47,7 @@ private:
 
   void displayObjectTree(const std::shared_ptr<Object>& object);
 
-  void displaySelectedObject(ObjectManager& objectManager);
+  void displaySelectedObject(ObjectManager* objectManager);
 
   void displayAddComponent(const std::shared_ptr<Object>& object);
 

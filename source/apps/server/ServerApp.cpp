@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 
 ServerApp::ServerApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -36,7 +37,11 @@ ServerApp::ServerApp(LaunchOptions options)
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
-  m_projectSerializer->load(m_options.project);
+  if (!m_projectSerializer->load(m_options.project) || !m_sceneManager->getCurrentScene())
+  {
+    logMessage("Error", "No scene loaded from project '" + m_options.project
+      + "' - the server will run but simulate nothing. Check the project path and working directory.");
+  }
 
   m_netServer->start(m_options.port, m_options.editMode);
 
@@ -56,6 +61,12 @@ ServerApp::ServerApp(LaunchOptions options)
     {
       logMessage("Error", e.what());
     }
+
+    // The server is headless (no window), so announce that it's up — otherwise a running server looks
+    // like it never started.
+    logMessage("Info", "Running scene '" + scene->getName() + "' ("
+      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects) on port "
+      + std::to_string(m_options.port) + ".");
   }
 }
 
@@ -95,17 +106,26 @@ void ServerApp::run()
 
     m_timeAccumulator += dt;
 
-    uint8_t steps = 1;
-    while (m_timeAccumulator >= m_fixedUpdateDt && steps <= 3)
+    bool ticked = false;
+    uint8_t steps = 0;
+    while (m_timeAccumulator >= m_fixedUpdateDt && steps < 3)
     {
-      ++steps;
-
       fixedUpdate(m_fixedUpdateDt);
 
       m_timeAccumulator -= m_fixedUpdateDt;
+      ++steps;
+      ticked = true;
     }
 
-    broadcastStateDelta();
+    // Only stream a delta when the sim actually advanced. The server is headless (no vsync), so without
+    // this guard the unbounded loop would flood every client with deltas and stall their drain loops.
+    if (ticked)
+    {
+      broadcastStateDelta();
+    }
+
+    // Don't busy-spin a core between ticks.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 }
 

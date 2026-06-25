@@ -6,6 +6,11 @@
 
 namespace net {
 
+// The default port the server listens on and the client/editor connect to (singleplayer, local-MP, and
+// remote all share the same wire). Apps use this unless overridden, so they find each other out of the
+// box instead of defaulting to port 0.
+inline constexpr int defaultPort = 45123;
+
 enum class MessageType : uint8_t {
   join,         // client -> server: request the initial Snapshot (carries role + auth at handshake)
   snapshot,     // server -> client: full project/scene state (ProjectSerializer::serialize())

@@ -24,7 +24,9 @@ public:
 
   void save(const std::string& path) const;
 
-  void load(const std::string& path) const;
+  // Returns false (and logs why) on a missing/malformed project, so callers can react instead of
+  // silently running with no scene.
+  bool load(const std::string& path) const;
 
 private:
   AssetRegistry* m_assetRegistry;

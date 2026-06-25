@@ -2,6 +2,7 @@
 #define SERVERAPP_H
 
 #include <context/SimContext.h>
+#include <Protocol.h>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -26,7 +27,7 @@ class ServerApp final : public SimContext {
 public:
   struct LaunchOptions {
     std::string project;
-    int port = 0;
+    int port = net::defaultPort;
     bool editMode = false;
     std::string authToken;
   };
