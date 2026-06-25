@@ -36,6 +36,16 @@ void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
   m_sceneEditCallback = std::move(callback);
 }
 
+void ObjectGUIManager::setSelectedObject(const std::optional<uuids::uuid>& objectUUID)
+{
+  m_selectedObject = objectUUID;
+}
+
+std::optional<uuids::uuid> ObjectGUIManager::getHighlightUUID() const
+{
+  return m_highlightSelectedObject ? m_selectedObject : std::nullopt;
+}
+
 void ObjectGUIManager::displayGui(ObjectManager* objectManager)
 {
   ImGui::Begin("Objects");
@@ -54,6 +64,22 @@ void ObjectGUIManager::displayGui(ObjectManager* objectManager)
     for (const auto& object : objectManager->getObjects())
     {
       displayObjectTree(object);
+    }
+
+    // Drop an object onto the empty area below the tree to reparent it to the root.
+    ImGui::Dummy(ImGui::GetContentRegionAvail());
+    if (ImGui::BeginDragDropTarget())
+    {
+      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
+      {
+        const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+        if (const auto dragged = uuids::uuid::from_string(uuidStr); dragged.has_value() && m_sceneEditCallback)
+        {
+          m_sceneEditCallback(replication::buildReparentObject(dragged.value(), nullptr));
+        }
+      }
+
+      ImGui::EndDragDropTarget();
     }
   }
 
@@ -86,12 +112,41 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     m_selectedObject = object->getUUID();
   }
 
+  // Drag this node onto another to reparent it (drop on empty space in the window reparents to root).
+  if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+  {
+    const std::string uuidStr = uuids::to_string(object->getUUID());
+    ImGui::SetDragDropPayload("object", uuidStr.c_str(), uuidStr.size());
+    ImGui::TextUnformatted(object->getName().c_str());
+    ImGui::EndDragDropSource();
+  }
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
+    {
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto dragged = uuids::uuid::from_string(uuidStr); dragged.has_value() && m_sceneEditCallback)
+      {
+        const auto parent = object->getUUID();
+        m_sceneEditCallback(replication::buildReparentObject(dragged.value(), &parent));
+      }
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
   if (ImGui::BeginPopupContextItem())
   {
     if (ImGui::MenuItem("Add Child") && m_sceneEditCallback)
     {
       const auto parent = object->getUUID();
       m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+    }
+
+    if (ImGui::MenuItem("Duplicate") && m_sceneEditCallback)
+    {
+      m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID()));
     }
 
     if (ImGui::MenuItem("Delete") && m_sceneEditCallback)
@@ -119,10 +174,13 @@ void ObjectGUIManager::displaySelectedObject(ObjectManager* objectManager)
 {
   ImGui::Begin("Selected Object");
 
+  ImGui::Checkbox("Highlight Object", &m_highlightSelectedObject);
+
   if (objectManager && m_selectedObject.has_value())
   {
     if (const auto object = objectManager->getObjectByUUID(m_selectedObject.value()))
     {
+      ImGui::Separator();
       ImGui::TextUnformatted(object->getName().c_str());
       ImGui::Separator();
 

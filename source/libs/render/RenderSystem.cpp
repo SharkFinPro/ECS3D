@@ -16,7 +16,8 @@
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 
-void RenderSystem::variableUpdate(ObjectManager& objectManager, GpuAssetCache& assetCache)
+void RenderSystem::variableUpdate(ObjectManager& objectManager, GpuAssetCache& assetCache,
+                                 const std::optional<uuids::uuid>& highlightUUID)
 {
   const auto renderer = assetCache.getRenderer();
   const auto lightingManager = renderer->getLightingManager();
@@ -55,6 +56,12 @@ void RenderSystem::variableUpdate(ObjectManager& objectManager, GpuAssetCache& a
           modelRenderer->getUseStandardPipeline() ? vke::PipelineType::object : vke::PipelineType::ellipticalDots,
           &m_selected[uuid]
         );
+
+        // The editor's selected object gets a second pass with the highlight pipeline (an outline).
+        if (highlightUUID == uuid)
+        {
+          renderer->getRenderingManager()->getRenderer3D()->renderObject(renderObject, vke::PipelineType::objectHighlight);
+        }
       }
     }
 

@@ -41,6 +41,11 @@ void applyComponentEdit(const ObjectManager& objectManager, const nlohmann::json
 [[nodiscard]] nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
                                                   const std::shared_ptr<Component>& component);
 
+[[nodiscard]] nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID);
+
+[[nodiscard]] nlohmann::json buildReparentObject(const uuids::uuid& objectUUID,
+                                                 const uuids::uuid* parentUUID = nullptr);
+
 void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit);
 
 }

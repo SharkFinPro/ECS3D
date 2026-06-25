@@ -26,9 +26,14 @@
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
+#include <VulkanEngine/components/renderingManager/renderer3D/MousePicker.h>
+#include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <chrono>
 #include <iostream>
+#include <optional>
 #include <thread>
 
 EditorApp::EditorApp(LaunchOptions options)
@@ -175,10 +180,45 @@ void EditorApp::run()
 
     sendInput();
 
+    handlePicking();
+
     updateGui();
 
     variableUpdate();
   }
+}
+
+void EditorApp::handlePicking()
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!scene)
+  {
+    return;
+  }
+
+  const auto window = m_renderer->getWindow();
+  const bool pressed = window->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
+
+  // Select on a fresh Ctrl+Left-click while the cursor is over the 3D viewport. isSelected() is the
+  // renderer's pick feedback from last frame's render.
+  const auto mousePicker = m_renderer->getRenderingManager()->getRenderer3D()->getMousePicker();
+  if (!m_mouseWasPressed && pressed && window->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && mousePicker->canMousePick())
+  {
+    std::optional<uuids::uuid> picked;
+    for (const auto& object : scene->getObjectManager()->getAllObjects())
+    {
+      if (m_renderSystem->isSelected(object->getUUID()))
+      {
+        picked = object->getUUID();
+        break;
+      }
+    }
+
+    // Picks the clicked object, or clears the selection when empty space was clicked.
+    m_objectGUIManager->setSelectedObject(picked);
+  }
+
+  m_mouseWasPressed = pressed;
 }
 
 void EditorApp::sendInput()
@@ -469,7 +509,7 @@ void EditorApp::variableUpdate()
 {
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache);
+    m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache, m_objectGUIManager->getHighlightUUID());
   }
 
   m_renderer->render();

@@ -194,6 +194,29 @@ nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
   return edit;
 }
 
+nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID)
+{
+  return {
+    { "op", "duplicateObject" },
+    { "object", uuids::to_string(objectUUID) }
+  };
+}
+
+nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::uuid* parentUUID)
+{
+  nlohmann::json edit = {
+    { "op", "reparentObject" },
+    { "object", uuids::to_string(objectUUID) }
+  };
+
+  if (parentUUID)
+  {
+    edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  return edit;
+}
+
 void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
 {
   const std::string op = edit.at("op");
@@ -236,6 +259,52 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
   {
     objectManager.removeObject(object);
     objectManager.deleteObjectsMarkedForDeletion();
+    return;
+  }
+
+  if (op == "duplicateObject")
+  {
+    objectManager.duplicateObject(object);
+    return;
+  }
+
+  if (op == "reparentObject")
+  {
+    std::shared_ptr<Object> parent;
+    if (edit.contains("parent"))
+    {
+      if (const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent"))))
+      {
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+      }
+    }
+
+    // Don't create a cycle (drop onto self or a descendant).
+    if (object == parent || (parent && object->isAncestorOf(parent)))
+    {
+      return;
+    }
+
+    if (const auto oldParent = object->getParent())
+    {
+      oldParent->removeChild(object);
+    }
+    else
+    {
+      objectManager.removeObjectFromRoot(object);
+    }
+
+    object->setParent(parent);
+
+    if (parent)
+    {
+      parent->addChild(object);
+    }
+    else
+    {
+      objectManager.addObjectToRoot(object);
+    }
+
     return;
   }
 

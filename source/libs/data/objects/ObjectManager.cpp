@@ -56,15 +56,38 @@ void ObjectManager::removeObjectFromRoot(const std::shared_ptr<Object>& object)
   std::erase(m_objects, object);
 }
 
+void ObjectManager::reassignUUIDs(nlohmann::json& objectData)
+{
+  objectData["uuid"] = uuids::to_string(createUUID());
+
+  if (objectData.contains("children"))
+  {
+    for (auto& child : objectData.at("children"))
+    {
+      reassignUUIDs(child);
+    }
+  }
+}
+
 void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
 {
   auto objectData = object->serialize();
-  objectData.at("name") = std::string(objectData.at("name")) + " - Copy";
+  objectData["name"] = std::string(objectData.at("name")) + " - Copy";
+
+  // Give the copy (and every descendant) fresh uuids - reusing the originals would collide in the
+  // uuid-keyed replication/picking.
+  reassignUUIDs(objectData);
 
   const auto newObject = std::make_shared<Object>(objectData, this);
   newObject->setParent(object->getParent());
 
   addObject(newObject);
+
+  // Object's ctor loads only its own components/scripts; children are separate objects, so build them.
+  if (objectData.contains("children"))
+  {
+    newObject->loadChildren(objectData.at("children"));
+  }
 }
 
 void ObjectManager::start() const

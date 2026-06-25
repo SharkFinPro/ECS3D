@@ -55,6 +55,9 @@ private:
 
   std::mt19937 m_rng;
   uuids::uuid_random_generator m_uuidGenerator;
+
+  // Recursively replace the serialized object's (and its children's) uuids with fresh ones.
+  void reassignUUIDs(nlohmann::json& objectData);
 };
 
 

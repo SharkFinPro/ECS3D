@@ -33,6 +33,12 @@ public:
   // stay present/dockable instead of popping in and out.
   void displayGui(ObjectManager* objectManager);
 
+  // Set the selection externally (e.g. from viewport mouse-picking).
+  void setSelectedObject(const std::optional<uuids::uuid>& objectUUID);
+
+  // The object to highlight in the viewport: the selection when "Highlight Object" is on, else nullopt.
+  [[nodiscard]] std::optional<uuids::uuid> getHighlightUUID() const;
+
 private:
   std::shared_ptr<ComponentEditor> m_componentEditor;
 
@@ -40,6 +46,8 @@ private:
   SceneEditCallback m_sceneEditCallback;
 
   std::optional<uuids::uuid> m_selectedObject;
+
+  bool m_highlightSelectedObject = true;
 
   // Components whose deletion we've already sent (markedAsDeleted persists until the next snapshot
   // rebuilds the object), so we don't re-send the same removeComponent every frame.

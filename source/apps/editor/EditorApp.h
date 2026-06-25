@@ -82,6 +82,9 @@ private:
   bool m_lastInputFocused = false;
   bool m_inputSent = false;
 
+  // Edge-detect the mouse so viewport picking only fires on a fresh Ctrl+click.
+  bool m_mouseWasPressed = false;
+
   vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
 
   void createRenderer();
@@ -93,6 +96,8 @@ private:
   void setupKeybinds();
 
   void applyMessage(const net::Message& message);
+
+  void handlePicking();
 
   void sendInput();
 
