@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <utility>
+#include <vector>
 
 ProjectSerializer::ProjectSerializer(AssetRegistry* assetRegistry,
                                      SceneManager* sceneManager,
@@ -44,18 +46,17 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
     return;
   }
 
-  // TODO: the old loadFromSaveFile swapped scene+asset managers (prepareForReset/cancelReset) so a
-  // TODO:   failed load couldn't corrupt live state. Restore that atomicity at the app level by
-  // TODO:   loading into fresh AssetRegistry/SceneManager instances and swapping them in on success.
   const auto& assets = saveData.at("assets");
 
-  // Load into a clean slate: a fresh snapshot or a different project must REPLACE the current state,
-  // not merge with it (addScene/registerAsset are keyed and won't overwrite existing entries).
-  m_sceneManager->clear();
-  m_assetRegistry->clear();
+  // Atomic load: parse and build everything that can throw (bad uuids, missing fields, malformed
+  // objects) into LOCAL instances first, while the live AssetRegistry/SceneManager are untouched. Only
+  // once the whole blob has parsed do we clear the live state and commit. A failed load (corrupt file
+  // or a bad snapshot) therefore leaves the current project intact instead of wiping it half-way — the
+  // atomicity the old loadFromSaveFile got from its prepareForReset/cancelReset manager swap.
+  AssetRegistry parsedAssets;
+  parsedAssets.loadFromJSON(assets);
 
-  m_assetRegistry->loadFromJSON(assets);
-
+  std::vector<std::shared_ptr<SceneAsset>> parsedScenes;
   if (assets.contains("scenes"))
   {
     for (const auto& sceneData : assets.at("scenes"))
@@ -66,14 +67,25 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
       const auto scene = std::make_shared<SceneAsset>(uuid, name, m_componentRegistry);
       scene->loadObjects(sceneData.at("objects"));
 
-      m_sceneManager->addScene(scene);
-
-      // Register the scene as an asset too, so it shows up in the editor's asset browser (where it can
-      // be double-clicked to switch the active scene). The scene DATA stays in the SceneManager; this is
-      // just the metadata record (its path holds the display name). AssetRegistry::serialize ignores
-      // Scene records, so this doesn't double-serialize.
-      m_assetRegistry->registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = name });
+      parsedScenes.push_back(scene);
     }
+  }
+
+  // Commit phase: nothing below throws, so the swap to the new project is all-or-nothing. A fresh
+  // snapshot or a different project must REPLACE the current state, not merge with it (addScene/
+  // registerAsset are keyed and won't overwrite existing entries), so clear first.
+  m_sceneManager->clear();
+  *m_assetRegistry = std::move(parsedAssets);
+
+  for (const auto& scene : parsedScenes)
+  {
+    m_sceneManager->addScene(scene);
+
+    // Register the scene as an asset too, so it shows up in the editor's asset browser (where it can
+    // be double-clicked to switch the active scene). The scene DATA stays in the SceneManager; this is
+    // just the metadata record (its path holds the display name). AssetRegistry::serialize ignores
+    // Scene records, so this doesn't double-serialize.
+    m_assetRegistry->registerAsset({ .uuid = scene->getUUID(), .type = AssetType::Scene, .path = scene->getName() });
   }
 
   if (saveData.contains("currentSceneUUID"))

@@ -16,8 +16,6 @@ add_library(${PROJECT_NAME}
   scenes/SceneAsset.cpp
   scenes/SceneAsset.h
   context/SimContext.h
-  context/RenderContext.h
-  context/EditContext.h
   objects/Object.cpp
   objects/Object.h
   objects/ObjectManager.cpp
