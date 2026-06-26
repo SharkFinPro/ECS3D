@@ -51,7 +51,7 @@ std::optional<uuids::uuid> ObjectGUIManager::getHighlightUUID() const
   return m_highlightSelectedObject ? m_selectedObject : std::nullopt;
 }
 
-void ObjectGUIManager::displayGui(ObjectManager* objectManager)
+void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 {
   ImGui::Begin("Objects");
 
@@ -200,7 +200,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::PopID();
 }
 
-void ObjectGUIManager::displaySelectedObject(ObjectManager* objectManager)
+void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
 {
   ImGui::Begin("Selected Object");
 
@@ -243,7 +243,7 @@ void ObjectGUIManager::displaySelectedObject(ObjectManager* objectManager)
   ImGui::End();
 }
 
-void ObjectGUIManager::displayDeleteConfirmationModal(ObjectManager* objectManager)
+void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objectManager)
 {
   if (!m_objectPendingDeletion.has_value())
   {
@@ -308,7 +308,7 @@ void ObjectGUIManager::displayDeleteConfirmationModal(ObjectManager* objectManag
   }
 }
 
-void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object)
+void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object) const
 {
   if (ImGui::Button("+ Add Component"))
   {

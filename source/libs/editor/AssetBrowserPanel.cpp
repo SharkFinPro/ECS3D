@@ -178,7 +178,7 @@ void AssetBrowserPanel::displayGui()
   displayCreateAssetPopup();
 }
 
-void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord& record, const float cellSize, const std::string& name)
+void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord& record, const float cellSize, const std::string& name) const
 {
   ImGui::TextWrapped("%s", name.c_str());
 

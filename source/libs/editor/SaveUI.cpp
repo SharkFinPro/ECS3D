@@ -89,7 +89,7 @@ void SaveUI::loadFromFile(const std::string& path)
   std::cout << "[SaveUI] Opened project " << path << std::endl;
 }
 
-void SaveUI::loadProjectBlob(const std::string& projectJson)
+void SaveUI::loadProjectBlob(const std::string& projectJson) const
 {
   const auto json = nlohmann::json::parse(projectJson, nullptr, false);
   if (json.is_discarded())

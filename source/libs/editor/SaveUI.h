@@ -42,7 +42,7 @@ public:
 
 private:
   // Apply a project blob locally (instant feedback) + forward it to the authoritative server.
-  void loadProjectBlob(const std::string& projectJson);
+  void loadProjectBlob(const std::string& projectJson) const;
 
   ProjectSerializer* m_projectSerializer;
 

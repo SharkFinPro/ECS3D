@@ -7,7 +7,7 @@
 #include <string>
 
 namespace {
-  // A labelled drop target for an asset uuid. Returns true (and fills outUUID) if an asset of the given
+  // A labeled drop target for an asset uuid. Returns true (and fills outUUID) if an asset of the given
   // payload type was dropped onto it this frame.
   bool assetDropTarget(const char* label, const uuids::uuid& current, const char* payloadId, uuids::uuid& outUUID)
   {

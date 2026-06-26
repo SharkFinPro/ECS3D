@@ -31,7 +31,7 @@ public:
 
   // objectManager may be null (no scene loaded yet): the windows are still drawn, just empty, so they
   // stay present/dockable instead of popping in and out.
-  void displayGui(ObjectManager* objectManager);
+  void displayGui(const ObjectManager* objectManager);
 
   // Set the selection externally (e.g. from viewport mouse-picking).
   void setSelectedObject(const std::optional<uuids::uuid>& objectUUID);
@@ -66,13 +66,13 @@ private:
 
   void displayObjectTree(const std::shared_ptr<Object>& object);
 
-  void displaySelectedObject(ObjectManager* objectManager);
+  void displaySelectedObject(const ObjectManager* objectManager);
 
   // The "Delete Object?" confirmation modal for m_objectPendingDeletion. Confirming (Yes / Enter) sends
   // a removeObject scene edit; cancelling (No / Escape), or the object vanishing, clears the prompt.
-  void displayDeleteConfirmationModal(ObjectManager* objectManager);
+  void displayDeleteConfirmationModal(const ObjectManager* objectManager);
 
-  void displayAddComponent(const std::shared_ptr<Object>& object);
+  void displayAddComponent(const std::shared_ptr<Object>& object) const;
 
   void displayComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component);
 };

@@ -64,7 +64,7 @@ private:
 
   [[nodiscard]] static std::string displayName(const AssetRecord& record);
 
-  void displayAsset(const uuids::uuid& uuid, const AssetRecord& record, float cellSize, const std::string& name);
+  void displayAsset(const uuids::uuid& uuid, const AssetRecord& record, float cellSize, const std::string& name) const;
 
   void displayCreateAssetPopup();
 
