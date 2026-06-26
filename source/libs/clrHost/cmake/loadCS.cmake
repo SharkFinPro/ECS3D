@@ -23,10 +23,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   target_link_libraries(${PROJECT_NAME} PUBLIC "-framework CoreFoundation")
 endif()
 
-# TODO: nethost.dll must sit next to every executable that boots the runtime (all three apps,
-# TODO:   since they all link ECS3DClrHost via ECS3DNet). A static lib has no runtime output of
-# TODO:   its own, so provide an ecs3d_deploy_clr_runtime(<exe_target>) helper the apps call to
-# TODO:   POST_BUILD copy nethost.dll (and let ECS3DScripting/ECS3DNet deploy their assemblies).
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-  find_file(NETHOST_DLL nethost.dll PATHS ${NETHOST_INCLUDE} NO_DEFAULT_PATH)
-endif()
+# nethost.dll must sit next to every executable that boots the runtime (all three apps, since they
+# all link ECS3DClrHost via ECS3DNet). A static lib has no runtime output of its own, so each app
+# deploys the shim itself by calling ecs3d_deploy_clr_runtime(<exe_target>) (defined in
+# ECS3DManaged.cmake, included above). ECS3DScripting/ECS3DNet deploy their assemblies the same way
+# via ecs3d_add_managed_assembly().
