@@ -99,6 +99,6 @@ void registerColliderEditors(ComponentEditor& componentEditor)
     return edited;
   });
 
-  // TODO: the collider debug gizmo (the old BoxCollider/SphereCollider::variableUpdate that drew the
-  // TODO:   shape via a vke::RenderObject) belongs in ECS3DRender RenderSystem, gated on getRenderCollider().
+  // The collider debug gizmo (the shape drawn with the objectHighlight pipeline when "Render Collider"
+  // is on) is handled by ECS3DRender's RenderSystem via GpuAssetCache::getColliderGizmo.
 }

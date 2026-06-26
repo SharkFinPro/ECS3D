@@ -87,3 +87,27 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getRenderObject(const uuids::u
 
   return renderObject;
 }
+
+std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath)
+{
+  if (const auto it = m_colliderGizmos.find(ownerUUID); it != m_colliderGizmos.end() && it->second.path == modelPath)
+  {
+    return it->second.renderObject;
+  }
+
+  // The debug models/texture are loaded by path (the vke AssetManager caches them). Was
+  // BoxCollider/SphereCollider::variableUpdate building a white cube/sphere render object.
+  const auto model = m_renderer->getAssetManager()->loadModel(modelPath.c_str());
+  const auto white = m_renderer->getAssetManager()->loadTexture("assets/textures/white.png");
+
+  if (!model || !white)
+  {
+    return nullptr;
+  }
+
+  auto renderObject = m_renderer->getAssetManager()->loadRenderObject(white, white, model);
+
+  m_colliderGizmos[ownerUUID] = { renderObject, modelPath };
+
+  return renderObject;
+}

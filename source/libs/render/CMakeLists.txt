@@ -22,6 +22,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   VulkanEngine
 )
 
-# RenderSystem is functionally complete: ModelRenderer drawing (via GpuAssetCache), LightRenderer
-# point/spot light submission (cached per object), and the pick-feedback bool.
-# TODO: only the collider debug gizmo remains (default-off viz) — see the TODO in RenderSystem.cpp.
+# RenderSystem is complete: ModelRenderer drawing (via GpuAssetCache), LightRenderer point/spot light
+# submission (cached per object), the pick-feedback bool + selected-object highlight, and the collider
+# debug gizmo (the shape drawn with the objectHighlight pipeline when "Render Collider" is on).

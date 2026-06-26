@@ -6,6 +6,8 @@
 #include <objects/components/Transform.h>
 #include <objects/components/ModelRenderer.h>
 #include <objects/components/LightRenderer.h>
+#include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
@@ -104,12 +106,31 @@ void RenderSystem::variableUpdate(ObjectManager& objectManager, GpuAssetCache& a
         lightingManager->renderLight(light.pointLight);
       }
     }
-  }
 
-  // TODO: collider debug gizmo (BoxCollider/SphereCollider::variableUpdate, gated on getRenderCollider()).
-  // TODO:   It needs a per-collider cached RenderObject (like the lights above) built from the debug
-  // TODO:   model/texture by path (cube_1x1x1.glb / sphere_3.glb + white.png), positioned via the
-  // TODO:   collider's getPosition/getScale/getRotation, submitted with the objectHighlight pipeline.
+    // Collider debug gizmo: draw the collider's shape (offset by its local transform) with the
+    // highlight pipeline when its render flag is on.
+    if (const auto box = object->getComponent<BoxCollider>(ComponentType::collider); box && box->getRenderCollider())
+    {
+      if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/cube_1x1x1.glb"))
+      {
+        gizmo->setPosition(transform->getPosition() + box->getLocalPosition());
+        gizmo->setScale(transform->getScale() * box->getLocalScale());
+        gizmo->setOrientationEuler(transform->getRotation() + box->getLocalRotation());
+
+        renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
+      }
+    }
+    else if (const auto sphere = object->getComponent<SphereCollider>(ComponentType::collider); sphere && sphere->getRenderCollider())
+    {
+      if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/sphere_3.glb"))
+      {
+        gizmo->setPosition(transform->getPosition() + sphere->getLocalPosition());
+        gizmo->setScale(transform->getScale() * sphere->getLocalRadius());
+
+        renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
+      }
+    }
+  }
 }
 
 bool RenderSystem::isSelected(const uuids::uuid& uuid) const
