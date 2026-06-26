@@ -15,8 +15,12 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
-# glm is header-only (no Vulkan), so ECS3DData can hold vector/matrix fields without the renderer.
-# TODO: pin this to the same glm version VulkanEngine fetches to avoid a duplicate/mismatched target.
+# glm is header-only (no Vulkan), so ECS3DData can hold vector/matrix fields without depending on
+# the renderer. We declare it ourselves (rather than reuse VulkanEngine's) so the render-free libs
+# don't transitively pull in the renderer just to use glm. This tag MUST stay in sync with the glm
+# version VulkanEngine fetches (currently 1.0.1, in its source/cmake/External.cmake): FetchContent is
+# first-wins and we declare first, so this copy becomes the single glm target both sides resolve to.
+# If they diverge, bump this to match VulkanEngine's tag.
 FetchContent_Declare(
   glm
   GIT_REPOSITORY https://github.com/g-truc/glm.git
