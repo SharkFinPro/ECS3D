@@ -39,11 +39,11 @@ public:
   // Drives each script's variableUpdate (where gameplay reads input). The server has no render frame,
   // so it runs this once per tick from the networked InputState; it must run before fixedUpdate so any
   // force the script queues from input is applied the same tick.
-  void variableUpdate(ObjectManager& objectManager);
+  void variableUpdate(ObjectManager& objectManager) const;
 
   // Refresh every Script's field blob from its live instance so a serialize()/Snapshot carries the
   // current values. Call this before building a Snapshot.
-  void syncFieldsToData(ObjectManager& objectManager);
+  void syncFieldsToData(const ObjectManager& objectManager) const;
 
 private:
   std::shared_ptr<ManagedHost> m_host;
@@ -66,7 +66,7 @@ private:
 
   void ensureEngine();
 
-  void checkForScriptChanges(ObjectManager& objectManager, float dt);
+  void checkForScriptChanges(const ObjectManager& objectManager, float dt);
 
   // Create the managed instance, cache its exposed fields, and push the Script's saved field blob in.
   void attach(const Object& object, const Script& script);

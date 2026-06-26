@@ -126,7 +126,7 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
   }
 }
 
-void ScriptSystem::variableUpdate(ObjectManager& objectManager)
+void ScriptSystem::variableUpdate(ObjectManager& objectManager) const
 {
   if (!m_engine)
   {
@@ -156,7 +156,7 @@ void ScriptSystem::variableUpdate(ObjectManager& objectManager)
   }
 }
 
-void ScriptSystem::syncFieldsToData(ObjectManager& objectManager)
+void ScriptSystem::syncFieldsToData(const ObjectManager& objectManager) const
 {
   if (!m_engine)
   {
@@ -186,7 +186,7 @@ void ScriptSystem::syncFieldsToData(ObjectManager& objectManager)
   }
 }
 
-void ScriptSystem::checkForScriptChanges(ObjectManager& objectManager, const float dt)
+void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, const float dt)
 {
   constexpr float minimumSnapshotInterval = 1.0f / 2.0f; // 2 checks every second
 
