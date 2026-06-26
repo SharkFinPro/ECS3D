@@ -53,12 +53,8 @@ ServerApp::ServerApp(LaunchOptions options)
 
   m_netServer->start(m_options.port, m_options.editMode, m_options.authToken);
 
-  // The server is authoritative, so it runs the scene immediately (the old SceneManager started on a
-  // user "Start"; here the server simulates as soon as it is up).
   m_sceneManager->startScene();
 
-  // Attach + start the managed script instances for the running scene (the old Object::start ->
-  // Script::start path; the data Script no longer reaches the CLR, so the server drives it here).
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     try

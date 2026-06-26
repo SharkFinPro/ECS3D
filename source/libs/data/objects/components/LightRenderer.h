@@ -36,8 +36,6 @@ public:
   void loadFromJSON(const nlohmann::json& componentData) override;
 
 private:
-  // The vke::PointLight / SpotLight are gone: the data holds only the light parameters. ECS3DRender
-  // builds and submits the actual lights from these values each frame.
   bool m_isSpotLight = false;
 
   glm::vec3 m_color = glm::vec3(0);

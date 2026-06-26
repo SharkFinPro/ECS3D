@@ -16,11 +16,10 @@ class ObjectManager;
 class Object;
 class Script;
 
-// Drives the live C# script instances on the server. It owns the ScriptEngine (the ScriptBridge ABI)
-// and absorbs the old ScriptManager's bookkeeping: which (uuid, class) pairs are attached, the
-// exposed-field cache, and the hot-reload file snapshot. Each Script data component just carries a
-// field blob; ScriptSystem syncs that blob <-> the live instance (writes it on attach/start, reads it
-// back before a snapshot). Gameplay only ever runs here, on the server.
+// Drives the live C# script instances on the server. Owns the ScriptEngine (the ScriptBridge ABI)
+// and tracks which (uuid, class) pairs are attached, the exposed-field cache, and the hot-reload
+// file snapshot. Each Script data component carries only a field blob; ScriptSystem syncs that blob
+// <-> the live instance (writes it on attach/start, reads it back before a snapshot). Server only.
 class ScriptSystem {
 public:
   explicit ScriptSystem(std::shared_ptr<ManagedHost> host);
@@ -28,7 +27,6 @@ public:
   ~ScriptSystem();
 
   // Attach + start every Script's managed instance, pushing each Script's saved field blob into it.
-  // Mirrors the old scene-start path (Object::start -> Script::start).
   void start(ObjectManager& objectManager);
 
   // Stop + detach every managed instance.

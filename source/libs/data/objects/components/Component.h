@@ -99,13 +99,7 @@ private:
   T m_liveValue;
 };
 
-// Data-only base. The behavior verbs that used to live here are lifted out:
-//   fixedUpdate(dt)  -> ECS3DSim systems (PhysicsSystem / CollisionSystem)
-//   variableUpdate() -> ECS3DRender RenderSystem
-//   displayGui()     -> ECS3DEditorLib ComponentEditor (which also owns the old displayGuiHeader)
-// Systems dispatch by casting to the concrete component data type; the base no longer carries the
-// virtuals, which is what keeps ECS3DData free of Vulkan/imgui. start()/stop() stay because the
-// play-vs-stopped ComponentVariable state is data the server needs.
+// Data-only base. start()/stop() manage the play-vs-stopped ComponentVariable state the server needs.
 class Component {
 public:
   explicit Component(ComponentType type, ComponentType subType = ComponentType::SubComponentType_none);

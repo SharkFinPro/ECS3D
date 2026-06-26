@@ -20,8 +20,8 @@ ProjectSerializer::ProjectSerializer(AssetRegistry* assetRegistry,
 nlohmann::json ProjectSerializer::serialize() const
 {
   // AssetRegistry serializes the flat file assets (models/textures/scripts); scenes carry the object
-  // tree and live in the SceneManager, so they are merged into the same "assets" object here (matching
-  // the old single-blob save format). The same blob is the network Snapshot sent to a joining client.
+  // tree and live in the SceneManager, so they are merged into the same "assets" object here.
+  // The same blob is the network Snapshot sent to a joining client.
   auto assets = m_assetRegistry->serialize();
 
   assets["scenes"] = nlohmann::json::array();
@@ -48,11 +48,9 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
 
   const auto& assets = saveData.at("assets");
 
-  // Atomic load: parse and build everything that can throw (bad uuids, missing fields, malformed
-  // objects) into LOCAL instances first, while the live AssetRegistry/SceneManager are untouched. Only
-  // once the whole blob has parsed do we clear the live state and commit. A failed load (corrupt file
-  // or a bad snapshot) therefore leaves the current project intact instead of wiping it half-way — the
-  // atomicity the old loadFromSaveFile got from its prepareForReset/cancelReset manager swap.
+  // Atomic load: parse everything that can throw into local instances first, while the live
+  // AssetRegistry/SceneManager are untouched. Only once the whole blob has parsed do we clear and
+  // commit, so a corrupt file or bad snapshot leaves the current project intact.
   AssetRegistry parsedAssets;
   parsedAssets.loadFromJSON(assets);
 

@@ -4,8 +4,7 @@
 # on it. Each module that ships an assembly calls this for its own .csproj:
 #   ECS3DScripting -> ScriptBridge (gameplay), ECS3DNet -> the websocket transport assembly.
 #
-# This is the "build my C# assembly" half of the old loadCS.cmake. The "host linkage" half
-# (nethost include/link) lives in ECS3DClrHost and is inherited transitively.
+# The "host linkage" half (nethost include/link) lives in ECS3DClrHost and is inherited transitively.
 function(ecs3d_add_managed_assembly NATIVE_TARGET CSPROJ_DIR OUT_SUBDIR ASSEMBLY_NAME)
   find_package(Dotnet REQUIRED)
 

@@ -12,10 +12,10 @@ namespace vke {
   class VulkanEngine;
 }
 
-// The editor-only half of the old SaveManager: native file dialogs + the Ctrl+S keybind + drag-and-drop
-// loading. Save serializes the editor's replicated project straight to disk. Open/New apply the project
-// locally (instant feedback) AND forward the blob via a callback the EditorApp turns into a loadProject
-// command, so the authoritative server reloads + re-snapshots and everyone stays in sync.
+// Editor file I/O: native file dialogs + the Ctrl+S keybind + drag-and-drop loading. Save serializes
+// the editor's replicated project straight to disk. Open/New apply the project locally (instant
+// feedback) AND forward the blob via a callback the EditorApp turns into a loadProject command, so
+// the authoritative server reloads + re-snapshots and everyone stays in sync.
 class SaveUI {
 public:
   using LoadProjectCallback = std::function<void(const std::string& projectJson)>;

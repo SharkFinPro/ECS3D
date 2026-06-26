@@ -114,8 +114,7 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
         continue;
       }
 
-      // Lazily (re)create the instance if needed - this is what restores instances after a hot reload,
-      // pushing the (refreshed) field blob back in. Matches the old Script::fixedUpdate lazy attach.
+      // Lazily (re)create the instance if needed — restores instances after a hot reload.
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
         attach(*object, *script);
@@ -252,7 +251,6 @@ void ScriptSystem::attach(const Object& object, const Script& script)
     fields.push_back({ f.at("name").get<std::string>(), f.at("type").get<std::string>() });
   }
 
-  // Push the Script's saved field blob into the fresh instance (the old Script::loadFromJSON path).
   writeFieldsToInstance(uuid, className, script.getFields());
 }
 

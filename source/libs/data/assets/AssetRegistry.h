@@ -21,9 +21,9 @@ struct AssetRecord {
   std::string className; // scripts only
 };
 
-// The data half of the old AssetManager: the uuid<->path registry + serialize. It carries asset
-// METADATA only (no GPU resources, no GUI). ECS3DRender's GpuAssetCache resolves these records to
-// vke::Model/Texture2D; the editor's AssetBrowserPanel renders the listing.
+// uuid<->path registry + serialize. Carries asset metadata only (no GPU resources, no GUI).
+// ECS3DRender's GpuAssetCache resolves these records to vke resources; the editor's
+// AssetBrowserPanel renders the listing.
 class AssetRegistry {
 public:
   void registerAsset(const AssetRecord& record);

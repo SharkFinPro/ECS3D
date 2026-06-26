@@ -318,8 +318,6 @@ void EditorApp::createRenderer()
 
 void EditorApp::registerEditors() const
 {
-  // The per-type editing widgets, keyed by component type string (the central componentEditor the old
-  // per-component displayGui() bodies move into).
   registerTransformEditor(*m_componentEditor);
   registerRigidBodyEditor(*m_componentEditor);
   registerModelRendererEditor(*m_componentEditor);

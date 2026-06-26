@@ -77,8 +77,6 @@ void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
 {
   m_shouldRender = componentData.at("shouldRender");
 
-  // The old loadFromJSON resolved each UUID to an Asset and built a vke::RenderObject here. That
-  // resolution is now the RenderSystem/GpuAssetCache's job; the data only stores the UUIDs.
   if (const auto modelUUID = uuids::uuid::from_string(std::string(componentData.at("modelUUID"))); modelUUID.has_value())
   {
     m_modelUUID = modelUUID.value();

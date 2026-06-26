@@ -26,10 +26,9 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DClrHost
 )
 
-# The script-call half of ScriptEngine + the old ScriptManager bookkeeping now live here
-# (ScriptEngine.cpp / ScriptSystem.cpp). The InputUtils binding reads the networked InputState
-# (the headless server has no GLFW window): the client/editor sends the pressed keys, ServerApp
-# writes them into InputState, and InputUtilsBindings reads them back.
+# The InputUtils binding reads the networked InputState (the headless server has no GLFW window):
+# the client/editor sends the pressed keys, ServerApp writes them into InputState, and
+# InputUtilsBindings reads them back.
 
 # Build + deploy the C# ScriptBridge assembly (gameplay).
 ecs3d_add_managed_assembly(${PROJECT_NAME}
@@ -39,7 +38,7 @@ ecs3d_add_managed_assembly(${PROJECT_NAME}
 )
 
 # Copy the user scripts next to the executable so the bridge can compile them at runtime (the bridge's
-# init scans scripts/UserScripts). Was core/cmake/loadCS.cmake.
+# init scans scripts/UserScripts).
 add_custom_target(ECS3DUserScripts ALL
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_CURRENT_SOURCE_DIR}/UserScripts"

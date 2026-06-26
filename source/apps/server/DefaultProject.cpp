@@ -9,8 +9,7 @@ using nlohmann::json;
 
 namespace {
 
-// Stable asset UUIDs for the shared models/textures/script (kept the same as the old SetupTest.json so
-// they read identically). Object UUIDs, by contrast, are freshly generated each launch (newUUID).
+// Stable asset UUIDs for the shared models/textures/script. Object UUIDs are freshly generated each launch (newUUID).
 const std::string cubeModel = "58034695-0495-4cfb-8f75-90cf24a9073b";
 const std::string playerModel = "bcf01ddf-e82a-4ed1-90a7-b93b4184f647";
 const std::string sphereModel = "a4c4a30b-735b-4b1c-9140-19f62ca3c720";
@@ -311,8 +310,7 @@ json scene(const std::string& name, const std::string& uuid, json objects)
 
 json buildDefaultProject()
 {
-  // Scene 1 is the one that's active out of the box (matching the old SetupTest.json default); the rest
-  // are switchable from the editor's asset browser.
+  // Scene 1 is active out of the box; the rest are switchable from the editor's asset browser.
   const std::string scene1UUID = newUUID();
 
   return {
