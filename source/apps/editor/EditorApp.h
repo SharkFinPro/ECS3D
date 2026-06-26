@@ -89,7 +89,7 @@ private:
   // true so the common case (the editor's own spawned --edit server) is unaffected if the message lags.
   bool m_serverEditable = true;
 
-  SceneStatus m_sceneStatus = SceneStatus::stopped;
+  SceneStatus m_sceneStatus = SceneStatus::running;
 
   // Only resend input when it changes (see ClientApp): keeps an unfocused editor from clobbering a
   // focused client's keys on the shared server-side InputState.
