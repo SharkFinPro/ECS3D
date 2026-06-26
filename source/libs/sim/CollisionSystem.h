@@ -10,7 +10,6 @@ class Object;
 class Collider;
 class RigidBody;
 class Simplex;
-class PhysicsSystem;
 
 struct CollisionEdge {
   std::shared_ptr<Object> object;
@@ -20,27 +19,23 @@ struct CollisionEdge {
 
 class CollisionSystem {
 public:
-  void fixedUpdate(ObjectManager& objectManager, PhysicsSystem& physicsSystem);
+  void fixedUpdate(const ObjectManager& objectManager);
 
 private:
   // Was CollisionManager::collisionEdges. The old add/removeObject maintenance is replaced by a
   // per-tick rebuild from the ObjectManager.
   std::vector<CollisionEdge> m_collisionEdges;
 
-  // Set for the duration of fixedUpdate so the OMP loop reaches the response the same way the
-  // original reached its members (via this), rather than capturing a new variable into the region.
-  PhysicsSystem* m_physicsSystem = nullptr;
-
   void checkCollisions();
 
   void findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
-  void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
-                        const std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+  static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
+                               const std::vector<std::shared_ptr<Object>>& collidedObjects);
 
   // GJK/EPA narrow phase, lifted out of Collider.
-  [[nodiscard]] bool collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
-                                  glm::vec3* mtv, glm::vec3* collisionPoint) const;
+  static bool collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
+                           glm::vec3* mtv, glm::vec3* collisionPoint);
 
   static bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& collider,
                                             const std::shared_ptr<Collider>& otherCollider,

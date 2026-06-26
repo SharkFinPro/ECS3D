@@ -34,7 +34,6 @@ ServerApp::ServerApp(LaunchOptions options)
   registerDataComponents(*m_componentRegistry);
 
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
-  m_physicsSystem = std::make_shared<PhysicsSystem>();
   m_collisionSystem = std::make_shared<CollisionSystem>();
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
@@ -172,8 +171,8 @@ void ServerApp::fixedUpdate(const float dt)
   {
     m_scriptSystem->variableUpdate(objectManager);
     m_scriptSystem->fixedUpdate(objectManager, dt);
-    m_physicsSystem->fixedUpdate(objectManager, dt, *this);
-    m_collisionSystem->fixedUpdate(objectManager, *m_physicsSystem);
+    PhysicsSystem::fixedUpdate(objectManager, dt, *this);
+    m_collisionSystem->fixedUpdate(objectManager);
   }
   catch (const std::exception& e)
   {

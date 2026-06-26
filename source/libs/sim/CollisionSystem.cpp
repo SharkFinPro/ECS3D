@@ -12,10 +12,8 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
-void CollisionSystem::fixedUpdate(ObjectManager& objectManager, PhysicsSystem& physicsSystem)
+void CollisionSystem::fixedUpdate(const ObjectManager& objectManager)
 {
-  m_physicsSystem = &physicsSystem;
-
   m_collisionEdges.clear();
 
   for (const auto& object : objectManager.getAllObjects())
@@ -98,7 +96,7 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
 }
 
 void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
-                                       const std::vector<std::shared_ptr<Object>>& collidedObjects) const
+                                       const std::vector<std::shared_ptr<Object>>& collidedObjects)
 {
   if (collidedObjects.size() == 1)
   {
@@ -106,7 +104,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
     glm::vec3 collisionPoint;
     if (collidesWith(collider, collidedObjects[0], &mtv, &collisionPoint))
     {
-      m_physicsSystem->handleCollision(*rigidBody, collidedObjects[0], mtv, collisionPoint);
+      PhysicsSystem::handleCollision(*rigidBody, collidedObjects[0], mtv, collisionPoint);
     }
 
     return;
@@ -143,7 +141,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
         glm::vec3 collisionPoint;
         if (collidesWith(collider, collidedObjects[j], &mtv, &collisionPoint))
         {
-          m_physicsSystem->handleCollision(*rigidBody, collidedObjects[j], mtv, collisionPoint);
+          PhysicsSystem::handleCollision(*rigidBody, collidedObjects[j], mtv, collisionPoint);
         }
       }
     }
@@ -151,7 +149,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
 }
 
 bool CollisionSystem::collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
-                                   glm::vec3* mtv, glm::vec3* collisionPoint) const
+                                   glm::vec3* mtv, glm::vec3* collisionPoint)
 {
   const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
   if (!otherCollider)

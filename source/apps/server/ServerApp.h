@@ -13,7 +13,6 @@ class ComponentRegistry;
 class AssetRegistry;
 class SceneManager;
 class ProjectSerializer;
-class PhysicsSystem;
 class CollisionSystem;
 class ScriptSystem;
 
@@ -57,7 +56,6 @@ private:
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectSerializer> m_projectSerializer;
 
-  std::shared_ptr<PhysicsSystem> m_physicsSystem;
   std::shared_ptr<CollisionSystem> m_collisionSystem;
   std::shared_ptr<ScriptSystem> m_scriptSystem;
 

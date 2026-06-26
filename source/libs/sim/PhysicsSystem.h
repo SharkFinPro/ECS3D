@@ -13,23 +13,23 @@ class RigidBody;
 
 class PhysicsSystem {
 public:
-  void fixedUpdate(ObjectManager& objectManager, float dt, SimContext& context);
+  static void fixedUpdate(const ObjectManager& objectManager, float dt, const SimContext& context);
 
   // Public so CollisionSystem can forward its detected collisions here (the response that used to be
   // RigidBody::handleCollision), and so the script bindings can apply forces.
-  void applyForce(RigidBody& body, Transform& transform, const glm::vec3& force, const glm::vec3& position);
+  static void applyForce(RigidBody& body, const Transform& transform, const glm::vec3& force, const glm::vec3& position);
 
-  void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
-                       glm::vec3 minimumTranslationVector, glm::vec3 collisionPoint);
+  static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
+                              glm::vec3 minimumTranslationVector, glm::vec3 collisionPoint);
 
 private:
   // The behavior lifted out of RigidBody. Each takes the data it acts on by reference instead of
   // living as a method on the component, so only ECS3DSim (server) carries the physics.
-  void integrate(RigidBody& body, Transform& transform, float dt);
+  static void integrate(RigidBody& body, Transform& transform, float dt);
 
-  void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 minimumTranslationVector);
+  static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 minimumTranslationVector);
 
-  void limitMovement(RigidBody& body, Transform& transform);
+  static void limitMovement(RigidBody& body, const Transform& transform);
 
   [[nodiscard]] static glm::mat3x3 getInertiaTensor(const RigidBody& body, const Transform& transform);
 };

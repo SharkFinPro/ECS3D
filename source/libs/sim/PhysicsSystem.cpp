@@ -7,7 +7,7 @@
 #include <glm/glm.hpp>
 #include <stdexcept>
 
-void PhysicsSystem::fixedUpdate(ObjectManager& objectManager, const float dt, SimContext& context)
+void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt, const SimContext& context)
 {
   // The dispatch that used to be a virtual call inside Object::fixedUpdate now lives here: the system
   // walks the objects and acts on the concrete RigidBody/Transform data. Only ECS3DSim (server) does.
@@ -60,7 +60,7 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
   body.setAngularVelocity(body.getAngularVelocity() * damping);
 }
 
-void PhysicsSystem::applyForce(RigidBody& body, Transform& transform, const glm::vec3& force, const glm::vec3& position)
+void PhysicsSystem::applyForce(RigidBody& body, const Transform& transform, const glm::vec3& force, const glm::vec3& position)
 {
   const auto velocity = body.getVelocity() + force;
   body.setVelocity(velocity);
@@ -140,7 +140,7 @@ void PhysicsSystem::respondToCollision(RigidBody& body, Transform& transform, co
   transform.move(minimumTranslationVector);
 }
 
-void PhysicsSystem::limitMovement(RigidBody& body, Transform& transform)
+void PhysicsSystem::limitMovement(RigidBody& body, const Transform& transform)
 {
   if (glm::length(body.getVelocity()) < 1e-5f)
   {

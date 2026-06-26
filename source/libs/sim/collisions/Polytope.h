@@ -67,7 +67,7 @@ private:
 
   std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist);
 
-  bool isFacingInward(const FaceData& faceData) const;
+  [[nodiscard]] bool isFacingInward(const FaceData& faceData) const;
 
   void constructFace(Edge edge, glm::vec3 supportPoint, float& currentMinDist);
 
