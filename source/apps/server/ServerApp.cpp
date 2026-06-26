@@ -167,7 +167,7 @@ void ServerApp::fixedUpdate(const float dt)
   {
     m_scriptSystem->variableUpdate(objectManager);
     m_scriptSystem->fixedUpdate(objectManager, dt);
-    PhysicsSystem::fixedUpdate(objectManager, dt, *this);
+    PhysicsSystem::fixedUpdate(objectManager, dt);
     m_collisionSystem->fixedUpdate(objectManager);
   }
   catch (const std::exception& e)

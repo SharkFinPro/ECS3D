@@ -7,7 +7,7 @@
 #include <glm/glm.hpp>
 #include <stdexcept>
 
-void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt, const SimContext& context)
+void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
 {
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -30,8 +30,6 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
 
     integrate(*rigidBody, *transform, dt);
   }
-
-  (void)context;
 }
 
 void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float dt)

@@ -6,14 +6,13 @@
 #include <memory>
 
 class ObjectManager;
-class SimContext;
 class Object;
 class Transform;
 class RigidBody;
 
 class PhysicsSystem {
 public:
-  static void fixedUpdate(const ObjectManager& objectManager, float dt, const SimContext& context);
+  static void fixedUpdate(const ObjectManager& objectManager, float dt);
 
   // Public so CollisionSystem can forward collisions here and script bindings can apply forces.
   static void applyForce(RigidBody& body, const Transform& transform, const glm::vec3& force, const glm::vec3& position);

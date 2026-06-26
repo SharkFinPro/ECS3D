@@ -1,7 +1,6 @@
 #ifndef SERVERAPP_H
 #define SERVERAPP_H
 
-#include <context/SimContext.h>
 #include <Protocol.h>
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
@@ -21,9 +20,8 @@ namespace net {
   struct Message;
 }
 
-// The authoritative server. It owns the simulation and is the only thing that links ECS3DSim +
-// ECS3DScripting. It implements SimContext so it can be handed to the systems for logging.
-class ServerApp final : public SimContext {
+// The authoritative server. It owns the simulation and is the only thing that links ECS3DSim + ECS3DScripting.
+class ServerApp final {
 public:
   struct LaunchOptions {
     std::string project;
@@ -37,13 +35,13 @@ public:
 
   explicit ServerApp(LaunchOptions options);
 
-  ~ServerApp() override;
+  ~ServerApp();
 
   [[nodiscard]] bool isActive() const;
 
   void run();
 
-  void logMessage(const std::string& level, const std::string& message) override;
+  void logMessage(const std::string& level, const std::string& message);
 
 private:
   LaunchOptions m_options;
