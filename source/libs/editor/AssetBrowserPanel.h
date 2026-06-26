@@ -12,7 +12,7 @@ class AssetRegistry;
 class GpuAssetCache;
 
 // The editor's "Assets" panel: a grid of the replicated AssetRegistry records with thumbnails (the
-// texture image for textures, a labelled tile otherwise). Each tile is a drag-drop source carrying its
+// texture image for textures, a labeled tile otherwise). Each tile is a drag-drop source carrying its
 // uuid (so component editors can accept it); scene tiles are double-clicked to switch the active scene.
 class AssetBrowserPanel {
 public:
