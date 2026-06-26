@@ -62,13 +62,15 @@ void ObjectGUIManager::displayGui(ObjectManager* objectManager)
   }
 
   ImGui::BeginDisabled(!m_editable || objectManager == nullptr);
-  if (ImGui::Button("+ Add Object") && objectManager && m_sceneEditCallback)
+  if (ImGui::Button("Create New Object", {ImGui::GetContentRegionAvail().x, 45}))
   {
     m_sceneEditCallback(replication::buildAddObject("Object"));
   }
   ImGui::EndDisabled();
 
+  ImGui::Spacing();
   ImGui::Separator();
+  ImGui::Spacing();
 
   if (objectManager)
   {
