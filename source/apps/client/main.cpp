@@ -8,7 +8,7 @@ int main(int argc, char** argv)
   {
     // Defaults to singleplayer (spawn a local server). --host connects to an existing/remote server
     // instead (no local server spawned).
-    ClientApp::ConnectOptions options { .launchLocalServer = true, .project = "SetupTest.json" };
+    ClientApp::ConnectOptions options { .launchLocalServer = true };
 
     for (int i = 1; i < argc; ++i)
     {

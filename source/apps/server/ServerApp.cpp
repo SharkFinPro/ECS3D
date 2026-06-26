@@ -1,4 +1,5 @@
 #include "ServerApp.h"
+#include "DefaultProject.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
@@ -38,7 +39,14 @@ ServerApp::ServerApp(LaunchOptions options)
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
-  if (!m_projectSerializer->load(m_options.project) || !m_sceneManager->getCurrentScene())
+  if (m_options.project.empty())
+  {
+    // No project file requested: run the built-in sample (scenes 1-3 + falling balls), generated in
+    // code. The procedural scenes can't be a static file, so the whole sample is built here rather than
+    // shipped as a project on disk.
+    m_projectSerializer->deserialize(buildDefaultProject());
+  }
+  else if (!m_projectSerializer->load(m_options.project) || !m_sceneManager->getCurrentScene())
   {
     logMessage("Error", "No scene loaded from project '" + m_options.project
       + "' - the server will run but simulate nothing. Check the project path and working directory.");

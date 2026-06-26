@@ -8,7 +8,8 @@ int main(int argc, char** argv)
   {
     // --edit is the launch-capability gate that allows editor connections; absent it the server is a
     // pure play server. (--token is reserved for the auth payload, which isn't enforced yet.)
-    ServerApp::LaunchOptions options { .project = "SetupTest.json" };
+    // An empty project runs the built-in sample (scenes 1-3 + falling balls); --project loads a file.
+    ServerApp::LaunchOptions options;
 
     for (int i = 1; i < argc; ++i)
     {

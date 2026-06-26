@@ -7,7 +7,7 @@ int main(int argc, char** argv)
   try
   {
     // Defaults to spawning a local edit server. --host attaches to an existing server instead.
-    EditorApp::LaunchOptions options { .project = "SetupTest.json" };
+    EditorApp::LaunchOptions options;
 
     for (int i = 1; i < argc; ++i)
     {

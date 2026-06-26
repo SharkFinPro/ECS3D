@@ -17,9 +17,8 @@ public:
   ~ServerProcess();
 
   // Launch <directory of the current executable>/<exeBaseName>, with its working directory set to that
-  // same directory so it resolves SetupTest.json / net/Transport / scripts / assets the way the headless
-  // server does. `arguments` (if any) are appended to the command line. Returns true if the process
-  // started.
+  // same directory so it resolves net/Transport / scripts / assets the way the headless server does.
+  // `arguments` (if any) are appended to the command line. Returns true if the process started.
   bool launch(const std::string& exeBaseName, const std::string& arguments = "");
 
 private:
