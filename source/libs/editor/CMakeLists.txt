@@ -34,8 +34,3 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DRender  # pulls imgui transitively via VulkanEngine, which the component editors + GuiComponents use
   nfd          # native file dialogs for SaveUI
 )
-
-# DONE: component displayGui() bodies -> ComponentEditor handlers (the central componentEditor),
-# ObjectGUIManager (object tree + selected-object panel), and GuiComponents.h all live here now.
-# TODO: still to migrate — the GUI half of AssetManager (-> AssetBrowserPanel: browser/creation popups/
-# TODO:   drag-drop sources/menu widget) and the file-dialog/keybind half of SaveManager (-> SaveUI).
