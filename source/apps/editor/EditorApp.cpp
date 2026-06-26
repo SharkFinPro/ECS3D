@@ -533,6 +533,8 @@ void EditorApp::displayMessageLog()
 
 void EditorApp::displaySceneStatus()
 {
+  constexpr int sceneStatusButtonWidth = 125;
+
   ImGui::Begin("Scene Status");
 
   // The scene lives on the authoritative server, so these are fire-and-forget lifecycle commands. The
@@ -540,19 +542,19 @@ void EditorApp::displaySceneStatus()
   // the buttons aren't disabled by state). They mutate the server, so they're disabled when read-only.
   ImGui::BeginDisabled(!m_serverEditable);
 
-  if (ImGui::Button("Start"))
+  if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
   {
     sendSceneControl("start");
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Pause"))
+  if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
   {
     sendSceneControl("pause");
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Stop"))
+  if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
   {
     sendSceneControl("stop");
   }
