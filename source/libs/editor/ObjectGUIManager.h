@@ -47,6 +47,10 @@ private:
 
   std::optional<uuids::uuid> m_selectedObject;
 
+  // The object awaiting delete confirmation (set by the context-menu "Delete" or the Delete hotkey).
+  // While set, the "Delete Object?" modal is shown; confirming sends a removeObject scene edit.
+  std::optional<uuids::uuid> m_objectPendingDeletion;
+
   bool m_highlightSelectedObject = true;
 
   // Components whose deletion we've already sent (markedAsDeleted persists until the next snapshot
@@ -56,6 +60,10 @@ private:
   void displayObjectTree(const std::shared_ptr<Object>& object);
 
   void displaySelectedObject(ObjectManager* objectManager);
+
+  // The "Delete Object?" confirmation modal for m_objectPendingDeletion. Confirming (Yes / Enter) sends
+  // a removeObject scene edit; cancelling (No / Escape), or the object vanishing, clears the prompt.
+  void displayDeleteConfirmationModal(ObjectManager* objectManager);
 
   void displayAddComponent(const std::shared_ptr<Object>& object);
 

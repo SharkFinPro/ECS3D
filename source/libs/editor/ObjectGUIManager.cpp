@@ -83,9 +83,21 @@ void ObjectGUIManager::displayGui(ObjectManager* objectManager)
     }
   }
 
+  // Delete hotkey: while the Objects panel has focus, Delete queues the selected object for removal
+  // (guarded against firing while a text field is being typed into). The confirmation modal follows.
+  if (objectManager && m_selectedObject.has_value() &&
+      ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+      !ImGui::GetIO().WantTextInput &&
+      ImGui::IsKeyPressed(ImGuiKey_Delete))
+  {
+    m_objectPendingDeletion = m_selectedObject;
+  }
+
   ImGui::End();
 
   displaySelectedObject(objectManager);
+
+  displayDeleteConfirmationModal(objectManager);
 }
 
 void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
@@ -149,9 +161,10 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID()));
     }
 
-    if (ImGui::MenuItem("Delete") && m_sceneEditCallback)
+    if (ImGui::MenuItem("Delete"))
     {
-      m_sceneEditCallback(replication::buildRemoveObject(object->getUUID()));
+      // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
+      m_objectPendingDeletion = object->getUUID();
     }
 
     ImGui::EndPopup();
@@ -205,6 +218,71 @@ void ObjectGUIManager::displaySelectedObject(ObjectManager* objectManager)
   }
 
   ImGui::End();
+}
+
+void ObjectGUIManager::displayDeleteConfirmationModal(ObjectManager* objectManager)
+{
+  if (!m_objectPendingDeletion.has_value())
+  {
+    return;
+  }
+
+  // The pending object can disappear out from under us (a fresh snapshot, or another editor removing
+  // it): drop the prompt rather than confirming a stale delete.
+  const auto object = objectManager ? objectManager->getObjectByUUID(m_objectPendingDeletion.value()) : nullptr;
+  if (!object)
+  {
+    m_objectPendingDeletion.reset();
+    return;
+  }
+
+  ImGui::OpenPopup("Delete Object?");
+
+  bool shouldDelete = false;
+
+  if (ImGui::BeginPopupModal("Delete Object?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    ImGui::TextUnformatted("Are you sure you want to delete");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", object->getName().c_str());
+    ImGui::SameLine();
+    ImGui::TextUnformatted("?");
+
+    ImGui::TextUnformatted("This action cannot be undone.");
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Yes", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter))
+    {
+      shouldDelete = true;
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("No", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+      m_objectPendingDeletion.reset();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
+
+  if (shouldDelete)
+  {
+    if (m_sceneEditCallback)
+    {
+      m_sceneEditCallback(replication::buildRemoveObject(m_objectPendingDeletion.value()));
+    }
+
+    if (m_selectedObject == m_objectPendingDeletion)
+    {
+      m_selectedObject.reset();
+    }
+
+    m_objectPendingDeletion.reset();
+  }
 }
 
 void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object)
