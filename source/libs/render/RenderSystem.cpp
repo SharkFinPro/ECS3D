@@ -18,7 +18,7 @@
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 
-void RenderSystem::variableUpdate(ObjectManager& objectManager, GpuAssetCache& assetCache,
+void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                                  const std::optional<uuids::uuid>& highlightUUID)
 {
   const auto renderer = assetCache.getRenderer();

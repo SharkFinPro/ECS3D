@@ -18,7 +18,7 @@ class RenderSystem {
 public:
   // highlightUUID (the editor's selected object) is re-drawn with the objectHighlight pipeline. The
   // client passes nullopt.
-  void variableUpdate(ObjectManager& objectManager, GpuAssetCache& assetCache,
+  void variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                       const std::optional<uuids::uuid>& highlightUUID = std::nullopt);
 
   // The renderer's pick feedback (was ModelRenderer::selectedByRenderer) - true for the object under

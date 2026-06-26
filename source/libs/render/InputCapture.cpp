@@ -4,7 +4,7 @@
 
 namespace input {
 
-InputSnapshot capture(vke::VulkanEngine& renderer)
+InputSnapshot capture(const vke::VulkanEngine& renderer)
 {
   InputSnapshot snapshot;
 

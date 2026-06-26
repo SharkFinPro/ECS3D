@@ -17,7 +17,7 @@ struct InputSnapshot {
   bool focused = true;     // the window only reports keys while it has focus, so this is informational
 };
 
-[[nodiscard]] InputSnapshot capture(vke::VulkanEngine& renderer);
+[[nodiscard]] InputSnapshot capture(const vke::VulkanEngine& renderer);
 
 }
 
