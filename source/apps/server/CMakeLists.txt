@@ -22,4 +22,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 ecs3d_deploy_clr_runtime(${PROJECT_NAME})
 
 # The sample project is generated in code (DefaultProject) rather than shipped as a file, so there's no
-# project to deploy next to the executable.
+# project to deploy next to the executable. Its models/textures (defaultAssets) DO need to ship next to
+# the executable, though: the renderer (editor/client, which share this bin) resolves the project's
+# asset paths against the working directory. Deployed at configure time so it doesn't depend on build
+# order, and unconditionally (the apps need it whether or not the tests are built).
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/defaultAssets/" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/assets/")
