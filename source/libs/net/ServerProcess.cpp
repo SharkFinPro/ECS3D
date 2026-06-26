@@ -21,7 +21,7 @@ ServerProcess::~ServerProcess()
 #endif
 }
 
-bool ServerProcess::launch(const std::string& exeBaseName)
+bool ServerProcess::launch(const std::string& exeBaseName, const std::string& arguments)
 {
 #if defined(_WIN32)
   if (m_handle)
@@ -46,6 +46,11 @@ bool ServerProcess::launch(const std::string& exeBaseName)
 
   // CreateProcessW needs a writable command-line buffer.
   std::wstring commandLine = L"\"" + applicationName + L"\"";
+  if (!arguments.empty())
+  {
+    // Arguments are ASCII launch flags (e.g. "--ephemeral"), so a plain widening is sufficient.
+    commandLine += L" " + std::wstring(arguments.begin(), arguments.end());
+  }
   std::vector<wchar_t> commandBuffer(commandLine.begin(), commandLine.end());
   commandBuffer.push_back(L'\0');
 

@@ -19,6 +19,10 @@ public:
 
   void broadcast(const Message& message);
 
+  // The number of clients currently connected to the transport. Used by an ephemeral (editor/client-
+  // spawned) server to detect when its last connection drops; returns 0 before start().
+  [[nodiscard]] int connectionCount() const;
+
   [[nodiscard]] bool poll(Message& message);
 
   // Called from the C# socket thread (via the registered native callback) to hand an inbound message
@@ -37,6 +41,7 @@ private:
   void* m_startFn = nullptr;
   void* m_stopFn = nullptr;
   void* m_broadcastFn = nullptr;
+  void* m_connectionCountFn = nullptr;
   void* m_setCallbackFn = nullptr;
 };
 

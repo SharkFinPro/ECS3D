@@ -82,6 +82,15 @@ public static unsafe class Transport
   }
 
   [UnmanagedCallersOnly]
+  public static int serverConnectionCount()
+  {
+    lock (_clientsLock)
+    {
+      return _clients.Count;
+    }
+  }
+
+  [UnmanagedCallersOnly]
   public static void serverBroadcast(byte type, IntPtr data, int len)
   {
     var frame = Frame(type, data, len);

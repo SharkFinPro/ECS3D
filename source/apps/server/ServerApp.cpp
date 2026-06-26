@@ -86,9 +86,17 @@ ServerApp::~ServerApp()
 
 bool ServerApp::isActive() const
 {
-  // TODO: a dedicated server runs until killed; an editor/client-spawned server should exit when its
-  // TODO:   last connection drops. There is no exit condition yet, so this is an open-ended loop.
-  return true;
+  // A dedicated server runs until killed.
+  if (!m_options.exitWhenEmpty)
+  {
+    return true;
+  }
+
+  // An editor/client-spawned server is ephemeral: once its spawning app has connected (m_hasConnected,
+  // set on the first join), it should exit as soon as the last connection drops, so it doesn't linger
+  // if the parent ever fails to terminate it. Until that first connection it stays up through the
+  // launch -> connect window (when the count is legitimately still 0).
+  return !m_hasConnected || m_netServer->connectionCount() > 0;
 }
 
 void ServerApp::run()
@@ -170,7 +178,9 @@ void ServerApp::handleClientMessage(const net::Message& message)
   switch (message.type)
   {
     case net::MessageType::join:
-      // A client joined: send it the full project/scene as a Snapshot.
+      // A client joined: send it the full project/scene as a Snapshot. Record that a connection has
+      // been seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
+      m_hasConnected = true;
       broadcastSnapshot();
       break;
     case net::MessageType::editComponent:

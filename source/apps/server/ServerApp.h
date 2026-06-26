@@ -30,6 +30,9 @@ public:
     std::string project;
     int port = net::defaultPort;
     bool editMode = false;
+    // When set (an editor/client-spawned local server), the server exits once its last connection drops
+    // instead of running until killed like a dedicated server.
+    bool exitWhenEmpty = false;
     std::string authToken;
   };
 
@@ -61,6 +64,11 @@ private:
   std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
+
+  // For an exitWhenEmpty server: set once the first client has connected, so isActive() only starts
+  // applying the "no connections left" exit check after the spawning app has actually connected (and
+  // doesn't exit during the launch -> connect window when the count is still 0).
+  bool m_hasConnected = false;
 
   void fixedUpdate(float dt);
 

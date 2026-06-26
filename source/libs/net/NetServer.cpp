@@ -11,6 +11,7 @@ namespace {
   using ServerStartFn = void(*)(int32_t, uint8_t);
   using ServerStopFn = void(*)();
   using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
+  using ServerConnectionCountFn = int32_t(*)();
   using SetCallbackFn = void(*)(void*);
 
   // One authoritative server per process; the C# socket thread routes inbound messages here.
@@ -43,6 +44,7 @@ void NetServer::start(const int port, const bool editMode)
   m_startFn = m_host->getDelegate(kAssembly, kType, "serverStart");
   m_stopFn = m_host->getDelegate(kAssembly, kType, "serverStop");
   m_broadcastFn = m_host->getDelegate(kAssembly, kType, "serverBroadcast");
+  m_connectionCountFn = m_host->getDelegate(kAssembly, kType, "serverConnectionCount");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
 
   g_activeServer = this;
@@ -78,6 +80,16 @@ void NetServer::broadcast(const Message& message)
     message.payload.data(),
     static_cast<int32_t>(message.payload.size())
   );
+}
+
+int NetServer::connectionCount() const
+{
+  if (!m_started)
+  {
+    return 0;
+  }
+
+  return reinterpret_cast<ServerConnectionCountFn>(m_connectionCountFn)();
 }
 
 bool NetServer::poll(Message& message)

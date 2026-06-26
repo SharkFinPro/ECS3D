@@ -25,6 +25,12 @@ int main(int argc, char** argv)
       {
         options.editMode = true;
       }
+      else if (arg == "--ephemeral")
+      {
+        // An editor/client-spawned local server: exit once its last connection drops, rather than
+        // running until killed like a dedicated server.
+        options.exitWhenEmpty = true;
+      }
       else if (arg == "--token" && i + 1 < argc)
       {
         options.authToken = argv[++i];
