@@ -24,7 +24,7 @@ public:
 
 private:
   // Was CollisionManager::collisionEdges. The old add/removeObject maintenance is replaced by a
-  // per-tick rebuild from the ObjectManager (the registration TODO left in ObjectManager).
+  // per-tick rebuild from the ObjectManager.
   std::vector<CollisionEdge> m_collisionEdges;
 
   // Set for the duration of fixedUpdate so the OMP loop reaches the response the same way the

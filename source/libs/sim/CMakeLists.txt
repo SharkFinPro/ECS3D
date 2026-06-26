@@ -22,10 +22,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 )
 
 # CollisionSystem holds the migrated sweep-and-prune (CollisionManager) + GJK/EPA (Collider.cpp,
-# Simplex, Polytope) — transplanted nearly verbatim.
-# TODO: port the physics MATH bodies in PhysicsSystem (integrate, applyForce, handleCollision/
-# TODO:   respondToCollision, getInertiaTensor, limitMovement) from RigidBody.cpp, and wire
-# TODO:   CollisionSystem's collision response into PhysicsSystem::handleCollision.
+# Simplex, Polytope) — transplanted nearly verbatim. PhysicsSystem carries the physics bodies
+# (integrate, applyForce, handleCollision/respondToCollision, getInertiaTensor, limitMovement)
+# lifted from RigidBody.cpp, and CollisionSystem routes its detected collisions into
+# PhysicsSystem::handleCollision.
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
