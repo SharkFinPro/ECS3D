@@ -9,6 +9,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
 #include <nlohmann/json.hpp>
+#include <cmath>
 
 namespace replication {
 
@@ -30,6 +31,15 @@ nlohmann::json buildStateDelta(const ObjectManager& objectManager)
     const auto position = transform->getLocalPosition();
     const auto rotation = transform->getLocalRotation();
     const auto scale = transform->getLocalScale();
+
+    // nlohmann::json serializes NaN/inf as null; skip rather than send bad data.
+    auto finite3 = [](const glm::vec3& v) {
+      return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+    };
+    if (!finite3(position) || !finite3(rotation) || !finite3(scale))
+    {
+      continue;
+    }
 
     delta.push_back({
       { "uuid", uuids::to_string(object->getUUID()) },
