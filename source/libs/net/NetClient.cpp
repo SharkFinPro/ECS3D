@@ -17,7 +17,7 @@ namespace {
   NetClient* g_activeClient = nullptr;
 }
 
-extern "C" void ecs3dNetClientReceive(uint8_t type, const uint8_t* data, int32_t len)
+extern "C" void ecs3dNetClientReceive(const uint8_t type, const uint8_t* data, const int32_t len)
 {
   if (g_activeClient)
   {
@@ -70,7 +70,7 @@ void NetClient::disconnect()
   m_connected = false;
 }
 
-void NetClient::send(const Message& message)
+void NetClient::send(const Message& message) const
 {
   if (!m_connected)
   {

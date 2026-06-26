@@ -20,7 +20,7 @@ public:
 
   void stop();
 
-  void broadcast(const Message& message);
+  void broadcast(const Message& message) const;
 
   // The number of clients currently connected to the transport. Used by an ephemeral (editor/client-
   // spawned) server to detect when its last connection drops; returns 0 before start().

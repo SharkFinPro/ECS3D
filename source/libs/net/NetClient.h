@@ -18,7 +18,7 @@ public:
 
   void disconnect();
 
-  void send(const Message& message);
+  void send(const Message& message) const;
 
   [[nodiscard]] bool isConnected() const { return m_connected; }
 

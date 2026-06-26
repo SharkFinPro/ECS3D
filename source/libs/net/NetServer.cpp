@@ -67,7 +67,7 @@ void NetServer::stop()
   m_started = false;
 }
 
-void NetServer::broadcast(const Message& message)
+void NetServer::broadcast(const Message& message) const
 {
   if (!m_started)
   {
