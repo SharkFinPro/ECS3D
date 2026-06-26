@@ -43,8 +43,6 @@ public:
   [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getAllObjects() const;
 
 private:
-  // UUID generation moved here from ECS3D (it was part of the god object). ObjectManager creates
-  // objects, so it owns the generator the objects pull their ids from.
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
 
   std::vector<std::shared_ptr<Object>> m_objects;

@@ -49,9 +49,6 @@ public:
   void loadFromJSON(const nlohmann::json& componentData) override;
 
 private:
-  // The physics (integration, applyForce, collision response, inertia tensor, friction) is lifted
-  // into ECS3DSim PhysicsSystem, which reads/writes these fields through the accessors above. The
-  // data class never names the system, which keeps ECS3DData independent of ECS3DSim.
   ComponentVariable<glm::vec3> m_velocity{glm::vec3(0)};
   ComponentVariable<float> m_friction{0.1f};
   ComponentVariable<bool> m_doGravity{true};

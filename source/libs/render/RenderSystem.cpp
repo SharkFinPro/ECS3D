@@ -38,8 +38,6 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     if (const auto modelRenderer = object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
         modelRenderer && modelRenderer->getShouldRender() && modelRenderer->canRender())
     {
-      // The UUID -> RenderObject resolution that used to happen in ModelRenderer (build a vke object
-      // from the asset shared_ptrs) is now a cache lookup; the data only carries the UUIDs.
       const auto renderObject = assetCache.getRenderObject(uuid,
                                                            modelRenderer->getModelUUID(),
                                                            modelRenderer->getTextureUUID(),
@@ -51,8 +49,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         renderObject->setScale(transform->getScale());
         renderObject->setOrientationEuler(transform->getRotation());
 
-        // 4th arg is the renderer's pick feedback (was ModelRenderer::m_selectedByRenderer); the
-        // pointer is stable because unordered_map keeps element references valid across rehash.
+        // pointer is stable: unordered_map keeps element references valid across rehash.
         renderer->getRenderingManager()->getRenderer3D()->renderObject(
           renderObject,
           modelRenderer->getUseStandardPipeline() ? vke::PipelineType::object : vke::PipelineType::ellipticalDots,

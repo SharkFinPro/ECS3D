@@ -24,9 +24,6 @@ public:
 private:
   std::string m_className;
 
-  // The exposed-field name/type/value blob. The live values live in the C# script instance on the
-  // server; ECS3DScripting syncs this blob <-> the instance (reads it on snapshot, writes it on
-  // load/start). The data class just carries it so it can be serialized/replicated.
   nlohmann::json m_fields = nlohmann::json::array();
 };
 

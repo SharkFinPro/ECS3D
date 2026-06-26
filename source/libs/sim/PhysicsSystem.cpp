@@ -9,15 +9,12 @@
 
 void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt, const SimContext& context)
 {
-  // The dispatch that used to be a virtual call inside Object::fixedUpdate now lives here: the system
-  // walks the objects and acts on the concrete RigidBody/Transform data. Only ECS3DSim (server) does.
   for (const auto& object : objectManager.getAllObjects())
   {
     const auto rigidBody = object->getComponent<RigidBody>(ComponentType::rigidBody);
     const auto transform = object->getComponent<Transform>(ComponentType::transform);
 
-    // getComponent walks to the parent for rigidBody, so guard on ownership to integrate each body
-    // exactly once (the old RigidBody::fixedUpdate ran behind an owner == this check).
+    // getComponent walks to the parent for rigidBody, so guard on ownership to integrate each body exactly once.
     if (!rigidBody || !transform || rigidBody->getOwner() != object.get())
     {
       continue;

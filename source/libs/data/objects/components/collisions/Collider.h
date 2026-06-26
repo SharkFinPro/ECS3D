@@ -23,9 +23,7 @@ enum class ColliderType {
   sphereCollider
 };
 
-// Data-only: holds the shape geometry queries (findFurthestPoint, bounding box, getPosition/Scale/
-// Rotation) which are pure glm. The GJK/EPA narrow phase (collidesWith, getSupport, expandSimplex,
-// the simplex cases, sphere-sphere) and Simplex/Polytope moved to ECS3DSim CollisionSystem.
+// Data-only: shape geometry (findFurthestPoint, bounding box). GJK/EPA narrow phase lives in CollisionSystem.
 class Collider : public Component {
 public:
   explicit Collider(ColliderType type, ComponentType subType);

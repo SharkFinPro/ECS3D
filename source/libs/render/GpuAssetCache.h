@@ -15,9 +15,8 @@ namespace vke {
 
 class AssetRegistry;
 
-// The GPU-load half of the old AssetManager (the Asset::load() side of ModelAsset/TextureAsset).
-// Resolves the AssetRegistry's uuid->path records into vke resources, and caches the assembled
-// RenderObjects the RenderSystem draws.
+// Resolves AssetRegistry uuid->path records into vke resources and caches per-owner RenderObjects
+// for the RenderSystem.
 class GpuAssetCache {
 public:
   GpuAssetCache(std::shared_ptr<vke::VulkanEngine> renderer, const AssetRegistry* assetRegistry);
@@ -28,10 +27,8 @@ public:
 
   std::shared_ptr<vke::Texture2D> getTexture(const uuids::uuid& uuid);
 
-  // Keyed by the OWNING object, not the asset triple: the old ModelRenderer held its own
-  // vke::RenderObject, so two objects sharing a model still get distinct render objects. Rebuilds
-  // only when the owner's model/texture/specular UUIDs change. Models/textures themselves are still
-  // shared (cached by asset uuid).
+  // Keyed by owning object, not asset triple: two objects sharing a model get distinct render
+  // objects. Rebuilds when the owner's model/texture/specular UUIDs change.
   std::shared_ptr<vke::RenderObject> getRenderObject(const uuids::uuid& ownerUUID,
                                                      const uuids::uuid& modelUUID,
                                                      const uuids::uuid& textureUUID,

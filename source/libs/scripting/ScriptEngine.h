@@ -6,10 +6,8 @@
 
 class ManagedHost;
 
-// The script-call half of the old core ScriptEngine. The CLR-hosting half (loading hostfxr, booting
-// the runtime) now lives in ManagedHost, so this is just the ScriptBridge ABI: it resolves the
-// bridge's [UnmanagedCallersOnly] entrypoints into native function pointers via ManagedHost, registers
-// the component bindings (Transform/RigidBody) with the managed side, and forwards
+// ScriptBridge ABI: resolves the bridge's [UnmanagedCallersOnly] entrypoints into native function
+// pointers via ManagedHost, registers component bindings with the managed side, and forwards
 // attach/start/stop/fixedUpdate + the exposed-field getters/setters. Server only.
 class ScriptEngine {
 public:

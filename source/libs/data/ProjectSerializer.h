@@ -9,9 +9,8 @@ class AssetRegistry;
 class SceneManager;
 class ComponentRegistry;
 
-// The load/save half of the old SaveManager (no file dialogs / keybinds — those are the editor's
-// SaveUI). serialize()/deserialize() are JSON-only so the same project blob is reused as the network
-// Snapshot (full state on join); save()/load() just add file I/O on top.
+// serialize()/deserialize() produce the JSON blob used as both the save file and the network
+// Snapshot (full state on join); save()/load() add file I/O on top.
 class ProjectSerializer {
 public:
   ProjectSerializer(AssetRegistry* assetRegistry,

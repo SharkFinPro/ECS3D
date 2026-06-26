@@ -30,9 +30,6 @@ public:
   void loadFromJSON(const nlohmann::json& componentData) override;
 
 private:
-  // The renderer, the vke::RenderObject, and the resolved asset handles are gone from the data: this
-  // class holds only the asset UUIDs + flags. ECS3DRender resolves the UUIDs to GPU objects via the
-  // GpuAssetCache, so the server can carry/replicate this data without ever touching Vulkan.
   bool m_shouldRender = false;
   bool m_useStandardPipeline = true;
 

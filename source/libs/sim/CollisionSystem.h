@@ -22,8 +22,6 @@ public:
   void fixedUpdate(const ObjectManager& objectManager);
 
 private:
-  // Was CollisionManager::collisionEdges. The old add/removeObject maintenance is replaced by a
-  // per-tick rebuild from the ObjectManager.
   std::vector<CollisionEdge> m_collisionEdges;
 
   void checkCollisions();

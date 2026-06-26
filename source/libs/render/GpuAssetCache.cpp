@@ -28,7 +28,6 @@ std::shared_ptr<vke::Model> GpuAssetCache::getModel(const uuids::uuid& uuid)
     return nullptr;
   }
 
-  // Was ModelAsset::load(): renderer->getAssetManager()->loadModel(path).
   auto model = m_renderer->getAssetManager()->loadModel(record->path.c_str());
 
   m_models.emplace(uuid, model);
@@ -49,7 +48,6 @@ std::shared_ptr<vke::Texture2D> GpuAssetCache::getTexture(const uuids::uuid& uui
     return nullptr;
   }
 
-  // Was TextureAsset::load(): renderer->getAssetManager()->loadTexture(path).
   auto texture = m_renderer->getAssetManager()->loadTexture(record->path.c_str());
 
   m_textures.emplace(uuid, texture);
@@ -80,7 +78,6 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getRenderObject(const uuids::u
     return nullptr;
   }
 
-  // Was the ModelRenderer ctor: loadRenderObject(texture, specularMap, model).
   auto renderObject = m_renderer->getAssetManager()->loadRenderObject(texture, specularMap, model);
 
   m_renderObjects[ownerUUID] = { renderObject, modelUUID, textureUUID, specularMapUUID };
@@ -95,8 +92,6 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::
     return it->second.renderObject;
   }
 
-  // The debug models/texture are loaded by path (the vke AssetManager caches them). Was
-  // BoxCollider/SphereCollider::variableUpdate building a white cube/sphere render object.
   const auto model = m_renderer->getAssetManager()->loadModel(modelPath.c_str());
   const auto white = m_renderer->getAssetManager()->loadTexture("assets/textures/white.png");
 

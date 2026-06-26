@@ -19,7 +19,6 @@ bool ComponentEditor::displayGui(const std::string& typeName, const std::shared_
 
 bool ComponentEditor::displayHeader(const std::shared_ptr<Component>& component, const std::string& componentName)
 {
-  // Migrated from Component::displayGuiHeader (which left the data-only Component).
   auto componentDisplayName = componentTypeToString.at(
     component->getSubType() != ComponentType::SubComponentType_none ? component->getSubType() : component->getType());
 
