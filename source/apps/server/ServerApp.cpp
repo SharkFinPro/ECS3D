@@ -514,7 +514,7 @@ void ServerApp::broadcastEditStatus()
   });
 }
 
-void ServerApp::broadcastStateDelta()
+void ServerApp::broadcastStateDelta() const
 {
   const auto scene = m_sceneManager->getCurrentScene();
   if (!scene)

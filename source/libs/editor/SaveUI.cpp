@@ -72,7 +72,7 @@ void SaveUI::open()
 
 void SaveUI::loadFromFile(const std::string& path)
 {
-  std::ifstream f(path);
+  const std::ifstream f(path);
   if (!f.is_open())
   {
     std::cerr << "[SaveUI] Could not open project file: " << path << std::endl;
@@ -208,8 +208,7 @@ void SaveUI::registerWindowEvents()
   const auto window = m_renderer->getWindow();
 
   // Capture only `this` (not the window shared_ptr) to avoid a window->listener->lambda->window cycle.
-  m_keyCallbackEventListener = window->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
-    const auto window = m_renderer->getWindow();
+  m_keyCallbackEventListener = window->on<vke::KeyCallbackEvent>([this, window](const vke::KeyCallbackEvent& e) {
     if (e.action == GLFW_PRESS && window->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && window->keyIsPressed(GLFW_KEY_S))
     {
       if (window->keyIsPressed(GLFW_KEY_LEFT_SHIFT))

@@ -18,7 +18,7 @@ namespace {
   NetServer* g_activeServer = nullptr;
 }
 
-extern "C" void ecs3dNetServerReceive(uint8_t type, const uint8_t* data, int32_t len)
+extern "C" void ecs3dNetServerReceive(const uint8_t type, const uint8_t* data, const int32_t len)
 {
   if (g_activeServer)
   {
