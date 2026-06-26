@@ -70,9 +70,9 @@ private:
 
   void sendInput();
 
-  void variableUpdate();
+  void variableUpdate() const;
 
-  void applyMessage(const net::Message& message);
+  void applyMessage(const net::Message& message) const;
 };
 
 

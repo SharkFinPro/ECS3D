@@ -103,7 +103,7 @@ private:
 
   void connectToServer();
 
-  void registerEditors();
+  void registerEditors() const;
 
   void setupKeybinds();
 
@@ -113,19 +113,19 @@ private:
 
   void sendInput();
 
-  void sendSceneControl(const std::string& op);
+  void sendSceneControl(const std::string& op) const;
 
   void updateGui();
 
-  void displayMenuBar();
+  void displayMenuBar() const;
 
-  void displaySceneStatus();
+  void displaySceneStatus() const;
 
   void updateDockSpace() const;
 
   void displayMessageLog();
 
-  void variableUpdate();
+  void variableUpdate() const;
 
   // The editor spawns a child ECS3DServer (ServerProcess) in edit mode and connects over localhost as
   // Role::editor, authorized by the --token it shares with that server at the handshake; edits then

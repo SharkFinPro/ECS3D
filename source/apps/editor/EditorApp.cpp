@@ -281,7 +281,7 @@ void EditorApp::sendInput()
   });
 }
 
-void EditorApp::sendSceneControl(const std::string& op)
+void EditorApp::sendSceneControl(const std::string& op) const
 {
   const nlohmann::json payload = { { "op", op } };
 
@@ -316,7 +316,7 @@ void EditorApp::createRenderer()
   m_sceneViewName = engineConfig.imGui.sceneViewName;
 }
 
-void EditorApp::registerEditors()
+void EditorApp::registerEditors() const
 {
   // The per-type editing widgets, keyed by component type string (the central componentEditor the old
   // per-component displayGui() bodies move into).
@@ -424,7 +424,7 @@ void EditorApp::updateGui()
   // scene-selector widget.
 }
 
-void EditorApp::displayMenuBar()
+void EditorApp::displayMenuBar() const
 {
   if (ImGui::BeginMainMenuBar())
   {
@@ -531,7 +531,7 @@ void EditorApp::displayMessageLog()
   ImGui::End();
 }
 
-void EditorApp::displaySceneStatus()
+void EditorApp::displaySceneStatus() const
 {
   constexpr int sceneStatusButtonWidth = 125;
 
@@ -564,7 +564,7 @@ void EditorApp::displaySceneStatus()
   ImGui::End();
 }
 
-void EditorApp::variableUpdate()
+void EditorApp::variableUpdate() const
 {
   if (const auto scene = m_sceneManager->getCurrentScene())
   {

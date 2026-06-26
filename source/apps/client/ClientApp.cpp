@@ -161,7 +161,7 @@ void ClientApp::createRenderer()
   m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
 }
 
-void ClientApp::variableUpdate()
+void ClientApp::variableUpdate() const
 {
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
@@ -171,7 +171,7 @@ void ClientApp::variableUpdate()
   m_renderer->render();
 }
 
-void ClientApp::applyMessage(const net::Message& message)
+void ClientApp::applyMessage(const net::Message& message) const
 {
   const std::string payload(message.payload.begin(), message.payload.end());
 
