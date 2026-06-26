@@ -4,11 +4,60 @@
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
+#include <nfd.h>
+#include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <optional>
+#include <random>
 #include <string>
+#include <vector>
+
+namespace {
+  // Pick a single existing file through the OS dialog. filters = { { label, "ext1,ext2" }, ... }.
+  std::optional<std::string> pickFile(const std::vector<nfdu8filteritem_t>& filters)
+  {
+    if (NFD_Init() != NFD_OKAY)
+    {
+      return std::nullopt;
+    }
+
+    nfdu8char_t* outPath = nullptr;
+    const nfdopendialogu8args_t args {
+      .filterList = filters.data(),
+      .filterCount = static_cast<nfdfiltersize_t>(filters.size())
+    };
+
+    std::optional<std::string> result;
+    if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY)
+    {
+      result = std::string(outPath);
+      NFD_FreePathU8(outPath);
+    }
+
+    NFD_Quit();
+    return result;
+  }
+
+  [[nodiscard]] std::string newUUID()
+  {
+    std::mt19937 rng{ std::random_device{}() };
+    uuids::uuid_random_generator generator{ rng };
+    return uuids::to_string(generator());
+  }
+
+  [[nodiscard]] bool nameIsValid(const std::string& name)
+  {
+    return !name.empty() && std::ranges::none_of(name, [](const char c) {
+      return c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|';
+    });
+  }
+}
 
 AssetBrowserPanel::AssetBrowserPanel(const AssetRegistry* assetRegistry, std::shared_ptr<GpuAssetCache> assetCache)
   : m_assetRegistry(assetRegistry),
@@ -18,6 +67,11 @@ AssetBrowserPanel::AssetBrowserPanel(const AssetRegistry* assetRegistry, std::sh
 void AssetBrowserPanel::setLoadSceneCallback(LoadSceneCallback callback)
 {
   m_onLoadScene = std::move(callback);
+}
+
+void AssetBrowserPanel::setAddAssetCallback(AddAssetCallback callback)
+{
+  m_onAddAsset = std::move(callback);
 }
 
 const char* AssetBrowserPanel::assetTypeLabel(const AssetType type)
@@ -107,6 +161,16 @@ void AssetBrowserPanel::displayGui()
   ImGui::Columns(1);
 
   ImGui::End();
+
+  // Open + draw the create-asset modal at the top level (the menu only flags it). Opening it from
+  // inside the main menu bar is unreliable.
+  if (m_openCreatePopup)
+  {
+    ImGui::OpenPopup("Create Asset");
+    m_openCreatePopup = false;
+  }
+
+  displayCreateAssetPopup();
 }
 
 void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord& record, const float cellSize, const std::string& name)
@@ -161,17 +225,164 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
 
 void AssetBrowserPanel::displayMenuWidget()
 {
+  const auto beginCreate = [&](const PendingAsset::Type type, const std::string& source, const char* defaultName) {
+    m_pending = {};
+    m_pending.type = type;
+    m_pending.sourcePath = source;
+    std::strncpy(m_pending.name, defaultName, sizeof(m_pending.name) - 1);
+    m_createError.clear();
+    m_openCreatePopup = true;
+  };
+
   if (ImGui::BeginMenu("Assets"))
   {
-    // TODO: migrate AssetManager::displayMenuWidget / displayCreateAssetPopup — importing a model/
-    // TODO:   texture/script needs an nfd file picker AND a server-side asset-add command (the asset
-    // TODO:   list is authoritative on the server), so these are disabled until that path exists.
-    ImGui::BeginDisabled();
-    ImGui::MenuItem("Import Model...");
-    ImGui::MenuItem("Import Texture...");
-    ImGui::MenuItem("Import Script...");
-    ImGui::EndDisabled();
+    if (ImGui::MenuItem("Import Model..."))
+    {
+      if (const auto picked = pickFile({ { "3D Models", "glb,gltf,obj,fbx" } }))
+      {
+        beginCreate(PendingAsset::Type::Model, *picked, std::filesystem::path(*picked).stem().string().c_str());
+      }
+    }
+
+    if (ImGui::MenuItem("Import Texture..."))
+    {
+      if (const auto picked = pickFile({ { "Images", "png,jpg,jpeg,tga,bmp" } }))
+      {
+        beginCreate(PendingAsset::Type::Texture, *picked, std::filesystem::path(*picked).stem().string().c_str());
+      }
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::MenuItem("New Scene"))
+    {
+      beginCreate(PendingAsset::Type::Scene, "", "New Scene");
+    }
+
+    if (ImGui::MenuItem("New Script"))
+    {
+      beginCreate(PendingAsset::Type::Script, "", "NewScript");
+    }
 
     ImGui::EndMenu();
   }
+
+  // The popup itself is opened/drawn from displayGui at the top level (not here, inside the menu bar),
+  // where ImGui popups behave reliably — displayMenuWidget only records the request.
+}
+
+void AssetBrowserPanel::displayCreateAssetPopup()
+{
+  if (!ImGui::BeginPopupModal("Create Asset", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    return;
+  }
+
+  if (!m_pending.sourcePath.empty())
+  {
+    ImGui::Text("Source: %s", std::filesystem::path(m_pending.sourcePath).filename().string().c_str());
+  }
+
+  ImGui::SetNextItemWidth(280.0f);
+  ImGui::InputText("Name", m_pending.name, sizeof(m_pending.name));
+
+  if (!m_createError.empty())
+  {
+    ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", m_createError.c_str());
+  }
+
+  ImGui::Separator();
+
+  if (ImGui::Button("Create", ImVec2(120, 0)))
+  {
+    if (!nameIsValid(m_pending.name))
+    {
+      m_createError = "Enter a valid name (no path characters).";
+    }
+    else
+    {
+      try
+      {
+        commitAsset();
+        ImGui::CloseCurrentPopup();
+      }
+      catch (const std::exception& e)
+      {
+        m_createError = e.what();
+      }
+    }
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Cancel", ImVec2(120, 0)))
+  {
+    m_pending = {};
+    ImGui::CloseCurrentPopup();
+  }
+
+  ImGui::EndPopup();
+}
+
+void AssetBrowserPanel::commitAsset()
+{
+  if (!m_onAddAsset)
+  {
+    return;
+  }
+
+  const std::string name = m_pending.name;
+  const std::string uuid = newUUID();
+
+  // Copy an imported file into the project's assets dir (relative to the working dir = exe dir) so the
+  // GpuAssetCache can load it; then send the registry record to the authoritative server.
+  const auto importFile = [&](const char* dir) {
+    const std::filesystem::path destDir = dir;
+    std::filesystem::create_directories(destDir);
+
+    const auto dest = destDir / (name + std::filesystem::path(m_pending.sourcePath).extension().string());
+    std::filesystem::copy_file(m_pending.sourcePath, dest, std::filesystem::copy_options::overwrite_existing);
+
+    return dest.generic_string();
+  };
+
+  nlohmann::json addAsset;
+
+  switch (m_pending.type)
+  {
+    case PendingAsset::Type::Model:
+      addAsset = { { "assetType", "model" }, { "uuid", uuid }, { "path", importFile("assets/models") } };
+      break;
+    case PendingAsset::Type::Texture:
+      addAsset = { { "assetType", "texture" }, { "uuid", uuid }, { "path", importFile("assets/textures") } };
+      break;
+    case PendingAsset::Type::Scene:
+      addAsset = { { "assetType", "scene" }, { "uuid", uuid }, { "name", name } };
+      break;
+    case PendingAsset::Type::Script:
+    {
+      std::filesystem::create_directories("scripts/UserScripts");
+      const std::filesystem::path path = std::filesystem::path("scripts/UserScripts") / (name + ".cs");
+
+      std::ofstream out(path);
+      out <<
+        "using System;\n"
+        "using System.Numerics;\n"
+        "using ScriptBridge;\n\n"
+        "public class " << name << " : ScriptBase\n"
+        "{\n"
+        "    public override void start() {}\n"
+        "    public override void fixedUpdate(float dt) {}\n"
+        "    public override void variableUpdate() {}\n"
+        "    public override void stop() {}\n"
+        "}\n";
+
+      addAsset = { { "assetType", "script" }, { "uuid", uuid }, { "path", path.generic_string() }, { "className", name } };
+      break;
+    }
+    default:
+      return;
+  }
+
+  m_onAddAsset(addAsset);
+  m_pending = {};
 }

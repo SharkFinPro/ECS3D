@@ -70,6 +70,8 @@ private:
 
   void loadScene(const std::string& sceneUUID);
 
+  void addAsset(const nlohmann::json& asset);
+
   void loadProject(const nlohmann::json& project);
 
   void broadcastSnapshot();

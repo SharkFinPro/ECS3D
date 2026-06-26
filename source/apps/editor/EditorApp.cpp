@@ -96,6 +96,18 @@ EditorApp::EditorApp(LaunchOptions options)
       .payload = std::vector<uint8_t>(payload.begin(), payload.end())
     });
   });
+  m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& addAsset) {
+    // Register it locally for instant feedback in the browser, then on the authoritative server (which
+    // re-snapshots to keep everyone in sync).
+    replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, addAsset);
+
+    const auto payload = addAsset.dump();
+
+    m_netClient->send(net::Message{
+      .type = net::MessageType::addAsset,
+      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+    });
+  });
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this](const std::string& projectJson) {

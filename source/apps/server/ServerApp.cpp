@@ -228,6 +228,18 @@ void ServerApp::handleClientMessage(const net::Message& message)
       }
       break;
     }
+    case net::MessageType::addAsset:
+    {
+      // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
+      const std::string payload(message.payload.begin(), message.payload.end());
+
+      const auto json = nlohmann::json::parse(payload, nullptr, false);
+      if (!json.is_discarded())
+      {
+        addAsset(json);
+      }
+      break;
+    }
     case net::MessageType::inputState:
     {
       // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
@@ -353,6 +365,15 @@ void ServerApp::loadScene(const std::string& sceneUUID)
 
   logMessage("Info", "Switched to scene '" + scene->getName() + "' ("
     + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
+
+  broadcastSnapshot();
+}
+
+void ServerApp::addAsset(const nlohmann::json& asset)
+{
+  replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
+
+  logMessage("Info", "Registered asset (" + asset.value("assetType", std::string{}) + ").");
 
   broadcastSnapshot();
 }

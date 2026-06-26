@@ -7,6 +7,9 @@
 
 class ObjectManager;
 class Component;
+class AssetRegistry;
+class SceneManager;
+class ComponentRegistry;
 
 // Per-tick state replication. The full Snapshot (on join) is just ProjectSerializer::serialize(); the
 // StateDelta is the lighter per-tick stream: each object's uuid + transform. The server builds it from
@@ -47,6 +50,14 @@ void applyComponentEdit(const ObjectManager& objectManager, const nlohmann::json
                                                  const uuids::uuid* parentUUID = nullptr);
 
 void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit);
+
+// Register an imported/created asset ({ assetType, uuid, path|name, [className] }). Shared by the
+// server (authoritative) and the editor (instant local feedback). Models/textures/scripts go into the
+// AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager.
+void applyAddAsset(AssetRegistry& assetRegistry,
+                   SceneManager& sceneManager,
+                   const std::shared_ptr<ComponentRegistry>& componentRegistry,
+                   const nlohmann::json& asset);
 
 }
 

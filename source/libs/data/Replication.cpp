@@ -1,5 +1,8 @@
 #include "Replication.h"
 #include "ComponentRegistry.h"
+#include "assets/AssetRegistry.h"
+#include "scenes/SceneManager.h"
+#include "scenes/SceneAsset.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
@@ -356,6 +359,42 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
         return;
       }
     }
+  }
+}
+
+void applyAddAsset(AssetRegistry& assetRegistry,
+                   SceneManager& sceneManager,
+                   const std::shared_ptr<ComponentRegistry>& componentRegistry,
+                   const nlohmann::json& asset)
+{
+  const auto parsed = uuids::uuid::from_string(asset.value("uuid", std::string{}));
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  const auto uuid = parsed.value();
+  const std::string type = asset.value("assetType", std::string{});
+
+  if (type == "model")
+  {
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Model, .path = asset.value("path", std::string{}) });
+  }
+  else if (type == "texture")
+  {
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Texture, .path = asset.value("path", std::string{}) });
+  }
+  else if (type == "script")
+  {
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Script,
+      .path = asset.value("path", std::string{}), .className = asset.value("className", std::string{}) });
+  }
+  else if (type == "scene")
+  {
+    const std::string name = asset.value("name", std::string{ "New Scene" });
+    sceneManager.addScene(std::make_shared<SceneAsset>(uuid, name, componentRegistry));
+    // Also register it as an asset so it shows in the browser (double-click to load).
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = name });
   }
 }
 
