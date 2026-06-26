@@ -3,6 +3,7 @@
 
 #include <VulkanEngine/components/window/Window.h>
 #include <Protocol.h>
+#include <scenes/SceneManager.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -87,6 +88,8 @@ private:
   // editor still renders the scene for viewing but disables its editing UI and shows a cue. Defaults
   // true so the common case (the editor's own spawned --edit server) is unaffected if the message lags.
   bool m_serverEditable = true;
+
+  SceneStatus m_sceneStatus = SceneStatus::stopped;
 
   // Only resend input when it changes (see ClientApp): keeps an unfocused editor from clobbering a
   // focused client's keys on the shared server-side InputState.

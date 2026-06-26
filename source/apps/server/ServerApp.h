@@ -84,6 +84,8 @@ private:
   // can show a read-only cue and disable its editing UI instead of looking broken/blank.
   void broadcastEditStatus();
 
+  void broadcastSceneStatus() const;
+
   void broadcastStateDelta() const;
 };
 

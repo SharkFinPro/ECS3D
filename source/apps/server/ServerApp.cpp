@@ -361,7 +361,8 @@ void ServerApp::applySceneControl(const nlohmann::json& control)
   }
 
   // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
-  // every view reflects it immediately.
+  // every view reflects it immediately. Also push the new status so the editor can react.
+  broadcastSceneStatus();
   broadcastSnapshot();
 }
 
@@ -497,6 +498,22 @@ void ServerApp::broadcastSnapshot()
   };
 
   m_netServer->broadcast(snapshot);
+}
+
+void ServerApp::broadcastSceneStatus() const
+{
+  const auto status = m_sceneManager->getSceneStatus();
+  const std::string statusStr = (status == SceneStatus::running)  ? "running"
+                              : (status == SceneStatus::paused)   ? "paused"
+                                                                  : "stopped";
+
+  const nlohmann::json payload = { { "status", statusStr } };
+  const auto dumped = payload.dump();
+
+  m_netServer->broadcast(net::Message{
+    .type = net::MessageType::sceneStatus,
+    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  });
 }
 
 void ServerApp::broadcastEditStatus()

@@ -385,6 +385,14 @@ void EditorApp::applyMessage(const net::Message& message)
         logMessage("Info", "Connected to a non-edit server - the editor is read-only.");
       }
       break;
+    case net::MessageType::sceneStatus:
+    {
+      const std::string status = json.value("status", std::string{});
+      if (status == "running")       m_sceneStatus = SceneStatus::running;
+      else if (status == "paused")   m_sceneStatus = SceneStatus::paused;
+      else                           m_sceneStatus = SceneStatus::stopped;
+      break;
+    }
     default:
       break;
   }
@@ -535,29 +543,35 @@ void EditorApp::displaySceneStatus() const
 
   ImGui::Begin("Scene Status");
 
-  // The scene lives on the authoritative server, so these are fire-and-forget lifecycle commands. The
-  // server applies them and re-snapshots (it doesn't replicate the running/paused status back yet, so
-  // the buttons aren't disabled by state). They mutate the server, so they're disabled when read-only.
-  ImGui::BeginDisabled(!m_serverEditable);
-
-  if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
+  if (m_sceneStatus != SceneStatus::running)
   {
-    sendSceneControl("start");
+    ImGui::BeginDisabled(!m_serverEditable);
+    if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
+    {
+      sendSceneControl("start");
+    }
+    ImGui::EndDisabled();
+  }
+  else
+  {
+    ImGui::BeginDisabled(!m_serverEditable);
+    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
+    {
+      sendSceneControl("pause");
+    }
+    ImGui::EndDisabled();
   }
 
-  ImGui::SameLine();
-  if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
+  if (m_sceneStatus != SceneStatus::stopped)
   {
-    sendSceneControl("pause");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!m_serverEditable);
+    if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
+    {
+      sendSceneControl("stop");
+    }
+    ImGui::EndDisabled();
   }
-
-  ImGui::SameLine();
-  if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
-  {
-    sendSceneControl("stop");
-  }
-
-  ImGui::EndDisabled();
 
   ImGui::End();
 }
