@@ -20,9 +20,12 @@ enum class MessageType : uint8_t {
   sceneEdit,     // editor -> server: a structural edit (add/remove object/component); server re-snapshots
   sceneControl,  // editor -> server: scene lifecycle ({ op: start|pause|stop|loadScene }); server re-snapshots
   loadProject,   // editor -> server: replace the project with this serialized blob; server re-snapshots
-  addAsset       // editor -> server: register a new asset (model/texture/script/scene); server re-snapshots
-  // TODO: add the auth payload on join (Role::editor needs the server's edit gate + a token).
-  // editComponent/sceneEdit/sceneControl/loadProject/addAsset are the editor's mutation path.
+  addAsset,      // editor -> server: register a new asset (model/texture/script/scene); server re-snapshots
+  editStatus     // server -> client: whether this server accepts edits ({ editable: bool }); sent on join
+  // editComponent/sceneEdit/sceneControl/loadProject/addAsset are the editor's mutation path; the server
+  // only honors them from a connection it authorized as Role::editor at the transport handshake (which
+  // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An
+  // editor connecting to a non-edit server is admitted read-only (it views but cannot mutate).
 };
 
 enum class Role : uint8_t {

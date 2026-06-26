@@ -39,6 +39,9 @@ public:
     int port = net::defaultPort;
     bool launchLocalServer = true;  // the editor edits a local project, so it spawns its own server
     std::string project;
+    // The edit token presented at the handshake when attaching to an existing edit server (--host). A
+    // spawned local server instead gets a fresh token generated at connect time.
+    std::string authToken;
   };
 
   explicit EditorApp(LaunchOptions options);
@@ -58,6 +61,10 @@ private:
   std::unique_ptr<net::ServerProcess> m_serverProcess;
   std::shared_ptr<net::NetClient> m_netClient;
 
+  // The token presented at the handshake to be authorized as Role::editor: generated per launch for a
+  // spawned local server (and passed to it via --token), or taken from the launch options for --host.
+  std::string m_authToken;
+
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<SceneManager> m_sceneManager;
@@ -75,6 +82,11 @@ private:
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
   bool m_shouldDisplayGui = true;
+
+  // Whether the connected server accepts edits (from its editStatus message). False = read-only: the
+  // editor still renders the scene for viewing but disables its editing UI and shows a cue. Defaults
+  // true so the common case (the editor's own spawned --edit server) is unaffected if the message lags.
+  bool m_serverEditable = true;
 
   // Only resend input when it changes (see ClientApp): keeps an unfocused editor from clobbering a
   // focused client's keys on the shared server-side InputState.
@@ -115,9 +127,9 @@ private:
 
   void variableUpdate();
 
-  // The editor spawns a child ECS3DServer (ServerProcess) and connects over localhost as Role::editor;
-  // edits become commands the server applies. TODO: pass --edit + an auth token once the server gates
-  // editor connections (the auth payload on join is still unimplemented).
+  // The editor spawns a child ECS3DServer (ServerProcess) in edit mode and connects over localhost as
+  // Role::editor, authorized by the --token it shares with that server at the handshake; edits then
+  // become commands the server applies.
 
   static void setupImGuiStyle();
 };

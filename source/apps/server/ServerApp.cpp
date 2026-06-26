@@ -44,7 +44,7 @@ ServerApp::ServerApp(LaunchOptions options)
       + "' - the server will run but simulate nothing. Check the project path and working directory.");
   }
 
-  m_netServer->start(m_options.port, m_options.editMode);
+  m_netServer->start(m_options.port, m_options.editMode, m_options.authToken);
 
   // The server is authoritative, so it runs the scene immediately (the old SceneManager started on a
   // user "Start"; here the server simulates as soon as it is up).
@@ -173,14 +173,42 @@ void ServerApp::fixedUpdate(const float dt)
   }
 }
 
+namespace {
+  // The editor's mutation messages. A non-edit server admits editors read-only, so it must drop these
+  // (the editors also disable them in their UI, but the server stays authoritative about it).
+  bool isMutation(const net::MessageType type)
+  {
+    switch (type)
+    {
+      case net::MessageType::editComponent:
+      case net::MessageType::sceneEdit:
+      case net::MessageType::sceneControl:
+      case net::MessageType::loadProject:
+      case net::MessageType::addAsset:
+        return true;
+      default:
+        return false;
+    }
+  }
+}
+
 void ServerApp::handleClientMessage(const net::Message& message)
 {
+  // A non-edit server is read-only: it serves snapshots/deltas to editors that connect to view it, but
+  // never applies their edits.
+  if (!m_options.editMode && isMutation(message.type))
+  {
+    return;
+  }
+
   switch (message.type)
   {
     case net::MessageType::join:
-      // A client joined: send it the full project/scene as a Snapshot. Record that a connection has
-      // been seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
+      // A client joined: tell it whether this server is editable, then send the full project/scene as a
+      // Snapshot. Record that a connection has been seen so an ephemeral server (exitWhenEmpty) can
+      // later exit when the last one drops.
       m_hasConnected = true;
+      broadcastEditStatus();
       broadcastSnapshot();
       break;
     case net::MessageType::editComponent:
@@ -466,6 +494,17 @@ void ServerApp::broadcastSnapshot()
   };
 
   m_netServer->broadcast(snapshot);
+}
+
+void ServerApp::broadcastEditStatus()
+{
+  const nlohmann::json payload = { { "editable", m_options.editMode } };
+  const auto dumped = payload.dump();
+
+  m_netServer->broadcast(net::Message{
+    .type = net::MessageType::editStatus,
+    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  });
 }
 
 void ServerApp::broadcastStateDelta()

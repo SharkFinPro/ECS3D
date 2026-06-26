@@ -26,6 +26,10 @@ public:
 
   void setLoadProjectCallback(LoadProjectCallback callback);
 
+  // When false (the connected server isn't in edit mode), dragging a project file in is ignored with a
+  // note rather than loading it, since loading replaces the server's project.
+  void setEditable(bool editable);
+
   void save();
 
   void saveAs();
@@ -47,6 +51,8 @@ private:
   LoadProjectCallback m_onLoadProject;
 
   std::string m_saveFile;
+
+  bool m_editable = true;
 
   vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
   vke::EventListener<vke::DropEvent> m_dropEventListener;

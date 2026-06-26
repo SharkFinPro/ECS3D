@@ -8,7 +8,7 @@ namespace {
   const std::string kAssembly = "net/Transport/ECS3DNetTransport.dll";
   const std::string kType = "ECS3DNetTransport.Transport, ECS3DNetTransport";
 
-  using ServerStartFn = void(*)(int32_t, uint8_t);
+  using ServerStartFn = void(*)(int32_t, uint8_t, const char*);
   using ServerStopFn = void(*)();
   using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
   using ServerConnectionCountFn = int32_t(*)();
@@ -30,7 +30,7 @@ NetServer::NetServer(std::shared_ptr<ManagedHost> host)
   : m_host(std::move(host))
 {}
 
-void NetServer::start(const int port, const bool editMode)
+void NetServer::start(const int port, const bool editMode, const std::string& authToken)
 {
   if (m_started)
   {
@@ -38,7 +38,7 @@ void NetServer::start(const int port, const bool editMode)
   }
 
   // The editMode flag is the launch-capability gate: only when set may a connection be granted
-  // Role::editor (via the auth token at handshake).
+  // Role::editor at the handshake, and only if it presents authToken (when one is configured).
   m_editMode = editMode;
 
   m_startFn = m_host->getDelegate(kAssembly, kType, "serverStart");
@@ -50,7 +50,7 @@ void NetServer::start(const int port, const bool editMode)
   g_activeServer = this;
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
 
-  reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0);
+  reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0, authToken.c_str());
   m_started = true;
 }
 

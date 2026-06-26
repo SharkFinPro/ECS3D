@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 namespace ECS3DNetTransport;
@@ -17,6 +18,13 @@ namespace ECS3DNetTransport;
 // C++ MessageQueue it pushes into is thread-safe). Outbound is a direct call from the tick thread.
 public static unsafe class Transport
 {
+  // The connection handshake is the first frame on every connection: a reserved type byte (outside the
+  // C++ MessageType enum, so it's consumed here and never delivered to C++) carrying [role byte][token
+  // UTF-8]. The server authorizes the connection from it before any protocol message flows.
+  private const byte HandshakeType = 0xFF;
+  private const byte RolePlayer = 0;
+  private const byte RoleEditor = 1;
+
   private static delegate* unmanaged<byte, byte*, int, void> _serverReceive;
   private static delegate* unmanaged<byte, byte*, int, void> _clientReceive;
 
@@ -25,6 +33,10 @@ public static unsafe class Transport
   private static Thread? _acceptThread;
   private static volatile bool _serverRunning;
   private static bool _editMode;
+
+  // The token an editor must present to be granted Role.editor. Empty means an edit-mode server accepts
+  // any editor (a trusted-network edit server); a non-empty token must match exactly.
+  private static string _expectedToken = "";
 
   private static readonly List<TcpClient> _clients = new();
   private static readonly object _clientsLock = new();
@@ -41,7 +53,7 @@ public static unsafe class Transport
   }
 
   [UnmanagedCallersOnly]
-  public static void serverStart(int port, byte editMode)
+  public static void serverStart(int port, byte editMode, IntPtr expectedTokenUtf8)
   {
     if (_serverRunning)
     {
@@ -49,8 +61,9 @@ public static unsafe class Transport
     }
 
     // editMode is the launch-capability gate: only an edit-mode server may grant Role.editor at the
-    // handshake. TODO: enforce it once the handshake carries role + token.
+    // handshake, and only when the presented token matches expectedToken (see Authorize).
     _editMode = editMode != 0;
+    _expectedToken = Marshal.PtrToStringUTF8(expectedTokenUtf8) ?? "";
 
     _listener = new TcpListener(IPAddress.Any, port);
     _listener.Start();
@@ -148,14 +161,25 @@ public static unsafe class Transport
     try
     {
       var stream = client.GetStream();
-      while (_serverRunning)
-      {
-        if (!ReadFrame(stream, out var type, out var payload))
-        {
-          break;
-        }
 
-        Deliver(_serverReceive, type, payload);
+      // The first frame must be the handshake. Authorize from it (e.g. reject an editor against a
+      // play-only server, or one with a bad token) before delivering any protocol message to C++.
+      if (ReadFrame(stream, out var handshakeType, out var handshakePayload) &&
+          handshakeType == HandshakeType && Authorize(handshakePayload))
+      {
+        while (_serverRunning)
+        {
+          if (!ReadFrame(stream, out var type, out var payload))
+          {
+            break;
+          }
+
+          Deliver(_serverReceive, type, payload);
+        }
+      }
+      else
+      {
+        Console.Error.WriteLine("[Transport] Rejected a connection that failed the handshake.");
       }
     }
     catch
@@ -169,6 +193,29 @@ public static unsafe class Transport
     }
 
     try { client.Close(); } catch { /* ignore */ }
+  }
+
+  // Decides whether a connection presenting this handshake payload ([role byte][token UTF-8]) is
+  // allowed onto the server at all. Players connect freely. An editor is admitted too — even against a
+  // non-edit server, where it gets a read-only view (the server simply honors no edits from it). The one
+  // hard rejection is a real auth failure: an editor offering the wrong token to an edit server that
+  // configured one. Whether an admitted editor may actually edit is conveyed separately via editStatus.
+  private static bool Authorize(byte[] payload)
+  {
+    if (payload.Length < 1)
+    {
+      return false;
+    }
+
+    var role = payload[0];
+    var token = payload.Length > 1 ? Encoding.UTF8.GetString(payload, 1, payload.Length - 1) : "";
+
+    if (role == RoleEditor && _editMode && _expectedToken.Length != 0 && token != _expectedToken)
+    {
+      return false;
+    }
+
+    return true;
   }
 
   [UnmanagedCallersOnly]
@@ -186,17 +233,17 @@ public static unsafe class Transport
     }
 
     var host = Marshal.PtrToStringUTF8(hostUtf8) ?? "127.0.0.1";
-
-    // role + token are sent at the handshake so the server can authorize Role.editor. TODO: write the
-    // handshake frame once the server enforces the edit gate; for now the connection is anonymous.
-    _ = role;
-    _ = Marshal.PtrToStringUTF8(tokenUtf8);
+    var token = Marshal.PtrToStringUTF8(tokenUtf8) ?? "";
 
     try
     {
       _client = new TcpClient();
       _client.Connect(host, port);
       _client.NoDelay = true;
+
+      // Send role + token as the first frame so the server can authorize this connection (in
+      // particular grant Role.editor) before any protocol message. Same wire format everywhere.
+      SendHandshake(role, token);
     }
     catch (Exception e)
     {
@@ -274,6 +321,28 @@ public static unsafe class Transport
   }
 
   // -- Framing helpers --
+
+  private static void SendHandshake(byte role, string token)
+  {
+    var tokenBytes = Encoding.UTF8.GetBytes(token);
+
+    var payload = new byte[1 + tokenBytes.Length];
+    payload[0] = role;
+    Array.Copy(tokenBytes, 0, payload, 1, tokenBytes.Length);
+
+    var frame = FrameBytes(HandshakeType, payload);
+    _client!.GetStream().Write(frame, 0, frame.Length);
+  }
+
+  private static byte[] FrameBytes(byte type, byte[] payload)
+  {
+    var frame = new byte[4 + 1 + payload.Length];
+    BinaryPrimitives.WriteInt32BigEndian(frame, 1 + payload.Length);
+    frame[4] = type;
+    Array.Copy(payload, 0, frame, 5, payload.Length);
+
+    return frame;
+  }
 
   private static byte[] Frame(byte type, IntPtr data, int len)
   {

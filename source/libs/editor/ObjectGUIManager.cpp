@@ -41,6 +41,11 @@ void ObjectGUIManager::setSelectedObject(const std::optional<uuids::uuid>& objec
   m_selectedObject = objectUUID;
 }
 
+void ObjectGUIManager::setEditable(const bool editable)
+{
+  m_editable = editable;
+}
+
 std::optional<uuids::uuid> ObjectGUIManager::getHighlightUUID() const
 {
   return m_highlightSelectedObject ? m_selectedObject : std::nullopt;
@@ -50,7 +55,13 @@ void ObjectGUIManager::displayGui(ObjectManager* objectManager)
 {
   ImGui::Begin("Objects");
 
-  ImGui::BeginDisabled(objectManager == nullptr);
+  if (!m_editable)
+  {
+    ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "Read-only - server is not in edit mode");
+    ImGui::Separator();
+  }
+
+  ImGui::BeginDisabled(!m_editable || objectManager == nullptr);
   if (ImGui::Button("+ Add Object") && objectManager && m_sceneEditCallback)
   {
     m_sceneEditCallback(replication::buildAddObject("Object"));
@@ -68,7 +79,7 @@ void ObjectGUIManager::displayGui(ObjectManager* objectManager)
 
     // Drop an object onto the empty area below the tree to reparent it to the root.
     ImGui::Dummy(ImGui::GetContentRegionAvail());
-    if (ImGui::BeginDragDropTarget())
+    if (m_editable && ImGui::BeginDragDropTarget())
     {
       if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
       {
@@ -84,8 +95,9 @@ void ObjectGUIManager::displayGui(ObjectManager* objectManager)
   }
 
   // Delete hotkey: while the Objects panel has focus, Delete queues the selected object for removal
-  // (guarded against firing while a text field is being typed into). The confirmation modal follows.
-  if (objectManager && m_selectedObject.has_value() &&
+  // (guarded against firing while a text field is being typed into, or when read-only). The
+  // confirmation modal follows.
+  if (m_editable && objectManager && m_selectedObject.has_value() &&
       ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
       !ImGui::GetIO().WantTextInput &&
       ImGui::IsKeyPressed(ImGuiKey_Delete))
@@ -125,7 +137,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   }
 
   // Drag this node onto another to reparent it (drop on empty space in the window reparents to root).
-  if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+  // Reparenting is a mutation, so it's only available when the server is editable.
+  if (m_editable && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
   {
     const std::string uuidStr = uuids::to_string(object->getUUID());
     ImGui::SetDragDropPayload("object", uuidStr.c_str(), uuidStr.size());
@@ -133,7 +146,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     ImGui::EndDragDropSource();
   }
 
-  if (ImGui::BeginDragDropTarget())
+  if (m_editable && ImGui::BeginDragDropTarget())
   {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
     {
@@ -148,7 +161,9 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     ImGui::EndDragDropTarget();
   }
 
-  if (ImGui::BeginPopupContextItem())
+  // The context menu is mutation-only (add child / duplicate / delete), so it's suppressed when the
+  // server is read-only.
+  if (m_editable && ImGui::BeginPopupContextItem())
   {
     if (ImGui::MenuItem("Add Child") && m_sceneEditCallback)
     {
@@ -197,6 +212,10 @@ void ObjectGUIManager::displaySelectedObject(ObjectManager* objectManager)
       ImGui::TextUnformatted(object->getName().c_str());
       ImGui::Separator();
 
+      // Read-only: the component widgets still show their values for inspection, but are disabled so
+      // they neither edit nor (via the header "-") remove anything.
+      ImGui::BeginDisabled(!m_editable);
+
       for (const auto& [type, component] : object->getComponents())
       {
         displayComponent(object->getUUID(), component);
@@ -209,6 +228,8 @@ void ObjectGUIManager::displaySelectedObject(ObjectManager* objectManager)
 
       ImGui::Separator();
       displayAddComponent(object);
+
+      ImGui::EndDisabled();
     }
     else
     {

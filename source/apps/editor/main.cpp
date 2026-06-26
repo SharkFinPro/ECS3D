@@ -25,6 +25,12 @@ int main(int argc, char** argv)
       {
         options.project = argv[++i];
       }
+      else if (arg == "--token" && i + 1 < argc)
+      {
+        // The edit token to present when attaching to an existing edit server (--host); a spawned local
+        // server gets its own generated token instead.
+        options.authToken = argv[++i];
+      }
     }
 
     EditorApp app(options);

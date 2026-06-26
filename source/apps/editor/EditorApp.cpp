@@ -31,9 +31,11 @@
 #include <VulkanEngine/components/renderingManager/renderer3D/MousePicker.h>
 #include <objects/Object.h>
 #include <nlohmann/json.hpp>
+#include <uuid.h>
 #include <chrono>
 #include <iostream>
 #include <optional>
+#include <random>
 #include <thread>
 
 EditorApp::EditorApp(LaunchOptions options)
@@ -133,24 +135,35 @@ void EditorApp::connectToServer()
 {
   using namespace std::chrono_literals;
 
-  // The editor edits a local project, so (in singleplayer) it spawns its own server. TODO: pass --edit
-  // + an auth token once the server enforces the edit gate; for now it connects as Role::editor.
+  // The editor edits a local project, so (in singleplayer) it spawns its own edit-mode server gated by a
+  // one-off token they share, then connects as Role::editor with that token. Attaching to an existing
+  // server (--host) instead uses the token from the launch options.
   if (m_options.launchLocalServer)
   {
+    // A fresh per-launch token so only this editor can edit the server it just spawned. The --edit flag
+    // is the capability gate; the token additionally fends off another local process on loopback.
+    std::mt19937 rng{ std::random_device{}() };
+    m_authToken = uuids::to_string(uuids::uuid_random_generator{ rng }());
+
     m_serverProcess = std::make_unique<net::ServerProcess>();
-    // --ephemeral: this spawned server should exit when its last connection drops, so it can't outlive
-    // the editor if the RAII terminate is ever missed (e.g. an abnormal exit).
-    if (!m_serverProcess->launch("ECS3DServer", "--ephemeral"))
+    // --edit grants the editor capability, --token is the secret the editor must present, and
+    // --ephemeral makes the server exit when its last connection drops so it can't outlive the editor.
+    const std::string arguments = "--edit --ephemeral --token " + m_authToken;
+    if (!m_serverProcess->launch("ECS3DServer", arguments))
     {
       std::cerr << "[Editor] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
     }
+  }
+  else
+  {
+    m_authToken = m_options.authToken;
   }
 
   // The (just-spawned) server needs a moment to boot the CLR and start listening, so retry.
   const auto deadline = std::chrono::steady_clock::now() + 15s;
   do
   {
-    m_netClient->connect(m_options.host, m_options.port, net::Role::editor, "");
+    m_netClient->connect(m_options.host, m_options.port, net::Role::editor, m_authToken);
 
     if (m_netClient->isConnected())
     {
@@ -366,6 +379,14 @@ void EditorApp::applyMessage(const net::Message& message)
         replication::applyComponentEdit(*scene->getObjectManager(), json);
       }
       break;
+    case net::MessageType::editStatus:
+      // The server told us whether it's editable; a non-edit server makes the editor a read-only viewer.
+      m_serverEditable = json.value("editable", true);
+      if (!m_serverEditable)
+      {
+        logMessage("Info", "Connected to a non-edit server - the editor is read-only.");
+      }
+      break;
     default:
       break;
   }
@@ -377,6 +398,12 @@ void EditorApp::updateGui()
   {
     return;
   }
+
+  // Propagate the server's editability to the panels so they disable their mutating affordances (and
+  // show a read-only cue) when connected to a non-edit server, rather than appearing broken.
+  m_objectGUIManager->setEditable(m_serverEditable);
+  m_assetBrowser->setEditable(m_serverEditable);
+  m_saveUI->setEditable(m_serverEditable);
 
   displayMenuBar();
 
@@ -406,7 +433,9 @@ void EditorApp::displayMenuBar()
     if (ImGui::BeginMenu("File"))
     {
       // Save serializes the replicated project to disk; New/Open send the project to the server (which
-      // reloads + re-snapshots), since the server owns the scene.
+      // reloads + re-snapshots), since the server owns the scene. New/Open are mutations, so they're
+      // disabled on a read-only server; Save (local serialization of what's on screen) stays available.
+      ImGui::BeginDisabled(!m_serverEditable);
       if (ImGui::MenuItem("New"))
       {
         m_saveUI->createNewProject();
@@ -416,6 +445,7 @@ void EditorApp::displayMenuBar()
       {
         m_saveUI->open();
       }
+      ImGui::EndDisabled();
 
       ImGui::Separator();
 
@@ -433,6 +463,15 @@ void EditorApp::displayMenuBar()
     }
 
     m_assetBrowser->displayMenuWidget();
+
+    // A persistent read-only badge, right-aligned, whenever the connected server isn't in edit mode.
+    if (!m_serverEditable)
+    {
+      const char* badge = "READ-ONLY (server not in edit mode)";
+      const float badgeWidth = ImGui::CalcTextSize(badge).x;
+      ImGui::SameLine(ImGui::GetWindowWidth() - badgeWidth - ImGui::GetStyle().WindowPadding.x * 2.0f);
+      ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "%s", badge);
+    }
 
     ImGui::EndMainMenuBar();
   }
@@ -498,7 +537,9 @@ void EditorApp::displaySceneStatus()
 
   // The scene lives on the authoritative server, so these are fire-and-forget lifecycle commands. The
   // server applies them and re-snapshots (it doesn't replicate the running/paused status back yet, so
-  // the buttons aren't disabled by state).
+  // the buttons aren't disabled by state). They mutate the server, so they're disabled when read-only.
+  ImGui::BeginDisabled(!m_serverEditable);
+
   if (ImGui::Button("Start"))
   {
     sendSceneControl("start");
@@ -515,6 +556,8 @@ void EditorApp::displaySceneStatus()
   {
     sendSceneControl("stop");
   }
+
+  ImGui::EndDisabled();
 
   ImGui::End();
 }

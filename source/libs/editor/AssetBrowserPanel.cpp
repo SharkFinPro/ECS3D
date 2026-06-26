@@ -74,6 +74,11 @@ void AssetBrowserPanel::setAddAssetCallback(AddAssetCallback callback)
   m_onAddAsset = std::move(callback);
 }
 
+void AssetBrowserPanel::setEditable(const bool editable)
+{
+  m_editable = editable;
+}
+
 const char* AssetBrowserPanel::assetTypeLabel(const AssetType type)
 {
   switch (type)
@@ -201,8 +206,10 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
     ImGui::Button(assetTypeLabel(record.type), { cellSize, cellSize });
   }
 
-  // Double-click a scene tile to make it the active scene.
-  if (record.type == AssetType::Scene && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+  // Double-click a scene tile to make it the active scene. Switching the active scene is a server-side
+  // mutation, so it's only available when the server is editable (a read-only viewer follows the
+  // server's current scene).
+  if (m_editable && record.type == AssetType::Scene && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
   {
     if (m_onLoadScene)
     {
@@ -210,8 +217,10 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
     }
   }
 
-  // Drag source (model/texture/script), tagged by type so only the right drop target accepts it.
-  if (const char* payloadId = assetDragDrop::payloadId(record.type))
+  // Drag source (model/texture/script), tagged by type so only the right drop target accepts it. Only
+  // when editable: assigning an asset to a component is a mutation, and ImGui::BeginDisabled does not
+  // block drag-drop targets, so suppressing the source here is what actually makes those slots read-only.
+  if (const char* payloadId = m_editable ? assetDragDrop::payloadId(record.type) : nullptr)
   {
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
     {
@@ -236,6 +245,9 @@ void AssetBrowserPanel::displayMenuWidget()
 
   if (ImGui::BeginMenu("Assets"))
   {
+    // Creating assets adds them to the authoritative project, so it's disabled on a read-only server.
+    ImGui::BeginDisabled(!m_editable);
+
     if (ImGui::MenuItem("Import Model..."))
     {
       if (const auto picked = pickFile({ { "3D Models", "glb,gltf,obj,fbx" } }))
@@ -263,6 +275,8 @@ void AssetBrowserPanel::displayMenuWidget()
     {
       beginCreate(PendingAsset::Type::Script, "", "NewScript");
     }
+
+    ImGui::EndDisabled();
 
     ImGui::EndMenu();
   }

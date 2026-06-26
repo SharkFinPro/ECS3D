@@ -36,6 +36,10 @@ public:
   // Set the selection externally (e.g. from viewport mouse-picking).
   void setSelectedObject(const std::optional<uuids::uuid>& objectUUID);
 
+  // When false (the connected server isn't in edit mode), the panels still render so the scene can be
+  // viewed/inspected, but the add/remove/reparent/edit affordances are disabled.
+  void setEditable(bool editable);
+
   // The object to highlight in the viewport: the selection when "Highlight Object" is on, else nullopt.
   [[nodiscard]] std::optional<uuids::uuid> getHighlightUUID() const;
 
@@ -52,6 +56,9 @@ private:
   std::optional<uuids::uuid> m_objectPendingDeletion;
 
   bool m_highlightSelectedObject = true;
+
+  // False when the connected server is read-only (not in edit mode); gates the mutating UI.
+  bool m_editable = true;
 
   // Components whose deletion we've already sent (markedAsDeleted persists until the next snapshot
   // rebuilds the object), so we don't re-send the same removeComponent every frame.

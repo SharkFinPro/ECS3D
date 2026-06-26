@@ -34,6 +34,11 @@ void SaveUI::setLoadProjectCallback(LoadProjectCallback callback)
   m_onLoadProject = std::move(callback);
 }
 
+void SaveUI::setEditable(const bool editable)
+{
+  m_editable = editable;
+}
+
 void SaveUI::save()
 {
   if (m_saveFile.empty() && !createSaveFile())
@@ -219,6 +224,12 @@ void SaveUI::registerWindowEvents()
   });
 
   m_dropEventListener = window->on<vke::DropEvent>([this](const vke::DropEvent& e) {
+    if (!m_editable)
+    {
+      std::cout << "[SaveUI] Connect to a server in edit mode to open a project." << std::endl;
+      return;
+    }
+
     if (e.paths.size() == 1)
     {
       loadFromFile(e.paths.front());

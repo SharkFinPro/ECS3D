@@ -26,6 +26,10 @@ public:
 
   void setAddAssetCallback(AddAssetCallback callback);
 
+  // When false (the connected server isn't in edit mode), the asset grid still renders for browsing,
+  // but creating assets and switching the active scene (both mutations) are disabled.
+  void setEditable(bool editable);
+
   void displayGui();
 
   void displayMenuWidget();
@@ -52,6 +56,9 @@ private:
   PendingAsset m_pending;
   bool m_openCreatePopup = false;
   std::string m_createError;
+
+  // False when the connected server is read-only (not in edit mode); gates create + scene switching.
+  bool m_editable = true;
 
   [[nodiscard]] static const char* assetTypeLabel(AssetType type);
 

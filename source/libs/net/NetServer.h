@@ -4,6 +4,7 @@
 #include "MessageQueue.h"
 #include <cstdint>
 #include <memory>
+#include <string>
 
 class ManagedHost;
 
@@ -13,7 +14,9 @@ class NetServer {
 public:
   explicit NetServer(std::shared_ptr<ManagedHost> host);
 
-  void start(int port, bool editMode);
+  // editMode enables granting Role::editor at the handshake; authToken (if non-empty) is the token an
+  // editor must then present to be authorized.
+  void start(int port, bool editMode, const std::string& authToken);
 
   void stop();
 
