@@ -2,6 +2,7 @@
 #define OBJECTGUIMANAGER_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <array>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -9,6 +10,7 @@
 #include <uuid.h>
 
 class ObjectManager;
+class AssetRegistry;
 class Object;
 class Component;
 class ComponentEditor;
@@ -29,6 +31,8 @@ public:
 
   void setSceneEditCallback(SceneEditCallback callback);
 
+  void setAssetRegistry(const AssetRegistry* registry);
+
   // objectManager may be null (no scene loaded yet): the windows are still drawn, just empty, so they
   // stay present/dockable instead of popping in and out.
   void displayGui(const ObjectManager* objectManager);
@@ -48,6 +52,12 @@ private:
 
   EditCallback m_editCallback;
   SceneEditCallback m_sceneEditCallback;
+
+  const AssetRegistry* m_assetRegistry = nullptr;
+
+  // Buffer for in-place name editing. Refreshed whenever the selected object changes.
+  std::array<char, 256> m_nameEditBuffer{};
+  std::optional<uuids::uuid> m_nameEditObjectUUID;
 
   std::optional<uuids::uuid> m_selectedObject;
 
@@ -73,6 +83,8 @@ private:
   void displayDeleteConfirmationModal(const ObjectManager* objectManager);
 
   void displayAddComponent(const std::shared_ptr<Object>& object) const;
+
+  void displayScriptDragDropArea(float dropZoneStartY, const std::shared_ptr<Object>& object);
 
   void displayComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component);
 };

@@ -1,6 +1,8 @@
 #include "ObjectGUIManager.h"
+#include "AssetDragDrop.h"
 #include "ComponentEditor.h"
 #include <Replication.h>
+#include <assets/AssetRegistry.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -11,14 +13,16 @@
 #include <utility>
 
 namespace {
-  // The components the "Add Component" menu can attach, as { display label, ComponentRegistry key }.
-  // Transform is omitted (every object already has one); scripts attach via script assets.
-  constexpr std::array<std::pair<const char*, const char*>, 5> addableComponents {{
-    { "Rigid Body", "RigidBody" },
-    { "Model Renderer", "ModelRenderer" },
-    { "Light Renderer", "LightRenderer" },
-    { "Box Collider", "Box" },
-    { "Sphere Collider", "Sphere" }
+  // The components the "Add Component" menu can attach.
+  // checkType is the ComponentType whose presence on the object hides this entry.
+  // Transform is omitted (every object already has one); scripts attach via drag & drop only.
+  struct AddableComponent { const char* label; const char* key; ComponentType checkType; };
+  constexpr std::array<AddableComponent, 5> addableComponents {{
+    { "Rigid Body",      "RigidBody",    ComponentType::rigidBody      },
+    { "Model Renderer",  "ModelRenderer", ComponentType::modelRenderer  },
+    { "Light Renderer",  "LightRenderer", ComponentType::lightRenderer  },
+    { "Box Collider",    "Box",           ComponentType::collider       },
+    { "Sphere Collider", "Sphere",        ComponentType::collider       }
   }};
 }
 
@@ -44,6 +48,11 @@ void ObjectGUIManager::setSelectedObject(const std::optional<uuids::uuid>& objec
 void ObjectGUIManager::setEditable(const bool editable)
 {
   m_editable = editable;
+}
+
+void ObjectGUIManager::setAssetRegistry(const AssetRegistry* registry)
+{
+  m_assetRegistry = registry;
 }
 
 std::optional<uuids::uuid> ObjectGUIManager::getHighlightUUID() const
@@ -211,7 +220,26 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
     if (const auto object = objectManager->getObjectByUUID(m_selectedObject.value()))
     {
       ImGui::Separator();
-      ImGui::TextUnformatted(object->getName().c_str());
+
+      // Sync the name buffer when the selection changes.
+      if (m_nameEditObjectUUID != object->getUUID())
+      {
+        m_nameEditObjectUUID = object->getUUID();
+        const auto name = object->getName();
+        const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
+        name.copy(m_nameEditBuffer.data(), len);
+        m_nameEditBuffer[len] = '\0';
+      }
+
+      ImGui::BeginDisabled(!m_editable);
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+      ImGui::InputText("##objectName", m_nameEditBuffer.data(), m_nameEditBuffer.size());
+      if (ImGui::IsItemDeactivatedAfterEdit() && m_sceneEditCallback)
+      {
+        m_sceneEditCallback(replication::buildRenameObject(object->getUUID(), m_nameEditBuffer.data()));
+      }
+      ImGui::EndDisabled();
+
       ImGui::Separator();
 
       // Read-only: the component widgets still show their values for inspection, but are disabled so
@@ -223,15 +251,34 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
         displayComponent(object->getUUID(), component);
       }
 
-      for (const auto& script : object->getScripts())
-      {
-        displayComponent(object->getUUID(), script);
-      }
-
       ImGui::Separator();
       displayAddComponent(object);
 
       ImGui::EndDisabled();
+
+      const float scriptDropZoneStartY = ImGui::GetCursorScreenPos().y;
+      ImGui::SeparatorText("Scripts");
+
+      ImGui::BeginDisabled(!m_editable);
+
+      if (object->getScripts().empty())
+      {
+        ImGui::Dummy({ ImGui::GetContentRegionAvail().x, 60.0f });
+      }
+      else
+      {
+        for (const auto& script : object->getScripts())
+        {
+          displayComponent(object->getUUID(), script);
+        }
+      }
+
+      ImGui::EndDisabled();
+
+      if (m_editable)
+      {
+        displayScriptDragDropArea(scriptDropZoneStartY, object);
+      }
     }
     else
     {
@@ -317,8 +364,13 @@ void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object
 
   if (ImGui::BeginPopup("AddComponentPopup"))
   {
-    for (const auto& [label, key] : addableComponents)
+    for (const auto& [label, key, checkType] : addableComponents)
     {
+      if (object->getComponent<Component>(checkType))
+      {
+        continue;
+      }
+
       if (ImGui::Selectable(label) && m_sceneEditCallback)
       {
         m_sceneEditCallback(replication::buildAddComponent(object->getUUID(), key));
@@ -326,6 +378,47 @@ void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object
     }
 
     ImGui::EndPopup();
+  }
+}
+
+void ObjectGUIManager::displayScriptDragDropArea(const float dropZoneStartY,
+                                                  const std::shared_ptr<Object>& object)
+{
+  if (ImGui::GetDragDropPayload() == nullptr)
+  {
+    return;
+  }
+
+  const ImVec2 windowPos     = ImGui::GetWindowPos();
+  const float  windowRight   = windowPos.x + ImGui::GetWindowWidth();
+  const float  contentBottom = windowPos.y + ImGui::GetWindowHeight() - ImGui::GetStyle().WindowPadding.y;
+
+  ImGui::SetCursorScreenPos({ windowPos.x, dropZoneStartY });
+  ImGui::SetNextItemAllowOverlap();
+  ImGui::InvisibleButton("##scriptDropZone",
+      { windowRight - windowPos.x, contentBottom - dropZoneStartY });
+
+  if (ImGui::BeginDragDropTarget())
+  {
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(assetDragDrop::script))
+    {
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto parsed = uuids::uuid::from_string(uuidStr))
+      {
+        if (m_assetRegistry)
+        {
+          if (const auto* record = m_assetRegistry->getByUUID(parsed.value()))
+          {
+            if (!record->className.empty() && m_sceneEditCallback)
+            {
+              m_sceneEditCallback(replication::buildAddScript(object->getUUID(), record->className));
+            }
+          }
+        }
+      }
+    }
+
+    ImGui::EndDragDropTarget();
   }
 }
 

@@ -49,6 +49,12 @@ void applyComponentEdit(const ObjectManager& objectManager, const nlohmann::json
 [[nodiscard]] nlohmann::json buildReparentObject(const uuids::uuid& objectUUID,
                                                  const uuids::uuid* parentUUID = nullptr);
 
+[[nodiscard]] nlohmann::json buildRenameObject(const uuids::uuid& objectUUID,
+                                               const std::string& name);
+
+[[nodiscard]] nlohmann::json buildAddScript(const uuids::uuid& objectUUID,
+                                            const std::string& className);
+
 void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit);
 
 // Register an imported/created asset ({ assetType, uuid, path|name, [className] }). Shared by the

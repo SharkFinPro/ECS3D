@@ -39,6 +39,10 @@ public:
   // force the script queues from input is applied the same tick.
   void variableUpdate(ObjectManager& objectManager) const;
 
+  // Attach any scripts that haven't been attached yet (without running their lifecycle methods).
+  // Call this before syncFieldsToData so newly added scripts have a field-cache entry.
+  void attachAll(ObjectManager& objectManager);
+
   // Refresh every Script's field blob from its live instance so a serialize()/Snapshot carries the
   // current values. Call this before building a Snapshot.
   void syncFieldsToData(const ObjectManager& objectManager) const;

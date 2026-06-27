@@ -475,6 +475,7 @@ void ServerApp::broadcastSnapshot()
   {
     try
     {
+      m_scriptSystem->attachAll(*scene->getObjectManager());
       m_scriptSystem->syncFieldsToData(*scene->getObjectManager());
     }
     catch (const std::exception& e)

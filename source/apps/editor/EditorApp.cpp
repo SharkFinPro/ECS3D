@@ -62,6 +62,7 @@ EditorApp::EditorApp(LaunchOptions options)
   registerEditors();
 
   m_objectGUIManager = std::make_shared<ObjectGUIManager>(m_componentEditor);
+  m_objectGUIManager->setAssetRegistry(m_assetRegistry.get());
   m_objectGUIManager->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
     // A widget changed: send the component's new state to the authoritative server as an edit command.
     const auto payload = replication::buildComponentEdit(objectUUID, component).dump();

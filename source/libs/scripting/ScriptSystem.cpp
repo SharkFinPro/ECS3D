@@ -155,6 +155,30 @@ void ScriptSystem::variableUpdate(ObjectManager& objectManager) const
   }
 }
 
+void ScriptSystem::attachAll(ObjectManager& objectManager)
+{
+  ensureEngine();
+
+  BindingContext::setObjectManager(&objectManager);
+
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    for (const auto& scriptComponent : object->getScripts())
+    {
+      const auto script = std::dynamic_pointer_cast<Script>(scriptComponent);
+      if (!script)
+      {
+        continue;
+      }
+
+      if (!isAttached(object->getUUID(), script->getClassName()))
+      {
+        attach(*object, *script);
+      }
+    }
+  }
+}
+
 void ScriptSystem::syncFieldsToData(const ObjectManager& objectManager) const
 {
   if (!m_engine)

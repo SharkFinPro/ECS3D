@@ -215,6 +215,25 @@ nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID)
   };
 }
 
+nlohmann::json buildRenameObject(const uuids::uuid& objectUUID, const std::string& name)
+{
+  return {
+    { "op", "renameObject" },
+    { "object", uuids::to_string(objectUUID) },
+    { "name", name }
+  };
+}
+
+nlohmann::json buildAddScript(const uuids::uuid& objectUUID, const std::string& className)
+{
+  return {
+    { "op", "addComponent" },
+    { "object", uuids::to_string(objectUUID) },
+    { "component", "Script" },
+    { "className", className }
+  };
+}
+
 nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::uuid* parentUUID)
 {
   nlohmann::json edit = {
@@ -275,6 +294,12 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
     return;
   }
 
+  if (op == "renameObject")
+  {
+    object->setName(edit.at("name"));
+    return;
+  }
+
   if (op == "duplicateObject")
   {
     objectManager.duplicateObject(object);
@@ -327,6 +352,14 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
 
     if (const auto component = objectManager.getComponentRegistry()->create(key))
     {
+      if (edit.contains("className"))
+      {
+        if (const auto script = std::dynamic_pointer_cast<Script>(component))
+        {
+          script->setClassName(edit.at("className"));
+        }
+      }
+
       object->addComponent(component);
     }
 
