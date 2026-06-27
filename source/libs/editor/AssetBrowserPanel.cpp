@@ -314,12 +314,22 @@ void AssetBrowserPanel::displayMenuWidget()
     m_openCreatePopup = true;
   };
 
+  auto labeledSeparator = [](const char* label)
+  {
+    ImGui::Spacing();
+    ImGui::TextColored(kColorSubtle, "%s", label);
+    ImGui::Separator();
+    ImGui::Spacing();
+  };
+
   if (ImGui::BeginMenu("Assets"))
   {
+    labeledSeparator("Import");
+
     // Creating assets adds them to the authoritative project, so it's disabled on a read-only server.
     ImGui::BeginDisabled(!m_editable);
 
-    if (ImGui::MenuItem("Import Model..."))
+    if (ImGui::MenuItem("Import Model"))
     {
       if (const auto picked = pickFile({ { "3D Models", "glb,gltf,obj,fbx" } }))
       {
@@ -327,7 +337,7 @@ void AssetBrowserPanel::displayMenuWidget()
       }
     }
 
-    if (ImGui::MenuItem("Import Texture..."))
+    if (ImGui::MenuItem("Import Texture"))
     {
       if (const auto picked = pickFile({ { "Images", "png,jpg,jpeg,tga,bmp" } }))
       {
@@ -335,7 +345,7 @@ void AssetBrowserPanel::displayMenuWidget()
       }
     }
 
-    ImGui::Separator();
+    labeledSeparator("Create");
 
     if (ImGui::MenuItem("New Scene"))
     {
