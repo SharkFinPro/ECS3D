@@ -131,7 +131,9 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   const bool isSelected = m_selectedObject.has_value() && m_selectedObject.value() == object->getUUID();
   const bool isLeaf = object->getChildren().empty();
 
-  ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+  ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_FramePadding |
+                             ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap |
+                             ImGuiTreeNodeFlags_OpenOnDoubleClick;
   if (isSelected)
   {
     flags |= ImGuiTreeNodeFlags_Selected;
@@ -195,6 +197,28 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     }
 
     ImGui::EndPopup();
+  }
+
+  // Add/Delete Buttons
+  ImGui::SameLine();
+
+  const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 4.0f;
+  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth * 2.0f - 5.0f);
+
+  if (ImGui::Button("+", {buttonWidth, 0}))
+  {
+    const auto parent = object->getUUID();
+    m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("-", {buttonWidth, 0}))
+  {
+    // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
+    m_objectPendingDeletion = object->getUUID();
   }
 
   if (open && !isLeaf)
