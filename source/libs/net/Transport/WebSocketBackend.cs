@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Runtime.InteropServices;
@@ -25,6 +26,24 @@ internal sealed class WebSocketBackend : TransportBackend
   private const string WebSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
   private static readonly TimeSpan KeepAlive = TimeSpan.FromSeconds(30);
 
+  // Why these two settings exist: unlike the raw-TCP backend (which writes whole frames with a blocking
+  // Stream.Write that never touches the thread pool), the WebSocket API is async-only, so every send goes
+  // through SendAsync().GetResult(). A send that fits the socket's send buffer completes synchronously and
+  // returns inline; one that doesn't falls back to the async path, whose continuation needs a thread-pool
+  // thread. Because our socket threads block on .GetResult(), the pool has to *inject* that thread, which
+  // it throttles to ~one per 15.6ms — a per-message stall that made WebSocket feel laggy versus TCP.
+  //
+  //  - A send buffer larger than a typical message keeps the common case on the synchronous path.
+  //  - Raising the thread-pool minimum removes the injection delay for the rare oversized message that
+  //    still goes async, so it degrades to plain bandwidth cost (same as TCP) instead of a 15ms hitch.
+  private const int SocketBufferSize = 1 << 20; // 1 MiB per direction.
+
+  static WebSocketBackend()
+  {
+    ThreadPool.GetMinThreads(out var worker, out var io);
+    ThreadPool.SetMinThreads(Math.Max(worker, 64), Math.Max(io, 64));
+  }
+
   // -- Server --
   private TcpListener? _listener;
   private Thread? _acceptThread;
@@ -35,6 +54,7 @@ internal sealed class WebSocketBackend : TransportBackend
 
   // -- Client --
   private WebSocket? _client;
+  private HttpMessageInvoker? _clientInvoker;
   private CancellationTokenSource? _clientCts;
   private readonly SemaphoreSlim _clientSendLock = new(1, 1);
   private Thread? _clientThread;
@@ -145,6 +165,8 @@ internal sealed class WebSocketBackend : TransportBackend
     try
     {
       tcp.NoDelay = true;
+      tcp.SendBufferSize = SocketBufferSize;
+      tcp.ReceiveBufferSize = SocketBufferSize;
       var stream = tcp.GetStream();
 
       // Upgrade the raw TCP connection to WebSocket, then let the BCL handle framing from here on.
@@ -220,9 +242,38 @@ internal sealed class WebSocketBackend : TransportBackend
     {
       var ws = new ClientWebSocket();
       ws.Options.KeepAliveInterval = KeepAlive;
-      ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), CancellationToken.None).GetAwaiter().GetResult();
+
+      // ClientWebSocket gives no way to set NoDelay on its socket, so it would otherwise leave Nagle's
+      // algorithm enabled — small per-tick messages get held ~40ms (Nagle + delayed ACK), the lag the
+      // TCP backend avoids by setting NoDelay on both ends. A ConnectCallback lets us own the socket and
+      // disable Nagle ourselves.
+      var invoker = new HttpMessageInvoker(new SocketsHttpHandler
+      {
+        ConnectCallback = static async (context, ct) =>
+        {
+          var socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
+          {
+            NoDelay = true,
+            SendBufferSize = SocketBufferSize,
+            ReceiveBufferSize = SocketBufferSize,
+          };
+          try
+          {
+            await socket.ConnectAsync(context.DnsEndPoint, ct).ConfigureAwait(false);
+            return new NetworkStream(socket, ownsSocket: true);
+          }
+          catch
+          {
+            socket.Dispose();
+            throw;
+          }
+        }
+      });
+
+      ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, CancellationToken.None).GetAwaiter().GetResult();
 
       _client = ws;
+      _clientInvoker = invoker;
       _clientCts = new CancellationTokenSource();
 
       // Send role + token as the first message so the server can authorize this connection (in
@@ -256,8 +307,10 @@ internal sealed class WebSocketBackend : TransportBackend
 
     var ws = _client;
     var cts = _clientCts;
+    var invoker = _clientInvoker;
     _client = null;
     _clientCts = null;
+    _clientInvoker = null;
 
     if (ws != null)
     {
@@ -267,6 +320,8 @@ internal sealed class WebSocketBackend : TransportBackend
     {
       cts?.Dispose();
     }
+
+    invoker?.Dispose();
   }
 
   public override void ClientSend(byte type, nint data, int len)
