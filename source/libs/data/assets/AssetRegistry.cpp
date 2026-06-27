@@ -14,12 +14,20 @@ void AssetRegistry::registerAsset(const AssetRecord& record)
   {
     m_loadedPaths.emplace(record.path, record.uuid);
   }
+
+  ++m_version;
 }
 
 void AssetRegistry::clear()
 {
   m_assets.clear();
   m_loadedPaths.clear();
+  ++m_version;
+}
+
+size_t AssetRegistry::getVersion() const
+{
+  return m_version;
 }
 
 const AssetRecord* AssetRegistry::getByUUID(const uuids::uuid& uuid) const

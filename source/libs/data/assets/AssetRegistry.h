@@ -37,6 +37,10 @@ public:
 
   [[nodiscard]] const std::unordered_map<uuids::uuid, AssetRecord>& getAssets() const;
 
+  // Monotonically incremented by registerAsset and clear. Consumers can cache
+  // derived views and invalidate when this value changes.
+  [[nodiscard]] size_t getVersion() const;
+
   [[nodiscard]] nlohmann::json serialize() const;
 
   void loadFromJSON(const nlohmann::json& assetsData);
@@ -45,6 +49,8 @@ private:
   std::unordered_map<uuids::uuid, AssetRecord> m_assets;
 
   std::unordered_map<std::string, uuids::uuid> m_loadedPaths;
+
+  size_t m_version = 0;
 };
 
 

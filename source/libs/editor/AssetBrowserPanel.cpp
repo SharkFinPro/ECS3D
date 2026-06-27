@@ -16,9 +16,17 @@
 #include <optional>
 #include <random>
 #include <string>
-#include <vector>
 
 namespace {
+  constexpr ImVec4 kColorSubtle { 0.55f, 0.55f, 0.55f, 1.00f };
+
+  constexpr std::array<std::pair<AssetType, const char*>, 4> kAssetTypeLabels {{
+    { AssetType::Model,   "Model"   },
+    { AssetType::Texture, "Texture" },
+    { AssetType::Scene,   "Scene"   },
+    { AssetType::Script,  "Script"  },
+  }};
+
   // Pick a single existing file through the OS dialog. filters = { { label, "ext1,ext2" }, ... }.
   std::optional<std::string> pickFile(const std::vector<nfdu8filteritem_t>& filters)
   {
@@ -79,6 +87,50 @@ void AssetBrowserPanel::setEditable(const bool editable)
   m_editable = editable;
 }
 
+void AssetBrowserPanel::recomputeCache()
+{
+  const std::string query = [this] {
+    std::string q = m_search;
+    std::ranges::transform(q, q.begin(), [](const unsigned char c) { return std::tolower(c); });
+    return q;
+  }();
+
+  m_cachedAssets.clear();
+
+  for (const auto& [uuid, record] : m_assetRegistry->getAssets())
+  {
+    if (m_filter != AssetType::Unknown && record.type != m_filter)
+    {
+      continue;
+    }
+
+    if (!query.empty())
+    {
+      std::string lowered = displayName(record);
+      std::ranges::transform(lowered, lowered.begin(), [](const unsigned char c) { return std::tolower(c); });
+
+      if (lowered.find(query) == std::string::npos)
+      {
+        continue;
+      }
+    }
+
+    m_cachedAssets.emplace_back(uuid, record);
+  }
+
+  std::ranges::sort(m_cachedAssets, [this](const auto& a, const auto& b) {
+    return std::ranges::lexicographical_compare(displayName(a.second), displayName(b.second),
+                                                [this](const char x, const char y) {
+      return m_sortType == SortType::NameAscending
+        ? std::tolower(x) < std::tolower(y)
+        : std::tolower(x) > std::tolower(y);
+    });
+  });
+
+  m_lastRegistryVersion = m_assetRegistry->getVersion();
+  m_dirty = false;
+}
+
 const char* AssetBrowserPanel::assetTypeLabel(const AssetType type)
 {
   switch (type)
@@ -105,26 +157,63 @@ void AssetBrowserPanel::displayGui()
 {
   ImGui::Begin("Assets");
 
-  // Type filter.
-  if (ImGui::BeginCombo("Type", assetTypeLabel(m_filter)))
+  if (ImGui::CollapsingHeader("Options"))
   {
-    for (const auto type : { AssetType::Unknown, AssetType::Model, AssetType::Texture, AssetType::Scene, AssetType::Script })
+    ImGui::Spacing();
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(kColorSubtle, "Filter:");
+    for (const auto& [type, label] : kAssetTypeLabels)
     {
-      if (ImGui::Selectable(assetTypeLabel(type), m_filter == type))
+      bool selected = m_filter == type;
+      ImGui::SameLine();
+      if (ImGui::Checkbox(label, &selected))
       {
-        m_filter = type;
+        m_filter = selected ? type : AssetType::Unknown;
+        m_dirty = true;
       }
     }
 
-    ImGui::EndCombo();
-  }
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(kColorSubtle, "Search:");
+    ImGui::SameLine();
+    if (ImGui::InputText("##Search", m_search, sizeof(m_search)))
+    {
+      m_dirty = true;
+    }
 
-  ImGui::InputText("Search", m_search, sizeof(m_search));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(kColorSubtle, "Sort:");
+    ImGui::SameLine();
+    const char* sortLabel = m_sortType == SortType::NameAscending ? "Name (A-Z)" : "Name (Z-A)";
+    if (ImGui::BeginCombo("##Sort", sortLabel))
+    {
+      if (ImGui::Selectable("Name (A-Z)", m_sortType == SortType::NameAscending))
+      {
+        m_sortType = SortType::NameAscending;
+        m_dirty = true;
+      }
+      if (ImGui::Selectable("Name (Z-A)", m_sortType == SortType::NameDescending))
+      {
+        m_sortType = SortType::NameDescending;
+        m_dirty = true;
+      }
+      ImGui::EndCombo();
+    }
+  }
 
   ImGui::Separator();
 
-  std::string query = m_search;
-  std::ranges::transform(query, query.begin(), [](const unsigned char c) { return std::tolower(c); });
+  // Dirty from registry changes or filter/sort/search changes.
+  if (m_assetRegistry->getVersion() != m_lastRegistryVersion)
+  {
+    m_dirty = true;
+  }
+
+  if (m_dirty)
+  {
+    recomputeCache();
+  }
 
   // Grid: size the tiles by the window content scale and pack as many columns as fit.
   const float contentScale = m_assetCache->getRenderer()->getWindow()->getContentScale();
@@ -134,29 +223,11 @@ void AssetBrowserPanel::displayGui()
 
   ImGui::Columns(columns, nullptr, false);
 
-  for (const auto& [uuid, record] : m_assetRegistry->getAssets())
+  for (const auto& [uuid, record] : m_cachedAssets)
   {
-    if (m_filter != AssetType::Unknown && record.type != m_filter)
-    {
-      continue;
-    }
-
-    const std::string name = displayName(record);
-
-    if (!query.empty())
-    {
-      std::string lowered = name;
-      std::ranges::transform(lowered, lowered.begin(), [](const unsigned char c) { return std::tolower(c); });
-
-      if (lowered.find(query) == std::string::npos)
-      {
-        continue;
-      }
-    }
-
     ImGui::PushID(uuids::to_string(uuid).c_str());
 
-    displayAsset(uuid, record, cellSize, name);
+    displayAsset(uuid, record, cellSize, displayName(record));
 
     ImGui::PopID();
 

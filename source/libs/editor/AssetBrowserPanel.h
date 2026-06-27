@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 #include <uuid.h>
 
 class AssetRegistry;
@@ -57,8 +58,18 @@ private:
   bool m_openCreatePopup = false;
   std::string m_createError;
 
+  enum class SortType { NameAscending, NameDescending };
+  SortType m_sortType = SortType::NameAscending;
+
+  // Cached sorted+filtered view of the registry. Rebuilt only when m_dirty is true.
+  std::vector<std::pair<uuids::uuid, AssetRecord>> m_cachedAssets;
+  size_t m_lastRegistryVersion = SIZE_MAX; // force rebuild on first frame
+  bool m_dirty = true;
+
   // False when the connected server is read-only (not in edit mode); gates create + scene switching.
   bool m_editable = true;
+
+  void recomputeCache();
 
   [[nodiscard]] static const char* assetTypeLabel(AssetType type);
 
