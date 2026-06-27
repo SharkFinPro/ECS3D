@@ -227,6 +227,20 @@ void ServerApp::handleClientMessage(const net::Message& message)
         {
           replication::applyComponentEdit(*scene->getObjectManager(), json);
 
+          // If the edit targets a Script, push the new field values into the live C# instance so the
+          // running behaviour reflects the change immediately (applyComponentEdit only updates the data
+          // layer; the C# instance is owned by ScriptSystem and needs an explicit write).
+          if (json.value("type", "") == "Script")
+          {
+            if (const auto parsed = uuids::uuid::from_string(std::string(json.at("object"))))
+            {
+              m_scriptSystem->applyScriptFieldEdit(
+                parsed.value(),
+                json.value("className", ""),
+                json.at("data").value("fields", nlohmann::json::array()));
+            }
+          }
+
           m_netServer->broadcast(message);
         }
       }

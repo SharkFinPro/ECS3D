@@ -209,6 +209,18 @@ void ScriptSystem::syncFieldsToData(const ObjectManager& objectManager) const
   }
 }
 
+void ScriptSystem::applyScriptFieldEdit(const uuids::uuid& objectUUID,
+                                        const std::string& className,
+                                        const nlohmann::json& fields) const
+{
+  if (!m_engine || !isAttached(objectUUID, className))
+  {
+    return;
+  }
+
+  writeFieldsToInstance(objectUUID, className, fields);
+}
+
 void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, const float dt)
 {
   constexpr float minimumSnapshotInterval = 1.0f / 2.0f; // 2 checks every second

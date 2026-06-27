@@ -47,6 +47,12 @@ public:
   // current values. Call this before building a Snapshot.
   void syncFieldsToData(const ObjectManager& objectManager) const;
 
+  // Push an updated field blob from the editor into the live C# instance immediately. Call this after
+  // applyComponentEdit so the running script sees the new values without waiting for a restart.
+  void applyScriptFieldEdit(const uuids::uuid& objectUUID,
+                            const std::string& className,
+                            const nlohmann::json& fields) const;
+
 private:
   std::shared_ptr<ManagedHost> m_host;
   std::unique_ptr<ScriptEngine> m_engine;
