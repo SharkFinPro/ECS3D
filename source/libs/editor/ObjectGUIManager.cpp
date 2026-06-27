@@ -260,9 +260,10 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
       ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted("Name");
       ImGui::SameLine();
-      ImGui::InputText(std::string("##objectName" + to_string(object->getUUID())).c_str(), m_nameEditBuffer.data(), m_nameEditBuffer.size());
-      if (ImGui::IsItemDeactivatedAfterEdit() && m_sceneEditCallback)
+      if (ImGui::InputText(std::string("##objectName" + to_string(object->getUUID())).c_str(), m_nameEditBuffer.data(), m_nameEditBuffer.size()) &&
+          m_sceneEditCallback)
       {
+        // Immediately process the edit on key press so that when selecting another object, the name change is not lost.
         m_sceneEditCallback(replication::buildRenameObject(object->getUUID(), m_nameEditBuffer.data()));
       }
       ImGui::EndDisabled();
