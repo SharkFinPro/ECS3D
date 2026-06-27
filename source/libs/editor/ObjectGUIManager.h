@@ -74,6 +74,8 @@ private:
   // rebuilds the object), so we don't re-send the same removeComponent every frame.
   std::unordered_set<const Component*> m_pendingRemovals;
 
+  bool m_showComponentSelector = false;
+
   void displayObjectTree(const std::shared_ptr<Object>& object);
 
   void displaySelectedObject(const ObjectManager* objectManager);
@@ -82,9 +84,9 @@ private:
   // a removeObject scene edit; cancelling (No / Escape), or the object vanishing, clears the prompt.
   void displayDeleteConfirmationModal(const ObjectManager* objectManager);
 
-  void displayAddComponent(const std::shared_ptr<Object>& object) const;
+  void displayAddComponent(const std::shared_ptr<Object>& object);
 
-  void displayScriptDragDropArea(float dropZoneStartY, const std::shared_ptr<Object>& object);
+  void displayScriptDragDropArea(float dropZoneStartY, const std::shared_ptr<Object>& object) const;
 
   void displayComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component);
 };

@@ -43,6 +43,7 @@ void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
 void ObjectGUIManager::setSelectedObject(const std::optional<uuids::uuid>& objectUUID)
 {
   m_selectedObject = objectUUID;
+  m_showComponentSelector = false;
 }
 
 void ObjectGUIManager::setEditable(const bool editable)
@@ -144,7 +145,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
   {
-    m_selectedObject = object->getUUID();
+    setSelectedObject(object->getUUID());
   }
 
   // Drag this node onto another to reparent it (drop on empty space in the window reparents to root).
@@ -355,14 +356,14 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
   }
 }
 
-void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object) const
+void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object)
 {
-  if (ImGui::Button("+ Add Component"))
+  if (!m_showComponentSelector && ImGui::Button("+ Add Component"))
   {
-    ImGui::OpenPopup("AddComponentPopup");
+    m_showComponentSelector = true;
   }
 
-  if (ImGui::BeginPopup("AddComponentPopup"))
+  if (m_showComponentSelector && ImGui::BeginCombo("##combo", "Select Component"))
   {
     for (const auto& [label, key, checkType] : addableComponents)
     {
@@ -374,15 +375,17 @@ void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object
       if (ImGui::Selectable(label) && m_sceneEditCallback)
       {
         m_sceneEditCallback(replication::buildAddComponent(object->getUUID(), key));
+
+        m_showComponentSelector = false;
       }
     }
 
-    ImGui::EndPopup();
+    ImGui::EndCombo();
   }
 }
 
 void ObjectGUIManager::displayScriptDragDropArea(const float dropZoneStartY,
-                                                  const std::shared_ptr<Object>& object)
+                                                  const std::shared_ptr<Object>& object) const
 {
   if (ImGui::GetDragDropPayload() == nullptr)
   {
