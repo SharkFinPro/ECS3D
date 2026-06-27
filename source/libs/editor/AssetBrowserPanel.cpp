@@ -217,9 +217,9 @@ void AssetBrowserPanel::displayGui()
 
   // Grid: size the tiles by the window content scale and pack as many columns as fit.
   const float contentScale = m_assetCache->getRenderer()->getWindow()->getContentScale();
-  const float cellSize = 72.0f * contentScale;
+  const float cellSize = 150.0f * contentScale;
   const float available = ImGui::GetContentRegionAvail().x;
-  const int columns = std::max(1, static_cast<int>(available / (cellSize + 16.0f)));
+  const int columns = std::max(1, static_cast<int>(available / cellSize));
 
   ImGui::Columns(columns, nullptr, false);
 
@@ -227,7 +227,7 @@ void AssetBrowserPanel::displayGui()
   {
     ImGui::PushID(uuids::to_string(uuid).c_str());
 
-    displayAsset(uuid, record, cellSize, displayName(record));
+    displayAsset(uuid, record, cellSize * 0.75f, displayName(record));
 
     ImGui::PopID();
 
