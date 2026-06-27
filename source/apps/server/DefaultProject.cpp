@@ -318,14 +318,18 @@ json buildDefaultProject()
       { "models", json::array({
         { { "filePath", "assets/models/cube_1x1x1.glb" }, { "name", "assets/models/cube_1x1x1.glb" }, { "uuid", cubeModel } },
         { { "filePath", "assets/models/sphere.glb" }, { "name", "assets/models/sphere.glb" }, { "uuid", playerModel } },
-        { { "filePath", "assets/models/sphere_3.glb" }, { "name", "assets/models/sphere_3.glb" }, { "uuid", sphereModel } }
+        { { "filePath", "assets/models/sphere_2.glb" }, { "name", "assets/models/sphere_2.glb" }, { "uuid", newUUID() } },
+        { { "filePath", "assets/models/sphere_3.glb" }, { "name", "assets/models/sphere_3.glb" }, { "uuid", sphereModel } },
+        { { "filePath", "assets/models/square.glb" }, { "name", "assets/models/square.glb" }, { "uuid", newUUID() } }
       })},
       { "textures", json::array({
+        { { "filePath", "assets/textures/black.png" }, { "name", "assets/textures/black.png" }, { "uuid", newUUID() } },
         { { "filePath", "assets/textures/white.png" }, { "name", "assets/textures/white.png" }, { "uuid", whiteTexture } },
         { { "filePath", "assets/textures/earth.png" }, { "name", "assets/textures/earth.png" }, { "uuid", earthTexture } },
         { { "filePath", "assets/textures/earth_specular.png" }, { "name", "assets/textures/earth_specular.png" }, { "uuid", earthSpecularTexture } }
       })},
       { "scripts", json::array({
+        { { "className", "BlockScript" }, { "filePath", "scripts/UserScripts/BlockScript.cs" }, { "uuid", newUUID() } },
         { { "className", "PlayerScript" }, { "filePath", "scripts/UserScripts/PlayerScript.cs" }, { "uuid", playerScript } }
       })},
       { "scenes", json::array({
