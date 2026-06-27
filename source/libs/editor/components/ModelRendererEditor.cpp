@@ -11,9 +11,14 @@ namespace {
   // payload type was dropped onto it this frame.
   bool assetDropTarget(const char* label, const uuids::uuid& current, const char* payloadId, uuids::uuid& outUUID)
   {
-    ImGui::Button(current.is_nil() ? "<none>" : uuids::to_string(current).c_str());
-
     bool dropped = false;
+
+    constexpr int widgetHeight = 50;
+
+    ImGui::BeginChild(label, {ImGui::GetContentRegionAvail().x, widgetHeight});
+    ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, {0.0, 0.5});
+    ImGui::Button(label, {ImGui::GetContentRegionAvail().x, widgetHeight});
+    ImGui::PopStyleVar();
 
     if (ImGui::BeginDragDropTarget())
     {
@@ -30,8 +35,7 @@ namespace {
       ImGui::EndDragDropTarget();
     }
 
-    ImGui::SameLine();
-    ImGui::TextUnformatted(label);
+    ImGui::EndChild();
 
     return dropped;
   }
@@ -68,19 +72,19 @@ void registerModelRendererEditor(ComponentEditor& componentEditor)
       // Drag an asset out of the AssetBrowserPanel onto these slots to assign it.
       uuids::uuid dropped;
 
-      if (assetDropTarget("Model", modelRenderer->getModelUUID(), assetDragDrop::model, dropped))
+      if (assetDropTarget(std::string("Model: " + to_string(modelRenderer->getModelUUID())).c_str(), modelRenderer->getModelUUID(), assetDragDrop::model, dropped))
       {
         modelRenderer->setModelUUID(dropped);
         edited = true;
       }
 
-      if (assetDropTarget("Texture", modelRenderer->getTextureUUID(), assetDragDrop::texture, dropped))
+      if (assetDropTarget(std::string("Texture: " + to_string(modelRenderer->getTextureUUID())).c_str(), modelRenderer->getTextureUUID(), assetDragDrop::texture, dropped))
       {
         modelRenderer->setTextureUUID(dropped);
         edited = true;
       }
 
-      if (assetDropTarget("Specular", modelRenderer->getSpecularMapUUID(), assetDragDrop::texture, dropped))
+      if (assetDropTarget(std::string("Specular Map: " + to_string(modelRenderer->getSpecularMapUUID())).c_str(), modelRenderer->getSpecularMapUUID(), assetDragDrop::texture, dropped))
       {
         modelRenderer->setSpecularMapUUID(dropped);
         edited = true;
