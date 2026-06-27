@@ -260,7 +260,7 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
       ImGui::AlignTextToFramePadding();
       ImGui::TextUnformatted("Name");
       ImGui::SameLine();
-      ImGui::InputText("##objectName", m_nameEditBuffer.data(), m_nameEditBuffer.size());
+      ImGui::InputText(std::string("##objectName" + to_string(object->getUUID())).c_str(), m_nameEditBuffer.data(), m_nameEditBuffer.size());
       if (ImGui::IsItemDeactivatedAfterEdit() && m_sceneEditCallback)
       {
         m_sceneEditCallback(replication::buildRenameObject(object->getUUID(), m_nameEditBuffer.data()));
