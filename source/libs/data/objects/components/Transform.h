@@ -1,0 +1,45 @@
+#ifndef TRANSFORM_H
+#define TRANSFORM_H
+
+#include "Component.h"
+#include <glm/vec3.hpp>
+
+class Transform final : public Component {
+public:
+  Transform();
+  explicit Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation);
+  ~Transform() override = default;
+
+  [[nodiscard]] uint8_t getUpdateID() const;
+
+  [[nodiscard]] glm::vec3 getPosition() const;
+  [[nodiscard]] glm::vec3 getScale() const;
+  [[nodiscard]] glm::vec3 getRotation() const;
+
+  // Parent-combined getPosition/Scale/Rotation are for the systems (world transforms); the editor
+  // edits this object's OWN local values, so it reads/writes them through these.
+  [[nodiscard]] glm::vec3 getLocalPosition() const;
+  [[nodiscard]] glm::vec3 getLocalScale() const;
+  [[nodiscard]] glm::vec3 getLocalRotation() const;
+
+  void setPosition(glm::vec3 position);
+  void setScale(glm::vec3 scale);
+  void setRotation(glm::vec3 rotation);
+
+  void move(const glm::vec3& direction);
+
+  [[nodiscard]] nlohmann::json serialize() override;
+
+  void loadFromJSON(const nlohmann::json& componentData) override;
+
+private:
+  uint8_t m_updateID = 1;
+
+  ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
+  ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(0));
+  ComponentVariable<glm::vec3> m_rotation = ComponentVariable(glm::vec3(0));
+};
+
+
+
+#endif //TRANSFORM_H

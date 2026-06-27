@@ -50,9 +50,9 @@ cmake --build .
 
 5. Run the Executable
 
-After building, all files will have been written to the `bin` directory. You can run the cube example with:
+After building, all files will have been written to the `bin` directory. You can run the editor with:
 
 ```bash
 cd bin
-./setupTest
+./ECS3DEditor
 ```

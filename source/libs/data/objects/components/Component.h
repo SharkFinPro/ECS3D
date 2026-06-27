@@ -1,0 +1,142 @@
+#ifndef COMPONENT_H
+#define COMPONENT_H
+
+#include <nlohmann/json_fwd.hpp>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+class Object;
+
+enum class ComponentType {
+  transform,
+  modelRenderer,
+  rigidBody,
+  collider,
+  lightRenderer,
+  SubComponentType_none,
+  SubComponentType_boxCollider,
+  SubComponentType_sphereCollider,
+  script
+};
+
+const std::unordered_map<ComponentType, std::string> componentTypeToString {
+  {ComponentType::transform, "Transform"},
+  {ComponentType::modelRenderer, "Model Renderer"},
+  {ComponentType::rigidBody, "Rigid Body"},
+  {ComponentType::SubComponentType_boxCollider, "Box Collider"},
+  {ComponentType::SubComponentType_sphereCollider, "Sphere Collider"},
+  {ComponentType::lightRenderer, "Light Renderer"},
+  {ComponentType::script, "Script"}
+};
+
+const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent {
+  {ComponentType::SubComponentType_boxCollider, ComponentType::collider},
+  {ComponentType::SubComponentType_sphereCollider, ComponentType::collider}
+};
+
+class ComponentVariableBase {
+public:
+  virtual ~ComponentVariableBase() = default;
+
+  virtual void start()
+  {
+    m_live = true;
+  }
+
+  void stop()
+  {
+    m_live = false;
+  }
+
+protected:
+  bool m_live = false;
+};
+
+template <typename T>
+class ComponentVariable final : public ComponentVariableBase {
+public:
+  explicit ComponentVariable(const T& initialValue)
+    : m_initialValue(initialValue), m_liveValue(initialValue)
+  {}
+
+  void start() override
+  {
+    ComponentVariableBase::start();
+
+    m_liveValue = m_initialValue;
+  }
+
+  [[nodiscard]] T& value()
+  {
+    return m_live ? m_liveValue : m_initialValue;
+  }
+
+  [[nodiscard]] T get() const
+  {
+    return m_live ? m_liveValue : m_initialValue;
+  }
+
+  [[nodiscard]] T getInitialValue() const
+  {
+    return m_initialValue;
+  }
+
+  void set(const T& newValue)
+  {
+    if (m_live)
+    {
+      m_liveValue = newValue;
+    }
+    else
+    {
+      m_initialValue = newValue;
+    }
+  }
+
+private:
+  T m_initialValue;
+  T m_liveValue;
+};
+
+// Data-only base. start()/stop() manage the play-vs-stopped ComponentVariable state the server needs.
+class Component {
+public:
+  explicit Component(ComponentType type, ComponentType subType = ComponentType::SubComponentType_none);
+  virtual ~Component() = default;
+
+  [[nodiscard]] ComponentType getType() const;
+
+  [[nodiscard]] ComponentType getSubType() const;
+
+  void setOwner(Object* owner);
+  [[nodiscard]] Object* getOwner() const;
+
+  [[nodiscard]] bool markedAsDeleted() const;
+
+  void markAsDeleted();
+
+  virtual void start();
+
+  virtual void stop();
+
+  [[nodiscard]] virtual nlohmann::json serialize() = 0;
+
+  virtual void loadFromJSON(const nlohmann::json& componentData) = 0;
+
+protected:
+  ComponentType m_type;
+  ComponentType m_subType;
+
+  Object* m_owner = nullptr;
+
+  bool m_shouldDelete = false;
+
+  std::vector<ComponentVariableBase*> m_variables;
+
+  void loadVariable(ComponentVariableBase& variable);
+};
+
+
+
+#endif //COMPONENT_H

@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
 
-option(ECS3D_BUILD_TESTS "Enable building tests for ECS3D" OFF)
-
 project(ECS3D)
 
 # Enable Objective-C support on macOS
@@ -12,8 +10,6 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 
 if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-  set(ECS3D_BUILD_TESTS ON)
-
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
@@ -28,11 +24,3 @@ if (MSVC)
 endif()
 
 add_subdirectory(source)
-
-if (ECS3D_BUILD_TESTS)
-  include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
-
-  file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/tests/assets/" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/assets/")
-
-  add_subdirectory(tests)
-endif()

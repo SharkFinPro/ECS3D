@@ -1,0 +1,94 @@
+#ifndef SERVERAPP_H
+#define SERVERAPP_H
+
+#include <Protocol.h>
+#include <nlohmann/json_fwd.hpp>
+#include <chrono>
+#include <memory>
+#include <string>
+
+class ManagedHost;
+class ComponentRegistry;
+class AssetRegistry;
+class SceneManager;
+class ProjectSerializer;
+class CollisionSystem;
+class ScriptSystem;
+
+namespace net {
+  class NetServer;
+  struct Message;
+}
+
+// The authoritative server. It owns the simulation and is the only thing that links ECS3DSim + ECS3DScripting.
+class ServerApp final {
+public:
+  struct LaunchOptions {
+    std::string project;
+    int port = net::defaultPort;
+    bool editMode = false;
+    // When set (an editor/client-spawned local server), the server exits once its last connection drops
+    // instead of running until killed like a dedicated server.
+    bool exitWhenEmpty = false;
+    std::string authToken;
+  };
+
+  explicit ServerApp(LaunchOptions options);
+
+  ~ServerApp();
+
+  [[nodiscard]] bool isActive() const;
+
+  void run();
+
+  static void logMessage(const std::string& level, const std::string& message);
+
+private:
+  LaunchOptions m_options;
+
+  std::shared_ptr<ManagedHost> m_host;
+  std::shared_ptr<net::NetServer> m_netServer;
+
+  std::shared_ptr<ComponentRegistry> m_componentRegistry;
+  std::shared_ptr<AssetRegistry> m_assetRegistry;
+  std::shared_ptr<SceneManager> m_sceneManager;
+  std::shared_ptr<ProjectSerializer> m_projectSerializer;
+
+  std::shared_ptr<CollisionSystem> m_collisionSystem;
+  std::shared_ptr<ScriptSystem> m_scriptSystem;
+
+  std::chrono::steady_clock::time_point m_previousTime;
+  const float m_fixedUpdateDt = 1.0f / 50.0f;
+  float m_timeAccumulator = 0.0f;
+
+  // For an exitWhenEmpty server: set once the first client has connected, so isActive() only starts
+  // applying the "no connections left" exit check after the spawning app has actually connected (and
+  // doesn't exit during the launch -> connect window when the count is still 0).
+  bool m_hasConnected = false;
+
+  void fixedUpdate(float dt);
+
+  void handleClientMessage(const net::Message& message);
+
+  void applySceneControl(const nlohmann::json& control);
+
+  void loadScene(const std::string& sceneUUID);
+
+  void addAsset(const nlohmann::json& asset);
+
+  void loadProject(const nlohmann::json& project);
+
+  void broadcastSnapshot();
+
+  // Tells clients whether this server accepts edits (true only for an edit-mode server), so an editor
+  // can show a read-only cue and disable its editing UI instead of looking broken/blank.
+  void broadcastEditStatus();
+
+  void broadcastSceneStatus() const;
+
+  void broadcastStateDelta() const;
+};
+
+
+
+#endif //SERVERAPP_H

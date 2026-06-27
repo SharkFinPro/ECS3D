@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <AssemblyName>ECS3DNetTransport</AssemblyName>
+        <RootNamespace>ECS3DNetTransport</RootNamespace>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <BaseOutputPath>$(BuildRoot)bin/</BaseOutputPath>
+        <BaseIntermediateOutputPath Condition="'$(DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH)' != ''">$(DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH)</BaseIntermediateOutputPath>
+    </PropertyGroup>
+</Project>

@@ -1,0 +1,24 @@
+project("ECS3DEditor")
+
+add_executable(${PROJECT_NAME}
+  main.cpp
+  EditorApp.cpp
+  EditorApp.h
+)
+
+# The editor is a client + tooling. Like the client it renders and connects over the network; it
+# adds ECS3DEditorLib. It does NOT link ECS3DSim or ECS3DScripting (the spawned --edit server does).
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  ECS3DData
+  ECS3DRender
+  ECS3DEditorLib
+  ECS3DNet
+  ECS3DClrHost
+)
+
+# Copy nethost.dll next to the executable so it can boot the CLR (the C# transport).
+ecs3d_deploy_clr_runtime(${PROJECT_NAME})
+
+# The editor spawns ECS3DServer as a separate process at runtime, so force it to be built whenever
+# the editor is built. (Requires server to be added before this dir; see ../CMakeLists.txt.)
+add_dependencies(${PROJECT_NAME} ECS3DServer)
