@@ -595,7 +595,7 @@ void EditorApp::setupImGuiStyle()
 {
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 
-  // Future Dark style reworked from ImThemes (ported from ECS3D::setupImGuiStyle).
+  // Future Dark style by rewrking from ImThemes
   ImGuiStyle& style = ImGui::GetStyle();
 
   style.Alpha = 1.0f;
