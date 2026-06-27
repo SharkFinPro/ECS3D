@@ -233,7 +233,9 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
       }
 
       ImGui::BeginDisabled(!m_editable);
-      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Name");
+      ImGui::SameLine();
       ImGui::InputText("##objectName", m_nameEditBuffer.data(), m_nameEditBuffer.size());
       if (ImGui::IsItemDeactivatedAfterEdit() && m_sceneEditCallback)
       {
