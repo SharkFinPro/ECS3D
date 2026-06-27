@@ -14,8 +14,8 @@ public static unsafe class Transport
 {
   // Hardcoded transport selection. Flip this to switch the wire protocol for the whole process.
   // UDP will be added later (see TransportProtocol).
-  private static readonly TransportProtocol Protocol = TransportProtocol.WebSocket;
-//   private static readonly TransportProtocol Protocol = TransportProtocol.Tcp;
+//   private static readonly TransportProtocol Protocol = TransportProtocol.WebSocket;
+  private static readonly TransportProtocol Protocol = TransportProtocol.Tcp;
 
   private static delegate* unmanaged<byte, byte*, int, void> _serverReceive;
   private static delegate* unmanaged<byte, byte*, int, void> _clientReceive;
