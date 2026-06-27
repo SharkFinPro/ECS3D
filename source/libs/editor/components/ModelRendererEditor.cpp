@@ -9,7 +9,7 @@
 namespace {
   // A labeled drop target for an asset uuid. Returns true (and fills outUUID) if an asset of the given
   // payload type was dropped onto it this frame.
-  bool assetDropTarget(const char* label, const uuids::uuid& current, const char* payloadId, uuids::uuid& outUUID)
+  bool assetDropTarget(const char* label, const char* payloadId, uuids::uuid& outUUID)
   {
     bool dropped = false;
 
@@ -72,19 +72,19 @@ void registerModelRendererEditor(ComponentEditor& componentEditor)
       // Drag an asset out of the AssetBrowserPanel onto these slots to assign it.
       uuids::uuid dropped;
 
-      if (assetDropTarget(std::string("Model: " + to_string(modelRenderer->getModelUUID())).c_str(), modelRenderer->getModelUUID(), assetDragDrop::model, dropped))
+      if (assetDropTarget(std::string("Model: " + to_string(modelRenderer->getModelUUID())).c_str(), assetDragDrop::model, dropped))
       {
         modelRenderer->setModelUUID(dropped);
         edited = true;
       }
 
-      if (assetDropTarget(std::string("Texture: " + to_string(modelRenderer->getTextureUUID())).c_str(), modelRenderer->getTextureUUID(), assetDragDrop::texture, dropped))
+      if (assetDropTarget(std::string("Texture: " + to_string(modelRenderer->getTextureUUID())).c_str(), assetDragDrop::texture, dropped))
       {
         modelRenderer->setTextureUUID(dropped);
         edited = true;
       }
 
-      if (assetDropTarget(std::string("Specular Map: " + to_string(modelRenderer->getSpecularMapUUID())).c_str(), modelRenderer->getSpecularMapUUID(), assetDragDrop::texture, dropped))
+      if (assetDropTarget(std::string("Specular Map: " + to_string(modelRenderer->getSpecularMapUUID())).c_str(), assetDragDrop::texture, dropped))
       {
         modelRenderer->setSpecularMapUUID(dropped);
         edited = true;
