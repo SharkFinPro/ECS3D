@@ -447,4 +447,31 @@ void applyAddAsset(AssetRegistry& assetRegistry,
   }
 }
 
+net::Message packAddAsset(const nlohmann::json& asset)
+{
+  net::Message message(net::MessageType::addAsset);
+
+  message.writeString(asset.value("assetType", std::string{}));
+  message.writeString(asset.value("uuid", std::string{}));
+  message.writeString(asset.value("path", std::string{}));
+  message.writeString(asset.value("name", std::string{}));
+  message.writeString(asset.value("className", std::string{}));
+
+  return message;
+}
+
+nlohmann::json unpackAddAsset(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  nlohmann::json asset;
+  asset["assetType"] = reader.readString();
+  asset["uuid"] = reader.readString();
+  asset["path"] = reader.readString();
+  asset["name"] = reader.readString();
+  asset["className"] = reader.readString();
+
+  return asset;
+}
+
 }

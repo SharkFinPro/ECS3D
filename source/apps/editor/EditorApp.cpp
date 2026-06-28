@@ -91,14 +91,9 @@ EditorApp::EditorApp(LaunchOptions options)
       m_sceneManager->loadScene(scene);
     }
 
-    const nlohmann::json control = { { "op", "loadScene" }, { "scene", uuids::to_string(sceneUUID) } };
-    const auto payload = control.dump();
-
     net::Message message(net::MessageType::sceneControl);
-    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
+    message.write(net::SceneControlOp::loadScene);
+    message.writeString(uuids::to_string(sceneUUID));
     m_netClient->send(message);
   });
   m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& addAsset) {
@@ -106,26 +101,19 @@ EditorApp::EditorApp(LaunchOptions options)
     // re-snapshots to keep everyone in sync).
     replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, addAsset);
 
-    const auto payload = addAsset.dump();
-
-    net::Message message(net::MessageType::addAsset);
-    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
-    m_netClient->send(message);
+    m_netClient->send(replication::packAddAsset(addAsset));
   });
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
-  m_saveUI->setLoadProjectCallback([this](const std::string& projectJson) {
-    // Open/New: the server owns the running sim, so send it the project blob; it reloads and re-snapshots.
-    std::cerr << "[Editor] Sending loadProject (" << projectJson.size() << " bytes) to server." << std::endl;
-
+  m_saveUI->setLoadProjectCallback([this] {
+    // Open/New: the server owns the running sim, so send it the project; it reloads and re-snapshots.
+    // SaveUI has already applied the project to our managers, so pack their current state — the same
+    // packed shape as a snapshot, which the server unpacks with the same ProjectPacker.
     net::Message message(net::MessageType::loadProject);
-    for (const std::vector<uint8_t> chunks(projectJson.begin(), projectJson.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
+    m_projectPacker->pack(message);
+
+    std::cerr << "[Editor] Sending loadProject (" << message.size() << " bytes) to server." << std::endl;
+
     m_netClient->send(message);
   });
 
@@ -288,17 +276,10 @@ void EditorApp::sendInput()
   m_netClient->send(message);
 }
 
-void EditorApp::sendSceneControl(const std::string& op) const
+void EditorApp::sendSceneControl(const net::SceneControlOp op) const
 {
-  const nlohmann::json payload = { { "op", op } };
-
-  const auto dumped = payload.dump();
-
   net::Message message(net::MessageType::sceneControl);
-  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  message.write(op);
   m_netClient->send(message);
 }
 
@@ -575,7 +556,7 @@ void EditorApp::displaySceneStatus() const
     ImGui::BeginDisabled(!m_serverEditable);
     if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
     {
-      sendSceneControl("start");
+      sendSceneControl(net::SceneControlOp::start);
     }
     ImGui::EndDisabled();
   }
@@ -584,7 +565,7 @@ void EditorApp::displaySceneStatus() const
     ImGui::BeginDisabled(!m_serverEditable);
     if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
     {
-      sendSceneControl("pause");
+      sendSceneControl(net::SceneControlOp::pause);
     }
     ImGui::EndDisabled();
   }
@@ -595,7 +576,7 @@ void EditorApp::displaySceneStatus() const
     ImGui::BeginDisabled(!m_serverEditable);
     if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
     {
-      sendSceneControl("stop");
+      sendSceneControl(net::SceneControlOp::stop);
     }
     ImGui::EndDisabled();
   }
