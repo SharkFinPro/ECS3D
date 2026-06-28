@@ -6,6 +6,11 @@
 #include <string>
 #include <uuid.h>
 
+namespace net {
+  class Message;
+  class MessageReader;
+}
+
 class ObjectManager;
 class ComponentRegistry;
 
@@ -25,6 +30,13 @@ public:
   void stop() const;
 
   [[nodiscard]] nlohmann::json serialize() const;
+
+  void pack(net::Message& message) const;
+
+  // Reconstructs a scene (uuid + name + object tree) from a packed snapshot. A static factory because
+  // the uuid/name lead the packed data and are needed to construct the SceneAsset itself.
+  [[nodiscard]] static std::shared_ptr<SceneAsset> unpack(net::MessageReader& messageReader,
+                                                          const std::shared_ptr<ComponentRegistry>& componentRegistry);
 
   [[nodiscard]] std::shared_ptr<ObjectManager> getObjectManager() const;
 

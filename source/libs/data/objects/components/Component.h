@@ -40,6 +40,19 @@ const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent 
   {ComponentType::SubComponentType_sphereCollider, ComponentType::collider}
 };
 
+// Maps a packed ComponentType (the discriminator each component writes first in pack()) back to its
+// ComponentRegistry factory key, so unpack() can reconstruct components from scratch. Colliders pack
+// their subtype, which is keyed by "Box"/"Sphere" (matching Object::loadFromJSON's registry lookup).
+const std::unordered_map<ComponentType, std::string> componentTypeToRegistryKey {
+  {ComponentType::transform, "Transform"},
+  {ComponentType::modelRenderer, "ModelRenderer"},
+  {ComponentType::rigidBody, "RigidBody"},
+  {ComponentType::lightRenderer, "LightRenderer"},
+  {ComponentType::SubComponentType_boxCollider, "Box"},
+  {ComponentType::SubComponentType_sphereCollider, "Sphere"},
+  {ComponentType::script, "Script"}
+};
+
 class ComponentVariableBase {
 public:
   virtual ~ComponentVariableBase() = default;

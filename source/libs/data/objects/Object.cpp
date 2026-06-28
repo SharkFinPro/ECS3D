@@ -229,32 +229,29 @@ const std::vector<std::shared_ptr<Component>>& Object::getScripts() const
 void Object::pack(net::Message& message) const
 {
   // UUID
-  const std::string uuidStr = uuids::to_string(m_uuid);
-  message.write(static_cast<uint32_t>(uuidStr.size()));
-  for (char c : uuidStr) message.write(c);
+  message.writeString(uuids::to_string(m_uuid));
 
   // Name
   std::string cleanName = m_name;
   cleanName.erase(std::ranges::find(cleanName, '\0'), cleanName.end());
-  message.write(static_cast<uint32_t>(cleanName.size()));
-  for (char c : cleanName) message.write(c);
+  message.writeString(cleanName);
 
   // Components
-  message.write(m_components.size());
+  message.write(static_cast<uint32_t>(m_components.size()));
   for (const auto& [_, component] : m_components)
   {
     component->pack(message);
   }
 
   // Scripts
-  message.write(m_scripts.size());
+  message.write(static_cast<uint32_t>(m_scripts.size()));
   for (const auto& script : m_scripts)
   {
     script->pack(message);
   }
 
   // Children
-  message.write(m_children.size());
+  message.write(static_cast<uint32_t>(m_children.size()));
   for (const auto& child : m_children)
   {
     child->pack(message);
@@ -263,63 +260,80 @@ void Object::pack(net::Message& message) const
 
 void Object::unpack(net::MessageReader& messageReader)
 {
-  // Name
-  const uint32_t nameSize = messageReader.read<uint32_t>();
-  m_name.resize(nameSize);
-  for (char& c : m_name) c = messageReader.read<char>();
+  // Symmetric with pack(): reconstructs this object from scratch, creating any missing components,
+  // scripts, and child objects (so it works on a fresh, empty Object as well as an existing one).
+  m_uuid = uuids::uuid::from_string(messageReader.readString()).value();
+  m_name = messageReader.readString();
+
+  const auto& registry = m_manager->getComponentRegistry();
 
   // Components
   const uint32_t componentCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < componentCount; ++i)
   {
-    auto componentType = messageReader.read<ComponentType>();
+    const auto packedType = messageReader.read<ComponentType>();
 
-    if (const auto parentIt = subComponentTypeToParent.find(componentType);
+    // Colliders pack their subtype, but live under the parent "collider" key in m_components.
+    auto lookupType = packedType;
+    if (const auto parentIt = subComponentTypeToParent.find(packedType);
         parentIt != subComponentTypeToParent.end())
     {
-      componentType = parentIt->second;
+      lookupType = parentIt->second;
     }
 
-    if (const auto component = getComponent(componentType))
+    // Look up directly (not via getComponent, which falls back to the parent's rigidBody) so a fresh
+    // object reconstructs its own components instead of unpacking into an inherited one.
+    auto componentIt = m_components.find(lookupType);
+    auto component = componentIt != m_components.end() ? componentIt->second : nullptr;
+
+    if (!component)
     {
-      component->unpack(messageReader);
+      component = registry->create(componentTypeToRegistryKey.at(packedType));
+      addComponent(component);
     }
+
+    component->unpack(messageReader);
   }
 
   // Scripts
   const uint32_t scriptCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < scriptCount; ++i)
   {
-    messageReader.read<ComponentType>();
+    static_cast<void>(messageReader.read<ComponentType>()); // script type tag, not needed for lookup
 
-    const uint32_t classNameSize = messageReader.read<uint32_t>();
-    std::string className(classNameSize, '\0');
-    for (char& c : className) c = messageReader.read<char>();
+    const std::string className = messageReader.readString();
 
+    std::shared_ptr<Script> script;
     for (const auto& scriptComp : m_scripts)
     {
-      if (const auto script = std::dynamic_pointer_cast<Script>(scriptComp);
-          script && script->getClassName() == className)
+      if (const auto existing = std::dynamic_pointer_cast<Script>(scriptComp);
+          existing && existing->getClassName() == className)
       {
-        script->unpack(messageReader);
+        script = existing;
         break;
       }
     }
+
+    if (!script)
+    {
+      script = std::dynamic_pointer_cast<Script>(registry->create("Script"));
+      script->setClassName(className);
+      addComponent(script);
+    }
+
+    script->unpack(messageReader);
   }
 
-  // Children
+  // Children. Each is packed as a full object (its uuid leads, read by the recursive unpack below);
+  // reconstructed fresh and wired to this parent + the manager before unpacking its own subtree.
   const uint32_t childCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < childCount; ++i)
   {
-    const uint32_t uuidSize = messageReader.read<uint32_t>();
-    std::string uuidStr(uuidSize, '\0');
-    for (char& c : uuidStr) c = messageReader.read<char>();
-    const auto childUUID = uuids::uuid::from_string(uuidStr).value();
+    auto child = std::make_shared<Object>();
+    child->setParent(shared_from_this());
+    m_manager->addObject(child);
 
-    if (const auto child = m_manager->getObjectByUUID(childUUID))
-    {
-      child->unpack(messageReader);
-    }
+    child->unpack(messageReader);
   }
 }
 

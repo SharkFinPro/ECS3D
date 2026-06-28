@@ -2,6 +2,7 @@
 #include "../objects/Object.h"
 #include "../objects/ObjectManager.h"
 #include <nlohmann/json.hpp>
+#include <Protocol.h>
 #include <utility>
 
 SceneAsset::SceneAsset(const uuids::uuid uuid,
@@ -48,6 +49,26 @@ nlohmann::json SceneAsset::serialize() const
   };
 
   return data;
+}
+
+void SceneAsset::pack(net::Message& message) const
+{
+  message.writeString(uuids::to_string(m_uuid));
+  message.writeString(m_name);
+
+  m_objectManager->pack(message);
+}
+
+std::shared_ptr<SceneAsset> SceneAsset::unpack(net::MessageReader& messageReader,
+                                               const std::shared_ptr<ComponentRegistry>& componentRegistry)
+{
+  const auto uuid = uuids::uuid::from_string(messageReader.readString()).value();
+  const auto name = messageReader.readString();
+
+  auto scene = std::make_shared<SceneAsset>(uuid, name, componentRegistry);
+  scene->m_objectManager->unpack(messageReader);
+
+  return scene;
 }
 
 std::shared_ptr<ObjectManager> SceneAsset::getObjectManager() const

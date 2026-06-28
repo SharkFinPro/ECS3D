@@ -7,6 +7,8 @@ add_library(${PROJECT_NAME}
   ComponentRegistration.h
   ProjectSerializer.cpp
   ProjectSerializer.h
+  ProjectPacker.cpp
+  ProjectPacker.h
   Replication.cpp
   Replication.h
   assets/AssetRegistry.cpp

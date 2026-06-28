@@ -3,6 +3,7 @@
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
+#include <ProjectPacker.h>
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
@@ -33,6 +34,7 @@ ServerApp::ServerApp(LaunchOptions options)
   registerDataComponents(*m_componentRegistry);
 
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
+  m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_collisionSystem = std::make_shared<CollisionSystem>();
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
@@ -497,28 +499,17 @@ void ServerApp::broadcastSnapshot()
     }
   }
 
-  const auto project = m_projectSerializer->serialize();
-  const auto payload = project.dump();
-
-  const auto sceneCount = project.contains("assets") && project.at("assets").contains("scenes")
-    ? project.at("assets").at("scenes").size() : 0;
-  logMessage("Info", "Broadcasting snapshot: " + std::to_string(sceneCount) + " scene(s), "
-    + std::to_string(payload.size()) + " bytes, currentScene='"
-    + project.value("currentSceneUUID", std::string{}) + "'.");
-
+  // Binary snapshot: ProjectPacker writes the same project state ProjectSerializer::serialize would,
+  // but tightly packed instead of JSON. ProjectSerializer stays the JSON path for file save/load.
   net::Message message(net::MessageType::snapshot);
-  for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
-  m_netServer->broadcast(message);
+  m_projectPacker->pack(message);
 
-  // const net::Message snapshot {
-  //   .type = net::MessageType::snapshot,
-  //   .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-  // };
-  //
-  // m_netServer->broadcast(snapshot);
+  const auto currentScene = m_sceneManager->getCurrentScene();
+  logMessage("Info", "Broadcasting snapshot: " + std::to_string(m_sceneManager->getScenes().size())
+    + " scene(s), " + std::to_string(message.size()) + " bytes, currentScene='"
+    + (currentScene ? uuids::to_string(currentScene->getUUID()) : std::string{}) + "'.");
+
+  m_netServer->broadcast(message);
 }
 
 void ServerApp::broadcastSceneStatus() const
@@ -537,11 +528,6 @@ void ServerApp::broadcastSceneStatus() const
     message.write(chunk);
   }
   m_netServer->broadcast(message);
-
-  // m_netServer->broadcast(net::Message{
-  //   .type = net::MessageType::sceneStatus,
-  //   .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  // });
 }
 
 void ServerApp::broadcastEditStatus()
@@ -555,11 +541,6 @@ void ServerApp::broadcastEditStatus()
     message.write(chunk);
   }
   m_netServer->broadcast(message);
-
-  // m_netServer->broadcast(net::Message{
-  //   .type = net::MessageType::editStatus,
-  //   .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  // });
 }
 
 void ServerApp::broadcastStateDelta() const
@@ -578,13 +559,6 @@ void ServerApp::broadcastStateDelta() const
     message.write(chunk);
   }
   m_netServer->broadcast(message);
-
-  // const net::Message message {
-  //   .type = net::MessageType::stateDelta,
-  //   .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-  // };
-  //
-  // m_netServer->broadcast(message);
 }
 
 void ServerApp::logMessage(const std::string& level, const std::string& message)

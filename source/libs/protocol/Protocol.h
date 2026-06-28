@@ -1,10 +1,13 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
+#include <array>
 #include <bit>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace net {
@@ -53,6 +56,13 @@ public:
     return *this;
   }
 
+  // Length-prefixed string (uint32 size + bytes). The pairing read is MessageReader::readString.
+  Message& writeString(const std::string& value) {
+    write(static_cast<uint32_t>(value.size()));
+    m_payload.insert(m_payload.end(), value.begin(), value.end());
+    return *this;
+  }
+
   [[nodiscard]] std::size_t size() const noexcept { return m_payload.size(); }
   [[nodiscard]] std::span<const uint8_t> bytes() const noexcept { return m_payload; }
 
@@ -76,6 +86,17 @@ public:
     std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
     m_offset += sizeof(T);
     return std::bit_cast<T>(raw);
+  }
+
+  // Reads a length-prefixed string written by Message::writeString.
+  [[nodiscard]] std::string readString() {
+    const auto size = read<uint32_t>();
+    if (size > m_data.size() - m_offset)
+      throw std::runtime_error("Message underflow");
+
+    std::string value(reinterpret_cast<const char*>(m_data.data() + m_offset), size);
+    m_offset += size;
+    return value;
   }
 
   [[nodiscard]] std::size_t remaining() const noexcept { return m_data.size() - m_offset; }

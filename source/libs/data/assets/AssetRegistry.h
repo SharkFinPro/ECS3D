@@ -6,6 +6,11 @@
 #include <unordered_map>
 #include <uuid.h>
 
+namespace net {
+  class Message;
+  class MessageReader;
+}
+
 enum class AssetType {
   Unknown,
   Model,
@@ -44,6 +49,12 @@ public:
   [[nodiscard]] nlohmann::json serialize() const;
 
   void loadFromJSON(const nlohmann::json& assetsData);
+
+  // Binary equivalents of serialize()/loadFromJSON for the network snapshot. Like serialize(), pack()
+  // only writes the flat file assets (Model/Texture/Script); Scene records belong to the SceneManager.
+  void pack(net::Message& message) const;
+
+  void unpack(net::MessageReader& messageReader);
 
 private:
   std::unordered_map<uuids::uuid, AssetRecord> m_assets;

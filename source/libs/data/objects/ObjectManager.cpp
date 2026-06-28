@@ -1,6 +1,7 @@
 #include "ObjectManager.h"
 #include "Object.h"
 #include <nlohmann/json.hpp>
+#include <Protocol.h>
 #include <algorithm>
 #include <array>
 #include <functional>
@@ -118,6 +119,30 @@ nlohmann::json ObjectManager::serialize() const
   }
 
   return data;
+}
+
+void ObjectManager::pack(net::Message& message) const
+{
+  // Mirrors serialize(): only the root objects are written, each packing its own subtree recursively.
+  message.write(static_cast<uint32_t>(m_objects.size()));
+
+  for (const auto& object : m_objects)
+  {
+    object->pack(message);
+  }
+}
+
+void ObjectManager::unpack(net::MessageReader& messageReader)
+{
+  const uint32_t objectCount = messageReader.read<uint32_t>();
+
+  for (uint32_t i = 0; i < objectCount; ++i)
+  {
+    auto object = std::make_shared<Object>();
+    addObject(object);
+
+    object->unpack(messageReader);
+  }
 }
 
 void ObjectManager::removeObject(const std::shared_ptr<Object>& object)
