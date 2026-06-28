@@ -379,14 +379,18 @@ void ServerApp::handleAddAsset(const net::Message& message) const
 void ServerApp::handleInputState(const net::Message& message)
 {
   // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
-  const std::string payload(message.bytes().begin(), message.bytes().end());
+  net::MessageReader reader(message);
+  const auto focused = reader.read<bool>();
+  InputState::setFocused(focused);
 
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (!json.is_discarded())
+  const auto numKeys = reader.read<size_t>();
+  std::vector<int> keysPressed(numKeys);
+  for (auto& key : keysPressed)
   {
-    InputState::setKeysPressed(json.value("keys", std::vector<int>{}));
-    InputState::setFocused(json.value("focused", false));
+    key = reader.read<int>();
   }
+
+  InputState::setKeysPressed(keysPressed);
 }
 
 void ServerApp::handleSceneControl(const net::Message& message) const

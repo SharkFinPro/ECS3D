@@ -94,18 +94,14 @@ void ClientApp::sendInput()
   m_lastInputFocused = snapshot.focused;
   m_inputSent = true;
 
-  const nlohmann::json payload = {
-    { "keys", snapshot.keys },
-    { "focused", snapshot.focused }
-  };
-
-  const auto dumped = payload.dump();
-
   net::Message message(net::MessageType::inputState);
-  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  message.write(snapshot.focused);
+  message.write(snapshot.keys.size());
+  for (const auto& key : snapshot.keys)
   {
-    message.write(chunk);
+    message.write(key);
   }
+
   m_netClient->send(message);
 }
 
