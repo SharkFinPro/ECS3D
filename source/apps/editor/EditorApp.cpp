@@ -362,7 +362,7 @@ void EditorApp::setupKeybinds()
 
 void EditorApp::applyMessage(const net::Message& message)
 {
-  // The snapshot is packed binary (ProjectPacker); every other message is still JSON.
+  // The snapshot and per-tick state delta are packed binary; every other message is still JSON.
   if (message.getType() == net::MessageType::snapshot)
   {
     // Full state on join: rebuild the replicated scene from the packed project blob.
@@ -372,6 +372,15 @@ void EditorApp::applyMessage(const net::Message& message)
     std::cerr << "[Editor] Applied snapshot (" << message.size() << " bytes). Current scene: "
               << (scene ? scene->getName() : "<none>") << " ("
               << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
+    return;
+  }
+
+  if (message.getType() == net::MessageType::stateDelta)
+  {
+    if (const auto scene = m_sceneManager->getCurrentScene())
+    {
+      replication::unpackStateDelta(*scene->getObjectManager(), message);
+    }
     return;
   }
 
@@ -385,12 +394,6 @@ void EditorApp::applyMessage(const net::Message& message)
 
   switch (message.getType())
   {
-    case net::MessageType::stateDelta:
-      if (const auto scene = m_sceneManager->getCurrentScene())
-      {
-        replication::applyStateDelta(*scene->getObjectManager(), json);
-      }
-      break;
     case net::MessageType::editComponent:
       // Another editor (or this one, echoed by the server) changed a component.
       if (const auto scene = m_sceneManager->getCurrentScene())

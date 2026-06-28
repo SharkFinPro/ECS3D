@@ -551,13 +551,10 @@ void ServerApp::broadcastStateDelta() const
     return;
   }
 
-  const auto payload = replication::buildStateDelta(*scene->getObjectManager()).dump();
-
+  // Binary state delta: packStateDelta writes each object's uuid + local transform straight into the
+  // message, instead of the heavier JSON dump this used to broadcast every tick.
   net::Message message(net::MessageType::stateDelta);
-  for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  replication::packStateDelta(message, *scene->getObjectManager());
   m_netServer->broadcast(message);
 }
 
