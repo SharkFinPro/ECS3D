@@ -68,10 +68,6 @@ void Script::pack(net::Message& message) const
 
 void Script::unpack(net::MessageReader& messageReader)
 {
-  const uint32_t classNameSize = messageReader.read<uint32_t>();
-  m_className.resize(classNameSize);
-  for (char& c : m_className) c = messageReader.read<char>();
-
   const uint32_t fieldsSize = messageReader.read<uint32_t>();
   std::string fieldsStr(fieldsSize, '\0');
   for (char& c : fieldsStr) c = messageReader.read<char>();

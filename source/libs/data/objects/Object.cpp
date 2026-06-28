@@ -263,12 +263,6 @@ void Object::pack(net::Message& message) const
 
 void Object::unpack(net::MessageReader& messageReader)
 {
-  // UUID
-  const uint32_t uuidSize = messageReader.read<uint32_t>();
-  std::string uuidStr(uuidSize, '\0');
-  for (char& c : uuidStr) c = messageReader.read<char>();
-  m_uuid = uuids::uuid::from_string(uuidStr).value();
-
   // Name
   const uint32_t nameSize = messageReader.read<uint32_t>();
   m_name.resize(nameSize);
@@ -278,21 +272,54 @@ void Object::unpack(net::MessageReader& messageReader)
   const uint32_t componentCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < componentCount; ++i)
   {
+    auto componentType = messageReader.read<ComponentType>();
 
+    if (const auto parentIt = subComponentTypeToParent.find(componentType);
+        parentIt != subComponentTypeToParent.end())
+    {
+      componentType = parentIt->second;
+    }
+
+    if (const auto component = getComponent(componentType))
+    {
+      component->unpack(messageReader);
+    }
   }
 
   // Scripts
   const uint32_t scriptCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < scriptCount; ++i)
   {
+    messageReader.read<ComponentType>();
 
+    const uint32_t classNameSize = messageReader.read<uint32_t>();
+    std::string className(classNameSize, '\0');
+    for (char& c : className) c = messageReader.read<char>();
+
+    for (const auto& scriptComp : m_scripts)
+    {
+      if (const auto script = std::dynamic_pointer_cast<Script>(scriptComp);
+          script && script->getClassName() == className)
+      {
+        script->unpack(messageReader);
+        break;
+      }
+    }
   }
 
   // Children
   const uint32_t childCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < childCount; ++i)
   {
+    const uint32_t uuidSize = messageReader.read<uint32_t>();
+    std::string uuidStr(uuidSize, '\0');
+    for (char& c : uuidStr) c = messageReader.read<char>();
+    const auto childUUID = uuids::uuid::from_string(uuidStr).value();
 
+    if (const auto child = m_manager->getObjectByUUID(childUUID))
+    {
+      child->unpack(messageReader);
+    }
   }
 }
 
