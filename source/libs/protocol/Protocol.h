@@ -25,7 +25,7 @@ enum class MessageType : uint8_t {
   inputState,    // client -> server: local input ({ keys, focused }) for the scripts to read
   editComponent, // editor -> server -> all: a single component value edit (replication::buildComponentEdit)
   sceneEdit,     // editor -> server: a structural edit (add/remove object/component); server re-snapshots
-  sceneControl,  // editor -> server: scene lifecycle ({ op: start|pause|stop|loadScene }); server re-snapshots
+  sceneControl,  // editor -> server: scene lifecycle (SceneControlOp + optional scene uuid); server re-snapshots
   loadProject,   // editor -> server: replace the project with this serialized blob; server re-snapshots
   addAsset,      // editor -> server: register a new asset (model/texture/script/scene); server re-snapshots
   editStatus,    // server -> client: whether this server accepts edits ({ editable: bool }); sent on join
@@ -39,6 +39,15 @@ enum class MessageType : uint8_t {
 enum class Role : uint8_t {
   player,
   editor
+};
+
+// The scene lifecycle ops carried by a sceneControl message. Packed as a leading uint8; loadScene is
+// followed by a length-prefixed scene uuid string (the others carry no payload).
+enum class SceneControlOp : uint8_t {
+  start,
+  pause,
+  stop,
+  loadScene
 };
 
 template <typename T>

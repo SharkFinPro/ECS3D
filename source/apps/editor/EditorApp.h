@@ -128,7 +128,7 @@ private:
 
   void sendInput();
 
-  void sendSceneControl(const std::string& op) const;
+  void sendSceneControl(net::SceneControlOp op) const;
 
   void updateGui();
 

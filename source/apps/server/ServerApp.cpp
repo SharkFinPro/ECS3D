@@ -394,19 +394,27 @@ void ServerApp::handleInputState(const net::Message& message)
 
 void ServerApp::handleSceneControl(const net::Message& message) const
 {
-  const std::string payload(message.bytes().begin(), message.bytes().end());
+  net::MessageReader reader(message);
 
-  const auto control = nlohmann::json::parse(payload, nullptr, false);
-  if (control.is_discarded())
+  net::SceneControlOp op;
+  try
+  {
+    op = reader.read<net::SceneControlOp>();
+  }
+  catch (const std::exception&)
   {
     return;
   }
 
-  const std::string op = control.value("op", std::string{});
-
-  if (op == "loadScene")
+  if (op == net::SceneControlOp::loadScene)
   {
-    loadScene(control.value("scene", std::string{}));
+    try
+    {
+      loadScene(reader.readString());
+    }
+    catch (const std::exception&)
+    {
+    }
     return;
   }
 
@@ -421,7 +429,7 @@ void ServerApp::handleSceneControl(const net::Message& message) const
 
   try
   {
-    if (op == "start")
+    if (op == net::SceneControlOp::start)
     {
       m_sceneManager->startScene();
 
@@ -432,11 +440,11 @@ void ServerApp::handleSceneControl(const net::Message& message) const
         m_scriptSystem->start(objectManager);
       }
     }
-    else if (op == "pause")
+    else if (op == net::SceneControlOp::pause)
     {
       m_sceneManager->pauseScene();
     }
-    else if (op == "stop")
+    else if (op == net::SceneControlOp::stop)
     {
       if (previousStatus != SceneStatus::stopped)
       {

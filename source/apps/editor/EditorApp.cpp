@@ -91,14 +91,9 @@ EditorApp::EditorApp(LaunchOptions options)
       m_sceneManager->loadScene(scene);
     }
 
-    const nlohmann::json control = { { "op", "loadScene" }, { "scene", uuids::to_string(sceneUUID) } };
-    const auto payload = control.dump();
-
     net::Message message(net::MessageType::sceneControl);
-    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
+    message.write(net::SceneControlOp::loadScene);
+    message.writeString(uuids::to_string(sceneUUID));
     m_netClient->send(message);
   });
   m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& addAsset) {
@@ -288,17 +283,10 @@ void EditorApp::sendInput()
   m_netClient->send(message);
 }
 
-void EditorApp::sendSceneControl(const std::string& op) const
+void EditorApp::sendSceneControl(const net::SceneControlOp op) const
 {
-  const nlohmann::json payload = { { "op", op } };
-
-  const auto dumped = payload.dump();
-
   net::Message message(net::MessageType::sceneControl);
-  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  message.write(op);
   m_netClient->send(message);
 }
 
@@ -575,7 +563,7 @@ void EditorApp::displaySceneStatus() const
     ImGui::BeginDisabled(!m_serverEditable);
     if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
     {
-      sendSceneControl("start");
+      sendSceneControl(net::SceneControlOp::start);
     }
     ImGui::EndDisabled();
   }
@@ -584,7 +572,7 @@ void EditorApp::displaySceneStatus() const
     ImGui::BeginDisabled(!m_serverEditable);
     if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
     {
-      sendSceneControl("pause");
+      sendSceneControl(net::SceneControlOp::pause);
     }
     ImGui::EndDisabled();
   }
@@ -595,7 +583,7 @@ void EditorApp::displaySceneStatus() const
     ImGui::BeginDisabled(!m_serverEditable);
     if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
     {
-      sendSceneControl("stop");
+      sendSceneControl(net::SceneControlOp::stop);
     }
     ImGui::EndDisabled();
   }
