@@ -1,6 +1,7 @@
 #include "Transform.h"
 #include "../Object.h"
 #include <nlohmann/json.hpp>
+#include <Protocol.h>
 
 Transform::Transform()
   : Component(ComponentType::transform)
@@ -129,4 +130,20 @@ void Transform::loadFromJSON(const nlohmann::json& componentData)
   m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
   m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
   m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
+}
+
+void Transform::pack(net::Message& message) const
+{
+  message.write(ComponentType::transform);
+
+  message.write(m_position.get());
+  message.write(m_scale.get());
+  message.write(m_rotation.get());
+}
+
+void Transform::unpack(net::MessageReader& messageReader)
+{
+  m_position.set(messageReader.read<glm::vec3>());
+  m_scale.set(messageReader.read<glm::vec3>());
+  m_rotation.set(messageReader.read<glm::vec3>());
 }

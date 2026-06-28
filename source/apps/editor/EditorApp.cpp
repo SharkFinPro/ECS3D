@@ -2,6 +2,7 @@
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
+#include <ProjectPacker.h>
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
@@ -52,6 +53,7 @@ EditorApp::EditorApp(LaunchOptions options)
   registerDataComponents(*m_componentRegistry);
 
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
+  m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
 
   createRenderer();
 
@@ -67,19 +69,23 @@ EditorApp::EditorApp(LaunchOptions options)
     // A widget changed: send the component's new state to the authoritative server as an edit command.
     const auto payload = replication::buildComponentEdit(objectUUID, component).dump();
 
-    m_netClient->send(net::Message{
-      .type = net::MessageType::editComponent,
-      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-    });
+    net::Message message(net::MessageType::editComponent);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
   });
   m_objectGUIManager->setSceneEditCallback([this](const nlohmann::json& edit) {
     // A structural change (add/remove object or component): the server applies it and re-snapshots.
     const auto payload = edit.dump();
 
-    m_netClient->send(net::Message{
-      .type = net::MessageType::sceneEdit,
-      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-    });
+    net::Message message(net::MessageType::sceneEdit);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
   });
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
@@ -94,10 +100,12 @@ EditorApp::EditorApp(LaunchOptions options)
     const nlohmann::json control = { { "op", "loadScene" }, { "scene", uuids::to_string(sceneUUID) } };
     const auto payload = control.dump();
 
-    m_netClient->send(net::Message{
-      .type = net::MessageType::sceneControl,
-      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-    });
+    net::Message message(net::MessageType::sceneControl);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
   });
   m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& addAsset) {
     // Register it locally for instant feedback in the browser, then on the authoritative server (which
@@ -106,20 +114,25 @@ EditorApp::EditorApp(LaunchOptions options)
 
     const auto payload = addAsset.dump();
 
-    m_netClient->send(net::Message{
-      .type = net::MessageType::addAsset,
-      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-    });
+    net::Message message(net::MessageType::addAsset);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
   });
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this](const std::string& projectJson) {
     // Open/New: the server owns the running sim, so send it the project blob; it reloads and re-snapshots.
     std::cerr << "[Editor] Sending loadProject (" << projectJson.size() << " bytes) to server." << std::endl;
-    m_netClient->send(net::Message{
-      .type = net::MessageType::loadProject,
-      .payload = std::vector<uint8_t>(projectJson.begin(), projectJson.end())
-    });
+
+    net::Message message(net::MessageType::loadProject);
+    for (const std::vector<uint8_t> chunks(projectJson.begin(), projectJson.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
   });
 
   setupKeybinds();
@@ -129,7 +142,8 @@ EditorApp::EditorApp(LaunchOptions options)
   connectToServer();
 
   // Ask the server for the initial Snapshot.
-  m_netClient->send(net::Message{ .type = net::MessageType::join, .payload = {} });
+  const net::Message message(net::MessageType::join);
+  m_netClient->send(message);
 }
 
 void EditorApp::connectToServer()
@@ -276,10 +290,12 @@ void EditorApp::sendInput()
 
   const auto dumped = payload.dump();
 
-  m_netClient->send(net::Message{
-    .type = net::MessageType::inputState,
-    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  });
+  net::Message message(net::MessageType::inputState);
+  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netClient->send(message);
 }
 
 void EditorApp::sendSceneControl(const std::string& op) const
@@ -288,10 +304,12 @@ void EditorApp::sendSceneControl(const std::string& op) const
 
   const auto dumped = payload.dump();
 
-  m_netClient->send(net::Message{
-    .type = net::MessageType::sceneControl,
-    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  });
+  net::Message message(net::MessageType::sceneControl);
+  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netClient->send(message);
 }
 
 void EditorApp::createRenderer()
@@ -344,7 +362,29 @@ void EditorApp::setupKeybinds()
 
 void EditorApp::applyMessage(const net::Message& message)
 {
-  const std::string payload(message.payload.begin(), message.payload.end());
+  // The snapshot and per-tick state delta are packed binary; every other message is still JSON.
+  if (message.getType() == net::MessageType::snapshot)
+  {
+    // Full state on join: rebuild the replicated scene from the packed project blob.
+    m_projectPacker->unpack(message);
+
+    const auto scene = m_sceneManager->getCurrentScene();
+    std::cerr << "[Editor] Applied snapshot (" << message.size() << " bytes). Current scene: "
+              << (scene ? scene->getName() : "<none>") << " ("
+              << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
+    return;
+  }
+
+  if (message.getType() == net::MessageType::stateDelta)
+  {
+    if (const auto scene = m_sceneManager->getCurrentScene())
+    {
+      replication::unpackStateDelta(*scene->getObjectManager(), message);
+    }
+    return;
+  }
+
+  const std::string payload(message.bytes().begin(), message.bytes().end());
 
   const auto json = nlohmann::json::parse(payload, nullptr, false);
   if (json.is_discarded())
@@ -352,25 +392,8 @@ void EditorApp::applyMessage(const net::Message& message)
     return;
   }
 
-  switch (message.type)
+  switch (message.getType())
   {
-    case net::MessageType::snapshot:
-    {
-      // Full state on join: rebuild the replicated scene from the project blob.
-      m_projectSerializer->deserialize(json);
-
-      const auto scene = m_sceneManager->getCurrentScene();
-      std::cerr << "[Editor] Applied snapshot (" << message.payload.size() << " bytes). Current scene: "
-                << (scene ? scene->getName() : "<none>") << " ("
-                << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
-      break;
-    }
-    case net::MessageType::stateDelta:
-      if (const auto scene = m_sceneManager->getCurrentScene())
-      {
-        replication::applyStateDelta(*scene->getObjectManager(), json);
-      }
-      break;
     case net::MessageType::editComponent:
       // Another editor (or this one, echoed by the server) changed a component.
       if (const auto scene = m_sceneManager->getCurrentScene())

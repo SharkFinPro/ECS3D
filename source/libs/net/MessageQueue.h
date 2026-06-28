@@ -1,7 +1,7 @@
 #ifndef MESSAGEQUEUE_H
 #define MESSAGEQUEUE_H
 
-#include "Protocol.h"
+#include <Protocol.h>
 #include <mutex>
 #include <queue>
 

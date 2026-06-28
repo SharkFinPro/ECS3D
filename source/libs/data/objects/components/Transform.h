@@ -32,6 +32,10 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
+  void pack(net::Message& message) const override;
+
+  void unpack(net::MessageReader& messageReader) override;
+
 private:
   uint8_t m_updateID = 1;
 

@@ -29,6 +29,10 @@ public:
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
+  void pack(net::Message& message) const override;
+
+  void unpack(net::MessageReader& messageReader) override;
+
 private:
   bool m_renderCollider = false;
 

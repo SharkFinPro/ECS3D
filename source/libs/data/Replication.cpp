@@ -8,14 +8,23 @@
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
+#include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <cmath>
 
 namespace replication {
 
-nlohmann::json buildStateDelta(const ObjectManager& objectManager)
+void packStateDelta(net::Message& message, const ObjectManager& objectManager)
 {
-  nlohmann::json delta = nlohmann::json::array();
+  // Collect first so the entry count can lead (Message is append-only — there's no way to back-patch a
+  // header once entries are written). Each entry is uuid + the three local transform vectors.
+  struct Entry {
+    std::string uuid;
+    glm::vec3 position;
+    glm::vec3 rotation;
+    glm::vec3 scale;
+  };
+  std::vector<Entry> entries;
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -32,7 +41,7 @@ nlohmann::json buildStateDelta(const ObjectManager& objectManager)
     const auto rotation = transform->getLocalRotation();
     const auto scale = transform->getLocalScale();
 
-    // nlohmann::json serializes NaN/inf as null; skip rather than send bad data.
+    // Skip NaN/inf rather than replicate bad data (the receiver would write it straight into the scene).
     auto finite3 = [](const glm::vec3& v) {
       return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
     };
@@ -41,22 +50,32 @@ nlohmann::json buildStateDelta(const ObjectManager& objectManager)
       continue;
     }
 
-    delta.push_back({
-      { "uuid", uuids::to_string(object->getUUID()) },
-      { "position", { position.x, position.y, position.z } },
-      { "rotation", { rotation.x, rotation.y, rotation.z } },
-      { "scale", { scale.x, scale.y, scale.z } }
-    });
+    entries.push_back({ uuids::to_string(object->getUUID()), position, rotation, scale });
   }
 
-  return delta;
+  message.write(static_cast<uint32_t>(entries.size()));
+  for (const auto& entry : entries)
+  {
+    message.writeString(entry.uuid);
+    message.write(entry.position);
+    message.write(entry.rotation);
+    message.write(entry.scale);
+  }
 }
 
-void applyStateDelta(const ObjectManager& objectManager, const nlohmann::json& delta)
+void unpackStateDelta(const ObjectManager& objectManager, const net::Message& message)
 {
-  for (const auto& entry : delta)
+  net::MessageReader reader(message);
+
+  const uint32_t count = reader.read<uint32_t>();
+  for (uint32_t i = 0; i < count; ++i)
   {
-    const auto parsed = uuids::uuid::from_string(std::string(entry.at("uuid")));
+    const auto uuid = reader.readString();
+    const auto position = reader.read<glm::vec3>();
+    const auto rotation = reader.read<glm::vec3>();
+    const auto scale = reader.read<glm::vec3>();
+
+    const auto parsed = uuids::uuid::from_string(uuid);
     if (!parsed.has_value())
     {
       continue;
@@ -75,13 +94,9 @@ void applyStateDelta(const ObjectManager& objectManager, const nlohmann::json& d
     }
 
     // The delta carries LOCAL transforms, so write them straight back as local values.
-    const auto& position = entry.at("position");
-    const auto& rotation = entry.at("rotation");
-    const auto& scale = entry.at("scale");
-
-    transform->setPosition(glm::vec3(position.at(0), position.at(1), position.at(2)));
-    transform->setRotation(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
-    transform->setScale(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
+    transform->setPosition(position);
+    transform->setRotation(rotation);
+    transform->setScale(scale);
   }
 }
 

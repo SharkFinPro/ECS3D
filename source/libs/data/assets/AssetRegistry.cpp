@@ -1,5 +1,7 @@
 #include "AssetRegistry.h"
 #include <nlohmann/json.hpp>
+#include <Protocol.h>
+#include <vector>
 
 void AssetRegistry::registerAsset(const AssetRecord& record)
 {
@@ -123,5 +125,43 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
         .className = assetData.at("className")
       });
     }
+  }
+}
+
+void AssetRegistry::pack(net::Message& message) const
+{
+  // Collect first so we can write a count up front (m_assets also holds Scene records, which — like
+  // serialize() — are skipped here; they're carried by the SceneManager).
+  std::vector<const AssetRecord*> records;
+  for (const auto& [uuid, record] : m_assets)
+  {
+    if (record.type == AssetType::Model || record.type == AssetType::Texture
+        || record.type == AssetType::Script)
+    {
+      records.push_back(&record);
+    }
+  }
+
+  message.write(static_cast<uint32_t>(records.size()));
+  for (const auto* record : records)
+  {
+    message.write(record->type);
+    message.writeString(uuids::to_string(record->uuid));
+    message.writeString(record->path);
+    message.writeString(record->className); // empty for non-scripts
+  }
+}
+
+void AssetRegistry::unpack(net::MessageReader& messageReader)
+{
+  const uint32_t count = messageReader.read<uint32_t>();
+  for (uint32_t i = 0; i < count; ++i)
+  {
+    const auto type = messageReader.read<AssetType>();
+    const auto uuid = uuids::uuid::from_string(messageReader.readString()).value();
+    const auto path = messageReader.readString();
+    const auto className = messageReader.readString();
+
+    registerAsset({ .uuid = uuid, .type = type, .path = path, .className = className });
   }
 }

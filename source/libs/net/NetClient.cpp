@@ -1,5 +1,6 @@
 #include "NetClient.h"
 #include <ManagedHost.h>
+#include <array>
 
 namespace net {
 
@@ -78,9 +79,9 @@ void NetClient::send(const Message& message) const
   }
 
   reinterpret_cast<ClientSendFn>(m_sendFn)(
-    static_cast<uint8_t>(message.type),
-    message.payload.data(),
-    static_cast<int32_t>(message.payload.size())
+    static_cast<uint8_t>(message.getType()),
+    message.bytes().data(),
+    static_cast<int32_t>(message.size())
   );
 }
 
@@ -91,10 +92,16 @@ bool NetClient::poll(Message& message)
 
 void NetClient::enqueue(const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  Message message {
-    .type = static_cast<MessageType>(type),
-    .payload = std::vector<uint8_t>(data, data + len)
-  };
+  Message message(static_cast<MessageType>(type));
+  for (const std::vector<uint8_t> chunks(data, data + len); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+
+  // Message message {
+  //   .type = static_cast<MessageType>(type),
+  //   .payload = std::vector<uint8_t>(data, data + len)
+  // };
 
   m_inbox.push(std::move(message));
 }

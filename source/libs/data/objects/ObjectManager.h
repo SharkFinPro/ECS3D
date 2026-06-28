@@ -7,6 +7,11 @@
 #include <vector>
 #include <uuid.h>
 
+namespace net {
+  class Message;
+  class MessageReader;
+}
+
 class Object;
 class ComponentRegistry;
 
@@ -31,6 +36,10 @@ public:
   void stop() const;
 
   [[nodiscard]] nlohmann::json serialize() const;
+
+  void pack(net::Message& message) const;
+
+  void unpack(net::MessageReader& messageReader);
 
   void removeObject(const std::shared_ptr<Object>& object);
 

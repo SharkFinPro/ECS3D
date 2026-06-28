@@ -48,6 +48,10 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
+  void pack(net::Message& message) const override;
+
+  void unpack(net::MessageReader& messageReader) override;
+
 private:
   ComponentVariable<glm::vec3> m_velocity{glm::vec3(0)};
   ComponentVariable<float> m_friction{0.1f};

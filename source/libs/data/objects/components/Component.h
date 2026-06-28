@@ -6,6 +6,11 @@
 #include <unordered_map>
 #include <vector>
 
+namespace net {
+  class Message;
+  class MessageReader;
+}
+
 class Object;
 
 enum class ComponentType {
@@ -33,6 +38,19 @@ const std::unordered_map<ComponentType, std::string> componentTypeToString {
 const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent {
   {ComponentType::SubComponentType_boxCollider, ComponentType::collider},
   {ComponentType::SubComponentType_sphereCollider, ComponentType::collider}
+};
+
+// Maps a packed ComponentType (the discriminator each component writes first in pack()) back to its
+// ComponentRegistry factory key, so unpack() can reconstruct components from scratch. Colliders pack
+// their subtype, which is keyed by "Box"/"Sphere" (matching Object::loadFromJSON's registry lookup).
+const std::unordered_map<ComponentType, std::string> componentTypeToRegistryKey {
+  {ComponentType::transform, "Transform"},
+  {ComponentType::modelRenderer, "ModelRenderer"},
+  {ComponentType::rigidBody, "RigidBody"},
+  {ComponentType::lightRenderer, "LightRenderer"},
+  {ComponentType::SubComponentType_boxCollider, "Box"},
+  {ComponentType::SubComponentType_sphereCollider, "Sphere"},
+  {ComponentType::script, "Script"}
 };
 
 class ComponentVariableBase {
@@ -123,6 +141,10 @@ public:
   [[nodiscard]] virtual nlohmann::json serialize() = 0;
 
   virtual void loadFromJSON(const nlohmann::json& componentData) = 0;
+
+  virtual void pack(net::Message& message) const = 0;
+
+  virtual void unpack(net::MessageReader& messageReader) = 0;
 
 protected:
   ComponentType m_type;

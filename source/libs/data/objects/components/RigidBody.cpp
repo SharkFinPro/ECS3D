@@ -1,5 +1,6 @@
 #include "RigidBody.h"
 #include <nlohmann/json.hpp>
+#include <Protocol.h>
 
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody)
@@ -145,4 +146,26 @@ void RigidBody::loadFromJSON(const nlohmann::json& componentData)
   m_doGravity.set(componentData.at("doGravity"));
   m_gravity.set(componentData.at("gravity"));
   m_mass.set(componentData.at("mass"));
+}
+
+void RigidBody::pack(net::Message& message) const
+{
+  message.write(ComponentType::rigidBody);
+
+  message.write(m_velocity.get());
+  message.write(m_friction.get());
+  message.write(m_doGravity.get());
+  message.write(m_gravity.get());
+  message.write(m_angularVelocity.get());
+  message.write(m_mass.get());
+}
+
+void RigidBody::unpack(net::MessageReader& messageReader)
+{
+  m_velocity.set(messageReader.read<glm::vec3>());
+  m_friction.set(messageReader.read<float>());
+  m_doGravity.set(messageReader.read<bool>());
+  m_gravity.set(messageReader.read<float>());
+  m_angularVelocity.set(messageReader.read<glm::vec3>());
+  m_mass.set(messageReader.read<float>());
 }

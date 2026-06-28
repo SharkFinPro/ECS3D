@@ -1,5 +1,6 @@
 #include "ModelRenderer.h"
 #include <nlohmann/json.hpp>
+#include <Protocol.h>
 
 ModelRenderer::ModelRenderer()
   : Component(ComponentType::modelRenderer)
@@ -91,4 +92,26 @@ void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
   {
     m_specularMapUUID = specularMapUUID.value();
   }
+}
+
+void ModelRenderer::pack(net::Message& message) const
+{
+  message.write(ComponentType::modelRenderer);
+
+  message.write(m_shouldRender);
+  message.write(m_useStandardPipeline);
+
+  message.write(m_modelUUID);
+  message.write(m_textureUUID);
+  message.write(m_specularMapUUID);
+}
+
+void ModelRenderer::unpack(net::MessageReader& messageReader)
+{
+  m_shouldRender = messageReader.read<bool>();
+  m_useStandardPipeline = messageReader.read<bool>();
+
+  m_modelUUID = messageReader.read<uuids::uuid>();
+  m_textureUUID = messageReader.read<uuids::uuid>();
+  m_specularMapUUID = messageReader.read<uuids::uuid>();
 }

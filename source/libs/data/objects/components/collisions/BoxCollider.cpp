@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <limits>
 #include <stdexcept>
+#include <Protocol.h>
 
 BoxCollider::BoxCollider()
   : Collider(ColliderType::boxCollider, ComponentType::SubComponentType_boxCollider)
@@ -141,6 +142,24 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
   }
 
   return furthestVertex;
+}
+
+void BoxCollider::pack(net::Message& message) const
+{
+  message.write(ComponentType::SubComponentType_boxCollider);
+
+  message.write(m_renderCollider);
+  message.write(m_position.get());
+  message.write(m_scale.get());
+  message.write(m_rotation.get());
+}
+
+void BoxCollider::unpack(net::MessageReader& messageReader)
+{
+  m_renderCollider = messageReader.read<bool>();
+  m_position.set(messageReader.read<glm::vec3>());
+  m_scale.set(messageReader.read<glm::vec3>());
+  m_rotation.set(messageReader.read<glm::vec3>());
 }
 
 void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)

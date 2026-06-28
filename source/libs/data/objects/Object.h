@@ -9,6 +9,11 @@
 #include <string>
 #include <uuid.h>
 
+namespace net {
+  class Message;
+  class MessageReader;
+}
+
 enum class ComponentType;
 class Component;
 
@@ -61,6 +66,10 @@ public:
   [[nodiscard]] const std::unordered_map<ComponentType, std::shared_ptr<Component>>& getComponents() const;
 
   [[nodiscard]] const std::vector<std::shared_ptr<Component>>& getScripts() const;
+
+  void pack(net::Message& message) const;
+
+  void unpack(net::MessageReader& messageReader);
 
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> m_components;

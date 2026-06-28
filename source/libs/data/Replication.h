@@ -11,15 +11,20 @@ class AssetRegistry;
 class SceneManager;
 class ComponentRegistry;
 
-// Per-tick state replication. The full Snapshot (on join) is just ProjectSerializer::serialize(); the
-// StateDelta is the lighter per-tick stream: each object's uuid + transform. The server builds it from
-// its authoritative scene, the client applies it to its replicated view. This lives in ECS3DData (it
+namespace net {
+  class Message;
+}
+
+// Per-tick state replication. The full Snapshot (on join) is the packed project blob (ProjectPacker);
+// the StateDelta is the lighter per-tick stream: each object's uuid + local transform, packed as binary
+// straight into the message (count-prefixed entries) rather than JSON. The server packs it from its
+// authoritative scene, the client unpacks it into its replicated view. This lives in ECS3DData (it
 // reads/writes the scene data); the net layer only carries the resulting bytes.
 namespace replication {
 
-[[nodiscard]] nlohmann::json buildStateDelta(const ObjectManager& objectManager);
+void packStateDelta(net::Message& message, const ObjectManager& objectManager);
 
-void applyStateDelta(const ObjectManager& objectManager, const nlohmann::json& delta);
+void unpackStateDelta(const ObjectManager& objectManager, const net::Message& message);
 
 // The editor's return path: a single component edit, carried as { object, type, [className], data },
 // where data is the component's own serialize() blob. The server applies it to its authoritative scene

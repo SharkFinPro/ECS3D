@@ -17,6 +17,7 @@ class ComponentRegistry;
 class AssetRegistry;
 class SceneManager;
 class ProjectSerializer;
+class ProjectPacker;
 class RenderSystem;
 class GpuAssetCache;
 class ComponentEditor;
@@ -27,7 +28,7 @@ class SaveUI;
 namespace net {
   class NetClient;
   class ServerProcess;
-  struct Message;
+  class Message;
 }
 
 // The editor is a client + tooling: it renders the replicated scene (Snapshot/StateDelta, same as the
@@ -70,6 +71,7 @@ private:
   std::shared_ptr<AssetRegistry> m_assetRegistry;
   std::shared_ptr<SceneManager> m_sceneManager;
   std::shared_ptr<ProjectSerializer> m_projectSerializer;
+  std::shared_ptr<ProjectPacker> m_projectPacker;
 
   std::shared_ptr<vke::VulkanEngine> m_renderer;
   std::shared_ptr<GpuAssetCache> m_assetCache;

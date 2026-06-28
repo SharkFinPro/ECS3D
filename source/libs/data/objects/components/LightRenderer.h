@@ -35,6 +35,10 @@ public:
 
   void loadFromJSON(const nlohmann::json& componentData) override;
 
+  void pack(net::Message& message) const override;
+
+  void unpack(net::MessageReader& messageReader) override;
+
 private:
   bool m_isSpotLight = false;
 

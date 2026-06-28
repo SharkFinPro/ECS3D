@@ -1,5 +1,6 @@
 #include "LightRenderer.h"
 #include <nlohmann/json.hpp>
+#include <Protocol.h>
 
 LightRenderer::LightRenderer()
   : Component(ComponentType::lightRenderer)
@@ -113,4 +114,32 @@ void LightRenderer::loadFromJSON(const nlohmann::json& componentData)
   m_coneAngle = componentData.at("coneAngle");
 
   m_isSpotLight = componentData.at("isSpotlight");
+}
+
+void LightRenderer::pack(net::Message& message) const
+{
+  message.write(ComponentType::lightRenderer);
+
+  message.write(m_isSpotLight);
+
+  message.write(m_color);
+  message.write(m_ambient);
+  message.write(m_diffuse);
+  message.write(m_specular);
+
+  message.write(m_direction);
+  message.write(m_coneAngle);
+}
+
+void LightRenderer::unpack(net::MessageReader& messageReader)
+{
+  m_isSpotLight = messageReader.read<bool>();
+
+  m_color = messageReader.read<glm::vec3>();
+  m_ambient = messageReader.read<float>();
+  m_diffuse = messageReader.read<float>();
+  m_specular = messageReader.read<float>();
+
+  m_direction = messageReader.read<glm::vec3>();
+  m_coneAngle = messageReader.read<float>();
 }

@@ -7,6 +7,8 @@ add_library(${PROJECT_NAME}
   ComponentRegistration.h
   ProjectSerializer.cpp
   ProjectSerializer.h
+  ProjectPacker.cpp
+  ProjectPacker.h
   Replication.cpp
   Replication.h
   assets/AssetRegistry.cpp
@@ -47,6 +49,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   nlohmann_json::nlohmann_json
   glm::glm
   stduuid
+  ECS3DNetProtocol
 )
 
 # ECS3DData is feature-complete: all component data, Object/ObjectManager, scenes (SceneManager/

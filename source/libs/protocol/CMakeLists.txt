@@ -1,0 +1,2 @@
+add_library(ECS3DNetProtocol INTERFACE)
+target_include_directories(ECS3DNetProtocol INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

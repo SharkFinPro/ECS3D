@@ -4,6 +4,7 @@
 #include <glm/gtx/component_wise.inl>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <Protocol.h>
 
 SphereCollider::SphereCollider()
   : Collider(ColliderType::sphereCollider, ComponentType::SubComponentType_sphereCollider)
@@ -97,6 +98,22 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
   }
 
   return { 0, 0, 0 };
+}
+
+void SphereCollider::pack(net::Message& message) const
+{
+  message.write(ComponentType::SubComponentType_sphereCollider);
+
+  message.write(m_renderCollider);
+  message.write(m_position.get());
+  message.write(m_radius.get());
+}
+
+void SphereCollider::unpack(net::MessageReader& messageReader)
+{
+  m_renderCollider = messageReader.read<bool>();
+  m_position.set(messageReader.read<glm::vec3>());
+  m_radius.set(messageReader.read<float>());
 }
 
 void SphereCollider::updateTransformPointer()
