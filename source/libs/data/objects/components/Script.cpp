@@ -58,18 +58,14 @@ void Script::pack(net::Message& message) const
 {
   message.write(ComponentType::script);
 
-  message.write(static_cast<uint32_t>(m_className.size()));
-  for (char c : m_className) message.write(c);
+  message.writeString(m_className);
 
-  const std::string fieldsStr = m_fields.dump();
-  message.write(static_cast<uint32_t>(fieldsStr.size()));
-  for (char c : fieldsStr) message.write(c);
+  message.writeString(m_fields.dump());
 }
 
 void Script::unpack(net::MessageReader& messageReader)
 {
-  const uint32_t fieldsSize = messageReader.read<uint32_t>();
-  std::string fieldsStr(fieldsSize, '\0');
-  for (char& c : fieldsStr) c = messageReader.read<char>();
+  auto fieldsStr = messageReader.readString();
+
   m_fields = nlohmann::json::parse(fieldsStr);
 }
