@@ -1,5 +1,6 @@
 #include "Script.h"
 #include <utility>
+#include <Protocol.h>
 
 Script::Script()
   : Component(ComponentType::script)
@@ -55,8 +56,24 @@ void Script::loadFromJSON(const nlohmann::json& componentData)
 
 void Script::pack(net::Message& message) const
 {
+  message.write(ComponentType::script);
+
+  message.write(static_cast<uint32_t>(m_className.size()));
+  for (char c : m_className) message.write(c);
+
+  const std::string fieldsStr = m_fields.dump();
+  message.write(static_cast<uint32_t>(fieldsStr.size()));
+  for (char c : fieldsStr) message.write(c);
 }
 
 void Script::unpack(net::MessageReader& messageReader)
 {
+  const uint32_t classNameSize = messageReader.read<uint32_t>();
+  m_className.resize(classNameSize);
+  for (char& c : m_className) c = messageReader.read<char>();
+
+  const uint32_t fieldsSize = messageReader.read<uint32_t>();
+  std::string fieldsStr(fieldsSize, '\0');
+  for (char& c : fieldsStr) c = messageReader.read<char>();
+  m_fields = nlohmann::json::parse(fieldsStr);
 }
