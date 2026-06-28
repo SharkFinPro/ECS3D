@@ -550,16 +550,11 @@ void ServerApp::broadcastSceneStatus() const
   m_netServer->broadcast(message);
 }
 
-void ServerApp::broadcastEditStatus()
+void ServerApp::broadcastEditStatus() const
 {
-  const nlohmann::json payload = { { "editable", m_options.editMode } };
-  const auto dumped = payload.dump();
-
   net::Message message(net::MessageType::editStatus);
-  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  message.write(m_options.editMode);
+
   m_netServer->broadcast(message);
 }
 

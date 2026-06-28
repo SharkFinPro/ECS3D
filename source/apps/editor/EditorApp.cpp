@@ -408,16 +408,11 @@ void EditorApp::handleEditComponent(const net::Message& message) const
 
 void EditorApp::handleEditStatus(const net::Message& message)
 {
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (json.is_discarded())
-  {
-    return;
-  }
+  net::MessageReader reader(message);
 
   // The server told us whether it's editable; a non-edit server makes the editor a read-only viewer.
-  m_serverEditable = json.value("editable", true);
+  m_serverEditable = reader.read<bool>();
+
   if (!m_serverEditable)
   {
     logMessage("Info", "Connected to a non-edit server - the editor is read-only.");

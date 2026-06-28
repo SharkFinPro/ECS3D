@@ -92,7 +92,7 @@ private:
 
   // Tells clients whether this server accepts edits (true only for an edit-mode server), so an editor
   // can show a read-only cue and disable its editing UI instead of looking broken/blank.
-  void broadcastEditStatus();
+  void broadcastEditStatus() const;
 
   void broadcastSceneStatus() const;
 
