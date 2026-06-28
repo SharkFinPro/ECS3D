@@ -114,6 +114,16 @@ private:
 
   void applyMessage(const net::Message& message);
 
+  void handleSnapshot(const net::Message& message) const;
+
+  void handleStateDelta(const net::Message& message) const;
+
+  void handleEditComponent(const net::Message& message) const;
+
+  void handleEditStatus(const net::Message& message);
+
+  void handleSceneStatus(const net::Message& message);
+
   void handlePicking();
 
   void sendInput();

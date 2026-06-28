@@ -362,28 +362,53 @@ void EditorApp::setupKeybinds()
 
 void EditorApp::applyMessage(const net::Message& message)
 {
-  // The snapshot and per-tick state delta are packed binary; every other message is still JSON.
-  if (message.getType() == net::MessageType::snapshot)
+  switch (message.getType())
   {
-    // Full state on join: rebuild the replicated scene from the packed project blob.
-    m_projectPacker->unpack(message);
+    case net::MessageType::snapshot:
+      handleSnapshot(message);
+      break;
 
-    const auto scene = m_sceneManager->getCurrentScene();
-    std::cerr << "[Editor] Applied snapshot (" << message.size() << " bytes). Current scene: "
-              << (scene ? scene->getName() : "<none>") << " ("
-              << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
-    return;
+    case net::MessageType::stateDelta:
+      handleStateDelta(message);
+      break;
+
+    case net::MessageType::editComponent:
+      handleEditComponent(message);
+      break;
+
+    case net::MessageType::editStatus:
+      handleEditStatus(message);
+      break;
+
+    case net::MessageType::sceneStatus:
+      handleSceneStatus(message);
+      break;
+
+    default: break;
   }
+}
 
-  if (message.getType() == net::MessageType::stateDelta)
+void EditorApp::handleSnapshot(const net::Message& message) const
+{
+  // Full state on join: rebuild the replicated scene from the packed project blob.
+  m_projectPacker->unpack(message);
+
+  const auto scene = m_sceneManager->getCurrentScene();
+  std::cerr << "[Editor] Applied snapshot (" << message.size() << " bytes). Current scene: "
+            << (scene ? scene->getName() : "<none>") << " ("
+            << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
+}
+
+void EditorApp::handleStateDelta(const net::Message& message) const
+{
+  if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    if (const auto scene = m_sceneManager->getCurrentScene())
-    {
-      replication::unpackStateDelta(*scene->getObjectManager(), message);
-    }
-    return;
+    replication::unpackStateDelta(*scene->getObjectManager(), message);
   }
+}
 
+void EditorApp::handleEditComponent(const net::Message& message) const
+{
   const std::string payload(message.bytes().begin(), message.bytes().end());
 
   const auto json = nlohmann::json::parse(payload, nullptr, false);
@@ -392,34 +417,45 @@ void EditorApp::applyMessage(const net::Message& message)
     return;
   }
 
-  switch (message.getType())
+  // Another editor (or this one, echoed by the server) changed a component.
+  if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    case net::MessageType::editComponent:
-      // Another editor (or this one, echoed by the server) changed a component.
-      if (const auto scene = m_sceneManager->getCurrentScene())
-      {
-        replication::applyComponentEdit(*scene->getObjectManager(), json);
-      }
-      break;
-    case net::MessageType::editStatus:
-      // The server told us whether it's editable; a non-edit server makes the editor a read-only viewer.
-      m_serverEditable = json.value("editable", true);
-      if (!m_serverEditable)
-      {
-        logMessage("Info", "Connected to a non-edit server - the editor is read-only.");
-      }
-      break;
-    case net::MessageType::sceneStatus:
-    {
-      const std::string status = json.value("status", std::string{});
-      if (status == "running")       m_sceneStatus = SceneStatus::running;
-      else if (status == "paused")   m_sceneStatus = SceneStatus::paused;
-      else                           m_sceneStatus = SceneStatus::stopped;
-      break;
-    }
-    default:
-      break;
+    replication::applyComponentEdit(*scene->getObjectManager(), json);
   }
+}
+
+void EditorApp::handleEditStatus(const net::Message& message)
+{
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  const auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (json.is_discarded())
+  {
+    return;
+  }
+
+  // The server told us whether it's editable; a non-edit server makes the editor a read-only viewer.
+  m_serverEditable = json.value("editable", true);
+  if (!m_serverEditable)
+  {
+    logMessage("Info", "Connected to a non-edit server - the editor is read-only.");
+  }
+}
+
+void EditorApp::handleSceneStatus(const net::Message& message)
+{
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  const auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (json.is_discarded())
+  {
+    return;
+  }
+
+  const std::string status = json.value("status", std::string{});
+  if (status == "running")       m_sceneStatus = SceneStatus::running;
+  else if (status == "paused")   m_sceneStatus = SceneStatus::paused;
+  else                           m_sceneStatus = SceneStatus::stopped;
 }
 
 void EditorApp::updateGui()
