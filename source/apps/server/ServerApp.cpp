@@ -151,7 +151,7 @@ void ServerApp::run()
   }
 }
 
-void ServerApp::fixedUpdate(const float dt)
+void ServerApp::fixedUpdate(const float dt) const
 {
   const auto scene = m_sceneManager->getCurrentScene();
   if (!scene || m_sceneManager->getSceneStatus() != SceneStatus::running)
@@ -281,7 +281,7 @@ void ServerApp::handleEditComponent(const net::Message& message) const
   }
 }
 
-void ServerApp::handleSceneEdit(const net::Message& message)
+void ServerApp::handleSceneEdit(const net::Message& message) const
 {
   // An editor changed the scene graph (add/remove object or component): apply it, then re-snapshot
   // so every view rebuilds (structural changes aren't replicated per-op).
@@ -299,7 +299,7 @@ void ServerApp::handleSceneEdit(const net::Message& message)
   }
 }
 
-void ServerApp::handleLoadProject(const net::Message& message)
+void ServerApp::handleLoadProject(const net::Message& message) const
 {
   // An editor opened a different project: stop the current scripts, swap the project in, restart,
   // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
@@ -307,27 +307,73 @@ void ServerApp::handleLoadProject(const net::Message& message)
 
   const std::string payload(message.bytes().begin(), message.bytes().end());
 
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (!json.is_discarded())
-  {
-    loadProject(json);
-  }
-  else
+  const auto project = nlohmann::json::parse(payload, nullptr, false);
+  if (project.is_discarded())
   {
     logMessage("Error", "loadProject payload was not valid JSON.");
+    return;
   }
+
+  // Stop the current scripts before the scene is swapped out from under them.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    try
+    {
+      m_scriptSystem->stop(*scene->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      logMessage("Error", e.what());
+    }
+  }
+
+  try
+  {
+    // deserialize clears + rebuilds the AssetRegistry/SceneManager and loads the current scene.
+    m_projectSerializer->deserialize(project);
+  }
+  catch (const std::exception& e)
+  {
+    logMessage("Error", std::string("Failed to load project from editor: ") + e.what());
+    return;
+  }
+
+  m_sceneManager->startScene();
+
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    try
+    {
+      m_scriptSystem->start(*scene->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      logMessage("Error", e.what());
+    }
+
+    logMessage("Info", "Loaded project from editor: scene '" + scene->getName() + "' ("
+      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
+  }
+
+  broadcastSnapshot();
 }
 
-void ServerApp::handleAddAsset(const net::Message& message)
+void ServerApp::handleAddAsset(const net::Message& message) const
 {
   // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
   const std::string payload(message.bytes().begin(), message.bytes().end());
 
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (!json.is_discarded())
+  const auto asset = nlohmann::json::parse(payload, nullptr, false);
+  if (asset.is_discarded())
   {
-    addAsset(json);
+    return;
   }
+
+  replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
+
+  logMessage("Info", "Registered asset (" + asset.value("assetType", std::string{}) + ").");
+
+  broadcastSnapshot();
 }
 
 void ServerApp::handleInputState(const net::Message& message)
@@ -343,7 +389,7 @@ void ServerApp::handleInputState(const net::Message& message)
   }
 }
 
-void ServerApp::handleSceneControl(const net::Message& message)
+void ServerApp::handleSceneControl(const net::Message& message) const
 {
   const std::string payload(message.bytes().begin(), message.bytes().end());
 
@@ -407,7 +453,7 @@ void ServerApp::handleSceneControl(const net::Message& message)
   broadcastSnapshot();
 }
 
-void ServerApp::loadScene(const std::string& sceneUUID)
+void ServerApp::loadScene(const std::string& sceneUUID) const
 {
   const auto parsed = uuids::uuid::from_string(sceneUUID);
   if (!parsed.has_value())
@@ -452,62 +498,7 @@ void ServerApp::loadScene(const std::string& sceneUUID)
   broadcastSnapshot();
 }
 
-void ServerApp::addAsset(const nlohmann::json& asset)
-{
-  replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
-
-  logMessage("Info", "Registered asset (" + asset.value("assetType", std::string{}) + ").");
-
-  broadcastSnapshot();
-}
-
-void ServerApp::loadProject(const nlohmann::json& project)
-{
-  // Stop the current scripts before the scene is swapped out from under them.
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    try
-    {
-      m_scriptSystem->stop(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      logMessage("Error", e.what());
-    }
-  }
-
-  try
-  {
-    // deserialize clears + rebuilds the AssetRegistry/SceneManager and loads the current scene.
-    m_projectSerializer->deserialize(project);
-  }
-  catch (const std::exception& e)
-  {
-    logMessage("Error", std::string("Failed to load project from editor: ") + e.what());
-    return;
-  }
-
-  m_sceneManager->startScene();
-
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    try
-    {
-      m_scriptSystem->start(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      logMessage("Error", e.what());
-    }
-
-    logMessage("Info", "Loaded project from editor: scene '" + scene->getName() + "' ("
-      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
-  }
-
-  broadcastSnapshot();
-}
-
-void ServerApp::broadcastSnapshot()
+void ServerApp::broadcastSnapshot() const
 {
   // Refresh each Script's field blob from its live C# instance so the snapshot carries current values.
   // This reaches into the script bridge, so guard it: a field-sync hiccup must NOT stop the snapshot

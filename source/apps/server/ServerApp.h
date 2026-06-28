@@ -68,7 +68,7 @@ private:
   // doesn't exit during the launch -> connect window when the count is still 0).
   bool m_hasConnected = false;
 
-  void fixedUpdate(float dt);
+  void fixedUpdate(float dt) const;
 
   void handleClientMessage(const net::Message& message);
 
@@ -76,23 +76,19 @@ private:
 
   void handleEditComponent(const net::Message& message) const;
 
-  void handleSceneEdit(const net::Message& message);
+  void handleSceneEdit(const net::Message& message) const;
 
-  void handleLoadProject(const net::Message& message);
+  void handleLoadProject(const net::Message& message) const;
 
-  void handleAddAsset(const net::Message& message);
+  void handleAddAsset(const net::Message& message) const;
 
   static void handleInputState(const net::Message& message);
 
-  void handleSceneControl(const net::Message& message);
+  void handleSceneControl(const net::Message& message) const;
 
-  void loadScene(const std::string& sceneUUID);
+  void loadScene(const std::string& sceneUUID) const;
 
-  void addAsset(const nlohmann::json& asset);
-
-  void loadProject(const nlohmann::json& project);
-
-  void broadcastSnapshot();
+  void broadcastSnapshot() const;
 
   // Tells clients whether this server accepts edits (true only for an edit-mode server), so an editor
   // can show a read-only cue and disable its editing UI instead of looking broken/blank.
