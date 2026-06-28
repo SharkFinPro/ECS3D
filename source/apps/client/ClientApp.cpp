@@ -14,7 +14,6 @@
 #include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
-#include <nlohmann/json.hpp>
 #include <chrono>
 #include <iostream>
 #include <thread>
