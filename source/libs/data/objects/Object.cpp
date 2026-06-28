@@ -7,6 +7,7 @@
 #include <glm/vec3.hpp>
 #include <stdexcept>
 #include <utility>
+#include <Protocol.h>
 
 Object::Object(std::string name)
   : m_name(std::move(name))
@@ -223,6 +224,76 @@ const std::unordered_map<ComponentType, std::shared_ptr<Component>>& Object::get
 const std::vector<std::shared_ptr<Component>>& Object::getScripts() const
 {
   return m_scripts;
+}
+
+void Object::pack(net::Message& message) const
+{
+  // Name
+  std::string cleanName = m_name;
+  cleanName.erase(std::ranges::find(cleanName, '\0'), cleanName.end());
+  message.write(static_cast<uint32_t>(cleanName.size()));
+  for (char c : cleanName) message.write(c);
+
+  // UUID
+  const std::string uuidStr = uuids::to_string(m_uuid);
+  message.write(static_cast<uint32_t>(uuidStr.size()));
+  for (char c : uuidStr) message.write(c);
+
+  // Components
+  message.write(m_components.size());
+  for (const auto& [_, component] : m_components)
+  {
+    component->pack(message);
+  }
+
+  // Scripts
+  message.write(m_scripts.size());
+  for (const auto& script : m_scripts)
+  {
+    script->pack(message);
+  }
+
+  // Children
+  message.write(m_children.size());
+  for (const auto& child : m_children)
+  {
+    child->pack(message);
+  }
+}
+
+void Object::unpack(net::MessageReader& messageReader)
+{
+  // Name
+  const uint32_t nameSize = messageReader.read<uint32_t>();
+  m_name.resize(nameSize);
+  for (char& c : m_name) c = messageReader.read<char>();
+
+  // UUID
+  const uint32_t uuidSize = messageReader.read<uint32_t>();
+  std::string uuidStr(uuidSize, '\0');
+  for (char& c : uuidStr) c = messageReader.read<char>();
+  m_uuid = uuids::uuid::from_string(uuidStr).value();
+
+  // Components
+  const uint32_t componentCount = messageReader.read<uint32_t>();
+  for (uint32_t i = 0; i < componentCount; ++i)
+  {
+
+  }
+
+  // Scripts
+  const uint32_t scriptCount = messageReader.read<uint32_t>();
+  for (uint32_t i = 0; i < scriptCount; ++i)
+  {
+
+  }
+
+  // Children
+  const uint32_t childCount = messageReader.read<uint32_t>();
+  for (uint32_t i = 0; i < childCount; ++i)
+  {
+
+  }
 }
 
 std::shared_ptr<Component> Object::getComponent(const ComponentType type) const
