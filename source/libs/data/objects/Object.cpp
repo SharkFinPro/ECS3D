@@ -228,16 +228,16 @@ const std::vector<std::shared_ptr<Component>>& Object::getScripts() const
 
 void Object::pack(net::Message& message) const
 {
+  // UUID
+  const std::string uuidStr = uuids::to_string(m_uuid);
+  message.write(static_cast<uint32_t>(uuidStr.size()));
+  for (char c : uuidStr) message.write(c);
+
   // Name
   std::string cleanName = m_name;
   cleanName.erase(std::ranges::find(cleanName, '\0'), cleanName.end());
   message.write(static_cast<uint32_t>(cleanName.size()));
   for (char c : cleanName) message.write(c);
-
-  // UUID
-  const std::string uuidStr = uuids::to_string(m_uuid);
-  message.write(static_cast<uint32_t>(uuidStr.size()));
-  for (char c : uuidStr) message.write(c);
 
   // Components
   message.write(m_components.size());
@@ -263,16 +263,16 @@ void Object::pack(net::Message& message) const
 
 void Object::unpack(net::MessageReader& messageReader)
 {
-  // Name
-  const uint32_t nameSize = messageReader.read<uint32_t>();
-  m_name.resize(nameSize);
-  for (char& c : m_name) c = messageReader.read<char>();
-
   // UUID
   const uint32_t uuidSize = messageReader.read<uint32_t>();
   std::string uuidStr(uuidSize, '\0');
   for (char& c : uuidStr) c = messageReader.read<char>();
   m_uuid = uuids::uuid::from_string(uuidStr).value();
+
+  // Name
+  const uint32_t nameSize = messageReader.read<uint32_t>();
+  m_name.resize(nameSize);
+  for (char& c : m_name) c = messageReader.read<char>();
 
   // Components
   const uint32_t componentCount = messageReader.read<uint32_t>();
