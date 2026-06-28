@@ -421,18 +421,8 @@ void EditorApp::handleEditStatus(const net::Message& message)
 
 void EditorApp::handleSceneStatus(const net::Message& message)
 {
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (json.is_discarded())
-  {
-    return;
-  }
-
-  const std::string status = json.value("status", std::string{});
-  if (status == "running")       m_sceneStatus = SceneStatus::running;
-  else if (status == "paused")   m_sceneStatus = SceneStatus::paused;
-  else                           m_sceneStatus = SceneStatus::stopped;
+  net::MessageReader reader(message);
+  m_sceneStatus = reader.read<SceneStatus>();
 }
 
 void EditorApp::updateGui()
