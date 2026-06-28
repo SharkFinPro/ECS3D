@@ -101,14 +101,7 @@ EditorApp::EditorApp(LaunchOptions options)
     // re-snapshots to keep everyone in sync).
     replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, addAsset);
 
-    const auto payload = addAsset.dump();
-
-    net::Message message(net::MessageType::addAsset);
-    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
-    m_netClient->send(message);
+    m_netClient->send(replication::packAddAsset(addAsset));
   });
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);

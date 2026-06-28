@@ -70,6 +70,13 @@ void applyAddAsset(AssetRegistry& assetRegistry,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,
                    const nlohmann::json& asset);
 
+// Wire (de)serialization for an addAsset blob. The schema is open-ended per asset type, but only a fixed
+// set of string fields is ever consumed (see applyAddAsset), so each is packed length-prefixed (empty
+// when absent) instead of as JSON. The pairing unpack rebuilds the blob applyAddAsset expects.
+[[nodiscard]] net::Message packAddAsset(const nlohmann::json& asset);
+
+[[nodiscard]] nlohmann::json unpackAddAsset(const net::Message& message);
+
 }
 
 

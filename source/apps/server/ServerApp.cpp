@@ -360,10 +360,12 @@ void ServerApp::handleLoadProject(const net::Message& message) const
 void ServerApp::handleAddAsset(const net::Message& message) const
 {
   // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto asset = nlohmann::json::parse(payload, nullptr, false);
-  if (asset.is_discarded())
+  nlohmann::json asset;
+  try
+  {
+    asset = replication::unpackAddAsset(message);
+  }
+  catch (const std::exception&)
   {
     return;
   }
