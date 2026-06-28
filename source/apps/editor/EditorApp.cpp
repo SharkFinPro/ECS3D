@@ -105,15 +105,15 @@ EditorApp::EditorApp(LaunchOptions options)
   });
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
-  m_saveUI->setLoadProjectCallback([this](const std::string& projectJson) {
-    // Open/New: the server owns the running sim, so send it the project blob; it reloads and re-snapshots.
-    std::cerr << "[Editor] Sending loadProject (" << projectJson.size() << " bytes) to server." << std::endl;
-
+  m_saveUI->setLoadProjectCallback([this] {
+    // Open/New: the server owns the running sim, so send it the project; it reloads and re-snapshots.
+    // SaveUI has already applied the project to our managers, so pack their current state — the same
+    // packed shape as a snapshot, which the server unpacks with the same ProjectPacker.
     net::Message message(net::MessageType::loadProject);
-    for (const std::vector<uint8_t> chunks(projectJson.begin(), projectJson.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
+    m_projectPacker->pack(message);
+
+    std::cerr << "[Editor] Sending loadProject (" << message.size() << " bytes) to server." << std::endl;
+
     m_netClient->send(message);
   });
 

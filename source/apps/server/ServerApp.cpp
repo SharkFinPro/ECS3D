@@ -304,15 +304,6 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
   logMessage("Info", "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
 
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto project = nlohmann::json::parse(payload, nullptr, false);
-  if (project.is_discarded())
-  {
-    logMessage("Error", "loadProject payload was not valid JSON.");
-    return;
-  }
-
   // Stop the current scripts before the scene is swapped out from under them.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
@@ -328,8 +319,9 @@ void ServerApp::handleLoadProject(const net::Message& message) const
 
   try
   {
-    // deserialize clears + rebuilds the AssetRegistry/SceneManager and loads the current scene.
-    m_projectSerializer->deserialize(project);
+    // Same packed shape as a snapshot: unpack clears + rebuilds the AssetRegistry/SceneManager and loads
+    // the current scene. ProjectSerializer stays the JSON path for file save/load.
+    m_projectPacker->unpack(message);
   }
   catch (const std::exception& e)
   {

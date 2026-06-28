@@ -98,9 +98,9 @@ void SaveUI::loadProjectBlob(const std::string& projectJson) const
     return;
   }
 
-  // Apply it locally for immediate feedback (the editor's replicated managers), then hand the blob to
-  // the app to forward to the authoritative server, which reloads + re-snapshots to keep everyone in
-  // sync. Local-only would desync; server-only leaves the editor blank if the round-trip lags.
+  // Apply it locally for immediate feedback (the editor's replicated managers), then notify the app to
+  // forward it to the authoritative server, which reloads + re-snapshots to keep everyone in sync.
+  // Local-only would desync; server-only leaves the editor blank if the round-trip lags.
   try
   {
     m_projectSerializer->deserialize(json);
@@ -113,7 +113,7 @@ void SaveUI::loadProjectBlob(const std::string& projectJson) const
 
   if (m_onLoadProject)
   {
-    m_onLoadProject(projectJson);
+    m_onLoadProject();
   }
 }
 
