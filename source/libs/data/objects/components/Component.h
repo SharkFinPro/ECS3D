@@ -6,6 +6,11 @@
 #include <unordered_map>
 #include <vector>
 
+namespace net {
+  class Message;
+  class MessageReader;
+}
+
 class Object;
 
 enum class ComponentType {
@@ -123,6 +128,10 @@ public:
   [[nodiscard]] virtual nlohmann::json serialize() = 0;
 
   virtual void loadFromJSON(const nlohmann::json& componentData) = 0;
+
+  virtual void pack(net::Message& message) const = 0;
+
+  virtual void unpack(net::MessageReader& messageReader) = 0;
 
 protected:
   ComponentType m_type;

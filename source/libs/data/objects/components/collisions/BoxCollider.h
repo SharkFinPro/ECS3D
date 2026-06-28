@@ -44,6 +44,10 @@ public:
 
   glm::vec3 findFurthestPoint(const glm::vec3& direction) override;
 
+  void pack(net::Message& message) const override;
+
+  void unpack(net::MessageReader& messageReader) override;
+
 private:
   // The vke::RenderObject + collider gizmo rendering moved to ECS3DRender; m_renderCollider stays as
   // a plain flag the editor toggles and the render system reads.

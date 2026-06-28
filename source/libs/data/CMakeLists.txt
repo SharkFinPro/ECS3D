@@ -47,6 +47,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   nlohmann_json::nlohmann_json
   glm::glm
   stduuid
+  ECS3DNetProtocol
 )
 
 # ECS3DData is feature-complete: all component data, Object/ObjectManager, scenes (SceneManager/

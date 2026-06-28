@@ -52,3 +52,11 @@ void Script::loadFromJSON(const nlohmann::json& componentData)
     m_fields = componentData.at("fields");
   }
 }
+
+void Script::pack(net::Message& message) const
+{
+}
+
+void Script::unpack(net::MessageReader& messageReader)
+{
+}
