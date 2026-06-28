@@ -14,7 +14,6 @@
 #include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
-#include <nlohmann/json.hpp>
 #include <chrono>
 #include <iostream>
 #include <thread>
@@ -94,18 +93,14 @@ void ClientApp::sendInput()
   m_lastInputFocused = snapshot.focused;
   m_inputSent = true;
 
-  const nlohmann::json payload = {
-    { "keys", snapshot.keys },
-    { "focused", snapshot.focused }
-  };
-
-  const auto dumped = payload.dump();
-
   net::Message message(net::MessageType::inputState);
-  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  message.write(snapshot.focused);
+  message.write(snapshot.keys.size());
+  for (const auto& key : snapshot.keys)
   {
-    message.write(chunk);
+    message.write(key);
   }
+
   m_netClient->send(message);
 }
 
@@ -217,19 +212,9 @@ void ClientApp::handleStateDelta(const net::Message& message) const
 
 void ClientApp::handleEditComponent(const net::Message& message) const
 {
-  const auto scene = m_sceneManager->getCurrentScene();
-
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (json.is_discarded())
-  {
-    return;
-  }
-
   // The server applied an editor's component change; mirror it into the replicated scene.
-  if (scene)
+  if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), json);
+    replication::applyComponentEdit(*scene->getObjectManager(), message);
   }
 }

@@ -9,6 +9,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/components/Component.h>
 #include <PhysicsSystem.h>
 #include <CollisionSystem.h>
 #include <ScriptSystem.h>
@@ -255,28 +256,26 @@ void ServerApp::handleEditComponent(const net::Message& message) const
   // other view (and the editing client, idempotently) converges.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    const std::string payload(message.bytes().begin(), message.bytes().end());
+    replication::applyComponentEdit(*scene->getObjectManager(), message);
 
-    const auto json = nlohmann::json::parse(payload, nullptr, false);
-    if (!json.is_discarded())
+    m_netServer->broadcast(message);
+
+    // If the edit targets a Script, push the new field values into the live C# instance so the
+    // running behavior reflects the change immediately (applyComponentEdit only updates the data
+    // layer; the C# instance is owned by ScriptSystem and needs an explicit write). The packed layout
+    // mirrors Script::pack: [object uuid][type][className][fields].
+    net::MessageReader reader(message);
+    const auto objectUUID = uuids::uuid::from_string(reader.readString());
+
+    if (objectUUID.has_value() && reader.read<ComponentType>() == ComponentType::script)
     {
-      replication::applyComponentEdit(*scene->getObjectManager(), json);
+      const auto className = reader.readString();
+      const auto fields = nlohmann::json::parse(reader.readString(), nullptr, false);
 
-      // If the edit targets a Script, push the new field values into the live C# instance so the
-      // running behaviour reflects the change immediately (applyComponentEdit only updates the data
-      // layer; the C# instance is owned by ScriptSystem and needs an explicit write).
-      if (json.value("type", "") == "Script")
+      if (!fields.is_discarded())
       {
-        if (const auto parsed = uuids::uuid::from_string(std::string(json.at("object"))))
-        {
-          m_scriptSystem->applyScriptFieldEdit(
-            parsed.value(),
-            json.value("className", ""),
-            json.at("data").value("fields", nlohmann::json::array()));
-        }
+        m_scriptSystem->applyScriptFieldEdit(objectUUID.value(), className, fields);
       }
-
-      m_netServer->broadcast(message);
     }
   }
 }
@@ -379,14 +378,18 @@ void ServerApp::handleAddAsset(const net::Message& message) const
 void ServerApp::handleInputState(const net::Message& message)
 {
   // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
-  const std::string payload(message.bytes().begin(), message.bytes().end());
+  net::MessageReader reader(message);
+  const auto focused = reader.read<bool>();
+  InputState::setFocused(focused);
 
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (!json.is_discarded())
+  const auto numKeys = reader.read<size_t>();
+  std::vector<int> keysPressed(numKeys);
+  for (auto& key : keysPressed)
   {
-    InputState::setKeysPressed(json.value("keys", std::vector<int>{}));
-    InputState::setFocused(json.value("focused", false));
+    key = reader.read<int>();
   }
+
+  InputState::setKeysPressed(keysPressed);
 }
 
 void ServerApp::handleSceneControl(const net::Message& message) const
@@ -448,8 +451,7 @@ void ServerApp::handleSceneControl(const net::Message& message) const
   }
 
   // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
-  // every view reflects it immediately. Also push the new status so the editor can react.
-  broadcastSceneStatus();
+  // every view reflects it immediately.
   broadcastSnapshot();
 }
 
@@ -527,36 +529,23 @@ void ServerApp::broadcastSnapshot() const
     + (currentScene ? uuids::to_string(currentScene->getUUID()) : std::string{}) + "'.");
 
   m_netServer->broadcast(message);
+
+  broadcastSceneStatus();
 }
 
 void ServerApp::broadcastSceneStatus() const
 {
-  const auto status = m_sceneManager->getSceneStatus();
-  const std::string statusStr = status == SceneStatus::running  ? "running"
-                              : status == SceneStatus::paused   ? "paused"
-                                                                : "stopped";
-
-  const nlohmann::json payload = { { "status", statusStr } };
-  const auto dumped = payload.dump();
-
   net::Message message(net::MessageType::sceneStatus);
-  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  message.write(m_sceneManager->getSceneStatus());
+
   m_netServer->broadcast(message);
 }
 
-void ServerApp::broadcastEditStatus()
+void ServerApp::broadcastEditStatus() const
 {
-  const nlohmann::json payload = { { "editable", m_options.editMode } };
-  const auto dumped = payload.dump();
-
   net::Message message(net::MessageType::editStatus);
-  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  message.write(m_options.editMode);
+
   m_netServer->broadcast(message);
 }
 
