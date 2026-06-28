@@ -72,7 +72,19 @@ private:
 
   void handleClientMessage(const net::Message& message);
 
-  void applySceneControl(const nlohmann::json& control);
+  void handleJoin(const net::Message& message);
+
+  void handleEditComponent(const net::Message& message) const;
+
+  void handleSceneEdit(const net::Message& message);
+
+  void handleLoadProject(const net::Message& message);
+
+  void handleAddAsset(const net::Message& message);
+
+  static void handleInputState(const net::Message& message);
+
+  void handleSceneControl(const net::Message& message);
 
   void loadScene(const std::string& sceneUUID);
 

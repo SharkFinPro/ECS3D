@@ -208,125 +208,151 @@ void ServerApp::handleClientMessage(const net::Message& message)
   switch (message.getType())
   {
     case net::MessageType::join:
-      // A client joined: tell it whether this server is editable, then send the full project/scene as a
-      // Snapshot. Record that a connection has been seen so an ephemeral server (exitWhenEmpty) can
-      // later exit when the last one drops.
-      m_hasConnected = true;
-      broadcastEditStatus();
-      broadcastSnapshot();
+      handleJoin(message);
       break;
+
     case net::MessageType::editComponent:
-    {
-      // An editor changed a component: apply it to the authoritative scene, then re-broadcast so every
-      // other view (and the editing client, idempotently) converges.
-      if (const auto scene = m_sceneManager->getCurrentScene())
-      {
-        const std::string payload(message.bytes().begin(), message.bytes().end());
-
-        const auto json = nlohmann::json::parse(payload, nullptr, false);
-        if (!json.is_discarded())
-        {
-          replication::applyComponentEdit(*scene->getObjectManager(), json);
-
-          // If the edit targets a Script, push the new field values into the live C# instance so the
-          // running behaviour reflects the change immediately (applyComponentEdit only updates the data
-          // layer; the C# instance is owned by ScriptSystem and needs an explicit write).
-          if (json.value("type", "") == "Script")
-          {
-            if (const auto parsed = uuids::uuid::from_string(std::string(json.at("object"))))
-            {
-              m_scriptSystem->applyScriptFieldEdit(
-                parsed.value(),
-                json.value("className", ""),
-                json.at("data").value("fields", nlohmann::json::array()));
-            }
-          }
-
-          m_netServer->broadcast(message);
-        }
-      }
+      handleEditComponent(message);
       break;
-    }
+
     case net::MessageType::sceneEdit:
-    {
-      // An editor changed the scene graph (add/remove object or component): apply it, then re-snapshot
-      // so every view rebuilds (structural changes aren't replicated per-op).
-      if (const auto scene = m_sceneManager->getCurrentScene())
-      {
-        const std::string payload(message.bytes().begin(), message.bytes().end());
-
-        const auto json = nlohmann::json::parse(payload, nullptr, false);
-        if (!json.is_discarded())
-        {
-          replication::applySceneEdit(*scene->getObjectManager(), json);
-
-          broadcastSnapshot();
-        }
-      }
+      handleSceneEdit(message);
       break;
-    }
+
     case net::MessageType::loadProject:
-    {
-      // An editor opened a different project: stop the current scripts, swap the project in, restart,
-      // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
-      logMessage("Info", "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
-
-      const std::string payload(message.bytes().begin(), message.bytes().end());
-
-      const auto json = nlohmann::json::parse(payload, nullptr, false);
-      if (!json.is_discarded())
-      {
-        loadProject(json);
-      }
-      else
-      {
-        logMessage("Error", "loadProject payload was not valid JSON.");
-      }
+      handleLoadProject(message);
       break;
-    }
+
     case net::MessageType::addAsset:
-    {
-      // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
-      const std::string payload(message.bytes().begin(), message.bytes().end());
-
-      const auto json = nlohmann::json::parse(payload, nullptr, false);
-      if (!json.is_discarded())
-      {
-        addAsset(json);
-      }
+      handleAddAsset(message);
       break;
-    }
+
     case net::MessageType::inputState:
-    {
-      // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
-      const std::string payload(message.bytes().begin(), message.bytes().end());
-
-      const auto json = nlohmann::json::parse(payload, nullptr, false);
-      if (!json.is_discarded())
-      {
-        InputState::setKeysPressed(json.value("keys", std::vector<int>{}));
-        InputState::setFocused(json.value("focused", false));
-      }
+      handleInputState(message);
       break;
-    }
+
     case net::MessageType::sceneControl:
-    {
-      const std::string payload(message.bytes().begin(), message.bytes().end());
+      handleSceneControl(message);
+      break;
 
-      const auto json = nlohmann::json::parse(payload, nullptr, false);
-      if (!json.is_discarded())
-      {
-        applySceneControl(json);
-      }
-      break;
-    }
-    default:
-      break;
+    default: break;
   }
 }
 
-void ServerApp::applySceneControl(const nlohmann::json& control)
+void ServerApp::handleJoin(const net::Message& message)
 {
+  // A client joined: tell it whether this server is editable, then send the full project/scene as a
+  // Snapshot. Record that a connection has been seen so an ephemeral server (exitWhenEmpty) can
+  // later exit when the last one drops.
+  m_hasConnected = true;
+  broadcastEditStatus();
+  broadcastSnapshot();
+}
+
+void ServerApp::handleEditComponent(const net::Message& message) const
+{
+  // An editor changed a component: apply it to the authoritative scene, then re-broadcast so every
+  // other view (and the editing client, idempotently) converges.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    const std::string payload(message.bytes().begin(), message.bytes().end());
+
+    const auto json = nlohmann::json::parse(payload, nullptr, false);
+    if (!json.is_discarded())
+    {
+      replication::applyComponentEdit(*scene->getObjectManager(), json);
+
+      // If the edit targets a Script, push the new field values into the live C# instance so the
+      // running behaviour reflects the change immediately (applyComponentEdit only updates the data
+      // layer; the C# instance is owned by ScriptSystem and needs an explicit write).
+      if (json.value("type", "") == "Script")
+      {
+        if (const auto parsed = uuids::uuid::from_string(std::string(json.at("object"))))
+        {
+          m_scriptSystem->applyScriptFieldEdit(
+            parsed.value(),
+            json.value("className", ""),
+            json.at("data").value("fields", nlohmann::json::array()));
+        }
+      }
+
+      m_netServer->broadcast(message);
+    }
+  }
+}
+
+void ServerApp::handleSceneEdit(const net::Message& message)
+{
+  // An editor changed the scene graph (add/remove object or component): apply it, then re-snapshot
+  // so every view rebuilds (structural changes aren't replicated per-op).
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    const std::string payload(message.bytes().begin(), message.bytes().end());
+
+    const auto json = nlohmann::json::parse(payload, nullptr, false);
+    if (!json.is_discarded())
+    {
+      replication::applySceneEdit(*scene->getObjectManager(), json);
+
+      broadcastSnapshot();
+    }
+  }
+}
+
+void ServerApp::handleLoadProject(const net::Message& message)
+{
+  // An editor opened a different project: stop the current scripts, swap the project in, restart,
+  // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
+  logMessage("Info", "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
+
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  const auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (!json.is_discarded())
+  {
+    loadProject(json);
+  }
+  else
+  {
+    logMessage("Error", "loadProject payload was not valid JSON.");
+  }
+}
+
+void ServerApp::handleAddAsset(const net::Message& message)
+{
+  // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  const auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (!json.is_discarded())
+  {
+    addAsset(json);
+  }
+}
+
+void ServerApp::handleInputState(const net::Message& message)
+{
+  // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  const auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (!json.is_discarded())
+  {
+    InputState::setKeysPressed(json.value("keys", std::vector<int>{}));
+    InputState::setFocused(json.value("focused", false));
+  }
+}
+
+void ServerApp::handleSceneControl(const net::Message& message)
+{
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  const auto control = nlohmann::json::parse(payload, nullptr, false);
+  if (control.is_discarded())
+  {
+    return;
+  }
+
   const std::string op = control.value("op", std::string{});
 
   if (op == "loadScene")
