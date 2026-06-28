@@ -1,7 +1,6 @@
 project(ECS3DNet)
 
 add_library(${PROJECT_NAME}
-  Protocol.h
   MessageQueue.cpp
   MessageQueue.h
   NetServer.cpp
@@ -19,6 +18,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
   ECS3DClrHost
+  ECS3DNetProtocol
 )
 
 # The C# TCP transport assembly. The C++ side owns the protocol (opaque serialize() payloads); C#

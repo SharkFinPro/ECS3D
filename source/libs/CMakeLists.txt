@@ -66,6 +66,7 @@ FetchContent_MakeAvailable(
 # path the <VulkanEngine/...> headers need.
 set(ECS3D_VULKANENGINE_INCLUDE "${VulkanEngine_SOURCE_DIR}/include" CACHE INTERNAL "VulkanEngine include dir")
 
+add_subdirectory(protocol)
 add_subdirectory(data)
 add_subdirectory(clrHost)
 add_subdirectory(net)

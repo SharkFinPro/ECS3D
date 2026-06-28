@@ -17,7 +17,7 @@ class ScriptSystem;
 
 namespace net {
   class NetServer;
-  struct Message;
+  class Message;
 }
 
 // The authoritative server. It owns the simulation and is the only thing that links ECS3DSim + ECS3DScripting.

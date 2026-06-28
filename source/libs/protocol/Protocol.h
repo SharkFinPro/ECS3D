@@ -1,7 +1,10 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
+#include <bit>
 #include <cstdint>
+#include <span>
+#include <stdexcept>
 #include <vector>
 
 namespace net {
@@ -12,6 +15,7 @@ namespace net {
 inline constexpr int defaultPort = 3000;
 
 enum class MessageType : uint8_t {
+  undefined,
   join,         // client -> server: request the initial Snapshot (carries role + auth at handshake)
   snapshot,     // server -> client: full project/scene state (ProjectSerializer::serialize())
   stateDelta,   // server -> client: per-tick transform stream (replication::buildStateDelta)
@@ -34,12 +38,51 @@ enum class Role : uint8_t {
   editor
 };
 
-struct Message {
-  MessageType type;
+template <typename T>
+concept Trivial = std::is_trivially_copyable_v<T>;
 
-  // Opaque payload: the existing serialize() JSON as bytes. The net layer never references a
-  // specific component type, only this generic blob.
-  std::vector<uint8_t> payload;
+class Message {
+public:
+  explicit Message(const MessageType type) noexcept : type(type) {}
+  Message() {}
+
+  template <Trivial T>
+  Message& write(const T& value) {
+    const auto raw = std::bit_cast<std::array<uint8_t, sizeof(T)>>(value);
+    m_payload.insert(m_payload.end(), raw.begin(), raw.end());
+    return *this;
+  }
+
+  [[nodiscard]] std::size_t size() const noexcept { return m_payload.size(); }
+  [[nodiscard]] std::span<const uint8_t> bytes() const noexcept { return m_payload; }
+
+  [[nodiscard]] MessageType getType() const noexcept { return type; }
+
+private:
+  MessageType type = MessageType::undefined;
+  std::vector<uint8_t> m_payload;
+};
+
+class MessageReader {
+public:
+  explicit MessageReader(const Message& message) noexcept : m_data(message.bytes()) {}
+
+  template <Trivial T>
+  [[nodiscard]] T read() {
+    if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
+      throw std::runtime_error("Message underflow");
+
+    std::array<uint8_t, sizeof(T)> raw{};
+    std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+    m_offset += sizeof(T);
+    return std::bit_cast<T>(raw);
+  }
+
+  [[nodiscard]] std::size_t remaining() const noexcept { return m_data.size() - m_offset; }
+
+private:
+  std::span<const uint8_t> m_data;
+  std::size_t m_offset = 0;
 };
 
 }

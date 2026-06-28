@@ -27,7 +27,7 @@ class SaveUI;
 namespace net {
   class NetClient;
   class ServerProcess;
-  struct Message;
+  class Message;
 }
 
 // The editor is a client + tooling: it renders the replicated scene (Snapshot/StateDelta, same as the

@@ -20,7 +20,7 @@ class RenderSystem;
 namespace net {
   class NetClient;
   class ServerProcess;
-  struct Message;
+  class Message;
 }
 
 // The lightweight view. It renders + sends input; it never links ECS3DSim/ECS3DScripting. It holds a

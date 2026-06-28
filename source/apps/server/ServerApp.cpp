@@ -198,12 +198,12 @@ void ServerApp::handleClientMessage(const net::Message& message)
 {
   // A non-edit server is read-only: it serves snapshots/deltas to editors that connect to view it, but
   // never applies their edits.
-  if (!m_options.editMode && isMutation(message.type))
+  if (!m_options.editMode && isMutation(message.getType()))
   {
     return;
   }
 
-  switch (message.type)
+  switch (message.getType())
   {
     case net::MessageType::join:
       // A client joined: tell it whether this server is editable, then send the full project/scene as a
@@ -219,7 +219,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
       // other view (and the editing client, idempotently) converges.
       if (const auto scene = m_sceneManager->getCurrentScene())
       {
-        const std::string payload(message.payload.begin(), message.payload.end());
+        const std::string payload(message.bytes().begin(), message.bytes().end());
 
         const auto json = nlohmann::json::parse(payload, nullptr, false);
         if (!json.is_discarded())
@@ -251,7 +251,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
       // so every view rebuilds (structural changes aren't replicated per-op).
       if (const auto scene = m_sceneManager->getCurrentScene())
       {
-        const std::string payload(message.payload.begin(), message.payload.end());
+        const std::string payload(message.bytes().begin(), message.bytes().end());
 
         const auto json = nlohmann::json::parse(payload, nullptr, false);
         if (!json.is_discarded())
@@ -267,9 +267,9 @@ void ServerApp::handleClientMessage(const net::Message& message)
     {
       // An editor opened a different project: stop the current scripts, swap the project in, restart,
       // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
-      logMessage("Info", "Received loadProject (" + std::to_string(message.payload.size()) + " bytes).");
+      logMessage("Info", "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
 
-      const std::string payload(message.payload.begin(), message.payload.end());
+      const std::string payload(message.bytes().begin(), message.bytes().end());
 
       const auto json = nlohmann::json::parse(payload, nullptr, false);
       if (!json.is_discarded())
@@ -285,7 +285,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
     case net::MessageType::addAsset:
     {
       // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
-      const std::string payload(message.payload.begin(), message.payload.end());
+      const std::string payload(message.bytes().begin(), message.bytes().end());
 
       const auto json = nlohmann::json::parse(payload, nullptr, false);
       if (!json.is_discarded())
@@ -297,7 +297,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
     case net::MessageType::inputState:
     {
       // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
-      const std::string payload(message.payload.begin(), message.payload.end());
+      const std::string payload(message.bytes().begin(), message.bytes().end());
 
       const auto json = nlohmann::json::parse(payload, nullptr, false);
       if (!json.is_discarded())
@@ -309,7 +309,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
     }
     case net::MessageType::sceneControl:
     {
-      const std::string payload(message.payload.begin(), message.payload.end());
+      const std::string payload(message.bytes().begin(), message.bytes().end());
 
       const auto json = nlohmann::json::parse(payload, nullptr, false);
       if (!json.is_discarded())
@@ -506,12 +506,19 @@ void ServerApp::broadcastSnapshot()
     + std::to_string(payload.size()) + " bytes, currentScene='"
     + project.value("currentSceneUUID", std::string{}) + "'.");
 
-  const net::Message snapshot {
-    .type = net::MessageType::snapshot,
-    .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-  };
+  net::Message message(net::MessageType::snapshot);
+  for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netServer->broadcast(message);
 
-  m_netServer->broadcast(snapshot);
+  // const net::Message snapshot {
+  //   .type = net::MessageType::snapshot,
+  //   .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+  // };
+  //
+  // m_netServer->broadcast(snapshot);
 }
 
 void ServerApp::broadcastSceneStatus() const
@@ -524,10 +531,17 @@ void ServerApp::broadcastSceneStatus() const
   const nlohmann::json payload = { { "status", statusStr } };
   const auto dumped = payload.dump();
 
-  m_netServer->broadcast(net::Message{
-    .type = net::MessageType::sceneStatus,
-    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  });
+  net::Message message(net::MessageType::sceneStatus);
+  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netServer->broadcast(message);
+
+  // m_netServer->broadcast(net::Message{
+  //   .type = net::MessageType::sceneStatus,
+  //   .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  // });
 }
 
 void ServerApp::broadcastEditStatus()
@@ -535,10 +549,17 @@ void ServerApp::broadcastEditStatus()
   const nlohmann::json payload = { { "editable", m_options.editMode } };
   const auto dumped = payload.dump();
 
-  m_netServer->broadcast(net::Message{
-    .type = net::MessageType::editStatus,
-    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  });
+  net::Message message(net::MessageType::editStatus);
+  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netServer->broadcast(message);
+
+  // m_netServer->broadcast(net::Message{
+  //   .type = net::MessageType::editStatus,
+  //   .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  // });
 }
 
 void ServerApp::broadcastStateDelta() const
@@ -551,12 +572,19 @@ void ServerApp::broadcastStateDelta() const
 
   const auto payload = replication::buildStateDelta(*scene->getObjectManager()).dump();
 
-  const net::Message message {
-    .type = net::MessageType::stateDelta,
-    .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-  };
-
+  net::Message message(net::MessageType::stateDelta);
+  for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
   m_netServer->broadcast(message);
+
+  // const net::Message message {
+  //   .type = net::MessageType::stateDelta,
+  //   .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+  // };
+  //
+  // m_netServer->broadcast(message);
 }
 
 void ServerApp::logMessage(const std::string& level, const std::string& message)

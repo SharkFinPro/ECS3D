@@ -43,7 +43,9 @@ ClientApp::ClientApp(ConnectOptions options)
   connectToServer();
 
   // Ask the server for the initial Snapshot.
-  m_netClient->send(net::Message{ .type = net::MessageType::join, .payload = {} });
+  const net::Message message(net::MessageType::join);
+  m_netClient->send(message);
+  // m_netClient->send(net::Message{ .type = net::MessageType::join, .payload = {} });
 }
 
 ClientApp::~ClientApp()
@@ -100,10 +102,17 @@ void ClientApp::sendInput()
 
   const auto dumped = payload.dump();
 
-  m_netClient->send(net::Message{
-    .type = net::MessageType::inputState,
-    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  });
+  net::Message message(net::MessageType::inputState);
+  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netClient->send(message);
+
+  // m_netClient->send(net::Message{
+  //   .type = net::MessageType::inputState,
+  //   .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  // });
 }
 
 void ClientApp::connectToServer()
@@ -173,7 +182,7 @@ void ClientApp::variableUpdate() const
 
 void ClientApp::applyMessage(const net::Message& message) const
 {
-  const std::string payload(message.payload.begin(), message.payload.end());
+  const std::string payload(message.bytes().begin(), message.bytes().end());
 
   const auto json = nlohmann::json::parse(payload, nullptr, false);
   if (json.is_discarded())
@@ -181,7 +190,7 @@ void ClientApp::applyMessage(const net::Message& message) const
     return;
   }
 
-  switch (message.type)
+  switch (message.getType())
   {
     case net::MessageType::snapshot:
     {
@@ -189,7 +198,7 @@ void ClientApp::applyMessage(const net::Message& message) const
       m_projectSerializer->deserialize(json);
 
       const auto scene = m_sceneManager->getCurrentScene();
-      std::cerr << "[Client] Applied snapshot (" << message.payload.size() << " bytes). Current scene: "
+      std::cerr << "[Client] Applied snapshot (" << message.size() << " bytes). Current scene: "
                 << (scene ? scene->getName() : "<none>") << " ("
                 << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
       break;

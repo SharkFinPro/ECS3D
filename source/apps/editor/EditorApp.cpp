@@ -67,19 +67,33 @@ EditorApp::EditorApp(LaunchOptions options)
     // A widget changed: send the component's new state to the authoritative server as an edit command.
     const auto payload = replication::buildComponentEdit(objectUUID, component).dump();
 
-    m_netClient->send(net::Message{
-      .type = net::MessageType::editComponent,
-      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-    });
+    net::Message message(net::MessageType::editComponent);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
+
+    // m_netClient->send(net::Message{
+    //   .type = net::MessageType::editComponent,
+    //   .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+    // });
   });
   m_objectGUIManager->setSceneEditCallback([this](const nlohmann::json& edit) {
     // A structural change (add/remove object or component): the server applies it and re-snapshots.
     const auto payload = edit.dump();
 
-    m_netClient->send(net::Message{
-      .type = net::MessageType::sceneEdit,
-      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-    });
+    net::Message message(net::MessageType::sceneEdit);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
+
+    // m_netClient->send(net::Message{
+    //   .type = net::MessageType::sceneEdit,
+    //   .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+    // });
   });
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
@@ -94,10 +108,17 @@ EditorApp::EditorApp(LaunchOptions options)
     const nlohmann::json control = { { "op", "loadScene" }, { "scene", uuids::to_string(sceneUUID) } };
     const auto payload = control.dump();
 
-    m_netClient->send(net::Message{
-      .type = net::MessageType::sceneControl,
-      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-    });
+    net::Message message(net::MessageType::sceneControl);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
+
+    // m_netClient->send(net::Message{
+    //   .type = net::MessageType::sceneControl,
+    //   .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+    // });
   });
   m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& addAsset) {
     // Register it locally for instant feedback in the browser, then on the authoritative server (which
@@ -106,20 +127,35 @@ EditorApp::EditorApp(LaunchOptions options)
 
     const auto payload = addAsset.dump();
 
-    m_netClient->send(net::Message{
-      .type = net::MessageType::addAsset,
-      .payload = std::vector<uint8_t>(payload.begin(), payload.end())
-    });
+    net::Message message(net::MessageType::addAsset);
+    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
+
+    // m_netClient->send(net::Message{
+    //   .type = net::MessageType::addAsset,
+    //   .payload = std::vector<uint8_t>(payload.begin(), payload.end())
+    // });
   });
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this](const std::string& projectJson) {
     // Open/New: the server owns the running sim, so send it the project blob; it reloads and re-snapshots.
     std::cerr << "[Editor] Sending loadProject (" << projectJson.size() << " bytes) to server." << std::endl;
-    m_netClient->send(net::Message{
-      .type = net::MessageType::loadProject,
-      .payload = std::vector<uint8_t>(projectJson.begin(), projectJson.end())
-    });
+
+    net::Message message(net::MessageType::loadProject);
+    for (const std::vector<uint8_t> chunks(projectJson.begin(), projectJson.end()); const auto& chunk : chunks)
+    {
+      message.write(chunk);
+    }
+    m_netClient->send(message);
+
+    // m_netClient->send(net::Message{
+    //   .type = net::MessageType::loadProject,
+    //   .payload = std::vector<uint8_t>(projectJson.begin(), projectJson.end())
+    // });
   });
 
   setupKeybinds();
@@ -129,7 +165,9 @@ EditorApp::EditorApp(LaunchOptions options)
   connectToServer();
 
   // Ask the server for the initial Snapshot.
-  m_netClient->send(net::Message{ .type = net::MessageType::join, .payload = {} });
+  const net::Message message(net::MessageType::join);
+  m_netClient->send(message);
+  // m_netClient->send(net::Message{ .type = net::MessageType::join, .payload = {} });
 }
 
 void EditorApp::connectToServer()
@@ -276,10 +314,17 @@ void EditorApp::sendInput()
 
   const auto dumped = payload.dump();
 
-  m_netClient->send(net::Message{
-    .type = net::MessageType::inputState,
-    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  });
+  net::Message message(net::MessageType::inputState);
+  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netClient->send(message);
+
+  // m_netClient->send(net::Message{
+  //   .type = net::MessageType::inputState,
+  //   .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  // });
 }
 
 void EditorApp::sendSceneControl(const std::string& op) const
@@ -288,10 +333,17 @@ void EditorApp::sendSceneControl(const std::string& op) const
 
   const auto dumped = payload.dump();
 
-  m_netClient->send(net::Message{
-    .type = net::MessageType::sceneControl,
-    .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
-  });
+  net::Message message(net::MessageType::sceneControl);
+  for (const std::vector<uint8_t> chunks(dumped.begin(), dumped.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netClient->send(message);
+
+  // m_netClient->send(net::Message{
+  //   .type = net::MessageType::sceneControl,
+  //   .payload = std::vector<uint8_t>(dumped.begin(), dumped.end())
+  // });
 }
 
 void EditorApp::createRenderer()
@@ -344,7 +396,7 @@ void EditorApp::setupKeybinds()
 
 void EditorApp::applyMessage(const net::Message& message)
 {
-  const std::string payload(message.payload.begin(), message.payload.end());
+  const std::string payload(message.bytes().begin(), message.bytes().end());
 
   const auto json = nlohmann::json::parse(payload, nullptr, false);
   if (json.is_discarded())
@@ -352,7 +404,7 @@ void EditorApp::applyMessage(const net::Message& message)
     return;
   }
 
-  switch (message.type)
+  switch (message.getType())
   {
     case net::MessageType::snapshot:
     {
@@ -360,7 +412,7 @@ void EditorApp::applyMessage(const net::Message& message)
       m_projectSerializer->deserialize(json);
 
       const auto scene = m_sceneManager->getCurrentScene();
-      std::cerr << "[Editor] Applied snapshot (" << message.payload.size() << " bytes). Current scene: "
+      std::cerr << "[Editor] Applied snapshot (" << message.size() << " bytes). Current scene: "
                 << (scene ? scene->getName() : "<none>") << " ("
                 << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
       break;
