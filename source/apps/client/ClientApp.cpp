@@ -176,27 +176,48 @@ void ClientApp::variableUpdate() const
 
 void ClientApp::applyMessage(const net::Message& message) const
 {
-  // The snapshot and per-tick state delta are packed binary; every other message is still JSON.
-  if (message.getType() == net::MessageType::snapshot)
+  switch (message.getType())
   {
-    // Full state on join: rebuild the replicated scene from the packed project blob.
-    m_projectPacker->unpack(message);
+    case net::MessageType::snapshot:
+      handleSnapshot(message);
+      break;
 
-    const auto scene = m_sceneManager->getCurrentScene();
-    std::cerr << "[Client] Applied snapshot (" << message.size() << " bytes). Current scene: "
-              << (scene ? scene->getName() : "<none>") << " ("
-              << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
-    return;
+    case net::MessageType::stateDelta:
+      handleStateDelta(message);
+      break;
+
+    case net::MessageType::editComponent:
+      handleEditComponent(message);
+      break;
+
+    default: break;
   }
+}
 
-  if (message.getType() == net::MessageType::stateDelta)
+void ClientApp::handleSnapshot(const net::Message& message) const
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+
+  // Full state on join: rebuild the replicated scene from the packed project blob.
+  m_projectPacker->unpack(message);
+  std::cerr << "[Client] Applied snapshot (" << message.size() << " bytes). Current scene: "
+            << (scene ? scene->getName() : "<none>") << " ("
+            << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
+}
+
+void ClientApp::handleStateDelta(const net::Message& message) const
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+
+  if (scene)
   {
-    if (const auto scene = m_sceneManager->getCurrentScene())
-    {
-      replication::unpackStateDelta(*scene->getObjectManager(), message);
-    }
-    return;
+    replication::unpackStateDelta(*scene->getObjectManager(), message);
   }
+}
+
+void ClientApp::handleEditComponent(const net::Message& message) const
+{
+  const auto scene = m_sceneManager->getCurrentScene();
 
   const std::string payload(message.bytes().begin(), message.bytes().end());
 
@@ -206,16 +227,9 @@ void ClientApp::applyMessage(const net::Message& message) const
     return;
   }
 
-  switch (message.getType())
+  // The server applied an editor's component change; mirror it into the replicated scene.
+  if (scene)
   {
-    case net::MessageType::editComponent:
-      // The server applied an editor's component change; mirror it into the replicated scene.
-      if (const auto scene = m_sceneManager->getCurrentScene())
-      {
-        replication::applyComponentEdit(*scene->getObjectManager(), json);
-      }
-      break;
-    default:
-      break;
+    replication::applyComponentEdit(*scene->getObjectManager(), json);
   }
 }

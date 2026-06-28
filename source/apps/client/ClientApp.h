@@ -73,6 +73,12 @@ private:
   void variableUpdate() const;
 
   void applyMessage(const net::Message& message) const;
+
+  void handleSnapshot(const net::Message& message) const;
+
+  void handleStateDelta(const net::Message& message) const;
+
+  void handleEditComponent(const net::Message& message) const;
 };
 
 
