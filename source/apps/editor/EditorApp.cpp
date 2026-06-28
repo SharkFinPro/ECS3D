@@ -67,13 +67,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_objectGUIManager->setAssetRegistry(m_assetRegistry.get());
   m_objectGUIManager->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
     // A widget changed: send the component's new state to the authoritative server as an edit command.
-    const auto payload = replication::buildComponentEdit(objectUUID, component).dump();
-
-    net::Message message(net::MessageType::editComponent);
-    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
+    const auto message = replication::buildComponentEdit(objectUUID, component);
     m_netClient->send(message);
   });
   m_objectGUIManager->setSceneEditCallback([this](const nlohmann::json& edit) {
@@ -405,18 +399,10 @@ void EditorApp::handleStateDelta(const net::Message& message) const
 
 void EditorApp::handleEditComponent(const net::Message& message) const
 {
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (json.is_discarded())
-  {
-    return;
-  }
-
   // Another editor (or this one, echoed by the server) changed a component.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), json);
+    replication::applyComponentEdit(*scene->getObjectManager(), message);
   }
 }
 

@@ -30,10 +30,10 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
 // where data is the component's own serialize() blob. The server applies it to its authoritative scene
 // (reusing each component's loadFromJSON) and re-broadcasts so every view converges. Reuses the
 // existing serialize()/loadFromJSON boundary — the net layer never names a component type.
-[[nodiscard]] nlohmann::json buildComponentEdit(const uuids::uuid& objectUUID,
-                                                const std::shared_ptr<Component>& component);
+[[nodiscard]] net::Message buildComponentEdit(const uuids::uuid& objectUUID,
+                                              const std::shared_ptr<Component>& component);
 
-void applyComponentEdit(const ObjectManager& objectManager, const nlohmann::json& edit);
+void applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
 
 // Structural edits (add/remove object or component). Unlike a value edit these change the scene graph,
 // so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op — the

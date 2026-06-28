@@ -9,6 +9,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/components/Component.h>
 #include <PhysicsSystem.h>
 #include <CollisionSystem.h>
 #include <ScriptSystem.h>
@@ -255,28 +256,26 @@ void ServerApp::handleEditComponent(const net::Message& message) const
   // other view (and the editing client, idempotently) converges.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    const std::string payload(message.bytes().begin(), message.bytes().end());
+    replication::applyComponentEdit(*scene->getObjectManager(), message);
 
-    const auto json = nlohmann::json::parse(payload, nullptr, false);
-    if (!json.is_discarded())
+    m_netServer->broadcast(message);
+
+    // If the edit targets a Script, push the new field values into the live C# instance so the
+    // running behavior reflects the change immediately (applyComponentEdit only updates the data
+    // layer; the C# instance is owned by ScriptSystem and needs an explicit write). The packed layout
+    // mirrors Script::pack: [object uuid][type][className][fields].
+    net::MessageReader reader(message);
+    const auto objectUUID = uuids::uuid::from_string(reader.readString());
+
+    if (objectUUID.has_value() && reader.read<ComponentType>() == ComponentType::script)
     {
-      replication::applyComponentEdit(*scene->getObjectManager(), json);
+      const auto className = reader.readString();
+      const auto fields = nlohmann::json::parse(reader.readString(), nullptr, false);
 
-      // If the edit targets a Script, push the new field values into the live C# instance so the
-      // running behaviour reflects the change immediately (applyComponentEdit only updates the data
-      // layer; the C# instance is owned by ScriptSystem and needs an explicit write).
-      if (json.value("type", "") == "Script")
+      if (!fields.is_discarded())
       {
-        if (const auto parsed = uuids::uuid::from_string(std::string(json.at("object"))))
-        {
-          m_scriptSystem->applyScriptFieldEdit(
-            parsed.value(),
-            json.value("className", ""),
-            json.at("data").value("fields", nlohmann::json::array()));
-        }
+        m_scriptSystem->applyScriptFieldEdit(objectUUID.value(), className, fields);
       }
-
-      m_netServer->broadcast(message);
     }
   }
 }

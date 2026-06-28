@@ -100,76 +100,67 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
   }
 }
 
-nlohmann::json buildComponentEdit(const uuids::uuid& objectUUID,
-                                  const std::shared_ptr<Component>& component)
+net::Message buildComponentEdit(const uuids::uuid& objectUUID,
+                                const std::shared_ptr<Component>& component)
 {
-  auto data = component->serialize();
+  net::Message message(net::MessageType::editComponent);
 
-  nlohmann::json edit = {
-    { "object", uuids::to_string(objectUUID) },
-    { "type", data.at("type") },
-    { "data", data }
-  };
+  message.writeString(uuids::to_string(objectUUID));
+  component->pack(message);
 
-  // Scripts are keyed by class name (an object can hold several), so the apply side needs it to find
-  // the right instance.
-  if (const auto script = std::dynamic_pointer_cast<Script>(component))
-  {
-    edit["className"] = script->getClassName();
-  }
-
-  return edit;
+  return message;
 }
 
-void applyComponentEdit(const ObjectManager& objectManager, const nlohmann::json& edit)
+void applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit)
 {
-  const auto parsed = uuids::uuid::from_string(std::string(edit.at("object")));
-  if (!parsed.has_value())
+  net::MessageReader reader(edit);
+  const auto objectUUIDString = reader.readString();
+  const auto objectUUID = uuids::uuid::from_string(objectUUIDString);
+  if (!objectUUID.has_value())
   {
     return;
   }
 
-  const auto object = objectManager.getObjectByUUID(parsed.value());
+  const auto object = objectManager.getObjectByUUID(objectUUID.value());
   if (!object)
   {
     return;
   }
 
-  const std::string type = edit.at("type");
-  const std::string className = edit.contains("className") ? edit.at("className") : "";
-  const auto& data = edit.at("data");
+  // Each component packs its type (or, for colliders, its subtype) first as a discriminator.
+  const auto componentType = reader.read<ComponentType>();
 
-  // Match the target by its serialize "type" (and class name for scripts), then reuse loadFromJSON.
-  const auto matches = [&](const std::shared_ptr<Component>& component) {
-    if (component->serialize().at("type") != type)
-    {
-      return false;
-    }
-
-    if (const auto script = std::dynamic_pointer_cast<Script>(component))
-    {
-      return script->getClassName() == className;
-    }
-
-    return true;
-  };
-
-  for (const auto& [componentType, component] : object->getComponents())
+  // Scripts live in their own list, keyed by class name, and pack the name next so the right one can be
+  // found before unpack() reads the remaining field data.
+  if (componentType == ComponentType::script)
   {
-    if (matches(component))
+    const auto className = reader.readString();
+
+    for (const auto& script : object->getScripts())
     {
-      component->loadFromJSON(data);
-      return;
+      if (const auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
+          scriptComponent && scriptComponent->getClassName() == className)
+      {
+        script->unpack(reader);
+        return;
+      }
     }
+
+    return;
   }
 
-  for (const auto& script : object->getScripts())
+  // Colliders pack their subtype as the discriminator, but the component map is keyed by the parent
+  // (collider) type, so map back before looking it up.
+  auto lookupType = componentType;
+  if (const auto parent = subComponentTypeToParent.find(componentType); parent != subComponentTypeToParent.end())
   {
-    if (matches(script))
-    {
-      script->loadFromJSON(data);
-      return;
-    }
+    lookupType = parent->second;
+  }
+
+  const auto components = object->getComponents();
+  if (components.contains(lookupType))
+  {
+    components.at(lookupType)->unpack(reader);
   }
 }
 

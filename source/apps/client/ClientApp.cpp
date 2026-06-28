@@ -213,19 +213,9 @@ void ClientApp::handleStateDelta(const net::Message& message) const
 
 void ClientApp::handleEditComponent(const net::Message& message) const
 {
-  const auto scene = m_sceneManager->getCurrentScene();
-
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (json.is_discarded())
-  {
-    return;
-  }
-
   // The server applied an editor's component change; mirror it into the replicated scene.
-  if (scene)
+  if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), json);
+    replication::applyComponentEdit(*scene->getObjectManager(), message);
   }
 }
