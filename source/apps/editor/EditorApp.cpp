@@ -13,6 +13,8 @@
 #include <InputCapture.h>
 #include <ComponentEditor.h>
 #include <ObjectGUIManager.h>
+#include <EditorTheme.h>
+#include <GuiComponents.h>
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
 #include <objects/components/Component.h>
@@ -310,7 +312,7 @@ void EditorApp::registerEditors() const
 {
   registerTransformEditor(*m_componentEditor);
   registerRigidBodyEditor(*m_componentEditor);
-  registerModelRendererEditor(*m_componentEditor);
+  registerModelRendererEditor(*m_componentEditor, m_assetCache, m_assetRegistry.get());
   registerLightRendererEditor(*m_componentEditor);
   registerColliderEditors(*m_componentEditor);
   registerScriptEditor(*m_componentEditor);
@@ -423,11 +425,11 @@ void EditorApp::updateGui()
 
   updateDockSpace();
 
+  m_assetBrowser->displayGui();
+
   displayMessageLog();
 
   displaySceneStatus();
-
-  m_assetBrowser->displayGui();
 
   // The object tree + selected-object component panels (always drawn so they stay present/dockable;
   // empty when no scene is loaded yet). Edits fire the callbacks wired in the ctor.
@@ -484,7 +486,7 @@ void EditorApp::displayMenuBar() const
       const char* badge = "READ-ONLY (server not in edit mode)";
       const float badgeWidth = ImGui::CalcTextSize(badge).x;
       ImGui::SameLine(ImGui::GetWindowWidth() - badgeWidth - ImGui::GetStyle().WindowPadding.x * 2.0f);
-      ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "%s", badge);
+      ImGui::TextColored(theme::scriptAmber, "%s", badge);
     }
 
     ImGui::EndMainMenuBar();
@@ -532,10 +534,23 @@ void EditorApp::displayMessageLog()
 {
   ImGui::Begin("Project Errors");
 
+  if (m_errorMessages.empty())
+  {
+    // Mockup's reassuring empty state instead of a bare, blank panel.
+    gc::successEmptyState("No problems detected");
+    ImGui::End();
+    return;
+  }
+
+  // Count badge + Clear on the header row.
+  gc::pill(std::to_string(m_errorMessages.size()).c_str(), theme::t3);
+  ImGui::SameLine();
   if (ImGui::Button("Clear"))
   {
     m_errorMessages.clear();
   }
+
+  ImGui::Spacing();
 
   for (const auto& message : m_errorMessages)
   {
@@ -551,13 +566,19 @@ void EditorApp::displaySceneStatus() const
 
   ImGui::Begin("Scene Status");
 
+  // Play controls first (mockup's leading accent Start button).
   if (m_sceneStatus != SceneStatus::running)
   {
     ImGui::BeginDisabled(!m_serverEditable);
+    ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
     if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
     {
       sendSceneControl(net::SceneControlOp::start);
     }
+    ImGui::PopStyleColor(4);
     ImGui::EndDisabled();
   }
   else
@@ -579,6 +600,56 @@ void EditorApp::displaySceneStatus() const
       sendSceneControl(net::SceneControlOp::stop);
     }
     ImGui::EndDisabled();
+  }
+
+  // Status readout (divider + dot/label + scene name), right-aligned to the panel edge so the play
+  // buttons stay put on the left regardless of the readout's width.
+  const char* label = m_sceneStatus == SceneStatus::running ? "Running"
+                    : m_sceneStatus == SceneStatus::paused  ? "Paused"
+                                                            : "Stopped";
+  const ImVec4 dotCol = m_sceneStatus == SceneStatus::running ? theme::sceneGreen
+                      : m_sceneStatus == SceneStatus::paused  ? theme::scriptAmber
+                                                              : theme::t3;
+  const auto scene = m_sceneManager->getCurrentScene();
+
+  constexpr float nameGap = 14.0f;     // scene name -> divider
+  constexpr float dividerGap = 14.0f;  // divider -> dot block
+  constexpr float dotToLabel = 18.0f;  // dot block start -> label text
+  float readoutWidth = dividerGap + dotToLabel + ImGui::CalcTextSize(label).x;
+  if (scene)
+  {
+    readoutWidth += ImGui::CalcTextSize(scene->getName().c_str()).x + nameGap;
+  }
+
+  // Anchor to the right edge, but never overlap the play buttons on a narrow panel.
+  ImGui::SameLine();
+  const float readoutX = std::max(ImGui::GetCursorPosX() + 4.0f,
+                                  ImGui::GetContentRegionMax().x - readoutWidth);
+  ImGui::SetCursorPosX(readoutX);
+
+  // Current scene name (muted) first, mirroring the mockup's toolbar.
+  if (scene)
+  {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::t3, "%s", scene->getName().c_str());
+    ImGui::SameLine(0.0f, nameGap);
+  }
+
+  // Divider between the scene name and the status readout.
+  const ImVec2 dp = ImGui::GetCursorScreenPos();
+  const float frameH = ImGui::GetFrameHeight();
+  ImGui::GetWindowDrawList()->AddLine(ImVec2(dp.x, dp.y + frameH * 0.2f),
+                                      ImVec2(dp.x, dp.y + frameH * 0.8f), theme::u32(theme::line));
+  ImGui::SetCursorScreenPos(ImVec2(dp.x + dividerGap, dp.y));
+
+  // Status indicator dot + label (green running / amber paused / muted stopped).
+  {
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float cy = p.y + ImGui::GetFrameHeight() * 0.5f;
+    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(p.x + 5.0f, cy), 4.0f, theme::u32(dotCol));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + dotToLabel, p.y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::t2, "%s", label);
   }
 
   ImGui::End();
@@ -603,6 +674,12 @@ void EditorApp::setupImGuiStyle()
 {
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 
+  // Redesign prototype: drive the global style from the shared design tokens (see EditorTheme.h /
+  // "ECS3D Editor.dc" mockup). The legacy "Future Dark" block below is retained (disabled) for
+  // reference while the redesign is in progress.
+  theme::applyStyle();
+
+#if 0
   // Future Dark style by rewrking from ImThemes
   ImGuiStyle& style = ImGui::GetStyle();
 
@@ -691,4 +768,5 @@ void EditorApp::setupImGuiStyle()
   style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(0.4980392158031464f, 0.5137255191802979f, 1.0f, 1.0f);
   style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.196078434586525f, 0.1764705926179886f, 0.5450980663299561f, 0.501960813999176f);
   style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.196078434586525f, 0.1764705926179886f, 0.5450980663299561f, 0.501960813999176f);
+#endif
 }

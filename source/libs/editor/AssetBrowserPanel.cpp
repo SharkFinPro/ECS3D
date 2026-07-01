@@ -1,5 +1,6 @@
 #include "AssetBrowserPanel.h"
 #include "AssetDragDrop.h"
+#include "GuiComponents.h"
 #include <GpuAssetCache.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -18,8 +19,6 @@
 #include <string>
 
 namespace {
-  constexpr ImVec4 kColorSubtle { 0.55f, 0.55f, 0.55f, 1.00f };
-
   constexpr std::array<std::pair<AssetType, const char*>, 4> kAssetTypeLabels {{
     { AssetType::Model,   "Model"   },
     { AssetType::Texture, "Texture" },
@@ -118,13 +117,31 @@ void AssetBrowserPanel::recomputeCache()
     m_cachedAssets.emplace_back(uuid, record);
   }
 
-  std::ranges::sort(m_cachedAssets, [this](const auto& a, const auto& b) {
-    return std::ranges::lexicographical_compare(displayName(a.second), displayName(b.second),
-                                                [this](const char x, const char y) {
-      return m_sortType == SortType::NameAscending
-        ? std::tolower(x) < std::tolower(y)
-        : std::tolower(x) > std::tolower(y);
+  const auto ciNameLess = [](const std::string& l, const std::string& r) {
+    return std::ranges::lexicographical_compare(l, r, [](const char x, const char y) {
+      return std::tolower(static_cast<unsigned char>(x)) < std::tolower(static_cast<unsigned char>(y));
     });
+  };
+
+  std::ranges::sort(m_cachedAssets, [this, &ciNameLess](const auto& a, const auto& b) {
+    const std::string nameA = displayName(a.second);
+    const std::string nameB = displayName(b.second);
+
+    switch (m_sortType)
+    {
+      case SortType::NameDescending:
+        return ciNameLess(nameB, nameA);
+      case SortType::Type:
+      {
+        // Group by type label, then by name within each type.
+        const std::string typeA = assetTypeLabel(a.second.type);
+        const std::string typeB = assetTypeLabel(b.second.type);
+        return typeA != typeB ? ciNameLess(typeA, typeB) : ciNameLess(nameA, nameB);
+      }
+      case SortType::NameAscending:
+      default:
+        return ciNameLess(nameA, nameB);
+    }
   });
 
   m_lastRegistryVersion = m_assetRegistry->getVersion();
@@ -157,35 +174,39 @@ void AssetBrowserPanel::displayGui()
 {
   ImGui::Begin("Assets");
 
-  if (ImGui::CollapsingHeader("Options"))
+  if (ImGui::CollapsingHeader("Options", ImGuiTreeNodeFlags_DefaultOpen))
   {
     ImGui::Spacing();
 
+    // Filter chips on one row (label sits inline with its chips).
     ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(kColorSubtle, "Filter:");
+    ImGui::TextColored(theme::t2, "Filter");
     for (const auto& [type, label] : kAssetTypeLabels)
     {
       bool selected = m_filter == type;
-      ImGui::SameLine();
-      if (ImGui::Checkbox(label, &selected))
+      ImGui::SameLine(0.0f, 16.0f);
+      if (gc::accentCheckboxCompact(label, &selected))
       {
         m_filter = selected ? type : AssetType::Unknown;
         m_dirty = true;
       }
     }
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(kColorSubtle, "Search:");
-    ImGui::SameLine();
-    if (ImGui::InputText("##Search", m_search, sizeof(m_search)))
+    // Search + Sort share a row (mockup): the search box fills the row, the sort combo sits on the right.
+    constexpr float sortWidth = 200.0f;
+    constexpr float gap = 10.0f;
+    const float searchWidth = std::max(120.0f, ImGui::GetContentRegionAvail().x - sortWidth - gap);
+
+    if (gc::searchField("##Search", m_search, sizeof(m_search), "Search assets", searchWidth))
     {
       m_dirty = true;
     }
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(kColorSubtle, "Sort:");
-    ImGui::SameLine();
-    const char* sortLabel = m_sortType == SortType::NameAscending ? "Name (A-Z)" : "Name (Z-A)";
+    ImGui::SameLine(0.0f, gap);
+    ImGui::SetNextItemWidth(sortWidth);
+    const char* sortLabel = m_sortType == SortType::NameAscending  ? "Name (A-Z)"
+                          : m_sortType == SortType::NameDescending ? "Name (Z-A)"
+                                                                   : "Type";
     if (ImGui::BeginCombo("##Sort", sortLabel))
     {
       if (ImGui::Selectable("Name (A-Z)", m_sortType == SortType::NameAscending))
@@ -198,8 +219,16 @@ void AssetBrowserPanel::displayGui()
         m_sortType = SortType::NameDescending;
         m_dirty = true;
       }
+      if (ImGui::Selectable("Type", m_sortType == SortType::Type))
+      {
+        m_sortType = SortType::Type;
+        m_dirty = true;
+      }
       ImGui::EndCombo();
     }
+
+    ImGui::Spacing();
+    ImGui::Spacing();
   }
 
   ImGui::Separator();
@@ -215,26 +244,44 @@ void AssetBrowserPanel::displayGui()
     recomputeCache();
   }
 
-  // Grid: size the tiles by the window content scale and pack as many columns as fit.
+  // Grid: manual wrapping (auto-fill columns with a min tile width, stretched to fill) with even
+  // gutters both directions, matching the mockup's CSS grid. Tiles are placed at absolute positions so
+  // the card->label spacing stays independent of the inter-tile gap.
   const float contentScale = m_assetCache->getRenderer()->getWindow()->getContentScale();
-  const float cellSize = 150.0f * contentScale;
+  const float gap = 14.0f * contentScale;
+  const float minTile = 132.0f * contentScale;
   const float available = ImGui::GetContentRegionAvail().x;
-  const int columns = std::max(1, static_cast<int>(available / cellSize));
 
-  ImGui::Columns(columns, nullptr, false);
+  const int columns = std::max(1, static_cast<int>((available + gap) / (minTile + gap)));
+  const float tileWidth = (available - gap * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+  const float cellHeight = tileWidth + ImGui::GetStyle().ItemSpacing.y + ImGui::GetTextLineHeight();
 
+  const ImVec2 origin = ImGui::GetCursorScreenPos();
+
+  int index = 0;
   for (const auto& [uuid, record] : m_cachedAssets)
   {
+    const int row = index / columns;
+    const int col = index % columns;
+    ImGui::SetCursorScreenPos(ImVec2(origin.x + static_cast<float>(col) * (tileWidth + gap),
+                                     origin.y + static_cast<float>(row) * (cellHeight + gap)));
+
     ImGui::PushID(uuids::to_string(uuid).c_str());
-
-    displayAsset(uuid, record, cellSize * 0.75f, displayName(record));
-
+    ImGui::BeginGroup();
+    displayAsset(uuid, record, tileWidth, displayName(record));
+    ImGui::EndGroup();
     ImGui::PopID();
 
-    ImGui::NextColumn();
+    ++index;
   }
 
-  ImGui::Columns(1);
+  // Reserve the full grid extent so scrolling + the window content region are correct.
+  if (index > 0)
+  {
+    const int rows = (index + columns - 1) / columns;
+    ImGui::SetCursorScreenPos(origin);
+    ImGui::Dummy(ImVec2(available, static_cast<float>(rows) * cellHeight + static_cast<float>(rows - 1) * gap));
+  }
 
   ImGui::End();
 
@@ -251,31 +298,36 @@ void AssetBrowserPanel::displayGui()
 
 void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord& record, const float cellSize, const std::string& name) const
 {
-  ImGui::TextWrapped("%s", name.c_str());
+  // Per-type icon + accent color for the card (textures instead show their actual image).
+  ImTextureID thumb = 0;
+  gc::SecIcon icon = gc::SecIcon::none;
+  ImVec4 iconCol = theme::accent;
 
-  bool drewThumbnail = false;
-
-  // Textures show their actual image; everything else gets a labelled tile.
-  if (record.type == AssetType::Texture)
+  switch (record.type)
   {
-    try
-    {
-      if (const auto texture = m_assetCache->getTexture(uuid))
+    case AssetType::Texture:
+      iconCol = theme::accent;
+      try
       {
-        ImGui::ImageButton("##thumb", texture->getImGuiTexture(), { cellSize, cellSize });
-        drewThumbnail = true;
+        if (const auto texture = m_assetCache->getTexture(uuid))
+        {
+          thumb = texture->getImGuiTexture();
+        }
       }
-    }
-    catch (const std::exception&)
-    {
-      // fall back to a labelled tile below
-    }
+      catch (const std::exception&)
+      {
+        // fall back to the type icon below
+      }
+      icon = gc::SecIcon::image;
+      break;
+    case AssetType::Model:  icon = gc::SecIcon::model;  iconCol = theme::modelPurple; break;
+    case AssetType::Script: icon = gc::SecIcon::script; iconCol = theme::scriptAmber; break;
+    case AssetType::Scene:  icon = gc::SecIcon::scene;  iconCol = theme::sceneGreen;  break;
+    default: break;
   }
 
-  if (!drewThumbnail)
-  {
-    ImGui::Button(assetTypeLabel(record.type), { cellSize, cellSize });
-  }
+  const bool clicked = gc::assetCard(cellSize, thumb, icon, iconCol, assetTypeLabel(record.type), iconCol);
+  (void) clicked;
 
   // Double-click a scene tile to make it the active scene. Switching the active scene is a server-side
   // mutation, so it's only available when the server is editable (a read-only viewer follows the
@@ -301,6 +353,8 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
       ImGui::EndDragDropSource();
     }
   }
+
+  gc::assetCardLabel(name.c_str(), cellSize);
 }
 
 void AssetBrowserPanel::displayMenuWidget()
@@ -317,7 +371,7 @@ void AssetBrowserPanel::displayMenuWidget()
   auto labeledSeparator = [](const char* label)
   {
     ImGui::Spacing();
-    ImGui::TextColored(kColorSubtle, "%s", label);
+    ImGui::TextColored(theme::t3, "%s", label);
     ImGui::Separator();
     ImGui::Spacing();
   };
@@ -373,22 +427,34 @@ void AssetBrowserPanel::displayCreateAssetPopup()
     return;
   }
 
+  // Reserve a consistent width so the auto-resized popup doesn't jump between sources/names.
+  ImGui::Dummy(ImVec2(320.0f, 0.0f));
+
   if (!m_pending.sourcePath.empty())
   {
-    ImGui::Text("Source: %s", std::filesystem::path(m_pending.sourcePath).filename().string().c_str());
+    gc::rowLabel("Source");
+    ImGui::TextColored(theme::t1, "%s", std::filesystem::path(m_pending.sourcePath).filename().string().c_str());
   }
 
-  ImGui::SetNextItemWidth(280.0f);
-  ImGui::InputText("Name", m_pending.name, sizeof(m_pending.name));
+  gc::rowLabel("Name");
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+  ImGui::InputText("##name", m_pending.name, sizeof(m_pending.name));
 
   if (!m_createError.empty())
   {
-    ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", m_createError.c_str());
+    ImGui::TextColored(theme::danger, "%s", m_createError.c_str());
   }
 
+  ImGui::Spacing();
   ImGui::Separator();
+  ImGui::Spacing();
 
-  if (ImGui::Button("Create", ImVec2(120, 0)))
+  // Accent confirm; neutral cancel (mirrors the Scene Status Start button + delete modal).
+  ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
+  ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
+  if (ImGui::Button("Create", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter))
   {
     if (!nameIsValid(m_pending.name))
     {
@@ -407,9 +473,10 @@ void AssetBrowserPanel::displayCreateAssetPopup()
       }
     }
   }
+  ImGui::PopStyleColor(4);
 
   ImGui::SameLine();
-  if (ImGui::Button("Cancel", ImVec2(120, 0)))
+  if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
   {
     m_pending = {};
     ImGui::CloseCurrentPopup();

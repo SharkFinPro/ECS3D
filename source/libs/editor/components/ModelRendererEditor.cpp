@@ -1,25 +1,54 @@
 #include "ModelRendererEditor.h"
 #include "../ComponentEditor.h"
 #include "../AssetDragDrop.h"
+#include "../GuiComponents.h"
 #include <objects/components/ModelRenderer.h>
+#include <assets/AssetRegistry.h>
+#include <GpuAssetCache.h>
+#include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <imgui.h>
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace {
-  // A labeled drop target for an asset uuid. Returns true (and fills outUUID) if an asset of the given
-  // payload type was dropped onto it this frame.
-  bool assetDropTarget(const char* label, const char* payloadId, uuids::uuid& outUUID)
+  // A model-renderer asset reference slot: shows the assigned asset's thumbnail/icon + filename (the
+  // mockup's Model/Texture/Specular rows) and accepts an asset of `payloadId` dropped onto it. Returns
+  // true (and fills outUUID) when something is dropped this frame. cache/registry may be null.
+  bool assetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegistry* registry,
+                 const char* id, const char* kind, const char* payloadId, const uuids::uuid& current,
+                 const bool isTexture, const gc::SecIcon icon, const ImVec4& iconCol, uuids::uuid& outUUID)
   {
+    std::string name = "None";
+    ImTextureID thumb = 0;
+
+    if (registry)
+    {
+      if (const auto* record = registry->getByUUID(current))
+      {
+        name = std::filesystem::path(record->path).filename().string();
+
+        if (isTexture && cache)
+        {
+          try
+          {
+            if (const auto texture = cache->getTexture(current))
+            {
+              thumb = texture->getImGuiTexture();
+            }
+          }
+          catch (const std::exception&)
+          {
+            // fall back to the type icon
+          }
+        }
+      }
+    }
+
+    gc::assetRefRow(id, kind, name.c_str(), thumb, icon, iconCol);
+
     bool dropped = false;
-
-    constexpr int widgetHeight = 50;
-
-    ImGui::BeginChild(label, {ImGui::GetContentRegionAvail().x, widgetHeight});
-    ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, {0.0, 0.5});
-    ImGui::Button(label, {ImGui::GetContentRegionAvail().x, widgetHeight});
-    ImGui::PopStyleVar();
-
     if (ImGui::BeginDragDropTarget())
     {
       if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(payloadId))
@@ -35,15 +64,16 @@ namespace {
       ImGui::EndDragDropTarget();
     }
 
-    ImGui::EndChild();
-
     return dropped;
   }
 }
 
-void registerModelRendererEditor(ComponentEditor& componentEditor)
+void registerModelRendererEditor(ComponentEditor& componentEditor,
+                                 std::shared_ptr<GpuAssetCache> assetCache,
+                                 const AssetRegistry* assetRegistry)
 {
-  componentEditor.registerHandler("Model Renderer", [](const std::shared_ptr<Component>& component) -> bool {
+  componentEditor.registerHandler("Model Renderer",
+    [cache = std::move(assetCache), registry = assetRegistry](const std::shared_ptr<Component>& component) -> bool {
     const auto modelRenderer = std::dynamic_pointer_cast<ModelRenderer>(component);
     if (!modelRenderer)
     {
@@ -57,34 +87,39 @@ void registerModelRendererEditor(ComponentEditor& componentEditor)
       bool useStandardPipeline = modelRenderer->getUseStandardPipeline();
       bool shouldRender = modelRenderer->getShouldRender();
 
-      if (ImGui::Checkbox("Use Standard Pipeline", &useStandardPipeline))
+      if (gc::accentCheckbox("Use Standard Pipeline", &useStandardPipeline))
       {
         modelRenderer->setUseStandardPipeline(useStandardPipeline);
         edited = true;
       }
 
-      if (ImGui::Checkbox("Render", &shouldRender))
+      if (gc::accentCheckbox("Render", &shouldRender))
       {
         modelRenderer->setShouldRender(shouldRender);
         edited = true;
       }
 
+      ImGui::Spacing();
+
       // Drag an asset out of the AssetBrowserPanel onto these slots to assign it.
       uuids::uuid dropped;
 
-      if (assetDropTarget(std::string("Model: " + to_string(modelRenderer->getModelUUID())).c_str(), assetDragDrop::model, dropped))
+      if (assetSlot(cache, registry, "modelSlot", "Model", assetDragDrop::model,
+                    modelRenderer->getModelUUID(), false, gc::SecIcon::model, theme::modelPurple, dropped))
       {
         modelRenderer->setModelUUID(dropped);
         edited = true;
       }
 
-      if (assetDropTarget(std::string("Texture: " + to_string(modelRenderer->getTextureUUID())).c_str(), assetDragDrop::texture, dropped))
+      if (assetSlot(cache, registry, "textureSlot", "Texture", assetDragDrop::texture,
+                    modelRenderer->getTextureUUID(), true, gc::SecIcon::image, theme::accent, dropped))
       {
         modelRenderer->setTextureUUID(dropped);
         edited = true;
       }
 
-      if (assetDropTarget(std::string("Specular Map: " + to_string(modelRenderer->getSpecularMapUUID())).c_str(), assetDragDrop::texture, dropped))
+      if (assetSlot(cache, registry, "specularSlot", "Specular Map", assetDragDrop::texture,
+                    modelRenderer->getSpecularMapUUID(), true, gc::SecIcon::image, theme::accent, dropped))
       {
         modelRenderer->setSpecularMapUUID(dropped);
         edited = true;

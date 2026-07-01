@@ -25,39 +25,30 @@ void registerTransformEditor(ComponentEditor& componentEditor)
       glm::vec3 rotation = transform->getLocalRotation();
       glm::vec3 scale = transform->getLocalScale();
 
-      ImGui::PushID("TransformPosition");
-      if (gc::xyzGui("Position", &position.x, &position.y, &position.z))
+      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z))
       {
         transform->setPosition(position);
         edited = true;
       }
-      ImGui::PopID();
 
-      ImGui::PushID("TransformRotation");
-      if (gc::xyzGui("Rotation", &rotation.x, &rotation.y, &rotation.z))
+      if (gc::xyzGuiBoxed("Rotation", &rotation.x, &rotation.y, &rotation.z))
       {
         transform->setRotation(rotation);
         edited = true;
       }
-      ImGui::PopID();
 
-      ImGui::PushID("TransformScale");
-      if (gc::xyzGui("Scale", &scale.x, &scale.y, &scale.z))
+      if (gc::xyzGuiBoxed("Scale", &scale.x, &scale.y, &scale.z))
       {
         transform->setScale(scale);
         edited = true;
       }
 
       float combinedScale = (scale.x + scale.y + scale.z) / 3.0f;
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted("Scale All");
-      ImGui::SameLine(110.0f);
-      if (ImGui::DragFloat("##Scale All", &combinedScale, 0.1f))
+      if (gc::accentSlider("Scale All", &combinedScale, 0.0f, 10.0f))
       {
         transform->setScale(glm::vec3(combinedScale));
         edited = true;
       }
-      ImGui::PopID();
     }
 
     return edited;

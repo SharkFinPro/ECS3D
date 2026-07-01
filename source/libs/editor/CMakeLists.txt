@@ -3,6 +3,7 @@ project(ECS3DEditorLib)
 add_library(${PROJECT_NAME}
   ComponentEditor.cpp
   ComponentEditor.h
+  EditorTheme.h
   GuiComponents.h
   ObjectGUIManager.cpp
   ObjectGUIManager.h
