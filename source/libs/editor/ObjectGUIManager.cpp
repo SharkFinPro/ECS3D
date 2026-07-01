@@ -229,6 +229,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   }
 
   // Icon + name + accent selection bar, drawn over the (empty-label) node row.
+  const float rowHeight = ImGui::GetItemRectMax().y - ImGui::GetItemRectMin().y;
   {
     const ImVec2 rmin = ImGui::GetItemRectMin();
     const ImVec2 rmax = ImGui::GetItemRectMax();
@@ -306,7 +307,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth * 2.0f - buttonGap);
 
   ImGui::SetNextItemAllowOverlap();
-  if (gc::rowIconButton("addChild", gc::SecIcon::plus, false, buttonWidth))
+  if (gc::rowIconButton("addChild", gc::SecIcon::plus, false, buttonWidth, rowHeight))
   {
     const auto parent = object->getUUID();
     m_sceneEditCallback(replication::buildAddObject("Object", &parent));
@@ -315,7 +316,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::SameLine(0.0f, buttonGap);
 
   ImGui::SetNextItemAllowOverlap();
-  if (gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth))
+  if (gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight))
   {
     // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
     m_objectPendingDeletion = object->getUUID();

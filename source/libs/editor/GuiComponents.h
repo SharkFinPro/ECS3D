@@ -786,25 +786,29 @@ namespace gc {
   // Buttons + empty states
   // ------------------------------------------------------------------------------------------------
 
-  // A small (27px) square icon button for inline row actions (+/- on object rows). Accent wash on hover,
-  // or a red wash when `danger`. Returns true when clicked.
-  inline bool rowIconButton(const char* id, const SecIcon icon, const bool danger, const float s = 27.0f)
+  // A small square icon button for inline row actions (+/- on object rows). Accent wash on hover,
+  // or a red wash when `danger`. `h` defaults to `w` (square); pass the row's height so the hit/wash
+  // area fills the full row instead of leaving dead space above/below. Returns true when clicked.
+  inline bool rowIconButton(const char* id, const SecIcon icon, const bool danger, const float w = 27.0f,
+                             const float h = -1.0f)
   {
+    const float height = h > 0.0f ? h : w;
     const ImVec2 pos = ImGui::GetCursorScreenPos();
 
     ImGui::PushID(id);
-    const bool clicked = ImGui::InvisibleButton("##b", ImVec2(s, s));
+    const bool clicked = ImGui::InvisibleButton("##b", ImVec2(w, height));
     const bool hovered = ImGui::IsItemHovered();
     ImGui::PopID();
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     if (hovered)
     {
-      dl->AddRectFilled(pos, ImVec2(pos.x + s, pos.y + s),
+      dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + height),
                         theme::u32(danger ? theme::v4(58, 35, 38) : theme::accdim), 5.0f);
     }
     const ImVec4 iconCol = hovered ? (danger ? theme::danger : theme::accent) : theme::t3;
-    drawSecIcon(dl, ImVec2(pos.x + s * 0.5f, pos.y + s * 0.5f), s * 0.48f, icon, theme::u32(iconCol));
+    const float iconSize = (w < height ? w : height) * 0.48f;
+    drawSecIcon(dl, ImVec2(pos.x + w * 0.5f, pos.y + height * 0.5f), iconSize, icon, theme::u32(iconCol));
 
     return clicked;
   }
