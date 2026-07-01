@@ -409,22 +409,34 @@ void AssetBrowserPanel::displayCreateAssetPopup()
     return;
   }
 
+  // Reserve a consistent width so the auto-resized popup doesn't jump between sources/names.
+  ImGui::Dummy(ImVec2(320.0f, 0.0f));
+
   if (!m_pending.sourcePath.empty())
   {
-    ImGui::Text("Source: %s", std::filesystem::path(m_pending.sourcePath).filename().string().c_str());
+    gc::rowLabel("Source");
+    ImGui::TextColored(theme::t1, "%s", std::filesystem::path(m_pending.sourcePath).filename().string().c_str());
   }
 
-  ImGui::SetNextItemWidth(280.0f);
-  ImGui::InputText("Name", m_pending.name, sizeof(m_pending.name));
+  gc::rowLabel("Name");
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+  ImGui::InputText("##name", m_pending.name, sizeof(m_pending.name));
 
   if (!m_createError.empty())
   {
     ImGui::TextColored(theme::danger, "%s", m_createError.c_str());
   }
 
+  ImGui::Spacing();
   ImGui::Separator();
+  ImGui::Spacing();
 
-  if (ImGui::Button("Create", ImVec2(120, 0)))
+  // Accent confirm; neutral cancel (mirrors the Scene Status Start button + delete modal).
+  ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
+  ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
+  if (ImGui::Button("Create", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter))
   {
     if (!nameIsValid(m_pending.name))
     {
@@ -443,9 +455,10 @@ void AssetBrowserPanel::displayCreateAssetPopup()
       }
     }
   }
+  ImGui::PopStyleColor(4);
 
   ImGui::SameLine();
-  if (ImGui::Button("Cancel", ImVec2(120, 0)))
+  if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
   {
     m_pending = {};
     ImGui::CloseCurrentPopup();
