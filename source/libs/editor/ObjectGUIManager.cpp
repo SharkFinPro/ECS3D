@@ -130,8 +130,7 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   // Section header with a right-aligned count pill (mockup: "OBJECTS  [10]").
   if (objectManager)
   {
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(theme::t2, "OBJECTS");
+    gc::sectionLabel("Objects");
 
     const auto count = std::to_string(objectManager->getObjects().size());
     const float pillWidth = ImGui::CalcTextSize(count.c_str()).x + 18.0f;
