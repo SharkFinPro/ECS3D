@@ -862,6 +862,36 @@ namespace gc {
     const ImVec2 ts = ImGui::CalcTextSize(text);
     dl->AddText(ImVec2(pos.x + (w - ts.x) * 0.5f, pos.y + (height - ts.y) * 0.5f), theme::u32(theme::t3), text);
   }
+
+  // A centered "all clear" empty state (the mockup's "No problems detected"): a green check inside a
+  // tinted circle over muted text. Fills the available content region and centers the block within it.
+  inline void successEmptyState(const char* text)
+  {
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    constexpr float circleR = 23.0f;
+    constexpr float gap = 12.0f;
+    const ImVec2 ts = ImGui::CalcTextSize(text);
+    const float blockH = circleR * 2.0f + gap + ts.y;
+
+    const float cx = origin.x + avail.x * 0.5f;
+    float y = origin.y + std::max(0.0f, (avail.y - blockH) * 0.5f);
+
+    // Tinted circle + check mark.
+    const ImVec2 cc(cx, y + circleR);
+    ImVec4 tint = theme::sceneGreen;
+    tint.w = 0.15f;
+    dl->AddCircleFilled(cc, circleR, theme::u32(tint));
+    const ImU32 mark = theme::u32(theme::sceneGreen);
+    const float s = circleR;
+    dl->AddLine(ImVec2(cc.x - s * 0.32f, cc.y + s * 0.02f), ImVec2(cc.x - s * 0.06f, cc.y + s * 0.28f), mark, 2.6f);
+    dl->AddLine(ImVec2(cc.x - s * 0.06f, cc.y + s * 0.28f), ImVec2(cc.x + s * 0.36f, cc.y - s * 0.22f), mark, 2.6f);
+
+    y += circleR * 2.0f + gap;
+    dl->AddText(ImVec2(cx - ts.x * 0.5f, y), theme::u32(theme::t2), text);
+  }
 }
 
 #endif //ECS3D_GUICOMPONENTS_H

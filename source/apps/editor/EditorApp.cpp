@@ -641,10 +641,23 @@ void EditorApp::displayMessageLog()
 {
   ImGui::Begin("Project Errors");
 
+  if (m_errorMessages.empty())
+  {
+    // Mockup's reassuring empty state instead of a bare, blank panel.
+    gc::successEmptyState("No problems detected");
+    ImGui::End();
+    return;
+  }
+
+  // Count badge + Clear on the header row.
+  gc::pill(std::to_string(m_errorMessages.size()).c_str(), theme::t3);
+  ImGui::SameLine();
   if (ImGui::Button("Clear"))
   {
     m_errorMessages.clear();
   }
+
+  ImGui::Spacing();
 
   for (const auto& message : m_errorMessages)
   {
