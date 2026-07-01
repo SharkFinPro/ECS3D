@@ -899,6 +899,41 @@ namespace gc {
     y += circleR * 2.0f + gap;
     dl->AddText(ImVec2(cx - ts.x * 0.5f, y), theme::u32(theme::t2), text);
   }
+
+  // A centered neutral empty state: a muted icon in a subtle disc over a primary line and an optional
+  // secondary line (e.g. the inspector's "No object selected"). Fills the available content region.
+  inline void emptyState(const SecIcon icon, const char* text, const char* subtext = nullptr)
+  {
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    constexpr float circleR = 24.0f;
+    constexpr float gap = 13.0f;
+    constexpr float subGap = 5.0f;
+    const ImVec2 ts = ImGui::CalcTextSize(text);
+    const ImVec2 ss = subtext ? ImGui::CalcTextSize(subtext) : ImVec2(0.0f, 0.0f);
+    float blockH = circleR * 2.0f + gap + ts.y;
+    if (subtext)
+    {
+      blockH += subGap + ss.y;
+    }
+
+    const float cx = origin.x + avail.x * 0.5f;
+    float y = origin.y + std::max(0.0f, (avail.y - blockH) * 0.5f);
+
+    const ImVec2 cc(cx, y + circleR);
+    dl->AddCircleFilled(cc, circleR, theme::u32(theme::head));
+    drawSecIcon(dl, cc, circleR * 0.9f, icon, theme::u32(theme::t3));
+
+    y += circleR * 2.0f + gap;
+    dl->AddText(ImVec2(cx - ts.x * 0.5f, y), theme::u32(theme::t2), text);
+    if (subtext)
+    {
+      y += ts.y + subGap;
+      dl->AddText(ImVec2(cx - ss.x * 0.5f, y), theme::u32(theme::t3), subtext);
+    }
+  }
 }
 
 #endif //ECS3D_GUICOMPONENTS_H

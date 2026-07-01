@@ -354,81 +354,88 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
   ImGui::Separator();
   ImGui::Spacing();
 
-  gc::accentCheckbox("Highlight Object", &m_highlightSelectedObject);
-
-  if (objectManager && m_selectedObject.has_value())
+  // Empty state when nothing is selected — an intentional placeholder rather than a lone checkbox.
+  if (!selected)
   {
-    if (const auto object = objectManager->getObjectByUUID(m_selectedObject.value()))
+    if (m_selectedObject.has_value())
     {
-      ImGui::Separator();
-
-      // Sync the name buffer when the selection changes.
-      if (m_nameEditObjectUUID != object->getUUID())
-      {
-        m_nameEditObjectUUID = object->getUUID();
-        const auto name = object->getName();
-        const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
-        name.copy(m_nameEditBuffer.data(), len);
-        m_nameEditBuffer[len] = '\0';
-      }
-
-      ImGui::BeginDisabled(!m_editable);
-      gc::rowLabel("Name");
-      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-      if (ImGui::InputText(std::string("##objectName" + to_string(object->getUUID())).c_str(), m_nameEditBuffer.data(), m_nameEditBuffer.size()) &&
-          m_sceneEditCallback)
-      {
-        // Immediately process the edit on key press so that when selecting another object, the name change is not lost.
-        m_sceneEditCallback(replication::buildRenameObject(object->getUUID(), m_nameEditBuffer.data()));
-      }
-      ImGui::EndDisabled();
-
-      ImGui::Separator();
-
-      // Read-only: the component widgets still show their values for inspection, but are disabled so
-      // they neither edit nor (via the header "-") remove anything.
-      ImGui::BeginDisabled(!m_editable);
-
-      for (const auto& [type, component] : object->getComponents())
-      {
-        displayComponent(object->getUUID(), component);
-      }
-
-      ImGui::Separator();
-      displayAddComponent(object);
-
-      ImGui::EndDisabled();
-
-      ImGui::Spacing();
-      const float scriptDropZoneStartY = ImGui::GetCursorScreenPos().y;
-      gc::sectionLabel("Scripts");
-
-      ImGui::BeginDisabled(!m_editable);
-
-      if (object->getScripts().empty())
-      {
-        gc::dashedBox("No scripts attached");
-      }
-      else
-      {
-        for (const auto& script : object->getScripts())
-        {
-          displayComponent(object->getUUID(), script);
-        }
-      }
-
-      ImGui::EndDisabled();
-
-      if (m_editable)
-      {
-        displayScriptDragDropArea(scriptDropZoneStartY, object);
-      }
-    }
-    else
-    {
-      // The selected object went away (e.g. a fresh snapshot replaced the scene).
+      // Selection referenced an object that no longer exists (e.g. a fresh snapshot replaced the scene).
       m_selectedObject.reset();
     }
+
+    gc::emptyState(gc::SecIcon::block, "No object selected",
+                   "Select an object from the Objects panel");
+
+    ImGui::End();
+    return;
+  }
+
+  const auto& object = selected;
+
+  gc::accentCheckbox("Highlight Object", &m_highlightSelectedObject);
+
+  ImGui::Separator();
+
+  // Sync the name buffer when the selection changes.
+  if (m_nameEditObjectUUID != object->getUUID())
+  {
+    m_nameEditObjectUUID = object->getUUID();
+    const auto name = object->getName();
+    const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
+    name.copy(m_nameEditBuffer.data(), len);
+    m_nameEditBuffer[len] = '\0';
+  }
+
+  ImGui::BeginDisabled(!m_editable);
+  gc::rowLabel("Name");
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+  if (ImGui::InputText(std::string("##objectName" + to_string(object->getUUID())).c_str(), m_nameEditBuffer.data(), m_nameEditBuffer.size()) &&
+      m_sceneEditCallback)
+  {
+    // Immediately process the edit on key press so that when selecting another object, the name change is not lost.
+    m_sceneEditCallback(replication::buildRenameObject(object->getUUID(), m_nameEditBuffer.data()));
+  }
+  ImGui::EndDisabled();
+
+  ImGui::Separator();
+
+  // Read-only: the component widgets still show their values for inspection, but are disabled so
+  // they neither edit nor (via the header "-") remove anything.
+  ImGui::BeginDisabled(!m_editable);
+
+  for (const auto& [type, component] : object->getComponents())
+  {
+    displayComponent(object->getUUID(), component);
+  }
+
+  ImGui::Separator();
+  displayAddComponent(object);
+
+  ImGui::EndDisabled();
+
+  ImGui::Spacing();
+  const float scriptDropZoneStartY = ImGui::GetCursorScreenPos().y;
+  gc::sectionLabel("Scripts");
+
+  ImGui::BeginDisabled(!m_editable);
+
+  if (object->getScripts().empty())
+  {
+    gc::dashedBox("No scripts attached");
+  }
+  else
+  {
+    for (const auto& script : object->getScripts())
+    {
+      displayComponent(object->getUUID(), script);
+    }
+  }
+
+  ImGui::EndDisabled();
+
+  if (m_editable)
+  {
+    displayScriptDragDropArea(scriptDropZoneStartY, object);
   }
 
   ImGui::End();
