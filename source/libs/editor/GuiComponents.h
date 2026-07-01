@@ -4,6 +4,7 @@
 #include "EditorTheme.h"
 #include <imgui.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -89,6 +90,29 @@ namespace gc {
     dl->AddText(ImVec2(pos.x + pad.x, pos.y + pad.y), theme::u32(textCol), text);
 
     ImGui::Dummy(size);
+  }
+
+  // A small-caps panel/section label (uppercased, letter-spaced, muted) matching the mockup's
+  // "OBJECTS" / "SELECTED OBJECT" / "SCRIPTS" headers. The letter spacing is drawn manually (ImGui has
+  // no tracking control). Advances the ImGui cursor past the label. Returns its drawn width.
+  inline float sectionLabel(const char* text, const float letterSpacing = 1.5f,
+                            const ImVec4& col = theme::t2)
+  {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const ImU32 u = theme::u32(col);
+
+    float x = pos.x;
+    for (const char* c = text; *c; ++c)
+    {
+      const char glyph[2] = { static_cast<char>(std::toupper(static_cast<unsigned char>(*c))), '\0' };
+      dl->AddText(ImVec2(x, pos.y), u, glyph);
+      x += ImGui::CalcTextSize(glyph).x + letterSpacing;
+    }
+
+    const float width = x - pos.x - letterSpacing;
+    ImGui::Dummy(ImVec2(width, ImGui::GetTextLineHeight()));
+    return width;
   }
 
   // A filled-accent checkbox matching the mockup (rounded inset box, accent fill + check when on).

@@ -356,8 +356,9 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
 
       ImGui::EndDisabled();
 
+      ImGui::Spacing();
       const float scriptDropZoneStartY = ImGui::GetCursorScreenPos().y;
-      ImGui::SeparatorText("Scripts");
+      gc::sectionLabel("Scripts");
 
       ImGui::BeginDisabled(!m_editable);
 
