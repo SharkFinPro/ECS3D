@@ -17,13 +17,13 @@ namespace {
   // The components the "Add Component" menu can attach.
   // checkType is the ComponentType whose presence on the object hides this entry.
   // Transform is omitted (every object already has one); scripts attach via drag & drop only.
-  struct AddableComponent { const char* label; const char* key; ComponentType checkType; };
+  struct AddableComponent { const char* label; const char* key; ComponentType checkType; gc::SecIcon icon; };
   constexpr std::array<AddableComponent, 5> addableComponents {{
-    { "Rigid Body",      "RigidBody",    ComponentType::rigidBody      },
-    { "Model Renderer",  "ModelRenderer", ComponentType::modelRenderer  },
-    { "Light Renderer",  "LightRenderer", ComponentType::lightRenderer  },
-    { "Box Collider",    "Box",           ComponentType::collider       },
-    { "Sphere Collider", "Sphere",        ComponentType::collider       }
+    { "Rigid Body",      "RigidBody",     ComponentType::rigidBody,     gc::SecIcon::rigid    },
+    { "Model Renderer",  "ModelRenderer", ComponentType::modelRenderer, gc::SecIcon::image    },
+    { "Light Renderer",  "LightRenderer", ComponentType::lightRenderer, gc::SecIcon::light    },
+    { "Box Collider",    "Box",           ComponentType::collider,      gc::SecIcon::collider },
+    { "Sphere Collider", "Sphere",        ComponentType::collider,      gc::SecIcon::sphere   }
   }};
 
   // Heuristic icon for an object derived from its components (the mockup shows a per-object glyph).
@@ -525,7 +525,7 @@ void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object
     return;
   }
 
-  // Open state: an accent header button (click to cancel) over a styled list of addable components, so
+  // Open state: an accent header button (click to cancel) over an inline list of addable components, so
   // the selector reads as the same control as the dashed button that revealed it.
   if (gc::accentButton("Select Component", gc::SecIcon::plus))
   {
@@ -533,29 +533,58 @@ void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object
   }
 
   ImGui::Spacing();
-  ImGui::Indent(6.0f);
-  ImGui::PushStyleColor(ImGuiCol_Header, theme::accdim);
-  ImGui::PushStyleColor(ImGuiCol_HeaderHovered, theme::accdim);
-  ImGui::PushStyleColor(ImGuiCol_HeaderActive, theme::accSoft);
-  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(11.0f, 9.0f));
 
-  for (const auto& [label, key, checkType] : addableComponents)
+  // Count the not-yet-present components so the enclosing popup box can size to its rows.
+  int addableCount = 0;
+  for (const auto& component : addableComponents)
   {
-    if (object->getComponent<Component>(checkType))
+    if (!object->getComponent<Component>(component.checkType))
     {
-      continue;
-    }
-
-    if (ImGui::Selectable(label) && m_sceneEditCallback)
-    {
-      m_sceneEditCallback(replication::buildAddComponent(object->getUUID(), key));
-      m_showComponentSelector = false;
+      ++addableCount;
     }
   }
 
-  ImGui::PopStyleVar();
-  ImGui::PopStyleColor(3);
-  ImGui::Unindent(6.0f);
+  constexpr float rowHeight = 34.0f;
+  constexpr float rowGap = 2.0f;
+  constexpr float boxPad = 6.0f;
+  const float boxHeight = (addableCount > 0 ? addableCount * rowHeight + (addableCount - 1) * rowGap
+                                            : rowHeight) + boxPad * 2.0f;
+
+  // Enclose the list in a bordered, rounded surface so it reads as a foldable popup.
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::head);
+  ImGui::PushStyleColor(ImGuiCol_Border, theme::line2);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 7.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(boxPad, boxPad));
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, rowGap));
+
+  ImGui::BeginChild("##addComponentList", ImVec2(0.0f, boxHeight), true);
+
+  if (addableCount == 0)
+  {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::t3, "All components added");
+  }
+  else
+  {
+    for (const auto& [label, key, checkType, icon] : addableComponents)
+    {
+      if (object->getComponent<Component>(checkType))
+      {
+        continue;
+      }
+
+      if (gc::menuRow(label, icon, rowHeight) && m_sceneEditCallback)
+      {
+        m_sceneEditCallback(replication::buildAddComponent(object->getUUID(), key));
+        m_showComponentSelector = false;
+      }
+    }
+  }
+
+  ImGui::EndChild();
+
+  ImGui::PopStyleVar(3);
+  ImGui::PopStyleColor(2);
 }
 
 void ObjectGUIManager::displayScriptDragDropArea(const float dropZoneStartY,

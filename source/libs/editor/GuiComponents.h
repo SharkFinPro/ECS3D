@@ -389,6 +389,37 @@ namespace gc {
     ImGui::Dummy(ImVec2(w, h));
   }
 
+  // A full-width inline list row with a leading accent icon + label (e.g. the inspector's inline
+  // "Add Component" list). Fills with the accent-dim wash on hover. Returns true when clicked.
+  inline bool menuRow(const char* label, const SecIcon icon = SecIcon::none, const float height = 34.0f)
+  {
+    const float w = ImGui::GetContentRegionAvail().x;
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    ImGui::PushID(label);
+    const bool clicked = ImGui::InvisibleButton("##row", ImVec2(w, height));
+    const bool hovered = ImGui::IsItemHovered();
+    ImGui::PopID();
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (hovered)
+    {
+      dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + height), theme::u32(theme::accdim), 6.0f);
+    }
+
+    float textX = pos.x + 11.0f;
+    if (icon != SecIcon::none)
+    {
+      drawSecIcon(dl, ImVec2(pos.x + 18.0f, pos.y + height * 0.5f), 15.0f, icon,
+                  theme::u32(hovered ? theme::accent : theme::t2));
+      textX = pos.x + 34.0f;
+    }
+    const ImVec2 ts = ImGui::CalcTextSize(label);
+    dl->AddText(ImVec2(textX, pos.y + (height - ts.y) * 0.5f), theme::u32(theme::t1), label);
+
+    return clicked;
+  }
+
   // A full-width text field with an inset search glyph on the left and a placeholder hint (the asset
   // browser's "Search assets" box). The extra left frame padding clears the glyph. Returns true when
   // the text changed this frame.
