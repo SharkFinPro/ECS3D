@@ -52,6 +52,34 @@ namespace {
 
     return gc::SecIcon::block;
   }
+
+  // The short type label shown in the inspector's selected-object chip (mirrors iconForObject's
+  // component heuristic).
+  const char* labelForObject(const std::shared_ptr<Object>& object)
+  {
+    const auto& components = object->getComponents();
+
+    if (components.contains(ComponentType::lightRenderer))
+    {
+      return "Light";
+    }
+
+    if (const auto collider = components.find(ComponentType::collider); collider != components.end())
+    {
+      if (collider->second->getSubType() == ComponentType::SubComponentType_sphereCollider)
+      {
+        return "Sphere";
+      }
+      return components.contains(ComponentType::rigidBody) ? "Rigid Block" : "Block";
+    }
+
+    if (components.contains(ComponentType::modelRenderer))
+    {
+      return "Model";
+    }
+
+    return "Object";
+  }
 }
 
 ObjectGUIManager::ObjectGUIManager(std::shared_ptr<ComponentEditor> componentEditor)
@@ -310,6 +338,22 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
 {
   ImGui::Begin("Selected Object");
+
+  // Panel header: "SELECTED OBJECT" small-caps label + a right-aligned type chip (mockup).
+  const auto selected = (objectManager && m_selectedObject.has_value())
+    ? objectManager->getObjectByUUID(m_selectedObject.value()) : nullptr;
+
+  gc::sectionLabel("Selected Object");
+  if (selected)
+  {
+    const char* typeLabel = labelForObject(selected);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - gc::iconPillWidth(typeLabel));
+    gc::iconPill(iconForObject(selected), typeLabel);
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
 
   gc::accentCheckbox("Highlight Object", &m_highlightSelectedObject);
 

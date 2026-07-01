@@ -345,6 +345,32 @@ namespace gc {
     }
   }
 
+  // Computes the drawn width of an iconPill for right-alignment before drawing it.
+  inline float iconPillWidth(const char* text)
+  {
+    return 8.0f + 14.0f + 7.0f + ImGui::CalcTextSize(text).x + 10.0f;
+  }
+
+  // A rounded pill with a leading icon + text (the inspector's selected-object type chip). Pure
+  // decoration; advances the cursor past it.
+  inline void iconPill(const SecIcon icon, const char* text, const ImVec4& iconCol = theme::accent,
+                       const ImVec4& textCol = theme::t2, const ImVec4& bgCol = theme::inset)
+  {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 ts = ImGui::CalcTextSize(text);
+    constexpr float iconSize = 14.0f, padL = 8.0f, padR = 10.0f, gap = 7.0f, padY = 3.0f;
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const float w = padL + iconSize + gap + ts.x + padR;
+    const float h = ts.y + padY * 2.0f;
+
+    dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + h), theme::u32(bgCol), h * 0.5f);
+    drawSecIcon(dl, ImVec2(pos.x + padL + iconSize * 0.5f, pos.y + h * 0.5f), iconSize, icon,
+                theme::u32(iconCol));
+    dl->AddText(ImVec2(pos.x + padL + iconSize + gap, pos.y + padY), theme::u32(textCol), text);
+
+    ImGui::Dummy(ImVec2(w, h));
+  }
+
   // A 34x34 icon button for the floating viewport tool rail. Accent-filled when `active`, subtle wash on
   // hover. Returns true when clicked.
   inline bool overlayIconButton(const char* id, const SecIcon icon, const bool active)
