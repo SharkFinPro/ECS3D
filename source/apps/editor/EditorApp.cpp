@@ -425,11 +425,11 @@ void EditorApp::updateGui()
 
   updateDockSpace();
 
+  m_assetBrowser->displayGui();
+
   displayMessageLog();
 
   displaySceneStatus();
-
-  m_assetBrowser->displayGui();
 
   // The object tree + selected-object component panels (always drawn so they stay present/dockable;
   // empty when no scene is loaded yet). Edits fire the callbacks wired in the ctor.
