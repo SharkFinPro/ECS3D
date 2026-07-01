@@ -119,13 +119,31 @@ void AssetBrowserPanel::recomputeCache()
     m_cachedAssets.emplace_back(uuid, record);
   }
 
-  std::ranges::sort(m_cachedAssets, [this](const auto& a, const auto& b) {
-    return std::ranges::lexicographical_compare(displayName(a.second), displayName(b.second),
-                                                [this](const char x, const char y) {
-      return m_sortType == SortType::NameAscending
-        ? std::tolower(x) < std::tolower(y)
-        : std::tolower(x) > std::tolower(y);
+  const auto ciNameLess = [](const std::string& l, const std::string& r) {
+    return std::ranges::lexicographical_compare(l, r, [](const char x, const char y) {
+      return std::tolower(static_cast<unsigned char>(x)) < std::tolower(static_cast<unsigned char>(y));
     });
+  };
+
+  std::ranges::sort(m_cachedAssets, [this, &ciNameLess](const auto& a, const auto& b) {
+    const std::string nameA = displayName(a.second);
+    const std::string nameB = displayName(b.second);
+
+    switch (m_sortType)
+    {
+      case SortType::NameDescending:
+        return ciNameLess(nameB, nameA);
+      case SortType::Type:
+      {
+        // Group by type label, then by name within each type.
+        const std::string typeA = assetTypeLabel(a.second.type);
+        const std::string typeB = assetTypeLabel(b.second.type);
+        return typeA != typeB ? ciNameLess(typeA, typeB) : ciNameLess(nameA, nameB);
+      }
+      case SortType::NameAscending:
+      default:
+        return ciNameLess(nameA, nameB);
+    }
   });
 
   m_lastRegistryVersion = m_assetRegistry->getVersion();
@@ -191,7 +209,9 @@ void AssetBrowserPanel::displayGui()
 
     ImGui::SameLine(0.0f, gap);
     ImGui::SetNextItemWidth(sortWidth);
-    const char* sortLabel = m_sortType == SortType::NameAscending ? "Name (A-Z)" : "Name (Z-A)";
+    const char* sortLabel = m_sortType == SortType::NameAscending  ? "Name (A-Z)"
+                          : m_sortType == SortType::NameDescending ? "Name (Z-A)"
+                                                                   : "Type";
     if (ImGui::BeginCombo("##Sort", sortLabel))
     {
       if (ImGui::Selectable("Name (A-Z)", m_sortType == SortType::NameAscending))
@@ -202,6 +222,11 @@ void AssetBrowserPanel::displayGui()
       if (ImGui::Selectable("Name (Z-A)", m_sortType == SortType::NameDescending))
       {
         m_sortType = SortType::NameDescending;
+        m_dirty = true;
+      }
+      if (ImGui::Selectable("Type", m_sortType == SortType::Type))
+      {
+        m_sortType = SortType::Type;
         m_dirty = true;
       }
       ImGui::EndCombo();

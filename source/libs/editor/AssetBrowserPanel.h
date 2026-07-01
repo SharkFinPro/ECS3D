@@ -58,7 +58,7 @@ private:
   bool m_openCreatePopup = false;
   std::string m_createError;
 
-  enum class SortType { NameAscending, NameDescending };
+  enum class SortType { NameAscending, NameDescending, Type };
   SortType m_sortType = SortType::NameAscending;
 
   // Cached sorted+filtered view of the registry. Rebuilt only when m_dirty is true.
