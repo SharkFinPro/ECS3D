@@ -673,24 +673,7 @@ void EditorApp::displaySceneStatus() const
 
   ImGui::Begin("Scene Status");
 
-  // Status indicator dot + label (green running / amber paused / muted stopped), matching the mockup's
-  // viewport toolbar.
-  {
-    const char* label = m_sceneStatus == SceneStatus::running ? "Running"
-                      : m_sceneStatus == SceneStatus::paused  ? "Paused"
-                                                              : "Stopped";
-    const ImVec4 dotCol = m_sceneStatus == SceneStatus::running ? theme::sceneGreen
-                        : m_sceneStatus == SceneStatus::paused  ? theme::scriptAmber
-                                                                : theme::t3;
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float cy = p.y + ImGui::GetFrameHeight() * 0.5f;
-    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(p.x + 5.0f, cy), 4.0f, theme::u32(dotCol));
-    ImGui::SetCursorScreenPos(ImVec2(p.x + 18.0f, p.y));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(theme::t2, "%s", label);
-    ImGui::SameLine(0.0f, 16.0f);
-  }
-
+  // Play controls first (mockup's leading accent Start button).
   if (m_sceneStatus != SceneStatus::running)
   {
     ImGui::BeginDisabled(!m_serverEditable);
@@ -724,6 +707,56 @@ void EditorApp::displaySceneStatus() const
       sendSceneControl(net::SceneControlOp::stop);
     }
     ImGui::EndDisabled();
+  }
+
+  // Status readout (divider + dot/label + scene name), right-aligned to the panel edge so the play
+  // buttons stay put on the left regardless of the readout's width.
+  const char* label = m_sceneStatus == SceneStatus::running ? "Running"
+                    : m_sceneStatus == SceneStatus::paused  ? "Paused"
+                                                            : "Stopped";
+  const ImVec4 dotCol = m_sceneStatus == SceneStatus::running ? theme::sceneGreen
+                      : m_sceneStatus == SceneStatus::paused  ? theme::scriptAmber
+                                                              : theme::t3;
+  const auto scene = m_sceneManager->getCurrentScene();
+
+  constexpr float nameGap = 14.0f;     // scene name -> divider
+  constexpr float dividerGap = 14.0f;  // divider -> dot block
+  constexpr float dotToLabel = 18.0f;  // dot block start -> label text
+  float readoutWidth = dividerGap + dotToLabel + ImGui::CalcTextSize(label).x;
+  if (scene)
+  {
+    readoutWidth += ImGui::CalcTextSize(scene->getName().c_str()).x + nameGap;
+  }
+
+  // Anchor to the right edge, but never overlap the play buttons on a narrow panel.
+  ImGui::SameLine();
+  const float readoutX = std::max(ImGui::GetCursorPosX() + 4.0f,
+                                  ImGui::GetContentRegionMax().x - readoutWidth);
+  ImGui::SetCursorPosX(readoutX);
+
+  // Current scene name (muted) first, mirroring the mockup's toolbar.
+  if (scene)
+  {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::t3, "%s", scene->getName().c_str());
+    ImGui::SameLine(0.0f, nameGap);
+  }
+
+  // Divider between the scene name and the status readout.
+  const ImVec2 dp = ImGui::GetCursorScreenPos();
+  const float frameH = ImGui::GetFrameHeight();
+  ImGui::GetWindowDrawList()->AddLine(ImVec2(dp.x, dp.y + frameH * 0.2f),
+                                      ImVec2(dp.x, dp.y + frameH * 0.8f), theme::u32(theme::line));
+  ImGui::SetCursorScreenPos(ImVec2(dp.x + dividerGap, dp.y));
+
+  // Status indicator dot + label (green running / amber paused / muted stopped).
+  {
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float cy = p.y + ImGui::GetFrameHeight() * 0.5f;
+    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(p.x + 5.0f, cy), 4.0f, theme::u32(dotCol));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + dotToLabel, p.y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::t2, "%s", label);
   }
 
   ImGui::End();
