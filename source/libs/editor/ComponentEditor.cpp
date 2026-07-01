@@ -1,6 +1,22 @@
 #include "ComponentEditor.h"
+#include "GuiComponents.h"
 #include <objects/components/Component.h>
 #include <imgui.h>
+
+namespace {
+  gc::SecIcon iconForComponent(const ComponentType type)
+  {
+    switch (type)
+    {
+      case ComponentType::transform:      return gc::SecIcon::transform;
+      case ComponentType::modelRenderer:  return gc::SecIcon::image;
+      case ComponentType::lightRenderer:  return gc::SecIcon::image;
+      case ComponentType::rigidBody:      return gc::SecIcon::rigid;
+      case ComponentType::collider:       return gc::SecIcon::collider;
+      default:                            return gc::SecIcon::none;
+    }
+  }
+}
 
 void ComponentEditor::registerHandler(const std::string& typeName, GuiHandler handler)
 {
@@ -27,27 +43,18 @@ bool ComponentEditor::displayHeader(const std::shared_ptr<Component>& component,
     componentDisplayName = componentName;
   }
 
-  const bool open = ImGui::CollapsingHeader(
-    componentDisplayName.c_str(),
-    ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DefaultOpen
-  );
+  // Transform is intrinsic to every object, so it has no remove button.
+  const bool removable = component->getType() != ComponentType::transform;
 
-  if (component->getType() != ComponentType::transform)
+  ImGui::PushID(component.get());
+  bool removeClicked = false;
+  const bool open = gc::sectionHeader(componentDisplayName.c_str(), removable, &removeClicked,
+                                      iconForComponent(component->getType()));
+  if (removeClicked)
   {
-    ImGui::SameLine();
-
-    const float buttonWidth = ImGui::CalcTextSize("-").x + ImGui::GetStyle().FramePadding.x * 4.0f;
-    const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
-
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth);
-
-    ImGui::PushID(component.get());
-    if (ImGui::Button("-", {buttonWidth, 0}))
-    {
-      component->markAsDeleted();
-    }
-    ImGui::PopID();
+    component->markAsDeleted();
   }
+  ImGui::PopID();
 
   return open;
 }

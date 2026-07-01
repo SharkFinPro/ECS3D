@@ -1,5 +1,6 @@
 #include "LightRendererEditor.h"
 #include "../ComponentEditor.h"
+#include "../GuiComponents.h"
 #include <objects/components/LightRenderer.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/vec3.hpp>
@@ -29,43 +30,45 @@ void registerLightRendererEditor(ComponentEditor& componentEditor)
 
       // These now write the plain light data directly (the vke::PointLight/SpotLight are built by the
       // RenderSystem from these values each frame).
-      if (ImGui::Checkbox("Spot Light", &isSpotLight))
+      if (gc::accentCheckbox("Spot Light", &isSpotLight))
       {
         light->setSpotLight(isSpotLight);
         edited = true;
       }
 
-      if (ImGui::ColorEdit3("Color", value_ptr(color)))
+      gc::rowLabel("Color");
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+      if (ImGui::ColorEdit3("##Color", value_ptr(color)))
       {
         light->setColor(color);
         edited = true;
       }
 
-      if (ImGui::SliderFloat("Ambient", &ambient, 0.0f, 1.0f))
+      if (gc::accentSlider("Ambient", &ambient, 0.0f, 1.0f))
       {
         light->setAmbient(ambient);
         edited = true;
       }
 
-      if (ImGui::SliderFloat("Diffuse", &diffuse, 0.0f, 1.0f))
+      if (gc::accentSlider("Diffuse", &diffuse, 0.0f, 1.0f))
       {
         light->setDiffuse(diffuse);
         edited = true;
       }
 
-      if (ImGui::SliderFloat("Specular", &specular, 0.0f, 1.0f))
+      if (gc::accentSlider("Specular", &specular, 0.0f, 1.0f))
       {
         light->setSpecular(specular);
         edited = true;
       }
 
-      if (ImGui::SliderFloat3("Direction", value_ptr(direction), -1.0f, 1.0f))
+      if (gc::xyzGuiBoxed("Direction", &direction.x, &direction.y, &direction.z, 0.01f))
       {
         light->setDirection(direction);
         edited = true;
       }
 
-      if (ImGui::SliderFloat("Cone Angle", &coneAngle, 0.0f, 180.0f))
+      if (gc::accentSlider("Cone Angle", &coneAngle, 0.0f, 180.0f))
       {
         light->setConeAngle(coneAngle);
         edited = true;

@@ -1,6 +1,7 @@
 #include "ObjectGUIManager.h"
 #include "AssetDragDrop.h"
 #include "ComponentEditor.h"
+#include "GuiComponents.h"
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <objects/Object.h>
@@ -24,6 +25,33 @@ namespace {
     { "Box Collider",    "Box",           ComponentType::collider       },
     { "Sphere Collider", "Sphere",        ComponentType::collider       }
   }};
+
+  // Heuristic icon for an object derived from its components (the mockup shows a per-object glyph).
+  gc::SecIcon iconForObject(const std::shared_ptr<Object>& object)
+  {
+    const auto& components = object->getComponents();
+
+    if (components.contains(ComponentType::lightRenderer))
+    {
+      return gc::SecIcon::light;
+    }
+
+    if (const auto collider = components.find(ComponentType::collider); collider != components.end())
+    {
+      if (collider->second->getSubType() == ComponentType::SubComponentType_sphereCollider)
+      {
+        return gc::SecIcon::sphere;
+      }
+      return components.contains(ComponentType::rigidBody) ? gc::SecIcon::rigidblock : gc::SecIcon::block;
+    }
+
+    if (components.contains(ComponentType::modelRenderer))
+    {
+      return gc::SecIcon::model;
+    }
+
+    return gc::SecIcon::block;
+  }
 }
 
 ObjectGUIManager::ObjectGUIManager(std::shared_ptr<ComponentEditor> componentEditor)
@@ -71,8 +99,22 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
     ImGui::Separator();
   }
 
+  // Section header with a right-aligned count pill (mockup: "OBJECTS  [10]").
+  if (objectManager)
+  {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::t2, "OBJECTS");
+
+    const auto count = std::to_string(objectManager->getObjects().size());
+    const float pillWidth = ImGui::CalcTextSize(count.c_str()).x + 18.0f;
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - pillWidth);
+    gc::pill(count.c_str(), theme::t3);
+
+    ImGui::Spacing();
+  }
+
   ImGui::BeginDisabled(!m_editable || objectManager == nullptr);
-  if (ImGui::Button("Create New Object", {ImGui::GetContentRegionAvail().x, 45}))
+  if (gc::accentButton("Create New Object", gc::SecIcon::plus))
   {
     m_sceneEditCallback(replication::buildAddObject("Object"));
   }
@@ -143,11 +185,41 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
   }
 
-  const bool open = ImGui::TreeNodeEx(object->getName().c_str(), flags);
+  // Empty label: we draw the icon + name ourselves so the row matches the mockup (per-type glyph + an
+  // accent left-bar on the selected row). Accent-tint the node's selection/hover fills.
+  ImGui::PushStyleColor(ImGuiCol_Header, theme::accdim);
+  ImGui::PushStyleColor(ImGuiCol_HeaderHovered, theme::hover);
+  ImGui::PushStyleColor(ImGuiCol_HeaderActive, theme::accdim);
+  // Taller rows than the default frame padding so the row + its inline buttons have more breathing room.
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 11.0f));
+  const bool open = ImGui::TreeNodeEx("##node", flags);
+  ImGui::PopStyleVar();
+  ImGui::PopStyleColor(3);
 
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
   {
     setSelectedObject(object->getUUID());
+  }
+
+  // Icon + name + accent selection bar, drawn over the (empty-label) node row.
+  {
+    const ImVec2 rmin = ImGui::GetItemRectMin();
+    const ImVec2 rmax = ImGui::GetItemRectMax();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    if (isSelected)
+    {
+      dl->AddRectFilled(rmin, ImVec2(rmin.x + 2.5f, rmax.y), theme::u32(theme::accent));
+    }
+
+    const float tx = rmin.x + ImGui::GetTreeNodeToLabelSpacing();
+    const float cy = (rmin.y + rmax.y) * 0.5f;
+    gc::drawSecIcon(dl, ImVec2(tx + 8.0f, cy), 16.0f, iconForObject(object), theme::u32(theme::t2));
+
+    const float textX = tx + 22.0f;
+    const float nameMax = rmax.x - textX - 72.0f;
+    const std::string shown = gc::ellipsize(object->getName().c_str(), nameMax);
+    dl->AddText(ImVec2(textX, cy - ImGui::GetTextLineHeight() * 0.5f), theme::u32(theme::t1), shown.c_str());
   }
 
   // Drag this node onto another to reparent it (drop on empty space in the window reparents to root).
@@ -199,23 +271,24 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     ImGui::EndPopup();
   }
 
-  // Add/Delete Buttons
+  // Add/Delete Buttons, flush to the right edge of the row.
   ImGui::SameLine();
 
-  const float buttonWidth = ImGui::CalcTextSize("+").x + ImGui::GetStyle().FramePadding.x * 4.0f;
-  const float contentRegionWidth = ImGui::GetContentRegionAvail().x;
+  constexpr float buttonWidth = 31.0f;
+  constexpr float buttonGap = 3.0f;
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth * 2.0f - buttonGap);
 
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + contentRegionWidth - buttonWidth * 2.0f - 5.0f);
-
-  if (ImGui::Button("+", {buttonWidth, 0}))
+  ImGui::SetNextItemAllowOverlap();
+  if (gc::rowIconButton("addChild", gc::SecIcon::plus, false, buttonWidth))
   {
     const auto parent = object->getUUID();
     m_sceneEditCallback(replication::buildAddObject("Object", &parent));
   }
 
-  ImGui::SameLine();
+  ImGui::SameLine(0.0f, buttonGap);
 
-  if (ImGui::Button("-", {buttonWidth, 0}))
+  ImGui::SetNextItemAllowOverlap();
+  if (gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth))
   {
     // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
     m_objectPendingDeletion = object->getUUID();
@@ -238,7 +311,7 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
 {
   ImGui::Begin("Selected Object");
 
-  ImGui::Checkbox("Highlight Object", &m_highlightSelectedObject);
+  gc::accentCheckbox("Highlight Object", &m_highlightSelectedObject);
 
   if (objectManager && m_selectedObject.has_value())
   {
@@ -257,9 +330,8 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
       }
 
       ImGui::BeginDisabled(!m_editable);
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted("Name");
-      ImGui::SameLine();
+      gc::rowLabel("Name");
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
       if (ImGui::InputText(std::string("##objectName" + to_string(object->getUUID())).c_str(), m_nameEditBuffer.data(), m_nameEditBuffer.size()) &&
           m_sceneEditCallback)
       {
@@ -291,7 +363,7 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
 
       if (object->getScripts().empty())
       {
-        ImGui::Dummy({ ImGui::GetContentRegionAvail().x, 60.0f });
+        gc::dashedBox("No scripts attached");
       }
       else
       {
@@ -385,30 +457,46 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
 
 void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object)
 {
-  if (!m_showComponentSelector && ImGui::Button("+ Add Component"))
+  if (!m_showComponentSelector)
   {
-    m_showComponentSelector = true;
+    if (gc::dashedButton("Add Component", gc::SecIcon::plus))
+    {
+      m_showComponentSelector = true;
+    }
+    return;
   }
 
-  if (m_showComponentSelector && ImGui::BeginCombo("##combo", "Select Component"))
+  // Open state: an accent header button (click to cancel) over a styled list of addable components, so
+  // the selector reads as the same control as the dashed button that revealed it.
+  if (gc::accentButton("Select Component", gc::SecIcon::plus))
   {
-    for (const auto& [label, key, checkType] : addableComponents)
+    m_showComponentSelector = false;
+  }
+
+  ImGui::Spacing();
+  ImGui::Indent(6.0f);
+  ImGui::PushStyleColor(ImGuiCol_Header, theme::accdim);
+  ImGui::PushStyleColor(ImGuiCol_HeaderHovered, theme::accdim);
+  ImGui::PushStyleColor(ImGuiCol_HeaderActive, theme::accSoft);
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(11.0f, 9.0f));
+
+  for (const auto& [label, key, checkType] : addableComponents)
+  {
+    if (object->getComponent<Component>(checkType))
     {
-      if (object->getComponent<Component>(checkType))
-      {
-        continue;
-      }
-
-      if (ImGui::Selectable(label) && m_sceneEditCallback)
-      {
-        m_sceneEditCallback(replication::buildAddComponent(object->getUUID(), key));
-
-        m_showComponentSelector = false;
-      }
+      continue;
     }
 
-    ImGui::EndCombo();
+    if (ImGui::Selectable(label) && m_sceneEditCallback)
+    {
+      m_sceneEditCallback(replication::buildAddComponent(object->getUUID(), key));
+      m_showComponentSelector = false;
+    }
   }
+
+  ImGui::PopStyleVar();
+  ImGui::PopStyleColor(3);
+  ImGui::Unindent(6.0f);
 }
 
 void ObjectGUIManager::displayScriptDragDropArea(const float dropZoneStartY,

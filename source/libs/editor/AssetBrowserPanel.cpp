@@ -1,5 +1,6 @@
 #include "AssetBrowserPanel.h"
 #include "AssetDragDrop.h"
+#include "GuiComponents.h"
 #include <GpuAssetCache.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -157,34 +158,35 @@ void AssetBrowserPanel::displayGui()
 {
   ImGui::Begin("Assets");
 
-  if (ImGui::CollapsingHeader("Options"))
+  if (ImGui::CollapsingHeader("Options", ImGuiTreeNodeFlags_DefaultOpen))
   {
     ImGui::Spacing();
 
+    // Filter chips on one row.
     ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(kColorSubtle, "Filter:");
+    ImGui::TextColored(theme::t2, "Filter");
     for (const auto& [type, label] : kAssetTypeLabels)
     {
       bool selected = m_filter == type;
-      ImGui::SameLine();
-      if (ImGui::Checkbox(label, &selected))
+      ImGui::SameLine(0.0f, 16.0f);
+      if (gc::accentCheckboxCompact(label, &selected))
       {
         m_filter = selected ? type : AssetType::Unknown;
         m_dirty = true;
       }
     }
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(kColorSubtle, "Search:");
-    ImGui::SameLine();
+    ImGui::Spacing();
+
+    gc::rowLabel("Search");
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     if (ImGui::InputText("##Search", m_search, sizeof(m_search)))
     {
       m_dirty = true;
     }
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(kColorSubtle, "Sort:");
-    ImGui::SameLine();
+    gc::rowLabel("Sort");
+    ImGui::SetNextItemWidth(220.0f);
     const char* sortLabel = m_sortType == SortType::NameAscending ? "Name (A-Z)" : "Name (Z-A)";
     if (ImGui::BeginCombo("##Sort", sortLabel))
     {
@@ -200,6 +202,8 @@ void AssetBrowserPanel::displayGui()
       }
       ImGui::EndCombo();
     }
+
+    ImGui::Spacing();
   }
 
   ImGui::Separator();
@@ -251,31 +255,36 @@ void AssetBrowserPanel::displayGui()
 
 void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord& record, const float cellSize, const std::string& name) const
 {
-  ImGui::TextWrapped("%s", name.c_str());
+  // Per-type icon + accent color for the card (textures instead show their actual image).
+  ImTextureID thumb = 0;
+  gc::SecIcon icon = gc::SecIcon::none;
+  ImVec4 iconCol = theme::accent;
 
-  bool drewThumbnail = false;
-
-  // Textures show their actual image; everything else gets a labelled tile.
-  if (record.type == AssetType::Texture)
+  switch (record.type)
   {
-    try
-    {
-      if (const auto texture = m_assetCache->getTexture(uuid))
+    case AssetType::Texture:
+      iconCol = theme::accent;
+      try
       {
-        ImGui::ImageButton("##thumb", texture->getImGuiTexture(), { cellSize, cellSize });
-        drewThumbnail = true;
+        if (const auto texture = m_assetCache->getTexture(uuid))
+        {
+          thumb = texture->getImGuiTexture();
+        }
       }
-    }
-    catch (const std::exception&)
-    {
-      // fall back to a labelled tile below
-    }
+      catch (const std::exception&)
+      {
+        // fall back to the type icon below
+      }
+      icon = gc::SecIcon::image;
+      break;
+    case AssetType::Model:  icon = gc::SecIcon::model;  iconCol = theme::modelPurple; break;
+    case AssetType::Script: icon = gc::SecIcon::script; iconCol = theme::scriptAmber; break;
+    case AssetType::Scene:  icon = gc::SecIcon::scene;  iconCol = theme::sceneGreen;  break;
+    default: break;
   }
 
-  if (!drewThumbnail)
-  {
-    ImGui::Button(assetTypeLabel(record.type), { cellSize, cellSize });
-  }
+  const bool clicked = gc::assetCard(cellSize, thumb, icon, iconCol, assetTypeLabel(record.type), iconCol);
+  (void) clicked;
 
   // Double-click a scene tile to make it the active scene. Switching the active scene is a server-side
   // mutation, so it's only available when the server is editable (a read-only viewer follows the
@@ -301,6 +310,8 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
       ImGui::EndDragDropSource();
     }
   }
+
+  gc::assetCardLabel(name.c_str(), cellSize);
 }
 
 void AssetBrowserPanel::displayMenuWidget()

@@ -93,6 +93,11 @@ private:
 
   SceneStatus m_sceneStatus = SceneStatus::running;
 
+  // The active viewport manipulation tool, shown highlighted in the floating overlay rail. Cosmetic for
+  // now (the prototype's overlay rail doesn't yet drive a real gizmo).
+  enum class ViewportTool { move, rotate, scale, pan };
+  ViewportTool m_activeTool = ViewportTool::move;
+
   // Only resend input when it changes (see ClientApp): keeps an unfocused editor from clobbering a
   // focused client's keys on the shared server-side InputState.
   std::vector<int> m_lastInputKeys;
@@ -135,6 +140,9 @@ private:
   void displayMenuBar() const;
 
   void displaySceneStatus() const;
+
+  // Floating, on-top overlays drawn over the 3D scene-view window: corner label, tool rail, axis hint.
+  void displaySceneOverlay();
 
   void updateDockSpace() const;
 

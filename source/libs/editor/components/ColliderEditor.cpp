@@ -23,7 +23,7 @@ void registerColliderEditors(ComponentEditor& componentEditor)
     if (ComponentEditor::displayHeader(component))
     {
       bool renderCollider = box->getRenderCollider();
-      if (ImGui::Checkbox("Render Collider", &renderCollider))
+      if (gc::accentCheckbox("Render Collider", &renderCollider))
       {
         box->setRenderCollider(renderCollider);
         edited = true;
@@ -33,24 +33,20 @@ void registerColliderEditors(ComponentEditor& componentEditor)
       glm::vec3 rotation = box->getLocalRotation();
       glm::vec3 scale = box->getLocalScale();
 
-      ImGui::PushID("BoxColliderPosition");
-      if (gc::xyzGui("Position", &position.x, &position.y, &position.z))
+      ImGui::PushID("BoxCollider");
+      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z))
       {
         box->setPosition(position);
         edited = true;
       }
-      ImGui::PopID();
 
-      ImGui::PushID("BoxColliderRotation");
-      if (gc::xyzGui("Rotation", &rotation.x, &rotation.y, &rotation.z))
+      if (gc::xyzGuiBoxed("Rotation", &rotation.x, &rotation.y, &rotation.z))
       {
         box->setRotation(rotation);
         edited = true;
       }
-      ImGui::PopID();
 
-      ImGui::PushID("BoxColliderScale");
-      if (gc::xyzGui("Scale", &scale.x, &scale.y, &scale.z))
+      if (gc::xyzGuiBoxed("Scale", &scale.x, &scale.y, &scale.z))
       {
         box->setScale(scale);
         edited = true;
@@ -73,22 +69,22 @@ void registerColliderEditors(ComponentEditor& componentEditor)
     if (ComponentEditor::displayHeader(component))
     {
       bool renderCollider = sphere->getRenderCollider();
-      if (ImGui::Checkbox("Render Collider", &renderCollider))
+      if (gc::accentCheckbox("Render Collider", &renderCollider))
       {
         sphere->setRenderCollider(renderCollider);
         edited = true;
       }
 
       float radius = sphere->getLocalRadius();
-      if (ImGui::DragFloat("Radius", &radius, 0.1f, 0.0f, 0.0f))
+      if (gc::labeledDrag("Radius", &radius))
       {
         sphere->setRadius(radius);
         edited = true;
       }
 
       glm::vec3 position = sphere->getLocalPosition();
-      ImGui::PushID("SphereColliderPosition");
-      if (gc::xyzGui("Position", &position.x, &position.y, &position.z))
+      ImGui::PushID("SphereCollider");
+      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z))
       {
         sphere->setPosition(position);
         edited = true;
