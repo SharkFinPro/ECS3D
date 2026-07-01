@@ -662,6 +662,7 @@ namespace gc {
   inline void assetCardLabel(const char* name, const float width)
   {
     ImGui::TextColored(theme::t1, "%s", ellipsize(name, width).c_str());
+    ImGui::Spacing();
   }
 
   // A full-width model-renderer reference slot (mockup: 30px thumb + kind label + filename + folder
