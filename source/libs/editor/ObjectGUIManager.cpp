@@ -302,7 +302,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   // Add/Delete Buttons, flush to the right edge of the row.
   ImGui::SameLine();
 
-  constexpr float buttonWidth = 31.0f;
+  const float buttonWidth = rowHeight;
   constexpr float buttonGap = 3.0f;
   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth * 2.0f - buttonGap);
 
