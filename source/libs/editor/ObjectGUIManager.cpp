@@ -465,23 +465,31 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
   {
     ImGui::TextUnformatted("Are you sure you want to delete");
     ImGui::SameLine();
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", object->getName().c_str());
+    ImGui::TextColored(theme::accent, "%s", object->getName().c_str());
     ImGui::SameLine();
     ImGui::TextUnformatted("?");
 
-    ImGui::TextUnformatted("This action cannot be undone.");
+    ImGui::TextColored(theme::t3, "This action cannot be undone.");
 
+    ImGui::Spacing();
     ImGui::Separator();
+    ImGui::Spacing();
 
-    if (ImGui::Button("Yes", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter))
+    // Danger-red confirm; neutral cancel.
+    ImGui::PushStyleColor(ImGuiCol_Button, theme::danger);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(240, 110, 114));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(210, 70, 75));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(255, 255, 255));
+    if (ImGui::Button("Delete", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter))
     {
       shouldDelete = true;
       ImGui::CloseCurrentPopup();
     }
+    ImGui::PopStyleColor(4);
 
     ImGui::SameLine();
 
-    if (ImGui::Button("No", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
     {
       m_objectPendingDeletion.reset();
       ImGui::CloseCurrentPopup();
