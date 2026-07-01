@@ -29,7 +29,6 @@
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
-#include <imgui_internal.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/MousePicker.h>
@@ -437,114 +436,8 @@ void EditorApp::updateGui()
   const auto scene = m_sceneManager->getCurrentScene();
   m_objectGUIManager->displayGui(scene ? scene->getObjectManager().get() : nullptr);
 
-  displaySceneOverlay();
-
   // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate
   // scene-selector widget.
-}
-
-void EditorApp::displaySceneOverlay()
-{
-  // The scene-view window is owned + drawn by the engine during render(); we reach in for its rect (via
-  // imgui_internal) and float small on-top panels over its corners. Separate small windows (rather than
-  // one full-rect overlay) keep the rest of the viewport interactive for camera + picking.
-  const ImGuiWindow* sceneView = ImGui::FindWindowByName(m_sceneViewName.c_str());
-  if (!sceneView || sceneView->Collapsed || sceneView->Hidden)
-  {
-    return;
-  }
-
-  const ImVec2 vmin = sceneView->InnerRect.Min;
-  const ImVec2 vmax = sceneView->InnerRect.Max;
-  if (vmax.x - vmin.x < 80.0f || vmax.y - vmin.y < 80.0f)
-  {
-    return;
-  }
-
-  constexpr float margin = 12.0f;
-  constexpr ImU32 frostBg = IM_COL32(13, 14, 16, 153);
-  constexpr ImU32 frostBorder = IM_COL32(255, 255, 255, 20);
-
-  constexpr ImGuiWindowFlags baseFlags =
-    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoMove |
-    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBackground |
-    ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus;
-
-  const auto frost = [&](const ImVec2& p0, const ImVec2& p1) {
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p0, p1, frostBg, 9.0f);
-    dl->AddRect(p0, p1, frostBorder, 9.0f);
-  };
-
-  // ----- top-left: "SCENE VIEW" label -----
-  {
-    const ImVec2 size(118.0f, 30.0f);
-    ImGui::SetNextWindowPos(ImVec2(vmin.x + margin, vmin.y + margin));
-    ImGui::SetNextWindowSize(size);
-    ImGui::Begin("##sceneLabel", nullptr, baseFlags | ImGuiWindowFlags_NoInputs);
-    const ImVec2 wp = ImGui::GetWindowPos();
-    frost(wp, ImVec2(wp.x + size.x, wp.y + size.y));
-    ImGui::GetWindowDrawList()->AddText(ImVec2(wp.x + 12.0f, wp.y + 8.0f),
-                                        IM_COL32(223, 226, 232, 255), "SCENE VIEW");
-    ImGui::End();
-  }
-
-  // ----- top-right: tool rail -----
-  {
-    const ImVec2 size(42.0f, 163.0f);
-    ImGui::SetNextWindowPos(ImVec2(vmax.x - margin - size.x, vmin.y + margin));
-    ImGui::SetNextWindowSize(size);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 3.0f));
-    ImGui::Begin("##sceneToolRail", nullptr, baseFlags);
-
-    const ImVec2 wp = ImGui::GetWindowPos();
-    frost(wp, ImVec2(wp.x + size.x, wp.y + size.y));
-
-    if (gc::overlayIconButton("move", gc::SecIcon::transform, m_activeTool == ViewportTool::move))
-    {
-      m_activeTool = ViewportTool::move;
-    }
-    if (gc::overlayIconButton("rotate", gc::SecIcon::rotate, m_activeTool == ViewportTool::rotate))
-    {
-      m_activeTool = ViewportTool::rotate;
-    }
-    if (gc::overlayIconButton("scale", gc::SecIcon::scale, m_activeTool == ViewportTool::scale))
-    {
-      m_activeTool = ViewportTool::scale;
-    }
-
-    // Divider.
-    ImGui::Dummy(ImVec2(0.0f, 3.0f));
-    const ImVec2 dp = ImGui::GetCursorScreenPos();
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(dp.x + 5.0f, dp.y), ImVec2(dp.x + size.x - 13.0f, dp.y),
-                                        IM_COL32(255, 255, 255, 26), 1.0f);
-    ImGui::Dummy(ImVec2(0.0f, 3.0f));
-
-    if (gc::overlayIconButton("pan", gc::SecIcon::pan, m_activeTool == ViewportTool::pan))
-    {
-      m_activeTool = ViewportTool::pan;
-    }
-
-    ImGui::End();
-    ImGui::PopStyleVar(2);
-  }
-
-  // ----- bottom-left: axis indicator -----
-  {
-    const ImVec2 size(92.0f, 30.0f);
-    ImGui::SetNextWindowPos(ImVec2(vmin.x + margin, vmax.y - margin - size.y));
-    ImGui::SetNextWindowSize(size);
-    ImGui::Begin("##sceneAxis", nullptr, baseFlags | ImGuiWindowFlags_NoInputs);
-    const ImVec2 wp = ImGui::GetWindowPos();
-    frost(wp, ImVec2(wp.x + size.x, wp.y + size.y));
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float ty = wp.y + 8.0f;
-    dl->AddText(ImVec2(wp.x + 16.0f, ty), theme::u32(theme::axisX), "X");
-    dl->AddText(ImVec2(wp.x + 42.0f, ty), theme::u32(theme::axisY), "Y");
-    dl->AddText(ImVec2(wp.x + 68.0f, ty), theme::u32(theme::axisZ), "Z");
-    ImGui::End();
-  }
 }
 
 void EditorApp::displayMenuBar() const
