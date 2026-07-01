@@ -19,8 +19,6 @@
 #include <string>
 
 namespace {
-  constexpr ImVec4 kColorSubtle { 0.55f, 0.55f, 0.55f, 1.00f };
-
   constexpr std::array<std::pair<AssetType, const char*>, 4> kAssetTypeLabels {{
     { AssetType::Model,   "Model"   },
     { AssetType::Texture, "Texture" },
@@ -355,7 +353,7 @@ void AssetBrowserPanel::displayMenuWidget()
   auto labeledSeparator = [](const char* label)
   {
     ImGui::Spacing();
-    ImGui::TextColored(kColorSubtle, "%s", label);
+    ImGui::TextColored(theme::t3, "%s", label);
     ImGui::Separator();
     ImGui::Spacing();
   };
@@ -421,7 +419,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
 
   if (!m_createError.empty())
   {
-    ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", m_createError.c_str());
+    ImGui::TextColored(theme::danger, "%s", m_createError.c_str());
   }
 
   ImGui::Separator();

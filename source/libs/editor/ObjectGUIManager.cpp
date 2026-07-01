@@ -123,7 +123,7 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 
   if (!m_editable)
   {
-    ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "Read-only - server is not in edit mode");
+    ImGui::TextColored(theme::scriptAmber, "Read-only - server is not in edit mode");
     ImGui::Separator();
   }
 

@@ -486,7 +486,7 @@ void EditorApp::displayMenuBar() const
       const char* badge = "READ-ONLY (server not in edit mode)";
       const float badgeWidth = ImGui::CalcTextSize(badge).x;
       ImGui::SameLine(ImGui::GetWindowWidth() - badgeWidth - ImGui::GetStyle().WindowPadding.x * 2.0f);
-      ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "%s", badge);
+      ImGui::TextColored(theme::scriptAmber, "%s", badge);
     }
 
     ImGui::EndMainMenuBar();
