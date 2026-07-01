@@ -244,26 +244,44 @@ void AssetBrowserPanel::displayGui()
     recomputeCache();
   }
 
-  // Grid: size the tiles by the window content scale and pack as many columns as fit.
+  // Grid: manual wrapping (auto-fill columns with a min tile width, stretched to fill) with even
+  // gutters both directions, matching the mockup's CSS grid. Tiles are placed at absolute positions so
+  // the card->label spacing stays independent of the inter-tile gap.
   const float contentScale = m_assetCache->getRenderer()->getWindow()->getContentScale();
-  const float cellSize = 150.0f * contentScale;
+  const float gap = 14.0f * contentScale;
+  const float minTile = 132.0f * contentScale;
   const float available = ImGui::GetContentRegionAvail().x;
-  const int columns = std::max(1, static_cast<int>(available / cellSize));
 
-  ImGui::Columns(columns, nullptr, false);
+  const int columns = std::max(1, static_cast<int>((available + gap) / (minTile + gap)));
+  const float tileWidth = (available - gap * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+  const float cellHeight = tileWidth + ImGui::GetStyle().ItemSpacing.y + ImGui::GetTextLineHeight();
 
+  const ImVec2 origin = ImGui::GetCursorScreenPos();
+
+  int index = 0;
   for (const auto& [uuid, record] : m_cachedAssets)
   {
+    const int row = index / columns;
+    const int col = index % columns;
+    ImGui::SetCursorScreenPos(ImVec2(origin.x + static_cast<float>(col) * (tileWidth + gap),
+                                     origin.y + static_cast<float>(row) * (cellHeight + gap)));
+
     ImGui::PushID(uuids::to_string(uuid).c_str());
-
-    displayAsset(uuid, record, cellSize * 0.75f, displayName(record));
-
+    ImGui::BeginGroup();
+    displayAsset(uuid, record, tileWidth, displayName(record));
+    ImGui::EndGroup();
     ImGui::PopID();
 
-    ImGui::NextColumn();
+    ++index;
   }
 
-  ImGui::Columns(1);
+  // Reserve the full grid extent so scrolling + the window content region are correct.
+  if (index > 0)
+  {
+    const int rows = (index + columns - 1) / columns;
+    ImGui::SetCursorScreenPos(origin);
+    ImGui::Dummy(ImVec2(available, static_cast<float>(rows) * cellHeight + static_cast<float>(rows - 1) * gap));
+  }
 
   ImGui::End();
 
