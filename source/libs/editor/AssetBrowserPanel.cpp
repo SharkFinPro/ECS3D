@@ -194,8 +194,8 @@ void AssetBrowserPanel::displayGui()
       }
     }
 
-    ImGui::Spacing();
-    ImGui::Spacing();
+    // ImGui::Spacing();
+    // ImGui::Spacing();
 
     // Search + Sort share a row (mockup): the search box fills the row, the sort combo sits on the right.
     constexpr float sortWidth = 200.0f;
