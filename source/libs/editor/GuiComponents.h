@@ -212,7 +212,8 @@ namespace gc {
   // Simple vector icon set drawn with ImDrawList (stand-in for the mockup's Lucide icons, since the
   // icon font is out of scope for this prototype). Drawn centered in a `size`-wide box at `center`.
   enum class SecIcon { none, transform, model, rigid, collider, image, rotate, scale, pan,
-                       script, scene, folder, plus, minus, light, block, rigidblock, sphere, player };
+                       script, scene, folder, plus, minus, light, block, rigidblock, sphere, player,
+                       search };
 
   inline void drawSecIcon(ImDrawList* dl, const ImVec2& center, const float size, const SecIcon icon,
                           const ImU32 col)
@@ -325,6 +326,16 @@ namespace gc {
         dl->PathArcTo(ImVec2(center.x, center.y + r), r * 0.75f, 3.34f, 6.08f, 12);
         dl->PathStroke(col, 0, 1.5f);
         break;
+      case SecIcon::search: // magnifying glass
+      {
+        const float ringR = r * 0.62f;
+        const ImVec2 ringC(center.x - r * 0.18f, center.y - r * 0.18f);
+        dl->AddCircle(ringC, ringR, col, 12, 1.5f);
+        const float d = ringR * 0.70f;
+        dl->AddLine(ImVec2(ringC.x + d, ringC.y + d), ImVec2(center.x + r * 0.85f, center.y + r * 0.85f),
+                    col, 1.6f);
+        break;
+      }
       case SecIcon::pan: // 4-way arrows
       {
         dl->AddLine(ImVec2(center.x, center.y - r), ImVec2(center.x, center.y + r), col, 1.5f);
@@ -369,6 +380,26 @@ namespace gc {
     dl->AddText(ImVec2(pos.x + padL + iconSize + gap, pos.y + padY), theme::u32(textCol), text);
 
     ImGui::Dummy(ImVec2(w, h));
+  }
+
+  // A full-width text field with an inset search glyph on the left and a placeholder hint (the asset
+  // browser's "Search assets" box). The extra left frame padding clears the glyph. Returns true when
+  // the text changed this frame.
+  inline bool searchField(const char* id, char* buf, const size_t bufSize, const char* hint = "Search",
+                          const float width = 0.0f)
+  {
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetFrameHeight();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(34.0f, ImGui::GetStyle().FramePadding.y));
+    ImGui::SetNextItemWidth(width > 0.0f ? width : ImGui::GetContentRegionAvail().x);
+    const bool changed = ImGui::InputTextWithHint(id, hint, buf, bufSize);
+    ImGui::PopStyleVar();
+
+    drawSecIcon(ImGui::GetWindowDrawList(), ImVec2(pos.x + 18.0f, pos.y + h * 0.5f), 14.0f,
+                SecIcon::search, theme::u32(theme::t3));
+
+    return changed;
   }
 
   // A 34x34 icon button for the floating viewport tool rail. Accent-filled when `active`, subtle wash on
@@ -626,10 +657,10 @@ namespace gc {
     return clicked;
   }
 
-  // The filename label drawn under an assetCard, ellipsized to the tile width.
+  // The filename label drawn under an assetCard, ellipsized to the tile width. Sits directly under the
+  // tile on the standard item gap (the mockup's ~9px thumbnail-to-name spacing).
   inline void assetCardLabel(const char* name, const float width)
   {
-    ImGui::Spacing();
     ImGui::TextColored(theme::t1, "%s", ellipsize(name, width).c_str());
   }
 

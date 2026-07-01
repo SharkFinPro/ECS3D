@@ -162,7 +162,7 @@ void AssetBrowserPanel::displayGui()
   {
     ImGui::Spacing();
 
-    // Filter chips on one row.
+    // Filter chips on one row (label sits inline with its chips).
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(theme::t2, "Filter");
     for (const auto& [type, label] : kAssetTypeLabels)
@@ -177,16 +177,20 @@ void AssetBrowserPanel::displayGui()
     }
 
     ImGui::Spacing();
+    ImGui::Spacing();
 
-    gc::rowLabel("Search");
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-    if (ImGui::InputText("##Search", m_search, sizeof(m_search)))
+    // Search + Sort share a row (mockup): the search box fills the row, the sort combo sits on the right.
+    constexpr float sortWidth = 200.0f;
+    constexpr float gap = 10.0f;
+    const float searchWidth = std::max(120.0f, ImGui::GetContentRegionAvail().x - sortWidth - gap);
+
+    if (gc::searchField("##Search", m_search, sizeof(m_search), "Search assets", searchWidth))
     {
       m_dirty = true;
     }
 
-    gc::rowLabel("Sort");
-    ImGui::SetNextItemWidth(220.0f);
+    ImGui::SameLine(0.0f, gap);
+    ImGui::SetNextItemWidth(sortWidth);
     const char* sortLabel = m_sortType == SortType::NameAscending ? "Name (A-Z)" : "Name (Z-A)";
     if (ImGui::BeginCombo("##Sort", sortLabel))
     {
@@ -203,6 +207,7 @@ void AssetBrowserPanel::displayGui()
       ImGui::EndCombo();
     }
 
+    ImGui::Spacing();
     ImGui::Spacing();
   }
 
