@@ -152,6 +152,7 @@ void ClientApp::createRenderer()
       .position = { 0, 5, -50 }
     },
     .imGui {
+      .useDockspace = false,
       .maxTextures = 100
     }
   };
