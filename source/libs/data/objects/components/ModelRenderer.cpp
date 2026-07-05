@@ -26,6 +26,16 @@ void ModelRenderer::setUseStandardPipeline(const bool useStandardPipeline)
   m_useStandardPipeline = useStandardPipeline;
 }
 
+float ModelRenderer::getReflectivity() const
+{
+  return m_reflectivity;
+}
+
+void ModelRenderer::setReflectivity(const float reflectivity)
+{
+  m_reflectivity = reflectivity;
+}
+
 uuids::uuid ModelRenderer::getModelUUID() const
 {
   return m_modelUUID;
@@ -66,6 +76,8 @@ nlohmann::json ModelRenderer::serialize()
   const nlohmann::json data = {
     { "type", "ModelRenderer" },
     { "shouldRender", m_shouldRender },
+    { "useStandardPipeline", m_useStandardPipeline },
+    { "reflectivity", m_reflectivity },
     { "modelUUID", m_modelUUID.is_nil() ? "" : uuids::to_string(m_modelUUID) },
     { "textureUUID", m_textureUUID.is_nil() ? "" : uuids::to_string(m_textureUUID) },
     { "specularMapUUID", m_specularMapUUID.is_nil() ? "" : uuids::to_string(m_specularMapUUID) }
@@ -77,6 +89,10 @@ nlohmann::json ModelRenderer::serialize()
 void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
 {
   m_shouldRender = componentData.at("shouldRender");
+
+  // value() with defaults: these fields are absent from projects saved before they existed.
+  m_useStandardPipeline = componentData.value("useStandardPipeline", true);
+  m_reflectivity = componentData.value("reflectivity", 0.0f);
 
   if (const auto modelUUID = uuids::uuid::from_string(std::string(componentData.at("modelUUID"))); modelUUID.has_value())
   {
@@ -100,6 +116,7 @@ void ModelRenderer::pack(net::Message& message) const
 
   message.write(m_shouldRender);
   message.write(m_useStandardPipeline);
+  message.write(m_reflectivity);
 
   message.write(m_modelUUID);
   message.write(m_textureUUID);
@@ -110,6 +127,7 @@ void ModelRenderer::unpack(net::MessageReader& messageReader)
 {
   m_shouldRender = messageReader.read<bool>();
   m_useStandardPipeline = messageReader.read<bool>();
+  m_reflectivity = messageReader.read<float>();
 
   m_modelUUID = messageReader.read<uuids::uuid>();
   m_textureUUID = messageReader.read<uuids::uuid>();

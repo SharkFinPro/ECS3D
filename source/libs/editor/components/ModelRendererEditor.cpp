@@ -99,6 +99,13 @@ void registerModelRendererEditor(ComponentEditor& componentEditor,
         edited = true;
       }
 
+      float reflectivity = modelRenderer->getReflectivity();
+      if (gc::accentSlider("Reflectivity", &reflectivity, 0.0f, 1.0f))
+      {
+        modelRenderer->setReflectivity(reflectivity);
+        edited = true;
+      }
+
       ImGui::Spacing();
 
       // Drag an asset out of the AssetBrowserPanel onto these slots to assign it.

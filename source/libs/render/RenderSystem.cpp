@@ -48,6 +48,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         renderObject->setPosition(transform->getPosition());
         renderObject->setScale(transform->getScale());
         renderObject->setOrientationEuler(transform->getRotation());
+        renderObject->setReflectivity(modelRenderer->getReflectivity());
 
         // pointer is stable: unordered_map keeps element references valid across rehash.
         renderer->getRenderingManager()->getRenderer3D()->renderObject(
