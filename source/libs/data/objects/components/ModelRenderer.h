@@ -14,6 +14,9 @@ public:
   [[nodiscard]] bool getUseStandardPipeline() const;
   void setUseStandardPipeline(bool useStandardPipeline);
 
+  [[nodiscard]] float getReflectivity() const;
+  void setReflectivity(float reflectivity);
+
   [[nodiscard]] uuids::uuid getModelUUID() const;
   void setModelUUID(const uuids::uuid& modelUUID);
 
@@ -36,6 +39,8 @@ public:
 private:
   bool m_shouldRender = false;
   bool m_useStandardPipeline = true;
+
+  float m_reflectivity = 0.0f;
 
   uuids::uuid m_modelUUID;
   uuids::uuid m_textureUUID;

@@ -602,6 +602,25 @@ void EditorApp::displaySceneStatus() const
     ImGui::EndDisabled();
   }
 
+  // Ray tracing toggle: a local render setting (this view's vke renderer only, never replicated), so
+  // it stays enabled on a read-only server. Greyed out when the device can't ray trace.
+  const auto renderingManager = m_renderer->getRenderingManager();
+  ImGui::SameLine(0.0f, 18.0f);
+  ImGui::BeginDisabled(!renderingManager->supportsRayTracing());
+  bool rayTracing = renderingManager->isRayTracingEnabled();
+  if (gc::accentCheckboxCompact("Ray Tracing", &rayTracing))
+  {
+    if (rayTracing)
+    {
+      renderingManager->enableRayTracing();
+    }
+    else
+    {
+      renderingManager->disableRayTracing();
+    }
+  }
+  ImGui::EndDisabled();
+
   // Status readout (divider + dot/label + scene name), right-aligned to the panel edge so the play
   // buttons stay put on the left regardless of the readout's width.
   const char* label = m_sceneStatus == SceneStatus::running ? "Running"
