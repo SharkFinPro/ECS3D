@@ -1,0 +1,7 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:ECS3DLauncher.Shared.Controls"
+             x:Class="ECS3DLauncher.Tabs.Learn.LearnView">
+
+    <controls:EmptyState IconData="{StaticResource IconBook}" Heading="Documentation" />
+</UserControl>
