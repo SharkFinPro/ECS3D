@@ -1,0 +1,181 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:m="using:ECS3DLauncher.Shared.Models"
+             xmlns:local="using:ECS3DLauncher.Tabs.Projects"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:dd="using:ECS3DLauncher.Shared"
+             mc:Ignorable="d"
+             d:DesignWidth="960" d:DesignHeight="720"
+             d:DataContext="{x:Static dd:DesignData.Projects}"
+             x:Class="ECS3DLauncher.Tabs.Projects.ProjectsView"
+             x:DataType="local:ProjectsViewModel">
+
+    <Panel>
+
+        <!-- PROJECTS: GRID -->
+        <ItemsControl IsVisible="{Binding IsGridView}" ItemsSource="{Binding ProjectTiles}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><WrapPanel Margin="-9" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="m:Project">
+                    <Panel Width="236" Height="238" Margin="9">
+
+                        <!-- New Project card -->
+                        <Button Classes="card-btn" Theme="{StaticResource BareButton}"
+                                IsVisible="{Binding IsNewCard}" CornerRadius="11"
+                                Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).NewProjectCommand, FallbackValue={x:Null}}">
+                            <Panel>
+                                <Rectangle Classes="dash" RadiusX="11" RadiusY="11"
+                                           Fill="{StaticResource AccDim}"
+                                           Stroke="#661FB8D4" StrokeThickness="1.5" StrokeDashArray="5,4" />
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="11">
+                                    <Border Width="46" Height="46" CornerRadius="12" HorizontalAlignment="Center"
+                                            Background="{StaticResource AccDim2}">
+                                        <Path Classes="icon acc" Width="18" Height="18" StrokeThickness="1.7"
+                                              Data="{StaticResource IconPlus}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="New Project" FontSize="14" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource AccBrush}"
+                                                   HorizontalAlignment="Center" />
+                                        <TextBlock Text="Start from a template" FontSize="11.5"
+                                                   Foreground="{StaticResource AccSubtitle}"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Panel>
+                        </Button>
+
+                        <!-- Project card -->
+                        <Border Classes="card" IsVisible="{Binding IsRealCard}"
+                                CornerRadius="11" ClipToBounds="True">
+                            <StackPanel>
+                                <!-- thumbnail -->
+                                <Panel Height="146" Background="{StaticResource InsetBrush}">
+                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                           IsVisible="{Binding HasThumbnail}" />
+                                    <Panel IsVisible="{Binding !HasThumbnail}">
+                                        <Border Background="{StaticResource ThumbStripes}" />
+                                        <Border Background="{Binding GlowBrush}" />
+                                        <Path Classes="icon" Width="30" Height="30"
+                                              Stroke="#2EFFFFFF" StrokeThickness="2.4"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Data="{Binding PlaceholderIcon, Converter={StaticResource IconKey}}" />
+                                    </Panel>
+                                    <Border IsVisible="{Binding Pinned}" Width="24" Height="24" CornerRadius="6"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="9"
+                                            Background="#A60D0E10">
+                                        <Path Classes="icon fill" Width="10" Height="10"
+                                              Data="{StaticResource IconStar}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                </Panel>
+                                <!-- info -->
+                                <StackPanel Margin="14,13,14,14">
+                                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Path}" FontSize="11.5" Margin="0,3,0,0"
+                                               FontFamily="{StaticResource MonoFontFamily}"
+                                               Foreground="{StaticResource T3Brush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Grid Margin="0,11,0,0" ColumnDefinitions="Auto,*,Auto">
+                                        <Path Grid.Column="0" Classes="icon t3" Width="10" Height="10"
+                                              VerticalAlignment="Center" Data="{StaticResource IconClock}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Edited}" FontSize="11.5"
+                                                   Margin="7,0,0,0" Foreground="{StaticResource T2Brush}"
+                                                   VerticalAlignment="Center" />
+                                        <Border Grid.Column="2" CornerRadius="20" Padding="9,2"
+                                                Background="{StaticResource InsetBrush}"
+                                                BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                                            <TextBlock Text="{Binding Version}" FontSize="10.5" FontWeight="SemiBold"
+                                                       FontFamily="{StaticResource MonoFontFamily}"
+                                                       Foreground="{StaticResource T2Brush}" />
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Panel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- PROJECTS: LIST -->
+        <ItemsControl IsVisible="{Binding IsListView}" ItemsSource="{Binding ProjectTiles}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="m:Project">
+                    <Panel Margin="0,0,0,8">
+
+                        <!-- New Project row -->
+                        <Button Classes="card-btn" Theme="{StaticResource BareButton}"
+                                IsVisible="{Binding IsNewCard}" CornerRadius="9"
+                                Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).NewProjectCommand, FallbackValue={x:Null}}">
+                            <Panel>
+                                <Rectangle Classes="dash" RadiusX="9" RadiusY="9"
+                                           Fill="{StaticResource AccDim}"
+                                           Stroke="#661FB8D4" StrokeThickness="1.5" StrokeDashArray="5,4" />
+                                <StackPanel Orientation="Horizontal" Spacing="14" Margin="14,11">
+                                    <Border Width="38" Height="38" CornerRadius="8"
+                                            Background="{StaticResource AccDim2}">
+                                        <Path Classes="icon acc" Width="13.5" Height="13.5" StrokeThickness="1.4"
+                                              Data="{StaticResource IconPlus}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                                        <TextBlock Text="New Project" FontSize="13.5" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource AccBrush}" />
+                                        <TextBlock Text="Start from a template" FontSize="11.5"
+                                                   Foreground="{StaticResource AccSubtitle}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Panel>
+                        </Button>
+
+                        <!-- Project row -->
+                        <Border Classes="card row" IsVisible="{Binding IsRealCard}" CornerRadius="9">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="14,9">
+                                <Border Grid.Column="0" Width="60" Height="38" CornerRadius="6"
+                                        ClipToBounds="True" Background="{StaticResource InsetBrush}">
+                                    <Panel>
+                                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                               IsVisible="{Binding HasThumbnail}" />
+                                        <Border Background="{StaticResource ThumbStripes}"
+                                                IsVisible="{Binding !HasThumbnail}" />
+                                        <Border Background="{Binding GlowBrush}"
+                                                IsVisible="{Binding !HasThumbnail}" />
+                                    </Panel>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0" Spacing="2">
+                                    <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Path}" FontSize="11.5"
+                                               FontFamily="{StaticResource MonoFontFamily}"
+                                               Foreground="{StaticResource T3Brush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding Edited}" Width="110"
+                                           FontSize="11.5" Foreground="{StaticResource T2Brush}"
+                                           VerticalAlignment="Center" />
+                                <Border Grid.Column="3" CornerRadius="20" Padding="9,2" Margin="0,0,14,0"
+                                        VerticalAlignment="Center"
+                                        Background="{StaticResource InsetBrush}"
+                                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                                    <TextBlock Text="{Binding Version}" FontSize="10.5" FontWeight="SemiBold"
+                                               FontFamily="{StaticResource MonoFontFamily}"
+                                               Foreground="{StaticResource T2Brush}" />
+                                </Border>
+                                <Path Grid.Column="4" Classes="icon fill" Width="10.5" Height="10.5"
+                                      IsVisible="{Binding Pinned}" VerticalAlignment="Center"
+                                      Data="{StaticResource IconStar}" />
+                            </Grid>
+                        </Border>
+                    </Panel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+    </Panel>
+</UserControl>
