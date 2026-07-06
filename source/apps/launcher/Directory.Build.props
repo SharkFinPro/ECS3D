@@ -1,0 +1,22 @@
+<Project>
+
+  <!-- Build-output locations for the launcher.
+
+       These live here (not in ECS3DLauncher.csproj) on purpose: BaseIntermediateOutputPath must be
+       set before Microsoft.NET.Sdk imports Microsoft.Common.props (setting it in the .csproj is too
+       late — MSB3539) and must also be visible to `restore`, which evaluates Directory.Build.props
+       but not late .csproj PropertyGroups. -->
+  <PropertyGroup>
+    <!-- CMake passes these to redirect obj/bin into its build tree (see CMakeLists.txt). Empty for a
+         standalone `dotnet` / Rider build, which then uses the SDK defaults (obj/ and bin/). -->
+    <BaseIntermediateOutputPath Condition="'$(LauncherObjDir)' != ''">$(LauncherObjDir)</BaseIntermediateOutputPath>
+    <BaseOutputPath Condition="'$(LauncherBinDir)' != ''">$(LauncherBinDir)</BaseOutputPath>
+
+    <!-- When obj/bin are relocated out of the project (above), the SDK's default `obj/**` and
+         `bin/**` compile exclusions stop covering the local folders. Re-exclude them explicitly so a
+         stray *.cs left in a local obj/ or bin/ (e.g. from an earlier standalone build) can never be
+         double-compiled into the CMake build — that produces CS0579 duplicate-attribute errors. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildThisFileDirectory)obj\**;$(MSBuildThisFileDirectory)bin\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Ships as ECS3DLauncher(.exe), matching ECS3DEditor/Client/Server in bin. This name is
+         also the avares:// resource authority (see Theme.axaml / ProjectsViewModel). -->
+    <AssemblyName>ECS3DLauncher</AssemblyName>
+    <RootNamespace>ECS3DLauncher</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Build-output locations (obj/bin redirection) live in Directory.Build.props — they must be set
+       before the SDK's common props import, which a PropertyGroup here is too late for. -->
+
+  <ItemGroup>
+    <AvaloniaResource Include="source/Assets/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.5" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1" />
+  </ItemGroup>
+
+  <!-- SkiaSharp/HarfBuzzSharp ship ~100 MB of native debug symbols (libSkiaSharp.pdb,
+       libHarfBuzzSharp.pdb) that get copied on publish. Strip the native symbols (lib*.pdb)
+       from the published launcher — useless in a shipped UI app. The app's own managed
+       ECS3DLauncher.pdb is kept for crash diagnostics. -->
+  <Target Name="TrimNativeSymbols" AfterTargets="Publish">
+    <ItemGroup>
+      <_NativeSymbols Include="$(PublishDir)lib*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_NativeSymbols)" />
+  </Target>
+
+  <!-- Debug-only dev tooling. None of this ships in a Release build, and CMake
+       always publishes Release, so it never reaches the engine's bin. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <!-- DevTools (F12): live visual-tree inspector + runtime property editing.
+         Bridges to the standalone AvaloniaUI Developer Tools app. -->
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
+    <!-- HotAvalonia: live XAML hot reload in the running app. v3 auto-enables
+         for the startup exe (no code needed) — edit any .axaml and the running
+         window repaints. Loader is bumped to match the Avalonia 12 packages. -->
+    <PackageReference Include="HotAvalonia" Version="3.1.3" PrivateAssets="All" Publish="True" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="12.0.5" PrivateAssets="All" Publish="True" />
+    <!-- Lets HotAvalonia patch optimized code so code-loaded embedded assets
+         (images, fonts) hot reload too, not just XAML files. -->
+    <PackageReference Include="MonoMod.RuntimeDetour" Version="*" PrivateAssets="All" Publish="True" />
+  </ItemGroup>
+
+</Project>
