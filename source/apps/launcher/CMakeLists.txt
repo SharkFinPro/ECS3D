@@ -90,7 +90,6 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     --self-contained false
     -p:PublishSingleFile=true
     -p:IncludeNativeLibrariesForSelfExtract=true
-    -p:EnableCompressionInSingleFile=true
     -p:DebugType=none
     -p:DebugSymbols=false
     -o "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
