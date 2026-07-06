@@ -31,13 +31,13 @@ public partial class ProjectsViewModel : ObservableObject
 
         Projects =
         [
-            new() { Name = "Solar Sandbox",     Path = "~/ecs3d/solar_sandbox",  Edited = "12 minutes ago", Version = "ECS3D 0.4.2", Pinned = true,  Thumbnail = Load("scene_render.png") },
-            new() { Name = "Physics Playground", Path = "~/ecs3d/physics_play",  Edited = "3 hours ago",    Version = "ECS3D 0.4.2", Pinned = true,  GlowColor = Color.Parse("#8C1FB8D4"), PlaceholderIcon = "IconScene" },
-            new() { Name = "Marble Run",        Path = "~/ecs3d/marble_run",     Edited = "Yesterday",      Version = "ECS3D 0.4.1", GlowColor = Color.Parse("#85A78BFA"), PlaceholderIcon = "IconModel" },
-            new() { Name = "Voxel Terrain",     Path = "~/ecs3d/voxel_terrain",  Edited = "2 days ago",     Version = "ECS3D 0.4.1", GlowColor = Color.Parse("#7D5CBF6A"), PlaceholderIcon = "IconModel" },
-            new() { Name = "Boids Flock",       Path = "~/ecs3d/boids",          Edited = "Last week",      Version = "ECS3D 0.4.0", GlowColor = Color.Parse("#7DE6B35A"), PlaceholderIcon = "IconScene" },
-            new() { Name = "Particle Demo",     Path = "~/ecs3d/particles",      Edited = "Last week",      Version = "ECS3D 0.4.0", GlowColor = Color.Parse("#7AE5565B"), PlaceholderIcon = "IconScene" },
-            new() { Name = "Shader Lab",        Path = "~/ecs3d/shader_lab",     Edited = "2 weeks ago",    Version = "ECS3D 0.3.9", GlowColor = Color.Parse("#854D93F5"), PlaceholderIcon = "IconModel" },
+            new() { Name = "Solar Sandbox",     Path = "~/ecs3d/solar_sandbox",  Edited = "12 minutes ago", Version = "0.0.1", Pinned = true,  Thumbnail = Load("scene_render.png") },
+            new() { Name = "Physics Playground", Path = "~/ecs3d/physics_play",  Edited = "3 hours ago",    Version = "0.0.1", Pinned = true,  GlowColor = Color.Parse("#8C1FB8D4"), PlaceholderIcon = "IconScene" },
+            new() { Name = "Marble Run",        Path = "~/ecs3d/marble_run",     Edited = "Yesterday",      Version = "0.0.1", GlowColor = Color.Parse("#85A78BFA"), PlaceholderIcon = "IconModel" },
+            new() { Name = "Voxel Terrain",     Path = "~/ecs3d/voxel_terrain",  Edited = "2 days ago",     Version = "0.0.1", GlowColor = Color.Parse("#7D5CBF6A"), PlaceholderIcon = "IconModel" },
+            new() { Name = "Boids Flock",       Path = "~/ecs3d/boids",          Edited = "Last week",      Version = "0.0.1", GlowColor = Color.Parse("#7DE6B35A"), PlaceholderIcon = "IconScene" },
+            new() { Name = "Particle Demo",     Path = "~/ecs3d/particles",      Edited = "Last week",      Version = "0.0.1", GlowColor = Color.Parse("#7AE5565B"), PlaceholderIcon = "IconScene" },
+            new() { Name = "Shader Lab",        Path = "~/ecs3d/shader_lab",     Edited = "2 weeks ago",    Version = "0.0.1", GlowColor = Color.Parse("#854D93F5"), PlaceholderIcon = "IconModel" },
         ];
 
         ProjectTiles = [new() { IsNewCard = true, Name = "", Path = "", Edited = "", Version = "" }];

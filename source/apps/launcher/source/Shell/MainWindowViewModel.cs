@@ -13,7 +13,7 @@ namespace ECS3DLauncher.Shell;
 // Each tab owns its content via its own view model under source/Tabs/*.
 public partial class MainWindowViewModel : ObservableObject
 {
-    public string Version => "v0.4.2";
+    public string Version => "v0.0.1";
 
     public ObservableCollection<NavItemViewModel> NavItems { get; }
 
