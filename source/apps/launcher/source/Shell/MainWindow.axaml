@@ -1,0 +1,223 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="using:ECS3DLauncher.Shell"
+        xmlns:projects="using:ECS3DLauncher.Tabs.Projects"
+        xmlns:templates="using:ECS3DLauncher.Tabs.Templates"
+        xmlns:samples="using:ECS3DLauncher.Tabs.Samples"
+        xmlns:learn="using:ECS3DLauncher.Tabs.Learn"
+        xmlns:settings="using:ECS3DLauncher.Tabs.Settings"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:dd="using:ECS3DLauncher.Shared"
+        mc:Ignorable="d"
+        d:DataContext="{x:Static dd:DesignData.MainWindow}"
+        x:Class="ECS3DLauncher.Shell.MainWindow"
+        x:DataType="shell:MainWindowViewModel"
+        Title="ECS3D Project Manager"
+        Width="1120" Height="720" MinWidth="900" MinHeight="600"
+        Background="{StaticResource BgBrush}"
+        Foreground="{StaticResource T1Brush}"
+        FontFamily="{StaticResource ContentFontFamily}"
+        FontSize="13"
+        WindowStartupLocation="CenterScreen"
+        WindowDecorations="None">
+
+    <Grid RowDefinitions="42,*">
+
+        <!-- ===== TITLE BAR ===== -->
+        <Border Grid.Row="0" Background="{StaticResource TitleBg}"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1"
+                PointerPressed="OnTitleBarPressed">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="13,0,6,0">
+
+                <Border Grid.Column="0" Width="22" Height="22" CornerRadius="6"
+                        Background="{StaticResource AccDim}" VerticalAlignment="Center">
+                    <Path Classes="icon acc" Width="11" Height="11"
+                          Data="{StaticResource IconModel}"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+
+                <TextBlock Grid.Column="1" Text="ECS3D" FontWeight="Bold" FontSize="13.5"
+                           VerticalAlignment="Center" Margin="11,0,0,0" />
+                <TextBlock Grid.Column="2" Text="Project Manager" FontSize="12"
+                           Foreground="{StaticResource T3Brush}"
+                           VerticalAlignment="Center" Margin="11,0,0,0" />
+
+                <TextBlock Grid.Column="4" Text="{Binding Version}" FontSize="11"
+                           FontFamily="{StaticResource MonoFontFamily}"
+                           Foreground="{StaticResource T3Brush}"
+                           VerticalAlignment="Center" Margin="0,0,8,0" />
+
+                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2"
+                            VerticalAlignment="Center">
+                    <Button Classes="win" Theme="{StaticResource BareButton}"
+                            Click="OnMinimize" ToolTip.Tip="Minimize">
+                        <Rectangle Classes="wg" Width="10" Height="1.3" RadiusX="1" RadiusY="1"
+                                   Fill="{StaticResource T2Brush}" />
+                    </Button>
+                    <Button Name="MaxButton" Classes="win" Theme="{StaticResource BareButton}"
+                            Click="OnMaximize" ToolTip.Tip="Maximize">
+                        <Panel Width="11" Height="11">
+                            <!-- maximize: single square -->
+                            <Border Name="GlyphMax" Classes="wg" Width="9" Height="9" CornerRadius="2"
+                                    BorderBrush="{StaticResource T2Brush}" BorderThickness="1.3"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <!-- restore: front square + top-right edge of the back square -->
+                            <Panel Name="GlyphRestore" IsVisible="False">
+                                <Path Classes="icon" Stretch="None" StrokeThickness="1.3"
+                                      Width="11" Height="11"
+                                      Data="M3.5 1.5 H7.5 A2 2 0 0 1 9.5 3.5 V7.5" />
+                                <Border Classes="wg" Width="7.5" Height="7.5" CornerRadius="2"
+                                        BorderBrush="{StaticResource T2Brush}" BorderThickness="1.3"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" />
+                            </Panel>
+                        </Panel>
+                    </Button>
+                    <Button Classes="win close" Theme="{StaticResource BareButton}"
+                            Click="OnClose" ToolTip.Tip="Close">
+                        <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== BODY ===== -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+
+            <!-- ===== SIDEBAR ===== -->
+            <Border Grid.Column="0" Width="212" Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
+                <DockPanel Margin="12,16">
+
+                    <TextBlock DockPanel.Dock="Top" Text="LIBRARY"
+                               FontSize="11" FontWeight="SemiBold" LetterSpacing="1"
+                               Foreground="{StaticResource T3Brush}"
+                               Margin="10,4,10,10" />
+
+                    <!-- Settings pinned to the bottom -->
+                    <Button DockPanel.Dock="Bottom" Classes="navbtn" Theme="{StaticResource BareButton}"
+                            Command="{Binding SelectNavCommand}" CommandParameter="settings">
+                        <Grid Margin="11,9" ColumnDefinitions="Auto,*">
+                            <Path Grid.Column="0" Classes="icon" Width="12" Height="12"
+                                  Data="{StaticResource IconSettings}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="Settings" Classes="navlabel"
+                                       FontSize="13.5" FontWeight="Medium"
+                                       Margin="11,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <!-- Nav items -->
+                    <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding NavItems}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="shell:NavItemViewModel">
+                                <Button Classes="navbtn" Theme="{StaticResource BareButton}" Margin="0,0,0,2"
+                                        Command="{Binding $parent[Window].((shell:MainWindowViewModel)DataContext).SelectNavCommand, FallbackValue={x:Null}}"
+                                        CommandParameter="{Binding Key}">
+                                    <Panel>
+                                        <Border IsVisible="{Binding IsActive}"
+                                                Background="{StaticResource AccDim}" CornerRadius="7"
+                                                BorderBrush="{StaticResource AccBrush}"
+                                                BorderThickness="2.5,0,0,0" />
+                                        <Grid Margin="11,9" ColumnDefinitions="Auto,*,Auto">
+                                            <Path Grid.Column="0" Classes="icon" Classes.t1="{Binding IsActive}"
+                                                  Width="12" Height="12" VerticalAlignment="Center"
+                                                  Data="{Binding Icon, Converter={StaticResource IconKey}}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Label}"
+                                                       Classes="navlabel" Classes.on="{Binding IsActive}"
+                                                       FontSize="13.5" FontWeight="Medium"
+                                                       Margin="11,0,0,0" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Count}"
+                                                       IsVisible="{Binding Count, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                       FontSize="11" FontFamily="{StaticResource MonoFontFamily}"
+                                                       Foreground="{StaticResource T3Brush}"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Panel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
+
+            <!-- ===== MAIN ===== -->
+            <Grid Grid.Column="1" RowDefinitions="Auto,*">
+
+                <!-- Toolbar -->
+                <Grid Grid.Row="0" Margin="28,20,28,16" ColumnDefinitions="*,Auto,Auto,Auto">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding ViewTitle}" FontSize="19" FontWeight="Bold"
+                                   LetterSpacing="-0.2" />
+                        <TextBlock Text="{Binding ViewSubtitle}" FontSize="12.5"
+                                   Foreground="{StaticResource T2Brush}" />
+                    </StackPanel>
+
+                    <!-- Search -->
+                    <Border Grid.Column="1" Width="230" Height="36" CornerRadius="8" Margin="0,0,14,0"
+                            Background="{StaticResource InsetBrush}"
+                            BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                        <Grid ColumnDefinitions="Auto,*" Margin="12,0">
+                            <Path Grid.Column="0" Classes="icon t3" Width="10.5" Height="10.5"
+                                  VerticalAlignment="Center" Data="{StaticResource IconSearch}" />
+                            <TextBox Grid.Column="1" Classes="search" PlaceholderText="Search projects"
+                                     Margin="9,0,0,0" Foreground="{StaticResource T1Brush}" FontSize="13" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Grid/List toggle (drives the Projects tab) -->
+                    <Border Grid.Column="2" CornerRadius="8" Padding="3" Margin="0,0,14,0"
+                            Background="{StaticResource InsetBrush}"
+                            BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                            <Button Classes="seg" Classes.on="{Binding Projects.IsGridView}"
+                                    Theme="{StaticResource BareButton}" Command="{Binding Projects.SetGridCommand}">
+                                <Path Classes="icon" Width="11" Height="11" Data="{StaticResource IconGrid}" />
+                            </Button>
+                            <Button Classes="seg" Classes.on="{Binding Projects.IsListView}"
+                                    Theme="{StaticResource BareButton}" Command="{Binding Projects.SetListCommand}">
+                                <Path Classes="icon" Width="11" Height="11" Data="{StaticResource IconList}" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- New Project -->
+                    <Button Grid.Column="3" Classes="cta" Theme="{StaticResource BareButton}"
+                            Command="{Binding NewProjectCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Path Classes="icon dark" Width="12" Height="12" StrokeThickness="1.5"
+                                  Data="{StaticResource IconPlus}" VerticalAlignment="Center" />
+                            <TextBlock Text="New Project" FontSize="13" FontWeight="Bold"
+                                       Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <!-- Content: the active tab's view model, templated to its view.
+                     Padding lives on the content, not the ScrollViewer: ScrollViewer
+                     padding doesn't scroll with the content, so the bottom inset
+                     was lost once the view overflowed and cards got cut off. -->
+                <ScrollViewer Grid.Row="1">
+                    <ContentControl Margin="28,4,28,32" Content="{Binding CurrentTab}">
+                        <ContentControl.DataTemplates>
+                            <DataTemplate DataType="projects:ProjectsViewModel">
+                                <projects:ProjectsView />
+                            </DataTemplate>
+                            <DataTemplate DataType="templates:TemplatesViewModel">
+                                <templates:TemplatesView />
+                            </DataTemplate>
+                            <DataTemplate DataType="samples:SamplesViewModel">
+                                <samples:SamplesView />
+                            </DataTemplate>
+                            <DataTemplate DataType="learn:LearnViewModel">
+                                <learn:LearnView />
+                            </DataTemplate>
+                            <DataTemplate DataType="settings:SettingsViewModel">
+                                <settings:SettingsView />
+                            </DataTemplate>
+                        </ContentControl.DataTemplates>
+                    </ContentControl>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
