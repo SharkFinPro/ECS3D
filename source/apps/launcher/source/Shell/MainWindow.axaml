@@ -22,7 +22,7 @@
         WindowStartupLocation="CenterScreen"
         WindowDecorations="None">
 
-    <Grid RowDefinitions="42,*">
+    <Grid Name="Root" Focusable="True" RowDefinitions="42,*">
 
         <!-- ===== TITLE BAR ===== -->
         <Border Grid.Row="0" Background="{StaticResource TitleBg}"

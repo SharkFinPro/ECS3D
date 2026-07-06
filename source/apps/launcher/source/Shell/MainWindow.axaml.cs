@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 
 namespace ECS3DLauncher.Shell;
 
@@ -22,6 +23,21 @@ public partial class MainWindow : Window
         InitializeComponent();
         AddHandler(PointerPressedEvent, OnEdgePressed, RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, OnEdgeMoved, RoutingStrategies.Tunnel);
+        // A press on a non-focusable element (title text, empty panels, ...) does not
+        // pull keyboard focus off a TextBox, so its caret keeps blinking. Clear focus
+        // whenever a press lands outside any TextBox. handledEventsToo so it still runs
+        // even when a control (e.g. a Button) marks the event handled.
+        AddHandler(PointerPressedEvent, OnGlobalPointerPressed, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // Ignore presses inside a TextBox — those should keep (or take) focus.
+        if (e.Source is Visual v && v.FindAncestorOfType<TextBox>(includeSelf: true) is not null)
+            return;
+
+        if (FocusManager?.GetFocusedElement() is TextBox)
+            Root.Focus();
     }
 
     private WindowEdge? EdgeAt(Point p)
