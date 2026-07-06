@@ -13,7 +13,7 @@
         d:DataContext="{x:Static dd:DesignData.MainWindow}"
         x:Class="ECS3DLauncher.Shell.MainWindow"
         x:DataType="shell:MainWindowViewModel"
-        Title="ECS3D Project Manager"
+        Title="ECS3D Launcher"
         Width="1120" Height="720" MinWidth="900" MinHeight="600"
         Background="{StaticResource BgBrush}"
         Foreground="{StaticResource T1Brush}"
@@ -39,7 +39,7 @@
 
                 <TextBlock Grid.Column="1" Text="ECS3D" FontWeight="Bold" FontSize="13.5"
                            VerticalAlignment="Center" Margin="11,0,0,0" />
-                <TextBlock Grid.Column="2" Text="Project Manager" FontSize="12"
+                <TextBlock Grid.Column="2" Text="Launcher" FontSize="12"
                            Foreground="{StaticResource T3Brush}"
                            VerticalAlignment="Center" Margin="11,0,0,0" />
 
