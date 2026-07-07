@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
@@ -174,6 +175,16 @@ public static class Bridge
     public static byte getFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
         => (byte)(((bool)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? false)) ? 1 : 0);
 
+    [UnmanagedCallersOnly]
+    public static unsafe void getFieldVector3(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
+                                              float* x, float* y, float* z)
+    {
+        var v = (Vector3)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? Vector3.Zero);
+        *x = v.X;
+        *y = v.Y;
+        *z = v.Z;
+    }
+
     private static object? GetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
     {
         var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
@@ -202,6 +213,11 @@ public static class Bridge
     public static void setFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, byte value)
         => SetField(uuidPtr, classNamePtr, fieldNamePtr, value != 0);
 
+    [UnmanagedCallersOnly]
+    public static void setFieldVector3(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
+                                       float x, float y, float z)
+        => SetField(uuidPtr, classNamePtr, fieldNamePtr, new Vector3(x, y, z));
+
     private static void SetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, object value)
     {
         var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
@@ -215,7 +231,15 @@ public static class Bridge
             .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null);
 
-        field?.SetValue(instance, Convert.ChangeType(value, field.FieldType));
+        if (field == null)
+        {
+            return;
+        }
+
+        // Convert.ChangeType only handles IConvertible (float/int/bool); a struct like Vector3 arrives as
+        // the field's own type already, so assign it directly.
+        var converted = field.FieldType.IsInstanceOfType(value) ? value : Convert.ChangeType(value, field.FieldType);
+        field.SetValue(instance, converted);
     }
 
     private static string? MapTypeName(Type t)
@@ -238,6 +262,11 @@ public static class Bridge
         if (t == typeof(string))
         {
             return "string";
+        }
+
+        if (t == typeof(Vector3))
+        {
+            return "vector3";
         }
 
         return null;

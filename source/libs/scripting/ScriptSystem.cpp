@@ -333,6 +333,16 @@ void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,
     {
       m_engine->setFieldBool(uuidStr.c_str(), className.c_str(), fieldName, field.at("value").get<bool>());
     }
+    else if (type == "vector3")
+    {
+      // Stored as a [x, y, z] JSON array (see readFieldsFromInstance / ScriptEditor).
+      const auto& value = field.at("value");
+      if (value.is_array() && value.size() == 3)
+      {
+        m_engine->setFieldVector3(uuidStr.c_str(), className.c_str(), fieldName,
+          value.at(0).get<float>(), value.at(1).get<float>(), value.at(2).get<float>());
+      }
+    }
   }
 }
 
@@ -370,6 +380,12 @@ nlohmann::json ScriptSystem::readFieldsFromInstance(const uuids::uuid& uuid,
     else if (field.type == "bool")
     {
       entry["value"] = m_engine->getFieldBool(uuidStr.c_str(), className.c_str(), fieldName);
+    }
+    else if (field.type == "vector3")
+    {
+      float x = 0.0f, y = 0.0f, z = 0.0f;
+      m_engine->getFieldVector3(uuidStr.c_str(), className.c_str(), fieldName, x, y, z);
+      entry["value"] = { x, y, z };
     }
 
     fields.push_back(std::move(entry));
