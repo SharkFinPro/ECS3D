@@ -5,6 +5,7 @@
 #include <memory>
 #include <uuid.h>
 
+class Object;
 class ObjectManager;
 class Component;
 class AssetRegistry;
@@ -61,6 +62,18 @@ void applyComponentEdit(const ObjectManager& objectManager, const net::Message& 
                                             const std::string& className);
 
 void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit);
+
+// Runtime spawn/destroy replication. Unlike the editor's structural edits (which re-snapshot), a script
+// spawning or destroying an object at runtime replicates incrementally: the server broadcasts one packed
+// object (spawn) or a uuid (destroy), and each view splices it into / out of its replicated scene. Keeps
+// frequent runtime spawning off the full-snapshot path.
+[[nodiscard]] net::Message buildObjectSpawned(const Object& object);
+
+[[nodiscard]] net::Message buildObjectDestroyed(const uuids::uuid& objectUUID);
+
+void applyObjectSpawned(ObjectManager& objectManager, const net::Message& message);
+
+void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message);
 
 // Register an imported/created asset ({ assetType, uuid, path|name, [className] }). Shared by the
 // server (authoritative) and the editor (instant local feedback). Models/textures/scripts go into the

@@ -13,6 +13,8 @@ struct WorldBindings
   const char*(*getObjectName)(const char* uuid);
   bool(*objectExists)(const char* uuid);
   const char*(*getAllObjectUuids)();
+  const char*(*spawnObject)(const char* name, float x, float y, float z);
+  void(*destroyObject)(const char* uuid);
 };
 
 class WorldBindingsProvider {
@@ -24,6 +26,11 @@ private:
   static const char* bindGetObjectName(const char* uuid);
   static bool bindObjectExists(const char* uuid);
   static const char* bindGetAllObjectUuids();
+
+  // Spawn a minimal object (a Transform at the given position); returns its new uuid. Full prefab spawn
+  // arrives in Phase 5. destroyObject marks the object for deletion through the existing path.
+  static const char* bindSpawnObject(const char* name, float x, float y, float z);
+  static void bindDestroyObject(const char* uuid);
 };
 
 

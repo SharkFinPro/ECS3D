@@ -411,6 +411,51 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
   }
 }
 
+net::Message buildObjectSpawned(const Object& object)
+{
+  net::Message message(net::MessageType::objectSpawned);
+  object.pack(message);
+  return message;
+}
+
+net::Message buildObjectDestroyed(const uuids::uuid& objectUUID)
+{
+  net::Message message(net::MessageType::objectDestroyed);
+  message.writeString(uuids::to_string(objectUUID));
+  return message;
+}
+
+void applyObjectSpawned(ObjectManager& objectManager, const net::Message& message)
+{
+  // Symmetric with buildObjectSpawned: reconstruct one root object exactly as ObjectManager::unpack does
+  // per object (fresh Object, registered so it has a manager, then unpacked from the packed blob).
+  net::MessageReader reader(message);
+
+  auto object = std::make_shared<Object>();
+  objectManager.addObject(object);
+  object->unpack(reader);
+}
+
+void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  const auto parsed = uuids::uuid::from_string(reader.readString());
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  const auto object = objectManager.getObjectByUUID(parsed.value());
+  if (!object)
+  {
+    return;
+  }
+
+  objectManager.removeObject(object);
+  objectManager.deleteObjectsMarkedForDeletion();
+}
+
 void applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,

@@ -120,6 +120,10 @@ private:
 
   void handleEditComponent(const net::Message& message) const;
 
+  void handleObjectSpawned(const net::Message& message) const;
+
+  void handleObjectDestroyed(const net::Message& message) const;
+
   void handleEditStatus(const net::Message& message);
 
   void handleSceneStatus(const net::Message& message);

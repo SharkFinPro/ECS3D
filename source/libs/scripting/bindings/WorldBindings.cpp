@@ -2,6 +2,10 @@
 #include "BindingContext.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
+#include <objects/components/Component.h>
+#include <objects/components/Transform.h>
+#include <glm/vec3.hpp>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -24,7 +28,9 @@ WorldBindings WorldBindingsProvider::getBindings()
     .findObjectByName = &bindFindObjectByName,
     .getObjectName = &bindGetObjectName,
     .objectExists = &bindObjectExists,
-    .getAllObjectUuids = &bindGetAllObjectUuids
+    .getAllObjectUuids = &bindGetAllObjectUuids,
+    .spawnObject = &bindSpawnObject,
+    .destroyObject = &bindDestroyObject
   };
 }
 
@@ -108,4 +114,57 @@ const char* WorldBindingsProvider::bindGetAllObjectUuids()
   }
 
   return store(result);
+}
+
+const char* WorldBindingsProvider::bindSpawnObject(const char* name, const float x, const float y, const float z)
+{
+  const auto objectManager = BindingContext::getObjectManager();
+  if (!objectManager)
+  {
+    return store("");
+  }
+
+  // The default Object ctor already attaches a Transform. addObject assigns the manager + a fresh uuid.
+  auto object = std::make_shared<Object>(name ? std::string(name) : std::string("Object"));
+  objectManager->addObject(object);
+
+  // A script only runs while the scene is running, so the newborn must be started too (live component
+  // state) before its transform is positioned — otherwise physics/replication would read stopped values.
+  object->start();
+
+  if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
+  {
+    transform->setPosition({ x, y, z });
+  }
+
+  // Record it so ServerApp can broadcast the spawn after the tick (scripting can't reach the net layer).
+  BindingContext::recordSpawn(object);
+
+  return store(uuids::to_string(object->getUUID()));
+}
+
+void WorldBindingsProvider::bindDestroyObject(const char* uuid)
+{
+  const auto objectManager = BindingContext::getObjectManager();
+  if (!objectManager || !uuid)
+  {
+    return;
+  }
+
+  const auto parsed = uuids::uuid::from_string(std::string(uuid));
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  const auto object = objectManager->getObjectByUUID(parsed.value());
+  if (!object)
+  {
+    return;
+  }
+
+  // Mark for deletion (never mutate the object list mid script iteration); ServerApp broadcasts the
+  // destroy and calls deleteObjectsMarkedForDeletion after the tick.
+  objectManager->removeObject(object);
+  BindingContext::recordDestroy(parsed.value());
 }
