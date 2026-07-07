@@ -20,7 +20,7 @@ inline constexpr int defaultPort = 3000;
 enum class MessageType : uint8_t {
   undefined,
   join,         // client -> server: request the initial Snapshot (carries role + auth at handshake)
-  snapshot,     // server -> client: full project/scene state (ProjectSerializer::serialize())
+  snapshot,     // server -> client: full project/scene state (ProjectPacker::pack())
   stateDelta,   // server -> client: per-tick transform stream, packed binary (replication::packStateDelta)
   inputState,    // client -> server: local input ({ keys, focused }) for the scripts to read
   editComponent, // editor -> server -> all: a single component value edit (replication::buildComponentEdit)
