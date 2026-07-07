@@ -19,6 +19,15 @@ public static class Bridge
     private static readonly Dictionary<string, ScriptBase> _instances = new();
     private static string Key(string uuid, string className) => $"{uuid}_{className}";
 
+    // Script-to-script access. An object can carry several scripts (one per class), so a script is
+    // addressed by type (FindScript<T>) or enumerated for the untyped case (FindScripts). Purely a view
+    // over the live instances — ScriptBase exposes these as getScript<T>/getScripts to user scripts.
+    internal static T? FindScript<T>(string uuid) where T : ScriptBase =>
+        _instances.Values.OfType<T>().FirstOrDefault(s => s.EntityId == uuid);
+
+    internal static IReadOnlyList<ScriptBase> FindScripts(string uuid) =>
+        _instances.Values.Where(s => s.EntityId == uuid).ToList();
+
     private static string ReadFileSafe(string path)
     {
         using var fs = new FileStream(
