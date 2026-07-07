@@ -1,0 +1,150 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ===== Icons: stroked geometry =====
+         Sizes in the views are ~3/4 of the mockup's icon font-size: Uniform
+         stretch fills the whole box, while the SVG glyphs only filled ~3/4 of
+         their 24-unit viewBox. Stroke ~= 0.07 x mockup font-size. -->
+    <Style Selector="Path.icon">
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Stroke" Value="{StaticResource T2Brush}" />
+        <Setter Property="StrokeThickness" Value="1.25" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+        <Setter Property="StrokeJoin" Value="Round" />
+        <Setter Property="Fill" Value="Transparent" />
+    </Style>
+    <Style Selector="Path.icon.t1">
+        <Setter Property="Stroke" Value="{StaticResource T1Brush}" />
+    </Style>
+    <Style Selector="Path.icon.t3">
+        <Setter Property="Stroke" Value="{StaticResource T3Brush}" />
+    </Style>
+    <Style Selector="Path.icon.acc">
+        <Setter Property="Stroke" Value="{StaticResource AccBrush}" />
+    </Style>
+    <Style Selector="Path.icon.dark">
+        <Setter Property="Stroke" Value="{StaticResource AccText}" />
+    </Style>
+    <Style Selector="Path.icon.fill">
+        <Setter Property="Fill" Value="{StaticResource AccBrush}" />
+        <Setter Property="Stroke" Value="Transparent" />
+        <Setter Property="StrokeThickness" Value="0" />
+    </Style>
+
+    <!-- ===== Window control buttons ===== -->
+    <Style Selector="Button.win">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Button.win:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+    </Style>
+    <Style Selector="Button.win:pointerover Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource T1Brush}" />
+    </Style>
+    <Style Selector="Button.win:pointerover Rectangle.wg">
+        <Setter Property="Fill" Value="{StaticResource T1Brush}" />
+    </Style>
+    <Style Selector="Button.win:pointerover Border.wg">
+        <Setter Property="BorderBrush" Value="{StaticResource T1Brush}" />
+    </Style>
+    <Style Selector="Button.close:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource CloseRed}" />
+    </Style>
+    <Style Selector="Button.close:pointerover Path.icon">
+        <Setter Property="Stroke" Value="White" />
+    </Style>
+
+    <!-- ===== Sidebar nav ===== -->
+    <Style Selector="Button.navbtn">
+        <Setter Property="CornerRadius" Value="7" />
+    </Style>
+    <Style Selector="Button.navbtn:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+    </Style>
+    <Style Selector="TextBlock.navlabel">
+        <Setter Property="Foreground" Value="{StaticResource T2Brush}" />
+    </Style>
+    <Style Selector="TextBlock.navlabel.on">
+        <Setter Property="Foreground" Value="{StaticResource T1Brush}" />
+    </Style>
+
+    <!-- ===== Grid/List segmented toggle ===== -->
+    <Style Selector="Button.seg">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="CornerRadius" Value="5" />
+    </Style>
+    <Style Selector="Button.seg:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+    </Style>
+    <Style Selector="Button.seg.on /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HeadBrush}" />
+    </Style>
+    <Style Selector="Button.seg.on Path.icon">
+        <Setter Property="Stroke" Value="{StaticResource AccBrush}" />
+    </Style>
+
+    <!-- ===== Primary call-to-action (New Project) ===== -->
+    <Style Selector="Button.cta">
+        <Setter Property="Background" Value="{StaticResource AccBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="13,0,16,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.cta:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource AccHoverBrush}" />
+    </Style>
+
+    <!-- ===== New-project dashed cards ===== -->
+    <Style Selector="Button.card-btn:pointerover Rectangle.dash">
+        <Setter Property="Fill" Value="{StaticResource AccDim2}" />
+    </Style>
+
+    <!-- ===== Project / template cards ===== -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Border.card:pointerover">
+        <Setter Property="BorderBrush" Value="{StaticResource AccBrush}" />
+    </Style>
+    <Style Selector="Border.card.row:pointerover">
+        <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+    </Style>
+
+    <!-- ===== Search box: no Fluent hover/focus chrome ===== -->
+    <Style Selector="TextBox.search">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.search:pointerover /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="TextBox.search:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <!-- ===== Scrollbar (thin, matches mockup) ===== -->
+    <Style Selector="ScrollBar:vertical">
+        <Setter Property="Width" Value="11" />
+    </Style>
+    <Style Selector="ScrollBar Thumb">
+        <Setter Property="Background" Value="#34373E" />
+        <Setter Property="CornerRadius" Value="7" />
+    </Style>
+    <Style Selector="ScrollBar Thumb:pointerover">
+        <Setter Property="Background" Value="#474B55" />
+    </Style>
+
+</Styles>

@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ECS3DLauncher.Shared.Controls.EmptyState"
+             x:Name="Root">
+
+    <!-- Reusable "nothing here yet" placeholder. Tabs set IconData + Heading. -->
+    <StackPanel Margin="0,90,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" Spacing="14">
+        <Border Width="54" Height="54" CornerRadius="14" HorizontalAlignment="Center"
+                Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+            <Path Classes="icon" Width="20" Height="20" StrokeThickness="1.8"
+                  Data="{Binding #Root.IconData}"
+                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <StackPanel Spacing="5">
+            <TextBlock Text="{Binding #Root.Heading}" FontSize="14" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="Nothing to show here yet" FontSize="12.5"
+                       Foreground="{StaticResource T3Brush}" HorizontalAlignment="Center" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

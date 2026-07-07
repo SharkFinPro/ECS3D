@@ -1,0 +1,9 @@
+# Standalone .NET build output (CMake builds redirect these into cmake-build-*/,
+# but a direct `dotnet run` / Rider build drops them here next to the csproj).
+bin/
+obj/
+
+# Rider / IDE
+.idea/
+.vs/
+*.user

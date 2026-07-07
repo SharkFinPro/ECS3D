@@ -1,0 +1,69 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:conv="using:ECS3DLauncher.Shared.Converters">
+
+    <!-- ECS3D palette (values lifted from the mockup's CSS variables) -->
+    <SolidColorBrush x:Key="AccBrush"      Color="#1FB8D4" />
+    <SolidColorBrush x:Key="AccHoverBrush" Color="#21C7E5" />
+    <SolidColorBrush x:Key="AccDim"        Color="#261FB8D4" />
+    <SolidColorBrush x:Key="AccDim2"       Color="#381FB8D4" />
+    <SolidColorBrush x:Key="AccText"       Color="#06222A" />
+    <SolidColorBrush x:Key="AccSubtitle"   Color="#3CB0C8" />
+    <SolidColorBrush x:Key="BgBrush"       Color="#141518" />
+    <SolidColorBrush x:Key="PanelBrush"    Color="#1C1D22" />
+    <SolidColorBrush x:Key="HeadBrush"     Color="#262932" />
+    <SolidColorBrush x:Key="InsetBrush"    Color="#0F1013" />
+    <SolidColorBrush x:Key="HoverBrush"    Color="#23262E" />
+    <SolidColorBrush x:Key="LineBrush"     Color="#2A2D35" />
+    <SolidColorBrush x:Key="T1Brush"       Color="#E7E8EC" />
+    <SolidColorBrush x:Key="T2Brush"       Color="#9498A3" />
+    <SolidColorBrush x:Key="T3Brush"       Color="#646A76" />
+    <SolidColorBrush x:Key="TitleBg"       Color="#17181C" />
+    <SolidColorBrush x:Key="CloseRed"      Color="#E5565B" />
+
+    <!-- Diagonal hatch used behind placeholder thumbnails -->
+    <LinearGradientBrush x:Key="ThumbStripes" StartPoint="0%,0%" EndPoint="7%,7%"
+                         SpreadMethod="Repeat">
+        <GradientStop Offset="0.0" Color="#181A1F" />
+        <GradientStop Offset="0.5" Color="#181A1F" />
+        <GradientStop Offset="0.5" Color="#141519" />
+        <GradientStop Offset="1.0" Color="#141519" />
+    </LinearGradientBrush>
+
+    <!-- Geist / Geist Mono are embedded under source/Assets/Fonts (the same
+         families the mockup pulls from Google Fonts). Both are variable fonts
+         covering the 400-700 weights the UI uses. -->
+    <FontFamily x:Key="ContentFontFamily">avares://ECS3DLauncher/source/Assets/Fonts#Geist</FontFamily>
+    <FontFamily x:Key="MonoFontFamily">avares://ECS3DLauncher/source/Assets/Fonts#Geist Mono</FontFamily>
+
+    <conv:IconKeyConverter x:Key="IconKey" />
+
+    <!-- Bare button chrome. Fluent's Button theme injects its own hover and
+         pressed backgrounds (bright flashes), centers content at natural size
+         (broke the stretched New Project cards), and reserves the "accent"
+         style class for its blue accent button. Custom-chrome buttons opt out
+         entirely via this theme; hover looks are added per-class in
+         /source/Shared/Styles/AppStyles.axaml. -->
+    <ControlTheme x:Key="BareButton" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate TargetType="Button">
+                <ContentPresenter Name="PART_ContentPresenter"
+                                  Background="{TemplateBinding Background}"
+                                  BorderBrush="{TemplateBinding BorderBrush}"
+                                  BorderThickness="{TemplateBinding BorderThickness}"
+                                  CornerRadius="{TemplateBinding CornerRadius}"
+                                  Padding="{TemplateBinding Padding}"
+                                  Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+</ResourceDictionary>

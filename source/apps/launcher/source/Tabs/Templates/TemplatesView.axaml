@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:m="using:ECS3DLauncher.Shared.Models"
+             xmlns:local="using:ECS3DLauncher.Tabs.Templates"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:dd="using:ECS3DLauncher.Shared"
+             mc:Ignorable="d"
+             d:DesignWidth="960" d:DesignHeight="720"
+             d:DataContext="{x:Static dd:DesignData.Templates}"
+             x:Class="ECS3DLauncher.Tabs.Templates.TemplatesView"
+             x:DataType="local:TemplatesViewModel">
+
+    <ItemsControl ItemsSource="{Binding Templates}">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate><WrapPanel Margin="-9" /></ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="m:ProjectTemplate">
+                <Border Classes="card" Width="236" Margin="9"
+                        CornerRadius="11" Padding="18">
+                    <StackPanel Spacing="13">
+                        <Border Width="44" Height="44" CornerRadius="11"
+                                HorizontalAlignment="Left" Background="{StaticResource AccDim}">
+                            <Path Classes="icon acc" Width="16" Height="16" StrokeThickness="1.5"
+                                  Data="{Binding Icon, Converter={StaticResource IconKey}}"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Description}" FontSize="12" TextWrapping="Wrap"
+                                       LineHeight="18" Foreground="{StaticResource T2Brush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

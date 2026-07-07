@@ -1,0 +1,22 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Icon geometry, translated from the ECS3D mockup's SVG paths (24x24 viewBox).
+         Circles/rects are expressed as arc/line path syntax. Rendered stroked. -->
+
+    <StreamGeometry x:Key="IconModel">M21 8 12 3 3 8v8l9 5 9-5Z M3 8l9 5 9-5 M12 13v8</StreamGeometry>
+    <StreamGeometry x:Key="IconScene">M12 3 3 7.5l9 4.5 9-4.5Z M3 12.5 12 17l9-4.5 M3 16.5 12 21l9-4.5</StreamGeometry>
+    <StreamGeometry x:Key="IconLayers">M12 3 3 7.5l9 4.5 9-4.5Z M3 12.5 12 17l9-4.5 M3 16.5 12 21l9-4.5</StreamGeometry>
+    <StreamGeometry x:Key="IconPlus">M12 5.5v13 M5.5 12h13</StreamGeometry>
+    <StreamGeometry x:Key="IconClose">M6 6l12 12 M18 6 6 18</StreamGeometry>
+    <StreamGeometry x:Key="IconSearch">M4 11 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0 Z M21 21 L16.7 16.7</StreamGeometry>
+    <StreamGeometry x:Key="IconGrid">M5.1 3.5 h3.8 a1.6 1.6 0 0 1 1.6 1.6 v3.8 a1.6 1.6 0 0 1 -1.6 1.6 h-3.8 a1.6 1.6 0 0 1 -1.6 -1.6 v-3.8 a1.6 1.6 0 0 1 1.6 -1.6 Z M15.1 3.5 h3.8 a1.6 1.6 0 0 1 1.6 1.6 v3.8 a1.6 1.6 0 0 1 -1.6 1.6 h-3.8 a1.6 1.6 0 0 1 -1.6 -1.6 v-3.8 a1.6 1.6 0 0 1 1.6 -1.6 Z M5.1 13.5 h3.8 a1.6 1.6 0 0 1 1.6 1.6 v3.8 a1.6 1.6 0 0 1 -1.6 1.6 h-3.8 a1.6 1.6 0 0 1 -1.6 -1.6 v-3.8 a1.6 1.6 0 0 1 1.6 -1.6 Z M15.1 13.5 h3.8 a1.6 1.6 0 0 1 1.6 1.6 v3.8 a1.6 1.6 0 0 1 -1.6 1.6 h-3.8 a1.6 1.6 0 0 1 -1.6 -1.6 v-3.8 a1.6 1.6 0 0 1 1.6 -1.6 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconList">M4 6 H20 M4 12 H20 M4 18 H20</StreamGeometry>
+    <StreamGeometry x:Key="IconClock">M4 12 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 Z M12 8 v4 l3 1.8</StreamGeometry>
+    <StreamGeometry x:Key="IconStar">M12 3.4l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 17.7 6.9 20.3l1-5.8L3.7 9.5l5.8-.8z</StreamGeometry>
+    <StreamGeometry x:Key="IconFolder">M3 7.5a2 2 0 0 1 2-2h3.5l2 2.2H19a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z</StreamGeometry>
+    <StreamGeometry x:Key="IconBook">M5 4h11a2 2 0 0 1 2 2v13H7a2 2 0 0 0-2 2V4z M5 19a2 2 0 0 0 2 2h11 M9 8.5h6 M9 12h4</StreamGeometry>
+    <StreamGeometry x:Key="IconSparkle">M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z M18 15l.7 1.9L20.6 18l-1.9.7L18 20.6l-.7-1.9L15.4 18l1.9-.7z</StreamGeometry>
+    <StreamGeometry x:Key="IconSettings">M5 8h14 M5 16h14 M6.8 8 a2.2 2.2 0 1 0 4.4 0 a2.2 2.2 0 1 0 -4.4 0 Z M12.8 16 a2.2 2.2 0 1 0 4.4 0 a2.2 2.2 0 1 0 -4.4 0 Z</StreamGeometry>
+
+</ResourceDictionary>
