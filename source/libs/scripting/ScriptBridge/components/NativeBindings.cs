@@ -7,4 +7,6 @@ internal static unsafe class NativeBindings
     internal static RigidBodyBindings RigidBody;
 
     internal static TransformBindings Transform;
+
+    internal static WorldBindings World;
 }

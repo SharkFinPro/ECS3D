@@ -13,6 +13,8 @@ add_library(${PROJECT_NAME}
   bindings/RigidBodyBindings.h
   bindings/InputUtilsBindings.cpp
   bindings/InputUtilsBindings.h
+  bindings/WorldBindings.cpp
+  bindings/WorldBindings.h
   bindings/InputState.cpp
   bindings/InputState.h
 )

@@ -2,6 +2,7 @@
 #include "bindings/TransformBindings.h"
 #include "bindings/RigidBodyBindings.h"
 #include "bindings/InputUtilsBindings.h"
+#include "bindings/WorldBindings.h"
 #include <ManagedHost.h>
 #include <filesystem>
 #include <iostream>
@@ -79,6 +80,11 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerRigidBody =
     reinterpret_cast<RegisterRigidBodyFn>(m_host->getDelegate(assemblyPath, typeName, "registerRigidBodyBindings"));
   registerRigidBody(RigidBodyBindingsProvider::getBindings());
+
+  using RegisterWorldFn = void(*)(WorldBindings);
+  const auto registerWorld =
+    reinterpret_cast<RegisterWorldFn>(m_host->getDelegate(assemblyPath, typeName, "registerWorldBindings"));
+  registerWorld(WorldBindingsProvider::getBindings());
 
   // InputUtils reads the networked InputState (ServerApp writes it from the client's inputState
   // messages), since the headless server has no GLFW window of its own.

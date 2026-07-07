@@ -253,6 +253,12 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static unsafe void registerWorldBindings(WorldBindings bindings)
+    {
+        NativeBindings.World = bindings;
+    }
+
+    [UnmanagedCallersOnly]
     public static void attachScript(IntPtr uuidPtr, IntPtr classNamePtr)
     {
         var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
