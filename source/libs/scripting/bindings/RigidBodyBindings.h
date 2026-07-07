@@ -6,6 +6,7 @@ struct RigidBodyBindings
   void(*applyForce)(const char* uuid, float x, float y, float z, float px, float py, float pz);
   void(*setVelocity)(const char* uuid, float x, float y, float z);
   bool(*isFalling)(const char* uuid);
+  bool(*has)(const char* uuid);
 };
 
 class RigidBodyBindingsProvider {
@@ -19,6 +20,9 @@ private:
   static void bindSetVelocity(const char* uuid, float x, float y, float z);
 
   static bool bindIsFalling(const char* uuid);
+
+  // Whether the object identified by uuid currently has a RigidBody (backs World.tryGetRigidBody).
+  static bool bindHas(const char* uuid);
 };
 
 

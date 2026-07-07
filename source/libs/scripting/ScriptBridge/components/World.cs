@@ -67,4 +67,46 @@ public static unsafe class World
 
         return result.Split(',');
     }
+
+    // Acquire another object's Transform. Returns false (and a null wrapper) when the object doesn't
+    // exist or has no Transform, so scripts branch instead of operating on a dead handle. This is the
+    // project-wide convention for reaching another object's components; every component wrapper follows
+    // it. A handle that outlives its component (e.g. the object is destroyed later this tick) degrades
+    // to safe no-op calls.
+    public static bool tryGetTransform(string uuid, out Transform transform)
+    {
+        if (has(NativeBindings.Transform.has, uuid))
+        {
+            transform = new Transform(uuid);
+            return true;
+        }
+
+        transform = null!;
+        return false;
+    }
+
+    public static bool tryGetRigidBody(string uuid, out RigidBody rigidBody)
+    {
+        if (has(NativeBindings.RigidBody.has, uuid))
+        {
+            rigidBody = new RigidBody(uuid);
+            return true;
+        }
+
+        rigidBody = null!;
+        return false;
+    }
+
+    private static bool has(delegate* unmanaged<IntPtr, bool> nativeHas, string uuid)
+    {
+        var uuidPtr = Marshal.StringToCoTaskMemUTF8(uuid);
+        try
+        {
+            return nativeHas(uuidPtr);
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(uuidPtr);
+        }
+    }
 }

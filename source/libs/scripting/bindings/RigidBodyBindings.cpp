@@ -37,7 +37,8 @@ RigidBodyBindings RigidBodyBindingsProvider::getBindings()
   return RigidBodyBindings {
     .applyForce = &bindApplyForce,
     .setVelocity = &bindSetVelocity,
-    .isFalling = &bindIsFalling
+    .isFalling = &bindIsFalling,
+    .has = &bindHas
   };
 }
 
@@ -74,4 +75,9 @@ bool RigidBodyBindingsProvider::bindIsFalling(const char* uuid)
   }
 
   return rigidBody->isFalling();
+}
+
+bool RigidBodyBindingsProvider::bindHas(const char* uuid)
+{
+  return find(uuid) != nullptr;
 }

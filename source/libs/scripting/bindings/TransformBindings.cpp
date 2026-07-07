@@ -42,7 +42,8 @@ TransformBindings TransformBindingsProvider::getBindings()
     .setRotation = &bindSetRotation,
     .move = &bindMove,
     .start = &bindStart,
-    .stop = &bindStop
+    .stop = &bindStop,
+    .has = &bindHas
   };
 }
 
@@ -141,4 +142,9 @@ void TransformBindingsProvider::bindStop(const char* uuid)
   }
 
   transform->stop();
+}
+
+bool TransformBindingsProvider::bindHas(const char* uuid)
+{
+  return find(uuid) != nullptr;
 }
