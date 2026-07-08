@@ -24,6 +24,10 @@ internal sealed class TcpBackend : TransportBackend
   private readonly List<TcpClient> _clients = new();
   private readonly object _clientsLock = new();
 
+  // A stable, monotonically-increasing id handed to each accepted connection, surfaced to C++ on every
+  // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
+  private int _nextConnId;
+
   // -- Client --
   private TcpClient? _client;
   private Thread? _clientThread;
@@ -113,12 +117,14 @@ internal sealed class TcpBackend : TransportBackend
 
       client.NoDelay = true;
 
+      var connId = Interlocked.Increment(ref _nextConnId);
+
       lock (_clientsLock)
       {
         _clients.Add(client);
       }
 
-      var thread = new Thread(() => ServerReceiveLoop(client))
+      var thread = new Thread(() => ServerReceiveLoop(client, connId))
       {
         IsBackground = true,
         Name = "ecs3d-net-client"
@@ -127,7 +133,7 @@ internal sealed class TcpBackend : TransportBackend
     }
   }
 
-  private void ServerReceiveLoop(TcpClient client)
+  private void ServerReceiveLoop(TcpClient client, int connId)
   {
     try
     {
@@ -145,7 +151,7 @@ internal sealed class TcpBackend : TransportBackend
             break;
           }
 
-          Transport.DeliverServer(type, payload);
+          Transport.DeliverServer(connId, type, payload);
         }
       }
       else

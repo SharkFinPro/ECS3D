@@ -75,7 +75,9 @@ private:
   // sim and scripting at the app level so neither library depends on the other.
   void dispatchCollisionEvents(ObjectManager& objectManager) const;
 
-  void handleClientMessage(const net::Message& message);
+  // senderId is the stable connection id of the message's origin (from NetServer::poll), so per-client
+  // messages like inputState land in the right slot.
+  void handleClientMessage(const net::Message& message, int32_t senderId);
 
   void handleJoin(const net::Message& message);
 
@@ -87,7 +89,7 @@ private:
 
   void handleAddAsset(const net::Message& message) const;
 
-  static void handleInputState(const net::Message& message);
+  static void handleInputState(const net::Message& message, int32_t senderId);
 
   void handleSceneControl(const net::Message& message) const;
 

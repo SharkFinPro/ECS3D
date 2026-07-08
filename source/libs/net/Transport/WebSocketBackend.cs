@@ -52,6 +52,10 @@ internal sealed class WebSocketBackend : TransportBackend
   private readonly List<Connection> _connections = new();
   private readonly object _clientsLock = new();
 
+  // A stable, monotonically-increasing id handed to each accepted connection, surfaced to C++ on every
+  // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
+  private int _nextConnId;
+
   // -- Client --
   private WebSocket? _client;
   private HttpMessageInvoker? _clientInvoker;
@@ -187,6 +191,8 @@ internal sealed class WebSocketBackend : TransportBackend
         return;
       }
 
+      var connId = Interlocked.Increment(ref _nextConnId);
+
       conn = new Connection(ws, cts);
       lock (_clientsLock)
       {
@@ -201,7 +207,7 @@ internal sealed class WebSocketBackend : TransportBackend
           break;
         }
 
-        Transport.DeliverServer(message[0], Payload(message));
+        Transport.DeliverServer(connId, message[0], Payload(message));
       }
     }
     catch

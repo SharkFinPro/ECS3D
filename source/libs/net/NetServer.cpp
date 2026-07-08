@@ -19,11 +19,11 @@ namespace {
   NetServer* g_activeServer = nullptr;
 }
 
-extern "C" void ecs3dNetServerReceive(const uint8_t type, const uint8_t* data, const int32_t len)
+extern "C" void ecs3dNetServerReceive(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
   if (g_activeServer)
   {
-    g_activeServer->enqueue(type, data, len);
+    g_activeServer->enqueue(connId, type, data, len);
   }
 }
 
@@ -93,12 +93,12 @@ int NetServer::connectionCount() const
   return reinterpret_cast<ServerConnectionCountFn>(m_connectionCountFn)();
 }
 
-bool NetServer::poll(Message& message)
+bool NetServer::poll(Message& message, int32_t& senderId)
 {
-  return m_inbox.pop(message);
+  return m_inbox.pop(message, senderId);
 }
 
-void NetServer::enqueue(const uint8_t type, const uint8_t* data, const int32_t len)
+void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
   Message message(static_cast<MessageType>(type));
   for (const std::vector<uint8_t> chunks(data, data + len); const auto& chunk : chunks)
@@ -106,12 +106,7 @@ void NetServer::enqueue(const uint8_t type, const uint8_t* data, const int32_t l
     message.write(chunk);
   }
 
-  // Message message {
-  //   .type = static_cast<MessageType>(type),
-  //   .payload = std::vector<uint8_t>(data, data + len)
-  // };
-
-  m_inbox.push(std::move(message));
+  m_inbox.push(std::move(message), connId);
 }
 
 }

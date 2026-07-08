@@ -26,11 +26,14 @@ public:
   // spawned) server to detect when its last connection drops; returns 0 before start().
   [[nodiscard]] int connectionCount() const;
 
-  [[nodiscard]] bool poll(Message& message);
+  // senderId is set to the stable connection id of the message's origin, so the app can route input to
+  // the right per-connection slot.
+  [[nodiscard]] bool poll(Message& message, int32_t& senderId);
 
   // Called from the C# socket thread (via the registered native callback) to hand an inbound message
-  // to the tick thread; the inbox is mutex-protected so the threads never collide.
-  void enqueue(uint8_t type, const uint8_t* data, int32_t len);
+  // to the tick thread; the inbox is mutex-protected so the threads never collide. connId is the stable
+  // per-connection id the transport assigns each client.
+  void enqueue(int32_t connId, uint8_t type, const uint8_t* data, int32_t len);
 
 private:
   std::shared_ptr<ManagedHost> m_host;

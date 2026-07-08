@@ -117,13 +117,14 @@ void ServerApp::run()
   while (isActive())
   {
     net::Message message;
-    while (m_netServer->poll(message))
+    int32_t senderId = 0;
+    while (m_netServer->poll(message, senderId))
     {
       // A bad/malicious message (or a script-bridge hiccup while building a snapshot) must not take the
       // whole server down - that would look like "client connected, then nothing".
       try
       {
-        handleClientMessage(message);
+        handleClientMessage(message, senderId);
       }
       catch (const std::exception& e)
       {
@@ -235,7 +236,7 @@ namespace {
   }
 }
 
-void ServerApp::handleClientMessage(const net::Message& message)
+void ServerApp::handleClientMessage(const net::Message& message, const int32_t senderId)
 {
   // A non-edit server is read-only: it serves snapshots/deltas to editors that connect to view it, but
   // never applies their edits.
@@ -267,7 +268,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
       break;
 
     case net::MessageType::inputState:
-      handleInputState(message);
+      handleInputState(message, senderId);
       break;
 
     case net::MessageType::sceneControl:
@@ -410,12 +411,13 @@ void ServerApp::handleAddAsset(const net::Message& message) const
   broadcastSnapshot();
 }
 
-void ServerApp::handleInputState(const net::Message& message)
+void ServerApp::handleInputState(const net::Message& message, const int32_t senderId)
 {
-  // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
+  // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it. It
+  // lands in this connection's own slot (keyed by senderId) so two players don't clobber each other.
   net::MessageReader reader(message);
   const auto focused = reader.read<bool>();
-  InputState::setFocused(focused);
+  InputState::setFocused(senderId, focused);
 
   const auto numKeys = reader.read<size_t>();
   std::vector<int> keysPressed(numKeys);
@@ -424,7 +426,7 @@ void ServerApp::handleInputState(const net::Message& message)
     key = reader.read<int>();
   }
 
-  InputState::setKeysPressed(keysPressed);
+  InputState::setKeysPressed(senderId, keysPressed);
 }
 
 void ServerApp::handleSceneControl(const net::Message& message) const
