@@ -47,7 +47,11 @@ InputUtilsBindings InputUtilsBindingsProvider::getBindings()
     .keyIsPressed = &bindKeyIsPressed,
     .windowIsFocused = &bindWindowIsFocused,
     .keyIsPressedForObject = &bindKeyIsPressedForObject,
-    .windowIsFocusedForObject = &bindWindowIsFocusedForObject
+    .windowIsFocusedForObject = &bindWindowIsFocusedForObject,
+    .mousePositionForObject = &bindMousePositionForObject,
+    .mouseDeltaForObject = &bindMouseDeltaForObject,
+    .scrollForObject = &bindScrollForObject,
+    .mouseButtonForObject = &bindMouseButtonForObject
   };
 }
 
@@ -73,4 +77,38 @@ bool InputUtilsBindingsProvider::bindWindowIsFocusedForObject(const char* uuid)
 {
   const auto slot = playerSlotOf(uuid);
   return slot.has_value() && InputState::isFocused(slot.value());
+}
+
+void InputUtilsBindingsProvider::bindMousePositionForObject(const char* uuid, float* x, float* y)
+{
+  *x = 0.0f;
+  *y = 0.0f;
+
+  if (const auto slot = playerSlotOf(uuid))
+  {
+    InputState::getMousePosition(slot.value(), *x, *y);
+  }
+}
+
+void InputUtilsBindingsProvider::bindMouseDeltaForObject(const char* uuid, float* x, float* y)
+{
+  *x = 0.0f;
+  *y = 0.0f;
+
+  if (const auto slot = playerSlotOf(uuid))
+  {
+    InputState::getMouseDelta(slot.value(), *x, *y);
+  }
+}
+
+float InputUtilsBindingsProvider::bindScrollForObject(const char* uuid)
+{
+  const auto slot = playerSlotOf(uuid);
+  return slot.has_value() ? InputState::getScroll(slot.value()) : 0.0f;
+}
+
+bool InputUtilsBindingsProvider::bindMouseButtonForObject(const char* uuid, const int button)
+{
+  const auto slot = playerSlotOf(uuid);
+  return slot.has_value() && InputState::isMouseButtonPressed(slot.value(), button);
 }

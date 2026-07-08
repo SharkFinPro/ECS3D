@@ -22,7 +22,9 @@ enum class MessageType : uint8_t {
   join,         // client -> server: request the initial Snapshot (carries role + auth at handshake)
   snapshot,     // server -> client: full project/scene state (ProjectPacker::pack())
   stateDelta,   // server -> client: per-tick transform stream, packed binary (replication::packStateDelta)
-  inputState,    // client -> server: local input ({ keys, focused }) for the scripts to read
+  inputState,    // client -> server: local input for the scripts to read. Payload: focused (bool),
+                 // key count (size_t) + that many key codes (int), then the mouse block: mouseX, mouseY,
+                 // mouseDeltaX, mouseDeltaY, scrollY (5x float), buttons (uint8 bitmask L/R/M)
   editComponent, // editor -> server -> all: a single component value edit (replication::buildComponentEdit)
   sceneEdit,     // editor -> server: a structural edit (add/remove object/component); server re-snapshots
   sceneControl,  // editor -> server: scene lifecycle (SceneControlOp + optional scene uuid); server re-snapshots

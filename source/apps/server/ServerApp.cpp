@@ -151,6 +151,10 @@ void ServerApp::run()
     {
       fixedUpdate(m_fixedUpdateDt);
 
+      // The tick's scripts have now read this tick's mouse motion; zero the accumulated delta/scroll so a
+      // still mouse reads zero next tick (and a catch-up sub-step doesn't re-consume the same movement).
+      InputState::clearMouseDeltas();
+
       m_timeAccumulator -= m_fixedUpdateDt;
       ++steps;
       ticked = true;
@@ -484,6 +488,20 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
   }
 
   InputState::setKeysPressed(slot, keysPressed);
+
+  // Mouse block, appended after the keys (see Protocol.h). Guard on remaining() so an older client that
+  // predates mouse input degrades to "no mouse" instead of throwing an underflow.
+  constexpr size_t mouseBytes = 5 * sizeof(float) + sizeof(uint8_t);
+  if (reader.remaining() >= mouseBytes)
+  {
+    const auto mouseX = reader.read<float>();
+    const auto mouseY = reader.read<float>();
+    const auto mouseDeltaX = reader.read<float>();
+    const auto mouseDeltaY = reader.read<float>();
+    const auto scrollY = reader.read<float>();
+    const auto buttons = reader.read<uint8_t>();
+    InputState::setMouse(slot, mouseX, mouseY, mouseDeltaX, mouseDeltaY, scrollY, buttons);
+  }
 }
 
 void ServerApp::handleSceneControl(const net::Message& message) const

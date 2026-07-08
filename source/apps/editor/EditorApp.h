@@ -4,6 +4,7 @@
 #include <VulkanEngine/components/window/Window.h>
 #include <Protocol.h>
 #include <scenes/SceneManager.h>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -97,6 +98,9 @@ private:
   // focused client's keys on the shared server-side InputState.
   std::vector<int> m_lastInputKeys;
   bool m_lastInputFocused = false;
+  uint8_t m_lastButtons = 0;
+  float m_lastMouseX = 0.0f;
+  float m_lastMouseY = 0.0f;
   bool m_inputSent = false;
 
   // Edge-detect the mouse so viewport picking only fires on a fresh Ctrl+click.

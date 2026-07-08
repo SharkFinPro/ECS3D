@@ -1,7 +1,16 @@
 using System;
+using System.Numerics;
 using System.Runtime.InteropServices;
 
 namespace ScriptBridge;
+
+// GLFW mouse-button indices (0/1/2), used with PlayerInput.mouseButton.
+public enum MouseButton
+{
+    Left   = 0,
+    Right  = 1,
+    Middle = 2,
+}
 
 public enum Key
 {
@@ -26,6 +35,10 @@ public unsafe struct InputUtilsBindings
     // fields go at the END to keep the layout matched with the native InputUtilsBindings struct.
     public delegate* unmanaged<IntPtr, int, bool> keyIsPressedForObject;
     public delegate* unmanaged<IntPtr, bool> windowIsFocusedForObject;
+    public delegate* unmanaged<IntPtr, float*, float*, void> mousePositionForObject;
+    public delegate* unmanaged<IntPtr, float*, float*, void> mouseDeltaForObject;
+    public delegate* unmanaged<IntPtr, float> scrollForObject;
+    public delegate* unmanaged<IntPtr, int, bool> mouseButtonForObject;
 }
 
 // Player-agnostic input: reads the aggregate across all players (a key is pressed if any player presses
@@ -60,4 +73,25 @@ public sealed unsafe class PlayerInput
     public bool keyIsPressed(Key key) => NativeBindings.InputUtils.keyIsPressedForObject(_uuid, (int)key);
 
     public bool windowIsFocused() => NativeBindings.InputUtils.windowIsFocusedForObject(_uuid);
+
+    // Absolute cursor position in window pixels.
+    public Vector2 mousePosition()
+    {
+        float x = 0, y = 0;
+        NativeBindings.InputUtils.mousePositionForObject(_uuid, &x, &y);
+        return new Vector2(x, y);
+    }
+
+    // Cursor movement over this tick (sums every frame the client sent since the last tick).
+    public Vector2 mouseDelta()
+    {
+        float x = 0, y = 0;
+        NativeBindings.InputUtils.mouseDeltaForObject(_uuid, &x, &y);
+        return new Vector2(x, y);
+    }
+
+    // Vertical scroll-wheel movement over this tick.
+    public float scroll() => NativeBindings.InputUtils.scrollForObject(_uuid);
+
+    public bool mouseButton(MouseButton button) => NativeBindings.InputUtils.mouseButtonForObject(_uuid, (int)button);
 }

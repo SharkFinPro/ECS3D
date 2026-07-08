@@ -15,6 +15,12 @@ struct InputUtilsBindings
   bool(*windowIsFocused)();
   bool(*keyIsPressedForObject)(const char* uuid, int key);
   bool(*windowIsFocusedForObject)(const char* uuid);
+  // Per-player mouse (resolved via PlayerController.playerSlot). Position is absolute; delta/scroll are
+  // this tick's accumulated motion; button is the GLFW index (0/1/2).
+  void(*mousePositionForObject)(const char* uuid, float* x, float* y);
+  void(*mouseDeltaForObject)(const char* uuid, float* x, float* y);
+  float(*scrollForObject)(const char* uuid);
+  bool(*mouseButtonForObject)(const char* uuid, int button);
 };
 
 class InputUtilsBindingsProvider {
@@ -29,6 +35,14 @@ private:
   static bool bindKeyIsPressedForObject(const char* uuid, int key);
 
   static bool bindWindowIsFocusedForObject(const char* uuid);
+
+  static void bindMousePositionForObject(const char* uuid, float* x, float* y);
+
+  static void bindMouseDeltaForObject(const char* uuid, float* x, float* y);
+
+  static float bindScrollForObject(const char* uuid);
+
+  static bool bindMouseButtonForObject(const char* uuid, int button);
 };
 
 

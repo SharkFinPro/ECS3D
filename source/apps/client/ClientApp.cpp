@@ -84,13 +84,29 @@ void ClientApp::sendInput()
 {
   const auto snapshot = input::capture(*m_renderer);
 
-  if (m_inputSent && snapshot.keys == m_lastInputKeys && snapshot.focused == m_lastInputFocused)
+  // Discrete state we de-dup on (don't resend an unchanged keyboard/button/cursor every frame). Cursor
+  // position is included so mouse movement triggers a send; delta rides along in the same message.
+  const bool discreteChanged = !m_inputSent
+    || snapshot.keys != m_lastInputKeys
+    || snapshot.focused != m_lastInputFocused
+    || snapshot.buttons != m_lastButtons
+    || snapshot.mouseX != m_lastMouseX
+    || snapshot.mouseY != m_lastMouseY;
+
+  // Scroll is a per-frame amount with no resting position, so it must be sent on any frame it's non-zero
+  // (it isn't captured by the position comparison above).
+  const bool scrolled = snapshot.scrollY != 0.0f;
+
+  if (m_inputSent && !discreteChanged && !scrolled)
   {
     return;
   }
 
   m_lastInputKeys = snapshot.keys;
   m_lastInputFocused = snapshot.focused;
+  m_lastButtons = snapshot.buttons;
+  m_lastMouseX = snapshot.mouseX;
+  m_lastMouseY = snapshot.mouseY;
   m_inputSent = true;
 
   net::Message message(net::MessageType::inputState);
@@ -100,6 +116,13 @@ void ClientApp::sendInput()
   {
     message.write(key);
   }
+
+  message.write(snapshot.mouseX);
+  message.write(snapshot.mouseY);
+  message.write(snapshot.mouseDeltaX);
+  message.write(snapshot.mouseDeltaY);
+  message.write(snapshot.scrollY);
+  message.write(snapshot.buttons);
 
   m_netClient->send(message);
 }

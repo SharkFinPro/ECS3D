@@ -2,6 +2,7 @@
 #define CLIENTAPP_H
 
 #include <Protocol.h>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -62,6 +63,9 @@ private:
   // clobber this one's keys on the shared server-side InputState every frame.
   std::vector<int> m_lastInputKeys;
   bool m_lastInputFocused = false;
+  uint8_t m_lastButtons = 0;
+  float m_lastMouseX = 0.0f;
+  float m_lastMouseY = 0.0f;
   bool m_inputSent = false;
 
   void createRenderer();
