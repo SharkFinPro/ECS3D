@@ -85,7 +85,8 @@ void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::s
   }
 
   std::ranges::sort(current);
-  current.erase(std::ranges::unique(current).begin(), current.end());
+  auto uniqueRange = std::ranges::unique(current);
+  current.erase(uniqueRange.begin(), current.end());
 
   // Diff against the previous tick. Both sets are sorted, so the enter/stay/exit split is three linear
   // set operations rather than an O(n^2) rescan.
