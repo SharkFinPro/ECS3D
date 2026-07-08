@@ -38,6 +38,16 @@ public:
   [[nodiscard]] bool isTrigger() const;
   void setIsTrigger(bool isTrigger);
 
+  // Broad-phase filtering. layer is this collider's layer index (0-31); mask is the set of layers it
+  // collides with (bit N = layer N). Two colliders interact only if each one's mask includes the other's
+  // layer, so a pair on non-matching layers is skipped before any narrow-phase / event work. Threaded
+  // through each subclass's serialize/loadFromJSON/pack/unpack like isTrigger.
+  [[nodiscard]] uint32_t getLayer() const;
+  void setLayer(uint32_t layer);
+
+  [[nodiscard]] uint32_t getMask() const;
+  void setMask(uint32_t mask);
+
   virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
 
   [[nodiscard]] virtual glm::vec3 getPosition() { return glm::vec3(0); }
@@ -52,6 +62,9 @@ protected:
   BoundingBox m_boundingBox;
 
   bool m_isTrigger = false;
+
+  uint32_t m_layer = 0;
+  uint32_t m_mask = 0xFFFFFFFFu;
 };
 
 

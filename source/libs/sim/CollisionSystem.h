@@ -76,6 +76,9 @@ private:
   // A contact is a trigger (events fire, but no physical response) if either collider is flagged as one.
   static bool isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other);
 
+  // Broad-phase layer filter: true only if each collider's mask includes the other's layer.
+  static bool layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b);
+
   // GJK/EPA narrow phase, lifted out of Collider.
   static bool collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
                            glm::vec3* mtv, glm::vec3* collisionPoint);

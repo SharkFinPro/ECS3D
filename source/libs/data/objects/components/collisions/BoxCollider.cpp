@@ -71,7 +71,9 @@ nlohmann::json BoxCollider::serialize()
     { "position", { position.x, position.y, position.z } },
     { "rotation", { rotation.x, rotation.y, rotation.z } },
     { "scale", { scale.x, scale.y, scale.z } },
-    { "isTrigger", m_isTrigger }
+    { "isTrigger", m_isTrigger },
+    { "layer", m_layer },
+    { "mask", m_mask }
   };
 
   return data;
@@ -87,8 +89,10 @@ void BoxCollider::loadFromJSON(const nlohmann::json& componentData)
   m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
   m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
 
-  // value() (not at()): projects saved before triggers existed have no isTrigger key.
+  // value() (not at()): projects saved before triggers/layers existed have no such key.
   m_isTrigger = componentData.value("isTrigger", false);
+  m_layer = componentData.value("layer", 0u);
+  m_mask = componentData.value("mask", 0xFFFFFFFFu);
 
   m_meshDirty = true;
 }
@@ -157,6 +161,8 @@ void BoxCollider::pack(net::Message& message) const
   message.write(m_scale.get());
   message.write(m_rotation.get());
   message.write(m_isTrigger);
+  message.write(m_layer);
+  message.write(m_mask);
 }
 
 void BoxCollider::unpack(net::MessageReader& messageReader)
@@ -166,6 +172,8 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
   m_scale.set(messageReader.read<glm::vec3>());
   m_rotation.set(messageReader.read<glm::vec3>());
   m_isTrigger = messageReader.read<bool>();
+  m_layer = messageReader.read<uint32_t>();
+  m_mask = messageReader.read<uint32_t>();
 }
 
 void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)

@@ -126,6 +126,14 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
       break;
     }
 
+    // Layer/mask filter: skip pairs that don't share a collision layer before any narrow-phase or event
+    // work, so filtered layers produce neither a physical response nor a collision event. Kept after the
+    // sweep-and-prune break so the early-out still fires for beyond-range colliders on any layer.
+    if (!layersCollide(edge.collider, other.collider))
+    {
+      continue;
+    }
+
     const auto otherBbox = other.collider->getBoundingBox();
 
     if (bbox.maxX < otherBbox.minX || bbox.minX > otherBbox.maxX ||
@@ -215,6 +223,15 @@ bool CollisionSystem::isTriggerPair(const std::shared_ptr<Collider>& collider, c
 
   const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
   return otherCollider && otherCollider->isTrigger();
+}
+
+bool CollisionSystem::layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b)
+{
+  // layer is 0-31 (clamped in Collider::setLayer), so the shift stays in range.
+  const uint32_t aBit = 1u << a->getLayer();
+  const uint32_t bBit = 1u << b->getLayer();
+
+  return (a->getMask() & bBit) != 0u && (b->getMask() & aBit) != 0u;
 }
 
 bool CollisionSystem::collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
