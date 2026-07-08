@@ -31,4 +31,11 @@ public abstract class ScriptBase
     public virtual void fixedUpdate(float dt) {}
     public virtual void variableUpdate() {}
     public virtual void stop() {}
+
+    // Contact events, dispatched by the server after each tick's collision pass. otherUuid is the object
+    // this one is touching; onCollisionEnter fires the tick contact begins, onCollisionStay every tick it
+    // persists, onCollisionExit the tick it ends (otherUuid may already be destroyed by then).
+    public virtual void onCollisionEnter(string otherUuid) {}
+    public virtual void onCollisionStay(string otherUuid) {}
+    public virtual void onCollisionExit(string otherUuid) {}
 }

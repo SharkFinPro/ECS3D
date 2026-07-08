@@ -16,6 +16,14 @@ class ObjectManager;
 class Object;
 class Script;
 
+// Which contact-lifecycle callback a dispatched collision event maps to. The integer values are the
+// wire contract with ScriptBridge.Bridge.onCollision (0 = enter, 1 = stay, 2 = exit) — keep them in sync.
+enum class CollisionEvent {
+  enter = 0,
+  stay = 1,
+  exit = 2
+};
+
 // Drives the live C# script instances on the server. Owns the ScriptEngine (the ScriptBridge ABI)
 // and tracks which (uuid, class) pairs are attached, the exposed-field cache, and the hot-reload
 // file snapshot. Each Script data component carries only a field blob; ScriptSystem syncs that blob
@@ -38,6 +46,15 @@ public:
   // so it runs this once per tick from the networked InputState; it must run before fixedUpdate so any
   // force the script queues from input is applied the same tick.
   void variableUpdate(ObjectManager& objectManager) const;
+
+  // Deliver one collision event to both objects' scripts: objectA's scripts learn of objectB and vice
+  // versa. Fed plain uuid pairs by the app (from CollisionSystem's enter/stay/exit lists) so scripting
+  // stays independent of sim. Safe if an object was destroyed (its side is skipped); the survivor still
+  // gets the event.
+  void dispatchCollisionEvent(ObjectManager& objectManager,
+                              const uuids::uuid& objectA,
+                              const uuids::uuid& objectB,
+                              CollisionEvent event) const;
 
   // Attach any scripts that haven't been attached yet (without running their lifecycle methods).
   // Call this before syncFieldsToData so newly added scripts have a field-cache entry.
@@ -80,6 +97,13 @@ private:
   void attach(const Object& object, const Script& script);
 
   void detach(const uuids::uuid& uuid, const std::string& className);
+
+  // Deliver one directed collision event: every attached script on `target` learns it is touching
+  // `other`. One half of dispatchCollisionEvent's both-directions delivery.
+  void dispatchCollisionTo(ObjectManager& objectManager,
+                           const uuids::uuid& target,
+                           const uuids::uuid& other,
+                           CollisionEvent event) const;
 
   void writeFieldsToInstance(const uuids::uuid& uuid,
                              const std::string& className,

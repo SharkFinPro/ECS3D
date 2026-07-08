@@ -15,6 +15,7 @@ class ProjectSerializer;
 class ProjectPacker;
 class CollisionSystem;
 class ScriptSystem;
+class ObjectManager;
 
 namespace net {
   class NetServer;
@@ -69,6 +70,10 @@ private:
   bool m_hasConnected = false;
 
   void fixedUpdate(float dt) const;
+
+  // Feed this tick's collision enter/stay/exit pairs (from CollisionSystem) into the scripts. Bridges
+  // sim and scripting at the app level so neither library depends on the other.
+  void dispatchCollisionEvents(ObjectManager& objectManager) const;
 
   void handleClientMessage(const net::Message& message);
 

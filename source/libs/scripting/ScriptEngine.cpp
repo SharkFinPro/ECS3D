@@ -46,6 +46,7 @@ void ScriptEngine::init(const std::string& bridgeDir,
 
   m_fixedUpdate = reinterpret_cast<FixedUpdateFn>(resolve("fixedUpdate"));
   m_variableUpdate = reinterpret_cast<VariableUpdateFn>(resolve("variableUpdate"));
+  m_onCollision = reinterpret_cast<OnCollisionFn>(resolve("onCollision"));
 
   m_getExposedFields = reinterpret_cast<GetExposedFieldsFn>(resolve("getExposedFields"));
   m_freeString = reinterpret_cast<FreeStringFn>(resolve("freeString"));
@@ -158,6 +159,17 @@ void ScriptEngine::variableUpdate(const char* uuid,
   if (m_variableUpdate)
   {
     m_variableUpdate(uuid, className);
+  }
+}
+
+void ScriptEngine::onCollision(const char* uuid,
+                               const char* className,
+                               const char* otherUuid,
+                               const int event) const
+{
+  if (m_onCollision)
+  {
+    m_onCollision(uuid, className, otherUuid, event);
   }
 }
 

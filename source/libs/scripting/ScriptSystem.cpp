@@ -155,6 +155,59 @@ void ScriptSystem::variableUpdate(ObjectManager& objectManager) const
   }
 }
 
+void ScriptSystem::dispatchCollisionEvent(ObjectManager& objectManager,
+                                          const uuids::uuid& objectA,
+                                          const uuids::uuid& objectB,
+                                          const CollisionEvent event) const
+{
+  if (!m_engine)
+  {
+    return;
+  }
+
+  // Point the bindings at the scene so a script's collision handler can resolve uuids (move, applyForce,
+  // World queries) while it runs, just like fixedUpdate does.
+  BindingContext::setObjectManager(&objectManager);
+
+  dispatchCollisionTo(objectManager, objectA, objectB, event);
+  dispatchCollisionTo(objectManager, objectB, objectA, event);
+}
+
+void ScriptSystem::dispatchCollisionTo(ObjectManager& objectManager,
+                                       const uuids::uuid& target,
+                                       const uuids::uuid& other,
+                                       const CollisionEvent event) const
+{
+  const auto object = objectManager.getObjectByUUID(target);
+  if (!object)
+  {
+    // The object was destroyed (e.g. this is the exit event for a contact that ended because it was
+    // removed). Nothing to notify on this side.
+    return;
+  }
+
+  const auto targetStr = uuids::to_string(target);
+  const auto otherStr = uuids::to_string(other);
+  const auto eventCode = static_cast<int>(event);
+
+  for (const auto& scriptComponent : object->getScripts())
+  {
+    const auto script = std::dynamic_pointer_cast<Script>(scriptComponent);
+    if (!script)
+    {
+      continue;
+    }
+
+    // Only notify instances that have been attached + started (mirrors variableUpdate's guard).
+    if (!isAttached(target, script->getClassName()))
+    {
+      continue;
+    }
+
+    m_engine->onCollision(targetStr.c_str(), script->getClassName().c_str(), otherStr.c_str(), eventCode);
+  }
+}
+
 void ScriptSystem::attachAll(ObjectManager& objectManager)
 {
   ensureEngine();

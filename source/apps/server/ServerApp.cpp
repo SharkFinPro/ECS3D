@@ -177,10 +177,36 @@ void ServerApp::fixedUpdate(const float dt) const
     m_scriptSystem->fixedUpdate(objectManager, dt);
     PhysicsSystem::fixedUpdate(objectManager, dt);
     m_collisionSystem->fixedUpdate(objectManager);
+
+    // Contact events for this tick: hand CollisionSystem's diffed pair lists to the scripts. Done here
+    // in the app (not as a library call) so sim stays independent of scripting — the collision system
+    // produces plain uuid pairs and ScriptSystem consumes them.
+    dispatchCollisionEvents(objectManager);
   }
   catch (const std::exception& e)
   {
     logMessage("Error", e.what());
+  }
+}
+
+void ServerApp::dispatchCollisionEvents(ObjectManager& objectManager) const
+{
+  // A collision pair notifies both of its objects (each learns of the other); ScriptSystem expands the
+  // pair into both directions and skips any object that was destroyed. Order enter/stay/exit so a script
+  // sees begin-before-persist and never a stale contact after it ended.
+  for (const auto& pair : m_collisionSystem->getCollisionEnters())
+  {
+    m_scriptSystem->dispatchCollisionEvent(objectManager, pair.a, pair.b, CollisionEvent::enter);
+  }
+
+  for (const auto& pair : m_collisionSystem->getCollisionStays())
+  {
+    m_scriptSystem->dispatchCollisionEvent(objectManager, pair.a, pair.b, CollisionEvent::stay);
+  }
+
+  for (const auto& pair : m_collisionSystem->getCollisionExits())
+  {
+    m_scriptSystem->dispatchCollisionEvent(objectManager, pair.a, pair.b, CollisionEvent::exit);
   }
 }
 
@@ -337,6 +363,9 @@ void ServerApp::handleLoadProject(const net::Message& message) const
 
   m_sceneManager->startScene();
 
+  // New project/scene: any contact history belongs to the project we just swapped out.
+  m_collisionSystem->reset();
+
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     try
@@ -438,6 +467,10 @@ void ServerApp::handleSceneControl(const net::Message& message) const
       if (previousStatus == SceneStatus::stopped)
       {
         m_scriptSystem->start(objectManager);
+
+        // Fresh run: drop any contact history from the previous run so its first tick doesn't fire
+        // spurious enter/exit events against stale pairs.
+        m_collisionSystem->reset();
       }
     }
     else if (op == net::SceneControlOp::pause)
@@ -450,6 +483,7 @@ void ServerApp::handleSceneControl(const net::Message& message) const
       {
         m_scriptSystem->stop(objectManager);
         m_sceneManager->resetScene();
+        m_collisionSystem->reset();
       }
     }
   }
@@ -492,6 +526,9 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
 
   m_sceneManager->loadScene(scene);
   m_sceneManager->startScene();
+
+  // New scene: contact history from the previous scene is meaningless here.
+  m_collisionSystem->reset();
 
   try
   {

@@ -39,6 +39,14 @@ public:
   void variableUpdate(const char* uuid,
                       const char* className) const;
 
+  // Forward a collision event to one script instance. event matches CollisionEvent in ScriptSystem.h
+  // (0 = enter, 1 = stay, 2 = exit); kept as a raw int here so the ABI layer stays free of scripting's
+  // semantic enum.
+  void onCollision(const char* uuid,
+                   const char* className,
+                   const char* otherUuid,
+                   int event) const;
+
   [[nodiscard]] std::string getExposedFields(const char* uuid,
                                              const char* className) const;
 
@@ -88,6 +96,7 @@ private:
   using StopFn = void(*)(const char*, const char*);
   using FixedUpdateFn = void(*)(const char*, const char*, float);
   using VariableUpdateFn = void(*)(const char*, const char*);
+  using OnCollisionFn = void(*)(const char*, const char*, const char*, int);
   using VoidFn = void(*)();
   using InitBridgeFn = void(*)(const char*);
 
@@ -113,6 +122,7 @@ private:
   StopFn m_stop = nullptr;
   FixedUpdateFn m_fixedUpdate = nullptr;
   VariableUpdateFn m_variableUpdate = nullptr;
+  OnCollisionFn m_onCollision = nullptr;
   VoidFn m_reload = nullptr;
 
   GetExposedFieldsFn m_getExposedFields = nullptr;
