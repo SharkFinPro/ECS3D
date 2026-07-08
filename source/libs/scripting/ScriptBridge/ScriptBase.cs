@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace ScriptBridge;
 
@@ -26,6 +27,16 @@ public abstract class ScriptBase
     protected IReadOnlyList<ScriptBase> getScripts(string uuid) => Bridge.FindScripts(uuid);
 
     protected IReadOnlyList<ScriptBase> getScripts() => Bridge.FindScripts(EntityId);
+
+    // Scene queries that automatically ignore this script's own object, so a ray/overlap cast from an
+    // object never reports itself. Use these instead of the World.* versions unless you specifically want
+    // self included (World.raycast/overlapSphere take an optional ignoreUuid too).
+    protected bool raycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit,
+                           uint layerMask = 0xFFFFFFFF)
+        => World.raycast(origin, direction, maxDistance, out hit, layerMask, EntityId);
+
+    protected string[] overlapSphere(Vector3 center, float radius, uint layerMask = 0xFFFFFFFF)
+        => World.overlapSphere(center, radius, layerMask, EntityId);
 
     public virtual void start() {}
     public virtual void fixedUpdate(float dt) {}

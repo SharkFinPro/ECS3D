@@ -13,6 +13,7 @@
 #include <objects/components/Component.h>
 #include <PhysicsSystem.h>
 #include <CollisionSystem.h>
+#include <queries/SceneQueries.h>
 #include <ScriptSystem.h>
 #include <bindings/InputState.h>
 #include <bindings/BindingContext.h>
@@ -41,6 +42,11 @@ ServerApp::ServerApp(LaunchOptions options)
   m_collisionSystem = std::make_shared<CollisionSystem>();
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
+
+  // Scene queries live in sim, which scripting can't link; inject them into BindingContext so the World
+  // raycast/overlapSphere bindings can call them (the decided function-pointer injection for Phase 2.5).
+  BindingContext::setRaycast(&SceneQueries::raycast);
+  BindingContext::setOverlapSphere(&SceneQueries::overlapSphere);
 
   if (m_options.project.empty())
   {

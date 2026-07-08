@@ -11,6 +11,8 @@ add_library(${PROJECT_NAME}
   collisions/Polytope.h
   collisions/Support.cpp
   collisions/Support.h
+  queries/SceneQueries.cpp
+  queries/SceneQueries.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

@@ -4,6 +4,8 @@
 ObjectManager* BindingContext::s_objectManager = nullptr;
 std::vector<std::shared_ptr<Object>> BindingContext::s_spawned;
 std::vector<uuids::uuid> BindingContext::s_destroyed;
+BindingContext::RaycastFn BindingContext::s_raycast = nullptr;
+BindingContext::OverlapSphereFn BindingContext::s_overlapSphere = nullptr;
 
 void BindingContext::setObjectManager(ObjectManager* objectManager)
 {
@@ -33,4 +35,24 @@ std::vector<std::shared_ptr<Object>> BindingContext::takeSpawned()
 std::vector<uuids::uuid> BindingContext::takeDestroyed()
 {
   return std::exchange(s_destroyed, {});
+}
+
+void BindingContext::setRaycast(const RaycastFn raycast)
+{
+  s_raycast = raycast;
+}
+
+BindingContext::RaycastFn BindingContext::getRaycast()
+{
+  return s_raycast;
+}
+
+void BindingContext::setOverlapSphere(const OverlapSphereFn overlapSphere)
+{
+  s_overlapSphere = overlapSphere;
+}
+
+BindingContext::OverlapSphereFn BindingContext::getOverlapSphere()
+{
+  return s_overlapSphere;
 }

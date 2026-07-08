@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -13,6 +14,17 @@ public unsafe struct WorldBindings
     public delegate* unmanaged<IntPtr> getAllObjectUuids;
     public delegate* unmanaged<IntPtr, float, float, float, IntPtr> spawnObject;
     public delegate* unmanaged<IntPtr, void> destroyObject;
+    public delegate* unmanaged<float, float, float, float, float, float, float, uint, IntPtr, IntPtr> raycast;
+    public delegate* unmanaged<float, float, float, float, uint, IntPtr, IntPtr> overlapSphere;
+}
+
+// The result of a successful World.raycast: the object hit and where.
+public struct RaycastHit
+{
+    public string objectUuid;
+    public float distance;
+    public Vector3 point;
+    public Vector3 normal;
 }
 
 // World queries available to any user script: find objects, read names, and enumerate the scene.
@@ -144,6 +156,77 @@ public static unsafe class World
         finally
         {
             Marshal.FreeCoTaskMem(uuidPtr);
+        }
+    }
+
+    // Cast a ray against scene colliders. Returns true and fills `hit` with the nearest collider within
+    // maxDistance whose layer is in layerMask; false (and hit = default) on a miss. The math runs on the
+    // server via the sim query injected into BindingContext. Direction need not be normalized.
+    public static bool raycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit,
+                               uint layerMask = 0xFFFFFFFFu, string ignoreUuid = "")
+    {
+        hit = default;
+
+        var ignorePtr = Marshal.StringToCoTaskMemUTF8(ignoreUuid);
+        string raw;
+        try
+        {
+            // Native returns "uuid,dist,px,py,pz,nx,ny,nz" into its thread-local buffer, or "" on a miss;
+            // marshal it out immediately (return ownership is native's) and parse. ignoreUuid (our arg,
+            // our ownership) lets the caller exclude an object — used to skip self.
+            raw = Marshal.PtrToStringUTF8(NativeBindings.World.raycast(
+                origin.X, origin.Y, origin.Z, direction.X, direction.Y, direction.Z,
+                maxDistance, layerMask, ignorePtr)) ?? "";
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(ignorePtr);
+        }
+
+        if (raw.Length == 0)
+        {
+            return false;
+        }
+
+        var parts = raw.Split(',');
+        if (parts.Length != 8)
+        {
+            return false;
+        }
+
+        // std::to_string writes with the C locale ('.' decimal), so parse invariant to match.
+        hit = new RaycastHit
+        {
+            objectUuid = parts[0],
+            distance = float.Parse(parts[1], CultureInfo.InvariantCulture),
+            point = new Vector3(
+                float.Parse(parts[2], CultureInfo.InvariantCulture),
+                float.Parse(parts[3], CultureInfo.InvariantCulture),
+                float.Parse(parts[4], CultureInfo.InvariantCulture)),
+            normal = new Vector3(
+                float.Parse(parts[5], CultureInfo.InvariantCulture),
+                float.Parse(parts[6], CultureInfo.InvariantCulture),
+                float.Parse(parts[7], CultureInfo.InvariantCulture))
+        };
+        return true;
+    }
+
+    // Every object whose collider overlaps the given sphere and whose layer is in layerMask. Hand a
+    // returned uuid to tryGetTransform/tryGetRigidBody to act on it.
+    public static string[] overlapSphere(Vector3 center, float radius, uint layerMask = 0xFFFFFFFFu,
+                                         string ignoreUuid = "")
+    {
+        var ignorePtr = Marshal.StringToCoTaskMemUTF8(ignoreUuid);
+        try
+        {
+            var raw = Marshal.PtrToStringUTF8(NativeBindings.World.overlapSphere(
+                center.X, center.Y, center.Z, radius, layerMask, ignorePtr)) ?? "";
+
+            return raw.Length == 0 ? Array.Empty<string>() : raw.Split(',');
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(ignorePtr);
         }
     }
 }
