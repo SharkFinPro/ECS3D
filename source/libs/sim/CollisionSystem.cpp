@@ -147,6 +147,12 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
 {
   if (collidedObjects.size() == 1)
   {
+    // Triggers still recorded the pair (events fire), but get no MTV correction / impulse.
+    if (isTriggerPair(collider, collidedObjects[0]))
+    {
+      return;
+    }
+
     glm::vec3 mtv;
     glm::vec3 collisionPoint;
     if (collidesWith(collider, collidedObjects[0], &mtv, &collisionPoint))
@@ -184,6 +190,11 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
       {
         chosenFlags[j] = true;
 
+        if (isTriggerPair(collider, collidedObjects[j]))
+        {
+          continue;
+        }
+
         glm::vec3 mtv;
         glm::vec3 collisionPoint;
         if (collidesWith(collider, collidedObjects[j], &mtv, &collisionPoint))
@@ -193,6 +204,17 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
       }
     }
   }
+}
+
+bool CollisionSystem::isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other)
+{
+  if (collider->isTrigger())
+  {
+    return true;
+  }
+
+  const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
+  return otherCollider && otherCollider->isTrigger();
 }
 
 bool CollisionSystem::collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,

@@ -29,6 +29,13 @@ void registerColliderEditors(ComponentEditor& componentEditor)
         edited = true;
       }
 
+      bool isTrigger = box->isTrigger();
+      if (gc::accentCheckbox("Is Trigger", &isTrigger))
+      {
+        box->setIsTrigger(isTrigger);
+        edited = true;
+      }
+
       glm::vec3 position = box->getLocalPosition();
       glm::vec3 rotation = box->getLocalRotation();
       glm::vec3 scale = box->getLocalScale();
@@ -72,6 +79,13 @@ void registerColliderEditors(ComponentEditor& componentEditor)
       if (gc::accentCheckbox("Render Collider", &renderCollider))
       {
         sphere->setRenderCollider(renderCollider);
+        edited = true;
+      }
+
+      bool isTrigger = sphere->isTrigger();
+      if (gc::accentCheckbox("Is Trigger", &isTrigger))
+      {
+        sphere->setIsTrigger(isTrigger);
         edited = true;
       }
 

@@ -73,6 +73,9 @@ private:
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
                                const std::vector<std::shared_ptr<Object>>& collidedObjects);
 
+  // A contact is a trigger (events fire, but no physical response) if either collider is flagged as one.
+  static bool isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other);
+
   // GJK/EPA narrow phase, lifted out of Collider.
   static bool collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
                            glm::vec3* mtv, glm::vec3* collisionPoint);

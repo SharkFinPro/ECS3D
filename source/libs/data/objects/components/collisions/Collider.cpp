@@ -45,3 +45,13 @@ ColliderType Collider::getColliderType() const
 {
   return m_colliderType;
 }
+
+bool Collider::isTrigger() const
+{
+  return m_isTrigger;
+}
+
+void Collider::setIsTrigger(const bool isTrigger)
+{
+  m_isTrigger = isTrigger;
+}

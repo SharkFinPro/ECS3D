@@ -32,6 +32,12 @@ public:
 
   [[nodiscard]] ColliderType getColliderType() const;
 
+  // A trigger still produces collision events but no physical response (no MTV correction, no
+  // impulses) — a volume scripts can react to without it blocking anything. Shared by every collider
+  // shape; each subclass threads it through its own serialize/loadFromJSON/pack/unpack.
+  [[nodiscard]] bool isTrigger() const;
+  void setIsTrigger(bool isTrigger);
+
   virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
 
   [[nodiscard]] virtual glm::vec3 getPosition() { return glm::vec3(0); }
@@ -44,6 +50,8 @@ protected:
   ColliderType m_colliderType;
 
   BoundingBox m_boundingBox;
+
+  bool m_isTrigger = false;
 };
 
 
