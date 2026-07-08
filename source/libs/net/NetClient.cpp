@@ -87,7 +87,9 @@ void NetClient::send(const Message& message) const
 
 bool NetClient::poll(Message& message)
 {
-  return m_inbox.pop(message);
+  // The client has a single peer (the server), so the sender id is meaningless here — discard it.
+  int32_t senderId = 0;
+  return m_inbox.pop(message, senderId);
 }
 
 void NetClient::enqueue(const uint8_t type, const uint8_t* data, const int32_t len)
@@ -97,11 +99,6 @@ void NetClient::enqueue(const uint8_t type, const uint8_t* data, const int32_t l
   {
     message.write(chunk);
   }
-
-  // Message message {
-  //   .type = static_cast<MessageType>(type),
-  //   .payload = std::vector<uint8_t>(data, data + len)
-  // };
 
   m_inbox.push(std::move(message));
 }

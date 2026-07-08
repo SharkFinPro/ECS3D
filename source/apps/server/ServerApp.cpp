@@ -117,18 +117,26 @@ void ServerApp::run()
   while (isActive())
   {
     net::Message message;
-    while (m_netServer->poll(message))
+    int32_t senderId = 0;
+    while (m_netServer->poll(message, senderId))
     {
       // A bad/malicious message (or a script-bridge hiccup while building a snapshot) must not take the
       // whole server down - that would look like "client connected, then nothing".
       try
       {
-        handleClientMessage(message);
+        handleClientMessage(message, senderId);
       }
       catch (const std::exception& e)
       {
         logMessage("Error", std::string("Failed to handle client message: ") + e.what());
       }
+    }
+
+    // Release the player slot of any connection that dropped, so a departed player's input doesn't linger
+    // and its slot is free for the next joiner.
+    for (const auto connId : m_netServer->takeDisconnected())
+    {
+      handleDisconnect(connId);
     }
 
     const auto now = std::chrono::steady_clock::now();
@@ -142,6 +150,12 @@ void ServerApp::run()
     while (m_timeAccumulator >= m_fixedUpdateDt && steps < 3)
     {
       fixedUpdate(m_fixedUpdateDt);
+
+      // The tick's scripts have now read this tick's mouse motion + key edges; zero the accumulated
+      // delta/scroll and snapshot the current keys as "last tick's" so a still mouse reads zero next tick
+      // and wasPressed/ReleasedThisTick reflect only genuinely new changes (a catch-up sub-step sees none).
+      InputState::clearMouseDeltas();
+      InputState::commitInputEdges();
 
       m_timeAccumulator -= m_fixedUpdateDt;
       ++steps;
@@ -235,7 +249,7 @@ namespace {
   }
 }
 
-void ServerApp::handleClientMessage(const net::Message& message)
+void ServerApp::handleClientMessage(const net::Message& message, const int32_t senderId)
 {
   // A non-edit server is read-only: it serves snapshots/deltas to editors that connect to view it, but
   // never applies their edits.
@@ -247,7 +261,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
   switch (message.getType())
   {
     case net::MessageType::join:
-      handleJoin(message);
+      handleJoin(message, senderId);
       break;
 
     case net::MessageType::editComponent:
@@ -267,7 +281,7 @@ void ServerApp::handleClientMessage(const net::Message& message)
       break;
 
     case net::MessageType::inputState:
-      handleInputState(message);
+      handleInputState(message, senderId);
       break;
 
     case net::MessageType::sceneControl:
@@ -278,14 +292,60 @@ void ServerApp::handleClientMessage(const net::Message& message)
   }
 }
 
-void ServerApp::handleJoin(const net::Message& message)
+void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 {
-  // A client joined: tell it whether this server is editable, then send the full project/scene as a
-  // Snapshot. Record that a connection has been seen so an ephemeral server (exitWhenEmpty) can
-  // later exit when the last one drops.
+  // A client joined: bind it to a player slot (so its input routes to that player), tell it whether this
+  // server is editable, then send the full project/scene as a Snapshot. Record that a connection has been
+  // seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
   m_hasConnected = true;
+  assignPlayerSlot(senderId);
   broadcastEditStatus();
   broadcastSnapshot();
+}
+
+int32_t ServerApp::assignPlayerSlot(const int32_t connId)
+{
+  if (const auto it = m_connectionSlots.find(connId); it != m_connectionSlots.end())
+  {
+    return it->second;
+  }
+
+  // Lowest free slot: scan upward until a slot no connection currently holds is found.
+  int32_t slot = 0;
+  const auto slotTaken = [this](const int32_t candidate) {
+    for (const auto& [conn, taken] : m_connectionSlots)
+    {
+      if (taken == candidate)
+      {
+        return true;
+      }
+    }
+    return false;
+  };
+  while (slotTaken(slot))
+  {
+    ++slot;
+  }
+
+  m_connectionSlots.emplace(connId, slot);
+  logMessage("Info", "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
+  return slot;
+}
+
+void ServerApp::handleDisconnect(const int32_t connId)
+{
+  const auto it = m_connectionSlots.find(connId);
+  if (it == m_connectionSlots.end())
+  {
+    return;
+  }
+
+  const int32_t slot = it->second;
+  m_connectionSlots.erase(it);
+  InputState::removeSlot(slot);
+
+  logMessage("Info", "Connection " + std::to_string(connId) + " dropped; freed player slot "
+    + std::to_string(slot) + ".");
 }
 
 void ServerApp::handleEditComponent(const net::Message& message) const
@@ -410,12 +470,17 @@ void ServerApp::handleAddAsset(const net::Message& message) const
   broadcastSnapshot();
 }
 
-void ServerApp::handleInputState(const net::Message& message)
+void ServerApp::handleInputState(const net::Message& message, const int32_t senderId)
 {
-  // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it.
+  // The client's captured keyboard state for this frame; the scripts read it through their player's slot.
+  // It lands in this connection's player slot so two players don't clobber each other. assignPlayerSlot is
+  // idempotent — normally the slot already exists from the join, but bind on demand in case input somehow
+  // arrives first.
+  const int32_t slot = assignPlayerSlot(senderId);
+
   net::MessageReader reader(message);
   const auto focused = reader.read<bool>();
-  InputState::setFocused(focused);
+  InputState::setFocused(slot, focused);
 
   const auto numKeys = reader.read<size_t>();
   std::vector<int> keysPressed(numKeys);
@@ -424,7 +489,21 @@ void ServerApp::handleInputState(const net::Message& message)
     key = reader.read<int>();
   }
 
-  InputState::setKeysPressed(keysPressed);
+  InputState::setKeysPressed(slot, keysPressed);
+
+  // Mouse block, appended after the keys (see Protocol.h). Guard on remaining() so an older client that
+  // predates mouse input degrades to "no mouse" instead of throwing an underflow.
+  constexpr size_t mouseBytes = 5 * sizeof(float) + sizeof(uint8_t);
+  if (reader.remaining() >= mouseBytes)
+  {
+    const auto mouseX = reader.read<float>();
+    const auto mouseY = reader.read<float>();
+    const auto mouseDeltaX = reader.read<float>();
+    const auto mouseDeltaY = reader.read<float>();
+    const auto scrollY = reader.read<float>();
+    const auto buttons = reader.read<uint8_t>();
+    InputState::setMouse(slot, mouseX, mouseY, mouseDeltaX, mouseDeltaY, scrollY, buttons);
+  }
 }
 
 void ServerApp::handleSceneControl(const net::Message& message) const

@@ -1,6 +1,7 @@
 #include "NetServer.h"
 #include <ManagedHost.h>
 #include <array>
+#include <utility>
 
 namespace net {
 
@@ -19,11 +20,19 @@ namespace {
   NetServer* g_activeServer = nullptr;
 }
 
-extern "C" void ecs3dNetServerReceive(const uint8_t type, const uint8_t* data, const int32_t len)
+extern "C" void ecs3dNetServerReceive(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
   if (g_activeServer)
   {
-    g_activeServer->enqueue(type, data, len);
+    g_activeServer->enqueue(connId, type, data, len);
+  }
+}
+
+extern "C" void ecs3dNetServerDisconnect(const int32_t connId)
+{
+  if (g_activeServer)
+  {
+    g_activeServer->enqueueDisconnect(connId);
   }
 }
 
@@ -47,9 +56,11 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_broadcastFn = m_host->getDelegate(kAssembly, kType, "serverBroadcast");
   m_connectionCountFn = m_host->getDelegate(kAssembly, kType, "serverConnectionCount");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
+  m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
 
   g_activeServer = this;
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
+  reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerDisconnect));
 
   reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0, authToken.c_str());
   m_started = true;
@@ -93,12 +104,12 @@ int NetServer::connectionCount() const
   return reinterpret_cast<ServerConnectionCountFn>(m_connectionCountFn)();
 }
 
-bool NetServer::poll(Message& message)
+bool NetServer::poll(Message& message, int32_t& senderId)
 {
-  return m_inbox.pop(message);
+  return m_inbox.pop(message, senderId);
 }
 
-void NetServer::enqueue(const uint8_t type, const uint8_t* data, const int32_t len)
+void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
   Message message(static_cast<MessageType>(type));
   for (const std::vector<uint8_t> chunks(data, data + len); const auto& chunk : chunks)
@@ -106,12 +117,19 @@ void NetServer::enqueue(const uint8_t type, const uint8_t* data, const int32_t l
     message.write(chunk);
   }
 
-  // Message message {
-  //   .type = static_cast<MessageType>(type),
-  //   .payload = std::vector<uint8_t>(data, data + len)
-  // };
+  m_inbox.push(std::move(message), connId);
+}
 
-  m_inbox.push(std::move(message));
+void NetServer::enqueueDisconnect(const int32_t connId)
+{
+  std::lock_guard lock(m_disconnectMutex);
+  m_disconnected.push_back(connId);
+}
+
+std::vector<int32_t> NetServer::takeDisconnected()
+{
+  std::lock_guard lock(m_disconnectMutex);
+  return std::exchange(m_disconnected, {});
 }
 
 }

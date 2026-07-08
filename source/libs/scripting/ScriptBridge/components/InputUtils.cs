@@ -1,7 +1,16 @@
 using System;
+using System.Numerics;
 using System.Runtime.InteropServices;
 
 namespace ScriptBridge;
+
+// GLFW mouse-button indices (0/1/2), used with PlayerInput.mouseButton.
+public enum MouseButton
+{
+    Left   = 0,
+    Right  = 1,
+    Middle = 2,
+}
 
 public enum Key
 {
@@ -22,8 +31,20 @@ public unsafe struct InputUtilsBindings
 {
     public delegate* unmanaged<int, bool> keyIsPressed;
     public delegate* unmanaged<bool> windowIsFocused;
+    // Per-player: resolve the object's PlayerController.playerSlot and read that player's input. New
+    // fields go at the END to keep the layout matched with the native InputUtilsBindings struct.
+    public delegate* unmanaged<IntPtr, int, bool> keyIsPressedForObject;
+    public delegate* unmanaged<IntPtr, bool> windowIsFocusedForObject;
+    public delegate* unmanaged<IntPtr, float*, float*, void> mousePositionForObject;
+    public delegate* unmanaged<IntPtr, float*, float*, void> mouseDeltaForObject;
+    public delegate* unmanaged<IntPtr, float> scrollForObject;
+    public delegate* unmanaged<IntPtr, int, bool> mouseButtonForObject;
+    public delegate* unmanaged<IntPtr, int, bool> wasKeyPressedThisTickForObject;
+    public delegate* unmanaged<IntPtr, int, bool> wasKeyReleasedThisTickForObject;
 }
 
+// Player-agnostic input: reads the aggregate across all players (a key is pressed if any player presses
+// it). For a specific player's input, use ScriptBase.input (backed by PlayerInput) instead.
 public static unsafe class InputUtils
 {
     private static bool keyIsPressed(int key) => NativeBindings.InputUtils.keyIsPressed(key);
@@ -31,4 +52,53 @@ public static unsafe class InputUtils
     public static bool keyIsPressed(Key key) => keyIsPressed((int)key);
 
     public static bool windowIsFocused() => NativeBindings.InputUtils.windowIsFocused();
+}
+
+// A single player's input, scoped to the object it was constructed from: it reads only that object's
+// player slot (via its PlayerController). ScriptBase exposes one as `input`, bound to the script's own
+// object, so `input.keyIsPressed(Key.W)` reads this player and no other. Reads as "nothing pressed" when
+// the object has no PlayerController.
+public sealed unsafe class PlayerInput
+{
+    private readonly IntPtr _uuid;
+
+    internal PlayerInput(string uuid)
+    {
+        _uuid = Marshal.StringToCoTaskMemUTF8(uuid);
+    }
+
+    ~PlayerInput()
+    {
+        Marshal.FreeCoTaskMem(_uuid);
+    }
+
+    public bool keyIsPressed(Key key) => NativeBindings.InputUtils.keyIsPressedForObject(_uuid, (int)key);
+
+    // True only on the tick the key transitions down / up (edge), vs. keyIsPressed which is level.
+    public bool wasPressedThisTick(Key key) => NativeBindings.InputUtils.wasKeyPressedThisTickForObject(_uuid, (int)key);
+
+    public bool wasReleasedThisTick(Key key) => NativeBindings.InputUtils.wasKeyReleasedThisTickForObject(_uuid, (int)key);
+
+    public bool windowIsFocused() => NativeBindings.InputUtils.windowIsFocusedForObject(_uuid);
+
+    // Absolute cursor position in window pixels.
+    public Vector2 mousePosition()
+    {
+        float x = 0, y = 0;
+        NativeBindings.InputUtils.mousePositionForObject(_uuid, &x, &y);
+        return new Vector2(x, y);
+    }
+
+    // Cursor movement over this tick (sums every frame the client sent since the last tick).
+    public Vector2 mouseDelta()
+    {
+        float x = 0, y = 0;
+        NativeBindings.InputUtils.mouseDeltaForObject(_uuid, &x, &y);
+        return new Vector2(x, y);
+    }
+
+    // Vertical scroll-wheel movement over this tick.
+    public float scroll() => NativeBindings.InputUtils.scrollForObject(_uuid);
+
+    public bool mouseButton(MouseButton button) => NativeBindings.InputUtils.mouseButtonForObject(_uuid, (int)button);
 }

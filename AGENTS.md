@@ -106,7 +106,17 @@ mirrored by a C# `[StructLayout(Sequential)]` struct and registered through `Bri
 the **end** of both to keep the layout matched). `BindingContext` is the bridge from the static, C-ABI
 bindings back to the server's live scene: `ScriptSystem` points it at the current `ObjectManager` each
 tick. The headless server has no GLFW window, so input is networked: clients send `inputState`, the
-server writes it into the global `InputState`, and `InputUtilsBindings` reads it back for scripts. Forces
+server writes it into `InputState`, and `InputUtilsBindings` reads it back for scripts. Input is
+**per-player**: the transport tags each inbound message with a stable connection id (`NetServer::poll`'s
+`senderId`, from a monotonic id the C# backends assign); `ServerApp` binds each connection to a **player
+slot** on join (freed on disconnect via a transport disconnect callback + `NetServer::takeDisconnected`),
+and `InputState` is keyed by that slot. A script reads *its own* player through `ScriptBase.input`
+(`PlayerInput`), which resolves `object → PlayerController.playerSlot → InputState[slot]`; the global
+`InputUtils` stays a player-agnostic aggregate. `PlayerController` is an ordinary replicated data
+component (slot is editable + serialized), so possession is visible to the editor and to clients — the
+hook Phase 4's camera uses to pick "whose view". Mouse delta/scroll and key edges
+(`wasPressedThisTick`) accumulate between fixed ticks and are reset per tick by
+`InputState::clearMouseDeltas()`/`commitInputEdges()`. Forces
 requested from a script are buffered on the `RigidBody` data (pending-force queue) and drained by
 `PhysicsSystem`, keeping `scripting` independent of `sim`. Four conventions worth inheriting: (1) reaching
 another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t)` → false when

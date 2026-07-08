@@ -91,6 +91,14 @@ json sphereCollider()
   };
 }
 
+json playerController(const int slot = 0)
+{
+  return {
+    { "type", "PlayerController" },
+    { "playerSlot", slot }
+  };
+}
+
 json makeObject(const std::string& name, json components, json scripts = json::array())
 {
   return {
@@ -137,13 +145,14 @@ json sphere(const glm::vec3& position, const glm::vec3& scale = glm::vec3(1))
   }));
 }
 
-json player(const glm::vec3& position)
+json player(const glm::vec3& position, const int slot = 0)
 {
   return makeObject("Player", json::array({
     transform(position),
     modelRenderer(playerModel, whiteTexture, whiteTexture),
     rigidBody(),
-    sphereCollider()
+    sphereCollider(),
+    playerController(slot)
   }), json::array({
     {
       { "type", "Script" },

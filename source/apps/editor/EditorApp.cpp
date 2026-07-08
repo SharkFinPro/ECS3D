@@ -24,6 +24,7 @@
 #include <components/LightRendererEditor.h>
 #include <components/ColliderEditor.h>
 #include <components/ScriptEditor.h>
+#include <components/PlayerControllerEditor.h>
 #include <NetClient.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
@@ -249,22 +250,45 @@ void EditorApp::handlePicking()
 
 void EditorApp::sendInput()
 {
-  // Don't let typing in an editor panel drive the player: when ImGui wants the keyboard, report no
-  // keys. focused stays true (an unfocused window already reports no keys), so this view never disables
-  // another connected view's input on the shared server-side InputState.
-  input::InputSnapshot snapshot;
-  if (!ImGui::GetIO().WantCaptureKeyboard)
+  const auto& io = ImGui::GetIO();
+
+  // Don't let editor UI interaction drive the game: when ImGui wants the keyboard, report no keys; when
+  // it wants the mouse (hovering a panel), report no mouse. focused stays true (an unfocused window
+  // already reports no keys), so this view never disables another connected view's input.
+  input::InputSnapshot snapshot = input::capture(*m_renderer);
+
+  if (io.WantCaptureKeyboard)
   {
-    snapshot = input::capture(*m_renderer);
+    snapshot.keys.clear();
   }
 
-  if (m_inputSent && snapshot.keys == m_lastInputKeys && snapshot.focused == m_lastInputFocused)
+  if (io.WantCaptureMouse)
+  {
+    snapshot.mouseDeltaX = 0.0f;
+    snapshot.mouseDeltaY = 0.0f;
+    snapshot.scrollY = 0.0f;
+    snapshot.buttons = 0;
+  }
+
+  const bool discreteChanged = !m_inputSent
+    || snapshot.keys != m_lastInputKeys
+    || snapshot.focused != m_lastInputFocused
+    || snapshot.buttons != m_lastButtons
+    || snapshot.mouseX != m_lastMouseX
+    || snapshot.mouseY != m_lastMouseY;
+
+  const bool scrolled = snapshot.scrollY != 0.0f;
+
+  if (m_inputSent && !discreteChanged && !scrolled)
   {
     return;
   }
 
   m_lastInputKeys = snapshot.keys;
   m_lastInputFocused = snapshot.focused;
+  m_lastButtons = snapshot.buttons;
+  m_lastMouseX = snapshot.mouseX;
+  m_lastMouseY = snapshot.mouseY;
   m_inputSent = true;
 
   net::Message message(net::MessageType::inputState);
@@ -274,6 +298,13 @@ void EditorApp::sendInput()
   {
     message.write(key);
   }
+
+  message.write(snapshot.mouseX);
+  message.write(snapshot.mouseY);
+  message.write(snapshot.mouseDeltaX);
+  message.write(snapshot.mouseDeltaY);
+  message.write(snapshot.scrollY);
+  message.write(snapshot.buttons);
 
   m_netClient->send(message);
 }
@@ -316,6 +347,7 @@ void EditorApp::registerEditors() const
   registerLightRendererEditor(*m_componentEditor);
   registerColliderEditors(*m_componentEditor);
   registerScriptEditor(*m_componentEditor);
+  registerPlayerControllerEditor(*m_componentEditor);
 }
 
 void EditorApp::setupKeybinds()

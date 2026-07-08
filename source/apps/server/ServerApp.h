@@ -4,8 +4,10 @@
 #include <Protocol.h>
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 class ManagedHost;
 class ComponentRegistry;
@@ -69,15 +71,29 @@ private:
   // doesn't exit during the launch -> connect window when the count is still 0).
   bool m_hasConnected = false;
 
+  // Player↔connection binding (Phase 3.2): each connection is bound to a player slot (0, 1, ...) on join
+  // and released on disconnect. inputState from a connection is written into its slot; a script reads its
+  // own player's input by resolving its object's PlayerController.playerSlot to that slot. Touched only on
+  // the tick thread (join / inputState / disconnect all run there), so no locking is needed.
+  std::unordered_map<int32_t, int32_t> m_connectionSlots;
+
+  // Bind connId to the lowest free player slot (idempotent — returns the existing slot if already bound).
+  int32_t assignPlayerSlot(int32_t connId);
+
+  // Release a dropped connection's slot and clear its input.
+  void handleDisconnect(int32_t connId);
+
   void fixedUpdate(float dt) const;
 
   // Feed this tick's collision enter/stay/exit pairs (from CollisionSystem) into the scripts. Bridges
   // sim and scripting at the app level so neither library depends on the other.
   void dispatchCollisionEvents(ObjectManager& objectManager) const;
 
-  void handleClientMessage(const net::Message& message);
+  // senderId is the stable connection id of the message's origin (from NetServer::poll), so per-client
+  // messages like inputState land in the right slot.
+  void handleClientMessage(const net::Message& message, int32_t senderId);
 
-  void handleJoin(const net::Message& message);
+  void handleJoin(const net::Message& message, int32_t senderId);
 
   void handleEditComponent(const net::Message& message) const;
 
@@ -87,7 +103,7 @@ private:
 
   void handleAddAsset(const net::Message& message) const;
 
-  static void handleInputState(const net::Message& message);
+  void handleInputState(const net::Message& message, int32_t senderId);
 
   void handleSceneControl(const net::Message& message) const;
 

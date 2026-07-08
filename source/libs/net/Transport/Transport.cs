@@ -17,8 +17,14 @@ public static unsafe class Transport
 //   private static readonly TransportProtocol Protocol = TransportProtocol.WebSocket;
   private static readonly TransportProtocol Protocol = TransportProtocol.Tcp;
 
-  private static delegate* unmanaged<byte, byte*, int, void> _serverReceive;
+  // The server callback carries the origin connection id (the C++ side routes per-client input by it);
+  // the client callback has a single peer and needs none.
+  private static delegate* unmanaged<int, byte, byte*, int, void> _serverReceive;
   private static delegate* unmanaged<byte, byte*, int, void> _clientReceive;
+
+  // Fired when a server-side connection drops, carrying its connection id, so the C++ side can release
+  // the player slot bound to it. Optional — the C++ side may never register one.
+  private static delegate* unmanaged<int, void> _serverDisconnect;
 
   private static readonly TransportBackend _backend = CreateBackend();
 
@@ -35,7 +41,13 @@ public static unsafe class Transport
   [UnmanagedCallersOnly]
   public static void serverSetReceiveCallback(IntPtr fn)
   {
-    _serverReceive = (delegate* unmanaged<byte, byte*, int, void>)fn;
+    _serverReceive = (delegate* unmanaged<int, byte, byte*, int, void>)fn;
+  }
+
+  [UnmanagedCallersOnly]
+  public static void serverSetDisconnectCallback(IntPtr fn)
+  {
+    _serverDisconnect = (delegate* unmanaged<int, void>)fn;
   }
 
   [UnmanagedCallersOnly]
@@ -92,9 +104,33 @@ public static unsafe class Transport
   // Backends call these from their socket threads to push an inbound (type, payload) up to C++. The C++
   // MessageQueue behind the callback is thread-safe.
 
-  internal static void DeliverServer(byte type, byte[] payload)
+  internal static void DeliverServer(int connId, byte type, byte[] payload)
   {
-    Deliver(_serverReceive, type, payload);
+    var callback = _serverReceive;
+    if (callback == null)
+    {
+      return;
+    }
+
+    if (payload.Length == 0)
+    {
+      callback(connId, type, null, 0);
+      return;
+    }
+
+    fixed (byte* p = payload)
+    {
+      callback(connId, type, p, payload.Length);
+    }
+  }
+
+  internal static void DeliverServerDisconnect(int connId)
+  {
+    var callback = _serverDisconnect;
+    if (callback != null)
+    {
+      callback(connId);
+    }
   }
 
   internal static void DeliverClient(byte type, byte[] payload)
