@@ -108,11 +108,20 @@ bindings back to the server's live scene: `ScriptSystem` points it at the curren
 tick. The headless server has no GLFW window, so input is networked: clients send `inputState`, the
 server writes it into the global `InputState`, and `InputUtilsBindings` reads it back for scripts. Forces
 requested from a script are buffered on the `RigidBody` data (pending-force queue) and drained by
-`PhysicsSystem`, keeping `scripting` independent of `sim`. Two conventions worth inheriting: (1) reaching
+`PhysicsSystem`, keeping `scripting` independent of `sim`. Four conventions worth inheriting: (1) reaching
 another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t)` → false when
 absent/destroyed; never throws in the tick loop) — future component wrappers follow this; (2) a binding
 that mutates scene structure can't touch the net layer, so it **buffers the change on `BindingContext`**
-and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above).
+and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above);
+(3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
+pairs and diffs them into enter/stay/exit uuid-pair lists; `ServerApp` hands those to
+`ScriptSystem::dispatchCollisionEvent` (→ `onCollisionEnter/Stay/Exit` script virtuals) after the collision
+pass — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` never links
+`scripting`; (4) **sim→script *queries* cross by function-pointer injection.** Query behavior stays in a
+`sim` system (`SceneQueries`: raycast/overlapSphere), and `ServerApp` injects its statics into
+`BindingContext` (`setRaycast`/`setOverlapSphere`) at startup; the `World` bindings call through them. The
+injected signatures use only shared types (`ObjectManager`/`glm`/`uuid`), so no library learns the other —
+the pattern to reuse for any future sim query exposed to scripts.
 
 ## Development Principles
 
