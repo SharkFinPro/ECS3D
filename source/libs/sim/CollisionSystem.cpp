@@ -11,6 +11,7 @@
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <iterator>
 
 void CollisionSystem::fixedUpdate(const ObjectManager& objectManager)
 {
@@ -39,7 +40,11 @@ void CollisionSystem::checkCollisions()
     return a.position < b.position;
   });
 
-#pragma omp parallel for default(none) num_threads(6)
+  // Each edge's collided objects, indexed by edge so the parallel loop can record them lock-free (every
+  // thread writes only its own slot). Drained serially into the pair set once the loop finishes.
+  std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
+
+#pragma omp parallel for default(none) shared(perEdgeCollisions) num_threads(6)
   for (int i = 0; i < m_collisionEdges.size(); ++i)
   {
     const auto& edge = m_collisionEdges[i];
@@ -57,8 +62,50 @@ void CollisionSystem::checkCollisions()
     if (!collidedObjects.empty())
     {
       handleCollisions(rigidBody, edge.collider, collidedObjects);
+      perEdgeCollisions[i] = std::move(collidedObjects);
     }
   }
+
+  recordCollisionEvents(perEdgeCollisions);
+}
+
+void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions)
+{
+  // Flatten the per-edge results into this tick's canonical pair set. A dynamic-vs-dynamic contact is
+  // detected from both sides, so canonicalize (a < b) and dedupe.
+  std::vector<CollisionPair> current;
+  for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
+  {
+    const auto& selfUUID = m_collisionEdges[i].object->getUUID();
+
+    for (const auto& other : perEdgeCollisions[i])
+    {
+      current.push_back(CollisionPair::make(selfUUID, other->getUUID()));
+    }
+  }
+
+  std::ranges::sort(current);
+  current.erase(std::ranges::unique(current).begin(), current.end());
+
+  // Diff against the previous tick. Both sets are sorted, so the enter/stay/exit split is three linear
+  // set operations rather than an O(n^2) rescan.
+  m_enters.clear();
+  m_stays.clear();
+  m_exits.clear();
+
+  std::ranges::set_difference(current, m_previousPairs, std::back_inserter(m_enters));
+  std::ranges::set_intersection(current, m_previousPairs, std::back_inserter(m_stays));
+  std::ranges::set_difference(m_previousPairs, current, std::back_inserter(m_exits));
+
+  m_previousPairs = std::move(current);
+}
+
+void CollisionSystem::reset()
+{
+  m_previousPairs.clear();
+  m_enters.clear();
+  m_stays.clear();
+  m_exits.clear();
 }
 
 void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const
