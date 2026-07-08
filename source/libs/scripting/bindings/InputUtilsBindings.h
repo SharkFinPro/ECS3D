@@ -21,6 +21,9 @@ struct InputUtilsBindings
   void(*mouseDeltaForObject)(const char* uuid, float* x, float* y);
   float(*scrollForObject)(const char* uuid);
   bool(*mouseButtonForObject)(const char* uuid, int button);
+  // Per-player key edges against last tick (see InputState::commitInputEdges).
+  bool(*wasKeyPressedThisTickForObject)(const char* uuid, int key);
+  bool(*wasKeyReleasedThisTickForObject)(const char* uuid, int key);
 };
 
 class InputUtilsBindingsProvider {
@@ -43,6 +46,10 @@ private:
   static float bindScrollForObject(const char* uuid);
 
   static bool bindMouseButtonForObject(const char* uuid, int button);
+
+  static bool bindWasKeyPressedThisTickForObject(const char* uuid, int key);
+
+  static bool bindWasKeyReleasedThisTickForObject(const char* uuid, int key);
 };
 
 

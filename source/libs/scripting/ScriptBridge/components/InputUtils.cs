@@ -39,6 +39,8 @@ public unsafe struct InputUtilsBindings
     public delegate* unmanaged<IntPtr, float*, float*, void> mouseDeltaForObject;
     public delegate* unmanaged<IntPtr, float> scrollForObject;
     public delegate* unmanaged<IntPtr, int, bool> mouseButtonForObject;
+    public delegate* unmanaged<IntPtr, int, bool> wasKeyPressedThisTickForObject;
+    public delegate* unmanaged<IntPtr, int, bool> wasKeyReleasedThisTickForObject;
 }
 
 // Player-agnostic input: reads the aggregate across all players (a key is pressed if any player presses
@@ -71,6 +73,11 @@ public sealed unsafe class PlayerInput
     }
 
     public bool keyIsPressed(Key key) => NativeBindings.InputUtils.keyIsPressedForObject(_uuid, (int)key);
+
+    // True only on the tick the key transitions down / up (edge), vs. keyIsPressed which is level.
+    public bool wasPressedThisTick(Key key) => NativeBindings.InputUtils.wasKeyPressedThisTickForObject(_uuid, (int)key);
+
+    public bool wasReleasedThisTick(Key key) => NativeBindings.InputUtils.wasKeyReleasedThisTickForObject(_uuid, (int)key);
 
     public bool windowIsFocused() => NativeBindings.InputUtils.windowIsFocusedForObject(_uuid);
 

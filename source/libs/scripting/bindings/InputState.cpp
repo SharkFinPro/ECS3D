@@ -38,6 +38,14 @@ void InputState::clearMouseDeltas()
   }
 }
 
+void InputState::commitInputEdges()
+{
+  for (auto& [slot, input] : s_slots)
+  {
+    input.previousKeys = input.pressedKeys;
+  }
+}
+
 void InputState::removeSlot(const int32_t playerSlot)
 {
   s_slots.erase(playerSlot);
@@ -47,6 +55,22 @@ bool InputState::isKeyPressed(const int32_t playerSlot, const int key)
 {
   const auto it = s_slots.find(playerSlot);
   return it != s_slots.end() && it->second.pressedKeys.contains(key);
+}
+
+bool InputState::wasKeyPressedThisTick(const int32_t playerSlot, const int key)
+{
+  const auto it = s_slots.find(playerSlot);
+  return it != s_slots.end()
+    && it->second.pressedKeys.contains(key)
+    && !it->second.previousKeys.contains(key);
+}
+
+bool InputState::wasKeyReleasedThisTick(const int32_t playerSlot, const int key)
+{
+  const auto it = s_slots.find(playerSlot);
+  return it != s_slots.end()
+    && !it->second.pressedKeys.contains(key)
+    && it->second.previousKeys.contains(key);
 }
 
 bool InputState::isFocused(const int32_t playerSlot)

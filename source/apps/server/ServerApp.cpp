@@ -151,9 +151,11 @@ void ServerApp::run()
     {
       fixedUpdate(m_fixedUpdateDt);
 
-      // The tick's scripts have now read this tick's mouse motion; zero the accumulated delta/scroll so a
-      // still mouse reads zero next tick (and a catch-up sub-step doesn't re-consume the same movement).
+      // The tick's scripts have now read this tick's mouse motion + key edges; zero the accumulated
+      // delta/scroll and snapshot the current keys as "last tick's" so a still mouse reads zero next tick
+      // and wasPressed/ReleasedThisTick reflect only genuinely new changes (a catch-up sub-step sees none).
       InputState::clearMouseDeltas();
+      InputState::commitInputEdges();
 
       m_timeAccumulator -= m_fixedUpdateDt;
       ++steps;

@@ -34,11 +34,21 @@ public:
   // scripts consume them, so a still mouse reads zero delta rather than a stale value.
   static void clearMouseDeltas();
 
+  // Snapshot every slot's current keys as "last tick's" keys. Called once per fixed tick after the
+  // scripts consume the edges, so wasPressed/ReleasedThisTick diff this tick's keys against last tick's.
+  static void commitInputEdges();
+
   // Drop a slot's state when its player disconnects, so a departed player's last keys don't linger.
   static void removeSlot(int32_t playerSlot);
 
   // Per-slot queries (used once a script knows which player it belongs to, via PlayerController).
   [[nodiscard]] static bool isKeyPressed(int32_t playerSlot, int key);
+
+  // Edge queries against last tick's key set (see commitInputEdges): pressed = down now but not last
+  // tick; released = down last tick but not now.
+  [[nodiscard]] static bool wasKeyPressedThisTick(int32_t playerSlot, int key);
+
+  [[nodiscard]] static bool wasKeyReleasedThisTick(int32_t playerSlot, int key);
 
   [[nodiscard]] static bool isFocused(int32_t playerSlot);
 
@@ -61,6 +71,7 @@ public:
 private:
   struct SlotInput {
     std::unordered_set<int> pressedKeys;
+    std::unordered_set<int> previousKeys;  // last tick's pressedKeys, for edge detection
     bool focused = false;
 
     float mouseX = 0.0f;

@@ -51,7 +51,9 @@ InputUtilsBindings InputUtilsBindingsProvider::getBindings()
     .mousePositionForObject = &bindMousePositionForObject,
     .mouseDeltaForObject = &bindMouseDeltaForObject,
     .scrollForObject = &bindScrollForObject,
-    .mouseButtonForObject = &bindMouseButtonForObject
+    .mouseButtonForObject = &bindMouseButtonForObject,
+    .wasKeyPressedThisTickForObject = &bindWasKeyPressedThisTickForObject,
+    .wasKeyReleasedThisTickForObject = &bindWasKeyReleasedThisTickForObject
   };
 }
 
@@ -111,4 +113,16 @@ bool InputUtilsBindingsProvider::bindMouseButtonForObject(const char* uuid, cons
 {
   const auto slot = playerSlotOf(uuid);
   return slot.has_value() && InputState::isMouseButtonPressed(slot.value(), button);
+}
+
+bool InputUtilsBindingsProvider::bindWasKeyPressedThisTickForObject(const char* uuid, const int key)
+{
+  const auto slot = playerSlotOf(uuid);
+  return slot.has_value() && InputState::wasKeyPressedThisTick(slot.value(), key);
+}
+
+bool InputUtilsBindingsProvider::bindWasKeyReleasedThisTickForObject(const char* uuid, const int key)
+{
+  const auto slot = playerSlotOf(uuid);
+  return slot.has_value() && InputState::wasKeyReleasedThisTick(slot.value(), key);
 }
