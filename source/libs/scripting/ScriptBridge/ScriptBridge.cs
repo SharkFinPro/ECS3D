@@ -362,6 +362,25 @@ public static class Bridge
             instance.variableUpdate();
         }
     }
+
+    // eventType matches CollisionEvent in ScriptSystem.h: 0 = enter, 1 = stay, 2 = exit.
+    [UnmanagedCallersOnly]
+    public static void onCollision(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr otherUuidPtr, int eventType)
+    {
+        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+        if (!_instances.TryGetValue(key, out var instance))
+        {
+            return;
+        }
+
+        var other = Marshal.PtrToStringUTF8(otherUuidPtr)!;
+        switch (eventType)
+        {
+            case 0: instance.onCollisionEnter(other); break;
+            case 1: instance.onCollisionStay(other); break;
+            case 2: instance.onCollisionExit(other); break;
+        }
+    }
 }
 
 internal sealed class ScriptContext : AssemblyLoadContext

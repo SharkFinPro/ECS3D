@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
   // Returned strings point into this buffer, valid until the next WorldBindings call on the same
@@ -20,6 +21,18 @@ namespace {
     s_returnBuffer = std::move(value);
     return s_returnBuffer.c_str();
   }
+
+  // Parse an optional uuid argument; an empty/invalid string becomes the nil uuid, which the query
+  // treats as "ignore nothing" (real object uuids are never nil).
+  uuids::uuid parseIgnore(const char* uuid)
+  {
+    if (!uuid)
+    {
+      return {};
+    }
+
+    return uuids::uuid::from_string(std::string(uuid)).value_or(uuids::uuid{});
+  }
 }
 
 WorldBindings WorldBindingsProvider::getBindings()
@@ -30,7 +43,9 @@ WorldBindings WorldBindingsProvider::getBindings()
     .objectExists = &bindObjectExists,
     .getAllObjectUuids = &bindGetAllObjectUuids,
     .spawnObject = &bindSpawnObject,
-    .destroyObject = &bindDestroyObject
+    .destroyObject = &bindDestroyObject,
+    .raycast = &bindRaycast,
+    .overlapSphere = &bindOverlapSphere
   };
 }
 
@@ -167,4 +182,66 @@ void WorldBindingsProvider::bindDestroyObject(const char* uuid)
   // destroy and calls deleteObjectsMarkedForDeletion after the tick.
   objectManager->removeObject(object);
   BindingContext::recordDestroy(parsed.value());
+}
+
+const char* WorldBindingsProvider::bindRaycast(const float ox, const float oy, const float oz,
+                                               const float dx, const float dy, const float dz,
+                                               const float maxDistance, const uint32_t layerMask,
+                                               const char* ignoreUuid)
+{
+  const auto objectManager = BindingContext::getObjectManager();
+  const auto raycast = BindingContext::getRaycast();
+  if (!objectManager || !raycast)
+  {
+    return store("");
+  }
+
+  uuids::uuid hitObject;
+  glm::vec3 hitPoint(0.0f);
+  glm::vec3 hitNormal(0.0f);
+  float hitDistance = 0.0f;
+
+  if (!raycast(*objectManager, { ox, oy, oz }, { dx, dy, dz }, maxDistance, layerMask,
+               parseIgnore(ignoreUuid), hitObject, hitPoint, hitNormal, hitDistance))
+  {
+    return store("");
+  }
+
+  // "uuid,dist,px,py,pz,nx,ny,nz" — uuids have no commas, so this parses cleanly on the managed side.
+  std::string result = uuids::to_string(hitObject);
+  for (const float value : { hitDistance, hitPoint.x, hitPoint.y, hitPoint.z,
+                             hitNormal.x, hitNormal.y, hitNormal.z })
+  {
+    result += ',';
+    result += std::to_string(value);
+  }
+
+  return store(result);
+}
+
+const char* WorldBindingsProvider::bindOverlapSphere(const float cx, const float cy, const float cz,
+                                                     const float radius, const uint32_t layerMask,
+                                                     const char* ignoreUuid)
+{
+  const auto objectManager = BindingContext::getObjectManager();
+  const auto overlapSphere = BindingContext::getOverlapSphere();
+  if (!objectManager || !overlapSphere)
+  {
+    return store("");
+  }
+
+  std::vector<uuids::uuid> results;
+  overlapSphere(*objectManager, { cx, cy, cz }, radius, layerMask, parseIgnore(ignoreUuid), results);
+
+  std::string out;
+  for (const auto& uuid : results)
+  {
+    if (!out.empty())
+    {
+      out += ',';
+    }
+    out += uuids::to_string(uuid);
+  }
+
+  return store(out);
 }

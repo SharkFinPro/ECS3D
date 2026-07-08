@@ -45,3 +45,34 @@ ColliderType Collider::getColliderType() const
 {
   return m_colliderType;
 }
+
+bool Collider::isTrigger() const
+{
+  return m_isTrigger;
+}
+
+void Collider::setIsTrigger(const bool isTrigger)
+{
+  m_isTrigger = isTrigger;
+}
+
+uint32_t Collider::getLayer() const
+{
+  return m_layer;
+}
+
+void Collider::setLayer(const uint32_t layer)
+{
+  // Only layers 0-31 exist (mask is 32 bits); clamp so a stray value can't shift out of range.
+  m_layer = layer > 31u ? 31u : layer;
+}
+
+uint32_t Collider::getMask() const
+{
+  return m_mask;
+}
+
+void Collider::setMask(const uint32_t mask)
+{
+  m_mask = mask;
+}

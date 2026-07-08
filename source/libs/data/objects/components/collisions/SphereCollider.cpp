@@ -64,7 +64,10 @@ nlohmann::json SphereCollider::serialize()
     { "subType", "Sphere" },
     { "radius", m_radius.getInitialValue() },
     { "renderCollider", m_renderCollider },
-    { "position", { position.x, position.y, position.z } }
+    { "position", { position.x, position.y, position.z } },
+    { "isTrigger", m_isTrigger },
+    { "layer", m_layer },
+    { "mask", m_mask }
   };
 
   return data;
@@ -77,6 +80,11 @@ void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
 
   m_radius.set(componentData.at("radius"));
   m_renderCollider = componentData.at("renderCollider");
+
+  // value() (not at()): projects saved before triggers/layers existed have no such key.
+  m_isTrigger = componentData.value("isTrigger", false);
+  m_layer = componentData.value("layer", 0u);
+  m_mask = componentData.value("mask", 0xFFFFFFFFu);
 }
 
 glm::vec3 SphereCollider::getPosition()
@@ -107,6 +115,9 @@ void SphereCollider::pack(net::Message& message) const
   message.write(m_renderCollider);
   message.write(m_position.get());
   message.write(m_radius.get());
+  message.write(m_isTrigger);
+  message.write(m_layer);
+  message.write(m_mask);
 }
 
 void SphereCollider::unpack(net::MessageReader& messageReader)
@@ -114,6 +125,9 @@ void SphereCollider::unpack(net::MessageReader& messageReader)
   m_renderCollider = messageReader.read<bool>();
   m_position.set(messageReader.read<glm::vec3>());
   m_radius.set(messageReader.read<float>());
+  m_isTrigger = messageReader.read<bool>();
+  m_layer = messageReader.read<uint32_t>();
+  m_mask = messageReader.read<uint32_t>();
 }
 
 void SphereCollider::updateTransformPointer()

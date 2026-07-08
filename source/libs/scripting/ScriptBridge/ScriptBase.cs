@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace ScriptBridge;
 
@@ -27,8 +28,25 @@ public abstract class ScriptBase
 
     protected IReadOnlyList<ScriptBase> getScripts() => Bridge.FindScripts(EntityId);
 
+    // Scene queries that automatically ignore this script's own object, so a ray/overlap cast from an
+    // object never reports itself. Use these instead of the World.* versions unless you specifically want
+    // self included (World.raycast/overlapSphere take an optional ignoreUuid too).
+    protected bool raycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit,
+                           uint layerMask = 0xFFFFFFFF)
+        => World.raycast(origin, direction, maxDistance, out hit, layerMask, EntityId);
+
+    protected string[] overlapSphere(Vector3 center, float radius, uint layerMask = 0xFFFFFFFF)
+        => World.overlapSphere(center, radius, layerMask, EntityId);
+
     public virtual void start() {}
     public virtual void fixedUpdate(float dt) {}
     public virtual void variableUpdate() {}
     public virtual void stop() {}
+
+    // Contact events, dispatched by the server after each tick's collision pass. otherUuid is the object
+    // this one is touching; onCollisionEnter fires the tick contact begins, onCollisionStay every tick it
+    // persists, onCollisionExit the tick it ends (otherUuid may already be destroyed by then).
+    public virtual void onCollisionEnter(string otherUuid) {}
+    public virtual void onCollisionStay(string otherUuid) {}
+    public virtual void onCollisionExit(string otherUuid) {}
 }

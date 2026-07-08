@@ -1,6 +1,8 @@
 #ifndef WORLDBINDINGS_H
 #define WORLDBINDINGS_H
 
+#include <cstdint>
+
 // Scene/world queries exposed to scripts. Mirrors the TransformBindings pattern: a C-ABI struct of
 // function pointers registered with the managed side through Bridge, resolved against the server's
 // current ObjectManager via BindingContext (set by ScriptSystem each tick).
@@ -15,6 +17,10 @@ struct WorldBindings
   const char*(*getAllObjectUuids)();
   const char*(*spawnObject)(const char* name, float x, float y, float z);
   void(*destroyObject)(const char* uuid);
+  const char*(*raycast)(float ox, float oy, float oz, float dx, float dy, float dz,
+                        float maxDistance, uint32_t layerMask, const char* ignoreUuid);
+  const char*(*overlapSphere)(float cx, float cy, float cz, float radius, uint32_t layerMask,
+                              const char* ignoreUuid);
 };
 
 class WorldBindingsProvider {
@@ -31,6 +37,14 @@ private:
   // arrives in Phase 5. destroyObject marks the object for deletion through the existing path.
   static const char* bindSpawnObject(const char* name, float x, float y, float z);
   static void bindDestroyObject(const char* uuid);
+
+  // Ray/overlap queries delegate to the sim implementation the app injected into BindingContext. Both
+  // return a comma-delimited string the managed side parses: raycast → "uuid,dist,px,py,pz,nx,ny,nz" (or
+  // "" on a miss); overlapSphere → a comma-separated uuid list (or "").
+  static const char* bindRaycast(float ox, float oy, float oz, float dx, float dy, float dz,
+                                 float maxDistance, uint32_t layerMask, const char* ignoreUuid);
+  static const char* bindOverlapSphere(float cx, float cy, float cz, float radius, uint32_t layerMask,
+                                       const char* ignoreUuid);
 };
 
 
