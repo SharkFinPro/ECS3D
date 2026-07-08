@@ -2,6 +2,7 @@
 #include "bindings/TransformBindings.h"
 #include "bindings/RigidBodyBindings.h"
 #include "bindings/InputUtilsBindings.h"
+#include "bindings/WorldBindings.h"
 #include <ManagedHost.h>
 #include <filesystem>
 #include <iostream>
@@ -52,10 +53,12 @@ void ScriptEngine::init(const std::string& bridgeDir,
   m_getFieldFloat = reinterpret_cast<GetFieldFloatFn>(resolve("getFieldFloat"));
   m_getFieldInt = reinterpret_cast<GetFieldIntFn>(resolve("getFieldInt"));
   m_getFieldBool = reinterpret_cast<GetFieldBoolFn>(resolve("getFieldBool"));
+  m_getFieldVector3 = reinterpret_cast<GetFieldVector3Fn>(resolve("getFieldVector3"));
 
   m_setFieldFloat = reinterpret_cast<SetFieldFloatFn>(resolve("setFieldFloat"));
   m_setFieldInt = reinterpret_cast<SetFieldIntFn>(resolve("setFieldInt"));
   m_setFieldBool = reinterpret_cast<SetFieldBoolFn>(resolve("setFieldBool"));
+  m_setFieldVector3 = reinterpret_cast<SetFieldVector3Fn>(resolve("setFieldVector3"));
 
   registerBindings(assemblyPath, kBridgeType);
 
@@ -79,6 +82,11 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerRigidBody =
     reinterpret_cast<RegisterRigidBodyFn>(m_host->getDelegate(assemblyPath, typeName, "registerRigidBodyBindings"));
   registerRigidBody(RigidBodyBindingsProvider::getBindings());
+
+  using RegisterWorldFn = void(*)(WorldBindings);
+  const auto registerWorld =
+    reinterpret_cast<RegisterWorldFn>(m_host->getDelegate(assemblyPath, typeName, "registerWorldBindings"));
+  registerWorld(WorldBindingsProvider::getBindings());
 
   // InputUtils reads the networked InputState (ServerApp writes it from the client's inputState
   // messages), since the headless server has no GLFW window of its own.
@@ -197,6 +205,17 @@ bool ScriptEngine::getFieldBool(const char* uuid,
   return m_getFieldBool ? m_getFieldBool(uuid, className, fieldName) : false;
 }
 
+void ScriptEngine::getFieldVector3(const char* uuid,
+                                   const char* className,
+                                   const char* fieldName,
+                                   float& x, float& y, float& z) const
+{
+  if (m_getFieldVector3)
+  {
+    m_getFieldVector3(uuid, className, fieldName, &x, &y, &z);
+  }
+}
+
 void ScriptEngine::setFieldFloat(const char* uuid,
                                  const char* className,
                                  const char* fieldName,
@@ -227,5 +246,16 @@ void ScriptEngine::setFieldBool(const char* uuid,
   if (m_setFieldBool)
   {
     m_setFieldBool(uuid, className, fieldName, value);
+  }
+}
+
+void ScriptEngine::setFieldVector3(const char* uuid,
+                                   const char* className,
+                                   const char* fieldName,
+                                   const float x, const float y, const float z) const
+{
+  if (m_setFieldVector3)
+  {
+    m_setFieldVector3(uuid, className, fieldName, x, y, z);
   }
 }

@@ -62,6 +62,20 @@ void registerScriptEditor(ComponentEditor& componentEditor)
             edited = true;
           }
         }
+        else if (type == "vector3")
+        {
+          const auto& value = field.at("value");
+          float vec[3] = {
+            value.is_array() && value.size() == 3 ? value.at(0).get<float>() : 0.0f,
+            value.is_array() && value.size() == 3 ? value.at(1).get<float>() : 0.0f,
+            value.is_array() && value.size() == 3 ? value.at(2).get<float>() : 0.0f
+          };
+          if (ImGui::DragFloat3(name.c_str(), vec, 0.1f))
+          {
+            field["value"] = { vec[0], vec[1], vec[2] };
+            edited = true;
+          }
+        }
         else
         {
           ImGui::LabelText(name.c_str(), "%s", field.at("value").is_string()

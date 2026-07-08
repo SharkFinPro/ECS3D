@@ -9,11 +9,13 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <PhysicsSystem.h>
 #include <CollisionSystem.h>
 #include <ScriptSystem.h>
 #include <bindings/InputState.h>
+#include <bindings/BindingContext.h>
 #include <NetServer.h>
 #include <ManagedHost.h>
 #include <nlohmann/json.hpp>
@@ -144,6 +146,10 @@ void ServerApp::run()
     // this guard the unbounded loop would flood every client with deltas and stall their drain loops.
     if (ticked)
     {
+      // Replicate any runtime spawn/destroy the tick's scripts requested before the delta, so a client
+      // has the object (or has dropped it) by the time the delta for this tick references it.
+      broadcastStructuralChanges();
+
       broadcastStateDelta();
     }
 
@@ -564,6 +570,32 @@ void ServerApp::broadcastStateDelta() const
   net::Message message(net::MessageType::stateDelta);
   replication::packStateDelta(message, *scene->getObjectManager());
   m_netServer->broadcast(message);
+}
+
+void ServerApp::broadcastStructuralChanges() const
+{
+  // The spawn/destroy bindings buffered what the scripts did on BindingContext (scripting can't reach the
+  // net layer). Broadcast spawns before destroys, then remove the marked objects from the authoritative
+  // scene. A spawned object is still live here, so its packed blob carries current transform/components.
+  const auto spawned = BindingContext::takeSpawned();
+  for (const auto& object : spawned)
+  {
+    m_netServer->broadcast(replication::buildObjectSpawned(*object));
+  }
+
+  const auto destroyed = BindingContext::takeDestroyed();
+  for (const auto& uuid : destroyed)
+  {
+    m_netServer->broadcast(replication::buildObjectDestroyed(uuid));
+  }
+
+  if (!destroyed.empty())
+  {
+    if (const auto scene = m_sceneManager->getCurrentScene())
+    {
+      scene->getObjectManager()->deleteObjectsMarkedForDeletion();
+    }
+  }
 }
 
 void ServerApp::logMessage(const std::string& level, const std::string& message)

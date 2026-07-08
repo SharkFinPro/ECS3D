@@ -79,6 +79,10 @@ private:
   void handleStateDelta(const net::Message& message) const;
 
   void handleEditComponent(const net::Message& message) const;
+
+  void handleObjectSpawned(const net::Message& message) const;
+
+  void handleObjectDestroyed(const net::Message& message) const;
 };
 
 

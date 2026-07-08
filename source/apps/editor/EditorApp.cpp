@@ -349,6 +349,14 @@ void EditorApp::applyMessage(const net::Message& message)
       handleEditComponent(message);
       break;
 
+    case net::MessageType::objectSpawned:
+      handleObjectSpawned(message);
+      break;
+
+    case net::MessageType::objectDestroyed:
+      handleObjectDestroyed(message);
+      break;
+
     case net::MessageType::editStatus:
       handleEditStatus(message);
       break;
@@ -386,6 +394,24 @@ void EditorApp::handleEditComponent(const net::Message& message) const
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     replication::applyComponentEdit(*scene->getObjectManager(), message);
+  }
+}
+
+void EditorApp::handleObjectSpawned(const net::Message& message) const
+{
+  // A script spawned an object at runtime; splice the packed object into the replicated scene.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    replication::applyObjectSpawned(*scene->getObjectManager(), message);
+  }
+}
+
+void EditorApp::handleObjectDestroyed(const net::Message& message) const
+{
+  // A script destroyed an object at runtime; drop it from the replicated scene.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    replication::applyObjectDestroyed(*scene->getObjectManager(), message);
   }
 }
 

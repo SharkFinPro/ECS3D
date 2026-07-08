@@ -10,6 +10,7 @@ public unsafe struct RigidBodyBindings
     public delegate* unmanaged<IntPtr, float, float, float, float, float, float, void> applyForce;
     public delegate* unmanaged<IntPtr, float, float, float, void> setVelocity;
     public delegate* unmanaged<IntPtr, bool> isFalling;
+    public delegate* unmanaged<IntPtr, bool> has;
 }
 
 public unsafe class RigidBody

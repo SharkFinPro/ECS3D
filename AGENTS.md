@@ -33,7 +33,7 @@
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
 | `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree + inspector), `AssetBrowserPanel`, `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess` (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
-| `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils; `InputState`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
+| `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
 | `source/libs/clrHost/` | `ECS3DClrHost` — `ManagedHost` boots CoreCLR and hands out managed statics as native fn ptrs. Owns the CMake helpers (`cmake/ECS3DManaged.cmake`, `FindDotnet.cmake`, `loadCS.cmake`). |
 | `source/apps/` | The executables. `apps/CMakeLists.txt` orders them (server first — client/editor depend on it). |
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
@@ -89,6 +89,10 @@ rebuilds from it, atomically (a malformed packet leaves the current project inta
 goes as a compact binary **stateDelta** (uuid + local transform per object; `data/Replication.{h,cpp}`).
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`) that only a connection authorized as `Role::editor` on an `--edit` server may send.
+Runtime structural changes from a *script* (spawn/destroy) take a third path: lightweight
+`objectSpawned` (one packed `Object`) / `objectDestroyed` (a uuid) messages the client splices into/out of
+its scene incrementally — kept off the full-snapshot path so frequent spawning stays cheap. Build/apply
+live in `data/Replication.{h,cpp}`; a late joiner still gets the objects via the normal join snapshot.
 
 **Transport / CLR.** `Protocol.h` defines the format; `NetServer`/`NetClient` own it in C++ and hand
 `ECS3DNetTransport` (C#) opaque `(type byte, payload)` pairs. `ManagedHost` boots CoreCLR and resolves
@@ -97,11 +101,18 @@ thread-safe `MessageQueue` and drained by the app loop. The transport backend (T
 selected by a single field in `Transport.cs`.
 
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
-`bindings/` expose Transform/RigidBody/InputUtils to C# via fn-ptr structs. The headless server has no
-GLFW window, so input is networked: clients send `inputState`, the server writes it into the global
-`InputState`, and `InputUtilsBindings` reads it back for scripts. Forces requested from a script are
-buffered on the `RigidBody` data (pending-force queue) and drained by `PhysicsSystem`, keeping
-`scripting` independent of `sim`.
+`bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is
+mirrored by a C# `[StructLayout(Sequential)]` struct and registered through `Bridge` (add new fields at
+the **end** of both to keep the layout matched). `BindingContext` is the bridge from the static, C-ABI
+bindings back to the server's live scene: `ScriptSystem` points it at the current `ObjectManager` each
+tick. The headless server has no GLFW window, so input is networked: clients send `inputState`, the
+server writes it into the global `InputState`, and `InputUtilsBindings` reads it back for scripts. Forces
+requested from a script are buffered on the `RigidBody` data (pending-force queue) and drained by
+`PhysicsSystem`, keeping `scripting` independent of `sim`. Two conventions worth inheriting: (1) reaching
+another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t)` → false when
+absent/destroyed; never throws in the tick loop) — future component wrappers follow this; (2) a binding
+that mutates scene structure can't touch the net layer, so it **buffers the change on `BindingContext`**
+and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above).
 
 ## Development Principles
 

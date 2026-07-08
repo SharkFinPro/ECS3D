@@ -97,6 +97,11 @@ private:
   void broadcastSceneStatus() const;
 
   void broadcastStateDelta() const;
+
+  // Drain the spawn/destroy a script requested this tick (buffered on BindingContext): broadcast an
+  // objectSpawned/objectDestroyed per change, then actually delete the marked objects. Runs after the
+  // tick's scripts, before the state delta.
+  void broadcastStructuralChanges() const;
 };
 
 

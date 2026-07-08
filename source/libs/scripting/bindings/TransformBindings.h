@@ -11,6 +11,7 @@ struct TransformBindings
   void(*move)(const char* uuid, float x, float y, float z);
   void(*start)(const char* uuid);
   void(*stop)(const char* uuid);
+  bool(*has)(const char* uuid);
 };
 
 class TransformBindingsProvider {
@@ -30,6 +31,9 @@ private:
 
   static void bindStart(const char* uuid);
   static void bindStop(const char* uuid);
+
+  // Whether the object identified by uuid currently has a Transform (backs World.tryGetTransform).
+  static bool bindHas(const char* uuid);
 };
 
 

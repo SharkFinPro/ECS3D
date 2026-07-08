@@ -15,6 +15,7 @@ public unsafe struct TransformBindings
     public delegate* unmanaged<IntPtr, float, float, float, void> move;
     public delegate* unmanaged<IntPtr, void> start;
     public delegate* unmanaged<IntPtr, void> stop;
+    public delegate* unmanaged<IntPtr, bool> has;
 }
 
 public unsafe class Transform

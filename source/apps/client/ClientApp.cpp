@@ -186,6 +186,14 @@ void ClientApp::applyMessage(const net::Message& message) const
       handleEditComponent(message);
       break;
 
+    case net::MessageType::objectSpawned:
+      handleObjectSpawned(message);
+      break;
+
+    case net::MessageType::objectDestroyed:
+      handleObjectDestroyed(message);
+      break;
+
     default: break;
   }
 }
@@ -217,5 +225,23 @@ void ClientApp::handleEditComponent(const net::Message& message) const
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     replication::applyComponentEdit(*scene->getObjectManager(), message);
+  }
+}
+
+void ClientApp::handleObjectSpawned(const net::Message& message) const
+{
+  // A script spawned an object at runtime; splice the packed object into the replicated scene.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    replication::applyObjectSpawned(*scene->getObjectManager(), message);
+  }
+}
+
+void ClientApp::handleObjectDestroyed(const net::Message& message) const
+{
+  // A script destroyed an object at runtime; drop it from the replicated scene.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    replication::applyObjectDestroyed(*scene->getObjectManager(), message);
   }
 }

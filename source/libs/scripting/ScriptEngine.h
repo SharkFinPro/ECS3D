@@ -54,6 +54,11 @@ public:
                                   const char* className,
                                   const char* fieldName) const;
 
+  void getFieldVector3(const char* uuid,
+                       const char* className,
+                       const char* fieldName,
+                       float& x, float& y, float& z) const;
+
   void setFieldFloat(const char* uuid,
                      const char* className,
                      const char* fieldName,
@@ -68,6 +73,11 @@ public:
                     const char* className,
                     const char* fieldName,
                     bool value) const;
+
+  void setFieldVector3(const char* uuid,
+                       const char* className,
+                       const char* fieldName,
+                       float x, float y, float z) const;
 
   [[nodiscard]] bool isInitialized() const { return m_initialized; }
 
@@ -87,10 +97,12 @@ private:
   using GetFieldFloatFn = float(*)(const char*, const char*, const char*);
   using GetFieldIntFn = int(*)(const char*, const char*, const char*);
   using GetFieldBoolFn = bool(*)(const char*, const char*, const char*);
+  using GetFieldVector3Fn = void(*)(const char*, const char*, const char*, float*, float*, float*);
 
   using SetFieldFloatFn = void(*)(const char*, const char*, const char*, float);
   using SetFieldIntFn = void(*)(const char*, const char*, const char*, int);
   using SetFieldBoolFn = void(*)(const char*, const char*, const char*, bool);
+  using SetFieldVector3Fn = void(*)(const char*, const char*, const char*, float, float, float);
 
   std::shared_ptr<ManagedHost> m_host;
   bool m_initialized = false;
@@ -109,10 +121,12 @@ private:
   GetFieldFloatFn m_getFieldFloat = nullptr;
   GetFieldIntFn m_getFieldInt = nullptr;
   GetFieldBoolFn m_getFieldBool = nullptr;
+  GetFieldVector3Fn m_getFieldVector3 = nullptr;
 
   SetFieldFloatFn m_setFieldFloat = nullptr;
   SetFieldIntFn m_setFieldInt = nullptr;
   SetFieldBoolFn m_setFieldBool = nullptr;
+  SetFieldVector3Fn m_setFieldVector3 = nullptr;
 
   void registerBindings(const std::string& assemblyPath,
                         const std::string& typeName) const;

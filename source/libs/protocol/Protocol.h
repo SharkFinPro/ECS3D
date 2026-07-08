@@ -29,7 +29,9 @@ enum class MessageType : uint8_t {
   loadProject,   // editor -> server: replace the project with this serialized blob; server re-snapshots
   addAsset,      // editor -> server: register a new asset (model/texture/script/scene); server re-snapshots
   editStatus,    // server -> client: whether this server accepts edits ({ editable: bool }); sent on join
-  sceneStatus    // server -> client: current scene lifecycle state ({ status: "running"|"paused"|"stopped" })
+  sceneStatus,   // server -> client: current scene lifecycle state ({ status: "running"|"paused"|"stopped" })
+  objectSpawned, // server -> client: one object created at runtime (Object::pack); spliced into the scene
+  objectDestroyed // server -> client: uuid of an object removed at runtime; the client drops it from the scene
   // editComponent/sceneEdit/sceneControl/loadProject/addAsset are the editor's mutation path; the server
   // only honors them from a connection it authorized as Role::editor at the transport handshake (which
   // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An
