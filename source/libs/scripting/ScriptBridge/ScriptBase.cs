@@ -11,10 +11,16 @@ public abstract class ScriptBase
 
     protected Transform transform { get; private set; } = null!;
 
+    // This script's own player's input, resolved through its object's PlayerController. Reads as "nothing
+    // pressed" if the object has no PlayerController. Prefer this over the global InputUtils, which reads
+    // every player's input aggregated together.
+    protected PlayerInput input { get; private set; } = null!;
+
     internal void initComponents()
     {
         rigidBody = new RigidBody(EntityId);
         transform = new Transform(EntityId);
+        input = new PlayerInput(EntityId);
     }
 
     // Reach another script by type. Returns null if the object has no script of type T (or no such

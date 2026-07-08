@@ -1,22 +1,76 @@
 #include "InputUtilsBindings.h"
 #include "InputState.h"
+#include "BindingContext.h"
+#include <objects/Object.h>
+#include <objects/ObjectManager.h>
+#include <objects/components/Component.h>
+#include <objects/components/PlayerController.h>
+#include <optional>
+#include <string>
+
+namespace {
+  // Resolve an object's player slot from its PlayerController. Returns nullopt when the object doesn't
+  // exist or carries no PlayerController (so per-player input reads as "nothing pressed").
+  std::optional<int32_t> playerSlotOf(const char* uuid)
+  {
+    const auto objectManager = BindingContext::getObjectManager();
+    if (!objectManager)
+    {
+      return std::nullopt;
+    }
+
+    const auto parsed = uuids::uuid::from_string(std::string(uuid));
+    if (!parsed.has_value())
+    {
+      return std::nullopt;
+    }
+
+    const auto object = objectManager->getObjectByUUID(parsed.value());
+    if (!object)
+    {
+      return std::nullopt;
+    }
+
+    const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController);
+    if (!playerController)
+    {
+      return std::nullopt;
+    }
+
+    return playerController->getPlayerSlot();
+  }
+}
 
 InputUtilsBindings InputUtilsBindingsProvider::getBindings()
 {
   return InputUtilsBindings {
     .keyIsPressed = &bindKeyIsPressed,
-    .windowIsFocused = &bindWindowIsFocused
+    .windowIsFocused = &bindWindowIsFocused,
+    .keyIsPressedForObject = &bindKeyIsPressedForObject,
+    .windowIsFocusedForObject = &bindWindowIsFocusedForObject
   };
 }
 
 bool InputUtilsBindingsProvider::bindKeyIsPressed(const int key)
 {
-  // Player-agnostic for now: a key reads as pressed if any connection presses it. Phase 3.2 gives a
-  // script its own player identity and switches this to the per-connection query.
+  // Player-agnostic: a key reads as pressed if any player presses it. Scripts that want a specific
+  // player's input read through ScriptBase.input (the *ForObject path below).
   return InputState::isAnyKeyPressed(key);
 }
 
 bool InputUtilsBindingsProvider::bindWindowIsFocused()
 {
   return InputState::isAnyFocused();
+}
+
+bool InputUtilsBindingsProvider::bindKeyIsPressedForObject(const char* uuid, const int key)
+{
+  const auto slot = playerSlotOf(uuid);
+  return slot.has_value() && InputState::isKeyPressed(slot.value(), key);
+}
+
+bool InputUtilsBindingsProvider::bindWindowIsFocusedForObject(const char* uuid)
+{
+  const auto slot = playerSlotOf(uuid);
+  return slot.has_value() && InputState::isFocused(slot.value());
 }

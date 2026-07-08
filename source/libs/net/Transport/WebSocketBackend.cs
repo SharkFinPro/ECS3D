@@ -165,6 +165,7 @@ internal sealed class WebSocketBackend : TransportBackend
     WebSocket? ws = null;
     CancellationTokenSource? cts = null;
     Connection? conn = null;
+    var connId = 0;
 
     try
     {
@@ -191,7 +192,7 @@ internal sealed class WebSocketBackend : TransportBackend
         return;
       }
 
-      var connId = Interlocked.Increment(ref _nextConnId);
+      connId = Interlocked.Increment(ref _nextConnId);
 
       conn = new Connection(ws, cts);
       lock (_clientsLock)
@@ -222,6 +223,10 @@ internal sealed class WebSocketBackend : TransportBackend
         {
           _connections.Remove(conn);
         }
+
+        // Release any player slot the server bound to this connection (only admitted connections, which
+        // are the ones that got a connId, reach here with conn != null).
+        Transport.DeliverServerDisconnect(connId);
       }
 
       if (ws != null)

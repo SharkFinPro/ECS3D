@@ -1,34 +1,39 @@
 #include "InputState.h"
 
-std::unordered_map<int32_t, InputState::ConnectionInput> InputState::s_connections;
+std::unordered_map<int32_t, InputState::SlotInput> InputState::s_slots;
 
-void InputState::setKeysPressed(const int32_t connectionId, const std::vector<int>& keys)
+void InputState::setKeysPressed(const int32_t playerSlot, const std::vector<int>& keys)
 {
-  auto& slot = s_connections[connectionId];
+  auto& slot = s_slots[playerSlot];
   slot.pressedKeys.clear();
   slot.pressedKeys.insert(keys.begin(), keys.end());
 }
 
-void InputState::setFocused(const int32_t connectionId, const bool focused)
+void InputState::setFocused(const int32_t playerSlot, const bool focused)
 {
-  s_connections[connectionId].focused = focused;
+  s_slots[playerSlot].focused = focused;
 }
 
-bool InputState::isKeyPressed(const int32_t connectionId, const int key)
+void InputState::removeSlot(const int32_t playerSlot)
 {
-  const auto it = s_connections.find(connectionId);
-  return it != s_connections.end() && it->second.pressedKeys.contains(key);
+  s_slots.erase(playerSlot);
 }
 
-bool InputState::isFocused(const int32_t connectionId)
+bool InputState::isKeyPressed(const int32_t playerSlot, const int key)
 {
-  const auto it = s_connections.find(connectionId);
-  return it != s_connections.end() && it->second.focused;
+  const auto it = s_slots.find(playerSlot);
+  return it != s_slots.end() && it->second.pressedKeys.contains(key);
+}
+
+bool InputState::isFocused(const int32_t playerSlot)
+{
+  const auto it = s_slots.find(playerSlot);
+  return it != s_slots.end() && it->second.focused;
 }
 
 bool InputState::isAnyKeyPressed(const int key)
 {
-  for (const auto& [id, input] : s_connections)
+  for (const auto& [slot, input] : s_slots)
   {
     if (input.pressedKeys.contains(key))
     {
@@ -41,7 +46,7 @@ bool InputState::isAnyKeyPressed(const int key)
 
 bool InputState::isAnyFocused()
 {
-  for (const auto& [id, input] : s_connections)
+  for (const auto& [slot, input] : s_slots)
   {
     if (input.focused)
     {

@@ -24,6 +24,8 @@ add_library(${PROJECT_NAME}
   components/ColliderEditor.h
   components/ScriptEditor.cpp
   components/ScriptEditor.h
+  components/PlayerControllerEditor.cpp
+  components/PlayerControllerEditor.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

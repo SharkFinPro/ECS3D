@@ -132,6 +132,13 @@ void ServerApp::run()
       }
     }
 
+    // Release the player slot of any connection that dropped, so a departed player's input doesn't linger
+    // and its slot is free for the next joiner.
+    for (const auto connId : m_netServer->takeDisconnected())
+    {
+      handleDisconnect(connId);
+    }
+
     const auto now = std::chrono::steady_clock::now();
     const float dt = std::chrono::duration<float>(now - m_previousTime).count();
     m_previousTime = now;
@@ -248,7 +255,7 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
   switch (message.getType())
   {
     case net::MessageType::join:
-      handleJoin(message);
+      handleJoin(message, senderId);
       break;
 
     case net::MessageType::editComponent:
@@ -279,14 +286,60 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
   }
 }
 
-void ServerApp::handleJoin(const net::Message& message)
+void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 {
-  // A client joined: tell it whether this server is editable, then send the full project/scene as a
-  // Snapshot. Record that a connection has been seen so an ephemeral server (exitWhenEmpty) can
-  // later exit when the last one drops.
+  // A client joined: bind it to a player slot (so its input routes to that player), tell it whether this
+  // server is editable, then send the full project/scene as a Snapshot. Record that a connection has been
+  // seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
   m_hasConnected = true;
+  assignPlayerSlot(senderId);
   broadcastEditStatus();
   broadcastSnapshot();
+}
+
+int32_t ServerApp::assignPlayerSlot(const int32_t connId)
+{
+  if (const auto it = m_connectionSlots.find(connId); it != m_connectionSlots.end())
+  {
+    return it->second;
+  }
+
+  // Lowest free slot: scan upward until a slot no connection currently holds is found.
+  int32_t slot = 0;
+  const auto slotTaken = [this](const int32_t candidate) {
+    for (const auto& [conn, taken] : m_connectionSlots)
+    {
+      if (taken == candidate)
+      {
+        return true;
+      }
+    }
+    return false;
+  };
+  while (slotTaken(slot))
+  {
+    ++slot;
+  }
+
+  m_connectionSlots.emplace(connId, slot);
+  logMessage("Info", "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
+  return slot;
+}
+
+void ServerApp::handleDisconnect(const int32_t connId)
+{
+  const auto it = m_connectionSlots.find(connId);
+  if (it == m_connectionSlots.end())
+  {
+    return;
+  }
+
+  const int32_t slot = it->second;
+  m_connectionSlots.erase(it);
+  InputState::removeSlot(slot);
+
+  logMessage("Info", "Connection " + std::to_string(connId) + " dropped; freed player slot "
+    + std::to_string(slot) + ".");
 }
 
 void ServerApp::handleEditComponent(const net::Message& message) const
@@ -413,11 +466,15 @@ void ServerApp::handleAddAsset(const net::Message& message) const
 
 void ServerApp::handleInputState(const net::Message& message, const int32_t senderId)
 {
-  // The client's captured keyboard state for this frame; the scripts' InputUtils bindings read it. It
-  // lands in this connection's own slot (keyed by senderId) so two players don't clobber each other.
+  // The client's captured keyboard state for this frame; the scripts read it through their player's slot.
+  // It lands in this connection's player slot so two players don't clobber each other. assignPlayerSlot is
+  // idempotent — normally the slot already exists from the join, but bind on demand in case input somehow
+  // arrives first.
+  const int32_t slot = assignPlayerSlot(senderId);
+
   net::MessageReader reader(message);
   const auto focused = reader.read<bool>();
-  InputState::setFocused(senderId, focused);
+  InputState::setFocused(slot, focused);
 
   const auto numKeys = reader.read<size_t>();
   std::vector<int> keysPressed(numKeys);
@@ -426,7 +483,7 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
     key = reader.read<int>();
   }
 
-  InputState::setKeysPressed(senderId, keysPressed);
+  InputState::setKeysPressed(slot, keysPressed);
 }
 
 void ServerApp::handleSceneControl(const net::Message& message) const

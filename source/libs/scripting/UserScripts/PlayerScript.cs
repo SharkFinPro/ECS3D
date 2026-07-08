@@ -60,18 +60,18 @@ public class PlayerScript : ScriptBase
 
     private void handleInput()
     {
-        if (!InputUtils.windowIsFocused())
+        if (!input.windowIsFocused())
         {
             return;
         }
 
         float xForce = 0;
-        if (InputUtils.keyIsPressed(Key.LEFT))
+        if (input.keyIsPressed(Key.LEFT))
         {
             xForce += m_speed;
         }
 
-        if (InputUtils.keyIsPressed(Key.RIGHT))
+        if (input.keyIsPressed(Key.RIGHT))
         {
             xForce -= m_speed;
         }
@@ -82,12 +82,12 @@ public class PlayerScript : ScriptBase
         }
 
         float zForce = 0;
-        if (InputUtils.keyIsPressed(Key.UP))
+        if (input.keyIsPressed(Key.UP))
         {
             zForce += m_speed;
         }
 
-        if (InputUtils.keyIsPressed(Key.DOWN))
+        if (input.keyIsPressed(Key.DOWN))
         {
             zForce -= m_speed;
         }
@@ -97,7 +97,7 @@ public class PlayerScript : ScriptBase
             m_appliedForce.Z = zForce;
         }
 
-        if (!m_wasJumping && !rigidBody.isFalling() && InputUtils.keyIsPressed(Key.X))
+        if (!m_wasJumping && !rigidBody.isFalling() && input.keyIsPressed(Key.X))
         {
             m_appliedForce.Y = m_jumpForce;
             m_wasJumping = true;

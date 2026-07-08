@@ -4,7 +4,9 @@
 #include "MessageQueue.h"
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <vector>
 
 class ManagedHost;
 
@@ -35,10 +37,21 @@ public:
   // per-connection id the transport assigns each client.
   void enqueue(int32_t connId, uint8_t type, const uint8_t* data, int32_t len);
 
+  // Called from the C# socket thread when a connection drops; the connId is buffered for the tick thread
+  // to drain via takeDisconnected() so it can release the player slot bound to that connection.
+  void enqueueDisconnect(int32_t connId);
+
+  // Drain the connection ids that have dropped since the last call (clears the buffer).
+  [[nodiscard]] std::vector<int32_t> takeDisconnected();
+
 private:
   std::shared_ptr<ManagedHost> m_host;
 
   MessageQueue m_inbox;
+
+  // Dropped connection ids pushed from the socket threads, drained on the tick thread.
+  std::mutex m_disconnectMutex;
+  std::vector<int32_t> m_disconnected;
 
   bool m_editMode = false;
   bool m_started = false;
@@ -49,6 +62,7 @@ private:
   void* m_broadcastFn = nullptr;
   void* m_connectionCountFn = nullptr;
   void* m_setCallbackFn = nullptr;
+  void* m_setDisconnectCallbackFn = nullptr;
 };
 
 }

@@ -29,6 +29,8 @@ add_library(${PROJECT_NAME}
   objects/components/RigidBody.h
   objects/components/Script.cpp
   objects/components/Script.h
+  objects/components/PlayerController.cpp
+  objects/components/PlayerController.h
   objects/components/ModelRenderer.cpp
   objects/components/ModelRenderer.h
   objects/components/LightRenderer.cpp

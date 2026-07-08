@@ -170,6 +170,10 @@ internal sealed class TcpBackend : TransportBackend
     }
 
     try { client.Close(); } catch { /* ignore */ }
+
+    // Let the server release any player slot bound to this connection. A no-op on the C++ side if the
+    // connection never joined (e.g. a rejected handshake), since it holds no slot for it.
+    Transport.DeliverServerDisconnect(connId);
   }
 
   public override byte ClientConnect(string host, int port, byte role, string token)

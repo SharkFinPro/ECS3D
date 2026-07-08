@@ -22,6 +22,10 @@ public static unsafe class Transport
   private static delegate* unmanaged<int, byte, byte*, int, void> _serverReceive;
   private static delegate* unmanaged<byte, byte*, int, void> _clientReceive;
 
+  // Fired when a server-side connection drops, carrying its connection id, so the C++ side can release
+  // the player slot bound to it. Optional — the C++ side may never register one.
+  private static delegate* unmanaged<int, void> _serverDisconnect;
+
   private static readonly TransportBackend _backend = CreateBackend();
 
   private static TransportBackend CreateBackend()
@@ -38,6 +42,12 @@ public static unsafe class Transport
   public static void serverSetReceiveCallback(IntPtr fn)
   {
     _serverReceive = (delegate* unmanaged<int, byte, byte*, int, void>)fn;
+  }
+
+  [UnmanagedCallersOnly]
+  public static void serverSetDisconnectCallback(IntPtr fn)
+  {
+    _serverDisconnect = (delegate* unmanaged<int, void>)fn;
   }
 
   [UnmanagedCallersOnly]
@@ -111,6 +121,15 @@ public static unsafe class Transport
     fixed (byte* p = payload)
     {
       callback(connId, type, p, payload.Length);
+    }
+  }
+
+  internal static void DeliverServerDisconnect(int connId)
+  {
+    var callback = _serverDisconnect;
+    if (callback != null)
+    {
+      callback(connId);
     }
   }
 
