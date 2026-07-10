@@ -19,17 +19,22 @@ class ComponentEditor;
 // component of the selected object through the ComponentEditor and reports edits back:
 //   - a component VALUE change -> EditCallback(objectUUID, component)
 //   - a STRUCTURAL change (add/remove object or component) -> SceneEditCallback(<built edit json>)
-// The EditorApp turns both into network messages for the authoritative server.
+//   - a new prefab asset ("Save as Prefab") -> AddAssetCallback(<built addAsset json>)
+// The EditorApp turns all three into network messages for the authoritative server.
 class ObjectGUIManager {
 public:
   using EditCallback = std::function<void(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)>;
   using SceneEditCallback = std::function<void(const nlohmann::json& edit)>;
+  // Same blob (and same EditorApp handler) as AssetBrowserPanel::AddAssetCallback.
+  using AddAssetCallback = std::function<void(const nlohmann::json& addAsset)>;
 
   explicit ObjectGUIManager(std::shared_ptr<ComponentEditor> componentEditor);
 
   void setEditCallback(EditCallback callback);
 
   void setSceneEditCallback(SceneEditCallback callback);
+
+  void setAddAssetCallback(AddAssetCallback callback);
 
   void setAssetRegistry(const AssetRegistry* registry);
 
@@ -52,6 +57,7 @@ private:
 
   EditCallback m_editCallback;
   SceneEditCallback m_sceneEditCallback;
+  AddAssetCallback m_addAssetCallback;
 
   const AssetRegistry* m_assetRegistry = nullptr;
 
@@ -85,6 +91,10 @@ private:
   void displayDeleteConfirmationModal(const ObjectManager* objectManager);
 
   void displayAddComponent(const std::shared_ptr<Object>& object);
+
+  // Write the object's serialized blob to assets/prefabs/<Name>.prefab and register it as a Prefab asset.
+  // Re-saving under the same name updates the file in place and keeps the existing asset record.
+  void saveAsPrefab(const std::shared_ptr<Object>& object) const;
 
   void displayScriptDragDropArea(float dropZoneStartY, const std::shared_ptr<Object>& object) const;
 

@@ -4,16 +4,50 @@
 #include "GuiComponents.h"
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
+#include <assets/PrefabLoader.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
+#include <algorithm>
 #include <array>
+#include <filesystem>
+#include <random>
 #include <string>
 #include <utility>
 
 namespace {
+  // A fresh asset uuid for a saved prefab. (AssetBrowserPanel has the same one-liner for the assets it
+  // creates; asset uuids are unrelated to the scene's object uuids, so ObjectManager's generator is not
+  // the right source here.)
+  [[nodiscard]] std::string newAssetUUID()
+  {
+    std::mt19937 rng{ std::random_device{}() };
+    uuids::uuid_random_generator generator{ rng };
+    return uuids::to_string(generator());
+  }
+
+  // Object names are free-form; a prefab name becomes a file name.
+  [[nodiscard]] std::string sanitizeFileName(const std::string& name)
+  {
+    std::string result;
+    for (const char c : name)
+    {
+      const bool illegal = c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"'
+                        || c == '<' || c == '>' || c == '|' || c == '\0';
+      result += illegal ? '_' : c;
+    }
+
+    // Trim trailing spaces/dots — Windows rejects file names ending in either.
+    while (!result.empty() && (result.back() == ' ' || result.back() == '.'))
+    {
+      result.pop_back();
+    }
+
+    return result.empty() ? "Prefab" : result;
+  }
+
   // The components the "Add Component" menu can attach.
   // checkType is the ComponentType whose presence on the object hides this entry.
   // Transform is omitted (every object already has one); scripts attach via drag & drop only.
@@ -98,6 +132,11 @@ void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
   m_sceneEditCallback = std::move(callback);
 }
 
+void ObjectGUIManager::setAddAssetCallback(AddAssetCallback callback)
+{
+  m_addAssetCallback = std::move(callback);
+}
+
 void ObjectGUIManager::setSelectedObject(const std::optional<uuids::uuid>& objectUUID)
 {
   m_selectedObject = objectUUID;
@@ -160,7 +199,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
       displayObjectTree(object);
     }
 
-    // Drop an object onto the empty area below the tree to reparent it to the root.
+    // The empty area below the tree is the scene root: drop an object there to reparent it to the root,
+    // or a prefab from the asset browser to instantiate it.
     ImGui::Dummy(ImGui::GetContentRegionAvail());
     if (m_editable && ImGui::BeginDragDropTarget())
     {
@@ -170,6 +210,16 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
         if (const auto dragged = uuids::uuid::from_string(uuidStr); dragged.has_value() && m_sceneEditCallback)
         {
           m_sceneEditCallback(replication::buildReparentObject(dragged.value(), nullptr));
+        }
+      }
+
+      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(assetDragDrop::prefab))
+      {
+        const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+        if (const auto prefab = uuids::uuid::from_string(uuidStr); prefab.has_value() && m_sceneEditCallback)
+        {
+          // The server resolves the prefab uuid to its body on disk, instantiates, and re-snapshots.
+          m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value()));
         }
       }
 
@@ -290,6 +340,11 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     if (ImGui::MenuItem("Duplicate") && m_sceneEditCallback)
     {
       m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID()));
+    }
+
+    if (ImGui::MenuItem("Save as Prefab"))
+    {
+      saveAsPrefab(object);
     }
 
     if (ImGui::MenuItem("Delete"))
@@ -588,6 +643,33 @@ void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object
 
   ImGui::PopStyleVar(3);
   ImGui::PopStyleColor(2);
+}
+
+void ObjectGUIManager::saveAsPrefab(const std::shared_ptr<Object>& object) const
+{
+  if (!m_addAssetCallback)
+  {
+    return;
+  }
+
+  // The prefab body is the object's own serialize() blob, written beside the project's other assets. The
+  // path (not the body) is what the registry — and therefore the snapshot — carries; the authoritative
+  // server reads the file when it instantiates.
+  const auto path = (std::filesystem::path(prefabs::directory)
+    / (sanitizeFileName(object->getName()) + prefabs::extension)).generic_string();
+
+  if (!prefabs::saveBody(path, object->serialize()))
+  {
+    return;
+  }
+
+  // Re-saving under the same name overwrites the file but keeps the existing record (registerAsset is
+  // keyed by path), so the prefab is updated in place rather than duplicated.
+  m_addAssetCallback({
+    { "assetType", "prefab" },
+    { "uuid", newAssetUUID() },
+    { "path", path }
+  });
 }
 
 void ObjectGUIManager::displayScriptDragDropArea(const float dropZoneStartY,

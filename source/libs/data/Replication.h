@@ -61,7 +61,14 @@ void applyComponentEdit(const ObjectManager& objectManager, const net::Message& 
 [[nodiscard]] nlohmann::json buildAddScript(const uuids::uuid& objectUUID,
                                             const std::string& className);
 
-void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit);
+// Instantiate a prefab asset into the scene at the transform stored in its body. Unlike every other op
+// this one names an asset rather than an existing object, so applySceneEdit needs the AssetRegistry to
+// resolve the prefab's uuid to its file (see PrefabLoader.h) — pass it whenever prefab ops are possible
+// (the authoritative server always does).
+[[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID);
+
+void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                    const AssetRegistry* assetRegistry = nullptr);
 
 // Runtime spawn/destroy replication. Unlike the editor's structural edits (which re-snapshot), a script
 // spawning or destroying an object at runtime replicates incrementally: the server broadcasts one packed

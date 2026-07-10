@@ -1,6 +1,7 @@
 #include "Replication.h"
 #include "ComponentRegistry.h"
 #include "assets/AssetRegistry.h"
+#include "assets/PrefabLoader.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneAsset.h"
 #include "objects/Object.h"
@@ -255,9 +256,41 @@ nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::u
   return edit;
 }
 
-void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
+nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID)
+{
+  return {
+    { "op", "instantiatePrefab" },
+    { "prefab", uuids::to_string(prefabUUID) }
+  };
+}
+
+void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                    const AssetRegistry* assetRegistry)
 {
   const std::string op = edit.at("op");
+
+  if (op == "instantiatePrefab")
+  {
+    // The only op keyed by an asset rather than an existing object: resolve the prefab's body from disk
+    // and clone it in with fresh uuids. A missing/malformed prefab yields a null body and is skipped.
+    if (!assetRegistry)
+    {
+      return;
+    }
+
+    const auto parsedPrefab = uuids::uuid::from_string(std::string(edit.at("prefab")));
+    if (!parsedPrefab.has_value())
+    {
+      return;
+    }
+
+    if (const auto body = prefabs::loadBody(*assetRegistry, parsedPrefab.value()); body.is_object())
+    {
+      objectManager.instantiate(body);
+    }
+
+    return;
+  }
 
   if (op == "addObject")
   {

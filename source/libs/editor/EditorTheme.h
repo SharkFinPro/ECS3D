@@ -43,6 +43,7 @@ namespace theme {
   inline const ImVec4 modelPurple = v4(167, 139, 250); // #a78bfa
   inline const ImVec4 scriptAmber = v4(230, 179, 90);  // #e6b35a
   inline const ImVec4 sceneGreen  = v4(92, 194, 133);  // #5cc285
+  inline const ImVec4 prefabBlue  = v4(96, 165, 250);  // #60a5fa
 
   inline ImU32 u32(const ImVec4& c) { return ImGui::ColorConvertFloat4ToU32(c); }
 

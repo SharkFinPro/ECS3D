@@ -395,8 +395,9 @@ void ServerApp::handleEditComponent(const net::Message& message) const
 
 void ServerApp::handleSceneEdit(const net::Message& message) const
 {
-  // An editor changed the scene graph (add/remove object or component): apply it, then re-snapshot
-  // so every view rebuilds (structural changes aren't replicated per-op).
+  // An editor changed the scene graph (add/remove object or component, or instantiate a prefab): apply
+  // it, then re-snapshot so every view rebuilds (structural changes aren't replicated per-op). The
+  // registry is passed so the prefab op can resolve its asset uuid to the body on disk.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     const std::string payload(message.bytes().begin(), message.bytes().end());
@@ -404,7 +405,7 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
     const auto json = nlohmann::json::parse(payload, nullptr, false);
     if (!json.is_discarded())
     {
-      replication::applySceneEdit(*scene->getObjectManager(), json);
+      replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
 
       broadcastSnapshot();
     }

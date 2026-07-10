@@ -10,6 +10,7 @@ namespace assetDragDrop {
   inline constexpr const char* model = "asset_model";
   inline constexpr const char* texture = "asset_texture";
   inline constexpr const char* script = "asset_script";
+  inline constexpr const char* prefab = "asset_prefab";
 
   [[nodiscard]] inline const char* payloadId(const AssetType type)
   {
@@ -18,6 +19,7 @@ namespace assetDragDrop {
       case AssetType::Model: return model;
       case AssetType::Texture: return texture;
       case AssetType::Script: return script;
+      case AssetType::Prefab: return prefab;
       default: return nullptr;
     }
   }
