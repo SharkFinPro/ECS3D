@@ -144,8 +144,13 @@ without the `tryGet` ceremony since `ScriptBase` always constructs one for the s
 `RenderSystem::updateCamera` finds the active `Camera` (optionally restricted to one object), builds
 `lookAt(pos, pos + q·direction, worldUp)` — `q` is the object's orientation, so the camera turns as the
 object turns, but `worldUp` (not an orientation-derived up) keeps the horizon level — then disables
-`vke::Camera`'s free-fly and calls `Renderer3D::setCameraParameters`; no active camera re-enables free-fly.
-**The editor never calls `updateCamera`**, so its viewport keeps free-fly for free. **FOV/near/far are
+`vke::Camera`'s free-fly and calls `Renderer3D::setCameraParameters`; no active camera re-enables free-fly
+(`RenderSystem::useFreeFlyCamera`, which also pushes the free-fly pose once on the handover — `render()`
+only pushes it while the scene view is focused, so without that the component camera's last pose lingers).
+The editor's **View** combo (Scene Status) picks what its viewport looks through: its own free-fly camera
+(the default) or any object in the scene carrying a `Camera`, which is how you see a client's view — a
+player camera is labelled with its `PlayerController` slot. A stale choice (object gone, `Camera` removed)
+falls back to free-fly. **FOV/near/far are
 carried and editable but have no visible effect yet** — `vke`'s projection matrix is hardcoded
 (`RenderInfo::getProjectionMatrix`); a fix needs an upstream `VulkanRenderer` change (a projection setter
 alongside `setCameraParameters`), tracked as deliberately deferred in `ROADMAP.md`. A client picks its
@@ -157,7 +162,13 @@ which would have meant touching both backends for one bit of routing. `PlayerScr
 object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
 gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
 movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded
-forward axis.
+forward axis. **The editor must not gate forwarded mouse input on `io.WantCaptureMouse`**: its 3D viewport
+*is* an ImGui window under the dockspace, so that flag is set whenever the cursor is over the scene, and
+gating on it silently swallows the right-drag mouse-look. `EditorApp::sendInput` instead forwards the mouse
+only while the viewport looks through a scene camera (in free-fly the right-drag belongs to the editor's own
+camera, so forwarding it too would turn the player at the same time) **and** `RenderingManager::isSceneFocused()`
+is true — the same signal `vke` gates its free-fly camera on. The keyboard still gates on
+`io.WantCaptureKeyboard`, which only trips for text input, so WASD reaches the game from either view.
 
 ## Development Principles
 
@@ -202,9 +213,9 @@ forward axis.
   render/editor — those invariants keep it headless.
 - Add dependencies only via `source/libs/CMakeLists.txt` `FetchContent`; register new files in the
   owning library's source list.
-- **The C++/CLR/Vulkan stack generally cannot be build-verified in the agent environment** (no MSVC/
-  Vulkan SDK/.NET). State clearly when a change is unverified and needs to be compiled on the user's
-  machine.
+- **Do not build-verify the C++/CLR/Vulkan stack — the developer does that.** Don't invoke `cmake --build`,
+  and never `dotnet build`/`publish` the C# projects directly. State clearly that a change is unverified
+  and needs to be compiled on the developer's machine.
 - Avoid speculative refactors. Keep changes scoped and incremental. Ask about lifetime/ownership,
   threading, and replication semantics rather than assuming.
 - Update this document when your understanding of the project meaningfully improves.
