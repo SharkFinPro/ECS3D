@@ -2,6 +2,7 @@
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
 #include <objects/components/Camera.h>
+#include <glm/vec3.hpp>
 #include <imgui.h>
 #include <algorithm>
 #include <memory>
@@ -21,6 +22,7 @@ void registerCameraEditor(ComponentEditor& componentEditor)
     if (ComponentEditor::displayHeader(component))
     {
       bool active = camera->isActive();
+      glm::vec3 direction = camera->getDirection();
       float fov = camera->getFov();
       float nearPlane = camera->getNearPlane();
       float farPlane = camera->getFarPlane();
@@ -31,6 +33,13 @@ void registerCameraEditor(ComponentEditor& componentEditor)
       if (gc::accentCheckbox("Active", &active))
       {
         camera->setActive(active);
+        edited = true;
+      }
+
+      // The direction the camera looks, relative to the object's rotation. (0,0,-1) = the object's forward.
+      if (gc::xyzGuiBoxed("Direction", &direction.x, &direction.y, &direction.z, 0.01f))
+      {
+        camera->setDirection(direction);
         edited = true;
       }
 

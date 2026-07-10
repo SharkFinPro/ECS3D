@@ -10,6 +10,8 @@
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
+#include <glm/common.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <VulkanEngine/VulkanEngine.h>
@@ -162,12 +164,26 @@ void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCach
       continue;
     }
 
-    // Pose comes from the object's Transform. A zero rotation faces -Z (matching object orientation and
-    // the vke camera's default forward); the quaternion also carries roll into the up vector.
+    // Position comes from the Transform; facing is the Camera's own direction, rotated by the object's
+    // orientation so the camera turns as the object turns. World-up (not an orientation-derived up) keeps
+    // the horizon level and avoids the roll/inversion the euler-quaternion up produced.
     const glm::vec3 position = transform->getPosition();
     const glm::quat orientation(glm::radians(transform->getRotation()));
-    const glm::vec3 forward = orientation * glm::vec3(0.0f, 0.0f, -1.0f);
-    const glm::vec3 up = orientation * glm::vec3(0.0f, 1.0f, 0.0f);
+
+    glm::vec3 forward = orientation * camera->getDirection();
+    if (glm::length(forward) < 1e-6f)
+    {
+      forward = glm::vec3(0.0f, 0.0f, -1.0f); // guard an un-set (zero) direction
+    }
+    forward = glm::normalize(forward);
+
+    // lookAt degenerates when the view direction is parallel to up (looking straight up/down); fall back to
+    // a different reference axis so the matrix stays finite.
+    glm::vec3 up(0.0f, 1.0f, 0.0f);
+    if (glm::abs(glm::dot(forward, up)) > 0.9999f)
+    {
+      up = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
 
     const glm::mat4 viewMatrix = lookAt(position, position + forward, up);
 

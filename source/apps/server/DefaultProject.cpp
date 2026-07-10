@@ -1,6 +1,7 @@
 #include "DefaultProject.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
+#include <glm/geometric.hpp>
 #include <random>
 #include <string>
 #include <uuid.h>
@@ -99,6 +100,18 @@ json playerController(const int slot = 0)
   };
 }
 
+json camera(const glm::vec3& direction = glm::vec3(0, 0, -1))
+{
+  return {
+    { "type", "Camera" },
+    { "direction", vec(direction) },
+    { "fov", 45.0 },
+    { "nearPlane", 0.1 },
+    { "farPlane", 1000.0 },
+    { "active", true }
+  };
+}
+
 json makeObject(const std::string& name, json components, json scripts = json::array())
 {
   return {
@@ -145,14 +158,18 @@ json sphere(const glm::vec3& position, const glm::vec3& scale = glm::vec3(1))
   }));
 }
 
-json player(const glm::vec3& position, const int slot = 0)
+json player(const glm::vec3& position, const int slot = 0,
+            const glm::vec3& cameraDirection = glm::vec3(0, 0, -1))
 {
-  return makeObject("Player", json::array({
+  // The camera's initial facing is set on the Camera component itself (cameraDirection), independent of the
+  // player model's orientation.
+  return makeObject("Player " + std::to_string(slot), json::array({
     transform(position),
     modelRenderer(playerModel, whiteTexture, whiteTexture),
     rigidBody(),
     sphereCollider(),
-    playerController(slot)
+    playerController(slot),
+    camera(cameraDirection)
   }), json::array({
     {
       { "type", "Script" },
@@ -200,7 +217,10 @@ json buildScene1()
     sphere({ 2, 0, 0 }),
     sphere({ 0, 2, 0 }),
     sphere({ 0, -2, 2 }),
-    player({ 5, 0, 5 })
+    // Two players so an editor (slot 0) and a client (slot 1) each have their own camera POV when testing.
+    // Each camera's direction aims back toward the scene (origin) from opposite sides.
+    player({ 5, 0, 5 }, 0, glm::normalize(glm::vec3(-5, 0, -5))),
+    player({ -5, 0, 5 }, 1, glm::normalize(glm::vec3(5, 0, -5)))
   });
 }
 
@@ -215,7 +235,7 @@ json buildScene2()
     rigidBlock({ -18, -5, 0 }, { 10, 1, 10 }, { 0, 0, -30 }),
     block({ -22, 10, -3 }),
     sphere({ 2, 0, 3 }),
-    player({ 5, 0, 5 })
+    player({ 5, 0, 5 }, 0, glm::normalize(glm::vec3(-5, 0, -5)))
   });
 }
 
