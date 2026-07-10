@@ -31,6 +31,15 @@ public:
 
   void duplicateObject(const std::shared_ptr<Object>& object);
 
+  // Build a live object (and its whole subtree) from a serialized-object blob, giving every node a fresh
+  // uuid, and add it at the scene root. This is the prefab instantiation path (the body is one
+  // Object::serialize() blob — see PrefabLoader.h) and the shared core of duplicateObject.
+  //
+  // Throws if objectData isn't a well-formed serialized object (unknown component type, missing uuid/name);
+  // callers on the tick loop must guard. The returned object is NOT started — a caller spawning into a
+  // running scene starts it (and its children) itself.
+  std::shared_ptr<Object> instantiate(const nlohmann::json& objectData);
+
   void start() const;
 
   void stop() const;
@@ -65,6 +74,11 @@ private:
 
   // Recursively replace the serialized object's (and its children's) uuids with fresh ones.
   void reassignUUIDs(nlohmann::json& objectData);
+
+  // Shared body of instantiate/duplicateObject: fresh uuids, build the root under `parent` (null = scene
+  // root), then build its children.
+  std::shared_ptr<Object> instantiateUnder(const nlohmann::json& objectData,
+                                           const std::shared_ptr<Object>& parent);
 };
 
 

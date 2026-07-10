@@ -70,25 +70,42 @@ void ObjectManager::reassignUUIDs(nlohmann::json& objectData)
   }
 }
 
+std::shared_ptr<Object> ObjectManager::instantiateUnder(const nlohmann::json& objectData,
+                                                       const std::shared_ptr<Object>& parent)
+{
+  // Work on a copy: reassignUUIDs rewrites the blob, and a prefab body is reused across instantiations.
+  auto data = objectData;
+
+  // Give the new object (and every descendant) fresh uuids - reusing the originals would collide in the
+  // uuid-keyed replication/picking.
+  reassignUUIDs(data);
+
+  const auto newObject = std::make_shared<Object>(data, this);
+  newObject->setParent(parent);
+
+  addObject(newObject);
+
+  // Object's ctor loads only its own components/scripts; children are separate objects, so build them.
+  if (data.contains("children"))
+  {
+    newObject->loadChildren(data.at("children"));
+  }
+
+  return newObject;
+}
+
+std::shared_ptr<Object> ObjectManager::instantiate(const nlohmann::json& objectData)
+{
+  return instantiateUnder(objectData, nullptr);
+}
+
 void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
 {
   auto objectData = object->serialize();
   objectData["name"] = std::string(objectData.at("name")) + " - Copy";
 
-  // Give the copy (and every descendant) fresh uuids - reusing the originals would collide in the
-  // uuid-keyed replication/picking.
-  reassignUUIDs(objectData);
-
-  const auto newObject = std::make_shared<Object>(objectData, this);
-  newObject->setParent(object->getParent());
-
-  addObject(newObject);
-
-  // Object's ctor loads only its own components/scripts; children are separate objects, so build them.
-  if (objectData.contains("children"))
-  {
-    newObject->loadChildren(objectData.at("children"));
-  }
+  // A duplicate sits beside its original; a prefab instance (instantiate) lands at the scene root.
+  instantiateUnder(objectData, object->getParent());
 }
 
 void ObjectManager::start() const
