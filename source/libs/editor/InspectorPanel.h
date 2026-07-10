@@ -2,6 +2,8 @@
 #define INSPECTORPANEL_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -11,8 +13,10 @@ class ObjectManager;
 class AssetRegistry;
 class Component;
 class ComponentEditor;
+class GpuAssetCache;
 class EditorSelection;
 class ObjectInspector;
+class AssetInspector;
 
 // The editor's inspector panel (the old "Selected Object" window), generalised into a per-kind
 // dispatcher: it owns the window, the empty state, and dispatch on the shared EditorSelection's kind.
@@ -24,7 +28,7 @@ public:
   using EditCallback = std::function<void(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)>;
   using SceneEditCallback = std::function<void(const nlohmann::json& edit)>;
 
-  explicit InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor);
+  InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor, std::shared_ptr<GpuAssetCache> assetCache);
 
   ~InspectorPanel();
 
@@ -32,6 +36,8 @@ public:
   // write): the panel dispatches on its kind and the highlight derives from it.
   void setSelection(std::shared_ptr<EditorSelection> selection);
 
+  // Used both to resolve an Asset selection to its record (and clear it when the asset leaves the
+  // registry) and by the object inspector's script drop zone.
   void setAssetRegistry(const AssetRegistry* registry);
 
   void setEditable(bool editable);
@@ -51,7 +57,14 @@ public:
 private:
   std::shared_ptr<EditorSelection> m_selection;
 
+  const AssetRegistry* m_assetRegistry = nullptr;
+
   std::unique_ptr<ObjectInspector> m_objectInspector;
+  std::unique_ptr<AssetInspector> m_assetInspector;
+
+  // The registry version last checked for a stale asset selection. Re-validation only runs when the
+  // registry changes (matching the asset browser's cache gating).
+  size_t m_lastAssetRegistryVersion = SIZE_MAX;
 };
 
 #endif //INSPECTORPANEL_H

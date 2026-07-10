@@ -1,4 +1,5 @@
 #include "AssetBrowserPanel.h"
+#include "AssetDisplay.h"
 #include "AssetDragDrop.h"
 #include "GuiComponents.h"
 #include "Selection.h"
@@ -157,27 +158,12 @@ void AssetBrowserPanel::recomputeCache()
 
 const char* AssetBrowserPanel::assetTypeLabel(const AssetType type)
 {
-  switch (type)
-  {
-    case AssetType::Model: return "Model";
-    case AssetType::Texture: return "Texture";
-    case AssetType::Scene: return "Scene";
-    case AssetType::Script: return "Script";
-    case AssetType::Prefab: return "Prefab";
-    default: return "All";
-  }
+  return assetDisplay::typeLabel(type);
 }
 
 std::string AssetBrowserPanel::displayName(const AssetRecord& record)
 {
-  switch (record.type)
-  {
-    // Scenes and prefabs store their display name in path (neither is a file).
-    case AssetType::Scene:
-    case AssetType::Prefab: return record.path;
-    case AssetType::Script: return record.className;
-    default: return std::filesystem::path(record.path).filename().string();
-  }
+  return assetDisplay::name(record);
 }
 
 void AssetBrowserPanel::displayGui()
@@ -309,32 +295,23 @@ void AssetBrowserPanel::displayGui()
 void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord& record, const float cellSize, const std::string& name) const
 {
   // Per-type icon + accent color for the card (textures instead show their actual image).
-  ImTextureID thumb = 0;
-  gc::SecIcon icon = gc::SecIcon::none;
-  ImVec4 iconCol = theme::accent;
+  const gc::SecIcon icon = assetDisplay::icon(record.type);
+  const ImVec4 iconCol = assetDisplay::color(record.type);
 
-  switch (record.type)
+  ImTextureID thumb = 0;
+  if (record.type == AssetType::Texture)
   {
-    case AssetType::Texture:
-      iconCol = theme::accent;
-      try
+    try
+    {
+      if (const auto texture = m_assetCache->getTexture(uuid))
       {
-        if (const auto texture = m_assetCache->getTexture(uuid))
-        {
-          thumb = texture->getImGuiTexture();
-        }
+        thumb = texture->getImGuiTexture();
       }
-      catch (const std::exception&)
-      {
-        // fall back to the type icon below
-      }
-      icon = gc::SecIcon::image;
-      break;
-    case AssetType::Model:  icon = gc::SecIcon::model;  iconCol = theme::modelPurple; break;
-    case AssetType::Script: icon = gc::SecIcon::script; iconCol = theme::scriptAmber; break;
-    case AssetType::Scene:  icon = gc::SecIcon::scene;  iconCol = theme::sceneGreen;  break;
-    case AssetType::Prefab: icon = gc::SecIcon::block;  iconCol = theme::prefabBlue;  break;
-    default: break;
+    }
+    catch (const std::exception&)
+    {
+      // fall back to the type icon
+    }
   }
 
   // Selecting an asset is a view action (not a mutation), so it stays available on a read-only server.

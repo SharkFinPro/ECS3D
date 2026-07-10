@@ -131,7 +131,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_objectGUIManager->setAddAssetCallback(addAsset);
   m_objectGUIManager->setSceneEditCallback(sceneEdit);
 
-  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor);
+  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_assetCache);
   m_inspectorPanel->setSelection(m_selection);
   m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
   m_inspectorPanel->setEditCallback(editComponent);
