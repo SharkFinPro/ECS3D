@@ -40,8 +40,8 @@ private:
   static void bindDestroyObject(const char* uuid);
 
   // Spawn a whole prefab (its subtree, with fresh uuids) at the given position; returns the new root's
-  // uuid, or "" when the prefab uuid isn't a registered prefab or its file is missing/malformed. The body
-  // is resolved through the AssetRegistry injected into BindingContext.
+  // uuid, or "" when the prefab uuid isn't a registered prefab or its body is malformed. The body is
+  // resolved through the AssetRegistry injected into BindingContext.
   static const char* bindSpawnPrefab(const char* prefabUuid, float x, float y, float z);
 
   // Ray/overlap queries delegate to the sim implementation the app injected into BindingContext. Both

@@ -63,8 +63,8 @@ void applyComponentEdit(const ObjectManager& objectManager, const net::Message& 
 
 // Instantiate a prefab asset into the scene at the transform stored in its body. Unlike every other op
 // this one names an asset rather than an existing object, so applySceneEdit needs the AssetRegistry to
-// resolve the prefab's uuid to its file (see PrefabLoader.h) — pass it whenever prefab ops are possible
-// (the authoritative server always does).
+// resolve the prefab's uuid to its body — pass it whenever prefab ops are possible (the authoritative
+// server always does).
 [[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID);
 
 void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
@@ -82,9 +82,10 @@ void applyObjectSpawned(ObjectManager& objectManager, const net::Message& messag
 
 void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message);
 
-// Register an imported/created asset ({ assetType, uuid, path|name, [className] }). Shared by the
+// Register an imported/created asset ({ assetType, uuid, path|name, [className], [body] }). Shared by the
 // server (authoritative) and the editor (instant local feedback). Models/textures/scripts/prefabs go
-// into the AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager.
+// into the AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager. A prefab carries its
+// serialized-object `body` inline (there is no file on disk).
 void applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,

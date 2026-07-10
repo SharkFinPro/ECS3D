@@ -166,9 +166,10 @@ std::string AssetBrowserPanel::displayName(const AssetRecord& record)
 {
   switch (record.type)
   {
-    case AssetType::Scene: return record.path;        // scenes store their display name in path
+    // Scenes and prefabs store their display name in path (neither is a file).
+    case AssetType::Scene:
+    case AssetType::Prefab: return record.path;
     case AssetType::Script: return record.className;
-    case AssetType::Prefab: return std::filesystem::path(record.path).stem().string(); // hide ".prefab"
     default: return std::filesystem::path(record.path).filename().string();
   }
 }

@@ -1,6 +1,6 @@
 #include "WorldBindings.h"
 #include "BindingContext.h"
-#include <assets/PrefabLoader.h>
+#include <assets/AssetRegistry.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -190,10 +190,11 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
     return store("");
   }
 
-  // Path-only asset record -> the body is read from disk (loadBody warns + returns null when it can't).
-  const auto body = prefabs::loadBody(*assetRegistry, parsed.value());
+  // The body is carried inline on the asset record; null when the uuid isn't a prefab or the blob is bad.
+  const auto body = assetRegistry->getPrefabBody(parsed.value());
   if (!body.is_object())
   {
+    std::cerr << "[WorldBindings] No prefab body for " << prefabUuid << std::endl;
     return store("");
   }
 

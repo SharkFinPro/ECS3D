@@ -1,7 +1,6 @@
 #include "Replication.h"
 #include "ComponentRegistry.h"
 #include "assets/AssetRegistry.h"
-#include "assets/PrefabLoader.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneAsset.h"
 #include "objects/Object.h"
@@ -271,8 +270,9 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
 
   if (op == "instantiatePrefab")
   {
-    // The only op keyed by an asset rather than an existing object: resolve the prefab's body from disk
-    // and clone it in with fresh uuids. A missing/malformed prefab yields a null body and is skipped.
+    // The only op keyed by an asset rather than an existing object: pull the prefab's body from the
+    // registry and clone it in with fresh uuids. An unknown/malformed prefab yields a null body and is
+    // skipped.
     if (!assetRegistry)
     {
       return;
@@ -284,7 +284,7 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
       return;
     }
 
-    if (const auto body = prefabs::loadBody(*assetRegistry, parsedPrefab.value()); body.is_object())
+    if (const auto body = assetRegistry->getPrefabBody(parsedPrefab.value()); body.is_object())
     {
       objectManager.instantiate(body);
     }
@@ -518,8 +518,10 @@ void applyAddAsset(AssetRegistry& assetRegistry,
   }
   else if (type == "prefab")
   {
-    // Path-only, like a model: the body was already written to disk by whoever created the prefab.
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Prefab, .path = asset.value("path", std::string{}) });
+    // Keyed by display name (like a scene) and carrying its body inline. Re-registering an existing name
+    // updates that prefab's body in place, so "Save as Prefab" over an existing name means "update it".
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Prefab,
+      .path = asset.value("name", std::string{}), .body = asset.value("body", std::string{}) });
   }
   else if (type == "scene")
   {
@@ -539,6 +541,7 @@ net::Message packAddAsset(const nlohmann::json& asset)
   message.writeString(asset.value("path", std::string{}));
   message.writeString(asset.value("name", std::string{}));
   message.writeString(asset.value("className", std::string{}));
+  message.writeString(asset.value("body", std::string{}));
 
   return message;
 }
@@ -553,6 +556,7 @@ nlohmann::json unpackAddAsset(const net::Message& message)
   asset["path"] = reader.readString();
   asset["name"] = reader.readString();
   asset["className"] = reader.readString();
+  asset["body"] = reader.readString();
 
   return asset;
 }

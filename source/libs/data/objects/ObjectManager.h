@@ -32,8 +32,8 @@ public:
   void duplicateObject(const std::shared_ptr<Object>& object);
 
   // Build a live object (and its whole subtree) from a serialized-object blob, giving every node a fresh
-  // uuid, and add it at the scene root. This is the prefab instantiation path (the body is one
-  // Object::serialize() blob — see PrefabLoader.h) and the shared core of duplicateObject.
+  // uuid, and add it at the scene root. This is the prefab instantiation path (a prefab's body is one
+  // Object::serialize() blob — see AssetRegistry::getPrefabBody) and the shared core of duplicateObject.
   //
   // Throws if objectData isn't a well-formed serialized object (unknown component type, missing uuid/name);
   // callers on the tick loop must guard. The returned object is NOT started — a caller spawning into a

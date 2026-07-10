@@ -19,6 +19,12 @@ const std::string earthTexture = "2cfcc1b3-86f7-487b-bf37-6255111ab0ca";
 const std::string earthSpecularTexture = "9e4b3267-a29c-43ac-aca4-ccd06f078f5c";
 const std::string playerScript = "de114693-8cf3-4123-a308-70dbb2af120f";
 
+// Stable prefab UUIDs, so a script can spawn one by a uuid it can hardcode (World.spawnPrefab).
+const std::string blockPrefab = "0a1e5c2d-7b3f-4a91-8c60-1d4e2f6a8b03";
+const std::string rigidBlockPrefab = "3f8c1a47-92d5-4e08-b1a6-5c7e09f4d2b1";
+const std::string spherePrefab = "6d2b4f19-08ac-4d73-9e52-b83a1c6f0e47";
+const std::string playerPrefab = "9c7f0e83-4d16-4b52-a09e-27f5b3d81c6a";
+
 std::string newUUID()
 {
   static std::mt19937 gen{ std::random_device{}() };
@@ -123,53 +129,56 @@ json makeObject(const std::string& name, json components, json scripts = json::a
   };
 }
 
-// --- Prefabs (mirror tests/common/Prefabs.h) -------------------------------------------------------
+// --- Prefab bodies -----------------------------------------------------------------------------------
+//
+// Each is one serialized object at the identity transform, defined exactly once. They are registered as
+// real Prefab assets (see buildDefaultProject) AND are what the scenes below instantiate, so the default
+// project both ships a browsable/spawnable prefab set and eats its own dog food.
 
-json block(const glm::vec3& position,
-           const glm::vec3& scale = glm::vec3(1),
-           const glm::vec3& rotation = glm::vec3(0))
+const json& blockBody()
 {
-  return makeObject("Block", json::array({
-    transform(position, scale, rotation),
+  static const json body = makeObject("Block", json::array({
+    transform(glm::vec3(0)),
     modelRenderer(cubeModel, whiteTexture, whiteTexture),
     rigidBody(),
     boxCollider()
   }));
+
+  return body;
 }
 
-json rigidBlock(const glm::vec3& position,
-                const glm::vec3& scale,
-                const glm::vec3& rotation = glm::vec3(0))
+const json& rigidBlockBody()
 {
-  return makeObject("Rigid Block", json::array({
-    transform(position, scale, rotation),
+  static const json body = makeObject("Rigid Block", json::array({
+    transform(glm::vec3(0)),
     modelRenderer(cubeModel, whiteTexture, whiteTexture),
     boxCollider()
   }));
+
+  return body;
 }
 
-json sphere(const glm::vec3& position, const glm::vec3& scale = glm::vec3(1))
+const json& sphereBody()
 {
-  return makeObject("Sphere", json::array({
-    transform(position, scale),
+  static const json body = makeObject("Sphere", json::array({
+    transform(glm::vec3(0)),
     modelRenderer(sphereModel, earthTexture, earthSpecularTexture),
     rigidBody(),
     sphereCollider()
   }));
+
+  return body;
 }
 
-json player(const glm::vec3& position, const int slot = 0,
-            const glm::vec3& cameraDirection = glm::vec3(0, 0, -1))
+const json& playerBody()
 {
-  // The camera's initial facing is set on the Camera component itself (cameraDirection), independent of the
-  // player model's orientation.
-  return makeObject("Player " + std::to_string(slot), json::array({
-    transform(position),
+  static const json body = makeObject("Player", json::array({
+    transform(glm::vec3(0)),
     modelRenderer(playerModel, whiteTexture, whiteTexture),
     rigidBody(),
     sphereCollider(),
-    playerController(slot),
-    camera(cameraDirection)
+    playerController(),
+    camera()
   }), json::array({
     {
       { "type", "Script" },
@@ -180,8 +189,88 @@ json player(const glm::vec3& position, const int slot = 0,
       })}
     }
   }));
+
+  return body;
 }
 
+json prefabAsset(const std::string& name, const std::string& uuid, const json& body)
+{
+  return { { "name", name }, { "uuid", uuid }, { "body", body } };
+}
+
+// --- Instances ---------------------------------------------------------------------------------------
+//
+// The JSON-time equivalent of ObjectManager::instantiate: copy a prefab body, give it a fresh uuid, and
+// override the root transform. (These bodies have no children; a body with children would need its whole
+// subtree reassigned, which is what ObjectManager::reassignUUIDs does at runtime.)
+
+json instanceOf(json body,
+                const glm::vec3& position,
+                const glm::vec3& scale = glm::vec3(1),
+                const glm::vec3& rotation = glm::vec3(0))
+{
+  body["uuid"] = newUUID();
+
+  for (auto& component : body.at("components"))
+  {
+    if (component.at("type") == "Transform")
+    {
+      component["position"] = vec(position);
+      component["scale"] = vec(scale);
+      component["rotation"] = vec(rotation);
+      break;
+    }
+  }
+
+  return body;
+}
+
+json block(const glm::vec3& position,
+           const glm::vec3& scale = glm::vec3(1),
+           const glm::vec3& rotation = glm::vec3(0))
+{
+  return instanceOf(blockBody(), position, scale, rotation);
+}
+
+json rigidBlock(const glm::vec3& position,
+                const glm::vec3& scale,
+                const glm::vec3& rotation = glm::vec3(0))
+{
+  return instanceOf(rigidBlockBody(), position, scale, rotation);
+}
+
+json sphere(const glm::vec3& position, const glm::vec3& scale = glm::vec3(1))
+{
+  return instanceOf(sphereBody(), position, scale);
+}
+
+json player(const glm::vec3& position, const int slot = 0,
+            const glm::vec3& cameraDirection = glm::vec3(0, 0, -1))
+{
+  // Per-instance overrides on top of the shared body: which player owns it, and where its camera looks.
+  // The camera's facing lives on the Camera component, independent of the player model's orientation.
+  auto object = instanceOf(playerBody(), position);
+  object["name"] = "Player " + std::to_string(slot);
+
+  for (auto& component : object.at("components"))
+  {
+    const auto& type = component.at("type");
+
+    if (type == "PlayerController")
+    {
+      component["playerSlot"] = slot;
+    }
+    else if (type == "Camera")
+    {
+      component["direction"] = vec(cameraDirection);
+    }
+  }
+
+  return object;
+}
+
+// Lights are parameterized well past what a prefab would capture (color/ambient/diffuse/specular all vary
+// per instance), so they stay a plain builder rather than a prefab.
 json light(const glm::vec3& position,
            const glm::vec3& color,
            const float ambient,
@@ -360,6 +449,14 @@ json buildDefaultProject()
       { "scripts", json::array({
         { { "className", "BlockScript" }, { "filePath", "scripts/UserScripts/BlockScript.cs" }, { "uuid", newUUID() } },
         { { "className", "PlayerScript" }, { "filePath", "scripts/UserScripts/PlayerScript.cs" }, { "uuid", playerScript } }
+      })},
+      // The same bodies the scenes below instantiate, exposed as assets: drag one into the scene from the
+      // editor's asset browser, or spawn it from a script with World.spawnPrefab(uuid, position).
+      { "prefabs", json::array({
+        prefabAsset("Block", blockPrefab, blockBody()),
+        prefabAsset("Rigid Block", rigidBlockPrefab, rigidBlockBody()),
+        prefabAsset("Sphere", spherePrefab, sphereBody()),
+        prefabAsset("Player", playerPrefab, playerBody())
       })},
       { "scenes", json::array({
         scene("Scene 1", scene1UUID, buildScene1()),

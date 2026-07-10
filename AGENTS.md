@@ -28,7 +28,7 @@
 | `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, MSVC export-all-symbols. Just `add_subdirectory(source)`. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
-| `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry`, `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
+| `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune + GJK/EPA under `collisions/`). Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
 | `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree + inspector), `AssetBrowserPanel`, `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `nfd`. |
@@ -88,11 +88,30 @@ the JSON path for file save/load) — sent on join and rebroadcast after any str
 rebuilds from it, atomically (a malformed packet leaves the current project intact). Per-tick motion
 goes as a compact binary **stateDelta** (uuid + local transform per object; `data/Replication.{h,cpp}`).
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
-`addAsset`) that only a connection authorized as `Role::editor` on an `--edit` server may send.
+`addAsset`) that only a connection authorized as `Role::editor` on an `--edit` server may send. (`sceneEdit`
+carries the prefab-instantiation op too — see Prefabs below.)
 Runtime structural changes from a *script* (spawn/destroy) take a third path: lightweight
 `objectSpawned` (one packed `Object`) / `objectDestroyed` (a uuid) messages the client splices into/out of
 its scene incrementally — kept off the full-snapshot path so frequent spawning stays cheap. Build/apply
 live in `data/Replication.{h,cpp}`; a late joiner still gets the objects via the normal join snapshot.
+
+**Prefabs.** A prefab is an `AssetRegistry` record whose **body travels inline** — one `Object::serialize()`
+blob, stored dumped in `AssetRecord::body` and threaded through the same `serialize`/`loadFromJSON`/`pack`/
+`unpack` contract as everything else (the shape `Script::m_fields` already uses). It is deliberately **not a
+file on disk**: a model path names a *client-side GPU resource the server never touches*, but a prefab body
+is *server-side gameplay data the server must have to instantiate*, and the editor and server may share no
+filesystem. Prefabs (like scenes) key off a display name in `path`; `registerAsset` is first-wins for every
+other type, but **re-registering an existing prefab name updates its body in place, keeping the uuid**, so
+"Save as Prefab" over an existing name means *update it*. Instantiation is
+`ObjectManager::instantiate(body)` — fresh uuids via `reassignUUIDs`, the shared core of `duplicateObject` —
+reachable two ways: the editor's `instantiatePrefab` **`sceneEdit` op** (the one op keyed by an asset, hence
+the `const AssetRegistry*` parameter on `applySceneEdit`), and a script's `World.spawnPrefab(uuid, position)`,
+which rides 1.3's existing `objectSpawned` replication (one message carries the whole subtree). The binding
+reaches the registry through **`BindingContext::setAssetRegistry`**, injected once at startup exactly like the
+sim's raycast/overlap statics. **Instances are detached copies** — nothing records which prefab an object came
+from, so overrides and prefab→instance propagation don't exist (deliberately deferred; see `ROADMAP.md`).
+`DefaultProject` defines its `Block`/`Rigid Block`/`Sphere`/`Player` bodies once, registers them as prefabs
+with stable uuids, and builds its scenes by instancing them.
 
 **Transport / CLR.** `Protocol.h` defines the format; `NetServer`/`NetClient` own it in C++ and hand
 `ECS3DNetTransport` (C#) opaque `(type byte, payload)` pairs. `ManagedHost` boots CoreCLR and resolves

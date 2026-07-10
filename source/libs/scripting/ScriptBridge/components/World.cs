@@ -146,8 +146,8 @@ public static unsafe class World
 
     // Spawn a prefab asset — its whole object subtree, with fresh uuids — with the root at the given
     // position, and return the root's uuid. Returns "" when prefabUuid isn't a registered prefab or its
-    // file is missing/malformed (the spawn is skipped and the server logs it; nothing throws). The prefab's
-    // asset uuid is the one shown by the editor's asset browser.
+    // body is malformed (the spawn is skipped and the server logs it; nothing throws). The prefab's asset
+    // uuid is the one shown by the editor's asset browser.
     public static string spawnPrefab(string prefabUuid, float x, float y, float z)
     {
         var uuidPtr = Marshal.StringToCoTaskMemUTF8(prefabUuid);

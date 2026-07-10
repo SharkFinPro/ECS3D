@@ -4,15 +4,12 @@
 #include "GuiComponents.h"
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
-#include <assets/PrefabLoader.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
-#include <algorithm>
 #include <array>
-#include <filesystem>
 #include <random>
 #include <string>
 #include <utility>
@@ -26,26 +23,6 @@ namespace {
     std::mt19937 rng{ std::random_device{}() };
     uuids::uuid_random_generator generator{ rng };
     return uuids::to_string(generator());
-  }
-
-  // Object names are free-form; a prefab name becomes a file name.
-  [[nodiscard]] std::string sanitizeFileName(const std::string& name)
-  {
-    std::string result;
-    for (const char c : name)
-    {
-      const bool illegal = c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"'
-                        || c == '<' || c == '>' || c == '|' || c == '\0';
-      result += illegal ? '_' : c;
-    }
-
-    // Trim trailing spaces/dots — Windows rejects file names ending in either.
-    while (!result.empty() && (result.back() == ' ' || result.back() == '.'))
-    {
-      result.pop_back();
-    }
-
-    return result.empty() ? "Prefab" : result;
   }
 
   // The components the "Add Component" menu can attach.
@@ -652,23 +629,16 @@ void ObjectGUIManager::saveAsPrefab(const std::shared_ptr<Object>& object) const
     return;
   }
 
-  // The prefab body is the object's own serialize() blob, written beside the project's other assets. The
-  // path (not the body) is what the registry — and therefore the snapshot — carries; the authoritative
-  // server reads the file when it instantiates.
-  const auto path = (std::filesystem::path(prefabs::directory)
-    / (sanitizeFileName(object->getName()) + prefabs::extension)).generic_string();
-
-  if (!prefabs::saveBody(path, object->serialize()))
-  {
-    return;
-  }
-
-  // Re-saving under the same name overwrites the file but keeps the existing record (registerAsset is
-  // keyed by path), so the prefab is updated in place rather than duplicated.
+  // The prefab body is the object's own serialize() blob, carried inline in the asset record — there is no
+  // file on disk, so it travels with the project and reaches a server that shares no filesystem with us.
+  //
+  // Prefabs are keyed by display name: saving over an existing name updates that prefab's body in place
+  // (keeping its uuid) rather than adding a second one. The uuid here is only used when the name is new.
   m_addAssetCallback({
     { "assetType", "prefab" },
     { "uuid", newAssetUUID() },
-    { "path", path }
+    { "name", object->getName() },
+    { "body", object->serialize().dump() }
   });
 }
 

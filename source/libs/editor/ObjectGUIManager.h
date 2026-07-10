@@ -92,8 +92,8 @@ private:
 
   void displayAddComponent(const std::shared_ptr<Object>& object);
 
-  // Write the object's serialized blob to assets/prefabs/<Name>.prefab and register it as a Prefab asset.
-  // Re-saving under the same name updates the file in place and keeps the existing asset record.
+  // Register the object's serialized blob as a Prefab asset (body carried inline, no file on disk).
+  // Re-saving under the same name updates that prefab's body in place, keeping its uuid.
   void saveAsPrefab(const std::shared_ptr<Object>& object) const;
 
   void displayScriptDragDropArea(float dropZoneStartY, const std::shared_ptr<Object>& object) const;
