@@ -7,6 +7,7 @@ add_library(${PROJECT_NAME}
   GuiComponents.h
   ObjectGUIManager.cpp
   ObjectGUIManager.h
+  Selection.h
   AssetBrowserPanel.cpp
   AssetBrowserPanel.h
   AssetDragDrop.h
