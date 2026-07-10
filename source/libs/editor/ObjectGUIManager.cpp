@@ -18,13 +18,14 @@ namespace {
   // checkType is the ComponentType whose presence on the object hides this entry.
   // Transform is omitted (every object already has one); scripts attach via drag & drop only.
   struct AddableComponent { const char* label; const char* key; ComponentType checkType; gc::SecIcon icon; };
-  constexpr std::array<AddableComponent, 6> addableComponents {{
+  constexpr std::array<AddableComponent, 7> addableComponents {{
     { "Rigid Body",        "RigidBody",        ComponentType::rigidBody,        gc::SecIcon::rigid    },
     { "Model Renderer",    "ModelRenderer",    ComponentType::modelRenderer,    gc::SecIcon::image    },
     { "Light Renderer",    "LightRenderer",    ComponentType::lightRenderer,    gc::SecIcon::light    },
     { "Box Collider",      "Box",              ComponentType::collider,         gc::SecIcon::collider },
     { "Sphere Collider",   "Sphere",           ComponentType::collider,         gc::SecIcon::sphere   },
-    { "Player Controller", "PlayerController", ComponentType::playerController, gc::SecIcon::none     }
+    { "Player Controller", "PlayerController", ComponentType::playerController, gc::SecIcon::none     },
+    { "Camera",            "Camera",           ComponentType::camera,           gc::SecIcon::none     }
   }};
 
   // Heuristic icon for an object derived from its components (the mockup shows a per-object glyph).

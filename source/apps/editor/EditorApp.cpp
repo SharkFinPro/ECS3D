@@ -25,6 +25,7 @@
 #include <components/ColliderEditor.h>
 #include <components/ScriptEditor.h>
 #include <components/PlayerControllerEditor.h>
+#include <components/CameraEditor.h>
 #include <NetClient.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
@@ -348,6 +349,7 @@ void EditorApp::registerEditors() const
   registerColliderEditors(*m_componentEditor);
   registerScriptEditor(*m_componentEditor);
   registerPlayerControllerEditor(*m_componentEditor);
+  registerCameraEditor(*m_componentEditor);
 }
 
 void EditorApp::setupKeybinds()
