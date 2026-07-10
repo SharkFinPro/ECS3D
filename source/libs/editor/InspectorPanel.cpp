@@ -41,7 +41,7 @@ void InspectorPanel::setSceneEditCallback(SceneEditCallback callback)
 
 void InspectorPanel::displayGui(const ObjectManager* objectManager)
 {
-  ImGui::Begin("Selected Object");
+  ImGui::Begin("Inspector");
 
   // Resolve the current selection to a concrete inspector. Only the Object kind is renderable today;
   // objectUUID() returns nullopt for the None/Asset kinds, so those fall through to the empty state.
@@ -50,7 +50,7 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager)
     ? objectManager->getObjectByUUID(selectedUUID.value()) : nullptr;
 
   // Panel header: small-caps section label + a right-aligned per-kind type chip (mockup).
-  gc::sectionLabel("Selected Object");
+  gc::sectionLabel("Inspector");
   if (object)
   {
     m_objectInspector->displayTypeChip(object);
@@ -61,7 +61,7 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager)
   ImGui::Spacing();
 
   // Empty state when nothing renderable is selected — an intentional placeholder rather than a lone
-  // checkbox.
+  // checkbox. The copy is kind-agnostic (objects today, assets in a later phase).
   if (!object)
   {
     if (selectedUUID.has_value())
@@ -70,8 +70,8 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager)
       m_selection->clear();
     }
 
-    gc::emptyState(gc::SecIcon::block, "No object selected",
-                   "Select an object from the Objects panel");
+    gc::emptyState(gc::SecIcon::block, "Nothing selected",
+                   "Select an object or asset to inspect it");
 
     ImGui::End();
     return;

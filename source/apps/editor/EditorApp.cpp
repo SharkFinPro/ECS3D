@@ -631,7 +631,7 @@ void EditorApp::updateDockSpace() const
 
     gui->dockLeft("Objects");
 
-    gui->dockRight("Selected Object");
+    gui->dockRight("Inspector");
 
     gui->dockTop("Scene Status");
 
