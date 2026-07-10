@@ -31,6 +31,8 @@ add_library(${PROJECT_NAME}
   objects/components/Script.h
   objects/components/PlayerController.cpp
   objects/components/PlayerController.h
+  objects/components/Camera.cpp
+  objects/components/Camera.h
   objects/components/ModelRenderer.cpp
   objects/components/ModelRenderer.h
   objects/components/LightRenderer.cpp
