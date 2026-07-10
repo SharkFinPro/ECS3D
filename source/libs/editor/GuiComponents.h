@@ -670,7 +670,8 @@ namespace gc {
   // the caller can attach drag-drop / double-click handling to the last item immediately after. Returns
   // true when clicked. Draw the filename underneath with assetCardLabel().
   inline bool assetCard(const float size, const ImTextureID thumb, const SecIcon icon,
-                        const ImVec4& iconCol, const char* kind, const ImVec4& kindCol)
+                        const ImVec4& iconCol, const char* kind, const ImVec4& kindCol,
+                        const bool selected = false)
   {
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const bool clicked = ImGui::InvisibleButton("##tile", ImVec2(size, size));
@@ -681,7 +682,16 @@ namespace gc {
 
     dl->AddRectFilled(pos, p1, theme::u32(theme::inset), 8.0f);
     drawThumb(dl, pos, p1, thumb, icon, iconCol, 8.0f);
-    dl->AddRect(pos, p1, theme::u32(hovered ? theme::accent : theme::line), 8.0f);
+    // Selected tiles get a solid 2px accent ring; otherwise hover tints the border and the rest sit on
+    // the faint line color.
+    if (selected)
+    {
+      dl->AddRect(pos, p1, theme::u32(theme::accent), 8.0f, 0, 2.0f);
+    }
+    else
+    {
+      dl->AddRect(pos, p1, theme::u32(hovered ? theme::accent : theme::line), 8.0f);
+    }
 
     // Type badge (color dot + kind) top-left.
     const ImVec2 ts = ImGui::CalcTextSize(kind);

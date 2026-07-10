@@ -1,6 +1,7 @@
 #include "AssetBrowserPanel.h"
 #include "AssetDragDrop.h"
 #include "GuiComponents.h"
+#include "Selection.h"
 #include <GpuAssetCache.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -80,6 +81,11 @@ void AssetBrowserPanel::setLoadSceneCallback(LoadSceneCallback callback)
 void AssetBrowserPanel::setAddAssetCallback(AddAssetCallback callback)
 {
   m_onAddAsset = std::move(callback);
+}
+
+void AssetBrowserPanel::setSelection(std::shared_ptr<EditorSelection> selection)
+{
+  m_selection = std::move(selection);
 }
 
 void AssetBrowserPanel::setEditable(const bool editable)
@@ -331,8 +337,14 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
     default: break;
   }
 
-  const bool clicked = gc::assetCard(cellSize, thumb, icon, iconCol, assetTypeLabel(record.type), iconCol);
-  (void) clicked;
+  // Selecting an asset is a view action (not a mutation), so it stays available on a read-only server.
+  const bool selected = m_selection && m_selection->assetUUID() == uuid;
+  if (gc::assetCard(cellSize, thumb, icon, iconCol, assetTypeLabel(record.type), iconCol, selected) && m_selection)
+  {
+    // Writes the shared selection slot: this deselects any object (and clears any other asset), since
+    // there is a single selection at a time.
+    m_selection->selectAsset(uuid);
+  }
 
   // Double-click a scene tile to make it the active scene. Switching the active scene is a server-side
   // mutation, so it's only available when the server is editable (a read-only viewer follows the

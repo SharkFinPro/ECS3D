@@ -138,6 +138,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_inspectorPanel->setSceneEditCallback(sceneEdit);
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
+  m_assetBrowser->setSelection(m_selection);
   m_assetBrowser->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) {
     // Switch locally for instant feedback (the editor has every scene), and tell the authoritative
     // server to switch the active scene — it re-snapshots back to keep everyone in sync.
