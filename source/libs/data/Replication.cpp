@@ -255,9 +255,42 @@ nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::u
   return edit;
 }
 
-void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit)
+nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID)
+{
+  return {
+    { "op", "instantiatePrefab" },
+    { "prefab", uuids::to_string(prefabUUID) }
+  };
+}
+
+void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                    const AssetRegistry* assetRegistry)
 {
   const std::string op = edit.at("op");
+
+  if (op == "instantiatePrefab")
+  {
+    // The only op keyed by an asset rather than an existing object: pull the prefab's body from the
+    // registry and clone it in with fresh uuids. An unknown/malformed prefab yields a null body and is
+    // skipped.
+    if (!assetRegistry)
+    {
+      return;
+    }
+
+    const auto parsedPrefab = uuids::uuid::from_string(std::string(edit.at("prefab")));
+    if (!parsedPrefab.has_value())
+    {
+      return;
+    }
+
+    if (const auto body = assetRegistry->getPrefabBody(parsedPrefab.value()); body.is_object())
+    {
+      objectManager.instantiate(body);
+    }
+
+    return;
+  }
 
   if (op == "addObject")
   {
@@ -483,6 +516,13 @@ void applyAddAsset(AssetRegistry& assetRegistry,
     assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Script,
       .path = asset.value("path", std::string{}), .className = asset.value("className", std::string{}) });
   }
+  else if (type == "prefab")
+  {
+    // Keyed by display name (like a scene) and carrying its body inline. Re-registering an existing name
+    // updates that prefab's body in place, so "Save as Prefab" over an existing name means "update it".
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Prefab,
+      .path = asset.value("name", std::string{}), .body = asset.value("body", std::string{}) });
+  }
   else if (type == "scene")
   {
     const std::string name = asset.value("name", std::string{ "New Scene" });
@@ -501,6 +541,7 @@ net::Message packAddAsset(const nlohmann::json& asset)
   message.writeString(asset.value("path", std::string{}));
   message.writeString(asset.value("name", std::string{}));
   message.writeString(asset.value("className", std::string{}));
+  message.writeString(asset.value("body", std::string{}));
 
   return message;
 }
@@ -515,6 +556,7 @@ nlohmann::json unpackAddAsset(const net::Message& message)
   asset["path"] = reader.readString();
   asset["name"] = reader.readString();
   asset["className"] = reader.readString();
+  asset["body"] = reader.readString();
 
   return asset;
 }

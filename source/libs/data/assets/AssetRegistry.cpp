@@ -5,8 +5,20 @@
 
 void AssetRegistry::registerAsset(const AssetRecord& record)
 {
-  if (!record.path.empty() && m_loadedPaths.contains(record.path))
+  if (const auto pathIt = m_loadedPaths.find(record.path);
+      !record.path.empty() && pathIt != m_loadedPaths.end())
   {
+    // A prefab is the one asset whose payload can change after registration: re-saving an object under an
+    // existing prefab name updates the body in place and KEEPS the original uuid, so a script or scene
+    // holding that uuid keeps working. Every other type is first-wins (re-importing a file is a no-op).
+    if (const auto existing = m_assets.find(pathIt->second);
+        record.type == AssetType::Prefab && existing != m_assets.end()
+        && existing->second.type == AssetType::Prefab)
+    {
+      existing->second.body = record.body;
+      ++m_version;
+    }
+
     return;
   }
 
@@ -55,6 +67,21 @@ const std::unordered_map<uuids::uuid, AssetRecord>& AssetRegistry::getAssets() c
   return m_assets;
 }
 
+nlohmann::json AssetRegistry::getPrefabBody(const uuids::uuid& uuid) const
+{
+  const auto* record = getByUUID(uuid);
+  if (!record || record->type != AssetType::Prefab || record->body.empty())
+  {
+    return nullptr;
+  }
+
+  // The body is stored dumped (like Script::m_fields on the wire); parse leniently so a corrupt blob
+  // yields a null json the caller skips, rather than throwing inside the server's tick loop.
+  auto body = nlohmann::json::parse(record->body, nullptr, false);
+
+  return body.is_discarded() || !body.is_object() ? nlohmann::json(nullptr) : body;
+}
+
 nlohmann::json AssetRegistry::serialize() const
 {
   // Scenes are NOT serialized here — they carry their object tree and belong to the SceneManager
@@ -62,7 +89,8 @@ nlohmann::json AssetRegistry::serialize() const
   nlohmann::json data = {
     { "models", nlohmann::json::array() },
     { "textures", nlohmann::json::array() },
-    { "scripts", nlohmann::json::array() }
+    { "scripts", nlohmann::json::array() },
+    { "prefabs", nlohmann::json::array() }
   };
 
   for (const auto& [uuid, record] : m_assets)
@@ -80,6 +108,20 @@ nlohmann::json AssetRegistry::serialize() const
       case AssetType::Script:
         data["scripts"].push_back({ { "className", record.className }, { "filePath", record.path }, { "uuid", uuidString } });
         break;
+      case AssetType::Prefab:
+      {
+        // The body travels with the record. Embed it as real JSON (not the dumped string) so the project
+        // file stays readable/editable; loadFromJSON dumps it back. A discarded parse would throw on
+        // dump(), so a corrupt body is written as null and dropped on the next load.
+        auto body = nlohmann::json::parse(record.body, nullptr, false);
+
+        data["prefabs"].push_back({
+          { "name", record.path },
+          { "uuid", uuidString },
+          { "body", body.is_discarded() ? nlohmann::json(nullptr) : std::move(body) }
+        });
+        break;
+      }
       default:
         break;
     }
@@ -126,17 +168,38 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
       });
     }
   }
+
+  if (assetsData.contains("prefabs"))
+  {
+    for (const auto& assetData : assetsData.at("prefabs"))
+    {
+      // A prefab without a usable body is nothing — drop it rather than register a record that can never
+      // instantiate (serialize() writes null for a body it couldn't parse).
+      if (!assetData.contains("body") || !assetData.at("body").is_object())
+      {
+        continue;
+      }
+
+      registerAsset({
+        .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
+        .type = AssetType::Prefab,
+        .path = assetData.at("name"),                 // prefabs key off their display name
+        .body = assetData.at("body").dump()
+      });
+    }
+  }
 }
 
 void AssetRegistry::pack(net::Message& message) const
 {
   // Collect first so we can write a count up front (m_assets also holds Scene records, which — like
-  // serialize() — are skipped here; they're carried by the SceneManager).
+  // serialize() — are skipped here; they're carried by the SceneManager). A Prefab carries its whole body
+  // inline; every other record writes an empty body string, keeping the entry layout uniform.
   std::vector<const AssetRecord*> records;
   for (const auto& [uuid, record] : m_assets)
   {
     if (record.type == AssetType::Model || record.type == AssetType::Texture
-        || record.type == AssetType::Script)
+        || record.type == AssetType::Script || record.type == AssetType::Prefab)
     {
       records.push_back(&record);
     }
@@ -149,6 +212,7 @@ void AssetRegistry::pack(net::Message& message) const
     message.writeString(uuids::to_string(record->uuid));
     message.writeString(record->path);
     message.writeString(record->className); // empty for non-scripts
+    message.writeString(record->body);      // empty for non-prefabs
   }
 }
 
@@ -161,7 +225,8 @@ void AssetRegistry::unpack(net::MessageReader& messageReader)
     const auto uuid = uuids::uuid::from_string(messageReader.readString()).value();
     const auto path = messageReader.readString();
     const auto className = messageReader.readString();
+    const auto body = messageReader.readString();
 
-    registerAsset({ .uuid = uuid, .type = type, .path = path, .className = className });
+    registerAsset({ .uuid = uuid, .type = type, .path = path, .className = className, .body = body });
   }
 }

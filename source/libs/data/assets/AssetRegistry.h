@@ -11,26 +11,36 @@ namespace net {
   class MessageReader;
 }
 
+// Packed raw over the wire (AssetRegistry::pack), so only ever APPEND to this enum.
 enum class AssetType {
   Unknown,
   Model,
   Texture,
   Scene,
-  Script
+  Script,
+  Prefab
 };
 
 struct AssetRecord {
   uuids::uuid uuid;
   AssetType type = AssetType::Unknown;
-  std::string path;
+  std::string path;      // scenes and prefabs store their display name here instead
   std::string className; // scripts only
+  std::string body;      // prefabs only: a serialized Object blob (Object::serialize().dump())
 };
 
 // uuid<->path registry + serialize. Carries asset metadata only (no GPU resources, no GUI).
-// ECS3DRender's GpuAssetCache resolves these records to vke resources; the editor's
+// ECS3DRender's GpuAssetCache resolves Model/Texture records to vke resources; the editor's
 // AssetBrowserPanel renders the listing.
+//
+// A Prefab is the exception that carries its payload: the body travels inline (in the project file and
+// the snapshot) rather than as a file on disk, because the authoritative server needs it to instantiate
+// and may share no filesystem with the editor that made it. It is an opaque JSON blob threaded straight
+// through serialize/pack, exactly like Script::m_fields.
 class AssetRegistry {
 public:
+  // First-wins: re-registering an existing path keeps the original record. The one exception is a Prefab,
+  // whose body is updated in place (keeping its uuid) — see registerAsset.
   void registerAsset(const AssetRecord& record);
 
   // Drop all records (used when (re)loading a project / applying a fresh snapshot).
@@ -42,6 +52,10 @@ public:
 
   [[nodiscard]] const std::unordered_map<uuids::uuid, AssetRecord>& getAssets() const;
 
+  // The parsed body of a Prefab record, ready for ObjectManager::instantiate. Returns a null json when
+  // the uuid isn't a registered prefab or its body is empty/malformed, so callers skip rather than throw.
+  [[nodiscard]] nlohmann::json getPrefabBody(const uuids::uuid& uuid) const;
+
   // Monotonically incremented by registerAsset and clear. Consumers can cache
   // derived views and invalidate when this value changes.
   [[nodiscard]] size_t getVersion() const;
@@ -51,7 +65,8 @@ public:
   void loadFromJSON(const nlohmann::json& assetsData);
 
   // Binary equivalents of serialize()/loadFromJSON for the network snapshot. Like serialize(), pack()
-  // only writes the flat file assets (Model/Texture/Script); Scene records belong to the SceneManager.
+  // only writes the flat file assets (Model/Texture/Script/Prefab); Scene records belong to the
+  // SceneManager.
   void pack(net::Message& message) const;
 
   void unpack(net::MessageReader& messageReader);

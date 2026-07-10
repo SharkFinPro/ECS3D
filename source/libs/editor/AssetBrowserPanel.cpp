@@ -19,11 +19,12 @@
 #include <string>
 
 namespace {
-  constexpr std::array<std::pair<AssetType, const char*>, 4> kAssetTypeLabels {{
+  constexpr std::array<std::pair<AssetType, const char*>, 5> kAssetTypeLabels {{
     { AssetType::Model,   "Model"   },
     { AssetType::Texture, "Texture" },
     { AssetType::Scene,   "Scene"   },
     { AssetType::Script,  "Script"  },
+    { AssetType::Prefab,  "Prefab"  },
   }};
 
   // Pick a single existing file through the OS dialog. filters = { { label, "ext1,ext2" }, ... }.
@@ -156,6 +157,7 @@ const char* AssetBrowserPanel::assetTypeLabel(const AssetType type)
     case AssetType::Texture: return "Texture";
     case AssetType::Scene: return "Scene";
     case AssetType::Script: return "Script";
+    case AssetType::Prefab: return "Prefab";
     default: return "All";
   }
 }
@@ -164,7 +166,9 @@ std::string AssetBrowserPanel::displayName(const AssetRecord& record)
 {
   switch (record.type)
   {
-    case AssetType::Scene: return record.path;        // scenes store their display name in path
+    // Scenes and prefabs store their display name in path (neither is a file).
+    case AssetType::Scene:
+    case AssetType::Prefab: return record.path;
     case AssetType::Script: return record.className;
     default: return std::filesystem::path(record.path).filename().string();
   }
@@ -323,6 +327,7 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
     case AssetType::Model:  icon = gc::SecIcon::model;  iconCol = theme::modelPurple; break;
     case AssetType::Script: icon = gc::SecIcon::script; iconCol = theme::scriptAmber; break;
     case AssetType::Scene:  icon = gc::SecIcon::scene;  iconCol = theme::sceneGreen;  break;
+    case AssetType::Prefab: icon = gc::SecIcon::block;  iconCol = theme::prefabBlue;  break;
     default: break;
   }
 

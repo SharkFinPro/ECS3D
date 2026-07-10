@@ -48,6 +48,10 @@ ServerApp::ServerApp(LaunchOptions options)
   BindingContext::setRaycast(&SceneQueries::raycast);
   BindingContext::setOverlapSphere(&SceneQueries::overlapSphere);
 
+  // The World spawnPrefab binding resolves a prefab uuid to its body through the registry. Injected once:
+  // loadProject reassigns the registry's contents, never the object.
+  BindingContext::setAssetRegistry(m_assetRegistry.get());
+
   if (m_options.project.empty())
   {
     // No project file requested: run the built-in sample (scenes 1-3 + falling balls), generated in
@@ -395,8 +399,9 @@ void ServerApp::handleEditComponent(const net::Message& message) const
 
 void ServerApp::handleSceneEdit(const net::Message& message) const
 {
-  // An editor changed the scene graph (add/remove object or component): apply it, then re-snapshot
-  // so every view rebuilds (structural changes aren't replicated per-op).
+  // An editor changed the scene graph (add/remove object or component, or instantiate a prefab): apply
+  // it, then re-snapshot so every view rebuilds (structural changes aren't replicated per-op). The
+  // registry is passed so the prefab op can resolve its asset uuid to the body on disk.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     const std::string payload(message.bytes().begin(), message.bytes().end());
@@ -404,7 +409,7 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
     const auto json = nlohmann::json::parse(payload, nullptr, false);
     if (!json.is_discarded())
     {
-      replication::applySceneEdit(*scene->getObjectManager(), json);
+      replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
 
       broadcastSnapshot();
     }

@@ -91,8 +91,18 @@ EditorApp::EditorApp(LaunchOptions options)
   m_componentEditor = std::make_shared<ComponentEditor>();
   registerEditors();
 
+  // Registering a new asset: apply it locally for instant feedback, then on the authoritative server
+  // (which re-snapshots to keep everyone in sync). Shared by the asset browser's import/create and the
+  // object tree's "Save as Prefab".
+  const auto addAsset = [this](const nlohmann::json& asset) {
+    replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
+
+    m_netClient->send(replication::packAddAsset(asset));
+  };
+
   m_objectGUIManager = std::make_shared<ObjectGUIManager>(m_componentEditor);
   m_objectGUIManager->setAssetRegistry(m_assetRegistry.get());
+  m_objectGUIManager->setAddAssetCallback(addAsset);
   m_objectGUIManager->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
     // A widget changed: send the component's new state to the authoritative server as an edit command.
     const auto message = replication::buildComponentEdit(objectUUID, component);
@@ -124,13 +134,7 @@ EditorApp::EditorApp(LaunchOptions options)
     message.writeString(uuids::to_string(sceneUUID));
     m_netClient->send(message);
   });
-  m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& addAsset) {
-    // Register it locally for instant feedback in the browser, then on the authoritative server (which
-    // re-snapshots to keep everyone in sync).
-    replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, addAsset);
-
-    m_netClient->send(replication::packAddAsset(addAsset));
-  });
+  m_assetBrowser->setAddAssetCallback(addAsset);
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this] {

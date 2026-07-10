@@ -1,10 +1,14 @@
 #include "WorldBindings.h"
 #include "BindingContext.h"
+#include <assets/AssetRegistry.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/components/Transform.h>
 #include <glm/vec3.hpp>
+#include <nlohmann/json.hpp>
+#include <exception>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -33,6 +37,18 @@ namespace {
 
     return uuids::uuid::from_string(std::string(uuid)).value_or(uuids::uuid{});
   }
+
+  // Object::start() covers only its own components; a prefab instance is a whole subtree, and every node
+  // needs live component state before physics/replication read it.
+  void startSubtree(const Object& object)
+  {
+    object.start();
+
+    for (const auto& child : object.getChildren())
+    {
+      startSubtree(*child);
+    }
+  }
 }
 
 WorldBindings WorldBindingsProvider::getBindings()
@@ -45,7 +61,8 @@ WorldBindings WorldBindingsProvider::getBindings()
     .spawnObject = &bindSpawnObject,
     .destroyObject = &bindDestroyObject,
     .raycast = &bindRaycast,
-    .overlapSphere = &bindOverlapSphere
+    .overlapSphere = &bindOverlapSphere,
+    .spawnPrefab = &bindSpawnPrefab
   };
 }
 
@@ -153,6 +170,57 @@ const char* WorldBindingsProvider::bindSpawnObject(const char* name, const float
   }
 
   // Record it so ServerApp can broadcast the spawn after the tick (scripting can't reach the net layer).
+  BindingContext::recordSpawn(object);
+
+  return store(uuids::to_string(object->getUUID()));
+}
+
+const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const float x, const float y, const float z)
+{
+  const auto objectManager = BindingContext::getObjectManager();
+  const auto assetRegistry = BindingContext::getAssetRegistry();
+  if (!objectManager || !assetRegistry || !prefabUuid)
+  {
+    return store("");
+  }
+
+  const auto parsed = uuids::uuid::from_string(std::string(prefabUuid));
+  if (!parsed.has_value())
+  {
+    return store("");
+  }
+
+  // The body is carried inline on the asset record; null when the uuid isn't a prefab or the blob is bad.
+  const auto body = assetRegistry->getPrefabBody(parsed.value());
+  if (!body.is_object())
+  {
+    std::cerr << "[WorldBindings] No prefab body for " << prefabUuid << std::endl;
+    return store("");
+  }
+
+  std::shared_ptr<Object> object;
+  try
+  {
+    object = objectManager->instantiate(body);
+  }
+  catch (const std::exception& e)
+  {
+    // instantiate throws on a malformed body (e.g. a component type this build doesn't know). A bad prefab
+    // must degrade to "no spawn", never take down the tick loop.
+    std::cerr << "[WorldBindings] Failed to instantiate prefab " << prefabUuid << ": " << e.what() << std::endl;
+    return store("");
+  }
+
+  // A script only runs while the scene is running, so the whole newborn subtree must be started (live
+  // component state) before the root is positioned — otherwise physics/replication read stopped values.
+  startSubtree(*object);
+
+  if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
+  {
+    transform->setPosition({ x, y, z });
+  }
+
+  // One recorded spawn: Object::pack carries the whole subtree, so the client splices in the same tree.
   BindingContext::recordSpawn(object);
 
   return store(uuids::to_string(object->getUUID()));

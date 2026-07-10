@@ -61,7 +61,14 @@ void applyComponentEdit(const ObjectManager& objectManager, const net::Message& 
 [[nodiscard]] nlohmann::json buildAddScript(const uuids::uuid& objectUUID,
                                             const std::string& className);
 
-void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit);
+// Instantiate a prefab asset into the scene at the transform stored in its body. Unlike every other op
+// this one names an asset rather than an existing object, so applySceneEdit needs the AssetRegistry to
+// resolve the prefab's uuid to its body — pass it whenever prefab ops are possible (the authoritative
+// server always does).
+[[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID);
+
+void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                    const AssetRegistry* assetRegistry = nullptr);
 
 // Runtime spawn/destroy replication. Unlike the editor's structural edits (which re-snapshot), a script
 // spawning or destroying an object at runtime replicates incrementally: the server broadcasts one packed
@@ -75,9 +82,10 @@ void applyObjectSpawned(ObjectManager& objectManager, const net::Message& messag
 
 void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message);
 
-// Register an imported/created asset ({ assetType, uuid, path|name, [className] }). Shared by the
-// server (authoritative) and the editor (instant local feedback). Models/textures/scripts go into the
-// AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager.
+// Register an imported/created asset ({ assetType, uuid, path|name, [className], [body] }). Shared by the
+// server (authoritative) and the editor (instant local feedback). Models/textures/scripts/prefabs go
+// into the AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager. A prefab carries its
+// serialized-object `body` inline (there is no file on disk).
 void applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,

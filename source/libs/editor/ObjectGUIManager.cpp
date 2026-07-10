@@ -10,10 +10,21 @@
 #include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <array>
+#include <random>
 #include <string>
 #include <utility>
 
 namespace {
+  // A fresh asset uuid for a saved prefab. (AssetBrowserPanel has the same one-liner for the assets it
+  // creates; asset uuids are unrelated to the scene's object uuids, so ObjectManager's generator is not
+  // the right source here.)
+  [[nodiscard]] std::string newAssetUUID()
+  {
+    std::mt19937 rng{ std::random_device{}() };
+    uuids::uuid_random_generator generator{ rng };
+    return uuids::to_string(generator());
+  }
+
   // The components the "Add Component" menu can attach.
   // checkType is the ComponentType whose presence on the object hides this entry.
   // Transform is omitted (every object already has one); scripts attach via drag & drop only.
@@ -98,6 +109,11 @@ void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
   m_sceneEditCallback = std::move(callback);
 }
 
+void ObjectGUIManager::setAddAssetCallback(AddAssetCallback callback)
+{
+  m_addAssetCallback = std::move(callback);
+}
+
 void ObjectGUIManager::setSelectedObject(const std::optional<uuids::uuid>& objectUUID)
 {
   m_selectedObject = objectUUID;
@@ -160,7 +176,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
       displayObjectTree(object);
     }
 
-    // Drop an object onto the empty area below the tree to reparent it to the root.
+    // The empty area below the tree is the scene root: drop an object there to reparent it to the root,
+    // or a prefab from the asset browser to instantiate it.
     ImGui::Dummy(ImGui::GetContentRegionAvail());
     if (m_editable && ImGui::BeginDragDropTarget())
     {
@@ -170,6 +187,16 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
         if (const auto dragged = uuids::uuid::from_string(uuidStr); dragged.has_value() && m_sceneEditCallback)
         {
           m_sceneEditCallback(replication::buildReparentObject(dragged.value(), nullptr));
+        }
+      }
+
+      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(assetDragDrop::prefab))
+      {
+        const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+        if (const auto prefab = uuids::uuid::from_string(uuidStr); prefab.has_value() && m_sceneEditCallback)
+        {
+          // The server resolves the prefab uuid to its body on disk, instantiates, and re-snapshots.
+          m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value()));
         }
       }
 
@@ -290,6 +317,11 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     if (ImGui::MenuItem("Duplicate") && m_sceneEditCallback)
     {
       m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID()));
+    }
+
+    if (ImGui::MenuItem("Save as Prefab"))
+    {
+      saveAsPrefab(object);
     }
 
     if (ImGui::MenuItem("Delete"))
@@ -588,6 +620,26 @@ void ObjectGUIManager::displayAddComponent(const std::shared_ptr<Object>& object
 
   ImGui::PopStyleVar(3);
   ImGui::PopStyleColor(2);
+}
+
+void ObjectGUIManager::saveAsPrefab(const std::shared_ptr<Object>& object) const
+{
+  if (!m_addAssetCallback)
+  {
+    return;
+  }
+
+  // The prefab body is the object's own serialize() blob, carried inline in the asset record — there is no
+  // file on disk, so it travels with the project and reaches a server that shares no filesystem with us.
+  //
+  // Prefabs are keyed by display name: saving over an existing name updates that prefab's body in place
+  // (keeping its uuid) rather than adding a second one. The uuid here is only used when the name is new.
+  m_addAssetCallback({
+    { "assetType", "prefab" },
+    { "uuid", newAssetUUID() },
+    { "name", object->getName() },
+    { "body", object->serialize().dump() }
+  });
 }
 
 void ObjectGUIManager::displayScriptDragDropArea(const float dropZoneStartY,

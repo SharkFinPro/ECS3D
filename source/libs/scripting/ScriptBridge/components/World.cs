@@ -16,6 +16,7 @@ public unsafe struct WorldBindings
     public delegate* unmanaged<IntPtr, void> destroyObject;
     public delegate* unmanaged<float, float, float, float, float, float, float, uint, IntPtr, IntPtr> raycast;
     public delegate* unmanaged<float, float, float, float, uint, IntPtr, IntPtr> overlapSphere;
+    public delegate* unmanaged<IntPtr, float, float, float, IntPtr> spawnPrefab;
 }
 
 // The result of a successful World.raycast: the object hit and where.
@@ -126,8 +127,8 @@ public static unsafe class World
     }
 
     // Spawn a minimal object (a Transform at the given position) and return its uuid. The object appears
-    // on connected clients after the current tick. Full prefab spawn (with model/scripts) arrives in
-    // Phase 5; for now, hand the returned uuid to tryGetTransform to drive it.
+    // on connected clients after the current tick. Hand the returned uuid to tryGetTransform to drive it.
+    // For an object with models/colliders/scripts, save it as a prefab and use spawnPrefab.
     public static string spawn(string name, float x, float y, float z)
     {
         var namePtr = Marshal.StringToCoTaskMemUTF8(name);
@@ -142,6 +143,26 @@ public static unsafe class World
     }
 
     public static string spawn(string name, Vector3 position) => spawn(name, position.X, position.Y, position.Z);
+
+    // Spawn a prefab asset — its whole object subtree, with fresh uuids — with the root at the given
+    // position, and return the root's uuid. Returns "" when prefabUuid isn't a registered prefab or its
+    // body is malformed (the spawn is skipped and the server logs it; nothing throws). The prefab's asset
+    // uuid is the one shown by the editor's asset browser.
+    public static string spawnPrefab(string prefabUuid, float x, float y, float z)
+    {
+        var uuidPtr = Marshal.StringToCoTaskMemUTF8(prefabUuid);
+        try
+        {
+            return Marshal.PtrToStringUTF8(NativeBindings.World.spawnPrefab(uuidPtr, x, y, z)) ?? "";
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(uuidPtr);
+        }
+    }
+
+    public static string spawnPrefab(string prefabUuid, Vector3 position)
+        => spawnPrefab(prefabUuid, position.X, position.Y, position.Z);
 
     // Destroy an object at runtime. Safe if the uuid is unknown/already gone (no-op). The removal takes
     // effect at the end of the tick (mark-for-deletion), so a wrapper held for this uuid degrades to
