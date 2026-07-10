@@ -2,6 +2,7 @@
 #include "AssetDragDrop.h"
 #include "ComponentEditor.h"
 #include "GuiComponents.h"
+#include "Selection.h"
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <objects/Object.h>
@@ -114,10 +115,9 @@ void ObjectGUIManager::setAddAssetCallback(AddAssetCallback callback)
   m_addAssetCallback = std::move(callback);
 }
 
-void ObjectGUIManager::setSelectedObject(const std::optional<uuids::uuid>& objectUUID)
+void ObjectGUIManager::setSelection(std::shared_ptr<EditorSelection> selection)
 {
-  m_selectedObject = objectUUID;
-  m_showComponentSelector = false;
+  m_selection = std::move(selection);
 }
 
 void ObjectGUIManager::setEditable(const bool editable)
@@ -132,7 +132,9 @@ void ObjectGUIManager::setAssetRegistry(const AssetRegistry* registry)
 
 std::optional<uuids::uuid> ObjectGUIManager::getHighlightUUID() const
 {
-  return m_highlightSelectedObject ? m_selectedObject : std::nullopt;
+  // Only object selections highlight in the viewport; objectUUID() already returns nullopt for the
+  // None/Asset kinds, so this naturally suppresses the highlight for those.
+  return m_highlightSelectedObject ? m_selection->objectUUID() : std::nullopt;
 }
 
 void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
@@ -207,12 +209,12 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   // Delete hotkey: while the Objects panel has focus, Delete queues the selected object for removal
   // (guarded against firing while a text field is being typed into, or when read-only). The
   // confirmation modal follows.
-  if (m_editable && objectManager && m_selectedObject.has_value() &&
+  if (m_editable && objectManager && m_selection->objectUUID().has_value() &&
       ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
       !ImGui::GetIO().WantTextInput &&
       ImGui::IsKeyPressed(ImGuiKey_Delete))
   {
-    m_objectPendingDeletion = m_selectedObject;
+    m_objectPendingDeletion = m_selection->objectUUID();
   }
 
   ImGui::End();
@@ -226,7 +228,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 {
   ImGui::PushID(uuids::to_string(object->getUUID()).c_str());
 
-  const bool isSelected = m_selectedObject.has_value() && m_selectedObject.value() == object->getUUID();
+  const bool isSelected = m_selection->objectUUID() == object->getUUID();
   const bool isLeaf = object->getChildren().empty();
 
   ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_FramePadding |
@@ -254,7 +256,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
   {
-    setSelectedObject(object->getUUID());
+    m_selection->selectObject(object->getUUID());
+    m_showComponentSelector = false;
   }
 
   // Icon + name + accent selection bar, drawn over the (empty-label) node row.
@@ -374,8 +377,9 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
   ImGui::Begin("Selected Object");
 
   // Panel header: "SELECTED OBJECT" small-caps label + a right-aligned type chip (mockup).
-  const auto selected = (objectManager && m_selectedObject.has_value())
-    ? objectManager->getObjectByUUID(m_selectedObject.value()) : nullptr;
+  const auto selectedUUID = m_selection->objectUUID();
+  const auto selected = (objectManager && selectedUUID.has_value())
+    ? objectManager->getObjectByUUID(selectedUUID.value()) : nullptr;
 
   gc::sectionLabel("Selected Object");
   if (selected)
@@ -392,10 +396,10 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
   // Empty state when nothing is selected — an intentional placeholder rather than a lone checkbox.
   if (!selected)
   {
-    if (m_selectedObject.has_value())
+    if (selectedUUID.has_value())
     {
       // Selection referenced an object that no longer exists (e.g. a fresh snapshot replaced the scene).
-      m_selectedObject.reset();
+      m_selection->clear();
     }
 
     gc::emptyState(gc::SecIcon::block, "No object selected",
@@ -411,10 +415,13 @@ void ObjectGUIManager::displaySelectedObject(const ObjectManager* objectManager)
 
   ImGui::Separator();
 
-  // Sync the name buffer when the selection changes.
+  // Sync the name buffer when the selection changes. Also fold the shown object back to a closed
+  // Add Component list, so a viewport pick (which writes the shared selection directly) matches the
+  // tree click's reset.
   if (m_nameEditObjectUUID != object->getUUID())
   {
     m_nameEditObjectUUID = object->getUUID();
+    m_showComponentSelector = false;
     const auto name = object->getName();
     const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
     name.copy(m_nameEditBuffer.data(), len);
@@ -540,9 +547,9 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
       m_sceneEditCallback(replication::buildRemoveObject(m_objectPendingDeletion.value()));
     }
 
-    if (m_selectedObject == m_objectPendingDeletion)
+    if (m_selection->objectUUID() == m_objectPendingDeletion)
     {
-      m_selectedObject.reset();
+      m_selection->clear();
     }
 
     m_objectPendingDeletion.reset();

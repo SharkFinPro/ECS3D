@@ -14,6 +14,7 @@ class AssetRegistry;
 class Object;
 class Component;
 class ComponentEditor;
+class EditorSelection;
 
 // The editor's object tree ("Objects") + selected-object panel ("Selected Object"). It draws each
 // component of the selected object through the ComponentEditor and reports edits back:
@@ -38,12 +39,14 @@ public:
 
   void setAssetRegistry(const AssetRegistry* registry);
 
+  // The shared selection slot owned by EditorApp: the tree click and delete flows read/write it, and
+  // the viewport highlight derives from it. Other writers (viewport picking, the asset browser) share
+  // the same instance, so selecting an object here and picking one there stay in sync.
+  void setSelection(std::shared_ptr<EditorSelection> selection);
+
   // objectManager may be null (no scene loaded yet): the windows are still drawn, just empty, so they
   // stay present/dockable instead of popping in and out.
   void displayGui(const ObjectManager* objectManager);
-
-  // Set the selection externally (e.g. from viewport mouse-picking).
-  void setSelectedObject(const std::optional<uuids::uuid>& objectUUID);
 
   // When false (the connected server isn't in edit mode), the panels still render so the scene can be
   // viewed/inspected, but the add/remove/reparent/edit affordances are disabled.
@@ -65,7 +68,9 @@ private:
   std::array<char, 256> m_nameEditBuffer{};
   std::optional<uuids::uuid> m_nameEditObjectUUID;
 
-  std::optional<uuids::uuid> m_selectedObject;
+  // The editor-wide selection, owned by EditorApp and shared with the other panels. The Object kind is
+  // what this manager cares about; asset selections are inspected by other panels.
+  std::shared_ptr<EditorSelection> m_selection;
 
   // The object awaiting delete confirmation (set by the context-menu "Delete" or the Delete hotkey).
   // While set, the "Delete Object?" modal is shown; confirming sends a removeObject scene edit.

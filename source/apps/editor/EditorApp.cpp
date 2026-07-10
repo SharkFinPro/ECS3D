@@ -13,6 +13,7 @@
 #include <InputCapture.h>
 #include <ComponentEditor.h>
 #include <ObjectGUIManager.h>
+#include <Selection.h>
 #include <EditorTheme.h>
 #include <GuiComponents.h>
 #include <AssetBrowserPanel.h>
@@ -100,8 +101,11 @@ EditorApp::EditorApp(LaunchOptions options)
     m_netClient->send(replication::packAddAsset(asset));
   };
 
+  m_selection = std::make_shared<EditorSelection>();
+
   m_objectGUIManager = std::make_shared<ObjectGUIManager>(m_componentEditor);
   m_objectGUIManager->setAssetRegistry(m_assetRegistry.get());
+  m_objectGUIManager->setSelection(m_selection);
   m_objectGUIManager->setAddAssetCallback(addAsset);
   m_objectGUIManager->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
     // A widget changed: send the component's new state to the authoritative server as an edit command.
@@ -270,8 +274,16 @@ void EditorApp::handlePicking()
       }
     }
 
-    // Picks the clicked object, or clears the selection when empty space was clicked.
-    m_objectGUIManager->setSelectedObject(picked);
+    // Picks the clicked object, or clears the selection when empty space was clicked. Writes the
+    // shared selection directly (the object tree/inspector read the same instance).
+    if (picked.has_value())
+    {
+      m_selection->selectObject(picked.value());
+    }
+    else
+    {
+      m_selection->clear();
+    }
   }
 
   m_mouseWasPressed = pressed;

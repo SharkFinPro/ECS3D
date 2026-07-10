@@ -27,6 +27,7 @@ class ComponentEditor;
 class ObjectGUIManager;
 class AssetBrowserPanel;
 class SaveUI;
+class EditorSelection;
 
 namespace net {
   class NetClient;
@@ -79,6 +80,11 @@ private:
   std::shared_ptr<vke::VulkanEngine> m_renderer;
   std::shared_ptr<GpuAssetCache> m_assetCache;
   std::shared_ptr<RenderSystem> m_renderSystem;
+
+  // The editor-wide selection slot (object vs. asset vs. nothing), shared into the panels that read or
+  // write it — the object tree/inspector today, the asset browser in a later phase. handlePicking
+  // writes it directly from viewport mouse-picking.
+  std::shared_ptr<EditorSelection> m_selection;
 
   std::shared_ptr<ComponentEditor> m_componentEditor;
   std::shared_ptr<ObjectGUIManager> m_objectGUIManager;
