@@ -298,7 +298,22 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
   // server is editable, then send the full project/scene as a Snapshot. Record that a connection has been
   // seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
   m_hasConnected = true;
-  assignPlayerSlot(senderId);
+  const int32_t slot = assignPlayerSlot(senderId);
+
+  // If the joining client tagged its request with a nonce (players do; the editor sends none), tell it
+  // which player slot it was bound to so it can render through that player's camera (Phase 4.4). Broadcast
+  // + nonce correlation avoids a per-connection send path: every client hears it, but only the one whose
+  // join nonce matches keeps it. The remaining() guard keeps an older/nonce-less client working.
+  net::MessageReader reader(message);
+  if (reader.remaining() >= sizeof(uint64_t))
+  {
+    const auto nonce = reader.read<uint64_t>();
+    net::Message reply(net::MessageType::playerSlot);
+    reply.write(nonce);
+    reply.write(slot);
+    m_netServer->broadcast(reply);
+  }
+
   broadcastEditStatus();
   broadcastSnapshot();
 }
