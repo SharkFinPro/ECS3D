@@ -13,6 +13,8 @@ add_library(${PROJECT_NAME}
   Replication.h
   assets/AssetRegistry.cpp
   assets/AssetRegistry.h
+  assets/PrefabLoader.cpp
+  assets/PrefabLoader.h
   scenes/SceneManager.cpp
   scenes/SceneManager.h
   scenes/SceneAsset.cpp

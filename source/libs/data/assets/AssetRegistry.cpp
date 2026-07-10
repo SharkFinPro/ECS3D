@@ -62,7 +62,8 @@ nlohmann::json AssetRegistry::serialize() const
   nlohmann::json data = {
     { "models", nlohmann::json::array() },
     { "textures", nlohmann::json::array() },
-    { "scripts", nlohmann::json::array() }
+    { "scripts", nlohmann::json::array() },
+    { "prefabs", nlohmann::json::array() }
   };
 
   for (const auto& [uuid, record] : m_assets)
@@ -79,6 +80,11 @@ nlohmann::json AssetRegistry::serialize() const
         break;
       case AssetType::Script:
         data["scripts"].push_back({ { "className", record.className }, { "filePath", record.path }, { "uuid", uuidString } });
+        break;
+      case AssetType::Prefab:
+        // Like a model: the record is just a path to the file holding the body (one Object::serialize()
+        // blob). See PrefabLoader.h.
+        data["prefabs"].push_back({ { "name", record.path }, { "filePath", record.path }, { "uuid", uuidString } });
         break;
       default:
         break;
@@ -126,17 +132,30 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
       });
     }
   }
+
+  if (assetsData.contains("prefabs"))
+  {
+    for (const auto& assetData : assetsData.at("prefabs"))
+    {
+      registerAsset({
+        .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
+        .type = AssetType::Prefab,
+        .path = assetData.at("filePath")
+      });
+    }
+  }
 }
 
 void AssetRegistry::pack(net::Message& message) const
 {
   // Collect first so we can write a count up front (m_assets also holds Scene records, which — like
-  // serialize() — are skipped here; they're carried by the SceneManager).
+  // serialize() — are skipped here; they're carried by the SceneManager). A Prefab travels as a path
+  // like a model: its body stays on disk, read by the server when it instantiates.
   std::vector<const AssetRecord*> records;
   for (const auto& [uuid, record] : m_assets)
   {
     if (record.type == AssetType::Model || record.type == AssetType::Texture
-        || record.type == AssetType::Script)
+        || record.type == AssetType::Script || record.type == AssetType::Prefab)
     {
       records.push_back(&record);
     }

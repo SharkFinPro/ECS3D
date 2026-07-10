@@ -483,6 +483,11 @@ void applyAddAsset(AssetRegistry& assetRegistry,
     assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Script,
       .path = asset.value("path", std::string{}), .className = asset.value("className", std::string{}) });
   }
+  else if (type == "prefab")
+  {
+    // Path-only, like a model: the body was already written to disk by whoever created the prefab.
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Prefab, .path = asset.value("path", std::string{}) });
+  }
   else if (type == "scene")
   {
     const std::string name = asset.value("name", std::string{ "New Scene" });

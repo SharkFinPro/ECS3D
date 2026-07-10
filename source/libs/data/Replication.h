@@ -76,8 +76,8 @@ void applyObjectSpawned(ObjectManager& objectManager, const net::Message& messag
 void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message);
 
 // Register an imported/created asset ({ assetType, uuid, path|name, [className] }). Shared by the
-// server (authoritative) and the editor (instant local feedback). Models/textures/scripts go into the
-// AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager.
+// server (authoritative) and the editor (instant local feedback). Models/textures/scripts/prefabs go
+// into the AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager.
 void applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,

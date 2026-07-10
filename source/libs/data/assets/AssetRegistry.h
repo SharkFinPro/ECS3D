@@ -11,12 +11,14 @@ namespace net {
   class MessageReader;
 }
 
+// Packed raw over the wire (AssetRegistry::pack), so only ever APPEND to this enum.
 enum class AssetType {
   Unknown,
   Model,
   Texture,
   Scene,
-  Script
+  Script,
+  Prefab
 };
 
 struct AssetRecord {
@@ -26,9 +28,10 @@ struct AssetRecord {
   std::string className; // scripts only
 };
 
-// uuid<->path registry + serialize. Carries asset metadata only (no GPU resources, no GUI).
-// ECS3DRender's GpuAssetCache resolves these records to vke resources; the editor's
-// AssetBrowserPanel renders the listing.
+// uuid<->path registry + serialize. Carries asset metadata only (no GPU resources, no GUI, no prefab
+// bodies). ECS3DRender's GpuAssetCache resolves these records to vke resources; the editor's
+// AssetBrowserPanel renders the listing; a Prefab record's path resolves to its body through
+// prefabs::loadBody (see PrefabLoader.h).
 class AssetRegistry {
 public:
   void registerAsset(const AssetRecord& record);
@@ -51,7 +54,8 @@ public:
   void loadFromJSON(const nlohmann::json& assetsData);
 
   // Binary equivalents of serialize()/loadFromJSON for the network snapshot. Like serialize(), pack()
-  // only writes the flat file assets (Model/Texture/Script); Scene records belong to the SceneManager.
+  // only writes the flat file assets (Model/Texture/Script/Prefab); Scene records belong to the
+  // SceneManager.
   void pack(net::Message& message) const;
 
   void unpack(net::MessageReader& messageReader);
