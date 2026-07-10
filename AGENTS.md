@@ -28,12 +28,12 @@
 | `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, MSVC export-all-symbols. Just `add_subdirectory(source)`. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
-| `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script), `Object`/`ObjectManager`, scenes, `AssetRegistry`, `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
+| `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry`, `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune + GJK/EPA under `collisions/`). Operates on `ECS3DData` via accessors. OpenMP if available. |
-| `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
+| `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
 | `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree + inspector), `AssetBrowserPanel`, `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess` (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
-| `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
+| `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
 | `source/libs/clrHost/` | `ECS3DClrHost` — `ManagedHost` boots CoreCLR and hands out managed statics as native fn ptrs. Owns the CMake helpers (`cmake/ECS3DManaged.cmake`, `FindDotnet.cmake`, `loadCS.cmake`). |
 | `source/apps/` | The executables. `apps/CMakeLists.txt` orders them (server first — client/editor depend on it). |
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
@@ -114,11 +114,11 @@ and `InputState` is keyed by that slot. A script reads *its own* player through 
 (`PlayerInput`), which resolves `object → PlayerController.playerSlot → InputState[slot]`; the global
 `InputUtils` stays a player-agnostic aggregate. `PlayerController` is an ordinary replicated data
 component (slot is editable + serialized), so possession is visible to the editor and to clients — the
-hook Phase 4's camera uses to pick "whose view". Mouse delta/scroll and key edges
+hook the camera uses to pick "whose view" (see Camera below). Mouse delta/scroll and key edges
 (`wasPressedThisTick`) accumulate between fixed ticks and are reset per tick by
 `InputState::clearMouseDeltas()`/`commitInputEdges()`. Forces
 requested from a script are buffered on the `RigidBody` data (pending-force queue) and drained by
-`PhysicsSystem`, keeping `scripting` independent of `sim`. Four conventions worth inheriting: (1) reaching
+`PhysicsSystem`, keeping `scripting` independent of `sim`. Five conventions worth inheriting: (1) reaching
 another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t)` → false when
 absent/destroyed; never throws in the tick loop) — future component wrappers follow this; (2) a binding
 that mutates scene structure can't touch the net layer, so it **buffers the change on `BindingContext`**
@@ -131,7 +131,33 @@ pass — the same "buffer plain data, let the app carry it" shape as pending for
 `sim` system (`SceneQueries`: raycast/overlapSphere), and `ServerApp` injects its statics into
 `BindingContext` (`setRaycast`/`setOverlapSphere`) at startup; the `World` bindings call through them. The
 injected signatures use only shared types (`ObjectManager`/`glm`/`uuid`), so no library learns the other —
-the pattern to reuse for any future sim query exposed to scripts.
+the pattern to reuse for any future sim query exposed to scripts; (5) **a read-only script binding for
+data the object doesn't own outright** follows the same `Transform`/`RigidBody` shape even when nothing
+mutates it: `CameraBindings` (`getDirection`/`has`) lets `PlayerScript` read its own `Camera` component so
+movement can be relative to wherever the camera actually faces, degrading to the forward default
+`(0,0,-1)` when the object has none — the same "safe missing-component" convention as `tryGet`, just
+without the `tryGet` ceremony since `ScriptBase` always constructs one for the script's own object (like
+`transform`/`rigidBody`/`input`).
+
+**Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
+`active`) — position comes from the object's `Transform`, so only the *look* needs its own field.
+`RenderSystem::updateCamera` finds the active `Camera` (optionally restricted to one object), builds
+`lookAt(pos, pos + q·direction, worldUp)` — `q` is the object's orientation, so the camera turns as the
+object turns, but `worldUp` (not an orientation-derived up) keeps the horizon level — then disables
+`vke::Camera`'s free-fly and calls `Renderer3D::setCameraParameters`; no active camera re-enables free-fly.
+**The editor never calls `updateCamera`**, so its viewport keeps free-fly for free. **FOV/near/far are
+carried and editable but have no visible effect yet** — `vke`'s projection matrix is hardcoded
+(`RenderInfo::getProjectionMatrix`); a fix needs an upstream `VulkanRenderer` change (a projection setter
+alongside `setCameraParameters`), tracked as deliberately deferred in `ROADMAP.md`. A client picks its
+*own* camera via the player↔object association (`PlayerController.playerSlot` + a `Camera` on the same
+object) using a **nonce-over-broadcast** handshake: the client tags its `join` with a random nonce, the
+server echoes `(nonce, slot)` back over the existing broadcast (`NetServer` has no targeted-send path), and
+only the client whose nonce matches keeps it — chosen over adding a targeted-send ABI to the C# transport,
+which would have meant touching both backends for one bit of routing. `PlayerScript` mouse-look rotates the
+object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
+gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
+movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded
+forward axis.
 
 ## Development Principles
 
