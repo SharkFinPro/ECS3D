@@ -58,8 +58,9 @@ public class PlayerScript : ScriptBase
 
     public override void variableUpdate()
     {
-        handleInput();
+        // Look first so movement uses this tick's heading (movement is relative to the current yaw).
         handleLook();
+        handleInput();
     }
 
     public override void stop()
@@ -112,36 +113,59 @@ public class PlayerScript : ScriptBase
             return;
         }
 
-        float xForce = 0;
-        if (input.keyIsPressed(Key.LEFT))
-        {
-            xForce += m_speed;
-        }
-
-        if (input.keyIsPressed(Key.RIGHT))
-        {
-            xForce -= m_speed;
-        }
-
-        if (xForce != 0)
-        {
-            m_appliedForce.X = xForce;
-        }
-
-        float zForce = 0;
+        // Movement follows where the player faces: forward is the camera's forward projected onto the
+        // ground plane (yaw only, so looking up/down doesn't tilt movement). Assumes the camera's forward
+        // is the object's -Z, so the body's yaw is the movement heading.
+        float forwardInput = 0;
         if (input.keyIsPressed(Key.UP))
         {
-            zForce += m_speed;
+            forwardInput += 1.0f;
         }
 
         if (input.keyIsPressed(Key.DOWN))
         {
-            zForce -= m_speed;
+            forwardInput -= 1.0f;
         }
 
-        if (zForce != 0)
+        float strafeInput = 0;
+        if (input.keyIsPressed(Key.RIGHT))
         {
-            m_appliedForce.Z = zForce;
+            strafeInput += 1.0f;
+        }
+
+        if (input.keyIsPressed(Key.LEFT))
+        {
+            strafeInput -= 1.0f;
+        }
+
+        if (forwardInput != 0 || strafeInput != 0)
+        {
+            // Base heading is the camera's own facing (its direction field) on the ground plane, so
+            // "forward" follows wherever the camera actually points — not an assumed -Z.
+            Vector3 camDir = camera.getDirection();
+            Vector3 baseForward = new Vector3(camDir.X, 0.0f, camDir.Z);
+            baseForward = baseForward.LengthSquared() > 0.0001f
+                ? Vector3.Normalize(baseForward)
+                : new Vector3(0.0f, 0.0f, -1.0f); // camera looks straight up/down: fall back to forward
+
+            // Rotate the base heading by the body's current yaw (mouse-look), then derive right from it.
+            float yawRad = transform.getRotation().Y * (MathF.PI / 180.0f);
+            float cos = MathF.Cos(yawRad), sin = MathF.Sin(yawRad);
+            Vector3 forward = new Vector3(
+                baseForward.X * cos + baseForward.Z * sin,
+                0.0f,
+                -baseForward.X * sin + baseForward.Z * cos
+            );
+            Vector3 right = new Vector3(-forward.Z, 0.0f, forward.X);
+
+            Vector3 move = forward * forwardInput + right * strafeInput;
+            if (move.LengthSquared() > 0.0f)
+            {
+                move = Vector3.Normalize(move) * m_speed;
+            }
+
+            m_appliedForce.X = move.X;
+            m_appliedForce.Z = move.Z;
         }
 
         if (!m_wasJumping && !rigidBody.isFalling() && input.keyIsPressed(Key.X))

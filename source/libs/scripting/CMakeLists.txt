@@ -15,6 +15,8 @@ add_library(${PROJECT_NAME}
   bindings/InputUtilsBindings.h
   bindings/WorldBindings.cpp
   bindings/WorldBindings.h
+  bindings/CameraBindings.cpp
+  bindings/CameraBindings.h
   bindings/InputState.cpp
   bindings/InputState.h
 )
