@@ -7,6 +7,7 @@
 #include <vector>
 #include <uuid.h>
 
+class AssetRegistry;
 class Object;
 class ObjectManager;
 
@@ -20,6 +21,9 @@ class ObjectManager;
 // Scene queries (raycast/overlap) live in sim, which scripting can't link, so the server app injects them
 // here as function pointers at startup (see SceneQueries); the World bindings call through them. Signatures
 // use only types both sides share (data + glm + uuid) and must match SceneQueries' statics.
+//
+// The AssetRegistry is injected the same way (once, at startup — the server reassigns its contents on
+// loadProject but never the object), so the spawnPrefab binding can resolve a prefab uuid to its body.
 class BindingContext {
 public:
   using RaycastFn = bool(*)(ObjectManager&, const glm::vec3&, const glm::vec3&, float, uint32_t,
@@ -30,6 +34,10 @@ public:
   static void setObjectManager(ObjectManager* objectManager);
 
   [[nodiscard]] static ObjectManager* getObjectManager();
+
+  static void setAssetRegistry(AssetRegistry* assetRegistry);
+
+  [[nodiscard]] static AssetRegistry* getAssetRegistry();
 
   static void recordSpawn(const std::shared_ptr<Object>& object);
 
@@ -48,6 +56,7 @@ public:
 
 private:
   static ObjectManager* s_objectManager;
+  static AssetRegistry* s_assetRegistry;
 
   static std::vector<std::shared_ptr<Object>> s_spawned;
   static std::vector<uuids::uuid> s_destroyed;

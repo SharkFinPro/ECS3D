@@ -2,6 +2,7 @@
 #include <utility>
 
 ObjectManager* BindingContext::s_objectManager = nullptr;
+AssetRegistry* BindingContext::s_assetRegistry = nullptr;
 std::vector<std::shared_ptr<Object>> BindingContext::s_spawned;
 std::vector<uuids::uuid> BindingContext::s_destroyed;
 BindingContext::RaycastFn BindingContext::s_raycast = nullptr;
@@ -15,6 +16,16 @@ void BindingContext::setObjectManager(ObjectManager* objectManager)
 ObjectManager* BindingContext::getObjectManager()
 {
   return s_objectManager;
+}
+
+void BindingContext::setAssetRegistry(AssetRegistry* assetRegistry)
+{
+  s_assetRegistry = assetRegistry;
+}
+
+AssetRegistry* BindingContext::getAssetRegistry()
+{
+  return s_assetRegistry;
 }
 
 void BindingContext::recordSpawn(const std::shared_ptr<Object>& object)

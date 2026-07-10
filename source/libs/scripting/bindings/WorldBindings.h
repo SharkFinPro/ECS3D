@@ -21,6 +21,7 @@ struct WorldBindings
                         float maxDistance, uint32_t layerMask, const char* ignoreUuid);
   const char*(*overlapSphere)(float cx, float cy, float cz, float radius, uint32_t layerMask,
                               const char* ignoreUuid);
+  const char*(*spawnPrefab)(const char* prefabUuid, float x, float y, float z);
 };
 
 class WorldBindingsProvider {
@@ -33,10 +34,15 @@ private:
   static bool bindObjectExists(const char* uuid);
   static const char* bindGetAllObjectUuids();
 
-  // Spawn a minimal object (a Transform at the given position); returns its new uuid. Full prefab spawn
-  // arrives in Phase 5. destroyObject marks the object for deletion through the existing path.
+  // Spawn a minimal object (a Transform at the given position); returns its new uuid. destroyObject marks
+  // the object for deletion through the existing path.
   static const char* bindSpawnObject(const char* name, float x, float y, float z);
   static void bindDestroyObject(const char* uuid);
+
+  // Spawn a whole prefab (its subtree, with fresh uuids) at the given position; returns the new root's
+  // uuid, or "" when the prefab uuid isn't a registered prefab or its file is missing/malformed. The body
+  // is resolved through the AssetRegistry injected into BindingContext.
+  static const char* bindSpawnPrefab(const char* prefabUuid, float x, float y, float z);
 
   // Ray/overlap queries delegate to the sim implementation the app injected into BindingContext. Both
   // return a comma-delimited string the managed side parses: raycast → "uuid,dist,px,py,pz,nx,ny,nz" (or

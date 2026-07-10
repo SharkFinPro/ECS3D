@@ -48,6 +48,10 @@ ServerApp::ServerApp(LaunchOptions options)
   BindingContext::setRaycast(&SceneQueries::raycast);
   BindingContext::setOverlapSphere(&SceneQueries::overlapSphere);
 
+  // The World spawnPrefab binding resolves a prefab uuid to its body through the registry. Injected once:
+  // loadProject reassigns the registry's contents, never the object.
+  BindingContext::setAssetRegistry(m_assetRegistry.get());
+
   if (m_options.project.empty())
   {
     // No project file requested: run the built-in sample (scenes 1-3 + falling balls), generated in
