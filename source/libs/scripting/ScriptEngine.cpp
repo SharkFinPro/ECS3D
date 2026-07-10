@@ -3,6 +3,7 @@
 #include "bindings/RigidBodyBindings.h"
 #include "bindings/InputUtilsBindings.h"
 #include "bindings/WorldBindings.h"
+#include "bindings/CameraBindings.h"
 #include <ManagedHost.h>
 #include <filesystem>
 #include <iostream>
@@ -95,6 +96,12 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerInputUtils =
     reinterpret_cast<RegisterInputUtilsFn>(m_host->getDelegate(assemblyPath, typeName, "registerInputUtilsBindings"));
   registerInputUtils(InputUtilsBindingsProvider::getBindings());
+
+  // Read-only camera access (its look direction), so a script can move relative to where the camera faces.
+  using RegisterCameraFn = void(*)(CameraBindings);
+  const auto registerCamera =
+    reinterpret_cast<RegisterCameraFn>(m_host->getDelegate(assemblyPath, typeName, "registerCameraBindings"));
+  registerCamera(CameraBindingsProvider::getBindings());
 }
 
 void ScriptEngine::reloadScripts() const

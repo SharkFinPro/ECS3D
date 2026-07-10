@@ -7,6 +7,9 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/Object.h>
+#include <objects/components/PlayerController.h>
+#include <objects/components/Camera.h>
 #include <GpuAssetCache.h>
 #include <RenderSystem.h>
 #include <InputCapture.h>
@@ -16,6 +19,7 @@
 #include <VulkanEngine/VulkanEngine.h>
 #include <chrono>
 #include <iostream>
+#include <random>
 #include <thread>
 
 ClientApp::ClientApp(ConnectOptions options)
@@ -41,8 +45,13 @@ ClientApp::ClientApp(ConnectOptions options)
 
   connectToServer();
 
-  // Ask the server for the initial Snapshot.
-  const net::Message message(net::MessageType::join);
+  // A random per-session tag so the server can echo back this client's player slot (see handlePlayerSlot).
+  std::random_device rd;
+  m_joinNonce = (static_cast<uint64_t>(rd()) << 32) ^ rd();
+
+  // Ask the server for the initial Snapshot, tagged with our nonce so the reply's slot is identifiable.
+  net::Message message(net::MessageType::join);
+  message.write(m_joinNonce);
   m_netClient->send(message);
 }
 
@@ -188,6 +197,10 @@ void ClientApp::variableUpdate() const
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache);
+
+    // Render through this client's own player camera (the object with our PlayerController slot + a
+    // Camera); nullopt falls back to the scene's first active camera / free-fly (Phase 4.4).
+    m_renderSystem->updateCamera(*scene->getObjectManager(), *m_assetCache, resolvePlayerCamera());
   }
 
   m_renderer->render();
@@ -215,6 +228,10 @@ void ClientApp::applyMessage(const net::Message& message) const
 
     case net::MessageType::objectDestroyed:
       handleObjectDestroyed(message);
+      break;
+
+    case net::MessageType::playerSlot:
+      handlePlayerSlot(message);
       break;
 
     default: break;
@@ -267,4 +284,48 @@ void ClientApp::handleObjectDestroyed(const net::Message& message) const
   {
     replication::applyObjectDestroyed(*scene->getObjectManager(), message);
   }
+}
+
+void ClientApp::handlePlayerSlot(const net::Message& message) const
+{
+  // The server broadcasts every client's slot assignment; keep only the one tagged with our own nonce.
+  net::MessageReader reader(message);
+  const auto nonce = reader.read<uint64_t>();
+  const auto slot = reader.read<int32_t>();
+
+  if (nonce == m_joinNonce)
+  {
+    m_playerSlot = slot;
+  }
+}
+
+std::optional<uuids::uuid> ClientApp::resolvePlayerCamera() const
+{
+  if (m_playerSlot < 0)
+  {
+    return std::nullopt;
+  }
+
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!scene)
+  {
+    return std::nullopt;
+  }
+
+  // Our player object is the one whose PlayerController holds our slot; render through its Camera.
+  for (const auto& object : scene->getObjectManager()->getAllObjects())
+  {
+    const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController);
+    if (!playerController || playerController->getPlayerSlot() != m_playerSlot)
+    {
+      continue;
+    }
+
+    if (object->getComponent<Camera>(ComponentType::camera))
+    {
+      return object->getUUID();
+    }
+  }
+
+  return std::nullopt;
 }

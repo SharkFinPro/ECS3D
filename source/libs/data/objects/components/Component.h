@@ -23,7 +23,8 @@ enum class ComponentType {
   SubComponentType_boxCollider,
   SubComponentType_sphereCollider,
   script,
-  playerController // appended last: the packed value is the wire discriminator, so new types go at the end
+  playerController,
+  camera // appended last: the packed value is the wire discriminator, so new types go at the end
 };
 
 const std::unordered_map<ComponentType, std::string> componentTypeToString {
@@ -34,7 +35,8 @@ const std::unordered_map<ComponentType, std::string> componentTypeToString {
   {ComponentType::SubComponentType_sphereCollider, "Sphere Collider"},
   {ComponentType::lightRenderer, "Light Renderer"},
   {ComponentType::script, "Script"},
-  {ComponentType::playerController, "Player Controller"}
+  {ComponentType::playerController, "Player Controller"},
+  {ComponentType::camera, "Camera"}
 };
 
 const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent {
@@ -53,7 +55,8 @@ const std::unordered_map<ComponentType, std::string> componentTypeToRegistryKey 
   {ComponentType::SubComponentType_boxCollider, "Box"},
   {ComponentType::SubComponentType_sphereCollider, "Sphere"},
   {ComponentType::script, "Script"},
-  {ComponentType::playerController, "PlayerController"}
+  {ComponentType::playerController, "PlayerController"},
+  {ComponentType::camera, "Camera"}
 };
 
 class ComponentVariableBase {

@@ -26,6 +26,8 @@ add_library(${PROJECT_NAME}
   components/ScriptEditor.h
   components/PlayerControllerEditor.cpp
   components/PlayerControllerEditor.h
+  components/CameraEditor.cpp
+  components/CameraEditor.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

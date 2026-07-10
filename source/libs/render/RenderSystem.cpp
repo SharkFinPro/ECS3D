@@ -6,10 +6,16 @@
 #include <objects/components/Transform.h>
 #include <objects/components/ModelRenderer.h>
 #include <objects/components/LightRenderer.h>
+#include <objects/components/Camera.h>
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
+#include <glm/common.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/camera/Camera.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
 #include <VulkanEngine/components/lighting/LightingManager.h>
 #include <VulkanEngine/components/lighting/lights/PointLight.h>
@@ -17,6 +23,24 @@
 #include <VulkanEngine/components/pipelines/implementations/common/PipelineTypes.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
+
+namespace {
+  // Hand the viewport back to the built-in free-fly camera. render() only pushes the free-fly pose while
+  // the scene view is focused, so push it once here too: otherwise the component camera's last pose would
+  // linger until the user happens to focus the viewport.
+  void enableFreeFlyCamera(const std::shared_ptr<vke::VulkanEngine>& renderer)
+  {
+    const auto camera = renderer->getCamera();
+
+    if (camera->isEnabled())
+    {
+      return;
+    }
+
+    camera->enable();
+    renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(camera->getPosition(), camera->getViewMatrix());
+  }
+}
 
 void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                                  const std::optional<uuids::uuid>& highlightUUID)
@@ -129,6 +153,71 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
       }
     }
   }
+}
+
+void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCache& assetCache,
+                                const std::optional<uuids::uuid>& cameraObject)
+{
+  const auto renderer = assetCache.getRenderer();
+
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    // When a specific camera object is requested (a client's own player camera), skip the rest.
+    if (cameraObject && object->getUUID() != *cameraObject)
+    {
+      continue;
+    }
+
+    const auto camera = object->getComponent<Camera>(ComponentType::camera);
+
+    if (!camera || !camera->isActive())
+    {
+      continue;
+    }
+
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
+    if (!transform)
+    {
+      continue;
+    }
+
+    // Position comes from the Transform; facing is the Camera's own direction, rotated by the object's
+    // orientation so the camera turns as the object turns. World-up (not an orientation-derived up) keeps
+    // the horizon level and avoids the roll/inversion the euler-quaternion up produced.
+    const glm::vec3 position = transform->getPosition();
+    const glm::quat orientation(glm::radians(transform->getRotation()));
+
+    glm::vec3 forward = orientation * camera->getDirection();
+    if (glm::length(forward) < 1e-6f)
+    {
+      forward = glm::vec3(0.0f, 0.0f, -1.0f); // guard an un-set (zero) direction
+    }
+    forward = glm::normalize(forward);
+
+    // lookAt degenerates when the view direction is parallel to up (looking straight up/down); fall back to
+    // a different reference axis so the matrix stays finite.
+    glm::vec3 up(0.0f, 1.0f, 0.0f);
+    if (glm::abs(glm::dot(forward, up)) > 0.9999f)
+    {
+      up = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
+
+    const glm::mat4 viewMatrix = lookAt(position, position + forward, up);
+
+    // Take over from the built-in free-fly camera (render() skips it while disabled, so this pose sticks).
+    renderer->getCamera()->disable();
+    renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(position, viewMatrix);
+    return;
+  }
+
+  // No active component camera in the scene — hand control back to the built-in free-fly camera.
+  enableFreeFlyCamera(renderer);
+}
+
+void RenderSystem::useFreeFlyCamera(GpuAssetCache& assetCache) const
+{
+  enableFreeFlyCamera(assetCache.getRenderer());
 }
 
 bool RenderSystem::isSelected(const uuids::uuid& uuid) const

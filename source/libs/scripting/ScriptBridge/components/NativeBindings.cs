@@ -9,4 +9,6 @@ internal static unsafe class NativeBindings
     internal static TransformBindings Transform;
 
     internal static WorldBindings World;
+
+    internal static CameraBindings Camera;
 }

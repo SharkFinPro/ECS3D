@@ -18,6 +18,8 @@
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
 #include <objects/components/Component.h>
+#include <objects/components/Camera.h>
+#include <objects/components/PlayerController.h>
 #include <components/TransformEditor.h>
 #include <components/RigidBodyEditor.h>
 #include <components/ModelRendererEditor.h>
@@ -25,6 +27,7 @@
 #include <components/ColliderEditor.h>
 #include <components/ScriptEditor.h>
 #include <components/PlayerControllerEditor.h>
+#include <components/CameraEditor.h>
 #include <NetClient.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
@@ -41,6 +44,28 @@
 #include <optional>
 #include <random>
 #include <thread>
+
+namespace {
+  // How a camera reads in the editor's "View" combo: the owning object's name, the player slot when it's a
+  // client's player camera, and a cue when the Camera is inactive (RenderSystem only renders through active
+  // cameras, so selecting one shows the free-fly view instead).
+  std::string cameraLabel(const std::shared_ptr<Object>& object)
+  {
+    std::string label = object->getName();
+
+    if (const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController))
+    {
+      label += " (Player " + std::to_string(playerController->getPlayerSlot()) + ")";
+    }
+
+    if (const auto camera = object->getComponent<Camera>(ComponentType::camera); camera && !camera->isActive())
+    {
+      label += " - inactive";
+    }
+
+    return label;
+  }
+}
 
 EditorApp::EditorApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -252,9 +277,9 @@ void EditorApp::sendInput()
 {
   const auto& io = ImGui::GetIO();
 
-  // Don't let editor UI interaction drive the game: when ImGui wants the keyboard, report no keys; when
-  // it wants the mouse (hovering a panel), report no mouse. focused stays true (an unfocused window
-  // already reports no keys), so this view never disables another connected view's input.
+  // Don't let editor UI interaction drive the game: when ImGui wants the keyboard, report no keys.
+  // focused stays true (an unfocused window already reports no keys), so this view never disables
+  // another connected view's input.
   input::InputSnapshot snapshot = input::capture(*m_renderer);
 
   if (io.WantCaptureKeyboard)
@@ -262,7 +287,16 @@ void EditorApp::sendInput()
     snapshot.keys.clear();
   }
 
-  if (io.WantCaptureMouse)
+  // The mouse can't be gated on io.WantCaptureMouse: the 3D viewport is itself an ImGui window in the
+  // editor's dockspace, so that flag is set whenever the cursor is over it — which would swallow the
+  // right-drag mouse-look a script reads. Forward the mouse only while looking through a scene camera
+  // (in free-fly the right-drag belongs to the editor's own camera, so sending it too would turn the
+  // player at the same time) and while the scene view is focused, which is the signal vke's free-fly
+  // camera gates on and goes false as soon as a panel is clicked.
+  const bool mouseDrivesGame = m_viewCameraObject.has_value()
+                            && m_renderer->getRenderingManager()->isSceneFocused();
+
+  if (!mouseDrivesGame)
   {
     snapshot.mouseDeltaX = 0.0f;
     snapshot.mouseDeltaY = 0.0f;
@@ -348,6 +382,7 @@ void EditorApp::registerEditors() const
   registerColliderEditors(*m_componentEditor);
   registerScriptEditor(*m_componentEditor);
   registerPlayerControllerEditor(*m_componentEditor);
+  registerCameraEditor(*m_componentEditor);
 }
 
 void EditorApp::setupKeybinds()
@@ -618,7 +653,7 @@ void EditorApp::displayMessageLog()
   ImGui::End();
 }
 
-void EditorApp::displaySceneStatus() const
+void EditorApp::displaySceneStatus()
 {
   constexpr int sceneStatusButtonWidth = 125;
 
@@ -679,6 +714,8 @@ void EditorApp::displaySceneStatus() const
   }
   ImGui::EndDisabled();
 
+  displayCameraSelector();
+
   // Status readout (divider + dot/label + scene name), right-aligned to the panel edge so the play
   // buttons stay put on the left regardless of the readout's width.
   const char* label = m_sceneStatus == SceneStatus::running ? "Running"
@@ -732,11 +769,91 @@ void EditorApp::displaySceneStatus() const
   ImGui::End();
 }
 
-void EditorApp::variableUpdate() const
+void EditorApp::displayCameraSelector()
 {
-  if (const auto scene = m_sceneManager->getCurrentScene())
+  constexpr auto freeFlyLabel = "Editor Camera";
+
+  const auto scene = m_sceneManager->getCurrentScene();
+  const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
+
+  // A view choice, not a scene edit, so this stays enabled on a read-only server.
+  std::string preview = freeFlyLabel;
+  if (objectManager && m_viewCameraObject)
   {
-    m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache, m_objectGUIManager->getHighlightUUID());
+    if (const auto object = objectManager->getObjectByUUID(*m_viewCameraObject))
+    {
+      preview = cameraLabel(object);
+    }
+  }
+
+  ImGui::SameLine(0.0f, 18.0f);
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextColored(theme::t2, "%s", "View");
+  ImGui::SameLine();
+
+  ImGui::SetNextItemWidth(200.0f);
+  if (ImGui::BeginCombo("##ViewCamera", preview.c_str()))
+  {
+    if (ImGui::Selectable(freeFlyLabel, !m_viewCameraObject))
+    {
+      m_viewCameraObject.reset();
+    }
+
+    if (objectManager)
+    {
+      for (const auto& object : objectManager->getAllObjects())
+      {
+        if (!object->getComponent<Camera>(ComponentType::camera))
+        {
+          continue;
+        }
+
+        const auto uuid = object->getUUID();
+
+        // Objects can share a name, so the uuid disambiguates the ImGui id.
+        const std::string label = cameraLabel(object) + "##" + uuids::to_string(uuid);
+
+        if (ImGui::Selectable(label.c_str(), m_viewCameraObject == uuid))
+        {
+          m_viewCameraObject = uuid;
+        }
+      }
+    }
+
+    ImGui::EndCombo();
+  }
+}
+
+void EditorApp::variableUpdate()
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+  const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
+
+  if (objectManager)
+  {
+    m_renderSystem->variableUpdate(*objectManager, *m_assetCache, m_objectGUIManager->getHighlightUUID());
+  }
+
+  // Drop a stale choice (the object left the scene, or lost its Camera) rather than freezing the viewport
+  // on that camera's last pose.
+  if (objectManager && m_viewCameraObject)
+  {
+    const auto object = objectManager->getObjectByUUID(*m_viewCameraObject);
+
+    if (!object || !object->getComponent<Camera>(ComponentType::camera))
+    {
+      m_viewCameraObject.reset();
+    }
+  }
+
+  // Look through the selected scene camera, or hand the viewport back to the editor's free-fly camera.
+  if (objectManager && m_viewCameraObject)
+  {
+    m_renderSystem->updateCamera(*objectManager, *m_assetCache, m_viewCameraObject);
+  }
+  else
+  {
+    m_renderSystem->useFreeFlyCamera(*m_assetCache);
   }
 
   m_renderer->render();

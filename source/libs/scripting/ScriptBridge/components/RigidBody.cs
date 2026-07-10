@@ -11,6 +11,8 @@ public unsafe struct RigidBodyBindings
     public delegate* unmanaged<IntPtr, float, float, float, void> setVelocity;
     public delegate* unmanaged<IntPtr, bool> isFalling;
     public delegate* unmanaged<IntPtr, bool> has;
+    // New fields go at the END to keep the layout matched with the native RigidBodyBindings struct.
+    public delegate* unmanaged<IntPtr, float, float, float, void> setAngularVelocity;
 }
 
 public unsafe class RigidBody
@@ -37,6 +39,12 @@ public unsafe class RigidBody
         NativeBindings.RigidBody.setVelocity(_uuid, x, y, z);
 
     public void setVelocity(Vector3 velocity) => setVelocity(velocity.X, velocity.Y, velocity.Z);
+
+    public void setAngularVelocity(float x, float y, float z) =>
+        NativeBindings.RigidBody.setAngularVelocity(_uuid, x, y, z);
+
+    public void setAngularVelocity(Vector3 angularVelocity) =>
+        setAngularVelocity(angularVelocity.X, angularVelocity.Y, angularVelocity.Z);
 
     public bool isFalling() => NativeBindings.RigidBody.isFalling(_uuid);
 }

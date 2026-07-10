@@ -11,6 +11,10 @@ public abstract class ScriptBase
 
     protected Transform transform { get; private set; } = null!;
 
+    // This script's own camera (read-only), for moving relative to where the view faces. Reads a forward
+    // default (0,0,-1) if the object has no Camera.
+    protected Camera camera { get; private set; } = null!;
+
     // This script's own player's input, resolved through its object's PlayerController. Reads as "nothing
     // pressed" if the object has no PlayerController. Prefer this over the global InputUtils, which reads
     // every player's input aggregated together.
@@ -20,6 +24,7 @@ public abstract class ScriptBase
     {
         rigidBody = new RigidBody(EntityId);
         transform = new Transform(EntityId);
+        camera = new Camera(EntityId);
         input = new PlayerInput(EntityId);
     }
 

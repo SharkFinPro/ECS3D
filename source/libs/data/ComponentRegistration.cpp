@@ -8,6 +8,7 @@
 #include "objects/components/collisions/SphereCollider.h"
 #include "objects/components/Script.h"
 #include "objects/components/PlayerController.h"
+#include "objects/components/Camera.h"
 #include <memory>
 
 void registerDataComponents(ComponentRegistry& componentRegistry)
@@ -31,4 +32,7 @@ void registerDataComponents(ComponentRegistry& componentRegistry)
 
   // Player↔object association (Phase 3.2): marks an object as owned by a player slot.
   componentRegistry.registerComponent("PlayerController", [] { return std::make_shared<PlayerController>(); });
+
+  // A view the renderer can look through (Phase 4).
+  componentRegistry.registerComponent("Camera", [] { return std::make_shared<Camera>(); });
 }
