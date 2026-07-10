@@ -277,9 +277,9 @@ void EditorApp::sendInput()
 {
   const auto& io = ImGui::GetIO();
 
-  // Don't let editor UI interaction drive the game: when ImGui wants the keyboard, report no keys; when
-  // it wants the mouse (hovering a panel), report no mouse. focused stays true (an unfocused window
-  // already reports no keys), so this view never disables another connected view's input.
+  // Don't let editor UI interaction drive the game: when ImGui wants the keyboard, report no keys.
+  // focused stays true (an unfocused window already reports no keys), so this view never disables
+  // another connected view's input.
   input::InputSnapshot snapshot = input::capture(*m_renderer);
 
   if (io.WantCaptureKeyboard)
@@ -287,7 +287,16 @@ void EditorApp::sendInput()
     snapshot.keys.clear();
   }
 
-  if (io.WantCaptureMouse)
+  // The mouse can't be gated on io.WantCaptureMouse: the 3D viewport is itself an ImGui window in the
+  // editor's dockspace, so that flag is set whenever the cursor is over it — which would swallow the
+  // right-drag mouse-look a script reads. Forward the mouse only while looking through a scene camera
+  // (in free-fly the right-drag belongs to the editor's own camera, so sending it too would turn the
+  // player at the same time) and while the scene view is focused, which is the signal vke's free-fly
+  // camera gates on and goes false as soon as a panel is clicked.
+  const bool mouseDrivesGame = m_viewCameraObject.has_value()
+                            && m_renderer->getRenderingManager()->isSceneFocused();
+
+  if (!mouseDrivesGame)
   {
     snapshot.mouseDeltaX = 0.0f;
     snapshot.mouseDeltaY = 0.0f;
