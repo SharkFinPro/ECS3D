@@ -25,6 +25,7 @@ class RenderSystem;
 class GpuAssetCache;
 class ComponentEditor;
 class ObjectGUIManager;
+class InspectorPanel;
 class AssetBrowserPanel;
 class SaveUI;
 class EditorSelection;
@@ -88,6 +89,7 @@ private:
 
   std::shared_ptr<ComponentEditor> m_componentEditor;
   std::shared_ptr<ObjectGUIManager> m_objectGUIManager;
+  std::shared_ptr<InspectorPanel> m_inspectorPanel;
   std::shared_ptr<AssetBrowserPanel> m_assetBrowser;
   std::shared_ptr<SaveUI> m_saveUI;
 

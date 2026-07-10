@@ -13,6 +13,7 @@
 #include <InputCapture.h>
 #include <ComponentEditor.h>
 #include <ObjectGUIManager.h>
+#include <InspectorPanel.h>
 #include <Selection.h>
 #include <EditorTheme.h>
 #include <GuiComponents.h>
@@ -101,19 +102,16 @@ EditorApp::EditorApp(LaunchOptions options)
     m_netClient->send(replication::packAddAsset(asset));
   };
 
-  m_selection = std::make_shared<EditorSelection>();
-
-  m_objectGUIManager = std::make_shared<ObjectGUIManager>(m_componentEditor);
-  m_objectGUIManager->setAssetRegistry(m_assetRegistry.get());
-  m_objectGUIManager->setSelection(m_selection);
-  m_objectGUIManager->setAddAssetCallback(addAsset);
-  m_objectGUIManager->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
-    // A widget changed: send the component's new state to the authoritative server as an edit command.
+  // A component widget changed: send the component's new state to the authoritative server as an edit
+  // command. Only the Inspector fires this (component value edits).
+  const auto editComponent = [this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
     const auto message = replication::buildComponentEdit(objectUUID, component);
     m_netClient->send(message);
-  });
-  m_objectGUIManager->setSceneEditCallback([this](const nlohmann::json& edit) {
-    // A structural change (add/remove object or component): the server applies it and re-snapshots.
+  };
+
+  // A structural change (add/remove/reparent object, add/remove component, rename, add script): the
+  // server applies it and re-snapshots. Shared by the object tree and the Inspector.
+  const auto sceneEdit = [this](const nlohmann::json& edit) {
     const auto payload = edit.dump();
 
     net::Message message(net::MessageType::sceneEdit);
@@ -122,7 +120,22 @@ EditorApp::EditorApp(LaunchOptions options)
       message.write(chunk);
     }
     m_netClient->send(message);
-  });
+  };
+
+  m_selection = std::make_shared<EditorSelection>();
+
+  // The object tree owns the hierarchy + structural tree edits + "Save as Prefab"; the Inspector owns
+  // the selected item's body (object component editing today). Both read/write the one selection slot.
+  m_objectGUIManager = std::make_shared<ObjectGUIManager>();
+  m_objectGUIManager->setSelection(m_selection);
+  m_objectGUIManager->setAddAssetCallback(addAsset);
+  m_objectGUIManager->setSceneEditCallback(sceneEdit);
+
+  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor);
+  m_inspectorPanel->setSelection(m_selection);
+  m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
+  m_inspectorPanel->setEditCallback(editComponent);
+  m_inspectorPanel->setSceneEditCallback(sceneEdit);
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
   m_assetBrowser->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) {
@@ -527,6 +540,7 @@ void EditorApp::updateGui()
   // Propagate the server's editability to the panels so they disable their mutating affordances (and
   // show a read-only cue) when connected to a non-edit server, rather than appearing broken.
   m_objectGUIManager->setEditable(m_serverEditable);
+  m_inspectorPanel->setEditable(m_serverEditable);
   m_assetBrowser->setEditable(m_serverEditable);
   m_saveUI->setEditable(m_serverEditable);
 
@@ -540,10 +554,12 @@ void EditorApp::updateGui()
 
   displaySceneStatus();
 
-  // The object tree + selected-object component panels (always drawn so they stay present/dockable;
-  // empty when no scene is loaded yet). Edits fire the callbacks wired in the ctor.
+  // The object tree + Inspector panels (always drawn so they stay present/dockable; empty when no scene
+  // is loaded yet). Edits fire the callbacks wired in the ctor.
   const auto scene = m_sceneManager->getCurrentScene();
-  m_objectGUIManager->displayGui(scene ? scene->getObjectManager().get() : nullptr);
+  const auto* objectManager = scene ? scene->getObjectManager().get() : nullptr;
+  m_objectGUIManager->displayGui(objectManager);
+  m_inspectorPanel->displayGui(objectManager);
 
   // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate
   // scene-selector widget.
@@ -847,7 +863,7 @@ void EditorApp::variableUpdate()
 
   if (objectManager)
   {
-    m_renderSystem->variableUpdate(*objectManager, *m_assetCache, m_objectGUIManager->getHighlightUUID());
+    m_renderSystem->variableUpdate(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUID());
   }
 
   // Drop a stale choice (the object left the scene, or lost its Camera) rather than freezing the viewport
