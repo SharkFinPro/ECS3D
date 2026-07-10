@@ -6,10 +6,14 @@
 #include <objects/components/Transform.h>
 #include <objects/components/ModelRenderer.h>
 #include <objects/components/LightRenderer.h>
+#include <objects/components/Camera.h>
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/camera/Camera.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
 #include <VulkanEngine/components/lighting/LightingManager.h>
 #include <VulkanEngine/components/lighting/lights/PointLight.h>
@@ -129,6 +133,52 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
       }
     }
   }
+}
+
+void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCache& assetCache,
+                                const std::optional<uuids::uuid>& cameraObject)
+{
+  const auto renderer = assetCache.getRenderer();
+
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    // When a specific camera object is requested (a client's own player camera), skip the rest.
+    if (cameraObject && object->getUUID() != *cameraObject)
+    {
+      continue;
+    }
+
+    const auto camera = object->getComponent<Camera>(ComponentType::camera);
+
+    if (!camera || !camera->isActive())
+    {
+      continue;
+    }
+
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
+    if (!transform)
+    {
+      continue;
+    }
+
+    // Pose comes from the object's Transform. A zero rotation faces -Z (matching object orientation and
+    // the vke camera's default forward); the quaternion also carries roll into the up vector.
+    const glm::vec3 position = transform->getPosition();
+    const glm::quat orientation(glm::radians(transform->getRotation()));
+    const glm::vec3 forward = orientation * glm::vec3(0.0f, 0.0f, -1.0f);
+    const glm::vec3 up = orientation * glm::vec3(0.0f, 1.0f, 0.0f);
+
+    const glm::mat4 viewMatrix = lookAt(position, position + forward, up);
+
+    // Take over from the built-in free-fly camera (render() skips it while disabled, so this pose sticks).
+    renderer->getCamera()->disable();
+    renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(position, viewMatrix);
+    return;
+  }
+
+  // No active component camera in the scene — hand control back to the built-in free-fly camera.
+  renderer->getCamera()->enable();
 }
 
 bool RenderSystem::isSelected(const uuids::uuid& uuid) const

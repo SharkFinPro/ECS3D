@@ -188,6 +188,10 @@ void ClientApp::variableUpdate() const
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache);
+
+    // Render through the scene's active component Camera when one exists (Phase 4.2); falls back to the
+    // built-in free-fly camera otherwise. Phase 4.4 narrows this to the client's own player camera.
+    m_renderSystem->updateCamera(*scene->getObjectManager(), *m_assetCache);
   }
 
   m_renderer->render();
