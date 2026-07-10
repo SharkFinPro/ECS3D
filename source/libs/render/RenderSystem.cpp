@@ -24,6 +24,24 @@
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 
+namespace {
+  // Hand the viewport back to the built-in free-fly camera. render() only pushes the free-fly pose while
+  // the scene view is focused, so push it once here too: otherwise the component camera's last pose would
+  // linger until the user happens to focus the viewport.
+  void enableFreeFlyCamera(const std::shared_ptr<vke::VulkanEngine>& renderer)
+  {
+    const auto camera = renderer->getCamera();
+
+    if (camera->isEnabled())
+    {
+      return;
+    }
+
+    camera->enable();
+    renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(camera->getPosition(), camera->getViewMatrix());
+  }
+}
+
 void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                                  const std::optional<uuids::uuid>& highlightUUID)
 {
@@ -194,7 +212,12 @@ void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCach
   }
 
   // No active component camera in the scene — hand control back to the built-in free-fly camera.
-  renderer->getCamera()->enable();
+  enableFreeFlyCamera(renderer);
+}
+
+void RenderSystem::useFreeFlyCamera(GpuAssetCache& assetCache) const
+{
+  enableFreeFlyCamera(assetCache.getRenderer());
 }
 
 bool RenderSystem::isSelected(const uuids::uuid& uuid) const

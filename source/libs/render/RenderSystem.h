@@ -24,11 +24,16 @@ public:
   // Drives the vke camera from a component Camera (Phase 4). Finds the active Camera object, builds a
   // view matrix from its Transform pose, disables the built-in free-fly camera, and pushes the pose into
   // the renderer. Falls back to (re-enabling) the free-fly camera when no active camera exists. The
-  // client calls this each frame; the editor never does, so its editing viewport keeps free-fly control.
+  // client calls this each frame; the editor calls it only while its viewport is looking through a scene
+  // camera, and calls useFreeFlyCamera() otherwise.
   // cameraObject optionally restricts the search to one object (Phase 4.4 — a client's own player camera);
   // nullopt means "first active camera in the scene".
   void updateCamera(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                     const std::optional<uuids::uuid>& cameraObject = std::nullopt);
+
+  // Hands the viewport back to the built-in free-fly camera (the editor's default view). Idempotent, so
+  // it's safe to call every frame.
+  void useFreeFlyCamera(GpuAssetCache& assetCache) const;
 
   // True for the object under the cursor; the editor reads it to drive Ctrl-click selection.
   [[nodiscard]] bool isSelected(const uuids::uuid& uuid) const;

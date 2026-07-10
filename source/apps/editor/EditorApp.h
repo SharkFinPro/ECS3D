@@ -4,8 +4,10 @@
 #include <VulkanEngine/components/window/Window.h>
 #include <Protocol.h>
 #include <scenes/SceneManager.h>
+#include <uuid.h>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -94,6 +96,11 @@ private:
 
   SceneStatus m_sceneStatus = SceneStatus::running;
 
+  // The object whose Camera component the viewport looks through ("View" combo in Scene Status), letting
+  // the editor see what a client sees. nullopt = the editor's own free-fly camera. Purely local: it's a
+  // view choice, never replicated. Cleared when the chosen object leaves the scene or loses its Camera.
+  std::optional<uuids::uuid> m_viewCameraObject;
+
   // Only resend input when it changes (see ClientApp): keeps an unfocused editor from clobbering a
   // focused client's keys on the shared server-side InputState.
   std::vector<int> m_lastInputKeys;
@@ -142,13 +149,17 @@ private:
 
   void displayMenuBar() const;
 
-  void displaySceneStatus() const;
+  void displaySceneStatus();
+
+  // The "View" combo: the editor's free-fly camera, or any Camera in the scene (a client's player camera
+  // is labelled with its slot).
+  void displayCameraSelector();
 
   void updateDockSpace() const;
 
   void displayMessageLog();
 
-  void variableUpdate() const;
+  void variableUpdate();
 
   // The editor spawns a child ECS3DServer (ServerProcess) in edit mode and connects over localhost as
   // Role::editor, authorized by the --token it shares with that server at the handshake; edits then
