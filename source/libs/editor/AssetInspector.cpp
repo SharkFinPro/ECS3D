@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <exception>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -42,6 +44,7 @@ void AssetInspector::display(const AssetRecord& record)
   {
     case AssetType::Texture: displayTextureBody(record); break;
     case AssetType::Model:   displayModelBody(record);   break;
+    case AssetType::Script:  displayScriptBody();         break;
     default: break;
   }
 }
@@ -74,6 +77,8 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
   m_haveMeshStats = false;
   m_vertexCount = 0;
   m_indexCount = 0;
+  m_haveScriptSource = false;
+  m_scriptSource.clear();
 
   // Only file-backed types have a path on disk; scenes/prefabs carry their name there instead.
   if (record.type == AssetType::Scene || record.type == AssetType::Prefab || record.path.empty())
@@ -110,6 +115,27 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
     catch (const std::exception&)
     {
       // The model file may be unreachable editor-side; leave the stats unshown.
+    }
+  }
+
+  // Read the script source from disk (the editor side has the .cs file). Degrades to "not available"
+  // when the file isn't reachable — e.g. attached to a server that shares no filesystem.
+  if (record.type == AssetType::Script)
+  {
+    if (std::ifstream in(record.path, std::ios::binary); in)
+    {
+      std::ostringstream ss;
+      ss << in.rdbuf();
+      m_scriptSource = ss.str();
+      m_haveScriptSource = true;
+
+      // Guard against a pathologically large file dragging the panel down.
+      constexpr size_t maxBytes = 256 * 1024;
+      if (m_scriptSource.size() > maxBytes)
+      {
+        m_scriptSource.resize(maxBytes);
+        m_scriptSource += "\n\n... (truncated)";
+      }
     }
   }
 }
@@ -220,4 +246,23 @@ void AssetInspector::displayModelBody(const AssetRecord& record)
     gc::rowLabel("Triangles");
     ImGui::TextColored(theme::t2, "%zu", m_indexCount / 3);
   }
+}
+
+void AssetInspector::displayScriptBody()
+{
+  ImGui::Spacing();
+  gc::sectionLabel("Source");
+  ImGui::Spacing();
+
+  if (!m_haveScriptSource)
+  {
+    gc::dashedBox("Source not available");
+    return;
+  }
+
+  // A read-only multiline box: selectable/copyable and scrollable, filling the rest of the panel. The
+  // buffer is the cached source (null-terminated via data()); ReadOnly keeps ImGui from writing to it.
+  const ImVec2 size(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
+  ImGui::InputTextMultiline("##scriptSource", m_scriptSource.data(), m_scriptSource.size() + 1,
+                            size, ImGuiInputTextFlags_ReadOnly);
 }

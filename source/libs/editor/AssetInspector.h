@@ -36,6 +36,8 @@ private:
   bool m_haveMeshStats = false; // model mesh stats resolved from the loaded vke::Model
   size_t m_vertexCount = 0;
   size_t m_indexCount = 0;
+  bool m_haveScriptSource = false; // script .cs source read from disk
+  std::string m_scriptSource;
 
   // Display name + uuid + path/source rows common to every asset type.
   void displayHeader(const AssetRecord& record) const;
@@ -48,6 +50,9 @@ private:
 
   // Type icon (3D preview deferred, see B3), file format + size, and mesh stats.
   void displayModelBody(const AssetRecord& record);
+
+  // Read-only .cs source preview (from the cached source, loaded editor-side).
+  void displayScriptBody();
 };
 
 #endif //ASSETINSPECTOR_H
