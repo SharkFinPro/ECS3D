@@ -61,7 +61,7 @@ public:
   // button is the GLFW mouse-button index (0 = left, 1 = right, 2 = middle).
   [[nodiscard]] static bool isMouseButtonPressed(int32_t playerSlot, int button);
 
-  // Aggregate across every slot — what the player-agnostic global InputUtils reads. A key is "pressed"
+  // Aggregate across every slot - what the player-agnostic global InputUtils reads. A key is "pressed"
   // if any player presses it; "focused" if any player is focused. In the singleplayer case (one slot)
   // the aggregate is just that one player's input.
   [[nodiscard]] static bool isAnyKeyPressed(int key);

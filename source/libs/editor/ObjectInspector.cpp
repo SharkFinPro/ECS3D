@@ -322,7 +322,7 @@ void ObjectInspector::displayComponent(const uuids::uuid& objectUUID, const std:
   }
 
   // The header's "-" button marks the component deleted; turn that into a structural removeComponent
-  // (sent once — the next snapshot rebuilds the object without it).
+  // (sent once - the next snapshot rebuilds the object without it).
   if (component->markedAsDeleted() && !m_pendingRemovals.contains(component.get()) && m_sceneEditCallback)
   {
     m_pendingRemovals.insert(component.get());

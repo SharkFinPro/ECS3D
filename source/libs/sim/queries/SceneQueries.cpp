@@ -23,7 +23,7 @@ namespace {
   }
 
   // The box's world matrix, built the same way BoxCollider::generateTransformedMesh does (note: the box's
-  // own getScale() adds transform+local, but the collision mesh multiplies — so mirror the mesh here so
+  // own getScale() adds transform+local, but the collision mesh multiplies - so mirror the mesh here so
   // ray/overlap match what actually collides). Maps the unit box [-1,1]^3 into world space.
   glm::mat4 boxWorldMatrix(const std::shared_ptr<Transform>& transform, const std::shared_ptr<BoxCollider>& box)
   {
@@ -61,7 +61,7 @@ namespace {
       return false; // sphere entirely behind the origin
     }
 
-    // Origin inside the sphere (near root behind us) → report contact at the origin, so a ray started
+    // Origin inside the sphere (near root behind us) -> report contact at the origin, so a ray started
     // inside a collider (e.g. a body resting on/penetrating it) still detects it.
     const float t = std::max(tNear, 0.0f);
     if (t > maxDistance)
@@ -106,11 +106,11 @@ namespace {
       const float inv = 1.0f / localDir[axis];
       float t1 = (-1.0f - localOrigin[axis]) * inv; // -1 face
       float t2 = (1.0f - localOrigin[axis]) * inv;  // +1 face
-      float entrySign = -1.0f;                      // entering the -1 face → local normal -axis
+      float entrySign = -1.0f;                      // entering the -1 face -> local normal -axis
       if (t1 > t2)
       {
         std::swap(t1, t2);
-        entrySign = 1.0f; // entering the +1 face → local normal +axis
+        entrySign = 1.0f; // entering the +1 face -> local normal +axis
       }
 
       if (t1 > tMin)
@@ -128,7 +128,7 @@ namespace {
     }
 
     // tMax < 0 means the whole box is behind the origin. tMin < 0 <= tMax means the origin is inside the
-    // box → report contact at the origin (t = 0), so a ray started inside a collider still detects it.
+    // box -> report contact at the origin (t = 0), so a ray started inside a collider still detects it.
     if (hitAxis < 0 || tMax < 0.0f)
     {
       return false;

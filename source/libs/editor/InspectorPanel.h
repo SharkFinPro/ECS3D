@@ -21,7 +21,7 @@ class ObjectInspector;
 class AssetInspector;
 
 // The editor's inspector panel, a per-kind dispatcher: it owns the window, the empty state, and
-// dispatches on the shared EditorSelection's kind — the Object kind to ObjectInspector, the Asset kind
+// dispatches on the shared EditorSelection's kind - the Object kind to ObjectInspector, the Asset kind
 // to AssetInspector. The object edit callbacks + ComponentEditor are handed straight to ObjectInspector.
 class InspectorPanel {
 public:

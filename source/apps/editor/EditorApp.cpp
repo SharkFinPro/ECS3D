@@ -69,8 +69,8 @@ namespace {
   }
 
   // Whether any of the object's components mention the asset uuid in their serialized form. Searching the
-  // serialized form keeps this generic (no component type named here); only model/texture references —
-  // the ones that would dangle — ever match.
+  // serialized form keeps this generic (no component type named here); only model/texture references -
+  // the ones that would dangle - ever match.
   bool objectReferencesAsset(const std::shared_ptr<Object>& object, const std::string& uuidString)
   {
     for (const auto& [type, component] : object->getComponents())
@@ -166,7 +166,7 @@ EditorApp::EditorApp(LaunchOptions options)
   };
 
   // How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
-  // replicated scenes' objects and every prefab body — the two places an object tree lives editor-side.
+  // replicated scenes' objects and every prefab body - the two places an object tree lives editor-side.
   const auto countAssetReferences = [this](const uuids::uuid& assetUUID) {
     const auto uuidString = uuids::to_string(assetUUID);
     int count = 0;
@@ -247,7 +247,7 @@ EditorApp::EditorApp(LaunchOptions options)
   };
 
   // A prefab body edit: re-register under the existing name, updating the body in place and keeping the
-  // uuid — the same path "Save as Prefab" over an existing name takes, via the same addAsset shape.
+  // uuid - the same path "Save as Prefab" over an existing name takes, via the same addAsset shape.
   const auto updatePrefabBody = [addAsset](const uuids::uuid& assetUUID, const std::string& name,
                                            const std::string& body) {
     addAsset({

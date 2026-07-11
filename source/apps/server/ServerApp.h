@@ -71,13 +71,13 @@ private:
   // doesn't exit during the launch -> connect window when the count is still 0).
   bool m_hasConnected = false;
 
-  // Player↔connection binding: each connection is bound to a player slot (0, 1, ...) on join
+  // Player<->connection binding: each connection is bound to a player slot (0, 1, ...) on join
   // and released on disconnect. inputState from a connection is written into its slot; a script reads its
   // own player's input by resolving its object's PlayerController.playerSlot to that slot. Touched only on
   // the tick thread (join / inputState / disconnect all run there), so no locking is needed.
   std::unordered_map<int32_t, int32_t> m_connectionSlots;
 
-  // Bind connId to the lowest free player slot (idempotent — returns the existing slot if already bound).
+  // Bind connId to the lowest free player slot (idempotent - returns the existing slot if already bound).
   int32_t assignPlayerSlot(int32_t connId);
 
   // Release a dropped connection's slot and clear its input.

@@ -16,7 +16,7 @@ namespace replication {
 
 void packStateDelta(net::Message& message, const ObjectManager& objectManager)
 {
-  // Collect first so the entry count can lead (Message is append-only — there's no way to back-patch a
+  // Collect first so the entry count can lead (Message is append-only - there's no way to back-patch a
   // header once entries are written). Each entry is uuid + the three local transform vectors.
   struct Entry {
     std::string uuid;

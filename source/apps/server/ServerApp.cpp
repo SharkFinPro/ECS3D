@@ -79,7 +79,7 @@ ServerApp::ServerApp(LaunchOptions options)
       logMessage("Error", e.what());
     }
 
-    // The server is headless (no window), so announce that it's up — otherwise a running server looks
+    // The server is headless (no window), so announce that it's up - otherwise a running server looks
     // like it never started.
     logMessage("Info", "Running scene '" + scene->getName() + "' ("
       + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects) on port "
@@ -108,7 +108,7 @@ bool ServerApp::isActive() const
     return true;
   }
 
-  // An ephemeral (editor/client-spawned) server exits once its last connection drops — but only after the
+  // An ephemeral (editor/client-spawned) server exits once its last connection drops - but only after the
   // first join (m_hasConnected), so it survives the launch -> connect window when the count is still 0.
   return !m_hasConnected || m_netServer->connectionCount() > 0;
 }
@@ -200,7 +200,7 @@ void ServerApp::fixedUpdate(const float dt) const
     m_collisionSystem->fixedUpdate(objectManager);
 
     // Contact events for this tick: hand CollisionSystem's diffed pair lists to the scripts. Done here
-    // in the app (not as a library call) so sim stays independent of scripting — the collision system
+    // in the app (not as a library call) so sim stays independent of scripting - the collision system
     // produces plain uuid pairs and ScriptSystem consumes them.
     dispatchCollisionEvents(objectManager);
   }
@@ -313,7 +313,7 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 
   // If the client tagged its join with a nonce (players do; the editor sends none), tell it which slot it
   // got so it can render through that player's camera. Broadcasting with nonce correlation avoids a
-  // per-connection send path — every client hears it, only the matching one keeps it.
+  // per-connection send path - every client hears it, only the matching one keeps it.
   net::MessageReader reader(message);
   if (reader.remaining() >= sizeof(uint64_t))
   {

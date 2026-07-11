@@ -33,7 +33,7 @@ struct CollisionPair {
 
   // Lexicographic by (a, b). Defaulting the three-way comparison gives the full set of relational
   // operators (uuid has only < and ==, which the compiler synthesizes from), so CollisionPair models
-  // totally_ordered — required by std::ranges::sort / set_difference.
+  // totally_ordered - required by std::ranges::sort / set_difference.
   std::strong_ordering operator<=>(const CollisionPair& other) const = default;
 };
 

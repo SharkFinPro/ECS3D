@@ -114,7 +114,7 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
         continue;
       }
 
-      // Lazily (re)create the instance if needed — restores instances after a hot reload.
+      // Lazily (re)create the instance if needed - restores instances after a hot reload.
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
         attach(*object, *script);

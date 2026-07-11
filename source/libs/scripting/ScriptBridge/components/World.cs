@@ -144,7 +144,7 @@ public static unsafe class World
 
     public static string spawn(string name, Vector3 position) => spawn(name, position.X, position.Y, position.Z);
 
-    // Spawn a prefab asset — its whole object subtree, with fresh uuids — with the root at the given
+    // Spawn a prefab asset - its whole object subtree, with fresh uuids - with the root at the given
     // position, and return the root's uuid. Returns "" when prefabUuid isn't a registered prefab or its
     // body is malformed (the spawn is skipped and the server logs it; nothing throws). The prefab's asset
     // uuid is the one shown by the editor's asset browser.
@@ -194,7 +194,7 @@ public static unsafe class World
         {
             // Native returns "uuid,dist,px,py,pz,nx,ny,nz" into its thread-local buffer, or "" on a miss;
             // marshal it out immediately (return ownership is native's) and parse. ignoreUuid (our arg,
-            // our ownership) lets the caller exclude an object — used to skip self.
+            // our ownership) lets the caller exclude an object - used to skip self.
             raw = Marshal.PtrToStringUTF8(NativeBindings.World.raycast(
                 origin.X, origin.Y, origin.Z, direction.X, direction.Y, direction.Z,
                 maxDistance, layerMask, ignorePtr)) ?? "";

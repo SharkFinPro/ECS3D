@@ -83,7 +83,7 @@ private:
   std::shared_ptr<RenderSystem> m_renderSystem;
 
   // The editor-wide selection slot (object vs. asset vs. nothing), shared into the panels that read or
-  // write it — the object tree, inspector, and asset browser. handlePicking writes it directly from
+  // write it - the object tree, inspector, and asset browser. handlePicking writes it directly from
   // viewport mouse-picking.
   std::shared_ptr<EditorSelection> m_selection;
 

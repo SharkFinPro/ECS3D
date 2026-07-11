@@ -15,7 +15,7 @@ public enum TransportProtocol
 // selected instance. Inbound messages are pushed up to C++ via Transport.DeliverServer/DeliverClient.
 //
 // Everything below the handshake is transport-specific and lives in the concrete subclasses (TcpBackend,
-// WebSocketBackend). What's shared — and must stay identical across transports — is the connection
+// WebSocketBackend). What's shared - and must stay identical across transports - is the connection
 // handshake/authorization policy, which lives here.
 internal abstract class TransportBackend
 {
@@ -41,7 +41,7 @@ internal abstract class TransportBackend
   public abstract void ClientSend(byte type, nint data, int len);
 
   // Decides whether a connection presenting this handshake payload ([role byte][token UTF-8]) is
-  // allowed onto the server at all. Players connect freely. An editor is admitted too — even against a
+  // allowed onto the server at all. Players connect freely. An editor is admitted too - even against a
   // non-edit server, where it gets a read-only view (the server simply honors no edits from it). The one
   // hard rejection is a real auth failure: an editor offering the wrong token to an edit server that
   // configured one. Whether an admitted editor may actually edit is conveyed separately via editStatus.

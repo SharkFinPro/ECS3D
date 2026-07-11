@@ -32,7 +32,7 @@ public partial class MainWindow : Window
 
     private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        // Ignore presses inside a TextBox — those should keep (or take) focus.
+        // Ignore presses inside a TextBox - those should keep (or take) focus.
         if (e.Source is Visual v && v.FindAncestorOfType<TextBox>(includeSelf: true) is not null)
             return;
 

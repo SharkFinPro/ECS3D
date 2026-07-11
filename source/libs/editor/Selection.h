@@ -21,7 +21,7 @@ public:
 
   void clear() { m_kind = Kind::None; m_uuid.reset(); }
 
-  // The selected uuid when the selection is of that kind, else nullopt — so callers can branch on the
+  // The selected uuid when the selection is of that kind, else nullopt - so callers can branch on the
   // optional without also checking kind().
   [[nodiscard]] std::optional<uuids::uuid> objectUUID() const
   {

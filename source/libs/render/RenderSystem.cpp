@@ -211,7 +211,7 @@ void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCach
     return;
   }
 
-  // No active component camera in the scene — hand control back to the built-in free-fly camera.
+  // No active component camera in the scene - hand control back to the built-in free-fly camera.
   enableFreeFlyCamera(renderer);
 }
 

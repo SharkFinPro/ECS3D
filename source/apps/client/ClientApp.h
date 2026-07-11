@@ -100,7 +100,7 @@ private:
   void handlePlayerSlot(const net::Message& message) const;
 
   // The object this client should render through: the one carrying a PlayerController for this client's
-  // player slot and a Camera. nullopt when the slot is still unknown or no such camera exists — the
+  // player slot and a Camera. nullopt when the slot is still unknown or no such camera exists - the
   // caller then falls back to the scene's first active camera / free-fly (RenderSystem::updateCamera).
   [[nodiscard]] std::optional<uuids::uuid> resolvePlayerCamera() const;
 };

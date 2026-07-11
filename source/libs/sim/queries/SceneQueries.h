@@ -9,7 +9,7 @@
 class ObjectManager;
 
 // Analytic scene queries (raycast, sphere overlap) over the collider geometry. Lives in sim because it
-// is query *behavior* over the data (the data/systems split), but scripting can't link sim — so the
+// is query *behavior* over the data (the data/systems split), but scripting can't link sim - so the
 // server app injects these two statics into BindingContext as function pointers at startup. The
 // signatures below therefore use only types both sim and scripting can see (data + glm + uuid) and must
 // stay matched to BindingContext::RaycastFn / OverlapSphereFn.

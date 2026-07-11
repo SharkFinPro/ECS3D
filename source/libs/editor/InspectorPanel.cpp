@@ -121,7 +121,7 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
   ImGui::Separator();
   ImGui::Spacing();
 
-  // Empty state when nothing renderable is selected — an intentional placeholder rather than a lone
+  // Empty state when nothing renderable is selected - an intentional placeholder rather than a lone
   // checkbox. The copy is kind-agnostic (objects or assets).
   if (!object && !asset)
   {
