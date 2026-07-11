@@ -102,6 +102,15 @@ EditorApp::EditorApp(LaunchOptions options)
     m_netClient->send(replication::packAddAsset(asset));
   };
 
+  // Renaming an asset (display-name override only): apply locally for instant feedback, then on the
+  // authoritative server (which re-snapshots). Same local-apply-then-send shape as addAsset.
+  const auto renameAsset = [this](const uuids::uuid& assetUUID, const std::string& displayName) {
+    const auto op = replication::buildRenameAsset(assetUUID, displayName);
+    replication::applyRenameAsset(*m_assetRegistry, op);
+
+    m_netClient->send(replication::packRenameAsset(op));
+  };
+
   // A component widget changed: send the component's new state to the authoritative server as an edit
   // command. Only the Inspector fires this (component value edits).
   const auto editComponent = [this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
@@ -152,6 +161,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_inspectorPanel->setEditCallback(editComponent);
   m_inspectorPanel->setSceneEditCallback(sceneEdit);
   m_inspectorPanel->setLoadSceneCallback(loadScene);
+  m_inspectorPanel->setRenameAssetCallback(renameAsset);
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
   m_assetBrowser->setSelection(m_selection);

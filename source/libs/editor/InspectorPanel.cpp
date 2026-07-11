@@ -50,6 +50,11 @@ void InspectorPanel::setLoadSceneCallback(std::function<void(const uuids::uuid& 
   m_assetInspector->setLoadSceneCallback(std::move(callback));
 }
 
+void InspectorPanel::setRenameAssetCallback(std::function<void(const uuids::uuid& assetUUID, const std::string& displayName)> callback)
+{
+  m_assetInspector->setRenameCallback(std::move(callback));
+}
+
 void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::optional<uuids::uuid>& activeSceneUUID)
 {
   ImGui::Begin("Inspector");

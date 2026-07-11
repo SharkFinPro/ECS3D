@@ -27,6 +27,22 @@ void AssetInspector::setLoadSceneCallback(LoadSceneCallback callback)
   m_onLoadScene = std::move(callback);
 }
 
+void AssetInspector::setRenameCallback(RenameCallback callback)
+{
+  m_onRename = std::move(callback);
+}
+
+namespace {
+  // A display-name rename is a display-only override the AssetRegistry packs (see AssetRegistry::pack): it
+  // survives a snapshot only for the flat file assets. A Scene record is regenerated from the SceneManager
+  // on every snapshot (and never packed), so its override wouldn't stick — keep the scene name read-only.
+  bool isRenamable(const AssetType type)
+  {
+    return type == AssetType::Model || type == AssetType::Texture
+        || type == AssetType::Script || type == AssetType::Prefab;
+  }
+}
+
 void AssetInspector::setEditable(const bool editable)
 {
   m_editable = editable;
@@ -62,10 +78,37 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
   }
 }
 
-void AssetInspector::displayHeader(const AssetRecord& record) const
+void AssetInspector::displayHeader(const AssetRecord& record)
 {
-  // Display name (primary text), then metadata rows shared by every asset type.
-  ImGui::TextColored(theme::t1, "%s", assetDisplay::name(record).c_str());
+  // Re-seed the name buffer with the effective display name when the selection changes (only then, so an
+  // external rename can't overwrite an in-progress edit — same discipline as ObjectInspector).
+  if (m_nameEditUUID != record.uuid)
+  {
+    m_nameEditUUID = record.uuid;
+    const auto name = assetDisplay::name(record);
+    const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
+    name.copy(m_nameEditBuffer.data(), len);
+    m_nameEditBuffer[len] = '\0';
+  }
+
+  // Display name: an editable rename field for the flat file assets (gated on editable), read-only text
+  // for scenes (their override wouldn't survive a snapshot — see isRenamable).
+  if (isRenamable(record.type))
+  {
+    ImGui::BeginDisabled(!m_editable);
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    if (ImGui::InputText(("##assetName" + uuids::to_string(record.uuid)).c_str(),
+                         m_nameEditBuffer.data(), m_nameEditBuffer.size()) && m_onRename)
+    {
+      // Immediate send on each edit (like object rename), so switching selection can't lose the change.
+      m_onRename(record.uuid, m_nameEditBuffer.data());
+    }
+    ImGui::EndDisabled();
+  }
+  else
+  {
+    ImGui::TextColored(theme::t1, "%s", assetDisplay::name(record).c_str());
+  }
 
   ImGui::Spacing();
 

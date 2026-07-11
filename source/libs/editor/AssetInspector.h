@@ -2,6 +2,7 @@
 #define ASSETINSPECTOR_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <array>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -20,10 +21,14 @@ class AssetInspector {
 public:
   // Switching the active scene: the same callback the asset browser's scene double-click uses.
   using LoadSceneCallback = std::function<void(const uuids::uuid& sceneUUID)>;
+  // A display-name rename: the EditorApp applies it locally and sends a renameAsset op.
+  using RenameCallback = std::function<void(const uuids::uuid& assetUUID, const std::string& displayName)>;
 
   explicit AssetInspector(std::shared_ptr<GpuAssetCache> assetCache);
 
   void setLoadSceneCallback(LoadSceneCallback callback);
+
+  void setRenameCallback(RenameCallback callback);
 
   // When false (read-only server), the scene inspector's "Load Scene" button is disabled, mirroring the
   // browser's gated double-click.
@@ -40,8 +45,15 @@ private:
   std::shared_ptr<GpuAssetCache> m_assetCache;
 
   LoadSceneCallback m_onLoadScene;
+  RenameCallback m_onRename;
 
   bool m_editable = true;
+
+  // Buffer for the in-place display-name field. Re-seeded (from the effective display name) whenever the
+  // selected asset changes, so an external rename doesn't clobber what the user is typing — matching
+  // ObjectInspector's name buffer.
+  std::array<char, 256> m_nameEditBuffer{};
+  std::optional<uuids::uuid> m_nameEditUUID;
 
   // File metadata (size, image dimensions) for the currently-shown asset, recomputed only when the
   // selected asset changes so the panel isn't hitting disk every frame.
@@ -67,8 +79,9 @@ private:
   bool m_havePrefab = false;
   PrefabNode m_prefabRoot;
 
-  // Display name + uuid + path/source rows common to every asset type.
-  void displayHeader(const AssetRecord& record) const;
+  // Display name (an editable rename field for the flat file assets, gated on editable; read-only text for
+  // scenes) + uuid + path/source rows common to every asset type.
+  void displayHeader(const AssetRecord& record);
 
   // Refreshes the file-metadata cache above for `record` (no-op work when its file isn't reachable).
   void refreshMeta(const AssetRecord& record);

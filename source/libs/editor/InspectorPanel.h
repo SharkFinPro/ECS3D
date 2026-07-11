@@ -49,6 +49,10 @@ public:
   // Forwarded to the asset inspector's scene view (same callback the asset browser uses).
   void setLoadSceneCallback(std::function<void(const uuids::uuid& sceneUUID)> callback);
 
+  // Forwarded to the asset inspector's rename field (a display-name override; EditorApp applies locally
+  // and sends a renameAsset op).
+  void setRenameAssetCallback(std::function<void(const uuids::uuid& assetUUID, const std::string& displayName)> callback);
+
   // objectManager may be null (no scene loaded yet): the window is still drawn (empty) so it stays
   // present/dockable instead of popping in and out. activeSceneUUID is the currently loaded scene, used
   // by the scene inspector's is-active indicator (nullopt when no scene is loaded).
