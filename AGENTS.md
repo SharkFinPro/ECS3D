@@ -31,7 +31,7 @@
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune + GJK/EPA under `collisions/`). Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
-| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (read-only per-`AssetType` views), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `nfd`. |
+| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess` (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
 | `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
 | `source/libs/clrHost/` | `ECS3DClrHost` — `ManagedHost` boots CoreCLR and hands out managed statics as native fn ptrs. Owns the CMake helpers (`cmake/ECS3DManaged.cmake`, `FindDotnet.cmake`, `loadCS.cmake`). |
@@ -88,8 +88,20 @@ the JSON path for file save/load) — sent on join and rebroadcast after any str
 rebuilds from it, atomically (a malformed packet leaves the current project intact). Per-tick motion
 goes as a compact binary **stateDelta** (uuid + local transform per object; `data/Replication.{h,cpp}`).
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
-`addAsset`) that only a connection authorized as `Role::editor` on an `--edit` server may send. (`sceneEdit`
-carries the prefab-instantiation op too — see Prefabs below.)
+`addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
+`--edit` server may send. (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
+asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
+applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
+registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —
+a `renameAsset` sets an optional `AssetRecord::displayName` override (threaded through
+`serialize`/`loadFromJSON`/`pack`/`unpack` like every other field); the file on disk and `path` (the
+registry key, and the name-key for prefabs/scenes) never change. **Delete always succeeds and references
+dangle** — `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` lookups already null-tolerate a
+missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
+replicated scenes + prefab bodies for the uuid ("referenced by N objects"); no server-side refusal or
+cascade exists (see `ROADMAP.md` B1). Rename/delete are offered only for the flat file assets
+(Model/Texture/Script/Prefab) that `AssetRegistry` owns — a Scene record is regenerated from the
+`SceneManager` on every snapshot, so an override on it wouldn't survive.
 Runtime structural changes from a *script* (spawn/destroy) take a third path: lightweight
 `objectSpawned` (one packed `Object`) / `objectDestroyed` (a uuid) messages the client splices into/out of
 its scene incrementally — kept off the full-snapshot path so frequent spawning stays cheap. Build/apply
