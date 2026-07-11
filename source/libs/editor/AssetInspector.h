@@ -1,10 +1,12 @@
 #ifndef ASSETINSPECTOR_H
 #define ASSETINSPECTOR_H
 
+#include <nlohmann/json_fwd.hpp>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 #include <uuid.h>
 
 struct AssetRecord;
@@ -55,6 +57,16 @@ private:
   bool m_haveScriptSource = false; // script .cs source read from disk
   std::string m_scriptSource;
 
+  // A prefab body walked into a read-only tree (no ObjectManager instantiation): each node is an object
+  // name + its component type names + child nodes.
+  struct PrefabNode {
+    std::string name;
+    std::vector<std::string> components;
+    std::vector<PrefabNode> children;
+  };
+  bool m_havePrefab = false;
+  PrefabNode m_prefabRoot;
+
   // Display name + uuid + path/source rows common to every asset type.
   void displayHeader(const AssetRecord& record) const;
 
@@ -72,6 +84,14 @@ private:
 
   // Is-active indicator + a "Load Scene" button (reusing LoadSceneCallback, gated on editable).
   void displaySceneBody(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID);
+
+  // Read-only summary of the prefab body: root name, component types, child object tree.
+  void displayPrefabBody();
+
+  void displayPrefabNode(const PrefabNode& node, bool root) const;
+
+  // Walks one serialized-Object JSON node into a PrefabNode (recursing into children).
+  static PrefabNode parsePrefabNode(const nlohmann::json& node);
 };
 
 #endif //ASSETINSPECTOR_H

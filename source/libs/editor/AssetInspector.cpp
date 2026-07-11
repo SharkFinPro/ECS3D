@@ -8,6 +8,7 @@
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <VulkanEngine/components/assets/objects/Model.h>
 #include <stb_image.h>
+#include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <algorithm>
 #include <exception>
@@ -56,6 +57,7 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
     case AssetType::Model:   displayModelBody(record);   break;
     case AssetType::Script:  displayScriptBody();         break;
     case AssetType::Scene:   displaySceneBody(record, activeSceneUUID); break;
+    case AssetType::Prefab:  displayPrefabBody();         break;
     default: break;
   }
 }
@@ -90,9 +92,24 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
   m_indexCount = 0;
   m_haveScriptSource = false;
   m_scriptSource.clear();
+  m_havePrefab = false;
+  m_prefabRoot = {};
 
-  // Only file-backed types have a path on disk; scenes/prefabs carry their name there instead.
-  if (record.type == AssetType::Scene || record.type == AssetType::Prefab || record.path.empty())
+  // Prefabs carry their contents inline (record.body), not as a file — walk the JSON into a read-only
+  // tree here (once per selection) rather than instantiating an ObjectManager.
+  if (record.type == AssetType::Prefab)
+  {
+    if (const auto body = nlohmann::json::parse(record.body, nullptr, false);
+        !body.is_discarded() && body.is_object())
+    {
+      m_prefabRoot = parsePrefabNode(body);
+      m_havePrefab = true;
+    }
+    return;
+  }
+
+  // Only file-backed types have a path on disk; scenes carry their name there instead.
+  if (record.type == AssetType::Scene || record.path.empty())
   {
     return;
   }
@@ -306,4 +323,89 @@ void AssetInspector::displaySceneBody(const AssetRecord& record, const std::opti
     m_onLoadScene(record.uuid);
   }
   ImGui::EndDisabled();
+}
+
+AssetInspector::PrefabNode AssetInspector::parsePrefabNode(const nlohmann::json& node)
+{
+  PrefabNode result;
+  result.name = node.value("name", std::string("(unnamed)"));
+
+  if (const auto components = node.find("components"); components != node.end() && components->is_array())
+  {
+    for (const auto& component : *components)
+    {
+      result.components.push_back(component.value("type", std::string("Component")));
+    }
+  }
+
+  if (const auto children = node.find("children"); children != node.end() && children->is_array())
+  {
+    for (const auto& child : *children)
+    {
+      if (child.is_object())
+      {
+        result.children.push_back(parsePrefabNode(child));
+      }
+    }
+  }
+
+  return result;
+}
+
+void AssetInspector::displayPrefabBody()
+{
+  ImGui::Spacing();
+  gc::sectionLabel("Contents");
+  ImGui::Spacing();
+
+  if (!m_havePrefab)
+  {
+    // Empty/malformed body (e.g. an older or hand-edited record) — nothing to walk.
+    gc::dashedBox("Prefab body unavailable");
+    return;
+  }
+
+  displayPrefabNode(m_prefabRoot, true);
+}
+
+void AssetInspector::displayPrefabNode(const PrefabNode& node, const bool root) const
+{
+  ImGui::PushID(&node);
+
+  ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
+  if (root)
+  {
+    flags |= ImGuiTreeNodeFlags_DefaultOpen;
+  }
+  if (node.children.empty())
+  {
+    flags |= ImGuiTreeNodeFlags_Leaf;
+  }
+
+  if (ImGui::TreeNodeEx(node.name.c_str(), flags))
+  {
+    // Component types on one muted line, indented under the object.
+    if (!node.components.empty())
+    {
+      std::string types;
+      for (size_t i = 0; i < node.components.size(); ++i)
+      {
+        if (i != 0)
+        {
+          types += ", ";
+        }
+        types += node.components[i];
+      }
+      ImGui::TextColored(theme::t3, "%s", types.c_str());
+    }
+
+    for (const auto& child : node.children)
+    {
+      displayPrefabNode(child, false);
+    }
+
+    ImGui::TreePop();
+  }
+
+  ImGui::PopID();
 }
