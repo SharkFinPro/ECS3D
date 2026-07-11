@@ -32,6 +32,16 @@ void AssetInspector::setRenameCallback(RenameCallback callback)
   m_onRename = std::move(callback);
 }
 
+void AssetInspector::setRemoveCallback(RemoveCallback callback)
+{
+  m_onRemove = std::move(callback);
+}
+
+void AssetInspector::setReferenceCountCallback(ReferenceCountCallback callback)
+{
+  m_onReferenceCount = std::move(callback);
+}
+
 namespace {
   // A display-name rename is a display-only override the AssetRegistry packs (see AssetRegistry::pack): it
   // survives a snapshot only for the flat file assets. A Scene record is regenerated from the SceneManager
@@ -76,6 +86,11 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
     case AssetType::Prefab:  displayPrefabBody();         break;
     default: break;
   }
+
+  // Delete lives at the foot of the panel, for the flat file assets only (a Scene's removal isn't a
+  // registry op — see isRenamable / ROADMAP B1). The modal is drawn every frame the button is armed.
+  displayDeleteButton(record);
+  displayDeleteConfirmationModal(record);
 }
 
 void AssetInspector::displayHeader(const AssetRecord& record)
@@ -451,4 +466,106 @@ void AssetInspector::displayPrefabNode(const PrefabNode& node, const bool root) 
   }
 
   ImGui::PopID();
+}
+
+void AssetInspector::displayDeleteButton(const AssetRecord& record)
+{
+  // Only the flat file assets can be deleted from here (a Scene lives in the SceneManager, not a registry
+  // record we can drop — see isRenamable).
+  if (!isRenamable(record.type))
+  {
+    return;
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  ImGui::BeginDisabled(!m_editable);
+
+  // Danger-red full-width button (same palette as the modal's confirm).
+  ImGui::PushStyleColor(ImGuiCol_Button, theme::danger);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(240, 110, 114));
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(210, 70, 75));
+  ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(255, 255, 255));
+  if (ImGui::Button("Delete Asset", ImVec2(ImGui::GetContentRegionAvail().x, 34.0f)))
+  {
+    // Arm the modal and compute the reference count once, now, rather than every frame.
+    m_assetPendingDeletion = record.uuid;
+    m_pendingRefCount = m_onReferenceCount ? m_onReferenceCount(record.uuid) : 0;
+  }
+  ImGui::PopStyleColor(4);
+
+  ImGui::EndDisabled();
+}
+
+void AssetInspector::displayDeleteConfirmationModal(const AssetRecord& record)
+{
+  // Armed only for the currently-shown asset. If the selection changed out from under an armed prompt
+  // (the modal is normally blocking, but be defensive), drop it rather than confirm a stale delete.
+  if (m_assetPendingDeletion != record.uuid)
+  {
+    m_assetPendingDeletion.reset();
+    return;
+  }
+
+  ImGui::OpenPopup("Delete Asset?");
+
+  bool shouldDelete = false;
+
+  if (ImGui::BeginPopupModal("Delete Asset?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    ImGui::TextUnformatted("Are you sure you want to delete");
+    ImGui::SameLine();
+    ImGui::TextColored(theme::accent, "%s", assetDisplay::name(record).c_str());
+    ImGui::SameLine();
+    ImGui::TextUnformatted("?");
+
+    // Deletion always succeeds; any references are left to dangle (the slots show "None") — warn how many.
+    if (m_pendingRefCount > 0)
+    {
+      ImGui::TextColored(theme::scriptAmber, "Referenced by %d object%s - those references will be left empty.",
+                         m_pendingRefCount, m_pendingRefCount == 1 ? "" : "s");
+    }
+
+    ImGui::TextColored(theme::t3, "This action cannot be undone.");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Danger-red confirm; neutral cancel (mirrors ObjectGUIManager's delete modal).
+    ImGui::PushStyleColor(ImGuiCol_Button, theme::danger);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(240, 110, 114));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(210, 70, 75));
+    ImGui::PushStyleColor(ImGuiCol_Text, theme::v4(255, 255, 255));
+    if (ImGui::Button("Delete", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter))
+    {
+      shouldDelete = true;
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::PopStyleColor(4);
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+      m_assetPendingDeletion.reset();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
+
+  if (shouldDelete)
+  {
+    if (m_onRemove)
+    {
+      m_onRemove(record.uuid);
+    }
+
+    // The selection is cleared by InspectorPanel next frame: the local apply drops the uuid from the
+    // registry, and the panel's stale-asset check clears the slot (the same path a fresh snapshot uses).
+    m_assetPendingDeletion.reset();
+  }
 }

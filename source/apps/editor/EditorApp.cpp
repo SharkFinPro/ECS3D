@@ -67,6 +67,54 @@ namespace {
 
     return label;
   }
+
+  // Whether any of an object's components serialize the asset uuid (models/textures store it as a string
+  // field — see ModelRenderer::serialize). Searching the serialized form keeps this generic: no layer here
+  // names a concrete component type. Scripts reference assets by class name and prefab instances are
+  // detached copies, so only model/texture uuids ever match — exactly the references that would dangle.
+  bool objectReferencesAsset(const std::shared_ptr<Object>& object, const std::string& uuidString)
+  {
+    for (const auto& [type, component] : object->getComponents())
+    {
+      if (component->serialize().dump().find(uuidString) != std::string::npos)
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Count the object nodes within a serialized prefab body (one Object tree) that reference the uuid.
+  int countReferencesInPrefabNode(const nlohmann::json& node, const std::string& uuidString)
+  {
+    int count = 0;
+
+    if (const auto components = node.find("components"); components != node.end() && components->is_array())
+    {
+      for (const auto& component : *components)
+      {
+        if (component.dump().find(uuidString) != std::string::npos)
+        {
+          ++count;
+          break;
+        }
+      }
+    }
+
+    if (const auto children = node.find("children"); children != node.end() && children->is_array())
+    {
+      for (const auto& child : *children)
+      {
+        if (child.is_object())
+        {
+          count += countReferencesInPrefabNode(child, uuidString);
+        }
+      }
+    }
+
+    return count;
+  }
 }
 
 EditorApp::EditorApp(LaunchOptions options)
@@ -109,6 +157,54 @@ EditorApp::EditorApp(LaunchOptions options)
     replication::applyRenameAsset(*m_assetRegistry, op);
 
     m_netClient->send(replication::packRenameAsset(op));
+  };
+
+  // Deleting an asset: same local-apply-then-send shape. Deletion always succeeds; any references dangle
+  // (lookups null-tolerate a missing uuid), so nothing else needs to change here.
+  const auto removeAsset = [this](const uuids::uuid& assetUUID) {
+    const auto op = replication::buildRemoveAsset(assetUUID);
+    replication::applyRemoveAsset(*m_assetRegistry, op);
+
+    m_netClient->send(replication::packRemoveAsset(op));
+  };
+
+  // How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
+  // replicated scenes' objects and every prefab body — the two places an object tree lives editor-side.
+  const auto countAssetReferences = [this](const uuids::uuid& assetUUID) {
+    const auto uuidString = uuids::to_string(assetUUID);
+    int count = 0;
+
+    for (const auto& [sceneUUID, scene] : m_sceneManager->getScenes())
+    {
+      const auto objectManager = scene->getObjectManager();
+      if (!objectManager)
+      {
+        continue;
+      }
+
+      for (const auto& object : objectManager->getAllObjects())
+      {
+        if (objectReferencesAsset(object, uuidString))
+        {
+          ++count;
+        }
+      }
+    }
+
+    for (const auto& [recordUUID, record] : m_assetRegistry->getAssets())
+    {
+      if (record.type != AssetType::Prefab)
+      {
+        continue;
+      }
+
+      if (auto body = nlohmann::json::parse(record.body, nullptr, false); !body.is_discarded() && body.is_object())
+      {
+        count += countReferencesInPrefabNode(body, uuidString);
+      }
+    }
+
+    return count;
   };
 
   // A component widget changed: send the component's new state to the authoritative server as an edit
@@ -162,6 +258,8 @@ EditorApp::EditorApp(LaunchOptions options)
   m_inspectorPanel->setSceneEditCallback(sceneEdit);
   m_inspectorPanel->setLoadSceneCallback(loadScene);
   m_inspectorPanel->setRenameAssetCallback(renameAsset);
+  m_inspectorPanel->setRemoveAssetCallback(removeAsset);
+  m_inspectorPanel->setAssetReferenceCountCallback(countAssetReferences);
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
   m_assetBrowser->setSelection(m_selection);
