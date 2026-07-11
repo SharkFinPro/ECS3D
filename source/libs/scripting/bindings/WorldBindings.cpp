@@ -161,7 +161,7 @@ const char* WorldBindingsProvider::bindSpawnObject(const char* name, const float
   objectManager->addObject(object);
 
   // A script only runs while the scene is running, so the newborn must be started too (live component
-  // state) before its transform is positioned — otherwise physics/replication would read stopped values.
+  // state) before its transform is positioned - otherwise physics/replication would read stopped values.
   object->start();
 
   if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
@@ -212,7 +212,7 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
   }
 
   // A script only runs while the scene is running, so the whole newborn subtree must be started (live
-  // component state) before the root is positioned — otherwise physics/replication read stopped values.
+  // component state) before the root is positioned - otherwise physics/replication read stopped values.
   startSubtree(*object);
 
   if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
@@ -275,7 +275,7 @@ const char* WorldBindingsProvider::bindRaycast(const float ox, const float oy, c
     return store("");
   }
 
-  // "uuid,dist,px,py,pz,nx,ny,nz" — uuids have no commas, so this parses cleanly on the managed side.
+  // "uuid,dist,px,py,pz,nx,ny,nz" - uuids have no commas, so this parses cleanly on the managed side.
   std::string result = uuids::to_string(hitObject);
   for (const float value : { hitDistance, hitPoint.x, hitPoint.y, hitPoint.z,
                              hitNormal.x, hitNormal.y, hitNormal.z })

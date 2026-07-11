@@ -229,6 +229,13 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
   Splitting a new component means: fields → `data`, physics → `sim`, rendering → `render`, bindings →
   `scripting`, inspector widget → `editor`. Register it in `registerDataComponents()`.
 - **Source-list discipline:** every new file goes in its library's `CMakeLists.txt` source list.
+- **Comments:** write them sparingly. Prefer self-documenting code (clear names, small functions) over a
+  comment; if code needs a comment to be understood, first ask whether it can be made clearer instead.
+  Comment only what the code cannot say for itself -- the *why* behind a non-obvious algorithm, design
+  decision, workaround, or caveat -- never a restatement of *what* the line does. Keep them short (1-2
+  lines). Do not narrate implementation history ("was X", "moved from Y", "Phase N", "temporary") or
+  point at external plans/roadmaps -- describe the code as it is now. **Comments are ASCII-only:** no
+  em dashes, arrows, or other Unicode -- use `-`, `->`, `<->`.
 
 ## Applications
 

@@ -33,10 +33,10 @@ public:
 
   // Build a live object (and its whole subtree) from a serialized-object blob, giving every node a fresh
   // uuid, and add it at the scene root. This is the prefab instantiation path (a prefab's body is one
-  // Object::serialize() blob — see AssetRegistry::getPrefabBody) and the shared core of duplicateObject.
+  // Object::serialize() blob - see AssetRegistry::getPrefabBody) and the shared core of duplicateObject.
   //
   // Throws if objectData isn't a well-formed serialized object (unknown component type, missing uuid/name);
-  // callers on the tick loop must guard. The returned object is NOT started — a caller spawning into a
+  // callers on the tick loop must guard. The returned object is NOT started - a caller spawning into a
   // running scene starts it (and its children) itself.
   std::shared_ptr<Object> instantiate(const nlohmann::json& objectData);
 

@@ -11,7 +11,7 @@ public unsafe struct CameraBindings
     public delegate* unmanaged<IntPtr, bool> has;
 }
 
-// The object's camera (Phase 4), scoped to the object it was constructed from. Read-only for now: it
+// The object's camera, scoped to the object it was constructed from. Read-only for now: it
 // exposes the look direction so a script can move relative to where the camera faces. Reads the forward
 // default (0,0,-1) when the object has no Camera.
 public sealed unsafe class Camera

@@ -3,17 +3,16 @@ using System.Runtime.InteropServices;
 
 namespace ECS3DNetTransport;
 
-// The C# socket half of ECS3DNet. The C++ side (NetServer/NetClient) owns the protocol — it only ever
+// The C# socket half of ECS3DNet. The C++ side (NetServer/NetClient) owns the protocol - it only ever
 // hands us an opaque (type byte + payload bytes) pair and gets the same back.
 //
 // This class is just the native boundary: it holds the inbound callbacks C++ registers, exposes the
 // [UnmanagedCallersOnly] exports C++ calls, and forwards every call to the selected TransportBackend.
-// The actual socket work (TCP vs. WebSocket, and later UDP) lives in the backends, which are fully
-// separate code paths. The wire transport is chosen by the hardcoded Protocol field below.
+// The actual socket work (TCP vs. WebSocket) lives in the backends, which are fully separate code
+// paths. The wire transport is chosen by the hardcoded Protocol field below.
 public static unsafe class Transport
 {
   // Hardcoded transport selection. Flip this to switch the wire protocol for the whole process.
-  // UDP will be added later (see TransportProtocol).
 //   private static readonly TransportProtocol Protocol = TransportProtocol.WebSocket;
   private static readonly TransportProtocol Protocol = TransportProtocol.Tcp;
 
@@ -23,7 +22,7 @@ public static unsafe class Transport
   private static delegate* unmanaged<byte, byte*, int, void> _clientReceive;
 
   // Fired when a server-side connection drops, carrying its connection id, so the C++ side can release
-  // the player slot bound to it. Optional — the C++ side may never register one.
+  // the player slot bound to it. Optional - the C++ side may never register one.
   private static delegate* unmanaged<int, void> _serverDisconnect;
 
   private static readonly TransportBackend _backend = CreateBackend();

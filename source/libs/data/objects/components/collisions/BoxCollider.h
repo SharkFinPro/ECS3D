@@ -49,8 +49,8 @@ public:
   void unpack(net::MessageReader& messageReader) override;
 
 private:
-  // The vke::RenderObject + collider gizmo rendering moved to ECS3DRender; m_renderCollider stays as
-  // a plain flag the editor toggles and the render system reads.
+  // Collider gizmo rendering lives in ECS3DRender; m_renderCollider is a plain flag the editor toggles
+  // and the render system reads.
   bool m_renderCollider = false;
 
   std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};

@@ -411,7 +411,7 @@ void AssetBrowserPanel::displayMenuWidget()
   }
 
   // The popup itself is opened/drawn from displayGui at the top level (not here, inside the menu bar),
-  // where ImGui popups behave reliably — displayMenuWidget only records the request.
+  // where ImGui popups behave reliably - displayMenuWidget only records the request.
 }
 
 void AssetBrowserPanel::displayCreateAssetPopup()

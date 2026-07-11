@@ -87,7 +87,7 @@ void NetClient::send(const Message& message) const
 
 bool NetClient::poll(Message& message)
 {
-  // The client has a single peer (the server), so the sender id is meaningless here — discard it.
+  // The client has a single peer (the server), so the sender id is meaningless here - discard it.
   int32_t senderId = 0;
   return m_inbox.pop(message, senderId);
 }

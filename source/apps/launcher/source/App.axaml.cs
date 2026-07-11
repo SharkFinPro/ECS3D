@@ -21,7 +21,7 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Wire the view to its view model explicitly — no ViewLocator needed
+            // Wire the view to its view model explicitly - no ViewLocator needed
             // while there is a single window.
             desktop.MainWindow = new MainWindow
             {

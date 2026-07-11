@@ -29,7 +29,7 @@ void registerCameraEditor(ComponentEditor& componentEditor)
 
       // Only an active camera is picked up by RenderSystem::updateCamera. Note: fov/near/far are carried
       // and serialized, but the engine's projection is currently hardcoded, so editing them has no visible
-      // effect until VulkanEngine exposes a projection setter (see ROADMAP 4.2).
+      // effect until VulkanEngine exposes a projection setter.
       if (gc::accentCheckbox("Active", &active))
       {
         camera->setActive(active);

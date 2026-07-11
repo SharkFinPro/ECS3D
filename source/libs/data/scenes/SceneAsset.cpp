@@ -15,7 +15,6 @@ SceneAsset::SceneAsset(const uuids::uuid uuid,
 
 void SceneAsset::loadObjects(const nlohmann::json& objectsData) const
 {
-  // Was AssetManager::loadScenesFromJSON's inner loop.
   for (const auto& objectData : objectsData)
   {
     auto object = std::make_shared<Object>(objectData, m_objectManager.get());

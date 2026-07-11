@@ -34,9 +34,9 @@ enum class MessageType : uint8_t {
   sceneStatus,   // server -> client: current scene lifecycle state ({ status: "running"|"paused"|"stopped" })
   objectSpawned, // server -> client: one object created at runtime (Object::pack); spliced into the scene
   objectDestroyed, // server -> client: uuid of an object removed at runtime; the client drops it from the scene
-  playerSlot,    // server -> all: (nonce uint64, slot int32) — the player slot bound to the client whose
+  playerSlot,    // server -> all: (nonce uint64, slot int32) - the player slot bound to the client whose
                  // join carried this nonce. Broadcast + nonce correlation (no per-connection send path):
-                 // every client hears it, only the one whose join nonce matches keeps it (Phase 4.4).
+                 // every client hears it, only the one whose join nonce matches keeps it.
   renameAsset,   // editor -> server: set an asset's display-name override (replication::packRenameAsset); server re-snapshots
   removeAsset    // editor -> server: drop an asset record by uuid (replication::packRemoveAsset); server re-snapshots
   // editComponent/sceneEdit/sceneControl/loadProject/addAsset/renameAsset/removeAsset are the editor's mutation path; the server

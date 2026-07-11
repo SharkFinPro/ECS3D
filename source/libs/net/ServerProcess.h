@@ -6,7 +6,7 @@
 namespace net {
 
 // Launches a child ECS3DServer process for singleplayer / local-MP (the editor/client spawn a local
-// server and connect over loopback — the same netcode path as remote). RAII: the child is terminated
+// server and connect over loopback - the same netcode path as remote). RAII: the child is terminated
 // when this object is destroyed, so the local server doesn't outlive its window.
 class ServerProcess {
 public:

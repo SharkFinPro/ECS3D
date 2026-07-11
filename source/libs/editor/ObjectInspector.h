@@ -16,8 +16,8 @@ class ComponentEditor;
 
 // The Inspector's renderer for the Object selection kind: the object's name field, Highlight toggle,
 // component + script widgets (via ComponentEditor), Add Component, and the script drop zone. Extracted
-// from ObjectGUIManager so the panel can dispatch per selection kind; it reports edits back through the
-// same two callbacks the manager used to fire:
+// from ObjectGUIManager so the panel can dispatch per selection kind; it reports edits back through two
+// callbacks:
 //   - a component VALUE change -> EditCallback(objectUUID, component)
 //   - a STRUCTURAL change (rename / add / remove component, add script) -> SceneEditCallback(<edit json>)
 class ObjectInspector {

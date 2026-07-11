@@ -386,7 +386,7 @@ void ObjectGUIManager::saveAsPrefab(const std::shared_ptr<Object>& object) const
     return;
   }
 
-  // The prefab body is the object's own serialize() blob, carried inline in the asset record — there is no
+  // The prefab body is the object's own serialize() blob, carried inline in the asset record - there is no
   // file on disk, so it travels with the project and reaches a server that shares no filesystem with us.
   //
   // Prefabs are keyed by display name: saving over an existing name updates that prefab's body in place

@@ -228,29 +228,24 @@ const std::vector<std::shared_ptr<Component>>& Object::getScripts() const
 
 void Object::pack(net::Message& message) const
 {
-  // UUID
   message.writeString(uuids::to_string(m_uuid));
 
-  // Name
   std::string cleanName = m_name;
   cleanName.erase(std::ranges::find(cleanName, '\0'), cleanName.end());
   message.writeString(cleanName);
 
-  // Components
   message.write(static_cast<uint32_t>(m_components.size()));
   for (const auto& [_, component] : m_components)
   {
     component->pack(message);
   }
 
-  // Scripts
   message.write(static_cast<uint32_t>(m_scripts.size()));
   for (const auto& script : m_scripts)
   {
     script->pack(message);
   }
 
-  // Children
   message.write(static_cast<uint32_t>(m_children.size()));
   for (const auto& child : m_children)
   {
@@ -267,7 +262,6 @@ void Object::unpack(net::MessageReader& messageReader)
 
   const auto& registry = m_manager->getComponentRegistry();
 
-  // Components
   const uint32_t componentCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < componentCount; ++i)
   {
@@ -295,7 +289,6 @@ void Object::unpack(net::MessageReader& messageReader)
     component->unpack(messageReader);
   }
 
-  // Scripts
   const uint32_t scriptCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < scriptCount; ++i)
   {

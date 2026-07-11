@@ -33,7 +33,7 @@ struct CollisionPair {
 
   // Lexicographic by (a, b). Defaulting the three-way comparison gives the full set of relational
   // operators (uuid has only < and ==, which the compiler synthesizes from), so CollisionPair models
-  // totally_ordered — required by std::ranges::sort / set_difference.
+  // totally_ordered - required by std::ranges::sort / set_difference.
   std::strong_ordering operator<=>(const CollisionPair& other) const = default;
 };
 
@@ -79,7 +79,7 @@ private:
   // Broad-phase layer filter: true only if each collider's mask includes the other's layer.
   static bool layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b);
 
-  // GJK/EPA narrow phase, lifted out of Collider.
+  // GJK/EPA narrow phase.
   static bool collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
                            glm::vec3* mtv, glm::vec3* collisionPoint);
 

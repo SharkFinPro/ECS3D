@@ -52,7 +52,7 @@ public class PlayerScript : ScriptBase
         m_appliedForce *= 0;
 
         // Mouse-look owns rotation, so cancel any physics spin (e.g. from a collision) before physics
-        // integrates it this tick — otherwise the view would fight/jitter against the look direction.
+        // integrates it this tick - otherwise the view would fight/jitter against the look direction.
         rigidBody.setAngularVelocity(0, 0, 0);
     }
 
@@ -141,7 +141,7 @@ public class PlayerScript : ScriptBase
         if (forwardInput != 0 || strafeInput != 0)
         {
             // Base heading is the camera's own facing (its direction field) on the ground plane, so
-            // "forward" follows wherever the camera actually points — not an assumed -Z.
+            // "forward" follows wherever the camera actually points - not an assumed -Z.
             Vector3 camDir = camera.getDirection();
             Vector3 baseForward = new Vector3(camDir.X, 0.0f, camDir.Z);
             baseForward = baseForward.LengthSquared() > 0.0001f

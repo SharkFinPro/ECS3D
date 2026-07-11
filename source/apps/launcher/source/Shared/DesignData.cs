@@ -6,7 +6,7 @@ namespace ECS3DLauncher.Shared;
 
 // Design-time view models. Referenced via d:DataContext so the Rider/Avalonia
 // previewer renders real content when a view is opened on its own, with no
-// runtime DataContext. Stripped from the app at runtime — design-only.
+// runtime DataContext. Stripped from the app at runtime - design-only.
 public static class DesignData
 {
     public static MainWindowViewModel MainWindow { get; } = new();

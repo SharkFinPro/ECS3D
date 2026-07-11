@@ -15,7 +15,7 @@ public sealed class IconKeyConverter : IValueConverter
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         // Use TryGetResource (not Resources.TryGetValue) so lookup traverses
-        // merged dictionaries and theme scopes — the icon geometries live in a
+        // merged dictionaries and theme scopes - the icon geometries live in a
         // merged ResourceInclude.
         if (value is string key &&
             Application.Current!.TryGetResource(key, null, out var res) &&

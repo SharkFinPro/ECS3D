@@ -30,9 +30,9 @@ void registerDataComponents(ComponentRegistry& componentRegistry)
   // (server only). loadFromJSON sets the className, so the factory is argless like the rest.
   componentRegistry.registerComponent("Script", [] { return std::make_shared<Script>(); });
 
-  // Player↔object association (Phase 3.2): marks an object as owned by a player slot.
+  // Player<->object association: marks an object as owned by a player slot.
   componentRegistry.registerComponent("PlayerController", [] { return std::make_shared<PlayerController>(); });
 
-  // A view the renderer can look through (Phase 4).
+  // A view the renderer can look through.
   componentRegistry.registerComponent("Camera", [] { return std::make_shared<Camera>(); });
 }

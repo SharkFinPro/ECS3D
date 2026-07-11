@@ -33,7 +33,7 @@ public:
   [[nodiscard]] ColliderType getColliderType() const;
 
   // A trigger still produces collision events but no physical response (no MTV correction, no
-  // impulses) — a volume scripts can react to without it blocking anything. Shared by every collider
+  // impulses) - a volume scripts can react to without it blocking anything. Shared by every collider
   // shape; each subclass threads it through its own serialize/loadFromJSON/pack/unpack.
   [[nodiscard]] bool isTrigger() const;
   void setIsTrigger(bool isTrigger);

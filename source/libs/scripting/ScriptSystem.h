@@ -17,7 +17,7 @@ class Object;
 class Script;
 
 // Which contact-lifecycle callback a dispatched collision event maps to. The integer values are the
-// wire contract with ScriptBridge.Bridge.onCollision (0 = enter, 1 = stay, 2 = exit) — keep them in sync.
+// wire contract with ScriptBridge.Bridge.onCollision (0 = enter, 1 = stay, 2 = exit) - keep them in sync.
 enum class CollisionEvent {
   enter = 0,
   stay = 1,

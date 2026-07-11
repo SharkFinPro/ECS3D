@@ -13,15 +13,14 @@ enum class SceneStatus {
   paused
 };
 
-// Data: the scene store + the play/pause/stop state. The fixedUpdate/variableUpdate verbs are gone —
-// the app loop drives the systems over getCurrentScene()->getObjectManager() when status == running.
-// The Start/Pause/Stop GUI moved to the editor.
+// Data: the scene store + the play/pause/stop state. The app loop drives the systems over
+// getCurrentScene()->getObjectManager() when status == running; the Start/Pause/Stop GUI lives in the editor.
 class SceneManager {
 public:
   void addScene(const std::shared_ptr<SceneAsset>& scene);
 
   // Drop all scenes (used when (re)loading a project / applying a fresh snapshot, so stale scenes
-  // don't linger — addScene is keyed by uuid and won't replace an existing entry).
+  // don't linger - addScene is keyed by uuid and won't replace an existing entry).
   void clear();
 
   [[nodiscard]] std::shared_ptr<SceneAsset> getScene(const uuids::uuid& uuid) const;

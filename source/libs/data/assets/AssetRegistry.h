@@ -29,7 +29,7 @@ struct AssetRecord {
   std::string body;        // prefabs only: a serialized Object blob (Object::serialize().dump())
   std::string displayName; // optional rename override: when non-empty it replaces the derived display
                            // name (see assetDisplay::name). The file on disk and `path` (the registry
-                           // key) never change — a rename is display-only (see ROADMAP B1).
+                           // key) never change - a rename is display-only.
 };
 
 // uuid<->path registry + serialize. Carries asset metadata only (no GPU resources, no GUI).
@@ -43,17 +43,17 @@ struct AssetRecord {
 class AssetRegistry {
 public:
   // First-wins: re-registering an existing path keeps the original record. The one exception is a Prefab,
-  // whose body is updated in place (keeping its uuid) — see registerAsset.
+  // whose body is updated in place (keeping its uuid) - see registerAsset.
   void registerAsset(const AssetRecord& record);
 
-  // Set a record's display-name override (a display-only rename; the file on disk and `path` — the
-  // registry key — are untouched, so name-keyed prefabs/scenes keep their identity). No-op for an unknown
-  // uuid. Bumps the version so cached views refresh. See ROADMAP B1.
+  // Set a record's display-name override (a display-only rename; the file on disk and `path` - the
+  // registry key - are untouched, so name-keyed prefabs/scenes keep their identity). No-op for an unknown
+  // uuid. Bumps the version so cached views refresh.
   void renameAsset(const uuids::uuid& uuid, const std::string& displayName);
 
   // Drop a record by uuid, also clearing its `path` key (so a name-keyed prefab name frees up for reuse).
-  // No-op for an unknown uuid. References to it dangle by design — lookups already null-tolerate a missing
-  // uuid (see ROADMAP B1). Bumps the version.
+  // No-op for an unknown uuid. References to it dangle by design - lookups already null-tolerate a missing
+  // uuid. Bumps the version.
   void removeAsset(const uuids::uuid& uuid);
 
   // Drop all records (used when (re)loading a project / applying a fresh snapshot).

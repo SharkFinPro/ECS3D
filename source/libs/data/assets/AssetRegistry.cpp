@@ -41,7 +41,7 @@ void AssetRegistry::renameAsset(const uuids::uuid& uuid, const std::string& disp
   }
 
   // Display-only: `path` (the key, and the name-key for prefabs/scenes) stays put, so nothing that
-  // resolves the asset by path or uuid is disturbed — only the shown name changes.
+  // resolves the asset by path or uuid is disturbed - only the shown name changes.
   it->second.displayName = displayName;
   ++m_version;
 }
@@ -55,7 +55,7 @@ void AssetRegistry::removeAsset(const uuids::uuid& uuid)
   }
 
   // Free the path key too so its name (a prefab/scene display name, or a file path) can be registered
-  // again later. Guard on the mapping actually pointing back at this uuid — a first-wins collision earlier
+  // again later. Guard on the mapping actually pointing back at this uuid - a first-wins collision earlier
   // may have left the key owned by a different record.
   if (const auto pathIt = m_loadedPaths.find(it->second.path);
       pathIt != m_loadedPaths.end() && pathIt->second == uuid)
@@ -119,8 +119,8 @@ nlohmann::json AssetRegistry::getPrefabBody(const uuids::uuid& uuid) const
 
 nlohmann::json AssetRegistry::serialize() const
 {
-  // Scenes are NOT serialized here — they carry their object tree and belong to the SceneManager
-  // migration. The future ProjectSerializer merges this with the scene data.
+  // Scenes are NOT serialized here - they carry their object tree and belong to the SceneManager.
+  // ProjectSerializer merges this with the scene data.
   nlohmann::json data = {
     { "models", nlohmann::json::array() },
     { "textures", nlohmann::json::array() },
@@ -129,7 +129,7 @@ nlohmann::json AssetRegistry::serialize() const
   };
 
   // A rename sets a display-name override on the record; write it (append only, omitted when empty) so a
-  // renamed asset survives a save/load. The file on disk and `path` never change — only this override.
+  // renamed asset survives a save/load. The file on disk and `path` never change - only this override.
   const auto withDisplayName = [](nlohmann::json entry, const AssetRecord& record) {
     if (!record.displayName.empty())
     {
@@ -221,7 +221,7 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
   {
     for (const auto& assetData : assetsData.at("prefabs"))
     {
-      // A prefab without a usable body is nothing — drop it rather than register a record that can never
+      // A prefab without a usable body is nothing - drop it rather than register a record that can never
       // instantiate (serialize() writes null for a body it couldn't parse).
       if (!assetData.contains("body") || !assetData.at("body").is_object())
       {
@@ -241,8 +241,8 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
 
 void AssetRegistry::pack(net::Message& message) const
 {
-  // Collect first so we can write a count up front (m_assets also holds Scene records, which — like
-  // serialize() — are skipped here; they're carried by the SceneManager). A Prefab carries its whole body
+  // Collect first so we can write a count up front (m_assets also holds Scene records, which - like
+  // serialize() - are skipped here; they're carried by the SceneManager). A Prefab carries its whole body
   // inline; every other record writes an empty body string, keeping the entry layout uniform.
   std::vector<const AssetRecord*> records;
   for (const auto& [uuid, record] : m_assets)

@@ -45,8 +45,8 @@ private:
   static const char* bindSpawnPrefab(const char* prefabUuid, float x, float y, float z);
 
   // Ray/overlap queries delegate to the sim implementation the app injected into BindingContext. Both
-  // return a comma-delimited string the managed side parses: raycast → "uuid,dist,px,py,pz,nx,ny,nz" (or
-  // "" on a miss); overlapSphere → a comma-separated uuid list (or "").
+  // return a comma-delimited string the managed side parses: raycast -> "uuid,dist,px,py,pz,nx,ny,nz" (or
+  // "" on a miss); overlapSphere -> a comma-separated uuid list (or "").
   static const char* bindRaycast(float ox, float oy, float oz, float dx, float dy, float dz,
                                  float maxDistance, uint32_t layerMask, const char* ignoreUuid);
   static const char* bindOverlapSphere(float cx, float cy, float cz, float radius, uint32_t layerMask,

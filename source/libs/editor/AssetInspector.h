@@ -20,7 +20,7 @@ class TransientObject;
 
 // The Inspector's renderer for the Asset selection kind: a common header (type chip, display name, uuid,
 // path/source) shared by every asset type, plus a per-type body. Most views are read-only; the Prefab body
-// is editable (Phase 4) — its contents are deserialized into a detached TransientObject and edited with the
+// is editable - its contents are deserialized into a detached TransientObject and edited with the
 // same component editors an object uses (a reused ObjectInspector), each edit re-serialized and sent as an
 // asset body update. Peer to ObjectInspector behind InspectorPanel's per-selection-kind dispatch.
 class AssetInspector {
@@ -35,7 +35,7 @@ public:
   // the delete-confirmation modal. Computed by the EditorApp, which owns the scenes and the registry.
   using ReferenceCountCallback = std::function<int(const uuids::uuid& assetUUID)>;
   // A prefab body edit: the EditorApp re-registers the prefab under its existing name (which updates the
-  // body in place, keeping the uuid — the "Save as Prefab" over an existing name path) and re-snapshots.
+  // body in place, keeping the uuid - the "Save as Prefab" over an existing name path) and re-snapshots.
   using UpdatePrefabBodyCallback = std::function<void(const uuids::uuid& assetUUID, const std::string& name,
                                                       const std::string& body)>;
 
@@ -86,7 +86,7 @@ private:
   // verbatim from the Object kind. The inspector's callbacks feed the buffers below rather than the network:
   // structural edits are deferred (applied after its display returns, since applying mid-display would
   // invalidate the component map it iterates); value edits just mark the body dirty. Both apply to the
-  // detached object immediately (instant local feedback), but the SEND is coalesced — see m_prefabBodyDirty.
+  // detached object immediately (instant local feedback), but the SEND is coalesced - see m_prefabBodyDirty.
   std::unique_ptr<TransientObject> m_prefabBody;
   std::unique_ptr<ObjectInspector> m_prefabInspector;
   std::vector<nlohmann::json> m_pendingPrefabEdits;
@@ -95,14 +95,14 @@ private:
   // prefab body update is an addAsset that makes the server re-snapshot the whole project. Sending one per
   // drag frame swamps every view, so edits are coalesced: they mutate the detached object live, set this
   // flag, and are only serialized + sent once the user stops interacting (no active widget) or switches
-  // selection — turning a whole slider drag into a single body update. m_prefabRecord* records which asset
+  // selection - turning a whole slider drag into a single body update. m_prefabRecord* records which asset
   // the pending edit belongs to, so a flush triggered by a selection change sends it under the right key.
   bool m_prefabBodyDirty = false;
   uuids::uuid m_prefabRecordUUID{};
   std::string m_prefabRecordName;
 
   // Buffer for the in-place display-name field. Re-seeded (from the effective display name) whenever the
-  // selected asset changes, so an external rename doesn't clobber what the user is typing — matching
+  // selected asset changes, so an external rename doesn't clobber what the user is typing - matching
   // ObjectInspector's name buffer.
   std::array<char, 256> m_nameEditBuffer{};
   std::optional<uuids::uuid> m_nameEditUUID;
@@ -136,7 +136,7 @@ private:
   // Large image preview (falling back to the type icon like the browser tiles) + dimensions + size.
   void displayTextureBody(const AssetRecord& record);
 
-  // Type icon (3D preview deferred, see B3), file format + size, and mesh stats.
+  // Type icon (3D preview deferred), file format + size, and mesh stats.
   void displayModelBody(const AssetRecord& record);
 
   // Read-only .cs source preview (from the cached source, loaded editor-side).
@@ -159,7 +159,7 @@ private:
   void displayDeleteButton(const AssetRecord& record);
 
   // The "Delete Asset?" confirmation modal for m_assetPendingDeletion, warning how many objects reference
-  // it (references are left to dangle — see ROADMAP B1). Confirming fires the remove callback.
+  // it (references are left to dangle). Confirming fires the remove callback.
   void displayDeleteConfirmationModal(const AssetRecord& record);
 };
 

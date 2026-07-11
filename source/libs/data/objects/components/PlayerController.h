@@ -4,10 +4,10 @@
 #include "Component.h"
 #include <cstdint>
 
-// Marks an object as owned by a player (Phase 3.2). playerSlot is the player index the object belongs
-// to; the server binds each connection to a slot (see ServerApp), so a script on this object reads that
+// Marks an object as owned by a player. playerSlot is the player index the object belongs to; the
+// server binds each connection to a slot (see ServerApp), so a script on this object reads that
 // player's input via ScriptBase.input. The slot is a ComponentVariable so a script/spawner can rebind it
-// at runtime (a Phase 5 player spawner sets it on a freshly spawned player) and it resets on scene stop.
+// at runtime and it resets on scene stop.
 class PlayerController final : public Component {
 public:
   PlayerController();

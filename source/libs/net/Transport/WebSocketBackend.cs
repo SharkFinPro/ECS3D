@@ -31,7 +31,7 @@ internal sealed class WebSocketBackend : TransportBackend
   // through SendAsync().GetResult(). A send that fits the socket's send buffer completes synchronously and
   // returns inline; one that doesn't falls back to the async path, whose continuation needs a thread-pool
   // thread. Because our socket threads block on .GetResult(), the pool has to *inject* that thread, which
-  // it throttles to ~one per 15.6ms — a per-message stall that made WebSocket feel laggy versus TCP.
+  // it throttles to ~one per 15.6ms - a per-message stall that made WebSocket feel laggy versus TCP.
   //
   //  - A send buffer larger than a typical message keeps the common case on the synchronous path.
   //  - Raising the thread-pool minimum removes the injection delay for the rare oversized message that
@@ -255,7 +255,7 @@ internal sealed class WebSocketBackend : TransportBackend
       ws.Options.KeepAliveInterval = KeepAlive;
 
       // ClientWebSocket gives no way to set NoDelay on its socket, so it would otherwise leave Nagle's
-      // algorithm enabled — small per-tick messages get held ~40ms (Nagle + delayed ACK), the lag the
+      // algorithm enabled - small per-tick messages get held ~40ms (Nagle + delayed ACK), the lag the
       // TCP backend avoids by setting NoDelay on both ends. A ConnectCallback lets us own the socket and
       // disable Nagle ourselves.
       var invoker = new HttpMessageInvoker(new SocketsHttpHandler

@@ -58,7 +58,7 @@ void TransientObject::rebuild(const std::string& body)
 
   try
   {
-    // A private manager owns the object exactly as a scene's does — but is never handed to any scene,
+    // A private manager owns the object exactly as a scene's does - but is never handed to any scene,
     // SceneManager, or replication path, so the object stays out of the simulation. Preserve the body's
     // uuids (no reassignUUIDs) so the body is stable across edits.
     m_manager = std::make_unique<ObjectManager>(m_componentRegistry);
@@ -77,7 +77,7 @@ void TransientObject::rebuild(const std::string& body)
   }
   catch (const std::exception&)
   {
-    // A malformed body (unknown component type, missing uuid/name) — leave the object null; the inspector
+    // A malformed body (unknown component type, missing uuid/name) - leave the object null; the inspector
     // shows its "unavailable" fallback.
     m_manager.reset();
     m_object.reset();

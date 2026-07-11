@@ -30,14 +30,14 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
 // The editor's return path: a single component edit, carried as { object, type, [className], data },
 // where data is the component's own serialize() blob. The server applies it to its authoritative scene
 // (reusing each component's loadFromJSON) and re-broadcasts so every view converges. Reuses the
-// existing serialize()/loadFromJSON boundary — the net layer never names a component type.
+// existing serialize()/loadFromJSON boundary - the net layer never names a component type.
 [[nodiscard]] net::Message buildComponentEdit(const uuids::uuid& objectUUID,
                                               const std::shared_ptr<Component>& component);
 
 void applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
 
 // Structural edits (add/remove object or component). Unlike a value edit these change the scene graph,
-// so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op — the
+// so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op - the
 // client/editor just rebuild from the snapshot. Each is carried as { op, ... }.
 [[nodiscard]] nlohmann::json buildAddObject(const std::string& name,
                                             const uuids::uuid* parentUUID = nullptr);
@@ -63,7 +63,7 @@ void applyComponentEdit(const ObjectManager& objectManager, const net::Message& 
 
 // Instantiate a prefab asset into the scene at the transform stored in its body. Unlike every other op
 // this one names an asset rather than an existing object, so applySceneEdit needs the AssetRegistry to
-// resolve the prefab's uuid to its body — pass it whenever prefab ops are possible (the authoritative
+// resolve the prefab's uuid to its body - pass it whenever prefab ops are possible (the authoritative
 // server always does).
 [[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID);
 
@@ -99,7 +99,7 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 [[nodiscard]] nlohmann::json unpackAddAsset(const net::Message& message);
 
 // Asset mutation ({ uuid, [displayName] }). Rename is a display-name override only; remove drops the
-// record and lets references dangle (see ROADMAP B1). Both mirror addAsset's local-apply-then-send shape:
+// record and lets references dangle. Both mirror addAsset's local-apply-then-send shape:
 // the editor applies locally for instant feedback and sends the op; the server applies it authoritatively
 // and re-snapshots. The build* helpers assemble the blob; pack*/unpack* carry it on the wire.
 [[nodiscard]] nlohmann::json buildRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName);

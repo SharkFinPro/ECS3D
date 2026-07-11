@@ -111,7 +111,7 @@ bool ProjectSerializer::load(const std::string& path) const
   std::ifstream f(path);
   if (!f.is_open())
   {
-    // Don't fail silently — the server would otherwise just idle with no scene and no clue why. The
+    // Don't fail silently - the server would otherwise just idle with no scene and no clue why. The
     // path is relative to the working directory, which is the usual culprit (run from the bin dir).
     std::cerr << "[ProjectSerializer] Could not open project file: " << path
               << " (cwd: " << std::filesystem::current_path().string() << ")" << std::endl;

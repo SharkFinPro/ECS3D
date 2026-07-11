@@ -31,7 +31,7 @@ AssetInspector::AssetInspector(std::shared_ptr<GpuAssetCache> assetCache,
     m_prefabInspector(std::make_unique<ObjectInspector>(std::move(componentEditor)))
 {
   // The reused inspector edits a detached object, so its edits must apply locally rather than travel to the
-  // server. A value edit already mutated the component in place — just mark the body dirty. A structural
+  // server. A value edit already mutated the component in place - just mark the body dirty. A structural
   // edit is queued and applied after display() returns (applying it now would mutate the component map
   // mid-iteration). Neither sends immediately; displayPrefabBody coalesces the send (see m_prefabBodyDirty).
   m_prefabInspector->setEditCallback([this](const uuids::uuid&, const std::shared_ptr<Component>&) {
@@ -81,7 +81,7 @@ void AssetInspector::setAssetRegistry(const AssetRegistry* registry)
 namespace {
   // A display-name rename is a display-only override the AssetRegistry packs (see AssetRegistry::pack): it
   // survives a snapshot only for the flat file assets. A Scene record is regenerated from the SceneManager
-  // on every snapshot (and never packed), so its override wouldn't stick — keep the scene name read-only.
+  // on every snapshot (and never packed), so its override wouldn't stick - keep the scene name read-only.
   bool isRenamable(const AssetType type)
   {
     return type == AssetType::Model || type == AssetType::Texture
@@ -125,7 +125,7 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
   }
 
   // Delete lives at the foot of the panel, for the flat file assets only (a Scene's removal isn't a
-  // registry op — see isRenamable / ROADMAP B1). The modal is drawn every frame the button is armed.
+  // registry op - see isRenamable). The modal is drawn every frame the button is armed.
   displayDeleteButton(record);
   displayDeleteConfirmationModal(record);
 }
@@ -133,7 +133,7 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
 void AssetInspector::displayHeader(const AssetRecord& record)
 {
   // Re-seed the name buffer with the effective display name when the selection changes (only then, so an
-  // external rename can't overwrite an in-progress edit — same discipline as ObjectInspector).
+  // external rename can't overwrite an in-progress edit - same discipline as ObjectInspector).
   if (m_nameEditUUID != record.uuid)
   {
     m_nameEditUUID = record.uuid;
@@ -144,7 +144,7 @@ void AssetInspector::displayHeader(const AssetRecord& record)
   }
 
   // Display name: an editable rename field for the flat file assets (gated on editable), read-only text
-  // for scenes (their override wouldn't survive a snapshot — see isRenamable).
+  // for scenes (their override wouldn't survive a snapshot - see isRenamable).
   if (isRenamable(record.type))
   {
     ImGui::BeginDisabled(!m_editable);
@@ -208,7 +208,7 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
   }
 
   // Mesh stats come from the loaded vke::Model (its vertex/index arrays are already in memory once the
-  // model is cached). Resolving it here — once per selection — reuses the same cache the renderer uses.
+  // model is cached). Resolving it here - once per selection - reuses the same cache the renderer uses.
   if (record.type == AssetType::Model)
   {
     try
@@ -227,7 +227,7 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
   }
 
   // Read the script source from disk (the editor side has the .cs file). Degrades to "not available"
-  // when the file isn't reachable — e.g. attached to a server that shares no filesystem.
+  // when the file isn't reachable - e.g. attached to a server that shares no filesystem.
   if (record.type == AssetType::Script)
   {
     if (std::ifstream in(record.path, std::ios::binary); in)
@@ -317,8 +317,8 @@ void AssetInspector::displayModelBody(const AssetRecord& record)
   gc::sectionLabel("Preview");
   ImGui::Spacing();
 
-  // A live 3D preview needs an offscreen render target the engine doesn't expose yet (deferred, B3), so
-  // stand in the type icon.
+  // A live 3D preview needs an offscreen render target the engine doesn't expose yet, so stand in the
+  // type icon.
   const float scale = m_assetCache->getRenderer()->getWindow()->getContentScale();
   const float boxW = ImGui::GetContentRegionAvail().x;
   const float boxH = std::min(boxW, 200.0f * scale);
@@ -430,14 +430,13 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
   const auto& object = m_prefabBody->object();
   if (!object)
   {
-    // Empty/malformed body (an older or hand-edited record) — nothing to deserialize.
+    // Empty/malformed body (an older or hand-edited record) - nothing to deserialize.
     gc::dashedBox("Prefab body unavailable");
     return;
   }
 
-  // Draw the body with the same component editors an object uses. The wired callbacks collect structural
-  // edits and mark value edits dirty rather than sending them; apply the structural ones once display has
-  // returned so they don't mutate the component map ObjectInspector::display is iterating.
+  // Draw the body with the same component editors an object uses. Apply the queued structural edits after
+  // display() returns, so they don't mutate the component map ObjectInspector::display is iterating.
   m_pendingPrefabEdits.clear();
 
   m_prefabInspector->display(object);
@@ -453,8 +452,8 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
   m_pendingPrefabEdits.clear();
 
   // Coalesce the send: a prefab body update makes the server re-snapshot the whole project, so hold it
-  // until the user isn't actively dragging/typing a widget. The detached object already reflects the edit,
-  // so local feedback stays instant; the network sees one update per interaction instead of per frame.
+  // until the user isn't dragging/typing. The detached object already reflects the edit, so local
+  // feedback stays instant.
   if (m_prefabBodyDirty && !ImGui::IsAnyItemActive())
   {
     flushPrefabBody();
@@ -475,9 +474,8 @@ void AssetInspector::flushPrefabBody()
     return;
   }
 
-  // Re-register under the prefab's name (m_prefabRecordName): re-registering an existing name updates the
-  // body in place and keeps the uuid — the same path "Save as Prefab" over an existing name takes.
-  // markSynced so the resulting registry update (and the server's snapshot echo) doesn't rebuild the object.
+  // Re-register under the prefab's name: this updates the body in place and keeps the uuid. markSynced so
+  // the resulting registry update (and the server's snapshot echo) doesn't rebuild the object.
   const auto newBody = m_prefabBody->serialize();
   m_onUpdatePrefabBody(m_prefabRecordUUID, m_prefabRecordName, newBody);
   m_prefabBody->markSynced(newBody);
@@ -486,7 +484,7 @@ void AssetInspector::flushPrefabBody()
 void AssetInspector::displayDeleteButton(const AssetRecord& record)
 {
   // Only the flat file assets can be deleted from here (a Scene lives in the SceneManager, not a registry
-  // record we can drop — see isRenamable).
+  // record we can drop - see isRenamable).
   if (!isRenamable(record.type))
   {
     return;
@@ -536,7 +534,7 @@ void AssetInspector::displayDeleteConfirmationModal(const AssetRecord& record)
     ImGui::SameLine();
     ImGui::TextUnformatted("?");
 
-    // Deletion always succeeds; any references are left to dangle (the slots show "None") — warn how many.
+    // Deletion always succeeds; any references are left to dangle (the slots show "None") - warn how many.
     if (m_pendingRefCount > 0)
     {
       ImGui::TextColored(theme::scriptAmber, "Referenced by %d object%s - those references will be left empty.",
