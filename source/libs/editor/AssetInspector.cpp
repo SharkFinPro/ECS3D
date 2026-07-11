@@ -435,9 +435,8 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
     return;
   }
 
-  // Draw the body with the same component editors an object uses. The wired callbacks collect structural
-  // edits and mark value edits dirty rather than sending them; apply the structural ones once display has
-  // returned so they don't mutate the component map ObjectInspector::display is iterating.
+  // Draw the body with the same component editors an object uses. Apply the queued structural edits after
+  // display() returns, so they don't mutate the component map ObjectInspector::display is iterating.
   m_pendingPrefabEdits.clear();
 
   m_prefabInspector->display(object);
@@ -453,8 +452,8 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
   m_pendingPrefabEdits.clear();
 
   // Coalesce the send: a prefab body update makes the server re-snapshot the whole project, so hold it
-  // until the user isn't actively dragging/typing a widget. The detached object already reflects the edit,
-  // so local feedback stays instant; the network sees one update per interaction instead of per frame.
+  // until the user isn't dragging/typing. The detached object already reflects the edit, so local
+  // feedback stays instant.
   if (m_prefabBodyDirty && !ImGui::IsAnyItemActive())
   {
     flushPrefabBody();
@@ -475,9 +474,8 @@ void AssetInspector::flushPrefabBody()
     return;
   }
 
-  // Re-register under the prefab's name (m_prefabRecordName): re-registering an existing name updates the
-  // body in place and keeps the uuid — the same path "Save as Prefab" over an existing name takes.
-  // markSynced so the resulting registry update (and the server's snapshot echo) doesn't rebuild the object.
+  // Re-register under the prefab's name: this updates the body in place and keeps the uuid. markSynced so
+  // the resulting registry update (and the server's snapshot echo) doesn't rebuild the object.
   const auto newBody = m_prefabBody->serialize();
   m_onUpdatePrefabBody(m_prefabRecordUUID, m_prefabRecordName, newBody);
   m_prefabBody->markSynced(newBody);

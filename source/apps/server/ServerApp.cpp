@@ -54,9 +54,8 @@ ServerApp::ServerApp(LaunchOptions options)
 
   if (m_options.project.empty())
   {
-    // No project file requested: run the built-in sample (scenes 1-3 + falling balls), generated in
-    // code. The procedural scenes can't be a static file, so the whole sample is built here rather than
-    // shipped as a project on disk.
+    // No project file requested: run the built-in sample (scenes 1-3 + falling balls). It's generated in
+    // code because the procedural scenes can't be a static file on disk.
     m_projectSerializer->deserialize(buildDefaultProject());
   }
   else if (!m_projectSerializer->load(m_options.project) || !m_sceneManager->getCurrentScene())
@@ -109,10 +108,8 @@ bool ServerApp::isActive() const
     return true;
   }
 
-  // An editor/client-spawned server is ephemeral: once its spawning app has connected (m_hasConnected,
-  // set on the first join), it should exit as soon as the last connection drops, so it doesn't linger
-  // if the parent ever fails to terminate it. Until that first connection it stays up through the
-  // launch -> connect window (when the count is legitimately still 0).
+  // An ephemeral (editor/client-spawned) server exits once its last connection drops — but only after the
+  // first join (m_hasConnected), so it survives the launch -> connect window when the count is still 0.
   return !m_hasConnected || m_netServer->connectionCount() > 0;
 }
 
@@ -155,9 +152,9 @@ void ServerApp::run()
     {
       fixedUpdate(m_fixedUpdateDt);
 
-      // The tick's scripts have now read this tick's mouse motion + key edges; zero the accumulated
-      // delta/scroll and snapshot the current keys as "last tick's" so a still mouse reads zero next tick
-      // and wasPressed/ReleasedThisTick reflect only genuinely new changes (a catch-up sub-step sees none).
+      // The tick's scripts have read this tick's mouse motion + key edges; zero the accumulated delta/scroll
+      // and snapshot the current keys as "last tick's", so a still mouse reads zero and
+      // wasPressed/ReleasedThisTick reflect only genuinely new changes.
       InputState::clearMouseDeltas();
       InputState::commitInputEdges();
 
@@ -314,10 +311,9 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
   m_hasConnected = true;
   const int32_t slot = assignPlayerSlot(senderId);
 
-  // If the joining client tagged its request with a nonce (players do; the editor sends none), tell it
-  // which player slot it was bound to so it can render through that player's camera. Broadcast
-  // + nonce correlation avoids a per-connection send path: every client hears it, but only the one whose
-  // join nonce matches keeps it. The remaining() guard keeps an older/nonce-less client working.
+  // If the client tagged its join with a nonce (players do; the editor sends none), tell it which slot it
+  // got so it can render through that player's camera. Broadcasting with nonce correlation avoids a
+  // per-connection send path — every client hears it, only the matching one keeps it.
   net::MessageReader reader(message);
   if (reader.remaining() >= sizeof(uint64_t))
   {
@@ -543,10 +539,9 @@ void ServerApp::handleRemoveAsset(const net::Message& message) const
 
 void ServerApp::handleInputState(const net::Message& message, const int32_t senderId)
 {
-  // The client's captured keyboard state for this frame; the scripts read it through their player's slot.
-  // It lands in this connection's player slot so two players don't clobber each other. assignPlayerSlot is
-  // idempotent — normally the slot already exists from the join, but bind on demand in case input somehow
-  // arrives first.
+  // The client's captured keyboard state, dropped into its player slot so two players don't clobber each
+  // other. assignPlayerSlot is idempotent (the slot usually exists from the join), but bind on demand in
+  // case input arrives first.
   const int32_t slot = assignPlayerSlot(senderId);
 
   net::MessageReader reader(message);

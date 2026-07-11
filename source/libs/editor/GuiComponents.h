@@ -63,9 +63,8 @@ namespace gc {
   // Minimum width of the secondary-text label column on the left of inspector rows.
   constexpr float kLabelColumn = 72.0f;
 
-  // Draws a muted row label and advances to the control column. The column is at least kLabelColumn but
-  // always clears the label text (the default ImGui font is wider than the mockup's), so the control is
-  // never drawn on top of the label.
+  // Draws a muted row label and advances to the control column (at least kLabelColumn, but always past
+  // the label text so the control never overlaps it).
   // Gap kept between the end of a row label and the start of its control.
   constexpr float kLabelGap = 22.0f;
 

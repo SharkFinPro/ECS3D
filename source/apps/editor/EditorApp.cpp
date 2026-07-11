@@ -68,10 +68,9 @@ namespace {
     return label;
   }
 
-  // Whether any of an object's components serialize the asset uuid (models/textures store it as a string
-  // field — see ModelRenderer::serialize). Searching the serialized form keeps this generic: no layer here
-  // names a concrete component type. Scripts reference assets by class name and prefab instances are
-  // detached copies, so only model/texture uuids ever match — exactly the references that would dangle.
+  // Whether any of the object's components mention the asset uuid in their serialized form. Searching the
+  // serialized form keeps this generic (no component type named here); only model/texture references —
+  // the ones that would dangle — ever match.
   bool objectReferencesAsset(const std::shared_ptr<Object>& object, const std::string& uuidString)
   {
     for (const auto& [type, component] : object->getComponents())
@@ -141,17 +140,15 @@ EditorApp::EditorApp(LaunchOptions options)
   m_componentEditor = std::make_shared<ComponentEditor>();
   registerEditors();
 
-  // Registering a new asset: apply it locally for instant feedback, then on the authoritative server
-  // (which re-snapshots to keep everyone in sync). Shared by the asset browser's import/create and the
-  // object tree's "Save as Prefab".
+  // Register a new asset: apply locally for instant feedback, then on the server (which re-snapshots).
+  // Shared by the asset browser's import/create and the object tree's "Save as Prefab".
   const auto addAsset = [this](const nlohmann::json& asset) {
     replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
 
     m_netClient->send(replication::packAddAsset(asset));
   };
 
-  // Renaming an asset (display-name override only): apply locally for instant feedback, then on the
-  // authoritative server (which re-snapshots). Same local-apply-then-send shape as addAsset.
+  // Rename an asset (display-name override only). Same local-apply-then-send shape as addAsset.
   const auto renameAsset = [this](const uuids::uuid& assetUUID, const std::string& displayName) {
     const auto op = replication::buildRenameAsset(assetUUID, displayName);
     replication::applyRenameAsset(*m_assetRegistry, op);
@@ -159,8 +156,8 @@ EditorApp::EditorApp(LaunchOptions options)
     m_netClient->send(replication::packRenameAsset(op));
   };
 
-  // Deleting an asset: same local-apply-then-send shape. Deletion always succeeds; any references dangle
-  // (lookups null-tolerate a missing uuid), so nothing else needs to change here.
+  // Delete an asset: same local-apply-then-send shape. Deletion always succeeds; references dangle
+  // (lookups null-tolerate a missing uuid).
   const auto removeAsset = [this](const uuids::uuid& assetUUID) {
     const auto op = replication::buildRemoveAsset(assetUUID);
     replication::applyRemoveAsset(*m_assetRegistry, op);
@@ -207,8 +204,7 @@ EditorApp::EditorApp(LaunchOptions options)
     return count;
   };
 
-  // A component widget changed: send the component's new state to the authoritative server as an edit
-  // command. Only the Inspector fires this (component value edits).
+  // A component value edit: send the component's new state to the server. Only the Inspector fires this.
   const auto editComponent = [this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
     const auto message = replication::buildComponentEdit(objectUUID, component);
     m_netClient->send(message);
@@ -236,9 +232,8 @@ EditorApp::EditorApp(LaunchOptions options)
   m_objectGUIManager->setAddAssetCallback(addAsset);
   m_objectGUIManager->setSceneEditCallback(sceneEdit);
 
-  // Switch the active scene: apply locally for instant feedback (the editor has every scene), then tell
-  // the authoritative server, which re-snapshots to keep everyone in sync. Shared by the asset browser's
-  // scene double-click and the Inspector's "Load Scene" button.
+  // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).
+  // Shared by the asset browser's scene double-click and the Inspector's "Load Scene" button.
   const auto loadScene = [this](const uuids::uuid& sceneUUID) {
     if (const auto scene = m_sceneManager->getScene(sceneUUID))
     {
@@ -251,9 +246,8 @@ EditorApp::EditorApp(LaunchOptions options)
     m_netClient->send(message);
   };
 
-  // A prefab body edit from the inspector: re-register the prefab under its existing name, which updates the
-  // body in place and keeps the uuid (the same path "Save as Prefab" over an existing name takes). Same
-  // local-apply-then-send addAsset shape as everything else.
+  // A prefab body edit: re-register under the existing name, updating the body in place and keeping the
+  // uuid — the same path "Save as Prefab" over an existing name takes, via the same addAsset shape.
   const auto updatePrefabBody = [addAsset](const uuids::uuid& assetUUID, const std::string& name,
                                            const std::string& body) {
     addAsset({
@@ -282,9 +276,8 @@ EditorApp::EditorApp(LaunchOptions options)
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this] {
-    // Open/New: the server owns the running sim, so send it the project; it reloads and re-snapshots.
-    // SaveUI has already applied the project to our managers, so pack their current state — the same
-    // packed shape as a snapshot, which the server unpacks with the same ProjectPacker.
+    // Open/New: the server owns the running sim, so send it the packed project (SaveUI already applied it
+    // to our managers); it reloads and re-snapshots.
     net::Message message(net::MessageType::loadProject);
     m_projectPacker->pack(message);
 
@@ -319,8 +312,7 @@ void EditorApp::connectToServer()
     m_authToken = uuids::to_string(uuids::uuid_random_generator{ rng }());
 
     m_serverProcess = std::make_unique<net::ServerProcess>();
-    // --edit grants the editor capability, --token is the secret the editor must present, and
-    // --ephemeral makes the server exit when its last connection drops so it can't outlive the editor.
+    // --ephemeral makes the server exit when its last connection drops, so it can't outlive the editor.
     const std::string arguments = "--edit --ephemeral --token " + m_authToken;
     if (!m_serverProcess->launch("ECS3DServer", arguments))
     {
@@ -399,8 +391,8 @@ void EditorApp::handlePicking()
   const auto window = m_renderer->getWindow();
   const bool pressed = window->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
 
-  // Select on a fresh Ctrl+Left-click while the cursor is over the 3D viewport. isSelected() is the
-  // renderer's pick feedback from last frame's render.
+  // Select on a fresh Ctrl+Left-click over the viewport. isSelected() is the renderer's pick result
+  // from last frame.
   const auto mousePicker = m_renderer->getRenderingManager()->getRenderer3D()->getMousePicker();
   if (!m_mouseWasPressed && pressed && window->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && mousePicker->canMousePick())
   {
@@ -414,8 +406,7 @@ void EditorApp::handlePicking()
       }
     }
 
-    // Picks the clicked object, or clears the selection when empty space was clicked. Writes the
-    // shared selection directly (the object tree/inspector read the same instance).
+    // Written directly to the shared selection the object tree/inspector read.
     if (picked.has_value())
     {
       m_selection->selectObject(picked.value());
@@ -433,9 +424,8 @@ void EditorApp::sendInput()
 {
   const auto& io = ImGui::GetIO();
 
-  // Don't let editor UI interaction drive the game: when ImGui wants the keyboard, report no keys.
-  // focused stays true (an unfocused window already reports no keys), so this view never disables
-  // another connected view's input.
+  // Don't let editor UI typing drive the game: when ImGui wants the keyboard, report no keys. focused
+  // stays true so this view never disables another connected view's input.
   input::InputSnapshot snapshot = input::capture(*m_renderer);
 
   if (io.WantCaptureKeyboard)
@@ -443,12 +433,10 @@ void EditorApp::sendInput()
     snapshot.keys.clear();
   }
 
-  // The mouse can't be gated on io.WantCaptureMouse: the 3D viewport is itself an ImGui window in the
-  // editor's dockspace, so that flag is set whenever the cursor is over it — which would swallow the
-  // right-drag mouse-look a script reads. Forward the mouse only while looking through a scene camera
-  // (in free-fly the right-drag belongs to the editor's own camera, so sending it too would turn the
-  // player at the same time) and while the scene view is focused, which is the signal vke's free-fly
-  // camera gates on and goes false as soon as a panel is clicked.
+  // The mouse can't be gated on io.WantCaptureMouse: the viewport is itself an ImGui window, so that
+  // flag is set whenever the cursor is over it, which would swallow the right-drag mouse-look a script
+  // reads. Forward the mouse only while looking through a scene camera (in free-fly the right-drag is
+  // the editor's own camera) and while the scene view is focused.
   const bool mouseDrivesGame = m_viewCameraObject.has_value()
                             && m_renderer->getRenderingManager()->isSceneFocused();
 
@@ -664,8 +652,8 @@ void EditorApp::updateGui()
     return;
   }
 
-  // Propagate the server's editability to the panels so they disable their mutating affordances (and
-  // show a read-only cue) when connected to a non-edit server, rather than appearing broken.
+  // Propagate the server's editability so the panels disable their mutating affordances (and show a
+  // read-only cue) on a non-edit server.
   m_objectGUIManager->setEditable(m_serverEditable);
   m_inspectorPanel->setEditable(m_serverEditable);
   m_assetBrowser->setEditable(m_serverEditable);
@@ -701,9 +689,8 @@ void EditorApp::displayMenuBar() const
 
     if (ImGui::BeginMenu("File"))
     {
-      // Save serializes the replicated project to disk; New/Open send the project to the server (which
-      // reloads + re-snapshots), since the server owns the scene. New/Open are mutations, so they're
-      // disabled on a read-only server; Save (local serialization of what's on screen) stays available.
+      // Save serializes the replicated project to disk; New/Open send it to the server (which reloads +
+      // re-snapshots). New/Open are mutations, disabled on a read-only server; Save stays available.
       ImGui::BeginDisabled(!m_serverEditable);
       if (ImGui::MenuItem("New"))
       {
@@ -1028,98 +1015,5 @@ void EditorApp::setupImGuiStyle()
 {
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 
-  // Drive the global style from the shared design tokens (see EditorTheme.h / "ECS3D Editor.dc"
-  // mockup). The disabled "Future Dark" block below is kept for reference.
   theme::applyStyle();
-
-#if 0
-  // Future Dark style by rewrking from ImThemes
-  ImGuiStyle& style = ImGui::GetStyle();
-
-  style.Alpha = 1.0f;
-  style.DisabledAlpha = 1.0f;
-  style.WindowPadding = ImVec2(12.0f, 12.0f);
-  style.WindowRounding = 0.0f;
-  style.WindowBorderSize = 0.0f;
-  style.WindowMinSize = ImVec2(20.0f, 20.0f);
-  style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
-  style.WindowMenuButtonPosition = ImGuiDir_None;
-  style.ChildRounding = 0.0f;
-  style.ChildBorderSize = 1.0f;
-  style.PopupRounding = 0.0f;
-  style.PopupBorderSize = 1.0f;
-  style.FramePadding = ImVec2(6.0f, 6.0f);
-  style.FrameRounding = 0.0f;
-  style.FrameBorderSize = 0.0f;
-  style.ItemSpacing = ImVec2(12.0f, 6.0f);
-  style.ItemInnerSpacing = ImVec2(6.0f, 3.0f);
-  style.CellPadding = ImVec2(12.0f, 6.0f);
-  style.IndentSpacing = 20.0f;
-  style.ColumnsMinSpacing = 6.0f;
-  style.ScrollbarSize = 12.0f;
-  style.ScrollbarRounding = 0.0f;
-  style.GrabMinSize = 12.0f;
-  style.GrabRounding = 0.0f;
-  style.TabRounding = 0.0f;
-  style.TabBorderSize = 0.0f;
-  style.TabCloseButtonMinWidthSelected = 0.0f;
-  style.TabCloseButtonMinWidthUnselected = 0.0f;
-  style.ColorButtonPosition = ImGuiDir_Right;
-  style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
-  style.SelectableTextAlign = ImVec2(0.0f, 0.0f);
-
-  style.Colors[ImGuiCol_Text] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-  style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.2745098173618317f, 0.3176470696926117f, 0.4509803950786591f, 1.0f);
-  style.Colors[ImGuiCol_WindowBg] = ImVec4(0.0784313753247261f, 0.08627451211214066f, 0.1019607856869698f, 1.0f);
-  style.Colors[ImGuiCol_ChildBg] = ImVec4(0.0784313753247261f, 0.08627451211214066f, 0.1019607856869698f, 1.0f);
-  style.Colors[ImGuiCol_PopupBg] = ImVec4(0.0784313753247261f, 0.08627451211214066f, 0.1019607856869698f, 1.0f);
-  style.Colors[ImGuiCol_Border] = ImVec4(0.1568627506494522f, 0.168627455830574f, 0.1921568661928177f, 1.0f);
-  style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.0784313753247261f, 0.08627451211214066f, 0.1019607856869698f, 1.0f);
-  style.Colors[ImGuiCol_FrameBg] = ImVec4(0.1176470592617989f, 0.1333333402872086f, 0.1490196138620377f, 1.0f);
-  style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.1568627506494522f, 0.168627455830574f, 0.1921568661928177f, 1.0f);
-  style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.2352941185235977f, 0.2156862765550613f, 0.5960784554481506f, 1.0f);
-  style.Colors[ImGuiCol_TitleBg] = ImVec4(0.0470588244497776f, 0.05490196123719215f, 0.07058823853731155f, 1.0f);
-  style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.0470588244497776f, 0.05490196123719215f, 0.07058823853731155f, 1.0f);
-  style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.0784313753247261f, 0.08627451211214066f, 0.1019607856869698f, 1.0f);
-  style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.09803921729326248f, 0.105882354080677f, 0.1215686276555061f, 1.0f);
-  style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.0470588244497776f, 0.05490196123719215f, 0.07058823853731155f, 1.0f);
-  style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.1176470592617989f, 0.1333333402872086f, 0.1490196138620377f, 1.0f);
-  style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.1568627506494522f, 0.168627455830574f, 0.1921568661928177f, 1.0f);
-  style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.1176470592617989f, 0.1333333402872086f, 0.1490196138620377f, 1.0f);
-  style.Colors[ImGuiCol_CheckMark] = ImVec4(0.4980392158031464f, 0.5137255191802979f, 1.0f, 1.0f);
-  style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.4980392158031464f, 0.5137255191802979f, 1.0f, 1.0f);
-  style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.5372549295425415f, 0.5529412031173706f, 1.0f, 1.0f);
-  style.Colors[ImGuiCol_Button] = ImVec4(0.1176470592617989f, 0.1333333402872086f, 0.1490196138620377f, 1.0f);
-  style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.196078434586525f, 0.1764705926179886f, 0.5450980663299561f, 1.0f);
-  style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.2352941185235977f, 0.2156862765550613f, 0.5960784554481506f, 1.0f);
-  style.Colors[ImGuiCol_Header] = ImVec4(0.1176470592617989f, 0.1333333402872086f, 0.1490196138620377f, 1.0f);
-  style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.196078434586525f, 0.1764705926179886f, 0.5450980663299561f, 1.0f);
-  style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.2352941185235977f, 0.2156862765550613f, 0.5960784554481506f, 1.0f);
-  style.Colors[ImGuiCol_Separator] = ImVec4(0.1568627506494522f, 0.1843137294054031f, 0.250980406999588f, 1.0f);
-  style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.1568627506494522f, 0.1843137294054031f, 0.250980406999588f, 1.0f);
-  style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.1568627506494522f, 0.1843137294054031f, 0.250980406999588f, 1.0f);
-  style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.1176470592617989f, 0.1333333402872086f, 0.1490196138620377f, 1.0f);
-  style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.196078434586525f, 0.1764705926179886f, 0.5450980663299561f, 1.0f);
-  style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.2352941185235977f, 0.2156862765550613f, 0.5960784554481506f, 1.0f);
-  style.Colors[ImGuiCol_Tab] = ImVec4(0.0470588244497776f, 0.05490196123719215f, 0.07058823853731155f, 1.0f);
-  style.Colors[ImGuiCol_TabHovered] = ImVec4(0.1176470592617989f, 0.1333333402872086f, 0.1490196138620377f, 1.0f);
-  style.Colors[ImGuiCol_TabActive] = ImVec4(0.09803921729326248f, 0.105882354080677f, 0.1215686276555061f, 1.0f);
-  style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.0470588244497776f, 0.05490196123719215f, 0.07058823853731155f, 1.0f);
-  style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.0784313753247261f, 0.08627451211214066f, 0.1019607856869698f, 1.0f);
-  style.Colors[ImGuiCol_PlotLines] = ImVec4(0.5215686559677124f, 0.6000000238418579f, 0.7019608020782471f, 1.0f);
-  style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.03921568766236305f, 0.9803921580314636f, 0.9803921580314636f, 1.0f);
-  style.Colors[ImGuiCol_PlotHistogram] = ImVec4(1.0f, 0.2901960909366608f, 0.5960784554481506f, 1.0f);
-  style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.9960784316062927f, 0.4745098054409027f, 0.6980392336845398f, 1.0f);
-  style.Colors[ImGuiCol_TableHeaderBg] = ImVec4(0.0470588244497776f, 0.05490196123719215f, 0.07058823853731155f, 1.0f);
-  style.Colors[ImGuiCol_TableBorderStrong] = ImVec4(0.0470588244497776f, 0.05490196123719215f, 0.07058823853731155f, 1.0f);
-  style.Colors[ImGuiCol_TableBorderLight] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-  style.Colors[ImGuiCol_TableRowBg] = ImVec4(0.1176470592617989f, 0.1333333402872086f, 0.1490196138620377f, 1.0f);
-  style.Colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.09803921729326248f, 0.105882354080677f, 0.1215686276555061f, 1.0f);
-  style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.2352941185235977f, 0.2156862765550613f, 0.5960784554481506f, 1.0f);
-  style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.4980392158031464f, 0.5137255191802979f, 1.0f, 1.0f);
-  style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.4980392158031464f, 0.5137255191802979f, 1.0f, 1.0f);
-  style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(0.4980392158031464f, 0.5137255191802979f, 1.0f, 1.0f);
-  style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.196078434586525f, 0.1764705926179886f, 0.5450980663299561f, 0.501960813999176f);
-  style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.196078434586525f, 0.1764705926179886f, 0.5450980663299561f, 0.501960813999176f);
-#endif
 }
