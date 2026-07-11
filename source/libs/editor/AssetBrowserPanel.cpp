@@ -1,6 +1,8 @@
 #include "AssetBrowserPanel.h"
+#include "AssetDisplay.h"
 #include "AssetDragDrop.h"
 #include "GuiComponents.h"
+#include "Selection.h"
 #include <GpuAssetCache.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -82,6 +84,11 @@ void AssetBrowserPanel::setAddAssetCallback(AddAssetCallback callback)
   m_onAddAsset = std::move(callback);
 }
 
+void AssetBrowserPanel::setSelection(std::shared_ptr<EditorSelection> selection)
+{
+  m_selection = std::move(selection);
+}
+
 void AssetBrowserPanel::setEditable(const bool editable)
 {
   m_editable = editable;
@@ -151,27 +158,12 @@ void AssetBrowserPanel::recomputeCache()
 
 const char* AssetBrowserPanel::assetTypeLabel(const AssetType type)
 {
-  switch (type)
-  {
-    case AssetType::Model: return "Model";
-    case AssetType::Texture: return "Texture";
-    case AssetType::Scene: return "Scene";
-    case AssetType::Script: return "Script";
-    case AssetType::Prefab: return "Prefab";
-    default: return "All";
-  }
+  return assetDisplay::typeLabel(type);
 }
 
 std::string AssetBrowserPanel::displayName(const AssetRecord& record)
 {
-  switch (record.type)
-  {
-    // Scenes and prefabs store their display name in path (neither is a file).
-    case AssetType::Scene:
-    case AssetType::Prefab: return record.path;
-    case AssetType::Script: return record.className;
-    default: return std::filesystem::path(record.path).filename().string();
-  }
+  return assetDisplay::name(record);
 }
 
 void AssetBrowserPanel::displayGui()
@@ -303,36 +295,33 @@ void AssetBrowserPanel::displayGui()
 void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord& record, const float cellSize, const std::string& name) const
 {
   // Per-type icon + accent color for the card (textures instead show their actual image).
-  ImTextureID thumb = 0;
-  gc::SecIcon icon = gc::SecIcon::none;
-  ImVec4 iconCol = theme::accent;
+  const gc::SecIcon icon = assetDisplay::icon(record.type);
+  const ImVec4 iconCol = assetDisplay::color(record.type);
 
-  switch (record.type)
+  ImTextureID thumb = 0;
+  if (record.type == AssetType::Texture)
   {
-    case AssetType::Texture:
-      iconCol = theme::accent;
-      try
+    try
+    {
+      if (const auto texture = m_assetCache->getTexture(uuid))
       {
-        if (const auto texture = m_assetCache->getTexture(uuid))
-        {
-          thumb = texture->getImGuiTexture();
-        }
+        thumb = texture->getImGuiTexture();
       }
-      catch (const std::exception&)
-      {
-        // fall back to the type icon below
-      }
-      icon = gc::SecIcon::image;
-      break;
-    case AssetType::Model:  icon = gc::SecIcon::model;  iconCol = theme::modelPurple; break;
-    case AssetType::Script: icon = gc::SecIcon::script; iconCol = theme::scriptAmber; break;
-    case AssetType::Scene:  icon = gc::SecIcon::scene;  iconCol = theme::sceneGreen;  break;
-    case AssetType::Prefab: icon = gc::SecIcon::block;  iconCol = theme::prefabBlue;  break;
-    default: break;
+    }
+    catch (const std::exception&)
+    {
+      // fall back to the type icon
+    }
   }
 
-  const bool clicked = gc::assetCard(cellSize, thumb, icon, iconCol, assetTypeLabel(record.type), iconCol);
-  (void) clicked;
+  // Selecting an asset is a view action (not a mutation), so it stays available on a read-only server.
+  const bool selected = m_selection && m_selection->assetUUID() == uuid;
+  if (gc::assetCard(cellSize, thumb, icon, iconCol, assetTypeLabel(record.type), iconCol, selected) && m_selection)
+  {
+    // Writes the shared selection slot: this deselects any object (and clears any other asset), since
+    // there is a single selection at a time.
+    m_selection->selectAsset(uuid);
+  }
 
   // Double-click a scene tile to make it the active scene. Switching the active scene is a server-side
   // mutation, so it's only available when the server is editable (a read-only viewer follows the

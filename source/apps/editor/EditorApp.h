@@ -25,8 +25,10 @@ class RenderSystem;
 class GpuAssetCache;
 class ComponentEditor;
 class ObjectGUIManager;
+class InspectorPanel;
 class AssetBrowserPanel;
 class SaveUI;
+class EditorSelection;
 
 namespace net {
   class NetClient;
@@ -80,8 +82,14 @@ private:
   std::shared_ptr<GpuAssetCache> m_assetCache;
   std::shared_ptr<RenderSystem> m_renderSystem;
 
+  // The editor-wide selection slot (object vs. asset vs. nothing), shared into the panels that read or
+  // write it — the object tree/inspector today, the asset browser in a later phase. handlePicking
+  // writes it directly from viewport mouse-picking.
+  std::shared_ptr<EditorSelection> m_selection;
+
   std::shared_ptr<ComponentEditor> m_componentEditor;
   std::shared_ptr<ObjectGUIManager> m_objectGUIManager;
+  std::shared_ptr<InspectorPanel> m_inspectorPanel;
   std::shared_ptr<AssetBrowserPanel> m_assetBrowser;
   std::shared_ptr<SaveUI> m_saveUI;
 

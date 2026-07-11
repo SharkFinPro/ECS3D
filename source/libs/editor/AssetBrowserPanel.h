@@ -11,6 +11,7 @@
 
 class AssetRegistry;
 class GpuAssetCache;
+class EditorSelection;
 
 // The editor's "Assets" panel: a grid of the replicated AssetRegistry records with thumbnails (the
 // texture image for textures, a labeled tile otherwise). Each tile is a drag-drop source carrying its
@@ -26,6 +27,10 @@ public:
   void setLoadSceneCallback(LoadSceneCallback callback);
 
   void setAddAssetCallback(AddAssetCallback callback);
+
+  // The shared selection slot owned by EditorApp: a tile click selects that asset here (the same slot
+  // the object tree/Inspector use), so selecting an asset deselects any object and vice versa.
+  void setSelection(std::shared_ptr<EditorSelection> selection);
 
   // When false (the connected server isn't in edit mode), the asset grid still renders for browsing,
   // but creating assets and switching the active scene (both mutations) are disabled.
@@ -46,6 +51,9 @@ private:
   const AssetRegistry* m_assetRegistry;
 
   std::shared_ptr<GpuAssetCache> m_assetCache;
+
+  // Shared with the object tree + Inspector; a tile click writes the Asset kind here.
+  std::shared_ptr<EditorSelection> m_selection;
 
   LoadSceneCallback m_onLoadScene;
   AddAssetCallback m_onAddAsset;
