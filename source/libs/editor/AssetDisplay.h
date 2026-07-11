@@ -27,9 +27,15 @@ namespace assetDisplay {
     }
   }
 
-  // The display name shown in the browser tile + inspector header.
+  // The display name shown in the browser tile + inspector header. A rename sets an override that wins
+  // over the type-derived name; the file on disk and `path` (the registry key) are untouched.
   inline std::string name(const AssetRecord& record)
   {
+    if (!record.displayName.empty())
+    {
+      return record.displayName;
+    }
+
     switch (record.type)
     {
       // Scenes and prefabs store their display name in `path` (neither is a file on disk).

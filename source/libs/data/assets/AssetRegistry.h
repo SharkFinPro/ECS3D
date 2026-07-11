@@ -24,9 +24,12 @@ enum class AssetType {
 struct AssetRecord {
   uuids::uuid uuid;
   AssetType type = AssetType::Unknown;
-  std::string path;      // scenes and prefabs store their display name here instead
-  std::string className; // scripts only
-  std::string body;      // prefabs only: a serialized Object blob (Object::serialize().dump())
+  std::string path;        // scenes and prefabs store their display name here instead
+  std::string className;   // scripts only
+  std::string body;        // prefabs only: a serialized Object blob (Object::serialize().dump())
+  std::string displayName; // optional rename override: when non-empty it replaces the derived display
+                           // name (see assetDisplay::name). The file on disk and `path` (the registry
+                           // key) never change — a rename is display-only (see ROADMAP B1).
 };
 
 // uuid<->path registry + serialize. Carries asset metadata only (no GPU resources, no GUI).
