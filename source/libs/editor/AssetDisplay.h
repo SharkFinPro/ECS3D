@@ -4,7 +4,10 @@
 #include "EditorTheme.h"
 #include "GuiComponents.h"
 #include <assets/AssetRegistry.h>
+#include <cstdint>
+#include <cstdio>
 #include <filesystem>
+#include <optional>
 #include <string>
 
 // Shared per-type presentation for asset records, so the asset browser tiles and the Inspector's asset
@@ -61,6 +64,38 @@ namespace assetDisplay {
       case AssetType::Texture:
       default:                return theme::accent;
     }
+  }
+
+  // A compact human-readable byte count (B / KB / MB) for a file-size row.
+  inline std::string fileSizeString(const std::uintmax_t bytes)
+  {
+    char buf[32];
+    if (bytes < 1024)
+    {
+      std::snprintf(buf, sizeof(buf), "%llu B", static_cast<unsigned long long>(bytes));
+    }
+    else if (bytes < 1024 * 1024)
+    {
+      std::snprintf(buf, sizeof(buf), "%.1f KB", static_cast<double>(bytes) / 1024.0);
+    }
+    else
+    {
+      std::snprintf(buf, sizeof(buf), "%.1f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+    }
+    return buf;
+  }
+
+  // The size of a file-backed asset on disk, or nullopt when the file isn't present editor-side (the
+  // editor and server may share no filesystem).
+  inline std::optional<std::string> fileSize(const std::string& path)
+  {
+    std::error_code ec;
+    const auto bytes = std::filesystem::file_size(path, ec);
+    if (ec)
+    {
+      return std::nullopt;
+    }
+    return fileSizeString(bytes);
   }
 }
 

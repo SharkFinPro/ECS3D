@@ -2,14 +2,16 @@
 #define ASSETINSPECTOR_H
 
 #include <memory>
+#include <string>
+#include <uuid.h>
 
 struct AssetRecord;
 class GpuAssetCache;
 
 // The Inspector's renderer for the Asset selection kind: a common header (type chip, display name, uuid,
-// path/source) shared by every asset type, plus a per-type body added in later Phase 2 tasks. Read-only
-// in Phase 2 — there is no protocol for asset mutation yet. Peer to ObjectInspector behind
-// InspectorPanel's per-selection-kind dispatch.
+// path/source) shared by every asset type, plus a per-type body. Read-only in Phase 2 — there is no
+// protocol for asset mutation yet. Peer to ObjectInspector behind InspectorPanel's per-selection-kind
+// dispatch.
 class AssetInspector {
 public:
   explicit AssetInspector(std::shared_ptr<GpuAssetCache> assetCache);
@@ -17,14 +19,29 @@ public:
   // The right-aligned type chip in the panel header, drawn on the current header row.
   void displayTypeChip(const AssetRecord& record) const;
 
-  // The asset body: the common metadata header, then the per-type detail.
+  // The asset body: the common metadata header, then per-type detail.
   void display(const AssetRecord& record);
 
 private:
   std::shared_ptr<GpuAssetCache> m_assetCache;
 
+  // File metadata (size, image dimensions) for the currently-shown asset, recomputed only when the
+  // selected asset changes so the panel isn't hitting disk every frame.
+  uuids::uuid m_metaUUID{};
+  bool m_metaLoaded = false;
+  std::string m_fileSize;       // empty when the file isn't present editor-side
+  bool m_haveImageSize = false;
+  int m_imageWidth = 0;
+  int m_imageHeight = 0;
+
   // Display name + uuid + path/source rows common to every asset type.
   void displayHeader(const AssetRecord& record) const;
+
+  // Refreshes the file-metadata cache above for `record` (no-op work when its file isn't reachable).
+  void refreshMeta(const AssetRecord& record);
+
+  // Large image preview (falling back to the type icon like the browser tiles) + dimensions + size.
+  void displayTextureBody(const AssetRecord& record);
 };
 
 #endif //ASSETINSPECTOR_H
