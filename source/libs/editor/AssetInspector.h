@@ -83,13 +83,23 @@ private:
   bool m_editable = true;
 
   // The detached prefab body being edited + the object inspector that draws its component editors, reused
-  // verbatim from the Object kind. The inspector's callbacks feed the two buffers below rather than the
-  // network: structural edits are deferred (applied after its display returns, since applying mid-display
-  // would invalidate the component map it iterates), value edits just flag a re-serialize.
+  // verbatim from the Object kind. The inspector's callbacks feed the buffers below rather than the network:
+  // structural edits are deferred (applied after its display returns, since applying mid-display would
+  // invalidate the component map it iterates); value edits just mark the body dirty. Both apply to the
+  // detached object immediately (instant local feedback), but the SEND is coalesced — see m_prefabBodyDirty.
   std::unique_ptr<TransientObject> m_prefabBody;
   std::unique_ptr<ObjectInspector> m_prefabInspector;
   std::vector<nlohmann::json> m_pendingPrefabEdits;
-  bool m_prefabValueEdited = false;
+
+  // Unlike a live object's component edit (a small editComponent message the server just rebroadcasts), a
+  // prefab body update is an addAsset that makes the server re-snapshot the whole project. Sending one per
+  // drag frame swamps every view, so edits are coalesced: they mutate the detached object live, set this
+  // flag, and are only serialized + sent once the user stops interacting (no active widget) or switches
+  // selection — turning a whole slider drag into a single body update. m_prefabRecord* records which asset
+  // the pending edit belongs to, so a flush triggered by a selection change sends it under the right key.
+  bool m_prefabBodyDirty = false;
+  uuids::uuid m_prefabRecordUUID{};
+  std::string m_prefabRecordName;
 
   // Buffer for the in-place display-name field. Re-seeded (from the effective display name) whenever the
   // selected asset changes, so an external rename doesn't clobber what the user is typing — matching
@@ -136,9 +146,14 @@ private:
   void displaySceneBody(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID);
 
   // Editable prefab contents: syncs the detached TransientObject from the record body, draws it with the
-  // reused ObjectInspector, then applies any deferred edit and sends the re-serialized body. Read-only
-  // (disabled editors) when !m_editable. Shows a fallback when the body is missing/malformed.
+  // reused ObjectInspector, applies any deferred edit to the detached object, and flushes a coalesced body
+  // update when the user stops interacting. Read-only (disabled editors) when !m_editable. Shows a fallback
+  // when the body is missing/malformed.
   void displayPrefabBody(const AssetRecord& record);
+
+  // Send the pending prefab body edit (if any) under the asset it belongs to (m_prefabRecord*), then clear
+  // the dirty flag. Serializes the detached object and re-registers it via UpdatePrefabBodyCallback.
+  void flushPrefabBody();
 
   // A danger "Delete Asset" button (flat file assets only, gated on editable) that arms the modal below.
   void displayDeleteButton(const AssetRecord& record);

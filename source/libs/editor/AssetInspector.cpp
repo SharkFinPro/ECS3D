@@ -31,10 +31,11 @@ AssetInspector::AssetInspector(std::shared_ptr<GpuAssetCache> assetCache,
     m_prefabInspector(std::make_unique<ObjectInspector>(std::move(componentEditor)))
 {
   // The reused inspector edits a detached object, so its edits must apply locally rather than travel to the
-  // server. A value edit already mutated the component in place — just note it. A structural edit is queued
-  // and applied after display() returns (applying it now would mutate the component map mid-iteration).
+  // server. A value edit already mutated the component in place — just mark the body dirty. A structural
+  // edit is queued and applied after display() returns (applying it now would mutate the component map
+  // mid-iteration). Neither sends immediately; displayPrefabBody coalesces the send (see m_prefabBodyDirty).
   m_prefabInspector->setEditCallback([this](const uuids::uuid&, const std::shared_ptr<Component>&) {
-    m_prefabValueEdited = true;
+    m_prefabBodyDirty = true;
   });
   m_prefabInspector->setSceneEditCallback([this](const nlohmann::json& edit) {
     m_pendingPrefabEdits.push_back(edit);
@@ -410,9 +411,21 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
   gc::sectionLabel("Contents");
   ImGui::Spacing();
 
+  // Switching to a different prefab with an edit still pending: flush it against the asset it belongs to
+  // (m_prefabRecord*, still the old one) before syncFromBody rebuilds to the new body below.
+  if (m_prefabBodyDirty && record.uuid != m_prefabRecordUUID)
+  {
+    flushPrefabBody();
+  }
+
   // (Re)build the detached object when the body changed under us (a different prefab selected, or an
-  // external snapshot). A local edit below re-serializes and markSyncs, so its own echo won't rebuild.
-  m_prefabBody->syncFromBody(record.body);
+  // external snapshot). A flushed edit markSyncs the sent body, so its own echo won't rebuild.
+  if (m_prefabBody->syncFromBody(record.body))
+  {
+    // The pending edit (if any) belongs to whatever we just loaded.
+    m_prefabRecordUUID = record.uuid;
+    m_prefabRecordName = record.path;
+  }
 
   const auto& object = m_prefabBody->object();
   if (!object)
@@ -423,34 +436,51 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
   }
 
   // Draw the body with the same component editors an object uses. The wired callbacks collect structural
-  // edits and flag value edits rather than sending them; apply + re-serialize once display has returned so
-  // a structural edit doesn't mutate the component map ObjectInspector::display is iterating.
+  // edits and mark value edits dirty rather than sending them; apply the structural ones once display has
+  // returned so they don't mutate the component map ObjectInspector::display is iterating.
   m_pendingPrefabEdits.clear();
-  m_prefabValueEdited = false;
 
   m_prefabInspector->display(object);
 
-  bool changed = m_prefabValueEdited;
   if (auto* manager = m_prefabBody->manager())
   {
     for (const auto& edit : m_pendingPrefabEdits)
     {
       replication::applySceneEdit(*manager, edit);
-      changed = true;
+      m_prefabBodyDirty = true;
     }
   }
   m_pendingPrefabEdits.clear();
 
-  if (changed && m_onUpdatePrefabBody)
+  // Coalesce the send: a prefab body update makes the server re-snapshot the whole project, so hold it
+  // until the user isn't actively dragging/typing a widget. The detached object already reflects the edit,
+  // so local feedback stays instant; the network sees one update per interaction instead of per frame.
+  if (m_prefabBodyDirty && !ImGui::IsAnyItemActive())
   {
-    // Send the updated body keyed by the prefab's name (record.path): re-registering an existing name
-    // updates the body in place and keeps the uuid — the same path "Save as Prefab" over an existing name
-    // takes. markSynced so the resulting registry update (and the server's snapshot echo) doesn't rebuild
-    // the object out from under the ongoing edit.
-    const auto newBody = m_prefabBody->serialize();
-    m_onUpdatePrefabBody(record.uuid, record.path, newBody);
-    m_prefabBody->markSynced(newBody);
+    flushPrefabBody();
   }
+}
+
+void AssetInspector::flushPrefabBody()
+{
+  if (!m_prefabBodyDirty)
+  {
+    return;
+  }
+
+  m_prefabBodyDirty = false;
+
+  if (!m_onUpdatePrefabBody || !m_prefabBody->object())
+  {
+    return;
+  }
+
+  // Re-register under the prefab's name (m_prefabRecordName): re-registering an existing name updates the
+  // body in place and keeps the uuid — the same path "Save as Prefab" over an existing name takes.
+  // markSynced so the resulting registry update (and the server's snapshot echo) doesn't rebuild the object.
+  const auto newBody = m_prefabBody->serialize();
+  m_onUpdatePrefabBody(m_prefabRecordUUID, m_prefabRecordName, newBody);
+  m_prefabBody->markSynced(newBody);
 }
 
 void AssetInspector::displayDeleteButton(const AssetRecord& record)
