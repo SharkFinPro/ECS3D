@@ -21,6 +21,16 @@ AssetInspector::AssetInspector(std::shared_ptr<GpuAssetCache> assetCache)
   : m_assetCache(std::move(assetCache))
 {}
 
+void AssetInspector::setLoadSceneCallback(LoadSceneCallback callback)
+{
+  m_onLoadScene = std::move(callback);
+}
+
+void AssetInspector::setEditable(const bool editable)
+{
+  m_editable = editable;
+}
+
 void AssetInspector::displayTypeChip(const AssetRecord& record) const
 {
   const char* label = assetDisplay::typeLabel(record.type);
@@ -28,7 +38,7 @@ void AssetInspector::displayTypeChip(const AssetRecord& record) const
   gc::iconPill(assetDisplay::icon(record.type), label, assetDisplay::color(record.type));
 }
 
-void AssetInspector::display(const AssetRecord& record)
+void AssetInspector::display(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID)
 {
   // Recompute the file metadata only when the selection changes, not every frame.
   if (!m_metaLoaded || m_metaUUID != record.uuid)
@@ -45,6 +55,7 @@ void AssetInspector::display(const AssetRecord& record)
     case AssetType::Texture: displayTextureBody(record); break;
     case AssetType::Model:   displayModelBody(record);   break;
     case AssetType::Script:  displayScriptBody();         break;
+    case AssetType::Scene:   displaySceneBody(record, activeSceneUUID); break;
     default: break;
   }
 }
@@ -265,4 +276,34 @@ void AssetInspector::displayScriptBody()
   const ImVec2 size(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
   ImGui::InputTextMultiline("##scriptSource", m_scriptSource.data(), m_scriptSource.size() + 1,
                             size, ImGuiInputTextFlags_ReadOnly);
+}
+
+void AssetInspector::displaySceneBody(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID)
+{
+  ImGui::Spacing();
+
+  const bool isActive = activeSceneUUID.has_value() && activeSceneUUID.value() == record.uuid;
+
+  // Status row: a green dot + "Active" when this is the loaded scene, else a muted "Inactive".
+  gc::rowLabel("Status");
+  {
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float cy = p.y + ImGui::GetFrameHeight() * 0.5f;
+    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(p.x + 5.0f, cy), 4.0f,
+                                                theme::u32(isActive ? theme::sceneGreen : theme::t3));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + 16.0f, p.y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(isActive ? theme::sceneGreen : theme::t3, isActive ? "Active" : "Inactive");
+  }
+
+  ImGui::Spacing();
+
+  // Load Scene: the same server-side active-scene switch as the browser's double-click, so gated on
+  // editable. Also disabled when this scene is already active (a reload would be a no-op round-trip).
+  ImGui::BeginDisabled(!m_editable || isActive);
+  if (gc::accentButton("Load Scene", gc::SecIcon::scene) && m_onLoadScene)
+  {
+    m_onLoadScene(record.uuid);
+  }
+  ImGui::EndDisabled();
 }

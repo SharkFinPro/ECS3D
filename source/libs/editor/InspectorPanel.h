@@ -46,9 +46,13 @@ public:
 
   void setSceneEditCallback(SceneEditCallback callback);
 
+  // Forwarded to the asset inspector's scene view (same callback the asset browser uses).
+  void setLoadSceneCallback(std::function<void(const uuids::uuid& sceneUUID)> callback);
+
   // objectManager may be null (no scene loaded yet): the window is still drawn (empty) so it stays
-  // present/dockable instead of popping in and out.
-  void displayGui(const ObjectManager* objectManager);
+  // present/dockable instead of popping in and out. activeSceneUUID is the currently loaded scene, used
+  // by the scene inspector's is-active indicator (nullopt when no scene is loaded).
+  void displayGui(const ObjectManager* objectManager, const std::optional<uuids::uuid>& activeSceneUUID);
 
   // The object to highlight in the viewport: the object selection when the object inspector's Highlight
   // toggle is on, else nullopt (also nullopt for the None/Asset kinds).

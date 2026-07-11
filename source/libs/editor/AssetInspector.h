@@ -1,7 +1,9 @@
 #ifndef ASSETINSPECTOR_H
 #define ASSETINSPECTOR_H
 
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <uuid.h>
 
@@ -14,16 +16,30 @@ class GpuAssetCache;
 // dispatch.
 class AssetInspector {
 public:
+  // Switching the active scene: the same callback the asset browser's scene double-click uses.
+  using LoadSceneCallback = std::function<void(const uuids::uuid& sceneUUID)>;
+
   explicit AssetInspector(std::shared_ptr<GpuAssetCache> assetCache);
+
+  void setLoadSceneCallback(LoadSceneCallback callback);
+
+  // When false (read-only server), the scene inspector's "Load Scene" button is disabled, mirroring the
+  // browser's gated double-click.
+  void setEditable(bool editable);
 
   // The right-aligned type chip in the panel header, drawn on the current header row.
   void displayTypeChip(const AssetRecord& record) const;
 
-  // The asset body: the common metadata header, then per-type detail.
-  void display(const AssetRecord& record);
+  // The asset body: the common metadata header, then per-type detail. activeSceneUUID is the currently
+  // loaded scene (for the scene inspector's is-active indicator); nullopt when no scene is loaded.
+  void display(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID);
 
 private:
   std::shared_ptr<GpuAssetCache> m_assetCache;
+
+  LoadSceneCallback m_onLoadScene;
+
+  bool m_editable = true;
 
   // File metadata (size, image dimensions) for the currently-shown asset, recomputed only when the
   // selected asset changes so the panel isn't hitting disk every frame.
@@ -53,6 +69,9 @@ private:
 
   // Read-only .cs source preview (from the cached source, loaded editor-side).
   void displayScriptBody();
+
+  // Is-active indicator + a "Load Scene" button (reusing LoadSceneCallback, gated on editable).
+  void displaySceneBody(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID);
 };
 
 #endif //ASSETINSPECTOR_H

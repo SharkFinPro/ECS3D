@@ -32,6 +32,7 @@ void InspectorPanel::setAssetRegistry(const AssetRegistry* registry)
 void InspectorPanel::setEditable(const bool editable)
 {
   m_objectInspector->setEditable(editable);
+  m_assetInspector->setEditable(editable);
 }
 
 void InspectorPanel::setEditCallback(EditCallback callback)
@@ -44,7 +45,12 @@ void InspectorPanel::setSceneEditCallback(SceneEditCallback callback)
   m_objectInspector->setSceneEditCallback(std::move(callback));
 }
 
-void InspectorPanel::displayGui(const ObjectManager* objectManager)
+void InspectorPanel::setLoadSceneCallback(std::function<void(const uuids::uuid& sceneUUID)> callback)
+{
+  m_assetInspector->setLoadSceneCallback(std::move(callback));
+}
+
+void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::optional<uuids::uuid>& activeSceneUUID)
 {
   ImGui::Begin("Inspector");
 
@@ -112,7 +118,7 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager)
   }
   else
   {
-    m_assetInspector->display(*asset);
+    m_assetInspector->display(*asset, activeSceneUUID);
   }
 
   ImGui::End();

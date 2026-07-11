@@ -131,17 +131,10 @@ EditorApp::EditorApp(LaunchOptions options)
   m_objectGUIManager->setAddAssetCallback(addAsset);
   m_objectGUIManager->setSceneEditCallback(sceneEdit);
 
-  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_assetCache);
-  m_inspectorPanel->setSelection(m_selection);
-  m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
-  m_inspectorPanel->setEditCallback(editComponent);
-  m_inspectorPanel->setSceneEditCallback(sceneEdit);
-
-  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
-  m_assetBrowser->setSelection(m_selection);
-  m_assetBrowser->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) {
-    // Switch locally for instant feedback (the editor has every scene), and tell the authoritative
-    // server to switch the active scene — it re-snapshots back to keep everyone in sync.
+  // Switch the active scene: apply locally for instant feedback (the editor has every scene), then tell
+  // the authoritative server, which re-snapshots to keep everyone in sync. Shared by the asset browser's
+  // scene double-click and the Inspector's "Load Scene" button.
+  const auto loadScene = [this](const uuids::uuid& sceneUUID) {
     if (const auto scene = m_sceneManager->getScene(sceneUUID))
     {
       m_sceneManager->loadScene(scene);
@@ -151,7 +144,18 @@ EditorApp::EditorApp(LaunchOptions options)
     message.write(net::SceneControlOp::loadScene);
     message.writeString(uuids::to_string(sceneUUID));
     m_netClient->send(message);
-  });
+  };
+
+  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_assetCache);
+  m_inspectorPanel->setSelection(m_selection);
+  m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
+  m_inspectorPanel->setEditCallback(editComponent);
+  m_inspectorPanel->setSceneEditCallback(sceneEdit);
+  m_inspectorPanel->setLoadSceneCallback(loadScene);
+
+  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
+  m_assetBrowser->setSelection(m_selection);
+  m_assetBrowser->setLoadSceneCallback(loadScene);
   m_assetBrowser->setAddAssetCallback(addAsset);
 
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
@@ -559,8 +563,9 @@ void EditorApp::updateGui()
   // is loaded yet). Edits fire the callbacks wired in the ctor.
   const auto scene = m_sceneManager->getCurrentScene();
   const auto* objectManager = scene ? scene->getObjectManager().get() : nullptr;
+  const auto activeSceneUUID = scene ? std::optional(scene->getUUID()) : std::nullopt;
   m_objectGUIManager->displayGui(objectManager);
-  m_inspectorPanel->displayGui(objectManager);
+  m_inspectorPanel->displayGui(objectManager, activeSceneUUID);
 
   // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate
   // scene-selector widget.
