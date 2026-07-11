@@ -131,7 +131,11 @@ locally (value edits in place; structural edits deferred past `display()` then `
 component map isn't mutated mid-iteration), and each change re-serializes the body and re-registers it under
 the prefab's existing name via the `addAsset` op (updating the body in place, keeping the uuid — the same
 "Save as Prefab" path), which re-snapshots. `TransientObject::markSynced` records the just-sent body so the
-local-apply/snapshot echo doesn't rebuild the object mid-edit.
+local-apply/snapshot echo doesn't rebuild the object mid-edit. Because that body update makes the server
+re-snapshot the **whole project** (unlike a live object's cheap `editComponent` rebroadcast), the send is
+**coalesced**: edits mutate the detached object live for instant local feedback but only flush to the network
+once no ImGui widget is active (drag released) or the selection changes, so a whole slider drag is one
+snapshot rather than one per frame.
 
 **Transport / CLR.** `Protocol.h` defines the format; `NetServer`/`NetClient` own it in C++ and hand
 `ECS3DNetTransport` (C#) opaque `(type byte, payload)` pairs. `ManagedHost` boots CoreCLR and resolves
