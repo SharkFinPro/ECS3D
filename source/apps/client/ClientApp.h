@@ -71,7 +71,7 @@ private:
   bool m_inputSent = false;
 
   // A per-session random tag sent in join; the server echoes it back in a playerSlot message so this
-  // client can pick out its own slot assignment from the broadcast (Phase 4.4).
+  // client can pick out its own slot assignment from the broadcast.
   uint64_t m_joinNonce = 0;
   // The player slot the server bound this client to (-1 until the playerSlot message arrives). Drives
   // which object's Camera the client renders through. mutable: set from the const message-apply path.

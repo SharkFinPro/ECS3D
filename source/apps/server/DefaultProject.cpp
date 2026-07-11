@@ -328,7 +328,7 @@ json buildScene2()
   });
 }
 
-// Procedurally-generated tower of random spheres/blocks (was setup test loadScene3).
+// Procedurally-generated tower of random spheres/blocks.
 json buildScene3()
 {
   constexpr int gridSize = 6;
@@ -379,7 +379,7 @@ json buildScene3()
   return objects;
 }
 
-// Procedurally-generated grid of falling spheres (was the fallingBalls test).
+// Procedurally-generated grid of falling spheres.
 json buildFallingBalls()
 {
   constexpr int gridSize = 5;

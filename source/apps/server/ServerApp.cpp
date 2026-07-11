@@ -44,7 +44,7 @@ ServerApp::ServerApp(LaunchOptions options)
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
   // Scene queries live in sim, which scripting can't link; inject them into BindingContext so the World
-  // raycast/overlapSphere bindings can call them (the decided function-pointer injection for Phase 2.5).
+  // raycast/overlapSphere bindings can call them.
   BindingContext::setRaycast(&SceneQueries::raycast);
   BindingContext::setOverlapSphere(&SceneQueries::overlapSphere);
 
@@ -315,7 +315,7 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
   const int32_t slot = assignPlayerSlot(senderId);
 
   // If the joining client tagged its request with a nonce (players do; the editor sends none), tell it
-  // which player slot it was bound to so it can render through that player's camera (Phase 4.4). Broadcast
+  // which player slot it was bound to so it can render through that player's camera. Broadcast
   // + nonce correlation avoids a per-connection send path: every client hears it, but only the one whose
   // join nonce matches keeps it. The remaining() guard keeps an older/nonce-less client working.
   net::MessageReader reader(message);
@@ -523,7 +523,7 @@ void ServerApp::handleRenameAsset(const net::Message& message) const
 void ServerApp::handleRemoveAsset(const net::Message& message) const
 {
   // An editor deleted an asset: drop the record and re-snapshot. References dangle by design (lookups
-  // null-tolerate a missing uuid) — see ROADMAP B1.
+  // null-tolerate a missing uuid).
   nlohmann::json op;
   try
   {
@@ -759,7 +759,7 @@ void ServerApp::broadcastStateDelta() const
   }
 
   // Binary state delta: packStateDelta writes each object's uuid + local transform straight into the
-  // message, instead of the heavier JSON dump this used to broadcast every tick.
+  // message, rather than a heavier per-tick JSON dump.
   net::Message message(net::MessageType::stateDelta);
   replication::packStateDelta(message, *scene->getObjectManager());
   m_netServer->broadcast(message);

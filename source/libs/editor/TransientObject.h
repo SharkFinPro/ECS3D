@@ -11,8 +11,8 @@ class ObjectManager;
 
 // A detached Object deserialized from a serialized-object blob (a prefab's AssetRecord::body), living in a
 // private scratch ObjectManager that is never wired to a scene, the SceneManager, or replication. It exists
-// solely so the editor's component editors can operate on prefab contents out-of-scene (see ROADMAP Phase 4
-// / B2). uuids are preserved on load (not reassigned like instantiation), so the body stays stable across
+// solely so the editor's component editors can operate on prefab contents out-of-scene. uuids are
+// preserved on load (not reassigned like instantiation), so the body stays stable across
 // edits; re-serialize after an edit to produce the updated body to send.
 //
 // The private manager is what lets the whole existing deserialize path (Object + children) and

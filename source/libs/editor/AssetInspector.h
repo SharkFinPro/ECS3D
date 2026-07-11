@@ -20,7 +20,7 @@ class TransientObject;
 
 // The Inspector's renderer for the Asset selection kind: a common header (type chip, display name, uuid,
 // path/source) shared by every asset type, plus a per-type body. Most views are read-only; the Prefab body
-// is editable (Phase 4) — its contents are deserialized into a detached TransientObject and edited with the
+// is editable — its contents are deserialized into a detached TransientObject and edited with the
 // same component editors an object uses (a reused ObjectInspector), each edit re-serialized and sent as an
 // asset body update. Peer to ObjectInspector behind InspectorPanel's per-selection-kind dispatch.
 class AssetInspector {
@@ -136,7 +136,7 @@ private:
   // Large image preview (falling back to the type icon like the browser tiles) + dimensions + size.
   void displayTextureBody(const AssetRecord& record);
 
-  // Type icon (3D preview deferred, see B3), file format + size, and mesh stats.
+  // Type icon (3D preview deferred), file format + size, and mesh stats.
   void displayModelBody(const AssetRecord& record);
 
   // Read-only .cs source preview (from the cached source, loaded editor-side).
@@ -159,7 +159,7 @@ private:
   void displayDeleteButton(const AssetRecord& record);
 
   // The "Delete Asset?" confirmation modal for m_assetPendingDeletion, warning how many objects reference
-  // it (references are left to dangle — see ROADMAP B1). Confirming fires the remove callback.
+  // it (references are left to dangle). Confirming fires the remove callback.
   void displayDeleteConfirmationModal(const AssetRecord& record);
 };
 

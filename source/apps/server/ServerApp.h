@@ -71,7 +71,7 @@ private:
   // doesn't exit during the launch -> connect window when the count is still 0).
   bool m_hasConnected = false;
 
-  // Player↔connection binding (Phase 3.2): each connection is bound to a player slot (0, 1, ...) on join
+  // Player↔connection binding: each connection is bound to a player slot (0, 1, ...) on join
   // and released on disconnect. inputState from a connection is written into its slot; a script reads its
   // own player's input by resolving its object's PlayerController.playerSlot to that slot. Touched only on
   // the tick thread (join / inputState / disconnect all run there), so no locking is needed.

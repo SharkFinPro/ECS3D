@@ -173,7 +173,7 @@ void ClientApp::connectToServer()
 
 void ClientApp::createRenderer()
 {
-  // Ported from ECS3D::initRenderer. The client is a lightweight view, so no custom ImGui style.
+  // The client is a lightweight view, so no custom ImGui style.
   const vke::EngineConfig engineConfig {
     .window {
       .width = 1280,
@@ -199,7 +199,7 @@ void ClientApp::variableUpdate() const
     m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache);
 
     // Render through this client's own player camera (the object with our PlayerController slot + a
-    // Camera); nullopt falls back to the scene's first active camera / free-fly (Phase 4.4).
+    // Camera); nullopt falls back to the scene's first active camera / free-fly.
     m_renderSystem->updateCamera(*scene->getObjectManager(), *m_assetCache, resolvePlayerCamera());
   }
 

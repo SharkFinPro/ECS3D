@@ -20,11 +20,9 @@ class EditorSelection;
 class ObjectInspector;
 class AssetInspector;
 
-// The editor's inspector panel (the old "Selected Object" window), generalised into a per-kind
-// dispatcher: it owns the window, the empty state, and dispatch on the shared EditorSelection's kind.
-// Today only the Object kind has a renderer (delegated to ObjectInspector); later phases register
-// asset-type renderers behind the same panel. The object edit callbacks + ComponentEditor are handed
-// straight to ObjectInspector, wired exactly as they were on ObjectGUIManager.
+// The editor's inspector panel, a per-kind dispatcher: it owns the window, the empty state, and
+// dispatches on the shared EditorSelection's kind — the Object kind to ObjectInspector, the Asset kind
+// to AssetInspector. The object edit callbacks + ComponentEditor are handed straight to ObjectInspector.
 class InspectorPanel {
 public:
   using EditCallback = std::function<void(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)>;

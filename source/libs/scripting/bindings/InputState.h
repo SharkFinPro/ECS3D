@@ -10,8 +10,8 @@
 // window) captures the pressed keys each frame and sends them as an inputState message; ServerApp
 // writes them here, and the InputUtils bindings read them.
 //
-// State is kept per player slot (Phase 3.2): the server binds each connection to a player slot and drops
-// that connection's input into its slot, so two players no longer clobber one shared key set. A script
+// State is kept per player slot: the server binds each connection to a player slot and drops that
+// connection's input into its slot, so two players don't clobber one shared key set. A script
 // reads its own player's input by resolving its object's PlayerController.playerSlot to a slot here
 // (ScriptBase.input); the player-agnostic global InputUtils reads the aggregate across all slots.
 //
@@ -63,7 +63,7 @@ public:
 
   // Aggregate across every slot — what the player-agnostic global InputUtils reads. A key is "pressed"
   // if any player presses it; "focused" if any player is focused. In the singleplayer case (one slot)
-  // this is identical to the old single-slot behavior.
+  // the aggregate is just that one player's input.
   [[nodiscard]] static bool isAnyKeyPressed(int key);
 
   [[nodiscard]] static bool isAnyFocused();

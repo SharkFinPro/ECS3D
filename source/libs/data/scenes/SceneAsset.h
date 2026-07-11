@@ -14,9 +14,9 @@ namespace net {
 class ObjectManager;
 class ComponentRegistry;
 
-// A scene is data: a named ObjectManager (the object tree). It is no longer part of the polymorphic
-// Asset hierarchy (the file assets are flat records in AssetRegistry); the verbs moved to the systems
-// and displayGui to the editor. start/stop stay (data lifecycle for the play/stop ComponentVariables).
+// A scene is data: a named ObjectManager (the object tree). It is not part of the polymorphic Asset
+// hierarchy (the file assets are flat records in AssetRegistry); behavior lives in the systems and
+// displayGui in the editor. start/stop remain here as data lifecycle for the play/stop ComponentVariables.
 class SceneAsset {
 public:
   SceneAsset(uuids::uuid uuid,

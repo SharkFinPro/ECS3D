@@ -32,8 +32,7 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 {
   object->setManager(this);
 
-  // (Collider registration used to happen here via CollisionManager::addObject; the ECS3DSim
-  // CollisionSystem now discovers colliders by scanning the objects each tick instead.)
+  // Colliders aren't registered here: CollisionSystem discovers them by scanning the objects each tick.
 
   m_allObjects.push_back(object);
 

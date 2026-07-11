@@ -3,10 +3,9 @@
 
 #include <imgui.h>
 
-// Design tokens + global style for the ECS3D editor redesign (see "ECS3D Editor.dc" mockup).
+// Design tokens + global style for the ECS3D editor (see "ECS3D Editor.dc" mockup).
 // Both the global ImGuiStyle (setupImGuiStyle) and the custom widgets in GuiComponents.h pull their
-// colors from here so the prototype stays consistent. Fonts and the custom title bar are intentionally
-// out of scope for this prototype.
+// colors from here so they stay consistent. Fonts and the custom title bar are intentionally out of scope.
 namespace theme {
   inline ImVec4 v4(const int r, const int g, const int b, const int a = 255)
   {
@@ -47,7 +46,7 @@ namespace theme {
 
   inline ImU32 u32(const ImVec4& c) { return ImGui::ColorConvertFloat4ToU32(c); }
 
-  // Applies the redesign tokens to the global ImGuiStyle. Call after the ImGui context is current.
+  // Applies the design tokens to the global ImGuiStyle. Call after the ImGui context is current.
   inline void applyStyle()
   {
     ImGuiStyle& s = ImGui::GetStyle();

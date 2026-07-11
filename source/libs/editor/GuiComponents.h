@@ -10,12 +10,12 @@
 #include <cstring>
 #include <string>
 
-// Small shared ImGui widgets for the component editors (migrated from core/GuiComponents.h). Lives in
-// ECS3DEditorLib next to the handlers that use it.
+// Small shared ImGui widgets for the component editors, living in ECS3DEditorLib next to the handlers
+// that use it.
 //
-// The widgets below the original xyzGui are redesign-prototype widgets: they render with ImDrawList to
-// match the "ECS3D Editor.dc" mockup (boxed axis fields, accent track sliders, pill badges, filled
-// accent checkboxes). They are drop-in replacements for the stock ImGui calls in the component editors.
+// The widgets below the original xyzGui render with ImDrawList to match the "ECS3D Editor.dc" mockup
+// (boxed axis fields, accent track sliders, pill badges, filled accent checkboxes). They are drop-in
+// replacements for the stock ImGui calls in the component editors.
 namespace gc {
   // A labelled X/Y/Z drag row. Returns true if any of the three was edited this frame.
   inline bool xyzGui(const char* label,
@@ -57,7 +57,7 @@ namespace gc {
   }
 
   // ------------------------------------------------------------------------------------------------
-  // Redesign prototype widgets
+  // Custom-drawn (ImDrawList) widgets
   // ------------------------------------------------------------------------------------------------
 
   // Minimum width of the secondary-text label column on the left of inspector rows.
@@ -216,8 +216,8 @@ namespace gc {
     return edited;
   }
 
-  // Simple vector icon set drawn with ImDrawList (stand-in for the mockup's Lucide icons, since the
-  // icon font is out of scope for this prototype). Drawn centered in a `size`-wide box at `center`.
+  // Simple vector icon set drawn with ImDrawList (stand-in for the mockup's Lucide icons; the icon
+  // font is out of scope). Drawn centered in a `size`-wide box at `center`.
   enum class SecIcon { none, transform, model, rigid, collider, image, rotate, scale, pan,
                        script, scene, folder, plus, minus, light, block, rigidblock, sphere, player,
                        search };

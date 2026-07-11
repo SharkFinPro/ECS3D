@@ -6,8 +6,8 @@
 
 class Collider;
 
-// Minkowski-difference support point. This was Collider::getSupport; it lives in ECS3DSim now
-// because it is part of the GJK/EPA algorithm, and it only reads the colliders' (data) geometry.
+// Minkowski-difference support point. Lives in ECS3DSim because it is part of the GJK/EPA algorithm,
+// and it only reads the colliders' (data) geometry.
 glm::vec3 getSupport(Collider* collider, const std::shared_ptr<Collider>& other, const glm::vec3& direction);
 
 

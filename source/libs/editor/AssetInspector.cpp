@@ -125,7 +125,7 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
   }
 
   // Delete lives at the foot of the panel, for the flat file assets only (a Scene's removal isn't a
-  // registry op — see isRenamable / ROADMAP B1). The modal is drawn every frame the button is armed.
+  // registry op — see isRenamable). The modal is drawn every frame the button is armed.
   displayDeleteButton(record);
   displayDeleteConfirmationModal(record);
 }
@@ -317,8 +317,8 @@ void AssetInspector::displayModelBody(const AssetRecord& record)
   gc::sectionLabel("Preview");
   ImGui::Spacing();
 
-  // A live 3D preview needs an offscreen render target the engine doesn't expose yet (deferred, B3), so
-  // stand in the type icon.
+  // A live 3D preview needs an offscreen render target the engine doesn't expose yet, so stand in the
+  // type icon.
   const float scale = m_assetCache->getRenderer()->getWindow()->getContentScale();
   const float boxW = ImGui::GetContentRegionAvail().x;
   const float boxH = std::min(boxW, 200.0f * scale);

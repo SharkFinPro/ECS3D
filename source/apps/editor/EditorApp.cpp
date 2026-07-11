@@ -230,7 +230,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_selection = std::make_shared<EditorSelection>();
 
   // The object tree owns the hierarchy + structural tree edits + "Save as Prefab"; the Inspector owns
-  // the selected item's body (object component editing today). Both read/write the one selection slot.
+  // the selected item's body. Both read/write the one selection slot.
   m_objectGUIManager = std::make_shared<ObjectGUIManager>();
   m_objectGUIManager->setSelection(m_selection);
   m_objectGUIManager->setAddAssetCallback(addAsset);
@@ -508,7 +508,7 @@ void EditorApp::sendSceneControl(const net::SceneControlOp op) const
 
 void EditorApp::createRenderer()
 {
-  // Ported from ECS3D::initRenderer. Unlike the client, the editor keeps the custom ImGui style.
+  // Unlike the client, the editor keeps the custom ImGui style.
   const vke::EngineConfig engineConfig {
     .window {
       .width = 1280,
@@ -1028,9 +1028,8 @@ void EditorApp::setupImGuiStyle()
 {
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 
-  // Redesign prototype: drive the global style from the shared design tokens (see EditorTheme.h /
-  // "ECS3D Editor.dc" mockup). The legacy "Future Dark" block below is retained (disabled) for
-  // reference while the redesign is in progress.
+  // Drive the global style from the shared design tokens (see EditorTheme.h / "ECS3D Editor.dc"
+  // mockup). The disabled "Future Dark" block below is kept for reference.
   theme::applyStyle();
 
 #if 0

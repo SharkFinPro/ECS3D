@@ -4,7 +4,7 @@
 #include "Component.h"
 #include <glm/vec3.hpp>
 
-// A view the renderer can look through (Phase 4). Position comes from the object's Transform; the facing
+// A view the renderer can look through. Position comes from the object's Transform; the facing
 // is this component's own `direction`, applied relative to the Transform rotation (so the camera turns as
 // the object turns, but its aim is editable independent of the object's/model's orientation). RenderSystem
 // finds the active camera each frame and pushes its pose/params into the vke renderer; a client picks which

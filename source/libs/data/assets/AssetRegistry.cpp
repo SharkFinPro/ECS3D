@@ -119,8 +119,8 @@ nlohmann::json AssetRegistry::getPrefabBody(const uuids::uuid& uuid) const
 
 nlohmann::json AssetRegistry::serialize() const
 {
-  // Scenes are NOT serialized here — they carry their object tree and belong to the SceneManager
-  // migration. The future ProjectSerializer merges this with the scene data.
+  // Scenes are NOT serialized here — they carry their object tree and belong to the SceneManager.
+  // ProjectSerializer merges this with the scene data.
   nlohmann::json data = {
     { "models", nlohmann::json::array() },
     { "textures", nlohmann::json::array() },

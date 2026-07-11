@@ -79,7 +79,7 @@ private:
   // Broad-phase layer filter: true only if each collider's mask includes the other's layer.
   static bool layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b);
 
-  // GJK/EPA narrow phase, lifted out of Collider.
+  // GJK/EPA narrow phase.
   static bool collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
                            glm::vec3* mtv, glm::vec3* collisionPoint);
 

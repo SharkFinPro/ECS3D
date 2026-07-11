@@ -21,12 +21,12 @@ public:
   void variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                       const std::optional<uuids::uuid>& highlightUUID = std::nullopt);
 
-  // Drives the vke camera from a component Camera (Phase 4). Finds the active Camera object, builds a
+  // Drives the vke camera from a component Camera. Finds the active Camera object, builds a
   // view matrix from its Transform pose, disables the built-in free-fly camera, and pushes the pose into
   // the renderer. Falls back to (re-enabling) the free-fly camera when no active camera exists. The
   // client calls this each frame; the editor calls it only while its viewport is looking through a scene
   // camera, and calls useFreeFlyCamera() otherwise.
-  // cameraObject optionally restricts the search to one object (Phase 4.4 — a client's own player camera);
+  // cameraObject optionally restricts the search to one object (a client's own player camera);
   // nullopt means "first active camera in the scene".
   void updateCamera(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                     const std::optional<uuids::uuid>& cameraObject = std::nullopt);

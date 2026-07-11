@@ -28,8 +28,8 @@ void registerLightRendererEditor(ComponentEditor& componentEditor)
       glm::vec3 direction = light->getDirection();
       float coneAngle = light->getConeAngle();
 
-      // These now write the plain light data directly (the vke::PointLight/SpotLight are built by the
-      // RenderSystem from these values each frame).
+      // These write the plain light data directly; the vke::PointLight/SpotLight are built by the
+      // RenderSystem from these values each frame.
       if (gc::accentCheckbox("Spot Light", &isSpotLight))
       {
         light->setSpotLight(isSpotLight);

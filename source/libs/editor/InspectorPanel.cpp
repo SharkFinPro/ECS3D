@@ -80,8 +80,8 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
 {
   ImGui::Begin("Inspector");
 
-  // Drop a stale asset selection when the registry changed under us and the uuid is gone (deletion in a
-  // later phase, or a fresh snapshot). Gated on the registry version so the membership re-check only
+  // Drop a stale asset selection when the registry changed under us and the uuid is gone (an asset
+  // deletion, or a fresh snapshot). Gated on the registry version so the membership re-check only
   // runs when the registry actually changed, matching the asset browser's cache gating.
   if (const auto assetUUID = m_selection->assetUUID())
   {
