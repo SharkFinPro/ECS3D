@@ -251,7 +251,20 @@ EditorApp::EditorApp(LaunchOptions options)
     m_netClient->send(message);
   };
 
-  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_assetCache);
+  // A prefab body edit from the inspector: re-register the prefab under its existing name, which updates the
+  // body in place and keeps the uuid (the same path "Save as Prefab" over an existing name takes). Same
+  // local-apply-then-send addAsset shape as everything else.
+  const auto updatePrefabBody = [addAsset](const uuids::uuid& assetUUID, const std::string& name,
+                                           const std::string& body) {
+    addAsset({
+      { "assetType", "prefab" },
+      { "uuid", uuids::to_string(assetUUID) },
+      { "name", name },
+      { "body", body }
+    });
+  };
+
+  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_componentRegistry, m_assetCache);
   m_inspectorPanel->setSelection(m_selection);
   m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
   m_inspectorPanel->setEditCallback(editComponent);
@@ -260,6 +273,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_inspectorPanel->setRenameAssetCallback(renameAsset);
   m_inspectorPanel->setRemoveAssetCallback(removeAsset);
   m_inspectorPanel->setAssetReferenceCountCallback(countAssetReferences);
+  m_inspectorPanel->setUpdatePrefabBodyCallback(updatePrefabBody);
 
   m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
   m_assetBrowser->setSelection(m_selection);

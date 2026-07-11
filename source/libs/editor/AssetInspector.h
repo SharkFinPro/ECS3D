@@ -11,12 +11,18 @@
 #include <uuid.h>
 
 struct AssetRecord;
+class AssetRegistry;
+class ComponentRegistry;
+class ComponentEditor;
 class GpuAssetCache;
+class ObjectInspector;
+class TransientObject;
 
 // The Inspector's renderer for the Asset selection kind: a common header (type chip, display name, uuid,
-// path/source) shared by every asset type, plus a per-type body. Read-only in Phase 2 — there is no
-// protocol for asset mutation yet. Peer to ObjectInspector behind InspectorPanel's per-selection-kind
-// dispatch.
+// path/source) shared by every asset type, plus a per-type body. Most views are read-only; the Prefab body
+// is editable (Phase 4) — its contents are deserialized into a detached TransientObject and edited with the
+// same component editors an object uses (a reused ObjectInspector), each edit re-serialized and sent as an
+// asset body update. Peer to ObjectInspector behind InspectorPanel's per-selection-kind dispatch.
 class AssetInspector {
 public:
   // Switching the active scene: the same callback the asset browser's scene double-click uses.
@@ -28,8 +34,16 @@ public:
   // How many objects (across the replicated scenes + prefab bodies) reference an asset by uuid, shown in
   // the delete-confirmation modal. Computed by the EditorApp, which owns the scenes and the registry.
   using ReferenceCountCallback = std::function<int(const uuids::uuid& assetUUID)>;
+  // A prefab body edit: the EditorApp re-registers the prefab under its existing name (which updates the
+  // body in place, keeping the uuid — the "Save as Prefab" over an existing name path) and re-snapshots.
+  using UpdatePrefabBodyCallback = std::function<void(const uuids::uuid& assetUUID, const std::string& name,
+                                                      const std::string& body)>;
 
-  explicit AssetInspector(std::shared_ptr<GpuAssetCache> assetCache);
+  AssetInspector(std::shared_ptr<GpuAssetCache> assetCache,
+                 std::shared_ptr<ComponentRegistry> componentRegistry,
+                 std::shared_ptr<ComponentEditor> componentEditor);
+
+  ~AssetInspector();
 
   void setLoadSceneCallback(LoadSceneCallback callback);
 
@@ -39,8 +53,14 @@ public:
 
   void setReferenceCountCallback(ReferenceCountCallback callback);
 
-  // When false (read-only server), the scene inspector's "Load Scene" button is disabled, mirroring the
-  // browser's gated double-click.
+  void setUpdatePrefabBodyCallback(UpdatePrefabBodyCallback callback);
+
+  // The registry backs the reused prefab-body ObjectInspector's script drop zone (resolving a dropped
+  // script asset to its class name). Same pointer the panel hands the object inspector.
+  void setAssetRegistry(const AssetRegistry* registry);
+
+  // When false (read-only server), the scene inspector's "Load Scene" button is disabled (mirroring the
+  // browser's gated double-click) and the prefab body's editors are disabled (read-only inspection).
   void setEditable(bool editable);
 
   // The right-aligned type chip in the panel header, drawn on the current header row.
@@ -52,13 +72,34 @@ public:
 
 private:
   std::shared_ptr<GpuAssetCache> m_assetCache;
+  std::shared_ptr<ComponentRegistry> m_componentRegistry;
 
   LoadSceneCallback m_onLoadScene;
   RenameCallback m_onRename;
   RemoveCallback m_onRemove;
   ReferenceCountCallback m_onReferenceCount;
+  UpdatePrefabBodyCallback m_onUpdatePrefabBody;
 
   bool m_editable = true;
+
+  // The detached prefab body being edited + the object inspector that draws its component editors, reused
+  // verbatim from the Object kind. The inspector's callbacks feed the buffers below rather than the network:
+  // structural edits are deferred (applied after its display returns, since applying mid-display would
+  // invalidate the component map it iterates); value edits just mark the body dirty. Both apply to the
+  // detached object immediately (instant local feedback), but the SEND is coalesced — see m_prefabBodyDirty.
+  std::unique_ptr<TransientObject> m_prefabBody;
+  std::unique_ptr<ObjectInspector> m_prefabInspector;
+  std::vector<nlohmann::json> m_pendingPrefabEdits;
+
+  // Unlike a live object's component edit (a small editComponent message the server just rebroadcasts), a
+  // prefab body update is an addAsset that makes the server re-snapshot the whole project. Sending one per
+  // drag frame swamps every view, so edits are coalesced: they mutate the detached object live, set this
+  // flag, and are only serialized + sent once the user stops interacting (no active widget) or switches
+  // selection — turning a whole slider drag into a single body update. m_prefabRecord* records which asset
+  // the pending edit belongs to, so a flush triggered by a selection change sends it under the right key.
+  bool m_prefabBodyDirty = false;
+  uuids::uuid m_prefabRecordUUID{};
+  std::string m_prefabRecordName;
 
   // Buffer for the in-place display-name field. Re-seeded (from the effective display name) whenever the
   // selected asset changes, so an external rename doesn't clobber what the user is typing — matching
@@ -85,16 +126,6 @@ private:
   bool m_haveScriptSource = false; // script .cs source read from disk
   std::string m_scriptSource;
 
-  // A prefab body walked into a read-only tree (no ObjectManager instantiation): each node is an object
-  // name + its component type names + child nodes.
-  struct PrefabNode {
-    std::string name;
-    std::vector<std::string> components;
-    std::vector<PrefabNode> children;
-  };
-  bool m_havePrefab = false;
-  PrefabNode m_prefabRoot;
-
   // Display name (an editable rename field for the flat file assets, gated on editable; read-only text for
   // scenes) + uuid + path/source rows common to every asset type.
   void displayHeader(const AssetRecord& record);
@@ -114,10 +145,15 @@ private:
   // Is-active indicator + a "Load Scene" button (reusing LoadSceneCallback, gated on editable).
   void displaySceneBody(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID);
 
-  // Read-only summary of the prefab body: root name, component types, child object tree.
-  void displayPrefabBody();
+  // Editable prefab contents: syncs the detached TransientObject from the record body, draws it with the
+  // reused ObjectInspector, applies any deferred edit to the detached object, and flushes a coalesced body
+  // update when the user stops interacting. Read-only (disabled editors) when !m_editable. Shows a fallback
+  // when the body is missing/malformed.
+  void displayPrefabBody(const AssetRecord& record);
 
-  void displayPrefabNode(const PrefabNode& node, bool root) const;
+  // Send the pending prefab body edit (if any) under the asset it belongs to (m_prefabRecord*), then clear
+  // the dirty flag. Serializes the detached object and re-registers it via UpdatePrefabBodyCallback.
+  void flushPrefabBody();
 
   // A danger "Delete Asset" button (flat file assets only, gated on editable) that arms the modal below.
   void displayDeleteButton(const AssetRecord& record);
@@ -125,9 +161,6 @@ private:
   // The "Delete Asset?" confirmation modal for m_assetPendingDeletion, warning how many objects reference
   // it (references are left to dangle — see ROADMAP B1). Confirming fires the remove callback.
   void displayDeleteConfirmationModal(const AssetRecord& record);
-
-  // Walks one serialized-Object JSON node into a PrefabNode (recursing into children).
-  static PrefabNode parsePrefabNode(const nlohmann::json& node);
 };
 
 #endif //ASSETINSPECTOR_H

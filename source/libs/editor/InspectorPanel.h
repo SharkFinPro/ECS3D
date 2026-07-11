@@ -7,11 +7,13 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <uuid.h>
 
 class ObjectManager;
 class AssetRegistry;
 class Component;
+class ComponentRegistry;
 class ComponentEditor;
 class GpuAssetCache;
 class EditorSelection;
@@ -28,7 +30,9 @@ public:
   using EditCallback = std::function<void(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)>;
   using SceneEditCallback = std::function<void(const nlohmann::json& edit)>;
 
-  InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor, std::shared_ptr<GpuAssetCache> assetCache);
+  InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor,
+                 std::shared_ptr<ComponentRegistry> componentRegistry,
+                 std::shared_ptr<GpuAssetCache> assetCache);
 
   ~InspectorPanel();
 
@@ -58,6 +62,11 @@ public:
   void setRemoveAssetCallback(std::function<void(const uuids::uuid& assetUUID)> callback);
 
   void setAssetReferenceCountCallback(std::function<int(const uuids::uuid& assetUUID)> callback);
+
+  // Forwarded to the asset inspector's editable prefab body: a prefab body edit (re-register under the
+  // existing name to update the body in place, keeping the uuid; the server re-snapshots).
+  void setUpdatePrefabBodyCallback(std::function<void(const uuids::uuid& assetUUID, const std::string& name,
+                                                      const std::string& body)> callback);
 
   // objectManager may be null (no scene loaded yet): the window is still drawn (empty) so it stays
   // present/dockable instead of popping in and out. activeSceneUUID is the currently loaded scene, used

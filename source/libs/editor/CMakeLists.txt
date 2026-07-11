@@ -13,6 +13,8 @@ add_library(${PROJECT_NAME}
   ObjectInspector.h
   AssetInspector.cpp
   AssetInspector.h
+  TransientObject.cpp
+  TransientObject.h
   AssetDisplay.h
   Selection.h
   AssetBrowserPanel.cpp
