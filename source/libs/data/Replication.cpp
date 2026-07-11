@@ -561,4 +561,81 @@ nlohmann::json unpackAddAsset(const net::Message& message)
   return asset;
 }
 
+nlohmann::json buildRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName)
+{
+  return {
+    { "uuid", uuids::to_string(assetUUID) },
+    { "displayName", displayName }
+  };
+}
+
+nlohmann::json buildRemoveAsset(const uuids::uuid& assetUUID)
+{
+  return {
+    { "uuid", uuids::to_string(assetUUID) }
+  };
+}
+
+void applyRenameAsset(AssetRegistry& assetRegistry, const nlohmann::json& op)
+{
+  const auto parsed = uuids::uuid::from_string(op.value("uuid", std::string{}));
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  assetRegistry.renameAsset(parsed.value(), op.value("displayName", std::string{}));
+}
+
+void applyRemoveAsset(AssetRegistry& assetRegistry, const nlohmann::json& op)
+{
+  const auto parsed = uuids::uuid::from_string(op.value("uuid", std::string{}));
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  assetRegistry.removeAsset(parsed.value());
+}
+
+net::Message packRenameAsset(const nlohmann::json& op)
+{
+  net::Message message(net::MessageType::renameAsset);
+
+  message.writeString(op.value("uuid", std::string{}));
+  message.writeString(op.value("displayName", std::string{}));
+
+  return message;
+}
+
+nlohmann::json unpackRenameAsset(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  nlohmann::json op;
+  op["uuid"] = reader.readString();
+  op["displayName"] = reader.readString();
+
+  return op;
+}
+
+net::Message packRemoveAsset(const nlohmann::json& op)
+{
+  net::Message message(net::MessageType::removeAsset);
+
+  message.writeString(op.value("uuid", std::string{}));
+
+  return message;
+}
+
+nlohmann::json unpackRemoveAsset(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  nlohmann::json op;
+  op["uuid"] = reader.readString();
+
+  return op;
+}
+
 }

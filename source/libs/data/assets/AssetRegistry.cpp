@@ -32,6 +32,41 @@ void AssetRegistry::registerAsset(const AssetRecord& record)
   ++m_version;
 }
 
+void AssetRegistry::renameAsset(const uuids::uuid& uuid, const std::string& displayName)
+{
+  const auto it = m_assets.find(uuid);
+  if (it == m_assets.end())
+  {
+    return;
+  }
+
+  // Display-only: `path` (the key, and the name-key for prefabs/scenes) stays put, so nothing that
+  // resolves the asset by path or uuid is disturbed — only the shown name changes.
+  it->second.displayName = displayName;
+  ++m_version;
+}
+
+void AssetRegistry::removeAsset(const uuids::uuid& uuid)
+{
+  const auto it = m_assets.find(uuid);
+  if (it == m_assets.end())
+  {
+    return;
+  }
+
+  // Free the path key too so its name (a prefab/scene display name, or a file path) can be registered
+  // again later. Guard on the mapping actually pointing back at this uuid — a first-wins collision earlier
+  // may have left the key owned by a different record.
+  if (const auto pathIt = m_loadedPaths.find(it->second.path);
+      pathIt != m_loadedPaths.end() && pathIt->second == uuid)
+  {
+    m_loadedPaths.erase(pathIt);
+  }
+
+  m_assets.erase(it);
+  ++m_version;
+}
+
 void AssetRegistry::clear()
 {
   m_assets.clear();

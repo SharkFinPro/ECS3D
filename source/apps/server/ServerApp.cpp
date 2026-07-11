@@ -246,6 +246,8 @@ namespace {
       case net::MessageType::sceneControl:
       case net::MessageType::loadProject:
       case net::MessageType::addAsset:
+      case net::MessageType::renameAsset:
+      case net::MessageType::removeAsset:
         return true;
       default:
         return false;
@@ -282,6 +284,14 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
 
     case net::MessageType::addAsset:
       handleAddAsset(message);
+      break;
+
+    case net::MessageType::renameAsset:
+      handleRenameAsset(message);
+      break;
+
+    case net::MessageType::removeAsset:
+      handleRemoveAsset(message);
       break;
 
     case net::MessageType::inputState:
@@ -486,6 +496,47 @@ void ServerApp::handleAddAsset(const net::Message& message) const
   replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
 
   logMessage("Info", "Registered asset (" + asset.value("assetType", std::string{}) + ").");
+
+  broadcastSnapshot();
+}
+
+void ServerApp::handleRenameAsset(const net::Message& message) const
+{
+  // An editor renamed an asset (display-name override only): apply it authoritatively and re-snapshot.
+  nlohmann::json op;
+  try
+  {
+    op = replication::unpackRenameAsset(message);
+  }
+  catch (const std::exception&)
+  {
+    return;
+  }
+
+  replication::applyRenameAsset(*m_assetRegistry, op);
+
+  logMessage("Info", "Renamed asset.");
+
+  broadcastSnapshot();
+}
+
+void ServerApp::handleRemoveAsset(const net::Message& message) const
+{
+  // An editor deleted an asset: drop the record and re-snapshot. References dangle by design (lookups
+  // null-tolerate a missing uuid) — see ROADMAP B1.
+  nlohmann::json op;
+  try
+  {
+    op = replication::unpackRemoveAsset(message);
+  }
+  catch (const std::exception&)
+  {
+    return;
+  }
+
+  replication::applyRemoveAsset(*m_assetRegistry, op);
+
+  logMessage("Info", "Removed asset.");
 
   broadcastSnapshot();
 }
