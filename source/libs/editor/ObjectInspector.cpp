@@ -108,6 +108,11 @@ void ObjectInspector::setEditable(const bool editable)
   m_editable = editable;
 }
 
+void ObjectInspector::setShowHighlightToggle(const bool show)
+{
+  m_showHighlightToggle = show;
+}
+
 void ObjectInspector::displayTypeChip(const std::shared_ptr<Object>& object) const
 {
   const char* typeLabel = labelForObject(object);
@@ -117,9 +122,12 @@ void ObjectInspector::displayTypeChip(const std::shared_ptr<Object>& object) con
 
 void ObjectInspector::display(const std::shared_ptr<Object>& object)
 {
-  gc::accentCheckbox("Highlight Object", &m_highlightObject);
+  if (m_showHighlightToggle)
+  {
+    gc::accentCheckbox("Highlight Object", &m_highlightObject);
 
-  ImGui::Separator();
+    ImGui::Separator();
+  }
 
   // Sync the name buffer when the selection changes. Also fold the shown object back to a closed
   // Add Component list, so a viewport pick (which writes the shared selection directly) matches the

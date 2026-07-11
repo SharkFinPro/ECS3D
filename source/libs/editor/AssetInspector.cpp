@@ -1,8 +1,12 @@
 #include "AssetInspector.h"
 #include "AssetDisplay.h"
 #include "GuiComponents.h"
+#include "ObjectInspector.h"
+#include "TransientObject.h"
 #include <GpuAssetCache.h>
+#include <Replication.h>
 #include <assets/AssetRegistry.h>
+#include <objects/Object.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
@@ -18,9 +22,30 @@
 #include <string>
 #include <utility>
 
-AssetInspector::AssetInspector(std::shared_ptr<GpuAssetCache> assetCache)
-  : m_assetCache(std::move(assetCache))
-{}
+AssetInspector::AssetInspector(std::shared_ptr<GpuAssetCache> assetCache,
+                               std::shared_ptr<ComponentRegistry> componentRegistry,
+                               std::shared_ptr<ComponentEditor> componentEditor)
+  : m_assetCache(std::move(assetCache)),
+    m_componentRegistry(std::move(componentRegistry)),
+    m_prefabBody(std::make_unique<TransientObject>(m_componentRegistry)),
+    m_prefabInspector(std::make_unique<ObjectInspector>(std::move(componentEditor)))
+{
+  // The reused inspector edits a detached object, so its edits must apply locally rather than travel to the
+  // server. A value edit already mutated the component in place — just note it. A structural edit is queued
+  // and applied after display() returns (applying it now would mutate the component map mid-iteration).
+  m_prefabInspector->setEditCallback([this](const uuids::uuid&, const std::shared_ptr<Component>&) {
+    m_prefabValueEdited = true;
+  });
+  m_prefabInspector->setSceneEditCallback([this](const nlohmann::json& edit) {
+    m_pendingPrefabEdits.push_back(edit);
+  });
+
+  // No viewport highlight for a detached prefab body.
+  m_prefabInspector->setShowHighlightToggle(false);
+}
+
+// Defined here (not defaulted in the header) so the inspector/body unique_ptrs see their complete types.
+AssetInspector::~AssetInspector() = default;
 
 void AssetInspector::setLoadSceneCallback(LoadSceneCallback callback)
 {
@@ -42,6 +67,16 @@ void AssetInspector::setReferenceCountCallback(ReferenceCountCallback callback)
   m_onReferenceCount = std::move(callback);
 }
 
+void AssetInspector::setUpdatePrefabBodyCallback(UpdatePrefabBodyCallback callback)
+{
+  m_onUpdatePrefabBody = std::move(callback);
+}
+
+void AssetInspector::setAssetRegistry(const AssetRegistry* registry)
+{
+  m_prefabInspector->setAssetRegistry(registry);
+}
+
 namespace {
   // A display-name rename is a display-only override the AssetRegistry packs (see AssetRegistry::pack): it
   // survives a snapshot only for the flat file assets. A Scene record is regenerated from the SceneManager
@@ -56,6 +91,7 @@ namespace {
 void AssetInspector::setEditable(const bool editable)
 {
   m_editable = editable;
+  m_prefabInspector->setEditable(editable);
 }
 
 void AssetInspector::displayTypeChip(const AssetRecord& record) const
@@ -83,7 +119,7 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
     case AssetType::Model:   displayModelBody(record);   break;
     case AssetType::Script:  displayScriptBody();         break;
     case AssetType::Scene:   displaySceneBody(record, activeSceneUUID); break;
-    case AssetType::Prefab:  displayPrefabBody();         break;
+    case AssetType::Prefab:  displayPrefabBody(record);   break;
     default: break;
   }
 
@@ -150,24 +186,9 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
   m_indexCount = 0;
   m_haveScriptSource = false;
   m_scriptSource.clear();
-  m_havePrefab = false;
-  m_prefabRoot = {};
 
-  // Prefabs carry their contents inline (record.body), not as a file — walk the JSON into a read-only
-  // tree here (once per selection) rather than instantiating an ObjectManager.
-  if (record.type == AssetType::Prefab)
-  {
-    if (const auto body = nlohmann::json::parse(record.body, nullptr, false);
-        !body.is_discarded() && body.is_object())
-    {
-      m_prefabRoot = parsePrefabNode(body);
-      m_havePrefab = true;
-    }
-    return;
-  }
-
-  // Only file-backed types have a path on disk; scenes carry their name there instead.
-  if (record.type == AssetType::Scene || record.path.empty())
+  // Only file-backed types have a path on disk; scenes carry their name there, prefabs their inline body.
+  if (record.type == AssetType::Scene || record.type == AssetType::Prefab || record.path.empty())
   {
     return;
   }
@@ -383,89 +404,53 @@ void AssetInspector::displaySceneBody(const AssetRecord& record, const std::opti
   ImGui::EndDisabled();
 }
 
-AssetInspector::PrefabNode AssetInspector::parsePrefabNode(const nlohmann::json& node)
-{
-  PrefabNode result;
-  result.name = node.value("name", std::string("(unnamed)"));
-
-  if (const auto components = node.find("components"); components != node.end() && components->is_array())
-  {
-    for (const auto& component : *components)
-    {
-      result.components.push_back(component.value("type", std::string("Component")));
-    }
-  }
-
-  if (const auto children = node.find("children"); children != node.end() && children->is_array())
-  {
-    for (const auto& child : *children)
-    {
-      if (child.is_object())
-      {
-        result.children.push_back(parsePrefabNode(child));
-      }
-    }
-  }
-
-  return result;
-}
-
-void AssetInspector::displayPrefabBody()
+void AssetInspector::displayPrefabBody(const AssetRecord& record)
 {
   ImGui::Spacing();
   gc::sectionLabel("Contents");
   ImGui::Spacing();
 
-  if (!m_havePrefab)
+  // (Re)build the detached object when the body changed under us (a different prefab selected, or an
+  // external snapshot). A local edit below re-serializes and markSyncs, so its own echo won't rebuild.
+  m_prefabBody->syncFromBody(record.body);
+
+  const auto& object = m_prefabBody->object();
+  if (!object)
   {
-    // Empty/malformed body (e.g. an older or hand-edited record) — nothing to walk.
+    // Empty/malformed body (an older or hand-edited record) — nothing to deserialize.
     gc::dashedBox("Prefab body unavailable");
     return;
   }
 
-  displayPrefabNode(m_prefabRoot, true);
-}
+  // Draw the body with the same component editors an object uses. The wired callbacks collect structural
+  // edits and flag value edits rather than sending them; apply + re-serialize once display has returned so
+  // a structural edit doesn't mutate the component map ObjectInspector::display is iterating.
+  m_pendingPrefabEdits.clear();
+  m_prefabValueEdited = false;
 
-void AssetInspector::displayPrefabNode(const PrefabNode& node, const bool root) const
-{
-  ImGui::PushID(&node);
+  m_prefabInspector->display(object);
 
-  ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
-  if (root)
+  bool changed = m_prefabValueEdited;
+  if (auto* manager = m_prefabBody->manager())
   {
-    flags |= ImGuiTreeNodeFlags_DefaultOpen;
-  }
-  if (node.children.empty())
-  {
-    flags |= ImGuiTreeNodeFlags_Leaf;
-  }
-
-  if (ImGui::TreeNodeEx(node.name.c_str(), flags))
-  {
-    // Component types on one muted line, indented under the object.
-    if (!node.components.empty())
+    for (const auto& edit : m_pendingPrefabEdits)
     {
-      std::string types;
-      for (size_t i = 0; i < node.components.size(); ++i)
-      {
-        if (i != 0)
-        {
-          types += ", ";
-        }
-        types += node.components[i];
-      }
-      ImGui::TextColored(theme::t3, "%s", types.c_str());
+      replication::applySceneEdit(*manager, edit);
+      changed = true;
     }
-
-    for (const auto& child : node.children)
-    {
-      displayPrefabNode(child, false);
-    }
-
-    ImGui::TreePop();
   }
+  m_pendingPrefabEdits.clear();
 
-  ImGui::PopID();
+  if (changed && m_onUpdatePrefabBody)
+  {
+    // Send the updated body keyed by the prefab's name (record.path): re-registering an existing name
+    // updates the body in place and keeps the uuid — the same path "Save as Prefab" over an existing name
+    // takes. markSynced so the resulting registry update (and the server's snapshot echo) doesn't rebuild
+    // the object out from under the ongoing edit.
+    const auto newBody = m_prefabBody->serialize();
+    m_onUpdatePrefabBody(record.uuid, record.path, newBody);
+    m_prefabBody->markSynced(newBody);
+  }
 }
 
 void AssetInspector::displayDeleteButton(const AssetRecord& record)

@@ -31,7 +31,7 @@
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune + GJK/EPA under `collisions/`). Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
-| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `nfd`. |
+| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess` (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
 | `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
 | `source/libs/clrHost/` | `ECS3DClrHost` — `ManagedHost` boots CoreCLR and hands out managed statics as native fn ptrs. Owns the CMake helpers (`cmake/ECS3DManaged.cmake`, `FindDotnet.cmake`, `loadCS.cmake`). |
@@ -123,7 +123,15 @@ reaches the registry through **`BindingContext::setAssetRegistry`**, injected on
 sim's raycast/overlap statics. **Instances are detached copies** — nothing records which prefab an object came
 from, so overrides and prefab→instance propagation don't exist (deliberately deferred; see `ROADMAP.md`).
 `DefaultProject` defines its `Block`/`Rigid Block`/`Sphere`/`Player` bodies once, registers them as prefabs
-with stable uuids, and builds its scenes by instancing them.
+with stable uuids, and builds its scenes by instancing them. **Editing a prefab's contents** happens in the
+Inspector: `AssetInspector` deserializes the body into a `TransientObject` (editor lib) — a detached `Object`
+living in a private scratch `ObjectManager` never wired to a scene/`SceneManager`/replication, uuids
+preserved so the body is stable across edits — and draws it with a reused `ObjectInspector`. Its edits apply
+locally (value edits in place; structural edits deferred past `display()` then `applySceneEdit`'d, so the
+component map isn't mutated mid-iteration), and each change re-serializes the body and re-registers it under
+the prefab's existing name via the `addAsset` op (updating the body in place, keeping the uuid — the same
+"Save as Prefab" path), which re-snapshots. `TransientObject::markSynced` records the just-sent body so the
+local-apply/snapshot echo doesn't rebuild the object mid-edit.
 
 **Transport / CLR.** `Protocol.h` defines the format; `NetServer`/`NetClient` own it in C++ and hand
 `ECS3DNetTransport` (C#) opaque `(type byte, payload)` pairs. `ManagedHost` boots CoreCLR and resolves

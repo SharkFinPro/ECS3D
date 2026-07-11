@@ -10,9 +10,14 @@
 #include <utility>
 
 InspectorPanel::InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor,
+                               std::shared_ptr<ComponentRegistry> componentRegistry,
                                std::shared_ptr<GpuAssetCache> assetCache)
-  : m_objectInspector(std::make_unique<ObjectInspector>(std::move(componentEditor))),
-    m_assetInspector(std::make_unique<AssetInspector>(std::move(assetCache)))
+  // componentEditor is shared by both inspectors (the asset inspector reuses the object editors for the
+  // editable prefab body). m_objectInspector is initialised first (declaration order), so it takes a copy
+  // and the asset inspector moves the last reference.
+  : m_objectInspector(std::make_unique<ObjectInspector>(componentEditor)),
+    m_assetInspector(std::make_unique<AssetInspector>(std::move(assetCache), std::move(componentRegistry),
+                                                      std::move(componentEditor)))
 {}
 
 // Defined here (not defaulted in the header) so the inspector unique_ptrs see their complete types.
@@ -27,6 +32,7 @@ void InspectorPanel::setAssetRegistry(const AssetRegistry* registry)
 {
   m_assetRegistry = registry;
   m_objectInspector->setAssetRegistry(registry);
+  m_assetInspector->setAssetRegistry(registry);
 }
 
 void InspectorPanel::setEditable(const bool editable)
@@ -63,6 +69,11 @@ void InspectorPanel::setRemoveAssetCallback(std::function<void(const uuids::uuid
 void InspectorPanel::setAssetReferenceCountCallback(std::function<int(const uuids::uuid& assetUUID)> callback)
 {
   m_assetInspector->setReferenceCountCallback(std::move(callback));
+}
+
+void InspectorPanel::setUpdatePrefabBodyCallback(std::function<void(const uuids::uuid& assetUUID, const std::string& name, const std::string& body)> callback)
+{
+  m_assetInspector->setUpdatePrefabBodyCallback(std::move(callback));
 }
 
 void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::optional<uuids::uuid>& activeSceneUUID)

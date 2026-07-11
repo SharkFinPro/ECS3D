@@ -35,6 +35,11 @@ public:
 
   void setEditable(bool editable);
 
+  // When false, the "Highlight Object" checkbox at the top is omitted. The Highlight toggle only means
+  // something for a live scene object (it drives the viewport highlight); the AssetInspector reuses this
+  // inspector to edit a detached prefab body, where there is nothing to highlight.
+  void setShowHighlightToggle(bool show);
+
   // The right-aligned type chip in the panel header (icon pill), drawn on the current header row.
   void displayTypeChip(const std::shared_ptr<Object>& object) const;
 
@@ -59,6 +64,9 @@ private:
   std::optional<uuids::uuid> m_nameEditObjectUUID;
 
   bool m_highlightObject = true;
+
+  // Whether to draw the Highlight toggle (see setShowHighlightToggle).
+  bool m_showHighlightToggle = true;
 
   // Components whose deletion we've already sent (markedAsDeleted persists until the next snapshot
   // rebuilds the object), so we don't re-send the same removeComponent every frame.
