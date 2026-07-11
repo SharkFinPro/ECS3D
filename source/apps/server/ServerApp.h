@@ -103,6 +103,10 @@ private:
 
   void handleAddAsset(const net::Message& message) const;
 
+  void handleRenameAsset(const net::Message& message) const;
+
+  void handleRemoveAsset(const net::Message& message) const;
+
   void handleInputState(const net::Message& message, int32_t senderId);
 
   void handleSceneControl(const net::Message& message) const;

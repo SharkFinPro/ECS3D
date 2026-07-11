@@ -32,6 +32,41 @@ void AssetRegistry::registerAsset(const AssetRecord& record)
   ++m_version;
 }
 
+void AssetRegistry::renameAsset(const uuids::uuid& uuid, const std::string& displayName)
+{
+  const auto it = m_assets.find(uuid);
+  if (it == m_assets.end())
+  {
+    return;
+  }
+
+  // Display-only: `path` (the key, and the name-key for prefabs/scenes) stays put, so nothing that
+  // resolves the asset by path or uuid is disturbed — only the shown name changes.
+  it->second.displayName = displayName;
+  ++m_version;
+}
+
+void AssetRegistry::removeAsset(const uuids::uuid& uuid)
+{
+  const auto it = m_assets.find(uuid);
+  if (it == m_assets.end())
+  {
+    return;
+  }
+
+  // Free the path key too so its name (a prefab/scene display name, or a file path) can be registered
+  // again later. Guard on the mapping actually pointing back at this uuid — a first-wins collision earlier
+  // may have left the key owned by a different record.
+  if (const auto pathIt = m_loadedPaths.find(it->second.path);
+      pathIt != m_loadedPaths.end() && pathIt->second == uuid)
+  {
+    m_loadedPaths.erase(pathIt);
+  }
+
+  m_assets.erase(it);
+  ++m_version;
+}
+
 void AssetRegistry::clear()
 {
   m_assets.clear();
@@ -93,6 +128,16 @@ nlohmann::json AssetRegistry::serialize() const
     { "prefabs", nlohmann::json::array() }
   };
 
+  // A rename sets a display-name override on the record; write it (append only, omitted when empty) so a
+  // renamed asset survives a save/load. The file on disk and `path` never change — only this override.
+  const auto withDisplayName = [](nlohmann::json entry, const AssetRecord& record) {
+    if (!record.displayName.empty())
+    {
+      entry["displayName"] = record.displayName;
+    }
+    return entry;
+  };
+
   for (const auto& [uuid, record] : m_assets)
   {
     const auto uuidString = uuids::to_string(uuid);
@@ -100,13 +145,13 @@ nlohmann::json AssetRegistry::serialize() const
     switch (record.type)
     {
       case AssetType::Model:
-        data["models"].push_back({ { "name", record.path }, { "filePath", record.path }, { "uuid", uuidString } });
+        data["models"].push_back(withDisplayName({ { "name", record.path }, { "filePath", record.path }, { "uuid", uuidString } }, record));
         break;
       case AssetType::Texture:
-        data["textures"].push_back({ { "name", record.path }, { "filePath", record.path }, { "uuid", uuidString } });
+        data["textures"].push_back(withDisplayName({ { "name", record.path }, { "filePath", record.path }, { "uuid", uuidString } }, record));
         break;
       case AssetType::Script:
-        data["scripts"].push_back({ { "className", record.className }, { "filePath", record.path }, { "uuid", uuidString } });
+        data["scripts"].push_back(withDisplayName({ { "className", record.className }, { "filePath", record.path }, { "uuid", uuidString } }, record));
         break;
       case AssetType::Prefab:
       {
@@ -115,11 +160,11 @@ nlohmann::json AssetRegistry::serialize() const
         // dump(), so a corrupt body is written as null and dropped on the next load.
         auto body = nlohmann::json::parse(record.body, nullptr, false);
 
-        data["prefabs"].push_back({
+        data["prefabs"].push_back(withDisplayName({
           { "name", record.path },
           { "uuid", uuidString },
           { "body", body.is_discarded() ? nlohmann::json(nullptr) : std::move(body) }
-        });
+        }, record));
         break;
       }
       default:
@@ -139,7 +184,8 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
       registerAsset({
         .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
         .type = AssetType::Model,
-        .path = assetData.at("filePath")
+        .path = assetData.at("filePath"),
+        .displayName = assetData.value("displayName", std::string{})
       });
     }
   }
@@ -151,7 +197,8 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
       registerAsset({
         .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
         .type = AssetType::Texture,
-        .path = assetData.at("filePath")
+        .path = assetData.at("filePath"),
+        .displayName = assetData.value("displayName", std::string{})
       });
     }
   }
@@ -164,7 +211,8 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
         .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
         .type = AssetType::Script,
         .path = assetData.at("filePath"),
-        .className = assetData.at("className")
+        .className = assetData.at("className"),
+        .displayName = assetData.value("displayName", std::string{})
       });
     }
   }
@@ -184,7 +232,8 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
         .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
         .type = AssetType::Prefab,
         .path = assetData.at("name"),                 // prefabs key off their display name
-        .body = assetData.at("body").dump()
+        .body = assetData.at("body").dump(),
+        .displayName = assetData.value("displayName", std::string{})
       });
     }
   }
@@ -211,8 +260,9 @@ void AssetRegistry::pack(net::Message& message) const
     message.write(record->type);
     message.writeString(uuids::to_string(record->uuid));
     message.writeString(record->path);
-    message.writeString(record->className); // empty for non-scripts
-    message.writeString(record->body);      // empty for non-prefabs
+    message.writeString(record->className);   // empty for non-scripts
+    message.writeString(record->body);        // empty for non-prefabs
+    message.writeString(record->displayName); // empty unless renamed (append-only wire field)
   }
 }
 
@@ -226,7 +276,9 @@ void AssetRegistry::unpack(net::MessageReader& messageReader)
     const auto path = messageReader.readString();
     const auto className = messageReader.readString();
     const auto body = messageReader.readString();
+    const auto displayName = messageReader.readString();
 
-    registerAsset({ .uuid = uuid, .type = type, .path = path, .className = className, .body = body });
+    registerAsset({ .uuid = uuid, .type = type, .path = path, .className = className, .body = body,
+                    .displayName = displayName });
   }
 }

@@ -98,6 +98,26 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 
 [[nodiscard]] nlohmann::json unpackAddAsset(const net::Message& message);
 
+// Asset mutation ({ uuid, [displayName] }). Rename is a display-name override only; remove drops the
+// record and lets references dangle (see ROADMAP B1). Both mirror addAsset's local-apply-then-send shape:
+// the editor applies locally for instant feedback and sends the op; the server applies it authoritatively
+// and re-snapshots. The build* helpers assemble the blob; pack*/unpack* carry it on the wire.
+[[nodiscard]] nlohmann::json buildRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName);
+
+[[nodiscard]] nlohmann::json buildRemoveAsset(const uuids::uuid& assetUUID);
+
+void applyRenameAsset(AssetRegistry& assetRegistry, const nlohmann::json& op);
+
+void applyRemoveAsset(AssetRegistry& assetRegistry, const nlohmann::json& op);
+
+[[nodiscard]] net::Message packRenameAsset(const nlohmann::json& op);
+
+[[nodiscard]] nlohmann::json unpackRenameAsset(const net::Message& message);
+
+[[nodiscard]] net::Message packRemoveAsset(const nlohmann::json& op);
+
+[[nodiscard]] nlohmann::json unpackRemoveAsset(const net::Message& message);
+
 }
 
 
