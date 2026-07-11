@@ -33,6 +33,9 @@ private:
   bool m_haveImageSize = false;
   int m_imageWidth = 0;
   int m_imageHeight = 0;
+  bool m_haveMeshStats = false; // model mesh stats resolved from the loaded vke::Model
+  size_t m_vertexCount = 0;
+  size_t m_indexCount = 0;
 
   // Display name + uuid + path/source rows common to every asset type.
   void displayHeader(const AssetRecord& record) const;
@@ -42,6 +45,9 @@ private:
 
   // Large image preview (falling back to the type icon like the browser tiles) + dimensions + size.
   void displayTextureBody(const AssetRecord& record);
+
+  // Type icon (3D preview deferred, see B3), file format + size, and mesh stats.
+  void displayModelBody(const AssetRecord& record);
 };
 
 #endif //ASSETINSPECTOR_H
