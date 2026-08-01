@@ -13,8 +13,8 @@ namespace ECS3DNetTransport;
 public static unsafe class Transport
 {
   // Hardcoded transport selection. Flip this to switch the wire protocol for the whole process.
-//   private static readonly TransportProtocol Protocol = TransportProtocol.WebSocket;
-  private static readonly TransportProtocol Protocol = TransportProtocol.Tcp;
+  private static readonly TransportProtocol Protocol = TransportProtocol.WebSocket;
+//   private static readonly TransportProtocol Protocol = TransportProtocol.Tcp;
 
   // The server callback carries the origin connection id (the C++ side routes per-client input by it);
   // the client callback has a single peer and needs none.

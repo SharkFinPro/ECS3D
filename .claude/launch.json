@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ecs3d-web-client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "source/apps/webClient", "run", "dev"],
+      "port": 3100
+    }
+  ]
+}

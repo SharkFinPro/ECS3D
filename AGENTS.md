@@ -38,6 +38,7 @@
 | `source/apps/` | The executables. `apps/CMakeLists.txt` orders them (server first — client/editor depend on it). |
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
 | `source/apps/launcher/` | The standalone C# Avalonia launcher. **Has its own `AGENTS.md`** — treat it as an independent project. |
+| `source/apps/webClient/` | The standalone Next.js/TypeScript browser port of `ECS3DClient`, rendering through a vendored WebGPU port of VulkanRenderer. **Has its own `AGENTS.md`.** Shares no build step with the C++ tree — only the wire protocol, which it reimplements byte-for-byte. |
 | `.github/workflows/` | `cmake-multi-platform.yml` — builds Release on Windows (MSVC), Linux (gcc+clang), macOS (clang) with the Vulkan SDK, then `ctest`. |
 
 ## Build System
@@ -252,6 +253,12 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
   Data+Render+EditorLib+Net+ClrHost.
 - **ECS3DLauncher** (`apps/launcher`) — a standalone C# Avalonia project-management GUI. Independent of
   the C++ toolchain and the CLR-hosting path; built via `dotnet publish`. **See its own `AGENTS.md`.**
+- **Web client** (`apps/webClient`) — a Next.js/TypeScript browser port of `ECS3DClient`: same
+  read-only replicated view, same input path, rendered with WebGPU instead of Vulkan. It is a *consumer*
+  of the server, not a second implementation of it — no sim, no scripting, no editor. Requires the
+  WebSocket transport backend (a browser can't speak the raw-TCP one) and cannot spawn a local server, so
+  it has no singleplayer path. **See its own `AGENTS.md`;** note that a component's `pack`/`unpack` now
+  has a second reader, so adding a field means threading it through the TypeScript side too.
 
 ## AI Agent Guidelines
 
