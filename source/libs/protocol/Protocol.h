@@ -8,6 +8,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace net {
@@ -59,19 +60,33 @@ enum class SceneControlOp : uint8_t {
   loadScene
 };
 
+// Types that may be bit_cast onto the wire whole. Scalars and enums qualify on their own; an aggregate
+// has to opt in by specializing this, because the general trivially copyable type is not safe to send:
+// a struct with padding would put its indeterminate bytes - whatever the stack or heap last held there -
+// in front of every connected peer, and a struct holding a pointer would send a process address out and
+// reconstitute a foreign one on the way back. Opting a type in is a claim that it has neither.
 template <typename T>
-concept Trivial = std::is_trivially_copyable_v<T>;
+inline constexpr bool wirePackable = std::is_arithmetic_v<T> || std::is_enum_v<T>;
+
+template <typename T>
+concept WireValue = std::is_trivially_copyable_v<T> && wirePackable<T>;
 
 class Message {
 public:
   explicit Message(const MessageType type) noexcept : type(type) {}
   Message() {}
 
-  template <Trivial T>
+  template <WireValue T>
   Message& write(const T& value) {
-    const auto raw = std::bit_cast<std::array<uint8_t, sizeof(T)>>(value);
-    m_payload.insert(m_payload.end(), raw.begin(), raw.end());
-    return *this;
+    // bool goes across as an explicit 0/1 byte rather than whatever sizeof(bool) is here, so the pairing
+    // read never has to trust a foreign byte to be a valid bool.
+    if constexpr (std::is_same_v<T, bool>) {
+      return write(static_cast<uint8_t>(value ? 1 : 0));
+    } else {
+      const auto raw = std::bit_cast<std::array<uint8_t, sizeof(T)>>(value);
+      m_payload.insert(m_payload.end(), raw.begin(), raw.end());
+      return *this;
+    }
   }
 
   // Length-prefixed string (uint32 size + bytes). The pairing read is MessageReader::readString.
@@ -95,15 +110,21 @@ class MessageReader {
 public:
   explicit MessageReader(const Message& message) noexcept : m_data(message.bytes()) {}
 
-  template <Trivial T>
+  template <WireValue T>
   [[nodiscard]] T read() {
-    if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
-      throw std::runtime_error("Message underflow");
+    // A byte off the network is not a bool: any value but 0 or 1 has no bool to bit_cast to, and gcc and
+    // clang genuinely miscompile such a bool into taking both branches. Narrow it here instead.
+    if constexpr (std::is_same_v<T, bool>) {
+      return read<uint8_t>() != 0;
+    } else {
+      if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
+        throw std::runtime_error("Message underflow");
 
-    std::array<uint8_t, sizeof(T)> raw{};
-    std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
-    m_offset += sizeof(T);
-    return std::bit_cast<T>(raw);
+      std::array<uint8_t, sizeof(T)> raw{};
+      std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+      m_offset += sizeof(T);
+      return std::bit_cast<T>(raw);
+    }
   }
 
   // Reads a length-prefixed string written by Message::writeString.

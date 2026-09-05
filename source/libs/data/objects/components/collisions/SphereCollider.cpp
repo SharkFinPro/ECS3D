@@ -1,6 +1,7 @@
 #include "SphereCollider.h"
 #include "../Transform.h"
 #include "../../Object.h"
+#include "WireTypes.h"
 #include <glm/gtx/component_wise.inl>
 #include <nlohmann/json.hpp>
 #include <stdexcept>

@@ -7,28 +7,24 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 namespace {
-  // Padded on purpose: the primitives bit_cast whole objects, so a type with padding is worth carrying
-  // through. Value-initialized at the call site so the padding is deterministic rather than whatever was
-  // on the stack.
+  // Trivially copyable, and padded: sending it would put the bytes between the members - whatever the
+  // stack last held there - in front of every peer. The concept has to refuse it.
   struct PaddedFields {
     int32_t first;
     float second;
     bool third;
-
-    bool operator==(const PaddedFields&) const = default;
   };
 
-  PaddedFields makePaddedFields()
-  {
-    PaddedFields fields{};
-    fields.first = -7;
-    fields.second = 0.125f;
-    fields.third = true;
+  // Trivially copyable too, and holding an address that means nothing to the peer that receives it.
+  struct HoldsAPointer {
+    const int* borrowed;
+  };
 
-    return fields;
-  }
+  template <typename T>
+  concept GoesOnTheWire = requires (net::Message message, const T& value) { message.write(value); };
 }
 
 TEST(ProtocolFraming, CarriesItsTypeAndStartsEmpty)
@@ -55,8 +51,7 @@ TEST(ProtocolFraming, RoundTripsEveryFieldWidth)
          .write<float>(1.5f)
          .write<double>(-2.25)
          .write<bool>(true)
-         .write(net::MessageType::inputState)
-         .write(makePaddedFields());
+         .write(net::MessageType::inputState);
 
   net::MessageReader reader(message);
 
@@ -69,9 +64,47 @@ TEST(ProtocolFraming, RoundTripsEveryFieldWidth)
   EXPECT_EQ(reader.read<double>(), -2.25);
   EXPECT_EQ(reader.read<bool>(), true);
   EXPECT_EQ(reader.read<net::MessageType>(), net::MessageType::inputState);
-  EXPECT_EQ(reader.read<PaddedFields>(), makePaddedFields());
 
   EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ProtocolFraming, RefusesTypesThatAreTriviallyCopyableButNotSafeToSend)
+{
+  static_assert(std::is_trivially_copyable_v<PaddedFields> && std::is_trivially_copyable_v<HoldsAPointer>,
+                "Both would have satisfied a plain trivially-copyable constraint.");
+
+  static_assert(GoesOnTheWire<uint32_t>);
+  static_assert(GoesOnTheWire<float>);
+  static_assert(GoesOnTheWire<net::MessageType>);
+
+  static_assert(!GoesOnTheWire<PaddedFields>);
+  static_assert(!GoesOnTheWire<HoldsAPointer>);
+  static_assert(!GoesOnTheWire<const int*>);
+}
+
+TEST(ProtocolFraming, ABoolOccupiesOneByteWhateverTheHostSaysItIs)
+{
+  net::Message message(net::MessageType::stateDelta);
+  message.write<bool>(true).write<bool>(false);
+
+  ASSERT_EQ(message.size(), 2u);
+  EXPECT_EQ(message.bytes()[0], 1u);
+  EXPECT_EQ(message.bytes()[1], 0u);
+}
+
+TEST(ProtocolFraming, AnyNonZeroByteReadsBackAsTrue)
+{
+  net::Message message(net::MessageType::inputState);
+  message.write<uint8_t>(0x2Au).write<uint8_t>(0xFFu).write<uint8_t>(0u);
+
+  net::MessageReader reader(message);
+
+  // A byte off the network is not a bool. Reading one as a bool has to narrow rather than reinterpret,
+  // or a value outside 0/1 is a bool with no value - which compilers optimize on the assumption it
+  // cannot happen, taking both sides of the same branch.
+  EXPECT_TRUE(reader.read<bool>());
+  EXPECT_TRUE(reader.read<bool>());
+  EXPECT_FALSE(reader.read<bool>());
 }
 
 TEST(ProtocolFraming, WritesExactlyTheSizeOfWhatItIsGiven)

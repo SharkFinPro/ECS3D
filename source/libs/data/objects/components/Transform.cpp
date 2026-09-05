@@ -1,5 +1,6 @@
 #include "Transform.h"
 #include "../Object.h"
+#include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 
