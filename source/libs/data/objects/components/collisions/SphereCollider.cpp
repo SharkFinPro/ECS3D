@@ -93,7 +93,7 @@ glm::vec3 SphereCollider::getPosition()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_position.value() + transform->getPosition();
+  return m_position.get() + transform->getPosition();
 }
 
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
@@ -102,7 +102,7 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    return direction * getScaledRadius(transform) + transform->getPosition() + m_position.value();
+    return direction * getScaledRadius(transform) + transform->getPosition() + m_position.get();
   }
 
   return { 0, 0, 0 };
@@ -147,5 +147,5 @@ float SphereCollider::getScaledRadius(const std::shared_ptr<Transform>& transfor
 {
   const auto maxScale = compMax(transform->getScale());
 
-  return maxScale * m_radius.value();
+  return maxScale * m_radius.get();
 }

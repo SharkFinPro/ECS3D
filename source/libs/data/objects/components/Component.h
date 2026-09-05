@@ -91,13 +91,8 @@ public:
     m_liveValue = m_initialValue;
   }
 
-  // Const so the active value can only be written through set(): a caller holding a mutable reference
-  // across a start() would find it pointing at the other value.
-  [[nodiscard]] const T& value() const
-  {
-    return m_live ? m_liveValue : m_initialValue;
-  }
-
+  // Deliberately by value, and the only reader: a reference would name whichever member is active at
+  // the time, and start() swaps which one that is.
   [[nodiscard]] T get() const
   {
     return m_live ? m_liveValue : m_initialValue;
@@ -130,6 +125,11 @@ class Component {
 public:
   explicit Component(ComponentType type, ComponentType subType = ComponentType::SubComponentType_none);
   virtual ~Component() = default;
+
+  // m_variables holds raw pointers into this object, so a copy would register the original's variables
+  // and leave its own permanently stopped. Components are shared through shared_ptr, never copied.
+  Component(const Component&) = delete;
+  Component& operator=(const Component&) = delete;
 
   [[nodiscard]] ComponentType getType() const;
 
