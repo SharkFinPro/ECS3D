@@ -19,6 +19,7 @@ set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(${PROJECT_NAME}
+  AssetRegistryTest.cpp
   LightRendererTest.cpp
   ObjectHierarchyTest.cpp
   SmokeTest.cpp
