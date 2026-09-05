@@ -390,6 +390,13 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
       return;
     }
 
+    // Dropping an object back onto the parent it already has would only move it to the end of the
+    // sibling list and cost a re-snapshot.
+    if (object->getParent() == parent)
+    {
+      return;
+    }
+
     if (const auto oldParent = object->getParent())
     {
       oldParent->removeChild(object);
@@ -494,7 +501,18 @@ void applyObjectSpawned(ObjectManager& objectManager, const net::Message& messag
 
   auto object = std::make_shared<Object>();
   objectManager.addObject(object);
-  object->unpack(reader);
+
+  try
+  {
+    object->unpack(reader);
+  }
+  catch (...)
+  {
+    // unpack registers each node with the manager before reading it, so a payload that runs out part way
+    // through would otherwise strand a half-built subtree in the live scene.
+    objectManager.discardSubtree(object);
+    throw;
+  }
 }
 
 void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message)

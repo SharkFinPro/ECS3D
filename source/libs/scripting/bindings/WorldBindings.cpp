@@ -40,7 +40,7 @@ namespace {
 
   // Object::start() covers only its own components; a prefab instance is a whole subtree, and every node
   // needs live component state before physics/replication read it.
-  void startSubtree(const Object& object)
+  void startSubtree(Object& object)
   {
     object.start();
 

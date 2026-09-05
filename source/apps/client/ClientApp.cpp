@@ -18,6 +18,7 @@
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <chrono>
+#include <exception>
 #include <iostream>
 #include <random>
 #include <thread>
@@ -80,7 +81,16 @@ void ClientApp::run()
     net::Message message;
     while (m_netClient->poll(message))
     {
-      applyMessage(message);
+      // A malformed message costs the message, not the session. Without this the exception escapes run()
+      // and main exits, so one bad packet closes the window.
+      try
+      {
+        applyMessage(message);
+      }
+      catch (const std::exception& e)
+      {
+        std::cerr << "[Client] Failed to apply a message from the server: " << e.what() << std::endl;
+      }
     }
 
     sendInput();
