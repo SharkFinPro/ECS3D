@@ -83,7 +83,7 @@ void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
 
   // value() (not at()): projects saved before triggers/layers existed have no such key.
   m_isTrigger = componentData.value("isTrigger", false);
-  m_layer = componentData.value("layer", 0u);
+  setLayer(componentData.value("layer", 0u));
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
 }
 
@@ -126,7 +126,7 @@ void SphereCollider::unpack(net::MessageReader& messageReader)
   m_position.set(messageReader.read<glm::vec3>());
   m_radius.set(messageReader.read<float>());
   m_isTrigger = messageReader.read<bool>();
-  m_layer = messageReader.read<uint32_t>();
+  setLayer(messageReader.read<uint32_t>());
   m_mask = messageReader.read<uint32_t>();
 }
 
