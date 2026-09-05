@@ -379,7 +379,15 @@ void ServerApp::handleEditComponent(const net::Message& message) const
   // other view (and the editing client, idempotently) converges.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), message);
+    // A payload the server itself cannot parse would fail the same way on every client, so it is
+    // dropped rather than rebroadcast. Unlike a missing target, which is routine on a view, this is
+    // always a bug: corruption, a truncated read, or a protocol mismatch.
+    if (replication::applyComponentEdit(*scene->getObjectManager(), message) ==
+        replication::ComponentEditResult::malformedPayload)
+    {
+      logMessage("Error", "Discarded a malformed component edit.");
+      return;
+    }
 
     m_netServer->broadcast(message);
 

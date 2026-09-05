@@ -34,7 +34,18 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
 [[nodiscard]] net::Message buildComponentEdit(const uuids::uuid& objectUUID,
                                               const std::shared_ptr<Component>& component);
 
-void applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
+// Why an edit did not land. The failures mean different things: a payload that will not parse is always a
+// bug - corruption, a truncated read, a protocol mismatch - while a missing target is routine, since the
+// server rebroadcasts every edit and a view can receive one for an object it has not been sent yet or has
+// already dropped. Collapsing them into one silent return hides the serious case behind the benign one.
+enum class ComponentEditResult {
+  applied,
+  malformedPayload,
+  unknownObject,
+  unknownComponent
+};
+
+ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
 
 // Structural edits (add/remove object or component). Unlike a value edit these change the scene graph,
 // so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op - the
