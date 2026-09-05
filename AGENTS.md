@@ -25,7 +25,7 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, MSVC export-all-symbols. Just `add_subdirectory(source)`. |
+| `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `include(CTest)`, MSVC export-all-symbols. Then `add_subdirectory(source)`. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
@@ -44,7 +44,7 @@
 ## Build System
 
 - **CMake ≥ 3.29**, **C++23**. Executables land in `bin/` when ECS3D is the top-level project, which is
-  also where `include(CTest)` runs (so `BUILD_TESTING` only exists for a top-level build).
+  also where `include(CTest)` runs.
 - **Dependencies** (`FetchContent` in `source/libs/CMakeLists.txt`): nlohmann/json 3.12.0, glm 1.0.1,
   stduuid 1.2.3, nativefiledialog-extended (nfd) 1.3.0, and VulkanEngine (`main`). They are declared at
   the libs scope so every library links them directly. **glm is declared first, on purpose:**
@@ -61,11 +61,13 @@
   server's `defaultAssets/` are copied into `bin/assets/` at configure time.
 - **Source lists are explicit** in each lib's `CMakeLists.txt` (not globs). **Add new engine files to
   the owning library's list.**
-- **Tests** (`source/tests/`) build as `ECS3DTests` and link only the render-free libraries, so the suite
-  stays runnable without a window, GPU or server. GoogleTest is fetched in `tests/CMakeLists.txt` rather
-  than with the shared deps, so `-DBUILD_TESTING=OFF` skips both the fetch and the target.
-  `gtest_discover_tests` registers every case with CTest, and the `check` target builds the suite and runs
-  it: `cmake --build <build-dir> --target check`.
+- **Tests** (`source/tests/`) build as `ECS3DTests`, linking only `ECS3DData`, so the suite stays runnable
+  without a window, GPU or server. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
+  `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
+  `PROJECT_IS_TOP_LEVEL AND BUILD_TESTING` — `BUILD_TESTING` is a cache variable a parent project may
+  already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
+  GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
+  suite and runs it: `cmake --build <build-dir> --target check`.
 - **Dependency direction (must hold):** `protocol` → nothing. `data` → protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + nfd. `net`/`scripting` →
   data + clrHost. Apps compose these. **`data` must never gain a Vulkan or ImGui include** — that

@@ -52,6 +52,11 @@ public:
 
   void removeObject(const std::shared_ptr<Object>& object);
 
+  // Drop a subtree that was never fully built. Not the deletion lifecycle: it defers nothing and does not
+  // reparent children, it just unregisters what was registered. For a subtree that is already live in the
+  // scene, removeObject is the one you want. Taken by value because it erases from vectors it may alias.
+  void discardSubtree(std::shared_ptr<Object> root);
+
   void deleteObjectsMarkedForDeletion();
 
   [[nodiscard]] std::shared_ptr<Object> getObjectByUUID(uuids::uuid uuid) const;
@@ -71,6 +76,8 @@ private:
 
   std::mt19937 m_rng;
   uuids::uuid_random_generator m_uuidGenerator;
+
+  void eraseSubtree(const std::shared_ptr<Object>& object);
 
   // Recursively replace the serialized object's (and its children's) uuids with fresh ones.
   void reassignUUIDs(nlohmann::json& objectData);

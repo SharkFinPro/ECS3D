@@ -53,14 +53,16 @@ public:
   [[nodiscard]] std::string getName() const;
   void setName(const std::string& name);
 
-  void start() const;
+  void start();
 
-  void stop() const;
+  void stop();
 
   [[nodiscard]] nlohmann::json serialize();
 
   [[nodiscard]] uuids::uuid getUUID() const;
 
+  // True when object sits somewhere below this one in the hierarchy. An object is not its own
+  // ancestor, so a caller guarding against cycles has to check for self separately.
   [[nodiscard]] bool isAncestorOf(const std::shared_ptr<Object>& object) const;
 
   [[nodiscard]] const std::unordered_map<ComponentType, std::shared_ptr<Component>>& getComponents() const;
@@ -76,6 +78,9 @@ private:
   std::vector<std::shared_ptr<Component>> m_scripts;
 
   ObjectManager* m_manager = nullptr;
+
+  // Whether this object has been started, so a component added to it mid-run is started too.
+  bool m_started = false;
 
   std::weak_ptr<Object> m_parent;
 
