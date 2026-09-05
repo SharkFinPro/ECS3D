@@ -87,7 +87,7 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   {
     gc::sectionLabel("Objects");
 
-    // getAllObjects, not getObjects: the latter is the root list, so a nested scene undercounted.
+    // Every object in the scene, not just the roots - matching the count the apps log on a snapshot.
     const auto count = std::to_string(objectManager->getAllObjects().size());
     const float pillWidth = ImGui::CalcTextSize(count.c_str()).x + 18.0f;
     ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - pillWidth);
