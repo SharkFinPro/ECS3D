@@ -24,6 +24,7 @@ add_executable(${PROJECT_NAME}
   AssetRegistryTest.cpp
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
+  CollisionMathTest.cpp
   LightRendererTest.cpp
   SettingsStoreTest.cpp
   ObjectSpawnTest.cpp
@@ -33,12 +34,14 @@ add_executable(${PROJECT_NAME}
   ObjectHierarchyTest.cpp
   ProtocolFramingTest.cpp
   SmokeTest.cpp
+  TestPrinters.h
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
   ECS3DNetProtocol
   ECS3DSettings
+  ECS3DSim
   GTest::gtest_main
 )
 

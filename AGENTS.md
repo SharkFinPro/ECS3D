@@ -85,8 +85,8 @@
 (populated by `registerDataComponents()`) is the type-name → factory table that deserialization uses,
 so no layer needs to name concrete component types across the boundary.
 
-**Client / server.** `ServerApp` is authoritative and headless — it is the **only** thing that links
-`ECS3DSim` + `ECS3DScripting`. It runs a fixed-timestep loop (`scriptSystem.variableUpdate` →
+**Client / server.** `ServerApp` is authoritative and headless — it is the **only** application that links
+`ECS3DSim` + `ECS3DScripting` (the test suite also links `ECS3DSim`, to reach the collision math). It runs a fixed-timestep loop (`scriptSystem.variableUpdate` →
 `fixedUpdate` → `physicsSystem` → `collisionSystem`) and streams state out. `ClientApp` renders + sends
 input, linking `ECS3DRender` but never sim/scripting. `EditorApp` is a client plus the ImGui tooling
 (`ECS3DEditorLib`); the authoritative scene lives on a spawned `--edit` server, so edits become
