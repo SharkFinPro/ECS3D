@@ -25,6 +25,7 @@ add_executable(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
+  ECS3DNetProtocol
   GTest::gtest_main
 )
 

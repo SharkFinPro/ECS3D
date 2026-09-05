@@ -9,13 +9,26 @@
 #include <string>
 
 namespace {
-  struct Pod {
+  // Padded on purpose: the primitives bit_cast whole objects, so a type with padding is worth carrying
+  // through. Value-initialized at the call site so the padding is deterministic rather than whatever was
+  // on the stack.
+  struct PaddedFields {
     int32_t first;
     float second;
     bool third;
 
-    bool operator==(const Pod&) const = default;
+    bool operator==(const PaddedFields&) const = default;
   };
+
+  PaddedFields makePaddedFields()
+  {
+    PaddedFields fields{};
+    fields.first = -7;
+    fields.second = 0.125f;
+    fields.third = true;
+
+    return fields;
+  }
 }
 
 TEST(ProtocolFraming, CarriesItsTypeAndStartsEmpty)
@@ -43,7 +56,7 @@ TEST(ProtocolFraming, RoundTripsEveryFieldWidth)
          .write<double>(-2.25)
          .write<bool>(true)
          .write(net::MessageType::inputState)
-         .write(Pod{ -7, 0.125f, true });
+         .write(makePaddedFields());
 
   net::MessageReader reader(message);
 
@@ -56,7 +69,7 @@ TEST(ProtocolFraming, RoundTripsEveryFieldWidth)
   EXPECT_EQ(reader.read<double>(), -2.25);
   EXPECT_EQ(reader.read<bool>(), true);
   EXPECT_EQ(reader.read<net::MessageType>(), net::MessageType::inputState);
-  EXPECT_EQ(reader.read<Pod>(), (Pod{ -7, 0.125f, true }));
+  EXPECT_EQ(reader.read<PaddedFields>(), makePaddedFields());
 
   EXPECT_EQ(reader.remaining(), 0u);
 }
@@ -83,18 +96,12 @@ TEST(ProtocolFraming, EncodesInNativeByteOrder)
   ASSERT_EQ(bytes.size(), 4u);
 
   // The primitives bit_cast straight into the payload, so the wire carries host byte order with no
-  // normalization. Every platform this builds on is little-endian; a big-endian port would need the
-  // format to grow a byte-order contract rather than this expectation to be relaxed.
-  if constexpr (std::endian::native == std::endian::little)
-  {
-    EXPECT_EQ(bytes[0], 0x04u);
-    EXPECT_EQ(bytes[3], 0x01u);
-  }
-  else
-  {
-    EXPECT_EQ(bytes[0], 0x01u);
-    EXPECT_EQ(bytes[3], 0x04u);
-  }
+  // normalization at all - two peers of different endianness would disagree about every integer.
+  static_assert(std::endian::native == std::endian::little,
+                "The wire carries host byte order; a big-endian port needs a byte-order contract first.");
+
+  EXPECT_EQ(bytes[0], 0x04u);
+  EXPECT_EQ(bytes[3], 0x01u);
 }
 
 TEST(ProtocolFraming, RoundTripsStringsIncludingAwkwardOnes)
@@ -170,6 +177,32 @@ TEST(ProtocolFraming, ReadingPastTheEndThrows)
 
   // Enough bytes for the value written, not enough for the one asked for.
   EXPECT_THROW(static_cast<void>(reader.read<uint32_t>()), std::runtime_error);
+}
+
+TEST(ProtocolFraming, ReadsRightUpToTheLastByte)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.write<uint32_t>(3);
+  message.write<uint8_t>('a');
+  message.write<uint8_t>('b');
+  message.write<uint8_t>('c');
+
+  net::MessageReader reader(message);
+
+  // The bounds checks are strict comparisons, so exactly-enough has to succeed rather than trip them.
+  EXPECT_EQ(reader.readString(), "abc");
+  EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ProtocolFraming, ReadsAValueThatExactlyFillsThePayload)
+{
+  net::Message message(net::MessageType::stateDelta);
+  message.write<uint32_t>(0x01020304u);
+
+  net::MessageReader reader(message);
+
+  EXPECT_EQ(reader.read<uint32_t>(), 0x01020304u);
+  EXPECT_EQ(reader.remaining(), 0u);
 }
 
 TEST(ProtocolFraming, AStringLengthLongerThanThePayloadThrows)
