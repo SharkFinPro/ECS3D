@@ -42,6 +42,8 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <chrono>
+#include <cstddef>
+#include <exception>
 #include <iostream>
 #include <optional>
 #include <random>
@@ -367,7 +369,16 @@ void EditorApp::run()
     net::Message message;
     while (m_netClient->poll(message))
     {
-      applyMessage(message);
+      // A malformed message costs the message, not the session. Without this the exception escapes run()
+      // and main exits, losing whatever was being edited.
+      try
+      {
+        applyMessage(message);
+      }
+      catch (const std::exception& e)
+      {
+        logMessage("Error", std::string("Failed to apply a message from the server: ") + e.what());
+      }
     }
 
     sendInput();
@@ -1008,6 +1019,14 @@ void EditorApp::variableUpdate()
 
 void EditorApp::logMessage(const std::string& level, const std::string& message)
 {
+  // Capped, and oldest first: a message stream the editor cannot parse produces one of these per tick,
+  // and the panel re-renders every line it holds each frame.
+  constexpr size_t maxMessages = 200;
+  if (m_errorMessages.size() >= maxMessages)
+  {
+    m_errorMessages.erase(m_errorMessages.begin());
+  }
+
   m_errorMessages.push_back("[" + level + "] " + message);
 }
 

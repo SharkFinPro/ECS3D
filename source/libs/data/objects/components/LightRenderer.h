@@ -42,15 +42,17 @@ public:
 private:
   bool m_isSpotLight = false;
 
-  // A light added in the editor should light something. Black with no diffuse or specular contributed
-  // nothing until all four were changed by hand; these match the point lights the default project uses.
+  // Matches the default project's point lights, so a light added in the editor lights something. Ambient
+  // stays 0 on purpose: it is an unattenuated flat fill, so only one light in a scene should carry it.
   glm::vec3 m_color = glm::vec3(1.0f);
   float m_ambient = 0.0f;
   float m_diffuse = 0.75f;
   float m_specular = 0.75f;
 
+  // Only read once the light is a spot light, where a zero direction points nowhere and a zero cone
+  // angle closes the cone entirely. The angle is in degrees and doubles into the shadow frustum's fov.
   glm::vec3 m_direction = glm::vec3(0, -1, 0);
-  float m_coneAngle = 0.0f;
+  float m_coneAngle = 30.0f;
 };
 
 
