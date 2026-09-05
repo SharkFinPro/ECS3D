@@ -23,8 +23,9 @@ enum class MessageType : uint8_t {
   snapshot,     // server -> client: full project/scene state (ProjectPacker::pack())
   stateDelta,   // server -> client: per-tick transform stream, packed binary (replication::packStateDelta)
   inputState,    // client -> server: local input for the scripts to read. Payload: focused (bool),
-                 // key count (size_t) + that many key codes (int), then the mouse block: mouseX, mouseY,
-                 // mouseDeltaX, mouseDeltaY, scrollY (5x float), buttons (uint8 bitmask L/R/M)
+                 // key count (uint32) + that many key codes (int32), then the mouse block: mouseX, mouseY,
+                 // mouseDeltaX, mouseDeltaY, scrollY (5x float), buttons (uint8 bitmask L/R/M). Every
+                 // field is fixed width so a 32-bit peer and a 64-bit one agree on the layout.
   editComponent, // editor -> server -> all: a single component value edit (replication::buildComponentEdit)
   sceneEdit,     // editor -> server: a structural edit (add/remove object/component); server re-snapshots
   sceneControl,  // editor -> server: scene lifecycle (SceneControlOp + optional scene uuid); server re-snapshots

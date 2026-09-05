@@ -582,11 +582,19 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
   const auto focused = reader.read<bool>();
   InputState::setFocused(slot, focused);
 
-  const auto numKeys = reader.read<size_t>();
+  // The count arrives from the network, so bound it against what is left of the payload before sizing
+  // anything: the message cannot hold more key codes than it has bytes for, and without the check a
+  // client asking for a billion keys gets the allocation attempted first and the underflow only after.
+  const auto numKeys = reader.read<uint32_t>();
+  if (numKeys > reader.remaining() / sizeof(int32_t))
+  {
+    throw std::runtime_error("inputState claims more keys than the payload can hold");
+  }
+
   std::vector<int> keysPressed(numKeys);
   for (auto& key : keysPressed)
   {
-    key = reader.read<int>();
+    key = reader.read<int32_t>();
   }
 
   InputState::setKeysPressed(slot, keysPressed);

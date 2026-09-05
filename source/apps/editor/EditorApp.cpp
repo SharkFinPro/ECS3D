@@ -482,10 +482,10 @@ void EditorApp::sendInput()
 
   net::Message message(net::MessageType::inputState);
   message.write(snapshot.focused);
-  message.write(snapshot.keys.size());
+  message.write(static_cast<uint32_t>(snapshot.keys.size()));
   for (const auto& key : snapshot.keys)
   {
-    message.write(key);
+    message.write(static_cast<int32_t>(key));
   }
 
   message.write(snapshot.mouseX);
