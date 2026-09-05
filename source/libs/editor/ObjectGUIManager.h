@@ -55,7 +55,14 @@ private:
   // False when the connected server is read-only (not in edit mode); gates the mutating UI.
   bool m_editable = true;
 
+  // The object being dragged, resolved once per frame and cleared at the end of it.
+  std::shared_ptr<Object> m_dragSource;
+
   void displayObjectTree(const std::shared_ptr<Object>& object);
+
+  // False for a row the current drag must not be dropped onto, so the row registers no drop target and
+  // gives no drop feedback.
+  [[nodiscard]] bool canAcceptObjectDrop(const std::shared_ptr<Object>& target) const;
 
   // The "Delete Object?" confirmation modal for m_objectPendingDeletion. Confirming (Yes / Enter) sends
   // a removeObject scene edit; cancelling (No / Escape), or the object vanishing, clears the prompt.
