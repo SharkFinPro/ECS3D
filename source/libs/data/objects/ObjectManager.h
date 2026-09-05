@@ -52,10 +52,10 @@ public:
 
   void removeObject(const std::shared_ptr<Object>& object);
 
-  // Drop a subtree that was never fully built. Unlike removeObject this is not the deletion lifecycle -
-  // it does not reparent children or defer anything; it erases exactly what was registered. The spawn
-  // path uses it to unwind when a packed object fails to unpack part way through.
-  void discardSubtree(const std::shared_ptr<Object>& root);
+  // Drop a subtree that was never fully built. Not the deletion lifecycle: it defers nothing and does not
+  // reparent children, it just unregisters what was registered. For a subtree that is already live in the
+  // scene, removeObject is the one you want. Taken by value because it erases from vectors it may alias.
+  void discardSubtree(std::shared_ptr<Object> root);
 
   void deleteObjectsMarkedForDeletion();
 
