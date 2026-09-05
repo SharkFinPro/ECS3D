@@ -53,9 +53,9 @@ public:
   [[nodiscard]] std::string getName() const;
   void setName(const std::string& name);
 
-  void start() const;
+  void start();
 
-  void stop() const;
+  void stop();
 
   [[nodiscard]] nlohmann::json serialize();
 
@@ -76,6 +76,9 @@ private:
   std::vector<std::shared_ptr<Component>> m_scripts;
 
   ObjectManager* m_manager = nullptr;
+
+  // Whether the scene this object belongs to is running, so a component added mid-run can be started.
+  bool m_started = false;
 
   std::weak_ptr<Object> m_parent;
 

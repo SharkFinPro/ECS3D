@@ -99,6 +99,13 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
   {
     component->setOwner(this);
   }
+
+  // Added to an object that is already running: without this its ComponentVariables stay backed by the
+  // authored value, so a runtime write would be saved into the scene as if it had been authored.
+  if (m_started)
+  {
+    component->start();
+  }
 }
 
 void Object::removeComponent(const std::shared_ptr<Component>& component)
@@ -138,8 +145,10 @@ void Object::setName(const std::string& name)
   m_name = name;
 }
 
-void Object::start() const
+void Object::start()
 {
+  m_started = true;
+
   for (const auto& [type, component] : m_components)
   {
     component->start();
@@ -151,8 +160,10 @@ void Object::start() const
   }
 }
 
-void Object::stop() const
+void Object::stop()
 {
+  m_started = false;
+
   for (const auto& [type, component] : m_components)
   {
     component->stop();
