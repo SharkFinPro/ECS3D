@@ -22,6 +22,7 @@ add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ComponentLookupTest.cpp
   AssetRegistryTest.cpp
+  ComponentEditTest.cpp
   CollisionMathTest.cpp
   LightRendererTest.cpp
   ObjectSpawnTest.cpp
