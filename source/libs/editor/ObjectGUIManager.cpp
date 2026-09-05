@@ -50,6 +50,33 @@ namespace {
 
     return gc::SecIcon::block;
   }
+
+  // A reparent that drops an object onto itself or onto one of its own descendants would cycle the
+  // graph, so the row refuses the drop instead of sending an edit the server rejects anyway.
+  [[nodiscard]] bool dropWouldCycle(const std::shared_ptr<Object>& target, const ImGuiPayload* payload)
+  {
+    if (!payload || !payload->IsDataType("object"))
+    {
+      return false;
+    }
+
+    const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+    const auto dragged = uuids::uuid::from_string(uuidStr);
+    if (!dragged.has_value())
+    {
+      return false;
+    }
+
+    for (auto current = target; current; current = current->getParent())
+    {
+      if (current->getUUID() == dragged.value())
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
 }
 
 void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
@@ -226,7 +253,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     ImGui::EndDragDropSource();
   }
 
-  if (m_editable && ImGui::BeginDragDropTarget())
+  if (m_editable && !dropWouldCycle(object, ImGui::GetDragDropPayload()) && ImGui::BeginDragDropTarget())
   {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
     {
