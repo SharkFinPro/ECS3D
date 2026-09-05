@@ -271,10 +271,12 @@ void ClientApp::handleStateDelta(const net::Message& message) const
 
 void ClientApp::handleEditComponent(const net::Message& message) const
 {
-  // The server applied an editor's component change; mirror it into the replicated scene.
+  // The server applied an editor's component change; mirror it into the replicated scene. The result is
+  // ignored on purpose: a view legitimately receives edits for objects it has not been sent yet or has
+  // already dropped, and the server only rebroadcasts what it applied itself.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), message);
+    static_cast<void>(replication::applyComponentEdit(*scene->getObjectManager(), message));
   }
 }
 

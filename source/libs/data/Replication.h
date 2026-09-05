@@ -34,7 +34,24 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
 [[nodiscard]] net::Message buildComponentEdit(const uuids::uuid& objectUUID,
                                               const std::shared_ptr<Component>& component);
 
-void applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
+// How an edit ended. The failures mean different things: a payload that will not parse is always a bug -
+// corruption, a truncated read, a protocol mismatch - while a missing target is routine, since the server
+// rebroadcasts every edit and a view can receive one for an object it has not been sent yet or has
+// already dropped. Collapsing them into one silent return hid the serious case behind the benign one.
+//
+// partiallyApplied is the ugly middle: a component unpacks field by field as it reads, so a payload that
+// runs out mid-body leaves it half written. The authority recovers by re-snapshotting.
+//
+// Not [[nodiscard]]: a replicated view legitimately ignores every failure here. The authority does not.
+enum class ComponentEditResult {
+  applied,
+  malformedPayload,
+  partiallyApplied,
+  unknownObject,
+  unknownComponent
+};
+
+ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
 
 // Structural edits (add/remove object or component). Unlike a value edit these change the scene graph,
 // so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op - the
