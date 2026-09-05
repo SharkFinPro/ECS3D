@@ -33,6 +33,7 @@ add_executable(${PROJECT_NAME}
   RuntimeComponentTest.cpp
   ObjectHierarchyTest.cpp
   ProtocolFramingTest.cpp
+  WireTypesTest.cpp
   SmokeTest.cpp
   TestPrinters.h
 )

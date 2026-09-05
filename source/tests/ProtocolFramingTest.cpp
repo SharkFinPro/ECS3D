@@ -10,8 +10,8 @@
 #include <type_traits>
 
 namespace {
-  // Trivially copyable, and padded: sending it would put the bytes between the members - whatever the
-  // stack last held there - in front of every peer. The concept has to refuse it.
+  // Trivially copyable, and padded: the bool leaves three trailing bytes holding whatever the stack last
+  // put there, and sending it would put them in front of every peer. The concept has to refuse it.
   struct PaddedFields {
     int32_t first;
     float second;
@@ -80,13 +80,30 @@ TEST(ProtocolFraming, RefusesTypesThatAreTriviallyCopyableButNotSafeToSend)
   static_assert(!GoesOnTheWire<PaddedFields>);
   static_assert(!GoesOnTheWire<HoldsAPointer>);
   static_assert(!GoesOnTheWire<const int*>);
+
+  // 16 bytes of which only 10 carry value on the x86-64 System V ABI, and 8 on MSVC - the padded scalar.
+  static_assert(!GoesOnTheWire<long double>);
 }
 
-TEST(ProtocolFraming, ABoolOccupiesOneByteWhateverTheHostSaysItIs)
+TEST(ProtocolFraming, ACvQualifiedBoolIsStillNarrowedRatherThanReinterpreted)
+{
+  net::Message message(net::MessageType::inputState);
+  message.write<uint8_t>(0x2Au);
+
+  net::MessageReader reader(message);
+
+  // Spelled with a qualifier the bool branch keys on remove_cv_t, or the byte would be bit_cast into a
+  // bool holding a value no bool has - the undefined case the plain spelling already avoids.
+  EXPECT_TRUE(reader.read<const bool>());
+}
+
+TEST(ProtocolFraming, ABoolIsWrittenAsOneZeroOrOneByte)
 {
   net::Message message(net::MessageType::stateDelta);
   message.write<bool>(true).write<bool>(false);
 
+  // A format lock rather than a test of the narrowing: sizeof(bool) is already 1 everywhere this builds,
+  // so the byte written is what a peer of any vintage expects to read.
   ASSERT_EQ(message.size(), 2u);
   EXPECT_EQ(message.bytes()[0], 1u);
   EXPECT_EQ(message.bytes()[1], 0u);
