@@ -362,6 +362,13 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
       return;
     }
 
+    // Dropping an object back onto the parent it already has would only move it to the end of the
+    // sibling list and cost a re-snapshot.
+    if (object->getParent() == parent)
+    {
+      return;
+    }
+
     if (const auto oldParent = object->getParent())
     {
       oldParent->removeChild(object);
