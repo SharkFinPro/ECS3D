@@ -77,7 +77,7 @@ private:
 
   ObjectManager* m_manager = nullptr;
 
-  // Whether the scene this object belongs to is running, so a component added mid-run can be started.
+  // Whether this object has been started, so a component added to it mid-run is started too.
   bool m_started = false;
 
   std::weak_ptr<Object> m_parent;

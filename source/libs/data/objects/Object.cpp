@@ -90,9 +90,11 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
 
     m_scripts.push_back(component);
   }
-  else
+  else if (!m_components.emplace(component->getType(), component).second)
   {
-    m_components.emplace(component->getType(), component);
+    // An object holds one component per type, so a second of the same type is not added - and must not
+    // be given an owner or started, or it would outlive the call as a live orphan.
+    return;
   }
 
   if (setOwner)
@@ -147,6 +149,13 @@ void Object::setName(const std::string& name)
 
 void Object::start()
 {
+  // Idempotent: a second start without an intervening stop would re-seed every live value from the
+  // authored one, silently discarding whatever the run had done to it.
+  if (m_started)
+  {
+    return;
+  }
+
   m_started = true;
 
   for (const auto& [type, component] : m_components)
@@ -162,6 +171,11 @@ void Object::start()
 
 void Object::stop()
 {
+  if (!m_started)
+  {
+    return;
+  }
+
   m_started = false;
 
   for (const auto& [type, component] : m_components)
