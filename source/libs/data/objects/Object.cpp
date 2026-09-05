@@ -287,6 +287,17 @@ void Object::unpack(net::MessageReader& messageReader)
 {
   // Symmetric with pack(): reconstructs this object from scratch, creating any missing components,
   // scripts, and child objects (so it works on a fresh, empty Object as well as an existing one).
+  //
+  // Reconstruction writes authored values, so an object that is already running is stopped for the
+  // duration and started again at the end, which re-seeds every live value from what was just read.
+  // Unpacking into a started object would otherwise write through to the live slot and leave the
+  // authored value at its constructor default, to be saved back later as if that were authored.
+  const bool wasStarted = m_started;
+  if (wasStarted)
+  {
+    stop();
+  }
+
   m_uuid = uuids::uuid::from_string(messageReader.readString()).value();
   m_name = messageReader.readString();
 
@@ -357,6 +368,11 @@ void Object::unpack(net::MessageReader& messageReader)
     m_manager->addObject(child);
 
     child->unpack(messageReader);
+  }
+
+  if (wasStarted)
+  {
+    start();
   }
 }
 

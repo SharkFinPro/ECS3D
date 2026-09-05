@@ -36,13 +36,15 @@ public:
   // Object::serialize() blob - see AssetRegistry::getPrefabBody) and the shared core of duplicateObject.
   //
   // Throws if objectData isn't a well-formed serialized object (unknown component type, missing uuid/name);
-  // callers on the tick loop must guard. The returned object is NOT started - a caller spawning into a
-  // running scene starts it (and its children) itself.
+  // callers on the tick loop must guard. Every node is registered through addObject, so the subtree comes
+  // back started when the manager is running.
   std::shared_ptr<Object> instantiate(const nlohmann::json& objectData);
 
-  void start() const;
+  // Whether the scene is running. addObject starts what it registers while this holds, so an object added
+  // mid-run is live rather than inert - see the note there.
+  void start();
 
-  void stop() const;
+  void stop();
 
   [[nodiscard]] nlohmann::json serialize() const;
 
@@ -73,6 +75,8 @@ private:
   std::vector<std::shared_ptr<Object>> m_allObjects;
 
   std::vector<std::shared_ptr<Object>> m_objectsToRemove;
+
+  bool m_started = false;
 
   std::mt19937 m_rng;
   uuids::uuid_random_generator m_uuidGenerator;
