@@ -18,11 +18,13 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(${PROJECT_NAME}
+  SettingsStoreTest.cpp
   SmokeTest.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
+  ECS3DSettings
   GTest::gtest_main
 )
 
