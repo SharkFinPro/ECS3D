@@ -42,6 +42,7 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <chrono>
+#include <cstddef>
 #include <exception>
 #include <iostream>
 #include <optional>
@@ -1018,6 +1019,14 @@ void EditorApp::variableUpdate()
 
 void EditorApp::logMessage(const std::string& level, const std::string& message)
 {
+  // Capped, and oldest first: a message stream the editor cannot parse produces one of these per tick,
+  // and the panel re-renders every line it holds each frame.
+  constexpr size_t maxMessages = 200;
+  if (m_errorMessages.size() >= maxMessages)
+  {
+    m_errorMessages.erase(m_errorMessages.begin());
+  }
+
   m_errorMessages.push_back("[" + level + "] " + message);
 }
 
