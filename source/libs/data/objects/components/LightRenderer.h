@@ -42,12 +42,14 @@ public:
 private:
   bool m_isSpotLight = false;
 
-  glm::vec3 m_color = glm::vec3(0);
+  // A light added in the editor should light something. Black with no diffuse or specular contributed
+  // nothing until all four were changed by hand; these match the point lights the default project uses.
+  glm::vec3 m_color = glm::vec3(1.0f);
   float m_ambient = 0.0f;
-  float m_diffuse = 0.0f;
-  float m_specular = 0.0f;
+  float m_diffuse = 0.75f;
+  float m_specular = 0.75f;
 
-  glm::vec3 m_direction = glm::vec3(0);
+  glm::vec3 m_direction = glm::vec3(0, -1, 0);
   float m_coneAngle = 0.0f;
 };
 
