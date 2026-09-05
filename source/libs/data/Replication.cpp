@@ -466,7 +466,18 @@ void applyObjectSpawned(ObjectManager& objectManager, const net::Message& messag
 
   auto object = std::make_shared<Object>();
   objectManager.addObject(object);
-  object->unpack(reader);
+
+  try
+  {
+    object->unpack(reader);
+  }
+  catch (...)
+  {
+    // unpack registers each node with the manager before reading it, so a payload that runs out part way
+    // through would otherwise strand a half-built subtree in the live scene.
+    objectManager.discardSubtree(object);
+    throw;
+  }
 }
 
 void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message)

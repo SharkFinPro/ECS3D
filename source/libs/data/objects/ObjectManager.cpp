@@ -210,6 +210,34 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
   m_objectsToRemove.clear();
 }
 
+void ObjectManager::discardSubtree(const std::shared_ptr<Object>& root)
+{
+  if (!root)
+  {
+    return;
+  }
+
+  // Detached from its parent first, so the walk below only touches objects inside the subtree and never
+  // mutates a children vector it is iterating.
+  if (const auto parent = root->getParent())
+  {
+    parent->removeChild(root);
+  }
+
+  eraseSubtree(root);
+}
+
+void ObjectManager::eraseSubtree(const std::shared_ptr<Object>& object)
+{
+  for (const auto& child : object->getChildren())
+  {
+    eraseSubtree(child);
+  }
+
+  std::erase(m_allObjects, object);
+  std::erase(m_objects, object);
+}
+
 std::shared_ptr<Object> ObjectManager::getObjectByUUID(const uuids::uuid uuid) const
 {
   for (const auto& object : m_allObjects)

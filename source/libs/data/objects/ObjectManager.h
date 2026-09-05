@@ -52,6 +52,11 @@ public:
 
   void removeObject(const std::shared_ptr<Object>& object);
 
+  // Drop a subtree that was never fully built. Unlike removeObject this is not the deletion lifecycle -
+  // it does not reparent children or defer anything; it erases exactly what was registered. The spawn
+  // path uses it to unwind when a packed object fails to unpack part way through.
+  void discardSubtree(const std::shared_ptr<Object>& root);
+
   void deleteObjectsMarkedForDeletion();
 
   [[nodiscard]] std::shared_ptr<Object> getObjectByUUID(uuids::uuid uuid) const;
@@ -71,6 +76,8 @@ private:
 
   std::mt19937 m_rng;
   uuids::uuid_random_generator m_uuidGenerator;
+
+  void eraseSubtree(const std::shared_ptr<Object>& object);
 
   // Recursively replace the serialized object's (and its children's) uuids with fresh ones.
   void reassignUUIDs(nlohmann::json& objectData);
