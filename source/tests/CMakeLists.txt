@@ -23,6 +23,7 @@ add_executable(${PROJECT_NAME}
   ComponentLookupTest.cpp
   AssetRegistryTest.cpp
   ComponentEditTest.cpp
+  ComponentVariableTest.cpp
   LightRendererTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
