@@ -48,7 +48,17 @@ Compile the project using your preferred build system:
 cmake --build .
 ```
 
-5. Run the Executable
+5. Run the Tests
+
+From the build directory, `check` builds the test suite and runs it through CTest:
+
+```bash
+cmake --build . --target check
+```
+
+To re-run the tests without rebuilding, use `ctest --output-on-failure`.
+
+6. Run the Executable
 
 After building, all files will have been written to the `bin` directory. You can run the editor with:
 
