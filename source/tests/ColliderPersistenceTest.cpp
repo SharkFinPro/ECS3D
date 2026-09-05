@@ -2,6 +2,7 @@
 
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
+#include "WireTypes.h"
 
 #include <Protocol.h>
 #include <glm/vec3.hpp>
