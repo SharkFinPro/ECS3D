@@ -21,6 +21,7 @@
 #include <ManagedHost.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
+#include <string>
 #include <thread>
 
 ServerApp::ServerApp(LaunchOptions options)
@@ -373,13 +374,46 @@ void ServerApp::handleDisconnect(const int32_t connId)
     + std::to_string(slot) + ".");
 }
 
+namespace {
+  const char* describe(const replication::ComponentEditResult result)
+  {
+    switch (result)
+    {
+      case replication::ComponentEditResult::malformedPayload: return "the payload does not parse";
+      case replication::ComponentEditResult::partiallyApplied: return "the payload ran out mid-component";
+      case replication::ComponentEditResult::unknownObject: return "no such object";
+      case replication::ComponentEditResult::unknownComponent: return "the object has no such component";
+      default: return "it was applied";
+    }
+  }
+}
+
 void ServerApp::handleEditComponent(const net::Message& message) const
 {
   // An editor changed a component: apply it to the authoritative scene, then re-broadcast so every
   // other view (and the editing client, idempotently) converges.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), message);
+    // Only an edit the authority actually applied gets rebroadcast. Rebroadcasting one it could not
+    // apply would push every client away from the authoritative state, and a payload it could not parse
+    // would fail identically on every one of them. Nothing below this point can rely on the message
+    // being well formed either, since it re-reads it.
+    const auto result = replication::applyComponentEdit(*scene->getObjectManager(), message);
+
+    if (result != replication::ComponentEditResult::applied)
+    {
+      logMessage("Error", "Discarded a component edit of " + std::to_string(message.size()) +
+                          " bytes: " + describe(result) + ".");
+
+      // A half-written component has no delta stream to correct it for most types, so the only way back
+      // to agreement is a fresh snapshot.
+      if (result == replication::ComponentEditResult::partiallyApplied)
+      {
+        broadcastSnapshot();
+      }
+
+      return;
+    }
 
     m_netServer->broadcast(message);
 

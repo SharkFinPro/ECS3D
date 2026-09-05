@@ -11,6 +11,8 @@
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <cmath>
+#include <exception>
+#include <new>
 
 namespace replication {
 
@@ -111,56 +113,82 @@ net::Message buildComponentEdit(const uuids::uuid& objectUUID,
   return message;
 }
 
-void applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit)
+ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit)
 {
   net::MessageReader reader(edit);
-  const auto objectUUIDString = reader.readString();
-  const auto objectUUID = uuids::uuid::from_string(objectUUIDString);
-  if (!objectUUID.has_value())
+
+  // A reader that runs off the end of the payload throws, as does a script's field blob failing to parse.
+  // The client and editor run loops have no guard of their own, so an escaping exception ends the
+  // process; the authority's loop catches, but only after losing the edit.
+  bool unpacking = false;
+
+  try
   {
-    return;
-  }
-
-  const auto object = objectManager.getObjectByUUID(objectUUID.value());
-  if (!object)
-  {
-    return;
-  }
-
-  // Each component packs its type (or, for colliders, its subtype) first as a discriminator.
-  const auto componentType = reader.read<ComponentType>();
-
-  // Scripts live in their own list, keyed by class name, and pack the name next so the right one can be
-  // found before unpack() reads the remaining field data.
-  if (componentType == ComponentType::script)
-  {
-    const auto className = reader.readString();
-
-    for (const auto& script : object->getScripts())
+    const auto objectUUIDString = reader.readString();
+    const auto objectUUID = uuids::uuid::from_string(objectUUIDString);
+    if (!objectUUID.has_value())
     {
-      if (const auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
-          scriptComponent && scriptComponent->getClassName() == className)
-      {
-        script->unpack(reader);
-        return;
-      }
+      return ComponentEditResult::malformedPayload;
     }
 
-    return;
-  }
+    const auto object = objectManager.getObjectByUUID(objectUUID.value());
+    if (!object)
+    {
+      return ComponentEditResult::unknownObject;
+    }
 
-  // Colliders pack their subtype as the discriminator, but the component map is keyed by the parent
-  // (collider) type, so map back before looking it up.
-  auto lookupType = componentType;
-  if (const auto parent = subComponentTypeToParent.find(componentType); parent != subComponentTypeToParent.end())
-  {
-    lookupType = parent->second;
-  }
+    // Each component packs its type (or, for colliders, its subtype) first as a discriminator.
+    const auto componentType = reader.read<ComponentType>();
 
-  const auto components = object->getComponents();
-  if (components.contains(lookupType))
-  {
+    // Scripts live in their own list, keyed by class name, and pack the name next so the right one can be
+    // found before unpack() reads the remaining field data.
+    if (componentType == ComponentType::script)
+    {
+      const auto className = reader.readString();
+
+      for (const auto& script : object->getScripts())
+      {
+        if (const auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
+            scriptComponent && scriptComponent->getClassName() == className)
+        {
+          unpacking = true;
+          script->unpack(reader);
+
+          return ComponentEditResult::applied;
+        }
+      }
+
+      return ComponentEditResult::unknownComponent;
+    }
+
+    // Colliders pack their subtype as the discriminator, but the component map is keyed by the parent
+    // (collider) type, so map back before looking it up.
+    auto lookupType = componentType;
+    if (const auto parent = subComponentTypeToParent.find(componentType); parent != subComponentTypeToParent.end())
+    {
+      lookupType = parent->second;
+    }
+
+    const auto& components = object->getComponents();
+    if (!components.contains(lookupType))
+    {
+      return ComponentEditResult::unknownComponent;
+    }
+
+    unpacking = true;
     components.at(lookupType)->unpack(reader);
+
+    return ComponentEditResult::applied;
+  }
+  catch (const std::bad_alloc&)
+  {
+    // Out of memory is not a malformed payload, and pretending otherwise would send the caller looking
+    // for a wire bug.
+    throw;
+  }
+  catch (const std::exception&)
+  {
+    return unpacking ? ComponentEditResult::partiallyApplied : ComponentEditResult::malformedPayload;
   }
 }
 
