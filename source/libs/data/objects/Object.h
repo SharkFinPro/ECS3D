@@ -61,7 +61,8 @@ public:
 
   [[nodiscard]] uuids::uuid getUUID() const;
 
-  // True when object sits somewhere below this one in the hierarchy.
+  // True when object sits somewhere below this one in the hierarchy. An object is not its own
+  // ancestor, so a caller guarding against cycles has to check for self separately.
   [[nodiscard]] bool isAncestorOf(const std::shared_ptr<Object>& object) const;
 
   [[nodiscard]] const std::unordered_map<ComponentType, std::shared_ptr<Component>>& getComponents() const;
