@@ -19,6 +19,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(${PROJECT_NAME}
   LightRendererTest.cpp
+  SerializationRoundTripTest.cpp
   SmokeTest.cpp
 )
 

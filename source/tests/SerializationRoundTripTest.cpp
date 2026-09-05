@@ -22,8 +22,10 @@
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cstddef>
 #include <glm/vec3.hpp>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -57,18 +59,31 @@ namespace {
     return uuids::uuid::from_string(text).value();
   }
 
-  // Assets and an object's components come out of unordered containers, so their serialized order is
-  // not stable even between two serializations of the same project. Arrays of scalars are left alone,
-  // since a vector's component order is meaningful.
-  nlohmann::json canonical(const nlohmann::json& value)
+  // The asset lists, the scene list and an object's components are all serialized straight out of
+  // unordered containers, so their order is not stable even between two serializations of the same
+  // project. Everything else - root objects, children, an object's scripts - comes from a vector, and
+  // reordering those would be a real regression, so they are compared as they are.
+  bool comesFromAnUnorderedContainer(const std::string& key, const nlohmann::json& array)
+  {
+    if (key == "models" || key == "textures" || key == "prefabs" || key == "scenes" || key == "components")
+    {
+      return true;
+    }
+
+    // Two different arrays are called "scripts": the asset records, which are a map, and an object's
+    // script components, which are a vector. Only the records carry a uuid.
+    return key == "scripts" && !array.empty() && array.front().is_object() && array.front().contains("uuid");
+  }
+
+  nlohmann::json canonical(const nlohmann::json& value, const std::string& key = "")
   {
     if (value.is_object())
     {
       nlohmann::json result = nlohmann::json::object();
 
-      for (const auto& [key, item] : value.items())
+      for (const auto& [childKey, item] : value.items())
       {
-        result[key] = canonical(item);
+        result[childKey] = canonical(item, childKey);
       }
 
       return result;
@@ -84,10 +99,10 @@ namespace {
 
     for (const auto& item : value)
     {
-      items.push_back(canonical(item));
+      items.push_back(canonical(item, key));
     }
 
-    if (!items.empty() && items.front().is_object())
+    if (comesFromAnUnorderedContainer(key, value))
     {
       std::ranges::sort(items, [](const nlohmann::json& first, const nlohmann::json& second) {
         return first.dump() < second.dump();
@@ -291,6 +306,28 @@ TEST(SerializationRoundTrip, AMalformedBlobLeavesTheProjectIntact)
 
   ASSERT_TRUE(injected);
 
-  EXPECT_ANY_THROW(project.serializer->deserialize(broken));
+  EXPECT_THROW(project.serializer->deserialize(broken), std::runtime_error);
+  EXPECT_EQ(canonical(project.serializer->serialize()), canonical(before));
+}
+
+TEST(SerializationRoundTrip, ATruncatedSnapshotLeavesTheProjectIntact)
+{
+  const auto project = makeProject();
+  buildProject(project);
+
+  const auto before = project.serializer->serialize();
+
+  net::Message message(net::MessageType::snapshot);
+  project.packer->pack(message);
+
+  net::Message truncated(net::MessageType::snapshot);
+  const auto bytes = message.bytes();
+  for (std::size_t i = 0; i + 1 < bytes.size() / 2; ++i)
+  {
+    truncated.write(bytes[i]);
+  }
+
+  // The binary path is the one fed bytes off the wire, so its atomicity is the half that matters most.
+  EXPECT_ANY_THROW(project.packer->unpack(truncated));
   EXPECT_EQ(canonical(project.serializer->serialize()), canonical(before));
 }
