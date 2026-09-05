@@ -135,9 +135,9 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/cube_1x1x1.glb"))
       {
-        gizmo->setPosition(transform->getPosition() + box->getLocalPosition());
-        gizmo->setScale(transform->getScale() * box->getLocalScale());
-        gizmo->setOrientationEuler(transform->getRotation() + box->getLocalRotation());
+        gizmo->setPosition(box->getPosition());
+        gizmo->setScale(box->getScale());
+        gizmo->setOrientationEuler(box->getRotation());
 
         renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
       }
