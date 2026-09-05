@@ -7,6 +7,19 @@
 #include <type_traits>
 #include <utility>
 
+namespace {
+  // Component-wise with a tolerance: move() adds, so the result is arithmetic rather than a value copied
+  // through, and glm has no printer here - an exact compare would fail with a hex dump of the bytes.
+  void expectNear(const glm::vec3& actual, const glm::vec3& expected)
+  {
+    constexpr float tolerance = 1e-5f;
+
+    EXPECT_NEAR(actual.x, expected.x, tolerance);
+    EXPECT_NEAR(actual.y, expected.y, tolerance);
+    EXPECT_NEAR(actual.z, expected.z, tolerance);
+  }
+}
+
 // The whole point of the accessor: it hands back a copy, so no caller can hold a reference that a
 // later start() quietly repoints at the other value, let alone write through one.
 static_assert(std::is_same_v<decltype(std::declval<const ComponentVariable<int>&>().get()), int>);
@@ -58,9 +71,9 @@ TEST(Transform, MoveDoesNotDisturbTheInitialPosition)
   transform.move(glm::vec3(0, 1, 0));
 
   // getLocalPosition, not getPosition: the latter walks to the owning object, and this one has none.
-  EXPECT_EQ(transform.getLocalPosition(), glm::vec3(1, 3, 3));
+  expectNear(transform.getLocalPosition(), glm::vec3(1, 3, 3));
 
   transform.stop();
 
-  EXPECT_EQ(transform.getLocalPosition(), glm::vec3(1, 2, 3));
+  expectNear(transform.getLocalPosition(), glm::vec3(1, 2, 3));
 }
