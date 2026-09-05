@@ -28,6 +28,7 @@
 | `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `include(CTest)`, MSVC export-all-symbols. Then `add_subdirectory(source)`. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
+| `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk. Depends on nothing but json. **Not** project data: see Development Principles. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune + GJK/EPA under `collisions/`). Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
@@ -68,7 +69,8 @@
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
   GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
   suite and runs it: `cmake --build <build-dir> --target check`.
-- **Dependency direction (must hold):** `protocol` → nothing. `data` → protocol (+ json/glm/uuid).
+- **Dependency direction (must hold):** `protocol` → nothing. `settings` → nothing (+ json). `data` →
+  protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + nfd. `net`/`scripting` →
   data + clrHost. Apps compose these. **`data` must never gain a Vulkan or ImGui include** — that
   invariant is what keeps the headless server headless.
@@ -234,6 +236,11 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
 - **The serialize/loadFromJSON boundary is the contract.** Replication, save/load, and the registry all
   ride on it. When you add a component field, thread it through both — and only both; no layer should
   learn the concrete type.
+- **A user preference is not project data.** Project state is authoritative and replicated to every client
+  as a `ProjectPacker` snapshot, so anything stored there travels on the wire and is shared between users.
+  Preferences are per-person and per-machine: they live in `ECS3DSettings` (`SettingsStore`, a JSON file
+  under the per-user application data directory) and are never serialized into a scene, a prefab, or a
+  snapshot.
 - **Respect the layer boundaries.** Put data in `data`, behavior in the matching system, UI in `editor`.
   Splitting a new component means: fields → `data`, physics → `sim`, rendering → `render`, bindings →
   `scripting`, inspector widget → `editor`. Register it in `registerDataComponents()`.

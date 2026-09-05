@@ -105,7 +105,7 @@ glm::vec3 BoxCollider::getPosition()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_position.value() + transform->getPosition();
+  return m_position.get() + transform->getPosition();
 }
 
 glm::vec3 BoxCollider::getScale()
@@ -114,7 +114,7 @@ glm::vec3 BoxCollider::getScale()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_scale.value() + transform->getScale();
+  return m_scale.get() + transform->getScale();
 }
 
 glm::vec3 BoxCollider::getRotation()
@@ -123,7 +123,7 @@ glm::vec3 BoxCollider::getRotation()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_rotation.value() + transform->getRotation();
+  return m_rotation.get() + transform->getRotation();
 }
 
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
@@ -180,9 +180,9 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
 
 void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)
 {
-  const auto rotation = transform->getRotation() + m_rotation.value();
-  const auto scale = transform->getScale() * m_scale.value();
-  const auto position = transform->getPosition() + m_position.value();
+  const auto rotation = transform->getRotation() + m_rotation.get();
+  const auto scale = transform->getScale() * m_scale.get();
+  const auto position = transform->getPosition() + m_position.get();
 
   const auto transformationMatrix = translate(glm::mat4(1.0f), position)
     * rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1})
