@@ -215,11 +215,13 @@ void ObjectInspector::displayAddComponent(const std::shared_ptr<Object>& object)
 
   ImGui::Spacing();
 
-  // Count the not-yet-present components so the enclosing popup box can size to its rows.
+  // Count the not-yet-present components so the enclosing popup box can size to its rows. getComponents
+  // rather than getComponent: the latter falls back to the parent for a RigidBody, which would hide the
+  // entry on every child of an object that has one.
   int addableCount = 0;
   for (const auto& component : addableComponents)
   {
-    if (!object->getComponent<Component>(component.checkType))
+    if (!object->getComponents().contains(component.checkType))
     {
       ++addableCount;
     }
@@ -249,7 +251,7 @@ void ObjectInspector::displayAddComponent(const std::shared_ptr<Object>& object)
   {
     for (const auto& [label, key, checkType, icon] : addableComponents)
     {
-      if (object->getComponent<Component>(checkType))
+      if (object->getComponents().contains(checkType))
       {
         continue;
       }
