@@ -100,7 +100,11 @@ TEST(RuntimeComponent, WhatTheSceneWouldSaveIsUntouchedByTheRun)
 
   bool sawTheCollider = false;
 
-  for (const auto& component : object->serialize().at("components"))
+  // Held in a named value: iterating object->serialize().at(...) directly walks a reference into a
+  // temporary that gcc does not keep alive for the loop.
+  const auto serialized = object->serialize();
+
+  for (const auto& component : serialized.at("components"))
   {
     if (component.at("type") != "Collider")
     {
