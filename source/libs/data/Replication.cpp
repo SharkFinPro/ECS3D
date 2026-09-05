@@ -8,6 +8,7 @@
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
+#include "WireTypes.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <cmath>

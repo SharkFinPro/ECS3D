@@ -25,6 +25,7 @@ add_executable(${PROJECT_NAME}
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
   CollisionMathTest.cpp
+  ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
   SettingsStoreTest.cpp
   ObjectSpawnTest.cpp
@@ -34,6 +35,7 @@ add_executable(${PROJECT_NAME}
   RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
   ProtocolFramingTest.cpp
+  WireTypesTest.cpp
   SmokeTest.cpp
   TestPrinters.h
 )

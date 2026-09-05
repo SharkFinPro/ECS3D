@@ -11,6 +11,7 @@ add_library(${PROJECT_NAME}
   ProjectPacker.h
   Replication.cpp
   Replication.h
+  WireTypes.h
   assets/AssetRegistry.cpp
   assets/AssetRegistry.h
   scenes/SceneManager.cpp
