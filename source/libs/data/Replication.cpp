@@ -12,6 +12,7 @@
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <exception>
+#include <new>
 
 namespace replication {
 
@@ -116,8 +117,11 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
 {
   net::MessageReader reader(edit);
 
-  // A reader that runs off the end of the payload throws; that is the same malformed case as a uuid that
-  // will not parse, and it must not take the tick loop down with it.
+  // A reader that runs off the end of the payload throws, as does a script's field blob failing to parse.
+  // The client and editor run loops have no guard of their own, so an escaping exception ends the
+  // process; the authority's loop catches, but only after losing the edit.
+  bool unpacking = false;
+
   try
   {
     const auto objectUUIDString = reader.readString();
@@ -147,7 +151,9 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
         if (const auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
             scriptComponent && scriptComponent->getClassName() == className)
         {
+          unpacking = true;
           script->unpack(reader);
+
           return ComponentEditResult::applied;
         }
       }
@@ -163,19 +169,26 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
       lookupType = parent->second;
     }
 
-    const auto components = object->getComponents();
+    const auto& components = object->getComponents();
     if (!components.contains(lookupType))
     {
       return ComponentEditResult::unknownComponent;
     }
 
+    unpacking = true;
     components.at(lookupType)->unpack(reader);
 
     return ComponentEditResult::applied;
   }
+  catch (const std::bad_alloc&)
+  {
+    // Out of memory is not a malformed payload, and pretending otherwise would send the caller looking
+    // for a wire bug.
+    throw;
+  }
   catch (const std::exception&)
   {
-    return ComponentEditResult::malformedPayload;
+    return unpacking ? ComponentEditResult::partiallyApplied : ComponentEditResult::malformedPayload;
   }
 }
 

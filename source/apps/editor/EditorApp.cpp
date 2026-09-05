@@ -601,10 +601,11 @@ void EditorApp::handleStateDelta(const net::Message& message) const
 
 void EditorApp::handleEditComponent(const net::Message& message) const
 {
-  // Another editor (or this one, echoed by the server) changed a component.
+  // Another editor (or this one, echoed by the server) changed a component. Like the client, the result
+  // is ignored: every failure is routine on a replicated view.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), message);
+    static_cast<void>(replication::applyComponentEdit(*scene->getObjectManager(), message));
   }
 }
 
