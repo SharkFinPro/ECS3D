@@ -39,12 +39,14 @@ include(GoogleTest)
 gtest_discover_tests(${PROJECT_NAME})
 
 # Builds the suite and runs it through CTest in one command. --test-dir keeps it to this suite rather
-# than every test in the tree, and --build-config is emitted only when there is a config to name.
+# than every test in the tree. COMMAND_EXPAND_LISTS is what splits the conditional --build-config into
+# two arguments; without it the pair arrives as one semicolon-joined argument that ctest rejects.
 add_custom_target(check
-  COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_CURRENT_BINARY_DIR} --output-on-failure
-          "$<$<BOOL:$<CONFIG>>:--build-config;$<CONFIG>>"
+  COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_CURRENT_BINARY_DIR}" --output-on-failure
+    "$<$<BOOL:$<CONFIG>>:--build-config;$<CONFIG>>"
   USES_TERMINAL
   VERBATIM
+  COMMAND_EXPAND_LISTS
 )
 
 add_dependencies(check ${PROJECT_NAME})

@@ -57,8 +57,8 @@ cmake --build . --target check
 ```
 
 To re-run the tests without rebuilding, use `ctest --test-dir source/tests --output-on-failure`, adding
-`-C Release` (or the configuration you built) if you configured a multi-config generator such as Visual
-Studio.
+`-C <config>` — the configuration you built, which is `Debug` by default — if you configured a
+multi-config generator such as Visual Studio.
 
 6. Run the Executable
 
