@@ -22,7 +22,8 @@ namespace {
   template <typename T>
   std::shared_ptr<T> throughTheWire(const std::shared_ptr<T>& source)
   {
-    net::Message message(net::MessageType::editComponent);
+    // The framing is what matters here, not the message type: pack writes the component alone.
+    net::Message message(net::MessageType::undefined);
     source->pack(message);
 
     net::MessageReader reader(message);
@@ -84,12 +85,12 @@ TEST(ColliderPersistence, AnOutOfRangeLayerIsClampedOnLoad)
   const auto loaded = std::make_shared<BoxCollider>();
   loaded->loadFromJSON(saved);
 
-  EXPECT_LE(loaded->getLayer(), 31u);
+  EXPECT_EQ(loaded->getLayer(), 31u);
 }
 
 TEST(ColliderPersistence, AnOutOfRangeLayerIsClampedOffTheWire)
 {
-  net::Message message(net::MessageType::editComponent);
+  net::Message message(net::MessageType::undefined);
   message.write(ComponentType::SubComponentType_sphereCollider);
   message.write(false);
   message.write(glm::vec3(0));
@@ -104,5 +105,5 @@ TEST(ColliderPersistence, AnOutOfRangeLayerIsClampedOffTheWire)
   const auto collider = std::make_shared<SphereCollider>();
   collider->unpack(reader);
 
-  EXPECT_LE(collider->getLayer(), 31u);
+  EXPECT_EQ(collider->getLayer(), 31u);
 }

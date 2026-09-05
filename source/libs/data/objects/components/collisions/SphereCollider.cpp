@@ -79,9 +79,10 @@ void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
   m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
 
   m_radius.set(componentData.at("radius"));
-  m_renderCollider = componentData.at("renderCollider");
 
-  // value() (not at()): projects saved before triggers/layers existed have no such key.
+  // value() (not at()): a blob written before triggers/layers existed, or hand-authored like the default
+  // project's, has no such key - and at() would throw the whole project load away over an absent flag.
+  m_renderCollider = componentData.value("renderCollider", false);
   m_isTrigger = componentData.value("isTrigger", false);
   setLayer(componentData.value("layer", 0u));
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
