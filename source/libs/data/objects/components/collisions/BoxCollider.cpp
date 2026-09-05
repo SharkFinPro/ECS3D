@@ -115,7 +115,9 @@ glm::vec3 BoxCollider::getScale()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_scale.get() + transform->getScale();
+  // Multiplied, not added: the collision mesh generateTransformedMesh builds scales the unit box by the
+  // product, so an offset of 1 has to mean "same size as the object" rather than "one bigger".
+  return m_scale.get() * transform->getScale();
 }
 
 glm::vec3 BoxCollider::getRotation()

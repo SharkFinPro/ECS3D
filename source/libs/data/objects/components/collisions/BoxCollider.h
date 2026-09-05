@@ -22,7 +22,8 @@ public:
   BoxCollider();
 
   // Local (collider-offset) accessors for the editor; getPosition/getScale/getRotation below are the
-  // world values (transform + offset) the collision system uses.
+  // world values the collision system uses - position and rotation offset the transform's, scale
+  // multiplies it, matching the matrix the collision mesh is built with.
   [[nodiscard]] glm::vec3 getLocalPosition() const;
   [[nodiscard]] glm::vec3 getLocalScale() const;
   [[nodiscard]] glm::vec3 getLocalRotation() const;
