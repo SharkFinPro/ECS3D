@@ -18,6 +18,7 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(${PROJECT_NAME}
+  ComponentVariableTest.cpp
   SmokeTest.cpp
 )
 

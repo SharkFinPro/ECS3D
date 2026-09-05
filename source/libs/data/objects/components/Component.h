@@ -91,7 +91,9 @@ public:
     m_liveValue = m_initialValue;
   }
 
-  [[nodiscard]] T& value()
+  // Const so the active value can only be written through set(): a caller holding a mutable reference
+  // across a start() would find it pointing at the other value.
+  [[nodiscard]] const T& value() const
   {
     return m_live ? m_liveValue : m_initialValue;
   }

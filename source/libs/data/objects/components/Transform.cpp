@@ -101,7 +101,7 @@ void Transform::setRotation(const glm::vec3 rotation)
 
 void Transform::move(const glm::vec3& direction)
 {
-  m_position.value() += direction;
+  m_position.set(m_position.get() + direction);
   ++m_updateID;
 }
 
