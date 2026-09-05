@@ -50,6 +50,23 @@ namespace {
 
     return gc::SecIcon::block;
   }
+
+  // The object being dragged in the hierarchy, or null when no object drag is in flight. Resolved once
+  // per frame so every row can test the drop against the engine's own cycle predicate.
+  [[nodiscard]] std::shared_ptr<Object> draggedObject(const ObjectManager* objectManager)
+  {
+    const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+
+    if (!objectManager || !payload || !payload->IsDataType("object"))
+    {
+      return nullptr;
+    }
+
+    const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+    const auto dragged = uuids::uuid::from_string(uuidStr);
+
+    return dragged.has_value() ? objectManager->getObjectByUUID(dragged.value()) : nullptr;
+  }
 }
 
 void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
@@ -108,6 +125,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 
   if (objectManager)
   {
+    m_dragSource = draggedObject(objectManager);
+
     for (const auto& object : objectManager->getObjects())
     {
       displayObjectTree(object);
@@ -154,7 +173,16 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 
   ImGui::End();
 
+  m_dragSource.reset();
+
   displayDeleteConfirmationModal(objectManager);
+}
+
+bool ObjectGUIManager::canAcceptObjectDrop(const std::shared_ptr<Object>& target) const
+{
+  // A reparent onto the dragged object itself or onto one of its own descendants would cycle the graph,
+  // so the row refuses the drop instead of sending an edit the server rejects anyway.
+  return !m_dragSource || (m_dragSource != target && !m_dragSource->isAncestorOf(target));
 }
 
 void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
@@ -226,7 +254,7 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     ImGui::EndDragDropSource();
   }
 
-  if (m_editable && ImGui::BeginDragDropTarget())
+  if (m_editable && canAcceptObjectDrop(object) && ImGui::BeginDragDropTarget())
   {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
     {

@@ -202,10 +202,15 @@ uuids::uuid Object::getUUID() const
 
 bool Object::isAncestorOf(const std::shared_ptr<Object>& object) const
 {
-  auto current = getParent();
+  if (!object)
+  {
+    return false;
+  }
+
+  auto current = object->getParent();
   while (current)
   {
-    if (object == current)
+    if (current.get() == this)
     {
       return true;
     }
