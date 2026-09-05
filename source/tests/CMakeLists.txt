@@ -29,11 +29,13 @@ add_executable(${PROJECT_NAME}
   SceneManagerTest.cpp
   RuntimeComponentTest.cpp
   ObjectHierarchyTest.cpp
+  ProtocolFramingTest.cpp
   SmokeTest.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
+  ECS3DNetProtocol
   ECS3DSettings
   GTest::gtest_main
 )
