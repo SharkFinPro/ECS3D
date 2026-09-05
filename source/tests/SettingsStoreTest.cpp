@@ -4,6 +4,7 @@
 
 #include <nlohmann/json.hpp>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -19,7 +20,7 @@ namespace {
                     ("ecs3d-" + std::string(info->test_suite_name()) + "-" + std::string(info->name()));
 
       std::error_code error;
-      remove_all(m_directory, error);
+      std::filesystem::remove_all(m_directory, error);
 
       m_file = m_directory / "settings.json";
     }
@@ -27,12 +28,12 @@ namespace {
     void TearDown() override
     {
       std::error_code error;
-      remove_all(m_directory, error);
+      std::filesystem::remove_all(m_directory, error);
     }
 
     void writeFile(const std::string& contents) const
     {
-      create_directories(m_directory);
+      std::filesystem::create_directories(m_directory);
       std::ofstream out(m_file, std::ios::trunc);
       out << contents;
     }
@@ -49,6 +50,19 @@ namespace {
     std::filesystem::path m_directory;
     std::filesystem::path m_file;
   };
+
+  bool hasAHomeDirectory()
+  {
+    for (const char* name : { "APPDATA", "XDG_CONFIG_HOME", "HOME" })
+    {
+      if (const char* value = std::getenv(name); value && *value)
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
 }
 
 TEST_F(SettingsStoreTest, UsesTheFallbackWhenThereIsNoFile)
@@ -123,8 +137,8 @@ TEST_F(SettingsStoreTest, MovesAnUnparseableFileAsideRatherThanOverwritingIt)
   auto spoiled = m_file;
   spoiled += ".bad";
 
-  EXPECT_FALSE(exists(m_file));
-  ASSERT_TRUE(exists(spoiled));
+  EXPECT_FALSE(std::filesystem::exists(m_file));
+  ASSERT_TRUE(std::filesystem::exists(spoiled));
 
   std::ifstream in(spoiled);
   std::string contents;
@@ -143,8 +157,8 @@ TEST_F(SettingsStoreTest, MovesAsideAFileThatParsesButIsNotAnObject)
   auto spoiled = m_file;
   spoiled += ".bad";
 
-  EXPECT_FALSE(exists(m_file));
-  EXPECT_TRUE(exists(spoiled));
+  EXPECT_FALSE(std::filesystem::exists(m_file));
+  EXPECT_TRUE(std::filesystem::exists(spoiled));
   EXPECT_EQ(store.get<int>("anything", 5), 5);
 }
 
@@ -168,7 +182,7 @@ TEST_F(SettingsStoreTest, DefersTheWriteUntilTheDebounceElapses)
   store.update();
 
   EXPECT_TRUE(store.hasPendingWrite());
-  EXPECT_FALSE(exists(m_file));
+  EXPECT_FALSE(std::filesystem::exists(m_file));
 
   store.flush();
 
@@ -186,7 +200,7 @@ TEST_F(SettingsStoreTest, UpdateWritesOnceTheDebounceHasElapsed)
   store.update();
 
   EXPECT_FALSE(store.hasPendingWrite());
-  ASSERT_TRUE(exists(m_file));
+  ASSERT_TRUE(std::filesystem::exists(m_file));
   EXPECT_EQ(readFile().at("count"), 1);
 }
 
@@ -205,7 +219,7 @@ TEST_F(SettingsStoreTest, DoesNotScheduleAWriteForAnUnchangedValue)
 TEST_F(SettingsStoreTest, KeepsTheWritePendingWhenItFails)
 {
   // A file where the settings directory needs to be, so creating the directory cannot succeed.
-  create_directories(m_directory);
+  std::filesystem::create_directories(m_directory);
   std::ofstream blocker(m_directory / "blocked");
   blocker << "not a directory";
   blocker.close();
@@ -228,7 +242,7 @@ TEST_F(SettingsStoreTest, LeavesNoTemporaryFileBehind)
   auto temporary = m_file;
   temporary += ".tmp";
 
-  EXPECT_FALSE(exists(temporary));
+  EXPECT_FALSE(std::filesystem::exists(temporary));
 }
 
 TEST_F(SettingsStoreTest, FlushesOnDestruction)
@@ -238,16 +252,26 @@ TEST_F(SettingsStoreTest, FlushesOnDestruction)
     store.set("count", 1);
   }
 
-  ASSERT_TRUE(exists(m_file));
+  ASSERT_TRUE(std::filesystem::exists(m_file));
   EXPECT_EQ(readFile().at("count"), 1);
 }
 
-TEST_F(SettingsStoreTest, DefaultFileIsAnAbsolutePathUnderAnECS3DDirectory)
+TEST_F(SettingsStoreTest, DefaultFileSitsUnderAnECS3DDirectory)
 {
   const auto file = SettingsStore::defaultFile();
 
-  // Absolute is the assertion with teeth: the no-home fallback is relative, and it is a degraded path.
-  EXPECT_TRUE(file.is_absolute());
   EXPECT_EQ(file.filename(), "settings.json");
   EXPECT_EQ(file.parent_path().filename(), "ECS3D");
+}
+
+TEST_F(SettingsStoreTest, DefaultFileIsAbsoluteWhenTheresAHomeToResolveAgainst)
+{
+  if (!hasAHomeDirectory())
+  {
+    GTEST_SKIP() << "No per-user directory in the environment; the relative fallback is expected.";
+  }
+
+  // Only meaningful when the environment actually names one: the fallback is deliberately relative, so
+  // asserting absoluteness unconditionally would fail a container that sets none of these.
+  EXPECT_TRUE(SettingsStore::defaultFile().is_absolute());
 }

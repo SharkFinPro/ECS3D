@@ -13,6 +13,26 @@ namespace {
 
     return value && *value ? value : nullptr;
   }
+
+  // rename is specified to replace an existing regular file, but on Windows it goes through the OS move
+  // and can still fail when something else has the destination open - an indexer or a virus scanner
+  // holding settings.json is enough. Clearing the destination and retrying costs the atomicity of that
+  // one write, which is a better outcome than never being able to save again.
+  bool moveOnto(const std::filesystem::path& from, const std::filesystem::path& to, std::error_code& error)
+  {
+    std::filesystem::rename(from, to, error);
+    if (!error)
+    {
+      return true;
+    }
+
+    std::error_code ignored;
+    std::filesystem::remove(to, ignored);
+
+    std::filesystem::rename(from, to, error);
+
+    return !error;
+  }
 }
 
 std::filesystem::path SettingsStore::defaultFile()
@@ -210,12 +230,14 @@ void SettingsStore::write()
     out << serialized << std::endl;
   }
 
-  std::filesystem::rename(temporary, m_file, error);
-  if (error)
+  if (!moveOnto(temporary, m_file, error))
   {
     std::cerr << "[SettingsStore] Could not move '" << temporary.string() << "' into place: "
               << error.message() << std::endl;
-    std::filesystem::remove(temporary, error);
+
+    std::error_code ignored;
+    std::filesystem::remove(temporary, ignored);
+
     scheduleWrite();
   }
 }
@@ -225,12 +247,8 @@ void SettingsStore::setAside() const
   auto spoiled = m_file;
   spoiled += ".bad";
 
-  // rename replaces an existing destination on every platform we build for, so an older .bad is only
-  // discarded once its replacement is safely in place.
   std::error_code error;
-  std::filesystem::rename(m_file, spoiled, error);
-
-  if (error)
+  if (!moveOnto(m_file, spoiled, error))
   {
     std::cerr << "[SettingsStore] Could not move '" << m_file.string() << "' aside: " << error.message()
               << std::endl;
