@@ -56,7 +56,9 @@ From the build directory, `check` builds the test suite and runs it through CTes
 cmake --build . --target check
 ```
 
-To re-run the tests without rebuilding, use `ctest --output-on-failure`.
+To re-run the tests without rebuilding, use `ctest --test-dir source/tests --output-on-failure`, adding
+`-C Release` (or the configuration you built) if you configured a multi-config generator such as Visual
+Studio.
 
 6. Run the Executable
 
