@@ -20,6 +20,9 @@ namespace {
     return { point, -point };
   }
 
+  // Every support-function result goes through a matrix multiply, so compare component-wise with a
+  // tolerance rather than exactly. Simplex results are compared exactly on purpose: those values are
+  // copied through an array untouched, and a tolerance there would stop a swap being noticed.
   void expectNear(const glm::vec3& actual, const glm::vec3& expected)
   {
     constexpr float tolerance = 1e-5f;
@@ -142,17 +145,17 @@ TEST(ColliderSupport, BoxReturnsTheCornerFurthestAlongTheDirection)
 {
   const auto [object, box] = makeCollider<BoxCollider>({ 0, 0, 0 }, { 1, 1, 1 });
 
-  EXPECT_EQ(box->findFurthestPoint({ 1.0f, 0.5f, 0.25f }), glm::vec3(1, 1, 1));
-  EXPECT_EQ(box->findFurthestPoint({ -1.0f, -0.5f, -0.25f }), glm::vec3(-1, -1, -1));
-  EXPECT_EQ(box->findFurthestPoint({ -1.0f, 0.5f, -0.25f }), glm::vec3(-1, 1, -1));
+  expectNear(box->findFurthestPoint({ 1.0f, 0.5f, 0.25f }), glm::vec3(1, 1, 1));
+  expectNear(box->findFurthestPoint({ -1.0f, -0.5f, -0.25f }), glm::vec3(-1, -1, -1));
+  expectNear(box->findFurthestPoint({ -1.0f, 0.5f, -0.25f }), glm::vec3(-1, 1, -1));
 }
 
 TEST(ColliderSupport, BoxAccountsForTheTransformPositionAndScale)
 {
   const auto [object, box] = makeCollider<BoxCollider>({ 10, 0, 0 }, { 2, 3, 4 });
 
-  EXPECT_EQ(box->findFurthestPoint({ 1.0f, 0.5f, 0.25f }), glm::vec3(12, 3, 4));
-  EXPECT_EQ(box->findFurthestPoint({ -1.0f, -0.5f, -0.25f }), glm::vec3(8, -3, -4));
+  expectNear(box->findFurthestPoint({ 1.0f, 0.5f, 0.25f }), glm::vec3(12, 3, 4));
+  expectNear(box->findFurthestPoint({ -1.0f, -0.5f, -0.25f }), glm::vec3(8, -3, -4));
 }
 
 TEST(ColliderSupport, BoxRotatesTheMeshBeforeMeasuringIt)
@@ -174,22 +177,22 @@ TEST(ColliderSupport, BoxMultipliesItsOwnScaleAndAddsItsOwnOffset)
 
   // The collider's scale multiplies the transform's while its position adds - an asymmetry worth
   // pinning, since the two read alike at the call site.
-  EXPECT_EQ(box->findFurthestPoint({ 1.0f, 0.5f, 0.25f }), glm::vec3(17, 1, 1));
+  expectNear(box->findFurthestPoint({ 1.0f, 0.5f, 0.25f }), glm::vec3(17, 1, 1));
 }
 
 TEST(ColliderSupport, SphereReturnsThePointOnTheSurface)
 {
   const auto [object, sphere] = makeCollider<SphereCollider>({ 2, 0, 0 }, { 1, 1, 1 });
 
-  EXPECT_EQ(sphere->findFurthestPoint({ 1, 0, 0 }), glm::vec3(3, 0, 0));
-  EXPECT_EQ(sphere->findFurthestPoint({ 0, -1, 0 }), glm::vec3(2, -1, 0));
+  expectNear(sphere->findFurthestPoint({ 1, 0, 0 }), glm::vec3(3, 0, 0));
+  expectNear(sphere->findFurthestPoint({ 0, -1, 0 }), glm::vec3(2, -1, 0));
 }
 
 TEST(ColliderSupport, SphereScalesItsRadiusByTheLargestTransformAxis)
 {
   const auto [object, sphere] = makeCollider<SphereCollider>({ 0, 0, 0 }, { 2, 5, 3 });
 
-  EXPECT_EQ(sphere->findFurthestPoint({ 1, 0, 0 }), glm::vec3(5, 0, 0));
+  expectNear(sphere->findFurthestPoint({ 1, 0, 0 }), glm::vec3(5, 0, 0));
 }
 
 TEST(ColliderSupport, GetSupportIsTheMinkowskiDifferenceOfTheTwoSupports)
@@ -201,5 +204,5 @@ TEST(ColliderSupport, GetSupportIsTheMinkowskiDifferenceOfTheTwoSupports)
   const std::shared_ptr<Collider> other = second;
 
   // (1, 1, 1) on the first box minus (4, -1, -1) on the second.
-  EXPECT_EQ(getSupport(first.get(), other, direction), glm::vec3(-3, 2, 2));
+  expectNear(getSupport(first.get(), other, direction), glm::vec3(-3, 2, 2));
 }
