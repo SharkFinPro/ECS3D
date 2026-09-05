@@ -580,15 +580,18 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
 
   net::MessageReader reader(message);
   const auto focused = reader.read<bool>();
-  InputState::setFocused(slot, focused);
 
   // The count arrives from the network, so bound it against what is left of the payload before sizing
   // anything: the message cannot hold more key codes than it has bytes for, and without the check a
   // client asking for a billion keys gets the allocation attempted first and the underflow only after.
+  // It is a ceiling, not an exact length - the trailing mouse block is counted as if it could be key
+  // codes - so a client that predates that block still degrades to "no mouse" rather than being refused.
   const auto numKeys = reader.read<uint32_t>();
   if (numKeys > reader.remaining() / sizeof(int32_t))
   {
-    throw std::runtime_error("inputState claims more keys than the payload can hold");
+    // Dropped rather than thrown, like every other malformed message here: the drain loop logs what it
+    // catches to a flushed stderr, which a client could otherwise spam from the tick thread.
+    return;
   }
 
   std::vector<int> keysPressed(numKeys);
@@ -597,6 +600,9 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
     key = reader.read<int32_t>();
   }
 
+  // Applied only once the message is known to be well formed, so a malformed one leaves the slot exactly
+  // as its last good message left it instead of half-updating it.
+  InputState::setFocused(slot, focused);
   InputState::setKeysPressed(slot, keysPressed);
 
   // Mouse block, appended after the keys (see Protocol.h). Guard on remaining() so an older client that
