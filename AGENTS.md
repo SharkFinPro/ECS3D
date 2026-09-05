@@ -238,7 +238,7 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
   as a `ProjectPacker` snapshot, so anything stored there travels on the wire and is shared between users.
   Preferences are per-person and per-machine: they live in `ECS3DSettings` (`SettingsStore`, a JSON file
   under the per-user application data directory) and are never serialized into a scene, a prefab, or a
-  snapshot. The editor and the launcher own separate files there and neither reads the other's.
+  snapshot.
 - **Respect the layer boundaries.** Put data in `data`, behavior in the matching system, UI in `editor`.
   Splitting a new component means: fields → `data`, physics → `sim`, rendering → `render`, bindings →
   `scripting`, inspector widget → `editor`. Register it in `registerDataComponents()`.

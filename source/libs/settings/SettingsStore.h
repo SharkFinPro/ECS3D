@@ -3,6 +3,7 @@
 
 #include <nlohmann/json.hpp>
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <string>
 
@@ -11,24 +12,26 @@
 // would travel on the wire and be shared between users.
 //
 // Every key is read independently against a compiled-in default, and keys this build does not know are
-// carried through untouched, so a file written by a newer build survives an older one.
+// carried through untouched, so a file written by a newer build survives an older one. "version" is
+// reserved by the store itself.
+//
+// Not thread safe: it belongs to the app loop that calls update().
 class SettingsStore {
 public:
   // %APPDATA%/ECS3D on Windows, $XDG_CONFIG_HOME (or ~/.config) /ECS3D on Linux,
-  // ~/Library/Application Support/ECS3D on macOS. The editor and the launcher own separate files here
-  // and neither reads the other's.
+  // ~/Library/Application Support/ECS3D on macOS.
   [[nodiscard]] static std::filesystem::path defaultFile();
 
-  explicit SettingsStore(std::filesystem::path file);
+  // Reads the file if it is there, so a store is never half-initialized: writing without having read
+  // first would drop every key this build does not set. A file that fails to parse is renamed aside
+  // rather than overwritten, and the defaults are used, so the editor always starts.
+  explicit SettingsStore(std::filesystem::path file,
+                         std::chrono::milliseconds writeDelay = std::chrono::milliseconds(1000));
 
   ~SettingsStore();
 
   SettingsStore(const SettingsStore&) = delete;
   SettingsStore& operator=(const SettingsStore&) = delete;
-
-  // Reads the file if it is there. A file that fails to parse is renamed aside rather than overwritten,
-  // and the defaults are used, so the editor always starts.
-  void load();
 
   template <typename T>
   [[nodiscard]] T get(const std::string& key, const T& fallback) const
@@ -45,7 +48,7 @@ public:
     {
       return it->get<T>();
     }
-    catch (const nlohmann::json::exception&)
+    catch (const std::exception&)
     {
       return fallback;
     }
@@ -77,15 +80,21 @@ public:
 private:
   static constexpr int settingsVersion = 1;
 
-  // Long enough that dragging a slider settles into one write, short enough to survive a hard kill.
-  static constexpr std::chrono::milliseconds writeDelay{ 1000 };
+  // A resetting debounce alone would never write while something changes every frame, so a pending
+  // write is forced through once it has been waiting this long however busy the caller is.
+  static constexpr std::chrono::milliseconds maxWriteDelay{ 5000 };
 
   std::filesystem::path m_file;
+
+  std::chrono::milliseconds m_writeDelay;
 
   nlohmann::json m_values = nlohmann::json::object();
 
   bool m_writePending = false;
   std::chrono::steady_clock::time_point m_writeDue;
+  std::chrono::steady_clock::time_point m_writeFirstRequested;
+
+  void load();
 
   void scheduleWrite();
 
