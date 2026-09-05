@@ -22,6 +22,7 @@ add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ComponentLookupTest.cpp
   AssetRegistryTest.cpp
+  ComponentEditTest.cpp
   ComponentVariableTest.cpp
   LightRendererTest.cpp
   ObjectSpawnTest.cpp
@@ -29,11 +30,13 @@ add_executable(${PROJECT_NAME}
   SceneManagerTest.cpp
   RuntimeComponentTest.cpp
   ObjectHierarchyTest.cpp
+  ProtocolFramingTest.cpp
   SmokeTest.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
+  ECS3DNetProtocol
   GTest::gtest_main
 )
 
