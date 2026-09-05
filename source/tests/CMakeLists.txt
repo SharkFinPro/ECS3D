@@ -25,6 +25,7 @@ add_executable(${PROJECT_NAME}
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
   LightRendererTest.cpp
+  SettingsStoreTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
   SceneManagerTest.cpp
@@ -37,6 +38,7 @@ add_executable(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
   ECS3DNetProtocol
+  ECS3DSettings
   GTest::gtest_main
 )
 
