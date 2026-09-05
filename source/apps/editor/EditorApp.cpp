@@ -42,6 +42,7 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <chrono>
+#include <exception>
 #include <iostream>
 #include <optional>
 #include <random>
@@ -367,7 +368,16 @@ void EditorApp::run()
     net::Message message;
     while (m_netClient->poll(message))
     {
-      applyMessage(message);
+      // A malformed message costs the message, not the session. Without this the exception escapes run()
+      // and main exits, losing whatever was being edited.
+      try
+      {
+        applyMessage(message);
+      }
+      catch (const std::exception& e)
+      {
+        logMessage("Error", std::string("Failed to apply a message from the server: ") + e.what());
+      }
     }
 
     sendInput();
