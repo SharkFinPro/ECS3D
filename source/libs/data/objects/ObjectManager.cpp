@@ -85,9 +85,20 @@ std::shared_ptr<Object> ObjectManager::instantiateUnder(const nlohmann::json& ob
   addObject(newObject);
 
   // Object's ctor loads only its own components/scripts; children are separate objects, so build them.
+  // Each child registers itself before it is loaded, so a body whose child names a component this build
+  // does not know would strand a half-built subtree - and callers here are expected to catch and carry
+  // on, which is precisely what leaves the wreckage in the scene.
   if (data.contains("children"))
   {
-    newObject->loadChildren(data.at("children"));
+    try
+    {
+      newObject->loadChildren(data.at("children"));
+    }
+    catch (...)
+    {
+      discardSubtree(newObject);
+      throw;
+    }
   }
 
   return newObject;
@@ -208,6 +219,38 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
   }
 
   m_objectsToRemove.clear();
+}
+
+void ObjectManager::discardSubtree(std::shared_ptr<Object> root)
+{
+  if (!root)
+  {
+    return;
+  }
+
+  // The root's parent stays in the scene, so its reference has to go too - otherwise the subtree is gone
+  // from the manager but still hanging off a live object.
+  if (const auto parent = root->getParent())
+  {
+    parent->removeChild(root);
+  }
+
+  eraseSubtree(root);
+}
+
+void ObjectManager::eraseSubtree(const std::shared_ptr<Object>& object)
+{
+  for (const auto& child : object->getChildren())
+  {
+    eraseSubtree(child);
+  }
+
+  std::erase(m_allObjects, object);
+  std::erase(m_objects, object);
+
+  // A queued removal would otherwise outlive the discard and be reparented back into the scene by the
+  // next deletion pass.
+  std::erase(m_objectsToRemove, object);
 }
 
 std::shared_ptr<Object> ObjectManager::getObjectByUUID(const uuids::uuid uuid) const
