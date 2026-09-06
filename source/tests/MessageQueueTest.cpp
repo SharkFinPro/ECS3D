@@ -7,6 +7,8 @@
 #include <atomic>
 #include <compare>
 #include <cstdint>
+#include <limits>
+#include <ostream>
 #include <thread>
 #include <vector>
 
@@ -22,8 +24,16 @@ namespace {
     return message;
   }
 
+  // A pop that handed back an empty message - the regression these tests exist for - would make the read
+  // throw, and an exception escaping a consumer thread is std::terminate rather than a failed test. A
+  // short message yields a sequence no producer ever wrote, which fails the comparison instead.
   uint32_t sequenceOf(const net::Message& message)
   {
+    if (message.size() != sizeof(uint32_t))
+    {
+      return std::numeric_limits<uint32_t>::max();
+    }
+
     net::MessageReader reader(message);
 
     return reader.read<uint32_t>();
@@ -37,6 +47,12 @@ namespace {
     // was pushed - the defaulted comparison gives both the ordering and the equality that needs.
     auto operator<=>(const Delivery&) const = default;
   };
+
+  // Found by ADL. Without it a failed comparison of two 800-element vectors is 800 hex dumps.
+  void PrintTo(const Delivery& delivery, std::ostream* out)
+  {
+    *out << "(sender " << delivery.senderId << ", #" << delivery.sequence << ")";
+  }
 
   // Everything one producer pushes, in the order it pushed it.
   void produce(net::MessageQueue& queue, const int32_t senderId, const uint32_t count)
@@ -69,13 +85,18 @@ TEST(MessageQueue, PopReportsAnEmptyQueue)
   net::MessageQueue queue;
 
   net::Message message(net::MessageType::snapshot);
+  message.write<uint32_t>(0xABCDEF01u);
   int32_t senderId = 7;
 
   EXPECT_FALSE(queue.pop(message, senderId));
 
   // A failed pop must not have written to either output - a caller that ignores the return value and
-  // reads the message anyway should see what it passed in, not a half-assigned entry.
+  // reads the message anyway should see what it passed in, not a half-assigned entry. The payload is
+  // checked as well as the type, since a pop that moved from the message before testing for emptiness
+  // would leave the type intact and the bytes gone.
   EXPECT_EQ(message.getType(), net::MessageType::snapshot);
+  EXPECT_EQ(message.size(), sizeof(uint32_t));
+  EXPECT_EQ(sequenceOf(message), 0xABCDEF01u);
   EXPECT_EQ(senderId, 7);
 }
 
@@ -184,6 +205,13 @@ TEST(MessageQueue, ConcurrentProducersAndConsumersDeliverEachMessageExactlyOnce)
       consumerThreads.emplace_back([&queue, &producersDone, &drained = perConsumer[consumer]] {
         while (true)
         {
+          // Read before the pop, not after. The other order loses a race: a pop can come back empty,
+          // the last producer can then push and finish, and the flag can be set - all before this
+          // thread gets to look at it - and the consumer would leave that message behind and fail a
+          // test that had found nothing wrong. Sampled first, a true flag means the store already
+          // happened-before the pop, and the producers were joined before the store.
+          const bool producersFinished = producersDone.load(std::memory_order_acquire);
+
           net::Message message;
           int32_t senderId = 0;
 
@@ -193,10 +221,9 @@ TEST(MessageQueue, ConcurrentProducersAndConsumersDeliverEachMessageExactlyOnce)
             continue;
           }
 
-          // Checked only after a pop came back empty: the producers are joined before this is set, so
-          // an empty queue past that point is empty for good. Stopping on the flag rather than on a
-          // message count means a lost message fails the assertions below instead of hanging here.
-          if (producersDone.load(std::memory_order_acquire))
+          // Stopping on the flag rather than on a message count means a lost message fails the
+          // assertions below instead of hanging here.
+          if (producersFinished)
           {
             return;
           }
