@@ -31,6 +31,7 @@ add_executable(${PROJECT_NAME}
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
+  CollisionEventTest.cpp
   SettingsStoreTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
