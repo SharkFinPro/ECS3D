@@ -23,8 +23,14 @@ namespace {
   constexpr float dt = 0.1f;
 
   // What integrate() adds to a body's velocity each tick under the default gravity. Note that integrate
-  // moves by the velocity directly rather than by velocity * dt, so "velocity" is displacement per tick.
+  // moves by the velocity directly rather than by velocity * dt, so "velocity" is displacement per tick -
+  // while the rotation it applies below it does use dt.
   constexpr float gravityPerTick = -9.81f * dt * 0.1f;
+
+  // The numbers below are also derived from RigidBody's defaults, not just from dt. Pinned here so that
+  // changing one produces a failure that names the default rather than a page of unexplained arithmetic.
+  constexpr float defaultGravity = -9.81f;
+  constexpr float defaultMass = 10.0f;
 
   struct Scene {
     std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
@@ -66,7 +72,11 @@ namespace {
   void expectNear(const char* what, const glm::vec3& actual, const glm::vec3& expected)
   {
     constexpr float tolerance = 1e-4f;
-    SCOPED_TRACE(what);
+
+    // Both vectors in the trace, not just the component that failed: a physics failure is much easier
+    // to read as "expected (0.9, 1, 0.9), got (0.9, 0.9, 0.9)" than as one number out of context.
+    SCOPED_TRACE(::testing::Message() << what << ": expected " << ::testing::PrintToString(expected)
+                                      << ", actual " << ::testing::PrintToString(actual));
 
     EXPECT_NEAR(actual.x, expected.x, tolerance);
     EXPECT_NEAR(actual.y, expected.y, tolerance);
@@ -74,11 +84,14 @@ namespace {
   }
 }
 
-TEST(PhysicsIntegration, GravityAccumulatesInVelocityAndSquaresInDistance)
+TEST(PhysicsIntegration, GravityAccumulatesInVelocityAndAddsUpInDistance)
 {
   const auto scene = makeScene();
   const auto object = addObject(scene, "Falling", { 0, 0, 0 });
   const auto body = addBody(object, true);
+
+  ASSERT_FLOAT_EQ(body->getGravity(), defaultGravity);
+  ASSERT_FLOAT_EQ(body->getMass(), defaultMass);
 
   for (int tick = 0; tick < 3; ++tick)
   {
@@ -129,7 +142,6 @@ TEST(PhysicsIntegration, AQueuedForceIsAppliedOnceAndThenForgotten)
   const auto object = addObject(scene, "Pushed", { 0, 0, 0 });
   const auto body = addBody(object, false);
 
-  body->setFriction(0.0f);
   body->addPendingForce({ 0, 5, 0 }, transformOf(object)->getPosition());
 
   PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
@@ -155,6 +167,23 @@ TEST(PhysicsIntegration, AForceThroughTheCentreOfMassDoesNotSpinTheBody)
 
   const auto transform = transformOf(object);
   PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, transform->getPosition());
+
+  expectNear("velocity", body->getVelocity(), { 1, 0, 0 });
+  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
+}
+
+TEST(PhysicsIntegration, AForceAlmostThroughTheCentreIsTreatedAsThroughIt)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Pushed", { 0, 0, 0 });
+  const auto body = addBody(object, false);
+
+  const auto transform = transformOf(object);
+
+  // Five thousandths off centre, inside the one-centimetre lever arm applyForce refuses to divide by.
+  // The exactly-centred case above proves nothing about that guard - the cross product of a zero vector
+  // is zero whether the guard is there or not - so this is the one that would notice it going away.
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 0.005f, 0 });
 
   expectNear("velocity", body->getVelocity(), { 1, 0, 0 });
   expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
@@ -198,9 +227,8 @@ TEST(PhysicsIntegration, AWiderBodyIsHarderToSpinAboutItsShortAxis)
   const auto object = addObject(scene, "Wide", { 0, 0, 0 });
   const auto body = addBody(object, false);
 
-  transformOf(object)->setScale({ 3, 1, 1 });
-
   const auto transform = transformOf(object);
+  transform->setScale({ 3, 1, 1 });
   PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 });
 
   // Izz takes width and height: (1/12) * 10 * 0.1 * (9 + 1) = 5/6, so the same impulse spins it at 1.2
@@ -214,17 +242,25 @@ TEST(PhysicsIntegration, ACollisionAlongTheTranslationVectorCancelsTheVelocityIn
 
   const auto falling = addObject(scene, "Falling", { 0, 0, 0 });
   const auto body = addBody(falling, false);
+  // Placed anywhere: handleCollision is given the translation vector directly and never reads the other
+  // object's transform when it has no rigid body of its own.
   const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
 
   body->setVelocity({ 0, -1, 0 });
 
-  // Pushed a quarter unit back up out of the ground, with the contact directly below the centre.
+  // Pushed a quarter unit back up out of the ground, with the contact directly under the body.
   PhysicsSystem::handleCollision(*body, ground, { 0, 0.25f, 0 }, { 0, -1, 0 });
 
   // The correction moves the body clear, and the impulse removes exactly the velocity that was driving
   // it into the surface - so it rests rather than accumulating downward speed against something solid.
   EXPECT_NEAR(transformOf(falling)->getPosition().y, 0.25f, 1e-5f);
   EXPECT_NEAR(body->getVelocity().y, 0.0f, 1e-5f);
+
+  // The impulse is applied at the contact point, which by then is 1.25 below the corrected centre - far
+  // enough past the lever-arm guard to reach the cross product. It produces no spin only because the arm
+  // and the impulse are parallel, so a swapped argument order or a sign slip in there would show up here
+  // and nowhere else.
+  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
 }
 
 TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
@@ -236,13 +272,15 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
 
   const auto falling = addObject(scene, "Falling", { 0, 5, 0 });
   falling->addComponent(std::make_shared<BoxCollider>());
-  addBody(falling, true);
+  const auto body = addBody(falling, true);
 
   CollisionSystem collisionSystem;
 
   float lowest = std::numeric_limits<float>::max();
   float highest = std::numeric_limits<float>::lowest();
 
+  // Sixty ticks: enough to land at tick eight and settle, and short enough to stay clear of the point
+  // where Transform's uint8_t update counter wraps and a collider's cached bounding box goes stale.
   for (int tick = 0; tick < 60; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
@@ -257,13 +295,22 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
     }
   }
 
-  // Two unit boxes, so resting on top means their centres are two apart. The bounds are deliberately
-  // loose rather than pinned to exactly 2: the body sinks by one gravity step between the integrate
-  // that moves it and the collision pass that pushes it back out, and where EPA puts the contact point
-  // decides whether the response also tips it, which raises the resting centre. What must hold is that
-  // it neither sinks through the box below nor gets thrown off it.
-  EXPECT_GT(lowest, 1.5f);
-  EXPECT_LT(highest, 3.0f);
+  // Two unit boxes, so resting on top means their centres are exactly two apart - and because the height
+  // is read after the collision pass rather than between it and the integrate, the sink of one gravity
+  // step is already corrected by the time it is sampled. There is nothing loose about it to allow for.
+  // The hundredth is for EPA's own precision, not for slack in the result: the correction is measured
+  // fresh each tick rather than accumulated, so the error does not build up over the sample window.
+  EXPECT_NEAR(lowest, 2.0f, 1e-2f);
+  EXPECT_NEAR(highest, 2.0f, 1e-2f);
+
+  // The two ways this actually goes wrong, neither of which a height alone would catch: the response is
+  // applied at the contact point, so a contact reported at a corner rather than under the centre would
+  // spin the box, and a spinning box slides off a ground box only two units wide.
+  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
+
+  const auto resting = transformOf(falling)->getPosition();
+  EXPECT_NEAR(resting.x, 0.0f, 1e-3f);
+  EXPECT_NEAR(resting.z, 0.0f, 1e-3f);
 }
 
 TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)
@@ -283,4 +330,72 @@ TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)
   // parent's body and double every force on it - once per descendant.
   EXPECT_NEAR(body->getVelocity().y, gravityPerTick, 1e-5f);
   EXPECT_NEAR(transformOf(parent)->getPosition().y, gravityPerTick, 1e-5f);
+}
+
+TEST(PhysicsIntegration, ARotationTakesTheTimestepWhereAMoveDoesNot)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Spinning", { 0, 0, 0 });
+  const auto body = addBody(object, false);
+
+  body->setFriction(0.0f);
+  body->setVelocity({ 1, 0, 0 });
+  body->setAngularVelocity({ 0, 10, 0 });
+
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+
+  // The asymmetry the top of this file records, asserted rather than described: the position moves by
+  // the whole velocity while the rotation moves by the angular velocity times dt. Anyone who "fixed"
+  // one of the two to match the other would break every tuned value in the project.
+  expectNear("position", transformOf(object)->getPosition(), { 1, 0, 0 });
+  expectNear("rotation", transformOf(object)->getRotation(), { 0, 10.0f * dt, 0 });
+
+  // And the spin is damped a percent per tick afterwards, so a body left alone stops turning.
+  expectNear("angular velocity", body->getAngularVelocity(), { 0, 9.9f, 0 });
+}
+
+TEST(PhysicsIntegration, TwoBodiesClosingOnEachOtherAreSeparatedAndSlowed)
+{
+  const auto scene = makeScene();
+
+  const auto left = addObject(scene, "Left", { 0, 0, 0 });
+  const auto leftBody = addBody(left, false);
+  const auto right = addObject(scene, "Right", { 0, 0, 0 });
+  const auto rightBody = addBody(right, false);
+
+  leftBody->setVelocity({ -1, 0, 0 });
+  rightBody->setVelocity({ 1, 0, 0 });
+
+  // Both bodies are corrected, in opposite directions - unlike the static case, where only the one with
+  // a body moves. The contact is placed along the normal so the impulse produces no torque of its own.
+  PhysicsSystem::handleCollision(*leftBody, right, { 1, 0, 0 }, { 2, 0, 0 });
+
+  expectNear("left position", transformOf(left)->getPosition(), { 1, 0, 0 });
+  expectNear("right position", transformOf(right)->getPosition(), { -1, 0, 0 });
+
+  // They are closing, so the impulse fires: the relative velocity along the normal is 2, and it goes to
+  // the body this call is for. The other gets its own call from its own edge.
+  expectNear("left velocity", leftBody->getVelocity(), { 1, 0, 0 });
+  expectNear("right velocity", rightBody->getVelocity(), { 1, 0, 0 });
+  expectNear("left spin", leftBody->getAngularVelocity(), { 0, 0, 0 });
+}
+
+TEST(PhysicsIntegration, TwoBodiesAlreadyMovingApartAreSeparatedButNotSlowed)
+{
+  const auto scene = makeScene();
+
+  const auto left = addObject(scene, "Left", { 0, 0, 0 });
+  const auto leftBody = addBody(left, false);
+  const auto right = addObject(scene, "Right", { 0, 0, 0 });
+  addBody(right, false);
+
+  leftBody->setVelocity({ 1, 0, 0 });
+  right->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity({ -1, 0, 0 });
+
+  PhysicsSystem::handleCollision(*leftBody, right, { 1, 0, 0 }, { 2, 0, 0 });
+
+  // Still pushed apart - an overlap is an overlap - but no impulse, because they are already separating
+  // and adding one would fling apart two bodies that were resolving themselves.
+  expectNear("left position", transformOf(left)->getPosition(), { 1, 0, 0 });
+  expectNear("left velocity", leftBody->getVelocity(), { 1, 0, 0 });
 }
