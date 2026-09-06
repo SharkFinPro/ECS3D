@@ -8,6 +8,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/SphereCollider.h"
 
 #include <Protocol.h>
 #include <glm/vec3.hpp>
@@ -189,4 +190,51 @@ TEST(ComponentEdit, ReportsAScriptClassTheObjectDoesNotCarryAsUnknown)
 
   EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, edit),
             replication::ComponentEditResult::unknownComponent);
+}
+
+TEST(ComponentEdit, RefusesADiscriminatorThatNamesNoComponent)
+{
+  const auto scene = makeScene();
+
+  net::Message edit(net::MessageType::editComponent);
+  edit.writeString(uuids::to_string(scene.object->getUUID()));
+  edit.write(static_cast<ComponentType>(0x7F));
+
+  // A discriminator off the wire has to name something that is actually packed before it picks a slot.
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, edit),
+            replication::ComponentEditResult::malformedPayload);
+}
+
+TEST(ComponentEdit, RefusesTheParentColliderTypeAsADiscriminator)
+{
+  const auto scene = makeScene();
+  scene.object->addComponent(std::make_shared<BoxCollider>());
+
+  net::Message edit(net::MessageType::editComponent);
+  edit.writeString(uuids::to_string(scene.object->getUUID()));
+  edit.write(ComponentType::collider);
+
+  // The case that made the check necessary: colliders pack their shape, never the parent type, but the
+  // parent type is a valid key in the component map - so this used to unpack into whichever shape was
+  // there, reading a body of the wrong layout.
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, edit),
+            replication::ComponentEditResult::malformedPayload);
+}
+
+TEST(ComponentEdit, RefusesAnEditForTheOtherColliderShape)
+{
+  const auto scene = makeScene();
+
+  const auto sphere = std::make_shared<SphereCollider>();
+  scene.object->addComponent(sphere);
+  sphere->setRadius(5.0f);
+
+  // Both shapes live under the same map key, so this resolves to the sphere - but a box body read as a
+  // sphere takes a 12-byte vector where a 4-byte float belongs, corrupting it silently.
+  const auto edit = replication::buildComponentEdit(scene.object->getUUID(),
+                                                    std::make_shared<BoxCollider>());
+
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, edit),
+            replication::ComponentEditResult::unknownComponent);
+  EXPECT_FLOAT_EQ(sphere->getLocalRadius(), 5.0f);
 }

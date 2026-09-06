@@ -308,6 +308,14 @@ void Object::unpack(net::MessageReader& messageReader)
   {
     const auto packedType = messageReader.read<ComponentType>();
 
+    // The discriminator comes off the network, so it has to name something that is actually packed
+    // before it picks a slot on this object.
+    const auto registryKey = componentTypeToRegistryKey.find(packedType);
+    if (registryKey == componentTypeToRegistryKey.end())
+    {
+      throw std::runtime_error("Packed component type is not a component");
+    }
+
     // Colliders pack their subtype, but live under the parent "collider" key in m_components.
     auto lookupType = packedType;
     if (const auto parentIt = subComponentTypeToParent.find(packedType);
@@ -321,9 +329,27 @@ void Object::unpack(net::MessageReader& messageReader)
     auto componentIt = m_components.find(lookupType);
     auto component = componentIt != m_components.end() ? componentIt->second : nullptr;
 
+    // The two collider shapes share that key but not a field layout. Reading a box body into a
+    // SphereCollider would take a 12-byte vector where a 4-byte float belongs and misalign everything
+    // after it, so the slot is rebuilt as the shape the payload describes rather than reused.
+    if (component && component->getPackedType() != packedType)
+    {
+      removeComponent(component);
+      component = nullptr;
+    }
+
     if (!component)
     {
-      component = registry->create(componentTypeToRegistryKey.at(packedType));
+      component = registry->create(registryKey->second);
+
+      // create() returns null for a type this build never registered, and addComponent dereferences it
+      // immediately to read getType(). A null dereference escapes every guard around this path,
+      // including the run loops' catches and the spawn unwind - on a path that reads bytes off the wire.
+      if (!component)
+      {
+        throw std::runtime_error("Unknown component type: " + registryKey->second);
+      }
+
       addComponent(component);
     }
 
@@ -351,6 +377,12 @@ void Object::unpack(net::MessageReader& messageReader)
     if (!script)
     {
       script = std::dynamic_pointer_cast<Script>(registry->create("Script"));
+
+      if (!script)
+      {
+        throw std::runtime_error("Script component type is not registered");
+      }
+
       script->setClassName(className);
       addComponent(script);
     }
@@ -403,7 +435,7 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
 
   const auto& registry = m_manager->getComponentRegistry();
 
-  for (const auto& componentData : objectData["components"])
+  for (const auto& componentData : objectData.at("components"))
   {
     const auto componentType = componentData.at("type").get<std::string>();
 
@@ -424,7 +456,7 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     component->loadFromJSON(componentData);
   }
 
-  for (const auto& scriptData : objectData["scripts"])
+  for (const auto& scriptData : objectData.at("scripts"))
   {
     const auto script = registry->create("Script");
 
