@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 
 namespace ECS3DNetTransport;
@@ -33,7 +34,30 @@ internal abstract class TransportBackend
   // Generous rather than tight: the largest legitimate message is a full project snapshot, which carries
   // every scene, prefab body and asset record, and the point is to refuse the absurd rather than to
   // predict the biggest real project. Shared here so both transports refuse the same thing.
+  //
+  // Note this bounds the declared length, not the memory: a message at the ceiling is held two or three
+  // times over while it is assembled and copied out, so budget a multiple of this rather than this.
   protected const int MaxMessageBytes = 64 * 1024 * 1024;
+
+  // The handshake is [role byte][token], so it has no business being large - and it is the one frame
+  // read before the peer has been authorized at all. Capping it separately means the pre-auth surface is
+  // a few kilobytes rather than the whole ceiling above, which everything after the handshake gets.
+  protected const int MaxHandshakeBytes = 4 * 1024;
+
+  // An outbound message over the ceiling would be refused by every peer that received it, and refused
+  // silently - the receiving loop cannot tell an over-long frame from a closed socket. Caught at the
+  // sender instead, where there is something useful to say about it.
+  protected static bool TooLargeToSend(int len)
+  {
+    if (1 + len <= MaxMessageBytes)
+    {
+      return false;
+    }
+
+    Console.Error.WriteLine($"[Transport] Refusing to send a {1 + len} byte message; the limit is {MaxMessageBytes}.");
+
+    return true;
+  }
 
   // editMode is the launch-capability gate: only an edit-mode server may grant Role.editor at the
   // handshake, and only when the presented token matches expectedToken (see Authorize). Set at ServerStart.

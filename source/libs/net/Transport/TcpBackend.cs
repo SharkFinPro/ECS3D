@@ -81,6 +81,11 @@ internal sealed class TcpBackend : TransportBackend
 
   public override void ServerBroadcast(byte type, nint data, int len)
   {
+    if (TooLargeToSend(len))
+    {
+      return;
+    }
+
     var frame = Frame(type, data, len);
 
     lock (_clientsLock)
@@ -141,7 +146,7 @@ internal sealed class TcpBackend : TransportBackend
 
       // The first frame must be the handshake. Authorize from it (e.g. reject an editor against a
       // play-only server, or one with a bad token) before delivering any protocol message to C++.
-      if (ReadFrame(stream, out var handshakeType, out var handshakePayload) &&
+      if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes) &&
           handshakeType == HandshakeType && Authorize(handshakePayload))
       {
         while (_serverRunning)
@@ -225,7 +230,7 @@ internal sealed class TcpBackend : TransportBackend
   public override void ClientSend(byte type, nint data, int len)
   {
     var stream = _client?.GetStream();
-    if (stream is null)
+    if (stream is null || TooLargeToSend(len))
     {
       return;
     }
@@ -301,7 +306,7 @@ internal sealed class TcpBackend : TransportBackend
     return frame;
   }
 
-  private static bool ReadFrame(Stream stream, out byte type, out byte[] payload)
+  private static bool ReadFrame(Stream stream, out byte type, out byte[] payload, int maxBytes = MaxMessageBytes)
   {
     type = 0;
     payload = Array.Empty<byte>();
@@ -312,12 +317,22 @@ internal sealed class TcpBackend : TransportBackend
       return false;
     }
 
-    // The length is the peer's word, and it is read before the handshake has been authorized - the
-    // handshake is itself a frame - so this runs for anything that can open a socket. Unbounded, four
-    // bytes of 0x7FFFFFFF ask for a two gigabyte allocation, and the copy below would ask for it twice.
+    // The length is the peer's word, and the handshake is itself a frame - so this runs for anything that
+    // can open a socket, before Authorize has seen a byte. Unbounded, a length just under int.MaxValue
+    // asks for a two gigabyte allocation, and the copy below holds it twice over at once. The handshake
+    // read passes a far smaller ceiling than the rest, since it carries a role byte and a token.
     var bodyLen = BinaryPrimitives.ReadInt32BigEndian(header);
-    if (bodyLen < 1 || bodyLen > MaxMessageBytes)
+    if (bodyLen < 1)
     {
+      return false;
+    }
+
+    if (bodyLen > maxBytes)
+    {
+      // Logged, because a refusal and a closed socket are the same false to the caller. A message this
+      // size is either an attack or a peer that has outgrown the limit, and both are worth seeing.
+      Console.Error.WriteLine($"[Transport] Refused a {bodyLen} byte frame; the limit here is {maxBytes}.");
+
       return false;
     }
 
