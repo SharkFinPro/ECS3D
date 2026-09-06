@@ -45,8 +45,9 @@ add_executable(${PROJECT_NAME}
 
   # net's MessageQueue is compiled in rather than linked: it is the one piece of ECS3DNet with no CLR
   # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a
-  # suite that is headless by construction. That is also the constraint - do not add ECS3DNet to the
-  # link libraries below, or these objects and the library's duplicate.
+  # suite that is headless by construction. That is also the constraint the arrangement rests on - do
+  # not add ECS3DNet to the link libraries below, or these objects and the library's duplicate. Anything
+  # else in net that needs covering will hit the same wall.
   ../libs/net/MessageQueue.cpp
 )
 
