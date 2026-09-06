@@ -135,6 +135,11 @@ public:
 
   [[nodiscard]] ComponentType getSubType() const;
 
+  // The discriminator this component writes first in pack(): its subtype where it has one (a collider
+  // packs its shape), otherwise its type. An unpack has to match this before it reads any fields, since
+  // two shapes stored under the same map key have different field layouts.
+  [[nodiscard]] ComponentType getPackedType() const;
+
   void setOwner(Object* owner);
   [[nodiscard]] Object* getOwner() const;
 
