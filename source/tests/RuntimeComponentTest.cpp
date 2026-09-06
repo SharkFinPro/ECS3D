@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "TestPrinters.h"
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "Replication.h"

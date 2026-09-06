@@ -184,6 +184,9 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
     return store("");
   }
 
+  // instantiate registers every node of the subtree through addObject, which starts what it registers
+  // while the scene is running - so the instance already has live component state by the time its root
+  // is positioned below, rather than the stopped values physics and replication would otherwise read.
   std::shared_ptr<Object> object;
   try
   {
@@ -196,9 +199,6 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
     std::cerr << "[WorldBindings] Failed to instantiate prefab " << prefabUuid << ": " << e.what() << std::endl;
     return store("");
   }
-
-  // Every node of the subtree was registered through addObject, which starts what it registers while the
-  // scene is running - so the instance already has live component state before the root is positioned.
 
   if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
   {
