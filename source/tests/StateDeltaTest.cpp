@@ -3,6 +3,7 @@
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "Replication.h"
+#include "TestPrinters.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
@@ -11,10 +12,11 @@
 #include <Protocol.h>
 #include <glm/vec3.hpp>
 #include <cmath>
-#include <stdexcept>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
+#include <vector>
 #include <uuid.h>
 
 namespace {
@@ -42,9 +44,30 @@ namespace {
     return object;
   }
 
+  // Thrown rather than returned null, like findByName below: every caller dereferences the result on the
+  // same line, so a message beats a crash in the line after.
   std::shared_ptr<Transform> transformOf(const std::shared_ptr<Object>& object)
   {
-    return object->getComponent<Transform>(ComponentType::transform);
+    auto transform = object->getComponent<Transform>(ComponentType::transform);
+    if (!transform)
+    {
+      throw std::runtime_error(object->getName() + " has no transform");
+    }
+
+    return transform;
+  }
+
+  std::shared_ptr<Object> findByName(const Scene& scene, const std::string& name)
+  {
+    for (const auto& object : scene.objectManager->getAllObjects())
+    {
+      if (object->getName() == name)
+      {
+        return object;
+      }
+    }
+
+    throw std::runtime_error("no object named " + name);
   }
 
   // The way a view actually comes to share uuids with the authority: it is sent the scene. Cloning any
@@ -67,32 +90,23 @@ namespace {
     return message;
   }
 
-  std::shared_ptr<Object> findByName(const Scene& scene, const std::string& name)
+  // The uuid strings a delta carries, in the order it carries them. Reading them back is what lets a
+  // test say which entry sat where rather than assuming the sender's iteration order stays put.
+  std::vector<std::string> entryUuids(const net::Message& message)
   {
-    for (const auto& object : scene.objectManager->getAllObjects())
+    net::MessageReader reader(message);
+
+    std::vector<std::string> uuidStrings;
+    const uint32_t count = reader.read<uint32_t>();
+    for (uint32_t i = 0; i < count; ++i)
     {
-      if (object->getName() == name)
-      {
-        return object;
-      }
+      uuidStrings.push_back(reader.readString());
+      static_cast<void>(reader.read<glm::vec3>());
+      static_cast<void>(reader.read<glm::vec3>());
+      static_cast<void>(reader.read<glm::vec3>());
     }
 
-    // Thrown rather than returned null: every caller here immediately dereferences it, and a message
-    // naming the object reads better than a crash in the line after.
-    throw std::runtime_error("no object named " + name);
-  }
-
-  void expectNear(const char* what, const glm::vec3& actual, const glm::vec3& expected)
-  {
-    constexpr float tolerance = 1e-5f;
-    SCOPED_TRACE(::testing::Message()
-                 << what
-                 << ": expected (" << expected.x << ", " << expected.y << ", " << expected.z << ")"
-                 << ", actual (" << actual.x << ", " << actual.y << ", " << actual.z << ")");
-
-    EXPECT_NEAR(actual.x, expected.x, tolerance);
-    EXPECT_NEAR(actual.y, expected.y, tolerance);
-    EXPECT_NEAR(actual.z, expected.z, tolerance);
+    return uuidStrings;
   }
 }
 
@@ -111,13 +125,36 @@ TEST(StateDelta, ReproducesATransformOnTheReceivingScene)
   replication::unpackStateDelta(*target.objectManager, deltaOf(source));
 
   const auto replicated = transformOf(findByName(target, "Object"));
-  ASSERT_NE(replicated, nullptr);
 
-  // Every value the delta carries, on the way in and on the way out. This is the stream that keeps two
-  // players seeing the same world, and drift here does not crash - it just makes them disagree.
-  expectNear("position", replicated->getLocalPosition(), { 1.5f, -2.25f, 3.0f });
-  expectNear("rotation", replicated->getLocalRotation(), { 10, 20, 30 });
-  expectNear("scale", replicated->getLocalScale(), { 2, 4, 8 });
+  // Compared exactly, because the path is exact: every value goes bit_cast, memcpy, bit_cast with no
+  // arithmetic anywhere. A tolerance here would tell a reader the wire is approximate when it is not,
+  // and would hide a single-bit corruption.
+  EXPECT_EQ(replicated->getLocalPosition(), glm::vec3(1.5f, -2.25f, 3.0f));
+  EXPECT_EQ(replicated->getLocalRotation(), glm::vec3(10, 20, 30));
+  EXPECT_EQ(replicated->getLocalScale(), glm::vec3(2, 4, 8));
+}
+
+TEST(StateDelta, SendsWhatARunningSceneShowsRatherThanWhatItWouldSave)
+{
+  const auto source = makeScene();
+  const auto target = makeScene();
+
+  const auto object = addObject(source, "Object");
+  snapshotInto(source, target);
+
+  // The authority is always a started scene and a view never is, so a value leaves the live slot and
+  // arrives in the authored one. Every other test here runs both ends stopped, where the two agree -
+  // which is exactly where a regression in that routing would hide.
+  source.objectManager->start();
+  transformOf(object)->setPosition({ 4, 5, 6 });
+
+  replication::unpackStateDelta(*target.objectManager, deltaOf(source));
+
+  EXPECT_EQ(transformOf(findByName(target, "Object"))->getLocalPosition(), glm::vec3(4, 5, 6));
+
+  // And the run did not touch what the scene would save.
+  source.objectManager->stop();
+  EXPECT_EQ(transformOf(object)->getLocalPosition(), glm::vec3(0));
 }
 
 TEST(StateDelta, CarriesLocalTransformsSoAHierarchyIsNotDoubleCounted)
@@ -132,16 +169,18 @@ TEST(StateDelta, CarriesLocalTransformsSoAHierarchyIsNotDoubleCounted)
   transformOf(parent)->setPosition({ 10, 0, 0 });
   transformOf(child)->setPosition({ 1, 0, 0 });
 
-  replication::unpackStateDelta(*target.objectManager, deltaOf(source));
+  const auto message = deltaOf(source);
+  EXPECT_EQ(entryUuids(message).size(), 2u);
+
+  replication::unpackStateDelta(*target.objectManager, message);
 
   const auto replicatedChild = transformOf(findByName(target, "Child"));
-  ASSERT_NE(replicatedChild, nullptr);
 
   // The wire carries the child's own offset, and the receiver walks the parents itself. Sending the
   // combined value instead would land the child at 21 rather than 11 - and only under hierarchy, so a
   // flat scene would look perfectly fine.
-  expectNear("child local", replicatedChild->getLocalPosition(), { 1, 0, 0 });
-  expectNear("child world", replicatedChild->getPosition(), { 11, 0, 0 });
+  EXPECT_EQ(replicatedChild->getLocalPosition(), glm::vec3(1, 0, 0));
+  EXPECT_EQ(replicatedChild->getPosition(), glm::vec3(11, 0, 0));
 }
 
 TEST(StateDelta, AnEmptySceneStillPacksACount)
@@ -161,26 +200,45 @@ TEST(StateDelta, AnEmptySceneStillPacksACount)
 TEST(StateDelta, SkipsAnObjectWhoseTransformIsNotFinite)
 {
   const auto source = makeScene();
-  const auto target = makeScene();
 
   const auto healthy = addObject(source, "Healthy");
-  const auto broken = addObject(source, "Broken");
-  snapshotInto(source, target);
+  const auto notANumber = addObject(source, "NotANumber");
+  const auto infinite = addObject(source, "Infinite");
+  const auto spinning = addObject(source, "Spinning");
+  const auto scaled = addObject(source, "Scaled");
 
   transformOf(healthy)->setPosition({ 1, 2, 3 });
-  transformOf(broken)->setPosition({ std::numeric_limits<float>::quiet_NaN(), 0, 0 });
+  transformOf(notANumber)->setPosition({ std::numeric_limits<float>::quiet_NaN(), 0, 0 });
+  transformOf(infinite)->setPosition({ std::numeric_limits<float>::infinity(), 0, 0 });
 
-  const auto message = deltaOf(source);
+  // All three vectors are checked, not just the position: a non-finite rotation or scale reaches the
+  // receiver's world transforms just as surely.
+  transformOf(spinning)->setRotation({ 0, std::numeric_limits<float>::quiet_NaN(), 0 });
+  transformOf(scaled)->setScale({ 0, 0, std::numeric_limits<float>::infinity() });
 
-  // One entry, not two: a NaN written into the receiver's scene would spread through every world
-  // transform below it and never come back, so it is dropped at the sender.
-  net::MessageReader reader(message);
-  EXPECT_EQ(reader.read<uint32_t>(), 1u);
+  const auto sent = entryUuids(deltaOf(source));
 
-  replication::unpackStateDelta(*target.objectManager, message);
+  // A NaN written into the receiver's scene spreads through every world transform below it and never
+  // comes back, so it is dropped at the sender rather than filtered at the far end.
+  ASSERT_EQ(sent.size(), 1u);
+  EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
+}
 
-  expectNear("healthy", transformOf(findByName(target, "Healthy"))->getLocalPosition(), { 1, 2, 3 });
-  EXPECT_TRUE(std::isfinite(transformOf(findByName(target, "Broken"))->getLocalPosition().x));
+TEST(StateDelta, SkipsAnObjectWithNoTransformAtAll)
+{
+  const auto source = makeScene();
+
+  const auto healthy = addObject(source, "Healthy");
+
+  auto bare = std::make_shared<Object>(std::vector<std::shared_ptr<Component>>{}, "Bare");
+  source.objectManager->addObject(bare);
+
+  const auto sent = entryUuids(deltaOf(source));
+
+  // Nothing in the engine builds one of these today, but the delta is the wrong place to find out: the
+  // sender reads three vectors off a component that is not there.
+  ASSERT_EQ(sent.size(), 1u);
+  EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
 }
 
 TEST(StateDelta, AnEntryForAnObjectTheReceiverDoesNotHaveDoesNotDerailTheRest)
@@ -195,8 +253,7 @@ TEST(StateDelta, AnEntryForAnObjectTheReceiverDoesNotHaveDoesNotDerailTheRest)
 
   // The receiver drops the middle one. Routine rather than exotic: the authority streams a delta for
   // everything it holds, and a view is always a little behind - it can have removed an object the
-  // authority has not stopped sending yet. The entry order follows registration, so the one it cannot
-  // resolve sits between two it can.
+  // authority has not stopped sending yet.
   target.objectManager->removeObject(findByName(target, "Unknown"));
   target.objectManager->deleteObjectsMarkedForDeletion();
 
@@ -204,12 +261,20 @@ TEST(StateDelta, AnEntryForAnObjectTheReceiverDoesNotHaveDoesNotDerailTheRest)
   transformOf(unknown)->setPosition({ 2, 0, 0 });
   transformOf(third)->setPosition({ 3, 0, 0 });
 
-  replication::unpackStateDelta(*target.objectManager, deltaOf(source));
+  const auto message = deltaOf(source);
+
+  // Asserted rather than assumed: the whole point is an unresolvable entry with entries after it, and
+  // if the sender's order ever changed this would quietly stop testing that.
+  const auto sent = entryUuids(message);
+  ASSERT_EQ(sent.size(), 3u);
+  ASSERT_EQ(sent[1], uuids::to_string(unknown->getUUID()));
+
+  replication::unpackStateDelta(*target.objectManager, message);
 
   // The unknown entry is skipped, but its bytes are still consumed - so everything after it lands where
   // it should instead of being read at an offset.
-  expectNear("first", transformOf(findByName(target, "First"))->getLocalPosition(), { 1, 0, 0 });
-  expectNear("third", transformOf(findByName(target, "Third"))->getLocalPosition(), { 3, 0, 0 });
+  EXPECT_EQ(transformOf(findByName(target, "First"))->getLocalPosition(), glm::vec3(1, 0, 0));
+  EXPECT_EQ(transformOf(findByName(target, "Third"))->getLocalPosition(), glm::vec3(3, 0, 0));
 }
 
 TEST(StateDelta, AnEntryWithAnUnreadableUuidDoesNotDerailTheRest)
@@ -219,8 +284,6 @@ TEST(StateDelta, AnEntryWithAnUnreadableUuidDoesNotDerailTheRest)
 
   const auto object = addObject(source, "Object");
   snapshotInto(source, target);
-
-  transformOf(object)->setPosition({ 7, 8, 9 });
 
   // Two entries by hand: a uuid that does not parse, then the real one. Same reasoning as above, for the
   // other way an entry can be unusable.
@@ -234,24 +297,53 @@ TEST(StateDelta, AnEntryWithAnUnreadableUuidDoesNotDerailTheRest)
 
   message.writeString(uuids::to_string(object->getUUID()));
   message.write(glm::vec3(7, 8, 9));
-  message.write(glm::vec3(0));
-  message.write(glm::vec3(1));
+  message.write(glm::vec3(90, 0, 0));
+  message.write(glm::vec3(2, 2, 2));
 
   replication::unpackStateDelta(*target.objectManager, message);
 
-  expectNear("position", transformOf(findByName(target, "Object"))->getLocalPosition(), { 7, 8, 9 });
+  const auto replicated = transformOf(findByName(target, "Object"));
+
+  // All three vectors, in the order the sender writes them. A round trip cannot catch a symmetric swap
+  // of rotation and scale, and this is the only place the field order is pinned against a payload
+  // written by hand - which matters, because Transform::pack orders the same three the other way.
+  EXPECT_EQ(replicated->getLocalPosition(), glm::vec3(7, 8, 9));
+  EXPECT_EQ(replicated->getLocalRotation(), glm::vec3(90, 0, 0));
+  EXPECT_EQ(replicated->getLocalScale(), glm::vec3(2, 2, 2));
 }
 
-TEST(StateDelta, ATruncatedDeltaThrowsRatherThanWritingHalfOfIt)
+TEST(StateDelta, ATruncatedDeltaThrowsAfterApplyingWhatItAlreadyRead)
+{
+  const auto source = makeScene();
+  const auto target = makeScene();
+
+  const auto object = addObject(source, "Object");
+  snapshotInto(source, target);
+
+  net::Message message(net::MessageType::stateDelta);
+  message.write<uint32_t>(2);
+
+  message.writeString(uuids::to_string(object->getUUID()));
+  message.write(glm::vec3(1, 2, 3));
+  message.write(glm::vec3(0));
+  message.write(glm::vec3(1));
+
+  // The second entry stops after its uuid.
+  message.writeString(uuids::to_string(object->getUUID()));
+
+  EXPECT_THROW(replication::unpackStateDelta(*target.objectManager, message), std::runtime_error);
+
+  // Entries are applied as they are read - nothing is staged and nothing is rolled back - so the first
+  // one is already in the scene when the second runs out. Pinned because it is the opposite of what a
+  // caller would assume from a function that threw, and the next tick's delta is what repairs it.
+  EXPECT_EQ(transformOf(findByName(target, "Object"))->getLocalPosition(), glm::vec3(1, 2, 3));
+}
+
+TEST(StateDelta, AnEmptyPayloadThrowsRatherThanReadingACountThatIsNotThere)
 {
   const auto target = makeScene();
-  addObject(target, "Object");
 
-  // Claims an entry and stops after the uuid. The reader throws on the underflow, which the client's run
-  // loop catches - the alternative is reading whatever follows in memory as a transform.
-  net::Message message(net::MessageType::stateDelta);
-  message.write<uint32_t>(1);
-  message.writeString("123e4567-e89b-12d3-a456-426614174000");
+  const net::Message message(net::MessageType::stateDelta);
 
   EXPECT_THROW(replication::unpackStateDelta(*target.objectManager, message), std::runtime_error);
 }
