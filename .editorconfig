@@ -1,0 +1,20 @@
+# Editor settings the whole tree agrees on. Deliberately does not set end_of_line: the repo stores LF and
+# core.autocrlf checks out CRLF on Windows, so pinning it here would fight git rather than help.
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{h,hpp,cpp,c,cs}]
+max_line_length = 120
+
+# Two trailing spaces are a line break in Markdown, so stripping them changes the rendering.
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{sln,csproj,props,targets}]
+indent_size = 2
