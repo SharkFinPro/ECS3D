@@ -2,6 +2,9 @@ project(ECS3DTests)
 
 include(FetchContent)
 
+# The MessageQueue tests run real producer/consumer threads of their own.
+find_package(Threads REQUIRED)
+
 # GoogleTest is the only test-only dependency, so it is declared here rather than alongside the shared
 # runtime deps in libs/: a build with BUILD_TESTING off never fetches it.
 FetchContent_Declare(
@@ -37,8 +40,20 @@ add_executable(${PROJECT_NAME}
   ObjectHierarchyTest.cpp
   ProtocolFramingTest.cpp
   WireTypesTest.cpp
+  MessageQueueTest.cpp
   SmokeTest.cpp
   TestPrinters.h
+
+  # net's MessageQueue is compiled in rather than linked: it is the one piece of ECS3DNet with no CLR
+  # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a
+  # suite that is headless by construction. That is also the constraint the arrangement rests on - do
+  # not add ECS3DNet to the link libraries below, or these objects and the library's duplicate. Anything
+  # else in net that needs covering will hit the same wall.
+  ../libs/net/MessageQueue.cpp
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -47,6 +62,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DSettings
   ECS3DSim
   GTest::gtest_main
+  Threads::Threads
 )
 
 # Kept out of bin/, which is the shipped executable layout.

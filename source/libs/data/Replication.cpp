@@ -138,8 +138,16 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
       return ComponentEditResult::unknownObject;
     }
 
-    // Each component packs its type (or, for colliders, its subtype) first as a discriminator.
+    // Each component packs its type (or, for colliders, its subtype) first as a discriminator. It comes
+    // off the wire, so check it names something that is actually packed before using it to pick a slot on
+    // the object. ComponentType::collider is the one that made this necessary: it is never a
+    // discriminator, since colliders pack their shape, but it is a valid key in the component map - so a
+    // payload claiming it went straight into whatever collider the object held.
     const auto componentType = reader.read<ComponentType>();
+    if (!componentTypeToRegistryKey.contains(componentType))
+    {
+      return ComponentEditResult::malformedPayload;
+    }
 
     // Scripts live in their own list, keyed by class name, and pack the name next so the right one can be
     // found before unpack() reads the remaining field data.
@@ -171,13 +179,23 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
     }
 
     const auto& components = object->getComponents();
-    if (!components.contains(lookupType))
+    const auto componentIt = components.find(lookupType);
+    if (componentIt == components.end())
+    {
+      return ComponentEditResult::unknownComponent;
+    }
+
+    // The two collider shapes share a map key but not a field layout, so the discriminator has to name
+    // the shape that is actually there. A box-shaped edit unpacked into a SphereCollider - reachable
+    // during an add/remove-component race - would read a 12-byte vector where a 4-byte float belongs,
+    // corrupting the component and misaligning every remaining read in the message.
+    if (componentIt->second->getPackedType() != componentType)
     {
       return ComponentEditResult::unknownComponent;
     }
 
     unpacking = true;
-    components.at(lookupType)->unpack(reader);
+    componentIt->second->unpack(reader);
 
     return ComponentEditResult::applied;
   }
