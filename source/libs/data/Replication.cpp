@@ -292,141 +292,149 @@ nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID)
   };
 }
 
-void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
-                    const AssetRegistry* assetRegistry)
-{
-  const std::string op = edit.at("op");
-
-  if (op == "instantiatePrefab")
+namespace {
+  SceneEditResult applyStructuralEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                                      const AssetRegistry* assetRegistry)
   {
-    // The only op keyed by an asset rather than an existing object: pull the prefab's body from the
-    // registry and clone it in with fresh uuids. An unknown/malformed prefab yields a null body and is
-    // skipped.
-    if (!assetRegistry)
+    const std::string op = edit.at("op");
+
+    if (op == "instantiatePrefab")
     {
-      return;
-    }
-
-    const auto parsedPrefab = uuids::uuid::from_string(std::string(edit.at("prefab")));
-    if (!parsedPrefab.has_value())
-    {
-      return;
-    }
-
-    if (const auto body = assetRegistry->getPrefabBody(parsedPrefab.value()); body.is_object())
-    {
-      objectManager.instantiate(body);
-    }
-
-    return;
-  }
-
-  if (op == "addObject")
-  {
-    const std::string name = edit.value("name", "Object");
-
-    const auto object = std::make_shared<Object>(name);
-
-    if (edit.contains("parent"))
-    {
-      if (const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent"))))
+      // The only op keyed by an asset rather than an existing object: pull the prefab's body from the
+      // registry and clone it in with fresh uuids. An unknown/malformed prefab yields a null body and is
+      // skipped.
+      if (!assetRegistry)
       {
-        if (const auto parent = objectManager.getObjectByUUID(parsed.value()))
+        return SceneEditResult::unknownAsset;
+      }
+
+      const auto parsedPrefab = uuids::uuid::from_string(std::string(edit.at("prefab")));
+      if (!parsedPrefab.has_value())
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      const auto body = assetRegistry->getPrefabBody(parsedPrefab.value());
+      if (!body.is_object())
+      {
+        return SceneEditResult::unknownAsset;
+      }
+
+      objectManager.instantiate(body);
+
+      return SceneEditResult::applied;
+    }
+
+    if (op == "addObject")
+    {
+      const std::string name = edit.value("name", "Object");
+
+      const auto object = std::make_shared<Object>(name);
+
+      if (edit.contains("parent"))
+      {
+        if (const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent"))))
         {
-          object->setParent(parent);
+          if (const auto parent = objectManager.getObjectByUUID(parsed.value()))
+          {
+            object->setParent(parent);
+          }
         }
       }
+
+      objectManager.addObject(object);
+      return SceneEditResult::applied;
     }
 
-    objectManager.addObject(object);
-    return;
-  }
-
-  // Every other op targets an existing object.
-  const auto parsed = uuids::uuid::from_string(std::string(edit.at("object")));
-  if (!parsed.has_value())
-  {
-    return;
-  }
-
-  const auto object = objectManager.getObjectByUUID(parsed.value());
-  if (!object)
-  {
-    return;
-  }
-
-  if (op == "removeObject")
-  {
-    objectManager.removeObject(object);
-    objectManager.deleteObjectsMarkedForDeletion();
-    return;
-  }
-
-  if (op == "renameObject")
-  {
-    object->setName(edit.at("name"));
-    return;
-  }
-
-  if (op == "duplicateObject")
-  {
-    objectManager.duplicateObject(object);
-    return;
-  }
-
-  if (op == "reparentObject")
-  {
-    std::shared_ptr<Object> parent;
-    if (edit.contains("parent"))
+    // Every other op targets an existing object.
+    const auto parsed = uuids::uuid::from_string(std::string(edit.at("object")));
+    if (!parsed.has_value())
     {
-      if (const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent"))))
+      return SceneEditResult::malformedEdit;
+    }
+
+    const auto object = objectManager.getObjectByUUID(parsed.value());
+    if (!object)
+    {
+      return SceneEditResult::unknownObject;
+    }
+
+    if (op == "removeObject")
+    {
+      objectManager.removeObject(object);
+      objectManager.deleteObjectsMarkedForDeletion();
+      return SceneEditResult::applied;
+    }
+
+    if (op == "renameObject")
+    {
+      object->setName(edit.at("name"));
+      return SceneEditResult::applied;
+    }
+
+    if (op == "duplicateObject")
+    {
+      objectManager.duplicateObject(object);
+      return SceneEditResult::applied;
+    }
+
+    if (op == "reparentObject")
+    {
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
       {
-        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent"))))
+        {
+          parent = objectManager.getObjectByUUID(parsedParent.value());
+        }
       }
+
+      // Don't create a cycle (drop onto self or a descendant).
+      if (object == parent || (parent && object->isAncestorOf(parent)))
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Dropping an object back onto the parent it already has would only move it to the end of the
+      // sibling list and cost a re-snapshot.
+      if (object->getParent() == parent)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      if (const auto oldParent = object->getParent())
+      {
+        oldParent->removeChild(object);
+      }
+      else
+      {
+        objectManager.removeObjectFromRoot(object);
+      }
+
+      object->setParent(parent);
+
+      if (parent)
+      {
+        parent->addChild(object);
+      }
+      else
+      {
+        objectManager.addObjectToRoot(object);
+      }
+
+      return SceneEditResult::applied;
     }
 
-    // Don't create a cycle (drop onto self or a descendant).
-    if (object == parent || (parent && object->isAncestorOf(parent)))
+    if (op == "addComponent")
     {
-      return;
-    }
+      const std::string key = edit.at("component");
 
-    // Dropping an object back onto the parent it already has would only move it to the end of the
-    // sibling list and cost a re-snapshot.
-    if (object->getParent() == parent)
-    {
-      return;
-    }
+      const auto component = objectManager.getComponentRegistry()->create(key);
+      if (!component)
+      {
+        return SceneEditResult::unknownComponent;
+      }
 
-    if (const auto oldParent = object->getParent())
-    {
-      oldParent->removeChild(object);
-    }
-    else
-    {
-      objectManager.removeObjectFromRoot(object);
-    }
-
-    object->setParent(parent);
-
-    if (parent)
-    {
-      parent->addChild(object);
-    }
-    else
-    {
-      objectManager.addObjectToRoot(object);
-    }
-
-    return;
-  }
-
-  if (op == "addComponent")
-  {
-    const std::string key = edit.at("component");
-
-    if (const auto component = objectManager.getComponentRegistry()->create(key))
-    {
       if (edit.contains("className"))
       {
         if (const auto script = std::dynamic_pointer_cast<Script>(component))
@@ -436,47 +444,78 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
       }
 
       object->addComponent(component);
+
+      return SceneEditResult::applied;
     }
 
-    return;
+    if (op == "removeComponent")
+    {
+      const std::string type = edit.at("type");
+      const std::string className = edit.contains("className") ? edit.at("className") : "";
+
+      const auto matches = [&](const std::shared_ptr<Component>& component) {
+        if (component->serialize().at("type") != type)
+        {
+          return false;
+        }
+
+        if (const auto script = std::dynamic_pointer_cast<Script>(component))
+        {
+          return script->getClassName() == className;
+        }
+
+        return true;
+      };
+
+      for (const auto& [componentType, component] : object->getComponents())
+      {
+        if (matches(component))
+        {
+          object->removeComponent(component);
+          return SceneEditResult::applied;
+        }
+      }
+
+      for (const auto& script : object->getScripts())
+      {
+        if (matches(script))
+        {
+          object->removeComponent(script);
+          return SceneEditResult::applied;
+        }
+      }
+
+      return SceneEditResult::unknownComponent;
+    }
+
+    return SceneEditResult::malformedEdit;
   }
+}
 
-  if (op == "removeComponent")
+SceneEditResult applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                               const AssetRegistry* assetRegistry)
+{
+  // Every op reaches its fields with at(), and instantiatePrefab builds a whole subtree from a body that
+  // may name a component this build does not know. Without this the authority's only guard is the run
+  // loop's catch, which logs the throw as a generic bad message and tells the caller nothing.
+  try
   {
-    const std::string type = edit.at("type");
-    const std::string className = edit.contains("className") ? edit.at("className") : "";
-
-    const auto matches = [&](const std::shared_ptr<Component>& component) {
-      if (component->serialize().at("type") != type)
-      {
-        return false;
-      }
-
-      if (const auto script = std::dynamic_pointer_cast<Script>(component))
-      {
-        return script->getClassName() == className;
-      }
-
-      return true;
-    };
-
-    for (const auto& [componentType, component] : object->getComponents())
-    {
-      if (matches(component))
-      {
-        object->removeComponent(component);
-        return;
-      }
-    }
-
-    for (const auto& script : object->getScripts())
-    {
-      if (matches(script))
-      {
-        object->removeComponent(script);
-        return;
-      }
-    }
+    return applyStructuralEdit(objectManager, edit, assetRegistry);
+  }
+  catch (const std::bad_alloc&)
+  {
+    // Out of memory is not a malformed edit, and pretending otherwise would send the caller looking for
+    // a wire bug.
+    throw;
+  }
+  catch (const nlohmann::json::exception&)
+  {
+    // A field the op needs is missing, or is not the type it is read as.
+    return SceneEditResult::malformedEdit;
+  }
+  catch (const std::exception&)
+  {
+    return SceneEditResult::failed;
   }
 }
 

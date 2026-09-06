@@ -386,6 +386,20 @@ namespace {
       default: return "it was applied";
     }
   }
+
+  const char* describe(const replication::SceneEditResult result)
+  {
+    switch (result)
+    {
+      case replication::SceneEditResult::malformedEdit: return "the edit is missing a field it needs";
+      case replication::SceneEditResult::unknownObject: return "no such object";
+      case replication::SceneEditResult::unknownComponent: return "no such component";
+      case replication::SceneEditResult::unknownAsset: return "no such prefab";
+      case replication::SceneEditResult::rejected: return "it would change nothing, or make a cycle";
+      case replication::SceneEditResult::failed: return "it threw part way through";
+      default: return "it was applied";
+    }
+  }
 }
 
 void ServerApp::handleEditComponent(const net::Message& message) const
@@ -442,18 +456,42 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
   // An editor changed the scene graph (add/remove object or component, or instantiate a prefab): apply
   // it, then re-snapshot so every view rebuilds (structural changes aren't replicated per-op). The
   // registry is passed so the prefab op can resolve its asset uuid to the body on disk.
-  if (const auto scene = m_sceneManager->getCurrentScene())
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!scene)
   {
-    const std::string payload(message.bytes().begin(), message.bytes().end());
+    logMessage("Error", "Discarded a scene edit: no scene is loaded.");
+    return;
+  }
 
-    const auto json = nlohmann::json::parse(payload, nullptr, false);
-    if (!json.is_discarded())
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  const auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (json.is_discarded())
+  {
+    logMessage("Error", "Discarded a scene edit of " + std::to_string(message.size()) +
+                        " bytes: it is not JSON.");
+    return;
+  }
+
+  const auto result = replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
+
+  if (result != replication::SceneEditResult::applied)
+  {
+    logMessage("Error", "Discarded a scene edit (" + json.value("op", std::string("no op")) + "): " +
+                        describe(result) + ".");
+
+    // Only an edit the authority applied is worth a snapshot: rebuilding every connected view to tell
+    // them nothing changed is the expensive way to say no. The exception is an edit that threw part way
+    // through, where how far it got is exactly what is not known.
+    if (result == replication::SceneEditResult::failed)
     {
-      replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
-
       broadcastSnapshot();
     }
+
+    return;
   }
+
+  broadcastSnapshot();
 }
 
 void ServerApp::handleLoadProject(const net::Message& message) const

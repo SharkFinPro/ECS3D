@@ -84,8 +84,26 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
 // server always does).
 [[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID);
 
-void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
-                    const AssetRegistry* assetRegistry = nullptr);
+// Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
+// payload it could not parse apart from an op it understood and refused, because only the first says the
+// sender and the authority disagree about the wire, and only the second is a normal thing for an editor
+// to send. There is no partially-applied case: an op either changes the graph or it does not, and the
+// one that builds as it goes (instantiatePrefab) unwinds its own subtree before it throws.
+//
+// Not [[nodiscard]], for the same reason: an editor applying an edit to its own scratch scene has
+// nothing to do with the answer. The authority does.
+enum class SceneEditResult {
+  applied,
+  malformedEdit,     // no op, an op nothing handles, or a field the op needs missing or unparseable
+  unknownObject,     // names an object this scene does not have
+  unknownComponent,  // names a component type that does not exist, or one the object is not carrying
+  unknownAsset,      // instantiatePrefab named an asset with no usable body
+  rejected,          // well formed and refused: a reparent that would cycle, or that changes nothing
+  failed             // threw part way through, e.g. a prefab body naming a component this build lacks
+};
+
+SceneEditResult applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                               const AssetRegistry* assetRegistry = nullptr);
 
 // Runtime spawn/destroy replication. Unlike the editor's structural edits (which re-snapshot), a script
 // spawning or destroying an object at runtime replicates incrementally: the server broadcasts one packed
