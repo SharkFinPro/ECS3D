@@ -298,6 +298,32 @@ void Object::unpack(net::MessageReader& messageReader)
     stop();
   }
 
+  try
+  {
+    unpackFields(messageReader);
+  }
+  catch (...)
+  {
+    // A payload that runs out, or names something this build cannot build, must not leave a running
+    // object stopped: every write to it afterwards would land in the authored slot and be saved into
+    // the scene as if it had been authored - the defect the bracket exists to prevent, on the error
+    // path. Callers discard the object today, but that is their choice, not this function's contract.
+    if (wasStarted)
+    {
+      start();
+    }
+
+    throw;
+  }
+
+  if (wasStarted)
+  {
+    start();
+  }
+}
+
+void Object::unpackFields(net::MessageReader& messageReader)
+{
   m_uuid = uuids::uuid::from_string(messageReader.readString()).value();
   m_name = messageReader.readString();
 
@@ -307,6 +333,22 @@ void Object::unpack(net::MessageReader& messageReader)
   for (uint32_t i = 0; i < componentCount; ++i)
   {
     const auto packedType = messageReader.read<ComponentType>();
+
+    // The discriminator comes off the network, so it has to name something that is actually packed
+    // before it picks a slot on this object.
+    const auto registryKey = componentTypeToRegistryKey.find(packedType);
+    if (registryKey == componentTypeToRegistryKey.end())
+    {
+      throw std::runtime_error("Packed component type is not a component");
+    }
+
+    // script is a component type but never a discriminator in this section - scripts have their own,
+    // after this one, and are keyed by class name. Claiming it here would create a nameless Script and
+    // then read the next component's bytes as its field blob.
+    if (packedType == ComponentType::script)
+    {
+      throw std::runtime_error("Script packed among the components");
+    }
 
     // Colliders pack their subtype, but live under the parent "collider" key in m_components.
     auto lookupType = packedType;
@@ -321,9 +363,28 @@ void Object::unpack(net::MessageReader& messageReader)
     auto componentIt = m_components.find(lookupType);
     auto component = componentIt != m_components.end() ? componentIt->second : nullptr;
 
+    // The two collider shapes share that key but not a field layout. Reading a box body into a
+    // SphereCollider would take a 12-byte vector where a 4-byte float belongs and misalign everything
+    // after it, so the slot is rebuilt as the shape the payload describes rather than reused. Defensive
+    // rather than live: every caller today unpacks into a freshly built object, which holds no collider.
+    if (component && component->getPackedType() != packedType)
+    {
+      removeComponent(component);
+      component = nullptr;
+    }
+
     if (!component)
     {
-      component = registry->create(componentTypeToRegistryKey.at(packedType));
+      component = registry->create(registryKey->second);
+
+      // create() returns null for a type this build never registered, and addComponent dereferences it
+      // immediately to read getType(). A null dereference escapes every guard around this path,
+      // including the run loops' catches and the spawn unwind - on a path that reads bytes off the wire.
+      if (!component)
+      {
+        throw std::runtime_error("Unknown component type: " + registryKey->second);
+      }
+
       addComponent(component);
     }
 
@@ -333,7 +394,12 @@ void Object::unpack(net::MessageReader& messageReader)
   const uint32_t scriptCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < scriptCount; ++i)
   {
-    static_cast<void>(messageReader.read<ComponentType>()); // script type tag, not needed for lookup
+    // Not needed for the lookup, which goes by class name - but a section that does not carry the tag it
+    // is supposed to is a payload claiming to be something it is not, and every read after it is off.
+    if (messageReader.read<ComponentType>() != ComponentType::script)
+    {
+      throw std::runtime_error("Script section carries a type tag that is not a script");
+    }
 
     const std::string className = messageReader.readString();
 
@@ -351,6 +417,12 @@ void Object::unpack(net::MessageReader& messageReader)
     if (!script)
     {
       script = std::dynamic_pointer_cast<Script>(registry->create("Script"));
+
+      if (!script)
+      {
+        throw std::runtime_error("Script component type is not registered");
+      }
+
       script->setClassName(className);
       addComponent(script);
     }
@@ -368,11 +440,6 @@ void Object::unpack(net::MessageReader& messageReader)
     m_manager->addObject(child);
 
     child->unpack(messageReader);
-  }
-
-  if (wasStarted)
-  {
-    start();
   }
 }
 
@@ -403,7 +470,7 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
 
   const auto& registry = m_manager->getComponentRegistry();
 
-  for (const auto& componentData : objectData["components"])
+  for (const auto& componentData : objectData.at("components"))
   {
     const auto componentType = componentData.at("type").get<std::string>();
 
@@ -424,7 +491,7 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     component->loadFromJSON(componentData);
   }
 
-  for (const auto& scriptData : objectData["scripts"])
+  for (const auto& scriptData : objectData.at("scripts"))
   {
     const auto script = registry->create("Script");
 
