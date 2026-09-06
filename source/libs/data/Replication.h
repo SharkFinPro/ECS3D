@@ -87,8 +87,12 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
 // Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
 // payload it could not parse apart from an op it understood and refused, because only the first says the
 // sender and the authority disagree about the wire, and only the second is a normal thing for an editor
-// to send. There is no partially-applied case: an op either changes the graph or it does not, and the
-// one that builds as it goes (instantiatePrefab) unwinds its own subtree before it throws.
+// to send.
+//
+// There is no partially-applied result, because in practice an op either changes the graph or it does
+// not: the one that builds as it goes (instantiatePrefab) unwinds its own subtree before it throws. The
+// exception is a reparent, which detaches before it reattaches - an allocation failure between the two
+// would strand the object. failed covers what is reachable; a bad_alloc there is rethrown.
 //
 // Not [[nodiscard]], for the same reason: an editor applying an edit to its own scratch scene has
 // nothing to do with the answer. The authority does.

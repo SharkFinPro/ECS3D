@@ -383,8 +383,10 @@ namespace {
       case replication::ComponentEditResult::partiallyApplied: return "the payload ran out mid-component";
       case replication::ComponentEditResult::unknownObject: return "no such object";
       case replication::ComponentEditResult::unknownComponent: return "the object has no such component";
-      default: return "it was applied";
+      case replication::ComponentEditResult::applied: return "it was applied";
     }
+
+    return "it was applied";
   }
 
   const char* describe(const replication::SceneEditResult result)
@@ -397,8 +399,10 @@ namespace {
       case replication::SceneEditResult::unknownAsset: return "no such prefab";
       case replication::SceneEditResult::rejected: return "it would change nothing, or make a cycle";
       case replication::SceneEditResult::failed: return "it threw part way through";
-      default: return "it was applied";
+      case replication::SceneEditResult::applied: return "it was applied";
     }
+
+    return "it was applied";
   }
 }
 
@@ -477,13 +481,26 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
 
   if (result != replication::SceneEditResult::applied)
   {
-    logMessage("Error", "Discarded a scene edit (" + json.value("op", std::string("no op")) + "): " +
-                        describe(result) + ".");
+    // Read defensively. A payload of [] or {"op": 5} is valid JSON, so it reaches here - and value()
+    // throws on a json that is not an object, or on a key that will not convert. Throwing out of the
+    // log line would put this back in the run loop's generic catch, which is the outcome this handler
+    // exists to replace.
+    const auto op = json.is_object() && json.contains("op") && json.at("op").is_string()
+      ? json.at("op").get<std::string>()
+      : std::string("no op");
 
-    // Only an edit the authority applied is worth a snapshot: rebuilding every connected view to tell
-    // them nothing changed is the expensive way to say no. The exception is an edit that threw part way
-    // through, where how far it got is exactly what is not known.
-    if (result == replication::SceneEditResult::failed)
+    logMessage("Error", "Discarded a scene edit (" + op + "): " + describe(result) + ".");
+
+    // A refusal the sender could have predicted needs no snapshot: rejected means the authority and the
+    // sender agree about the scene and the op simply changes nothing, and a malformed edit is a payload
+    // problem that resending the scene would not fix - and is the one a client can send on demand.
+    //
+    // Everything else means the sender's view disagrees with the authority: an object or component it
+    // believes exists and does not, a prefab it cannot resolve, an edit that threw part way through.
+    // Those are exactly the cases a snapshot repairs, and there is no client-initiated resync to fall
+    // back on - a structural edit was the only thing that rebuilt a drifted view.
+    if (result != replication::SceneEditResult::rejected &&
+        result != replication::SceneEditResult::malformedEdit)
     {
       broadcastSnapshot();
     }

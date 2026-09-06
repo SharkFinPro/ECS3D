@@ -301,8 +301,7 @@ namespace {
     if (op == "instantiatePrefab")
     {
       // The only op keyed by an asset rather than an existing object: pull the prefab's body from the
-      // registry and clone it in with fresh uuids. An unknown/malformed prefab yields a null body and is
-      // skipped.
+      // registry and clone it in with fresh uuids.
       if (!assetRegistry)
       {
         return SceneEditResult::unknownAsset;
@@ -320,7 +319,21 @@ namespace {
         return SceneEditResult::unknownAsset;
       }
 
-      objectManager.instantiate(body);
+      // Guarded here rather than left to the catch below: the body belongs to the asset, not to the
+      // edit, so a prefab whose stored blob is broken is a failure to apply and not a malformed edit -
+      // reporting it as one sends whoever reads the log to look at the wire.
+      try
+      {
+        objectManager.instantiate(body);
+      }
+      catch (const std::bad_alloc&)
+      {
+        throw;
+      }
+      catch (const std::exception&)
+      {
+        return SceneEditResult::failed;
+      }
 
       return SceneEditResult::applied;
     }
@@ -331,15 +344,24 @@ namespace {
 
       const auto object = std::make_shared<Object>(name);
 
+      // A parent that is named and does not resolve is not the same as no parent named at all: the
+      // sender asked for a child of something, and rooting the object instead and calling it applied
+      // reports the wrong answer for a view that is a round trip behind the authority.
       if (edit.contains("parent"))
       {
-        if (const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent"))))
+        const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsed.has_value())
         {
-          if (const auto parent = objectManager.getObjectByUUID(parsed.value()))
-          {
-            object->setParent(parent);
-          }
+          return SceneEditResult::malformedEdit;
         }
+
+        const auto parent = objectManager.getObjectByUUID(parsed.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
+        }
+
+        object->setParent(parent);
       }
 
       objectManager.addObject(object);
@@ -374,18 +396,42 @@ namespace {
 
     if (op == "duplicateObject")
     {
-      objectManager.duplicateObject(object);
+      // Same reasoning as the prefab body: this re-parses the object's own serialization, so a failure
+      // is the scene's and not the edit's.
+      try
+      {
+        objectManager.duplicateObject(object);
+      }
+      catch (const std::bad_alloc&)
+      {
+        throw;
+      }
+      catch (const std::exception&)
+      {
+        return SceneEditResult::failed;
+      }
+
       return SceneEditResult::applied;
     }
 
     if (op == "reparentObject")
     {
+      // No parent named means "move to the scene root", which is a real request. A parent that is named
+      // and does not resolve is a stale view, and falling through to a null parent would silently
+      // detach the object from the parent it has instead - and report that as applied.
       std::shared_ptr<Object> parent;
       if (edit.contains("parent"))
       {
-        if (const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent"))))
+        const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsedParent.has_value())
         {
-          parent = objectManager.getObjectByUUID(parsedParent.value());
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
         }
       }
 

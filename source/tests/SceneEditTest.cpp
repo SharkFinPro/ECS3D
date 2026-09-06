@@ -130,11 +130,11 @@ TEST(SceneEdit, ReportsAReparentThatWouldCycleAsRejected)
   child->setParent(scene.object);
   scene.objectManager->addObject(child);
 
-  const auto parentUUID = child->getUUID();
+  const auto descendantUUID = child->getUUID();
 
   // Dropping an object onto its own descendant. Refused rather than malformed: the editor can legitimately
   // send it, and the authority has nothing to rebuild every view for.
-  EXPECT_EQ(applyEdit(scene, replication::buildReparentObject(scene.object->getUUID(), &parentUUID)),
+  EXPECT_EQ(applyEdit(scene, replication::buildReparentObject(scene.object->getUUID(), &descendantUUID)),
             SceneEditResult::rejected);
   EXPECT_EQ(scene.object->getParent(), nullptr);
 }
@@ -192,4 +192,66 @@ TEST(SceneEdit, ReportsAPrefabBodyThisBuildCannotInstantiateAsFailed)
             SceneEditResult::failed);
   EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
+}
+
+TEST(SceneEdit, ReportsAPayloadThatIsNotAnObjectAsMalformed)
+{
+  const auto scene = makeScene();
+
+  // Valid JSON, so it gets past the server's parse and reaches here - where at("op") on an array throws
+  // a type error rather than a missing-key one.
+  EXPECT_EQ(applyEdit(scene, nlohmann::json::array()), SceneEditResult::malformedEdit);
+  EXPECT_EQ(applyEdit(scene, nlohmann::json(42)), SceneEditResult::malformedEdit);
+}
+
+TEST(SceneEdit, ReportsAnOpWhoseNameIsNotAStringAsMalformed)
+{
+  const auto scene = makeScene();
+
+  EXPECT_EQ(applyEdit(scene, nlohmann::json{ { "op", 5 } }), SceneEditResult::malformedEdit);
+}
+
+TEST(SceneEdit, ReportsAParentTheSceneDoesNotHaveAsUnknown)
+{
+  const auto scene = makeScene();
+
+  const auto missing = someOtherUUID();
+
+  // Naming a parent that is not there is not the same as naming none: the sender asked for a child of
+  // something, and rooting the object instead and reporting applied tells a stale view it is current.
+  EXPECT_EQ(applyEdit(scene, replication::buildAddObject("Added", &missing)),
+            SceneEditResult::unknownObject);
+  EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
+}
+
+TEST(SceneEdit, ReportsAReparentOntoAParentTheSceneDoesNotHaveAsUnknown)
+{
+  const auto scene = makeScene();
+
+  const auto child = std::make_shared<Object>("Child");
+  child->setParent(scene.object);
+  scene.objectManager->addObject(child);
+
+  const auto missing = someOtherUUID();
+
+  // The worse half of the same case: falling through to a null parent would have detached the child to
+  // the scene root - the opposite of what was asked - and called it applied.
+  EXPECT_EQ(applyEdit(scene, replication::buildReparentObject(child->getUUID(), &missing)),
+            SceneEditResult::unknownObject);
+  EXPECT_EQ(child->getParent(), scene.object);
+}
+
+TEST(SceneEdit, ReportsAReparentToTheSceneRootAsApplied)
+{
+  const auto scene = makeScene();
+
+  const auto child = std::make_shared<Object>("Child");
+  child->setParent(scene.object);
+  scene.objectManager->addObject(child);
+
+  // Naming no parent at all still means "move to the root", which the unknown-parent check must not
+  // have turned into a refusal.
+  EXPECT_EQ(applyEdit(scene, replication::buildReparentObject(child->getUUID())),
+            SceneEditResult::applied);
+  EXPECT_EQ(child->getParent(), nullptr);
 }
