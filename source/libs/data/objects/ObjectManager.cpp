@@ -44,6 +44,14 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   {
     object->getParent()->addChild(object);
   }
+
+  // Registered while the scene is running: without this the object's components stay backed by their
+  // authored values, so anything the run writes to them is saved into the scene as if it had been
+  // authored. This is the object-level counterpart of Object::addComponent's own start.
+  if (m_started)
+  {
+    object->start();
+  }
 }
 
 void ObjectManager::addObjectToRoot(const std::shared_ptr<Object>& object)
@@ -118,16 +126,20 @@ void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
   instantiateUnder(objectData, object->getParent());
 }
 
-void ObjectManager::start() const
+void ObjectManager::start()
 {
+  m_started = true;
+
   for (const auto& object : m_allObjects)
   {
     object->start();
   }
 }
 
-void ObjectManager::stop() const
+void ObjectManager::stop()
 {
+  m_started = false;
+
   for (const auto& object : m_allObjects)
   {
     object->stop();

@@ -90,8 +90,7 @@ TEST(RuntimeComponent, WhatTheSceneWouldSaveIsUntouchedByTheRun)
   const auto objectManager = makeManager(componentRegistry);
   const auto object = makeObject(*objectManager);
 
-  // Started through the manager, which is how a scene starts, and which reaches Object::start through a
-  // const member function.
+  // Started through the manager, which is how a scene starts.
   objectManager->start();
 
   const auto collider = std::make_shared<BoxCollider>();

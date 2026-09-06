@@ -32,6 +32,7 @@ add_executable(${PROJECT_NAME}
   SerializationRoundTripTest.cpp
   SceneManagerTest.cpp
   RuntimeComponentTest.cpp
+  RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
   ProtocolFramingTest.cpp
   WireTypesTest.cpp
