@@ -540,5 +540,18 @@ void AssetBrowserPanel::commitAsset()
   }
 
   m_onAddAsset(addAsset);
+
+  // A newly created scene becomes the active one. Registering it only makes it appear in the browser,
+  // so without this "New Scene" left the previous scene loaded - its objects still in the hierarchy and
+  // still rendered - and switching to the empty one meant finding the tile and double-clicking it. The
+  // load goes after the registration so the server has the scene by the time it is asked to switch.
+  if (m_pending.type == PendingAsset::Type::Scene && m_onLoadScene)
+  {
+    if (const auto parsed = uuids::uuid::from_string(uuid))
+    {
+      m_onLoadScene(parsed.value());
+    }
+  }
+
   m_pending = {};
 }
