@@ -1,0 +1,77 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 29, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "description": "Assertions live. What CI runs alongside release, and what the check target is normally exercised under.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "description": "Optimized. The configuration the engine is actually run and profiled in.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "sanitize",
+      "inherits": "base",
+      "displayName": "Debug + sanitizers",
+      "description": "Debug with AddressSanitizer, and UndefinedBehaviorSanitizer where the toolchain has it. Aimed at the test suite; see README for why the apps are a different matter.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ECS3D_SANITIZE": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug", "displayName": "Debug, build" },
+    { "name": "release", "configurePreset": "release", "displayName": "Release, build" },
+    { "name": "sanitize", "configurePreset": "sanitize", "displayName": "Sanitized, build" },
+    {
+      "name": "debug-check",
+      "configurePreset": "debug",
+      "displayName": "Debug, build and run the tests",
+      "targets": [ "check" ]
+    },
+    {
+      "name": "release-check",
+      "configurePreset": "release",
+      "displayName": "Release, build and run the tests",
+      "targets": [ "check" ]
+    },
+    {
+      "name": "sanitize-check",
+      "configurePreset": "sanitize",
+      "displayName": "Sanitized, build and run the tests",
+      "targets": [ "check" ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "debug", "inherits": "test-base", "configurePreset": "debug" },
+    { "name": "release", "inherits": "test-base", "configurePreset": "release" },
+    { "name": "sanitize", "inherits": "test-base", "configurePreset": "sanitize" }
+  ]
+}
