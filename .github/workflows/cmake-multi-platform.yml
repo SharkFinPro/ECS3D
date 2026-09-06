@@ -19,16 +19,12 @@ jobs:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
 
-      # Set up a matrix to run the following 4 configurations:
-      # 1. <Windows, Release, latest MSVC compiler toolchain on the default runner image, default generator>
-      # 2. <Linux, Release, latest GCC compiler toolchain on the default runner image, default generator>
-      # 3. <Linux, Release, latest Clang compiler toolchain on the default runner image, default generator>
-      # 4. <macOS, Release, latest Clang compiler toolchain on the default runner image, default generator>
-      #
-      # To add more build types (Release, Debug, RelWithDebInfo, etc.) customize the build_type list.
+      # Four toolchains - MSVC on Windows, gcc and clang on Linux, clang on macOS - each in both build
+      # types. Debug is not redundant: it is where assert() and the standard library's debug checks are
+      # live, so a Release-only matrix never runs the invariant checks the code is written against.
       matrix:
         os: [ 'ubuntu-22.04', windows-latest, macos-latest ]
-        build_type: [ Release ]
+        build_type: [ Release, Debug ]
         c_compiler: [ gcc, clang, cl ]
         include:
           - os: windows-latest
@@ -102,7 +98,9 @@ jobs:
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
 
       - name: Test
-        working-directory: ${{ steps.strings.outputs.build-output-dir }}
-        # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-        run: ctest --build-config ${{ matrix.build_type }}
+        # Run the suite through the check target rather than ctest directly, so CI exercises the target
+        # developers use - its --test-dir scoping and its config handling included. A defect in check
+        # otherwise lands on main green, which is how a broken generator expression in it got through.
+        # The suite is already built by the step above, so this only runs it. check passes
+        # --no-tests=error, which is what makes a suite that registers nothing fail instead of pass.
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --target check

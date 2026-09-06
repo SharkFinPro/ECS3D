@@ -5,11 +5,16 @@
 #include "Replication.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/Component.h"
+#include "objects/components/collisions/Collider.h"
+#include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/SphereCollider.h"
 
 #include <Protocol.h>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -38,6 +43,19 @@ namespace {
     source.objectManager->addObject(child);
 
     return replication::buildObjectSpawned(*parent);
+  }
+
+  // A well-formed object header claiming one component, followed by nothing but that component's
+  // discriminator - enough to reach the check without needing a body the check should never get to.
+  net::Message objectWithOneComponentTag(const ComponentType packedType)
+  {
+    net::Message message(net::MessageType::objectSpawned);
+    message.writeString("123e4567-e89b-12d3-a456-426614174000");
+    message.writeString("Spawned");
+    message.write<uint32_t>(1);
+    message.write(packedType);
+
+    return message;
   }
 
   net::Message firstBytes(const net::Message& source, const std::size_t kept)
@@ -135,4 +153,72 @@ TEST(ObjectSpawn, DiscardingASubtreeDetachesItFromALiveParent)
   EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
   EXPECT_EQ(scene.objectManager->getAllObjects().front(), keep);
+}
+
+TEST(ObjectSpawn, RefusesAPackedComponentTypeThatNamesNoComponent)
+{
+  const auto target = makeScene();
+
+  // A well-formed object header followed by a discriminator that is no component type. This threw
+  // before too, out of componentTypeToRegistryKey.at() - the exception type is what distinguishes the
+  // check from the incidental lookup failure it replaces.
+  EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager,
+                                               objectWithOneComponentTag(static_cast<ComponentType>(0x7F))),
+               std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
+}
+
+TEST(ObjectSpawn, RefusesAScriptPackedAmongTheComponents)
+{
+  const auto target = makeScene();
+
+  // script is a real component type, so it passes the registry-key check - but Object::pack never writes
+  // it in the component section. Left through, it built a nameless Script and then read the next
+  // component's bytes as its field blob.
+  EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager,
+                                               objectWithOneComponentTag(ComponentType::script)),
+               std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
+}
+
+TEST(ObjectSpawn, RefusesAComponentTypeThisBuildDoesNotRegister)
+{
+  // A registry with nothing registered in it: every key is valid, none of them can be created. This is
+  // the case that used to be a null dereference rather than an exception - create() returns null and
+  // addComponent reads getType() off it, which no guard around this path can catch.
+  Scene target;
+  target.objectManager = std::make_unique<ObjectManager>(target.componentRegistry);
+
+  EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager,
+                                               objectWithOneComponentTag(ComponentType::modelRenderer)),
+               std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
+}
+
+TEST(ObjectSpawn, RebuildsAColliderSlotWhenThePayloadIsTheOtherShape)
+{
+  const auto source = makeScene();
+
+  const auto packed = std::make_shared<Object>("Spawned");
+  source.objectManager->addObject(packed);
+  packed->addComponent(std::make_shared<BoxCollider>());
+
+  net::Message message(net::MessageType::objectSpawned);
+  packed->pack(message);
+
+  const auto target = makeScene();
+
+  const auto existing = std::make_shared<Object>("Existing");
+  target.objectManager->addObject(existing);
+  existing->addComponent(std::make_shared<SphereCollider>());
+
+  net::MessageReader reader(message);
+  existing->unpack(reader);
+
+  // Both shapes are stored under the collider key, so reusing the slot would have read a box body into
+  // the sphere - a 12-byte vector where a 4-byte float belongs, and every field after it misaligned.
+  const auto collider = existing->getComponent<Collider>(ComponentType::collider);
+  ASSERT_NE(collider, nullptr);
+  EXPECT_EQ(collider->getPackedType(), ComponentType::SubComponentType_boxCollider);
+  EXPECT_EQ(reader.remaining(), 0u);
 }

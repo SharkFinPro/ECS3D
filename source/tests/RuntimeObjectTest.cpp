@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "TestPrinters.h"
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "Replication.h"
@@ -63,7 +64,8 @@ TEST(RuntimeObject, AnObjectAddedToAStoppedSceneStillAuthorsItsValues)
   collider->setScale(glm::vec3(4));
   objectManager->start();
 
-  // Authored before the run, so the run starts from it.
+  // Authored before the run, so the run starts from it. A characterization guard rather than a test of
+  // the change: this held before addObject started anything, and has to keep holding.
   EXPECT_EQ(collider->getLocalScale(), glm::vec3(4));
 }
 
@@ -146,7 +148,9 @@ TEST(RuntimeObject, UnpackingIntoARunningObjectAuthorsWhatItReads)
   objectManager->start();
 
   // The object is registered before it is read, so it is already running when unpack rebuilds it - the
-  // case where writing through to the live value would strand the authored one at its default.
+  // case where writing through to the live value would strand the authored one at its default. This one
+  // guards the stop/start bracket in unpack specifically: without addObject's start it would pass either
+  // way, since an unstarted object authors what it reads regardless.
   const auto target = std::make_shared<Object>();
   objectManager->addObject(target);
 
