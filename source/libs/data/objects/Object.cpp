@@ -292,16 +292,38 @@ void Object::unpack(net::MessageReader& messageReader)
   // duration and started again at the end, which re-seeds every live value from what was just read.
   // Unpacking into a started object would otherwise write through to the live slot and leave the
   // authored value at its constructor default, to be saved back later as if that were authored.
-  //
-  // A throw below leaves the object stopped, which is deliberate: every path that can throw here ends
-  // with the object discarded (applyObjectSpawned unwinds the subtree) or the whole parsed scene thrown
-  // away before it is committed, so there is nothing left to restore.
   const bool wasStarted = m_started;
   if (wasStarted)
   {
     stop();
   }
 
+  try
+  {
+    unpackFields(messageReader);
+  }
+  catch (...)
+  {
+    // A payload that runs out, or names something this build cannot build, must not leave a running
+    // object stopped: every write to it afterwards would land in the authored slot and be saved into
+    // the scene as if it had been authored - the defect the bracket exists to prevent, on the error
+    // path. Callers discard the object today, but that is their choice, not this function's contract.
+    if (wasStarted)
+    {
+      start();
+    }
+
+    throw;
+  }
+
+  if (wasStarted)
+  {
+    start();
+  }
+}
+
+void Object::unpackFields(net::MessageReader& messageReader)
+{
   m_uuid = uuids::uuid::from_string(messageReader.readString()).value();
   m_name = messageReader.readString();
 
@@ -418,11 +440,6 @@ void Object::unpack(net::MessageReader& messageReader)
     m_manager->addObject(child);
 
     child->unpack(messageReader);
-  }
-
-  if (wasStarted)
-  {
-    start();
   }
 }
 
