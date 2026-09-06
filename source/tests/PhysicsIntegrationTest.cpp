@@ -111,7 +111,7 @@ TEST(PhysicsIntegration, ABodyWithGravityOffDoesNotMoveOnItsOwn)
 {
   const auto scene = makeScene();
   const auto object = addObject(scene, "Static", { 1, 2, 3 });
-  addBody(object, false);
+  const auto body = addBody(object, false);
 
   for (int tick = 0; tick < 10; ++tick)
   {
@@ -119,6 +119,13 @@ TEST(PhysicsIntegration, ABodyWithGravityOffDoesNotMoveOnItsOwn)
   }
 
   expectNear("position", transformOf(object)->getPosition(), { 1, 2, 3 });
+
+  // Turned back on, so the stillness above is the flag rather than an integrator that has stopped
+  // running - which is what an assertion that only checks nothing happened would otherwise allow.
+  body->setDoGravity(true);
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+
+  EXPECT_NEAR(transformOf(object)->getPosition().y, 2.0f + gravityPerTick, 1e-5f);
 }
 
 TEST(PhysicsIntegration, FrictionBleedsHorizontalVelocityAndLeavesTheVerticalAlone)
