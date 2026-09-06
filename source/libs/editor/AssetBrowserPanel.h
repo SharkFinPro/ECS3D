@@ -5,6 +5,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <uuid.h>
@@ -41,6 +42,10 @@ public:
   void displayMenuWidget();
 
 private:
+  // Switches to the scene commitAsset just created, if it created one. Called after the create popup
+  // closes, so it is outside the boundary that reports a create as having failed.
+  void activateCreatedScene();
+
   // A model/texture import or scene/script creation awaiting a name in the create popup.
   struct PendingAsset {
     enum class Type { None, Model, Texture, Scene, Script } type = Type::None;
@@ -65,6 +70,10 @@ private:
   PendingAsset m_pending;
   bool m_openCreatePopup = false;
   std::string m_createError;
+
+  // Set by commitAsset when the thing it created was a scene, and consumed once the create popup has
+  // closed - a scene becomes active only after its creation can no longer be reported as having failed.
+  std::optional<uuids::uuid> m_sceneToActivate;
 
   enum class SortType { NameAscending, NameDescending, Type };
   SortType m_sortType = SortType::NameAscending;

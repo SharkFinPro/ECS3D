@@ -23,6 +23,9 @@ public:
 
   [[nodiscard]] uuids::uuid createUUID();
 
+  // Registers the object, wiring it to this manager and to its parent. Starts it too while the scene is
+  // running, so an object added mid-run is live rather than inert - a stopped component reads and writes
+  // its authored value, which is what the scene saves. duplicateObject and instantiate inherit that.
   void addObject(const std::shared_ptr<Object>& object);
 
   void addObjectToRoot(const std::shared_ptr<Object>& object);
@@ -40,8 +43,6 @@ public:
   // back started when the manager is running.
   std::shared_ptr<Object> instantiate(const nlohmann::json& objectData);
 
-  // Whether the scene is running. addObject starts what it registers while this holds, so an object added
-  // mid-run is live rather than inert - see the note there.
   void start();
 
   void stop();
@@ -76,6 +77,7 @@ private:
 
   std::vector<std::shared_ptr<Object>> m_objectsToRemove;
 
+  // Whether the scene is running, set by start and cleared by stop. addObject consults it - see there.
   bool m_started = false;
 
   std::mt19937 m_rng;
