@@ -14,7 +14,6 @@
     {
       "name": "debug",
       "inherits": "base",
-      "generator": "Ninja",
       "displayName": "Debug",
       "description": "Assertions live. What CI runs alongside release, and what the check target is normally exercised under.",
       "cacheVariables": {
@@ -24,7 +23,6 @@
     {
       "name": "release",
       "inherits": "base",
-      "generator": "Ninja",
       "displayName": "Release",
       "description": "Optimized. The configuration the engine is actually run and profiled in.",
       "cacheVariables": {
@@ -34,7 +32,6 @@
     {
       "name": "sanitize",
       "inherits": "base",
-      "generator": "Ninja",
       "displayName": "Debug + sanitizers",
       "description": "Debug with AddressSanitizer, and UndefinedBehaviorSanitizer where the toolchain has it. Aimed at the test suite; see README for why the apps are a different matter.",
       "cacheVariables": {

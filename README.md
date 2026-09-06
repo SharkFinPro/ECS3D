@@ -41,10 +41,6 @@ cmake --build --preset debug
 `release` is the same pair with optimizations on. Each preset writes to its own directory
 (`cmake-build-debug`, `cmake-build-release`), so the two can coexist.
 
-Every preset names Ninja explicitly rather than only inheriting it from the hidden base preset. The
-command line resolves the inherited one either way, but CLion opens the presets showing "Let CMake
-decide" as the generator, so it is spelled out where an IDE will see it without following `inherits`.
-
 The C# projects are built **through CMake**, never directly. Running `dotnet build` or `dotnet publish`
 on them produces a second set of generated attributes and the next CMake build fails with `CS0579:
 Duplicate attribute`.
