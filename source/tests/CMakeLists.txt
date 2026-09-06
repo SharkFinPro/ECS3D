@@ -76,7 +76,11 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 include(GoogleTest)
 
-gtest_discover_tests(${PROJECT_NAME})
+# DISCOVERY_TIMEOUT is raised from the five second default because discovery runs the freshly linked test
+# binary to list its cases, and a cold Windows Debug executable with a large PDB can spend longer than
+# that just starting. That surfaces as the *build* failing with "Process terminated due to timeout" and
+# no output, which reads like a hang in a test rather than a slow start.
+gtest_discover_tests(${PROJECT_NAME} DISCOVERY_TIMEOUT 120)
 
 # Builds the suite and runs it through CTest in one command. --test-dir keeps it to this suite rather
 # than every test in the tree. --no-tests=error is the difference between a red build and a green one
