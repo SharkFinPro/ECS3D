@@ -41,7 +41,7 @@
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
 | `source/apps/launcher/` | The standalone C# Avalonia launcher. **Has its own `AGENTS.md`** — treat it as an independent project. |
 | `source/tests/` | `ECS3DTests` — the GoogleTest suite. Headless by construction (no window, GPU or server), registered with CTest. |
-| `.github/workflows/` | `cmake-multi-platform.yml` — builds Release on Windows (MSVC), Linux (gcc+clang), macOS (clang) with the Vulkan SDK, then `ctest`. |
+| `.github/workflows/` | `cmake-multi-platform.yml` — builds Release **and** Debug on Windows (MSVC), Linux (gcc+clang), macOS (clang) with the Vulkan SDK, then runs the suite through the `check` target. |
 
 ## Build System
 
@@ -69,7 +69,9 @@
   `PROJECT_IS_TOP_LEVEL AND BUILD_TESTING` — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
   GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
-  suite and runs it: `cmake --build <build-dir> --target check`.
+  suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
+  defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
+  empty test set and would otherwise report green for a suite that registered nothing.
 - **Dependency direction (must hold):** `protocol` → nothing. `settings` → nothing (+ json). `data` →
   protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + nfd. `net`/`scripting` →

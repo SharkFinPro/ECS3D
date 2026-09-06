@@ -93,6 +93,10 @@ private:
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 
   void loadFromJSON(const nlohmann::json& objectData);
+
+  // The body of unpack, split out so unpack itself is only the stop/start bracket around it and can
+  // restore the running state whichever way this exits.
+  void unpackFields(net::MessageReader& messageReader);
 };
 
 
