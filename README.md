@@ -23,48 +23,58 @@ git clone https://github.com/SharkFinPro/ECS3D.git
 cd ECS3D
 ```
 
-2. Create a Build Directory
+2. Configure and Build
 
-Create a separate directory for the build process:
+`CMakePresets.json` at the repo root carries the generator, the build directory and the build type, so
+there is nothing to remember and nothing to pass:
 
 ```bash
-mkdir build
-cd build
+cmake --preset debug
+cmake --build --preset debug
 ```
 
-3. Generate Build Files with CMake
+`release` is the same pair with optimizations on. Each preset writes to its own directory
+(`cmake-build-debug`, `cmake-build-release`), so the two can coexist. `ninja` is required; the presets
+pin it as the generator so a build behaves the same everywhere.
 
-Configure the CMake project and generate the necessary build files:
+The C# projects are built **through CMake**, never directly. Running `dotnet build` or `dotnet publish`
+on them produces a second set of generated attributes and the next CMake build fails with `CS0579:
+Duplicate attribute`.
+
+3. Run the Tests
+
+`check` builds the test suite and runs it through CTest:
 
 ```bash
-cmake ..
+cmake --build --preset debug-check
 ```
 
-4. Build the Project
-
-Compile the project using your preferred build system:
+To re-run the tests without rebuilding:
 
 ```bash
-cmake --build .
+ctest --preset debug
 ```
 
-5. Run the Tests
+4. Run the Executable
 
-From the build directory, `check` builds the test suite and runs it through CTest:
-
-```bash
-cmake --build . --target check
-```
-
-To re-run the tests without rebuilding, use `ctest --test-dir source/tests --output-on-failure`, adding
-`-C <config>` — the configuration you built, which is `Debug` by default — if you configured a
-multi-config generator such as Visual Studio.
-
-6. Run the Executable
-
-After building, all files will have been written to the `bin` directory. You can run the editor with:
+Everything is written to the preset's `bin` directory. You can run the editor with:
 
 ```bash
-cd bin
+cd cmake-build-debug/bin
 ./ECS3DEditor
 ```
+
+### Building with Sanitizers
+
+The `sanitize` preset is `debug` plus AddressSanitizer, and UndefinedBehaviorSanitizer on the toolchains
+that have it (Clang and GCC; MSVC ships ASan only):
+
+```bash
+cmake --preset sanitize
+cmake --build --preset sanitize-check
+```
+
+It is aimed at the **test suite**, which is headless and links no CLR. Running the editor or the server
+under ASan is a different problem: they host CoreCLR, which does its own memory management and needs
+sanitizer options set before it starts. Treat an app crash under this preset as a question about the
+setup, not as a finding, until the suite itself is clean.
