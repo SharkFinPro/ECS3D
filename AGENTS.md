@@ -68,7 +68,9 @@
   `PROJECT_IS_TOP_LEVEL AND BUILD_TESTING` — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
   GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
-  suite and runs it: `cmake --build <build-dir> --target check`.
+  suite and runs it: `cmake --build <build-dir> --target check`. The suite links `data`, `protocol`,
+  `settings` and `sim`; `net`'s `MessageQueue.cpp` is compiled straight into the target instead, since
+  linking `ECS3DNet` would pull `ManagedHost` and the C# transport assembly into a headless suite.
 - **Dependency direction (must hold):** `protocol` → nothing. `settings` → nothing (+ json). `data` →
   protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + nfd. `net`/`scripting` →
