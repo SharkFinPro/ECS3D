@@ -158,7 +158,9 @@ neither padding nor a pointer in it. `data`'s `WireTypes.h` holds those speciali
 and `uuids::uuid`, and any TU that reasons about the trait rather than just calling `write`/`read` must
 include it. Widths and byte order are still the caller's problem: pack fixed-width types, and the wire
 carries host endianness. `NetServer`/`NetClient` own the format in C++ and hand `ECS3DNetTransport` (C#)
-opaque `(type byte, payload)` pairs. `ManagedHost` boots CoreCLR and resolves
+opaque `(type byte, payload)` pairs. Both transports refuse an inbound message over
+`TransportBackend.MaxMessageBytes` and drop the connection - a peer declares its own frame length, and
+does so before the handshake has been authorized. `ManagedHost` boots CoreCLR and resolves
 managed statics as native function pointers; inbound frames are pushed from C# socket threads into a
 thread-safe `MessageQueue` and drained by the app loop. The transport backend (TCP/WebSocket) is
 selected by a single field in `Transport.cs`.
