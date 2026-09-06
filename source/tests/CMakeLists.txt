@@ -60,11 +60,13 @@ include(GoogleTest)
 gtest_discover_tests(${PROJECT_NAME})
 
 # Builds the suite and runs it through CTest in one command. --test-dir keeps it to this suite rather
-# than every test in the tree. COMMAND_EXPAND_LISTS is what splits the conditional --build-config into
+# than every test in the tree. --no-tests=error is the difference between a red build and a green one
+# when nothing registers: ctest exits 0 on an empty test set, which is how this step reported success
+# before the suite was wired up. COMMAND_EXPAND_LISTS is what splits the conditional --build-config into
 # two arguments; without it the pair arrives as one semicolon-joined argument that ctest rejects.
 add_custom_target(check
   COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_CURRENT_BINARY_DIR}" --output-on-failure
-    "$<$<BOOL:$<CONFIG>>:--build-config;$<CONFIG>>"
+    --no-tests=error "$<$<BOOL:$<CONFIG>>:--build-config;$<CONFIG>>"
   USES_TERMINAL
   VERBATIM
   COMMAND_EXPAND_LISTS
