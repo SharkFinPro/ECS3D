@@ -55,11 +55,12 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set reusable strings
-        # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
+        # The presets are named in lower case and the matrix build types are not, so derive the preset
+        # name once here rather than spelling the mapping out at every step that needs it.
         id: strings
         shell: bash
         run: |
-          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+          echo "preset=$(echo '${{ matrix.build_type }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-22.04' }}
@@ -86,16 +87,17 @@ jobs:
           cache: true
 
       - name: Configure CMake
+        # Through the preset, so that CMakePresets.json is exercised by CI rather than described by it:
+        # the generator, the build directory and the build type all come from the file a developer uses.
+        # Only the compilers are passed here, because they are the one thing the matrix varies and the
+        # presets deliberately do not pin.
         run: >
-          cmake -B ${{ steps.strings.outputs.build-output-dir }}
-          -G Ninja
+          cmake --preset ${{ steps.strings.outputs.preset }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-          -S ${{ github.workspace }}
 
       - name: Build
-        run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
+        run: cmake --build --preset ${{ steps.strings.outputs.preset }}
 
       - name: Test
         # Run the suite through the check target rather than ctest directly, so CI exercises the target
@@ -103,4 +105,4 @@ jobs:
         # otherwise lands on main green, which is how a broken generator expression in it got through.
         # The suite is already built by the step above, so this only runs it. check passes
         # --no-tests=error, which is what makes a suite that registers nothing fail instead of pass.
-        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --target check
+        run: cmake --build --preset ${{ steps.strings.outputs.preset }}-check

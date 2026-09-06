@@ -51,6 +51,12 @@
       "targets": [ "check" ]
     },
     {
+      "name": "release-check",
+      "configurePreset": "release",
+      "displayName": "Release, build and run the tests",
+      "targets": [ "check" ]
+    },
+    {
       "name": "sanitize-check",
       "configurePreset": "sanitize",
       "displayName": "Sanitized, build and run the tests",
