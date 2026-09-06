@@ -90,8 +90,12 @@ TEST(CollisionPairOrdering, OrdersLexicographicallyByBothMembers)
   const auto second = addBody(scene, "B", { 5, 0, 0 }, true);
   const auto third = addBody(scene, "C", { 10, 0, 0 }, true);
 
+  // Sorted with an explicit comparator rather than through std::ranges: uuid has < and ==, but not the
+  // full relational set that ranges::sort's sortable concept asks for. That gap is exactly why
+  // CollisionPair spells out its own three-way comparison instead of inheriting one.
   std::vector uuids{ first->getUUID(), second->getUUID(), third->getUUID() };
-  std::ranges::sort(uuids);
+  std::sort(uuids.begin(), uuids.end(),
+            [](const uuids::uuid& a, const uuids::uuid& b) { return a < b; });
 
   // The event lists are produced by set_difference and set_intersection, which need a total order and
   // not just equality. Comparing on the second member as well as the first is what makes it one.
