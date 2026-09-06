@@ -209,15 +209,22 @@ bool SceneQueries::raycast(ObjectManager& objectManager,
     glm::vec3 normal(0.0f);
     bool hit = false;
 
+    // Both shapes resolve their world placement through accessors that throw when the object has no
+    // Transform, so both are guarded the same way. This runs from a script binding on the tick loop,
+    // where a native exception would unwind through managed frames.
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
     if (collider->getColliderType() == ColliderType::sphereCollider)
     {
       const auto sphere = std::dynamic_pointer_cast<SphereCollider>(collider);
-      hit = raySphere(origin, dir, sphere->getPosition(), sphere->getRadius(), nearest, t, normal);
+      if (sphere && transform)
+      {
+        hit = raySphere(origin, dir, sphere->getPosition(), sphere->getRadius(), nearest, t, normal);
+      }
     }
     else
     {
       const auto box = std::dynamic_pointer_cast<BoxCollider>(collider);
-      const auto transform = object->getComponent<Transform>(ComponentType::transform);
       if (box && transform)
       {
         hit = rayBox(origin, dir, boxWorldMatrix(box), nearest, t, normal);
@@ -258,17 +265,22 @@ void SceneQueries::overlapSphere(ObjectManager& objectManager,
 
     bool overlaps = false;
 
+    // Guarded the same way as raycast, and for the same reason.
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
     if (collider->getColliderType() == ColliderType::sphereCollider)
     {
       const auto sphere = std::dynamic_pointer_cast<SphereCollider>(collider);
-      const glm::vec3 delta = sphere->getPosition() - center;
-      const float combined = sphere->getRadius() + radius;
-      overlaps = dot(delta, delta) <= combined * combined;
+      if (sphere && transform)
+      {
+        const glm::vec3 delta = sphere->getPosition() - center;
+        const float combined = sphere->getRadius() + radius;
+        overlaps = dot(delta, delta) <= combined * combined;
+      }
     }
     else
     {
       const auto box = std::dynamic_pointer_cast<BoxCollider>(collider);
-      const auto transform = object->getComponent<Transform>(ComponentType::transform);
       if (box && transform)
       {
         overlaps = sphereOverlapsBox(center, radius, boxWorldMatrix(box));

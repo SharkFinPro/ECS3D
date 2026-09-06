@@ -54,11 +54,11 @@ namespace {
     return result;
   }
 
-  [[nodiscard]] std::string newUUID()
+  [[nodiscard]] uuids::uuid newUUID()
   {
     std::mt19937 rng{ std::random_device{}() };
     uuids::uuid_random_generator generator{ rng };
-    return uuids::to_string(generator());
+    return generator();
   }
 
   [[nodiscard]] bool nameIsValid(const std::string& name)
@@ -465,6 +465,10 @@ void AssetBrowserPanel::displayCreateAssetPopup()
       {
         m_createError = e.what();
       }
+
+      // Outside the boundary: the asset is created and sent by now, so a failure here is not a failed
+      // create and must not reopen the form.
+      activateCreatedScene();
     }
   }
   ImGui::PopStyleColor(4);
@@ -487,7 +491,8 @@ void AssetBrowserPanel::commitAsset()
   }
 
   const std::string name = m_pending.name;
-  const std::string uuid = newUUID();
+  const auto assetUUID = newUUID();
+  const std::string uuid = uuids::to_string(assetUUID);
 
   // Copy an imported file into the project's assets dir (relative to the working dir = exe dir) so the
   // GpuAssetCache can load it; then send the registry record to the authoritative server.
@@ -540,5 +545,42 @@ void AssetBrowserPanel::commitAsset()
   }
 
   m_onAddAsset(addAsset);
+
+  // A newly created scene becomes the active one, but not from in here: this runs inside the create
+  // popup's error boundary, and a throw from the load would leave a created-and-sent scene looking like
+  // a failed create - with the form still open, so pressing Create again would mint a second one. The
+  // caller fires it once the commit can no longer fail.
+  if (m_pending.type == PendingAsset::Type::Scene)
+  {
+    m_sceneToActivate = assetUUID;
+  }
+
   m_pending = {};
+}
+
+void AssetBrowserPanel::activateCreatedScene()
+{
+  if (!m_sceneToActivate.has_value())
+  {
+    return;
+  }
+
+  const auto sceneUUID = m_sceneToActivate.value();
+  m_sceneToActivate.reset();
+
+  // Registering a scene only makes it appear in the browser, so without this "New Scene" left the
+  // previous scene loaded - its objects still in the hierarchy and still rendered - and reaching the
+  // empty one meant finding its tile and double-clicking it. The load is sent after the registration,
+  // so the server has the scene by the time it is asked to switch.
+  if (m_onLoadScene)
+  {
+    m_onLoadScene(sceneUUID);
+  }
+
+  // Matches what the double-click path leaves behind: it selects the scene tile on the way in, so the
+  // outgoing scene's object selection does not survive the switch.
+  if (m_selection)
+  {
+    m_selection->selectAsset(sceneUUID);
+  }
 }
