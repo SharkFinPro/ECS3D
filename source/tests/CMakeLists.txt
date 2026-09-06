@@ -25,6 +25,7 @@ add_executable(${PROJECT_NAME}
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
   CollisionMathTest.cpp
+  SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
   SettingsStoreTest.cpp
