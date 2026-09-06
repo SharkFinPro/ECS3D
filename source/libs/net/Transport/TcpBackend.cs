@@ -312,8 +312,11 @@ internal sealed class TcpBackend : TransportBackend
       return false;
     }
 
+    // The length is the peer's word, and it is read before the handshake has been authorized - the
+    // handshake is itself a frame - so this runs for anything that can open a socket. Unbounded, four
+    // bytes of 0x7FFFFFFF ask for a two gigabyte allocation, and the copy below would ask for it twice.
     var bodyLen = BinaryPrimitives.ReadInt32BigEndian(header);
-    if (bodyLen < 1)
+    if (bodyLen < 1 || bodyLen > MaxMessageBytes)
     {
       return false;
     }

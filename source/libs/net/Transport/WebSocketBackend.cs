@@ -490,6 +490,14 @@ internal sealed class WebSocketBackend : TransportBackend
         return null;
       }
 
+      // A fragmented message has no declared length, so the ceiling is on what has actually arrived: a
+      // peer can otherwise keep sending continuation frames and never set the end bit, and the stream
+      // grows until the process gives out. Slower than the TCP case, and the same ending.
+      if (assembled.Length + result.Count > MaxMessageBytes)
+      {
+        return null;
+      }
+
       assembled.Write(buffer, 0, result.Count);
 
       if (result.EndOfMessage)

@@ -26,6 +26,15 @@ internal abstract class TransportBackend
   protected const byte RolePlayer = 0;
   protected const byte RoleEditor = 1;
 
+  // The most a single inbound message may be before the connection is dropped. A peer declares its own
+  // frame length, so without a ceiling a peer that has not even handshaked yet can name any number and
+  // have the server allocate it - four bytes of input for gigabytes of memory, repeatable per connection.
+  //
+  // Generous rather than tight: the largest legitimate message is a full project snapshot, which carries
+  // every scene, prefab body and asset record, and the point is to refuse the absurd rather than to
+  // predict the biggest real project. Shared here so both transports refuse the same thing.
+  protected const int MaxMessageBytes = 64 * 1024 * 1024;
+
   // editMode is the launch-capability gate: only an edit-mode server may grant Role.editor at the
   // handshake, and only when the presented token matches expectedToken (see Authorize). Set at ServerStart.
   protected bool EditMode;
