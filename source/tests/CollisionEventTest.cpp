@@ -13,8 +13,8 @@
 
 #include <glm/vec3.hpp>
 #include <algorithm>
-#include <cstdint>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <vector>
 #include <uuid.h>
@@ -68,6 +68,13 @@ namespace {
   }
 }
 
+// Found by ADL: CollisionPair is a global type, so this has to be too. Without it a failed comparison
+// is thirty-two bytes of hex.
+inline void PrintTo(const CollisionPair& pair, std::ostream* out)
+{
+  *out << "{" << uuids::to_string(pair.a) << ", " << uuids::to_string(pair.b) << "}";
+}
+
 TEST(CollisionPairOrdering, IsTheSamePairWhicheverWayRoundItIsBuilt)
 {
   const auto scene = makeScene();
@@ -93,14 +100,14 @@ TEST(CollisionPairOrdering, OrdersLexicographicallyByBothMembers)
   // Sorted with an explicit comparator rather than through std::ranges: uuid has < and ==, but not the
   // full relational set that ranges::sort's sortable concept asks for. That gap is exactly why
   // CollisionPair spells out its own three-way comparison instead of inheriting one.
-  std::vector uuids{ first->getUUID(), second->getUUID(), third->getUUID() };
-  std::sort(uuids.begin(), uuids.end(),
+  std::vector sorted{ first->getUUID(), second->getUUID(), third->getUUID() };
+  std::sort(sorted.begin(), sorted.end(),
             [](const uuids::uuid& a, const uuids::uuid& b) { return a < b; });
 
   // The event lists are produced by set_difference and set_intersection, which need a total order and
   // not just equality. Comparing on the second member as well as the first is what makes it one.
-  const auto low = CollisionPair::make(uuids[0], uuids[1]);
-  const auto high = CollisionPair::make(uuids[0], uuids[2]);
+  const auto low = CollisionPair::make(sorted[0], sorted[1]);
+  const auto high = CollisionPair::make(sorted[0], sorted[2]);
 
   EXPECT_LT(low, high);
   EXPECT_GT(high, low);
@@ -113,6 +120,11 @@ TEST(CollisionEvent, AContactEntersThenStaysThenExits)
 
   // Triggers on purpose: a solid contact is pushed apart by the response in the same tick that reports
   // it, so the only way to hold two bodies overlapping across ticks is to ask for no response.
+  //
+  // It also keeps this file to at most one *solid* dynamic body per scene, which is deliberate. The
+  // narrow phase runs in an OpenMP loop over the edges, and a collider's bounding box and transformed
+  // mesh are caches it writes on read. They are only safe to share because checkCollisions warms them
+  // serially first, which stops being true the moment a response moves something mid-loop.
   const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true, true);
   const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
 
@@ -144,8 +156,8 @@ TEST(CollisionEvent, AContactEntersThenStaysThenExits)
 TEST(CollisionEvent, ObjectsThatNeverTouchProduceNothing)
 {
   const auto scene = makeScene();
-  addBody(scene, "A", { 0, 0, 0 }, true);
-  addBody(scene, "B", { 50, 0, 0 }, true);
+  const auto a = addBody(scene, "A", { 0, 0, 0 }, true, true);
+  const auto b = addBody(scene, "B", { 50, 0, 0 }, true, true);
 
   CollisionSystem collisionSystem;
   collisionSystem.fixedUpdate(*scene.objectManager);
@@ -153,6 +165,13 @@ TEST(CollisionEvent, ObjectsThatNeverTouchProduceNothing)
   EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
   EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
   EXPECT_TRUE(collisionSystem.getCollisionExits().empty());
+
+  // Moved into contact, so the silence above is the distance and not a narrow phase that answers no to
+  // everything. Every absence assertion in this file carries one of these.
+  b->getComponent<Transform>(ComponentType::transform)->setPosition({ 1, 0, 0 });
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), a, b));
 }
 
 TEST(CollisionEvent, APairSeenFromBothSidesIsRecordedOnce)
@@ -173,8 +192,8 @@ TEST(CollisionEvent, APairSeenFromBothSidesIsRecordedOnce)
 TEST(CollisionEvent, AStaticPairIsNeverEvenTested)
 {
   const auto scene = makeScene();
-  addBody(scene, "A", { 0, 0, 0 }, false);
-  addBody(scene, "B", { 1, 0, 0 }, false);
+  const auto a = addBody(scene, "A", { 0, 0, 0 }, false, true);
+  const auto b = addBody(scene, "B", { 1, 0, 0 }, false, true);
 
   CollisionSystem collisionSystem;
   collisionSystem.fixedUpdate(*scene.objectManager);
@@ -182,6 +201,13 @@ TEST(CollisionEvent, AStaticPairIsNeverEvenTested)
   // Overlapping, but neither is a collision source: the sweep skips an edge with no rigid body, so two
   // pieces of static geometry sharing a space cost nothing and report nothing.
   EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
+
+  // The same overlap, with one of them given a body. This is what makes the silence above about the
+  // missing body rather than about the boxes not touching.
+  a->addComponent(std::make_shared<RigidBody>());
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), a, b));
 }
 
 TEST(CollisionEvent, LayersThatDoNotShareAMaskProduceNoEvent)
@@ -219,6 +245,11 @@ TEST(CollisionEvent, OneSidedMaskAgreementIsNotEnough)
   a->getComponent<Collider>(ComponentType::collider)->setLayer(1);
   b->getComponent<Collider>(ComponentType::collider)->setLayer(2);
 
+  // Pinned, because the rest of this test reads the same whether the layers are 1 and 2 or both 0 -
+  // a setLayer that stopped working would leave it green.
+  ASSERT_EQ(a->getComponent<Collider>(ComponentType::collider)->getLayer(), 1u);
+  ASSERT_EQ(b->getComponent<Collider>(ComponentType::collider)->getLayer(), 2u);
+
   // A admits B's layer; B does not admit A's. The rule is that both have to agree, so this is no
   // contact rather than a contact one side does not know about.
   a->getComponent<Collider>(ComponentType::collider)->setMask(1u << 2);
@@ -228,6 +259,13 @@ TEST(CollisionEvent, OneSidedMaskAgreementIsNotEnough)
   collisionSystem.fixedUpdate(*scene.objectManager);
 
   EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
+
+  // B admitting A as well turns the same overlap into a contact, so the refusal above is the one-sided
+  // mask and not the geometry.
+  b->getComponent<Collider>(ComponentType::collider)->setMask(1u << 1);
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), a, b));
 }
 
 TEST(CollisionEvent, AParentAndItsChildDoNotCollide)
@@ -243,7 +281,13 @@ TEST(CollisionEvent, AParentAndItsChildDoNotCollide)
   auto child = std::make_shared<Object>("Child");
   child->setParent(parent);
   scene.objectManager->addObject(child);
+  child->getComponent<Transform>(ComponentType::transform)->setPosition({ 0, 0, 0 });
   child->addComponent(std::make_shared<BoxCollider>());
+
+  // The skip has to hold from both edges, and the child's edge only exists because getComponent walks
+  // to the parent for a rigid body. Without this the child would be no collision source at all, the
+  // parent's edge would carry the whole test, and deleting the child-side skip would leave it green.
+  ASSERT_NE(child->getComponent<RigidBody>(ComponentType::rigidBody), nullptr);
 
   CollisionSystem collisionSystem;
   collisionSystem.fixedUpdate(*scene.objectManager);
@@ -251,6 +295,17 @@ TEST(CollisionEvent, AParentAndItsChildDoNotCollide)
   // A child's transform is relative to its parent, so the two occupy the same space by construction.
   // Reporting that as a contact would fire an event on every tick of every composed object.
   EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
+
+  // Detached, and the very same overlap is a contact. Without this the test passes just as well against
+  // a narrow phase that answers no to everything.
+  child->setParent(nullptr);
+  parent->removeChild(child);
+  scene.objectManager->addObjectToRoot(child);
+  child->addComponent(std::make_shared<RigidBody>());
+
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), parent, child));
 }
 
 TEST(CollisionEvent, ATriggerReportsTheContactWithoutMovingAnything)
