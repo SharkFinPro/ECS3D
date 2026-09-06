@@ -208,7 +208,10 @@ TEST(ComponentEdit, RefusesADiscriminatorThatNamesNoComponent)
 TEST(ComponentEdit, RefusesTheParentColliderTypeAsADiscriminator)
 {
   const auto scene = makeScene();
-  scene.object->addComponent(std::make_shared<BoxCollider>());
+
+  const auto box = std::make_shared<BoxCollider>();
+  scene.object->addComponent(box);
+  box->setScale({ 4, 5, 6 });
 
   net::Message edit(net::MessageType::editComponent);
   edit.writeString(uuids::to_string(scene.object->getUUID()));
@@ -219,6 +222,7 @@ TEST(ComponentEdit, RefusesTheParentColliderTypeAsADiscriminator)
   // there, reading a body of the wrong layout.
   EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, edit),
             replication::ComponentEditResult::malformedPayload);
+  EXPECT_EQ(box->getLocalScale(), glm::vec3(4, 5, 6));
 }
 
 TEST(ComponentEdit, RefusesAnEditForTheOtherColliderShape)

@@ -292,6 +292,10 @@ void Object::unpack(net::MessageReader& messageReader)
   // duration and started again at the end, which re-seeds every live value from what was just read.
   // Unpacking into a started object would otherwise write through to the live slot and leave the
   // authored value at its constructor default, to be saved back later as if that were authored.
+  //
+  // A throw below leaves the object stopped, which is deliberate: every path that can throw here ends
+  // with the object discarded (applyObjectSpawned unwinds the subtree) or the whole parsed scene thrown
+  // away before it is committed, so there is nothing left to restore.
   const bool wasStarted = m_started;
   if (wasStarted)
   {
@@ -316,6 +320,14 @@ void Object::unpack(net::MessageReader& messageReader)
       throw std::runtime_error("Packed component type is not a component");
     }
 
+    // script is a component type but never a discriminator in this section - scripts have their own,
+    // after this one, and are keyed by class name. Claiming it here would create a nameless Script and
+    // then read the next component's bytes as its field blob.
+    if (packedType == ComponentType::script)
+    {
+      throw std::runtime_error("Script packed among the components");
+    }
+
     // Colliders pack their subtype, but live under the parent "collider" key in m_components.
     auto lookupType = packedType;
     if (const auto parentIt = subComponentTypeToParent.find(packedType);
@@ -331,7 +343,8 @@ void Object::unpack(net::MessageReader& messageReader)
 
     // The two collider shapes share that key but not a field layout. Reading a box body into a
     // SphereCollider would take a 12-byte vector where a 4-byte float belongs and misalign everything
-    // after it, so the slot is rebuilt as the shape the payload describes rather than reused.
+    // after it, so the slot is rebuilt as the shape the payload describes rather than reused. Defensive
+    // rather than live: every caller today unpacks into a freshly built object, which holds no collider.
     if (component && component->getPackedType() != packedType)
     {
       removeComponent(component);
@@ -359,7 +372,12 @@ void Object::unpack(net::MessageReader& messageReader)
   const uint32_t scriptCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < scriptCount; ++i)
   {
-    static_cast<void>(messageReader.read<ComponentType>()); // script type tag, not needed for lookup
+    // Not needed for the lookup, which goes by class name - but a section that does not carry the tag it
+    // is supposed to is a payload claiming to be something it is not, and every read after it is off.
+    if (messageReader.read<ComponentType>() != ComponentType::script)
+    {
+      throw std::runtime_error("Script section carries a type tag that is not a script");
+    }
 
     const std::string className = messageReader.readString();
 

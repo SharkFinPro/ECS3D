@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -42,6 +43,19 @@ namespace {
     source.objectManager->addObject(child);
 
     return replication::buildObjectSpawned(*parent);
+  }
+
+  // A well-formed object header claiming one component, followed by nothing but that component's
+  // discriminator - enough to reach the check without needing a body the check should never get to.
+  net::Message objectWithOneComponentTag(const ComponentType packedType)
+  {
+    net::Message message(net::MessageType::objectSpawned);
+    message.writeString("123e4567-e89b-12d3-a456-426614174000");
+    message.writeString("Spawned");
+    message.write<uint32_t>(1);
+    message.write(packedType);
+
+    return message;
   }
 
   net::Message firstBytes(const net::Message& source, const std::size_t kept)
@@ -145,16 +159,39 @@ TEST(ObjectSpawn, RefusesAPackedComponentTypeThatNamesNoComponent)
 {
   const auto target = makeScene();
 
-  // A well-formed object header followed by a discriminator that is no component type. It used to reach
-  // componentTypeToRegistryKey.at() and, for a value that happened to be a key but was not registered,
-  // a null component that addComponent dereferenced - past every guard around this path.
-  net::Message message(net::MessageType::objectSpawned);
-  message.writeString("123e4567-e89b-12d3-a456-426614174000");
-  message.writeString("Spawned");
-  message.write<uint32_t>(1);
-  message.write(static_cast<ComponentType>(0x7F));
+  // A well-formed object header followed by a discriminator that is no component type. This threw
+  // before too, out of componentTypeToRegistryKey.at() - the exception type is what distinguishes the
+  // check from the incidental lookup failure it replaces.
+  EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager,
+                                               objectWithOneComponentTag(static_cast<ComponentType>(0x7F))),
+               std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
+}
 
-  EXPECT_ANY_THROW(replication::applyObjectSpawned(*target.objectManager, message));
+TEST(ObjectSpawn, RefusesAScriptPackedAmongTheComponents)
+{
+  const auto target = makeScene();
+
+  // script is a real component type, so it passes the registry-key check - but Object::pack never writes
+  // it in the component section. Left through, it built a nameless Script and then read the next
+  // component's bytes as its field blob.
+  EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager,
+                                               objectWithOneComponentTag(ComponentType::script)),
+               std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
+}
+
+TEST(ObjectSpawn, RefusesAComponentTypeThisBuildDoesNotRegister)
+{
+  // A registry with nothing registered in it: every key is valid, none of them can be created. This is
+  // the case that used to be a null dereference rather than an exception - create() returns null and
+  // addComponent reads getType() off it, which no guard around this path can catch.
+  Scene target;
+  target.objectManager = std::make_unique<ObjectManager>(target.componentRegistry);
+
+  EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager,
+                                               objectWithOneComponentTag(ComponentType::modelRenderer)),
+               std::runtime_error);
   EXPECT_TRUE(target.objectManager->getAllObjects().empty());
 }
 
