@@ -31,6 +31,7 @@ add_executable(${PROJECT_NAME}
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
   SceneManagerTest.cpp
+  PhysicsIntegrationTest.cpp
   RuntimeComponentTest.cpp
   RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
