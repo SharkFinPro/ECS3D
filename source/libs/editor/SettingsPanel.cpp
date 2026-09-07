@@ -3,7 +3,7 @@
 #include "GuiComponents.h"
 #include <SettingsStore.h>
 #include <imgui.h>
-#include <cstddef>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -19,8 +19,8 @@ namespace {
 
   // A stored color is four components in 0..1. A wrong length or an out-of-range component is treated as
   // absent, the way the store treats a mistyped key, so a hand-edited file cannot leave the editor
-  // unreadable. NaN fails the comparison too, which is the point of testing the range rather than
-  // clamping to it.
+  // unreadable. Testing the range rather than clamping to it is what catches an infinity parsed from
+  // something like 1e400, which would otherwise reach ImGui as a color.
   void readColor(const SettingsStore& settings, const char* token, ImVec4& color)
   {
     const auto components = settings.get<std::vector<float>>(themeKey(token), {});
@@ -88,9 +88,9 @@ void SettingsPanel::displayGui()
   // shows that box, so anything else would be a second way to do the same thing.
   bool stayOpen = true;
 
-  // Begin reports a collapsed or clipped window by returning false without having drawn anything, and
-  // the contents have to be skipped in that case - but the close box still has to be honored, since it
-  // is what a collapsed window's title bar is mostly made of.
+  // Begin draws the window's decorations but reports a collapsed or clipped one by returning false, so
+  // the contents are skipped there. The close box still has to be honored either way, which is why End
+  // and the check below sit outside.
   if (ImGui::Begin(windowName, &stayOpen))
   {
     displayNav();
@@ -162,35 +162,36 @@ void SettingsPanel::displayAppearance()
     theme::applyStyle();
   }
 
-  const char* group = nullptr;
-
-  for (std::size_t i = 0; i < theme::tokens().size(); ++i)
+  // A pass per group rather than a header whenever the value changes from the previous row: the order
+  // of tokens() is then a readability choice rather than something the layout depends on.
+  for (const auto& group : theme::groups())
   {
-    const auto& token = theme::tokens()[i];
+    ImGui::Spacing();
+    gc::sectionLabel(group);
 
-    if (group == nullptr || std::string(group) != token.group)
+    for (const auto& token : theme::tokens())
     {
-      group = token.group;
+      if (std::strcmp(token.group, group) != 0)
+      {
+        continue;
+      }
 
-      ImGui::Spacing();
-      gc::sectionLabel(group);
+      // Keyed by the settings key rather than the label: two groups can carry the same label, and
+      // ImGui would treat both rows as one widget.
+      ImGui::PushID(token.key);
+
+      if (ImGui::ColorEdit4(token.label, &token.value->x, ImGuiColorEditFlags_AlphaBar))
+      {
+        m_settings->set(themeKey(token.key), std::vector{ token.value->x, token.value->y,
+                                                          token.value->z, token.value->w });
+
+        // The tokens feed the global ImGuiStyle as well as the custom widgets, so the style has to be
+        // rebuilt for a change to reach the plain ImGui controls.
+        theme::applyStyle();
+      }
+
+      ImGui::PopID();
     }
-
-    // Keyed by index rather than by label: two groups can carry the same label, and ImGui would treat
-    // both rows as one widget.
-    ImGui::PushID(static_cast<int>(i));
-
-    if (ImGui::ColorEdit4(token.label, &token.value->x, ImGuiColorEditFlags_AlphaBar))
-    {
-      m_settings->set(themeKey(token.key), std::vector{ token.value->x, token.value->y,
-                                                        token.value->z, token.value->w });
-
-      // The tokens feed the global ImGuiStyle as well as the custom widgets, so the style has to be
-      // rebuilt for a change to reach the plain ImGui controls.
-      theme::applyStyle();
-    }
-
-    ImGui::PopID();
   }
 }
 

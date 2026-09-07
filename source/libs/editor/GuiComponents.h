@@ -406,7 +406,10 @@ namespace gc {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     if (hovered || selected)
     {
-      dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + height), theme::u32(theme::accdim), 6.0f);
+      // A selected row reads stronger than a hovered one, so hovering the row next to the selected one
+      // does not light them identically.
+      dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + height),
+                        theme::u32(selected ? theme::accSoft : theme::accdim), 6.0f);
     }
 
     float textX = pos.x + 11.0f;

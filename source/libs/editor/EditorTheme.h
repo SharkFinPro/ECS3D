@@ -2,7 +2,10 @@
 #define ECS3D_EDITORTHEME_H
 
 #include <imgui.h>
+#include <algorithm>
 #include <array>
+#include <cstring>
+#include <vector>
 
 // Design tokens + global style for the ECS3D editor (see "ECS3D Editor.dc" mockup).
 // Both the global ImGuiStyle (setupImGuiStyle) and the custom widgets in GuiComponents.h pull their
@@ -43,6 +46,14 @@ namespace theme {
     // Danger (delete hover).
     inline const ImVec4 danger  = v4(229, 86, 91);
 
+    // Chrome that applyStyle used to spell out inline. Named so that the palette the settings panel
+    // edits is the whole palette: a light scheme built from the tokens above would otherwise leave
+    // every title bar and the menu bar near-black, with light text on them.
+    inline const ImVec4 titleBar    = v4(23, 24, 28);
+    inline const ImVec4 headHover   = v4(44, 48, 58);
+    inline const ImVec4 scrollHover = v4(71, 75, 85);
+    inline const ImVec4 modalDim    = v4(10, 11, 13, 150);
+
     // Asset-type accent colors (used by the asset grid badges + the model renderer slots).
     inline const ImVec4 modelPurple = v4(167, 139, 250); // #a78bfa
     inline const ImVec4 scriptAmber = v4(230, 179, 90);  // #e6b35a
@@ -50,8 +61,9 @@ namespace theme {
     inline const ImVec4 prefabBlue  = v4(96, 165, 250);  // #60a5fa
   }
 
-  // Defined after the defaults they copy, in the same header, so the initialization order within the
-  // translation unit that defines them is the order written here.
+  // Defined after the defaults they copy, in the same header. Inline variables are only partially
+  // ordered across translation units, but every unit that defines these defines them in this order, so
+  // the default is always initialized first whichever unit ends up doing it.
   inline ImVec4 bg      = defaults::bg;
   inline ImVec4 panel   = defaults::panel;
   inline ImVec4 head    = defaults::head;
@@ -74,6 +86,11 @@ namespace theme {
 
   inline ImVec4 danger  = defaults::danger;
 
+  inline ImVec4 titleBar    = defaults::titleBar;
+  inline ImVec4 headHover   = defaults::headHover;
+  inline ImVec4 scrollHover = defaults::scrollHover;
+  inline ImVec4 modalDim    = defaults::modalDim;
+
   inline ImVec4 modelPurple = defaults::modelPurple;
   inline ImVec4 scriptAmber = defaults::scriptAmber;
   inline ImVec4 sceneGreen  = defaults::sceneGreen;
@@ -90,32 +107,65 @@ namespace theme {
     const ImVec4* defaultValue;
   };
 
-  inline const std::array<Token, 22>& tokens()
+  inline const auto& tokens()
   {
-    static const std::array<Token, 22> list{{
-      { "Surfaces", "Background",    "bg",          &bg,          &defaults::bg },
-      { "Surfaces", "Panel",         "panel",       &panel,       &defaults::panel },
-      { "Surfaces", "Header",        "head",        &head,        &defaults::head },
-      { "Surfaces", "Inset",         "inset",       &inset,       &defaults::inset },
-      { "Surfaces", "Hover",         "hover",       &hover,       &defaults::hover },
-      { "Surfaces", "Line",          "line",        &line,        &defaults::line },
-      { "Surfaces", "Line (strong)", "line2",       &line2,       &defaults::line2 },
-      { "Text",     "Primary",       "t1",          &t1,          &defaults::t1 },
-      { "Text",     "Secondary",     "t2",          &t2,          &defaults::t2 },
-      { "Text",     "Muted",         "t3",          &t3,          &defaults::t3 },
-      { "Accent",   "Accent",        "accent",      &accent,      &defaults::accent },
-      { "Accent",   "Accent (dim)",  "accdim",      &accdim,      &defaults::accdim },
-      { "Accent",   "Accent (soft)", "accSoft",     &accSoft,     &defaults::accSoft },
-      { "Accent",   "On accent",     "onAcc",       &onAcc,       &defaults::onAcc },
-      { "Axes",     "X",             "axisX",       &axisX,       &defaults::axisX },
-      { "Axes",     "Y",             "axisY",       &axisY,       &defaults::axisY },
-      { "Axes",     "Z",             "axisZ",       &axisZ,       &defaults::axisZ },
-      { "Status",   "Danger",        "danger",      &danger,      &defaults::danger },
-      { "Assets",   "Model",         "modelPurple", &modelPurple, &defaults::modelPurple },
-      { "Assets",   "Script",        "scriptAmber", &scriptAmber, &defaults::scriptAmber },
-      { "Assets",   "Scene",         "sceneGreen",  &sceneGreen,  &defaults::sceneGreen },
-      { "Assets",   "Prefab",        "prefabBlue",  &prefabBlue,  &defaults::prefabBlue },
-    }};
+    // to_array rather than a sized array: a count spelled out here is a second thing to keep right, and
+    // getting it wrong upwards is not a compile error - it is a value-initialized Token whose key and
+    // pointers are null, which the settings panel walks straight into.
+    //
+    // Rows are grouped for reading, but nothing depends on that ordering: the panel collects the
+    // distinct groups rather than watching for the value to change from one row to the next.
+    //
+    // theme::bg is deliberately absent. It is the mockup's --bg and nothing in the tree reads it, so a
+    // row for it would be a control that does nothing.
+    static const auto list = std::to_array<Token>({
+      { "Surfaces", "Panel",          "panel",       &panel,       &defaults::panel },
+      { "Surfaces", "Header",         "head",        &head,        &defaults::head },
+      { "Surfaces", "Header (hover)", "headHover",   &headHover,   &defaults::headHover },
+      { "Surfaces", "Title bar",      "titleBar",    &titleBar,    &defaults::titleBar },
+      { "Surfaces", "Inset",          "inset",       &inset,       &defaults::inset },
+      { "Surfaces", "Hover",          "hover",       &hover,       &defaults::hover },
+      { "Surfaces", "Line",           "line",        &line,        &defaults::line },
+      { "Surfaces", "Line (strong)",  "line2",       &line2,       &defaults::line2 },
+      { "Surfaces", "Scroll (hover)", "scrollHover", &scrollHover, &defaults::scrollHover },
+      { "Surfaces", "Modal dim",      "modalDim",    &modalDim,    &defaults::modalDim },
+      { "Text",     "Primary",        "t1",          &t1,          &defaults::t1 },
+      { "Text",     "Secondary",      "t2",          &t2,          &defaults::t2 },
+      { "Text",     "Muted",          "t3",          &t3,          &defaults::t3 },
+      { "Accent",   "Accent",         "accent",      &accent,      &defaults::accent },
+      { "Accent",   "Accent (dim)",   "accdim",      &accdim,      &defaults::accdim },
+      { "Accent",   "Accent (soft)",  "accSoft",     &accSoft,     &defaults::accSoft },
+      { "Accent",   "On accent",      "onAcc",       &onAcc,       &defaults::onAcc },
+      { "Axes",     "X",              "axisX",       &axisX,       &defaults::axisX },
+      { "Axes",     "Y",              "axisY",       &axisY,       &defaults::axisY },
+      { "Axes",     "Z",              "axisZ",       &axisZ,       &defaults::axisZ },
+      { "Status",   "Danger",         "danger",      &danger,      &defaults::danger },
+      { "Assets",   "Model",          "modelPurple", &modelPurple, &defaults::modelPurple },
+      { "Assets",   "Script",         "scriptAmber", &scriptAmber, &defaults::scriptAmber },
+      { "Assets",   "Scene",          "sceneGreen",  &sceneGreen,  &defaults::sceneGreen },
+      { "Assets",   "Prefab",         "prefabBlue",  &prefabBlue,  &defaults::prefabBlue },
+    });
+
+    return list;
+  }
+
+  // The distinct groups in tokens(), in the order they first appear. The settings panel draws a pass
+  // per group, so this is what decides the section order on the page.
+  inline const std::vector<const char*>& groups()
+  {
+    static const std::vector<const char*> list = []
+    {
+      std::vector<const char*> found;
+      for (const auto& token : tokens())
+      {
+        if (std::ranges::none_of(found, [&](const char* seen) { return std::strcmp(seen, token.group) == 0; }))
+        {
+          found.push_back(token.group);
+        }
+      }
+
+      return found;
+    }();
 
     return list;
   }
@@ -167,15 +217,15 @@ namespace theme {
     c[ImGuiCol_FrameBgHovered]  = inset;        // hover is signalled via border in the custom widgets
     c[ImGuiCol_FrameBgActive]   = inset;
 
-    c[ImGuiCol_TitleBg]         = v4(23, 24, 28);
-    c[ImGuiCol_TitleBgActive]   = v4(23, 24, 28);
-    c[ImGuiCol_TitleBgCollapsed]= v4(23, 24, 28);
-    c[ImGuiCol_MenuBarBg]       = v4(23, 24, 28);
+    c[ImGuiCol_TitleBg]         = titleBar;
+    c[ImGuiCol_TitleBgActive]   = titleBar;
+    c[ImGuiCol_TitleBgCollapsed]= titleBar;
+    c[ImGuiCol_MenuBarBg]       = titleBar;
 
     c[ImGuiCol_ScrollbarBg]     = ImVec4(0, 0, 0, 0);
     c[ImGuiCol_ScrollbarGrab]   = line2;
-    c[ImGuiCol_ScrollbarGrabHovered] = v4(71, 75, 85);
-    c[ImGuiCol_ScrollbarGrabActive]  = v4(71, 75, 85);
+    c[ImGuiCol_ScrollbarGrabHovered] = scrollHover;
+    c[ImGuiCol_ScrollbarGrabActive]  = scrollHover;
 
     c[ImGuiCol_CheckMark]       = accent;
     c[ImGuiCol_SliderGrab]      = accent;
@@ -183,7 +233,7 @@ namespace theme {
 
     // Headers double as the component section bars (--head with accent hover).
     c[ImGuiCol_Header]          = head;
-    c[ImGuiCol_HeaderHovered]   = v4(44, 48, 58);
+    c[ImGuiCol_HeaderHovered]   = headHover;
     c[ImGuiCol_HeaderActive]    = head;
 
     c[ImGuiCol_Button]          = head;
@@ -207,7 +257,7 @@ namespace theme {
     c[ImGuiCol_TextSelectedBg]  = accSoft;
     c[ImGuiCol_DragDropTarget]  = accent;
     c[ImGuiCol_NavHighlight]    = accent;
-    c[ImGuiCol_ModalWindowDimBg]= v4(10, 11, 13, 150);
+    c[ImGuiCol_ModalWindowDimBg]= modalDim;
   }
 }
 
