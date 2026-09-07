@@ -45,6 +45,7 @@ add_executable(${PROJECT_NAME}
   ProtocolFramingTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
+  NarrowPhaseTest.cpp
   SmokeTest.cpp
   TestPrinters.h
 

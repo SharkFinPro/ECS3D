@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   PhysicsSystem.h
   CollisionSystem.cpp
   CollisionSystem.h
+  collisions/NarrowPhase.cpp
+  collisions/NarrowPhase.h
   collisions/Simplex.cpp
   collisions/Simplex.h
   collisions/Polytope.cpp
