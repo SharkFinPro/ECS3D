@@ -37,17 +37,17 @@ namespace gc {
 
     bool edited = false;
 
-    ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "X");
+    ImGui::TextColored(theme::axisX, "X");
     ImGui::SameLine();
     edited |= ImGui::DragFloat("##X", x, sensitivity);
     ImGui::SameLine();
 
-    ImGui::TextColored(ImVec4(0.3f,1,0.3f,1), "Y");
+    ImGui::TextColored(theme::axisY, "Y");
     ImGui::SameLine();
     edited |= ImGui::DragFloat("##Y", y, sensitivity);
     ImGui::SameLine();
 
-    ImGui::TextColored(ImVec4(0.3f,0.6f,1,1), "Z");
+    ImGui::TextColored(theme::axisZ, "Z");
     ImGui::SameLine();
     edited |= ImGui::DragFloat("##Z", z, sensitivity);
 
@@ -389,9 +389,9 @@ namespace gc {
   }
 
   // A full-width inline list row with a leading accent icon + label (e.g. the inspector's inline
-  // "Add Component" list). Fills with the accent-dim wash on hover. Returns true when clicked.
-  // selected keeps the wash on and the icon accented, for a row that is a persistent choice rather than
-  // a one-shot action (the settings nav).
+  // "Add Component" list). Fills with an accent wash on hover. Returns true when clicked. selected keeps
+  // the wash on, in the stronger of the two accents, for a row that is a persistent choice rather than a
+  // one-shot action (the settings nav).
   inline bool menuRow(const char* label, const SecIcon icon = SecIcon::none, const float height = 34.0f,
                       const bool selected = false)
   {

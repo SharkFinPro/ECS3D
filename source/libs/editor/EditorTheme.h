@@ -64,6 +64,9 @@ namespace theme {
   // Defined after the defaults they copy, in the same header. Inline variables are only partially
   // ordered across translation units, but every unit that defines these defines them in this order, so
   // the default is always initialized first whichever unit ends up doing it.
+  //
+  // Mutable because the Appearance settings write to them - all except bg, which nothing reads yet and
+  // which the panel therefore does not offer.
   inline ImVec4 bg      = defaults::bg;
   inline ImVec4 panel   = defaults::panel;
   inline ImVec4 head    = defaults::head;
