@@ -25,8 +25,9 @@ namespace fixtures {
     none
   };
 
-  // Constructing one registers the data components and opens an empty manager on top of them, which is
-  // the setup every suite below was repeating. Derive from it to hang extra members off the same scene.
+  // Constructing one opens an empty ObjectManager over a ComponentRegistry, registering the data
+  // components in it unless asked not to - the setup every suite below was repeating. Derive from it to
+  // hang extra members off the same scene.
   struct Scene {
     std::shared_ptr<ComponentRegistry> componentRegistry;
     std::unique_ptr<ObjectManager> objectManager;
