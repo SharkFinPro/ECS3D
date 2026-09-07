@@ -2,6 +2,7 @@
 #define ECS3D_EDITORTHEME_H
 
 #include <imgui.h>
+#include <array>
 
 // Design tokens + global style for the ECS3D editor (see "ECS3D Editor.dc" mockup).
 // Both the global ImGuiStyle (setupImGuiStyle) and the custom widgets in GuiComponents.h pull their
@@ -13,36 +14,111 @@ namespace theme {
   }
 
   // --- palette (mirrors the CSS custom properties in the mockup) ---
-  inline const ImVec4 bg      = v4(20, 21, 24);    // --bg
-  inline const ImVec4 panel   = v4(28, 29, 34);    // --panel
-  inline const ImVec4 head    = v4(38, 41, 50);    // --head
-  inline const ImVec4 inset   = v4(15, 16, 19);    // --inset
-  inline const ImVec4 hover   = v4(35, 38, 46);    // --hover
-  inline const ImVec4 line    = v4(42, 45, 53);    // --line
-  inline const ImVec4 line2   = v4(54, 58, 68);    // --line2
-  inline const ImVec4 t1      = v4(231, 232, 236); // --t1 primary text
-  inline const ImVec4 t2      = v4(148, 152, 163); // --t2 secondary text
-  inline const ImVec4 t3      = v4(100, 106, 118); // --t3 muted text
+  // The compiled-in values live here and nowhere else. The tokens below are mutable so the Appearance
+  // settings can override them - every widget reads them at draw time, so an assignment takes effect on
+  // the next frame - and these are what a reset restores.
+  namespace defaults {
+    inline const ImVec4 bg      = v4(20, 21, 24);    // --bg
+    inline const ImVec4 panel   = v4(28, 29, 34);    // --panel
+    inline const ImVec4 head    = v4(38, 41, 50);    // --head
+    inline const ImVec4 inset   = v4(15, 16, 19);    // --inset
+    inline const ImVec4 hover   = v4(35, 38, 46);    // --hover
+    inline const ImVec4 line    = v4(42, 45, 53);    // --line
+    inline const ImVec4 line2   = v4(54, 58, 68);    // --line2
+    inline const ImVec4 t1      = v4(231, 232, 236); // --t1 primary text
+    inline const ImVec4 t2      = v4(148, 152, 163); // --t2 secondary text
+    inline const ImVec4 t3      = v4(100, 106, 118); // --t3 muted text
 
-  // Accent (default cyan #1fb8d4). accdim is the translucent accent used for fills/glows.
-  inline const ImVec4 accent  = v4(31, 184, 212);
-  inline const ImVec4 accdim  = v4(31, 184, 212, 38);
-  inline const ImVec4 accSoft = v4(31, 184, 212, 60);
-  inline const ImVec4 onAcc   = v4(6, 34, 42);     // text/icon color on solid accent (#06222a)
+    // Accent (default cyan #1fb8d4). accdim is the translucent accent used for fills/glows.
+    inline const ImVec4 accent  = v4(31, 184, 212);
+    inline const ImVec4 accdim  = v4(31, 184, 212, 38);
+    inline const ImVec4 accSoft = v4(31, 184, 212, 60);
+    inline const ImVec4 onAcc   = v4(6, 34, 42);     // text/icon color on solid accent (#06222a)
 
-  // Axis colors.
-  inline const ImVec4 axisX   = v4(229, 86, 91);
-  inline const ImVec4 axisY   = v4(92, 191, 106);
-  inline const ImVec4 axisZ   = v4(77, 147, 245);
+    // Axis colors.
+    inline const ImVec4 axisX   = v4(229, 86, 91);
+    inline const ImVec4 axisY   = v4(92, 191, 106);
+    inline const ImVec4 axisZ   = v4(77, 147, 245);
 
-  // Danger (delete hover).
-  inline const ImVec4 danger  = v4(229, 86, 91);
+    // Danger (delete hover).
+    inline const ImVec4 danger  = v4(229, 86, 91);
 
-  // Asset-type accent colors (used by the asset grid badges + the model renderer slots).
-  inline const ImVec4 modelPurple = v4(167, 139, 250); // #a78bfa
-  inline const ImVec4 scriptAmber = v4(230, 179, 90);  // #e6b35a
-  inline const ImVec4 sceneGreen  = v4(92, 194, 133);  // #5cc285
-  inline const ImVec4 prefabBlue  = v4(96, 165, 250);  // #60a5fa
+    // Asset-type accent colors (used by the asset grid badges + the model renderer slots).
+    inline const ImVec4 modelPurple = v4(167, 139, 250); // #a78bfa
+    inline const ImVec4 scriptAmber = v4(230, 179, 90);  // #e6b35a
+    inline const ImVec4 sceneGreen  = v4(92, 194, 133);  // #5cc285
+    inline const ImVec4 prefabBlue  = v4(96, 165, 250);  // #60a5fa
+  }
+
+  // Defined after the defaults they copy, in the same header, so the initialization order within the
+  // translation unit that defines them is the order written here.
+  inline ImVec4 bg      = defaults::bg;
+  inline ImVec4 panel   = defaults::panel;
+  inline ImVec4 head    = defaults::head;
+  inline ImVec4 inset   = defaults::inset;
+  inline ImVec4 hover   = defaults::hover;
+  inline ImVec4 line    = defaults::line;
+  inline ImVec4 line2   = defaults::line2;
+  inline ImVec4 t1      = defaults::t1;
+  inline ImVec4 t2      = defaults::t2;
+  inline ImVec4 t3      = defaults::t3;
+
+  inline ImVec4 accent  = defaults::accent;
+  inline ImVec4 accdim  = defaults::accdim;
+  inline ImVec4 accSoft = defaults::accSoft;
+  inline ImVec4 onAcc   = defaults::onAcc;
+
+  inline ImVec4 axisX   = defaults::axisX;
+  inline ImVec4 axisY   = defaults::axisY;
+  inline ImVec4 axisZ   = defaults::axisZ;
+
+  inline ImVec4 danger  = defaults::danger;
+
+  inline ImVec4 modelPurple = defaults::modelPurple;
+  inline ImVec4 scriptAmber = defaults::scriptAmber;
+  inline ImVec4 sceneGreen  = defaults::sceneGreen;
+  inline ImVec4 prefabBlue  = defaults::prefabBlue;
+
+  // The palette as data, so the settings panel can list, persist and reset it without naming every
+  // token. group orders the UI; key is the settings-file name and must not change once shipped. A token
+  // added above becomes editable by adding one row here.
+  struct Token {
+    const char* group;
+    const char* label;
+    const char* key;
+    ImVec4* value;
+    const ImVec4* defaultValue;
+  };
+
+  inline const std::array<Token, 22>& tokens()
+  {
+    static const std::array<Token, 22> list{{
+      { "Surfaces", "Background",    "bg",          &bg,          &defaults::bg },
+      { "Surfaces", "Panel",         "panel",       &panel,       &defaults::panel },
+      { "Surfaces", "Header",        "head",        &head,        &defaults::head },
+      { "Surfaces", "Inset",         "inset",       &inset,       &defaults::inset },
+      { "Surfaces", "Hover",         "hover",       &hover,       &defaults::hover },
+      { "Surfaces", "Line",          "line",        &line,        &defaults::line },
+      { "Surfaces", "Line (strong)", "line2",       &line2,       &defaults::line2 },
+      { "Text",     "Primary",       "t1",          &t1,          &defaults::t1 },
+      { "Text",     "Secondary",     "t2",          &t2,          &defaults::t2 },
+      { "Text",     "Muted",         "t3",          &t3,          &defaults::t3 },
+      { "Accent",   "Accent",        "accent",      &accent,      &defaults::accent },
+      { "Accent",   "Accent (dim)",  "accdim",      &accdim,      &defaults::accdim },
+      { "Accent",   "Accent (soft)", "accSoft",     &accSoft,     &defaults::accSoft },
+      { "Accent",   "On accent",     "onAcc",       &onAcc,       &defaults::onAcc },
+      { "Axes",     "X",             "axisX",       &axisX,       &defaults::axisX },
+      { "Axes",     "Y",             "axisY",       &axisY,       &defaults::axisY },
+      { "Axes",     "Z",             "axisZ",       &axisZ,       &defaults::axisZ },
+      { "Status",   "Danger",        "danger",      &danger,      &defaults::danger },
+      { "Assets",   "Model",         "modelPurple", &modelPurple, &defaults::modelPurple },
+      { "Assets",   "Script",        "scriptAmber", &scriptAmber, &defaults::scriptAmber },
+      { "Assets",   "Scene",         "sceneGreen",  &sceneGreen,  &defaults::sceneGreen },
+      { "Assets",   "Prefab",        "prefabBlue",  &prefabBlue,  &defaults::prefabBlue },
+    }};
+
+    return list;
+  }
 
   inline ImU32 u32(const ImVec4& c) { return ImGui::ColorConvertFloat4ToU32(c); }
 

@@ -67,6 +67,10 @@ public:
     scheduleWrite();
   }
 
+  // Forgets a key, so the compiled-in default applies again. Distinct from setting the default value:
+  // an absent key follows the default if a later build changes it, a written one does not.
+  void clear(const std::string& key);
+
   // Drives the debounce; call once per frame. Rapid edits collapse into a single write.
   void update();
 
