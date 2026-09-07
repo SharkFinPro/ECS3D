@@ -33,7 +33,9 @@ namespace fixtures {
 
   Scene makeScene()
   {
-    return {};
+    // Direct-initialized: Scene's constructor is explicit, so an empty braced return would be a
+    // copy-initialization no constructor can be chosen for.
+    return Scene{};
   }
 
   std::shared_ptr<Object> addObject(const Scene& scene, const std::string& name)
