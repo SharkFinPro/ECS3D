@@ -212,14 +212,39 @@ TEST(NarrowPhase, TheCheapPredicateAgreesWithTheFullOne)
   const auto [secondObject, second] = makeCollider<BoxCollider>({ 0, 0, 0 });
 
   // intersects is what the sweep runs on every pair and findContact is what the response runs on the
-  // pairs it keeps, so a pair the sweep records has to be one the response can resolve. They share
-  // runGjk today, which is why this is two positions rather than a loop: a loop over a range would look
-  // like coverage while only ever restating that a function agrees with itself.
+  // pairs it keeps, so the two disagreeing means the sweep records a pair the response will not resolve,
+  // or resolves one no event was fired for. On a general pair they share runGjk, so two positions pin as
+  // much as a sweep would.
   moveTo(secondObject, { 1.0f, 0, 0 });
   EXPECT_TRUE(collisions::findContact(*first, *second).has_value());
   EXPECT_TRUE(collisions::intersects(*first, *second));
 
   moveTo(secondObject, { 5.0f, 0, 0 });
   EXPECT_FALSE(collisions::findContact(*first, *second).has_value());
+  EXPECT_FALSE(collisions::intersects(*first, *second));
+}
+
+TEST(NarrowPhase, TheCheapPredicateAgreesWithTheFullOneOnSpheres)
+{
+  const auto [firstObject, first] = makeCollider<SphereCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<SphereCollider>({ 0, 0, 0 });
+
+  // Spheres are the pair that needs its own case: they skip GJK, so the two entry points reach the
+  // overlap test through separate code rather than through one shared function. This is the only place
+  // the two can drift, and it did - the cheap predicate was written as "<" against the other's ">=".
+  for (const float x : { 0.0f, 1.0f, 1.99f, 2.0f, 2.01f, 5.0f })
+  {
+    moveTo(secondObject, { x, 0, 0 });
+
+    SCOPED_TRACE(::testing::Message() << "centers " << x << " apart");
+    EXPECT_EQ(collisions::intersects(*first, *second), collisions::findContact(*first, *second).has_value());
+  }
+
+  // The control, so the loop cannot be satisfied by both sides answering no everywhere. 2.0 is exactly
+  // the combined radius, which is the boundary the two used to straddle.
+  moveTo(secondObject, { 1.99f, 0, 0 });
+  EXPECT_TRUE(collisions::intersects(*first, *second));
+
+  moveTo(secondObject, { 2.0f, 0, 0 });
   EXPECT_FALSE(collisions::intersects(*first, *second));
 }

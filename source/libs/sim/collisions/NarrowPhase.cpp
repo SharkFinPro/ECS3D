@@ -30,7 +30,11 @@ namespace collisions {
 
       const auto combinedRadius = sphereA.getRadius() + sphereB.getRadius();
 
-      return length(other.getPosition() - collider.getPosition()) < combinedRadius;
+      // Negated rather than written as "< combinedRadius", so it is the same comparison findSphereContact
+      // makes. The two differ on a NaN distance, which a blown-up transform does produce: NaN < r is
+      // false where !(NaN >= r) is true, and the pair would be apart to the sweep while still yielding a
+      // contact to the response.
+      return !(length(other.getPosition() - collider.getPosition()) >= combinedRadius);
     }
 
     std::optional<Contact> findSphereContact(Collider& collider, Collider& other)

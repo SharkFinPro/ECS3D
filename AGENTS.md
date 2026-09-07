@@ -240,7 +240,10 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
 
 ## Development Principles
 
-- **No namespace on ECS3D code** (unlike `vke::` in VulkanEngine). Network code lives in `namespace net`.
+- **Namespaces are the exception on ECS3D code** (unlike `vke::` in VulkanEngine), used where a name is
+  generic enough that leaving it global would invite a collision: network code in `namespace net`, the
+  GJK/EPA entry points in `namespace collisions` (`Contact`, `findContact`, `intersects`). Default to no
+  namespace.
 - **Headers:** `#ifndef NAME_H` include guards; forward-declare across libraries and include in the
   `.cpp` to keep coupling low (see the `*App.h` files — they forward-declare every collaborator).
 - **Naming:** `PascalCase` types/files, `camelCase` methods/locals, `m_` member prefix. `[[nodiscard]]`
