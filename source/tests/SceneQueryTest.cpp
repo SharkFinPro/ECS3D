@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TestPrinters.h"
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
+#include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
@@ -29,46 +28,23 @@ namespace {
     float distance = 0.0f;
   };
 
-  struct Scene {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
-  };
-
-  Scene makeScene()
-  {
-    Scene scene;
-    registerDataComponents(*scene.componentRegistry);
-    scene.objectManager = std::make_unique<ObjectManager>(scene.componentRegistry);
-
-    return scene;
-  }
+  using fixtures::makeScene;
+  using fixtures::Scene;
 
   // A box collider is the unit box [-1,1]^3 through its world matrix, so at scale 1 an object at z = 10
   // spans z = 9 to 11 and a ray down +z meets its face at 9. Every distance below is built on that.
   std::shared_ptr<Object> addBox(const Scene& scene, const glm::vec3& position, const glm::vec3& scale)
   {
-    auto object = std::make_shared<Object>("Box");
-    scene.objectManager->addObject(object);
-
-    const auto transform = object->getComponent<Transform>(ComponentType::transform);
-    transform->setPosition(position);
-    transform->setScale(scale);
-
-    object->addComponent(std::make_shared<BoxCollider>());
+    auto object = addObject(scene, "Box", position, scale);
+    fixtures::addBoxCollider(object);
 
     return object;
   }
 
   std::shared_ptr<Object> addSphere(const Scene& scene, const glm::vec3& position, const float radius)
   {
-    auto object = std::make_shared<Object>("Sphere");
-    scene.objectManager->addObject(object);
-
-    object->getComponent<Transform>(ComponentType::transform)->setPosition(position);
-
-    const auto sphere = std::make_shared<SphereCollider>();
-    object->addComponent(sphere);
-    sphere->setRadius(radius);
+    auto object = addObject(scene, "Sphere", position);
+    fixtures::addSphereCollider(object, radius);
 
     return object;
   }
@@ -98,17 +74,10 @@ namespace {
     return results;
   }
 
-  // Every coordinate here comes out of a matrix inverse, so compare with a tolerance rather than exactly.
-  // The trace names which call failed - a test asserting both a point and a normal would otherwise
-  // report the same line inside this helper for either.
+  // Looser than the fixture default: every coordinate here comes out of a matrix inverse.
   void expectNear(const char* what, const glm::vec3& actual, const glm::vec3& expected)
   {
-    constexpr float tolerance = 1e-4f;
-    SCOPED_TRACE(what);
-
-    EXPECT_NEAR(actual.x, expected.x, tolerance);
-    EXPECT_NEAR(actual.y, expected.y, tolerance);
-    EXPECT_NEAR(actual.z, expected.z, tolerance);
+    fixtures::expectNear(what, actual, expected, 1e-4f);
   }
 }
 

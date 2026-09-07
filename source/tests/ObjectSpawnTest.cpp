@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
+#include "TestScene.h"
 #include "Replication.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -18,29 +17,14 @@
 #include <string>
 
 namespace {
-  struct Scene {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
-  };
-
-  Scene makeScene()
-  {
-    Scene scene;
-    registerDataComponents(*scene.componentRegistry);
-    scene.objectManager = std::make_unique<ObjectManager>(scene.componentRegistry);
-
-    return scene;
-  }
+  using fixtures::makeScene;
+  using fixtures::Scene;
 
   // A parent with one child, packed the way the server broadcasts a runtime spawn.
   net::Message packedSubtree(const Scene& source)
   {
-    const auto parent = std::make_shared<Object>("Spawned");
-    source.objectManager->addObject(parent);
-
-    const auto child = std::make_shared<Object>("Spawned Child");
-    child->setParent(parent);
-    source.objectManager->addObject(child);
+    const auto parent = addObject(source, "Spawned");
+    addChildObject(source, "Spawned Child", parent);
 
     return replication::buildObjectSpawned(*parent);
   }

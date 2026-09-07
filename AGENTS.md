@@ -72,6 +72,12 @@
   suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
   defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
   empty test set and would otherwise report green for a suite that registered nothing.
+- **Test fixtures** live in `source/tests/TestScene.h` (namespace `fixtures`). `fixtures::Scene`
+  constructs a registered `ComponentRegistry` and an `ObjectManager` on top of it - the setup every
+  suite used to repeat - and the free functions beside it add objects, colliders and rigid bodies, and
+  compare `glm::vec3` with a tolerance and a trace. Derive from `fixtures::Scene` to hang extra members
+  off a scene; ADL finds the free functions through the base, so a derived fixture calls them unqualified.
+  **Build a scene through these rather than re-deriving the scaffolding in a new suite.**
 - **Dependency direction (must hold):** `protocol` → nothing. `settings` → nothing (+ json). `data` →
   protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + nfd. `net`/`scripting` →

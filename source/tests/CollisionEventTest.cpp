@@ -1,9 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "TestPrinters.h"
+#include "TestScene.h"
 #include "CollisionSystem.h"
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/RigidBody.h"
@@ -20,37 +19,21 @@
 #include <uuid.h>
 
 namespace {
-  struct Scene {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
-  };
-
-  Scene makeScene()
-  {
-    Scene scene;
-    registerDataComponents(*scene.componentRegistry);
-    scene.objectManager = std::make_unique<ObjectManager>(scene.componentRegistry);
-
-    return scene;
-  }
+  using fixtures::makeScene;
+  using fixtures::positionOf;
+  using fixtures::Scene;
 
   // Whether the object gets a RigidBody decides whether it is a collision *source*: the sweep skips an
   // edge with no rigid body entirely, so a pair of static colliders is never even tested.
   std::shared_ptr<Object> addBody(const Scene& scene, const std::string& name, const glm::vec3& position,
                                   const bool dynamic, const bool trigger = false)
   {
-    auto object = std::make_shared<Object>(name);
-    scene.objectManager->addObject(object);
-
-    object->getComponent<Transform>(ComponentType::transform)->setPosition(position);
-
-    const auto collider = std::make_shared<BoxCollider>();
-    object->addComponent(collider);
-    collider->setIsTrigger(trigger);
+    auto object = addObject(scene, name, position);
+    fixtures::addBoxCollider(object)->setIsTrigger(trigger);
 
     if (dynamic)
     {
-      object->addComponent(std::make_shared<RigidBody>());
+      fixtures::addRigidBody(object);
     }
 
     return object;
@@ -60,11 +43,6 @@ namespace {
                 const std::shared_ptr<Object>& b)
   {
     return std::ranges::find(pairs, CollisionPair::make(a->getUUID(), b->getUUID())) != pairs.end();
-  }
-
-  glm::vec3 positionOf(const std::shared_ptr<Object>& object)
-  {
-    return object->getComponent<Transform>(ComponentType::transform)->getPosition();
   }
 }
 
