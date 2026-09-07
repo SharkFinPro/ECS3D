@@ -60,15 +60,15 @@ TEST(NarrowPhase, ReportsNoContactForBoxesThatDoNotOverlap)
   const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
   const auto [secondObject, second] = makeCollider<BoxCollider>({ 5, 0, 0 });
 
-  EXPECT_FALSE(findContact(first.get(), second).has_value());
-  EXPECT_FALSE(intersects(first.get(), second));
+  EXPECT_FALSE(collisions::findContact(first.get(), second).has_value());
+  EXPECT_FALSE(collisions::intersects(first.get(), second));
 
   // The control: the same pair, moved into contact. Without it this test would pass just as well
   // against a narrow phase that had stopped detecting anything at all.
   moveTo(secondObject, { 1.5f, 0, 0 });
 
-  EXPECT_TRUE(findContact(first.get(), second).has_value());
-  EXPECT_TRUE(intersects(first.get(), second));
+  EXPECT_TRUE(collisions::findContact(first.get(), second).has_value());
+  EXPECT_TRUE(collisions::intersects(first.get(), second));
 }
 
 TEST(NarrowPhase, MeasuresBoxPenetrationDepthAlongTheShallowestAxis)
@@ -79,7 +79,7 @@ TEST(NarrowPhase, MeasuresBoxPenetrationDepthAlongTheShallowestAxis)
   // the full 2 on y and z. EPA has to find the x face rather than one of the deeper ones.
   const auto [secondObject, second] = makeCollider<BoxCollider>({ 1.5f, 0, 0 });
 
-  const auto contact = findContact(first.get(), second);
+  const auto contact = collisions::findContact(first.get(), second);
   ASSERT_TRUE(contact.has_value());
 
   EXPECT_NEAR(contact->depth(), 0.5f, tolerance);
@@ -93,7 +93,7 @@ TEST(NarrowPhase, PointsTheNormalAwayFromTheOtherColliderWhicheverSideItIsOn)
 
   // Mirrored, so the sign convention is pinned rather than confirmed once on a side where it could have
   // been either way round.
-  const auto contact = findContact(first.get(), second);
+  const auto contact = collisions::findContact(first.get(), second);
   ASSERT_TRUE(contact.has_value());
 
   EXPECT_NEAR(contact->depth(), 0.5f, tolerance);
@@ -108,7 +108,7 @@ TEST(NarrowPhase, TakesTheOverlapFromTheScaledBoxNotTheUnitOne)
   // is only true if the scale reached the support function. Unscaled the pair would not touch at all.
   const auto [secondObject, second] = makeCollider<BoxCollider>({ 2.5f, 0, 0 });
 
-  const auto contact = findContact(first.get(), second);
+  const auto contact = collisions::findContact(first.get(), second);
   ASSERT_TRUE(contact.has_value());
 
   EXPECT_NEAR(contact->depth(), 1.5f, tolerance);
@@ -122,13 +122,16 @@ TEST(NarrowPhase, MeasuresSpherePenetrationFromTheCentersAndRadii)
 
   // Two unit spheres 1.5 apart overlap by 0.5. This pair skips GJK entirely - the sphere-sphere path is
   // closed form - so it is the one case whose depth is arrived at rather than converged on.
-  const auto contact = findContact(first.get(), second);
+  const auto contact = collisions::findContact(first.get(), second);
   ASSERT_TRUE(contact.has_value());
 
   EXPECT_NEAR(contact->depth(), 0.5f, tolerance);
   expectNear("normal", contact->normal(), { -1, 0, 0 });
 
-  // On the surface of the first sphere, on the line between the centers.
+  // On the surface of the first sphere, on the line between the centers - which is where it lands only
+  // because both radii are 1. The contact point is offset from the first sphere's center by the second
+  // sphere's radius, so an unequal pair reports a point that is on neither surface. Filed as a defect;
+  // this suite deliberately does not pin that behavior in place by asserting it.
   expectNear("point", contact->point, { 1, 0, 0 });
 }
 
@@ -139,10 +142,13 @@ TEST(NarrowPhase, PushesConcentricSpheresApartAlongY)
 
   // There is no separating direction to normalize here, so the fallback is an arbitrary axis. What
   // matters is that it is not zero: a zero translation would leave the pair welded together forever.
-  const auto contact = findContact(first.get(), second);
+  const auto contact = collisions::findContact(first.get(), second);
   ASSERT_TRUE(contact.has_value());
 
+  // The magnitude as well as the direction: half the combined radius is what the fallback produces, and
+  // asserting only that it is positive would not notice it shrinking to nearly nothing.
   EXPECT_GT(contact->depth(), 0.0f);
+  EXPECT_NEAR(contact->depth(), 1.0f, tolerance);
   expectNear("normal", contact->normal(), { 0, 1, 0 });
 }
 
@@ -152,11 +158,11 @@ TEST(NarrowPhase, TreatsSpheresThatOnlyTouchAsApart)
   const auto [secondObject, second] = makeCollider<SphereCollider>({ 2, 0, 0 });
 
   // Exactly the combined radius apart: touching is not overlapping.
-  EXPECT_FALSE(findContact(first.get(), second).has_value());
+  EXPECT_FALSE(collisions::findContact(first.get(), second).has_value());
 
   moveTo(secondObject, { 1.99f, 0, 0 });
 
-  EXPECT_TRUE(findContact(first.get(), second).has_value());
+  EXPECT_TRUE(collisions::findContact(first.get(), second).has_value());
 }
 
 TEST(NarrowPhase, MeasuresABoxAgainstASphere)
@@ -171,7 +177,7 @@ TEST(NarrowPhase, MeasuresABoxAgainstASphere)
   // a curve, so it approaches one. Hence the looser bound on this pair alone.
   constexpr float curvedTolerance = 1e-2f;
 
-  const auto contact = findContact(first.get(), second);
+  const auto contact = collisions::findContact(first.get(), second);
   ASSERT_TRUE(contact.has_value());
 
   EXPECT_NEAR(contact->depth(), 0.5f, curvedTolerance);
@@ -185,12 +191,12 @@ TEST(NarrowPhase, DepthGrowsWithTheOverlap)
   const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
   const auto [secondObject, second] = makeCollider<BoxCollider>({ 1.9f, 0, 0 });
 
-  const auto shallow = findContact(first.get(), second);
+  const auto shallow = collisions::findContact(first.get(), second);
   ASSERT_TRUE(shallow.has_value());
 
   moveTo(secondObject, { 1.0f, 0, 0 });
 
-  const auto deep = findContact(first.get(), second);
+  const auto deep = collisions::findContact(first.get(), second);
   ASSERT_TRUE(deep.has_value());
 
   // The relation as well as the numbers: a depth that is constant, or that runs backwards, is a defect
@@ -200,36 +206,20 @@ TEST(NarrowPhase, DepthGrowsWithTheOverlap)
   EXPECT_NEAR(deep->depth(), 1.0f, tolerance);
 }
 
-TEST(NarrowPhase, EveryContactIsAlsoAnIntersection)
+TEST(NarrowPhase, TheCheapPredicateAgreesWithTheFullOne)
 {
   const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
   const auto [secondObject, second] = makeCollider<BoxCollider>({ 0, 0, 0 });
 
-  // The cheap predicate is what the sweep runs on every pair; the full one is what the response runs on
-  // the pairs it keeps. They reach GJK by separate paths, so a contact the sweep would not have recorded
-  // is a pair the response resolves without an event ever being fired for it.
-  //
-  // Only this direction is an invariant. The other way round is not: intersects answers yes for a pair
-  // whose translation out of the overlap could not be built, which findContact reports as no contact.
-  for (int step = 0; step <= 40; ++step)
-  {
-    const float x = static_cast<float>(step) * 0.1f;
-    moveTo(secondObject, { x, 0, 0 });
-
-    SCOPED_TRACE(::testing::Message() << "x = " << x);
-
-    if (findContact(first.get(), second).has_value())
-    {
-      EXPECT_TRUE(intersects(first.get(), second));
-    }
-  }
-
-  // The controls, so the loop above cannot be satisfied by a narrow phase that finds nothing anywhere.
+  // intersects is what the sweep runs on every pair and findContact is what the response runs on the
+  // pairs it keeps, so a pair the sweep records has to be one the response can resolve. They share
+  // runGjk today, which is why this is two positions rather than a loop: a loop over a range would look
+  // like coverage while only ever restating that a function agrees with itself.
   moveTo(secondObject, { 1.0f, 0, 0 });
-  EXPECT_TRUE(findContact(first.get(), second).has_value());
-  EXPECT_TRUE(intersects(first.get(), second));
+  EXPECT_TRUE(collisions::findContact(first.get(), second).has_value());
+  EXPECT_TRUE(collisions::intersects(first.get(), second));
 
   moveTo(secondObject, { 5.0f, 0, 0 });
-  EXPECT_FALSE(findContact(first.get(), second).has_value());
-  EXPECT_FALSE(intersects(first.get(), second));
+  EXPECT_FALSE(collisions::findContact(first.get(), second).has_value());
+  EXPECT_FALSE(collisions::intersects(first.get(), second));
 }

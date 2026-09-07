@@ -140,7 +140,7 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
       continue;
     }
 
-    if (touches(edge.collider, other.object))
+    if (collisions::intersects(edge.collider.get(), other.collider))
     {
       collidedObjects.emplace_back(other.object);
     }
@@ -211,15 +211,8 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
   }
 }
 
-bool CollisionSystem::touches(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other)
-{
-  const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
-
-  return otherCollider && intersects(collider.get(), otherCollider);
-}
-
-std::optional<Contact> CollisionSystem::contactWith(const std::shared_ptr<Collider>& collider,
-                                                    const std::shared_ptr<Object>& other)
+std::optional<collisions::Contact> CollisionSystem::contactWith(const std::shared_ptr<Collider>& collider,
+                                                                const std::shared_ptr<Object>& other)
 {
   const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
   if (!otherCollider)
@@ -227,7 +220,7 @@ std::optional<Contact> CollisionSystem::contactWith(const std::shared_ptr<Collid
     return std::nullopt;
   }
 
-  return findContact(collider.get(), otherCollider);
+  return collisions::findContact(collider.get(), otherCollider);
 }
 
 bool CollisionSystem::isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other)

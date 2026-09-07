@@ -2,7 +2,6 @@
 #define COLLISIONSYSTEM_H
 
 #include "collisions/NarrowPhase.h"
-#include <glm/vec3.hpp>
 #include <compare>
 #include <memory>
 #include <optional>
@@ -80,12 +79,11 @@ private:
   // Broad-phase layer filter: true only if each collider's mask includes the other's layer.
   static bool layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b);
 
-  // The narrow phase itself lives in collisions/NarrowPhase.h and works on a pair of colliders. These
-  // two resolve the other object's collider first, which is all the sweep has to hand.
-  static bool touches(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other);
-
-  [[nodiscard]] static std::optional<Contact> contactWith(const std::shared_ptr<Collider>& collider,
-                                                          const std::shared_ptr<Object>& other);
+  // The narrow phase itself lives in collisions/NarrowPhase.h and works on a pair of colliders. This
+  // resolves the other object's collider first, which is all the response path has to hand - the sweep
+  // already holds both colliders and calls the narrow phase directly.
+  [[nodiscard]] static std::optional<collisions::Contact> contactWith(const std::shared_ptr<Collider>& collider,
+                                                                      const std::shared_ptr<Object>& other);
 };
 
 
