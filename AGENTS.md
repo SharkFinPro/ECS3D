@@ -63,15 +63,6 @@
   server's `defaultAssets/` are copied into `bin/assets/` at configure time.
 - **Source lists are explicit** in each lib's `CMakeLists.txt` (not globs). **Add new engine files to
   the owning library's list.**
-- **Tests** (`source/tests/`) build as `ECS3DTests`, linking only `ECS3DData`, so the suite stays runnable
-  without a window, GPU or server. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
-  `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
-  `PROJECT_IS_TOP_LEVEL AND BUILD_TESTING` — `BUILD_TESTING` is a cache variable a parent project may
-  already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
-  GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
-  suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
-  defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
-  empty test set and would otherwise report green for a suite that registered nothing.
 - **Test fixtures** live in `source/tests/TestScene.h` (namespace `fixtures`). `fixtures::Scene`
   constructs a registered `ComponentRegistry` and an `ObjectManager` on top of it - the setup every
   suite used to repeat - and the free functions beside it add objects, colliders and rigid bodies, and
@@ -79,6 +70,16 @@
   off a scene. Only `addObject`/`addChildObject` are reachable unqualified, by ADL through their `Scene`
   argument; the rest take a `shared_ptr<Object>` or a `glm::vec3`, so they need `fixtures::` or a
   using-declaration. **Build a scene through these rather than re-deriving the scaffolding in a new suite.**
+- **Tests** (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, `ECS3DSettings` and
+  `ECS3DNetProtocol` — never the renderer, the editor or `ECS3DNet` — so the suite stays runnable without a
+  window, GPU or server. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
+  `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
+  `PROJECT_IS_TOP_LEVEL AND BUILD_TESTING` — `BUILD_TESTING` is a cache variable a parent project may
+  already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
+  GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
+  suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
+  defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
+  empty test set and would otherwise report green for a suite that registered nothing.
 - **Dependency direction (must hold):** `protocol` → nothing. `settings` → nothing (+ json). `data` →
   protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + nfd. `net`/`scripting` →
