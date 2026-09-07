@@ -28,6 +28,7 @@ add_executable(${PROJECT_NAME}
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
   CollisionMathTest.cpp
+  NarrowPhaseTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
@@ -45,7 +46,6 @@ add_executable(${PROJECT_NAME}
   ProtocolFramingTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
-  NarrowPhaseTest.cpp
   SmokeTest.cpp
   TestPrinters.h
 
