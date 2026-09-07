@@ -2,7 +2,6 @@
 #define NARROWPHASE_H
 
 #include <glm/vec3.hpp>
-#include <memory>
 #include <optional>
 
 class Collider;
@@ -27,9 +26,13 @@ namespace collisions {
     [[nodiscard]] glm::vec3 normal() const;
   };
 
-  // GJK for the overlap, then EPA for the depth, normal and contact point. Takes the first collider raw
-  // and the second shared, the way getSupport does: it reads their geometry and owns neither.
-  [[nodiscard]] std::optional<Contact> findContact(Collider* collider, const std::shared_ptr<Collider>& other);
+  // GJK for the overlap, then EPA for the depth, normal and contact point.
+  //
+  // Both colliders by reference, like getSupport beside it: this reads their geometry, owns neither, and
+  // does not outlive the call, so it has no business in their lifetime - and a caller that holds a
+  // collider any other way than in a shared_ptr can still ask. Not const only because findFurthestPoint
+  // is a non-const virtual.
+  [[nodiscard]] std::optional<Contact> findContact(Collider& collider, Collider& other);
 
   // For a caller that only needs to know whether the pair touches, which is what the sweep asks. It
   // skips the work findContact does to describe the overlap - EPA on a general pair, the contact point
@@ -37,7 +40,7 @@ namespace collisions {
   //
   // The two agree except in one case: on the general path this answers yes for a pair whose translation
   // out of the overlap EPA could not build, which findContact reports as no contact at all.
-  [[nodiscard]] bool intersects(Collider* collider, const std::shared_ptr<Collider>& other);
+  [[nodiscard]] bool intersects(Collider& collider, Collider& other);
 }
 
 #endif //NARROWPHASE_H

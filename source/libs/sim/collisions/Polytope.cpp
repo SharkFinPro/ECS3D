@@ -40,8 +40,8 @@ glm::vec3 computeBarycentric(const glm::vec3& a, const glm::vec3& b, const glm::
   return { u, v, w };
 }
 
-Polytope::Polytope(Collider* collider, std::shared_ptr<Collider> otherCollider, Simplex &simplex)
-  : m_collider(collider), m_otherCollider(std::move(otherCollider))
+Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
+  : m_collider(&collider), m_otherCollider(&otherCollider)
 {
   generatePolytope(simplex);
 
@@ -79,7 +79,7 @@ glm::vec3 Polytope::findCollisionPoint() const
   {
     auto direction = glm::normalize(closestPoint);
 
-    pointOfCollision = otherTransform->getPosition() + direction * std::dynamic_pointer_cast<SphereCollider>(m_otherCollider)->getRadius();
+    pointOfCollision = otherTransform->getPosition() + direction * dynamic_cast<SphereCollider*>(m_otherCollider)->getRadius();
 
     return pointOfCollision;
   }
@@ -131,7 +131,7 @@ void Polytope::EPA()
 
     auto searchDirection = getSearchDirection();
 
-    const auto supportPoint = getSupport(m_collider, m_otherCollider, glm::normalize(searchDirection));
+    const auto supportPoint = getSupport(*m_collider, *m_otherCollider, glm::normalize(searchDirection));
 
     if (isDuplicateVertex(supportPoint))
     {

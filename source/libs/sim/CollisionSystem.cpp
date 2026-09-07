@@ -140,7 +140,7 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
       continue;
     }
 
-    if (collisions::intersects(edge.collider.get(), other.collider))
+    if (collisions::intersects(*edge.collider, *other.collider))
     {
       collidedObjects.emplace_back(other.object);
     }
@@ -220,7 +220,7 @@ std::optional<collisions::Contact> CollisionSystem::contactWith(const std::share
     return std::nullopt;
   }
 
-  return collisions::findContact(collider.get(), otherCollider);
+  return collisions::findContact(*collider, *otherCollider);
 }
 
 bool CollisionSystem::isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other)

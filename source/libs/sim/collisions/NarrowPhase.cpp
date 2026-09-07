@@ -23,23 +23,23 @@ namespace collisions {
     // Two spheres need no GJK at all: the overlap, its depth and its point all fall out of the centers
     // and the radii. Separate from findSphereContact so the sweep, which only asks whether the pair
     // touches, does not pay for a contact point it throws away.
-    bool spheresOverlap(Collider* collider, const std::shared_ptr<Collider>& other)
+    bool spheresOverlap(Collider& collider, Collider& other)
     {
-      const auto sphereA = dynamic_cast<SphereCollider*>(collider);
-      const auto sphereB = std::dynamic_pointer_cast<SphereCollider>(other);
+      auto& sphereA = dynamic_cast<SphereCollider&>(collider);
+      auto& sphereB = dynamic_cast<SphereCollider&>(other);
 
-      const auto combinedRadius = sphereA->getRadius() + sphereB->getRadius();
+      const auto combinedRadius = sphereA.getRadius() + sphereB.getRadius();
 
-      return length(other->getPosition() - collider->getPosition()) < combinedRadius;
+      return length(other.getPosition() - collider.getPosition()) < combinedRadius;
     }
 
-    std::optional<Contact> findSphereContact(Collider* collider, const std::shared_ptr<Collider>& other)
+    std::optional<Contact> findSphereContact(Collider& collider, Collider& other)
     {
-      const auto sphereA = dynamic_cast<SphereCollider*>(collider);
-      const auto sphereB = std::dynamic_pointer_cast<SphereCollider>(other);
+      auto& sphereA = dynamic_cast<SphereCollider&>(collider);
+      auto& sphereB = dynamic_cast<SphereCollider&>(other);
 
-      const auto combinedRadius = sphereA->getRadius() + sphereB->getRadius();
-      const auto delta = other->getPosition() - collider->getPosition();
+      const auto combinedRadius = sphereA.getRadius() + sphereB.getRadius();
+      const auto delta = other.getPosition() - collider.getPosition();
 
       const float dist = length(delta);
 
@@ -59,12 +59,12 @@ namespace collisions {
       // Offset from the first sphere's center by the *second* sphere's radius, which only lands on the
       // overlap when the radii match. Kept as it was rather than corrected here: it is what the collision
       // response has always been handed, and changing it changes how bodies spin. Filed separately.
-      return Contact{ minimumTranslationVector, collider->getPosition() + direction * sphereB->getRadius() };
+      return Contact{ minimumTranslationVector, collider.getPosition() + direction * sphereB.getRadius() };
     }
 
     // Leaves the terminating simplex in simplex. False means the pair does not overlap, or that GJK ran
     // out of iterations before deciding.
-    bool runGjk(Collider* collider, const std::shared_ptr<Collider>& other, Simplex& simplex)
+    bool runGjk(Collider& collider, Collider& other, Simplex& simplex)
     {
       glm::vec3 direction{ 1, 0, 0 };
 
@@ -212,10 +212,10 @@ namespace collisions {
     return normalize(minimumTranslationVector);
   }
 
-  std::optional<Contact> findContact(Collider* collider, const std::shared_ptr<Collider>& other)
+  std::optional<Contact> findContact(Collider& collider, Collider& other)
   {
-    if (collider->getColliderType() == ColliderType::sphereCollider &&
-        other->getColliderType() == ColliderType::sphereCollider)
+    if (collider.getColliderType() == ColliderType::sphereCollider &&
+        other.getColliderType() == ColliderType::sphereCollider)
     {
       return findSphereContact(collider, other);
     }
@@ -241,10 +241,10 @@ namespace collisions {
     return Contact{ -minimumTranslationVector, polytope.findCollisionPoint() };
   }
 
-  bool intersects(Collider* collider, const std::shared_ptr<Collider>& other)
+  bool intersects(Collider& collider, Collider& other)
   {
-    if (collider->getColliderType() == ColliderType::sphereCollider &&
-        other->getColliderType() == ColliderType::sphereCollider)
+    if (collider.getColliderType() == ColliderType::sphereCollider &&
+        other.getColliderType() == ColliderType::sphereCollider)
     {
       return spheresOverlap(collider, other);
     }
