@@ -76,8 +76,9 @@
   constructs a registered `ComponentRegistry` and an `ObjectManager` on top of it - the setup every
   suite used to repeat - and the free functions beside it add objects, colliders and rigid bodies, and
   compare `glm::vec3` with a tolerance and a trace. Derive from `fixtures::Scene` to hang extra members
-  off a scene; ADL finds the free functions through the base, so a derived fixture calls them unqualified.
-  **Build a scene through these rather than re-deriving the scaffolding in a new suite.**
+  off a scene. Only `addObject`/`addChildObject` are reachable unqualified, by ADL through their `Scene`
+  argument; the rest take a `shared_ptr<Object>` or a `glm::vec3`, so they need `fixtures::` or a
+  using-declaration. **Build a scene through these rather than re-deriving the scaffolding in a new suite.**
 - **Dependency direction (must hold):** `protocol` → nothing. `settings` → nothing (+ json). `data` →
   protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + nfd. `net`/`scripting` →

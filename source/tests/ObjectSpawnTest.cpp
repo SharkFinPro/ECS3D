@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TestScene.h"
+#include "ComponentRegistry.h"
 #include "Replication.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -169,9 +170,12 @@ TEST(ObjectSpawn, RefusesAComponentTypeThisBuildDoesNotRegister)
 {
   // A registry with nothing registered in it: every key is valid, none of them can be created. This is
   // the case that used to be a null dereference rather than an exception - create() returns null and
-  // addComponent reads getType() off it, which no guard around this path can catch.
-  Scene target;
-  target.objectManager = std::make_unique<ObjectManager>(target.componentRegistry);
+  // addComponent reads getType() off it, which no guard around this path can catch. ModelRenderer is a
+  // type this build does register, so the empty registry is the whole test: with the components in it
+  // the payload would get as far as unpacking a body that is not there and throw for another reason.
+  Scene target(fixtures::Components::none);
+
+  ASSERT_EQ(target.componentRegistry->create("ModelRenderer"), nullptr);
 
   EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager,
                                                objectWithOneComponentTag(ComponentType::modelRenderer)),

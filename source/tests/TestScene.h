@@ -17,13 +17,21 @@ class Transform;
 // the scene the way deserialization does - through the registry factories - so a fixture and a loaded
 // project produce the same objects.
 namespace fixtures {
+  // Whether the scene's registry knows the data components. A scene built with `none` can create no
+  // component at all, which is what a build being sent a type it does not have looks like - the case
+  // that used to be a null dereference rather than an exception.
+  enum class Components {
+    registered,
+    none
+  };
+
   // Constructing one registers the data components and opens an empty manager on top of them, which is
   // the setup every suite below was repeating. Derive from it to hang extra members off the same scene.
   struct Scene {
     std::shared_ptr<ComponentRegistry> componentRegistry;
     std::unique_ptr<ObjectManager> objectManager;
 
-    Scene();
+    explicit Scene(Components components = Components::registered);
     // Out of line, and with the moves spelled out alongside: ObjectManager is incomplete here, and a
     // user-declared destructor would otherwise suppress the moves that returning a Scene needs.
     ~Scene();

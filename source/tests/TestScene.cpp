@@ -14,10 +14,14 @@
 #include <stdexcept>
 
 namespace fixtures {
-  Scene::Scene()
+  Scene::Scene(const Components components)
     : componentRegistry(std::make_shared<ComponentRegistry>())
   {
-    registerDataComponents(*componentRegistry);
+    if (components == Components::registered)
+    {
+      registerDataComponents(*componentRegistry);
+    }
+
     objectManager = std::make_unique<ObjectManager>(componentRegistry);
   }
 
