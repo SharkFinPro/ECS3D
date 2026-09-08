@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
+#include "TestScene.h"
 #include "Replication.h"
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
@@ -17,20 +16,15 @@
 namespace {
   using replication::SceneEditResult;
 
-  struct Scene {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
+  // Every test here edits a scene that already holds an object, so the fixture carries one.
+  struct Scene : fixtures::Scene {
     std::shared_ptr<Object> object;
   };
 
   Scene makeScene()
   {
     Scene scene;
-    registerDataComponents(*scene.componentRegistry);
-    scene.objectManager = std::make_unique<ObjectManager>(scene.componentRegistry);
-
-    scene.object = std::make_shared<Object>("Object");
-    scene.objectManager->addObject(scene.object);
+    scene.object = addObject(scene, "Object");
 
     return scene;
   }

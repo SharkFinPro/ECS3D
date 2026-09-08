@@ -1,9 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
 #include "Replication.h"
 #include "TestPrinters.h"
+#include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
@@ -20,42 +19,9 @@
 #include <uuid.h>
 
 namespace {
-  struct Scene {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
-  };
-
-  Scene makeScene()
-  {
-    Scene scene;
-    registerDataComponents(*scene.componentRegistry);
-    scene.objectManager = std::make_unique<ObjectManager>(scene.componentRegistry);
-
-    return scene;
-  }
-
-  std::shared_ptr<Object> addObject(const Scene& scene, const std::string& name,
-                                    const std::shared_ptr<Object>& parent = nullptr)
-  {
-    auto object = std::make_shared<Object>(name);
-    object->setParent(parent);
-    scene.objectManager->addObject(object);
-
-    return object;
-  }
-
-  // Thrown rather than returned null, like findByName below: every caller dereferences the result on the
-  // same line, so a message beats a crash in the line after.
-  std::shared_ptr<Transform> transformOf(const std::shared_ptr<Object>& object)
-  {
-    auto transform = object->getComponent<Transform>(ComponentType::transform);
-    if (!transform)
-    {
-      throw std::runtime_error(object->getName() + " has no transform");
-    }
-
-    return transform;
-  }
+  using fixtures::makeScene;
+  using fixtures::Scene;
+  using fixtures::transformOf;
 
   std::shared_ptr<Object> findByName(const Scene& scene, const std::string& name)
   {
@@ -163,7 +129,7 @@ TEST(StateDelta, CarriesLocalTransformsSoAHierarchyIsNotDoubleCounted)
   const auto target = makeScene();
 
   const auto parent = addObject(source, "Parent");
-  const auto child = addObject(source, "Child", parent);
+  const auto child = addChildObject(source, "Child", parent);
   snapshotInto(source, target);
 
   transformOf(parent)->setPosition({ 10, 0, 0 });

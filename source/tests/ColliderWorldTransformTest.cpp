@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TestPrinters.h"
+#include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
@@ -12,14 +13,7 @@
 namespace {
   // The support function puts every result through a matrix, so its coordinates are compared with a
   // tolerance. The accessors are plain arithmetic and are compared exactly.
-  void expectNear(const glm::vec3& actual, const glm::vec3& expected)
-  {
-    constexpr float tolerance = 1e-5f;
-
-    EXPECT_NEAR(actual.x, expected.x, tolerance);
-    EXPECT_NEAR(actual.y, expected.y, tolerance);
-    EXPECT_NEAR(actual.z, expected.z, tolerance);
-  }
+  using fixtures::expectNear;
 
   // The Object is the collider's lifetime anchor: it holds the Transform the collider resolves through
   // and the raw owner pointer behind it.

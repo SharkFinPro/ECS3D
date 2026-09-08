@@ -63,8 +63,19 @@
   server's `defaultAssets/` are copied into `bin/assets/` at configure time.
 - **Source lists are explicit** in each lib's `CMakeLists.txt` (not globs). **Add new engine files to
   the owning library's list.**
-- **Tests** (`source/tests/`) build as `ECS3DTests`, linking only `ECS3DData`, so the suite stays runnable
-  without a window, GPU or server. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
+- **Test fixtures** live in `source/tests/TestScene.h` (namespace `fixtures`). `fixtures::Scene`
+  opens an `ObjectManager` over a `ComponentRegistry`, registering the data components in it unless the
+  `Components::none` constructor argument says otherwise - the setup every suite used to repeat - and the
+  free functions beside it add objects, colliders and rigid bodies, and compare `glm::vec3` with a
+  tolerance and a trace. Derive from `fixtures::Scene` to hang extra members off a scene. Only
+  `addObject`/`addChildObject` are reachable unqualified, by ADL through their `Scene` argument;
+  everything else takes arguments that do not name `fixtures` (or, for `makeScene`, none at all), so it
+  needs `fixtures::` or a using-declaration. **Build a scene through these rather than re-deriving the scaffolding in a new suite.**
+- **Tests** (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, `ECS3DSettings` and
+  `ECS3DNetProtocol` — never the renderer, the editor or `ECS3DNet` — so the suite stays runnable without a
+  window, GPU or server. `net/MessageQueue.cpp` is compiled straight into the target rather than linked,
+  because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
+  `CMakeLists.txt` before adding more. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
   `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
   `PROJECT_IS_TOP_LEVEL AND BUILD_TESTING` — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching

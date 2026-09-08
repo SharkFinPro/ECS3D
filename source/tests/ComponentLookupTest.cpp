@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "TestScene.h"
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "objects/Object.h"
@@ -11,9 +12,7 @@
 #include <memory>
 
 namespace {
-  struct Family {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
+  struct Family : fixtures::Scene {
     std::shared_ptr<Object> parent;
     std::shared_ptr<Object> child;
   };
@@ -21,15 +20,8 @@ namespace {
   Family makeFamily()
   {
     Family family;
-    registerDataComponents(*family.componentRegistry);
-    family.objectManager = std::make_unique<ObjectManager>(family.componentRegistry);
-
-    family.parent = std::make_shared<Object>("Parent");
-    family.objectManager->addObject(family.parent);
-
-    family.child = std::make_shared<Object>("Child");
-    family.child->setParent(family.parent);
-    family.objectManager->addObject(family.child);
+    family.parent = addObject(family, "Parent");
+    family.child = addChildObject(family, "Child", family.parent);
 
     return family;
   }
