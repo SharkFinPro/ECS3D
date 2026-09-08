@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
+#include "TestScene.h"
 #include "Replication.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -11,9 +10,7 @@
 #include <memory>
 
 namespace {
-  struct Hierarchy {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
+  struct Hierarchy : fixtures::Scene {
     std::shared_ptr<Object> grandparent;
     std::shared_ptr<Object> parent;
     std::shared_ptr<Object> child;
@@ -25,22 +22,10 @@ namespace {
   Hierarchy makeHierarchy()
   {
     Hierarchy hierarchy;
-    registerDataComponents(*hierarchy.componentRegistry);
-    hierarchy.objectManager = std::make_unique<ObjectManager>(hierarchy.componentRegistry);
-
-    hierarchy.grandparent = std::make_shared<Object>("Grandparent");
-    hierarchy.objectManager->addObject(hierarchy.grandparent);
-
-    hierarchy.parent = std::make_shared<Object>("Parent");
-    hierarchy.parent->setParent(hierarchy.grandparent);
-    hierarchy.objectManager->addObject(hierarchy.parent);
-
-    hierarchy.child = std::make_shared<Object>("Child");
-    hierarchy.child->setParent(hierarchy.parent);
-    hierarchy.objectManager->addObject(hierarchy.child);
-
-    hierarchy.sibling = std::make_shared<Object>("Sibling");
-    hierarchy.objectManager->addObject(hierarchy.sibling);
+    hierarchy.grandparent = addObject(hierarchy, "Grandparent");
+    hierarchy.parent = addChildObject(hierarchy, "Parent", hierarchy.grandparent);
+    hierarchy.child = addChildObject(hierarchy, "Child", hierarchy.parent);
+    hierarchy.sibling = addObject(hierarchy, "Sibling");
 
     return hierarchy;
   }

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "TestScene.h"
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 
@@ -10,14 +11,7 @@
 namespace {
   // Component-wise with a tolerance: move() adds, so the result is arithmetic rather than a value copied
   // through, and glm has no printer here - an exact compare would fail with a hex dump of the bytes.
-  void expectNear(const glm::vec3& actual, const glm::vec3& expected)
-  {
-    constexpr float tolerance = 1e-5f;
-
-    EXPECT_NEAR(actual.x, expected.x, tolerance);
-    EXPECT_NEAR(actual.y, expected.y, tolerance);
-    EXPECT_NEAR(actual.z, expected.z, tolerance);
-  }
+  using fixtures::expectNear;
 }
 
 // The whole point of the accessor: it hands back a copy, so no caller can hold a reference that a

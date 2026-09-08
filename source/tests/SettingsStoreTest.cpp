@@ -216,6 +216,42 @@ TEST_F(SettingsStoreTest, DoesNotScheduleAWriteForAnUnchangedValue)
   EXPECT_FALSE(store.hasPendingWrite());
 }
 
+TEST_F(SettingsStoreTest, ClearingAKeyReturnsItToTheFallback)
+{
+  {
+    SettingsStore store(m_file);
+    store.set("count", 41);
+    store.clear("count");
+
+    EXPECT_EQ(store.get<int>("count", 7), 7);
+  }
+
+  // The point of clearing rather than writing the default back: the key has to be gone from the file,
+  // so a later build shipping a different default is the one that applies.
+  EXPECT_FALSE(readFile().contains("count"));
+
+  const SettingsStore reloaded(m_file);
+  EXPECT_EQ(reloaded.get<int>("count", 7), 7);
+}
+
+TEST_F(SettingsStoreTest, DoesNotScheduleAWriteForClearingAnAbsentKey)
+{
+  SettingsStore store(m_file);
+
+  store.set("count", 1);
+  store.flush();
+
+  store.clear("missing");
+
+  EXPECT_FALSE(store.hasPendingWrite());
+
+  // The control: clearing a key that is there does schedule one, so the assertion above is about the
+  // key being absent rather than about clear() never scheduling anything.
+  store.clear("count");
+
+  EXPECT_TRUE(store.hasPendingWrite());
+}
+
 TEST_F(SettingsStoreTest, KeepsTheWritePendingWhenItFails)
 {
   // A file where the settings directory needs to be, so creating the directory cannot succeed.

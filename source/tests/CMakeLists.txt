@@ -31,10 +31,13 @@ add_executable(${PROJECT_NAME}
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
+  CollisionEventTest.cpp
   SettingsStoreTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
+  StateDeltaTest.cpp
   SceneManagerTest.cpp
+  PhysicsIntegrationTest.cpp
   RuntimeComponentTest.cpp
   RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
@@ -43,7 +46,9 @@ add_executable(${PROJECT_NAME}
   WireTypesTest.cpp
   MessageQueueTest.cpp
   SmokeTest.cpp
+  TestScene.cpp
   TestPrinters.h
+  TestScene.h
 
   # net's MessageQueue is compiled in rather than linked: it is the one piece of ECS3DNet with no CLR
   # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a

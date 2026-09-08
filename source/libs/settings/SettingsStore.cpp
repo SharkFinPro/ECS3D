@@ -130,6 +130,16 @@ void SettingsStore::load()
   m_values = std::move(parsed);
 }
 
+void SettingsStore::clear(const std::string& key)
+{
+  if (m_values.erase(key) == 0)
+  {
+    return;
+  }
+
+  scheduleWrite();
+}
+
 void SettingsStore::update()
 {
   if (!m_writePending)

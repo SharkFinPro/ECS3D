@@ -119,8 +119,9 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
   net::MessageReader reader(edit);
 
   // A reader that runs off the end of the payload throws, as does a script's field blob failing to parse.
-  // The client and editor run loops have no guard of their own, so an escaping exception ends the
-  // process; the authority's loop catches, but only after losing the edit.
+  // Every caller's run loop catches now, so an escaping exception costs the message rather than the
+  // session - but a catch tells the caller nothing about which edit was lost or why, which is what the
+  // result below is for.
   bool unpacking = false;
 
   try
