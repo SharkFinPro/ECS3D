@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TestPrinters.h"
+#include "TestScene.h"
 #include "collisions/Simplex.h"
 #include "collisions/Support.h"
 #include "objects/Object.h"
@@ -23,14 +24,7 @@ namespace {
   // Every support-function result goes through a matrix multiply, so compare component-wise with a
   // tolerance rather than exactly. Simplex results are compared exactly on purpose: those values are
   // copied through an array untouched, and a tolerance there would stop a swap being noticed.
-  void expectNear(const glm::vec3& actual, const glm::vec3& expected)
-  {
-    constexpr float tolerance = 1e-5f;
-
-    EXPECT_NEAR(actual.x, expected.x, tolerance);
-    EXPECT_NEAR(actual.y, expected.y, tolerance);
-    EXPECT_NEAR(actual.z, expected.z, tolerance);
-  }
+  using fixtures::expectNear;
 
   // A collider needs a Transform on the same object to place its geometry; nothing else about the scene
   // matters to the support functions. The returned Object is the collider's lifetime anchor - it holds

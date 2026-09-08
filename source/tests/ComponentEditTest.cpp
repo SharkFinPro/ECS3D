@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
+#include "TestScene.h"
 #include "Replication.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -18,27 +17,19 @@
 #include <uuid.h>
 
 namespace {
-  struct Scene {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
+  using fixtures::transformOf;
+
+  // Every test here edits an object that is already in the scene, so the fixture carries one.
+  struct Scene : fixtures::Scene {
     std::shared_ptr<Object> object;
   };
 
   Scene makeScene()
   {
     Scene scene;
-    registerDataComponents(*scene.componentRegistry);
-    scene.objectManager = std::make_unique<ObjectManager>(scene.componentRegistry);
-
-    scene.object = std::make_shared<Object>("Object");
-    scene.objectManager->addObject(scene.object);
+    scene.object = addObject(scene, "Object");
 
     return scene;
-  }
-
-  std::shared_ptr<Transform> transformOf(const std::shared_ptr<Object>& object)
-  {
-    return object->getComponent<Transform>(ComponentType::transform);
   }
 
   net::Message withoutTheLastBytes(const net::Message& source, const std::size_t dropped)

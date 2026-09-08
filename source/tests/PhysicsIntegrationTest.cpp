@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "TestScene.h"
 #include "CollisionSystem.h"
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
 #include "PhysicsSystem.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -31,58 +30,23 @@ namespace {
   constexpr float defaultGravity = -9.81f;
   constexpr float defaultMass = 10.0f;
 
-  struct Scene {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<ObjectManager> objectManager;
-  };
-
-  Scene makeScene()
-  {
-    Scene scene;
-    registerDataComponents(*scene.componentRegistry);
-    scene.objectManager = std::make_unique<ObjectManager>(scene.componentRegistry);
-
-    return scene;
-  }
-
-  std::shared_ptr<Object> addObject(const Scene& scene, const std::string& name, const glm::vec3& position)
-  {
-    auto object = std::make_shared<Object>(name);
-    scene.objectManager->addObject(object);
-    object->getComponent<Transform>(ComponentType::transform)->setPosition(position);
-
-    return object;
-  }
+  using fixtures::addObject;
+  using fixtures::makeScene;
+  using fixtures::transformOf;
 
   std::shared_ptr<RigidBody> addBody(const std::shared_ptr<Object>& object, const bool gravity)
   {
-    auto body = std::make_shared<RigidBody>();
-    object->addComponent(body);
+    auto body = fixtures::addRigidBody(object);
     body->setDoGravity(gravity);
 
     return body;
   }
 
-  std::shared_ptr<Transform> transformOf(const std::shared_ptr<Object>& object)
-  {
-    return object->getComponent<Transform>(ComponentType::transform);
-  }
-
+  // Looser than the fixture default: these values come out of an accumulation over several ticks, not
+  // out of a single operation.
   void expectNear(const char* what, const glm::vec3& actual, const glm::vec3& expected)
   {
-    constexpr float tolerance = 1e-4f;
-
-    // Both vectors in the trace, not just the component that failed: a physics failure is much easier
-    // to read as "expected (0.9, 1, 0.9), got (0.9, 0.9, 0.9)" than as one number out of context. Spelled
-    // out component by component because PrintToString came back as a hex dump for a glm vector.
-    SCOPED_TRACE(::testing::Message()
-                 << what
-                 << ": expected (" << expected.x << ", " << expected.y << ", " << expected.z << ")"
-                 << ", actual (" << actual.x << ", " << actual.y << ", " << actual.z << ")");
-
-    EXPECT_NEAR(actual.x, expected.x, tolerance);
-    EXPECT_NEAR(actual.y, expected.y, tolerance);
-    EXPECT_NEAR(actual.z, expected.z, tolerance);
+    fixtures::expectNear(what, actual, expected, 1e-4f);
   }
 }
 

@@ -22,6 +22,8 @@ add_library(${PROJECT_NAME}
   AssetDragDrop.h
   SaveUI.cpp
   SaveUI.h
+  SettingsPanel.cpp
+  SettingsPanel.h
   components/TransformEditor.cpp
   components/TransformEditor.h
   components/RigidBodyEditor.cpp
@@ -46,6 +48,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
-  ECS3DRender  # pulls imgui transitively via VulkanEngine, which the component editors + GuiComponents use
-  nfd          # native file dialogs for SaveUI
+  ECS3DRender    # pulls imgui transitively via VulkanEngine, which the component editors + GuiComponents use
+  ECS3DSettings  # the settings panel reads and writes user preferences directly - they are not replicated
+  nfd            # native file dialogs for SaveUI
 )

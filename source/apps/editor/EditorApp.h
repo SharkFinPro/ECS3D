@@ -29,6 +29,8 @@ class InspectorPanel;
 class AssetBrowserPanel;
 class SaveUI;
 class EditorSelection;
+class SettingsStore;
+class SettingsPanel;
 
 namespace net {
   class NetClient;
@@ -93,6 +95,12 @@ private:
   std::shared_ptr<AssetBrowserPanel> m_assetBrowser;
   std::shared_ptr<SaveUI> m_saveUI;
 
+  // User preferences: per-user and per-machine, never project data, so this is read and written locally
+  // rather than through the server. Built before the renderer, since the stored theme has to be on the
+  // tokens before the first applyStyle().
+  std::unique_ptr<SettingsStore> m_settings;
+  std::unique_ptr<SettingsPanel> m_settingsPanel;
+
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
   bool m_shouldDisplayGui = true;
@@ -156,6 +164,8 @@ private:
   void updateGui();
 
   void displayMenuBar() const;
+
+  void displayWindowMenu() const;
 
   void displaySceneStatus();
 
