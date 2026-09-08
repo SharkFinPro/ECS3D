@@ -19,6 +19,8 @@
 #include <GuiComponents.h>
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
+#include <SettingsPanel.h>
+#include <SettingsStore.h>
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
 #include <objects/components/PlayerController.h>
@@ -134,7 +136,14 @@ EditorApp::EditorApp(LaunchOptions options)
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
 
+  // Before createRenderer: the renderer runs setupImGuiStyle during construction, and that reads the
+  // theme tokens, so a stored override has to be on them by then or the editor repaints on first sight.
+  m_settings = std::make_unique<SettingsStore>(SettingsStore::defaultFile());
+  SettingsPanel::applyStoredTheme(*m_settings);
+
   createRenderer();
+
+  m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings);
 
   m_assetCache = std::make_shared<GpuAssetCache>(m_renderer, m_assetRegistry.get());
   m_renderSystem = std::make_shared<RenderSystem>();
@@ -384,6 +393,8 @@ void EditorApp::run()
     sendInput();
 
     handlePicking();
+
+    m_settings->update();
 
     updateGui();
 
@@ -689,6 +700,9 @@ void EditorApp::updateGui()
   m_objectGUIManager->displayGui(objectManager);
   m_inspectorPanel->displayGui(objectManager, activeSceneUUID);
 
+  // Draws nothing while closed. Preferences are local, so it needs no scene and no server.
+  m_settingsPanel->displayGui();
+
   // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate
   // scene-selector widget.
 }
@@ -732,6 +746,8 @@ void EditorApp::displayMenuBar() const
 
     m_assetBrowser->displayMenuWidget();
 
+    displayWindowMenu();
+
     // A persistent read-only badge, right-aligned, whenever the connected server isn't in edit mode.
     if (!m_serverEditable)
     {
@@ -742,6 +758,28 @@ void EditorApp::displayMenuBar() const
     }
 
     ImGui::EndMainMenuBar();
+  }
+}
+
+void EditorApp::displayWindowMenu() const
+{
+  if (ImGui::BeginMenu("Window"))
+  {
+    // Checked rather than a plain item, so the menu says whether the panel is already up: it is a
+    // dockable window that may be sitting behind another tab rather than closed.
+    if (ImGui::MenuItem("Settings", nullptr, m_settingsPanel->isOpen()))
+    {
+      if (m_settingsPanel->isOpen())
+      {
+        m_settingsPanel->setOpen(false);
+      }
+      else
+      {
+        m_settingsPanel->open();
+      }
+    }
+
+    ImGui::EndMenu();
   }
 }
 

@@ -37,17 +37,17 @@ namespace gc {
 
     bool edited = false;
 
-    ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "X");
+    ImGui::TextColored(theme::axisX, "X");
     ImGui::SameLine();
     edited |= ImGui::DragFloat("##X", x, sensitivity);
     ImGui::SameLine();
 
-    ImGui::TextColored(ImVec4(0.3f,1,0.3f,1), "Y");
+    ImGui::TextColored(theme::axisY, "Y");
     ImGui::SameLine();
     edited |= ImGui::DragFloat("##Y", y, sensitivity);
     ImGui::SameLine();
 
-    ImGui::TextColored(ImVec4(0.3f,0.6f,1,1), "Z");
+    ImGui::TextColored(theme::axisZ, "Z");
     ImGui::SameLine();
     edited |= ImGui::DragFloat("##Z", z, sensitivity);
 
@@ -389,8 +389,11 @@ namespace gc {
   }
 
   // A full-width inline list row with a leading accent icon + label (e.g. the inspector's inline
-  // "Add Component" list). Fills with the accent-dim wash on hover. Returns true when clicked.
-  inline bool menuRow(const char* label, const SecIcon icon = SecIcon::none, const float height = 34.0f)
+  // "Add Component" list). Fills with an accent wash on hover. Returns true when clicked. selected keeps
+  // the wash on, in the stronger of the two accents, for a row that is a persistent choice rather than a
+  // one-shot action (the settings nav).
+  inline bool menuRow(const char* label, const SecIcon icon = SecIcon::none, const float height = 34.0f,
+                      const bool selected = false)
   {
     const float w = ImGui::GetContentRegionAvail().x;
     const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -401,20 +404,24 @@ namespace gc {
     ImGui::PopID();
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    if (hovered)
+    if (hovered || selected)
     {
-      dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + height), theme::u32(theme::accdim), 6.0f);
+      // A selected row reads stronger than a hovered one, so hovering the row next to the selected one
+      // does not light them identically.
+      dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + height),
+                        theme::u32(selected ? theme::accSoft : theme::accdim), 6.0f);
     }
 
     float textX = pos.x + 11.0f;
     if (icon != SecIcon::none)
     {
       drawSecIcon(dl, ImVec2(pos.x + 18.0f, pos.y + height * 0.5f), 15.0f, icon,
-                  theme::u32(hovered ? theme::accent : theme::t2));
+                  theme::u32(hovered || selected ? theme::accent : theme::t2));
       textX = pos.x + 34.0f;
     }
     const ImVec2 ts = ImGui::CalcTextSize(label);
-    dl->AddText(ImVec2(textX, pos.y + (height - ts.y) * 0.5f), theme::u32(theme::t1), label);
+    dl->AddText(ImVec2(textX, pos.y + (height - ts.y) * 0.5f),
+                theme::u32(selected ? theme::accent : theme::t1), label);
 
     return clicked;
   }
