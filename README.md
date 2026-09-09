@@ -34,11 +34,11 @@ cd ECS3D
 there is nothing to remember and nothing to pass:
 
 ```bash
-cmake --preset debug
-cmake --build --preset debug
+cmake --preset ecs3d-debug
+cmake --build --preset ecs3d-debug
 ```
 
-`release` is the same pair with optimizations on. Each preset writes to its own directory
+`ecs3d-release` is the same pair with optimizations on. Each preset writes to its own directory
 (`cmake-build-debug`, `cmake-build-release`), so the two can coexist.
 
 The C# projects are built **through CMake**, never directly. Running `dotnet build` or `dotnet publish`
@@ -50,13 +50,13 @@ Duplicate attribute`.
 `check` builds the test suite and runs it through CTest:
 
 ```bash
-cmake --build --preset debug-check
+cmake --build --preset ecs3d-debug-check
 ```
 
 To re-run the tests without rebuilding:
 
 ```bash
-ctest --preset debug
+ctest --preset ecs3d-debug
 ```
 
 4. Run the Executable
@@ -70,12 +70,12 @@ cd cmake-build-debug/bin
 
 ### Building with Sanitizers
 
-The `sanitize` preset is `debug` plus AddressSanitizer, and UndefinedBehaviorSanitizer on the toolchains
-that have it (Clang and GCC; MSVC ships ASan only):
+The `ecs3d-sanitize` preset is `ecs3d-debug` plus AddressSanitizer, and UndefinedBehaviorSanitizer on the
+toolchains that have it (Clang and GCC; MSVC ships ASan only):
 
 ```bash
-cmake --preset sanitize
-cmake --build --preset sanitize-check
+cmake --preset ecs3d-sanitize
+cmake --build --preset ecs3d-sanitize-check
 ```
 
 It is aimed at the **test suite**, which is headless and links no CLR. Running the editor or the server

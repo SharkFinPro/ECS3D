@@ -55,12 +55,12 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set reusable strings
-        # The presets are named in lower case and the matrix build types are not, so derive the preset
+        # The presets are prefixed and lower case; the matrix build types are neither. Derive the preset
         # name once here rather than spelling the mapping out at every step that needs it.
         id: strings
         shell: bash
         run: |
-          echo "preset=$(echo '${{ matrix.build_type }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "preset=ecs3d-$(echo '${{ matrix.build_type }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-22.04' }}
