@@ -1,6 +1,10 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": { "major": 3, "minor": 29, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 29,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "ecs3d-base",
@@ -43,40 +47,83 @@
     }
   ],
   "buildPresets": [
-    { "name": "ecs3d-debug", "hidden": true, "displayName": "ECS3D Debug", "configurePreset": "ecs3d-debug" },
-    { "name": "ecs3d-release", "hidden": true, "displayName": "ECS3D Release", "configurePreset": "ecs3d-release" },
-    { "name": "ecs3d-sanitize", "hidden": true, "displayName": "ECS3D Debug + sanitizers", "configurePreset": "ecs3d-sanitize" },
+    {
+      "name": "ecs3d-debug",
+      "hidden": true,
+      "displayName": "ECS3D Debug",
+      "configurePreset": "ecs3d-debug"
+    },
+    {
+      "name": "ecs3d-release",
+      "hidden": true,
+      "displayName": "ECS3D Release",
+      "configurePreset": "ecs3d-release"
+    },
+    {
+      "name": "ecs3d-sanitize",
+      "hidden": true,
+      "displayName": "ECS3D Debug + sanitizers",
+      "configurePreset": "ecs3d-sanitize"
+    },
     {
       "name": "ecs3d-debug-check",
       "hidden": true,
       "displayName": "ECS3D Debug, build and run the tests",
       "configurePreset": "ecs3d-debug",
-      "targets": [ "check" ]
+      "targets": [
+        "check"
+      ]
     },
     {
       "name": "ecs3d-release-check",
       "hidden": true,
       "displayName": "ECS3D Release, build and run the tests",
       "configurePreset": "ecs3d-release",
-      "targets": [ "check" ]
+      "targets": [
+        "check"
+      ]
     },
     {
       "name": "ecs3d-sanitize-check",
       "hidden": true,
       "displayName": "ECS3D Debug + sanitizers, build and run the tests",
       "configurePreset": "ecs3d-sanitize",
-      "targets": [ "check" ]
+      "targets": [
+        "check"
+      ]
     }
   ],
   "testPresets": [
     {
       "name": "ecs3d-test-base",
       "hidden": true,
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error" }
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
     },
-    { "name": "ecs3d-debug", "hidden": true, "displayName": "ECS3D Debug", "inherits": "ecs3d-test-base", "configurePreset": "ecs3d-debug" },
-    { "name": "ecs3d-release", "hidden": true, "displayName": "ECS3D Release", "inherits": "ecs3d-test-base", "configurePreset": "ecs3d-release" },
-    { "name": "ecs3d-sanitize", "hidden": true, "displayName": "ECS3D Debug + sanitizers", "inherits": "ecs3d-test-base", "configurePreset": "ecs3d-sanitize" }
+    {
+      "name": "ecs3d-debug",
+      "hidden": true,
+      "displayName": "ECS3D Debug",
+      "inherits": "ecs3d-test-base",
+      "configurePreset": "ecs3d-debug"
+    },
+    {
+      "name": "ecs3d-release",
+      "hidden": true,
+      "displayName": "ECS3D Release",
+      "inherits": "ecs3d-test-base",
+      "configurePreset": "ecs3d-release"
+    },
+    {
+      "name": "ecs3d-sanitize",
+      "hidden": true,
+      "displayName": "ECS3D Debug + sanitizers",
+      "inherits": "ecs3d-test-base",
+      "configurePreset": "ecs3d-sanitize"
+    }
   ]
 }
