@@ -195,8 +195,7 @@ TEST(ColliderSupport, GetSupportIsTheMinkowskiDifferenceOfTheTwoSupports)
   const auto [secondObject, second] = makeCollider<BoxCollider>({ 5, 0, 0 }, { 1, 1, 1 });
 
   const glm::vec3 direction{ 1.0f, 0.5f, 0.25f };
-  const std::shared_ptr<Collider> other = second;
 
   // (1, 1, 1) on the first box minus (4, -1, -1) on the second.
-  expectNear(getSupport(first.get(), other, direction), glm::vec3(-3, 2, 2));
+  expectNear(getSupport(*first, *second, direction), glm::vec3(-3, 2, 2));
 }

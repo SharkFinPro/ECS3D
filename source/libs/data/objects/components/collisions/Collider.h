@@ -23,7 +23,8 @@ enum class ColliderType {
   sphereCollider
 };
 
-// Data-only: shape geometry (findFurthestPoint, bounding box). GJK/EPA narrow phase lives in CollisionSystem.
+// Data-only: shape geometry (findFurthestPoint, bounding box). The GJK/EPA narrow phase that consumes it
+// lives in sim, in collisions/NarrowPhase.
 class Collider : public Component {
 public:
   explicit Collider(ColliderType type, ComponentType subType);
