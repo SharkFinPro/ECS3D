@@ -30,16 +30,17 @@ cd ECS3D
 
 2. Configure and Build
 
-`CMakePresets.json` at the repo root carries the generator, the build directory and the build type, so
-there is nothing to remember and nothing to pass:
+`CMakePresets.json` at the repo root defines the configure presets, each carrying the generator, the
+build type and its own binary directory, so there is nothing to remember when configuring. The build
+then runs against that directory:
 
 ```bash
 cmake --preset ecs3d-debug
-cmake --build --preset ecs3d-debug
+cmake --build cmake-build-debug
 ```
 
-`ecs3d-release` is the same pair with optimizations on. Each preset writes to its own directory
-(`cmake-build-debug`, `cmake-build-release`), so the two can coexist.
+`ecs3d-release` is the same with optimizations on, writing to `cmake-build-release`, so the two can
+coexist.
 
 The C# projects are built **through CMake**, never directly. Running `dotnet build` or `dotnet publish`
 on them produces a second set of generated attributes and the next CMake build fails with `CS0579:
@@ -50,13 +51,13 @@ Duplicate attribute`.
 `check` builds the test suite and runs it through CTest:
 
 ```bash
-cmake --build --preset ecs3d-debug-check
+cmake --build cmake-build-debug --target check
 ```
 
 To re-run the tests without rebuilding:
 
 ```bash
-ctest --preset ecs3d-debug
+ctest --test-dir cmake-build-debug --output-on-failure
 ```
 
 4. Run the Executable
@@ -75,7 +76,7 @@ toolchains that have it (Clang and GCC; MSVC ships ASan only):
 
 ```bash
 cmake --preset ecs3d-sanitize
-cmake --build --preset ecs3d-sanitize-check
+cmake --build cmake-build-sanitize --target check
 ```
 
 It is aimed at the **test suite**, which is headless and links no CLR. Running the editor or the server
