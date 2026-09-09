@@ -2,4 +2,7 @@ build
 cmake-build-debug
 cmake-build-release
 cmake-build-sanitize
+cmake-build-ecs3d-debug
+cmake-build-ecs3d-release
+cmake-build-ecs3d-sanitize
 .idea

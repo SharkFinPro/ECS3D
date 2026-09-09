@@ -10,6 +10,7 @@
       "name": "ecs3d-base",
       "hidden": true,
       "generator": "Ninja",
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}",
       "cacheVariables": {
         "BUILD_TESTING": "ON"
       }
@@ -18,8 +19,7 @@
       "name": "ecs3d-debug",
       "inherits": "ecs3d-base",
       "displayName": "ECS3D Debug",
-      "description": "Debug build with assertions live. What CI exercises alongside release, and the configuration the check target is normally run under. Writes to cmake-build-debug.",
-      "binaryDir": "${sourceDir}/cmake-build-debug",
+      "description": "Debug build with assertions live. What CI exercises alongside release, and the configuration the check target is normally run under. Writes to cmake-build-ecs3d-debug.",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
@@ -28,8 +28,7 @@
       "name": "ecs3d-release",
       "inherits": "ecs3d-base",
       "displayName": "ECS3D Release",
-      "description": "Optimized build. The configuration the engine is run and profiled in, and the second build type CI covers. Writes to cmake-build-release.",
-      "binaryDir": "${sourceDir}/cmake-build-release",
+      "description": "Optimized build. The configuration the engine is run and profiled in, and the second build type CI covers. Writes to cmake-build-ecs3d-release.",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
@@ -37,9 +36,8 @@
     {
       "name": "ecs3d-sanitize",
       "inherits": "ecs3d-base",
-      "displayName": "ECS3D Debug + sanitizers",
-      "description": "Debug plus AddressSanitizer, and UndefinedBehaviorSanitizer where the toolchain has it (Clang and GCC; MSVC ships ASan only). Aimed at the headless test suite; see the README for why the apps are a different matter. Writes to cmake-build-sanitize.",
-      "binaryDir": "${sourceDir}/cmake-build-sanitize",
+      "displayName": "ECS3D Sanitized",
+      "description": "Debug plus AddressSanitizer, and UndefinedBehaviorSanitizer where the toolchain has it (Clang and GCC; MSVC ships ASan only). Aimed at the headless test suite; see the README for why the apps are a different matter. Writes to cmake-build-ecs3d-sanitize.",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ECS3D_SANITIZE": "ON"

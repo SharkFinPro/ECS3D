@@ -36,10 +36,10 @@ then runs against that directory:
 
 ```bash
 cmake --preset ecs3d-debug
-cmake --build cmake-build-debug
+cmake --build cmake-build-ecs3d-debug
 ```
 
-`ecs3d-release` is the same with optimizations on, writing to `cmake-build-release`, so the two can
+`ecs3d-release` is the same with optimizations on, writing to `cmake-build-ecs3d-release`, so the two can
 coexist.
 
 The C# projects are built **through CMake**, never directly. Running `dotnet build` or `dotnet publish`
@@ -51,13 +51,13 @@ Duplicate attribute`.
 `check` builds the test suite and runs it through CTest:
 
 ```bash
-cmake --build cmake-build-debug --target check
+cmake --build cmake-build-ecs3d-debug --target check
 ```
 
 To re-run the tests without rebuilding:
 
 ```bash
-ctest --test-dir cmake-build-debug --output-on-failure
+ctest --test-dir cmake-build-ecs3d-debug --output-on-failure
 ```
 
 4. Run the Executable
@@ -65,7 +65,7 @@ ctest --test-dir cmake-build-debug --output-on-failure
 Everything is written to the preset's `bin` directory. You can run the editor with:
 
 ```bash
-cd cmake-build-debug/bin
+cd cmake-build-ecs3d-debug/bin
 ./ECS3DEditor
 ```
 
@@ -76,7 +76,7 @@ toolchains that have it (Clang and GCC; MSVC ships ASan only):
 
 ```bash
 cmake --preset ecs3d-sanitize
-cmake --build cmake-build-sanitize --target check
+cmake --build cmake-build-ecs3d-sanitize --target check
 ```
 
 It is aimed at the **test suite**, which is headless and links no CLR. Running the editor or the server
