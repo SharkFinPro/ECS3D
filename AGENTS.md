@@ -31,7 +31,7 @@
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
 | `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk. Depends on nothing but json. **Not** project data: see Development Principles. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
-| `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune + GJK/EPA under `collisions/`). Operates on `ECS3DData` via accessors. OpenMP if available. |
+| `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune), calling the GJK/EPA narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
 | `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess` (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
@@ -251,7 +251,10 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
 
 ## Development Principles
 
-- **No namespace on ECS3D code** (unlike `vke::` in VulkanEngine). Network code lives in `namespace net`.
+- **Namespaces are the exception on ECS3D code** (unlike `vke::` in VulkanEngine), used where a name is
+  generic enough that leaving it global would invite a collision: network code in `namespace net`, the
+  GJK/EPA entry points in `namespace collisions` (`Contact`, `findContact`, `intersects`). Default to no
+  namespace.
 - **Headers:** `#ifndef NAME_H` include guards; forward-declare across libraries and include in the
   `.cpp` to keep coupling low (see the `*App.h` files — they forward-declare every collaborator).
 - **Naming:** `PascalCase` types/files, `camelCase` methods/locals, `m_` member prefix. `[[nodiscard]]`

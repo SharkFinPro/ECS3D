@@ -3,8 +3,9 @@
 
 #include <glm/glm.hpp>
 #include <array>
-#include <memory>
+#include <cstdint>
 #include <optional>
+#include <utility>
 #include <vector>
 
 class Simplex;
@@ -40,7 +41,9 @@ struct FaceData {
 
 class Polytope {
 public:
-  Polytope(Collider* collider, std::shared_ptr<Collider> otherCollider, Simplex& simplex);
+  // Both colliders by reference: a Polytope is built and consumed inside one narrow-phase call, so the
+  // caller's own shares outlive it and there is nothing here to own.
+  Polytope(Collider& collider, Collider& otherCollider, Simplex& simplex);
 
   [[nodiscard]] glm::vec3 getMinimumTranslationVector() const;
 
@@ -48,7 +51,7 @@ public:
 
 private:
   Collider* m_collider;
-  std::shared_ptr<Collider> m_otherCollider;
+  Collider* m_otherCollider;
 
   std::vector<SupportVertex> m_vertices;
   std::vector<Face> m_faces;
