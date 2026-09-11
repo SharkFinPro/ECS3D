@@ -12,6 +12,7 @@
 #include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <PhysicsSystem.h>
+#include <FixedTimestep.h>
 #include <CollisionSystem.h>
 #include <queries/SceneQueries.h>
 #include <ScriptSystem.h>
@@ -145,11 +146,19 @@ void ServerApp::run()
     const float dt = std::chrono::duration<float>(now - m_previousTime).count();
     m_previousTime = now;
 
-    m_timeAccumulator += dt;
+    // Caps how many ticks one real frame will replay. A stall (GC pause, breakpoint, OS scheduling
+    // hiccup) banks real time in m_timeAccumulator; without a cap the next frame(s) would replay all of
+    // it as a burst of full-speed ticks - e.g. a player holding a movement key would see it launched
+    // across the whole stall's worth of distance the instant the stall clears. FixedTimestep::advance
+    // drops anything past the cap instead of carrying it forward, so a stall of any length costs at most
+    // this many ticks' worth of movement.
+    constexpr int maxFixedStepsPerFrame = 3;
 
-    bool ticked = false;
-    uint8_t steps = 0;
-    while (m_timeAccumulator >= m_fixedUpdateDt && steps < 3)
+    const auto plan = FixedTimestep::advance(m_timeAccumulator, dt, m_fixedUpdateDt, maxFixedStepsPerFrame);
+    m_timeAccumulator = plan.remainingAccumulator;
+
+    const bool ticked = plan.steps > 0;
+    for (int step = 0; step < plan.steps; ++step)
     {
       fixedUpdate(m_fixedUpdateDt);
 
@@ -158,10 +167,6 @@ void ServerApp::run()
       // wasPressed/ReleasedThisTick reflect only genuinely new changes.
       InputState::clearMouseDeltas();
       InputState::commitInputEdges();
-
-      m_timeAccumulator -= m_fixedUpdateDt;
-      ++steps;
-      ticked = true;
     }
 
     // Only stream a delta when the sim actually advanced. The server is headless (no vsync), so without
