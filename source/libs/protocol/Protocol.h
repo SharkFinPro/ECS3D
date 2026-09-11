@@ -130,13 +130,9 @@ public:
     if constexpr (std::is_same_v<std::remove_cv_t<T>, bool>) {
       return read<uint8_t>() != 0;
     } else {
-      if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
-        throw std::runtime_error("Message underflow");
-
-      std::array<uint8_t, sizeof(T)> raw{};
-      std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+      const T value = peek<T>();
       m_offset += sizeof(T);
-      return std::bit_cast<T>(raw);
+      return value;
     }
   }
 
@@ -145,12 +141,7 @@ public:
   // was - a caller that catches and retries (or reads the same bytes as something else) sees no partial
   // advance.
   [[nodiscard]] std::string readString() {
-    if (sizeof(uint32_t) > m_data.size() - m_offset)
-      throw std::runtime_error("Message underflow");
-
-    std::array<uint8_t, sizeof(uint32_t)> lengthRaw{};
-    std::memcpy(lengthRaw.data(), m_data.data() + m_offset, sizeof(uint32_t));
-    const auto size = std::bit_cast<uint32_t>(lengthRaw);
+    const auto size = peek<uint32_t>();
 
     if (size > m_data.size() - m_offset - sizeof(uint32_t))
       throw std::runtime_error("Message underflow");
@@ -164,6 +155,18 @@ public:
   [[nodiscard]] std::size_t remaining() const noexcept { return m_data.size() - m_offset; }
 
 private:
+  // The raw bounds-checked read that read<T>() and readString() both need, without advancing m_offset -
+  // readString() must validate the length prefix before deciding whether the payload it names even fits.
+  template <WireValue T>
+  [[nodiscard]] T peek() const {
+    if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
+      throw std::runtime_error("Message underflow");
+
+    std::array<uint8_t, sizeof(T)> raw{};
+    std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+    return std::bit_cast<T>(raw);
+  }
+
   std::span<const uint8_t> m_data;
   std::size_t m_offset = 0;
 };
