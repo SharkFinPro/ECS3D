@@ -3,7 +3,9 @@
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "objects/components/LightRenderer.h"
+#include "WireTypes.h"
 
+#include <Protocol.h>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <memory>
@@ -70,4 +72,74 @@ TEST(LightRenderer, RoundTripsEveryFieldThroughJson)
   EXPECT_FLOAT_EQ(loaded->getSpecular(), 0.3f);
   EXPECT_EQ(loaded->getDirection(), glm::vec3(1, 0, 0));
   EXPECT_FLOAT_EQ(loaded->getConeAngle(), 45.0f);
+}
+
+TEST(LightRenderer, SetConeAngleKeepsAnInRangeValueExactly)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+
+  light->setConeAngle(45.0f);
+
+  EXPECT_FLOAT_EQ(light->getConeAngle(), 45.0f);
+}
+
+TEST(LightRenderer, SetConeAngleClampsAboveTheMax)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+
+  // The shadow frustum's fov is coneAngle * 2, so 90+ projects 180+ degrees and degenerates.
+  light->setConeAngle(200.0f);
+
+  EXPECT_FLOAT_EQ(light->getConeAngle(), LightRenderer::maxConeAngleDegrees);
+}
+
+TEST(LightRenderer, SetConeAngleClampsBelowTheMin)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+
+  light->setConeAngle(-10.0f);
+
+  EXPECT_FLOAT_EQ(light->getConeAngle(), LightRenderer::minConeAngleDegrees);
+}
+
+TEST(LightRenderer, AnOutOfRangeConeAngleIsClampedOnLoad)
+{
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+
+  auto saved = light->serialize();
+  saved["coneAngle"] = 200.0f;
+
+  // A hand-edited or corrupt project file must not reintroduce a degenerate cone angle.
+  const auto loaded = makeLight();
+  ASSERT_NE(loaded, nullptr);
+  loaded->loadFromJSON(saved);
+
+  EXPECT_FLOAT_EQ(loaded->getConeAngle(), LightRenderer::maxConeAngleDegrees);
+}
+
+TEST(LightRenderer, AnOutOfRangeConeAngleIsClampedOffTheWire)
+{
+  net::Message message(net::MessageType::undefined);
+  message.write(ComponentType::lightRenderer);
+  message.write(true);
+  message.write(glm::vec3(1));
+  message.write(0.0f);
+  message.write(0.75f);
+  message.write(0.75f);
+  message.write(glm::vec3(0, -1, 0));
+  message.write(200.0f);
+
+  net::MessageReader reader(message);
+  // pack writes the type discriminator first; unpack expects the reader positioned after it.
+  static_cast<void>(reader.read<ComponentType>());
+
+  const auto light = makeLight();
+  ASSERT_NE(light, nullptr);
+  light->unpack(reader);
+
+  EXPECT_FLOAT_EQ(light->getConeAngle(), LightRenderer::maxConeAngleDegrees);
 }
