@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME}
   SerializationRoundTripTest.cpp
   StateDeltaTest.cpp
   SceneManagerTest.cpp
+  PrefabTest.cpp
   PhysicsIntegrationTest.cpp
   RuntimeComponentTest.cpp
   RuntimeObjectTest.cpp
