@@ -64,6 +64,19 @@ namespace {
     replication::applySceneEdit(*hierarchy.objectManager,
                                 replication::buildReparentObject(object->getUUID()));
   }
+
+  // A root with `levels` single-child descendants below it, built in a loop through the same factories
+  // makeHierarchy uses. Returns the deepest node, whose ancestor chain is exactly `levels` long.
+  std::shared_ptr<Object> chainOfDepth(const Hierarchy& hierarchy, const std::size_t levels)
+  {
+    auto current = addObject(hierarchy, "ChainRoot");
+    for (std::size_t i = 0; i < levels; ++i)
+    {
+      current = addChildObject(hierarchy, "ChainNode", current);
+    }
+
+    return current;
+  }
 }
 
 TEST(ObjectHierarchy, IsAncestorOfLooksDownwards)
@@ -158,4 +171,32 @@ TEST(ObjectHierarchy, ReparentOntoTheCurrentParentIsANoOp)
   ASSERT_EQ(hierarchy.parent->getChildren().size(), 2u);
   EXPECT_EQ(hierarchy.parent->getChildren().front(), hierarchy.child);
   EXPECT_EQ(hierarchy.parent->getChildren().back(), secondChild);
+}
+
+TEST(ObjectHierarchy, ReparentOntoAChainExactlyAtTheDepthLimitIsAllowed)
+{
+  const auto hierarchy = makeHierarchy();
+
+  // The chain's deepest node sits maxObjectDepth - 1 levels below its own root, so dropping a leaf onto
+  // it lands the leaf at exactly maxObjectDepth.
+  const auto deepParent = chainOfDepth(hierarchy, maxObjectDepth - 1);
+  const auto leaf = addObject(hierarchy, "Leaf");
+
+  reparent(hierarchy, leaf, deepParent);
+
+  EXPECT_EQ(leaf->getParent(), deepParent);
+}
+
+TEST(ObjectHierarchy, ReparentOntoAChainOneLevelPastTheDepthLimitIsRejected)
+{
+  const auto hierarchy = makeHierarchy();
+
+  // One level deeper than the allowed case above - the positive control proving this shape of edit
+  // applies at all, so the rejection below is the depth check firing and not some other defect.
+  const auto deepParent = chainOfDepth(hierarchy, maxObjectDepth);
+  const auto leaf = addObject(hierarchy, "Leaf");
+
+  reparent(hierarchy, leaf, deepParent);
+
+  EXPECT_EQ(leaf->getParent(), nullptr);
 }

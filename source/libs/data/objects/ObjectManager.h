@@ -2,6 +2,7 @@
 #define OBJECTMANAGER_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstddef>
 #include <memory>
 #include <random>
 #include <vector>
@@ -85,8 +86,9 @@ private:
 
   void eraseSubtree(const std::shared_ptr<Object>& object);
 
-  // Recursively replace the serialized object's (and its children's) uuids with fresh ones.
-  void reassignUUIDs(nlohmann::json& objectData);
+  // Recursively replace the serialized object's (and its children's) uuids with fresh ones. Throws past
+  // maxObjectDepth (Object.h) rather than recursing further into an attacker-sized prefab/duplicate body.
+  void reassignUUIDs(nlohmann::json& objectData, std::size_t depth = 0);
 
   // Shared body of instantiate/duplicateObject: fresh uuids, build the root under `parent` (null = scene
   // root), then build its children.

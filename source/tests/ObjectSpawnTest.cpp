@@ -30,6 +30,23 @@ namespace {
     return replication::buildObjectSpawned(*parent);
   }
 
+  // A root with `levels` single-child descendants below it (root -> child -> ... -> levels deep), built
+  // through the same registry-backed factories a loaded scene uses. Returns the root, whose own
+  // serialize()/pack() then carries the whole chain - a loop, not recursion, so building a deep fixture
+  // doesn't itself risk the stack the fix is protecting.
+  std::shared_ptr<Object> chainOfDepth(const Scene& scene, const std::size_t levels)
+  {
+    const auto root = addObject(scene, "Root");
+
+    auto current = root;
+    for (std::size_t i = 0; i < levels; ++i)
+    {
+      current = addChildObject(scene, "Descendant", current);
+    }
+
+    return root;
+  }
+
   // A well-formed object header claiming one component, followed by nothing but that component's
   // discriminator - enough to reach the check without needing a body the check should never get to.
   net::Message objectWithOneComponentTag(const ComponentType packedType)
@@ -209,4 +226,56 @@ TEST(ObjectSpawn, RebuildsAColliderSlotWhenThePayloadIsTheOtherShape)
   ASSERT_NE(collider, nullptr);
   EXPECT_EQ(collider->getPackedType(), ComponentType::SubComponentType_boxCollider);
   EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ObjectSpawn, UnpacksAChainExactlyAtTheDepthLimit)
+{
+  const auto source = makeScene();
+  const auto root = chainOfDepth(source, maxObjectDepth);
+  const auto message = replication::buildObjectSpawned(*root);
+
+  const auto target = makeScene();
+  replication::applyObjectSpawned(*target.objectManager, message);
+
+  // root plus one descendant per level.
+  EXPECT_EQ(target.objectManager->getAllObjects().size(), maxObjectDepth + 1);
+}
+
+TEST(ObjectSpawn, RefusesAChainOneLevelDeeperThanTheDepthLimitAndLeavesNothingBehind)
+{
+  const auto source = makeScene();
+  const auto root = chainOfDepth(source, maxObjectDepth + 1);
+  const auto message = replication::buildObjectSpawned(*root);
+
+  const auto target = makeScene();
+
+  // Paired with UnpacksAChainExactlyAtTheDepthLimit above: that test is the positive control proving a
+  // chain this shape unpacks at all, so a throw here is the depth check firing, not some other defect.
+  EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager, message), std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
+}
+
+TEST(ObjectSpawn, InstantiatesAJsonChainExactlyAtTheDepthLimit)
+{
+  const auto source = makeScene();
+  const auto root = chainOfDepth(source, maxObjectDepth);
+  const auto body = root->serialize();
+
+  const auto target = makeScene();
+  target.objectManager->instantiate(body);
+
+  EXPECT_EQ(target.objectManager->getAllObjects().size(), maxObjectDepth + 1);
+}
+
+TEST(ObjectSpawn, RefusesAJsonChainOneLevelDeeperThanTheDepthLimitAndLeavesNothingBehind)
+{
+  const auto source = makeScene();
+  const auto root = chainOfDepth(source, maxObjectDepth + 1);
+  const auto body = root->serialize();
+
+  const auto target = makeScene();
+
+  // Paired with InstantiatesAJsonChainExactlyAtTheDepthLimit above, the same way the wire pair is.
+  EXPECT_THROW(target.objectManager->instantiate(body), std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
 }

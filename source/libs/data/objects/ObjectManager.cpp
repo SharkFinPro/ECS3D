@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <stdexcept>
 
 ObjectManager::ObjectManager(std::shared_ptr<ComponentRegistry> componentRegistry)
   : m_componentRegistry(std::move(componentRegistry)),
@@ -64,15 +65,20 @@ void ObjectManager::removeObjectFromRoot(const std::shared_ptr<Object>& object)
   std::erase(m_objects, object);
 }
 
-void ObjectManager::reassignUUIDs(nlohmann::json& objectData)
+void ObjectManager::reassignUUIDs(nlohmann::json& objectData, const std::size_t depth)
 {
+  if (depth > maxObjectDepth)
+  {
+    throw std::runtime_error("Object nesting exceeds maximum depth");
+  }
+
   objectData["uuid"] = uuids::to_string(createUUID());
 
   if (objectData.contains("children"))
   {
     for (auto& child : objectData.at("children"))
     {
-      reassignUUIDs(child);
+      reassignUUIDs(child, depth + 1);
     }
   }
 }

@@ -31,8 +31,13 @@ Object::Object(const nlohmann::json& objectData,
   loadFromJSON(objectData);
 }
 
-void Object::loadChildren(const nlohmann::json& childrenData)
+void Object::loadChildren(const nlohmann::json& childrenData, const std::size_t depth)
 {
+  if (depth > maxObjectDepth)
+  {
+    throw std::runtime_error("Object nesting exceeds maximum depth");
+  }
+
   for (const auto& childData : childrenData)
   {
     const auto child = std::make_shared<Object>(childData, m_manager);
@@ -42,7 +47,7 @@ void Object::loadChildren(const nlohmann::json& childrenData)
 
     if (childData.contains("children"))
     {
-      child->loadChildren(childData["children"]);
+      child->loadChildren(childData["children"], depth + 1);
     }
   }
 }
@@ -283,8 +288,16 @@ void Object::pack(net::Message& message) const
   }
 }
 
-void Object::unpack(net::MessageReader& messageReader)
+void Object::unpack(net::MessageReader& messageReader, const std::size_t depth)
 {
+  // A payload can claim as many nested children as it likes; refusing here rather than one frame deeper
+  // (inside unpackFields) keeps the check in one place for both this object and unpackFields' own
+  // recursive call into each child.
+  if (depth > maxObjectDepth)
+  {
+    throw std::runtime_error("Object nesting exceeds maximum depth");
+  }
+
   // Symmetric with pack(): reconstructs this object from scratch, creating any missing components,
   // scripts, and child objects (so it works on a fresh, empty Object as well as an existing one).
   //
@@ -300,7 +313,7 @@ void Object::unpack(net::MessageReader& messageReader)
 
   try
   {
-    unpackFields(messageReader);
+    unpackFields(messageReader, depth);
   }
   catch (...)
   {
@@ -322,7 +335,7 @@ void Object::unpack(net::MessageReader& messageReader)
   }
 }
 
-void Object::unpackFields(net::MessageReader& messageReader)
+void Object::unpackFields(net::MessageReader& messageReader, const std::size_t depth)
 {
   m_uuid = uuids::uuid::from_string(messageReader.readString()).value();
   m_name = messageReader.readString();
@@ -439,7 +452,7 @@ void Object::unpackFields(net::MessageReader& messageReader)
     child->setParent(shared_from_this());
     m_manager->addObject(child);
 
-    child->unpack(messageReader);
+    child->unpack(messageReader, depth + 1);
   }
 }
 

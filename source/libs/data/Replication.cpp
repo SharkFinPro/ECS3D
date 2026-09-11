@@ -12,6 +12,7 @@
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <cmath>
+#include <cstddef>
 #include <exception>
 #include <new>
 
@@ -312,6 +313,37 @@ nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID)
 }
 
 namespace {
+  // Number of ancestors above object (root = 0). Every object in a live scene arrived through a
+  // depth-checked unpack/load or reparent, so walking up never runs past maxObjectDepth.
+  std::size_t ancestorDepth(const std::shared_ptr<Object>& object)
+  {
+    std::size_t depth = 0;
+    for (auto current = object->getParent(); current; current = current->getParent())
+    {
+      ++depth;
+    }
+
+    return depth;
+  }
+
+  // Height of the subtree rooted at object (0 for a leaf). Bounded the same way as ancestorDepth, so the
+  // recursion here never runs past maxObjectDepth either.
+  std::size_t subtreeHeight(const std::shared_ptr<Object>& object)
+  {
+    std::size_t height = 0;
+
+    for (const auto& child : object->getChildren())
+    {
+      const std::size_t childHeight = 1 + subtreeHeight(child);
+      if (childHeight > height)
+      {
+        height = childHeight;
+      }
+    }
+
+    return height;
+  }
+
   SceneEditResult applyStructuralEdit(ObjectManager& objectManager, const nlohmann::json& edit,
                                       const AssetRegistry* assetRegistry)
   {
@@ -463,6 +495,16 @@ namespace {
       // Dropping an object back onto the parent it already has would only move it to the end of the
       // sibling list and cost a re-snapshot.
       if (object->getParent() == parent)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // A reparent can push the object's own subtree deeper than any single edit that built it: the
+      // depth check at unpack/load time only bounds a tree as it arrives, not what an existing tree can
+      // be moved onto later. Reject before mutating anything so the server never produces a snapshot its
+      // own clients would refuse to unpack.
+      if (const std::size_t newDepth = (parent ? ancestorDepth(parent) + 1 : 0) + subtreeHeight(object);
+          newDepth > maxObjectDepth)
       {
         return SceneEditResult::rejected;
       }
