@@ -1,4 +1,5 @@
 #include "EditorApp.h"
+#include "DarkTitleBar.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
@@ -543,6 +544,11 @@ void EditorApp::createRenderer()
   m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
 
   m_sceneViewName = engineConfig.imGui.sceneViewName;
+
+  // The title bar is native chrome ImGui never touches; follow the theme by luminance of the panel
+  // token, the same surface the rest of the window is drawn on.
+  const float panelLuminance = 0.299f * theme::panel.x + 0.587f * theme::panel.y + 0.114f * theme::panel.z;
+  applyDarkTitleBar(m_renderer->getWindow()->getWindow(), panelLuminance < 0.5f);
 }
 
 void EditorApp::registerEditors() const
