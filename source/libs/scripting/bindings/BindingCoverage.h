@@ -35,27 +35,14 @@ constexpr std::array<BindingCoverageEntry, static_cast<size_t>(ComponentType::co
   { ComponentType::camera,                         BindingStatus::bound }         // CameraBindings
 }};
 
-// True only if every enumerator in [0, ComponentType::count) appears in kComponentBindingCoverage
-// exactly once. The array is sized off ComponentType::count, so a new enumerator without a matching row
-// leaves a trailing entry value-initialized to { ComponentType::transform, BindingStatus::bound } - which
-// this catches as a duplicate of the real transform row, rather than passing silently.
+// The table is filled positionally: row i must describe ComponentType i, not just appear somewhere in
+// the array. Checking that directly also subsumes duplicate detection - if any type were listed twice,
+// some other index could not hold its own type's row.
 constexpr bool componentBindingCoverageIsComplete()
 {
-  std::array<bool, static_cast<size_t>(ComponentType::count)> seen{};
-
-  for (const auto& entry : kComponentBindingCoverage)
+  for (size_t i = 0; i < kComponentBindingCoverage.size(); ++i)
   {
-    const auto index = static_cast<size_t>(entry.type);
-    if (seen[index])
-    {
-      return false;
-    }
-    seen[index] = true;
-  }
-
-  for (const bool wasSeen : seen)
-  {
-    if (!wasSeen)
+    if (kComponentBindingCoverage[i].type != static_cast<ComponentType>(i))
     {
       return false;
     }
@@ -64,8 +51,11 @@ constexpr bool componentBindingCoverageIsComplete()
   return true;
 }
 
+// A failure here means a ComponentType was added (or reordered) without a matching row at its index in
+// kComponentBindingCoverage - add one (bound, notYetBound, or nativeOnly) in this file, in enum order.
 static_assert(componentBindingCoverageIsComplete(),
-              "A ComponentType enumerator (Component.h) has no row in kComponentBindingCoverage - add "
-              "one (bound, notYetBound, or nativeOnly) in source/libs/scripting/bindings/BindingCoverage.h.");
+              "A ComponentType enumerator (Component.h) has no row at its own index in "
+              "kComponentBindingCoverage - add one (bound, notYetBound, or nativeOnly) in "
+              "source/libs/scripting/bindings/BindingCoverage.h, in enum order.");
 
 #endif //BINDINGCOVERAGE_H
