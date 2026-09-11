@@ -203,6 +203,14 @@ void ObjectManager::pack(net::Message& message) const
 
 void ObjectManager::unpack(net::MessageReader& messageReader)
 {
+  // Replace, not append: every caller today unpacks into a manager it just constructed (see
+  // ProjectPacker::unpack/SceneAsset::unpack, which parse into fresh instances and swap on success), so
+  // clearing here can't undo a live scene - but a manager that already holds objects must not keep them
+  // once a new snapshot is read into it.
+  m_objects.clear();
+  m_allObjects.clear();
+  m_objectsToRemove.clear();
+
   const uint32_t objectCount = messageReader.read<uint32_t>();
 
   for (uint32_t i = 0; i < objectCount; ++i)

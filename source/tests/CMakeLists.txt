@@ -24,6 +24,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ComponentLookupTest.cpp
+  ComponentRegistryTest.cpp
   AssetRegistryTest.cpp
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
@@ -34,14 +35,17 @@ add_executable(${PROJECT_NAME}
   LightRendererTest.cpp
   CollisionEventTest.cpp
   SettingsStoreTest.cpp
+  KeybindsTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
   StateDeltaTest.cpp
   SceneManagerTest.cpp
+  PrefabTest.cpp
   PhysicsIntegrationTest.cpp
   RuntimeComponentTest.cpp
   RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
+  ObjectManagerTest.cpp
   SceneEditTest.cpp
   ProtocolFramingTest.cpp
   WireTypesTest.cpp

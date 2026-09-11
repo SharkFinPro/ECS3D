@@ -31,6 +31,11 @@ public:
   [[nodiscard]] float getConeAngle() const;
   void setConeAngle(float coneAngle);
 
+  // The shadow frustum's fov is coneAngle * 2, so a value at or past 90 projects at or past 180 degrees
+  // and degenerates. Shared by the editor slider and the setter's own clamp.
+  static constexpr float minConeAngleDegrees = 1.0f;
+  static constexpr float maxConeAngleDegrees = 89.0f;
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;

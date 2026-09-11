@@ -3,6 +3,8 @@ project(ECS3DSettings)
 add_library(${PROJECT_NAME}
   SettingsStore.cpp
   SettingsStore.h
+  Keybinds.cpp
+  Keybinds.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

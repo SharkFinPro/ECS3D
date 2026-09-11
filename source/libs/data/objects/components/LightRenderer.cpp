@@ -2,6 +2,7 @@
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
+#include <algorithm>
 
 LightRenderer::LightRenderer()
   : Component(ComponentType::lightRenderer)
@@ -82,7 +83,7 @@ float LightRenderer::getConeAngle() const
 
 void LightRenderer::setConeAngle(const float coneAngle)
 {
-  m_coneAngle = coneAngle;
+  m_coneAngle = std::clamp(coneAngle, minConeAngleDegrees, maxConeAngleDegrees);
 }
 
 nlohmann::json LightRenderer::serialize()
@@ -112,7 +113,7 @@ void LightRenderer::loadFromJSON(const nlohmann::json& componentData)
   m_ambient = componentData.at("ambient");
   m_diffuse = componentData.at("diffuse");
   m_specular = componentData.at("specular");
-  m_coneAngle = componentData.at("coneAngle");
+  setConeAngle(componentData.at("coneAngle"));
 
   m_isSpotLight = componentData.at("isSpotlight");
 }
@@ -142,5 +143,5 @@ void LightRenderer::unpack(net::MessageReader& messageReader)
   m_specular = messageReader.read<float>();
 
   m_direction = messageReader.read<glm::vec3>();
-  m_coneAngle = messageReader.read<float>();
+  setConeAngle(messageReader.read<float>());
 }

@@ -21,6 +21,8 @@
 #include <SaveUI.h>
 #include <SettingsPanel.h>
 #include <SettingsStore.h>
+#include <Keybinds.h>
+#include <KeybindDispatcher.h>
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
 #include <objects/components/PlayerController.h>
@@ -143,7 +145,9 @@ EditorApp::EditorApp(LaunchOptions options)
 
   createRenderer();
 
-  m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings);
+  setupKeybinds();
+
+  m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings, m_keybindTable, m_keybindDispatcher);
 
   m_assetCache = std::make_shared<GpuAssetCache>(m_renderer, m_assetRegistry.get());
   m_renderSystem = std::make_shared<RenderSystem>();
@@ -297,7 +301,9 @@ EditorApp::EditorApp(LaunchOptions options)
     m_netClient->send(message);
   });
 
-  setupKeybinds();
+  // Save/Save As are wired to the table once SaveUI exists; toggleGui was already wired in setupKeybinds.
+  m_keybindDispatcher->on(EditorAction::saveProject, [this] { m_saveUI->save(); });
+  m_keybindDispatcher->on(EditorAction::saveProjectAs, [this] { m_saveUI->saveAs(); });
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
 
@@ -553,17 +559,16 @@ void EditorApp::registerEditors() const
 
 void EditorApp::setupKeybinds()
 {
-  m_keyCallbackEventListener = m_renderer->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
-    if (e.action != GLFW_PRESS)
-    {
-      return;
-    }
+  m_keybindTable = std::make_shared<KeybindTable>();
+  m_keybindTable->load(*m_settings);
 
-    if (e.key == GLFW_KEY_F10)
-    {
-      m_shouldDisplayGui = !m_shouldDisplayGui;
-    }
-  });
+  m_keybindDispatcher = std::make_shared<KeybindDispatcher>(m_renderer, m_keybindTable);
+
+  m_keybindDispatcher->on(EditorAction::toggleGui, [this] { m_shouldDisplayGui = !m_shouldDisplayGui; });
+
+  // Save/Save As are registered later, once m_saveUI exists. Undo/redo/delete/duplicate/focus/gizmo stay
+  // in the table with no handler - bindable and shown in Settings, but a no-op until a later feature
+  // gives them behavior.
 }
 
 void EditorApp::applyMessage(const net::Message& message)
