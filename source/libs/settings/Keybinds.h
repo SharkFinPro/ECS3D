@@ -91,8 +91,11 @@ public:
   // how a chord is freed for another action to take.
   void unbind(EditorAction action, SettingsStore& settings);
 
-  // Clears the stored key so the action follows whatever this build's default is.
-  void reset(EditorAction action, SettingsStore& settings);
+  // Restores the action's compiled-in default chord, refusing (leaving both actions' bindings and the
+  // store untouched) when a different action currently holds that chord - same semantics as assign().
+  // An action whose default is unbound (the gizmo actions) always succeeds, simply clearing whatever
+  // chord it held.
+  AssignOutcome reset(EditorAction action, SettingsStore& settings);
 
   void resetAll(SettingsStore& settings);
 

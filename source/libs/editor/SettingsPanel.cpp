@@ -280,7 +280,11 @@ void SettingsPanel::displayKeybinds()
       ImGui::SameLine();
       if (ImGui::Button("Reset"))
       {
-        m_keybindTable->reset(info.action, *m_settings);
+        const auto outcome = m_keybindTable->reset(info.action, *m_settings);
+        if (outcome.result == KeybindTable::AssignResult::refused)
+        {
+          m_conflict = KeybindConflict{ info.action, *outcome.heldBy, *actionInfo(info.action).defaultChord, false };
+        }
         m_capturingAction.reset();
       }
 
@@ -317,6 +321,10 @@ void SettingsPanel::displayKeybindConflictModal()
 
   constexpr const char* popupName = "Keybind Conflict";
 
+  // Captured before any button below can reset m_conflict, so the second button's visibility check never
+  // reads through a cleared optional.
+  const bool offerChooseAnother = m_conflict->offerChooseAnother;
+
   ImGui::OpenPopup(popupName);
 
   if (ImGui::BeginPopupModal(popupName, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
@@ -341,12 +349,20 @@ void SettingsPanel::displayKeybindConflictModal()
 
     ImGui::SameLine();
 
-    if (ImGui::Button("Choose another key", ImVec2(150, 0)))
+    if (offerChooseAnother)
     {
-      const auto action = m_conflict->action;
+      if (ImGui::Button("Choose another key", ImVec2(150, 0)))
+      {
+        const auto action = m_conflict->action;
+        m_conflict.reset();
+        ImGui::CloseCurrentPopup();
+        beginCaptureFor(action);
+      }
+    }
+    else if (ImGui::Button("Close", ImVec2(150, 0)))
+    {
       m_conflict.reset();
       ImGui::CloseCurrentPopup();
-      beginCaptureFor(action);
     }
 
     ImGui::EndPopup();

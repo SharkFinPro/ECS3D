@@ -43,12 +43,15 @@ private:
     keybinds
   };
 
-  // A refused rebind: the chord `requested` for `action` is already held by `heldBy`. Shown as a modal
-  // with no reassign option, per spec - displacing the holder would leave it silently unbound.
+  // A refused rebind or reset: the chord `requested` for `action` is already held by `heldBy`. Shown as
+  // a modal with no reassign option, per spec - displacing the holder would leave it silently unbound.
+  // offerChooseAnother is false for a refused reset: there is no in-progress capture to redirect into a
+  // new key, so the modal offers only "Go to binding" and a close button.
   struct KeybindConflict {
     EditorAction action;
     EditorAction heldBy;
     KeyChord requested;
+    bool offerChooseAnother = true;
   };
 
   SettingsStore* m_settings;

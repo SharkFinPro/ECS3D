@@ -192,6 +192,70 @@ TEST_F(Keybinds, ResetClearsTheStoredKeyAndReturnsToTheDefault)
   EXPECT_EQ(table.binding(EditorAction::focusSelection), parseChord("F"));
 }
 
+TEST_F(Keybinds, ResetRefusesWhenTheDefaultIsHeldByAnotherAction)
+{
+  // Repro for the reset bijection break: free saveProject's default chord, hand it to another action,
+  // then reset saveProject - it must not silently displace the new holder.
+  SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  table.unbind(EditorAction::saveProject, settings);
+  ASSERT_EQ(table.assign(EditorAction::duplicateSelection, *parseChord("Ctrl+S"), settings).result,
+           KeybindTable::AssignResult::assigned);
+
+  static const std::string absentMarker = "\x01__absent__";
+  const auto storeValueBefore = settings.get<std::string>("keybinds.saveProject", absentMarker);
+
+  const auto outcome = table.reset(EditorAction::saveProject, settings);
+
+  EXPECT_EQ(outcome.result, KeybindTable::AssignResult::refused);
+  ASSERT_TRUE(outcome.heldBy.has_value());
+  EXPECT_EQ(*outcome.heldBy, EditorAction::duplicateSelection);
+
+  // Neither binding moved, and the store entry for saveProject is exactly what it was before reset() ran.
+  EXPECT_FALSE(table.binding(EditorAction::saveProject).has_value());
+  EXPECT_EQ(table.binding(EditorAction::duplicateSelection), parseChord("Ctrl+S"));
+  EXPECT_EQ(settings.get<std::string>("keybinds.saveProject", absentMarker), storeValueBefore);
+}
+
+TEST_F(Keybinds, PositiveControlResetSucceedsOnceTheHolderIsUnbound)
+{
+  // The control for the refusal above: once the chord is free again, reset() does restore the default.
+  SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  table.unbind(EditorAction::saveProject, settings);
+  ASSERT_EQ(table.assign(EditorAction::duplicateSelection, *parseChord("Ctrl+S"), settings).result,
+           KeybindTable::AssignResult::assigned);
+
+  table.unbind(EditorAction::duplicateSelection, settings);
+
+  const auto outcome = table.reset(EditorAction::saveProject, settings);
+
+  EXPECT_EQ(outcome.result, KeybindTable::AssignResult::assigned);
+  EXPECT_FALSE(outcome.heldBy.has_value());
+  EXPECT_EQ(table.binding(EditorAction::saveProject), parseChord("Ctrl+S"));
+}
+
+TEST_F(Keybinds, ResettingAnActionWhoseDefaultIsUnboundClearsItsBinding)
+{
+  // Gizmo actions default to unbound, so resetting one is never a conflict - it always clears.
+  SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  ASSERT_EQ(table.assign(EditorAction::gizmoTranslate, *parseChord("Ctrl+Alt+K"), settings).result,
+           KeybindTable::AssignResult::assigned);
+
+  const auto outcome = table.reset(EditorAction::gizmoTranslate, settings);
+
+  EXPECT_EQ(outcome.result, KeybindTable::AssignResult::assigned);
+  EXPECT_FALSE(outcome.heldBy.has_value());
+  EXPECT_FALSE(table.binding(EditorAction::gizmoTranslate).has_value());
+}
+
 TEST_F(Keybinds, ResetAllClearsEveryStoredKeyAndRestoresAllDefaults)
 {
   SettingsStore settings(m_file);

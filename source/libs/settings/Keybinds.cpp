@@ -306,10 +306,22 @@ void KeybindTable::unbind(const EditorAction action, SettingsStore& settings)
   settings.set(keyFor(action), std::string());
 }
 
-void KeybindTable::reset(const EditorAction action, SettingsStore& settings)
+KeybindTable::AssignOutcome KeybindTable::reset(const EditorAction action, SettingsStore& settings)
 {
-  m_bindings[static_cast<std::size_t>(action)] = actionInfo(action).defaultChord;
+  const auto defaultChord = actionInfo(action).defaultChord;
+
+  if (defaultChord)
+  {
+    if (const auto holder = actionFor(*defaultChord); holder && *holder != action)
+    {
+      return { AssignResult::refused, holder };
+    }
+  }
+
+  m_bindings[static_cast<std::size_t>(action)] = defaultChord;
   settings.clear(keyFor(action));
+
+  return { AssignResult::assigned, std::nullopt };
 }
 
 void KeybindTable::resetAll(SettingsStore& settings)
