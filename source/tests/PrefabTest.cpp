@@ -11,11 +11,13 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 
+#include <algorithm>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <unordered_set>
 #include <uuid.h>
 
@@ -68,6 +70,28 @@ namespace {
     {
       addUUIDs(child, out);
     }
+  }
+
+  // Object::serialize() builds "components" from an unordered_map, so its array order is unspecified and
+  // varies with insertion history - sort it by a stable key before comparing two bodies positionally.
+  // "children" comes from a vector, so its order is meaningful and left alone; only recurse into it.
+  nlohmann::json canonicalBody(nlohmann::json body)
+  {
+    auto& components = body.at("components");
+    std::ranges::sort(components, [](const nlohmann::json& lhs, const nlohmann::json& rhs)
+    {
+      const auto lhsSubType = lhs.value("subType", std::string());
+      const auto rhsSubType = rhs.value("subType", std::string());
+
+      return std::tie(lhs.at("type"), lhsSubType) < std::tie(rhs.at("type"), rhsSubType);
+    });
+
+    for (auto& child : body.at("children"))
+    {
+      child = canonicalBody(child);
+    }
+
+    return body;
   }
 
   glm::vec3 positionInBody(const nlohmann::json& body)
@@ -250,5 +274,5 @@ TEST(Prefab, TheStoredBodyRoundTripsThroughAScratchObjectManagerPreservingUuids)
   ASSERT_EQ(registry.getAssets().size(), 1u);
   ASSERT_NE(registry.getByUUID(prefabUUID), nullptr);
   EXPECT_EQ(registry.getByUUID(otherAssetUUID), nullptr);
-  EXPECT_EQ(registry.getPrefabBody(prefabUUID), reserialized);
+  EXPECT_EQ(canonicalBody(registry.getPrefabBody(prefabUUID)), canonicalBody(reserialized));
 }
