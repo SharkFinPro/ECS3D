@@ -3,28 +3,41 @@
 #include <vector>
 
 namespace {
-  std::mutex g_mutex;
-  std::vector<std::shared_ptr<LogSink>> g_sinks;
+  // Function-local statics only fix initialization order; destruction order across translation units
+  // is still unspecified, and the C# transport can log from socket threads that outlive main. Leaking
+  // this storage means it is simply never destroyed, so a late call is always safe.
+  std::mutex& logMutex()
+  {
+    static auto* mutex = new std::mutex();
+    return *mutex;
+  }
+
+  std::vector<std::shared_ptr<LogSink>>& logSinks()
+  {
+    static auto* sinks = new std::vector<std::shared_ptr<LogSink>>();
+    return *sinks;
+  }
+
   LogLevel g_minimumLevel = LogLevel::info;
 }
 
 void Log::addSink(std::shared_ptr<LogSink> sink)
 {
-  const std::lock_guard lock(g_mutex);
+  const std::lock_guard lock(logMutex());
 
-  g_sinks.push_back(std::move(sink));
+  logSinks().push_back(std::move(sink));
 }
 
 void Log::removeSink(const std::shared_ptr<LogSink>& sink)
 {
-  const std::lock_guard lock(g_mutex);
+  const std::lock_guard lock(logMutex());
 
-  std::erase(g_sinks, sink);
+  std::erase(logSinks(), sink);
 }
 
 void Log::setMinimumLevel(const LogLevel level)
 {
-  const std::lock_guard lock(g_mutex);
+  const std::lock_guard lock(logMutex());
 
   g_minimumLevel = level;
 }
@@ -33,16 +46,17 @@ void Log::write(const LogLevel level, const LogCategory category, std::string me
 {
   // Held across the sink calls below rather than released first: a sink must never log (see
   // LogSink.h), so re-entering write() on this thread can't happen and the lock can't deadlock.
-  const std::lock_guard lock(g_mutex);
+  const std::lock_guard lock(logMutex());
 
-  if (level < g_minimumLevel || g_sinks.empty())
+  auto& sinks = logSinks();
+  if (level < g_minimumLevel || sinks.empty())
   {
     return;
   }
 
   const LogEntry entry{ std::chrono::system_clock::now(), level, category, std::move(message) };
 
-  for (const auto& sink : g_sinks)
+  for (const auto& sink : sinks)
   {
     sink->write(entry);
   }
