@@ -38,6 +38,30 @@ namespace {
     }
   }
 
+  // True when no uuid in one set also appears in the other - used to prove two subtrees share no uuids.
+  bool disjointUUIDs(const std::vector<uuids::uuid>& a, const std::vector<uuids::uuid>& b)
+  {
+    return std::ranges::none_of(a, [&b](const auto& uuid) { return std::ranges::find(b, uuid) != b.end(); });
+  }
+
+  // True when every uuid in the set is distinct from every other - used to rule out a subtree that
+  // reuses the same uuid across its own nodes.
+  bool noDuplicateUUIDs(const std::vector<uuids::uuid>& values)
+  {
+    for (std::size_t i = 0; i < values.size(); ++i)
+    {
+      for (std::size_t j = i + 1; j < values.size(); ++j)
+      {
+        if (values[i] == values[j])
+        {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
   // Loads a manager's own serialize() output the way SceneAsset::loadObjects does: each root object is
   // reconstructed with its authored uuid, then its children are attached the same way loadChildren does.
   void loadObjects(const Scene& scene, const nlohmann::json& objectsData)
@@ -240,13 +264,15 @@ TEST(ObjectManager, InstantiateFromSerializedJsonAssignsFreshUuidsAndRegistersTh
   const auto source = addObject(authoring, "Body");
   addChildObject(authoring, "Limb", source);
 
+  std::vector<uuids::uuid> sourceUUIDs;
+  collectUUIDs(source, sourceUUIDs);
+
   const auto body = source->serialize();
 
   const auto scene = makeScene();
   const auto instance = scene.objectManager->instantiate(body);
 
   ASSERT_NE(instance, nullptr);
-  EXPECT_NE(instance->getUUID(), source->getUUID());
   EXPECT_EQ(instance->getName(), "Body");
   EXPECT_EQ(instance->getParent(), nullptr);
   EXPECT_EQ(scene.objectManager->getObjectByUUID(instance->getUUID()), instance);
@@ -256,8 +282,18 @@ TEST(ObjectManager, InstantiateFromSerializedJsonAssignsFreshUuidsAndRegistersTh
   ASSERT_EQ(instance->getChildren().size(), 1u);
   const auto instanceChild = instance->getChildren().front();
   EXPECT_EQ(instanceChild->getName(), "Limb");
-  EXPECT_NE(instanceChild->getUUID(), source->getChildren().front()->getUUID());
   EXPECT_EQ(scene.objectManager->getObjectByUUID(instanceChild->getUUID()), instanceChild);
+
+  std::vector<uuids::uuid> instanceUUIDs;
+  collectUUIDs(instance, instanceUUIDs);
+
+  // Check the whole instance subtree against the whole source subtree, not just corresponding nodes -
+  // a pairwise root-to-root, child-to-child comparison would miss the instance root colliding with the
+  // source child (or vice versa).
+  ASSERT_EQ(instanceUUIDs.size(), sourceUUIDs.size());
+  EXPECT_TRUE(noDuplicateUUIDs(sourceUUIDs));
+  EXPECT_TRUE(noDuplicateUUIDs(instanceUUIDs));
+  EXPECT_TRUE(disjointUUIDs(instanceUUIDs, sourceUUIDs));
 }
 
 TEST(ObjectManager, InstantiatingTheSameJsonTwiceProducesTwoDistinctUuidSets)
@@ -266,18 +302,34 @@ TEST(ObjectManager, InstantiatingTheSameJsonTwiceProducesTwoDistinctUuidSets)
   const auto source = addObject(authoring, "Body");
   addChildObject(authoring, "Limb", source);
 
+  std::vector<uuids::uuid> sourceUUIDs;
+  collectUUIDs(source, sourceUUIDs);
+
   const auto body = source->serialize();
 
   const auto scene = makeScene();
   const auto first = scene.objectManager->instantiate(body);
   const auto second = scene.objectManager->instantiate(body);
 
-  EXPECT_NE(first->getUUID(), second->getUUID());
   ASSERT_EQ(first->getChildren().size(), 1u);
   ASSERT_EQ(second->getChildren().size(), 1u);
-  EXPECT_NE(first->getChildren().front()->getUUID(), second->getChildren().front()->getUUID());
-
   EXPECT_EQ(scene.objectManager->getObjects().size(), 2u);
+
+  std::vector<uuids::uuid> firstUUIDs;
+  collectUUIDs(first, firstUUIDs);
+  std::vector<uuids::uuid> secondUUIDs;
+  collectUUIDs(second, secondUUIDs);
+
+  // Every instance's whole subtree is checked against the source's whole subtree and the other
+  // instance's whole subtree, not just node-to-node - a pairwise comparison would miss, say, the first
+  // instance's root colliding with the second instance's child.
+  ASSERT_EQ(firstUUIDs.size(), sourceUUIDs.size());
+  ASSERT_EQ(secondUUIDs.size(), sourceUUIDs.size());
+  EXPECT_TRUE(noDuplicateUUIDs(firstUUIDs));
+  EXPECT_TRUE(noDuplicateUUIDs(secondUUIDs));
+  EXPECT_TRUE(disjointUUIDs(firstUUIDs, sourceUUIDs));
+  EXPECT_TRUE(disjointUUIDs(secondUUIDs, sourceUUIDs));
+  EXPECT_TRUE(disjointUUIDs(firstUUIDs, secondUUIDs));
 }
 
 // Unlike instantiate (a fresh copy for a prefab drop), loading a manager's own serialized form back in
