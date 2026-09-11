@@ -18,6 +18,7 @@
 #include "objects/components/collisions/SphereCollider.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
+#include "TestScene.h"
 
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
@@ -330,4 +331,68 @@ TEST(SerializationRoundTrip, ATruncatedSnapshotLeavesTheProjectIntact)
   // The binary path is the one fed bytes off the wire, so its atomicity is the half that matters most.
   EXPECT_ANY_THROW(project.packer->unpack(truncated));
   EXPECT_EQ(canonical(project.serializer->serialize()), canonical(before));
+}
+
+TEST(SerializationRoundTrip, UnpackingTwiceIntoTheSameManagerReplacesRatherThanAppends)
+{
+  const auto source = fixtures::makeScene();
+  const auto first = fixtures::addObject(source, "First");
+  const auto second = fixtures::addObject(source, "Second");
+  const auto third = fixtures::addObject(source, "Third");
+
+  net::Message snapshot(net::MessageType::snapshot);
+  source.objectManager->pack(snapshot);
+
+  const auto target = fixtures::makeScene();
+
+  net::MessageReader firstReader(snapshot);
+  target.objectManager->unpack(firstReader);
+
+  net::MessageReader secondReader(snapshot);
+  target.objectManager->unpack(secondReader);
+
+  // A manager unpacked into twice must land exactly where a manager unpacked into once does - the
+  // positive control proving the assertion below actually depends on the second unpack replacing rather
+  // than merely happening to under-count.
+  const auto control = fixtures::makeScene();
+  net::MessageReader controlReader(snapshot);
+  control.objectManager->unpack(controlReader);
+
+  EXPECT_EQ(target.objectManager->getObjects().size(), control.objectManager->getObjects().size());
+  EXPECT_EQ(target.objectManager->getAllObjects().size(), control.objectManager->getAllObjects().size());
+  ASSERT_EQ(target.objectManager->getAllObjects().size(), 3u);
+
+  for (const auto& original : { first, second, third })
+  {
+    EXPECT_NE(target.objectManager->getObjectByUUID(original->getUUID()), nullptr);
+  }
+}
+
+TEST(SerializationRoundTrip, UnpackingADifferentSceneReplacesTheObjectsAManagerAlreadyHolds)
+{
+  const auto oldScene = fixtures::makeScene();
+  const auto oldFirst = fixtures::addObject(oldScene, "OldFirst");
+  const auto oldSecond = fixtures::addObject(oldScene, "OldSecond");
+
+  net::Message oldSnapshot(net::MessageType::snapshot);
+  oldScene.objectManager->pack(oldSnapshot);
+
+  const auto newScene = fixtures::makeScene();
+  const auto newFirst = fixtures::addObject(newScene, "NewFirst");
+
+  net::Message newSnapshot(net::MessageType::snapshot);
+  newScene.objectManager->pack(newSnapshot);
+
+  const auto target = fixtures::makeScene();
+
+  net::MessageReader oldReader(oldSnapshot);
+  target.objectManager->unpack(oldReader);
+
+  net::MessageReader newReader(newSnapshot);
+  target.objectManager->unpack(newReader);
+
+  ASSERT_EQ(target.objectManager->getAllObjects().size(), 1u);
+  EXPECT_EQ(target.objectManager->getObjectByUUID(oldFirst->getUUID()), nullptr);
+  EXPECT_EQ(target.objectManager->getObjectByUUID(oldSecond->getUUID()), nullptr);
+  EXPECT_NE(target.objectManager->getObjectByUUID(newFirst->getUUID()), nullptr);
 }
