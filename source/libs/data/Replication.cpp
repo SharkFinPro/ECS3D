@@ -303,12 +303,19 @@ nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::u
   return edit;
 }
 
-nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID)
+nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid* parentUUID)
 {
-  return {
+  nlohmann::json edit = {
     { "op", "instantiatePrefab" },
     { "prefab", uuids::to_string(prefabUUID) }
   };
+
+  if (parentUUID)
+  {
+    edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  return edit;
 }
 
 namespace {
@@ -338,12 +345,30 @@ namespace {
         return SceneEditResult::unknownAsset;
       }
 
+      // Same "named parent" handling as addObject/reparentObject: absent means the scene root, named and
+      // unresolvable is a stale view rather than a silent root.
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
+      {
+        const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsedParent.has_value())
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
+        }
+      }
+
       // Guarded here rather than left to the catch below: the body belongs to the asset, not to the
       // edit, so a prefab whose stored blob is broken is a failure to apply and not a malformed edit -
       // reporting it as one sends whoever reads the log to look at the wire.
       try
       {
-        objectManager.instantiate(body);
+        objectManager.instantiateUnder(body, parent);
       }
       catch (const std::bad_alloc&)
       {

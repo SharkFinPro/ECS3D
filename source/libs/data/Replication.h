@@ -81,8 +81,10 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
 // Instantiate a prefab asset into the scene at the transform stored in its body. Unlike every other op
 // this one names an asset rather than an existing object, so applySceneEdit needs the AssetRegistry to
 // resolve the prefab's uuid to its body - pass it whenever prefab ops are possible (the authoritative
-// server always does).
-[[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID);
+// server always does). An absent parentUUID instantiates at the scene root (the original behavior);
+// passing one instantiates as a child of that object instead, e.g. dropping the prefab onto it in the tree.
+[[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID,
+                                                    const uuids::uuid* parentUUID = nullptr);
 
 // Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
 // payload it could not parse apart from an op it understood and refused, because only the first says the

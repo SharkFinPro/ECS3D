@@ -43,6 +43,11 @@ public:
   // back started when the manager is running.
   std::shared_ptr<Object> instantiate(const nlohmann::json& objectData);
 
+  // Same as instantiate, but rooted under parent (null = scene root) instead of always at the root - the
+  // editor's instantiatePrefab op uses this when the prefab was dropped onto an existing object.
+  std::shared_ptr<Object> instantiateUnder(const nlohmann::json& objectData,
+                                           const std::shared_ptr<Object>& parent);
+
   void start();
 
   void stop();
@@ -87,11 +92,6 @@ private:
 
   // Recursively replace the serialized object's (and its children's) uuids with fresh ones.
   void reassignUUIDs(nlohmann::json& objectData);
-
-  // Shared body of instantiate/duplicateObject: fresh uuids, build the root under `parent` (null = scene
-  // root), then build its children.
-  std::shared_ptr<Object> instantiateUnder(const nlohmann::json& objectData,
-                                           const std::shared_ptr<Object>& parent);
 };
 
 

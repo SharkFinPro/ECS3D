@@ -42,6 +42,26 @@ namespace {
   {
     return uuids::uuid::from_string("123e4567-e89b-12d3-a456-426614174000").value();
   }
+
+  // A second fixed uuid, distinct from someOtherUUID(), for tests that need two uuids that name different
+  // things (e.g. a prefab and a parent that is not in the scene).
+  uuids::uuid anotherUUID()
+  {
+    return uuids::uuid::from_string("00000000-0000-0000-0000-000000000001").value();
+  }
+
+  // A trivial but well-formed prefab body: no components/scripts/children, just enough for instantiate to
+  // succeed. The uuid field is overwritten by reassignUUIDs on instantiation, so its value doesn't matter.
+  nlohmann::json trivialBody()
+  {
+    return {
+      { "name", "Block" },
+      { "uuid", uuids::to_string(someOtherUUID()) },
+      { "components", nlohmann::json::array() },
+      { "scripts", nlohmann::json::array() },
+      { "children", nlohmann::json::array() }
+    };
+  }
 }
 
 TEST(SceneEdit, AppliesAnAddObjectEdit)
@@ -186,6 +206,73 @@ TEST(SceneEdit, ReportsAPrefabBodyThisBuildCannotInstantiateAsFailed)
             SceneEditResult::failed);
   EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
+}
+
+TEST(SceneEdit, InstantiatesAPrefabUnderTheObjectItWasDroppedOnto)
+{
+  const auto scene = makeScene();
+
+  const nlohmann::json body = {
+    { "name", "Prefab Root" },
+    { "uuid", uuids::to_string(someOtherUUID()) },
+    { "components", nlohmann::json::array() },
+    { "scripts", nlohmann::json::array() },
+    { "children", nlohmann::json::array({ trivialBody() }) }
+  };
+
+  const auto prefabUUID = someOtherUUID();
+  AssetRegistry assetRegistry;
+  assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Prefab Root",
+                                .body = body.dump() });
+
+  const auto parentUUID = scene.object->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(prefabUUID, &parentUUID), &assetRegistry),
+            SceneEditResult::applied);
+
+  ASSERT_EQ(scene.object->getChildren().size(), 1u);
+  const auto instanceRoot = scene.object->getChildren().front();
+  EXPECT_EQ(instanceRoot->getParent(), scene.object);
+  EXPECT_EQ(instanceRoot->getChildren().size(), 1u);
+
+  // The whole subtree (scene.object + instance root + its child) is registered with the manager...
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), 3u);
+  // ...but the instance root did not also land at the scene root - only scene.object is there.
+  ASSERT_EQ(scene.objectManager->getObjects().size(), 1u);
+  EXPECT_EQ(scene.objectManager->getObjects().front(), scene.object);
+
+  // Positive control: the same prefab without a parent lands at the scene root instead, proving the
+  // parent above is what put the instance under scene.object rather than it always ending up there.
+  EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(prefabUUID), &assetRegistry),
+            SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getObjects().size(), 2u);
+}
+
+TEST(SceneEdit, ReportsABadInstantiatePrefabParentWithoutInstantiatingAnything)
+{
+  const auto scene = makeScene();
+
+  const auto prefabUUID = someOtherUUID();
+  AssetRegistry assetRegistry;
+  assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                                .body = trivialBody().dump() });
+
+  nlohmann::json unparseableParent = replication::buildInstantiatePrefab(prefabUUID);
+  unparseableParent["parent"] = "not-a-uuid";
+  EXPECT_EQ(applyEdit(scene, unparseableParent, &assetRegistry), SceneEditResult::malformedEdit);
+
+  const auto missingParent = anotherUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(prefabUUID, &missingParent), &assetRegistry),
+            SceneEditResult::unknownObject);
+
+  // Neither bad parent instantiated anything: still just the one object the fixture started with.
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
+
+  // Positive control: a parent that does resolve instantiates fine, proving the failures above are about
+  // the parent field and not something else broken in the edit.
+  const auto parentUUID = scene.object->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(prefabUUID, &parentUUID), &assetRegistry),
+            SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), 2u);
 }
 
 TEST(SceneEdit, ReportsAPayloadThatIsNotAnObjectAsMalformed)
