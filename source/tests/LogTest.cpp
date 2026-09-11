@@ -138,6 +138,20 @@ TEST_F(LogTest, AddingTheSameSinkTwiceDeliversEachEntryOnce)
   EXPECT_EQ(other->snapshot().size(), 1u);
 }
 
+TEST_F(LogTest, IsEnabledFollowsTheMinimumLevelInBothDirections)
+{
+  Log::setMinimumLevel(LogLevel::warn);
+
+  EXPECT_FALSE(Log::isEnabled(LogLevel::info));
+  EXPECT_TRUE(Log::isEnabled(LogLevel::warn));
+  EXPECT_TRUE(Log::isEnabled(LogLevel::error));
+
+  Log::setMinimumLevel(LogLevel::trace);
+
+  EXPECT_TRUE(Log::isEnabled(LogLevel::info));
+  EXPECT_TRUE(Log::isEnabled(LogLevel::trace));
+}
+
 TEST_F(LogTest, WritingWithNoSinksRegisteredDoesNotCrashOrRecordAnything)
 {
   Log::write(LogLevel::error, LogCategory::server, "nowhere to go");

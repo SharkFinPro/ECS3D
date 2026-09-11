@@ -1,5 +1,6 @@
 #include "Log.h"
 #include <algorithm>
+#include <atomic>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -20,7 +21,10 @@ namespace {
     return *sinks;
   }
 
-  LogLevel g_minimumLevel = LogLevel::info;
+  // isEnabled() reads this without the lock from any thread, so it must be atomic. Left as an ordinary
+  // static rather than leaked storage: it is trivially destructible, so there is no destruction-order
+  // hazard for it to hide.
+  std::atomic<LogLevel> g_minimumLevel = LogLevel::info;
 }
 
 void Log::addSink(std::shared_ptr<LogSink> sink)
@@ -45,19 +49,27 @@ void Log::removeSink(const std::shared_ptr<LogSink>& sink)
 
 void Log::setMinimumLevel(const LogLevel level)
 {
-  const std::lock_guard lock(logMutex());
-
   g_minimumLevel = level;
+}
+
+bool Log::isEnabled(const LogLevel level)
+{
+  return level >= g_minimumLevel.load();
 }
 
 void Log::write(const LogLevel level, const LogCategory category, std::string message)
 {
+  if (!isEnabled(level))
+  {
+    return;
+  }
+
   // Held across the sink calls below rather than released first: a sink must never log (see
   // LogSink.h), so re-entering write() on this thread can't happen and the lock can't deadlock.
   const std::lock_guard lock(logMutex());
 
   auto& sinks = logSinks();
-  if (level < g_minimumLevel || sinks.empty())
+  if (sinks.empty())
   {
     return;
   }

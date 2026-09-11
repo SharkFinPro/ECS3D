@@ -17,6 +17,10 @@ public:
   // Entries below this level are dropped before any sink sees them. Defaults to info.
   static void setMinimumLevel(LogLevel level);
 
+  // Lets a caller skip building an expensive message that write() would just filter out. Safe to call
+  // from any thread without the log's lock.
+  [[nodiscard]] static bool isEnabled(LogLevel level);
+
   static void write(LogLevel level, LogCategory category, std::string message);
 
   static void trace(LogCategory category, std::string message);
