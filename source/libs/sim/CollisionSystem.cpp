@@ -19,11 +19,8 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager)
   {
     if (const auto collider = object->getComponent<Collider>(ComponentType::collider))
     {
-      // Both collider shapes resolve their position (and the box path its bounding box, scale and
-      // rotation) through accessors that throw when the object has no Transform. Skipping such an
-      // object here - a collider with nothing to place it cannot collide with anything - keeps one
-      // stripped Transform from throwing out of checkCollisions and abandoning every other pair's
-      // collision work for the tick.
+      // A collider with no Transform has nothing to place it; its accessors throw, which would abandon
+      // every other pair's collision work for the tick.
       if (!object->getComponent<Transform>(ComponentType::transform))
       {
         continue;

@@ -366,9 +366,7 @@ TEST(CollisionEvent, ASphereMissingItsTransformDoesNotAbandonTheTick)
   const auto scene = makeScene();
 
   // Overlapping spheres, one of which has lost the Transform its collider resolves position and radius
-  // through. Pre-fix, checkCollisions warmed every edge's bounding box in one un-guarded loop before the
-  // narrow phase ever ran, so this object alone threw out of the whole tick - dropping the genuine
-  // contact below along with it.
+  // through.
   const auto strippedSphere = addObject(scene, "StrippedSphere", { 0, 0, 0 });
   fixtures::addSphereCollider(strippedSphere, 1.0f);
   fixtures::addRigidBody(strippedSphere);
@@ -393,8 +391,7 @@ TEST(CollisionEvent, ABoxMissingItsTransformDoesNotAbandonTheTick)
 {
   const auto scene = makeScene();
 
-  // Same shape as the sphere case above, for the other collider type: BoxCollider::getPosition/getScale/
-  // getRotation and Collider::getBoundingBox all resolve through the same Transform-or-throw accessor.
+  // Same case as the sphere test above, for the box collider.
   const auto strippedBox = addObject(scene, "StrippedBox", { 0, 0, 0 });
   fixtures::addBoxCollider(strippedBox);
   fixtures::addRigidBody(strippedBox);
