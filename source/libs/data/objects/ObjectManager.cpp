@@ -171,6 +171,26 @@ void ObjectManager::pack(net::Message& message) const
   }
 }
 
+void ObjectManager::restoreFromJSON(const nlohmann::json& objectsData)
+{
+  // Mirrors unpack(): replace, not append, and no fresh uuids - the run's spawn/destroy/reparent has
+  // already happened, so this puts the tree back exactly as it was captured before the run started.
+  m_objects.clear();
+  m_allObjects.clear();
+  m_objectsToRemove.clear();
+
+  for (const auto& objectData : objectsData)
+  {
+    auto object = std::make_shared<Object>(objectData, this);
+    addObject(object);
+
+    if (objectData.contains("children"))
+    {
+      object->loadChildren(objectData.at("children"));
+    }
+  }
+}
+
 void ObjectManager::unpack(net::MessageReader& messageReader)
 {
   // Replace, not append: every caller today unpacks into a manager it just constructed (see

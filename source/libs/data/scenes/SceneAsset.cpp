@@ -27,14 +27,24 @@ void SceneAsset::loadObjects(const nlohmann::json& objectsData) const
   }
 }
 
-void SceneAsset::start() const
+void SceneAsset::start()
 {
+  // Captured before anything runs, so a spawn/destroy/reparent during the run can be undone on stop the
+  // same way a component value already is.
+  m_authoredObjects = m_objectManager->serialize().at("objects");
+
   m_objectManager->start();
 }
 
-void SceneAsset::stop() const
+void SceneAsset::stop()
 {
   m_objectManager->stop();
+
+  if (!m_authoredObjects.is_null())
+  {
+    m_objectManager->restoreFromJSON(m_authoredObjects);
+    m_authoredObjects = nullptr;
+  }
 }
 
 nlohmann::json SceneAsset::serialize() const

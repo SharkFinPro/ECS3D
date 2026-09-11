@@ -106,7 +106,10 @@ so no layer needs to name concrete component types across the boundary.
 input, linking `ECS3DRender` but never sim/scripting. `EditorApp` is a client plus the ImGui tooling
 (`ECS3DEditorLib`); the authoritative scene lives on a spawned `--edit` server, so edits become
 *commands sent back*, not local mutations. Client/editor spawn a child `ECS3DServer` via `ServerProcess`
-for singleplayer.
+for singleplayer. **Stopping a scene discards every runtime change**, not just component values:
+`SceneAsset::start()` snapshots the current object tree before the run, and `stop()` rebuilds it from
+that snapshot with uuids preserved, undoing any script spawn/destroy/reparent (and any editor edit made
+while playing) the same way it already undoes an edited Transform.
 
 **Replication.** Two paths. Structural state (project/scene/assets) goes as a full **snapshot** — a
 packed binary blob built by `ProjectPacker` (the wire counterpart of `ProjectSerializer`, which remains
