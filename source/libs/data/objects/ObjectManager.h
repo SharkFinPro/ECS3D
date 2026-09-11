@@ -91,7 +91,8 @@ private:
   void reassignUUIDs(nlohmann::json& objectData, std::size_t depth = 0);
 
   // Shared body of instantiate/duplicateObject: fresh uuids, build the root under `parent` (null = scene
-  // root), then build its children.
+  // root), then build its children. Validated against maxObjectDepth starting from parent's own depth,
+  // not from 0 - the body's claimed depth and the live parent's actual depth combine into one tree.
   std::shared_ptr<Object> instantiateUnder(const nlohmann::json& objectData,
                                            const std::shared_ptr<Object>& parent);
 };
