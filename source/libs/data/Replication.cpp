@@ -15,6 +15,8 @@
 #include <cstddef>
 #include <exception>
 #include <new>
+#include <utility>
+#include <vector>
 
 namespace replication {
 
@@ -326,18 +328,30 @@ namespace {
     return depth;
   }
 
-  // Height of the subtree rooted at object (0 for a leaf). Bounded the same way as ancestorDepth, so the
-  // recursion here never runs past maxObjectDepth either.
+  // Height of the subtree rooted at object (0 for a leaf). Walked with an explicit stack rather than
+  // recursion: this runs on a reparent target, and a reparent is exactly the operation that could have
+  // put a tree deeper than maxObjectDepth in the first place if some other path missed a check, so this
+  // walk should not assume the depth it is trying to bound.
   std::size_t subtreeHeight(const std::shared_ptr<Object>& object)
   {
     std::size_t height = 0;
 
-    for (const auto& child : object->getChildren())
+    std::vector<std::pair<std::shared_ptr<Object>, std::size_t>> pending;
+    pending.emplace_back(object, 0);
+
+    while (!pending.empty())
     {
-      const std::size_t childHeight = 1 + subtreeHeight(child);
-      if (childHeight > height)
+      const auto [current, currentHeight] = pending.back();
+      pending.pop_back();
+
+      if (currentHeight > height)
       {
-        height = childHeight;
+        height = currentHeight;
+      }
+
+      for (const auto& child : current->getChildren())
+      {
+        pending.emplace_back(child, currentHeight + 1);
       }
     }
 
