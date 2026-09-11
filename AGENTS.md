@@ -143,7 +143,9 @@ other type, but **re-registering an existing prefab name updates its body in pla
 "Save as Prefab" over an existing name means *update it*. Instantiation is
 `ObjectManager::instantiate(body)` — fresh uuids via `reassignUUIDs`, the shared core of `duplicateObject` —
 reachable two ways: the editor's `instantiatePrefab` **`sceneEdit` op** (the one op keyed by an asset, hence
-the `const AssetRegistry*` parameter on `applySceneEdit`), and a script's `World.spawnPrefab(uuid, position)`,
+the `const AssetRegistry*` parameter on `applySceneEdit`; it takes an optional parent uuid, so dropping a
+prefab onto an object in the hierarchy instantiates it as that object's child via `instantiateUnder` instead
+of at the scene root), and a script's `World.spawnPrefab(uuid, position)`,
 which rides 1.3's existing `objectSpawned` replication (one message carries the whole subtree). The binding
 reaches the registry through **`BindingContext::setAssetRegistry`**, injected once at startup exactly like the
 sim's raycast/overlap statics. **Instances are detached copies** — nothing records which prefab an object came

@@ -267,6 +267,17 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       }
     }
 
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(assetDragDrop::prefab))
+    {
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto prefab = uuids::uuid::from_string(uuidStr); prefab.has_value() && m_sceneEditCallback)
+      {
+        // Same op as the empty-space drop, but with this row as the parent instead of the scene root.
+        const auto parent = object->getUUID();
+        m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), &parent));
+      }
+    }
+
     ImGui::EndDragDropTarget();
   }
 
