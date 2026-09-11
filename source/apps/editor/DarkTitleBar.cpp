@@ -2,10 +2,16 @@
 
 #ifdef _WIN32
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 
@@ -30,9 +36,14 @@ void applyDarkTitleBar(GLFWwindow* window, const bool dark)
   }
 
   const BOOL useDark = dark ? TRUE : FALSE;
-  if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark)) != S_OK)
+  const bool applied = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark)) == S_OK
+    || DwmSetWindowAttribute(hwnd, dwmwaUseImmersiveDarkModeLegacy, &useDark, sizeof(useDark)) == S_OK;
+
+  if (applied)
   {
-    DwmSetWindowAttribute(hwnd, dwmwaUseImmersiveDarkModeLegacy, &useDark, sizeof(useDark));
+    // Windows 10 doesn't repaint an existing window's non-client area for this attribute until the
+    // window is deactivated; force that repaint now instead of waiting for it.
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
   }
 }
 
