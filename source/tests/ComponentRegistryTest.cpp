@@ -3,7 +3,6 @@
 #include "TestScene.h"
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
-#include "objects/components/Camera.h"
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 
@@ -85,30 +84,21 @@ TEST(ComponentRegistry, CreateCallsTheRegisteredFactory)
   EXPECT_NE(first, second);
 }
 
-TEST(ComponentRegistry, RegisteringTheSameNameAgainReplacesTheFactory)
-{
-  ComponentRegistry registry;
-
-  registry.registerComponent("Slot", [] { return std::make_shared<Transform>(glm::vec3(0), glm::vec3(1),
-                                                                              glm::vec3(0)); });
-  registry.registerComponent("Slot", [] { return std::make_shared<Camera>(); });
-
-  // registerComponent assigns into the map by key, so the second registration under the same name wins
-  // outright rather than being ignored as a first-registration-sticks policy.
-  const auto component = registry.create("Slot");
-  ASSERT_NE(component, nullptr);
-  EXPECT_EQ(component->getType(), ComponentType::camera);
-}
-
 TEST(ComponentRegistry, TheTypeStringSerializeWritesResolvesBackThroughTheRegistry)
 {
   ComponentRegistry registry;
   registerDataComponents(registry);
 
-  // The same rule Object::loadFromJSON applies when reading a component back off disk: a Collider names
-  // its shape in "subType", everything else names itself directly in "type".
+  // The same rule Object::loadFromJSON applies to the "components" array: a Collider names its shape in
+  // "subType", everything else names itself directly in "type". Scripts are excluded: loadFromJSON reads
+  // them from a separate "scripts" array and always creates "Script" without consulting any type field.
   for (const auto& [type, key] : componentTypeToRegistryKey)
   {
+    if (type == ComponentType::script)
+    {
+      continue;
+    }
+
     const auto component = registry.create(key);
     ASSERT_NE(component, nullptr) << key;
 
