@@ -393,11 +393,13 @@ namespace {
     {
       const std::string name = edit.value("name", "Object");
 
-      const auto object = std::make_shared<Object>(name);
-
       // A parent that is named and does not resolve is not the same as no parent named at all: the
       // sender asked for a child of something, and rooting the object instead and calling it applied
-      // reports the wrong answer for a view that is a round trip behind the authority.
+      // reports the wrong answer for a view that is a round trip behind the authority. Resolved (and
+      // depth-checked) before anything is built: an editor connection could otherwise chain adds, each
+      // naming the previous object as parent, into a tree deep enough to overflow the stack the next
+      // time the server recurses through it (a snapshot broadcast, or this same check on a later edit).
+      std::shared_ptr<Object> parent;
       if (edit.contains("parent"))
       {
         const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent")));
@@ -406,14 +408,20 @@ namespace {
           return SceneEditResult::malformedEdit;
         }
 
-        const auto parent = objectManager.getObjectByUUID(parsed.value());
+        parent = objectManager.getObjectByUUID(parsed.value());
         if (!parent)
         {
           return SceneEditResult::unknownObject;
         }
 
-        object->setParent(parent);
+        if (ancestorDepth(parent) + 1 > maxObjectDepth)
+        {
+          return SceneEditResult::rejected;
+        }
       }
+
+      const auto object = std::make_shared<Object>(name);
+      object->setParent(parent);
 
       objectManager.addObject(object);
       return SceneEditResult::applied;

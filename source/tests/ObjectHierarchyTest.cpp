@@ -200,3 +200,37 @@ TEST(ObjectHierarchy, ReparentOntoAChainOneLevelPastTheDepthLimitIsRejected)
 
   EXPECT_EQ(leaf->getParent(), nullptr);
 }
+
+TEST(ObjectHierarchy, AddObjectUnderAParentOneBelowTheDepthLimitIsApplied)
+{
+  const auto hierarchy = makeHierarchy();
+
+  // The chain's deepest node sits maxObjectDepth - 1 levels below its own root, so a new child of it
+  // lands at exactly maxObjectDepth - the positive control for the rejection below.
+  const auto deepParent = chainOfDepth(hierarchy, maxObjectDepth - 1);
+  const auto before = hierarchy.objectManager->getAllObjects().size();
+
+  const auto parentUUID = deepParent->getUUID();
+  const auto result = replication::applySceneEdit(*hierarchy.objectManager,
+                                                   replication::buildAddObject("Added", &parentUUID));
+
+  EXPECT_EQ(result, replication::SceneEditResult::applied);
+  EXPECT_EQ(hierarchy.objectManager->getAllObjects().size(), before + 1);
+}
+
+TEST(ObjectHierarchy, AddObjectUnderAParentAtTheDepthLimitIsRejected)
+{
+  const auto hierarchy = makeHierarchy();
+
+  // One level deeper than the allowed case above: a new child of this parent would land one past
+  // maxObjectDepth.
+  const auto deepParent = chainOfDepth(hierarchy, maxObjectDepth);
+  const auto before = hierarchy.objectManager->getAllObjects().size();
+
+  const auto parentUUID = deepParent->getUUID();
+  const auto result = replication::applySceneEdit(*hierarchy.objectManager,
+                                                   replication::buildAddObject("Added", &parentUUID));
+
+  EXPECT_EQ(result, replication::SceneEditResult::rejected);
+  EXPECT_EQ(hierarchy.objectManager->getAllObjects().size(), before);
+}
