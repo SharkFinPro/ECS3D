@@ -4,6 +4,7 @@
 #include "bindings/InputUtilsBindings.h"
 #include "bindings/WorldBindings.h"
 #include "bindings/CameraBindings.h"
+#include "bindings/ModelRendererBindings.h"
 #include <ManagedHost.h>
 #include <filesystem>
 #include <iostream>
@@ -102,6 +103,11 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerCamera =
     reinterpret_cast<RegisterCameraFn>(m_host->getDelegate(assemblyPath, typeName, "registerCameraBindings"));
   registerCamera(CameraBindingsProvider::getBindings());
+
+  using RegisterModelRendererFn = void(*)(ModelRendererBindings);
+  const auto registerModelRenderer =
+    reinterpret_cast<RegisterModelRendererFn>(m_host->getDelegate(assemblyPath, typeName, "registerModelRendererBindings"));
+  registerModelRenderer(ModelRendererBindingsProvider::getBindings());
 }
 
 void ScriptEngine::reloadScripts() const

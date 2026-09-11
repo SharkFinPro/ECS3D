@@ -4,10 +4,12 @@
 #include <glm/vec3.hpp>
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 #include <uuid.h>
 
 class AssetRegistry;
+class Component;
 class Object;
 class ObjectManager;
 
@@ -43,10 +45,19 @@ public:
 
   static void recordDestroy(const uuids::uuid& objectUUID);
 
-  // Return the objects spawned / uuids destroyed since the last call, clearing the buffers.
+  // A script mutated a component that isn't covered by the per-tick state delta (Transform only), so it
+  // needs to replicate the same way the editor's own component edits do. Bindings can't reach the net
+  // layer, so buffer it here; the app drains it after the tick and broadcasts it via
+  // replication::buildComponentEdit.
+  static void recordComponentEdit(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component);
+
+  // Return the objects spawned / uuids destroyed / component edits made since the last call, clearing
+  // the buffers.
   [[nodiscard]] static std::vector<std::shared_ptr<Object>> takeSpawned();
 
   [[nodiscard]] static std::vector<uuids::uuid> takeDestroyed();
+
+  [[nodiscard]] static std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> takeComponentEdits();
 
   static void setRaycast(RaycastFn raycast);
   [[nodiscard]] static RaycastFn getRaycast();
@@ -60,6 +71,7 @@ private:
 
   static std::vector<std::shared_ptr<Object>> s_spawned;
   static std::vector<uuids::uuid> s_destroyed;
+  static std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> s_componentEdits;
 
   static RaycastFn s_raycast;
   static OverlapSphereFn s_overlapSphere;

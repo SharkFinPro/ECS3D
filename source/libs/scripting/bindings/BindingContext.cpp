@@ -5,6 +5,7 @@ ObjectManager* BindingContext::s_objectManager = nullptr;
 AssetRegistry* BindingContext::s_assetRegistry = nullptr;
 std::vector<std::shared_ptr<Object>> BindingContext::s_spawned;
 std::vector<uuids::uuid> BindingContext::s_destroyed;
+std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> BindingContext::s_componentEdits;
 BindingContext::RaycastFn BindingContext::s_raycast = nullptr;
 BindingContext::OverlapSphereFn BindingContext::s_overlapSphere = nullptr;
 
@@ -46,6 +47,16 @@ std::vector<std::shared_ptr<Object>> BindingContext::takeSpawned()
 std::vector<uuids::uuid> BindingContext::takeDestroyed()
 {
   return std::exchange(s_destroyed, {});
+}
+
+void BindingContext::recordComponentEdit(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)
+{
+  s_componentEdits.emplace_back(objectUUID, component);
+}
+
+std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> BindingContext::takeComponentEdits()
+{
+  return std::exchange(s_componentEdits, {});
 }
 
 void BindingContext::setRaycast(const RaycastFn raycast)

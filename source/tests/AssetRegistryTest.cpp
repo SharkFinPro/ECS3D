@@ -22,6 +22,11 @@ namespace {
     return { .uuid = uuid, .type = AssetType::Model, .path = path };
   }
 
+  AssetRecord texture(const uuids::uuid& uuid, const std::string& path)
+  {
+    return { .uuid = uuid, .type = AssetType::Texture, .path = path };
+  }
+
   std::string prefabBody(const std::string& name)
   {
     const nlohmann::json body = {
@@ -49,6 +54,24 @@ TEST(AssetRegistry, LooksARecordUpByUuidAndByPath)
 
   EXPECT_EQ(registry.getByUUID(missingUUID), nullptr);
   EXPECT_EQ(registry.getByPath("assets/models/nothing.glb"), nullptr);
+}
+
+TEST(AssetRegistry, GetByUUIDOfTypeRejectsAnUnknownOrWrongTypedUUID)
+{
+  AssetRegistry registry;
+  registry.registerAsset(model(modelUUID, "assets/models/cube.glb"));
+  registry.registerAsset(texture(otherUUID, "assets/textures/brick.png"));
+
+  // Positive control: the right uuid with the right type is returned.
+  const auto* asModel = registry.getByUUIDOfType(modelUUID, AssetType::Model);
+  ASSERT_NE(asModel, nullptr);
+  EXPECT_EQ(asModel->path, "assets/models/cube.glb");
+
+  // A texture uuid asked for as a Model must fail safely rather than hand back the wrong record.
+  EXPECT_EQ(registry.getByUUIDOfType(otherUUID, AssetType::Model), nullptr);
+
+  // An unregistered uuid fails the same way regardless of the requested type.
+  EXPECT_EQ(registry.getByUUIDOfType(missingUUID, AssetType::Model), nullptr);
 }
 
 TEST(AssetRegistry, RegisteringAPathTwiceKeepsTheFirstRecord)
