@@ -24,6 +24,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ComponentLookupTest.cpp
+  ComponentRegistryTest.cpp
   AssetRegistryTest.cpp
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
