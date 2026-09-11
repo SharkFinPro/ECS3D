@@ -1,5 +1,7 @@
 #include "Log.h"
+#include <algorithm>
 #include <mutex>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -25,7 +27,13 @@ void Log::addSink(std::shared_ptr<LogSink> sink)
 {
   const std::lock_guard lock(logMutex());
 
-  logSinks().push_back(std::move(sink));
+  auto& sinks = logSinks();
+  if (std::ranges::find(sinks, sink) != sinks.end())
+  {
+    return;
+  }
+
+  sinks.push_back(std::move(sink));
 }
 
 void Log::removeSink(const std::shared_ptr<LogSink>& sink)

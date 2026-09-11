@@ -122,6 +122,22 @@ TEST_F(LogTest, RemoveSinkStopsDeliveryToThatSinkAlone)
   EXPECT_EQ(kept->snapshot().size(), 2u);
 }
 
+TEST_F(LogTest, AddingTheSameSinkTwiceDeliversEachEntryOnce)
+{
+  const auto sink = addRingBuffer();
+  Log::addSink(sink);
+
+  const auto other = addRingBuffer();
+
+  Log::write(LogLevel::info, LogCategory::engine, "once please");
+
+  EXPECT_EQ(sink->snapshot().size(), 1u);
+
+  // Positive control: a distinct sink registered around the same time still receives the entry, so
+  // the count above reflects de-duplication rather than write() failing to deliver at all.
+  EXPECT_EQ(other->snapshot().size(), 1u);
+}
+
 TEST_F(LogTest, WritingWithNoSinksRegisteredDoesNotCrashOrRecordAnything)
 {
   Log::write(LogLevel::error, LogCategory::server, "nowhere to go");
