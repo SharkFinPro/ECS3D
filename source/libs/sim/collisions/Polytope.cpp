@@ -129,9 +129,9 @@ void Polytope::EPA()
       break;
     }
 
-    auto searchDirection = getSearchDirection();
+    const auto searchDirection = glm::normalize(getSearchDirection());
 
-    const auto supportPoint = getSupport(*m_collider, *m_otherCollider, glm::normalize(searchDirection));
+    const auto supportPoint = getSupport(*m_collider, *m_otherCollider, searchDirection);
 
     if (isDuplicateVertex(supportPoint))
     {

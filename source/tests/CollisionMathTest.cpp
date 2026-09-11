@@ -9,6 +9,7 @@
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <utility>
@@ -198,4 +199,40 @@ TEST(ColliderSupport, GetSupportIsTheMinkowskiDifferenceOfTheTwoSupports)
 
   // (1, 1, 1) on the first box minus (4, -1, -1) on the second.
   expectNear(getSupport(*first, *second, direction), glm::vec3(-3, 2, 2));
+}
+
+// A SupportVertex has to carry the same direction the support call was made with, normalized - every
+// consumer that later feeds SupportVertex::direction back into findFurthestPoint (a sphere multiplies it
+// by the radius) relies on that being unit length, not just "some direction".
+TEST(ColliderSupport, SupportVertexBuiltFromANonUnitDirectionStoresAUnitDirection)
+{
+  const auto [object, sphere] = makeCollider<SphereCollider>({ 0, 0, 0 }, { 1, 1, 1 });
+  const auto [otherObject, other] = makeCollider<BoxCollider>({ 5, 0, 0 }, { 1, 1, 1 });
+
+  const glm::vec3 rawDirection{ 3, 0, 0 };
+  const auto normalizedDirection = glm::normalize(rawDirection);
+
+  const auto support = getSupport(*sphere, *other, normalizedDirection);
+  const SupportVertex vertex{ support, normalizedDirection };
+
+  EXPECT_NEAR(glm::length(vertex.direction), 1.0f, 1e-5f);
+
+  // The positive control: feeding the stored direction back into the sphere's support function lands
+  // exactly on its surface, which only holds because the direction is unit length.
+  const auto surfacePoint = sphere->findFurthestPoint(vertex.direction);
+  EXPECT_NEAR(glm::length(surfacePoint - sphere->getPosition()), sphere->getRadius(), 1e-5f);
+}
+
+TEST(ColliderSupport, ReusingTheRawUnnormalizedDirectionMovesTheSphereSupportOffItsSurface)
+{
+  // The failure mode the assertion above guards against: the same call, but with the direction that was
+  // never normalized. This is what a stored SupportVertex::direction used to carry.
+  const auto [object, sphere] = makeCollider<SphereCollider>({ 0, 0, 0 }, { 1, 1, 1 });
+
+  const glm::vec3 rawDirection{ 3, 0, 0 };
+
+  const auto offSurfacePoint = sphere->findFurthestPoint(rawDirection);
+
+  EXPECT_NEAR(glm::length(offSurfacePoint - sphere->getPosition()), rawDirection.x, 1e-5f);
+  EXPECT_GT(glm::length(offSurfacePoint - sphere->getPosition()), sphere->getRadius() + 1e-3f);
 }
