@@ -22,6 +22,11 @@ namespace {
   static_assert(GLFW_MOD_ALT == 0x4);
   static_assert(GLFW_MOD_SUPER == 0x8);
 
+  // Caps Lock (0x10) and Num Lock (0x20) only appear in e.mods when GLFW's lock-key mods are enabled,
+  // which vke does not do today, but masking them keeps a stored chord from silently mismatching if
+  // that ever changes.
+  constexpr int keybindModMask = GLFW_MOD_SHIFT | GLFW_MOD_CONTROL | GLFW_MOD_ALT | GLFW_MOD_SUPER;
+
   bool isModifierKey(const int key)
   {
     return key == GLFW_KEY_LEFT_SHIFT || key == GLFW_KEY_RIGHT_SHIFT || key == GLFW_KEY_LEFT_CONTROL ||
@@ -79,7 +84,7 @@ void KeybindDispatcher::registerWindowEvents()
         else if (!isModifierKey(e.key))
         {
           const auto callback = std::exchange(m_captureCallback, nullptr);
-          callback(KeyChord{ e.key, e.mods });
+          callback(KeyChord{ e.key, e.mods & keybindModMask });
         }
 
         return;
@@ -90,7 +95,7 @@ void KeybindDispatcher::registerWindowEvents()
         return;
       }
 
-      const auto action = m_table->actionFor(KeyChord{ e.key, e.mods });
+      const auto action = m_table->actionFor(KeyChord{ e.key, e.mods & keybindModMask });
       if (!action)
       {
         return;
