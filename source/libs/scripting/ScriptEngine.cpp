@@ -1,4 +1,5 @@
 #include "ScriptEngine.h"
+#include "bindings/BindingCoverage.h"
 #include "bindings/TransformBindings.h"
 #include "bindings/RigidBodyBindings.h"
 #include "bindings/InputUtilsBindings.h"
