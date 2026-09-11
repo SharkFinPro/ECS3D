@@ -161,6 +161,7 @@ EditorApp::EditorApp(LaunchOptions options)
     replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
 
     m_netClient->send(replication::packAddAsset(asset));
+    m_saveUI->markEdited();
   };
 
   // Rename an asset (display-name override only). Same local-apply-then-send shape as addAsset.
@@ -169,6 +170,7 @@ EditorApp::EditorApp(LaunchOptions options)
     replication::applyRenameAsset(*m_assetRegistry, op);
 
     m_netClient->send(replication::packRenameAsset(op));
+    m_saveUI->markEdited();
   };
 
   // Delete an asset: same local-apply-then-send shape. Deletion always succeeds; references dangle
@@ -178,6 +180,7 @@ EditorApp::EditorApp(LaunchOptions options)
     replication::applyRemoveAsset(*m_assetRegistry, op);
 
     m_netClient->send(replication::packRemoveAsset(op));
+    m_saveUI->markEdited();
   };
 
   // How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
@@ -223,6 +226,7 @@ EditorApp::EditorApp(LaunchOptions options)
   const auto editComponent = [this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
     const auto message = replication::buildComponentEdit(objectUUID, component);
     m_netClient->send(message);
+    m_saveUI->markEdited();
   };
 
   // A structural change (add/remove/reparent object, add/remove component, rename, add script): the
@@ -236,6 +240,7 @@ EditorApp::EditorApp(LaunchOptions options)
       message.write(chunk);
     }
     m_netClient->send(message);
+    m_saveUI->markEdited();
   };
 
   m_selection = std::make_shared<EditorSelection>();
@@ -675,6 +680,10 @@ void EditorApp::handleSceneStatus(const net::Message& message)
 
 void EditorApp::updateGui()
 {
+  // Drawn regardless of the GUI toggle below: a window-close request can arrive while the GUI is
+  // hidden, and the prompt must not be hideable out from under the user.
+  m_saveUI->displayUnsavedChangesModal();
+
   if (!m_shouldDisplayGui)
   {
     return;
@@ -725,12 +734,12 @@ void EditorApp::displayMenuBar() const
       ImGui::BeginDisabled(!m_serverEditable);
       if (ImGui::MenuItem("New"))
       {
-        m_saveUI->createNewProject();
+        m_saveUI->requestNewProject();
       }
 
       if (ImGui::MenuItem("Open"))
       {
-        m_saveUI->open();
+        m_saveUI->requestOpen();
       }
       ImGui::EndDisabled();
 
