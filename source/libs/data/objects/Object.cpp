@@ -45,9 +45,13 @@ void Object::loadChildren(const nlohmann::json& childrenData, const std::size_t 
 
     m_manager->addObject(child);
 
-    if (childData.contains("children"))
+    // serialize() always writes "children" as an array, empty for a leaf, so contains() alone cannot
+    // tell a leaf from an internal node - it would recurse one call past every leaf just to iterate
+    // nothing, and that phantom call's own depth check would reject a tree at exactly maxObjectDepth.
+    if (const auto childrenIt = childData.find("children");
+        childrenIt != childData.end() && !childrenIt->empty())
     {
-      child->loadChildren(childData["children"], depth + 1);
+      child->loadChildren(*childrenIt, depth + 1);
     }
   }
 }
