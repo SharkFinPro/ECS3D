@@ -20,6 +20,7 @@
 #include <tuple>
 #include <unordered_set>
 #include <uuid.h>
+#include <vector>
 
 // Integration coverage for the data-layer half of prefab instantiation: registering a body, cloning it
 // into a scene through the instantiatePrefab sceneEdit op, and the update-in-place/detached-instance
@@ -75,9 +76,11 @@ namespace {
   // Object::serialize() builds "components" from an unordered_map, so its array order is unspecified and
   // varies with insertion history - sort it by a stable key before comparing two bodies positionally.
   // "children" comes from a vector, so its order is meaningful and left alone; only recurse into it.
+  // nlohmann's iterators are only bidirectional, so std::ranges::sort can't run on the json array itself -
+  // sort a plain vector copy and assign it back.
   nlohmann::json canonicalBody(nlohmann::json body)
   {
-    auto& components = body.at("components");
+    auto components = body.at("components").get<std::vector<nlohmann::json>>();
     std::ranges::sort(components, [](const nlohmann::json& lhs, const nlohmann::json& rhs)
     {
       const auto lhsSubType = lhs.value("subType", std::string());
@@ -85,6 +88,7 @@ namespace {
 
       return std::tie(lhs.at("type"), lhsSubType) < std::tie(rhs.at("type"), rhsSubType);
     });
+    body["components"] = std::move(components);
 
     for (auto& child : body.at("children"))
     {
