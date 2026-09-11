@@ -140,12 +140,22 @@ public:
     }
   }
 
-  // Reads a length-prefixed string written by Message::writeString.
+  // Reads a length-prefixed string written by Message::writeString. Both the length prefix and the size
+  // it names are checked before m_offset moves at all, so a throw here leaves the reader exactly where it
+  // was - a caller that catches and retries (or reads the same bytes as something else) sees no partial
+  // advance.
   [[nodiscard]] std::string readString() {
-    const auto size = read<uint32_t>();
-    if (size > m_data.size() - m_offset)
+    if (sizeof(uint32_t) > m_data.size() - m_offset)
       throw std::runtime_error("Message underflow");
 
+    std::array<uint8_t, sizeof(uint32_t)> lengthRaw{};
+    std::memcpy(lengthRaw.data(), m_data.data() + m_offset, sizeof(uint32_t));
+    const auto size = std::bit_cast<uint32_t>(lengthRaw);
+
+    if (size > m_data.size() - m_offset - sizeof(uint32_t))
+      throw std::runtime_error("Message underflow");
+
+    m_offset += sizeof(uint32_t);
     std::string value(reinterpret_cast<const char*>(m_data.data() + m_offset), size);
     m_offset += size;
     return value;
