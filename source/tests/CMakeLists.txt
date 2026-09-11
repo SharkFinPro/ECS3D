@@ -42,6 +42,7 @@ add_executable(${PROJECT_NAME}
   RuntimeComponentTest.cpp
   RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
+  ObjectManagerTest.cpp
   SceneEditTest.cpp
   ProtocolFramingTest.cpp
   WireTypesTest.cpp
