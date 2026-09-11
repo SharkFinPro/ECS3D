@@ -1,7 +1,6 @@
 #include "SaveUI.h"
 #include <ProjectSerializer.h>
 #include <VulkanEngine/VulkanEngine.h>
-#include <GLFW/glfw3.h>
 #include <nfd.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
@@ -23,9 +22,7 @@ SaveUI::~SaveUI()
 {
   if (m_renderer)
   {
-    const auto window = m_renderer->getWindow();
-    window->removeListener(m_keyCallbackEventListener);
-    window->removeListener(m_dropEventListener);
+    m_renderer->getWindow()->removeListener(m_dropEventListener);
   }
 }
 
@@ -206,21 +203,6 @@ bool SaveUI::createSaveFile()
 void SaveUI::registerWindowEvents()
 {
   const auto window = m_renderer->getWindow();
-
-  // Capture only `this` (not the window shared_ptr) to avoid a window->listener->lambda->window cycle.
-  m_keyCallbackEventListener = window->on<vke::KeyCallbackEvent>([this, window](const vke::KeyCallbackEvent& e) {
-    if (e.action == GLFW_PRESS && window->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && window->keyIsPressed(GLFW_KEY_S))
-    {
-      if (window->keyIsPressed(GLFW_KEY_LEFT_SHIFT))
-      {
-        saveAs();
-      }
-      else
-      {
-        save();
-      }
-    }
-  });
 
   m_dropEventListener = window->on<vke::DropEvent>([this](const vke::DropEvent& e) {
     if (!m_editable)

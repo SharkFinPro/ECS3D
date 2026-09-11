@@ -1,10 +1,13 @@
 #include "SettingsPanel.h"
 #include "EditorTheme.h"
 #include "GuiComponents.h"
+#include "KeybindDispatcher.h"
+#include <Keybinds.h>
 #include <SettingsStore.h>
 #include <imgui.h>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -41,8 +44,10 @@ namespace {
   }
 }
 
-SettingsPanel::SettingsPanel(SettingsStore& settings)
-  : m_settings(&settings), m_open(settings.get<bool>(openKey, false))
+SettingsPanel::SettingsPanel(SettingsStore& settings, std::shared_ptr<KeybindTable> keybindTable,
+                             std::shared_ptr<KeybindDispatcher> keybindDispatcher)
+  : m_settings(&settings), m_keybindTable(std::move(keybindTable)),
+    m_keybindDispatcher(std::move(keybindDispatcher)), m_open(settings.get<bool>(openKey, false))
 {}
 
 void SettingsPanel::applyStoredTheme(const SettingsStore& settings)
@@ -199,6 +204,167 @@ void SettingsPanel::displayKeybinds()
 {
   gc::sectionLabel("Keybinds");
 
-  gc::emptyState(gc::SecIcon::block, "Keybinds are not remappable yet",
-                 "The editor's bindings are fixed. This is where they will be edited.");
+  ImGui::TextColored(theme::t2, "Click Rebind, then press the new key combination.");
+
+  ImGui::Spacing();
+
+  if (ImGui::Button("Reset all to defaults"))
+  {
+    m_keybindTable->resetAll(*m_settings);
+    m_capturingAction.reset();
+  }
+
+  ImGui::Spacing();
+
+  constexpr ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH;
+  if (ImGui::BeginTable("KeybindTable", 3, flags))
+  {
+    ImGui::TableSetupColumn("Action");
+    ImGui::TableSetupColumn("Binding", ImGuiTableColumnFlags_WidthFixed, 180.0f);
+    ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 210.0f);
+    ImGui::TableHeadersRow();
+
+    for (const auto& info : editorActions())
+    {
+      ImGui::PushID(info.id);
+      ImGui::TableNextRow();
+
+      if (m_scrollToAction == info.action)
+      {
+        ImGui::SetScrollHereY();
+        m_scrollToAction.reset();
+      }
+
+      ImGui::TableSetColumnIndex(0);
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted(info.label);
+
+      ImGui::TableSetColumnIndex(1);
+      ImGui::AlignTextToFramePadding();
+      const bool capturingThis = m_capturingAction == info.action;
+      if (capturingThis)
+      {
+        ImGui::TextColored(theme::accent, "Press a key... Esc to cancel");
+      }
+      else if (const auto chord = m_keybindTable->binding(info.action))
+      {
+        ImGui::TextUnformatted(formatChord(*chord).c_str());
+      }
+      else
+      {
+        ImGui::TextColored(theme::t3, "Unbound");
+      }
+
+      ImGui::TableSetColumnIndex(2);
+      if (ImGui::Button(capturingThis ? "Cancel" : "Rebind"))
+      {
+        if (capturingThis)
+        {
+          m_capturingAction.reset();
+        }
+        else
+        {
+          beginCaptureFor(info.action);
+        }
+      }
+
+      ImGui::SameLine();
+      ImGui::BeginDisabled(!m_keybindTable->binding(info.action));
+      if (ImGui::Button("Unbind"))
+      {
+        m_keybindTable->unbind(info.action, *m_settings);
+        m_capturingAction.reset();
+      }
+      ImGui::EndDisabled();
+
+      ImGui::SameLine();
+      if (ImGui::Button("Reset"))
+      {
+        const auto outcome = m_keybindTable->reset(info.action, *m_settings);
+        if (outcome.result == KeybindTable::AssignResult::refused)
+        {
+          m_conflict = KeybindConflict{ info.action, *outcome.heldBy, *actionInfo(info.action).defaultChord, false };
+        }
+        m_capturingAction.reset();
+      }
+
+      ImGui::PopID();
+    }
+
+    ImGui::EndTable();
+  }
+
+  displayKeybindConflictModal();
+}
+
+void SettingsPanel::beginCaptureFor(const EditorAction action)
+{
+  m_capturingAction = action;
+
+  m_keybindDispatcher->beginCapture([this, action](const KeyChord& chord) {
+    m_capturingAction.reset();
+
+    const auto outcome = m_keybindTable->assign(action, chord, *m_settings);
+    if (outcome.result == KeybindTable::AssignResult::refused)
+    {
+      m_conflict = KeybindConflict{ action, *outcome.heldBy, chord };
+    }
+  });
+}
+
+void SettingsPanel::displayKeybindConflictModal()
+{
+  if (!m_conflict.has_value())
+  {
+    return;
+  }
+
+  constexpr const char* popupName = "Keybind Conflict";
+
+  // Captured before any button below can reset m_conflict, so the second button's visibility check never
+  // reads through a cleared optional.
+  const bool offerChooseAnother = m_conflict->offerChooseAnother;
+
+  ImGui::OpenPopup(popupName);
+
+  if (ImGui::BeginPopupModal(popupName, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+  {
+    ImGui::Text("%s is already bound to", formatChord(m_conflict->requested).c_str());
+    ImGui::SameLine();
+    ImGui::TextColored(theme::accent, "%s", actionInfo(m_conflict->heldBy).label);
+    ImGui::TextColored(theme::t3, "Choose a different key, or go there to change it first.");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // No reassign option: displacing the holder would leave a previously working action silently
+    // unbound, and the person who caused it is the least likely to notice.
+    if (ImGui::Button("Go to binding", ImVec2(150, 0)))
+    {
+      m_scrollToAction = m_conflict->heldBy;
+      m_conflict.reset();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+
+    if (offerChooseAnother)
+    {
+      if (ImGui::Button("Choose another key", ImVec2(150, 0)))
+      {
+        const auto action = m_conflict->action;
+        m_conflict.reset();
+        ImGui::CloseCurrentPopup();
+        beginCaptureFor(action);
+      }
+    }
+    else if (ImGui::Button("Close", ImVec2(150, 0)))
+    {
+      m_conflict.reset();
+      ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+  }
 }
