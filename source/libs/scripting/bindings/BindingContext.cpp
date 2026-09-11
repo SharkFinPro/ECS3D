@@ -51,6 +51,17 @@ std::vector<uuids::uuid> BindingContext::takeDestroyed()
 
 void BindingContext::recordComponentEdit(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)
 {
+  // Two setters on the same component in one tick (e.g. setModel then setTexture) would otherwise queue
+  // two entries; the drain packs the component's current state either way, so the second is a byte-identical
+  // broadcast. The buffer is small and drained every tick, so a linear scan beats a map here.
+  for (const auto& [existingUUID, existingComponent] : s_componentEdits)
+  {
+    if (existingUUID == objectUUID && existingComponent == component)
+    {
+      return;
+    }
+  }
+
   s_componentEdits.emplace_back(objectUUID, component);
 }
 
