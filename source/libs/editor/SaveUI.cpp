@@ -371,7 +371,9 @@ void SaveUI::displayUnsavedChangesModal()
 
     ImGui::SameLine();
 
-    if (ImGui::Button("Cancel", ImVec2(100, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    // No Escape shortcut here: vke::Window::update() quits on Escape held regardless of this modal, so
+    // binding Escape to Cancel would make it read as "dismiss the prompt" while it actually closes the app.
+    if (ImGui::Button("Cancel", ImVec2(100, 0)))
     {
       m_showUnsavedChangesModal = false;
       m_pendingDiscard = PendingDiscard::none;
