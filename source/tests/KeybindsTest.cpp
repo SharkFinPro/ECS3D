@@ -344,3 +344,43 @@ TEST_F(Keybinds, AHandEditedGarbageValueFallsBackToTheDefault)
 
   EXPECT_EQ(table.binding(EditorAction::saveProject), parseChord("Ctrl+S"));
 }
+
+TEST_F(Keybinds, KeyCodeFallbackRejectsAnOverflowingNumberInsteadOfThrowing)
+{
+  EXPECT_FALSE(parseChord("Key99999999999999").has_value());
+}
+
+TEST_F(Keybinds, KeyCodeFallbackRejectsTrailingJunkAfterTheDigits)
+{
+  EXPECT_FALSE(parseChord("Key12x").has_value());
+}
+
+TEST_F(Keybinds, KeyCodeFallbackRejectsAnEmptyNumber)
+{
+  EXPECT_FALSE(parseChord("Key").has_value());
+}
+
+TEST_F(Keybinds, KeyCodeFallbackRejectsANegativeNumber)
+{
+  EXPECT_FALSE(parseChord("Key-1").has_value());
+}
+
+TEST_F(Keybinds, PositiveControlKeyCodeFallbackRoundTripsAValidCode)
+{
+  // The control for the four rejections above: a well-formed "Key<code>" still parses.
+  const auto chord = parseChord("Key65");
+
+  ASSERT_TRUE(chord.has_value());
+  EXPECT_EQ(chord->key, 65);
+}
+
+TEST_F(Keybinds, LoadFallsBackToTheDefaultWhenAStoredKeyCodeOverflows)
+{
+  writeFile(R"({"keybinds.saveProject": "Key99999999999999"})");
+
+  const SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  EXPECT_EQ(table.binding(EditorAction::saveProject), parseChord("Ctrl+S"));
+}

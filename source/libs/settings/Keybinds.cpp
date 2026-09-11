@@ -2,6 +2,7 @@
 #include "SettingsStore.h"
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 
 namespace {
   constexpr int modShift = 0x1;
@@ -104,11 +105,18 @@ std::optional<KeyChord> parseChord(const std::string_view text)
 
   // "Key<code>" is the fallback spelling formatChord() uses for a key outside the named set above (e.g.
   // a punctuation or numpad key captured by a rebind), so every chord it produces round-trips back here.
-  if (keyToken.size() > 3 && ieq(keyToken.substr(0, 3), "Key") &&
-      std::all_of(keyToken.begin() + 3, keyToken.end(),
-                  [](const char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; }))
+  // std::from_chars rather than std::stoi: a hand-edited settings file can carry an out-of-range or
+  // malformed number, and stoi throws on that instead of reporting it as unparseable.
+  if (keyToken.size() > 3 && ieq(keyToken.substr(0, 3), "Key"))
   {
-    return KeyChord{ std::stoi(std::string(keyToken.substr(3))), mods };
+    const auto digits = keyToken.substr(3);
+    int value = 0;
+    const auto [ptr, ec] = std::from_chars(digits.data(), digits.data() + digits.size(), value);
+
+    if (ec == std::errc{} && ptr == digits.data() + digits.size() && value >= 0)
+    {
+      return KeyChord{ value, mods };
+    }
   }
 
   return std::nullopt;
