@@ -29,6 +29,7 @@
 | `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` option, MSVC export-all-symbols. Then `add_subdirectory(source)`. |
 | `CMakePresets.json` | Configure presets only: `ecs3d-debug`, `ecs3d-release`, `ecs3d-sanitize`, writing to `cmake-build-ecs3d-debug` / `-release` / `-sanitize`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
+| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for a future editor console panel), and the process-wide `Log` facade. Depends on nothing but the standard library. Sink-only so far — existing `std::cout`/`std::cerr` call sites have not been migrated to it yet. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
 | `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk, plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW's numeric key/mod values spelled out as literals so this library still depends on nothing but json. **Not** project data: see Development Principles. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
@@ -84,7 +85,7 @@
   suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
   defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
   empty test set and would otherwise report green for a suite that registered nothing.
-- **Dependency direction (must hold):** `protocol` → nothing. `settings` → nothing (+ json). `data` →
+- **Dependency direction (must hold):** `log` → nothing. `protocol` → nothing. `settings` → nothing (+ json). `data` →
   protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd. `net`/`scripting` →
   data + clrHost. Apps compose these. **`data` must never gain a Vulkan or ImGui include** — that
