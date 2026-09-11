@@ -21,6 +21,7 @@ namespace {
   static_assert(GLFW_MOD_CONTROL == 0x2);
   static_assert(GLFW_MOD_ALT == 0x4);
   static_assert(GLFW_MOD_SUPER == 0x8);
+  static_assert(GLFW_KEY_UNKNOWN == -1);
 
   // Caps Lock (0x10) and Num Lock (0x20) only appear in e.mods when GLFW's lock-key mods are enabled,
   // which vke does not do today, but masking them keeps a stored chord from silently mismatching if
@@ -81,7 +82,7 @@ void KeybindDispatcher::registerWindowEvents()
         {
           m_captureCallback = nullptr;
         }
-        else if (!isModifierKey(e.key))
+        else if (e.key >= 0 && !isModifierKey(e.key))
         {
           const auto callback = std::exchange(m_captureCallback, nullptr);
           callback(KeyChord{ e.key, e.mods & keybindModMask });

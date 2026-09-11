@@ -160,7 +160,13 @@ std::string formatChord(const KeyChord& chord)
     }
   }
 
-  append("Key" + std::to_string(chord.key));
+  // A negative key (GLFW_KEY_UNKNOWN and friends) is never a real chord; the capture path already
+  // refuses to store one, but formatChord must not manufacture "Key-1" if one reaches it regardless.
+  if (chord.key >= 0)
+  {
+    append("Key" + std::to_string(chord.key));
+  }
+
   return result;
 }
 
