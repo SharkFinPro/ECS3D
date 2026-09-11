@@ -578,6 +578,24 @@ namespace gc {
     return edited;
   }
 
+  // Relative luminance of `c` (WCAG formula, sRGB gamma removed), used to pick a legible text color
+  // against an arbitrary background - the theme's colors are user-editable, so a fixed text color would
+  // go illegible under some palettes.
+  inline float relativeLuminance(const ImVec4& c)
+  {
+    const auto linearize = [](const float u)
+    {
+      return u <= 0.03928f ? u / 12.92f : std::pow((u + 0.055f) / 1.055f, 2.4f);
+    };
+    return 0.2126f * linearize(c.x) + 0.7152f * linearize(c.y) + 0.0722f * linearize(c.z);
+  }
+
+  // Black or white, whichever reads better on top of `bg`.
+  inline ImVec4 contrastOn(const ImVec4& bg)
+  {
+    return relativeLuminance(bg) > 0.5f ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+  }
+
   // An accent track slider with a glowing thumb (Friction / Mass / Scale All in the mockup).
   // Label sits in the left column; the value is drawn right-aligned inside the track.
   inline bool accentSlider(const char* label, float* v, const float min, const float max)
@@ -625,11 +643,24 @@ namespace gc {
     dl->AddCircleFilled(ImVec2(fillX, cy), 9.0f, theme::u32(theme::accdim));
     dl->AddCircleFilled(ImVec2(fillX, cy), 7.0f, theme::u32(theme::accent));
 
-    // Value, right-aligned inside the track.
+    // Value, right-aligned inside the track. Drawn twice, clipped at the fill boundary, each half in
+    // whichever of black/white contrasts with what is actually behind it (the fill color, then the empty
+    // track color) - both are user-editable via Settings > Appearance, so a fixed text color can't be
+    // trusted to stay legible against either.
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%.3f", *v);
     const ImVec2 vts = ImGui::CalcTextSize(buf);
-    dl->AddText(ImVec2(pos.x + width - vts.x - 10.0f, cy - vts.y * 0.5f), theme::u32(theme::t1), buf);
+    const ImVec2 textPos(pos.x + width - vts.x - 10.0f, cy - vts.y * 0.5f);
+    const ImU32 colOnFill = theme::u32(contrastOn(theme::accent));
+    const ImU32 colOnTrack = theme::u32(contrastOn(theme::inset));
+
+    dl->PushClipRect(ImVec2(pos.x, pos.y), ImVec2(fillX, pos.y + h), true);
+    dl->AddText(textPos, colOnFill, buf);
+    dl->PopClipRect();
+
+    dl->PushClipRect(ImVec2(fillX, pos.y), ImVec2(pos.x + width, pos.y + h), true);
+    dl->AddText(textPos, colOnTrack, buf);
+    dl->PopClipRect();
 
     return edited;
   }
