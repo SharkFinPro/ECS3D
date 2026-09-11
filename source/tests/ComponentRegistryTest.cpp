@@ -37,6 +37,16 @@ namespace {
     }
     return joined;
   }
+
+  std::vector<std::string> wireTableNames()
+  {
+    std::set<std::string> wireNameSet;
+    for (const auto& [type, key] : componentTypeToRegistryKey)
+    {
+      wireNameSet.insert(key);
+    }
+    return std::vector<std::string>(wireNameSet.begin(), wireNameSet.end());
+  }
 }
 
 TEST(ComponentRegistry, RegistersEveryDataComponentTypeUnderItsOwnName)
@@ -147,22 +157,12 @@ TEST(ComponentRegistry, TheTypeStringSerializeWritesResolvesBackThroughTheRegist
 
 TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableExactly)
 {
-  // componentTypeToRegistryKey is Object::unpack's only route from a wire ComponentType back to a
-  // ComponentRegistry factory name. A name registered here but absent from that table builds, saves and
-  // loads through JSON without ever failing, then breaks silently the first time it is reconstructed off
-  // the wire; a name in that table but never registered fails every unpack immediately. Neither direction
-  // is covered by RegistersEveryDataComponentTypeUnderItsOwnName above, which only ever walks the wire
-  // table forward and so cannot see a registered name the table omits.
+  // A name registered here but missing from componentTypeToRegistryKey breaks only when the object is
+  // reconstructed off the wire, not when it builds, saves or loads through JSON.
   ComponentRegistry registry;
   registerDataComponents(registry);
 
-  std::set<std::string> wireNameSet;
-  for (const auto& [type, key] : componentTypeToRegistryKey)
-  {
-    wireNameSet.insert(key);
-  }
-  const std::vector<std::string> wireNames(wireNameSet.begin(), wireNameSet.end());
-
+  const auto wireNames = wireTableNames();
   const auto registeredNames = registry.registeredNames();
 
   const auto registeredButNotOnWire = namesMissingFrom(wireNames, registeredNames);
@@ -178,22 +178,14 @@ TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableExactly)
 
 TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableComparisonCatchesAnExtraName)
 {
-  // Positive control for the test above: prove the comparison actually fails when the two sides diverge,
-  // rather than passing vacuously. An extra name registered outside registerDataComponents must show up
-  // as exactly the one name the wire table doesn't know about.
+  // Positive control: proves the comparison above actually fails when the two sides diverge, not that it
+  // passes vacuously.
   ComponentRegistry registry;
   registerDataComponents(registry);
   registry.registerComponent("NotOnTheWireTable", [] { return std::make_shared<Transform>(); });
 
-  std::set<std::string> wireNameSet;
-  for (const auto& [type, key] : componentTypeToRegistryKey)
-  {
-    wireNameSet.insert(key);
-  }
-  const std::vector<std::string> wireNames(wireNameSet.begin(), wireNameSet.end());
+  const auto registeredButNotOnWire = namesMissingFrom(wireTableNames(), registry.registeredNames());
 
-  const auto registeredButNotOnWire = namesMissingFrom(wireNames, registry.registeredNames());
-
-  ASSERT_EQ(registeredButNotOnWire.size(), 1);
+  ASSERT_EQ(registeredButNotOnWire.size(), 1u);
   EXPECT_EQ(registeredButNotOnWire.front(), "NotOnTheWireTable");
 }
