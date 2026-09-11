@@ -274,6 +274,15 @@ void SaveUI::guardDiscard(const PendingDiscard action, std::string path)
     return;
   }
 
+  // A discard is already pending an answer (e.g. a drag-and-drop drop fires straight from GLFW and isn't
+  // blocked by the modal the way menu items are) - don't let a second request steal the first one's answer.
+  if (m_showUnsavedChangesModal)
+  {
+    std::cout << "[SaveUI] Already waiting on an unsaved-changes prompt; ignoring another discard request."
+              << std::endl;
+    return;
+  }
+
   m_pendingDiscard = action;
   m_pendingLoadPath = std::move(path);
   m_showUnsavedChangesModal = true;
