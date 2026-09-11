@@ -11,6 +11,7 @@
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <Protocol.h>
+#include <nlohmann/json.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
