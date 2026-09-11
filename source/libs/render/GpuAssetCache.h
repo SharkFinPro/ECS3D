@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <uuid.h>
 
 namespace vke {
@@ -38,6 +39,12 @@ public:
   // per collider OWNER and rebuilt if the model path changes. The RenderSystem draws it with the
   // objectHighlight pipeline when the collider's render flag is on.
   std::shared_ptr<vke::RenderObject> getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath);
+
+  // Drops the per-owner render object / collider gizmo for any uuid not in liveUUIDs. Called once per
+  // frame from RenderSystem::variableUpdate with the set of objects it just walked, so a deleted
+  // object's GPU resources are released instead of accumulating for the life of the process. Shared
+  // assets (m_models/m_textures, keyed by asset uuid rather than owner) are left alone.
+  void pruneStale(const std::unordered_set<uuids::uuid>& liveUUIDs);
 
 private:
   struct CachedRenderObject {
