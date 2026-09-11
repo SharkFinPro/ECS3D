@@ -61,6 +61,7 @@ bool SaveUI::save()
   // Serialize the editor's replicated project (kept current by snapshots/deltas) straight to disk.
   if (!m_projectSerializer->save(m_saveFile))
   {
+    std::cerr << "[SaveUI] Failed to save project to " << m_saveFile << std::endl;
     return false;
   }
 

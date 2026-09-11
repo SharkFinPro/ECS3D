@@ -307,7 +307,7 @@ EditorApp::EditorApp(LaunchOptions options)
   });
 
   // Save/Save As are wired to the table once SaveUI exists; toggleGui was already wired in setupKeybinds.
-  m_keybindDispatcher->on(EditorAction::saveProject, [this] { m_saveUI->save(); });
+  m_keybindDispatcher->on(EditorAction::saveProject, [this] { static_cast<void>(m_saveUI->save()); });
   m_keybindDispatcher->on(EditorAction::saveProjectAs, [this] { m_saveUI->saveAs(); });
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
@@ -747,7 +747,7 @@ void EditorApp::displayMenuBar() const
 
       if (ImGui::MenuItem("Save", "Ctrl+S"))
       {
-        m_saveUI->save();
+        static_cast<void>(m_saveUI->save());
       }
 
       if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
