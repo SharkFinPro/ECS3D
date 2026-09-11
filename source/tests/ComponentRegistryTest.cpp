@@ -8,6 +8,8 @@
 
 #include <glm/vec3.hpp>
 #include <memory>
+#include <nlohmann/json.hpp>
+#include <string>
 
 TEST(ComponentRegistry, RegistersEveryDataComponentTypeUnderItsOwnName)
 {
