@@ -250,10 +250,10 @@ void ClientApp::applyMessage(const net::Message& message) const
 
 void ClientApp::handleSnapshot(const net::Message& message) const
 {
-  const auto scene = m_sceneManager->getCurrentScene();
-
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
+
+  const auto scene = m_sceneManager->getCurrentScene();
   std::cerr << "[Client] Applied snapshot (" << message.size() << " bytes). Current scene: "
             << (scene ? scene->getName() : "<none>") << " ("
             << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
