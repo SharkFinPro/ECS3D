@@ -12,10 +12,11 @@ namespace vke {
   class VulkanEngine;
 }
 
-// Editor file I/O: native file dialogs + the Ctrl+S keybind + drag-and-drop loading. Save serializes
-// the editor's replicated project straight to disk. Open/New apply the project locally (instant
-// feedback) AND notify via a callback the EditorApp turns into a loadProject command (packing its
-// now-current managers), so the authoritative server reloads + re-snapshots and everyone stays in sync.
+// Editor file I/O: native file dialogs + drag-and-drop loading. save()/saveAs() are invoked by the
+// KeybindDispatcher (Ctrl+S / Ctrl+Shift+S), wired in EditorApp rather than here. Save serializes the
+// editor's replicated project straight to disk. Open/New apply the project locally (instant feedback)
+// AND notify via a callback the EditorApp turns into a loadProject command (packing its now-current
+// managers), so the authoritative server reloads + re-snapshots and everyone stays in sync.
 class SaveUI {
 public:
   using LoadProjectCallback = std::function<void()>;
@@ -54,7 +55,6 @@ private:
 
   bool m_editable = true;
 
-  vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
   vke::EventListener<vke::DropEvent> m_dropEventListener;
 
   [[nodiscard]] bool chooseSaveFile();

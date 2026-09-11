@@ -34,6 +34,7 @@ add_executable(${PROJECT_NAME}
   LightRendererTest.cpp
   CollisionEventTest.cpp
   SettingsStoreTest.cpp
+  KeybindsTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
   StateDeltaTest.cpp

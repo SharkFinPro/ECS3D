@@ -31,6 +31,8 @@ class SaveUI;
 class EditorSelection;
 class SettingsStore;
 class SettingsPanel;
+class KeybindTable;
+class KeybindDispatcher;
 
 namespace net {
   class NetClient;
@@ -101,6 +103,11 @@ private:
   std::unique_ptr<SettingsStore> m_settings;
   std::unique_ptr<SettingsPanel> m_settingsPanel;
 
+  // Named editor actions mapped to key chords, dispatched independently of who handles them (SaveUI,
+  // this class, or nothing yet - see setupKeybinds). Shared with SettingsPanel, which reads/rebinds them.
+  std::shared_ptr<KeybindTable> m_keybindTable;
+  std::shared_ptr<KeybindDispatcher> m_keybindDispatcher;
+
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
   bool m_shouldDisplayGui = true;
@@ -128,8 +135,6 @@ private:
 
   // Edge-detect the mouse so viewport picking only fires on a fresh Ctrl+click.
   bool m_mouseWasPressed = false;
-
-  vke::EventListener<vke::KeyCallbackEvent> m_keyCallbackEventListener;
 
   void createRenderer();
 
