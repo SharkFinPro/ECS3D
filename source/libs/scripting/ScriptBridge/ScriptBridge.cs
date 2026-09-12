@@ -26,20 +26,69 @@ public static class Bridge
     // faulted script's code can change or go away.
     private static readonly HashSet<string> _faulted = new();
 
+    // Console.Error.WriteLine can itself throw (a closed/redirected stderr handle in a service context),
+    // and that must not escape any further than the fault it was reporting would have. Best effort only -
+    // if this fails too there is nothing left to do without risking the same escape again.
+    private static void SafeWriteError(string message)
+    {
+        try
+        {
+            Console.Error.WriteLine(message);
+        }
+        catch
+        {
+        }
+    }
+
+    // Reading ex.Message/ex.StackTrace can itself throw - a user script can throw a custom Exception
+    // subclass with a hostile override - so the message is built in its own try and falls back to a
+    // hardcoded string that touches nothing on the exception if that happens.
     private static void ReportFault(string uuid, string className, string methodName, Exception ex)
     {
-        Console.Error.WriteLine(
-            $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}; the script has been stopped.\n" +
-            $"{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        string message;
+        try
+        {
+            message = $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}; the script has been stopped.\n" +
+                      $"{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+        }
+        catch
+        {
+            message = $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}, and the exception " +
+                      "could not be described; the script has been stopped.";
+        }
+
+        SafeWriteError(message);
+    }
+
+    // Same reporting shape as ReportFault, worded for reloadScripts()'s stop-everything sweep: the script
+    // isn't being marked faulted here (reloadScripts clears _faulted right after), it's just being told
+    // about instead of silently swallowed the way this line used to.
+    private static void ReportReloadCleanupFault(string uuid, string className, Exception ex)
+    {
+        string message;
+        try
+        {
+            message = $"[Bridge] Script '{className}' on object {uuid} threw in stop() during reload cleanup; " +
+                      $"continuing the reload.\n{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+        }
+        catch
+        {
+            message = $"[Bridge] Script '{className}' on object {uuid} threw in stop() during reload cleanup, and " +
+                      "the exception could not be described; continuing the reload.";
+        }
+
+        SafeWriteError(message);
     }
 
     // Runs a user-script call under the fault gate: skipped if this instance already faulted, and on a
     // caught exception the instance is marked faulted (so later calls skip too) and the failure is
-    // reported once. Returns whether the action actually ran.
-    private static bool RunGuarded(string uuid, string className, string methodName, Action action)
+    // reported once. Returns whether the action actually ran. bypassFaultGate lets a caller run its own
+    // cleanup even on an already-faulted instance (stop() needs this - see its call site).
+    private static bool RunGuarded(string uuid, string className, string methodName, Action action,
+                                   bool bypassFaultGate = false)
     {
         var key = Key(uuid, className);
-        if (_faulted.Contains(key))
+        if (!bypassFaultGate && _faulted.Contains(key))
         {
             return false;
         }
@@ -82,11 +131,20 @@ public static class Bridge
     // Script-to-script access. An object can carry several scripts (one per class), so a script is
     // addressed by type (FindScript<T>) or enumerated for the untyped case (FindScripts). Purely a view
     // over the live instances - ScriptBase exposes these as getScript<T>/getScripts to user scripts.
+    // Faulted instances are excluded: handing one out would let a sibling script call into it directly,
+    // bypassing the fault gate, and a throw from that call would fault the wrong script (the caller).
     internal static T? FindScript<T>(string uuid) where T : ScriptBase =>
-        _instances.Values.OfType<T>().FirstOrDefault(s => s.EntityId == uuid);
+        _instances
+            .Where(kvp => !_faulted.Contains(kvp.Key) && kvp.Value.EntityId == uuid)
+            .Select(kvp => kvp.Value)
+            .OfType<T>()
+            .FirstOrDefault();
 
     internal static IReadOnlyList<ScriptBase> FindScripts(string uuid) =>
-        _instances.Values.Where(s => s.EntityId == uuid).ToList();
+        _instances
+            .Where(kvp => !_faulted.Contains(kvp.Key) && kvp.Value.EntityId == uuid)
+            .Select(kvp => kvp.Value)
+            .ToList();
 
     private static string ReadFileSafe(string path)
     {
@@ -116,7 +174,14 @@ public static class Bridge
     {
         foreach (var instance in _instances.Values)
         {
-            try { instance.stop(); } catch {}
+            try
+            {
+                instance.stop();
+            }
+            catch (Exception ex)
+            {
+                ReportReloadCleanupFault(instance.EntityId, instance.GetType().Name, ex);
+            }
         }
 
         _instances.Clear();
@@ -459,7 +524,13 @@ public static class Bridge
         var className = Marshal.PtrToStringUTF8(classNamePtr)!;
         if (_instances.TryGetValue(Key(uuid, className), out var instance))
         {
-            RunGuarded(uuid, className, nameof(stop), () => instance.stop());
+            // Bypasses the fault gate: native ScriptSystem::stop calls this then unconditionally detaches,
+            // so it is the one place a faulted instance's cleanup hook still has to run - otherwise
+            // whatever it registered or allocated in start() leaks for the life of the process. The
+            // instance is not removed from _instances or _faulted here; it stays resident until
+            // detachScript runs the normal cleanup path rather than firing stop() from inside a catch
+            // block on an object whose invariants may already be broken.
+            RunGuarded(uuid, className, nameof(stop), () => instance.stop(), bypassFaultGate: true);
         }
     }
 
