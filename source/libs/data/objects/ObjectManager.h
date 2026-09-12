@@ -61,8 +61,10 @@ public:
   // Queues object for the next deleteObjectsMarkedForDeletion pass. Idempotent within a tick: marking an
   // object already queued is a no-op, so two paths reacting to the same event in one tick still produce
   // exactly one deletion. Returns true when this call newly marked the object, false when it was already
-  // marked - callers that broadcast a destroy should do so only on true.
-  [[nodiscard]] bool removeObject(const std::shared_ptr<Object>& object);
+  // marked - callers that broadcast a destroy should do so only on true. Not [[nodiscard]]: most callers
+  // (a structural scene edit, a client applying a destroy it was already told about) legitimately ignore
+  // the result.
+  bool removeObject(const std::shared_ptr<Object>& object);
 
   // Drop a subtree that was never fully built. Not the deletion lifecycle: it defers nothing and does not
   // reparent children, it just unregisters what was registered. For a subtree that is already live in the
