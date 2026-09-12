@@ -32,7 +32,7 @@
 | `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for a future editor console panel), and the process-wide `Log` facade. Depends on nothing but the standard library. Sink-only so far — existing `std::cout`/`std::cerr` call sites have not been migrated to it yet. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
 | `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk, plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW's numeric key/mod values spelled out as literals so this library still depends on nothing but json. **Not** project data: see Development Principles. |
-| `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
+| `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`, `edits/` (`EditCommand`/`EditHistory` — the undo/redo stack, see Editor Undo/Redo below). **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune), calling the GJK/EPA narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
 | `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Keybinds lists every `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the Settings panel's rebind capture), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI` (also owns the unsaved-changes gate: New/Open/a dropped file/closing the window all route through a guard that prompts Save/Don't Save/Cancel when a send-path callback has marked the project dirty since the last save/load - the window-close intercept sets its own raw `glfwSetWindowCloseCallback`, since `vke::Window` sets none), `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
@@ -271,6 +271,28 @@ only while the viewport looks through a scene camera (in free-fly the right-drag
 camera, so forwarding it too would turn the player at the same time) **and** `RenderingManager::isSceneFocused()`
 is true — the same signal `vke` gates its free-fly camera on. The keyboard still gates on
 `io.WantCaptureKeyboard`, which only trips for text input, so WASD reaches the game from either view.
+
+**Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
+deliberately headless (`ECS3DData` only) and deliberately not wired to `EditorApp` yet - only the command
+type and the two stacks exist so far. The design decision that shapes it: **undo is a new edit, never a
+local rewind** - undoing sends an ordinary reverse edit back through the normal replication path and waits
+for the rebroadcast like any other change, so the server stays the single source of truth and every
+connected view converges the same way. A command records its target uuid(s) and a before/after state in
+replicated form (a component's `serialize()` blob, an object's name/parent, a whole removed subtree, a
+whole asset record); the payload to send is built on demand from `Replication.h`'s own builders, never
+stored as a built `net::Message` (a `Command` stays a plain, copyable, comparable value that way).
+**Validation happens once, at the moment of undo/redo - never on every snapshot**, which would invalidate
+the whole stack on every structural edit even in single-user editing. It compares the command's
+after-state (undo) or before-state (redo) against the live scene/registry; a mismatch refuses the whole
+edit and drops that entry and everything older still on the stack being popped (undo is sequential -
+skipping a dropped entry to reach an older one would apply reverts out of order), naming which uuid
+conflicted. Not every kind is reversible with the sceneEdit ops that exist today: `removeObject`/
+`removeComponent` would need a one-shot "recreate with this data" op that does not exist, and
+`duplicateObject`/`instantiatePrefab` create a whole subtree that `ObjectManager::removeObject` cannot
+cleanly undo (it reparents children up rather than deleting them) - those kinds are still representable in
+the history but report `notUndoable` instead of sending a lossy or structurally wrong reverse. Wiring the
+editor's four mutation callbacks (component edit, scene edit, add asset, rename/remove asset) through this
+is deliberately a separate, later change.
 
 ## Development Principles
 
