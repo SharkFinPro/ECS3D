@@ -232,9 +232,13 @@ void WorldBindingsProvider::bindDestroyObject(const char* uuid)
   }
 
   // Mark for deletion (never mutate the object list mid script iteration); ServerApp broadcasts the
-  // destroy and calls deleteObjectsMarkedForDeletion after the tick.
-  objectManager->removeObject(object);
-  BindingContext::recordDestroy(parsed.value());
+  // destroy and calls deleteObjectsMarkedForDeletion after the tick. Only record the destroy when this
+  // call newly marked the object - two script paths destroying the same uuid in one tick must still
+  // broadcast exactly once.
+  if (objectManager->removeObject(object))
+  {
+    BindingContext::recordDestroy(parsed.value());
+  }
 }
 
 const char* WorldBindingsProvider::bindRaycast(const float ox, const float oy, const float oz,

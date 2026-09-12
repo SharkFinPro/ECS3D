@@ -242,9 +242,15 @@ void ObjectManager::unpack(net::MessageReader& messageReader)
   }
 }
 
-void ObjectManager::removeObject(const std::shared_ptr<Object>& object)
+bool ObjectManager::removeObject(const std::shared_ptr<Object>& object)
 {
+  if (std::ranges::find(m_objectsToRemove, object) != m_objectsToRemove.end())
+  {
+    return false;
+  }
+
   m_objectsToRemove.push_back(object);
+  return true;
 }
 
 void ObjectManager::deleteObjectsMarkedForDeletion()
