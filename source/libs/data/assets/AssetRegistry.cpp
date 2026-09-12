@@ -3,14 +3,33 @@
 #include <Protocol.h>
 #include <vector>
 
+namespace {
+  // A prefab body is stored dumped (like Script::m_fields on the wire); parse leniently - never throw on a
+  // hand-edited or wire-corrupted blob - and require it to be a usable object. An empty or malformed body
+  // is refused rather than registered, matching the guarantee getPrefabBody/loadFromJSON already rely on:
+  // any registered prefab has a body ObjectManager::instantiate can actually use.
+  bool isUsablePrefabBody(const std::string& body)
+  {
+    const auto parsed = nlohmann::json::parse(body, nullptr, false);
+
+    return !parsed.is_discarded() && parsed.is_object();
+  }
+}
+
 void AssetRegistry::registerAsset(const AssetRecord& record)
 {
+  if (record.type == AssetType::Prefab && !isUsablePrefabBody(record.body))
+  {
+    return;
+  }
+
   if (const auto pathIt = m_loadedPaths.find(record.path);
       !record.path.empty() && pathIt != m_loadedPaths.end())
   {
     // A prefab is the one asset whose payload can change after registration: re-saving an object under an
     // existing prefab name updates the body in place and KEEPS the original uuid, so a script or scene
     // holding that uuid keeps working. Every other type is first-wins (re-importing a file is a no-op).
+    // The body was already validated above, so a corrupt update never overwrites a good one.
     if (const auto existing = m_assets.find(pathIt->second);
         record.type == AssetType::Prefab && existing != m_assets.end()
         && existing->second.type == AssetType::Prefab)
@@ -221,18 +240,13 @@ void AssetRegistry::loadFromJSON(const nlohmann::json& assetsData)
   {
     for (const auto& assetData : assetsData.at("prefabs"))
     {
-      // A prefab without a usable body is nothing - drop it rather than register a record that can never
-      // instantiate (serialize() writes null for a body it couldn't parse).
-      if (!assetData.contains("body") || !assetData.at("body").is_object())
-      {
-        continue;
-      }
-
+      // A prefab without a usable body is nothing - registerAsset refuses it (the same check every other
+      // entry point funnels through), so a missing/non-object body just never becomes a record.
       registerAsset({
         .uuid = uuids::uuid::from_string(std::string(assetData.at("uuid"))).value(),
         .type = AssetType::Prefab,
         .path = assetData.at("name"),                 // prefabs key off their display name
-        .body = assetData.at("body").dump(),
+        .body = assetData.value("body", nlohmann::json()).dump(),
         .displayName = assetData.value("displayName", std::string{})
       });
     }
