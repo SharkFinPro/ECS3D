@@ -158,8 +158,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/sphere_3.glb"))
       {
-        gizmo->setPosition(transform->getPosition() + sphere->getLocalPosition());
-        gizmo->setScale(transform->getScale() * sphere->getLocalRadius());
+        gizmo->setPosition(sphere->getPosition());
+        gizmo->setScale(glm::vec3(sphere->getRadius()));
 
         renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
       }
