@@ -19,6 +19,7 @@
 #include <uuid.h>
 
 namespace {
+  using fixtures::expectNear;
   using fixtures::makeScene;
   using fixtures::positionOf;
   using fixtures::Scene;
@@ -314,6 +315,57 @@ TEST(CollisionEvent, ASolidContactPushesTheBodyOut)
   // between solid colliders both reports the contact and corrects the overlap.
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
   EXPECT_NE(positionOf(moving), glm::vec3(0, 0, 0));
+}
+
+TEST(CollisionEvent, TwoGenuineContactsInOneTickBothPushTheBodyClear)
+{
+  const auto scene = makeScene();
+
+  // Overlaps both by a different amount on a different axis, so a response that resolved only one of
+  // them - or resolved one twice - would leave a gap in the final position rather than a subtler numeric
+  // drift. The other two axes line up exactly with each candidate, which is what makes the overlap on
+  // its own axis the shallowest one the narrow phase can find.
+  const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true);
+  const auto shallow = addBody(scene, "Shallow", { 1.5f, 0, 0 }, false);
+  const auto deep = addBody(scene, "Deep", { 0, 1.0f, 0 }, false);
+
+  CollisionSystem collisionSystem;
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, shallow));
+  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, deep));
+
+  // Both contacts are real, so the multi-contact path has to resolve both in the same tick: 0.5 clear of
+  // Shallow on x, 1.0 clear of Deep on y.
+  expectNear(positionOf(moving), { -0.5f, -1.0f, 0 }, 1e-3f);
+}
+
+TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
+{
+  // The positive control for the test above: resolving Shallow or Deep on its own has to move Moving by
+  // exactly the piece the combined tick attributed to it, or the combined result could be two contacts
+  // agreeing on a coincidentally plausible sum rather than each genuinely being resolved.
+  {
+    const auto scene = makeScene();
+    const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true);
+    addBody(scene, "Shallow", { 1.5f, 0, 0 }, false);
+
+    CollisionSystem collisionSystem;
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    expectNear(positionOf(moving), { -0.5f, 0, 0 }, 1e-3f);
+  }
+
+  {
+    const auto scene = makeScene();
+    const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true);
+    addBody(scene, "Deep", { 0, 1.0f, 0 }, false);
+
+    CollisionSystem collisionSystem;
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    expectNear(positionOf(moving), { 0, -1.0f, 0 }, 1e-3f);
+  }
 }
 
 TEST(CollisionEvent, ResetForgetsThePreviousTick)
