@@ -544,6 +544,21 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   catch (const std::exception& e)
   {
     logMessage("Error", std::string("Failed to load project from editor: ") + e.what());
+
+    // unpack parses into locals and only swaps on failure-free completion, so a throw leaves the current
+    // scene untouched - the same one whose scripts were just stopped. Restart them so it keeps responding.
+    if (const auto scene = m_sceneManager->getCurrentScene())
+    {
+      try
+      {
+        m_scriptSystem->start(*scene->getObjectManager());
+      }
+      catch (const std::exception& startError)
+      {
+        logMessage("Error", startError.what());
+      }
+    }
+
     return;
   }
 
