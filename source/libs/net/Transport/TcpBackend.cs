@@ -22,11 +22,19 @@ internal sealed class TcpBackend : TransportBackend
   private volatile bool _serverRunning;
 
   private readonly List<TcpClient> _clients = new();
+  // Accepted sockets that have not yet cleared the handshake. Tracked separately from _clients so an
+  // unauthorized peer is never on the broadcast list, and so ServerStop still closes it.
+  private readonly List<TcpClient> _pending = new();
   private readonly object _clientsLock = new();
 
   // A stable, monotonically-increasing id handed to each accepted connection, surfaced to C++ on every
   // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
   private int _nextConnId;
+
+  // Bounds how long an accepted socket may sit unauthorized before it is dropped. Without this, a peer
+  // that opens a connection and sends nothing holds a thread and a socket - and, before this change,
+  // a spot on the broadcast list - forever.
+  private const int HandshakeTimeoutMs = 5000;
 
   // -- Client --
   private TcpClient? _client;
@@ -68,6 +76,13 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _clients.Clear();
+
+      foreach (var client in _pending)
+      {
+        try { client.Close(); } catch { /* ignore */ }
+      }
+
+      _pending.Clear();
     }
   }
 
@@ -124,9 +139,11 @@ internal sealed class TcpBackend : TransportBackend
 
       var connId = Interlocked.Increment(ref _nextConnId);
 
+      // Not added to _clients yet - it has not proven itself with a handshake, and _clients is the
+      // broadcast list. Tracked in _pending instead so ServerStop can still close it.
       lock (_clientsLock)
       {
-        _clients.Add(client);
+        _pending.Add(client);
       }
 
       var thread = new Thread(() => ServerReceiveLoop(client, connId))
@@ -145,10 +162,21 @@ internal sealed class TcpBackend : TransportBackend
       var stream = client.GetStream();
 
       // The first frame must be the handshake. Authorize from it (e.g. reject an editor against a
-      // play-only server, or one with a bad token) before delivering any protocol message to C++.
+      // play-only server, or one with a bad token) before delivering any protocol message to C++, and
+      // before this socket is added to the broadcast list. Timed, so a peer that never sends anything
+      // doesn't hold the thread and its spot in _pending forever.
+      client.ReceiveTimeout = HandshakeTimeoutMs;
       if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes) &&
           handshakeType == HandshakeType && Authorize(handshakePayload))
       {
+        client.ReceiveTimeout = 0;
+
+        lock (_clientsLock)
+        {
+          _pending.Remove(client);
+          _clients.Add(client);
+        }
+
         while (_serverRunning)
         {
           if (!ReadFrame(stream, out var type, out var payload))
@@ -172,6 +200,7 @@ internal sealed class TcpBackend : TransportBackend
     lock (_clientsLock)
     {
       _clients.Remove(client);
+      _pending.Remove(client);
     }
 
     try { client.Close(); } catch { /* ignore */ }
