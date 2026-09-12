@@ -5,6 +5,7 @@
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
 #include <memory>
@@ -26,6 +27,17 @@ namespace {
     object->addComponent(box);
 
     return { object, box };
+  }
+
+  std::pair<std::shared_ptr<Object>, std::shared_ptr<SphereCollider>> makeSphere(const glm::vec3& objectScale)
+  {
+    auto object = std::make_shared<Object>("Collider");
+    object->getComponent<Transform>(ComponentType::transform)->setScale(objectScale);
+
+    auto sphere = std::make_shared<SphereCollider>();
+    object->addComponent(sphere);
+
+    return { object, sphere };
   }
 }
 
@@ -76,4 +88,26 @@ TEST(ColliderWorldTransform, TheReportedScaleIsTheOneTheCollisionMeshUses)
   expectNear(box->findFurthestPoint({ 1.0f, 0.1f, 0.1f }), worldScale);
   expectNear(box->findFurthestPoint({ -1.0f, 0.1f, 0.1f }),
              glm::vec3(-worldScale.x, worldScale.y, worldScale.z));
+}
+
+TEST(ColliderWorldTransform, AUniformlyScaledSphereRadiusIsScaleTimesLocalRadius)
+{
+  const auto [object, sphere] = makeSphere(glm::vec3(2));
+  sphere->setRadius(1.5f);
+
+  // Positive control: pins that getRadius() actually reflects the transform's scale rather than being
+  // stuck at the local radius, before the non-uniform case below asks it to pick just one axis.
+  EXPECT_FLOAT_EQ(sphere->getRadius(), 3.0f);
+}
+
+TEST(ColliderWorldTransform, ANonUniformlyScaledSphereRadiusUsesTheLargestAxis)
+{
+  const auto [object, sphere] = makeSphere(glm::vec3(2, 5, 3));
+  sphere->setRadius(1.5f);
+
+  // The sphere collides as a single radius, not an ellipsoid, so it has to pick one axis rather than
+  // multiplying component-wise the way the box collider does. That axis is the largest one, matching the
+  // GJK support function - a gizmo (or any other consumer) that scaled per axis here would draw an
+  // ellipsoid that no longer matches what physics collides against.
+  EXPECT_FLOAT_EQ(sphere->getRadius(), 7.5f);
 }

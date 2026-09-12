@@ -72,8 +72,9 @@ namespace collisions {
     {
       glm::vec3 direction{ 1, 0, 0 };
 
-      auto support = getSupport(collider, other, normalize(direction));
-      simplex.addVertex({ support, direction });
+      auto normalizedDirection = normalize(direction);
+      auto support = getSupport(collider, other, normalizedDirection);
+      simplex.addVertex({ support, normalizedDirection });
 
       direction *= -1.0f;
 
@@ -82,14 +83,15 @@ namespace collisions {
       {
         ++iteration;
 
-        support = getSupport(collider, other, normalize(direction));
+        normalizedDirection = normalize(direction);
+        support = getSupport(collider, other, normalizedDirection);
 
         if (glm::dot(support, direction) < 0)
         {
           return false;
         }
 
-        simplex.addVertex({ support, direction });
+        simplex.addVertex({ support, normalizedDirection });
       } while (iteration < maxIterations && !expandSimplex(simplex, direction));
 
       return iteration != maxIterations;

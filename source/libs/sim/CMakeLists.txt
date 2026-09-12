@@ -3,6 +3,8 @@ project(ECS3DSim)
 add_library(${PROJECT_NAME}
   PhysicsSystem.cpp
   PhysicsSystem.h
+  FixedTimestep.cpp
+  FixedTimestep.h
   CollisionSystem.cpp
   CollisionSystem.h
   collisions/NarrowPhase.cpp

@@ -5,6 +5,7 @@
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/components/RigidBody.h>
+#include <objects/components/Transform.h>
 #include <objects/components/collisions/Collider.h>
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -18,6 +19,13 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager)
   {
     if (const auto collider = object->getComponent<Collider>(ComponentType::collider))
     {
+      // A collider with no Transform has nothing to place it; its accessors throw, which would abandon
+      // every other pair's collision work for the tick.
+      if (!object->getComponent<Transform>(ComponentType::transform))
+      {
+        continue;
+      }
+
       m_collisionEdges.push_back({ object, collider, 0.0f });
     }
   }

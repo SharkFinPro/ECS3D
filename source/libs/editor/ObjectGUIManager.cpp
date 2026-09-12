@@ -374,6 +374,16 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
     ImGui::SameLine();
     ImGui::TextUnformatted("?");
 
+    // Children survive a delete (ObjectManager::deleteObjectsMarkedForDeletion reparents them to the
+    // deleted object's own parent, or the scene root) - say so, since that's easy to miss.
+    if (const auto& children = object->getChildren(); !children.empty())
+    {
+      const auto parent = object->getParent();
+      const std::string destination = parent ? parent->getName() : "the scene root";
+      ImGui::TextColored(theme::scriptAmber, "Its %zu %s will be kept and moved to %s.", children.size(),
+                         children.size() == 1 ? "child" : "children", destination.c_str());
+    }
+
     ImGui::TextColored(theme::t3, "This action cannot be undone.");
 
     ImGui::Spacing();

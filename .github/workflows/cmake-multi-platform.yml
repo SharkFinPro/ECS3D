@@ -13,6 +13,10 @@ jobs:
     permissions:
       contents: read
 
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -87,6 +91,16 @@ jobs:
         with:
           version: 1.4.309.0
           cache: true
+
+      - name: Warm up dotnet first-run setup
+        # The first `dotnet` invocation that actually resolves the SDK (build/publish/restore, unlike
+        # the --version/--list-runtimes probes FindDotnet.cmake runs at configure time) performs
+        # one-time NuGet migration work guarded by a machine-wide named mutex. The build later runs the
+        # ScriptBridge and ECS3DNetTransport `dotnet publish` custom targets in parallel, and two
+        # processes racing through that first-run setup can crash it (e.g. the mutex's backing
+        # directory under /tmp/.dotnet/shm not existing yet on one side of the race). Run one real
+        # command here, serially, so first-run setup is done before the parallel publishes start.
+        run: dotnet nuget locals all --list
 
       - name: Configure CMake
         # Through the configure preset, so that CMakePresets.json is exercised by CI rather than

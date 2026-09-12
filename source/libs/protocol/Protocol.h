@@ -143,22 +143,23 @@ public:
     if constexpr (std::is_same_v<std::remove_cv_t<T>, bool>) {
       return read<uint8_t>() != 0;
     } else {
-      if (sizeof(T) > m_data.size() - m_offset)  // m_offset <= size() invariant; no overflow
-        throw std::runtime_error("Message underflow");
-
-      std::array<uint8_t, sizeof(T)> raw{};
-      std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+      const T value = peek<T>();
       m_offset += sizeof(T);
-      return std::bit_cast<T>(raw);
+      return value;
     }
   }
 
-  // Reads a length-prefixed string written by Message::writeString.
+  // Reads a length-prefixed string written by Message::writeString. Both the length prefix and the size
+  // it names are checked before m_offset moves at all, so a throw here leaves the reader exactly where it
+  // was - a caller that catches and retries (or reads the same bytes as something else) sees no partial
+  // advance.
   [[nodiscard]] std::string readString() {
-    const auto size = read<uint32_t>();
-    if (size > m_data.size() - m_offset)
+    const auto size = peek<uint32_t>();
+
+    if (size > m_data.size() - m_offset - sizeof(uint32_t))
       throw std::runtime_error("Message underflow");
 
+    m_offset += sizeof(uint32_t);
     std::string value(reinterpret_cast<const char*>(m_data.data() + m_offset), size);
     m_offset += size;
     return value;
@@ -167,6 +168,18 @@ public:
   [[nodiscard]] std::size_t remaining() const noexcept { return m_data.size() - m_offset; }
 
 private:
+  // The raw bounds-checked read that read<T>() and readString() both need, without advancing m_offset -
+  // readString() must validate the length prefix before deciding whether the payload it names even fits.
+  template <WireValue T>
+  [[nodiscard]] T peek() const {
+    if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
+      throw std::runtime_error("Message underflow");
+
+    std::array<uint8_t, sizeof(T)> raw{};
+    std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+    return std::bit_cast<T>(raw);
+  }
+
   std::span<const uint8_t> m_data;
   std::size_t m_offset = 0;
 };

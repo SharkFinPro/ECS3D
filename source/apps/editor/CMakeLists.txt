@@ -4,6 +4,8 @@ add_executable(${PROJECT_NAME}
   main.cpp
   EditorApp.cpp
   EditorApp.h
+  DarkTitleBar.cpp
+  DarkTitleBar.h
 )
 
 # The editor is a client + tooling. Like the client it renders and connects over the network; it
@@ -15,6 +17,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DNet
   ECS3DClrHost
 )
+
+# DarkTitleBar.cpp uses DwmSetWindowAttribute to match the native title bar to the editor's theme.
+if(WIN32)
+  target_link_libraries(${PROJECT_NAME} PRIVATE dwmapi)
+endif()
 
 # Copy nethost.dll next to the executable so it can boot the CLR (the C# transport).
 ecs3d_deploy_clr_runtime(${PROJECT_NAME})

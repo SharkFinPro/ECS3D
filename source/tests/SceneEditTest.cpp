@@ -8,6 +8,7 @@
 #include "objects/components/Component.h"
 #include "objects/components/collisions/BoxCollider.h"
 
+#include <cstddef>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -61,6 +62,45 @@ namespace {
       { "scripts", nlohmann::json::array() },
       { "children", nlohmann::json::array() }
     };
+  }
+
+  // A prefab body two levels deep: root, one child, one grandchild. Enough to straddle the depth limit
+  // without a whole chainOfDepth loop - this suite only ever needs the two nested levels.
+  nlohmann::json twoLevelBody()
+  {
+    nlohmann::json grandchild = trivialBody();
+    grandchild["name"] = "Grandchild";
+
+    const nlohmann::json child = {
+      { "name", "Child" },
+      { "uuid", uuids::to_string(someOtherUUID()) },
+      { "components", nlohmann::json::array() },
+      { "scripts", nlohmann::json::array() },
+      { "children", nlohmann::json::array({ grandchild }) }
+    };
+
+    return {
+      { "name", "Root" },
+      { "uuid", uuids::to_string(someOtherUUID()) },
+      { "components", nlohmann::json::array() },
+      { "scripts", nlohmann::json::array() },
+      { "children", nlohmann::json::array({ child }) }
+    };
+  }
+
+  // The node `levels` steps below start, chained through addChildObject - the same shape ObjectSpawnTest
+  // uses for its own depth fixtures, kept local here since each suite builds its chain through this
+  // suite's own Scene type.
+  std::shared_ptr<Object> descendantAtDepth(const Scene& scene, const std::shared_ptr<Object>& start,
+                                            const std::size_t levels)
+  {
+    auto current = start;
+    for (std::size_t i = 0; i < levels; ++i)
+    {
+      current = addChildObject(scene, "Descendant", current);
+    }
+
+    return current;
   }
 }
 
@@ -273,6 +313,38 @@ TEST(SceneEdit, ReportsABadInstantiatePrefabParentWithoutInstantiatingAnything)
   EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(prefabUUID, &parentUUID), &assetRegistry),
             SceneEditResult::applied);
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 2u);
+}
+
+TEST(SceneEdit, RefusesAPrefabDroppedWhereItsBodyWouldExceedTheDepthLimit)
+{
+  const auto scene = makeScene();
+
+  const auto prefabUUID = someOtherUUID();
+  AssetRegistry assetRegistry;
+  assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Root",
+                                .body = twoLevelBody().dump() });
+
+  // scene.object sits at the scene root (depth 0); walked down to one below the limit, the prefab's own
+  // root would land exactly at the limit and its grandchild one step past it.
+  const auto deepParent = descendantAtDepth(scene, scene.object, maxObjectDepth - 1);
+  const auto deepParentUUID = deepParent->getUUID();
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(prefabUUID, &deepParentUUID), &assetRegistry),
+            SceneEditResult::failed);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+
+  // Positive control: the same prefab two levels higher (root at maxObjectDepth - 2, grandchild landing
+  // exactly at maxObjectDepth) fits, proving the refusal above is the depth check firing and not
+  // something else wrong with the prefab or the parent.
+  const auto shallowerParent = descendantAtDepth(scene, scene.object, maxObjectDepth - 3);
+  const auto shallowerParentUUID = shallowerParent->getUUID();
+
+  const auto beforeApply = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(prefabUUID, &shallowerParentUUID),
+                      &assetRegistry),
+            SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), beforeApply + 3);
 }
 
 TEST(SceneEdit, ReportsAPayloadThatIsNotAnObjectAsMalformed)
