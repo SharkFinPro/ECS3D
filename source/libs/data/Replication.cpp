@@ -319,6 +319,55 @@ nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids
 }
 
 namespace {
+  // Transform's local values are relative to the parent (see Transform.h/.cpp), so reattaching an
+  // object under a different parent without rewriting them changes its world placement by the
+  // difference between the old and new parent's world transform. Called after the reparent with the
+  // object's own world placement from just before it was detached, this rewrites the local values so
+  // the world placement is unchanged.
+  void restoreWorldPlacementAfterReparent(const std::shared_ptr<Object>& object,
+                                          const std::shared_ptr<Object>& newParent,
+                                          const glm::vec3& oldWorldPosition,
+                                          const glm::vec3& oldWorldRotation,
+                                          const glm::vec3& oldWorldScale)
+  {
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+    if (!transform)
+    {
+      return;
+    }
+
+    glm::vec3 parentPosition(0.0f);
+    glm::vec3 parentRotation(0.0f);
+    glm::vec3 parentScale(1.0f);
+
+    if (newParent)
+    {
+      if (const auto parentTransform = newParent->getComponent<Transform>(ComponentType::transform))
+      {
+        parentPosition = parentTransform->getPosition();
+        parentRotation = parentTransform->getRotation();
+        parentScale = parentTransform->getScale();
+      }
+    }
+
+    auto localScale = transform->getLocalScale();
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      // A zero parent world scale on this axis would need a division by zero; leave the object's
+      // current local scale on that axis alone instead of producing inf/nan.
+      if (parentScale[axis] == 0.0f)
+      {
+        continue;
+      }
+
+      localScale[axis] = oldWorldScale[axis] / parentScale[axis];
+    }
+
+    transform->setPosition(oldWorldPosition - parentPosition);
+    transform->setRotation(oldWorldRotation - parentRotation);
+    transform->setScale(localScale);
+  }
+
   SceneEditResult applyStructuralEdit(ObjectManager& objectManager, const nlohmann::json& edit,
                                       const AssetRegistry* assetRegistry)
   {
@@ -492,6 +541,18 @@ namespace {
         return SceneEditResult::rejected;
       }
 
+      // Captured before detach: getPosition/getRotation/getScale compose with the CURRENT parent, so
+      // this is the object's world placement prior to the reparent.
+      glm::vec3 oldWorldPosition(0.0f);
+      glm::vec3 oldWorldRotation(0.0f);
+      glm::vec3 oldWorldScale(1.0f);
+      if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
+      {
+        oldWorldPosition = transform->getPosition();
+        oldWorldRotation = transform->getRotation();
+        oldWorldScale = transform->getScale();
+      }
+
       if (const auto oldParent = object->getParent())
       {
         oldParent->removeChild(object);
@@ -511,6 +572,8 @@ namespace {
       {
         objectManager.addObjectToRoot(object);
       }
+
+      restoreWorldPlacementAfterReparent(object, parent, oldWorldPosition, oldWorldRotation, oldWorldScale);
 
       return SceneEditResult::applied;
     }
