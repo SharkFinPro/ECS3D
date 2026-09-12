@@ -132,22 +132,35 @@ void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t*
 
 void NetServer::enqueueDisconnect(const int32_t connId)
 {
-  {
-    std::lock_guard lock(m_disconnectMutex);
-    m_disconnected.push_back(connId);
-  }
-
-  // Erased here rather than left for takeDisconnected: isEditor is polled from the tick thread between
-  // drains, and a connId is never reused, so leaving it in the set until the next drain would let a
-  // message from a connection that has already dropped still read back as an authorized editor.
-  std::lock_guard lock(m_editorMutex);
-  m_editorConnections.erase(connId);
+  // isEditor must not be revoked here: this runs on the socket thread, and a message this same
+  // connection sent moments before disconnecting may still be sitting in the inbox, undrained until the
+  // tick thread's next poll loop. Erasing now would make that message read back as unauthorized - an
+  // editor that edits and then closes (an ordinary flow) would have its last edit refused and logged.
+  std::lock_guard lock(m_disconnectMutex);
+  m_disconnected.push_back(connId);
 }
 
 std::vector<int32_t> NetServer::takeDisconnected()
 {
-  std::lock_guard lock(m_disconnectMutex);
-  return std::exchange(m_disconnected, {});
+  std::vector<int32_t> disconnected;
+  {
+    std::lock_guard lock(m_disconnectMutex);
+    disconnected = std::exchange(m_disconnected, {});
+  }
+
+  // Called on the tick thread after that tick's inbox drain, so any message from a now-dropped
+  // connection has already been handled with its authorization intact. Connection ids are never
+  // reused (both transport backends assign them via Interlocked.Increment), so a deferred erase here
+  // cannot let a new connection inherit a stale editor entry.
+  {
+    std::lock_guard lock(m_editorMutex);
+    for (const auto connId : disconnected)
+    {
+      m_editorConnections.erase(connId);
+    }
+  }
+
+  return disconnected;
 }
 
 void NetServer::authorize(const int32_t connId, const uint8_t role)
