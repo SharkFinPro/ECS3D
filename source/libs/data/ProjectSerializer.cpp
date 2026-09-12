@@ -100,10 +100,17 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
   }
 }
 
-void ProjectSerializer::save(const std::string& path) const
+bool ProjectSerializer::save(const std::string& path) const
 {
   std::ofstream outFile(path);
+  if (!outFile.is_open())
+  {
+    std::cerr << "[ProjectSerializer] Could not open project file for writing: " << path << std::endl;
+    return false;
+  }
+
   outFile << serialize().dump(2);
+  return static_cast<bool>(outFile);
 }
 
 bool ProjectSerializer::load(const std::string& path) const
