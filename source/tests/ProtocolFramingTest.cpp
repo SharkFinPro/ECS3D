@@ -304,6 +304,33 @@ TEST(ProtocolFraming, ATruncatedStringPrefixThrows)
   EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
 }
 
+TEST(ProtocolFraming, IsMutationMessageMatchesTheDocumentedEditorMutationPath)
+{
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::editComponent));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::sceneEdit));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::sceneControl));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::loadProject));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::addAsset));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::renameAsset));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::removeAsset));
+}
+
+TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
+{
+  // The positive control above proves the switch fires at all; this is every remaining MessageType, so a
+  // type added to one enum without the other fails one of the two tests instead of silently drifting.
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::undefined));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::join));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::snapshot));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::stateDelta));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::inputState));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::editStatus));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::sceneStatus));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectSpawned));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectDestroyed));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::playerSlot));
+}
+
 TEST(ProtocolFraming, ATruncatedStringPrefixLeavesTheReaderWhereItWas)
 {
   net::Message message(net::MessageType::sceneEdit);

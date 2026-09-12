@@ -188,7 +188,13 @@ messages are refused at the sender, where there is something useful to say about
 its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`) caps how deep
 `Object::unpack`/`loadChildren` and `ObjectManager::reassignUUIDs` will recurse into a wire or JSON
 payload, so a tree claiming more depth than any real hierarchy needs is refused rather than exhausting the
-stack. `ManagedHost`
+stack. The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
+reported to C++ separately from the messages it sends: once `Authorize` succeeds, both backends call
+`Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered
+in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` against
+that authorized role (in addition to edit-mode), never against a role a message merely claims - a
+connection cannot mutate an edit-mode server's scene by sending a mutation type unless the transport
+actually granted it `Role::editor`. `ManagedHost`
 boots CoreCLR and resolves
 managed statics as native function pointers; inbound frames are pushed from C# socket threads into a
 thread-safe `MessageQueue` and drained by the app loop. The transport backend (TCP/WebSocket) is
