@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <stdexcept>
 
 ObjectManager::ObjectManager(std::shared_ptr<ComponentRegistry> componentRegistry)
   : m_componentRegistry(std::move(componentRegistry)),
@@ -64,15 +65,35 @@ void ObjectManager::removeObjectFromRoot(const std::shared_ptr<Object>& object)
   std::erase(m_objects, object);
 }
 
-void ObjectManager::reassignUUIDs(nlohmann::json& objectData)
+namespace {
+  // Number of ancestors above object (root = 0), by a plain walk up getParent() - never more than
+  // maxObjectDepth steps for any object that arrived through a depth-checked path.
+  std::size_t ancestorDepth(const std::shared_ptr<Object>& object)
+  {
+    std::size_t depth = 0;
+    for (auto current = object->getParent(); current; current = current->getParent())
+    {
+      ++depth;
+    }
+
+    return depth;
+  }
+}
+
+void ObjectManager::reassignUUIDs(nlohmann::json& objectData, const std::size_t depth)
 {
+  if (depth > maxObjectDepth)
+  {
+    throw std::runtime_error("Object nesting exceeds maximum depth");
+  }
+
   objectData["uuid"] = uuids::to_string(createUUID());
 
   if (objectData.contains("children"))
   {
     for (auto& child : objectData.at("children"))
     {
-      reassignUUIDs(child);
+      reassignUUIDs(child, depth + 1);
     }
   }
 }
@@ -83,9 +104,15 @@ std::shared_ptr<Object> ObjectManager::instantiateUnder(const nlohmann::json& ob
   // Work on a copy: reassignUUIDs rewrites the blob, and a prefab body is reused across instantiations.
   auto data = objectData;
 
+  // A body is only as deep as it claims to be in isolation - but landing it under a live parent adds
+  // that parent's own depth on top, and this is reachable under any object (duplicateObject passes the
+  // source's own parent; an instantiatePrefab that can target an arbitrary object would too), so the
+  // combined tree is what has to fit under maxObjectDepth, not just the body by itself.
+  const std::size_t baseDepth = parent ? ancestorDepth(parent) + 1 : 0;
+
   // Give the new object (and every descendant) fresh uuids - reusing the originals would collide in the
   // uuid-keyed replication/picking.
-  reassignUUIDs(data);
+  reassignUUIDs(data, baseDepth);
 
   const auto newObject = std::make_shared<Object>(data, this);
   newObject->setParent(parent);
@@ -95,12 +122,15 @@ std::shared_ptr<Object> ObjectManager::instantiateUnder(const nlohmann::json& ob
   // Object's ctor loads only its own components/scripts; children are separate objects, so build them.
   // Each child registers itself before it is loaded, so a body whose child names a component this build
   // does not know would strand a half-built subtree - and callers here are expected to catch and carry
-  // on, which is precisely what leaves the wreckage in the scene.
-  if (data.contains("children"))
+  // on, which is precisely what leaves the wreckage in the scene. serialize() always writes "children" as
+  // an array, empty for a leaf, so an emptiness check (not just contains()) is what tells a leaf body from
+  // one with something to load - otherwise a leaf landing exactly at maxObjectDepth would be rejected for
+  // children it does not have.
+  if (const auto childrenIt = data.find("children"); childrenIt != data.end() && !childrenIt->empty())
   {
     try
     {
-      newObject->loadChildren(data.at("children"));
+      newObject->loadChildren(*childrenIt, baseDepth + 1);
     }
     catch (...)
     {

@@ -5,6 +5,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <vector>
 #include <unordered_map>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <uuid.h>
@@ -17,6 +18,12 @@ namespace net {
 enum class ComponentType;
 class Component;
 
+// A wire or JSON payload can claim arbitrarily deep object nesting; recursing that deep in
+// Object::unpack, Object::loadChildren, or ObjectManager::reassignUUIDs would exhaust the stack before
+// any handler gets a chance to reject it. 64 is far beyond any authored hierarchy but leaves comfortable
+// headroom under a Debug build's larger stack frames.
+inline constexpr std::size_t maxObjectDepth = 64;
+
 class Object : public std::enable_shared_from_this<Object> {
 public:
   explicit Object(std::string name = "Object");
@@ -27,7 +34,10 @@ public:
   Object(const nlohmann::json& objectData,
          ObjectManager* manager);
 
-  void loadChildren(const nlohmann::json& childrenData);
+  // depth is the nesting level of the children being built (the caller's own depth + 1); defaulted so
+  // every existing call site still means "load the direct children of this object". Throws past
+  // maxObjectDepth, the same guard unpack applies to the wire path.
+  void loadChildren(const nlohmann::json& childrenData, std::size_t depth = 1);
 
   void setParent(const std::shared_ptr<Object>& parent);
 
@@ -71,7 +81,9 @@ public:
 
   void pack(net::Message& message) const;
 
-  void unpack(net::MessageReader& messageReader);
+  // depth is this object's own nesting level (root = 0); defaulted so every existing call site still
+  // means "unpack this object". Throws past maxObjectDepth rather than recursing further.
+  void unpack(net::MessageReader& messageReader, std::size_t depth = 0);
 
 private:
   std::unordered_map<ComponentType, std::shared_ptr<Component>> m_components;
@@ -96,7 +108,7 @@ private:
 
   // The body of unpack, split out so unpack itself is only the stop/start bracket around it and can
   // restore the running state whichever way this exits.
-  void unpackFields(net::MessageReader& messageReader);
+  void unpackFields(net::MessageReader& messageReader, std::size_t depth);
 };
 
 

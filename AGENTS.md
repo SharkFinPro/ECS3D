@@ -176,7 +176,11 @@ opaque `(type byte, payload)` pairs. Both transports refuse an inbound message o
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
 WebSocket on what has actually arrived, since a fragmented message declares none. The handshake, the one
 message read before a peer is authorized, gets the much smaller `MaxHandshakeBytes`. Oversize *outbound*
-messages are refused at the sender, where there is something useful to say about them. `ManagedHost`
+messages are refused at the sender, where there is something useful to say about them. Object nesting has
+its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`) caps how deep
+`Object::unpack`/`loadChildren` and `ObjectManager::reassignUUIDs` will recurse into a wire or JSON
+payload, so a tree claiming more depth than any real hierarchy needs is refused rather than exhausting the
+stack. `ManagedHost`
 boots CoreCLR and resolves
 managed statics as native function pointers; inbound frames are pushed from C# socket threads into a
 thread-safe `MessageQueue` and drained by the app loop. The transport backend (TCP/WebSocket) is

@@ -12,8 +12,11 @@
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <cmath>
+#include <cstddef>
 #include <exception>
 #include <new>
+#include <utility>
+#include <vector>
 
 namespace replication {
 
@@ -319,6 +322,49 @@ nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids
 }
 
 namespace {
+  // Number of ancestors above object (root = 0). Every object in a live scene arrived through a
+  // depth-checked unpack/load or reparent, so walking up never runs past maxObjectDepth.
+  std::size_t ancestorDepth(const std::shared_ptr<Object>& object)
+  {
+    std::size_t depth = 0;
+    for (auto current = object->getParent(); current; current = current->getParent())
+    {
+      ++depth;
+    }
+
+    return depth;
+  }
+
+  // Height of the subtree rooted at object (0 for a leaf). Walked with an explicit stack rather than
+  // recursion: this runs on a reparent target, and a reparent is exactly the operation that could have
+  // put a tree deeper than maxObjectDepth in the first place if some other path missed a check, so this
+  // walk should not assume the depth it is trying to bound.
+  std::size_t subtreeHeight(const std::shared_ptr<Object>& object)
+  {
+    std::size_t height = 0;
+
+    std::vector<std::pair<std::shared_ptr<Object>, std::size_t>> pending;
+    pending.emplace_back(object, 0);
+
+    while (!pending.empty())
+    {
+      const auto [current, currentHeight] = pending.back();
+      pending.pop_back();
+
+      if (currentHeight > height)
+      {
+        height = currentHeight;
+      }
+
+      for (const auto& child : current->getChildren())
+      {
+        pending.emplace_back(child, currentHeight + 1);
+      }
+    }
+
+    return height;
+  }
+
   SceneEditResult applyStructuralEdit(ObjectManager& objectManager, const nlohmann::json& edit,
                                       const AssetRegistry* assetRegistry)
   {
@@ -386,11 +432,13 @@ namespace {
     {
       const std::string name = edit.value("name", "Object");
 
-      const auto object = std::make_shared<Object>(name);
-
       // A parent that is named and does not resolve is not the same as no parent named at all: the
       // sender asked for a child of something, and rooting the object instead and calling it applied
-      // reports the wrong answer for a view that is a round trip behind the authority.
+      // reports the wrong answer for a view that is a round trip behind the authority. Resolved (and
+      // depth-checked) before anything is built: an editor connection could otherwise chain adds, each
+      // naming the previous object as parent, into a tree deep enough to overflow the stack the next
+      // time the server recurses through it (a snapshot broadcast, or this same check on a later edit).
+      std::shared_ptr<Object> parent;
       if (edit.contains("parent"))
       {
         const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent")));
@@ -399,14 +447,20 @@ namespace {
           return SceneEditResult::malformedEdit;
         }
 
-        const auto parent = objectManager.getObjectByUUID(parsed.value());
+        parent = objectManager.getObjectByUUID(parsed.value());
         if (!parent)
         {
           return SceneEditResult::unknownObject;
         }
 
-        object->setParent(parent);
+        if (ancestorDepth(parent) + 1 > maxObjectDepth)
+        {
+          return SceneEditResult::rejected;
+        }
       }
+
+      const auto object = std::make_shared<Object>(name);
+      object->setParent(parent);
 
       objectManager.addObject(object);
       return SceneEditResult::applied;
@@ -488,6 +542,16 @@ namespace {
       // Dropping an object back onto the parent it already has would only move it to the end of the
       // sibling list and cost a re-snapshot.
       if (object->getParent() == parent)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // A reparent can push the object's own subtree deeper than any single edit that built it: the
+      // depth check at unpack/load time only bounds a tree as it arrives, not what an existing tree can
+      // be moved onto later. Reject before mutating anything so the server never produces a snapshot its
+      // own clients would refuse to unpack.
+      if (const std::size_t newDepth = (parent ? ancestorDepth(parent) + 1 : 0) + subtreeHeight(object);
+          newDepth > maxObjectDepth)
       {
         return SceneEditResult::rejected;
       }
