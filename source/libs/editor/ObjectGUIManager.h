@@ -70,7 +70,11 @@ private:
   // False when the connected server is read-only (not in edit mode); gates the mutating UI.
   bool m_editable = true;
 
-  // Owned by EditorApp; outlives this manager. Null until setSettings() is called.
+  // Owned by EditorApp and valid for as long as this panel is being drawn. Null until setSettings() is
+  // called. Not safe to touch during EditorApp teardown: EditorApp destroys its SettingsStore member
+  // before its ObjectGUIManager member, so this pointer is dangling by the time this manager's own
+  // destructor would run. Inert today only because there is no destructor logic here - a future
+  // destructor or flush-on-close hook must not read or write through m_settings.
   SettingsStore* m_settings = nullptr;
 
   SortMode m_sortMode = SortMode::authored;

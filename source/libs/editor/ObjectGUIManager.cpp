@@ -38,23 +38,26 @@ namespace {
     });
   }
 
-  // A display-only copy of `objects` in the requested order. Authored order hands back the vector as
-  // given - today that's ObjectManager/Object's own load order, since there is no persisted sibling order
-  // yet - and alphabetical stable-sorts a copy so two same-named objects keep their authored relative
-  // order. Never touches `objects` itself.
-  [[nodiscard]] std::vector<std::shared_ptr<Object>> sortedForDisplay(
-    const std::vector<std::shared_ptr<Object>>& objects, const ObjectGUIManager::SortMode mode)
+  // The display order for `objects`, never the scene's own order: authored order is `objects` itself
+  // (today that's ObjectManager/Object's own load order, since there is no persisted sibling order yet),
+  // untouched and unsorted - so the caller-owned `scratch` is only filled and sorted (a stable sort, so
+  // two same-named objects keep their authored relative order) when alphabetical mode actually needs a
+  // reordered copy. `scratch` must outlive the reference this returns, so it lives in the caller's own
+  // loop scope rather than inside this function.
+  [[nodiscard]] const std::vector<std::shared_ptr<Object>>& sortedForDisplay(
+    const std::vector<std::shared_ptr<Object>>& objects, const ObjectGUIManager::SortMode mode,
+    std::vector<std::shared_ptr<Object>>& scratch)
   {
     if (mode != ObjectGUIManager::SortMode::alphabetical)
     {
       return objects;
     }
 
-    std::vector<std::shared_ptr<Object>> sorted = objects;
-    std::ranges::stable_sort(sorted, [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
+    scratch = objects;
+    std::ranges::stable_sort(scratch, [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
       return ciNameLess(a->getName(), b->getName());
     });
-    return sorted;
+    return scratch;
   }
 
   // A fresh asset uuid for a saved prefab. (AssetBrowserPanel has the same one-liner for the assets it
@@ -206,7 +209,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   {
     m_dragSource = draggedObject(objectManager);
 
-    for (const auto& object : sortedForDisplay(objectManager->getObjects(), m_sortMode))
+    std::vector<std::shared_ptr<Object>> sortedRootsScratch;
+    for (const auto& object : sortedForDisplay(objectManager->getObjects(), m_sortMode, sortedRootsScratch))
     {
       displayObjectTree(object);
     }
@@ -440,7 +444,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 
   if (open && !isLeaf)
   {
-    for (const auto& child : sortedForDisplay(object->getChildren(), m_sortMode))
+    std::vector<std::shared_ptr<Object>> sortedChildrenScratch;
+    for (const auto& child : sortedForDisplay(object->getChildren(), m_sortMode, sortedChildrenScratch))
     {
       displayObjectTree(child);
     }
