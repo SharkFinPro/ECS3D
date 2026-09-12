@@ -106,3 +106,9 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::
 
   return renderObject;
 }
+
+void GpuAssetCache::pruneStale(const std::unordered_set<uuids::uuid>& liveUUIDs)
+{
+  std::erase_if(m_renderObjects, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
+  std::erase_if(m_colliderGizmos, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
+}

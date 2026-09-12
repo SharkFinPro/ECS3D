@@ -268,6 +268,22 @@ TEST(ProtocolFraming, AStringLengthLongerThanThePayloadThrows)
   EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
 }
 
+TEST(ProtocolFraming, AStringLengthLongerThanThePayloadLeavesTheReaderWhereItWas)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.write<uint32_t>(64);
+  message.write<uint8_t>('x');
+
+  net::MessageReader reader(message);
+
+  EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
+
+  // A failed readString must not have moved the offset: the positive control is reading the same four
+  // bytes back as the uint32 length prefix they actually are, not as a discarded partial string read.
+  EXPECT_EQ(reader.remaining(), message.size());
+  EXPECT_EQ(reader.read<uint32_t>(), 64u);
+}
+
 TEST(ProtocolFraming, AnAbsurdStringLengthThrowsRatherThanOverreading)
 {
   net::Message message(net::MessageType::sceneEdit);
@@ -313,4 +329,32 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectSpawned));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectDestroyed));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::playerSlot));
+}
+
+TEST(ProtocolFraming, ATruncatedStringPrefixLeavesTheReaderWhereItWas)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.write<uint16_t>(3);
+
+  net::MessageReader reader(message);
+
+  EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
+
+  // Same positive control as above, for the shorter-than-the-prefix-itself case: the two bytes read
+  // back as the uint16 that was actually written there.
+  EXPECT_EQ(reader.remaining(), message.size());
+  EXPECT_EQ(reader.read<uint16_t>(), 3u);
+}
+
+TEST(ProtocolFraming, AWellFormedStringFollowedByAnIntStillReadsBothCorrectly)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.writeString("abc");
+  message.write<int32_t>(42);
+
+  net::MessageReader reader(message);
+
+  EXPECT_EQ(reader.readString(), "abc");
+  EXPECT_EQ(reader.read<int32_t>(), 42);
+  EXPECT_EQ(reader.remaining(), 0u);
 }

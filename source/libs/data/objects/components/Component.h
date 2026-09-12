@@ -24,7 +24,11 @@ enum class ComponentType {
   SubComponentType_sphereCollider,
   script,
   playerController,
-  camera // appended last: the packed value is the wire discriminator, so new types go at the end
+  camera,
+  // Sentinel: total enumerator count, for compile-time completeness checks (see scripting's
+  // BindingCoverage.h). Never a real component - new types are appended just above it (the packed
+  // value is the wire discriminator, so order among real types still matters).
+  count
 };
 
 const std::unordered_map<ComponentType, std::string> componentTypeToString {

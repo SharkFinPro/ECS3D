@@ -6,10 +6,48 @@
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 
+#include <algorithm>
 #include <glm/vec3.hpp>
+#include <iterator>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <string>
+#include <vector>
+
+namespace {
+  // Names present in `only` but absent from `all`. Both inputs must already be sorted.
+  std::vector<std::string> namesMissingFrom(const std::vector<std::string>& all, const std::vector<std::string>& only)
+  {
+    std::vector<std::string> missing;
+    std::ranges::set_difference(only, all, std::back_inserter(missing));
+    return missing;
+  }
+
+  std::string joinNames(const std::vector<std::string>& names)
+  {
+    std::string joined;
+    for (const auto& name : names)
+    {
+      if (!joined.empty())
+      {
+        joined += ", ";
+      }
+      joined += name;
+    }
+    return joined;
+  }
+
+  std::vector<std::string> wireTableNames()
+  {
+    std::set<std::string> wireNameSet;
+    for (const auto& [type, key] : componentTypeToRegistryKey)
+    {
+      wireNameSet.insert(key);
+    }
+    return std::vector<std::string>(wireNameSet.begin(), wireNameSet.end());
+  }
+}
 
 TEST(ComponentRegistry, RegistersEveryDataComponentTypeUnderItsOwnName)
 {
@@ -115,4 +153,39 @@ TEST(ComponentRegistry, TheTypeStringSerializeWritesResolvesBackThroughTheRegist
     EXPECT_EQ(resolved->getType(), component->getType()) << key;
     EXPECT_EQ(resolved->getSubType(), component->getSubType()) << key;
   }
+}
+
+TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableExactly)
+{
+  // A name registered here but missing from componentTypeToRegistryKey breaks only when the object is
+  // reconstructed off the wire, not when it builds, saves or loads through JSON.
+  ComponentRegistry registry;
+  registerDataComponents(registry);
+
+  const auto wireNames = wireTableNames();
+  const auto registeredNames = registry.registeredNames();
+
+  const auto registeredButNotOnWire = namesMissingFrom(wireNames, registeredNames);
+  const auto onWireButNeverRegistered = namesMissingFrom(registeredNames, wireNames);
+
+  EXPECT_TRUE(registeredButNotOnWire.empty())
+    << "registered in registerDataComponents but missing from componentTypeToRegistryKey: "
+    << joinNames(registeredButNotOnWire);
+  EXPECT_TRUE(onWireButNeverRegistered.empty())
+    << "named in componentTypeToRegistryKey but never registered by registerDataComponents: "
+    << joinNames(onWireButNeverRegistered);
+}
+
+TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableComparisonCatchesAnExtraName)
+{
+  // Positive control: proves the comparison above actually fails when the two sides diverge, not that it
+  // passes vacuously.
+  ComponentRegistry registry;
+  registerDataComponents(registry);
+  registry.registerComponent("NotOnTheWireTable", [] { return std::make_shared<Transform>(); });
+
+  const auto registeredButNotOnWire = namesMissingFrom(wireTableNames(), registry.registeredNames());
+
+  ASSERT_EQ(registeredButNotOnWire.size(), 1u);
+  EXPECT_EQ(registeredButNotOnWire.front(), "NotOnTheWireTable");
 }

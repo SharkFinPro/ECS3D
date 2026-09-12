@@ -9,6 +9,7 @@
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <utility>
@@ -198,4 +199,22 @@ TEST(ColliderSupport, GetSupportIsTheMinkowskiDifferenceOfTheTwoSupports)
 
   // (1, 1, 1) on the first box minus (4, -1, -1) on the second.
   expectNear(getSupport(*first, *second, direction), glm::vec3(-3, 2, 2));
+}
+
+// A sphere's findFurthestPoint multiplies the direction by its radius, so it only lands on the surface
+// when the direction is unit length - the precondition SupportVertex::direction has to uphold for any
+// caller that feeds it back in.
+TEST(ColliderSupport, SphereSupportLandsOnTheSurfaceOnlyForAUnitDirection)
+{
+  const auto [object, sphere] = makeCollider<SphereCollider>({ 0, 0, 0 }, { 1, 1, 1 });
+
+  const glm::vec3 rawDirection{ 3, 0, 0 };
+  const auto normalizedDirection = glm::normalize(rawDirection);
+
+  const auto onSurfacePoint = sphere->findFurthestPoint(normalizedDirection);
+  EXPECT_NEAR(glm::length(onSurfacePoint - sphere->getPosition()), sphere->getRadius(), 1e-5f);
+
+  const auto offSurfacePoint = sphere->findFurthestPoint(rawDirection);
+  EXPECT_NEAR(glm::length(offSurfacePoint - sphere->getPosition()), rawDirection.x, 1e-5f);
+  EXPECT_GT(glm::length(offSurfacePoint - sphere->getPosition()), sphere->getRadius() + 1e-3f);
 }

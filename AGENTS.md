@@ -29,14 +29,15 @@
 | `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` option, MSVC export-all-symbols. Then `add_subdirectory(source)`. |
 | `CMakePresets.json` | Configure presets only: `ecs3d-debug`, `ecs3d-release`, `ecs3d-sanitize`, writing to `cmake-build-ecs3d-debug` / `-release` / `-sanitize`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
+| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for a future editor console panel), and the process-wide `Log` facade. Depends on nothing but the standard library. Sink-only so far — existing `std::cout`/`std::cerr` call sites have not been migrated to it yet. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
 | `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk, plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW's numeric key/mod values spelled out as literals so this library still depends on nothing but json. **Not** project data: see Development Principles. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`. **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune), calling the GJK/EPA narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
-| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Keybinds lists every `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the Settings panel's rebind capture), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI`, `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
+| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Keybinds lists every `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the Settings panel's rebind capture), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI` (also owns the unsaved-changes gate: New/Open/a dropped file/closing the window all route through a guard that prompts Save/Don't Save/Cancel when a send-path callback has marked the project dirty since the last save/load - the window-close intercept sets its own raw `glfwSetWindowCloseCallback`, since `vke::Window` sets none), `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess` (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
-| `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
+| `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera, ModelRenderer; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
 | `source/libs/clrHost/` | `ECS3DClrHost` — `ManagedHost` boots CoreCLR and hands out managed statics as native fn ptrs. Owns the CMake helpers (`cmake/ECS3DManaged.cmake`, `FindDotnet.cmake`, `loadCS.cmake`). |
 | `source/apps/` | The executables. `apps/CMakeLists.txt` orders them (server first — client/editor depend on it). |
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
@@ -56,6 +57,10 @@
 - **.NET 10** is required for the managed assemblies. `ecs3d_add_managed_assembly()` (in
   `clrHost/cmake/ECS3DManaged.cmake`) `dotnet publish`es a C# class lib next to the executables and
   writes its `runtimeconfig.json`; `ecs3d_deploy_clr_runtime()` copies `nethost.dll` beside each exe.
+  `FindDotnet.cmake` warms up the SDK's one-time first-run configuration once at configure time (a
+  single-threaded step that runs before any target's publish is scheduled), so no build-time `dotnet
+  publish` races through it; the two engine managed assembly targets additionally depend on each other
+  so they publish one at a time, while the launcher (`source/apps/launcher`) publishes independently.
 - **Managed assemblies deployed at build time:** `ScriptBridge` → `bin/scripts/ScriptBridge`,
   `ECS3DNetTransport` → `bin/net/Transport`, user scripts → `bin/scripts/UserScripts`. All apps boot the
   CLR from the same runtime; the server loads `ScriptBridge` on top.
@@ -84,7 +89,7 @@
   suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
   defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
   empty test set and would otherwise report green for a suite that registered nothing.
-- **Dependency direction (must hold):** `protocol` → nothing. `settings` → nothing (+ json). `data` →
+- **Dependency direction (must hold):** `log` → nothing. `protocol` → nothing. `settings` → nothing (+ json). `data` →
   protocol (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd. `net`/`scripting` →
   data + clrHost. Apps compose these. **`data` must never gain a Vulkan or ImGui include** — that
@@ -106,7 +111,10 @@ so no layer needs to name concrete component types across the boundary.
 input, linking `ECS3DRender` but never sim/scripting. `EditorApp` is a client plus the ImGui tooling
 (`ECS3DEditorLib`); the authoritative scene lives on a spawned `--edit` server, so edits become
 *commands sent back*, not local mutations. Client/editor spawn a child `ECS3DServer` via `ServerProcess`
-for singleplayer.
+for singleplayer. **Stopping a scene discards every runtime change**, not just component values:
+`SceneAsset::start()` snapshots the current object tree before the run, and `stop()` rebuilds it from
+that snapshot with uuids preserved, undoing any script spawn/destroy/reparent (and any editor edit made
+while playing) the same way it already undoes an edited Transform.
 
 **Replication.** Two paths. Structural state (project/scene/assets) goes as a full **snapshot** — a
 packed binary blob built by `ProjectPacker` (the wire counterpart of `ProjectSerializer`, which remains
@@ -176,9 +184,12 @@ opaque `(type byte, payload)` pairs. Both transports refuse an inbound message o
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
 WebSocket on what has actually arrived, since a fragmented message declares none. The handshake, the one
 message read before a peer is authorized, gets the much smaller `MaxHandshakeBytes`. Oversize *outbound*
-messages are refused at the sender, where there is something useful to say about them. The role a
-connection is actually granted at the handshake (`TransportBackend.Authorize`) is reported to C++
-separately from the messages it sends: once `Authorize` succeeds, both backends call
+messages are refused at the sender, where there is something useful to say about them. Object nesting has
+its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`) caps how deep
+`Object::unpack`/`loadChildren` and `ObjectManager::reassignUUIDs` will recurse into a wire or JSON
+payload, so a tree claiming more depth than any real hierarchy needs is refused rather than exhausting the
+stack. The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
+reported to C++ separately from the messages it sends: once `Authorize` succeeds, both backends call
 `Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered
 in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` against
 that authorized role (in addition to edit-mode), never against a role a message merely claims - a
@@ -226,7 +237,9 @@ mutates it: `CameraBindings` (`getDirection`/`has`) lets `PlayerScript` read its
 movement can be relative to wherever the camera actually faces, degrading to the forward default
 `(0,0,-1)` when the object has none — the same "safe missing-component" convention as `tryGet`, just
 without the `tryGet` ceremony since `ScriptBase` always constructs one for the script's own object (like
-`transform`/`rigidBody`/`input`).
+`transform`/`rigidBody`/`input`). `bindings/BindingCoverage.h` holds a table of every `ComponentType`
+against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
+without deciding its scripting story can't go unnoticed.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.

@@ -7,6 +7,7 @@
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <utility>
@@ -184,6 +185,20 @@ TEST(NarrowPhase, MeasuresABoxAgainstASphere)
   EXPECT_NEAR(contact->normal().x, -1.0f, curvedTolerance);
   EXPECT_NEAR(contact->normal().y, 0.0f, curvedTolerance);
   EXPECT_NEAR(contact->normal().z, 0.0f, curvedTolerance);
+}
+
+TEST(NarrowPhase, ContactPointForABoxAgainstASphereLandsOnTheSphereSurface)
+{
+  const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<SphereCollider>({ 1.5f, 0, 0 });
+
+  const auto contact = collisions::findContact(*first, *second);
+  ASSERT_TRUE(contact.has_value());
+
+  // The control: a point that ignored the radius entirely (e.g. the box's own surface) would not sit at
+  // this distance from the sphere's center.
+  const auto distanceFromSphereCenter = glm::length(contact->point - second->getPosition());
+  EXPECT_NEAR(distanceFromSphereCenter, second->getRadius(), tolerance);
 }
 
 TEST(NarrowPhase, DepthGrowsWithTheOverlap)
