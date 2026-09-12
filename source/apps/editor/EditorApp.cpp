@@ -246,6 +246,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_objectGUIManager->setSelection(m_selection);
   m_objectGUIManager->setAddAssetCallback(addAsset);
   m_objectGUIManager->setSceneEditCallback(sceneEdit);
+  m_objectGUIManager->setSettings(m_settings.get());
 
   // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).
   // Shared by the asset browser's scene double-click and the Inspector's "Load Scene" button.

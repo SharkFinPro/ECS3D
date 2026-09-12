@@ -10,6 +10,7 @@
 class ObjectManager;
 class Object;
 class EditorSelection;
+class SettingsStore;
 
 // The editor's object tree ("Objects" panel): the hierarchy, its per-row context menu, "Save as Prefab",
 // and the delete-confirmation modal. It reports structural changes back:
@@ -22,6 +23,20 @@ public:
   using SceneEditCallback = std::function<void(const nlohmann::json& edit)>;
   // Same blob (and same EditorApp handler) as AssetBrowserPanel::AddAssetCallback.
   using AddAssetCallback = std::function<void(const nlohmann::json& addAsset)>;
+
+  // How the tree orders siblings for display. This never touches the scene: authored is the order
+  // ObjectManager/Object already hand out (today, load order - there is no persisted sibling order yet),
+  // and alphabetical is a display-only sorted copy built fresh each frame.
+  enum class SortMode { authored, alphabetical };
+
+  // The store this panel's sort preference is read from and written to. Optional: with none set (or
+  // passed null) the panel just keeps authored order and never persists a choice. Reads the stored mode
+  // immediately, the way SettingsPanel's own constructor does for its section state.
+  void setSettings(SettingsStore* settings);
+
+  [[nodiscard]] SortMode sortMode() const;
+
+  void setSortMode(SortMode mode);
 
   void setSceneEditCallback(SceneEditCallback callback);
 
@@ -55,8 +70,17 @@ private:
   // False when the connected server is read-only (not in edit mode); gates the mutating UI.
   bool m_editable = true;
 
+  // Owned by EditorApp; outlives this manager. Null until setSettings() is called.
+  SettingsStore* m_settings = nullptr;
+
+  SortMode m_sortMode = SortMode::authored;
+
   // The object being dragged, resolved once per frame and cleared at the end of it.
   std::shared_ptr<Object> m_dragSource;
+
+  // The small sort-mode picker drawn in the panel header: a "Sort" label, a button naming the current
+  // mode, and a popup to switch it.
+  void displaySortControl();
 
   void displayObjectTree(const std::shared_ptr<Object>& object);
 
