@@ -197,3 +197,59 @@ TEST(SceneManager, ClearDropsEverythingAndTheRunState)
   EXPECT_EQ(sceneManager.getCurrentScene(), nullptr);
   EXPECT_EQ(sceneManager.getSceneStatus(), SceneStatus::stopped);
 }
+
+TEST(SceneManager, UniqueSceneNameLeavesAFreeNameAlone)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "Main", componentRegistry));
+
+  // Positive control: nothing else is named "Level", so the helper must not suffix it.
+  EXPECT_EQ(sceneManager.uniqueSceneName(secondUUID, "Level"), "Level");
+}
+
+TEST(SceneManager, UniqueSceneNameSuffixesACollidingName)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "Level", componentRegistry));
+
+  EXPECT_EQ(sceneManager.uniqueSceneName(secondUUID, "Level"), "Level (2)");
+}
+
+TEST(SceneManager, UniqueSceneNameGrowsAnAlreadySuffixedCollision)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "Level", componentRegistry));
+  sceneManager.addScene(makeScene(secondUUID, "Level (2)", componentRegistry));
+
+  const auto thirdUUID = uuids::uuid::from_string("33333333-3333-3333-3333-333333333333").value();
+
+  // Colliding with an already-suffixed name must grow the number, never stack another suffix.
+  EXPECT_EQ(sceneManager.uniqueSceneName(thirdUUID, "Level (2)"), "Level (3)");
+}
+
+TEST(SceneManager, UniqueSceneNameDoesNotRenameTheSameSceneItAlreadyOwns)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "Level", componentRegistry));
+
+  // Re-checking the name a scene already holds, by its own uuid, must not be treated as a collision
+  // with itself - otherwise a snapshot that re-registers every scene would rename them forever.
+  EXPECT_EQ(sceneManager.uniqueSceneName(firstUUID, "Level"), "Level");
+}
+
+TEST(SceneManager, UniqueSceneNameFallsBackForAnEmptyName)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+
+  EXPECT_EQ(sceneManager.uniqueSceneName(firstUUID, ""), "Scene");
+}

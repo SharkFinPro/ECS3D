@@ -46,6 +46,10 @@ public:
 
   [[nodiscard]] std::string getName() const;
 
+  // Used to enforce unique scene names (SceneManager::uniqueSceneName) at the registration sites,
+  // before the scene's AssetRegistry record is keyed off it - keeps `getName()` and that key in sync.
+  void setName(std::string name);
+
 private:
   uuids::uuid m_uuid;
 
