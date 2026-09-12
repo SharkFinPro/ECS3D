@@ -36,6 +36,14 @@ extern "C" void ecs3dNetServerDisconnect(const int32_t connId)
   }
 }
 
+extern "C" void ecs3dNetServerAuthorized(const int32_t connId, const uint8_t role)
+{
+  if (g_activeServer)
+  {
+    g_activeServer->authorize(connId, role);
+  }
+}
+
 NetServer::NetServer(std::shared_ptr<ManagedHost> host)
   : m_host(std::move(host))
 {}
@@ -57,10 +65,12 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_connectionCountFn = m_host->getDelegate(kAssembly, kType, "serverConnectionCount");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
   m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
+  m_setAuthorizedCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetAuthorizedCallback");
 
   g_activeServer = this;
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
   reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerDisconnect));
+  reinterpret_cast<SetCallbackFn>(m_setAuthorizedCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerAuthorized));
 
   reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0, authToken.c_str());
   m_started = true;
@@ -122,14 +132,39 @@ void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t*
 
 void NetServer::enqueueDisconnect(const int32_t connId)
 {
-  std::lock_guard lock(m_disconnectMutex);
-  m_disconnected.push_back(connId);
+  {
+    std::lock_guard lock(m_disconnectMutex);
+    m_disconnected.push_back(connId);
+  }
+
+  // Erased here rather than left for takeDisconnected: isEditor is polled from the tick thread between
+  // drains, and a connId is never reused, so leaving it in the set until the next drain would let a
+  // message from a connection that has already dropped still read back as an authorized editor.
+  std::lock_guard lock(m_editorMutex);
+  m_editorConnections.erase(connId);
 }
 
 std::vector<int32_t> NetServer::takeDisconnected()
 {
   std::lock_guard lock(m_disconnectMutex);
   return std::exchange(m_disconnected, {});
+}
+
+void NetServer::authorize(const int32_t connId, const uint8_t role)
+{
+  if (static_cast<Role>(role) != Role::editor)
+  {
+    return;
+  }
+
+  std::lock_guard lock(m_editorMutex);
+  m_editorConnections.insert(connId);
+}
+
+bool NetServer::isEditor(const int32_t connectionId) const
+{
+  std::lock_guard lock(m_editorMutex);
+  return m_editorConnections.contains(connectionId);
 }
 
 }

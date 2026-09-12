@@ -232,33 +232,16 @@ void ServerApp::dispatchCollisionEvents(ObjectManager& objectManager) const
   }
 }
 
-namespace {
-  // The editor's mutation messages. A non-edit server admits editors read-only, so it must drop these
-  // (the editors also disable them in their UI, but the server stays authoritative about it).
-  bool isMutation(const net::MessageType type)
-  {
-    switch (type)
-    {
-      case net::MessageType::editComponent:
-      case net::MessageType::sceneEdit:
-      case net::MessageType::sceneControl:
-      case net::MessageType::loadProject:
-      case net::MessageType::addAsset:
-      case net::MessageType::renameAsset:
-      case net::MessageType::removeAsset:
-        return true;
-      default:
-        return false;
-    }
-  }
-}
-
 void ServerApp::handleClientMessage(const net::Message& message, const int32_t senderId)
 {
   // A non-edit server is read-only: it serves snapshots/deltas to editors that connect to view it, but
-  // never applies their edits.
-  if (!m_options.editMode && isMutation(message.getType()))
+  // never applies their edits. On an edit-mode server, a mutation is honored only from the connection the
+  // transport authorized as Role::editor at the handshake - a connection that simply claims Role::player
+  // (which needs no token) must not be able to reach the same handlers.
+  if (net::isMutationMessage(message.getType()) && (!m_options.editMode || !m_netServer->isEditor(senderId)))
   {
+    logMessage("Error", "Discarded a message of type " + std::to_string(static_cast<int>(message.getType())) +
+                        " from connection " + std::to_string(senderId) + ": not an authorized editor.");
     return;
   }
 

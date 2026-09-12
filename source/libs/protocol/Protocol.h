@@ -48,6 +48,25 @@ enum class MessageType : uint8_t {
   // editor connecting to a non-edit server is admitted read-only (it views but cannot mutate).
 };
 
+// The editor's mutation path, called out as its own function so the transport-side enforcement and any
+// other caller read the same list the comment above documents, rather than a second one that can drift.
+[[nodiscard]] constexpr bool isMutationMessage(const MessageType type) noexcept
+{
+  switch (type)
+  {
+    case MessageType::editComponent:
+    case MessageType::sceneEdit:
+    case MessageType::sceneControl:
+    case MessageType::loadProject:
+    case MessageType::addAsset:
+    case MessageType::renameAsset:
+    case MessageType::removeAsset:
+      return true;
+    default:
+      return false;
+  }
+}
+
 enum class Role : uint8_t {
   player,
   editor

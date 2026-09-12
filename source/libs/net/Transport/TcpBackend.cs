@@ -149,6 +149,10 @@ internal sealed class TcpBackend : TransportBackend
       if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes) &&
           handshakeType == HandshakeType && Authorize(handshakePayload))
       {
+        // Authorize succeeded: tell the native side which role this connection was actually granted, so
+        // it can enforce that role on every later message rather than trusting one the sender claims.
+        Transport.DeliverServerAuthorized(connId, handshakePayload[0]);
+
         while (_serverRunning)
         {
           if (!ReadFrame(stream, out var type, out var payload))
