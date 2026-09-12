@@ -85,6 +85,13 @@ inline constexpr bool wirePackable =
 template <typename T>
 concept WireValue = std::is_trivially_copyable_v<T> && wirePackable<T>;
 
+// The frame length NetServer::broadcast and NetClient::send hand across the native/managed boundary is
+// int32_t; a message size that does not fit would narrow to a negative or truncated length on the wire.
+// Both sites guard against it before the cast and share this predicate so the two behave identically.
+[[nodiscard]] inline bool fitsInWireFrameLength(const std::size_t size) noexcept {
+  return size <= static_cast<std::size_t>(std::numeric_limits<int32_t>::max());
+}
+
 class Message {
 public:
   explicit Message(const MessageType type) noexcept : m_type(type) {}

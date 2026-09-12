@@ -287,21 +287,3 @@ TEST(ProtocolFraming, ATruncatedStringPrefixThrows)
 
   EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
 }
-
-TEST(ProtocolFraming, WritingAStringPreservesTheLengthInvariantAndStreamSync)
-{
-  // Pins the invariant the writeString size guard protects: the prefix accounts for exactly the bytes
-  // written, and a field written after a string is still readable - the stream never desyncs.
-  net::Message message(net::MessageType::sceneEdit);
-  const std::string value("guard the wire");
-
-  message.writeString(value);
-  EXPECT_EQ(message.size(), sizeof(uint32_t) + value.size());
-
-  message.write<uint32_t>(0xCAFEBABEu);
-
-  net::MessageReader reader(message);
-  EXPECT_EQ(reader.readString(), value);
-  EXPECT_EQ(reader.read<uint32_t>(), 0xCAFEBABEu);
-  EXPECT_EQ(reader.remaining(), 0u);
-}

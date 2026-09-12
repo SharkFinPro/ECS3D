@@ -91,10 +91,10 @@ void NetServer::broadcast(const Message& message) const
   // A size above INT32_MAX would narrow to a negative or truncated frame length on the wire; refuse it
   // here rather than hand the cast something it cannot represent. This is a void hot-path callback, so
   // there is no caller to throw to - log the refusal instead.
-  if (message.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
+  if (!fitsInWireFrameLength(message.size()))
   {
     std::cerr << "[NetServer] Refusing to broadcast a " << message.size() << " byte message; the limit is "
-              << std::numeric_limits<int32_t>::max() << ".\n";
+              << std::numeric_limits<int32_t>::max() << "." << std::endl;
     return;
   }
 
