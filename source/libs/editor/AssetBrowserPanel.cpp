@@ -168,6 +168,10 @@ std::string AssetBrowserPanel::displayName(const AssetRecord& record)
 
 void AssetBrowserPanel::displayGui()
 {
+  // 27em: the Search + Sort row (search floors at 120px, the sort combo is a fixed 200px, plus the gap
+  // between them) is the widest fixed content this panel draws - narrower and the sort combo would have
+  // to shrink below its own fixed width.
+  gc::constrainPanelSize(27.0f);
   ImGui::Begin("Assets");
 
   if (ImGui::CollapsingHeader("Options", ImGuiTreeNodeFlags_DefaultOpen))

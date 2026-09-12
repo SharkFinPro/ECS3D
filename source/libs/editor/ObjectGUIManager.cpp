@@ -91,6 +91,9 @@ void ObjectGUIManager::setEditable(const bool editable)
 
 void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 {
+  // 16em covers the "Objects" section label plus its count pill and the "Create New Object" button
+  // without wrapping - the widest fixed content this panel draws outside the tree itself.
+  gc::constrainPanelSize(16.0f);
   ImGui::Begin("Objects");
 
   if (!m_editable)

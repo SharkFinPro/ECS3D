@@ -93,6 +93,10 @@ void SettingsPanel::displayGui()
   // shows that box, so anything else would be a second way to do the same thing.
   bool stayOpen = true;
 
+  // 30em: the fixed navWidth nav column plus a usable width for its content pane (the Keybinds table's
+  // three columns are the widest section) - the nav column alone would leave no room to read a row.
+  gc::constrainPanelSize(30.0f);
+
   // Begin draws the window's decorations but reports a collapsed or clipped one by returning false, so
   // the contents are skipped there. The close box still has to be honored either way, which is why End
   // and the check below sit outside.

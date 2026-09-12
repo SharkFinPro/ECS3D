@@ -78,6 +78,9 @@ void InspectorPanel::setUpdatePrefabBodyCallback(std::function<void(const uuids:
 
 void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::optional<uuids::uuid>& activeSceneUUID)
 {
+  // 22em: gc::kLabelColumn's label column plus a boxed X/Y/Z row (three axis fields side by side) is the
+  // tightest layout this panel draws - narrower and the axis fields collapse below a readable width.
+  gc::constrainPanelSize(22.0f);
   ImGui::Begin("Inspector");
 
   // Drop a stale asset selection when the registry changed under us and the uuid is gone (an asset

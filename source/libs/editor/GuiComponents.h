@@ -951,6 +951,24 @@ namespace gc {
     dl->AddText(ImVec2(cx - ts.x * 0.5f, y), theme::u32(theme::t2), text);
   }
 
+  // ------------------------------------------------------------------------------------------------
+  // Panel window sizing
+  // ------------------------------------------------------------------------------------------------
+
+  // Clamps the next window (a docked panel's own Begin) to a minimum size so the dock splitter cannot
+  // shrink it into horizontal scrolling. ImGui applies size constraints to a docked window through the
+  // dock node's splitter, but only if SetNextWindowSizeConstraints runs every frame right before that
+  // window's Begin - it does not stick from a single call. Sizes are multiples of the current font size
+  // rather than raw pixels, so a panel stays usable after the user changes the editor's font. minHeightEm
+  // is 0 for every panel whose content scrolls vertically fine when short; only a single-row panel
+  // (Scene Status) needs a height floor too. No maximum is imposed.
+  inline void constrainPanelSize(const float minWidthEm, const float minHeightEm = 0.0f)
+  {
+    const float fontSize = ImGui::GetFontSize();
+    ImGui::SetNextWindowSizeConstraints(ImVec2(minWidthEm * fontSize, minHeightEm * fontSize),
+                                        ImVec2(FLT_MAX, FLT_MAX));
+  }
+
   // A centered neutral empty state: a muted icon in a subtle disc over a primary line and an optional
   // secondary line (e.g. the inspector's "No object selected"). Fills the available content region.
   inline void emptyState(const SecIcon icon, const char* text, const char* subtext = nullptr)

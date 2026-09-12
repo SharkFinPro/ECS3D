@@ -827,6 +827,9 @@ void EditorApp::updateDockSpace() const
 
 void EditorApp::displayMessageLog()
 {
+  // 16em: the count pill plus the "Clear" button on the header row is the widest fixed content here -
+  // the wrapped error text below is fine at any width.
+  gc::constrainPanelSize(16.0f);
   ImGui::Begin("Project Errors");
 
   if (m_errorMessages.empty())
@@ -859,6 +862,11 @@ void EditorApp::displaySceneStatus()
 {
   constexpr int sceneStatusButtonWidth = 125;
 
+  // This panel is a single toolbar row (play controls, then a right-aligned status readout that already
+  // shrinks its own width), so unlike the other panels it needs a height floor rather than a wide one:
+  // 4em keeps that one row of buttons from being clipped when the top dock is squeezed vertically. 16em
+  // matches the other simple panels' minimum width.
+  gc::constrainPanelSize(16.0f, 4.0f);
   ImGui::Begin("Scene Status");
 
   // Play controls first (mockup's leading accent Start button).
