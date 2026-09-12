@@ -46,16 +46,6 @@ void SphereCollider::setPosition(const glm::vec3& position)
   m_position.set(position);
 }
 
-bool SphereCollider::getRenderCollider() const
-{
-  return m_renderCollider;
-}
-
-void SphereCollider::setRenderCollider(const bool renderCollider)
-{
-  m_renderCollider = renderCollider;
-}
-
 nlohmann::json SphereCollider::serialize()
 {
   const auto position = m_position.getInitialValue();

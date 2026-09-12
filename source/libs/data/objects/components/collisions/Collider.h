@@ -49,6 +49,12 @@ public:
   [[nodiscard]] uint32_t getMask() const;
   void setMask(uint32_t mask);
 
+  // Collider gizmo rendering lives in ECS3DRender; m_renderCollider is a plain flag the editor toggles
+  // and the render system reads. Shared by every collider shape; each subclass threads it through its
+  // own serialize/loadFromJSON/pack/unpack.
+  [[nodiscard]] bool getRenderCollider() const;
+  void setRenderCollider(bool renderCollider);
+
   virtual glm::vec3 findFurthestPoint(const glm::vec3& direction) = 0;
 
   [[nodiscard]] virtual glm::vec3 getPosition() { return glm::vec3(0); }
@@ -66,6 +72,8 @@ protected:
 
   uint32_t m_layer = 0;
   uint32_t m_mask = 0xFFFFFFFFu;
+
+  bool m_renderCollider = false;
 };
 
 
