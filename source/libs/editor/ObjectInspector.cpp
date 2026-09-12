@@ -6,10 +6,12 @@
 #include <assets/AssetRegistry.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
+#include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <array>
 #include <string>
+#include <unordered_set>
 #include <utility>
 
 namespace {
@@ -82,6 +84,27 @@ namespace {
 
     return "Object";
   }
+
+  // Stable identity for the pending-removal guard (m_pendingRemovals): the owning object's uuid plus
+  // the component's type, using the same sub-type-aware label displayComponent already computes.
+  // Object::addComponent allows only one non-script component per ComponentType, so type is enough to
+  // identify those - but it deduplicates scripts by class name instead, letting several coexist under
+  // ComponentType::script, so a script's identity also folds in its class name.
+  std::string componentIdentity(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)
+  {
+    auto identity = to_string(objectUUID) + ":" + componentTypeToString.at(
+      component->getSubType() != ComponentType::SubComponentType_none ? component->getSubType() : component->getType());
+
+    if (component->getType() == ComponentType::script)
+    {
+      if (const auto script = std::dynamic_pointer_cast<Script>(component))
+      {
+        identity += ":" + script->getClassName();
+      }
+    }
+
+    return identity;
+  }
 }
 
 ObjectInspector::ObjectInspector(std::shared_ptr<ComponentEditor> componentEditor)
@@ -136,10 +159,34 @@ void ObjectInspector::display(const std::shared_ptr<Object>& object)
   {
     m_nameEditObjectUUID = object->getUUID();
     m_showComponentSelector = false;
+    // Bounds the guard's lifetime: an entry can only accumulate while its object stays selected, and
+    // this drops it (confirmed or not) the moment selection moves elsewhere.
+    m_pendingRemovals.clear();
     const auto name = object->getName();
     const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
     name.copy(m_nameEditBuffer.data(), len);
     m_nameEditBuffer[len] = '\0';
+  }
+
+  // Forget guard entries whose component no longer occupies that slot on this object - either the
+  // removal was confirmed (the next snapshot rebuilt the object without it) or the slot was freed and
+  // refilled by a new component of the same type/class, which must be free to send its own removal
+  // later. Without this, re-adding a component of a type just removed could never be deleted again.
+  {
+    std::unordered_set<std::string> present;
+    for (const auto& [type, component] : object->getComponents())
+    {
+      present.insert(componentIdentity(object->getUUID(), component));
+    }
+    for (const auto& script : object->getScripts())
+    {
+      present.insert(componentIdentity(object->getUUID(), script));
+    }
+
+    const auto prefix = to_string(object->getUUID()) + ":";
+    std::erase_if(m_pendingRemovals, [&](const std::string& entry) {
+      return entry.starts_with(prefix) && !present.contains(entry);
+    });
   }
 
   ImGui::BeginDisabled(!m_editable);
@@ -325,9 +372,9 @@ void ObjectInspector::displayComponent(const uuids::uuid& objectUUID, const std:
 
   // The header's "-" button marks the component deleted; turn that into a structural removeComponent
   // (sent once - the next snapshot rebuilds the object without it).
-  if (component->markedAsDeleted() && !m_pendingRemovals.contains(component.get()) && m_sceneEditCallback)
+  if (component->markedAsDeleted() && m_sceneEditCallback &&
+      m_pendingRemovals.insert(componentIdentity(objectUUID, component)).second)
   {
-    m_pendingRemovals.insert(component.get());
     m_sceneEditCallback(replication::buildRemoveComponent(objectUUID, component));
   }
 
