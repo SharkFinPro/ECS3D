@@ -20,6 +20,13 @@ class AssetRegistry;
 // the normal replication path like anything else the editor does. Validation happens here, at the moment
 // of undo/redo, against the live state - not on every snapshot, which would invalidate the whole stack on
 // every structural edit even in single-user editing (see EditCommand.h's validateForUndo/validateForRedo).
+//
+// Exception contract: undo()/redo() do not catch anything thrown by validation or by the build* calls -
+// notably nlohmann::json::parse on a stored before/after blob. A stored blob only becomes unparseable
+// through data corruption (a hand-edited save, a truncated write, a bug elsewhere), which is a defect to
+// surface loudly, not a routine refusal like a missing uuid - swallowing it here would hide the bug behind
+// a generic "not undoable" the next person has no way to diagnose. It is the caller's (the editor's)
+// responsibility to keep such a throw from reaching its frame loop.
 namespace edits {
 
 // Why undo()/redo() did not hand back a payload to send, in the same spirit as Replication.h's

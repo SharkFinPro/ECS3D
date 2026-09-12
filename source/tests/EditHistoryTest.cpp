@@ -9,6 +9,7 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
+#include "objects/components/Script.h"
 #include "objects/components/Transform.h"
 
 #include <glm/vec3.hpp>
@@ -48,6 +49,20 @@ namespace {
   uuids::uuid anotherUUID()
   {
     return uuids::uuid::from_string("00000000-0000-0000-0000-000000000001").value();
+  }
+
+  bool hasScript(const std::shared_ptr<Object>& object, const std::string& className)
+  {
+    for (const auto& script : object->getScripts())
+    {
+      if (const auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
+          scriptComponent && scriptComponent->getClassName() == className)
+      {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 
@@ -191,6 +206,71 @@ TEST(EditHistory, UndoAndRedoRoundTripAnAddComponent)
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
   EXPECT_TRUE(scene.object->getComponents().contains(ComponentType::rigidBody));
+}
+
+// buildRedoJSON's addComponent case branches on registryKey == "Script" (buildAddScript) versus every
+// other key (buildAddComponent) - the RigidBody test above only exercises the latter, so this covers the
+// Script branch specifically, plus a redo refusal that only that branch's className identity can produce.
+TEST(EditHistory, UndoAndRedoRoundTripAnAddScriptComponent)
+{
+  auto scene = makeScene();
+
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildAddScript(scene.object->getUUID(), "PlayerScript")),
+            replication::SceneEditResult::applied);
+  ASSERT_TRUE(hasScript(scene.object, "PlayerScript"));
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::addComponent(scene.object->getUUID(), "Script", "PlayerScript"));
+
+  const auto undoOutcome = history.undo(*scene.objectManager);
+  ASSERT_TRUE(undoOutcome.ok());
+  ASSERT_TRUE(undoOutcome.jsonPayload.has_value());
+  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
+            replication::SceneEditResult::applied);
+  EXPECT_FALSE(hasScript(scene.object, "PlayerScript"));
+  ASSERT_TRUE(history.canRedo());
+
+  // Positive control: with nothing interfering, redo restores it through buildAddScript.
+  const auto redoOutcome = history.redo(*scene.objectManager);
+  ASSERT_TRUE(redoOutcome.ok());
+  ASSERT_TRUE(redoOutcome.jsonPayload.has_value());
+  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload),
+            replication::SceneEditResult::applied);
+  EXPECT_TRUE(hasScript(scene.object, "PlayerScript"));
+  EXPECT_EQ(scene.object->getScripts().size(), 1u);
+}
+
+TEST(EditHistory, RedoOfAnAddScriptComponentRefusesWhenTheClassAlreadyExists)
+{
+  auto scene = makeScene();
+
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildAddScript(scene.object->getUUID(), "PlayerScript")),
+            replication::SceneEditResult::applied);
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::addComponent(scene.object->getUUID(), "Script", "PlayerScript"));
+
+  const auto undoOutcome = history.undo(*scene.objectManager);
+  ASSERT_TRUE(undoOutcome.ok());
+  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
+            replication::SceneEditResult::applied);
+  ASSERT_TRUE(history.canRedo());
+
+  // Something else adds a script under the same class name before redo runs.
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildAddScript(scene.object->getUUID(), "PlayerScript")),
+            replication::SceneEditResult::applied);
+
+  const auto redoOutcome = history.redo(*scene.objectManager);
+  EXPECT_EQ(redoOutcome.result, edits::HistoryResult::targetChanged);
+  ASSERT_TRUE(redoOutcome.conflict.has_value());
+  EXPECT_EQ(*redoOutcome.conflict, scene.object->getUUID());
+  EXPECT_FALSE(history.canRedo());
+
+  // Only one script survives either way - the refusal did not double up on the class.
+  EXPECT_EQ(scene.object->getScripts().size(), 1u);
 }
 
 TEST(EditHistory, UndoAndRedoRoundTripAnAddAsset)
