@@ -84,3 +84,8 @@ std::string SceneAsset::getName() const
 {
   return m_name;
 }
+
+void SceneAsset::setName(std::string name)
+{
+  m_name = std::move(name);
+}

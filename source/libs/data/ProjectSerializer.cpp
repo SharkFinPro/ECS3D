@@ -77,6 +77,15 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
 
   for (const auto& scene : parsedScenes)
   {
+    // Two scenes cannot share a display name - it is the AssetRegistry key a scene is looked up and
+    // selected by - so resolve a collision here, before that key is derived, rather than letting the
+    // second scene silently drop from the registry.
+    if (auto uniqueName = m_sceneManager->uniqueSceneName(scene->getUUID(), scene->getName());
+        uniqueName != scene->getName())
+    {
+      scene->setName(std::move(uniqueName));
+    }
+
     m_sceneManager->addScene(scene);
 
     // Register the scene as an asset too, so it shows up in the editor's asset browser (where it can

@@ -702,9 +702,12 @@ void applyAddAsset(AssetRegistry& assetRegistry,
   else if (type == "scene")
   {
     const std::string name = asset.value("name", std::string{ "New Scene" });
-    sceneManager.addScene(std::make_shared<SceneAsset>(uuid, name, componentRegistry));
+    // A new scene always defaults to the same fixed name, so a second one collides immediately - resolve
+    // it here, before the AssetRegistry key is derived, rather than letting it silently drop out.
+    const std::string uniqueName = sceneManager.uniqueSceneName(uuid, name);
+    sceneManager.addScene(std::make_shared<SceneAsset>(uuid, uniqueName, componentRegistry));
     // Also register it as an asset so it shows in the browser (double-click to load).
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = name });
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = uniqueName });
   }
 }
 
