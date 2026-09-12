@@ -822,13 +822,50 @@ void EditorApp::updateDockSpace() const
 
   if (!dockPercentsSetup)
   {
+    const ImVec2 viewportSize = ImGui::GetMainViewport()->Size;
+
+    // A just-opened (or minimized) window can report a zero-size viewport on its first frames; wait for a
+    // real size instead of dividing by zero or locking in a degenerate layout.
+    if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
+    {
+      return;
+    }
+
+    // Objects/Inspector: wide enough for a name/icon column and field labels, capped so a narrow window
+    // still leaves the center scene view usable.
+    constexpr float leftPanelWidth = 280.0f;
+    constexpr float rightPanelWidth = 360.0f;
+    constexpr float maxSideFraction = 0.3f;
+
+    // Assets/Project Errors: enough height for a row of thumbnails or a few log lines.
+    constexpr float bottomPanelHeight = 240.0f;
+    constexpr float maxBottomFraction = 0.35f;
+
+    const float leftWidth = std::min(leftPanelWidth, viewportSize.x * maxSideFraction);
+    const float rightWidth = std::min(rightPanelWidth, viewportSize.x * maxSideFraction);
+    const float bottomHeight = std::min(bottomPanelHeight, viewportSize.y * maxBottomFraction);
+
+    // Scene Status draws its controls on a single row (see displaySceneStatus): title bar + padding + one
+    // control row fits it exactly at any font size or DPI, with no scrollbar.
+    constexpr int sceneStatusRows = 1;
+    const float topHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f
+                           + ImGui::GetFrameHeightWithSpacing() * sceneStatusRows;
+
     const auto gui = m_renderer->getImGuiInstance();
 
-    gui->setTopDockPercent(0.09);
-    gui->setBottomDockPercent(0.28);
+    // DockBuilderSplitNode cuts each dock from whatever remains of the node (left, then right of that,
+    // then top, then bottom of what's left), so later percents must be relative to the reduced node, not
+    // the full viewport.
+    const float leftPercent = leftWidth / viewportSize.x;
+    const float rightPercent = rightWidth / (viewportSize.x - leftWidth);
+    const float topPercent = topHeight / viewportSize.y;
+    const float bottomPercent = bottomHeight / (viewportSize.y - topHeight);
 
-    gui->setLeftDockPercent(0.2);
-    gui->setRightDockPercent(0.35);
+    gui->setTopDockPercent(topPercent);
+    gui->setBottomDockPercent(bottomPercent);
+
+    gui->setLeftDockPercent(leftPercent);
+    gui->setRightDockPercent(rightPercent);
 
     dockPercentsSetup = true;
   }
