@@ -86,6 +86,17 @@ const AssetRecord* AssetRegistry::getByUUID(const uuids::uuid& uuid) const
   return it != m_assets.end() ? &it->second : nullptr;
 }
 
+const AssetRecord* AssetRegistry::getByUUIDOfType(const uuids::uuid& uuid, const AssetType type) const
+{
+  const auto* record = getByUUID(uuid);
+  if (!record || record->type != type)
+  {
+    return nullptr;
+  }
+
+  return record;
+}
+
 const AssetRecord* AssetRegistry::getByPath(const std::string& path) const
 {
   const auto pathIt = m_loadedPaths.find(path);

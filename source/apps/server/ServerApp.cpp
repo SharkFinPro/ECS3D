@@ -870,6 +870,15 @@ void ServerApp::broadcastStateDelta() const
 
 void ServerApp::broadcastStructuralChanges() const
 {
+  // A script's component edit (e.g. ModelRendererBindings swapping a model/texture) isn't covered by the
+  // per-tick state delta, which only carries Transform - so it replicates like an editor edit instead:
+  // rebuild the wire message from the mutated component and broadcast it the same way applyComponentEdit's
+  // caller does above.
+  for (const auto& [objectUUID, component] : BindingContext::takeComponentEdits())
+  {
+    m_netServer->broadcast(replication::buildComponentEdit(objectUUID, component));
+  }
+
   // The spawn/destroy bindings buffered what the scripts did on BindingContext (scripting can't reach the
   // net layer). Broadcast spawns before destroys, then remove the marked objects from the authoritative
   // scene. A spawned object is still live here, so its packed blob carries current transform/components.

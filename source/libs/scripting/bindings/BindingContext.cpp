@@ -5,6 +5,7 @@ ObjectManager* BindingContext::s_objectManager = nullptr;
 AssetRegistry* BindingContext::s_assetRegistry = nullptr;
 std::vector<std::shared_ptr<Object>> BindingContext::s_spawned;
 std::vector<uuids::uuid> BindingContext::s_destroyed;
+std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> BindingContext::s_componentEdits;
 BindingContext::RaycastFn BindingContext::s_raycast = nullptr;
 BindingContext::OverlapSphereFn BindingContext::s_overlapSphere = nullptr;
 
@@ -46,6 +47,27 @@ std::vector<std::shared_ptr<Object>> BindingContext::takeSpawned()
 std::vector<uuids::uuid> BindingContext::takeDestroyed()
 {
   return std::exchange(s_destroyed, {});
+}
+
+void BindingContext::recordComponentEdit(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)
+{
+  // Two setters on the same component in one tick (e.g. setModel then setTexture) would otherwise queue
+  // two entries; the drain packs the component's current state either way, so the second is a byte-identical
+  // broadcast. The buffer is small and drained every tick, so a linear scan beats a map here.
+  for (const auto& [existingUUID, existingComponent] : s_componentEdits)
+  {
+    if (existingUUID == objectUUID && existingComponent == component)
+    {
+      return;
+    }
+  }
+
+  s_componentEdits.emplace_back(objectUUID, component);
+}
+
+std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> BindingContext::takeComponentEdits()
+{
+  return std::exchange(s_componentEdits, {});
 }
 
 void BindingContext::setRaycast(const RaycastFn raycast)
