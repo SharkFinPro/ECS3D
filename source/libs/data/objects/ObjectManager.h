@@ -53,6 +53,12 @@ public:
 
   void stop();
 
+  // Rebuild the manager's objects from a save-shaped objects array (the "objects" field ObjectManager::
+  // serialize() writes), replacing whatever it currently holds and preserving each object's uuid - unlike
+  // instantiate, which assigns fresh ones. Used to put a scene back to its authored structure after a run
+  // (spawn/destroy/reparent undone), so editor selections and cross-references to authored objects survive.
+  void restoreFromJSON(const nlohmann::json& objectsData);
+
   [[nodiscard]] nlohmann::json serialize() const;
 
   void pack(net::Message& message) const;

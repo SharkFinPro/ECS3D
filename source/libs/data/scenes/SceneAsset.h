@@ -1,7 +1,7 @@
 #ifndef SCENEASSET_H
 #define SCENEASSET_H
 
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
 #include <memory>
 #include <string>
 #include <uuid.h>
@@ -25,9 +25,11 @@ public:
 
   void loadObjects(const nlohmann::json& objectsData) const;
 
-  void start() const;
+  // Captures the authored object tree before the run starts, so stop() can undo whatever the run did
+  // structurally (spawn/destroy/reparent) on top of the values it already resets.
+  void start();
 
-  void stop() const;
+  void stop();
 
   [[nodiscard]] nlohmann::json serialize() const;
 
@@ -50,6 +52,10 @@ private:
   std::string m_name;
 
   std::shared_ptr<ObjectManager> m_objectManager;
+
+  // The scene's authored object data (the "objects" array ObjectManager::serialize() would write), taken
+  // by start() and consumed by stop(). Null when no run is in progress to restore from.
+  nlohmann::json m_authoredObjects;
 };
 
 
