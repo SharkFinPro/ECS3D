@@ -12,6 +12,7 @@
 #include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <PhysicsSystem.h>
+#include <FixedTimestep.h>
 #include <CollisionSystem.h>
 #include <queries/SceneQueries.h>
 #include <ScriptSystem.h>
@@ -145,11 +146,19 @@ void ServerApp::run()
     const float dt = std::chrono::duration<float>(now - m_previousTime).count();
     m_previousTime = now;
 
-    m_timeAccumulator += dt;
+    // Caps how many ticks one real frame will replay. A stall (GC pause, breakpoint, OS scheduling
+    // hiccup) banks real time in m_timeAccumulator; without a cap the next frame(s) would replay all of
+    // it as a burst of full-speed ticks - e.g. a player holding a movement key would see it launched
+    // across the whole stall's worth of distance the instant the stall clears. FixedTimestep::advance
+    // drops anything past the cap instead of carrying it forward, so a stall of any length costs at most
+    // this many ticks' worth of movement.
+    constexpr int maxFixedStepsPerFrame = 3;
 
-    bool ticked = false;
-    uint8_t steps = 0;
-    while (m_timeAccumulator >= m_fixedUpdateDt && steps < 3)
+    const auto plan = FixedTimestep::advance(m_timeAccumulator, dt, m_fixedUpdateDt, maxFixedStepsPerFrame);
+    m_timeAccumulator = plan.remainingAccumulator;
+
+    const bool ticked = plan.steps > 0;
+    for (int step = 0; step < plan.steps; ++step)
     {
       fixedUpdate(m_fixedUpdateDt);
 
@@ -158,10 +167,6 @@ void ServerApp::run()
       // wasPressed/ReleasedThisTick reflect only genuinely new changes.
       InputState::clearMouseDeltas();
       InputState::commitInputEdges();
-
-      m_timeAccumulator -= m_fixedUpdateDt;
-      ++steps;
-      ticked = true;
     }
 
     // Only stream a delta when the sim actually advanced. The server is headless (no vsync), so without
@@ -232,33 +237,16 @@ void ServerApp::dispatchCollisionEvents(ObjectManager& objectManager) const
   }
 }
 
-namespace {
-  // The editor's mutation messages. A non-edit server admits editors read-only, so it must drop these
-  // (the editors also disable them in their UI, but the server stays authoritative about it).
-  bool isMutation(const net::MessageType type)
-  {
-    switch (type)
-    {
-      case net::MessageType::editComponent:
-      case net::MessageType::sceneEdit:
-      case net::MessageType::sceneControl:
-      case net::MessageType::loadProject:
-      case net::MessageType::addAsset:
-      case net::MessageType::renameAsset:
-      case net::MessageType::removeAsset:
-        return true;
-      default:
-        return false;
-    }
-  }
-}
-
 void ServerApp::handleClientMessage(const net::Message& message, const int32_t senderId)
 {
   // A non-edit server is read-only: it serves snapshots/deltas to editors that connect to view it, but
-  // never applies their edits.
-  if (!m_options.editMode && isMutation(message.getType()))
+  // never applies their edits. On an edit-mode server, a mutation is honored only from the connection the
+  // transport authorized as Role::editor at the handshake - a connection that simply claims Role::player
+  // (which needs no token) must not be able to reach the same handlers.
+  if (net::isMutationMessage(message.getType()) && (!m_options.editMode || !m_netServer->isEditor(senderId)))
   {
+    logMessage("Error", "Discarded a message of type " + std::to_string(static_cast<int>(message.getType())) +
+                        " from connection " + std::to_string(senderId) + ": not an authorized editor.");
     return;
   }
 
@@ -539,6 +527,21 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   catch (const std::exception& e)
   {
     logMessage("Error", std::string("Failed to load project from editor: ") + e.what());
+
+    // unpack parses into locals and only swaps on failure-free completion, so a throw leaves the current
+    // scene untouched - the same one whose scripts were just stopped. Restart them so it keeps responding.
+    if (const auto scene = m_sceneManager->getCurrentScene())
+    {
+      try
+      {
+        m_scriptSystem->start(*scene->getObjectManager());
+      }
+      catch (const std::exception& startError)
+      {
+        logMessage("Error", startError.what());
+      }
+    }
+
     return;
   }
 
@@ -865,6 +868,15 @@ void ServerApp::broadcastStateDelta() const
 
 void ServerApp::broadcastStructuralChanges() const
 {
+  // A script's component edit (e.g. ModelRendererBindings swapping a model/texture) isn't covered by the
+  // per-tick state delta, which only carries Transform - so it replicates like an editor edit instead:
+  // rebuild the wire message from the mutated component and broadcast it the same way applyComponentEdit's
+  // caller does above.
+  for (const auto& [objectUUID, component] : BindingContext::takeComponentEdits())
+  {
+    m_netServer->broadcast(replication::buildComponentEdit(objectUUID, component));
+  }
+
   // The spawn/destroy bindings buffered what the scripts did on BindingContext (scripting can't reach the
   // net layer). Broadcast spawns before destroys, then remove the marked objects from the authoritative
   // scene. A spawned object is still live here, so its packed blob carries current transform/components.

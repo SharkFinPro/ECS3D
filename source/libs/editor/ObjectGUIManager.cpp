@@ -3,16 +3,63 @@
 #include "GuiComponents.h"
 #include "Selection.h"
 #include <Replication.h>
+#include <SettingsStore.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
+#include <algorithm>
+#include <cctype>
 #include <random>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
+  constexpr const char* sortModeKey = "panels.objects.sortMode";
+
+  ObjectGUIManager::SortMode parseSortMode(const std::string& value)
+  {
+    return value == "alphabetical" ? ObjectGUIManager::SortMode::alphabetical : ObjectGUIManager::SortMode::authored;
+  }
+
+  const char* sortModeToString(const ObjectGUIManager::SortMode mode)
+  {
+    return mode == ObjectGUIManager::SortMode::alphabetical ? "alphabetical" : "authored";
+  }
+
+  // ASCII-only case fold, same approach AssetBrowserPanel uses for its own name sort/search - no
+  // std::locale, so this never depends on the environment.
+  [[nodiscard]] bool ciNameLess(const std::string& a, const std::string& b)
+  {
+    return std::ranges::lexicographical_compare(a, b, [](const char x, const char y) {
+      return std::tolower(static_cast<unsigned char>(x)) < std::tolower(static_cast<unsigned char>(y));
+    });
+  }
+
+  // The display order for `objects`, never the scene's own order: authored order is `objects` itself
+  // (today that's ObjectManager/Object's own load order, since there is no persisted sibling order yet),
+  // untouched and unsorted - so the caller-owned `scratch` is only filled and sorted (a stable sort, so
+  // two same-named objects keep their authored relative order) when alphabetical mode actually needs a
+  // reordered copy. `scratch` must outlive the reference this returns, so it lives in the caller's own
+  // loop scope rather than inside this function.
+  [[nodiscard]] const std::vector<std::shared_ptr<Object>>& sortedForDisplay(
+    const std::vector<std::shared_ptr<Object>>& objects, const ObjectGUIManager::SortMode mode,
+    std::vector<std::shared_ptr<Object>>& scratch)
+  {
+    if (mode != ObjectGUIManager::SortMode::alphabetical)
+    {
+      return objects;
+    }
+
+    scratch = objects;
+    std::ranges::stable_sort(scratch, [](const std::shared_ptr<Object>& a, const std::shared_ptr<Object>& b) {
+      return ciNameLess(a->getName(), b->getName());
+    });
+    return scratch;
+  }
+
   // A fresh asset uuid for a saved prefab. (AssetBrowserPanel has the same one-liner for the assets it
   // creates; asset uuids are unrelated to the scene's object uuids, so ObjectManager's generator is not
   // the right source here.)
@@ -89,6 +136,36 @@ void ObjectGUIManager::setEditable(const bool editable)
   m_editable = editable;
 }
 
+void ObjectGUIManager::setSettings(SettingsStore* settings)
+{
+  m_settings = settings;
+
+  if (m_settings)
+  {
+    m_sortMode = parseSortMode(m_settings->get<std::string>(sortModeKey, "authored"));
+  }
+}
+
+ObjectGUIManager::SortMode ObjectGUIManager::sortMode() const
+{
+  return m_sortMode;
+}
+
+void ObjectGUIManager::setSortMode(const SortMode mode)
+{
+  if (m_sortMode == mode)
+  {
+    return;
+  }
+
+  m_sortMode = mode;
+
+  if (m_settings)
+  {
+    m_settings->set(sortModeKey, std::string(sortModeToString(mode)));
+  }
+}
+
 void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 {
   // 16em covers the "Objects" section label plus its count pill and the "Create New Object" button
@@ -114,6 +191,10 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
     gc::pill(count.c_str(), theme::t3);
 
     ImGui::Spacing();
+
+    displaySortControl();
+
+    ImGui::Spacing();
   }
 
   ImGui::BeginDisabled(!m_editable || objectManager == nullptr);
@@ -131,7 +212,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   {
     m_dragSource = draggedObject(objectManager);
 
-    for (const auto& object : objectManager->getObjects())
+    std::vector<std::shared_ptr<Object>> sortedRootsScratch;
+    for (const auto& object : sortedForDisplay(objectManager->getObjects(), m_sortMode, sortedRootsScratch))
     {
       displayObjectTree(object);
     }
@@ -187,6 +269,33 @@ bool ObjectGUIManager::canAcceptObjectDrop(const std::shared_ptr<Object>& target
   // A reparent onto the dragged object itself or onto one of its own descendants would cycle the graph,
   // so the row refuses the drop instead of sending an edit the server rejects anyway.
   return !m_dragSource || (m_dragSource != target && !m_dragSource->isAncestorOf(target));
+}
+
+void ObjectGUIManager::displaySortControl()
+{
+  ImGui::TextColored(theme::t3, "Sort");
+  ImGui::SameLine();
+
+  const char* label = m_sortMode == SortMode::alphabetical ? "A-Z" : "Authored";
+  if (ImGui::SmallButton(label))
+  {
+    ImGui::OpenPopup("ObjectsSortMode");
+  }
+
+  if (ImGui::BeginPopup("ObjectsSortMode"))
+  {
+    if (ImGui::MenuItem("Authored Order", nullptr, m_sortMode == SortMode::authored))
+    {
+      setSortMode(SortMode::authored);
+    }
+
+    if (ImGui::MenuItem("Alphabetical", nullptr, m_sortMode == SortMode::alphabetical))
+    {
+      setSortMode(SortMode::alphabetical);
+    }
+
+    ImGui::EndPopup();
+  }
 }
 
 void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
@@ -338,7 +447,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 
   if (open && !isLeaf)
   {
-    for (const auto& child : object->getChildren())
+    std::vector<std::shared_ptr<Object>> sortedChildrenScratch;
+    for (const auto& child : sortedForDisplay(object->getChildren(), m_sortMode, sortedChildrenScratch))
     {
       displayObjectTree(child);
     }
@@ -376,6 +486,16 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
     ImGui::TextColored(theme::accent, "%s", object->getName().c_str());
     ImGui::SameLine();
     ImGui::TextUnformatted("?");
+
+    // Children survive a delete (ObjectManager::deleteObjectsMarkedForDeletion reparents them to the
+    // deleted object's own parent, or the scene root) - say so, since that's easy to miss.
+    if (const auto& children = object->getChildren(); !children.empty())
+    {
+      const auto parent = object->getParent();
+      const std::string destination = parent ? parent->getName() : "the scene root";
+      ImGui::TextColored(theme::scriptAmber, "Its %zu %s will be kept and moved to %s.", children.size(),
+                         children.size() == 1 ? "child" : "children", destination.c_str());
+    }
 
     ImGui::TextColored(theme::t3, "This action cannot be undone.");
 

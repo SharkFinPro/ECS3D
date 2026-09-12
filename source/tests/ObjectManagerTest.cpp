@@ -182,6 +182,89 @@ TEST(ObjectManager, DeletingARemovedRootPromotesItsChildrenToTheSceneRoot)
             scene.objectManager->getObjects().end());
 }
 
+TEST(ObjectManager, RemoveObjectReportsWhetherItNewlyMarkedTheObject)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Root");
+
+  EXPECT_TRUE(scene.objectManager->removeObject(object));
+  EXPECT_FALSE(scene.objectManager->removeObject(object));
+
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  // A double mark still deletes exactly once - the scene ends up exactly where a single removal leaves
+  // it, not doubly-removed or corrupted by revisiting the same object in the delete pass.
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(object->getUUID()), nullptr);
+  EXPECT_TRUE(scene.objectManager->getObjects().empty());
+  EXPECT_TRUE(scene.objectManager->getAllObjects().empty());
+}
+
+TEST(ObjectManager, RemovingTheSameObjectTwiceReparentsItsChildOnlyOnce)
+{
+  const auto scene = makeScene();
+  const auto grandparent = addObject(scene, "Grandparent");
+  const auto doomed = addChildObject(scene, "Doomed", grandparent);
+  const auto grandchild = addChildObject(scene, "Grandchild", doomed);
+
+  EXPECT_TRUE(scene.objectManager->removeObject(doomed));
+  EXPECT_FALSE(scene.objectManager->removeObject(doomed));
+
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  // Same end state a single removal produces: the grandchild is promoted exactly once, with exactly one
+  // entry for it in the grandparent's children and in the manager's own lists - a second, unrefused pass
+  // over the same object would have run removeChild/addChild again and could duplicate or corrupt that.
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(doomed->getUUID()), nullptr);
+  EXPECT_EQ(grandchild->getParent(), grandparent);
+
+  ASSERT_EQ(grandparent->getChildren().size(), 1u);
+  EXPECT_EQ(grandparent->getChildren().front(), grandchild);
+  EXPECT_EQ(std::ranges::count(grandparent->getChildren(), grandchild), 1);
+
+  ASSERT_EQ(scene.objectManager->getAllObjects().size(), 2u);
+  EXPECT_EQ(std::ranges::count(scene.objectManager->getAllObjects(), grandchild), 1);
+}
+
+// Positive control for the two tests above: marking is refused only for an object already queued, not
+// for every removeObject call in the tick - two distinct objects removed in the same tick are both
+// still marked and both still deleted.
+TEST(ObjectManager, RemovingTwoDifferentObjectsInTheSameTickMarksAndDeletesBoth)
+{
+  const auto scene = makeScene();
+  const auto first = addObject(scene, "First");
+  const auto second = addObject(scene, "Second");
+
+  EXPECT_TRUE(scene.objectManager->removeObject(first));
+  EXPECT_TRUE(scene.objectManager->removeObject(second));
+
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(first->getUUID()), nullptr);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(second->getUUID()), nullptr);
+  EXPECT_TRUE(scene.objectManager->getObjects().empty());
+  EXPECT_TRUE(scene.objectManager->getAllObjects().empty());
+}
+
+// The refusal only holds for the tick that queued the object: deleteObjectsMarkedForDeletion clears
+// m_objectsToRemove once it runs, so a fresh object added afterward can be marked normally rather than
+// being refused forever.
+TEST(ObjectManager, MarkingForDeletionIsScopedToATickNotForever)
+{
+  const auto scene = makeScene();
+  const auto first = addObject(scene, "First");
+
+  EXPECT_TRUE(scene.objectManager->removeObject(first));
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  const auto second = addObject(scene, "Second");
+  EXPECT_TRUE(scene.objectManager->removeObject(second));
+
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(second->getUUID()), nullptr);
+  EXPECT_TRUE(scene.objectManager->getAllObjects().empty());
+}
+
 TEST(ObjectManager, DuplicateObjectGivesTheCopyAndItsSubtreeFreshUuids)
 {
   const auto scene = makeScene();

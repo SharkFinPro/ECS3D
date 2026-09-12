@@ -1,4 +1,5 @@
 #include "EditorApp.h"
+#include "DarkTitleBar.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
@@ -161,6 +162,7 @@ EditorApp::EditorApp(LaunchOptions options)
     replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
 
     m_netClient->send(replication::packAddAsset(asset));
+    m_saveUI->markEdited();
   };
 
   // Rename an asset (display-name override only). Same local-apply-then-send shape as addAsset.
@@ -169,6 +171,7 @@ EditorApp::EditorApp(LaunchOptions options)
     replication::applyRenameAsset(*m_assetRegistry, op);
 
     m_netClient->send(replication::packRenameAsset(op));
+    m_saveUI->markEdited();
   };
 
   // Delete an asset: same local-apply-then-send shape. Deletion always succeeds; references dangle
@@ -178,6 +181,7 @@ EditorApp::EditorApp(LaunchOptions options)
     replication::applyRemoveAsset(*m_assetRegistry, op);
 
     m_netClient->send(replication::packRemoveAsset(op));
+    m_saveUI->markEdited();
   };
 
   // How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
@@ -223,6 +227,7 @@ EditorApp::EditorApp(LaunchOptions options)
   const auto editComponent = [this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
     const auto message = replication::buildComponentEdit(objectUUID, component);
     m_netClient->send(message);
+    m_saveUI->markEdited();
   };
 
   // A structural change (add/remove/reparent object, add/remove component, rename, add script): the
@@ -236,6 +241,7 @@ EditorApp::EditorApp(LaunchOptions options)
       message.write(chunk);
     }
     m_netClient->send(message);
+    m_saveUI->markEdited();
   };
 
   m_selection = std::make_shared<EditorSelection>();
@@ -246,6 +252,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_objectGUIManager->setSelection(m_selection);
   m_objectGUIManager->setAddAssetCallback(addAsset);
   m_objectGUIManager->setSceneEditCallback(sceneEdit);
+  m_objectGUIManager->setSettings(m_settings.get());
 
   // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).
   // Shared by the asset browser's scene double-click and the Inspector's "Load Scene" button.
@@ -302,7 +309,7 @@ EditorApp::EditorApp(LaunchOptions options)
   });
 
   // Save/Save As are wired to the table once SaveUI exists; toggleGui was already wired in setupKeybinds.
-  m_keybindDispatcher->on(EditorAction::saveProject, [this] { m_saveUI->save(); });
+  m_keybindDispatcher->on(EditorAction::saveProject, [this] { static_cast<void>(m_saveUI->save()); });
   m_keybindDispatcher->on(EditorAction::saveProjectAs, [this] { m_saveUI->saveAs(); });
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
@@ -543,6 +550,11 @@ void EditorApp::createRenderer()
   m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
 
   m_sceneViewName = engineConfig.imGui.sceneViewName;
+
+  // The title bar is native chrome ImGui never touches; follow the theme by luminance of the panel
+  // token, the same surface the rest of the window is drawn on.
+  const float panelLuminance = 0.299f * theme::panel.x + 0.587f * theme::panel.y + 0.114f * theme::panel.z;
+  applyDarkTitleBar(m_renderer->getWindow()->getWindow(), panelLuminance < 0.5f);
 }
 
 void EditorApp::registerEditors() const
@@ -675,6 +687,10 @@ void EditorApp::handleSceneStatus(const net::Message& message)
 
 void EditorApp::updateGui()
 {
+  // Drawn regardless of the GUI toggle below: a window-close request can arrive while the GUI is
+  // hidden, and the prompt must not be hideable out from under the user.
+  m_saveUI->displayUnsavedChangesModal();
+
   if (!m_shouldDisplayGui)
   {
     return;
@@ -725,12 +741,12 @@ void EditorApp::displayMenuBar() const
       ImGui::BeginDisabled(!m_serverEditable);
       if (ImGui::MenuItem("New"))
       {
-        m_saveUI->createNewProject();
+        m_saveUI->requestNewProject();
       }
 
       if (ImGui::MenuItem("Open"))
       {
-        m_saveUI->open();
+        m_saveUI->requestOpen();
       }
       ImGui::EndDisabled();
 
@@ -738,7 +754,7 @@ void EditorApp::displayMenuBar() const
 
       if (ImGui::MenuItem("Save", "Ctrl+S"))
       {
-        m_saveUI->save();
+        static_cast<void>(m_saveUI->save());
       }
 
       if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
@@ -813,13 +829,50 @@ void EditorApp::updateDockSpace() const
 
   if (!dockPercentsSetup)
   {
+    const ImVec2 viewportSize = ImGui::GetMainViewport()->Size;
+
+    // A just-opened (or minimized) window can report a zero-size viewport on its first frames; wait for a
+    // real size instead of dividing by zero or locking in a degenerate layout.
+    if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
+    {
+      return;
+    }
+
+    // Objects/Inspector: wide enough for a name/icon column and field labels, capped so a narrow window
+    // still leaves the center scene view usable.
+    constexpr float leftPanelWidth = 280.0f;
+    constexpr float rightPanelWidth = 360.0f;
+    constexpr float maxSideFraction = 0.3f;
+
+    // Assets/Project Errors: enough height for a row of thumbnails or a few log lines.
+    constexpr float bottomPanelHeight = 240.0f;
+    constexpr float maxBottomFraction = 0.35f;
+
+    const float leftWidth = std::min(leftPanelWidth, viewportSize.x * maxSideFraction);
+    const float rightWidth = std::min(rightPanelWidth, viewportSize.x * maxSideFraction);
+    const float bottomHeight = std::min(bottomPanelHeight, viewportSize.y * maxBottomFraction);
+
+    // Scene Status draws its controls on a single row (see displaySceneStatus): title bar + padding + one
+    // control row fits it exactly at any font size or DPI, with no scrollbar.
+    constexpr int sceneStatusRows = 1;
+    const float topHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f
+                           + ImGui::GetFrameHeightWithSpacing() * sceneStatusRows;
+
     const auto gui = m_renderer->getImGuiInstance();
 
-    gui->setTopDockPercent(0.09);
-    gui->setBottomDockPercent(0.28);
+    // DockBuilderSplitNode cuts each dock from whatever remains of the node (left, then right of that,
+    // then top, then bottom of what's left), so later percents must be relative to the reduced node, not
+    // the full viewport.
+    const float leftPercent = leftWidth / viewportSize.x;
+    const float rightPercent = rightWidth / (viewportSize.x - leftWidth);
+    const float topPercent = topHeight / viewportSize.y;
+    const float bottomPercent = bottomHeight / (viewportSize.y - topHeight);
 
-    gui->setLeftDockPercent(0.2);
-    gui->setRightDockPercent(0.35);
+    gui->setTopDockPercent(topPercent);
+    gui->setBottomDockPercent(bottomPercent);
+
+    gui->setLeftDockPercent(leftPercent);
+    gui->setRightDockPercent(rightPercent);
 
     dockPercentsSetup = true;
   }

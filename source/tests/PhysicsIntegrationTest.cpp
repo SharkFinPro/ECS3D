@@ -2,6 +2,7 @@
 
 #include "TestScene.h"
 #include "CollisionSystem.h"
+#include "FixedTimestep.h"
 #include "PhysicsSystem.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -374,4 +375,34 @@ TEST(PhysicsIntegration, TwoBodiesAlreadyMovingApartAreSeparatedButNotSlowed)
   expectNear("left velocity", leftBody->getVelocity(), { 1, 0, 0 });
   expectNear("right velocity", right->getComponent<RigidBody>(ComponentType::rigidBody)->getVelocity(),
              { -1, 0, 0 });
+}
+
+TEST(PhysicsIntegration, AStallLongerThanTheStepCapHasItsBankedTimeDroppedNotCarriedForward)
+{
+  // A long stall (GC pause, breakpoint, OS scheduling hiccup) hands the run loop one huge dt. Before the
+  // fix, ServerApp only capped how many ticks a single frame would replay - it never shed the leftover,
+  // so the accumulator kept the whole backlog and the next several frames replayed it as one burst of
+  // full-speed ticks (an object with a force applied every tick would move that many ticks' worth of
+  // distance almost instantly). advance() must drop everything past the cap right away instead.
+  constexpr float fixedDt = 1.0f / 50.0f;
+  constexpr int maxSteps = 3;
+
+  const auto plan = FixedTimestep::advance(0.0f, 5.0f, fixedDt, maxSteps);
+
+  EXPECT_EQ(plan.steps, maxSteps);
+  EXPECT_NEAR(plan.remainingAccumulator, 0.0f, 1e-5f);
+}
+
+TEST(PhysicsIntegration, AFrameWithinTheStepCapKeepsItsLeftoverForTheNextFrame)
+{
+  // Positive control for the test above: dropping the backlog only happens once the cap is actually hit.
+  // A normal frame (well under the cap) must keep its sub-tick remainder exactly as before, or ticks
+  // would drift out of sync with real time on every ordinary frame instead of only after a stall.
+  constexpr float fixedDt = 1.0f / 50.0f;
+  constexpr int maxSteps = 3;
+
+  const auto plan = FixedTimestep::advance(0.0f, 0.05f, fixedDt, maxSteps);
+
+  EXPECT_EQ(plan.steps, 2);
+  EXPECT_NEAR(plan.remainingAccumulator, 0.01f, 1e-5f);
 }

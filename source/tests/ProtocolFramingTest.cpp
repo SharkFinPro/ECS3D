@@ -268,6 +268,22 @@ TEST(ProtocolFraming, AStringLengthLongerThanThePayloadThrows)
   EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
 }
 
+TEST(ProtocolFraming, AStringLengthLongerThanThePayloadLeavesTheReaderWhereItWas)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.write<uint32_t>(64);
+  message.write<uint8_t>('x');
+
+  net::MessageReader reader(message);
+
+  EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
+
+  // A failed readString must not have moved the offset: the positive control is reading the same four
+  // bytes back as the uint32 length prefix they actually are, not as a discarded partial string read.
+  EXPECT_EQ(reader.remaining(), message.size());
+  EXPECT_EQ(reader.read<uint32_t>(), 64u);
+}
+
 TEST(ProtocolFraming, AnAbsurdStringLengthThrowsRatherThanOverreading)
 {
   net::Message message(net::MessageType::sceneEdit);
@@ -286,4 +302,59 @@ TEST(ProtocolFraming, ATruncatedStringPrefixThrows)
   net::MessageReader reader(message);
 
   EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
+}
+
+TEST(ProtocolFraming, IsMutationMessageMatchesTheDocumentedEditorMutationPath)
+{
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::editComponent));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::sceneEdit));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::sceneControl));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::loadProject));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::addAsset));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::renameAsset));
+  EXPECT_TRUE(net::isMutationMessage(net::MessageType::removeAsset));
+}
+
+TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
+{
+  // The positive control above proves the switch fires at all; this is every remaining MessageType, so a
+  // type added to one enum without the other fails one of the two tests instead of silently drifting.
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::undefined));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::join));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::snapshot));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::stateDelta));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::inputState));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::editStatus));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::sceneStatus));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectSpawned));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectDestroyed));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::playerSlot));
+}
+
+TEST(ProtocolFraming, ATruncatedStringPrefixLeavesTheReaderWhereItWas)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.write<uint16_t>(3);
+
+  net::MessageReader reader(message);
+
+  EXPECT_THROW(static_cast<void>(reader.readString()), std::runtime_error);
+
+  // Same positive control as above, for the shorter-than-the-prefix-itself case: the two bytes read
+  // back as the uint16 that was actually written there.
+  EXPECT_EQ(reader.remaining(), message.size());
+  EXPECT_EQ(reader.read<uint16_t>(), 3u);
+}
+
+TEST(ProtocolFraming, AWellFormedStringFollowedByAnIntStillReadsBothCorrectly)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.writeString("abc");
+  message.write<int32_t>(42);
+
+  net::MessageReader reader(message);
+
+  EXPECT_EQ(reader.readString(), "abc");
+  EXPECT_EQ(reader.read<int32_t>(), 42);
+  EXPECT_EQ(reader.remaining(), 0u);
 }

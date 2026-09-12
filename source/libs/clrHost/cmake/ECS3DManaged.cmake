@@ -40,6 +40,16 @@ function(ecs3d_add_managed_assembly TARGET SRC_DIR OUT_SUBDIR ASSEMBLY_NAME)
     VERBATIM
   )
 
+  # Chain managed assembly targets instead of letting the generator publish them in parallel: on a
+  # machine where dotnet has never run, two `dotnet publish` processes racing through the SDK's
+  # first-run configuration at once can crash it (a named mutex whose backing directory only one
+  # side has created yet).
+  get_property(_ecs3d_prev_managed_assembly GLOBAL PROPERTY ECS3D_LAST_MANAGED_ASSEMBLY)
+  if(_ecs3d_prev_managed_assembly)
+    add_dependencies(${ASSEMBLY_NAME} ${_ecs3d_prev_managed_assembly})
+  endif()
+  set_property(GLOBAL PROPERTY ECS3D_LAST_MANAGED_ASSEMBLY ${ASSEMBLY_NAME})
+
   add_dependencies(${TARGET} ${ASSEMBLY_NAME})
 endfunction()
 

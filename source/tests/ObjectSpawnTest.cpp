@@ -11,6 +11,7 @@
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <Protocol.h>
+#include <nlohmann/json.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -28,6 +29,38 @@ namespace {
     addChildObject(source, "Spawned Child", parent);
 
     return replication::buildObjectSpawned(*parent);
+  }
+
+  // A root with `levels` single-child descendants below it (root -> child -> ... -> levels deep), built
+  // through the same registry-backed factories a loaded scene uses. Returns the root, whose own
+  // serialize()/pack() then carries the whole chain - a loop, not recursion, so building a deep fixture
+  // doesn't itself risk the stack the fix is protecting.
+  std::shared_ptr<Object> chainOfDepth(const Scene& scene, const std::size_t levels)
+  {
+    const auto root = addObject(scene, "Root");
+
+    auto current = root;
+    for (std::size_t i = 0; i < levels; ++i)
+    {
+      current = addChildObject(scene, "Descendant", current);
+    }
+
+    return root;
+  }
+
+  // The node `levels` steps below start, built through addChildObject the same way chainOfDepth is -
+  // but returning the deepest node instead of the root, for tests that need a parent sitting at a
+  // specific depth rather than a whole chain to serialize.
+  std::shared_ptr<Object> descendantAtDepth(const Scene& scene, const std::shared_ptr<Object>& start,
+                                            const std::size_t levels)
+  {
+    auto current = start;
+    for (std::size_t i = 0; i < levels; ++i)
+    {
+      current = addChildObject(scene, "Descendant", current);
+    }
+
+    return current;
   }
 
   // A well-formed object header claiming one component, followed by nothing but that component's
@@ -209,4 +242,90 @@ TEST(ObjectSpawn, RebuildsAColliderSlotWhenThePayloadIsTheOtherShape)
   ASSERT_NE(collider, nullptr);
   EXPECT_EQ(collider->getPackedType(), ComponentType::SubComponentType_boxCollider);
   EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ObjectSpawn, UnpacksAChainExactlyAtTheDepthLimit)
+{
+  const auto source = makeScene();
+  const auto root = chainOfDepth(source, maxObjectDepth);
+  const auto message = replication::buildObjectSpawned(*root);
+
+  const auto target = makeScene();
+  replication::applyObjectSpawned(*target.objectManager, message);
+
+  // root plus one descendant per level.
+  EXPECT_EQ(target.objectManager->getAllObjects().size(), maxObjectDepth + 1);
+}
+
+TEST(ObjectSpawn, RefusesAChainOneLevelDeeperThanTheDepthLimitAndLeavesNothingBehind)
+{
+  const auto source = makeScene();
+  const auto root = chainOfDepth(source, maxObjectDepth + 1);
+  const auto message = replication::buildObjectSpawned(*root);
+
+  const auto target = makeScene();
+
+  // Paired with UnpacksAChainExactlyAtTheDepthLimit above: that test is the positive control proving a
+  // chain this shape unpacks at all, so a throw here is the depth check firing, not some other defect.
+  EXPECT_THROW(replication::applyObjectSpawned(*target.objectManager, message), std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
+}
+
+TEST(ObjectSpawn, InstantiatesAJsonChainExactlyAtTheDepthLimit)
+{
+  const auto source = makeScene();
+  const auto root = chainOfDepth(source, maxObjectDepth);
+  const auto body = root->serialize();
+
+  const auto target = makeScene();
+  target.objectManager->instantiate(body);
+
+  EXPECT_EQ(target.objectManager->getAllObjects().size(), maxObjectDepth + 1);
+}
+
+TEST(ObjectSpawn, RefusesAJsonChainOneLevelDeeperThanTheDepthLimitAndLeavesNothingBehind)
+{
+  const auto source = makeScene();
+  const auto root = chainOfDepth(source, maxObjectDepth + 1);
+  const auto body = root->serialize();
+
+  const auto target = makeScene();
+
+  // Paired with InstantiatesAJsonChainExactlyAtTheDepthLimit above, the same way the wire pair is.
+  EXPECT_THROW(target.objectManager->instantiate(body), std::runtime_error);
+  EXPECT_TRUE(target.objectManager->getAllObjects().empty());
+}
+
+TEST(ObjectSpawn, DuplicatesALeafBodyUnderAParentOneBelowTheDepthLimit)
+{
+  const auto scene = makeScene();
+
+  // duplicateObject is instantiateUnder's other caller, landing its copy beside the source - under the
+  // source's own live parent, not under the source itself - so a source sitting at maxObjectDepth with
+  // no children of its own is a body that is only 1 node deep dropped under a parent one below the limit.
+  const auto deepParent = descendantAtDepth(scene, addObject(scene, "Root"), maxObjectDepth - 1);
+  const auto source = addChildObject(scene, "Source", deepParent);
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  scene.objectManager->duplicateObject(source);
+
+  // The copy lands at maxObjectDepth exactly - the positive control proving this shape of duplicate
+  // applies at all, so the throw below is the depth check firing and not some other defect.
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before + 1);
+}
+
+TEST(ObjectSpawn, DuplicatingATwoLevelBodyPastTheDepthLimitThrowsAndLeavesNothingBehind)
+{
+  const auto scene = makeScene();
+
+  // One level deeper than the positive control above: source now carries a child of its own, so its
+  // duplicate (root at maxObjectDepth, child at maxObjectDepth + 1) no longer fits.
+  const auto deepParent = descendantAtDepth(scene, addObject(scene, "Root"), maxObjectDepth - 1);
+  const auto source = addChildObject(scene, "Source", deepParent);
+  addChildObject(scene, "SourceChild", source);
+
+  const auto before = scene.objectManager->getAllObjects().size();
+
+  EXPECT_THROW(scene.objectManager->duplicateObject(source), std::runtime_error);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
 }

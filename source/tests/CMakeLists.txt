@@ -28,11 +28,13 @@ add_executable(${PROJECT_NAME}
   AssetRegistryTest.cpp
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
+  EditHistoryTest.cpp
   CollisionMathTest.cpp
   NarrowPhaseTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
+  LogTest.cpp
   CollisionEventTest.cpp
   SettingsStoreTest.cpp
   KeybindsTest.cpp
@@ -69,6 +71,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
+  ECS3DLog
   ECS3DNetProtocol
   ECS3DSettings
   ECS3DSim

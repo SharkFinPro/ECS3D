@@ -14,6 +14,10 @@ add_library(${PROJECT_NAME}
   WireTypes.h
   assets/AssetRegistry.cpp
   assets/AssetRegistry.h
+  edits/EditCommand.cpp
+  edits/EditCommand.h
+  edits/EditHistory.cpp
+  edits/EditHistory.h
   scenes/SceneManager.cpp
   scenes/SceneManager.h
   scenes/SceneAsset.cpp

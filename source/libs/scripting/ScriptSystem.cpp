@@ -56,7 +56,7 @@ void ScriptSystem::start(ObjectManager& objectManager)
       }
 
       attach(*object, *script);
-      m_engine->start(uuids::to_string(object->getUUID()).c_str(), script->getClassName().c_str());
+      startIfNeeded(object->getUUID(), script->getClassName());
     }
   }
 }
@@ -114,18 +114,25 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
         continue;
       }
 
-      // Lazily (re)create the instance if needed - restores instances after a hot reload.
+      // Lazily (re)create the instance if needed - restores instances after a hot reload, and covers a
+      // script added to a running scene (new component, or an object spawned by World.spawnObject/
+      // spawnPrefab).
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
         attach(*object, *script);
       }
+
+      // The scene is running here (fixedUpdate is only called while it is), so any instance that isn't
+      // started yet - whether just attached above or attached earlier by attachAll while the snapshot
+      // was built - gets its one start() before this first tick.
+      startIfNeeded(object->getUUID(), script->getClassName());
 
       m_engine->fixedUpdate(uuids::to_string(object->getUUID()).c_str(), script->getClassName().c_str(), dt);
     }
   }
 }
 
-void ScriptSystem::variableUpdate(ObjectManager& objectManager) const
+void ScriptSystem::variableUpdate(ObjectManager& objectManager)
 {
   if (!m_engine)
   {
@@ -144,11 +151,17 @@ void ScriptSystem::variableUpdate(ObjectManager& objectManager) const
         continue;
       }
 
-      // Only run instances that have already been attached + started (fixedUpdate/start own attachment).
+      // Only run instances that have already been attached (fixedUpdate owns lazy attachment); a script
+      // added this same tick waits for fixedUpdate to attach it and runs variableUpdate from next tick on.
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
         continue;
       }
+
+      // attachAll (run from broadcastSnapshot, running or not) can attach an instance before the scene's
+      // tick loop ever reaches it; start it here, before its first variableUpdate, since the scene is
+      // running whenever this runs.
+      startIfNeeded(object->getUUID(), script->getClassName());
 
       m_engine->variableUpdate(uuids::to_string(object->getUUID()).c_str(), script->getClassName().c_str());
     }
@@ -305,6 +318,7 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
 
     m_attached.clear();
     m_fieldCache.clear();
+    m_started.clear();
 
     m_scriptsSnapshot = std::move(now);
 
@@ -350,6 +364,18 @@ void ScriptSystem::detach(const uuids::uuid& uuid, const std::string& className)
   const auto key = cacheKey(uuid, className);
   m_attached.erase(key);
   m_fieldCache.erase(key);
+  m_started.erase(key);
+}
+
+void ScriptSystem::startIfNeeded(const uuids::uuid& uuid, const std::string& className)
+{
+  if (!m_started.insert(cacheKey(uuid, className)).second)
+  {
+    // Already started - m_started.insert only returns true the first time a key is added.
+    return;
+  }
+
+  m_engine->start(uuids::to_string(uuid).c_str(), className.c_str());
 }
 
 void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,

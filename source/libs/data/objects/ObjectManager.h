@@ -2,6 +2,7 @@
 #define OBJECTMANAGER_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstddef>
 #include <memory>
 #include <random>
 #include <vector>
@@ -52,13 +53,25 @@ public:
 
   void stop();
 
+  // Rebuild the manager's objects from a save-shaped objects array (the "objects" field ObjectManager::
+  // serialize() writes), replacing whatever it currently holds and preserving each object's uuid - unlike
+  // instantiate, which assigns fresh ones. Used to put a scene back to its authored structure after a run
+  // (spawn/destroy/reparent undone), so editor selections and cross-references to authored objects survive.
+  void restoreFromJSON(const nlohmann::json& objectsData);
+
   [[nodiscard]] nlohmann::json serialize() const;
 
   void pack(net::Message& message) const;
 
   void unpack(net::MessageReader& messageReader);
 
-  void removeObject(const std::shared_ptr<Object>& object);
+  // Queues object for the next deleteObjectsMarkedForDeletion pass. Idempotent within a tick: marking an
+  // object already queued is a no-op, so two paths reacting to the same event in one tick still produce
+  // exactly one deletion. Returns true when this call newly marked the object, false when it was already
+  // marked - callers that broadcast a destroy should do so only on true. Not [[nodiscard]]: most callers
+  // (a structural scene edit, a client applying a destroy it was already told about) legitimately ignore
+  // the result.
+  bool removeObject(const std::shared_ptr<Object>& object);
 
   // Drop a subtree that was never fully built. Not the deletion lifecycle: it defers nothing and does not
   // reparent children, it just unregisters what was registered. For a subtree that is already live in the
@@ -90,8 +103,9 @@ private:
 
   void eraseSubtree(const std::shared_ptr<Object>& object);
 
-  // Recursively replace the serialized object's (and its children's) uuids with fresh ones.
-  void reassignUUIDs(nlohmann::json& objectData);
+  // Recursively replace the serialized object's (and its children's) uuids with fresh ones. Throws past
+  // maxObjectDepth (Object.h) rather than recursing further into an attacker-sized prefab/duplicate body.
+  void reassignUUIDs(nlohmann::json& objectData, std::size_t depth = 0);
 };
 
 

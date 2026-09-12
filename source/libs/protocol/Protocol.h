@@ -5,6 +5,7 @@
 #include <bit>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -48,6 +49,25 @@ enum class MessageType : uint8_t {
   // editor connecting to a non-edit server is admitted read-only (it views but cannot mutate).
 };
 
+// The editor's mutation path, called out as its own function so the transport-side enforcement and any
+// other caller read the same list the comment above documents, rather than a second one that can drift.
+[[nodiscard]] constexpr bool isMutationMessage(const MessageType type) noexcept
+{
+  switch (type)
+  {
+    case MessageType::editComponent:
+    case MessageType::sceneEdit:
+    case MessageType::sceneControl:
+    case MessageType::loadProject:
+    case MessageType::addAsset:
+    case MessageType::renameAsset:
+    case MessageType::removeAsset:
+      return true;
+    default:
+      return false;
+  }
+}
+
 enum class Role : uint8_t {
   player,
   editor
@@ -84,10 +104,17 @@ inline constexpr bool wirePackable =
 template <typename T>
 concept WireValue = std::is_trivially_copyable_v<T> && wirePackable<T>;
 
+// The frame length NetServer::broadcast and NetClient::send hand across the native/managed boundary is
+// int32_t; a message size that does not fit would narrow to a negative or truncated length on the wire.
+// Both sites guard against it before the cast and share this predicate so the two behave identically.
+[[nodiscard]] inline bool fitsInWireFrameLength(const std::size_t size) noexcept {
+  return size <= static_cast<std::size_t>(std::numeric_limits<int32_t>::max());
+}
+
 class Message {
 public:
-  explicit Message(const MessageType type) noexcept : type(type) {}
-  Message() {}
+  explicit Message(const MessageType type) noexcept : m_type(type) {}
+  Message() = default;
 
   template <WireValue T>
   Message& write(const T& value) {
@@ -104,6 +131,11 @@ public:
 
   // Length-prefixed string (uint32 size + bytes). The pairing read is MessageReader::readString.
   Message& writeString(const std::string& value) {
+    // Checked before anything is written: a size that does not fit the uint32 prefix would wrap, and a
+    // wrapped prefix desyncs every field the pairing readString and every read after it expect to find.
+    if (value.size() > std::numeric_limits<uint32_t>::max())
+      throw std::runtime_error("String too large to length-prefix in a wire message");
+
     write(static_cast<uint32_t>(value.size()));
     m_payload.insert(m_payload.end(), value.begin(), value.end());
     return *this;
@@ -112,10 +144,10 @@ public:
   [[nodiscard]] std::size_t size() const noexcept { return m_payload.size(); }
   [[nodiscard]] std::span<const uint8_t> bytes() const noexcept { return m_payload; }
 
-  [[nodiscard]] MessageType getType() const noexcept { return type; }
+  [[nodiscard]] MessageType getType() const noexcept { return m_type; }
 
 private:
-  MessageType type = MessageType::undefined;
+  MessageType m_type = MessageType::undefined;
   std::vector<uint8_t> m_payload;
 };
 
@@ -130,22 +162,23 @@ public:
     if constexpr (std::is_same_v<std::remove_cv_t<T>, bool>) {
       return read<uint8_t>() != 0;
     } else {
-      if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
-        throw std::runtime_error("Message underflow");
-
-      std::array<uint8_t, sizeof(T)> raw{};
-      std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+      const T value = peek<T>();
       m_offset += sizeof(T);
-      return std::bit_cast<T>(raw);
+      return value;
     }
   }
 
-  // Reads a length-prefixed string written by Message::writeString.
+  // Reads a length-prefixed string written by Message::writeString. Both the length prefix and the size
+  // it names are checked before m_offset moves at all, so a throw here leaves the reader exactly where it
+  // was - a caller that catches and retries (or reads the same bytes as something else) sees no partial
+  // advance.
   [[nodiscard]] std::string readString() {
-    const auto size = read<uint32_t>();
-    if (size > m_data.size() - m_offset)
+    const auto size = peek<uint32_t>();
+
+    if (size > m_data.size() - m_offset - sizeof(uint32_t))
       throw std::runtime_error("Message underflow");
 
+    m_offset += sizeof(uint32_t);
     std::string value(reinterpret_cast<const char*>(m_data.data() + m_offset), size);
     m_offset += size;
     return value;
@@ -154,6 +187,18 @@ public:
   [[nodiscard]] std::size_t remaining() const noexcept { return m_data.size() - m_offset; }
 
 private:
+  // The raw bounds-checked read that read<T>() and readString() both need, without advancing m_offset -
+  // readString() must validate the length prefix before deciding whether the payload it names even fits.
+  template <WireValue T>
+  [[nodiscard]] T peek() const {
+    if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
+      throw std::runtime_error("Message underflow");
+
+    std::array<uint8_t, sizeof(T)> raw{};
+    std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+    return std::bit_cast<T>(raw);
+  }
+
   std::span<const uint8_t> m_data;
   std::size_t m_offset = 0;
 };

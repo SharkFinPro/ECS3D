@@ -578,6 +578,38 @@ namespace gc {
     return edited;
   }
 
+  // Relative luminance of `c` (WCAG formula, sRGB gamma removed), used to pick a legible text color
+  // against an arbitrary background - the theme's colors are user-editable, so a fixed text color would
+  // go illegible under some palettes.
+  inline float relativeLuminance(const ImVec4& c)
+  {
+    const auto linearize = [](const float u)
+    {
+      return u <= 0.03928f ? u / 12.92f : std::pow((u + 0.055f) / 1.055f, 2.4f);
+    };
+    return 0.2126f * linearize(c.x) + 0.7152f * linearize(c.y) + 0.0722f * linearize(c.z);
+  }
+
+  // Composites `fg` (using its alpha) over the opaque `bg`. The theme tokens are user-editable and some
+  // carry alpha (e.g. accdim), so the color actually visible on screen is this blend, not the token
+  // value itself.
+  inline ImVec4 blendOver(const ImVec4& fg, const ImVec4& bg)
+  {
+    const float a = fg.w;
+    return { fg.x * a + bg.x * (1.0f - a), fg.y * a + bg.y * (1.0f - a), fg.z * a + bg.z * (1.0f - a), 1.0f };
+  }
+
+  // Black or white, whichever reads better on top of `bg`. Compares the two contrast ratios directly
+  // instead of using a luminance cutoff: black and white give equal WCAG contrast at L ~= 0.179, not at
+  // L = 0.5, so a 0.5 cutoff picks the worse color for every background between the two.
+  inline ImVec4 contrastOn(const ImVec4& bg)
+  {
+    const float l = relativeLuminance(bg);
+    const float contrastWithBlack = (l + 0.05f) / 0.05f;
+    const float contrastWithWhite = 1.05f / (l + 0.05f);
+    return contrastWithBlack > contrastWithWhite ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+  }
+
   // An accent track slider with a glowing thumb (Friction / Mass / Scale All in the mockup).
   // Label sits in the left column; the value is drawn right-aligned inside the track.
   inline bool accentSlider(const char* label, float* v, const float min, const float max)
@@ -625,11 +657,40 @@ namespace gc {
     dl->AddCircleFilled(ImVec2(fillX, cy), 9.0f, theme::u32(theme::accdim));
     dl->AddCircleFilled(ImVec2(fillX, cy), 7.0f, theme::u32(theme::accent));
 
-    // Value, right-aligned inside the track.
+    // Value, right-aligned inside the track. The track's painted band (trackH) is thinner than the text,
+    // so most of each glyph actually sits above/below it on the window panel, not on the track - each of
+    // the three backgrounds a pixel can land on (fill, empty track, panel) gets its own clipped pass with
+    // contrast computed against what is really visible there (blended, since accent/inset can carry
+    // alpha as user-editable tokens).
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%.3f", *v);
     const ImVec2 vts = ImGui::CalcTextSize(buf);
-    dl->AddText(ImVec2(pos.x + width - vts.x - 10.0f, cy - vts.y * 0.5f), theme::u32(theme::t1), buf);
+    const ImVec2 textPos(pos.x + width - vts.x - 10.0f, cy - vts.y * 0.5f);
+
+    const ImVec4 trackVisible = blendOver(theme::inset, theme::panel);
+    const ImVec4 fillVisible = blendOver(theme::accent, trackVisible);
+    const ImU32 colOnFill = theme::u32(contrastOn(fillVisible));
+    const ImU32 colOnTrack = theme::u32(contrastOn(trackVisible));
+    const ImU32 colOnPanel = theme::u32(contrastOn(theme::panel));
+
+    const float trackTop = cy - trackH * 0.5f;
+    const float trackBottom = cy + trackH * 0.5f;
+
+    dl->PushClipRect(ImVec2(pos.x, pos.y), ImVec2(pos.x + width, trackTop), true);
+    dl->AddText(textPos, colOnPanel, buf);
+    dl->PopClipRect();
+
+    dl->PushClipRect(ImVec2(pos.x, trackBottom), ImVec2(pos.x + width, pos.y + h), true);
+    dl->AddText(textPos, colOnPanel, buf);
+    dl->PopClipRect();
+
+    dl->PushClipRect(ImVec2(pos.x, trackTop), ImVec2(fillX, trackBottom), true);
+    dl->AddText(textPos, colOnFill, buf);
+    dl->PopClipRect();
+
+    dl->PushClipRect(ImVec2(fillX, trackTop), ImVec2(pos.x + width, trackBottom), true);
+    dl->AddText(textPos, colOnTrack, buf);
+    dl->PopClipRect();
 
     return edited;
   }

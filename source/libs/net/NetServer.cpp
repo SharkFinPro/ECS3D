@@ -1,6 +1,8 @@
 #include "NetServer.h"
 #include <ManagedHost.h>
 #include <array>
+#include <iostream>
+#include <limits>
 #include <utility>
 
 namespace net {
@@ -36,6 +38,14 @@ extern "C" void ecs3dNetServerDisconnect(const int32_t connId)
   }
 }
 
+extern "C" void ecs3dNetServerAuthorized(const int32_t connId, const uint8_t role)
+{
+  if (g_activeServer)
+  {
+    g_activeServer->authorize(connId, role);
+  }
+}
+
 NetServer::NetServer(std::shared_ptr<ManagedHost> host)
   : m_host(std::move(host))
 {}
@@ -57,10 +67,12 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_connectionCountFn = m_host->getDelegate(kAssembly, kType, "serverConnectionCount");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
   m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
+  m_setAuthorizedCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetAuthorizedCallback");
 
   g_activeServer = this;
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
   reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerDisconnect));
+  reinterpret_cast<SetCallbackFn>(m_setAuthorizedCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerAuthorized));
 
   reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0, authToken.c_str());
   m_started = true;
@@ -83,6 +95,16 @@ void NetServer::broadcast(const Message& message) const
 {
   if (!m_started)
   {
+    return;
+  }
+
+  // A size above INT32_MAX would narrow to a negative or truncated frame length on the wire; refuse it
+  // here rather than hand the cast something it cannot represent. This is a void hot-path callback, so
+  // there is no caller to throw to - log the refusal instead.
+  if (!fitsInWireFrameLength(message.size()))
+  {
+    std::cerr << "[NetServer] Refusing to broadcast a " << message.size() << " byte message; the limit is "
+              << std::numeric_limits<int32_t>::max() << "." << std::endl;
     return;
   }
 
@@ -122,14 +144,52 @@ void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t*
 
 void NetServer::enqueueDisconnect(const int32_t connId)
 {
+  // isEditor must not be revoked here: this runs on the socket thread, and a message this same
+  // connection sent moments before disconnecting may still be sitting in the inbox, undrained until the
+  // tick thread's next poll loop. Erasing now would make that message read back as unauthorized - an
+  // editor that edits and then closes (an ordinary flow) would have its last edit refused and logged.
   std::lock_guard lock(m_disconnectMutex);
   m_disconnected.push_back(connId);
 }
 
 std::vector<int32_t> NetServer::takeDisconnected()
 {
-  std::lock_guard lock(m_disconnectMutex);
-  return std::exchange(m_disconnected, {});
+  std::vector<int32_t> disconnected;
+  {
+    std::lock_guard lock(m_disconnectMutex);
+    disconnected = std::exchange(m_disconnected, {});
+  }
+
+  // Called on the tick thread after that tick's inbox drain, so any message from a now-dropped
+  // connection has already been handled with its authorization intact. Connection ids are never
+  // reused (both transport backends assign them via Interlocked.Increment), so a deferred erase here
+  // cannot let a new connection inherit a stale editor entry.
+  {
+    std::lock_guard lock(m_editorMutex);
+    for (const auto connId : disconnected)
+    {
+      m_editorConnections.erase(connId);
+    }
+  }
+
+  return disconnected;
+}
+
+void NetServer::authorize(const int32_t connId, const uint8_t role)
+{
+  if (static_cast<Role>(role) != Role::editor)
+  {
+    return;
+  }
+
+  std::lock_guard lock(m_editorMutex);
+  m_editorConnections.insert(connId);
+}
+
+bool NetServer::isEditor(const int32_t connectionId) const
+{
+  std::lock_guard lock(m_editorMutex);
+  return m_editorConnections.contains(connectionId);
 }
 
 }

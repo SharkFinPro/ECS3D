@@ -32,9 +32,6 @@ public:
   void setScale(const glm::vec3& scale);
   void setRotation(const glm::vec3& rotation);
 
-  [[nodiscard]] bool getRenderCollider() const;
-  void setRenderCollider(bool renderCollider);
-
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -50,10 +47,6 @@ public:
   void unpack(net::MessageReader& messageReader) override;
 
 private:
-  // Collider gizmo rendering lives in ECS3DRender; m_renderCollider is a plain flag the editor toggles
-  // and the render system reads.
-  bool m_renderCollider = false;
-
   std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
 
   uint8_t m_currentTransformUpdateID = 255;

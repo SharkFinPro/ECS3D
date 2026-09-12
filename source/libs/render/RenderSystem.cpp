@@ -60,6 +60,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   const auto renderer = assetCache.getRenderer();
   const auto lightingManager = renderer->getLightingManager();
 
+  m_liveUUIDs.clear();
+
   for (const auto& object : objectManager.getAllObjects())
   {
     const auto transform = object->getComponent<Transform>(ComponentType::transform);
@@ -70,6 +72,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     }
 
     const auto uuid = object->getUUID();
+
+    m_liveUUIDs.insert(uuid);
 
     if (const auto modelRenderer = object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
         modelRenderer && modelRenderer->getShouldRender() && modelRenderer->canRender())
@@ -106,12 +110,24 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       auto& light = m_lights[uuid];
 
-      if (!light.pointLight)
+      // Create only the kind currently in use. A LightRenderer that toggles spot/point releases the
+      // other kind's shared_ptr here first, dropping its own vke light (and shadow map) rather than
+      // keeping both allocated for as long as the object exists.
+      if (lightRenderer->isSpotLight())
       {
-        light.pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(
-          glm::vec3(0), lightRenderer->getColor(), lightRenderer->getAmbient(), lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
+        if (!light.spotLight)
+        {
+          light.pointLight.reset();
 
-        light.spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(
+          light.spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(
+            glm::vec3(0), lightRenderer->getColor(), lightRenderer->getAmbient(), lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
+        }
+      }
+      else if (!light.pointLight)
+      {
+        light.spotLight.reset();
+
+        light.pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(
           glm::vec3(0), lightRenderer->getColor(), lightRenderer->getAmbient(), lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
       }
 
@@ -158,13 +174,25 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/sphere_3.glb"))
       {
-        gizmo->setPosition(transform->getPosition() + sphere->getLocalPosition());
-        gizmo->setScale(transform->getScale() * sphere->getLocalRadius());
+        gizmo->setPosition(sphere->getPosition());
+        gizmo->setScale(glm::vec3(sphere->getRadius()));
 
         renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
       }
     }
   }
+
+  // Release every render resource keyed by a uuid no longer in the scene (object deleted, scene
+  // switched, project reloaded) - otherwise these caches grow for the life of the process, and a
+  // stale light stays registered with the lighting manager forever. Safe here: this runs before this
+  // frame's draws are recorded (variableUpdate always precedes vke::VulkanEngine::render()), and every
+  // vke object being dropped (Light, RenderObject) blocks on vkDeviceWaitIdle in its own destructor
+  // (see VulkanEngine's Light::~Light and UniformBuffer::~UniformBuffer), so nothing here can race a
+  // command buffer that is still using it.
+  std::erase_if(m_lights, [this](const auto& entry) { return !m_liveUUIDs.contains(entry.first); });
+  std::erase_if(m_selected, [this](const auto& entry) { return !m_liveUUIDs.contains(entry.first); });
+
+  assetCache.pruneStale(m_liveUUIDs);
 }
 
 void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCache& assetCache,
