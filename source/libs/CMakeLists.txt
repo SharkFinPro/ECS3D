@@ -2,10 +2,6 @@ include(FetchContent)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/clrHost/cmake")
 
-# Reusable helper for libraries that ship a C# assembly (ECS3DScripting, ECS3DNet).
-# Defined at this level so every lib subdirectory inherits the function.
-include(ECS3DManaged.cmake)
-
 # Shared, render-free dependencies. Declared here so every library below can link them
 # directly instead of going through ECS3DCore. Re-declaring the same names in core is a no-op.
 FetchContent_Declare(

@@ -56,6 +56,10 @@
 - **.NET 10** is required for the managed assemblies. `ecs3d_add_managed_assembly()` (in
   `clrHost/cmake/ECS3DManaged.cmake`) `dotnet publish`es a C# class lib next to the executables and
   writes its `runtimeconfig.json`; `ecs3d_deploy_clr_runtime()` copies `nethost.dll` beside each exe.
+  `FindDotnet.cmake` warms up the SDK's one-time first-run configuration once at configure time (a
+  single-threaded step that runs before any target's publish is scheduled), so no build-time `dotnet
+  publish` races through it; the two engine managed assembly targets additionally depend on each other
+  so they publish one at a time, while the launcher (`source/apps/launcher`) publishes independently.
 - **Managed assemblies deployed at build time:** `ScriptBridge` → `bin/scripts/ScriptBridge`,
   `ECS3DNetTransport` → `bin/net/Transport`, user scripts → `bin/scripts/UserScripts`. All apps boot the
   CLR from the same runtime; the server loads `ScriptBridge` on top.
