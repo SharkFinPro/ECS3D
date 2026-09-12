@@ -31,8 +31,13 @@ Object::Object(const nlohmann::json& objectData,
   loadFromJSON(objectData);
 }
 
-void Object::loadChildren(const nlohmann::json& childrenData)
+void Object::loadChildren(const nlohmann::json& childrenData, const std::size_t depth)
 {
+  if (depth > maxObjectDepth)
+  {
+    throw std::runtime_error("Object nesting exceeds maximum depth");
+  }
+
   for (const auto& childData : childrenData)
   {
     const auto child = std::make_shared<Object>(childData, m_manager);
@@ -40,9 +45,13 @@ void Object::loadChildren(const nlohmann::json& childrenData)
 
     m_manager->addObject(child);
 
-    if (childData.contains("children"))
+    // serialize() always writes "children" as an array, empty for a leaf, so contains() alone cannot
+    // tell a leaf from an internal node - it would recurse one call past every leaf just to iterate
+    // nothing, and that phantom call's own depth check would reject a tree at exactly maxObjectDepth.
+    if (const auto childrenIt = childData.find("children");
+        childrenIt != childData.end() && !childrenIt->empty())
     {
-      child->loadChildren(childData["children"]);
+      child->loadChildren(*childrenIt, depth + 1);
     }
   }
 }
@@ -90,14 +99,23 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
 
     m_scripts.push_back(component);
   }
-  else
+  else if (!m_components.emplace(component->getType(), component).second)
   {
-    m_components.emplace(component->getType(), component);
+    // An object holds one component per type, so a second of the same type is not added - and must not
+    // be given an owner or started, or it would outlive the call as a live orphan.
+    return;
   }
 
   if (setOwner)
   {
     component->setOwner(this);
+  }
+
+  // Added to an object that is already running: without this its ComponentVariables stay backed by the
+  // authored value, so a runtime write would be saved into the scene as if it had been authored.
+  if (m_started)
+  {
+    component->start();
   }
 }
 
@@ -138,8 +156,17 @@ void Object::setName(const std::string& name)
   m_name = name;
 }
 
-void Object::start() const
+void Object::start()
 {
+  // Idempotent: a second start without an intervening stop would re-seed every live value from the
+  // authored one, silently discarding whatever the run had done to it.
+  if (m_started)
+  {
+    return;
+  }
+
+  m_started = true;
+
   for (const auto& [type, component] : m_components)
   {
     component->start();
@@ -151,8 +178,15 @@ void Object::start() const
   }
 }
 
-void Object::stop() const
+void Object::stop()
 {
+  if (!m_started)
+  {
+    return;
+  }
+
+  m_started = false;
+
   for (const auto& [type, component] : m_components)
   {
     component->stop();
@@ -202,10 +236,15 @@ uuids::uuid Object::getUUID() const
 
 bool Object::isAncestorOf(const std::shared_ptr<Object>& object) const
 {
-  auto current = getParent();
+  if (!object)
+  {
+    return false;
+  }
+
+  auto current = object->getParent();
   while (current)
   {
-    if (object == current)
+    if (current.get() == this)
     {
       return true;
     }
@@ -253,10 +292,55 @@ void Object::pack(net::Message& message) const
   }
 }
 
-void Object::unpack(net::MessageReader& messageReader)
+void Object::unpack(net::MessageReader& messageReader, const std::size_t depth)
 {
+  // A payload can claim as many nested children as it likes; refusing here rather than one frame deeper
+  // (inside unpackFields) keeps the check in one place for both this object and unpackFields' own
+  // recursive call into each child.
+  if (depth > maxObjectDepth)
+  {
+    throw std::runtime_error("Object nesting exceeds maximum depth");
+  }
+
   // Symmetric with pack(): reconstructs this object from scratch, creating any missing components,
   // scripts, and child objects (so it works on a fresh, empty Object as well as an existing one).
+  //
+  // Reconstruction writes authored values, so an object that is already running is stopped for the
+  // duration and started again at the end, which re-seeds every live value from what was just read.
+  // Unpacking into a started object would otherwise write through to the live slot and leave the
+  // authored value at its constructor default, to be saved back later as if that were authored.
+  const bool wasStarted = m_started;
+  if (wasStarted)
+  {
+    stop();
+  }
+
+  try
+  {
+    unpackFields(messageReader, depth);
+  }
+  catch (...)
+  {
+    // A payload that runs out, or names something this build cannot build, must not leave a running
+    // object stopped: every write to it afterwards would land in the authored slot and be saved into
+    // the scene as if it had been authored - the defect the bracket exists to prevent, on the error
+    // path. Callers discard the object today, but that is their choice, not this function's contract.
+    if (wasStarted)
+    {
+      start();
+    }
+
+    throw;
+  }
+
+  if (wasStarted)
+  {
+    start();
+  }
+}
+
+void Object::unpackFields(net::MessageReader& messageReader, const std::size_t depth)
+{
   m_uuid = uuids::uuid::from_string(messageReader.readString()).value();
   m_name = messageReader.readString();
 
@@ -266,6 +350,22 @@ void Object::unpack(net::MessageReader& messageReader)
   for (uint32_t i = 0; i < componentCount; ++i)
   {
     const auto packedType = messageReader.read<ComponentType>();
+
+    // The discriminator comes off the network, so it has to name something that is actually packed
+    // before it picks a slot on this object.
+    const auto registryKey = componentTypeToRegistryKey.find(packedType);
+    if (registryKey == componentTypeToRegistryKey.end())
+    {
+      throw std::runtime_error("Packed component type is not a component");
+    }
+
+    // script is a component type but never a discriminator in this section - scripts have their own,
+    // after this one, and are keyed by class name. Claiming it here would create a nameless Script and
+    // then read the next component's bytes as its field blob.
+    if (packedType == ComponentType::script)
+    {
+      throw std::runtime_error("Script packed among the components");
+    }
 
     // Colliders pack their subtype, but live under the parent "collider" key in m_components.
     auto lookupType = packedType;
@@ -280,9 +380,28 @@ void Object::unpack(net::MessageReader& messageReader)
     auto componentIt = m_components.find(lookupType);
     auto component = componentIt != m_components.end() ? componentIt->second : nullptr;
 
+    // The two collider shapes share that key but not a field layout. Reading a box body into a
+    // SphereCollider would take a 12-byte vector where a 4-byte float belongs and misalign everything
+    // after it, so the slot is rebuilt as the shape the payload describes rather than reused. Defensive
+    // rather than live: every caller today unpacks into a freshly built object, which holds no collider.
+    if (component && component->getPackedType() != packedType)
+    {
+      removeComponent(component);
+      component = nullptr;
+    }
+
     if (!component)
     {
-      component = registry->create(componentTypeToRegistryKey.at(packedType));
+      component = registry->create(registryKey->second);
+
+      // create() returns null for a type this build never registered, and addComponent dereferences it
+      // immediately to read getType(). A null dereference escapes every guard around this path,
+      // including the run loops' catches and the spawn unwind - on a path that reads bytes off the wire.
+      if (!component)
+      {
+        throw std::runtime_error("Unknown component type: " + registryKey->second);
+      }
+
       addComponent(component);
     }
 
@@ -292,7 +411,12 @@ void Object::unpack(net::MessageReader& messageReader)
   const uint32_t scriptCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < scriptCount; ++i)
   {
-    static_cast<void>(messageReader.read<ComponentType>()); // script type tag, not needed for lookup
+    // Not needed for the lookup, which goes by class name - but a section that does not carry the tag it
+    // is supposed to is a payload claiming to be something it is not, and every read after it is off.
+    if (messageReader.read<ComponentType>() != ComponentType::script)
+    {
+      throw std::runtime_error("Script section carries a type tag that is not a script");
+    }
 
     const std::string className = messageReader.readString();
 
@@ -310,6 +434,12 @@ void Object::unpack(net::MessageReader& messageReader)
     if (!script)
     {
       script = std::dynamic_pointer_cast<Script>(registry->create("Script"));
+
+      if (!script)
+      {
+        throw std::runtime_error("Script component type is not registered");
+      }
+
       script->setClassName(className);
       addComponent(script);
     }
@@ -326,7 +456,7 @@ void Object::unpack(net::MessageReader& messageReader)
     child->setParent(shared_from_this());
     m_manager->addObject(child);
 
-    child->unpack(messageReader);
+    child->unpack(messageReader, depth + 1);
   }
 }
 
@@ -357,7 +487,7 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
 
   const auto& registry = m_manager->getComponentRegistry();
 
-  for (const auto& componentData : objectData["components"])
+  for (const auto& componentData : objectData.at("components"))
   {
     const auto componentType = componentData.at("type").get<std::string>();
 
@@ -378,7 +508,7 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     component->loadFromJSON(componentData);
   }
 
-  for (const auto& scriptData : objectData["scripts"])
+  for (const auto& scriptData : objectData.at("scripts"))
   {
     const auto script = registry->create("Script");
 

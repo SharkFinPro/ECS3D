@@ -2,6 +2,7 @@
 #define SCENEMANAGER_H
 
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <uuid.h>
 
@@ -26,6 +27,14 @@ public:
   [[nodiscard]] std::shared_ptr<SceneAsset> getScene(const uuids::uuid& uuid) const;
 
   [[nodiscard]] const std::unordered_map<uuids::uuid, std::shared_ptr<SceneAsset>>& getScenes() const;
+
+  // Scenes key their AssetRegistry record off their display name, so two scenes cannot share a name
+  // without one becoming unselectable. Returns `desiredName` unchanged if it is free, or if it already
+  // belongs to `uuid` itself (so re-registering an already-known scene never renames it); otherwise
+  // appends " (2)", " (3)", ... - stripping an existing "(N)" suffix first, so colliding with an
+  // already-suffixed name grows the number instead of stacking another one - picking the lowest number
+  // not already in use.
+  [[nodiscard]] std::string uniqueSceneName(const uuids::uuid& uuid, const std::string& desiredName) const;
 
   void loadScene(const std::shared_ptr<SceneAsset>& scene);
 

@@ -22,11 +22,19 @@ internal sealed class TcpBackend : TransportBackend
   private volatile bool _serverRunning;
 
   private readonly List<TcpClient> _clients = new();
+  // Accepted sockets that have not yet cleared the handshake. Tracked separately from _clients so an
+  // unauthorized peer is never on the broadcast list, and so ServerStop still closes it.
+  private readonly List<TcpClient> _pending = new();
   private readonly object _clientsLock = new();
 
   // A stable, monotonically-increasing id handed to each accepted connection, surfaced to C++ on every
   // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
   private int _nextConnId;
+
+  // Bounds how long an accepted socket may sit unauthorized before it is dropped. Without this, a peer
+  // that opens a connection and sends nothing holds a thread and a socket - and, before this change,
+  // a spot on the broadcast list - forever.
+  private const int HandshakeTimeoutMs = 5000;
 
   // -- Client --
   private TcpClient? _client;
@@ -68,6 +76,13 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _clients.Clear();
+
+      foreach (var client in _pending)
+      {
+        try { client.Close(); } catch { /* ignore */ }
+      }
+
+      _pending.Clear();
     }
   }
 
@@ -81,6 +96,11 @@ internal sealed class TcpBackend : TransportBackend
 
   public override void ServerBroadcast(byte type, nint data, int len)
   {
+    if (TooLargeToSend(len))
+    {
+      return;
+    }
+
     var frame = Frame(type, data, len);
 
     lock (_clientsLock)
@@ -119,9 +139,29 @@ internal sealed class TcpBackend : TransportBackend
 
       var connId = Interlocked.Increment(ref _nextConnId);
 
+      // Not added to _clients yet - it has not proven itself with a handshake, and _clients is the
+      // broadcast list. Tracked in _pending instead so ServerStop can still close it.
+      //
+      // ServerStop can run concurrently with this: it may have already taken _clientsLock, closed and
+      // cleared _pending, and returned by the time a connection that was queued by the OS just before
+      // _listener.Stop() reaches here. Re-checking _serverRunning inside the lock closes that window -
+      // if the server already stopped, the socket is closed here instead of being added to a list
+      // nothing will ever look at again, and its receive thread is never started (so it never reaches
+      // DeliverServerDisconnect either).
+      bool accepted;
       lock (_clientsLock)
       {
-        _clients.Add(client);
+        accepted = _serverRunning;
+        if (accepted)
+        {
+          _pending.Add(client);
+        }
+      }
+
+      if (!accepted)
+      {
+        try { client.Close(); } catch { /* ignore */ }
+        continue;
       }
 
       var thread = new Thread(() => ServerReceiveLoop(client, connId))
@@ -140,10 +180,28 @@ internal sealed class TcpBackend : TransportBackend
       var stream = client.GetStream();
 
       // The first frame must be the handshake. Authorize from it (e.g. reject an editor against a
-      // play-only server, or one with a bad token) before delivering any protocol message to C++.
-      if (ReadFrame(stream, out var handshakeType, out var handshakePayload) &&
+      // play-only server, or one with a bad token) before delivering any protocol message to C++, and
+      // before this socket is added to the broadcast list. Bounded two ways: ReceiveTimeout unblocks a
+      // syscall against a peer that sends nothing at all, and the deadline below bounds the whole
+      // handshake against a peer that trickles bytes just fast enough to keep individual reads from
+      // timing out (ReadExact loops per partial read, so a per-read timeout alone doesn't bound the total).
+      client.ReceiveTimeout = HandshakeTimeoutMs;
+      var handshakeDeadline = Environment.TickCount64 + HandshakeTimeoutMs;
+      if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes, handshakeDeadline) &&
           handshakeType == HandshakeType && Authorize(handshakePayload))
       {
+        // Authorize succeeded: tell the native side which role this connection was actually granted, so
+        // it can enforce that role on every later message rather than trusting one the sender claims.
+        Transport.DeliverServerAuthorized(connId, handshakePayload[0]);
+
+        client.ReceiveTimeout = 0;
+
+        lock (_clientsLock)
+        {
+          _pending.Remove(client);
+          _clients.Add(client);
+        }
+
         while (_serverRunning)
         {
           if (!ReadFrame(stream, out var type, out var payload))
@@ -167,6 +225,7 @@ internal sealed class TcpBackend : TransportBackend
     lock (_clientsLock)
     {
       _clients.Remove(client);
+      _pending.Remove(client);
     }
 
     try { client.Close(); } catch { /* ignore */ }
@@ -225,7 +284,7 @@ internal sealed class TcpBackend : TransportBackend
   public override void ClientSend(byte type, nint data, int len)
   {
     var stream = _client?.GetStream();
-    if (stream is null)
+    if (stream is null || TooLargeToSend(len))
     {
       return;
     }
@@ -301,25 +360,42 @@ internal sealed class TcpBackend : TransportBackend
     return frame;
   }
 
-  private static bool ReadFrame(Stream stream, out byte type, out byte[] payload)
+  // deadline is an Environment.TickCount64 value the whole frame must be read by, or null for no outer
+  // bound - every caller but the handshake read leaves it null, since the steady-state message loop must
+  // stay blocking and untimed.
+  private static bool ReadFrame(Stream stream, out byte type, out byte[] payload, int maxBytes = MaxMessageBytes,
+    long? deadline = null)
   {
     type = 0;
     payload = Array.Empty<byte>();
 
     Span<byte> header = stackalloc byte[4];
-    if (!ReadExact(stream, header))
+    if (!ReadExact(stream, header, deadline))
     {
       return false;
     }
 
+    // The length is the peer's word, and the handshake is itself a frame - so this runs for anything that
+    // can open a socket, before Authorize has seen a byte. Unbounded, a length just under int.MaxValue
+    // asks for a two gigabyte allocation, and the copy below holds it twice over at once. The handshake
+    // read passes a far smaller ceiling than the rest, since it carries a role byte and a token.
     var bodyLen = BinaryPrimitives.ReadInt32BigEndian(header);
     if (bodyLen < 1)
     {
       return false;
     }
 
+    if (bodyLen > maxBytes)
+    {
+      // Logged, because a refusal and a closed socket are the same false to the caller. A message this
+      // size is either an attack or a peer that has outgrown the limit, and both are worth seeing.
+      Console.Error.WriteLine($"[Transport] Refused a {bodyLen} byte frame; the limit here is {maxBytes}.");
+
+      return false;
+    }
+
     var body = new byte[bodyLen];
-    if (!ReadExact(stream, body))
+    if (!ReadExact(stream, body, deadline))
     {
       return false;
     }
@@ -330,11 +406,19 @@ internal sealed class TcpBackend : TransportBackend
     return true;
   }
 
-  private static bool ReadExact(Stream stream, Span<byte> buffer)
+  private static bool ReadExact(Stream stream, Span<byte> buffer, long? deadline = null)
   {
     var read = 0;
     while (read < buffer.Length)
     {
+      // Checked before each syscall rather than relying on ReceiveTimeout alone: ReceiveTimeout bounds
+      // one Read call, but a partial frame keeps this loop calling Read again, so a peer trickling one
+      // byte in just under the timeout each time would otherwise never trip it.
+      if (deadline.HasValue && Environment.TickCount64 >= deadline.Value)
+      {
+        return false;
+      }
+
       var n = stream.Read(buffer.Slice(read));
       if (n <= 0)
       {

@@ -37,18 +37,6 @@ namespace {
 
     return uuids::uuid::from_string(std::string(uuid)).value_or(uuids::uuid{});
   }
-
-  // Object::start() covers only its own components; a prefab instance is a whole subtree, and every node
-  // needs live component state before physics/replication read it.
-  void startSubtree(const Object& object)
-  {
-    object.start();
-
-    for (const auto& child : object.getChildren())
-    {
-      startSubtree(*child);
-    }
-  }
 }
 
 WorldBindings WorldBindingsProvider::getBindings()
@@ -156,13 +144,11 @@ const char* WorldBindingsProvider::bindSpawnObject(const char* name, const float
     return store("");
   }
 
-  // The default Object ctor already attaches a Transform. addObject assigns the manager + a fresh uuid.
+  // The default Object ctor already attaches a Transform. addObject assigns the manager + a fresh uuid,
+  // and starts the newborn - a script only runs while the scene is running, so its transform is
+  // positioned below with live component state rather than the stopped values physics would read.
   auto object = std::make_shared<Object>(name ? std::string(name) : std::string("Object"));
   objectManager->addObject(object);
-
-  // A script only runs while the scene is running, so the newborn must be started too (live component
-  // state) before its transform is positioned - otherwise physics/replication would read stopped values.
-  object->start();
 
   if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
   {
@@ -198,6 +184,9 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
     return store("");
   }
 
+  // instantiate registers every node of the subtree through addObject, which starts what it registers
+  // while the scene is running - so the instance already has live component state by the time its root
+  // is positioned below, rather than the stopped values physics and replication would otherwise read.
   std::shared_ptr<Object> object;
   try
   {
@@ -210,10 +199,6 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
     std::cerr << "[WorldBindings] Failed to instantiate prefab " << prefabUuid << ": " << e.what() << std::endl;
     return store("");
   }
-
-  // A script only runs while the scene is running, so the whole newborn subtree must be started (live
-  // component state) before the root is positioned - otherwise physics/replication read stopped values.
-  startSubtree(*object);
 
   if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
   {
@@ -247,9 +232,13 @@ void WorldBindingsProvider::bindDestroyObject(const char* uuid)
   }
 
   // Mark for deletion (never mutate the object list mid script iteration); ServerApp broadcasts the
-  // destroy and calls deleteObjectsMarkedForDeletion after the tick.
-  objectManager->removeObject(object);
-  BindingContext::recordDestroy(parsed.value());
+  // destroy and calls deleteObjectsMarkedForDeletion after the tick. Only record the destroy when this
+  // call newly marked the object - two script paths destroying the same uuid in one tick must still
+  // broadcast exactly once.
+  if (objectManager->removeObject(object))
+  {
+    BindingContext::recordDestroy(parsed.value());
+  }
 }
 
 const char* WorldBindingsProvider::bindRaycast(const float ox, const float oy, const float oz,

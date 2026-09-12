@@ -147,6 +147,20 @@ namespace {
 
     return edited;
   }
+
+  // "Render Collider" checkbox, shared by both collider shapes since the flag lives on the Collider base.
+  // Returns true if it was edited this frame.
+  bool colliderRenderGizmoEditor(const std::shared_ptr<Collider>& collider)
+  {
+    bool renderCollider = collider->getRenderCollider();
+    if (gc::accentCheckbox("Render Collider", &renderCollider))
+    {
+      collider->setRenderCollider(renderCollider);
+      return true;
+    }
+
+    return false;
+  }
 }
 
 void registerColliderEditors(ComponentEditor& componentEditor)
@@ -164,12 +178,7 @@ void registerColliderEditors(ComponentEditor& componentEditor)
 
     if (ComponentEditor::displayHeader(component))
     {
-      bool renderCollider = box->getRenderCollider();
-      if (gc::accentCheckbox("Render Collider", &renderCollider))
-      {
-        box->setRenderCollider(renderCollider);
-        edited = true;
-      }
+      edited |= colliderRenderGizmoEditor(box);
 
       bool isTrigger = box->isTrigger();
       if (gc::accentCheckbox("Is Trigger", &isTrigger))
@@ -219,12 +228,7 @@ void registerColliderEditors(ComponentEditor& componentEditor)
 
     if (ComponentEditor::displayHeader(component))
     {
-      bool renderCollider = sphere->getRenderCollider();
-      if (gc::accentCheckbox("Render Collider", &renderCollider))
-      {
-        sphere->setRenderCollider(renderCollider);
-        edited = true;
-      }
+      edited |= colliderRenderGizmoEditor(sphere);
 
       bool isTrigger = sphere->isTrigger();
       if (gc::accentCheckbox("Is Trigger", &isTrigger))

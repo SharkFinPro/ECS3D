@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <uuid.h>
 
 namespace vke {
@@ -39,6 +40,8 @@ public:
   [[nodiscard]] bool isSelected(const uuids::uuid& uuid) const;
 
 private:
+  // Only the kind the LightRenderer currently uses is ever populated; toggling spot/point releases
+  // the old shared_ptr (and its vke light) before creating the new one.
   struct CachedLight {
     std::shared_ptr<vke::PointLight> pointLight;
     std::shared_ptr<vke::SpotLight> spotLight;
@@ -49,6 +52,11 @@ private:
   std::unordered_map<uuids::uuid, CachedLight> m_lights;
 
   std::unordered_map<uuids::uuid, bool> m_selected;
+
+  // Reused across calls to avoid a per-frame allocation: variableUpdate refills it with every uuid
+  // seen this frame, then prunes m_lights/m_selected/GpuAssetCache's per-object caches of any uuid
+  // that is no longer present (object deleted, scene switched, project reloaded).
+  std::unordered_set<uuids::uuid> m_liveUUIDs;
 };
 
 

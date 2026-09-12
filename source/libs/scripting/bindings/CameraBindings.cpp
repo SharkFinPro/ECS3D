@@ -11,7 +11,7 @@ namespace {
   std::shared_ptr<Camera> find(const char* uuid)
   {
     const auto objectManager = BindingContext::getObjectManager();
-    if (!objectManager)
+    if (!objectManager || !uuid)
     {
       return nullptr;
     }

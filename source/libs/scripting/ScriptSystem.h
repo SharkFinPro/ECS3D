@@ -45,7 +45,7 @@ public:
   // Drives each script's variableUpdate (where gameplay reads input). The server has no render frame,
   // so it runs this once per tick from the networked InputState; it must run before fixedUpdate so any
   // force the script queues from input is applied the same tick.
-  void variableUpdate(ObjectManager& objectManager) const;
+  void variableUpdate(ObjectManager& objectManager);
 
   // Deliver one collision event to both objects' scripts: objectA's scripts learn of objectB and vice
   // versa. Fed plain uuid pairs by the app (from CollisionSystem's enter/stay/exit lists) so scripting
@@ -83,6 +83,12 @@ private:
   std::unordered_set<std::string> m_attached;
   std::unordered_map<std::string, std::vector<ExposedField>> m_fieldCache;
 
+  // Instances that have had their C# start() called. attachAll() (run every broadcastSnapshot, whether
+  // or not the scene is running) can attach a managed instance well before the scene's tick loop ever
+  // sees it, so "attached" and "started" are tracked separately: fixedUpdate/variableUpdate start any
+  // attached-but-not-yet-started instance the first time they would otherwise tick it.
+  std::unordered_set<std::string> m_started;
+
   // Hot-reload: poll the user-script directory's write times a couple times a second; on change,
   // snapshot field values back into the data, reload the bridge, and let fixedUpdate re-attach lazily.
   using ScriptsSnapshot = std::unordered_map<std::string, std::filesystem::file_time_type>;
@@ -97,6 +103,11 @@ private:
   void attach(const Object& object, const Script& script);
 
   void detach(const uuids::uuid& uuid, const std::string& className);
+
+  // Call the instance's C# start() exactly once - a no-op on every call after the first for the same
+  // (uuid, className). Safe to call unconditionally from the running tick loop, whether the instance was
+  // attached at scene start, lazily by fixedUpdate, or earlier by attachAll.
+  void startIfNeeded(const uuids::uuid& uuid, const std::string& className);
 
   // Deliver one directed collision event: every attached script on `target` learns it is touching
   // `other`. One half of dispatchCollisionEvent's both-directions delivery.

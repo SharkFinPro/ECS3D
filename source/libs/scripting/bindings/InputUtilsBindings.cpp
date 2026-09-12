@@ -14,7 +14,7 @@ namespace {
   std::optional<int32_t> playerSlotOf(const char* uuid)
   {
     const auto objectManager = BindingContext::getObjectManager();
-    if (!objectManager)
+    if (!objectManager || !uuid)
     {
       return std::nullopt;
     }

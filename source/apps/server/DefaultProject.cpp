@@ -93,7 +93,6 @@ json sphereCollider()
     { "type", "Collider" },
     { "subType", "Sphere" },
     { "radius", 1.0 },
-    { "renderCollider", false },
     { "position", vec(glm::vec3(0)) }
   };
 }

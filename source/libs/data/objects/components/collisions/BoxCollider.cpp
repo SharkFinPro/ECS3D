@@ -1,6 +1,7 @@
 #include "BoxCollider.h"
 #include "../Transform.h"
 #include "../../Object.h"
+#include "WireTypes.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
@@ -14,16 +15,6 @@ BoxCollider::BoxCollider()
   loadVariable(m_position);
   loadVariable(m_scale);
   loadVariable(m_rotation);
-}
-
-bool BoxCollider::getRenderCollider() const
-{
-  return m_renderCollider;
-}
-
-void BoxCollider::setRenderCollider(const bool renderCollider)
-{
-  m_renderCollider = renderCollider;
 }
 
 glm::vec3 BoxCollider::getLocalPosition() const
@@ -71,6 +62,7 @@ nlohmann::json BoxCollider::serialize()
     { "position", { position.x, position.y, position.z } },
     { "rotation", { rotation.x, rotation.y, rotation.z } },
     { "scale", { scale.x, scale.y, scale.z } },
+    { "renderCollider", m_renderCollider },
     { "isTrigger", m_isTrigger },
     { "layer", m_layer },
     { "mask", m_mask }
@@ -89,9 +81,10 @@ void BoxCollider::loadFromJSON(const nlohmann::json& componentData)
   m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
   m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
 
-  // value() (not at()): projects saved before triggers/layers existed have no such key.
+  // value() (not at()): projects saved before triggers/layers/the gizmo flag existed have no such key.
+  m_renderCollider = componentData.value("renderCollider", false);
   m_isTrigger = componentData.value("isTrigger", false);
-  m_layer = componentData.value("layer", 0u);
+  setLayer(componentData.value("layer", 0u));
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
 
   m_meshDirty = true;
@@ -103,7 +96,7 @@ glm::vec3 BoxCollider::getPosition()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_position.value() + transform->getPosition();
+  return m_position.get() + transform->getPosition();
 }
 
 glm::vec3 BoxCollider::getScale()
@@ -112,7 +105,9 @@ glm::vec3 BoxCollider::getScale()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_scale.value() + transform->getScale();
+  // Multiplied, not added: the collision mesh generateTransformedMesh builds scales the unit box by the
+  // product, so an offset of 1 has to mean "same size as the object" rather than "one bigger".
+  return m_scale.get() * transform->getScale();
 }
 
 glm::vec3 BoxCollider::getRotation()
@@ -121,7 +116,7 @@ glm::vec3 BoxCollider::getRotation()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_rotation.value() + transform->getRotation();
+  return m_rotation.get() + transform->getRotation();
 }
 
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
@@ -172,15 +167,15 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
   m_scale.set(messageReader.read<glm::vec3>());
   m_rotation.set(messageReader.read<glm::vec3>());
   m_isTrigger = messageReader.read<bool>();
-  m_layer = messageReader.read<uint32_t>();
+  setLayer(messageReader.read<uint32_t>());
   m_mask = messageReader.read<uint32_t>();
 }
 
 void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)
 {
-  const auto rotation = transform->getRotation() + m_rotation.value();
-  const auto scale = transform->getScale() * m_scale.value();
-  const auto position = transform->getPosition() + m_position.value();
+  const auto rotation = transform->getRotation() + m_rotation.get();
+  const auto scale = transform->getScale() * m_scale.get();
+  const auto position = transform->getPosition() + m_position.get();
 
   const auto transformationMatrix = translate(glm::mat4(1.0f), position)
     * rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1})

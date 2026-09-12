@@ -8,9 +8,15 @@
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
+#include "WireTypes.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <cmath>
+#include <cstddef>
+#include <exception>
+#include <new>
+#include <utility>
+#include <vector>
 
 namespace replication {
 
@@ -111,56 +117,101 @@ net::Message buildComponentEdit(const uuids::uuid& objectUUID,
   return message;
 }
 
-void applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit)
+ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit)
 {
   net::MessageReader reader(edit);
-  const auto objectUUIDString = reader.readString();
-  const auto objectUUID = uuids::uuid::from_string(objectUUIDString);
-  if (!objectUUID.has_value())
+
+  // A reader that runs off the end of the payload throws, as does a script's field blob failing to parse.
+  // Every caller's run loop catches now, so an escaping exception costs the message rather than the
+  // session - but a catch tells the caller nothing about which edit was lost or why, which is what the
+  // result below is for.
+  bool unpacking = false;
+
+  try
   {
-    return;
-  }
-
-  const auto object = objectManager.getObjectByUUID(objectUUID.value());
-  if (!object)
-  {
-    return;
-  }
-
-  // Each component packs its type (or, for colliders, its subtype) first as a discriminator.
-  const auto componentType = reader.read<ComponentType>();
-
-  // Scripts live in their own list, keyed by class name, and pack the name next so the right one can be
-  // found before unpack() reads the remaining field data.
-  if (componentType == ComponentType::script)
-  {
-    const auto className = reader.readString();
-
-    for (const auto& script : object->getScripts())
+    const auto objectUUIDString = reader.readString();
+    const auto objectUUID = uuids::uuid::from_string(objectUUIDString);
+    if (!objectUUID.has_value())
     {
-      if (const auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
-          scriptComponent && scriptComponent->getClassName() == className)
-      {
-        script->unpack(reader);
-        return;
-      }
+      return ComponentEditResult::malformedPayload;
     }
 
-    return;
-  }
+    const auto object = objectManager.getObjectByUUID(objectUUID.value());
+    if (!object)
+    {
+      return ComponentEditResult::unknownObject;
+    }
 
-  // Colliders pack their subtype as the discriminator, but the component map is keyed by the parent
-  // (collider) type, so map back before looking it up.
-  auto lookupType = componentType;
-  if (const auto parent = subComponentTypeToParent.find(componentType); parent != subComponentTypeToParent.end())
-  {
-    lookupType = parent->second;
-  }
+    // Each component packs its type (or, for colliders, its subtype) first as a discriminator. It comes
+    // off the wire, so check it names something that is actually packed before using it to pick a slot on
+    // the object. ComponentType::collider is the one that made this necessary: it is never a
+    // discriminator, since colliders pack their shape, but it is a valid key in the component map - so a
+    // payload claiming it went straight into whatever collider the object held.
+    const auto componentType = reader.read<ComponentType>();
+    if (!componentTypeToRegistryKey.contains(componentType))
+    {
+      return ComponentEditResult::malformedPayload;
+    }
 
-  const auto components = object->getComponents();
-  if (components.contains(lookupType))
+    // Scripts live in their own list, keyed by class name, and pack the name next so the right one can be
+    // found before unpack() reads the remaining field data.
+    if (componentType == ComponentType::script)
+    {
+      const auto className = reader.readString();
+
+      for (const auto& script : object->getScripts())
+      {
+        if (const auto scriptComponent = std::dynamic_pointer_cast<Script>(script);
+            scriptComponent && scriptComponent->getClassName() == className)
+        {
+          unpacking = true;
+          script->unpack(reader);
+
+          return ComponentEditResult::applied;
+        }
+      }
+
+      return ComponentEditResult::unknownComponent;
+    }
+
+    // Colliders pack their subtype as the discriminator, but the component map is keyed by the parent
+    // (collider) type, so map back before looking it up.
+    auto lookupType = componentType;
+    if (const auto parent = subComponentTypeToParent.find(componentType); parent != subComponentTypeToParent.end())
+    {
+      lookupType = parent->second;
+    }
+
+    const auto& components = object->getComponents();
+    const auto componentIt = components.find(lookupType);
+    if (componentIt == components.end())
+    {
+      return ComponentEditResult::unknownComponent;
+    }
+
+    // The two collider shapes share a map key but not a field layout, so the discriminator has to name
+    // the shape that is actually there. A box-shaped edit unpacked into a SphereCollider - reachable
+    // during an add/remove-component race - would read a 12-byte vector where a 4-byte float belongs,
+    // corrupting the component and misaligning every remaining read in the message.
+    if (componentIt->second->getPackedType() != componentType)
+    {
+      return ComponentEditResult::unknownComponent;
+    }
+
+    unpacking = true;
+    componentIt->second->unpack(reader);
+
+    return ComponentEditResult::applied;
+  }
+  catch (const std::bad_alloc&)
   {
-    components.at(lookupType)->unpack(reader);
+    // Out of memory is not a malformed payload, and pretending otherwise would send the caller looking
+    // for a wire bug.
+    throw;
+  }
+  catch (const std::exception&)
+  {
+    return unpacking ? ComponentEditResult::partiallyApplied : ComponentEditResult::malformedPayload;
   }
 }
 
@@ -255,142 +306,351 @@ nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::u
   return edit;
 }
 
-nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID)
+nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid* parentUUID)
 {
-  return {
+  nlohmann::json edit = {
     { "op", "instantiatePrefab" },
     { "prefab", uuids::to_string(prefabUUID) }
   };
+
+  if (parentUUID)
+  {
+    edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  return edit;
 }
 
-void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
-                    const AssetRegistry* assetRegistry)
-{
-  const std::string op = edit.at("op");
-
-  if (op == "instantiatePrefab")
+namespace {
+  // Number of ancestors above object (root = 0). Every object in a live scene arrived through a
+  // depth-checked unpack/load or reparent, so walking up never runs past maxObjectDepth.
+  std::size_t ancestorDepth(const std::shared_ptr<Object>& object)
   {
-    // The only op keyed by an asset rather than an existing object: pull the prefab's body from the
-    // registry and clone it in with fresh uuids. An unknown/malformed prefab yields a null body and is
-    // skipped.
-    if (!assetRegistry)
+    std::size_t depth = 0;
+    for (auto current = object->getParent(); current; current = current->getParent())
     {
-      return;
+      ++depth;
     }
 
-    const auto parsedPrefab = uuids::uuid::from_string(std::string(edit.at("prefab")));
-    if (!parsedPrefab.has_value())
-    {
-      return;
-    }
-
-    if (const auto body = assetRegistry->getPrefabBody(parsedPrefab.value()); body.is_object())
-    {
-      objectManager.instantiate(body);
-    }
-
-    return;
+    return depth;
   }
 
-  if (op == "addObject")
+  // Height of the subtree rooted at object (0 for a leaf). Walked with an explicit stack rather than
+  // recursion: this runs on a reparent target, and a reparent is exactly the operation that could have
+  // put a tree deeper than maxObjectDepth in the first place if some other path missed a check, so this
+  // walk should not assume the depth it is trying to bound.
+  std::size_t subtreeHeight(const std::shared_ptr<Object>& object)
   {
-    const std::string name = edit.value("name", "Object");
+    std::size_t height = 0;
 
-    const auto object = std::make_shared<Object>(name);
+    std::vector<std::pair<std::shared_ptr<Object>, std::size_t>> pending;
+    pending.emplace_back(object, 0);
 
-    if (edit.contains("parent"))
+    while (!pending.empty())
     {
-      if (const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent"))))
+      const auto [current, currentHeight] = pending.back();
+      pending.pop_back();
+
+      if (currentHeight > height)
       {
-        if (const auto parent = objectManager.getObjectByUUID(parsed.value()))
+        height = currentHeight;
+      }
+
+      for (const auto& child : current->getChildren())
+      {
+        pending.emplace_back(child, currentHeight + 1);
+      }
+    }
+
+    return height;
+  }
+
+  // Transform's local values are relative to the parent (see Transform.h/.cpp), so reattaching an
+  // object under a different parent without rewriting them changes its world placement by the
+  // difference between the old and new parent's world transform. Called after the reparent with the
+  // object's own world placement from just before it was detached, this rewrites the local values so
+  // the world placement is unchanged.
+  void restoreWorldPlacementAfterReparent(const std::shared_ptr<Object>& object,
+                                          const std::shared_ptr<Object>& newParent,
+                                          const glm::vec3& oldWorldPosition,
+                                          const glm::vec3& oldWorldRotation,
+                                          const glm::vec3& oldWorldScale)
+  {
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+    if (!transform)
+    {
+      return;
+    }
+
+    glm::vec3 parentPosition(0.0f);
+    glm::vec3 parentRotation(0.0f);
+    glm::vec3 parentScale(1.0f);
+
+    if (newParent)
+    {
+      if (const auto parentTransform = newParent->getComponent<Transform>(ComponentType::transform))
+      {
+        parentPosition = parentTransform->getPosition();
+        parentRotation = parentTransform->getRotation();
+        parentScale = parentTransform->getScale();
+      }
+    }
+
+    auto localScale = transform->getLocalScale();
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      // An axis whose compensated scale is not representable (the parent's world scale there is zero,
+      // denormal enough to overflow the division, or the division otherwise yields inf/nan) keeps the
+      // scale it already had rather than writing a value that would break every reader of this transform.
+      if (const auto compensated = oldWorldScale[axis] / parentScale[axis]; std::isfinite(compensated))
+      {
+        localScale[axis] = compensated;
+      }
+    }
+
+    transform->setPosition(oldWorldPosition - parentPosition);
+    transform->setRotation(oldWorldRotation - parentRotation);
+    transform->setScale(localScale);
+  }
+
+  SceneEditResult applyStructuralEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                                      const AssetRegistry* assetRegistry)
+  {
+    const std::string op = edit.at("op");
+
+    if (op == "instantiatePrefab")
+    {
+      // The only op keyed by an asset rather than an existing object: pull the prefab's body from the
+      // registry and clone it in with fresh uuids.
+      if (!assetRegistry)
+      {
+        return SceneEditResult::unknownAsset;
+      }
+
+      const auto parsedPrefab = uuids::uuid::from_string(std::string(edit.at("prefab")));
+      if (!parsedPrefab.has_value())
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      const auto body = assetRegistry->getPrefabBody(parsedPrefab.value());
+      if (!body.is_object())
+      {
+        return SceneEditResult::unknownAsset;
+      }
+
+      // Same "named parent" handling as addObject/reparentObject: absent means the scene root, named and
+      // unresolvable is a stale view rather than a silent root.
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
+      {
+        const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsedParent.has_value())
         {
-          object->setParent(parent);
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
         }
       }
-    }
 
-    objectManager.addObject(object);
-    return;
-  }
-
-  // Every other op targets an existing object.
-  const auto parsed = uuids::uuid::from_string(std::string(edit.at("object")));
-  if (!parsed.has_value())
-  {
-    return;
-  }
-
-  const auto object = objectManager.getObjectByUUID(parsed.value());
-  if (!object)
-  {
-    return;
-  }
-
-  if (op == "removeObject")
-  {
-    objectManager.removeObject(object);
-    objectManager.deleteObjectsMarkedForDeletion();
-    return;
-  }
-
-  if (op == "renameObject")
-  {
-    object->setName(edit.at("name"));
-    return;
-  }
-
-  if (op == "duplicateObject")
-  {
-    objectManager.duplicateObject(object);
-    return;
-  }
-
-  if (op == "reparentObject")
-  {
-    std::shared_ptr<Object> parent;
-    if (edit.contains("parent"))
-    {
-      if (const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent"))))
+      // Guarded here rather than left to the catch below: the body belongs to the asset, not to the
+      // edit, so a prefab whose stored blob is broken is a failure to apply and not a malformed edit -
+      // reporting it as one sends whoever reads the log to look at the wire.
+      try
       {
-        parent = objectManager.getObjectByUUID(parsedParent.value());
+        objectManager.instantiateUnder(body, parent);
       }
+      catch (const std::bad_alloc&)
+      {
+        throw;
+      }
+      catch (const std::exception&)
+      {
+        return SceneEditResult::failed;
+      }
+
+      return SceneEditResult::applied;
     }
 
-    // Don't create a cycle (drop onto self or a descendant).
-    if (object == parent || (parent && object->isAncestorOf(parent)))
+    if (op == "addObject")
     {
-      return;
+      const std::string name = edit.value("name", "Object");
+
+      // A parent that is named and does not resolve is not the same as no parent named at all: the
+      // sender asked for a child of something, and rooting the object instead and calling it applied
+      // reports the wrong answer for a view that is a round trip behind the authority. Resolved (and
+      // depth-checked) before anything is built: an editor connection could otherwise chain adds, each
+      // naming the previous object as parent, into a tree deep enough to overflow the stack the next
+      // time the server recurses through it (a snapshot broadcast, or this same check on a later edit).
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
+      {
+        const auto parsed = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsed.has_value())
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsed.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
+        }
+
+        if (ancestorDepth(parent) + 1 > maxObjectDepth)
+        {
+          return SceneEditResult::rejected;
+        }
+      }
+
+      const auto object = std::make_shared<Object>(name);
+      object->setParent(parent);
+
+      objectManager.addObject(object);
+      return SceneEditResult::applied;
     }
 
-    if (const auto oldParent = object->getParent())
+    // Every other op targets an existing object.
+    const auto parsed = uuids::uuid::from_string(std::string(edit.at("object")));
+    if (!parsed.has_value())
     {
-      oldParent->removeChild(object);
-    }
-    else
-    {
-      objectManager.removeObjectFromRoot(object);
+      return SceneEditResult::malformedEdit;
     }
 
-    object->setParent(parent);
-
-    if (parent)
+    const auto object = objectManager.getObjectByUUID(parsed.value());
+    if (!object)
     {
-      parent->addChild(object);
-    }
-    else
-    {
-      objectManager.addObjectToRoot(object);
+      return SceneEditResult::unknownObject;
     }
 
-    return;
-  }
-
-  if (op == "addComponent")
-  {
-    const std::string key = edit.at("component");
-
-    if (const auto component = objectManager.getComponentRegistry()->create(key))
+    if (op == "removeObject")
     {
+      objectManager.removeObject(object);
+      objectManager.deleteObjectsMarkedForDeletion();
+      return SceneEditResult::applied;
+    }
+
+    if (op == "renameObject")
+    {
+      object->setName(edit.at("name"));
+      return SceneEditResult::applied;
+    }
+
+    if (op == "duplicateObject")
+    {
+      // Same reasoning as the prefab body: this re-parses the object's own serialization, so a failure
+      // is the scene's and not the edit's.
+      try
+      {
+        objectManager.duplicateObject(object);
+      }
+      catch (const std::bad_alloc&)
+      {
+        throw;
+      }
+      catch (const std::exception&)
+      {
+        return SceneEditResult::failed;
+      }
+
+      return SceneEditResult::applied;
+    }
+
+    if (op == "reparentObject")
+    {
+      // No parent named means "move to the scene root", which is a real request. A parent that is named
+      // and does not resolve is a stale view, and falling through to a null parent would silently
+      // detach the object from the parent it has instead - and report that as applied.
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
+      {
+        const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsedParent.has_value())
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
+        }
+      }
+
+      // Don't create a cycle (drop onto self or a descendant).
+      if (object == parent || (parent && object->isAncestorOf(parent)))
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Dropping an object back onto the parent it already has would only move it to the end of the
+      // sibling list and cost a re-snapshot.
+      if (object->getParent() == parent)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // A reparent can push the object's own subtree deeper than any single edit that built it: the
+      // depth check at unpack/load time only bounds a tree as it arrives, not what an existing tree can
+      // be moved onto later. Reject before mutating anything so the server never produces a snapshot its
+      // own clients would refuse to unpack.
+      if (const std::size_t newDepth = (parent ? ancestorDepth(parent) + 1 : 0) + subtreeHeight(object);
+          newDepth > maxObjectDepth)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Captured before detach: getPosition/getRotation/getScale compose with the CURRENT parent, so
+      // this is the object's world placement prior to the reparent.
+      glm::vec3 oldWorldPosition(0.0f);
+      glm::vec3 oldWorldRotation(0.0f);
+      glm::vec3 oldWorldScale(1.0f);
+      if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
+      {
+        oldWorldPosition = transform->getPosition();
+        oldWorldRotation = transform->getRotation();
+        oldWorldScale = transform->getScale();
+      }
+
+      if (const auto oldParent = object->getParent())
+      {
+        oldParent->removeChild(object);
+      }
+      else
+      {
+        objectManager.removeObjectFromRoot(object);
+      }
+
+      object->setParent(parent);
+
+      if (parent)
+      {
+        parent->addChild(object);
+      }
+      else
+      {
+        objectManager.addObjectToRoot(object);
+      }
+
+      restoreWorldPlacementAfterReparent(object, parent, oldWorldPosition, oldWorldRotation, oldWorldScale);
+
+      return SceneEditResult::applied;
+    }
+
+    if (op == "addComponent")
+    {
+      const std::string key = edit.at("component");
+
+      const auto component = objectManager.getComponentRegistry()->create(key);
+      if (!component)
+      {
+        return SceneEditResult::unknownComponent;
+      }
+
       if (edit.contains("className"))
       {
         if (const auto script = std::dynamic_pointer_cast<Script>(component))
@@ -400,47 +660,78 @@ void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
       }
 
       object->addComponent(component);
+
+      return SceneEditResult::applied;
     }
 
-    return;
+    if (op == "removeComponent")
+    {
+      const std::string type = edit.at("type");
+      const std::string className = edit.contains("className") ? edit.at("className") : "";
+
+      const auto matches = [&](const std::shared_ptr<Component>& component) {
+        if (component->serialize().at("type") != type)
+        {
+          return false;
+        }
+
+        if (const auto script = std::dynamic_pointer_cast<Script>(component))
+        {
+          return script->getClassName() == className;
+        }
+
+        return true;
+      };
+
+      for (const auto& [componentType, component] : object->getComponents())
+      {
+        if (matches(component))
+        {
+          object->removeComponent(component);
+          return SceneEditResult::applied;
+        }
+      }
+
+      for (const auto& script : object->getScripts())
+      {
+        if (matches(script))
+        {
+          object->removeComponent(script);
+          return SceneEditResult::applied;
+        }
+      }
+
+      return SceneEditResult::unknownComponent;
+    }
+
+    return SceneEditResult::malformedEdit;
   }
+}
 
-  if (op == "removeComponent")
+SceneEditResult applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                               const AssetRegistry* assetRegistry)
+{
+  // Every op reaches its fields with at(), and instantiatePrefab builds a whole subtree from a body that
+  // may name a component this build does not know. Without this the authority's only guard is the run
+  // loop's catch, which logs the throw as a generic bad message and tells the caller nothing.
+  try
   {
-    const std::string type = edit.at("type");
-    const std::string className = edit.contains("className") ? edit.at("className") : "";
-
-    const auto matches = [&](const std::shared_ptr<Component>& component) {
-      if (component->serialize().at("type") != type)
-      {
-        return false;
-      }
-
-      if (const auto script = std::dynamic_pointer_cast<Script>(component))
-      {
-        return script->getClassName() == className;
-      }
-
-      return true;
-    };
-
-    for (const auto& [componentType, component] : object->getComponents())
-    {
-      if (matches(component))
-      {
-        object->removeComponent(component);
-        return;
-      }
-    }
-
-    for (const auto& script : object->getScripts())
-    {
-      if (matches(script))
-      {
-        object->removeComponent(script);
-        return;
-      }
-    }
+    return applyStructuralEdit(objectManager, edit, assetRegistry);
+  }
+  catch (const std::bad_alloc&)
+  {
+    // Out of memory is not a malformed edit, and pretending otherwise would send the caller looking for
+    // a wire bug.
+    throw;
+  }
+  catch (const nlohmann::json::exception&)
+  {
+    // A field the op needs is missing, or is not the type it is read as.
+    return SceneEditResult::malformedEdit;
+  }
+  catch (const std::exception&)
+  {
+    return SceneEditResult::failed;
   }
 }
 
@@ -466,7 +757,18 @@ void applyObjectSpawned(ObjectManager& objectManager, const net::Message& messag
 
   auto object = std::make_shared<Object>();
   objectManager.addObject(object);
-  object->unpack(reader);
+
+  try
+  {
+    object->unpack(reader);
+  }
+  catch (...)
+  {
+    // unpack registers each node with the manager before reading it, so a payload that runs out part way
+    // through would otherwise strand a half-built subtree in the live scene.
+    objectManager.discardSubtree(object);
+    throw;
+  }
 }
 
 void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message)
@@ -526,9 +828,12 @@ void applyAddAsset(AssetRegistry& assetRegistry,
   else if (type == "scene")
   {
     const std::string name = asset.value("name", std::string{ "New Scene" });
-    sceneManager.addScene(std::make_shared<SceneAsset>(uuid, name, componentRegistry));
+    // A new scene always defaults to the same fixed name, so a second one collides immediately - resolve
+    // it here, before the AssetRegistry key is derived, rather than letting it silently drop out.
+    const std::string uniqueName = sceneManager.uniqueSceneName(uuid, name);
+    sceneManager.addScene(std::make_shared<SceneAsset>(uuid, uniqueName, componentRegistry));
     // Also register it as an asset so it shows in the browser (double-click to load).
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = name });
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = uniqueName });
   }
 }
 

@@ -61,6 +61,12 @@ public:
 
   [[nodiscard]] const AssetRecord* getByUUID(const uuids::uuid& uuid) const;
 
+  // Like getByUUID, but only returns the record when it is also of the given type - nullptr for an
+  // unknown uuid or one whose record is a different AssetType (e.g. a texture uuid where a model is
+  // expected). Lets a caller that assigns an asset by uuid reject a wrong-typed one in one call rather
+  // than checking the type itself.
+  [[nodiscard]] const AssetRecord* getByUUIDOfType(const uuids::uuid& uuid, AssetType type) const;
+
   [[nodiscard]] const AssetRecord* getByPath(const std::string& path) const;
 
   [[nodiscard]] const std::unordered_map<uuids::uuid, AssetRecord>& getAssets() const;

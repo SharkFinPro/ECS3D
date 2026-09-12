@@ -68,7 +68,7 @@ void registerLightRendererEditor(ComponentEditor& componentEditor)
         edited = true;
       }
 
-      if (gc::accentSlider("Cone Angle", &coneAngle, 0.0f, 180.0f))
+      if (gc::accentSlider("Cone Angle", &coneAngle, LightRenderer::minConeAngleDegrees, LightRenderer::maxConeAngleDegrees))
       {
         light->setConeAngle(coneAngle);
         edited = true;

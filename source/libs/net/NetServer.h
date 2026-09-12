@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 class ManagedHost;
@@ -44,6 +45,15 @@ public:
   // Drain the connection ids that have dropped since the last call (clears the buffer).
   [[nodiscard]] std::vector<int32_t> takeDisconnected();
 
+  // Called from the C# socket thread (via the registered native callback), once, right after the
+  // transport's Authorize() grants a connection its role at the handshake. Records connId as an editor
+  // when role is Role::editor; any other role is a no-op (a connection is never anything else first).
+  void authorize(int32_t connId, uint8_t role);
+
+  // Whether connectionId was authorized as Role::editor at the handshake. False for a connection that
+  // authorized as a player, one still mid-handshake, and one that has since disconnected.
+  [[nodiscard]] bool isEditor(int32_t connectionId) const;
+
 private:
   std::shared_ptr<ManagedHost> m_host;
 
@@ -52,6 +62,11 @@ private:
   // Dropped connection ids pushed from the socket threads, drained on the tick thread.
   std::mutex m_disconnectMutex;
   std::vector<int32_t> m_disconnected;
+
+  // Connections the transport authorized as Role::editor, touched from both the socket threads
+  // (authorize/disconnect) and the tick thread (isEditor), hence its own mutex.
+  mutable std::mutex m_editorMutex;
+  std::unordered_set<int32_t> m_editorConnections;
 
   bool m_editMode = false;
   bool m_started = false;
@@ -63,6 +78,7 @@ private:
   void* m_connectionCountFn = nullptr;
   void* m_setCallbackFn = nullptr;
   void* m_setDisconnectCallbackFn = nullptr;
+  void* m_setAuthorizedCallbackFn = nullptr;
 };
 
 }

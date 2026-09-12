@@ -1,6 +1,7 @@
 #include "SphereCollider.h"
 #include "../Transform.h"
 #include "../../Object.h"
+#include "WireTypes.h"
 #include <glm/gtx/component_wise.inl>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -45,16 +46,6 @@ void SphereCollider::setPosition(const glm::vec3& position)
   m_position.set(position);
 }
 
-bool SphereCollider::getRenderCollider() const
-{
-  return m_renderCollider;
-}
-
-void SphereCollider::setRenderCollider(const bool renderCollider)
-{
-  m_renderCollider = renderCollider;
-}
-
 nlohmann::json SphereCollider::serialize()
 {
   const auto position = m_position.getInitialValue();
@@ -79,11 +70,12 @@ void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
   m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
 
   m_radius.set(componentData.at("radius"));
-  m_renderCollider = componentData.at("renderCollider");
 
-  // value() (not at()): projects saved before triggers/layers existed have no such key.
+  // value() (not at()): a blob written before triggers/layers existed, or hand-authored like the default
+  // project's, has no such key - and at() would throw the whole project load away over an absent flag.
+  m_renderCollider = componentData.value("renderCollider", false);
   m_isTrigger = componentData.value("isTrigger", false);
-  m_layer = componentData.value("layer", 0u);
+  setLayer(componentData.value("layer", 0u));
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
 }
 
@@ -93,7 +85,7 @@ glm::vec3 SphereCollider::getPosition()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_position.value() + transform->getPosition();
+  return m_position.get() + transform->getPosition();
 }
 
 glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
@@ -102,7 +94,7 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    return direction * getScaledRadius(transform) + transform->getPosition() + m_position.value();
+    return direction * getScaledRadius(transform) + transform->getPosition() + m_position.get();
   }
 
   return { 0, 0, 0 };
@@ -126,7 +118,7 @@ void SphereCollider::unpack(net::MessageReader& messageReader)
   m_position.set(messageReader.read<glm::vec3>());
   m_radius.set(messageReader.read<float>());
   m_isTrigger = messageReader.read<bool>();
-  m_layer = messageReader.read<uint32_t>();
+  setLayer(messageReader.read<uint32_t>());
   m_mask = messageReader.read<uint32_t>();
 }
 
@@ -147,5 +139,5 @@ float SphereCollider::getScaledRadius(const std::shared_ptr<Transform>& transfor
 {
   const auto maxScale = compMax(transform->getScale());
 
-  return maxScale * m_radius.value();
+  return maxScale * m_radius.get();
 }

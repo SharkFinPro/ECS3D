@@ -1,6 +1,8 @@
 #include "NetClient.h"
 #include <ManagedHost.h>
 #include <array>
+#include <iostream>
+#include <limits>
 
 namespace net {
 
@@ -75,6 +77,16 @@ void NetClient::send(const Message& message) const
 {
   if (!m_connected)
   {
+    return;
+  }
+
+  // A size above INT32_MAX would narrow to a negative or truncated frame length on the wire; refuse it
+  // here rather than hand the cast something it cannot represent. This is a void hot-path callback, so
+  // there is no caller to throw to - log the refusal instead.
+  if (!fitsInWireFrameLength(message.size()))
+  {
+    std::cerr << "[NetClient] Refusing to send a " << message.size() << " byte message; the limit is "
+              << std::numeric_limits<int32_t>::max() << "." << std::endl;
     return;
   }
 

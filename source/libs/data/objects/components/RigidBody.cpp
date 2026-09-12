@@ -1,4 +1,5 @@
 #include "RigidBody.h"
+#include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 

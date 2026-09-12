@@ -18,6 +18,7 @@
 #include <ManagedHost.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <chrono>
+#include <exception>
 #include <iostream>
 #include <random>
 #include <thread>
@@ -80,7 +81,16 @@ void ClientApp::run()
     net::Message message;
     while (m_netClient->poll(message))
     {
-      applyMessage(message);
+      // A malformed message costs the message, not the session. Without this the exception escapes run()
+      // and main exits, so one bad packet closes the window.
+      try
+      {
+        applyMessage(message);
+      }
+      catch (const std::exception& e)
+      {
+        std::cerr << "[Client] Failed to apply a message from the server: " << e.what() << std::endl;
+      }
     }
 
     sendInput();
@@ -120,10 +130,10 @@ void ClientApp::sendInput()
 
   net::Message message(net::MessageType::inputState);
   message.write(snapshot.focused);
-  message.write(snapshot.keys.size());
+  message.write(static_cast<uint32_t>(snapshot.keys.size()));
   for (const auto& key : snapshot.keys)
   {
-    message.write(key);
+    message.write(static_cast<int32_t>(key));
   }
 
   message.write(snapshot.mouseX);
@@ -240,10 +250,10 @@ void ClientApp::applyMessage(const net::Message& message) const
 
 void ClientApp::handleSnapshot(const net::Message& message) const
 {
-  const auto scene = m_sceneManager->getCurrentScene();
-
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
+
+  const auto scene = m_sceneManager->getCurrentScene();
   std::cerr << "[Client] Applied snapshot (" << message.size() << " bytes). Current scene: "
             << (scene ? scene->getName() : "<none>") << " ("
             << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
@@ -261,10 +271,12 @@ void ClientApp::handleStateDelta(const net::Message& message) const
 
 void ClientApp::handleEditComponent(const net::Message& message) const
 {
-  // The server applied an editor's component change; mirror it into the replicated scene.
+  // The server applied an editor's component change; mirror it into the replicated scene. The result is
+  // ignored on purpose: a view legitimately receives edits for objects it has not been sent yet or has
+  // already dropped, and the server only rebroadcasts what it applied itself.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), message);
+    static_cast<void>(replication::applyComponentEdit(*scene->getObjectManager(), message));
   }
 }
 

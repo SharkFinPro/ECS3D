@@ -34,7 +34,24 @@ void unpackStateDelta(const ObjectManager& objectManager, const net::Message& me
 [[nodiscard]] net::Message buildComponentEdit(const uuids::uuid& objectUUID,
                                               const std::shared_ptr<Component>& component);
 
-void applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
+// How an edit ended. The failures mean different things: a payload that will not parse is always a bug -
+// corruption, a truncated read, a protocol mismatch - while a missing target is routine, since the server
+// rebroadcasts every edit and a view can receive one for an object it has not been sent yet or has
+// already dropped. Collapsing them into one silent return hid the serious case behind the benign one.
+//
+// partiallyApplied is the ugly middle: a component unpacks field by field as it reads, so a payload that
+// runs out mid-body leaves it half written. The authority recovers by re-snapshotting.
+//
+// Not [[nodiscard]]: a replicated view legitimately ignores every failure here. The authority does not.
+enum class ComponentEditResult {
+  applied,
+  malformedPayload,
+  partiallyApplied,
+  unknownObject,
+  unknownComponent
+};
+
+ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
 
 // Structural edits (add/remove object or component). Unlike a value edit these change the scene graph,
 // so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op - the
@@ -64,11 +81,35 @@ void applyComponentEdit(const ObjectManager& objectManager, const net::Message& 
 // Instantiate a prefab asset into the scene at the transform stored in its body. Unlike every other op
 // this one names an asset rather than an existing object, so applySceneEdit needs the AssetRegistry to
 // resolve the prefab's uuid to its body - pass it whenever prefab ops are possible (the authoritative
-// server always does).
-[[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID);
+// server always does). An absent parentUUID instantiates at the scene root (the original behavior);
+// passing one instantiates as a child of that object instead, e.g. dropping the prefab onto it in the tree.
+[[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID,
+                                                    const uuids::uuid* parentUUID = nullptr);
 
-void applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
-                    const AssetRegistry* assetRegistry = nullptr);
+// Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
+// payload it could not parse apart from an op it understood and refused, because only the first says the
+// sender and the authority disagree about the wire, and only the second is a normal thing for an editor
+// to send.
+//
+// There is no partially-applied result, because in practice an op either changes the graph or it does
+// not: the one that builds as it goes (instantiatePrefab) unwinds its own subtree before it throws. The
+// exception is a reparent, which detaches before it reattaches - an allocation failure between the two
+// would strand the object. failed covers what is reachable; a bad_alloc there is rethrown.
+//
+// Not [[nodiscard]], for the same reason: an editor applying an edit to its own scratch scene has
+// nothing to do with the answer. The authority does.
+enum class SceneEditResult {
+  applied,
+  malformedEdit,     // no op, an op nothing handles, or a field the op needs missing or unparseable
+  unknownObject,     // names an object this scene does not have
+  unknownComponent,  // names a component type that does not exist, or one the object is not carrying
+  unknownAsset,      // instantiatePrefab named an asset with no usable body
+  rejected,          // well formed and refused: a reparent that would cycle, or that changes nothing
+  failed             // threw part way through, e.g. a prefab body naming a component this build lacks
+};
+
+SceneEditResult applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
+                               const AssetRegistry* assetRegistry = nullptr);
 
 // Runtime spawn/destroy replication. Unlike the editor's structural edits (which re-snapshot), a script
 // spawning or destroying an object at runtime replicates incrementally: the server broadcasts one packed

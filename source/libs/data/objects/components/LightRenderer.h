@@ -31,6 +31,11 @@ public:
   [[nodiscard]] float getConeAngle() const;
   void setConeAngle(float coneAngle);
 
+  // The shadow frustum's fov is coneAngle * 2, so a value at or past 90 projects at or past 180 degrees
+  // and degenerates. Shared by the editor slider and the setter's own clamp.
+  static constexpr float minConeAngleDegrees = 1.0f;
+  static constexpr float maxConeAngleDegrees = 89.0f;
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -42,13 +47,17 @@ public:
 private:
   bool m_isSpotLight = false;
 
-  glm::vec3 m_color = glm::vec3(0);
+  // Matches the default project's point lights, so a light added in the editor lights something. Ambient
+  // stays 0 on purpose: it is an unattenuated flat fill, so only one light in a scene should carry it.
+  glm::vec3 m_color = glm::vec3(1.0f);
   float m_ambient = 0.0f;
-  float m_diffuse = 0.0f;
-  float m_specular = 0.0f;
+  float m_diffuse = 0.75f;
+  float m_specular = 0.75f;
 
-  glm::vec3 m_direction = glm::vec3(0);
-  float m_coneAngle = 0.0f;
+  // Only read once the light is a spot light, where a zero direction points nowhere and a zero cone
+  // angle closes the cone entirely. The angle is in degrees and doubles into the shadow frustum's fov.
+  glm::vec3 m_direction = glm::vec3(0, -1, 0);
+  float m_coneAngle = 30.0f;
 };
 
 

@@ -7,6 +7,7 @@ add_library(${PROJECT_NAME}
   ScriptEngine.h
   bindings/BindingContext.cpp
   bindings/BindingContext.h
+  bindings/BindingCoverage.h
   bindings/TransformBindings.cpp
   bindings/TransformBindings.h
   bindings/RigidBodyBindings.cpp
@@ -17,6 +18,8 @@ add_library(${PROJECT_NAME}
   bindings/WorldBindings.h
   bindings/CameraBindings.cpp
   bindings/CameraBindings.h
+  bindings/ModelRendererBindings.cpp
+  bindings/ModelRendererBindings.h
   bindings/InputState.cpp
   bindings/InputState.h
 )

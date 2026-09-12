@@ -14,6 +14,11 @@ ComponentType Component::getType() const
   return m_type;
 }
 
+ComponentType Component::getPackedType() const
+{
+  return m_subType == ComponentType::SubComponentType_none ? m_type : m_subType;
+}
+
 void Component::setOwner(Object* owner)
 {
   m_owner = owner;

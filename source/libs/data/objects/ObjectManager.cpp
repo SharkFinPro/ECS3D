@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <stdexcept>
 
 ObjectManager::ObjectManager(std::shared_ptr<ComponentRegistry> componentRegistry)
   : m_componentRegistry(std::move(componentRegistry)),
@@ -44,6 +45,14 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   {
     object->getParent()->addChild(object);
   }
+
+  // Registered while the scene is running: without this the object's components stay backed by their
+  // authored values, so anything the run writes to them is saved into the scene as if it had been
+  // authored. This is the object-level counterpart of Object::addComponent's own start.
+  if (m_started)
+  {
+    object->start();
+  }
 }
 
 void ObjectManager::addObjectToRoot(const std::shared_ptr<Object>& object)
@@ -56,15 +65,35 @@ void ObjectManager::removeObjectFromRoot(const std::shared_ptr<Object>& object)
   std::erase(m_objects, object);
 }
 
-void ObjectManager::reassignUUIDs(nlohmann::json& objectData)
+namespace {
+  // Number of ancestors above object (root = 0), by a plain walk up getParent() - never more than
+  // maxObjectDepth steps for any object that arrived through a depth-checked path.
+  std::size_t ancestorDepth(const std::shared_ptr<Object>& object)
+  {
+    std::size_t depth = 0;
+    for (auto current = object->getParent(); current; current = current->getParent())
+    {
+      ++depth;
+    }
+
+    return depth;
+  }
+}
+
+void ObjectManager::reassignUUIDs(nlohmann::json& objectData, const std::size_t depth)
 {
+  if (depth > maxObjectDepth)
+  {
+    throw std::runtime_error("Object nesting exceeds maximum depth");
+  }
+
   objectData["uuid"] = uuids::to_string(createUUID());
 
   if (objectData.contains("children"))
   {
     for (auto& child : objectData.at("children"))
     {
-      reassignUUIDs(child);
+      reassignUUIDs(child, depth + 1);
     }
   }
 }
@@ -75,9 +104,15 @@ std::shared_ptr<Object> ObjectManager::instantiateUnder(const nlohmann::json& ob
   // Work on a copy: reassignUUIDs rewrites the blob, and a prefab body is reused across instantiations.
   auto data = objectData;
 
+  // A body is only as deep as it claims to be in isolation - but landing it under a live parent adds
+  // that parent's own depth on top, and this is reachable under any object (duplicateObject passes the
+  // source's own parent; an instantiatePrefab that can target an arbitrary object would too), so the
+  // combined tree is what has to fit under maxObjectDepth, not just the body by itself.
+  const std::size_t baseDepth = parent ? ancestorDepth(parent) + 1 : 0;
+
   // Give the new object (and every descendant) fresh uuids - reusing the originals would collide in the
   // uuid-keyed replication/picking.
-  reassignUUIDs(data);
+  reassignUUIDs(data, baseDepth);
 
   const auto newObject = std::make_shared<Object>(data, this);
   newObject->setParent(parent);
@@ -85,9 +120,23 @@ std::shared_ptr<Object> ObjectManager::instantiateUnder(const nlohmann::json& ob
   addObject(newObject);
 
   // Object's ctor loads only its own components/scripts; children are separate objects, so build them.
-  if (data.contains("children"))
+  // Each child registers itself before it is loaded, so a body whose child names a component this build
+  // does not know would strand a half-built subtree - and callers here are expected to catch and carry
+  // on, which is precisely what leaves the wreckage in the scene. serialize() always writes "children" as
+  // an array, empty for a leaf, so an emptiness check (not just contains()) is what tells a leaf body from
+  // one with something to load - otherwise a leaf landing exactly at maxObjectDepth would be rejected for
+  // children it does not have.
+  if (const auto childrenIt = data.find("children"); childrenIt != data.end() && !childrenIt->empty())
   {
-    newObject->loadChildren(data.at("children"));
+    try
+    {
+      newObject->loadChildren(*childrenIt, baseDepth + 1);
+    }
+    catch (...)
+    {
+      discardSubtree(newObject);
+      throw;
+    }
   }
 
   return newObject;
@@ -107,16 +156,20 @@ void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
   instantiateUnder(objectData, object->getParent());
 }
 
-void ObjectManager::start() const
+void ObjectManager::start()
 {
+  m_started = true;
+
   for (const auto& object : m_allObjects)
   {
     object->start();
   }
 }
 
-void ObjectManager::stop() const
+void ObjectManager::stop()
 {
+  m_started = false;
+
   for (const auto& object : m_allObjects)
   {
     object->stop();
@@ -148,8 +201,36 @@ void ObjectManager::pack(net::Message& message) const
   }
 }
 
+void ObjectManager::restoreFromJSON(const nlohmann::json& objectsData)
+{
+  // Mirrors unpack(): replace, not append, and no fresh uuids - the run's spawn/destroy/reparent has
+  // already happened, so this puts the tree back exactly as it was captured before the run started.
+  m_objects.clear();
+  m_allObjects.clear();
+  m_objectsToRemove.clear();
+
+  for (const auto& objectData : objectsData)
+  {
+    auto object = std::make_shared<Object>(objectData, this);
+    addObject(object);
+
+    if (objectData.contains("children"))
+    {
+      object->loadChildren(objectData.at("children"));
+    }
+  }
+}
+
 void ObjectManager::unpack(net::MessageReader& messageReader)
 {
+  // Replace, not append: every caller today unpacks into a manager it just constructed (see
+  // ProjectPacker::unpack/SceneAsset::unpack, which parse into fresh instances and swap on success), so
+  // clearing here can't undo a live scene - but a manager that already holds objects must not keep them
+  // once a new snapshot is read into it.
+  m_objects.clear();
+  m_allObjects.clear();
+  m_objectsToRemove.clear();
+
   const uint32_t objectCount = messageReader.read<uint32_t>();
 
   for (uint32_t i = 0; i < objectCount; ++i)
@@ -161,9 +242,15 @@ void ObjectManager::unpack(net::MessageReader& messageReader)
   }
 }
 
-void ObjectManager::removeObject(const std::shared_ptr<Object>& object)
+bool ObjectManager::removeObject(const std::shared_ptr<Object>& object)
 {
+  if (std::ranges::find(m_objectsToRemove, object) != m_objectsToRemove.end())
+  {
+    return false;
+  }
+
   m_objectsToRemove.push_back(object);
+  return true;
 }
 
 void ObjectManager::deleteObjectsMarkedForDeletion()
@@ -208,6 +295,38 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
   }
 
   m_objectsToRemove.clear();
+}
+
+void ObjectManager::discardSubtree(std::shared_ptr<Object> root)
+{
+  if (!root)
+  {
+    return;
+  }
+
+  // The root's parent stays in the scene, so its reference has to go too - otherwise the subtree is gone
+  // from the manager but still hanging off a live object.
+  if (const auto parent = root->getParent())
+  {
+    parent->removeChild(root);
+  }
+
+  eraseSubtree(root);
+}
+
+void ObjectManager::eraseSubtree(const std::shared_ptr<Object>& object)
+{
+  for (const auto& child : object->getChildren())
+  {
+    eraseSubtree(child);
+  }
+
+  std::erase(m_allObjects, object);
+  std::erase(m_objects, object);
+
+  // A queued removal would otherwise outlive the discard and be reparented back into the scene by the
+  // next deletion pass.
+  std::erase(m_objectsToRemove, object);
 }
 
 std::shared_ptr<Object> ObjectManager::getObjectByUUID(const uuids::uuid uuid) const

@@ -121,6 +121,11 @@ internal sealed class WebSocketBackend : TransportBackend
 
   public override void ServerBroadcast(byte type, nint data, int len)
   {
+    if (TooLargeToSend(len))
+    {
+      return;
+    }
+
     var message = BuildMessage(type, data, len);
 
     lock (_clientsLock)
@@ -185,14 +190,20 @@ internal sealed class WebSocketBackend : TransportBackend
 
       // The first message must be the connection handshake. Authorize from it (e.g. reject an editor
       // against a play-only server, or one with a bad token) before delivering any protocol message.
-      var first = ReceiveMessage(ws, cts.Token);
-      if (first is null || first.Length < 1 || first[0] != HandshakeType || !Authorize(Payload(first)))
+      // The handshake gets the tighter ceiling: it is the one message read before the peer is authorized.
+      var first = ReceiveMessage(ws, cts.Token, MaxHandshakeBytes);
+      var handshakePayload = first is null ? null : Payload(first);
+      if (first is null || first.Length < 1 || first[0] != HandshakeType || !Authorize(handshakePayload!))
       {
         Console.Error.WriteLine("[Transport] Rejected a connection that failed the handshake.");
         return;
       }
 
       connId = Interlocked.Increment(ref _nextConnId);
+
+      // Authorize succeeded: tell the native side which role this connection was actually granted, so it
+      // can enforce that role on every later message rather than trusting one the sender claims.
+      Transport.DeliverServerAuthorized(connId, handshakePayload![0]);
 
       conn = new Connection(ws, cts);
       lock (_clientsLock)
@@ -339,7 +350,7 @@ internal sealed class WebSocketBackend : TransportBackend
   {
     var ws = _client;
     var cts = _clientCts;
-    if (ws is null || cts is null)
+    if (ws is null || cts is null || TooLargeToSend(len))
     {
       return;
     }
@@ -468,7 +479,7 @@ internal sealed class WebSocketBackend : TransportBackend
 
   // Receives one whole WebSocket message (reassembling fragments) as [type byte][payload]. Returns null
   // on close or error.
-  private static byte[]? ReceiveMessage(WebSocket ws, CancellationToken token)
+  private static byte[]? ReceiveMessage(WebSocket ws, CancellationToken token, int maxBytes = MaxMessageBytes)
   {
     var buffer = new byte[8192];
     using var assembled = new MemoryStream();
@@ -487,6 +498,16 @@ internal sealed class WebSocketBackend : TransportBackend
 
       if (result.MessageType == WebSocketMessageType.Close)
       {
+        return null;
+      }
+
+      // A fragmented message has no declared length, so the ceiling is on what has actually arrived: a
+      // peer can otherwise keep sending continuation frames and never set the end bit, and the stream
+      // grows until the process gives out. Slower than the TCP case, and the same ending.
+      if (assembled.Length + result.Count > maxBytes)
+      {
+        Console.Error.WriteLine($"[Transport] Refused a message past {maxBytes} bytes; the peer kept sending.");
+
         return null;
       }
 

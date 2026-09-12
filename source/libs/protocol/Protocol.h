@@ -5,9 +5,11 @@
 #include <bit>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace net {
@@ -23,8 +25,10 @@ enum class MessageType : uint8_t {
   snapshot,     // server -> client: full project/scene state (ProjectPacker::pack())
   stateDelta,   // server -> client: per-tick transform stream, packed binary (replication::packStateDelta)
   inputState,    // client -> server: local input for the scripts to read. Payload: focused (bool),
-                 // key count (size_t) + that many key codes (int), then the mouse block: mouseX, mouseY,
-                 // mouseDeltaX, mouseDeltaY, scrollY (5x float), buttons (uint8 bitmask L/R/M)
+                 // key count (uint32) + that many key codes (int32), then the mouse block: mouseX, mouseY,
+                 // mouseDeltaX, mouseDeltaY, scrollY (5x float), buttons (uint8 bitmask L/R/M). The
+                 // widths are fixed so a 32-bit peer and a 64-bit one agree; byte order is still the
+                 // host's, so peers of differing endianness would not.
   editComponent, // editor -> server -> all: a single component value edit (replication::buildComponentEdit)
   sceneEdit,     // editor -> server: a structural edit (add/remove object/component); server re-snapshots
   sceneControl,  // editor -> server: scene lifecycle (SceneControlOp + optional scene uuid); server re-snapshots
@@ -45,6 +49,25 @@ enum class MessageType : uint8_t {
   // editor connecting to a non-edit server is admitted read-only (it views but cannot mutate).
 };
 
+// The editor's mutation path, called out as its own function so the transport-side enforcement and any
+// other caller read the same list the comment above documents, rather than a second one that can drift.
+[[nodiscard]] constexpr bool isMutationMessage(const MessageType type) noexcept
+{
+  switch (type)
+  {
+    case MessageType::editComponent:
+    case MessageType::sceneEdit:
+    case MessageType::sceneControl:
+    case MessageType::loadProject:
+    case MessageType::addAsset:
+    case MessageType::renameAsset:
+    case MessageType::removeAsset:
+      return true;
+    default:
+      return false;
+  }
+}
+
 enum class Role : uint8_t {
   player,
   editor
@@ -59,23 +82,60 @@ enum class SceneControlOp : uint8_t {
   loadScene
 };
 
+// Types that may be bit_cast onto the wire whole. The general trivially copyable type is not safe to
+// send: a struct with padding would put its indeterminate bytes - whatever the stack or heap last held
+// there - in front of every connected peer, and a struct holding a pointer would send a process address
+// out and reconstitute a foreign one on the way back. So the list is integers, enums and the two
+// floating-point types that have no padding; long double is deliberately absent, being 16 bytes of which
+// only 10 carry value on the x86-64 System V ABI.
+//
+// An aggregate opts in by specializing this, which is the claim that it has neither padding nor a
+// pointer - assert the layout where you specialize. The specializations live in data/WireTypes.h, which
+// any translation unit that reasons about wirePackable (rather than just calling write/read) has to
+// include, or it would evaluate the primary template and disagree with the rest of the program.
+//
+// Widths are still the caller's problem: size_t and long satisfy this and differ between a 32-bit and a
+// 64-bit peer, so pack fixed-width types. Byte order is the host's throughout.
 template <typename T>
-concept Trivial = std::is_trivially_copyable_v<T>;
+inline constexpr bool wirePackable =
+  std::is_integral_v<T> || std::is_enum_v<T> ||
+  std::is_same_v<std::remove_cv_t<T>, float> || std::is_same_v<std::remove_cv_t<T>, double>;
+
+template <typename T>
+concept WireValue = std::is_trivially_copyable_v<T> && wirePackable<T>;
+
+// The frame length NetServer::broadcast and NetClient::send hand across the native/managed boundary is
+// int32_t; a message size that does not fit would narrow to a negative or truncated length on the wire.
+// Both sites guard against it before the cast and share this predicate so the two behave identically.
+[[nodiscard]] inline bool fitsInWireFrameLength(const std::size_t size) noexcept {
+  return size <= static_cast<std::size_t>(std::numeric_limits<int32_t>::max());
+}
 
 class Message {
 public:
-  explicit Message(const MessageType type) noexcept : type(type) {}
-  Message() {}
+  explicit Message(const MessageType type) noexcept : m_type(type) {}
+  Message() = default;
 
-  template <Trivial T>
+  template <WireValue T>
   Message& write(const T& value) {
-    const auto raw = std::bit_cast<std::array<uint8_t, sizeof(T)>>(value);
-    m_payload.insert(m_payload.end(), raw.begin(), raw.end());
-    return *this;
+    // bool goes across as an explicit 0/1 byte rather than whatever sizeof(bool) is here, so the pairing
+    // read never has to trust a foreign byte to be a valid bool.
+    if constexpr (std::is_same_v<std::remove_cv_t<T>, bool>) {
+      return write(static_cast<uint8_t>(value ? 1 : 0));
+    } else {
+      const auto raw = std::bit_cast<std::array<uint8_t, sizeof(T)>>(value);
+      m_payload.insert(m_payload.end(), raw.begin(), raw.end());
+      return *this;
+    }
   }
 
   // Length-prefixed string (uint32 size + bytes). The pairing read is MessageReader::readString.
   Message& writeString(const std::string& value) {
+    // Checked before anything is written: a size that does not fit the uint32 prefix would wrap, and a
+    // wrapped prefix desyncs every field the pairing readString and every read after it expect to find.
+    if (value.size() > std::numeric_limits<uint32_t>::max())
+      throw std::runtime_error("String too large to length-prefix in a wire message");
+
     write(static_cast<uint32_t>(value.size()));
     m_payload.insert(m_payload.end(), value.begin(), value.end());
     return *this;
@@ -84,10 +144,10 @@ public:
   [[nodiscard]] std::size_t size() const noexcept { return m_payload.size(); }
   [[nodiscard]] std::span<const uint8_t> bytes() const noexcept { return m_payload; }
 
-  [[nodiscard]] MessageType getType() const noexcept { return type; }
+  [[nodiscard]] MessageType getType() const noexcept { return m_type; }
 
 private:
-  MessageType type = MessageType::undefined;
+  MessageType m_type = MessageType::undefined;
   std::vector<uint8_t> m_payload;
 };
 
@@ -95,23 +155,30 @@ class MessageReader {
 public:
   explicit MessageReader(const Message& message) noexcept : m_data(message.bytes()) {}
 
-  template <Trivial T>
+  template <WireValue T>
   [[nodiscard]] T read() {
-    if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
-      throw std::runtime_error("Message underflow");
-
-    std::array<uint8_t, sizeof(T)> raw{};
-    std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
-    m_offset += sizeof(T);
-    return std::bit_cast<T>(raw);
+    // A byte off the network is not a bool: any value but 0 or 1 has no bool to bit_cast to, and gcc and
+    // clang genuinely miscompile such a bool into taking both branches. Narrow it here instead.
+    if constexpr (std::is_same_v<std::remove_cv_t<T>, bool>) {
+      return read<uint8_t>() != 0;
+    } else {
+      const T value = peek<T>();
+      m_offset += sizeof(T);
+      return value;
+    }
   }
 
-  // Reads a length-prefixed string written by Message::writeString.
+  // Reads a length-prefixed string written by Message::writeString. Both the length prefix and the size
+  // it names are checked before m_offset moves at all, so a throw here leaves the reader exactly where it
+  // was - a caller that catches and retries (or reads the same bytes as something else) sees no partial
+  // advance.
   [[nodiscard]] std::string readString() {
-    const auto size = read<uint32_t>();
-    if (size > m_data.size() - m_offset)
+    const auto size = peek<uint32_t>();
+
+    if (size > m_data.size() - m_offset - sizeof(uint32_t))
       throw std::runtime_error("Message underflow");
 
+    m_offset += sizeof(uint32_t);
     std::string value(reinterpret_cast<const char*>(m_data.data() + m_offset), size);
     m_offset += size;
     return value;
@@ -120,6 +187,18 @@ public:
   [[nodiscard]] std::size_t remaining() const noexcept { return m_data.size() - m_offset; }
 
 private:
+  // The raw bounds-checked read that read<T>() and readString() both need, without advancing m_offset -
+  // readString() must validate the length prefix before deciding whether the payload it names even fits.
+  template <WireValue T>
+  [[nodiscard]] T peek() const {
+    if (sizeof(T) > m_data.size() - m_offset)  // offset_ <= size() invariant; no overflow
+      throw std::runtime_error("Message underflow");
+
+    std::array<uint8_t, sizeof(T)> raw{};
+    std::memcpy(raw.data(), m_data.data() + m_offset, sizeof(T));
+    return std::bit_cast<T>(raw);
+  }
+
   std::span<const uint8_t> m_data;
   std::size_t m_offset = 0;
 };

@@ -25,6 +25,11 @@ public static unsafe class Transport
   // the player slot bound to it. Optional - the C++ side may never register one.
   private static delegate* unmanaged<int, void> _serverDisconnect;
 
+  // Fired once per connection, right after a backend's Authorize() grants it a role at the handshake, so
+  // the C++ side can enforce that role on every later message (a connection cannot mutate an edit-mode
+  // server's scene unless it was actually authorized as Role.editor there). Optional, like the others.
+  private static delegate* unmanaged<int, byte, void> _serverAuthorized;
+
   private static readonly TransportBackend _backend = CreateBackend();
 
   private static TransportBackend CreateBackend()
@@ -47,6 +52,12 @@ public static unsafe class Transport
   public static void serverSetDisconnectCallback(IntPtr fn)
   {
     _serverDisconnect = (delegate* unmanaged<int, void>)fn;
+  }
+
+  [UnmanagedCallersOnly]
+  public static void serverSetAuthorizedCallback(IntPtr fn)
+  {
+    _serverAuthorized = (delegate* unmanaged<int, byte, void>)fn;
   }
 
   [UnmanagedCallersOnly]
@@ -129,6 +140,15 @@ public static unsafe class Transport
     if (callback != null)
     {
       callback(connId);
+    }
+  }
+
+  internal static void DeliverServerAuthorized(int connId, byte role)
+  {
+    var callback = _serverAuthorized;
+    if (callback != null)
+    {
+      callback(connId, role);
     }
   }
 

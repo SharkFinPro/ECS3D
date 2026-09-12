@@ -26,6 +26,48 @@ const std::unordered_map<uuids::uuid, std::shared_ptr<SceneAsset>>& SceneManager
   return m_scenes;
 }
 
+std::string SceneManager::uniqueSceneName(const uuids::uuid& uuid, const std::string& desiredName) const
+{
+  const std::string base = desiredName.empty() ? "Scene" : desiredName;
+
+  // Strip a trailing " (N)" suffix so colliding with an already-suffixed name grows the number instead
+  // of stacking another one (e.g. "Level (2)" collides into "Level (3)", never "Level (2) (2)").
+  std::string stem = base;
+  if (const auto open = base.rfind(" ("); open != std::string::npos && base.back() == ')')
+  {
+    const std::string inside = base.substr(open + 2, base.size() - open - 3);
+    if (!inside.empty() && inside.find_first_not_of("0123456789") == std::string::npos)
+    {
+      stem = base.substr(0, open);
+    }
+  }
+
+  const auto ownedByOther = [&](const std::string& candidate) {
+    for (const auto& [otherUUID, otherScene] : m_scenes)
+    {
+      if (otherUUID != uuid && otherScene->getName() == candidate)
+      {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (!ownedByOther(base))
+  {
+    return base;
+  }
+
+  for (size_t n = 2;; ++n)
+  {
+    std::string candidate = stem + " (" + std::to_string(n) + ")";
+    if (!ownedByOther(candidate))
+    {
+      return candidate;
+    }
+  }
+}
+
 void SceneManager::loadScene(const std::shared_ptr<SceneAsset>& scene)
 {
   if (!scene)

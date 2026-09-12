@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <unordered_set>
 #include <uuid.h>
 
@@ -69,8 +70,13 @@ private:
   bool m_showHighlightToggle = true;
 
   // Components whose deletion we've already sent (markedAsDeleted persists until the next snapshot
-  // rebuilds the object), so we don't re-send the same removeComponent every frame.
-  std::unordered_set<const Component*> m_pendingRemovals;
+  // rebuilds the object), so we don't re-send the same removeComponent every frame. Keyed by the
+  // owning object's uuid plus the component's type identity (see componentIdentity in the .cpp),
+  // never by address: an address can be reused by a same-size allocation right after a free
+  // (TransientObject::rebuild, replication::applySceneEdit's add/remove component path), which would
+  // silently swallow a later removal for an unrelated component landing at the same address. Entries
+  // are dropped once confirmed (the component's slot is gone from the object) and on selection change.
+  std::unordered_set<std::string> m_pendingRemovals;
 
   bool m_showComponentSelector = false;
 

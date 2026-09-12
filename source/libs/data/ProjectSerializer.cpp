@@ -77,6 +77,15 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
 
   for (const auto& scene : parsedScenes)
   {
+    // Two scenes cannot share a display name - it is the AssetRegistry key a scene is looked up and
+    // selected by - so resolve a collision here, before that key is derived, rather than letting the
+    // second scene silently drop from the registry.
+    if (auto uniqueName = m_sceneManager->uniqueSceneName(scene->getUUID(), scene->getName());
+        uniqueName != scene->getName())
+    {
+      scene->setName(std::move(uniqueName));
+    }
+
     m_sceneManager->addScene(scene);
 
     // Register the scene as an asset too, so it shows up in the editor's asset browser (where it can
@@ -100,10 +109,17 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
   }
 }
 
-void ProjectSerializer::save(const std::string& path) const
+bool ProjectSerializer::save(const std::string& path) const
 {
   std::ofstream outFile(path);
+  if (!outFile.is_open())
+  {
+    std::cerr << "[ProjectSerializer] Could not open project file for writing: " << path << std::endl;
+    return false;
+  }
+
   outFile << serialize().dump(2);
+  return static_cast<bool>(outFile);
 }
 
 bool ProjectSerializer::load(const std::string& path) const

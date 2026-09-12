@@ -1,9 +1,10 @@
 #ifndef COLLISIONSYSTEM_H
 #define COLLISIONSYSTEM_H
 
-#include <glm/vec3.hpp>
+#include "collisions/NarrowPhase.h"
 #include <compare>
 #include <memory>
+#include <optional>
 #include <vector>
 #include <uuid.h>
 
@@ -11,7 +12,6 @@ class ObjectManager;
 class Object;
 class Collider;
 class RigidBody;
-class Simplex;
 
 struct CollisionEdge {
   std::shared_ptr<Object> object;
@@ -79,18 +79,11 @@ private:
   // Broad-phase layer filter: true only if each collider's mask includes the other's layer.
   static bool layersCollide(const std::shared_ptr<Collider>& a, const std::shared_ptr<Collider>& b);
 
-  // GJK/EPA narrow phase.
-  static bool collidesWith(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
-                           glm::vec3* mtv, glm::vec3* collisionPoint);
-
-  static bool handleSphereToSphereCollision(const std::shared_ptr<Collider>& collider,
-                                            const std::shared_ptr<Collider>& otherCollider,
-                                            glm::vec3* mtv, glm::vec3* collisionPoint);
-
-  static bool expandSimplex(Simplex& simplex, glm::vec3& direction);
-  static void lineCase(const Simplex& simplex, glm::vec3& direction);
-  static void triangleCase(Simplex& simplex, glm::vec3& direction);
-  static bool tetrahedronCase(Simplex& simplex, glm::vec3& direction);
+  // The narrow phase itself lives in collisions/NarrowPhase.h and works on a pair of colliders. This
+  // resolves the other object's collider first, which is all the response path has to hand - the sweep
+  // already holds both colliders and calls the narrow phase directly.
+  [[nodiscard]] static std::optional<collisions::Contact> contactWith(const std::shared_ptr<Collider>& collider,
+                                                                      const std::shared_ptr<Object>& other);
 };
 
 

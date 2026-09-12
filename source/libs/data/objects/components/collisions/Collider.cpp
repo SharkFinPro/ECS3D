@@ -76,3 +76,13 @@ void Collider::setMask(const uint32_t mask)
 {
   m_mask = mask;
 }
+
+bool Collider::getRenderCollider() const
+{
+  return m_renderCollider;
+}
+
+void Collider::setRenderCollider(const bool renderCollider)
+{
+  m_renderCollider = renderCollider;
+}

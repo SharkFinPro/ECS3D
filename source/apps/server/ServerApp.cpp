@@ -12,6 +12,7 @@
 #include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <PhysicsSystem.h>
+#include <FixedTimestep.h>
 #include <CollisionSystem.h>
 #include <queries/SceneQueries.h>
 #include <ScriptSystem.h>
@@ -21,6 +22,7 @@
 #include <ManagedHost.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
+#include <string>
 #include <thread>
 
 ServerApp::ServerApp(LaunchOptions options)
@@ -144,11 +146,19 @@ void ServerApp::run()
     const float dt = std::chrono::duration<float>(now - m_previousTime).count();
     m_previousTime = now;
 
-    m_timeAccumulator += dt;
+    // Caps how many ticks one real frame will replay. A stall (GC pause, breakpoint, OS scheduling
+    // hiccup) banks real time in m_timeAccumulator; without a cap the next frame(s) would replay all of
+    // it as a burst of full-speed ticks - e.g. a player holding a movement key would see it launched
+    // across the whole stall's worth of distance the instant the stall clears. FixedTimestep::advance
+    // drops anything past the cap instead of carrying it forward, so a stall of any length costs at most
+    // this many ticks' worth of movement.
+    constexpr int maxFixedStepsPerFrame = 3;
 
-    bool ticked = false;
-    uint8_t steps = 0;
-    while (m_timeAccumulator >= m_fixedUpdateDt && steps < 3)
+    const auto plan = FixedTimestep::advance(m_timeAccumulator, dt, m_fixedUpdateDt, maxFixedStepsPerFrame);
+    m_timeAccumulator = plan.remainingAccumulator;
+
+    const bool ticked = plan.steps > 0;
+    for (int step = 0; step < plan.steps; ++step)
     {
       fixedUpdate(m_fixedUpdateDt);
 
@@ -157,10 +167,6 @@ void ServerApp::run()
       // wasPressed/ReleasedThisTick reflect only genuinely new changes.
       InputState::clearMouseDeltas();
       InputState::commitInputEdges();
-
-      m_timeAccumulator -= m_fixedUpdateDt;
-      ++steps;
-      ticked = true;
     }
 
     // Only stream a delta when the sim actually advanced. The server is headless (no vsync), so without
@@ -231,33 +237,16 @@ void ServerApp::dispatchCollisionEvents(ObjectManager& objectManager) const
   }
 }
 
-namespace {
-  // The editor's mutation messages. A non-edit server admits editors read-only, so it must drop these
-  // (the editors also disable them in their UI, but the server stays authoritative about it).
-  bool isMutation(const net::MessageType type)
-  {
-    switch (type)
-    {
-      case net::MessageType::editComponent:
-      case net::MessageType::sceneEdit:
-      case net::MessageType::sceneControl:
-      case net::MessageType::loadProject:
-      case net::MessageType::addAsset:
-      case net::MessageType::renameAsset:
-      case net::MessageType::removeAsset:
-        return true;
-      default:
-        return false;
-    }
-  }
-}
-
 void ServerApp::handleClientMessage(const net::Message& message, const int32_t senderId)
 {
   // A non-edit server is read-only: it serves snapshots/deltas to editors that connect to view it, but
-  // never applies their edits.
-  if (!m_options.editMode && isMutation(message.getType()))
+  // never applies their edits. On an edit-mode server, a mutation is honored only from the connection the
+  // transport authorized as Role::editor at the handshake - a connection that simply claims Role::player
+  // (which needs no token) must not be able to reach the same handlers.
+  if (net::isMutationMessage(message.getType()) && (!m_options.editMode || !m_netServer->isEditor(senderId)))
   {
+    logMessage("Error", "Discarded a message of type " + std::to_string(static_cast<int>(message.getType())) +
+                        " from connection " + std::to_string(senderId) + ": not an authorized editor.");
     return;
   }
 
@@ -373,13 +362,64 @@ void ServerApp::handleDisconnect(const int32_t connId)
     + std::to_string(slot) + ".");
 }
 
+namespace {
+  const char* describe(const replication::ComponentEditResult result)
+  {
+    switch (result)
+    {
+      case replication::ComponentEditResult::malformedPayload: return "the payload does not parse";
+      case replication::ComponentEditResult::partiallyApplied: return "the payload ran out mid-component";
+      case replication::ComponentEditResult::unknownObject: return "no such object";
+      case replication::ComponentEditResult::unknownComponent: return "the object has no such component";
+      case replication::ComponentEditResult::applied: return "it was applied";
+    }
+
+    return "it was applied";
+  }
+
+  const char* describe(const replication::SceneEditResult result)
+  {
+    switch (result)
+    {
+      case replication::SceneEditResult::malformedEdit: return "the edit is missing a field it needs";
+      case replication::SceneEditResult::unknownObject: return "no such object";
+      case replication::SceneEditResult::unknownComponent: return "no such component";
+      case replication::SceneEditResult::unknownAsset: return "no such prefab";
+      case replication::SceneEditResult::rejected: return "it would change nothing, or make a cycle";
+      case replication::SceneEditResult::failed: return "it threw part way through";
+      case replication::SceneEditResult::applied: return "it was applied";
+    }
+
+    return "it was applied";
+  }
+}
+
 void ServerApp::handleEditComponent(const net::Message& message) const
 {
   // An editor changed a component: apply it to the authoritative scene, then re-broadcast so every
   // other view (and the editing client, idempotently) converges.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    replication::applyComponentEdit(*scene->getObjectManager(), message);
+    // Only an edit the authority actually applied gets rebroadcast. Rebroadcasting one it could not
+    // apply would push every client away from the authoritative state, and a payload it could not parse
+    // would fail identically on every one of them. Nothing below this point can rely on the message
+    // being well formed either, since it re-reads it.
+    const auto result = replication::applyComponentEdit(*scene->getObjectManager(), message);
+
+    if (result != replication::ComponentEditResult::applied)
+    {
+      logMessage("Error", "Discarded a component edit of " + std::to_string(message.size()) +
+                          " bytes: " + describe(result) + ".");
+
+      // A half-written component has no delta stream to correct it for most types, so the only way back
+      // to agreement is a fresh snapshot.
+      if (result == replication::ComponentEditResult::partiallyApplied)
+      {
+        broadcastSnapshot();
+      }
+
+      return;
+    }
 
     m_netServer->broadcast(message);
 
@@ -408,18 +448,55 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
   // An editor changed the scene graph (add/remove object or component, or instantiate a prefab): apply
   // it, then re-snapshot so every view rebuilds (structural changes aren't replicated per-op). The
   // registry is passed so the prefab op can resolve its asset uuid to the body on disk.
-  if (const auto scene = m_sceneManager->getCurrentScene())
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!scene)
   {
-    const std::string payload(message.bytes().begin(), message.bytes().end());
+    logMessage("Error", "Discarded a scene edit: no scene is loaded.");
+    return;
+  }
 
-    const auto json = nlohmann::json::parse(payload, nullptr, false);
-    if (!json.is_discarded())
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  const auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (json.is_discarded())
+  {
+    logMessage("Error", "Discarded a scene edit of " + std::to_string(message.size()) +
+                        " bytes: it is not JSON.");
+    return;
+  }
+
+  const auto result = replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
+
+  if (result != replication::SceneEditResult::applied)
+  {
+    // Read defensively. A payload of [] or {"op": 5} is valid JSON, so it reaches here - and value()
+    // throws on a json that is not an object, or on a key that will not convert. Throwing out of the
+    // log line would put this back in the run loop's generic catch, which is the outcome this handler
+    // exists to replace.
+    const auto op = json.is_object() && json.contains("op") && json.at("op").is_string()
+      ? json.at("op").get<std::string>()
+      : std::string("no op");
+
+    logMessage("Error", "Discarded a scene edit (" + op + "): " + describe(result) + ".");
+
+    // A refusal the sender could have predicted needs no snapshot: rejected means the authority and the
+    // sender agree about the scene and the op simply changes nothing, and a malformed edit is a payload
+    // problem that resending the scene would not fix - and is the one a client can send on demand.
+    //
+    // Everything else means the sender's view disagrees with the authority: an object or component it
+    // believes exists and does not, a prefab it cannot resolve, an edit that threw part way through.
+    // Those are exactly the cases a snapshot repairs, and there is no client-initiated resync to fall
+    // back on - a structural edit was the only thing that rebuilt a drifted view.
+    if (result != replication::SceneEditResult::rejected &&
+        result != replication::SceneEditResult::malformedEdit)
     {
-      replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
-
       broadcastSnapshot();
     }
+
+    return;
   }
+
+  broadcastSnapshot();
 }
 
 void ServerApp::handleLoadProject(const net::Message& message) const
@@ -450,6 +527,21 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   catch (const std::exception& e)
   {
     logMessage("Error", std::string("Failed to load project from editor: ") + e.what());
+
+    // unpack parses into locals and only swaps on failure-free completion, so a throw leaves the current
+    // scene untouched - the same one whose scripts were just stopped. Restart them so it keeps responding.
+    if (const auto scene = m_sceneManager->getCurrentScene())
+    {
+      try
+      {
+        m_scriptSystem->start(*scene->getObjectManager());
+      }
+      catch (const std::exception& startError)
+      {
+        logMessage("Error", startError.what());
+      }
+    }
+
     return;
   }
 
@@ -546,15 +638,29 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
 
   net::MessageReader reader(message);
   const auto focused = reader.read<bool>();
-  InputState::setFocused(slot, focused);
 
-  const auto numKeys = reader.read<size_t>();
+  // The count arrives from the network, so bound it against what is left of the payload before sizing
+  // anything: the message cannot hold more key codes than it has bytes for, and without the check a
+  // client asking for a billion keys gets the allocation attempted first and the underflow only after.
+  // It is a ceiling, not an exact length - the trailing mouse block is counted as if it could be key
+  // codes - so a client that predates that block still degrades to "no mouse" rather than being refused.
+  const auto numKeys = reader.read<uint32_t>();
+  if (numKeys > reader.remaining() / sizeof(int32_t))
+  {
+    // Dropped rather than thrown, like every other malformed message here: the drain loop logs what it
+    // catches to a flushed stderr, which a client could otherwise spam from the tick thread.
+    return;
+  }
+
   std::vector<int> keysPressed(numKeys);
   for (auto& key : keysPressed)
   {
-    key = reader.read<int>();
+    key = reader.read<int32_t>();
   }
 
+  // Applied only once the message is known to be well formed, so a malformed one leaves the slot exactly
+  // as its last good message left it instead of half-updating it.
+  InputState::setFocused(slot, focused);
   InputState::setKeysPressed(slot, keysPressed);
 
   // Mouse block, appended after the keys (see Protocol.h). Guard on remaining() so an older client that
@@ -762,6 +868,15 @@ void ServerApp::broadcastStateDelta() const
 
 void ServerApp::broadcastStructuralChanges() const
 {
+  // A script's component edit (e.g. ModelRendererBindings swapping a model/texture) isn't covered by the
+  // per-tick state delta, which only carries Transform - so it replicates like an editor edit instead:
+  // rebuild the wire message from the mutated component and broadcast it the same way applyComponentEdit's
+  // caller does above.
+  for (const auto& [objectUUID, component] : BindingContext::takeComponentEdits())
+  {
+    m_netServer->broadcast(replication::buildComponentEdit(objectUUID, component));
+  }
+
   // The spawn/destroy bindings buffered what the scripts did on BindingContext (scripting can't reach the
   // net layer). Broadcast spawns before destroys, then remove the marked objects from the authoritative
   // scene. A spawned object is still live here, so its packed blob carries current transform/components.

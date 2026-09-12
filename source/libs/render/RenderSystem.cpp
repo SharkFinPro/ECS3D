@@ -25,6 +25,18 @@
 #include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
 
 namespace {
+  // A zero (or near-zero) direction has no defined forward: normalize() would return NaN and a lookAt
+  // built from it degenerates. Fall back to a stable default instead.
+  glm::vec3 guardDirection(const glm::vec3& direction, const glm::vec3& fallback)
+  {
+    if (glm::length(direction) < 1e-6f)
+    {
+      return fallback;
+    }
+
+    return glm::normalize(direction);
+  }
+
   // Hand the viewport back to the built-in free-fly camera. render() only pushes the free-fly pose while
   // the scene view is focused, so push it once here too: otherwise the component camera's last pose would
   // linger until the user happens to focus the viewport.
@@ -48,6 +60,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   const auto renderer = assetCache.getRenderer();
   const auto lightingManager = renderer->getLightingManager();
 
+  m_liveUUIDs.clear();
+
   for (const auto& object : objectManager.getAllObjects())
   {
     const auto transform = object->getComponent<Transform>(ComponentType::transform);
@@ -58,6 +72,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     }
 
     const auto uuid = object->getUUID();
+
+    m_liveUUIDs.insert(uuid);
 
     if (const auto modelRenderer = object->getComponent<ModelRenderer>(ComponentType::modelRenderer);
         modelRenderer && modelRenderer->getShouldRender() && modelRenderer->canRender())
@@ -94,12 +110,24 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       auto& light = m_lights[uuid];
 
-      if (!light.pointLight)
+      // Create only the kind currently in use. A LightRenderer that toggles spot/point releases the
+      // other kind's shared_ptr here first, dropping its own vke light (and shadow map) rather than
+      // keeping both allocated for as long as the object exists.
+      if (lightRenderer->isSpotLight())
       {
-        light.pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(
-          glm::vec3(0), lightRenderer->getColor(), lightRenderer->getAmbient(), lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
+        if (!light.spotLight)
+        {
+          light.pointLight.reset();
 
-        light.spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(
+          light.spotLight = std::dynamic_pointer_cast<vke::SpotLight>(lightingManager->createSpotLight(
+            glm::vec3(0), lightRenderer->getColor(), lightRenderer->getAmbient(), lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
+        }
+      }
+      else if (!light.pointLight)
+      {
+        light.spotLight.reset();
+
+        light.pointLight = std::dynamic_pointer_cast<vke::PointLight>(lightingManager->createPointLight(
           glm::vec3(0), lightRenderer->getColor(), lightRenderer->getAmbient(), lightRenderer->getDiffuse(), lightRenderer->getSpecular()));
       }
 
@@ -111,7 +139,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         light.spotLight->setAmbient(lightRenderer->getAmbient());
         light.spotLight->setDiffuse(lightRenderer->getDiffuse());
         light.spotLight->setSpecular(lightRenderer->getSpecular());
-        light.spotLight->setDirection(lightRenderer->getDirection());
+        light.spotLight->setDirection(guardDirection(lightRenderer->getDirection(), glm::vec3(0.0f, -1.0f, 0.0f)));
         light.spotLight->setConeAngle(lightRenderer->getConeAngle());
         light.spotLight->setPosition(transform->getPosition());
 
@@ -135,9 +163,9 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/cube_1x1x1.glb"))
       {
-        gizmo->setPosition(transform->getPosition() + box->getLocalPosition());
-        gizmo->setScale(transform->getScale() * box->getLocalScale());
-        gizmo->setOrientationEuler(transform->getRotation() + box->getLocalRotation());
+        gizmo->setPosition(box->getPosition());
+        gizmo->setScale(box->getScale());
+        gizmo->setOrientationEuler(box->getRotation());
 
         renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
       }
@@ -146,13 +174,25 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/sphere_3.glb"))
       {
-        gizmo->setPosition(transform->getPosition() + sphere->getLocalPosition());
-        gizmo->setScale(transform->getScale() * sphere->getLocalRadius());
+        gizmo->setPosition(sphere->getPosition());
+        gizmo->setScale(glm::vec3(sphere->getRadius()));
 
         renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
       }
     }
   }
+
+  // Release every render resource keyed by a uuid no longer in the scene (object deleted, scene
+  // switched, project reloaded) - otherwise these caches grow for the life of the process, and a
+  // stale light stays registered with the lighting manager forever. Safe here: this runs before this
+  // frame's draws are recorded (variableUpdate always precedes vke::VulkanEngine::render()), and every
+  // vke object being dropped (Light, RenderObject) blocks on vkDeviceWaitIdle in its own destructor
+  // (see VulkanEngine's Light::~Light and UniformBuffer::~UniformBuffer), so nothing here can race a
+  // command buffer that is still using it.
+  std::erase_if(m_lights, [this](const auto& entry) { return !m_liveUUIDs.contains(entry.first); });
+  std::erase_if(m_selected, [this](const auto& entry) { return !m_liveUUIDs.contains(entry.first); });
+
+  assetCache.pruneStale(m_liveUUIDs);
 }
 
 void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCache& assetCache,
@@ -188,12 +228,7 @@ void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCach
     const glm::vec3 position = transform->getPosition();
     const glm::quat orientation(glm::radians(transform->getRotation()));
 
-    glm::vec3 forward = orientation * camera->getDirection();
-    if (glm::length(forward) < 1e-6f)
-    {
-      forward = glm::vec3(0.0f, 0.0f, -1.0f); // guard an un-set (zero) direction
-    }
-    forward = glm::normalize(forward);
+    const glm::vec3 forward = guardDirection(orientation * camera->getDirection(), glm::vec3(0.0f, 0.0f, -1.0f));
 
     // lookAt degenerates when the view direction is parallel to up (looking straight up/down); fall back to
     // a different reference axis so the matrix stays finite.

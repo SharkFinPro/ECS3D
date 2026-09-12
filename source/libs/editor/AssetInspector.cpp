@@ -445,8 +445,12 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
   {
     for (const auto& edit : m_pendingPrefabEdits)
     {
-      replication::applySceneEdit(*manager, edit);
-      m_prefabBodyDirty = true;
+      // Only a change that took makes the body dirty. Flagging it regardless re-sent an unchanged prefab
+      // body to the server, and a prefab body update makes it re-snapshot the whole project.
+      if (replication::applySceneEdit(*manager, edit) == replication::SceneEditResult::applied)
+      {
+        m_prefabBodyDirty = true;
+      }
     }
   }
   m_pendingPrefabEdits.clear();

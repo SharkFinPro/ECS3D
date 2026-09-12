@@ -24,7 +24,11 @@ enum class ComponentType {
   SubComponentType_sphereCollider,
   script,
   playerController,
-  camera // appended last: the packed value is the wire discriminator, so new types go at the end
+  camera,
+  // Sentinel: total enumerator count, for compile-time completeness checks (see scripting's
+  // BindingCoverage.h). Never a real component - new types are appended just above it (the packed
+  // value is the wire discriminator, so order among real types still matters).
+  count
 };
 
 const std::unordered_map<ComponentType, std::string> componentTypeToString {
@@ -91,11 +95,8 @@ public:
     m_liveValue = m_initialValue;
   }
 
-  [[nodiscard]] T& value()
-  {
-    return m_live ? m_liveValue : m_initialValue;
-  }
-
+  // Deliberately by value, and the only reader: a reference would name whichever member is active at
+  // the time, and start() swaps which one that is.
   [[nodiscard]] T get() const
   {
     return m_live ? m_liveValue : m_initialValue;
@@ -129,9 +130,19 @@ public:
   explicit Component(ComponentType type, ComponentType subType = ComponentType::SubComponentType_none);
   virtual ~Component() = default;
 
+  // m_variables holds raw pointers into this object, so a copy would register the original's variables
+  // and leave its own permanently stopped. Components are shared through shared_ptr, never copied.
+  Component(const Component&) = delete;
+  Component& operator=(const Component&) = delete;
+
   [[nodiscard]] ComponentType getType() const;
 
   [[nodiscard]] ComponentType getSubType() const;
+
+  // The discriminator this component writes first in pack(): its subtype where it has one (a collider
+  // packs its shape), otherwise its type. An unpack has to match this before it reads any fields, since
+  // two shapes stored under the same map key have different field layouts.
+  [[nodiscard]] ComponentType getPackedType() const;
 
   void setOwner(Object* owner);
   [[nodiscard]] Object* getOwner() const;

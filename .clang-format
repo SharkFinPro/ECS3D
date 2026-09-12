@@ -1,0 +1,66 @@
+# Read off the existing sources rather than imported from a preset. Nothing in the tree has been
+# reformatted to match it yet - that is a separate, one-off commit, so it can be skipped in blame.
+#
+# Two settings are deliberate and worth not "fixing":
+#   SortIncludes    the include order here is meaningful (own header, project headers, third-party, std)
+#                   and no rule expresses it, so reordering would be churn rather than tidying.
+#   ReflowComments  comments are hand-wrapped so a sentence ends where the thought does. Rewrapping them
+#                   to fill the column would lose that and make every future diff noisier.
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: Latest
+
+ColumnLimit: 120
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+AccessModifierOffset: -2
+
+# Braces open on their own line for functions and control flow, and stay on the line for the things that
+# are declarations rather than blocks - classes, structs, enums, namespaces and lambdas.
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: false
+  AfterControlStatement: Always
+  AfterEnum: false
+  AfterExternBlock: false
+  AfterFunction: true
+  AfterNamespace: false
+  AfterStruct: false
+  AfterUnion: false
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+# A namespace that wraps a whole file should not cost every line in it two spaces. The tree is not
+# consistent about this today: the file-wrapping ones are flat, while anonymous namespaces and the short
+# forward-declaration blocks in headers are indented. Flat is the smaller change by a wide margin, since
+# the file-wrapping namespaces hold far more lines than the others.
+NamespaceIndentation: None
+FixNamespaceComments: false
+
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: false
+
+PointerAlignment: Left
+
+Cpp11BracedListStyle: false
+SpaceBeforeCpp11BracedList: true
+
+SortIncludes: false
+IncludeBlocks: Preserve
+ReflowComments: false
+
+AlwaysBreakTemplateDeclarations: Yes
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2

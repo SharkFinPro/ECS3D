@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class Component;
 
@@ -17,6 +18,9 @@ public:
   [[nodiscard]] std::shared_ptr<Component> create(const std::string& typeName) const;
 
   [[nodiscard]] bool isRegistered(const std::string& typeName) const;
+
+  // Sorted so callers (and tests) get a deterministic order rather than unordered_map's iteration order.
+  [[nodiscard]] std::vector<std::string> registeredNames() const;
 
 private:
   std::unordered_map<std::string, Factory> m_factories;
