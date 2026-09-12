@@ -18,9 +18,6 @@ public:
   [[nodiscard]] glm::vec3 getLocalPosition() const;
   void setPosition(const glm::vec3& position);
 
-  [[nodiscard]] bool getRenderCollider() const;
-  void setRenderCollider(bool renderCollider);
-
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -34,8 +31,6 @@ public:
   void unpack(net::MessageReader& messageReader) override;
 
 private:
-  bool m_renderCollider = false;
-
   ComponentVariable<float> m_radius = ComponentVariable(1.0f);
 
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));

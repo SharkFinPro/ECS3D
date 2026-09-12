@@ -17,16 +17,6 @@ BoxCollider::BoxCollider()
   loadVariable(m_rotation);
 }
 
-bool BoxCollider::getRenderCollider() const
-{
-  return m_renderCollider;
-}
-
-void BoxCollider::setRenderCollider(const bool renderCollider)
-{
-  m_renderCollider = renderCollider;
-}
-
 glm::vec3 BoxCollider::getLocalPosition() const
 {
   return m_position.get();

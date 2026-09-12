@@ -57,6 +57,52 @@ TEST(ColliderPersistence, ASphereKeepsItsGizmoFlagThroughBothPaths)
   EXPECT_TRUE(throughTheWire(collider)->getRenderCollider());
 }
 
+TEST(ColliderPersistence, ABoxClearsItsGizmoFlagThroughBothPaths)
+{
+  const auto collider = std::make_shared<BoxCollider>();
+  collider->setRenderCollider(false);
+
+  // The positive control above only proves "true" survives; a getter that always returns true would
+  // still pass it, so the off state needs its own round trip.
+  EXPECT_FALSE(throughJson(collider)->getRenderCollider());
+  EXPECT_FALSE(throughTheWire(collider)->getRenderCollider());
+}
+
+TEST(ColliderPersistence, ASphereClearsItsGizmoFlagThroughBothPaths)
+{
+  const auto collider = std::make_shared<SphereCollider>();
+  collider->setRenderCollider(false);
+
+  EXPECT_FALSE(throughJson(collider)->getRenderCollider());
+  EXPECT_FALSE(throughTheWire(collider)->getRenderCollider());
+}
+
+TEST(ColliderPersistence, ABoxWithNoGizmoFlagKeyDefaultsToOff)
+{
+  const auto collider = std::make_shared<BoxCollider>();
+
+  auto saved = collider->serialize();
+  saved.erase("renderCollider");
+
+  const auto loaded = std::make_shared<BoxCollider>();
+  loaded->loadFromJSON(saved);
+
+  EXPECT_FALSE(loaded->getRenderCollider());
+}
+
+TEST(ColliderPersistence, ASphereWithNoGizmoFlagKeyDefaultsToOff)
+{
+  const auto collider = std::make_shared<SphereCollider>();
+
+  auto saved = collider->serialize();
+  saved.erase("renderCollider");
+
+  const auto loaded = std::make_shared<SphereCollider>();
+  loaded->loadFromJSON(saved);
+
+  EXPECT_FALSE(loaded->getRenderCollider());
+}
+
 TEST(ColliderPersistence, ABoxRoundTripsItsLayerAndMask)
 {
   const auto collider = std::make_shared<BoxCollider>();
