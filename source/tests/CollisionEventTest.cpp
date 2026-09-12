@@ -359,3 +359,23 @@ TEST(CollisionEvent, AnObjectLeavingTheSceneExitsRatherThanLingering)
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionExits(), moving, resting));
 }
+
+TEST(CollisionEvent, ABodyTouchingTwoOthersResolvesBothContacts)
+{
+  const auto scene = makeScene();
+
+  // Only test in the file with more than one solid resting body, so this is the only one that drives
+  // handleCollisions' multi-candidate branch (findCollisions returning two or more objects for one edge).
+  const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true);
+  const auto left = addBody(scene, "Left", { -1.5f, 0, 0 }, false);
+  const auto right = addBody(scene, "Right", { 1.5f, 0, 0 }, false);
+
+  CollisionSystem collisionSystem;
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, left));
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, right));
+
+  // Both contacts have to be resolved, not just the one the sort picks first.
+  EXPECT_NE(positionOf(moving), glm::vec3(0, 0, 0));
+}

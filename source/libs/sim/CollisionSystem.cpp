@@ -10,6 +10,16 @@
 #include <algorithm>
 #include <iterator>
 
+namespace {
+  // One candidate's narrow-phase result, kept beside its squared penetration depth so
+  // CollisionSystem::handleCollisions can sort by depth and then resolve without recomputing the contact.
+  struct ScoredContact {
+    float distance;
+    std::shared_ptr<Object> object;
+    std::optional<collisions::Contact> contact;
+  };
+}
+
 void CollisionSystem::fixedUpdate(const ObjectManager& objectManager)
 {
   m_collisionEdges.clear();
@@ -167,46 +177,42 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
     return;
   }
 
-  std::vector chosenFlags(collidedObjects.size(), false);
-  std::vector<float> distances;
+  // Each candidate's contact (found once here) alongside its squared penetration depth, so the deepest
+  // overlap is resolved first without re-running the narrow phase for the candidate chosen below. A pair
+  // with no contact scores zero, which the loop below stops at.
+  std::vector<ScoredContact> scoredContacts;
+  scoredContacts.reserve(collidedObjects.size());
 
-  // Squared penetration depth per contact, so the deepest overlap is resolved first. A pair with no
-  // contact scores zero, which the loop below stops at - it used to read an uninitialized vector here.
   for (const auto& collidedObject : collidedObjects)
   {
-    const auto contact = contactWith(collider, collidedObject);
+    auto contact = contactWith(collider, collidedObject);
+    const float distance = contact ? dot(contact->minimumTranslationVector, contact->minimumTranslationVector)
+                                   : 0.0f;
 
-    distances.push_back(contact ? dot(contact->minimumTranslationVector, contact->minimumTranslationVector)
-                                : 0.0f);
+    scoredContacts.push_back({ distance, collidedObject, std::move(contact) });
   }
 
-  std::vector<float> sortedDistances = distances;
-  std::ranges::sort(sortedDistances, std::greater());
-
-  for (const float sortedDistance : sortedDistances)
+  std::ranges::stable_sort(scoredContacts, [](const ScoredContact& a, const ScoredContact& b)
   {
-    if (sortedDistance == 0)
+    return a.distance > b.distance;
+  });
+
+  for (const auto& scoredContact : scoredContacts)
+  {
+    if (scoredContact.distance == 0)
     {
       break;
     }
 
-    for (size_t j = 0; j < distances.size(); j++)
+    if (isTriggerPair(collider, scoredContact.object))
     {
-      if (sortedDistance == distances[j] && !chosenFlags[j])
-      {
-        chosenFlags[j] = true;
+      continue;
+    }
 
-        if (isTriggerPair(collider, collidedObjects[j]))
-        {
-          continue;
-        }
-
-        if (const auto contact = contactWith(collider, collidedObjects[j]))
-        {
-          PhysicsSystem::handleCollision(*rigidBody, collidedObjects[j], contact->minimumTranslationVector,
-                                         contact->point);
-        }
-      }
+    if (scoredContact.contact)
+    {
+      PhysicsSystem::handleCollision(*rigidBody, scoredContact.object, scoredContact.contact->minimumTranslationVector,
+                                     scoredContact.contact->point);
     }
   }
 }
