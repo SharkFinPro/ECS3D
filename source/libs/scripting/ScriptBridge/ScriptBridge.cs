@@ -20,14 +20,131 @@ public static class Bridge
     private static readonly Dictionary<string, ScriptBase> _instances = new();
     private static string Key(string uuid, string className) => $"{uuid}_{className}";
 
+    // A script that throws once must not take the process down, and must not spam the log every tick
+    // after that. Once a key is here, every entry point below skips it silently instead of calling in;
+    // reloadScripts and detachScript are the only places that clear it, since those are the only ways a
+    // faulted script's code can change or go away.
+    private static readonly HashSet<string> _faulted = new();
+
+    // Console.Error.WriteLine can itself throw (a closed/redirected stderr handle in a service context),
+    // and that must not escape any further than the fault it was reporting would have. Best effort only -
+    // if this fails too there is nothing left to do without risking the same escape again.
+    private static void SafeWriteError(string message)
+    {
+        try
+        {
+            Console.Error.WriteLine(message);
+        }
+        catch
+        {
+        }
+    }
+
+    // Reading ex.Message/ex.StackTrace can itself throw - a user script can throw a custom Exception
+    // subclass with a hostile override - so the message is built in its own try and falls back to a
+    // hardcoded string that touches nothing on the exception if that happens.
+    private static void ReportFault(string uuid, string className, string methodName, Exception ex)
+    {
+        string message;
+        try
+        {
+            message = $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}; the script has been stopped.\n" +
+                      $"{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+        }
+        catch
+        {
+            message = $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}, and the exception " +
+                      "could not be described; the script has been stopped.";
+        }
+
+        SafeWriteError(message);
+    }
+
+    // Same reporting shape as ReportFault, worded for reloadScripts()'s stop-everything sweep: the script
+    // isn't being marked faulted here (reloadScripts clears _faulted right after), it's just being told
+    // about instead of silently swallowed the way this line used to.
+    private static void ReportReloadCleanupFault(string uuid, string className, Exception ex)
+    {
+        string message;
+        try
+        {
+            message = $"[Bridge] Script '{className}' on object {uuid} threw in stop() during reload cleanup; " +
+                      $"continuing the reload.\n{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+        }
+        catch
+        {
+            message = $"[Bridge] Script '{className}' on object {uuid} threw in stop() during reload cleanup, and " +
+                      "the exception could not be described; continuing the reload.";
+        }
+
+        SafeWriteError(message);
+    }
+
+    // Runs a user-script call under the fault gate: skipped if this instance already faulted, and on a
+    // caught exception the instance is marked faulted (so later calls skip too) and the failure is
+    // reported once. Returns whether the action actually ran. bypassFaultGate lets a caller run its own
+    // cleanup even on an already-faulted instance (stop() needs this - see its call site).
+    private static bool RunGuarded(string uuid, string className, string methodName, Action action,
+                                   bool bypassFaultGate = false)
+    {
+        var key = Key(uuid, className);
+        if (!bypassFaultGate && _faulted.Contains(key))
+        {
+            return false;
+        }
+
+        try
+        {
+            action();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _faulted.Add(key);
+            ReportFault(uuid, className, methodName, ex);
+            return false;
+        }
+    }
+
+    // Same as RunGuarded, for entry points that must hand back a value. fallback is whatever the caller
+    // already treats as "no result" - reused rather than inventing a new sentinel.
+    private static T RunGuarded<T>(string uuid, string className, string methodName, Func<T> func, T fallback)
+    {
+        var key = Key(uuid, className);
+        if (_faulted.Contains(key))
+        {
+            return fallback;
+        }
+
+        try
+        {
+            return func();
+        }
+        catch (Exception ex)
+        {
+            _faulted.Add(key);
+            ReportFault(uuid, className, methodName, ex);
+            return fallback;
+        }
+    }
+
     // Script-to-script access. An object can carry several scripts (one per class), so a script is
     // addressed by type (FindScript<T>) or enumerated for the untyped case (FindScripts). Purely a view
     // over the live instances - ScriptBase exposes these as getScript<T>/getScripts to user scripts.
+    // Faulted instances are excluded: handing one out would let a sibling script call into it directly,
+    // bypassing the fault gate, and a throw from that call would fault the wrong script (the caller).
     internal static T? FindScript<T>(string uuid) where T : ScriptBase =>
-        _instances.Values.OfType<T>().FirstOrDefault(s => s.EntityId == uuid);
+        _instances
+            .Where(kvp => !_faulted.Contains(kvp.Key) && kvp.Value.EntityId == uuid)
+            .Select(kvp => kvp.Value)
+            .OfType<T>()
+            .FirstOrDefault();
 
     internal static IReadOnlyList<ScriptBase> FindScripts(string uuid) =>
-        _instances.Values.Where(s => s.EntityId == uuid).ToList();
+        _instances
+            .Where(kvp => !_faulted.Contains(kvp.Key) && kvp.Value.EntityId == uuid)
+            .Select(kvp => kvp.Value)
+            .ToList();
 
     private static string ReadFileSafe(string path)
     {
@@ -57,10 +174,18 @@ public static class Bridge
     {
         foreach (var instance in _instances.Values)
         {
-            try { instance.stop(); } catch {}
+            try
+            {
+                instance.stop();
+            }
+            catch (Exception ex)
+            {
+                ReportReloadCleanupFault(instance.EntityId, instance.GetType().Name, ex);
+            }
         }
 
         _instances.Clear();
+        _faulted.Clear();
 
         _ctx?.Unload();
         _ctx = null;
@@ -141,23 +266,34 @@ public static class Bridge
     [UnmanagedCallersOnly]
     public static IntPtr getExposedFields(IntPtr uuidPtr, IntPtr classNamePtr)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        if (!_instances.TryGetValue(key, out var instance))
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        var key = Key(uuid, className);
+        if (_faulted.Contains(key) || !_instances.TryGetValue(key, out var instance))
         {
             return Marshal.StringToCoTaskMemUTF8("[]");
         }
 
-        var fields = instance.GetType()
-            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null)
-            .Select(f => new {
-                name        = f.Name,
-                displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
-                type        = MapTypeName(f.FieldType)!
-            })
-            .ToArray();
+        try
+        {
+            var fields = instance.GetType()
+                .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null)
+                .Select(f => new {
+                    name        = f.Name,
+                    displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
+                    type        = MapTypeName(f.FieldType)!
+                })
+                .ToArray();
 
-        return Marshal.StringToCoTaskMemUTF8(JsonSerializer.Serialize(fields));
+            return Marshal.StringToCoTaskMemUTF8(JsonSerializer.Serialize(fields));
+        }
+        catch (Exception ex)
+        {
+            _faulted.Add(key);
+            ReportFault(uuid, className, nameof(getExposedFields), ex);
+            return Marshal.StringToCoTaskMemUTF8("[]");
+        }
     }
 
     [UnmanagedCallersOnly]
@@ -165,21 +301,39 @@ public static class Bridge
 
     [UnmanagedCallersOnly]
     public static float getFieldFloat(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
-        => (float)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? 0f);
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        return RunGuarded(uuid, className, nameof(getFieldFloat),
+            () => (float)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? 0f), 0f);
+    }
 
     [UnmanagedCallersOnly]
     public static int getFieldInt(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
-        => (int)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? 0);
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        return RunGuarded(uuid, className, nameof(getFieldInt),
+            () => (int)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? 0), 0);
+    }
 
     [UnmanagedCallersOnly]
     public static byte getFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
-        => (byte)(((bool)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? false)) ? 1 : 0);
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        return RunGuarded(uuid, className, nameof(getFieldBool),
+            () => (byte)(((bool)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? false)) ? 1 : 0), (byte)0);
+    }
 
     [UnmanagedCallersOnly]
     public static unsafe void getFieldVector3(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
                                               float* x, float* y, float* z)
     {
-        var v = (Vector3)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? Vector3.Zero);
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        var v = RunGuarded(uuid, className, nameof(getFieldVector3),
+            () => (Vector3)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? Vector3.Zero), Vector3.Zero);
         *x = v.X;
         *y = v.Y;
         *z = v.Z;
@@ -203,20 +357,37 @@ public static class Bridge
 
     [UnmanagedCallersOnly]
     public static void setFieldFloat(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, float value)
-        => SetField(uuidPtr, classNamePtr, fieldNamePtr, value);
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        RunGuarded(uuid, className, nameof(setFieldFloat), () => SetField(uuidPtr, classNamePtr, fieldNamePtr, value));
+    }
 
     [UnmanagedCallersOnly]
     public static void setFieldInt(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, int value)
-        => SetField(uuidPtr, classNamePtr, fieldNamePtr, value);
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        RunGuarded(uuid, className, nameof(setFieldInt), () => SetField(uuidPtr, classNamePtr, fieldNamePtr, value));
+    }
 
     [UnmanagedCallersOnly]
     public static void setFieldBool(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, byte value)
-        => SetField(uuidPtr, classNamePtr, fieldNamePtr, value != 0);
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        RunGuarded(uuid, className, nameof(setFieldBool), () => SetField(uuidPtr, classNamePtr, fieldNamePtr, value != 0));
+    }
 
     [UnmanagedCallersOnly]
     public static void setFieldVector3(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
                                        float x, float y, float z)
-        => SetField(uuidPtr, classNamePtr, fieldNamePtr, new Vector3(x, y, z));
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        RunGuarded(uuid, className, nameof(setFieldVector3),
+            () => SetField(uuidPtr, classNamePtr, fieldNamePtr, new Vector3(x, y, z)));
+    }
 
     private static void SetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, object value)
     {
@@ -319,59 +490,75 @@ public static class Bridge
             return;
         }
 
-        var instance = (ScriptBase)Activator.CreateInstance(type)!;
-        instance.EntityId = uuid;
-        instance.initComponents();
-        _instances[Key(uuid, className)] = instance;
+        // A throwing constructor (Activator.CreateInstance) is the same hazard as a throwing script
+        // method, so it goes through the same fault gate even though no instance exists yet.
+        RunGuarded(uuid, className, nameof(attachScript), () =>
+        {
+            var instance = (ScriptBase)Activator.CreateInstance(type)!;
+            instance.EntityId = uuid;
+            instance.initComponents();
+            _instances[Key(uuid, className)] = instance;
+        });
     }
 
     [UnmanagedCallersOnly]
     public static void detachScript(IntPtr uuidPtr, IntPtr classNamePtr)
     {
         var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        if (_instances.TryGetValue(key, out var instance))
-        {
-            _instances.Remove(key);
-        }
+        _instances.Remove(key);
+
+        // A detached script is gone regardless of fault state; clear it so a later reattach of the same
+        // uuid/class gets a clean slate instead of being skipped forever.
+        _faulted.Remove(key);
     }
 
     [UnmanagedCallersOnly]
     public static void start(IntPtr uuidPtr, IntPtr classNamePtr)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        if (_instances.TryGetValue(key, out var instance))
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        if (_instances.TryGetValue(Key(uuid, className), out var instance))
         {
-            instance.start();
+            RunGuarded(uuid, className, nameof(start), () => instance.start());
         }
     }
 
     [UnmanagedCallersOnly]
     public static void stop(IntPtr uuidPtr, IntPtr classNamePtr)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        if (_instances.TryGetValue(key, out var instance))
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        if (_instances.TryGetValue(Key(uuid, className), out var instance))
         {
-            instance.stop();
+            // Bypasses the fault gate: native ScriptSystem::stop calls this then unconditionally detaches,
+            // so it is the one place a faulted instance's cleanup hook still has to run - otherwise
+            // whatever it registered or allocated in start() leaks for the life of the process. The
+            // instance is not removed from _instances or _faulted here; it stays resident until
+            // detachScript runs the normal cleanup path rather than firing stop() from inside a catch
+            // block on an object whose invariants may already be broken.
+            RunGuarded(uuid, className, nameof(stop), () => instance.stop(), bypassFaultGate: true);
         }
     }
 
     [UnmanagedCallersOnly]
     public static void fixedUpdate(IntPtr uuidPtr, IntPtr classNamePtr, float dt)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        if (_instances.TryGetValue(key, out var instance))
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        if (_instances.TryGetValue(Key(uuid, className), out var instance))
         {
-            instance.fixedUpdate(dt);
+            RunGuarded(uuid, className, nameof(fixedUpdate), () => instance.fixedUpdate(dt));
         }
     }
 
     [UnmanagedCallersOnly]
     public static void variableUpdate(IntPtr uuidPtr, IntPtr classNamePtr)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        if (_instances.TryGetValue(key, out var instance))
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        if (_instances.TryGetValue(Key(uuid, className), out var instance))
         {
-            instance.variableUpdate();
+            RunGuarded(uuid, className, nameof(variableUpdate), () => instance.variableUpdate());
         }
     }
 
@@ -379,19 +566,23 @@ public static class Bridge
     [UnmanagedCallersOnly]
     public static void onCollision(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr otherUuidPtr, int eventType)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        if (!_instances.TryGetValue(key, out var instance))
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        if (!_instances.TryGetValue(Key(uuid, className), out var instance))
         {
             return;
         }
 
         var other = Marshal.PtrToStringUTF8(otherUuidPtr)!;
-        switch (eventType)
+        RunGuarded(uuid, className, nameof(onCollision), () =>
         {
-            case 0: instance.onCollisionEnter(other); break;
-            case 1: instance.onCollisionStay(other); break;
-            case 2: instance.onCollisionExit(other); break;
-        }
+            switch (eventType)
+            {
+                case 0: instance.onCollisionEnter(other); break;
+                case 1: instance.onCollisionStay(other); break;
+                case 2: instance.onCollisionExit(other); break;
+            }
+        });
     }
 }
 
