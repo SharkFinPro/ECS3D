@@ -141,9 +141,27 @@ internal sealed class TcpBackend : TransportBackend
 
       // Not added to _clients yet - it has not proven itself with a handshake, and _clients is the
       // broadcast list. Tracked in _pending instead so ServerStop can still close it.
+      //
+      // ServerStop can run concurrently with this: it may have already taken _clientsLock, closed and
+      // cleared _pending, and returned by the time a connection that was queued by the OS just before
+      // _listener.Stop() reaches here. Re-checking _serverRunning inside the lock closes that window -
+      // if the server already stopped, the socket is closed here instead of being added to a list
+      // nothing will ever look at again, and its receive thread is never started (so it never reaches
+      // DeliverServerDisconnect either).
+      bool accepted;
       lock (_clientsLock)
       {
-        _pending.Add(client);
+        accepted = _serverRunning;
+        if (accepted)
+        {
+          _pending.Add(client);
+        }
+      }
+
+      if (!accepted)
+      {
+        try { client.Close(); } catch { /* ignore */ }
+        continue;
       }
 
       var thread = new Thread(() => ServerReceiveLoop(client, connId))
@@ -163,10 +181,13 @@ internal sealed class TcpBackend : TransportBackend
 
       // The first frame must be the handshake. Authorize from it (e.g. reject an editor against a
       // play-only server, or one with a bad token) before delivering any protocol message to C++, and
-      // before this socket is added to the broadcast list. Timed, so a peer that never sends anything
-      // doesn't hold the thread and its spot in _pending forever.
+      // before this socket is added to the broadcast list. Bounded two ways: ReceiveTimeout unblocks a
+      // syscall against a peer that sends nothing at all, and the deadline below bounds the whole
+      // handshake against a peer that trickles bytes just fast enough to keep individual reads from
+      // timing out (ReadExact loops per partial read, so a per-read timeout alone doesn't bound the total).
       client.ReceiveTimeout = HandshakeTimeoutMs;
-      if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes) &&
+      var handshakeDeadline = Environment.TickCount64 + HandshakeTimeoutMs;
+      if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes, handshakeDeadline) &&
           handshakeType == HandshakeType && Authorize(handshakePayload))
       {
         client.ReceiveTimeout = 0;
@@ -335,13 +356,17 @@ internal sealed class TcpBackend : TransportBackend
     return frame;
   }
 
-  private static bool ReadFrame(Stream stream, out byte type, out byte[] payload, int maxBytes = MaxMessageBytes)
+  // deadline is an Environment.TickCount64 value the whole frame must be read by, or null for no outer
+  // bound - every caller but the handshake read leaves it null, since the steady-state message loop must
+  // stay blocking and untimed.
+  private static bool ReadFrame(Stream stream, out byte type, out byte[] payload, int maxBytes = MaxMessageBytes,
+    long? deadline = null)
   {
     type = 0;
     payload = Array.Empty<byte>();
 
     Span<byte> header = stackalloc byte[4];
-    if (!ReadExact(stream, header))
+    if (!ReadExact(stream, header, deadline))
     {
       return false;
     }
@@ -366,7 +391,7 @@ internal sealed class TcpBackend : TransportBackend
     }
 
     var body = new byte[bodyLen];
-    if (!ReadExact(stream, body))
+    if (!ReadExact(stream, body, deadline))
     {
       return false;
     }
@@ -377,11 +402,19 @@ internal sealed class TcpBackend : TransportBackend
     return true;
   }
 
-  private static bool ReadExact(Stream stream, Span<byte> buffer)
+  private static bool ReadExact(Stream stream, Span<byte> buffer, long? deadline = null)
   {
     var read = 0;
     while (read < buffer.Length)
     {
+      // Checked before each syscall rather than relying on ReceiveTimeout alone: ReceiveTimeout bounds
+      // one Read call, but a partial frame keeps this loop calling Read again, so a peer trickling one
+      // byte in just under the timeout each time would otherwise never trip it.
+      if (deadline.HasValue && Environment.TickCount64 >= deadline.Value)
+      {
+        return false;
+      }
+
       var n = stream.Read(buffer.Slice(read));
       if (n <= 0)
       {
