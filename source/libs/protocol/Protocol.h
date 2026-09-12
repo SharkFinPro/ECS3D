@@ -5,6 +5,7 @@
 #include <bit>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -84,10 +85,17 @@ inline constexpr bool wirePackable =
 template <typename T>
 concept WireValue = std::is_trivially_copyable_v<T> && wirePackable<T>;
 
+// The frame length NetServer::broadcast and NetClient::send hand across the native/managed boundary is
+// int32_t; a message size that does not fit would narrow to a negative or truncated length on the wire.
+// Both sites guard against it before the cast and share this predicate so the two behave identically.
+[[nodiscard]] inline bool fitsInWireFrameLength(const std::size_t size) noexcept {
+  return size <= static_cast<std::size_t>(std::numeric_limits<int32_t>::max());
+}
+
 class Message {
 public:
-  explicit Message(const MessageType type) noexcept : type(type) {}
-  Message() {}
+  explicit Message(const MessageType type) noexcept : m_type(type) {}
+  Message() = default;
 
   template <WireValue T>
   Message& write(const T& value) {
@@ -104,6 +112,11 @@ public:
 
   // Length-prefixed string (uint32 size + bytes). The pairing read is MessageReader::readString.
   Message& writeString(const std::string& value) {
+    // Checked before anything is written: a size that does not fit the uint32 prefix would wrap, and a
+    // wrapped prefix desyncs every field the pairing readString and every read after it expect to find.
+    if (value.size() > std::numeric_limits<uint32_t>::max())
+      throw std::runtime_error("String too large to length-prefix in a wire message");
+
     write(static_cast<uint32_t>(value.size()));
     m_payload.insert(m_payload.end(), value.begin(), value.end());
     return *this;
@@ -112,10 +125,10 @@ public:
   [[nodiscard]] std::size_t size() const noexcept { return m_payload.size(); }
   [[nodiscard]] std::span<const uint8_t> bytes() const noexcept { return m_payload; }
 
-  [[nodiscard]] MessageType getType() const noexcept { return type; }
+  [[nodiscard]] MessageType getType() const noexcept { return m_type; }
 
 private:
-  MessageType type = MessageType::undefined;
+  MessageType m_type = MessageType::undefined;
   std::vector<uint8_t> m_payload;
 };
 
