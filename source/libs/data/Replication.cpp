@@ -353,14 +353,13 @@ namespace {
     auto localScale = transform->getLocalScale();
     for (int axis = 0; axis < 3; ++axis)
     {
-      // A zero parent world scale on this axis would need a division by zero; leave the object's
-      // current local scale on that axis alone instead of producing inf/nan.
-      if (parentScale[axis] == 0.0f)
+      // An axis whose compensated scale is not representable (the parent's world scale there is zero,
+      // denormal enough to overflow the division, or the division otherwise yields inf/nan) keeps the
+      // scale it already had rather than writing a value that would break every reader of this transform.
+      if (const auto compensated = oldWorldScale[axis] / parentScale[axis]; std::isfinite(compensated))
       {
-        continue;
+        localScale[axis] = compensated;
       }
-
-      localScale[axis] = oldWorldScale[axis] / parentScale[axis];
     }
 
     transform->setPosition(oldWorldPosition - parentPosition);

@@ -9,6 +9,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 
+#include <cmath>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -475,7 +476,52 @@ TEST(SceneEdit, ReparentingOntoAParentWithAZeroWorldScaleAxisCompensatesTheOther
   const auto localScaleAfter = transformOf(scene.object)->getLocalScale();
   EXPECT_NEAR(localScaleAfter.x, worldScaleBefore.x / 2.0f, 1e-4f);
   EXPECT_NEAR(localScaleAfter.z, worldScaleBefore.z / 3.0f, 1e-4f);
-  // y cannot be divided (parent world scale is 0 there): the object's existing local scale is left as is.
+  // y is not representable (dividing by the parent's zero world scale there is not finite): the
+  // object's existing local scale is left as is.
+  EXPECT_NEAR(localScaleAfter.y, localScaleBefore.y, 1e-4f);
+}
+
+TEST(SceneEdit, ReparentingOntoAParentWithADenormalWorldScaleAxisKeepsThatAxisAndCompensatesOthers)
+{
+  const auto scene = makeScene();
+
+  // float's largest finite value is about 3.4e38, so any divisor smaller than (numerator / 3.4e38)
+  // makes the division overflow to +/-infinity regardless of the numerator's exact value. For an
+  // ordinary object scale that threshold sits around 1e-38; 1e-40f is comfortably below it and is
+  // itself in the denormal range (below the smallest normal float, ~1.18e-38), so this is chosen by
+  // that reasoning rather than by trial and error, and is a different case from the exact-zero one
+  // covered above.
+  const auto parent = addObject(scene, "Parent", glm::vec3(10.0f, -4.0f, 7.0f), glm::vec3(2.0f, 1e-40f, 3.0f));
+  transformOf(parent)->setRotation(glm::vec3(0.0f, 45.0f, 0.0f));
+
+  transformOf(scene.object)->setPosition(glm::vec3(5.0f, 2.0f, -1.0f));
+  transformOf(scene.object)->setRotation(glm::vec3(10.0f, 20.0f, 30.0f));
+  transformOf(scene.object)->setScale(glm::vec3(4.0f, 6.0f, 8.0f));
+
+  const auto worldPositionBefore = transformOf(scene.object)->getPosition();
+  const auto worldRotationBefore = transformOf(scene.object)->getRotation();
+  const auto worldScaleBefore = transformOf(scene.object)->getScale();
+  const auto localScaleBefore = transformOf(scene.object)->getLocalScale();
+
+  const auto parentUUID = parent->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildReparentObject(scene.object->getUUID(), &parentUUID)),
+            SceneEditResult::applied);
+  EXPECT_EQ(scene.object->getParent(), parent);
+
+  expectNear("world position", transformOf(scene.object)->getPosition(), worldPositionBefore);
+  expectNear("world rotation", transformOf(scene.object)->getRotation(), worldRotationBefore);
+
+  // x and z divide cleanly against the parent's ordinary scale on those axes.
+  EXPECT_NEAR(transformOf(scene.object)->getScale().x, worldScaleBefore.x, 1e-4f);
+  EXPECT_NEAR(transformOf(scene.object)->getScale().z, worldScaleBefore.z, 1e-4f);
+
+  const auto localScaleAfter = transformOf(scene.object)->getLocalScale();
+  EXPECT_NEAR(localScaleAfter.x, worldScaleBefore.x / 2.0f, 1e-4f);
+  EXPECT_NEAR(localScaleAfter.z, worldScaleBefore.z / 3.0f, 1e-4f);
+
+  // y overflows to infinity rather than dividing cleanly, so the guard keeps the existing local
+  // value there instead of writing a non-finite scale into the live transform.
+  EXPECT_TRUE(std::isfinite(localScaleAfter.y));
   EXPECT_NEAR(localScaleAfter.y, localScaleBefore.y, 1e-4f);
 }
 
