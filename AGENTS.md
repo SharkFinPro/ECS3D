@@ -231,7 +231,9 @@ mutates it: `CameraBindings` (`getDirection`/`has`) lets `PlayerScript` read its
 movement can be relative to wherever the camera actually faces, degrading to the forward default
 `(0,0,-1)` when the object has none — the same "safe missing-component" convention as `tryGet`, just
 without the `tryGet` ceremony since `ScriptBase` always constructs one for the script's own object (like
-`transform`/`rigidBody`/`input`).
+`transform`/`rigidBody`/`input`). `bindings/BindingCoverage.h` holds a table of every `ComponentType`
+against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
+without deciding its scripting story can't go unnoticed.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.
