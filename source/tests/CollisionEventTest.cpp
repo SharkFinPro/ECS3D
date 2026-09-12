@@ -317,50 +317,6 @@ TEST(CollisionEvent, ASolidContactPushesTheBodyOut)
   EXPECT_NE(positionOf(moving), glm::vec3(0, 0, 0));
 }
 
-TEST(CollisionEvent, ResetForgetsThePreviousTick)
-{
-  const auto scene = makeScene();
-  const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true, true);
-  const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
-
-  CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
-  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
-
-  collisionSystem.reset();
-
-  EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
-  EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
-  EXPECT_TRUE(collisionSystem.getCollisionExits().empty());
-
-  // A scene stop and start runs the diff against an empty history, so the first tick of the new run
-  // reports the contact as new rather than as a stay carried over from the previous one.
-  collisionSystem.fixedUpdate(*scene.objectManager);
-
-  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
-  EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
-}
-
-TEST(CollisionEvent, AnObjectLeavingTheSceneExitsRatherThanLingering)
-{
-  const auto scene = makeScene();
-  const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true, true);
-  const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
-
-  CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
-  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
-
-  scene.objectManager->removeObject(resting);
-  scene.objectManager->deleteObjectsMarkedForDeletion();
-
-  // The pair has to leave through the exit list rather than being dropped silently, or a script that
-  // paired an onCollisionEnter with an onCollisionExit never gets the second half.
-  collisionSystem.fixedUpdate(*scene.objectManager);
-
-  EXPECT_TRUE(contains(collisionSystem.getCollisionExits(), moving, resting));
-}
-
 TEST(CollisionEvent, TwoGenuineContactsInOneTickBothPushTheBodyClear)
 {
   const auto scene = makeScene();
@@ -410,4 +366,48 @@ TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
 
     expectNear(positionOf(moving), { 0, -1.0f, 0 }, 1e-3f);
   }
+}
+
+TEST(CollisionEvent, ResetForgetsThePreviousTick)
+{
+  const auto scene = makeScene();
+  const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true, true);
+  const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
+
+  CollisionSystem collisionSystem;
+  collisionSystem.fixedUpdate(*scene.objectManager);
+  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
+
+  collisionSystem.reset();
+
+  EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
+  EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
+  EXPECT_TRUE(collisionSystem.getCollisionExits().empty());
+
+  // A scene stop and start runs the diff against an empty history, so the first tick of the new run
+  // reports the contact as new rather than as a stay carried over from the previous one.
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
+  EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
+}
+
+TEST(CollisionEvent, AnObjectLeavingTheSceneExitsRatherThanLingering)
+{
+  const auto scene = makeScene();
+  const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true, true);
+  const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
+
+  CollisionSystem collisionSystem;
+  collisionSystem.fixedUpdate(*scene.objectManager);
+  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
+
+  scene.objectManager->removeObject(resting);
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  // The pair has to leave through the exit list rather than being dropped silently, or a script that
+  // paired an onCollisionEnter with an onCollisionExit never gets the second half.
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionExits(), moving, resting));
 }
