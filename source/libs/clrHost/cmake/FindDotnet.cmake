@@ -52,6 +52,23 @@ if(DOTNET_MAJOR LESS 8)
 endif()
 message(STATUS "[FindDotnet] Found .NET SDK ${DOTNET_VERSION_RAW}")
 
+# -- 2b. Warm up first-run setup, once per configure --
+# `dotnet --version` (above) and `--list-runtimes` (below) are muxer-only and never touch first-run
+# setup, which includes a NuGet migration guarded by a named mutex. The first *real* SDK command runs
+# that setup, and two of those racing at build time (managed assembly publish, launcher publish) can
+# crash it. Configure is single-threaded, so it is the one place we can run that command exactly once
+# before any publish gets scheduled, rather than relying on build-time target ordering to cover every
+# publisher.
+get_property(_ecs3d_dotnet_warmed_up GLOBAL PROPERTY ECS3D_DOTNET_WARMED_UP)
+if(NOT _ecs3d_dotnet_warmed_up)
+  execute_process(
+    COMMAND ${DOTNET_EXE} nuget locals all --list
+    OUTPUT_QUIET
+    ERROR_QUIET
+  )
+  set_property(GLOBAL PROPERTY ECS3D_DOTNET_WARMED_UP TRUE)
+endif()
+
 # -- 3. Detect Runtime Identifier (RID) --
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64")

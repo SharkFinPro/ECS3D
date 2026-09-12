@@ -74,6 +74,8 @@ void Simplex::removeD()
 
 void Simplex::addVertex(const SupportVertex& vertex)
 {
+  assert(m_length < 4);
+
   for (auto i = m_length; i > 0; --i)
   {
     m_vertices[i] = m_vertices[i - 1];

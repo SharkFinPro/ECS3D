@@ -22,6 +22,11 @@ namespace {
     return { .uuid = uuid, .type = AssetType::Model, .path = path };
   }
 
+  AssetRecord texture(const uuids::uuid& uuid, const std::string& path)
+  {
+    return { .uuid = uuid, .type = AssetType::Texture, .path = path };
+  }
+
   std::string prefabBody(const std::string& name)
   {
     const nlohmann::json body = {
@@ -49,6 +54,24 @@ TEST(AssetRegistry, LooksARecordUpByUuidAndByPath)
 
   EXPECT_EQ(registry.getByUUID(missingUUID), nullptr);
   EXPECT_EQ(registry.getByPath("assets/models/nothing.glb"), nullptr);
+}
+
+TEST(AssetRegistry, GetByUUIDOfTypeRejectsAnUnknownOrWrongTypedUUID)
+{
+  AssetRegistry registry;
+  registry.registerAsset(model(modelUUID, "assets/models/cube.glb"));
+  registry.registerAsset(texture(otherUUID, "assets/textures/brick.png"));
+
+  // Positive control: the right uuid with the right type is returned.
+  const auto* asModel = registry.getByUUIDOfType(modelUUID, AssetType::Model);
+  ASSERT_NE(asModel, nullptr);
+  EXPECT_EQ(asModel->path, "assets/models/cube.glb");
+
+  // A texture uuid asked for as a Model must fail safely rather than hand back the wrong record.
+  EXPECT_EQ(registry.getByUUIDOfType(otherUUID, AssetType::Model), nullptr);
+
+  // An unregistered uuid fails the same way regardless of the requested type.
+  EXPECT_EQ(registry.getByUUIDOfType(missingUUID, AssetType::Model), nullptr);
 }
 
 TEST(AssetRegistry, RegisteringAPathTwiceKeepsTheFirstRecord)
@@ -230,4 +253,88 @@ TEST(AssetRegistry, LoadingMergesIntoWhateverIsAlreadyThere)
   // states nor enforces, so pin the behavior it actually has.
   EXPECT_EQ(target.getAssets().size(), 2u);
   EXPECT_NE(target.getByUUID(otherUUID), nullptr);
+}
+
+TEST(AssetRegistry, RefusesAPrefabWithAnEmptyBody)
+{
+  AssetRegistry registry;
+  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block", .body = "" });
+
+  EXPECT_EQ(registry.getAssets().size(), 0u);
+  EXPECT_EQ(registry.getByPath("Block"), nullptr);
+}
+
+TEST(AssetRegistry, RefusesAPrefabWhoseBodyIsNotAnObject)
+{
+  AssetRegistry registry;
+
+  // A number, a bare string and malformed text are all "parses, but not an object" or "does not parse" -
+  // every one of them must be refused rather than registered as a prefab that can never instantiate.
+  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Number", .body = "5" });
+  registry.registerAsset({ .uuid = otherUUID, .type = AssetType::Prefab, .path = "Str", .body = "\"hi\"" });
+  registry.registerAsset({ .uuid = missingUUID, .type = AssetType::Prefab, .path = "Broken", .body = "{ not json" });
+
+  EXPECT_EQ(registry.getAssets().size(), 0u);
+}
+
+TEST(AssetRegistry, RegistersAPrefabWithAValidObjectBody)
+{
+  AssetRegistry registry;
+  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                           .body = prefabBody("Block") });
+
+  // Positive control: a real object body is the case every refusal above is measured against.
+  ASSERT_NE(registry.getByUUID(prefabUUID), nullptr);
+  EXPECT_EQ(registry.getPrefabBody(prefabUUID).at("name"), "Block");
+}
+
+TEST(AssetRegistry, ACorruptPrefabUpdateLeavesTheOriginalBodyAndUuidInPlace)
+{
+  AssetRegistry registry;
+  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                           .body = prefabBody("Block") });
+
+  // Re-registering under the same name normally updates the body in place; a corrupt update must not be
+  // allowed to clobber a good body just because the name already exists.
+  registry.registerAsset({ .uuid = otherUUID, .type = AssetType::Prefab, .path = "Block", .body = "" });
+  registry.registerAsset({ .uuid = otherUUID, .type = AssetType::Prefab, .path = "Block", .body = "5" });
+
+  ASSERT_NE(registry.getByUUID(prefabUUID), nullptr);
+  EXPECT_EQ(registry.getByUUID(otherUUID), nullptr);
+  EXPECT_EQ(registry.getPrefabBody(prefabUUID).at("name"), "Block");
+}
+
+TEST(AssetRegistry, ANonPrefabRecordWithAnEmptyBodyIsStillRegistered)
+{
+  AssetRegistry registry;
+  registry.registerAsset(model(modelUUID, "assets/models/cube.glb"));
+
+  // Every non-prefab type carries an empty body by design (see AssetRecord::body) - the prefab body check
+  // must not reach into them.
+  ASSERT_NE(registry.getByUUID(modelUUID), nullptr);
+  EXPECT_TRUE(registry.getByUUID(modelUUID)->body.empty());
+}
+
+TEST(AssetRegistry, AProjectWithAValidPrefabRoundTripsThroughBothPaths)
+{
+  AssetRegistry original;
+  original.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                           .body = prefabBody("Block") });
+
+  AssetRegistry fromJson;
+  fromJson.loadFromJSON(original.serialize());
+
+  net::Message message(net::MessageType::snapshot);
+  original.pack(message);
+
+  net::MessageReader reader(message);
+  AssetRegistry fromWire;
+  fromWire.unpack(reader);
+
+  for (const auto* registry : { &fromJson, &fromWire })
+  {
+    ASSERT_EQ(registry->getAssets().size(), 1u);
+    ASSERT_NE(registry->getByUUID(prefabUUID), nullptr);
+    EXPECT_EQ(registry->getPrefabBody(prefabUUID).at("name"), "Block");
+  }
 }

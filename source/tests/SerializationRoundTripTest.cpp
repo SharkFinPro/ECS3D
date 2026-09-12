@@ -368,6 +368,91 @@ TEST(SerializationRoundTrip, UnpackingTwiceIntoTheSameManagerReplacesRatherThanA
   }
 }
 
+TEST(SerializationRoundTrip, TwoSameNamedScenesSurviveTheJsonPathAsDistinctSelectableScenes)
+{
+  const auto original = makeProject();
+
+  const auto firstScene = std::make_shared<SceneAsset>(uuidFrom("88888888-8888-8888-8888-888888888888"),
+                                                        "Level", original.componentRegistry);
+  const auto secondScene = std::make_shared<SceneAsset>(uuidFrom("99999999-9999-9999-9999-999999999999"),
+                                                        "Level", original.componentRegistry);
+  original.sceneManager->addScene(firstScene);
+  original.sceneManager->addScene(secondScene);
+
+  const auto blob = original.serializer->serialize();
+
+  const auto rebuilt = makeProject();
+  rebuilt.serializer->deserialize(blob);
+
+  ASSERT_EQ(rebuilt.sceneManager->getScenes().size(), 2u);
+
+  const auto rebuiltFirst = rebuilt.sceneManager->getScene(firstScene->getUUID());
+  const auto rebuiltSecond = rebuilt.sceneManager->getScene(secondScene->getUUID());
+  ASSERT_NE(rebuiltFirst, nullptr);
+  ASSERT_NE(rebuiltSecond, nullptr);
+
+  // Both scenes must still be there, under distinct names - otherwise the second is a ghost: saved
+  // forever, but never listed and never selectable in the asset browser.
+  EXPECT_NE(rebuiltFirst->getName(), rebuiltSecond->getName());
+
+  const auto* firstRecord = rebuilt.assetRegistry->getByPath(rebuiltFirst->getName());
+  const auto* secondRecord = rebuilt.assetRegistry->getByPath(rebuiltSecond->getName());
+  ASSERT_NE(firstRecord, nullptr);
+  ASSERT_NE(secondRecord, nullptr);
+  EXPECT_EQ(firstRecord->uuid, rebuiltFirst->getUUID());
+  EXPECT_EQ(secondRecord->uuid, rebuiltSecond->getUUID());
+
+  // A second round trip through the now-unique names must not rename them again.
+  const auto rebuiltAgain = makeProject();
+  rebuiltAgain.serializer->deserialize(rebuilt.serializer->serialize());
+
+  EXPECT_EQ(rebuiltAgain.sceneManager->getScene(firstScene->getUUID())->getName(), rebuiltFirst->getName());
+  EXPECT_EQ(rebuiltAgain.sceneManager->getScene(secondScene->getUUID())->getName(), rebuiltSecond->getName());
+}
+
+TEST(SerializationRoundTrip, TwoSameNamedScenesSurviveTheBinaryPathAsDistinctSelectableScenes)
+{
+  const auto original = makeProject();
+
+  const auto firstScene = std::make_shared<SceneAsset>(uuidFrom("88888888-8888-8888-8888-888888888888"),
+                                                        "Level", original.componentRegistry);
+  const auto secondScene = std::make_shared<SceneAsset>(uuidFrom("99999999-9999-9999-9999-999999999999"),
+                                                        "Level", original.componentRegistry);
+  original.sceneManager->addScene(firstScene);
+  original.sceneManager->addScene(secondScene);
+
+  net::Message message(net::MessageType::snapshot);
+  original.packer->pack(message);
+
+  const auto rebuilt = makeProject();
+  rebuilt.packer->unpack(message);
+
+  ASSERT_EQ(rebuilt.sceneManager->getScenes().size(), 2u);
+
+  const auto rebuiltFirst = rebuilt.sceneManager->getScene(firstScene->getUUID());
+  const auto rebuiltSecond = rebuilt.sceneManager->getScene(secondScene->getUUID());
+  ASSERT_NE(rebuiltFirst, nullptr);
+  ASSERT_NE(rebuiltSecond, nullptr);
+  EXPECT_NE(rebuiltFirst->getName(), rebuiltSecond->getName());
+
+  const auto* firstRecord = rebuilt.assetRegistry->getByPath(rebuiltFirst->getName());
+  const auto* secondRecord = rebuilt.assetRegistry->getByPath(rebuiltSecond->getName());
+  ASSERT_NE(firstRecord, nullptr);
+  ASSERT_NE(secondRecord, nullptr);
+  EXPECT_EQ(firstRecord->uuid, rebuiltFirst->getUUID());
+  EXPECT_EQ(secondRecord->uuid, rebuiltSecond->getUUID());
+
+  // A second round trip through the now-unique names must not rename them again.
+  net::Message secondMessage(net::MessageType::snapshot);
+  rebuilt.packer->pack(secondMessage);
+
+  const auto rebuiltAgain = makeProject();
+  rebuiltAgain.packer->unpack(secondMessage);
+
+  EXPECT_EQ(rebuiltAgain.sceneManager->getScene(firstScene->getUUID())->getName(), rebuiltFirst->getName());
+  EXPECT_EQ(rebuiltAgain.sceneManager->getScene(secondScene->getUUID())->getName(), rebuiltSecond->getName());
+}
+
 TEST(SerializationRoundTrip, UnpackingADifferentSceneReplacesTheObjectsAManagerAlreadyHolds)
 {
   const auto oldScene = fixtures::makeScene();

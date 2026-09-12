@@ -9,6 +9,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/Collider.h"
+#include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
 #include <algorithm>
@@ -19,6 +20,7 @@
 #include <uuid.h>
 
 namespace {
+  using fixtures::expectNear;
   using fixtures::makeScene;
   using fixtures::positionOf;
   using fixtures::Scene;
@@ -316,6 +318,57 @@ TEST(CollisionEvent, ASolidContactPushesTheBodyOut)
   EXPECT_NE(positionOf(moving), glm::vec3(0, 0, 0));
 }
 
+TEST(CollisionEvent, TwoGenuineContactsInOneTickBothPushTheBodyClear)
+{
+  const auto scene = makeScene();
+
+  // Overlaps both by a different amount on a different axis, so a response that resolved only one of
+  // them - or resolved one twice - would leave a gap in the final position rather than a subtler numeric
+  // drift. The other two axes line up exactly with each candidate, which is what makes the overlap on
+  // its own axis the shallowest one the narrow phase can find.
+  const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true);
+  const auto shallow = addBody(scene, "Shallow", { 1.5f, 0, 0 }, false);
+  const auto deep = addBody(scene, "Deep", { 0, 1.0f, 0 }, false);
+
+  CollisionSystem collisionSystem;
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, shallow));
+  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, deep));
+
+  // Both contacts are real, so the multi-contact path has to resolve both in the same tick: 0.5 clear of
+  // Shallow on x, 1.0 clear of Deep on y.
+  expectNear(positionOf(moving), { -0.5f, -1.0f, 0 }, 1e-3f);
+}
+
+TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
+{
+  // The positive control for the test above: resolving Shallow or Deep on its own has to move Moving by
+  // exactly the piece the combined tick attributed to it, or the combined result could be two contacts
+  // agreeing on a coincidentally plausible sum rather than each genuinely being resolved.
+  {
+    const auto scene = makeScene();
+    const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true);
+    addBody(scene, "Shallow", { 1.5f, 0, 0 }, false);
+
+    CollisionSystem collisionSystem;
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    expectNear(positionOf(moving), { -0.5f, 0, 0 }, 1e-3f);
+  }
+
+  {
+    const auto scene = makeScene();
+    const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true);
+    addBody(scene, "Deep", { 0, 1.0f, 0 }, false);
+
+    CollisionSystem collisionSystem;
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    expectNear(positionOf(moving), { 0, -1.0f, 0 }, 1e-3f);
+  }
+}
+
 TEST(CollisionEvent, ResetForgetsThePreviousTick)
 {
   const auto scene = makeScene();
@@ -358,4 +411,60 @@ TEST(CollisionEvent, AnObjectLeavingTheSceneExitsRatherThanLingering)
   collisionSystem.fixedUpdate(*scene.objectManager);
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionExits(), moving, resting));
+}
+
+TEST(CollisionEvent, ASphereMissingItsTransformDoesNotAbandonTheTick)
+{
+  const auto scene = makeScene();
+
+  // Overlapping spheres, one of which has lost the Transform its collider resolves position and radius
+  // through.
+  const auto strippedSphere = addObject(scene, "StrippedSphere", { 0, 0, 0 });
+  fixtures::addSphereCollider(strippedSphere, 1.0f);
+  fixtures::addRigidBody(strippedSphere);
+  strippedSphere->removeComponent(strippedSphere->getComponent<Transform>(ComponentType::transform));
+
+  const auto otherSphere = addObject(scene, "OtherSphere", { 0.5f, 0, 0 });
+  fixtures::addSphereCollider(otherSphere, 1.0f);
+  fixtures::addRigidBody(otherSphere);
+
+  // Positive control, well clear of the sphere pair above: a genuinely overlapping box pair that proves
+  // the tick's other collision work still ran.
+  const auto boxA = addBody(scene, "BoxA", { 50, 0, 0 }, true);
+  const auto boxB = addBody(scene, "BoxB", { 51, 0, 0 }, true);
+
+  CollisionSystem collisionSystem;
+  EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager));
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), boxA, boxB));
+}
+
+TEST(CollisionEvent, ABoxMissingItsTransformDoesNotAbandonTheTick)
+{
+  const auto scene = makeScene();
+
+  // Same case as the sphere test above, for the box collider.
+  const auto strippedBox = addObject(scene, "StrippedBox", { 0, 0, 0 });
+  fixtures::addBoxCollider(strippedBox);
+  fixtures::addRigidBody(strippedBox);
+  strippedBox->removeComponent(strippedBox->getComponent<Transform>(ComponentType::transform));
+
+  const auto otherBox = addObject(scene, "OtherBox", { 0.5f, 0, 0 });
+  fixtures::addBoxCollider(otherBox);
+  fixtures::addRigidBody(otherBox);
+
+  // Positive control, well clear of the box pair above: a genuinely overlapping sphere pair that proves
+  // the tick's other collision work still ran.
+  const auto sphereA = addObject(scene, "SphereA", { 50, 0, 0 });
+  fixtures::addSphereCollider(sphereA, 1.0f);
+  fixtures::addRigidBody(sphereA);
+
+  const auto sphereB = addObject(scene, "SphereB", { 50.5f, 0, 0 });
+  fixtures::addSphereCollider(sphereB, 1.0f);
+  fixtures::addRigidBody(sphereB);
+
+  CollisionSystem collisionSystem;
+  EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager));
+
+  EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), sphereA, sphereB));
 }
