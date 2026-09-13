@@ -16,10 +16,10 @@
 #include <NetClient.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
+#include <Log.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <chrono>
 #include <exception>
-#include <iostream>
 #include <random>
 #include <thread>
 
@@ -89,7 +89,7 @@ void ClientApp::run()
       }
       catch (const std::exception& e)
       {
-        std::cerr << "[Client] Failed to apply a message from the server: " << e.what() << std::endl;
+        Log::error(LogCategory::client, std::string("Failed to apply a message from the server: ") + e.what());
       }
     }
 
@@ -158,7 +158,7 @@ void ClientApp::connectToServer()
     // the client if the RAII terminate is ever missed (e.g. an abnormal exit).
     if (!m_serverProcess->launch("ECS3DServer", "--ephemeral"))
     {
-      std::cerr << "[Client] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
+      Log::error(LogCategory::client, "Failed to launch local server (ECS3DServer) next to this executable.");
     }
   }
 
@@ -178,7 +178,7 @@ void ClientApp::connectToServer()
   }
   while (std::chrono::steady_clock::now() < deadline);
 
-  std::cerr << "[Client] Could not connect to " << m_options.host << ":" << m_options.port << "." << std::endl;
+  Log::error(LogCategory::client, "Could not connect to " + m_options.host + ":" + std::to_string(m_options.port) + ".");
 }
 
 void ClientApp::createRenderer()
@@ -254,9 +254,9 @@ void ClientApp::handleSnapshot(const net::Message& message) const
   m_projectPacker->unpack(message);
 
   const auto scene = m_sceneManager->getCurrentScene();
-  std::cerr << "[Client] Applied snapshot (" << message.size() << " bytes). Current scene: "
-            << (scene ? scene->getName() : "<none>") << " ("
-            << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
+  Log::info(LogCategory::client, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "
+    + (scene ? scene->getName() : "<none>") + " ("
+    + std::to_string(scene ? scene->getObjectManager()->getAllObjects().size() : 0) + " objects).");
 }
 
 void ClientApp::handleStateDelta(const net::Message& message) const

@@ -1,9 +1,13 @@
 #include "ClientApp.h"
-#include <iostream>
+#include <Log.h>
+#include <ConsoleSink.h>
+#include <memory>
 #include <string>
 
 int main(const int argc, char** argv)
 {
+  Log::addSink(std::make_shared<ConsoleSink>());
+
   try
   {
     // Defaults to singleplayer (spawn a local server). --host connects to an existing/remote server
@@ -34,7 +38,7 @@ int main(const int argc, char** argv)
   }
   catch (const std::exception& e)
   {
-    std::cerr << e.what() << std::endl;
+    Log::error(LogCategory::client, e.what());
     return EXIT_FAILURE;
   }
 

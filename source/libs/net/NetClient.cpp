@@ -1,7 +1,8 @@
 #include "NetClient.h"
 #include <ManagedHost.h>
+#include <Log.h>
+#include <LogEntry.h>
 #include <array>
-#include <iostream>
 #include <limits>
 
 namespace net {
@@ -85,8 +86,8 @@ void NetClient::send(const Message& message) const
   // there is no caller to throw to - log the refusal instead.
   if (!fitsInWireFrameLength(message.size()))
   {
-    std::cerr << "[NetClient] Refusing to send a " << message.size() << " byte message; the limit is "
-              << std::numeric_limits<int32_t>::max() << "." << std::endl;
+    Log::error(LogCategory::net, "Refusing to send a " + std::to_string(message.size())
+      + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
     return;
   }
 

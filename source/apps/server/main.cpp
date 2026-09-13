@@ -1,9 +1,13 @@
 #include "ServerApp.h"
-#include <iostream>
+#include <Log.h>
+#include <ConsoleSink.h>
+#include <memory>
 #include <string>
 
 int main(const int argc, char** argv)
 {
+  Log::addSink(std::make_shared<ConsoleSink>());
+
   try
   {
     // --edit is the launch-capability gate that allows editor connections; absent it the server is a
@@ -44,7 +48,7 @@ int main(const int argc, char** argv)
   }
   catch (const std::exception& e)
   {
-    std::cerr << e.what() << std::endl;
+    Log::error(LogCategory::server, e.what());
     return EXIT_FAILURE;
   }
 

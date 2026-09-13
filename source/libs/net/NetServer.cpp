@@ -1,7 +1,8 @@
 #include "NetServer.h"
 #include <ManagedHost.h>
+#include <Log.h>
+#include <LogEntry.h>
 #include <array>
-#include <iostream>
 #include <limits>
 #include <utility>
 
@@ -103,8 +104,8 @@ void NetServer::broadcast(const Message& message) const
   // there is no caller to throw to - log the refusal instead.
   if (!fitsInWireFrameLength(message.size()))
   {
-    std::cerr << "[NetServer] Refusing to broadcast a " << message.size() << " byte message; the limit is "
-              << std::numeric_limits<int32_t>::max() << "." << std::endl;
+    Log::error(LogCategory::net, "Refusing to broadcast a " + std::to_string(message.size())
+      + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
     return;
   }
 

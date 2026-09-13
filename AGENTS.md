@@ -330,15 +330,18 @@ is deliberately a separate, later change.
 
 - **ECS3DServer** (`apps/server`) — headless authoritative sim. `main.cpp` parses `--project`, `--port`,
   `--edit` (allow editor connections), `--ephemeral` (exit when the last connection drops — a spawned
-  local server), `--token`. Links Data+Sim+Scripting+Net+ClrHost. Ships `defaultAssets/` and generates a
-  built-in `DefaultProject` when no `--project` is given.
+  local server), `--token`. Links Data+Sim+Scripting+Net+ClrHost+Log. Ships `defaultAssets/` and generates
+  a built-in `DefaultProject` when no `--project` is given.
 - **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project`. Links
-  Data+Render+Net+ClrHost. Spawns a local server for singleplayer; `--host` connects to an existing
+  Data+Render+Net+ClrHost+Log. Spawns a local server for singleplayer; `--host` connects to an existing
   server instead.
 - **ECS3DEditor** (`apps/editor`) — client + ImGui tooling (object tree, inspector, asset browser, scene
   controls, save/load). `--host`/`--port`/`--project`/`--token` (edit token when attaching to an existing
   edit server). By default spawns its own `--edit` server with a generated token. Links
-  Data+Render+EditorLib+Net+ClrHost.
+  Data+Render+EditorLib+Net+ClrHost+Log.
+- Each app's `main` registers a `ConsoleSink` with `Log` as the first statement, before any object that
+  might log is constructed; app, server and net (`ECS3DNet`) output all goes through `Log` rather than
+  directly to `std::cerr`/`std::cout`.
 - **ECS3DLauncher** (`apps/launcher`) — a standalone C# Avalonia project-management GUI. Independent of
   the C++ toolchain and the CLR-hosting path; built via `dotnet publish`. **See its own `AGENTS.md`.**
 
