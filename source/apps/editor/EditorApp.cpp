@@ -1116,6 +1116,15 @@ void EditorApp::variableUpdate()
 
 void EditorApp::logMessage(const std::string& level, const std::string& message)
 {
+  if (level == "Error")
+  {
+    Log::error(LogCategory::editor, message);
+  }
+  else
+  {
+    Log::info(LogCategory::editor, message);
+  }
+
   // Capped, and oldest first: a message stream the editor cannot parse produces one of these per tick,
   // and the panel re-renders every line it holds each frame.
   constexpr size_t maxMessages = 200;
