@@ -1,7 +1,6 @@
 #include "LogBindings.h"
 #include "Log.h"
 #include <string>
-#include <type_traits>
 
 namespace {
   // The 0..4 mapping below assumes this exact underlying order; a LogLevel reorder must fail the build
