@@ -92,7 +92,7 @@
 - **Dependency direction (must hold):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd + log. `net`/`scripting` →
-  data + clrHost. `clrHost` → log. Apps compose these. **`data` must never gain a Vulkan or ImGui include** — that
+  data + clrHost + log. `clrHost` → log. Apps compose these. **`data` must never gain a Vulkan or ImGui include** — that
   invariant is what keeps the headless server headless.
 
 ## Architecture Overview
