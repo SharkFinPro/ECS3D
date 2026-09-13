@@ -2,6 +2,9 @@
 
 #if defined(_WIN32)
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -23,8 +26,10 @@ bool openConsoleWindow()
   }
 
   FILE* f = nullptr;
-  freopen_s(&f, "CONOUT$", "w", stdout);
-  freopen_s(&f, "CONOUT$", "w", stderr);
+  if (freopen_s(&f, "CONOUT$", "w", stdout) != 0 || freopen_s(&f, "CONOUT$", "w", stderr) != 0)
+  {
+    return false;
+  }
 
   // std::cout/std::cerr may have set failbit while no console backed them; clear that now that
   // stdout/stderr point at one.

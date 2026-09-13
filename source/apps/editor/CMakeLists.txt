@@ -22,10 +22,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # DarkTitleBar.cpp uses DwmSetWindowAttribute to match the native title bar to the editor's theme.
 if(WIN32)
   target_link_libraries(${PROJECT_NAME} PRIVATE dwmapi)
+endif()
 
-  # The editor has its own window, so hide the console by default; --console opens one on demand.
+# The editor has its own window, so hide the console by default; --console opens one on demand.
+# MSVC-only: clang-cl/MinGW would get a GUI subsystem with no WinMain and fail to link.
+if(MSVC)
   set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
-  target_link_options(${PROJECT_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/ENTRY:mainCRTStartup>")
+  target_link_options(${PROJECT_NAME} PRIVATE /ENTRY:mainCRTStartup)
 endif()
 
 # Copy nethost.dll next to the executable so it can boot the CLR (the C# transport).
