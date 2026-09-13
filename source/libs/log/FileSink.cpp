@@ -65,6 +65,12 @@ void FileSink::write(const LogEntry& entry)
     m_stream << formatTimestamp(entry.time) << " [" << toString(entry.level) << "]["
               << toString(entry.category) << "] " << entry.message << "\n";
     m_stream.flush();
+
+    // A failed write must not silence every later entry: drop this one and keep trying.
+    if (m_stream.fail())
+    {
+      m_stream.clear();
+    }
   }
   catch (...)
   {
