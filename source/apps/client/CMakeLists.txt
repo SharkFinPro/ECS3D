@@ -13,6 +13,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DRender
   ECS3DNet
   ECS3DClrHost
+  ECS3DLog
 )
 
 # Copy nethost.dll next to the executable so it can boot the CLR (the C# transport).

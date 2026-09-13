@@ -1,11 +1,15 @@
 #include "EditorApp.h"
-#include <iostream>
+#include <Log.h>
+#include <ConsoleSink.h>
+#include <memory>
 #include <string>
 
 int main(const int argc, char** argv)
 {
   try
   {
+    Log::addSink(std::make_shared<ConsoleSink>());
+
     // Defaults to spawning a local edit server. --host attaches to an existing server instead.
     EditorApp::LaunchOptions options;
 
@@ -43,7 +47,7 @@ int main(const int argc, char** argv)
   }
   catch (const std::exception& e)
   {
-    std::cerr << e.what() << std::endl;
+    Log::error(LogCategory::editor, e.what());
     return EXIT_FAILURE;
   }
 

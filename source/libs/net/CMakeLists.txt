@@ -19,6 +19,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
   ECS3DClrHost
   ECS3DNetProtocol
+  ECS3DLog
 )
 
 # The C# TCP transport assembly. The C++ side owns the protocol (opaque serialize() payloads); C#
