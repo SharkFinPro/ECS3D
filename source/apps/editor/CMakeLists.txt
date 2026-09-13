@@ -12,6 +12,7 @@ add_executable(${PROJECT_NAME}
 # adds ECS3DEditorLib. It does NOT link ECS3DSim or ECS3DScripting (the spawned --edit server does).
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
+  ECS3DLog
   ECS3DRender
   ECS3DEditorLib
   ECS3DNet
@@ -21,6 +22,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # DarkTitleBar.cpp uses DwmSetWindowAttribute to match the native title bar to the editor's theme.
 if(WIN32)
   target_link_libraries(${PROJECT_NAME} PRIVATE dwmapi)
+
+  # The editor has its own window, so hide the console by default; --console opens one on demand.
+  set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+  target_link_options(${PROJECT_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/ENTRY:mainCRTStartup>")
 endif()
 
 # Copy nethost.dll next to the executable so it can boot the CLR (the C# transport).

@@ -1,4 +1,5 @@
 #include "ClientApp.h"
+#include "ConsoleWindow.h"
 #include <iostream>
 #include <string>
 
@@ -6,6 +7,16 @@ int main(const int argc, char** argv)
 {
   try
   {
+    // The client is a GUI-subsystem build with no console by default; --console opens one.
+    for (int i = 1; i < argc; ++i)
+    {
+      if (std::string(argv[i]) == "--console")
+      {
+        openConsoleWindow();
+        break;
+      }
+    }
+
     // Defaults to singleplayer (spawn a local server). --host connects to an existing/remote server
     // instead (no local server spawned).
     ClientApp::ConnectOptions options { .launchLocalServer = true };

@@ -10,10 +10,17 @@ add_executable(${PROJECT_NAME}
 # ECS3DScripting (the server does the crunching).
 target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DData
+  ECS3DLog
   ECS3DRender
   ECS3DNet
   ECS3DClrHost
 )
+
+# The client has its own window, so hide the console by default; --console opens one on demand.
+if(WIN32)
+  set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+  target_link_options(${PROJECT_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/ENTRY:mainCRTStartup>")
+endif()
 
 # Copy nethost.dll next to the executable so it can boot the CLR (the C# transport).
 ecs3d_deploy_clr_runtime(${PROJECT_NAME})
