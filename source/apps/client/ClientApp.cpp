@@ -156,7 +156,7 @@ void ClientApp::connectToServer()
     m_serverProcess = std::make_unique<net::ServerProcess>();
     // --ephemeral: this spawned server should exit when its last connection drops, so it can't outlive
     // the client if the RAII terminate is ever missed (e.g. an abnormal exit).
-    if (!m_serverProcess->launch("ECS3DServer", "--ephemeral"))
+    if (!m_serverProcess->launch("ECS3DServer", "--ephemeral", m_options.showServerConsole))
     {
       std::cerr << "[Client] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
     }
