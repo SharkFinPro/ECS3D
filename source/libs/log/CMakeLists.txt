@@ -8,6 +8,8 @@ add_library(${PROJECT_NAME}
   LogSink.h
   ConsoleSink.cpp
   ConsoleSink.h
+  FileSink.cpp
+  FileSink.h
   RingBufferSink.cpp
   RingBufferSink.h
 )

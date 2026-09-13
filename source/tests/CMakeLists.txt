@@ -37,6 +37,7 @@ add_executable(${PROJECT_NAME}
   LogTest.cpp
   CollisionEventTest.cpp
   SettingsStoreTest.cpp
+  FileSinkTest.cpp
   KeybindsTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
