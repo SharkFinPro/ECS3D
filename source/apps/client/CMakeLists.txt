@@ -14,6 +14,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DRender
   ECS3DNet
   ECS3DClrHost
+  ECS3DLog
 )
 
 # The client has its own window, so hide the console by default; --console opens one on demand.

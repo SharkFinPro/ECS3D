@@ -20,8 +20,8 @@
 #include <bindings/BindingContext.h>
 #include <NetServer.h>
 #include <ManagedHost.h>
+#include <Log.h>
 #include <nlohmann/json.hpp>
-#include <iostream>
 #include <string>
 #include <thread>
 
@@ -62,7 +62,7 @@ ServerApp::ServerApp(LaunchOptions options)
   }
   else if (!m_projectSerializer->load(m_options.project) || !m_sceneManager->getCurrentScene())
   {
-    logMessage("Error", "No scene loaded from project '" + m_options.project
+    Log::error(LogCategory::server, "No scene loaded from project '" + m_options.project
       + "' - the server will run but simulate nothing. Check the project path and working directory.");
   }
 
@@ -78,12 +78,12 @@ ServerApp::ServerApp(LaunchOptions options)
     }
     catch (const std::exception& e)
     {
-      logMessage("Error", e.what());
+      Log::error(LogCategory::server, e.what());
     }
 
     // The server is headless (no window), so announce that it's up - otherwise a running server looks
     // like it never started.
-    logMessage("Info", "Running scene '" + scene->getName() + "' ("
+    Log::info(LogCategory::server, "Running scene '" + scene->getName() + "' ("
       + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects) on port "
       + std::to_string(m_options.port) + ".");
   }
@@ -131,7 +131,7 @@ void ServerApp::run()
       }
       catch (const std::exception& e)
       {
-        logMessage("Error", std::string("Failed to handle client message: ") + e.what());
+        Log::error(LogCategory::server, std::string("Failed to handle client message: ") + e.what());
       }
     }
 
@@ -212,7 +212,7 @@ void ServerApp::fixedUpdate(const float dt) const
   }
   catch (const std::exception& e)
   {
-    logMessage("Error", e.what());
+    Log::error(LogCategory::server, e.what());
   }
 }
 
@@ -245,7 +245,7 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
   // (which needs no token) must not be able to reach the same handlers.
   if (net::isMutationMessage(message.getType()) && (!m_options.editMode || !m_netServer->isEditor(senderId)))
   {
-    logMessage("Error", "Discarded a message of type " + std::to_string(static_cast<int>(message.getType())) +
+    Log::error(LogCategory::server, "Discarded a message of type " + std::to_string(static_cast<int>(message.getType())) +
                         " from connection " + std::to_string(senderId) + ": not an authorized editor.");
     return;
   }
@@ -342,7 +342,7 @@ int32_t ServerApp::assignPlayerSlot(const int32_t connId)
   }
 
   m_connectionSlots.emplace(connId, slot);
-  logMessage("Info", "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
+  Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
   return slot;
 }
 
@@ -358,7 +358,7 @@ void ServerApp::handleDisconnect(const int32_t connId)
   m_connectionSlots.erase(it);
   InputState::removeSlot(slot);
 
-  logMessage("Info", "Connection " + std::to_string(connId) + " dropped; freed player slot "
+  Log::info(LogCategory::server, "Connection " + std::to_string(connId) + " dropped; freed player slot "
     + std::to_string(slot) + ".");
 }
 
@@ -408,7 +408,7 @@ void ServerApp::handleEditComponent(const net::Message& message) const
 
     if (result != replication::ComponentEditResult::applied)
     {
-      logMessage("Error", "Discarded a component edit of " + std::to_string(message.size()) +
+      Log::error(LogCategory::server, "Discarded a component edit of " + std::to_string(message.size()) +
                           " bytes: " + describe(result) + ".");
 
       // A half-written component has no delta stream to correct it for most types, so the only way back
@@ -451,7 +451,7 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
   const auto scene = m_sceneManager->getCurrentScene();
   if (!scene)
   {
-    logMessage("Error", "Discarded a scene edit: no scene is loaded.");
+    Log::error(LogCategory::server, "Discarded a scene edit: no scene is loaded.");
     return;
   }
 
@@ -460,7 +460,7 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
   const auto json = nlohmann::json::parse(payload, nullptr, false);
   if (json.is_discarded())
   {
-    logMessage("Error", "Discarded a scene edit of " + std::to_string(message.size()) +
+    Log::error(LogCategory::server, "Discarded a scene edit of " + std::to_string(message.size()) +
                         " bytes: it is not JSON.");
     return;
   }
@@ -477,7 +477,7 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
       ? json.at("op").get<std::string>()
       : std::string("no op");
 
-    logMessage("Error", "Discarded a scene edit (" + op + "): " + describe(result) + ".");
+    Log::error(LogCategory::server, "Discarded a scene edit (" + op + "): " + describe(result) + ".");
 
     // A refusal the sender could have predicted needs no snapshot: rejected means the authority and the
     // sender agree about the scene and the op simply changes nothing, and a malformed edit is a payload
@@ -503,7 +503,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
 {
   // An editor opened a different project: stop the current scripts, swap the project in, restart,
   // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
-  logMessage("Info", "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
+  Log::info(LogCategory::server, "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
 
   // Stop the current scripts before the scene is swapped out from under them.
   if (const auto scene = m_sceneManager->getCurrentScene())
@@ -514,7 +514,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
     }
     catch (const std::exception& e)
     {
-      logMessage("Error", e.what());
+      Log::error(LogCategory::server, e.what());
     }
   }
 
@@ -526,7 +526,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   }
   catch (const std::exception& e)
   {
-    logMessage("Error", std::string("Failed to load project from editor: ") + e.what());
+    Log::error(LogCategory::server, std::string("Failed to load project from editor: ") + e.what());
 
     // unpack parses into locals and only swaps on failure-free completion, so a throw leaves the current
     // scene untouched - the same one whose scripts were just stopped. Restart them so it keeps responding.
@@ -538,7 +538,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
       }
       catch (const std::exception& startError)
       {
-        logMessage("Error", startError.what());
+        Log::error(LogCategory::server, startError.what());
       }
     }
 
@@ -558,10 +558,10 @@ void ServerApp::handleLoadProject(const net::Message& message) const
     }
     catch (const std::exception& e)
     {
-      logMessage("Error", e.what());
+      Log::error(LogCategory::server, e.what());
     }
 
-    logMessage("Info", "Loaded project from editor: scene '" + scene->getName() + "' ("
+    Log::info(LogCategory::server, "Loaded project from editor: scene '" + scene->getName() + "' ("
       + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
   }
 
@@ -583,7 +583,7 @@ void ServerApp::handleAddAsset(const net::Message& message) const
 
   replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
 
-  logMessage("Info", "Registered asset (" + asset.value("assetType", std::string{}) + ").");
+  Log::info(LogCategory::server, "Registered asset (" + asset.value("assetType", std::string{}) + ").");
 
   broadcastSnapshot();
 }
@@ -603,7 +603,7 @@ void ServerApp::handleRenameAsset(const net::Message& message) const
 
   replication::applyRenameAsset(*m_assetRegistry, op);
 
-  logMessage("Info", "Renamed asset.");
+  Log::info(LogCategory::server, "Renamed asset.");
 
   broadcastSnapshot();
 }
@@ -624,7 +624,7 @@ void ServerApp::handleRemoveAsset(const net::Message& message) const
 
   replication::applyRemoveAsset(*m_assetRegistry, op);
 
-  logMessage("Info", "Removed asset.");
+  Log::info(LogCategory::server, "Removed asset.");
 
   broadcastSnapshot();
 }
@@ -746,7 +746,7 @@ void ServerApp::handleSceneControl(const net::Message& message) const
   }
   catch (const std::exception& e)
   {
-    logMessage("Error", e.what());
+    Log::error(LogCategory::server, e.what());
   }
 
   // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
@@ -777,7 +777,7 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
     }
     catch (const std::exception& e)
     {
-      logMessage("Error", e.what());
+      Log::error(LogCategory::server, e.what());
     }
   }
 
@@ -793,10 +793,10 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
   }
   catch (const std::exception& e)
   {
-    logMessage("Error", e.what());
+    Log::error(LogCategory::server, e.what());
   }
 
-  logMessage("Info", "Switched to scene '" + scene->getName() + "' ("
+  Log::info(LogCategory::server, "Switched to scene '" + scene->getName() + "' ("
     + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
 
   broadcastSnapshot();
@@ -816,7 +816,7 @@ void ServerApp::broadcastSnapshot() const
     }
     catch (const std::exception& e)
     {
-      logMessage("Error", std::string("syncFieldsToData failed, sending snapshot with last-known field values: ") + e.what());
+      Log::error(LogCategory::server, std::string("syncFieldsToData failed, sending snapshot with last-known field values: ") + e.what());
     }
   }
 
@@ -826,7 +826,7 @@ void ServerApp::broadcastSnapshot() const
   m_projectPacker->pack(message);
 
   const auto currentScene = m_sceneManager->getCurrentScene();
-  logMessage("Info", "Broadcasting snapshot: " + std::to_string(m_sceneManager->getScenes().size())
+  Log::info(LogCategory::server, "Broadcasting snapshot: " + std::to_string(m_sceneManager->getScenes().size())
     + " scene(s), " + std::to_string(message.size()) + " bytes, currentScene='"
     + (currentScene ? uuids::to_string(currentScene->getUUID()) : std::string{}) + "'.");
 
@@ -899,9 +899,4 @@ void ServerApp::broadcastStructuralChanges() const
       scene->getObjectManager()->deleteObjectsMarkedForDeletion();
     }
   }
-}
-
-void ServerApp::logMessage(const std::string& level, const std::string& message)
-{
-  std::cerr << "[" << level << "] " << message << std::endl;
 }

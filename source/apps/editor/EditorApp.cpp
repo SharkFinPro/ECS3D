@@ -38,6 +38,7 @@
 #include <NetClient.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
+#include <Log.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
@@ -49,7 +50,6 @@
 #include <chrono>
 #include <cstddef>
 #include <exception>
-#include <iostream>
 #include <optional>
 #include <random>
 #include <thread>
@@ -303,7 +303,7 @@ EditorApp::EditorApp(LaunchOptions options)
     net::Message message(net::MessageType::loadProject);
     m_projectPacker->pack(message);
 
-    std::cerr << "[Editor] Sending loadProject (" << message.size() << " bytes) to server." << std::endl;
+    Log::info(LogCategory::editor, "Sending loadProject (" + std::to_string(message.size()) + " bytes) to server.");
 
     m_netClient->send(message);
   });
@@ -338,9 +338,9 @@ void EditorApp::connectToServer()
     m_serverProcess = std::make_unique<net::ServerProcess>();
     // --ephemeral makes the server exit when its last connection drops, so it can't outlive the editor.
     const std::string arguments = "--edit --ephemeral --token " + m_authToken;
-    if (!m_serverProcess->launch("ECS3DServer", arguments))
+    if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {
-      std::cerr << "[Editor] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
+      Log::error(LogCategory::editor, "Failed to launch local server (ECS3DServer) next to this executable.");
     }
   }
   else
@@ -363,7 +363,7 @@ void EditorApp::connectToServer()
   }
   while (std::chrono::steady_clock::now() < deadline);
 
-  std::cerr << "[Editor] Could not connect to " << m_options.host << ":" << m_options.port << "." << std::endl;
+  Log::error(LogCategory::editor, "Could not connect to " + m_options.host + ":" + std::to_string(m_options.port) + ".");
 }
 
 EditorApp::~EditorApp()
@@ -625,9 +625,9 @@ void EditorApp::handleSnapshot(const net::Message& message) const
   m_projectPacker->unpack(message);
 
   const auto scene = m_sceneManager->getCurrentScene();
-  std::cerr << "[Editor] Applied snapshot (" << message.size() << " bytes). Current scene: "
-            << (scene ? scene->getName() : "<none>") << " ("
-            << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
+  Log::info(LogCategory::editor, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "
+    + (scene ? scene->getName() : "<none>") + " ("
+    + std::to_string(scene ? scene->getObjectManager()->getAllObjects().size() : 0) + " objects).");
 }
 
 void EditorApp::handleStateDelta(const net::Message& message) const
@@ -1116,6 +1116,15 @@ void EditorApp::variableUpdate()
 
 void EditorApp::logMessage(const std::string& level, const std::string& message)
 {
+  if (level == "Error")
+  {
+    Log::error(LogCategory::editor, message);
+  }
+  else
+  {
+    Log::info(LogCategory::editor, message);
+  }
+
   // Capped, and oldest first: a message stream the editor cannot parse produces one of these per tick,
   // and the panel re-renders every line it holds each frame.
   constexpr size_t maxMessages = 200;

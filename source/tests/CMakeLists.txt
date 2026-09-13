@@ -35,11 +35,14 @@ add_executable(${PROJECT_NAME}
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
   LogTest.cpp
+  LogBindingsTest.cpp
   CollisionEventTest.cpp
   SettingsStoreTest.cpp
+  FileSinkTest.cpp
   KeybindsTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
+  ProjectSerializerLogTest.cpp
   StateDeltaTest.cpp
   SceneManagerTest.cpp
   PrefabTest.cpp
@@ -52,6 +55,7 @@ add_executable(${PROJECT_NAME}
   ProtocolFramingTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
+  TransportLogTest.cpp
   SmokeTest.cpp
   TestScene.cpp
   TestPrinters.h
@@ -61,12 +65,19 @@ add_executable(${PROJECT_NAME}
   # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a
   # suite that is headless by construction. That is also the constraint the arrangement rests on - do
   # not add ECS3DNet to the link libraries below, or these objects and the library's duplicate. Anything
-  # else in net that needs covering will hit the same wall.
+  # else in net that needs covering will hit the same wall. TransportLog.cpp is compiled in the same way,
+  # since it depends only on ECS3DLog.
   ../libs/net/MessageQueue.cpp
+  ../libs/net/TransportLog.cpp
+
+  # LogBindings depends only on ECS3DLog (no data/CLR includes), so it is compiled in directly rather
+  # than pulling all of ECS3DScripting - and its ManagedHost/CLR dependency - into a headless suite.
+  ../libs/scripting/bindings/LogBindings.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
+  ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

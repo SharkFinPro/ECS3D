@@ -1,11 +1,15 @@
 #include "ServerApp.h"
-#include <iostream>
+#include <Log.h>
+#include <ConsoleSink.h>
+#include <memory>
 #include <string>
 
 int main(const int argc, char** argv)
 {
   try
   {
+    Log::addSink(std::make_shared<ConsoleSink>());
+
     // --edit is the launch-capability gate that allows editor connections; absent it the server is a
     // pure play server. --token, when set, is the secret an editor must present to be authorized.
     // An empty project runs the built-in sample (scenes 1-3 + falling balls); --project loads a file.
@@ -44,7 +48,7 @@ int main(const int argc, char** argv)
   }
   catch (const std::exception& e)
   {
-    std::cerr << e.what() << std::endl;
+    Log::error(LogCategory::server, e.what());
     return EXIT_FAILURE;
   }
 

@@ -1,5 +1,8 @@
 #include "EditorApp.h"
 #include "ConsoleWindow.h"
+#include <Log.h>
+#include <ConsoleSink.h>
+#include <memory>
 #include <iostream>
 #include <string>
 
@@ -7,6 +10,8 @@ int main(const int argc, char** argv)
 {
   try
   {
+    Log::addSink(std::make_shared<ConsoleSink>());
+
     // The editor is a GUI-subsystem build with no console by default; --console opens one.
     for (int i = 1; i < argc; ++i)
     {
@@ -42,6 +47,10 @@ int main(const int argc, char** argv)
         // server gets its own generated token instead.
         options.authToken = argv[++i];
       }
+      else if (arg == "--no-server-console")
+      {
+        options.showServerConsole = false;
+      }
     }
 
     EditorApp app(options);
@@ -50,7 +59,7 @@ int main(const int argc, char** argv)
   }
   catch (const std::exception& e)
   {
-    std::cerr << e.what() << std::endl;
+    Log::error(LogCategory::editor, e.what());
     return EXIT_FAILURE;
   }
 

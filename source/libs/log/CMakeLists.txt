@@ -10,6 +10,8 @@ add_library(${PROJECT_NAME}
   ConsoleSink.h
   ConsoleWindow.cpp
   ConsoleWindow.h
+  FileSink.cpp
+  FileSink.h
   RingBufferSink.cpp
   RingBufferSink.h
 )

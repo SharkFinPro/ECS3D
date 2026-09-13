@@ -6,7 +6,7 @@ public class BlockScript : ScriptBase
 {
     public override void start()
     {
-        Console.WriteLine("[BlockScript] Block is ready!");
+        Log.info("Block is ready!");
     }
 
     public override void fixedUpdate(float dt)
@@ -21,19 +21,19 @@ public class BlockScript : ScriptBase
 
     public override void stop()
     {
-        Console.WriteLine("[BlockScript] Stopping.");
+        Log.info("Stopping.");
     }
 
     public override void onCollisionEnter(string otherUuid)
     {
-        Console.WriteLine($"[BlockScript] Collision ENTER with {otherUuid}");
+        Log.info($"Collision ENTER with {otherUuid}");
     }
 
     // onCollisionStay fires every tick the contact persists - left unlogged here so it doesn't flood
-    // the console. Override it when you need per-tick contact logic.
+    // the log. Override it when you need per-tick contact logic.
 
     public override void onCollisionExit(string otherUuid)
     {
-        Console.WriteLine($"[BlockScript] Collision EXIT with {otherUuid}");
+        Log.info($"Collision EXIT with {otherUuid}");
     }
 }

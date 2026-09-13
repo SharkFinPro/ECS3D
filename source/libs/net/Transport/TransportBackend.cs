@@ -54,7 +54,7 @@ internal abstract class TransportBackend
       return false;
     }
 
-    Console.Error.WriteLine($"[Transport] Refusing to send a {1 + len} byte message; the limit is {MaxMessageBytes}.");
+    Transport.Log(TransportLogLevel.Error, $"Refusing to send a {1 + len} byte message; the limit is {MaxMessageBytes}.");
 
     return true;
   }

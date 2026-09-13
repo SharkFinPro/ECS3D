@@ -45,8 +45,6 @@ public:
 
   void run();
 
-  static void logMessage(const std::string& level, const std::string& message);
-
 private:
   LaunchOptions m_options;
 

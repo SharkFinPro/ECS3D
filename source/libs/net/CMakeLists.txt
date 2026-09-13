@@ -9,6 +9,8 @@ add_library(${PROJECT_NAME}
   NetClient.h
   ServerProcess.cpp
   ServerProcess.h
+  TransportLog.cpp
+  TransportLog.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -17,8 +19,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
+  ECS3DLog
   ECS3DClrHost
   ECS3DNetProtocol
+  ECS3DLog
 )
 
 # The C# TCP transport assembly. The C++ side owns the protocol (opaque serialize() payloads); C#

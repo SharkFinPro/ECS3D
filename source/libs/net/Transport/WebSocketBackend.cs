@@ -90,7 +90,7 @@ internal sealed class WebSocketBackend : TransportBackend
     _acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "ecs3d-net-accept" };
     _acceptThread.Start();
 
-    Console.WriteLine($"[Transport] WebSocket server listening on port {port} (editMode={EditMode}).");
+    Transport.Log(TransportLogLevel.Info, $"WebSocket server listening on port {port} (editMode={EditMode}).");
   }
 
   public override void ServerStop()
@@ -195,7 +195,7 @@ internal sealed class WebSocketBackend : TransportBackend
       var handshakePayload = first is null ? null : Payload(first);
       if (first is null || first.Length < 1 || first[0] != HandshakeType || !Authorize(handshakePayload!))
       {
-        Console.Error.WriteLine("[Transport] Rejected a connection that failed the handshake.");
+        Transport.Log(TransportLogLevel.Warn, "Rejected a connection that failed the handshake.");
         return;
       }
 
@@ -304,7 +304,7 @@ internal sealed class WebSocketBackend : TransportBackend
     }
     catch (Exception e)
     {
-      Console.Error.WriteLine($"[Transport] Client failed to connect to {host}:{port}: {e.Message}");
+      Transport.Log(TransportLogLevel.Warn, $"Client failed to connect to {host}:{port}: {e.Message}");
       DisconnectClient();
       return 0;
     }
@@ -314,7 +314,7 @@ internal sealed class WebSocketBackend : TransportBackend
     _clientThread = new Thread(ClientReceiveLoop) { IsBackground = true, Name = "ecs3d-net-recv" };
     _clientThread.Start();
 
-    Console.WriteLine($"[Transport] Connected to {host}:{port}.");
+    Transport.Log(TransportLogLevel.Info, $"Connected to {host}:{port}.");
     return 1;
   }
 
@@ -506,7 +506,7 @@ internal sealed class WebSocketBackend : TransportBackend
       // grows until the process gives out. Slower than the TCP case, and the same ending.
       if (assembled.Length + result.Count > maxBytes)
       {
-        Console.Error.WriteLine($"[Transport] Refused a message past {maxBytes} bytes; the peer kept sending.");
+        Transport.Log(TransportLogLevel.Warn, $"Refused a message past {maxBytes} bytes; the peer kept sending.");
 
         return null;
       }

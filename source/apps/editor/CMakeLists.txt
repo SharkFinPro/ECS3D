@@ -17,6 +17,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DEditorLib
   ECS3DNet
   ECS3DClrHost
+  ECS3DLog
 )
 
 # DarkTitleBar.cpp uses DwmSetWindowAttribute to match the native title bar to the editor's theme.

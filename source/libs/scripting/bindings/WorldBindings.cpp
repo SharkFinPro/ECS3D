@@ -1,5 +1,6 @@
 #include "WorldBindings.h"
 #include "BindingContext.h"
+#include <Log.h>
 #include <assets/AssetRegistry.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
@@ -8,7 +9,6 @@
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <exception>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -180,7 +180,7 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
   const auto body = assetRegistry->getPrefabBody(parsed.value());
   if (!body.is_object())
   {
-    std::cerr << "[WorldBindings] No prefab body for " << prefabUuid << std::endl;
+    Log::warn(LogCategory::script, std::string("No prefab body for ") + prefabUuid);
     return store("");
   }
 
@@ -196,7 +196,8 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
   {
     // instantiate throws on a malformed body (e.g. a component type this build doesn't know). A bad prefab
     // must degrade to "no spawn", never take down the tick loop.
-    std::cerr << "[WorldBindings] Failed to instantiate prefab " << prefabUuid << ": " << e.what() << std::endl;
+    Log::error(LogCategory::script,
+               std::string("Failed to instantiate prefab ") + prefabUuid + ": " + e.what());
     return store("");
   }
 

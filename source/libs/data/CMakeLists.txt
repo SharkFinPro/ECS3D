@@ -59,6 +59,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   glm::glm
   stduuid
   ECS3DNetProtocol
+  ECS3DLog
 )
 
 # ECS3DData is feature-complete: all component data, Object/ObjectManager, scenes (SceneManager/

@@ -1,7 +1,9 @@
 #include "NetServer.h"
+#include "TransportLog.h"
 #include <ManagedHost.h>
+#include <Log.h>
+#include <LogEntry.h>
 #include <array>
-#include <iostream>
 #include <limits>
 #include <utility>
 
@@ -68,11 +70,13 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
   m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
   m_setAuthorizedCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetAuthorizedCallback");
+  m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
 
   g_activeServer = this;
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
   reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerDisconnect));
   reinterpret_cast<SetCallbackFn>(m_setAuthorizedCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerAuthorized));
+  reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
 
   reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0, authToken.c_str());
   m_started = true;
@@ -103,8 +107,8 @@ void NetServer::broadcast(const Message& message) const
   // there is no caller to throw to - log the refusal instead.
   if (!fitsInWireFrameLength(message.size()))
   {
-    std::cerr << "[NetServer] Refusing to broadcast a " << message.size() << " byte message; the limit is "
-              << std::numeric_limits<int32_t>::max() << "." << std::endl;
+    Log::error(LogCategory::net, "Refusing to broadcast a " + std::to_string(message.size())
+      + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
     return;
   }
 
