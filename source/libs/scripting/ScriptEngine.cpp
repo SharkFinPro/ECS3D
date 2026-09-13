@@ -6,9 +6,10 @@
 #include "bindings/WorldBindings.h"
 #include "bindings/CameraBindings.h"
 #include "bindings/ModelRendererBindings.h"
+#include "bindings/LogBindings.h"
+#include <Log.h>
 #include <ManagedHost.h>
 #include <filesystem>
-#include <iostream>
 #include <stdexcept>
 #include <utility>
 
@@ -66,16 +67,23 @@ void ScriptEngine::init(const std::string& bridgeDir,
 
   registerBindings(assemblyPath, kBridgeType);
 
-  std::cout << "[ScriptEngine] Initializing bridge, script dir: " << scriptDir << "\n";
+  Log::info(LogCategory::script, "Initializing bridge, script dir: " + scriptDir);
   initBridge(scriptDir.c_str());
 
   m_initialized = true;
-  std::cout << "[ScriptEngine] Initialized successfully.\n";
+  Log::info(LogCategory::script, "Initialized successfully.");
 }
 
 void ScriptEngine::registerBindings(const std::string& assemblyPath,
                                     const std::string& typeName) const
 {
+  // Registered first so anything the bridge logs while the rest of this function runs already has a
+  // binding to write through.
+  using RegisterLogFn = void(*)(LogBindings);
+  const auto registerLog =
+    reinterpret_cast<RegisterLogFn>(m_host->getDelegate(assemblyPath, typeName, "registerLogBindings"));
+  registerLog(LogBindingsProvider::getBindings());
+
   // Hand the managed side the C-ABI bindings it calls back into.
   using RegisterTransformFn = void(*)(TransformBindings);
   const auto registerTransform =
@@ -115,9 +123,9 @@ void ScriptEngine::reloadScripts() const
 {
   if (m_reload)
   {
-    std::cout << "[ScriptEngine] Hot-reloading scripts...\n";
+    Log::info(LogCategory::script, "Hot-reloading scripts...");
     m_reload();
-    std::cout << "[ScriptEngine] Reload complete.\n";
+    Log::info(LogCategory::script, "Reload complete.");
   }
 }
 

@@ -1,5 +1,6 @@
 #include "SaveUI.h"
 #include "GuiComponents.h"
+#include <Log.h>
 #include <ProjectSerializer.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <imgui.h>
@@ -8,7 +9,6 @@
 #include <uuid.h>
 #include <array>
 #include <fstream>
-#include <iostream>
 #include <random>
 #include <sstream>
 #include <vector>
@@ -61,13 +61,13 @@ bool SaveUI::save()
   // Serialize the editor's replicated project (kept current by snapshots/deltas) straight to disk.
   if (!m_projectSerializer->save(m_saveFile))
   {
-    std::cerr << "[SaveUI] Failed to save project to " << m_saveFile << std::endl;
+    Log::error(LogCategory::editor, "Failed to save project to " + m_saveFile);
     return false;
   }
 
   m_savedEditCount = m_editCount;
 
-  std::cout << "[SaveUI] Saved project to " << m_saveFile << std::endl;
+  Log::info(LogCategory::editor, "Saved project to " + m_saveFile);
   return true;
 }
 
@@ -114,7 +114,7 @@ void SaveUI::loadFromFile(const std::string& path)
   const std::ifstream f(path);
   if (!f.is_open())
   {
-    std::cerr << "[SaveUI] Could not open project file: " << path << std::endl;
+    Log::error(LogCategory::editor, "Could not open project file: " + path);
     return;
   }
 
@@ -125,7 +125,7 @@ void SaveUI::loadFromFile(const std::string& path)
   m_saveFile = path;
 
   loadProjectBlob(content);
-  std::cout << "[SaveUI] Opened project " << path << std::endl;
+  Log::info(LogCategory::editor, "Opened project " + path);
 }
 
 void SaveUI::loadProjectBlob(const std::string& projectJson)
@@ -133,7 +133,7 @@ void SaveUI::loadProjectBlob(const std::string& projectJson)
   const auto json = nlohmann::json::parse(projectJson, nullptr, false);
   if (json.is_discarded())
   {
-    std::cerr << "[SaveUI] Project file is not valid JSON." << std::endl;
+    Log::error(LogCategory::editor, "Project file is not valid JSON.");
     return;
   }
 
@@ -146,7 +146,7 @@ void SaveUI::loadProjectBlob(const std::string& projectJson)
   }
   catch (const std::exception& e)
   {
-    std::cerr << "[SaveUI] Failed to load project: " << e.what() << std::endl;
+    Log::error(LogCategory::editor, std::string("Failed to load project: ") + e.what());
     return;
   }
 
@@ -186,7 +186,7 @@ bool SaveUI::chooseSaveFile()
 {
   if (NFD_Init() != NFD_OKAY)
   {
-    std::cerr << "[SaveUI] NFD_Init failed" << std::endl;
+    Log::error(LogCategory::editor, "NFD_Init failed");
     return false;
   }
 
@@ -217,7 +217,7 @@ bool SaveUI::createSaveFile()
 {
   if (NFD_Init() != NFD_OKAY)
   {
-    std::cerr << "[SaveUI] NFD_Init failed" << std::endl;
+    Log::error(LogCategory::editor, "NFD_Init failed");
     return false;
   }
 
@@ -252,7 +252,7 @@ void SaveUI::registerWindowEvents()
   m_dropEventListener = window->on<vke::DropEvent>([this](const vke::DropEvent& e) {
     if (!m_editable)
     {
-      std::cout << "[SaveUI] Connect to a server in edit mode to open a project." << std::endl;
+      Log::info(LogCategory::editor, "Connect to a server in edit mode to open a project.");
       return;
     }
 
@@ -279,8 +279,8 @@ void SaveUI::guardDiscard(const PendingDiscard action, std::string path)
   // blocked by the modal the way menu items are) - don't let a second request steal the first one's answer.
   if (m_showUnsavedChangesModal)
   {
-    std::cout << "[SaveUI] Already waiting on an unsaved-changes prompt; ignoring another discard request."
-              << std::endl;
+    Log::info(LogCategory::editor,
+      "Already waiting on an unsaved-changes prompt; ignoring another discard request.");
     return;
   }
 

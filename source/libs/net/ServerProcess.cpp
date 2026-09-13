@@ -9,6 +9,7 @@
 #include <climits>
 #include <csignal>
 #include <cstdint>
+#include <fcntl.h>
 #include <sstream>
 #include <vector>
 #include <sys/wait.h>
@@ -40,7 +41,7 @@ ServerProcess::~ServerProcess()
 #endif
 }
 
-bool ServerProcess::launch(const std::string& exeBaseName, const std::string& arguments)
+bool ServerProcess::launch(const std::string& exeBaseName, const std::string& arguments, const bool showConsole)
 {
 #if defined(_WIN32)
   if (m_handle)
@@ -78,9 +79,10 @@ bool ServerProcess::launch(const std::string& exeBaseName, const std::string& ar
   PROCESS_INFORMATION processInfo {};
 
   // CREATE_NEW_CONSOLE so the local server's log (heartbeat, snapshot, script output) is visible in its
-  // own window during singleplayer rather than being swallowed.
+  // own window during singleplayer rather than being swallowed; CREATE_NO_WINDOW instead hides it entirely.
+  const DWORD creationFlags = showConsole ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW;
   if (!CreateProcessW(applicationName.c_str(), commandBuffer.data(), nullptr, nullptr, FALSE,
-                      CREATE_NEW_CONSOLE, nullptr, workingDir.c_str(), &startupInfo, &processInfo))
+                      creationFlags, nullptr, workingDir.c_str(), &startupInfo, &processInfo))
   {
     return false;
   }
@@ -148,8 +150,22 @@ bool ServerProcess::launch(const std::string& exeBaseName, const std::string& ar
 
   if (pid == 0)
   {
-    // Child: match the headless server's working directory, then replace the image. execv only returns
-    // on failure, so any path past it is an error.
+    // Child: only async-signal-safe calls are allowed here. When hidden, redirect stdout/stderr to
+    // /dev/null before touching anything else, then match the headless server's working directory and
+    // replace the image. execv only returns on failure, so any path past it is an error.
+    if (!showConsole)
+    {
+      const int devNull = open("/dev/null", O_WRONLY);
+      if (devNull >= 0)
+      {
+        dup2(devNull, STDOUT_FILENO);
+        dup2(devNull, STDERR_FILENO);
+        if (devNull > STDERR_FILENO)
+        {
+          close(devNull);
+        }
+      }
+    }
     if (chdir(workingDir.c_str()) == 0)
     {
       execv(serverExePath.c_str(), argv.data());
