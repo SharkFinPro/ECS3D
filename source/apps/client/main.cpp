@@ -1,7 +1,9 @@
 #include "ClientApp.h"
+#include "ConsoleWindow.h"
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <memory>
+#include <iostream>
 #include <string>
 
 int main(const int argc, char** argv)
@@ -9,6 +11,16 @@ int main(const int argc, char** argv)
   try
   {
     Log::addSink(std::make_shared<ConsoleSink>());
+
+    // The client is a GUI-subsystem build with no console by default; --console opens one.
+    for (int i = 1; i < argc; ++i)
+    {
+      if (std::string(argv[i]) == "--console")
+      {
+        openConsoleWindow();
+        break;
+      }
+    }
 
     // Defaults to singleplayer (spawn a local server). --host connects to an existing/remote server
     // instead (no local server spawned).

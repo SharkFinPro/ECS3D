@@ -1,7 +1,9 @@
 #include "EditorApp.h"
+#include "ConsoleWindow.h"
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <memory>
+#include <iostream>
 #include <string>
 
 int main(const int argc, char** argv)
@@ -9,6 +11,16 @@ int main(const int argc, char** argv)
   try
   {
     Log::addSink(std::make_shared<ConsoleSink>());
+
+    // The editor is a GUI-subsystem build with no console by default; --console opens one.
+    for (int i = 1; i < argc; ++i)
+    {
+      if (std::string(argv[i]) == "--console")
+      {
+        openConsoleWindow();
+        break;
+      }
+    }
 
     // Defaults to spawning a local edit server. --host attaches to an existing server instead.
     EditorApp::LaunchOptions options;
