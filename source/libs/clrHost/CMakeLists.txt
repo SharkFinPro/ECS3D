@@ -12,3 +12,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 # Native CLR hosting (nethost/hostfxr). Linked PUBLIC so ECS3DNet and ECS3DScripting
 # inherit it transitively and never call find_package(Dotnet) themselves.
 include(cmake/loadCS.cmake)
+
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  ECS3DLog
+)
