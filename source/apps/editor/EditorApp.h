@@ -49,6 +49,7 @@ public:
     std::string host = "127.0.0.1";
     int port = net::defaultPort;
     bool launchLocalServer = true;  // the editor edits a local project, so it spawns its own server
+    bool showServerConsole = true;  // whether the spawned local server gets its own console window
     std::string project;
     // The edit token presented at the handshake when attaching to an existing edit server (--host). A
     // spawned local server instead gets a fresh token generated at connect time.

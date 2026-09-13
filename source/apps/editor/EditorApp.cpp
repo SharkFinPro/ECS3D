@@ -338,7 +338,7 @@ void EditorApp::connectToServer()
     m_serverProcess = std::make_unique<net::ServerProcess>();
     // --ephemeral makes the server exit when its last connection drops, so it can't outlive the editor.
     const std::string arguments = "--edit --ephemeral --token " + m_authToken;
-    if (!m_serverProcess->launch("ECS3DServer", arguments))
+    if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {
       std::cerr << "[Editor] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
     }

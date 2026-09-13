@@ -18,8 +18,9 @@ public:
 
   // Launch <directory of the current executable>/<exeBaseName>, with its working directory set to that
   // same directory so it resolves net/Transport / scripts / assets the way the headless server does.
-  // `arguments` (if any) are appended to the command line. Returns true if the process started.
-  bool launch(const std::string& exeBaseName, const std::string& arguments = "");
+  // `arguments` (if any) are appended to the command line. `showConsole` controls whether the child gets
+  // its own console window (Windows) / inherits stdout+stderr (POSIX). Returns true if the process started.
+  bool launch(const std::string& exeBaseName, const std::string& arguments = "", bool showConsole = true);
 
 private:
   void* m_handle = nullptr;
