@@ -52,6 +52,7 @@ add_executable(${PROJECT_NAME}
   ProtocolFramingTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
+  TransportLogTest.cpp
   SmokeTest.cpp
   TestScene.cpp
   TestPrinters.h
@@ -61,8 +62,10 @@ add_executable(${PROJECT_NAME}
   # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a
   # suite that is headless by construction. That is also the constraint the arrangement rests on - do
   # not add ECS3DNet to the link libraries below, or these objects and the library's duplicate. Anything
-  # else in net that needs covering will hit the same wall.
+  # else in net that needs covering will hit the same wall. TransportLog.cpp is compiled in the same way,
+  # since it depends only on ECS3DLog.
   ../libs/net/MessageQueue.cpp
+  ../libs/net/TransportLog.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

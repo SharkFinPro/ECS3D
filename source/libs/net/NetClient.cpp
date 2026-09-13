@@ -1,4 +1,5 @@
 #include "NetClient.h"
+#include "TransportLog.h"
 #include <ManagedHost.h>
 #include <array>
 #include <iostream>
@@ -43,9 +44,11 @@ void NetClient::connect(const std::string& host, const int port, const Role role
   m_disconnectFn = m_host->getDelegate(kAssembly, kType, "clientDisconnect");
   m_sendFn = m_host->getDelegate(kAssembly, kType, "clientSend");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "clientSetReceiveCallback");
+  m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
 
   g_activeClient = this;
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetClientReceive));
+  reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
 
   // role + authToken are sent at the handshake; the server grants Role::editor only if its edit-mode
   // launch gate is enabled and the token authorizes it. Same wire format for singleplayer (loopback),

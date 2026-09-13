@@ -58,7 +58,7 @@ internal sealed class TcpBackend : TransportBackend
     _acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "ecs3d-net-accept" };
     _acceptThread.Start();
 
-    Console.WriteLine($"[Transport] TCP server listening on port {port} (editMode={EditMode}).");
+    Transport.Log(TransportLogLevel.Info, $"TCP server listening on port {port} (editMode={EditMode}).");
   }
 
   public override void ServerStop()
@@ -214,7 +214,7 @@ internal sealed class TcpBackend : TransportBackend
       }
       else
       {
-        Console.Error.WriteLine("[Transport] Rejected a connection that failed the handshake.");
+        Transport.Log(TransportLogLevel.Warn, "Rejected a connection that failed the handshake.");
       }
     }
     catch
@@ -254,7 +254,7 @@ internal sealed class TcpBackend : TransportBackend
     }
     catch (Exception e)
     {
-      Console.Error.WriteLine($"[Transport] Client failed to connect to {host}:{port}: {e.Message}");
+      Transport.Log(TransportLogLevel.Warn, $"Client failed to connect to {host}:{port}: {e.Message}");
       _client = null;
       return 0;
     }
@@ -264,7 +264,7 @@ internal sealed class TcpBackend : TransportBackend
     _clientThread = new Thread(ClientReceiveLoop) { IsBackground = true, Name = "ecs3d-net-recv" };
     _clientThread.Start();
 
-    Console.WriteLine($"[Transport] Connected to {host}:{port}.");
+    Transport.Log(TransportLogLevel.Info, $"Connected to {host}:{port}.");
     return 1;
   }
 
@@ -389,7 +389,7 @@ internal sealed class TcpBackend : TransportBackend
     {
       // Logged, because a refusal and a closed socket are the same false to the caller. A message this
       // size is either an attack or a peer that has outgrown the limit, and both are worth seeing.
-      Console.Error.WriteLine($"[Transport] Refused a {bodyLen} byte frame; the limit here is {maxBytes}.");
+      Transport.Log(TransportLogLevel.Warn, $"Refused a {bodyLen} byte frame; the limit here is {maxBytes}.");
 
       return false;
     }

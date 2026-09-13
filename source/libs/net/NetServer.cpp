@@ -1,4 +1,5 @@
 #include "NetServer.h"
+#include "TransportLog.h"
 #include <ManagedHost.h>
 #include <array>
 #include <iostream>
@@ -68,11 +69,13 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
   m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
   m_setAuthorizedCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetAuthorizedCallback");
+  m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
 
   g_activeServer = this;
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
   reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerDisconnect));
   reinterpret_cast<SetCallbackFn>(m_setAuthorizedCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerAuthorized));
+  reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
 
   reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0, authToken.c_str());
   m_started = true;
