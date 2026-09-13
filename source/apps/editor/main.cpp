@@ -6,10 +6,10 @@
 
 int main(const int argc, char** argv)
 {
-  Log::addSink(std::make_shared<ConsoleSink>());
-
   try
   {
+    Log::addSink(std::make_shared<ConsoleSink>());
+
     // Defaults to spawning a local edit server. --host attaches to an existing server instead.
     EditorApp::LaunchOptions options;
 

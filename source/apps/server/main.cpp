@@ -6,10 +6,10 @@
 
 int main(const int argc, char** argv)
 {
-  Log::addSink(std::make_shared<ConsoleSink>());
-
   try
   {
+    Log::addSink(std::make_shared<ConsoleSink>());
+
     // --edit is the launch-capability gate that allows editor connections; absent it the server is a
     // pure play server. --token, when set, is the secret an editor must present to be authorized.
     // An empty project runs the built-in sample (scenes 1-3 + falling balls); --project loads a file.

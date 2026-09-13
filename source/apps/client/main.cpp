@@ -6,10 +6,10 @@
 
 int main(const int argc, char** argv)
 {
-  Log::addSink(std::make_shared<ConsoleSink>());
-
   try
   {
+    Log::addSink(std::make_shared<ConsoleSink>());
+
     // Defaults to singleplayer (spawn a local server). --host connects to an existing/remote server
     // instead (no local server spawned).
     ClientApp::ConnectOptions options { .launchLocalServer = true };
