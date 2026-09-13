@@ -1,12 +1,12 @@
 #include "ScriptSystem.h"
 #include "ScriptEngine.h"
 #include "bindings/BindingContext.h"
+#include <Log.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
-#include <iostream>
 
 namespace {
   // Published next to the executable by ecs3d_add_managed_assembly / copied by CMake. Relative paths
@@ -306,7 +306,7 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
     return;
   }
 
-  std::cout << "\n[hot-reload] Change detected - reloading scripts..." << std::endl;
+  Log::info(LogCategory::script, "Change detected - reloading scripts...");
   try
   {
     // Preserve live field values across the reload: read them back into each Script's data blob, then
@@ -322,11 +322,12 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
 
     m_scriptsSnapshot = std::move(now);
 
-    std::cout << "[hot-reload] Reload successful." << std::endl;
+    Log::info(LogCategory::script, "Reload successful.");
   }
   catch (const std::exception& ex)
   {
-    std::cerr << "[hot-reload] Reload failed: " << ex.what() << " - continuing with previous scripts." << std::endl;
+    Log::error(LogCategory::script,
+               std::string("Script hot-reload failed: ") + ex.what() + " - continuing with previous scripts.");
   }
 }
 

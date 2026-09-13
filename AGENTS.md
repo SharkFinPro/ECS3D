@@ -240,7 +240,10 @@ movement can be relative to wherever the camera actually faces, degrading to the
 without the `tryGet` ceremony since `ScriptBase` always constructs one for the script's own object (like
 `transform`/`rigidBody`/`input`). `bindings/BindingCoverage.h` holds a table of every `ComponentType`
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
-without deciding its scripting story can't go unnoticed.
+without deciding its scripting story can't go unnoticed. `LogBindings` gives scripts `Log.trace/debug/
+info/warn/error` through `ECS3DLog` under `LogCategory::script`, registered first in `registerBindings` so
+everything the bridge itself logs afterwards - init, hot-reload, compilation - already has a binding to
+write through.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.

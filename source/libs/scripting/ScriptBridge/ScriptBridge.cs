@@ -26,14 +26,15 @@ public static class Bridge
     // faulted script's code can change or go away.
     private static readonly HashSet<string> _faulted = new();
 
-    // Console.Error.WriteLine can itself throw (a closed/redirected stderr handle in a service context),
-    // and that must not escape any further than the fault it was reporting would have. Best effort only -
-    // if this fails too there is nothing left to do without risking the same escape again.
+    // Log.error can itself throw (its fallback writes to Console.Error, which can be a closed/redirected
+    // handle in a service context), and that must not escape any further than the fault it was reporting
+    // would have. Best effort only - if this fails too there is nothing left to do without risking the
+    // same escape again.
     private static void SafeWriteError(string message)
     {
         try
         {
-            Console.Error.WriteLine(message);
+            Log.error(message);
         }
         catch
         {
@@ -48,12 +49,12 @@ public static class Bridge
         string message;
         try
         {
-            message = $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}; the script has been stopped.\n" +
+            message = $"Script '{className}' on object {uuid} threw in {methodName}; the script has been stopped.\n" +
                       $"{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
         }
         catch
         {
-            message = $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}, and the exception " +
+            message = $"Script '{className}' on object {uuid} threw in {methodName}, and the exception " +
                       "could not be described; the script has been stopped.";
         }
 
@@ -68,12 +69,12 @@ public static class Bridge
         string message;
         try
         {
-            message = $"[Bridge] Script '{className}' on object {uuid} threw in stop() during reload cleanup; " +
+            message = $"Script '{className}' on object {uuid} threw in stop() during reload cleanup; " +
                       $"continuing the reload.\n{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
         }
         catch
         {
-            message = $"[Bridge] Script '{className}' on object {uuid} threw in stop() during reload cleanup, and " +
+            message = $"Script '{className}' on object {uuid} threw in stop() during reload cleanup, and " +
                       "the exception could not be described; continuing the reload.";
         }
 
@@ -165,7 +166,7 @@ public static class Bridge
         _scriptDir = Marshal.PtrToStringUTF8(scriptDirPtr)
                      ?? throw new ArgumentNullException(nameof(scriptDirPtr));
 
-        Console.WriteLine($"[Bridge] Script directory: {_scriptDir}");
+        Log.info($"Script directory: {_scriptDir}");
         CompileAndLoad();
     }
 
@@ -200,18 +201,18 @@ public static class Bridge
     {
         if (!Directory.Exists(_scriptDir))
         {
-            Console.Error.WriteLine($"[Bridge] Script directory not found: {_scriptDir}");
+            Log.error($"Script directory not found: {_scriptDir}");
             return;
         }
 
         var sourceFiles = Directory.GetFiles(_scriptDir, "*.cs", SearchOption.AllDirectories);
         if (sourceFiles.Length == 0)
         {
-            Console.WriteLine("[Bridge] No .cs files found in script directory.");
+            Log.warn("No .cs files found in script directory.");
             return;
         }
 
-        Console.WriteLine($"[Bridge] Compiling {sourceFiles.Length} script file(s)...");
+        Log.info($"Compiling {sourceFiles.Length} script file(s)...");
 
         var syntaxTrees = sourceFiles
             .Select(path => CSharpSyntaxTree.ParseText(ReadFileSafe(path), path: path))
@@ -238,28 +239,28 @@ public static class Bridge
 
         foreach (var diag in result.Diagnostics.Where(d => d.Severity >= DiagnosticSeverity.Warning))
         {
-            Console.WriteLine($"[Bridge]     {diag}");
+            Log.info($"    {diag}");
         }
 
         if (!result.Success)
         {
-            Console.Error.WriteLine("[Bridge] Compilation failed:");
+            Log.error("Compilation failed:");
             foreach (var e in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
             {
-                Console.Error.WriteLine($"    {e}");
+                Log.error($"    {e}");
             }
             return;
         }
 
-        Console.WriteLine("[Bridge] Compilation succeeded.");
+        Log.info("Compilation succeeded.");
 
         ms.Seek(0, SeekOrigin.Begin);
         _ctx = new ScriptContext(ms);
 
-        Console.WriteLine($"[Bridge] {_ctx.ScriptTypes.Length} script type(s) available.");
+        Log.info($"{_ctx.ScriptTypes.Length} script type(s) available.");
         foreach (var t in _ctx.ScriptTypes)
         {
-            Console.WriteLine($"    + {t.Name}");
+            Log.info($"    + {t.Name}");
         }
     }
 
@@ -441,6 +442,12 @@ public static class Bridge
         }
 
         return null;
+    }
+
+    [UnmanagedCallersOnly]
+    public static unsafe void registerLogBindings(LogBindings bindings)
+    {
+        NativeBindings.Log = bindings;
     }
 
     [UnmanagedCallersOnly]
