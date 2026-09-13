@@ -30,6 +30,10 @@ int main(const int argc, char** argv)
       {
         options.project = argv[++i];
       }
+      else if (arg == "--no-server-console")
+      {
+        options.showServerConsole = false;
+      }
     }
 
     ClientApp app(options);

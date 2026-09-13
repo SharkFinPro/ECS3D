@@ -35,6 +35,10 @@ int main(const int argc, char** argv)
         // server gets its own generated token instead.
         options.authToken = argv[++i];
       }
+      else if (arg == "--no-server-console")
+      {
+        options.showServerConsole = false;
+      }
     }
 
     EditorApp app(options);

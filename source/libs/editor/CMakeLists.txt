@@ -53,4 +53,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DRender    # pulls imgui transitively via VulkanEngine, which the component editors + GuiComponents use
   ECS3DSettings  # the settings panel reads and writes user preferences directly - they are not replicated
   nfd            # native file dialogs for SaveUI
+  ECS3DLog
 )

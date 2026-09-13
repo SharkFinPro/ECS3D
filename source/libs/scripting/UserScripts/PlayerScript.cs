@@ -32,7 +32,7 @@ public class PlayerScript : ScriptBase
         m_pitch = rotation.X;
         m_yaw = rotation.Y;
 
-        Console.WriteLine("[PlayerScript] Player is ready!");
+        Log.info("Player is ready!");
     }
 
     public override void fixedUpdate(float dt)
@@ -65,7 +65,7 @@ public class PlayerScript : ScriptBase
 
     public override void stop()
     {
-        Console.WriteLine("[PlayerScript] Stopping.");
+        Log.info("Stopping.");
     }
 
     private bool isRespawnNeeded()

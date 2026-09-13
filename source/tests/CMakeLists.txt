@@ -35,11 +35,14 @@ add_executable(${PROJECT_NAME}
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
   LogTest.cpp
+  LogBindingsTest.cpp
   CollisionEventTest.cpp
   SettingsStoreTest.cpp
+  FileSinkTest.cpp
   KeybindsTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
+  ProjectSerializerLogTest.cpp
   StateDeltaTest.cpp
   SceneManagerTest.cpp
   PrefabTest.cpp
@@ -63,10 +66,15 @@ add_executable(${PROJECT_NAME}
   # not add ECS3DNet to the link libraries below, or these objects and the library's duplicate. Anything
   # else in net that needs covering will hit the same wall.
   ../libs/net/MessageQueue.cpp
+
+  # LogBindings depends only on ECS3DLog (no data/CLR includes), so it is compiled in directly rather
+  # than pulling all of ECS3DScripting - and its ManagedHost/CLR dependency - into a headless suite.
+  ../libs/scripting/bindings/LogBindings.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
+  ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

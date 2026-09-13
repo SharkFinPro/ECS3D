@@ -1,13 +1,19 @@
 #include <gtest/gtest.h>
 
+#include "Log.h"
+#include "LogSink.h"
+#include "RingBufferSink.h"
 #include "SettingsStore.h"
 
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace {
   class SettingsStoreTest : public testing::Test {
@@ -29,6 +35,13 @@ namespace {
     {
       std::error_code error;
       std::filesystem::remove_all(m_directory, error);
+
+      for (const auto& sink : m_addedSinks)
+      {
+        Log::removeSink(sink);
+      }
+
+      Log::setMinimumLevel(LogLevel::info);
     }
 
     void writeFile(const std::string& contents) const
@@ -47,8 +60,18 @@ namespace {
       return parsed;
     }
 
+    std::shared_ptr<RingBufferSink> addRingBuffer()
+    {
+      auto sink = std::make_shared<RingBufferSink>();
+      Log::addSink(sink);
+      m_addedSinks.push_back(sink);
+
+      return sink;
+    }
+
     std::filesystem::path m_directory;
     std::filesystem::path m_file;
+    std::vector<std::shared_ptr<LogSink>> m_addedSinks;
   };
 
   bool hasAHomeDirectory()
@@ -145,6 +168,31 @@ TEST_F(SettingsStoreTest, MovesAnUnparseableFileAsideRatherThanOverwritingIt)
   std::getline(in, contents);
   EXPECT_EQ(contents, "{ this is not json");
 
+  EXPECT_EQ(store.get<int>("anything", 5), 5);
+}
+
+TEST_F(SettingsStoreTest, LoadingInvalidJsonLogsAWarningAndFallsBackToDefaults)
+{
+  writeFile("{ this is not json");
+
+  const auto sink = addRingBuffer();
+
+  const SettingsStore store(m_file);
+
+  bool foundWarning = false;
+  for (const auto& entry : sink->snapshot())
+  {
+    if (entry.level == LogLevel::warn && entry.category == LogCategory::editor)
+    {
+      foundWarning = true;
+      break;
+    }
+  }
+
+  EXPECT_TRUE(foundWarning);
+
+  // Positive control: the defaults were actually used, so the warning above reflects the fallback path
+  // rather than some unrelated warning happening to be logged.
   EXPECT_EQ(store.get<int>("anything", 5), 5);
 }
 
@@ -266,6 +314,37 @@ TEST_F(SettingsStoreTest, KeepsTheWritePendingWhenItFails)
 
   // Forgetting the write would lose the setting for good: set() short-circuits on the unchanged value,
   // so nothing would ever ask for it again.
+  EXPECT_TRUE(store.hasPendingWrite());
+}
+
+TEST_F(SettingsStoreTest, AFailedWriteLogsAnError)
+{
+  // A file where the settings directory needs to be, so creating the directory cannot succeed.
+  std::filesystem::create_directories(m_directory);
+  std::ofstream blocker(m_directory / "blocked");
+  blocker << "not a directory";
+  blocker.close();
+
+  const auto sink = addRingBuffer();
+
+  SettingsStore store(m_directory / "blocked" / "settings.json");
+  store.set("count", 1);
+  store.flush();
+
+  bool foundError = false;
+  for (const auto& entry : sink->snapshot())
+  {
+    if (entry.level == LogLevel::error && entry.category == LogCategory::editor)
+    {
+      foundError = true;
+      break;
+    }
+  }
+
+  EXPECT_TRUE(foundError);
+
+  // Positive control: the write really did fail (still pending), so the error above reflects that
+  // failure rather than some unrelated error being logged.
   EXPECT_TRUE(store.hasPendingWrite());
 }
 
