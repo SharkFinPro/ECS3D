@@ -40,6 +40,7 @@ add_executable(${PROJECT_NAME}
   KeybindsTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
+  ProjectSerializerLogTest.cpp
   StateDeltaTest.cpp
   SceneManagerTest.cpp
   PrefabTest.cpp

@@ -1,7 +1,7 @@
 #include "SettingsStore.h"
+#include <Log.h>
 #include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <utility>
 
 namespace {
@@ -101,7 +101,7 @@ void SettingsStore::load()
   std::ifstream in(m_file);
   if (!in)
   {
-    std::cerr << "[SettingsStore] Could not open '" << m_file.string() << "'; using defaults." << std::endl;
+    Log::warn(LogCategory::editor, "Could not open settings file '" + m_file.string() + "'; using defaults.");
     return;
   }
 
@@ -112,8 +112,8 @@ void SettingsStore::load()
   }
   catch (const nlohmann::json::exception& e)
   {
-    std::cerr << "[SettingsStore] '" << m_file.string() << "' is not valid JSON (" << e.what()
-              << "); using defaults." << std::endl;
+    Log::warn(LogCategory::editor, "Settings file '" + m_file.string() + "' is not valid JSON ("
+      + e.what() + "); using defaults.");
     in.close();
     setAside();
     return;
@@ -121,7 +121,8 @@ void SettingsStore::load()
 
   if (!parsed.is_object())
   {
-    std::cerr << "[SettingsStore] '" << m_file.string() << "' is not a JSON object; using defaults." << std::endl;
+    Log::warn(LogCategory::editor,
+      "Settings file '" + m_file.string() + "' is not a JSON object; using defaults.");
     in.close();
     setAside();
     return;
@@ -202,8 +203,8 @@ void SettingsStore::write()
     std::filesystem::create_directories(directory, error);
     if (error)
     {
-      std::cerr << "[SettingsStore] Could not create '" << directory.string() << "': " << error.message()
-                << std::endl;
+      Log::error(LogCategory::editor,
+        "Could not create settings directory '" + directory.string() + "': " + error.message());
       scheduleWrite();
       return;
     }
@@ -218,7 +219,7 @@ void SettingsStore::write()
   }
   catch (const std::exception& e)
   {
-    std::cerr << "[SettingsStore] Could not serialize settings: " << e.what() << std::endl;
+    Log::error(LogCategory::editor, std::string("Could not serialize settings: ") + e.what());
     scheduleWrite();
     return;
   }
@@ -232,7 +233,7 @@ void SettingsStore::write()
     std::ofstream out(temporary, std::ios::trunc);
     if (!out)
     {
-      std::cerr << "[SettingsStore] Could not write '" << temporary.string() << "'." << std::endl;
+      Log::error(LogCategory::editor, "Could not write settings file '" + temporary.string() + "'.");
       scheduleWrite();
       return;
     }
@@ -242,8 +243,8 @@ void SettingsStore::write()
 
   if (!moveOnto(temporary, m_file, error))
   {
-    std::cerr << "[SettingsStore] Could not move '" << temporary.string() << "' into place: "
-              << error.message() << std::endl;
+    Log::error(LogCategory::editor,
+      "Could not move settings file '" + temporary.string() + "' into place: " + error.message());
 
     std::error_code ignored;
     std::filesystem::remove(temporary, ignored);
@@ -260,11 +261,10 @@ void SettingsStore::setAside() const
   std::error_code error;
   if (!moveOnto(m_file, spoiled, error))
   {
-    std::cerr << "[SettingsStore] Could not move '" << m_file.string() << "' aside: " << error.message()
-              << std::endl;
+    Log::error(LogCategory::editor,
+      "Could not move settings file '" + m_file.string() + "' aside: " + error.message());
     return;
   }
 
-  std::cerr << "[SettingsStore] Moved the unreadable settings file to '" << spoiled.string() << "'."
-            << std::endl;
+  Log::warn(LogCategory::editor, "Moved the unreadable settings file to '" + spoiled.string() + "'.");
 }
