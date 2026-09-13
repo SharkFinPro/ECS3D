@@ -79,6 +79,7 @@ private:
   void* m_setCallbackFn = nullptr;
   void* m_setDisconnectCallbackFn = nullptr;
   void* m_setAuthorizedCallbackFn = nullptr;
+  void* m_setLogCallbackFn = nullptr;
 };
 
 }

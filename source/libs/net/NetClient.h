@@ -40,6 +40,7 @@ private:
   void* m_disconnectFn = nullptr;
   void* m_sendFn = nullptr;
   void* m_setCallbackFn = nullptr;
+  void* m_setLogCallbackFn = nullptr;
 };
 
 }

@@ -199,7 +199,8 @@ actually granted it `Role::editor`. `ManagedHost`
 boots CoreCLR and resolves
 managed statics as native function pointers; inbound frames are pushed from C# socket threads into a
 thread-safe `MessageQueue` and drained by the app loop. The transport backend (TCP/WebSocket) is
-selected by a single field in `Transport.cs`.
+selected by a single field in `Transport.cs`. The transport logs through a native `setLogCallback`
+(`net::transportLog`, category `net`), falling back to the console before it is registered.
 
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is
