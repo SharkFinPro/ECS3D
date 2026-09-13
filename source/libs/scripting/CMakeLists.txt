@@ -20,6 +20,8 @@ add_library(${PROJECT_NAME}
   bindings/CameraBindings.h
   bindings/ModelRendererBindings.cpp
   bindings/ModelRendererBindings.h
+  bindings/LogBindings.cpp
+  bindings/LogBindings.h
   bindings/InputState.cpp
   bindings/InputState.h
 )
@@ -31,6 +33,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
   ECS3DClrHost
+  ECS3DLog
 )
 
 # The InputUtils binding reads the networked InputState (the headless server has no GLFW window):
