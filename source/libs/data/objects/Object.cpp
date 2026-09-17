@@ -15,6 +15,13 @@ Object::Object(std::string name)
   addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
 }
 
+Object::Object(std::string name, const uuids::uuid uuid)
+  : m_uuid(uuid),
+    m_name(std::move(name))
+{
+  addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
+}
+
 Object::Object(const std::vector<std::shared_ptr<Component>>& components, std::string name)
   : m_name(std::move(name))
 {

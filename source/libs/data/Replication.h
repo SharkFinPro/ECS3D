@@ -56,8 +56,14 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
 // Structural edits (add/remove object or component). Unlike a value edit these change the scene graph,
 // so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op - the
 // client/editor just rebuild from the snapshot. Each is carried as { op, ... }.
+//
+// The three ops that create an object (addObject, duplicateObject, instantiatePrefab) take an optional
+// uuid for the object they create, carried as "uuid". Without it the authority picks one and the sender
+// never learns which object its edit produced, which is what the undo history needs to record the edit
+// (see edits/EditCommand.h). A uuid the scene already holds is refused rather than merged into.
 [[nodiscard]] nlohmann::json buildAddObject(const std::string& name,
-                                            const uuids::uuid* parentUUID = nullptr);
+                                            const uuids::uuid* parentUUID = nullptr,
+                                            const uuids::uuid* objectUUID = nullptr);
 
 [[nodiscard]] nlohmann::json buildRemoveObject(const uuids::uuid& objectUUID);
 
@@ -67,7 +73,8 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
 [[nodiscard]] nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
                                                   const std::shared_ptr<Component>& component);
 
-[[nodiscard]] nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID);
+[[nodiscard]] nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID,
+                                                  const uuids::uuid* duplicateUUID = nullptr);
 
 [[nodiscard]] nlohmann::json buildReparentObject(const uuids::uuid& objectUUID,
                                                  const uuids::uuid* parentUUID = nullptr);
@@ -84,7 +91,8 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
 // server always does). An absent parentUUID instantiates at the scene root (the original behavior);
 // passing one instantiates as a child of that object instead, e.g. dropping the prefab onto it in the tree.
 [[nodiscard]] nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID,
-                                                    const uuids::uuid* parentUUID = nullptr);
+                                                    const uuids::uuid* parentUUID = nullptr,
+                                                    const uuids::uuid* instanceUUID = nullptr);
 
 // Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
 // payload it could not parse apart from an op it understood and refused, because only the first says the
@@ -104,7 +112,8 @@ enum class SceneEditResult {
   unknownObject,     // names an object this scene does not have
   unknownComponent,  // names a component type that does not exist, or one the object is not carrying
   unknownAsset,      // instantiatePrefab named an asset with no usable body
-  rejected,          // well formed and refused: a reparent that would cycle, or that changes nothing
+  rejected,          // well formed and refused: a reparent that would cycle or that changes nothing, or
+                     // a creating op naming a uuid the scene is already using
   failed             // threw part way through, e.g. a prefab body naming a component this build lacks
 };
 

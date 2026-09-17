@@ -125,6 +125,10 @@ goes as a compact binary **stateDelta** (uuid + local transform per object; `dat
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
 `--edit` server may send. (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
+three `sceneEdit` ops that create an object (`addObject`, `duplicateObject`, `instantiatePrefab`) may carry
+a client-chosen `"uuid"` for what they create; the server honors it, refuses one already in use
+(`SceneEditResult::rejected`), and picks its own when the field is absent. It exists so the sender knows
+which object its own edit produced - the undo history records the reverse edit against that uuid. The
 asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
 applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —

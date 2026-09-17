@@ -70,6 +70,17 @@ namespace {
     return uuids::to_string(generator());
   }
 
+  // The uuid this panel asks the server to give an object it is creating, so the edit it sends names the
+  // object it produces rather than one only the server knows about. The panel is only ever handed a const
+  // ObjectManager, so this generates its own the way newAssetUUID does instead of borrowing the manager's
+  // generator; the server refuses a uuid already in use either way.
+  [[nodiscard]] uuids::uuid newObjectUUID()
+  {
+    std::mt19937 rng{ std::random_device{}() };
+    uuids::uuid_random_generator generator{ rng };
+    return generator();
+  }
+
   // Heuristic icon for an object derived from its components (the mockup shows a per-object glyph). The
   // Inspector's ObjectInspector keeps its own copy of this mapping for the selected-object header chip.
   gc::SecIcon iconForObject(const std::shared_ptr<Object>& object)
@@ -197,7 +208,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   ImGui::BeginDisabled(!m_editable || objectManager == nullptr);
   if (gc::accentButton("Create New Object", gc::SecIcon::plus))
   {
-    m_sceneEditCallback(replication::buildAddObject("Object"));
+    const auto created = newObjectUUID();
+    m_sceneEditCallback(replication::buildAddObject("Object", nullptr, &created));
   }
   ImGui::EndDisabled();
 
@@ -235,7 +247,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
         if (const auto prefab = uuids::uuid::from_string(uuidStr); prefab.has_value() && m_sceneEditCallback)
         {
           // The server resolves the prefab uuid to its body on disk, instantiates, and re-snapshots.
-          m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value()));
+          const auto instance = newObjectUUID();
+          m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), nullptr, &instance));
         }
       }
 
@@ -383,7 +396,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       {
         // Same op as the empty-space drop, but with this row as the parent instead of the scene root.
         const auto parent = object->getUUID();
-        m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), &parent));
+        const auto instance = newObjectUUID();
+        m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), &parent, &instance));
       }
     }
 
@@ -397,12 +411,14 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     if (ImGui::MenuItem("Add Child") && m_sceneEditCallback)
     {
       const auto parent = object->getUUID();
-      m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+      const auto created = newObjectUUID();
+      m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
     }
 
     if (ImGui::MenuItem("Duplicate") && m_sceneEditCallback)
     {
-      m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID()));
+      const auto duplicate = newObjectUUID();
+      m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID(), &duplicate));
     }
 
     if (ImGui::MenuItem("Save as Prefab"))
@@ -430,7 +446,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   if (gc::rowIconButton("addChild", gc::SecIcon::plus, false, buttonWidth, rowHeight))
   {
     const auto parent = object->getUUID();
-    m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+    const auto created = newObjectUUID();
+    m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
   }
 
   ImGui::SameLine(0.0f, buttonGap);
