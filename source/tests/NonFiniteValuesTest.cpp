@@ -1,7 +1,14 @@
 #include <gtest/gtest.h>
 
+#include "ComponentRegistration.h"
+#include "ComponentRegistry.h"
+#include "ProjectSerializer.h"
 #include "TestScene.h"
+#include "assets/AssetRegistry.h"
 #include "objects/Object.h"
+#include "objects/ObjectManager.h"
+#include "scenes/SceneAsset.h"
+#include "scenes/SceneManager.h"
 #include "objects/components/Camera.h"
 #include "objects/components/LightRenderer.h"
 #include "objects/components/ModelRenderer.h"
@@ -14,6 +21,8 @@
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <limits>
+#include <memory>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -59,6 +68,37 @@ namespace {
         fixtures::expectNear(what, get(), finiteValue);
       }
     }
+  }
+
+  struct Project {
+    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
+    std::unique_ptr<AssetRegistry> assetRegistry = std::make_unique<AssetRegistry>();
+    std::unique_ptr<SceneManager> sceneManager = std::make_unique<SceneManager>();
+    std::unique_ptr<ProjectSerializer> serializer;
+  };
+
+  Project makeProject()
+  {
+    Project project;
+    registerDataComponents(*project.componentRegistry);
+
+    project.serializer = std::make_unique<ProjectSerializer>(project.assetRegistry.get(),
+                                                             project.sceneManager.get(),
+                                                             project.componentRegistry);
+
+    return project;
+  }
+
+  // One scene holding one object: the smallest project with a Transform position to break.
+  nlohmann::json buildProject(const Project& project)
+  {
+    const auto uuid = uuids::uuid::from_string("66666666-6666-6666-6666-666666666666").value();
+    const auto scene = std::make_shared<SceneAsset>(uuid, "Main", project.componentRegistry);
+    project.sceneManager->addScene(scene);
+
+    scene->getObjectManager()->addObject(std::make_shared<Object>("Body"));
+
+    return project.serializer->serialize();
   }
 }
 
@@ -226,4 +266,59 @@ TEST(NonFiniteValues, ARefusedSetLeavesNoNullInTheSerializedObject)
   EXPECT_FLOAT_EQ(transformData->at("position").at(0).get<float>(), 1.5f);
   EXPECT_FLOAT_EQ(transformData->at("position").at(1).get<float>(), -2.0f);
   EXPECT_FLOAT_EQ(transformData->at("position").at(2).get<float>(), 3.25f);
+}
+
+TEST(NonFiniteValues, AFailedLoadNamesTheSceneTheObjectAndTheComponent)
+{
+  const auto source = makeProject();
+  const auto blob = buildProject(source);
+
+  auto broken = blob;
+  bool injected = false;
+
+  for (auto& scene : broken.at("assets").at("scenes"))
+  {
+    for (auto& object : scene.at("objects"))
+    {
+      for (auto& component : object.at("components"))
+      {
+        if (component.at("type") == "Transform")
+        {
+          // Exactly what dump() writes where a non-finite float was stored.
+          component.at("position").at(0) = nullptr;
+          injected = true;
+          break;
+        }
+      }
+    }
+  }
+
+  ASSERT_TRUE(injected);
+
+  // Positive control: the same blob without the null loads, so the throw below is about the null rather
+  // than about a blob that was never loadable.
+  const auto control = makeProject();
+  EXPECT_NO_THROW(control.serializer->deserialize(blob));
+  EXPECT_EQ(control.sceneManager->getScenes().size(), 1u);
+
+  const auto target = makeProject();
+  const auto before = buildProject(target);
+
+  try
+  {
+    target.serializer->deserialize(broken);
+    FAIL() << "a null where a float belongs must not load";
+  }
+  catch (const std::runtime_error& error)
+  {
+    // The diagnostic is the point: without these the log line is an exception text with no way to tell
+    // which of a project's scenes and objects to go and fix.
+    const std::string message = error.what();
+    EXPECT_NE(message.find("Main"), std::string::npos) << message;
+    EXPECT_NE(message.find("Body"), std::string::npos) << message;
+    EXPECT_NE(message.find("Transform"), std::string::npos) << message;
+  }
+
+  // Still atomic: the failed load must leave the live scenes and assets exactly as they were.
+  EXPECT_EQ(target.serializer->serialize(), before);
 }

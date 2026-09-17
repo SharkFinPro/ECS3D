@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_map>
 #include <cstddef>
+#include <exception>
 #include <memory>
 #include <string>
 #include <uuid.h>
@@ -105,6 +106,11 @@ private:
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 
   void loadFromJSON(const nlohmann::json& objectData);
+
+  // A component's own exception says what was wrong with the value but not whose value it was, and the
+  // project load aborts on the first one, so the name and uuid are prepended before it propagates.
+  [[nodiscard]] std::string describeLoadFailure(const std::string& componentType,
+                                                const std::exception& error) const;
 
   // The body of unpack, split out so unpack itself is only the stop/start bracket around it and can
   // restore the running state whichever way this exits.
