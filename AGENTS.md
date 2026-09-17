@@ -124,7 +124,13 @@ rebuilds from it, atomically (a malformed packet leaves the current project inta
 goes as a compact binary **stateDelta** (uuid + local transform per object; `data/Replication.{h,cpp}`).
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
-`--edit` server may send. (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
+`--edit` server may send. (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
+`sceneEdit` also carries two ops for undoing a deletion: `removeSubtree` deletes an object and its whole
+subtree immediately, promoting nothing, unlike `removeObject` (which defers to the next tick and promotes
+the removed object's children); `restoreObject` rebuilds a subtree from an inline serialized body under a
+parent at a sibling index, and is the one structural op that **preserves the body's uuids** rather than
+reassigning them, because the undo history (`data/edits/EditCommand.h`) already names the removed
+subtree's objects by those uuids. The
 asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
 applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —
