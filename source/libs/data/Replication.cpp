@@ -454,15 +454,16 @@ namespace {
     }
 
     const auto parsed = uuids::uuid::from_string(std::string(edit.at("uuid")));
-
-    // A nil uuid is refused rather than passed on: registering an object carrying one has the manager
-    // generate a uuid for it instead, so the sender would be left waiting for the one it asked for.
-    if (!parsed.has_value() || parsed->is_nil())
+    if (!parsed.has_value())
     {
       return { .refusal = SceneEditResult::malformedEdit };
     }
 
-    if (objectManager.getObjectByUUID(parsed.value()))
+    // The nil uuid parses, so it is a well-formed request the authority simply will not honor: an object
+    // registered carrying one has the manager generate a uuid for it instead, which would leave the
+    // sender waiting for the uuid it asked for. A uuid the scene already uses is refused for the same
+    // reason - the sender would be told about an object that is not the one its edit meant to create.
+    if (parsed->is_nil() || objectManager.getObjectByUUID(parsed.value()))
     {
       return { .refusal = SceneEditResult::rejected };
     }

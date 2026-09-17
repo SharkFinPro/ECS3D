@@ -741,15 +741,16 @@ TEST(SceneEdit, ReportsACreatingOpWhoseChosenUuidDoesNotParseAsMalformed)
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), before + 3);
 }
 
-TEST(SceneEdit, ReportsACreatingOpNamingTheNilUuidAsMalformed)
+TEST(SceneEdit, RefusesACreatingOpNamingTheNilUuid)
 {
   const auto scene = makeScene();
 
-  // A nil uuid parses, but registering an object carrying one has the manager generate a uuid for it
-  // instead - so honoring it would leave the sender waiting for an object that never gets that uuid.
+  // A nil uuid parses, so this is a well-formed request rather than a broken payload - but registering
+  // an object carrying one has the manager generate a uuid for it instead, so honoring it would leave
+  // the sender waiting for an object that never gets the uuid it asked for.
   nlohmann::json addEdit = replication::buildAddObject("Added");
   addEdit["uuid"] = uuids::to_string(uuids::uuid{});
-  EXPECT_EQ(applyEdit(scene, addEdit), SceneEditResult::malformedEdit);
+  EXPECT_EQ(applyEdit(scene, addEdit), SceneEditResult::rejected);
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
 
   // Positive control: a real uuid on the same op applies.
@@ -782,4 +783,11 @@ TEST(SceneEdit, RefusesACreatingOpNamingAUuidTheSceneAlreadyHas)
   EXPECT_EQ(scene.objectManager->getObjectByUUID(taken), scene.object);
   EXPECT_EQ(scene.object->getName(), "Object");
   EXPECT_TRUE(scene.object->getChildren().empty());
+
+  // Positive control: the same op with a uuid nothing in the scene holds applies, so the refusals above
+  // are the collision and not the field itself.
+  const auto freeUUID = anotherUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildAddObject("Added", nullptr, &freeUUID)),
+            SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before + 1);
 }

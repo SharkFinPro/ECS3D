@@ -60,7 +60,8 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
 // The three ops that create an object (addObject, duplicateObject, instantiatePrefab) take an optional
 // uuid for the object they create, carried as "uuid". Without it the authority picks one and the sender
 // never learns which object its edit produced, which is what the undo history needs to record the edit
-// (see edits/EditCommand.h). A uuid the scene already holds is refused rather than merged into.
+// (see edits/EditCommand.h). A uuid that does not parse is a malformed edit; the nil uuid, or one the
+// scene already holds, is refused rather than merged into or quietly replaced.
 [[nodiscard]] nlohmann::json buildAddObject(const std::string& name,
                                             const uuids::uuid* parentUUID = nullptr,
                                             const uuids::uuid* objectUUID = nullptr);
@@ -113,7 +114,7 @@ enum class SceneEditResult {
   unknownComponent,  // names a component type that does not exist, or one the object is not carrying
   unknownAsset,      // instantiatePrefab named an asset with no usable body
   rejected,          // well formed and refused: a reparent that would cycle or that changes nothing, or
-                     // a creating op naming a uuid the scene is already using
+                     // a creating op naming the nil uuid or one the scene is already using
   failed             // threw part way through, e.g. a prefab body naming a component this build lacks
 };
 
