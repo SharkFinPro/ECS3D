@@ -124,8 +124,11 @@ rebuilds from it, atomically (a malformed packet leaves the current project inta
 goes as a compact binary **stateDelta** (uuid + local transform per object; `data/Replication.{h,cpp}`).
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
-`--edit` server may send. (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
-asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
+`--edit` server may send. (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
+`reparentObject` rewrites the moved object's local transform after reattaching so its world placement is
+unchanged, and `ObjectManager::deleteObjectsMarkedForDeletion` applies the same `objects/WorldPlacement.h`
+helper to the children of a deleted object as they move up a level. The asset-mutation trio
+(`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
 applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —
 a `renameAsset` sets an optional `AssetRecord::displayName` override (threaded through
