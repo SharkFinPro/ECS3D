@@ -21,11 +21,19 @@ internal sealed class TcpBackend : TransportBackend
   private Thread? _acceptThread;
   private volatile bool _serverRunning;
 
-  private readonly List<TcpClient> _clients = new();
+  private readonly List<Connection> _clients = new();
   // Accepted sockets that have not yet cleared the handshake. Tracked separately from _clients so an
   // unauthorized peer is never on the broadcast list, and so ServerStop still closes it.
   private readonly List<TcpClient> _pending = new();
   private readonly object _clientsLock = new();
+
+  // A socket that cleared the handshake, paired with the id C++ knows it by so a send that fails on the
+  // broadcast path can name the connection it dropped.
+  private sealed class Connection(TcpClient client, int connId)
+  {
+    public readonly TcpClient Client = client;
+    public readonly int ConnId = connId;
+  }
 
   // A stable, monotonically-increasing id handed to each accepted connection, surfaced to C++ on every
   // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
@@ -35,6 +43,12 @@ internal sealed class TcpBackend : TransportBackend
   // that opens a connection and sends nothing holds a thread and a socket - and, before this change,
   // a spot on the broadcast list - forever.
   private const int HandshakeTimeoutMs = 5000;
+
+  // Bounds a blocking Write to a peer that has stopped draining its socket. Broadcasts run on the tick
+  // thread, so an unbounded Write stops physics and scripts for everyone until that one peer reads again.
+  // Two seconds because a stalled peer then costs at most one such stall before it is dropped, while still
+  // being far longer than any plausible snapshot send takes on a healthy link.
+  private const int SendTimeoutMs = 2000;
 
   // -- Client --
   private TcpClient? _client;
@@ -70,9 +84,9 @@ internal sealed class TcpBackend : TransportBackend
 
     lock (_clientsLock)
     {
-      foreach (var client in _clients)
+      foreach (var conn in _clients)
       {
-        try { client.Close(); } catch { /* ignore */ }
+        try { conn.Client.Close(); } catch { /* ignore */ }
       }
 
       _clients.Clear();
@@ -103,19 +117,37 @@ internal sealed class TcpBackend : TransportBackend
 
     var frame = Frame(type, data, len);
 
+    // The fan-out runs off a snapshot so the sends happen outside _clientsLock. This is the tick thread,
+    // and a Write to a peer that has stopped reading blocks until SendTimeoutMs elapses; holding the lock
+    // across that would block the accept loop and every receive loop's cleanup along with it.
+    Connection[] clients;
     lock (_clientsLock)
     {
-      for (var i = _clients.Count - 1; i >= 0; --i)
+      clients = _clients.ToArray();
+    }
+
+    foreach (var conn in clients)
+    {
+      try
       {
-        try
+        conn.Client.GetStream().Write(frame, 0, frame.Length);
+      }
+      catch
+      {
+        // The connection dropped mid-send, or took longer than SendTimeoutMs to accept the frame; reap it.
+        Transport.Log(TransportLogLevel.Warn,
+          $"Dropping connection {conn.ConnId}: the send failed or timed out.");
+
+        // Closing the socket makes this connection's blocked read throw, and ServerReceiveLoop's exit path
+        // owns the DeliverServerDisconnect for it - delivering one here too would free the player slot
+        // twice. Closing an already-closed socket is harmless.
+        try { conn.Client.Close(); } catch { /* ignore */ }
+
+        lock (_clientsLock)
         {
-          _clients[i].GetStream().Write(frame, 0, frame.Length);
-        }
-        catch
-        {
-          // The connection dropped mid-send; reap it.
-          try { _clients[i].Close(); } catch { /* ignore */ }
-          _clients.RemoveAt(i);
+          // By reference rather than by index: the list may have changed since the snapshot, and if the
+          // receive loop already removed this connection the Remove is simply a no-op.
+          _clients.Remove(conn);
         }
       }
     }
@@ -136,6 +168,7 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       client.NoDelay = true;
+      client.SendTimeout = SendTimeoutMs;
 
       var connId = Interlocked.Increment(ref _nextConnId);
 
@@ -175,6 +208,8 @@ internal sealed class TcpBackend : TransportBackend
 
   private void ServerReceiveLoop(TcpClient client, int connId)
   {
+    Connection? conn = null;
+
     try
     {
       var stream = client.GetStream();
@@ -196,10 +231,12 @@ internal sealed class TcpBackend : TransportBackend
 
         client.ReceiveTimeout = 0;
 
+        conn = new Connection(client, connId);
+
         lock (_clientsLock)
         {
           _pending.Remove(client);
-          _clients.Add(client);
+          _clients.Add(conn);
         }
 
         while (_serverRunning)
@@ -224,7 +261,11 @@ internal sealed class TcpBackend : TransportBackend
 
     lock (_clientsLock)
     {
-      _clients.Remove(client);
+      if (conn != null)
+      {
+        _clients.Remove(conn);
+      }
+
       _pending.Remove(client);
     }
 
