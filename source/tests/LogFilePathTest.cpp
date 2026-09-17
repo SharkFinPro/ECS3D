@@ -102,13 +102,20 @@ TEST_F(LogFilePathTest, SettingsAndLogsShareTheUserDataDirectory)
   EXPECT_EQ(SettingsStore::defaultFile().parent_path(), userDataDirectory());
 }
 
-TEST_F(LogFilePathTest, ALogFileArgumentQuotesThePathForAChildCommandLine)
+TEST_F(LogFilePathTest, ALogFileArgumentQuotesAnAbsolutePathForAChildCommandLine)
 {
+  const auto file = std::filesystem::absolute(defaultLogFile("editor-server"));
   const auto argument = logFileArgument("editor-server");
 
-  EXPECT_TRUE(argument.starts_with("--log-file \""));
-  EXPECT_TRUE(argument.ends_with("\""));
-  EXPECT_NE(argument.find(defaultLogFile("editor-server").string()), std::string::npos);
+  if (file.string().find('"') != std::string::npos)
+  {
+    // No escape exists for a quote inside the path, so the flag is dropped rather than truncated.
+    EXPECT_TRUE(argument.empty());
+    return;
+  }
+
+  EXPECT_EQ(argument, "--log-file \"" + file.string() + "\"");
+  EXPECT_TRUE(file.is_absolute());
 }
 
 TEST_F(LogFilePathTest, LogFileArgumentOverridesTheDefaultAndReceivesEntries)
@@ -130,6 +137,15 @@ TEST_F(LogFilePathTest, LogFileArgumentOverridesTheDefaultAndReceivesEntries)
   // reaching the file is registration rather than the sink writing regardless.
   Log::info(LogCategory::engine, "after removal");
   EXPECT_EQ(readFile(m_file).find("after removal"), std::string::npos);
+}
+
+TEST_F(LogFilePathTest, ATrailingLogFileArgumentWithNoValueIsIgnored)
+{
+  const auto sink = addSink({ "--log-file", m_file.string(), "--log-file" });
+
+  ASSERT_NE(sink, nullptr);
+  EXPECT_TRUE(sink->isOpen());
+  EXPECT_TRUE(std::filesystem::exists(m_file));
 }
 
 TEST_F(LogFilePathTest, NoLogFileArgumentRegistersNothing)

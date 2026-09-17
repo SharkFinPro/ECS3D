@@ -3,6 +3,7 @@
 #include "UserDataDirectory.h"
 #include <filesystem>
 #include <string>
+#include <system_error>
 
 std::shared_ptr<FileSink> addFileSinkFromArguments(const int argc, char** argv,
                                                    const std::string_view appName,
@@ -58,5 +59,19 @@ std::shared_ptr<FileSink> addFileSinkFromArguments(const int argc, char** argv,
 
 std::string logFileArgument(const std::string_view appName)
 {
-  return "--log-file \"" + defaultLogFile(appName).string() + "\"";
+  std::error_code error;
+  auto file = std::filesystem::absolute(defaultLogFile(appName), error);
+  if (error)
+  {
+    file = defaultLogFile(appName);
+  }
+
+  const auto path = file.string();
+
+  if (path.find('"') != std::string::npos)
+  {
+    return {};
+  }
+
+  return "--log-file \"" + path + "\"";
 }

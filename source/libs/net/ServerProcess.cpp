@@ -20,7 +20,34 @@
 #endif
 #endif
 
-#if !defined(_WIN32)
+#if defined(_WIN32)
+namespace {
+  // The arguments can carry a file system path (the spawned server's log file), so the command line is
+  // converted through the ANSI code page rather than widened byte by byte: that alone would mangle a
+  // user name the code page spells with more than one byte. A name the code page cannot represent at
+  // all is already lost before this, when the path is narrowed to build the argument string.
+  std::wstring widen(const std::string& text)
+  {
+    if (text.empty())
+    {
+      return {};
+    }
+
+    const int length = MultiByteToWideChar(CP_ACP, 0, text.data(), static_cast<int>(text.size()),
+                                           nullptr, 0);
+    if (length <= 0)
+    {
+      return {};
+    }
+
+    std::wstring wide;
+    wide.resize(static_cast<size_t>(length));
+    MultiByteToWideChar(CP_ACP, 0, text.data(), static_cast<int>(text.size()), wide.data(), length);
+
+    return wide;
+  }
+}
+#else
 namespace {
   // The arguments arrive as one command line and execv wants them split. Double quotes group a token so
   // an argument can hold a path with spaces, which the caller relies on: the per-user directory the
@@ -40,7 +67,7 @@ namespace {
         quoted = !quoted;
         started = true;
       }
-      else if (!quoted && (character == ' ' || character == '	'))
+      else if (!quoted && (character == ' ' || character == '\t'))
       {
         if (started)
         {
@@ -115,9 +142,7 @@ bool ServerProcess::launch(const std::string& exeBaseName, const std::string& ar
   std::wstring commandLine = L"\"" + applicationName + L"\"";
   if (!arguments.empty())
   {
-    // Converted through path rather than widened byte by byte: the arguments can carry a file system
-    // path (the spawned server's log file), and a user name outside ASCII would not survive that.
-    commandLine += L" " + std::filesystem::path(arguments).wstring();
+    commandLine += L" " + widen(arguments);
   }
   std::vector<wchar_t> commandBuffer(commandLine.begin(), commandLine.end());
   commandBuffer.push_back(L'\0');

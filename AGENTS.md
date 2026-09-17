@@ -353,6 +353,9 @@ is deliberately a separate, later change.
   log to `editor-server.log` / `client-server.log` instead, so two local servers never share one file;
   the parent's `--log-file`/`--no-log-file` are not forwarded to it. All app, server and net
   (`ECS3DNet`) output goes through `Log`.
+- `net::ServerProcess::launch` takes the child's flags as one string; a token holding spaces may be
+  double quoted (there is no escape for a quote inside one). POSIX splits the string itself, honoring
+  those quotes; Windows hands it to the child's CRT, which parses them the same way.
 - **ECS3DLauncher** (`apps/launcher`) — a standalone C# Avalonia project-management GUI. Independent of
   the C++ toolchain and the CLR-hosting path; built via `dotnet publish`. **See its own `AGENTS.md`.**
 

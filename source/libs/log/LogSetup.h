@@ -17,8 +17,11 @@
 std::shared_ptr<FileSink> addFileSinkFromArguments(int argc, char** argv, std::string_view appName,
                                                    LogCategory category);
 
-// A --log-file flag for a child process's command line, with the path double quoted: the user data
-// directory contains a space on macOS, and the command line is one string that the launcher splits.
+// A --log-file flag for a child process's command line, naming an absolute path so it resolves against
+// this process's working directory rather than the child's. The path is double quoted, since the user
+// data directory contains a space on macOS and the command line is one string the launcher splits.
+// There is no escape for a quote inside the path, so a path containing one yields an empty string: no
+// flag, and the child falls back to its own default rather than being handed a truncated path.
 [[nodiscard]] std::string logFileArgument(std::string_view appName);
 
 #endif  // LOGSETUP_H
