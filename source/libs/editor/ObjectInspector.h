@@ -17,18 +17,28 @@ class ComponentEditor;
 
 // The Inspector's renderer for the Object selection kind: the object's name field, Highlight toggle,
 // component + script widgets (via ComponentEditor), Add Component, and the script drop zone. Extracted
-// from ObjectGUIManager so the panel can dispatch per selection kind; it reports edits back through two
+// from ObjectGUIManager so the panel can dispatch per selection kind; it reports edits back through three
 // callbacks:
-//   - a component VALUE change -> EditCallback(objectUUID, component)
+//   - a component VALUE change -> EditCallback(objectUUID, component), every frame the value moves
+//   - the same change once it is FINISHED -> EditCommittedCallback(objectUUID, before, after)
 //   - a STRUCTURAL change (rename / add / remove component, add script) -> SceneEditCallback(<edit json>)
 class ObjectInspector {
 public:
   using EditCallback = std::function<void(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)>;
   using SceneEditCallback = std::function<void(const nlohmann::json& edit)>;
 
+  // One finished user action rather than one per frame: a widget edits the component in place, so a
+  // slider drag fires EditCallback every frame and leaves nothing to read the pre-drag state from. The
+  // pair here is the whole gesture - the value before the first frame of it, and the value it settled on.
+  using EditCommittedCallback = std::function<void(const uuids::uuid& objectUUID,
+                                                   const nlohmann::json& before,
+                                                   const nlohmann::json& after)>;
+
   explicit ObjectInspector(std::shared_ptr<ComponentEditor> componentEditor);
 
   void setEditCallback(EditCallback callback);
+
+  void setEditCommittedCallback(EditCommittedCallback callback);
 
   void setSceneEditCallback(SceneEditCallback callback);
 
@@ -53,7 +63,20 @@ private:
   std::shared_ptr<ComponentEditor> m_componentEditor;
 
   EditCallback m_editCallback;
+  EditCommittedCallback m_editCommittedCallback;
   SceneEditCallback m_sceneEditCallback;
+
+  // The edit being gathered: which component is moving and what it looked like before the gesture
+  // started. The blobs are stored dumped, for the same reason EditCommand stores its own that way - this
+  // header only forward-declares nlohmann::json.
+  struct PendingEdit {
+    uuids::uuid objectUUID;
+    std::weak_ptr<Component> component;
+    std::string before;
+    std::string after;
+  };
+
+  std::optional<PendingEdit> m_pendingEdit;
 
   const AssetRegistry* m_assetRegistry = nullptr;
 
@@ -85,6 +108,10 @@ private:
   void displayScriptDragDropArea(float dropZoneStartY, const std::shared_ptr<Object>& object) const;
 
   void displayComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component);
+
+  // Hands the gathered before/after pair to the committed-edit callback and clears it. A no-op when
+  // nothing is pending or the value came back to where it started.
+  void commitPendingEdit();
 };
 
 #endif //OBJECTINSPECTOR_H

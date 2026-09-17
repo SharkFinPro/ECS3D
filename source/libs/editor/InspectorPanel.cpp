@@ -46,6 +46,11 @@ void InspectorPanel::setEditCallback(EditCallback callback)
   m_objectInspector->setEditCallback(std::move(callback));
 }
 
+void InspectorPanel::setEditCommittedCallback(EditCommittedCallback callback)
+{
+  m_objectInspector->setEditCommittedCallback(std::move(callback));
+}
+
 void InspectorPanel::setSceneEditCallback(SceneEditCallback callback)
 {
   m_objectInspector->setSceneEditCallback(std::move(callback));
