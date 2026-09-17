@@ -1,4 +1,5 @@
 #include "Transform.h"
+#include "FiniteCheck.h"
 #include "../Object.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
@@ -84,18 +85,33 @@ glm::vec3 Transform::getLocalRotation() const
 
 void Transform::setPosition(const glm::vec3 position)
 {
+  if (!finiteCheck::isFinite(position))
+  {
+    return;
+  }
+
   m_position.set(position);
   ++m_updateID;
 }
 
 void Transform::setScale(const glm::vec3 scale)
 {
+  if (!finiteCheck::isFinite(scale))
+  {
+    return;
+  }
+
   m_scale.set(scale);
   ++m_updateID;
 }
 
 void Transform::setRotation(const glm::vec3 rotation)
 {
+  if (!finiteCheck::isFinite(rotation))
+  {
+    return;
+  }
+
   m_rotation.set(rotation);
   ++m_updateID;
 }
