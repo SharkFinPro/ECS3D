@@ -45,6 +45,11 @@ public:
 
   void addChild(std::shared_ptr<Object> child);
 
+  // Same as addChild, but at a specific sibling index (clamped to m_children.size(), so an index past
+  // the end appends) instead of always at the end - restoreSubtree uses this to put a restored child
+  // back exactly where it was.
+  void addChild(std::shared_ptr<Object> child, std::size_t index);
+
   void removeChild(const std::shared_ptr<Object>& child);
 
   [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getChildren() const;

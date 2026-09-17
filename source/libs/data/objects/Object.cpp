@@ -5,6 +5,7 @@
 #include "components/Script.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 #include <Protocol.h>
@@ -69,6 +70,12 @@ std::shared_ptr<Object> Object::getParent() const
 void Object::addChild(std::shared_ptr<Object> child)
 {
   m_children.emplace_back(std::move(child));
+}
+
+void Object::addChild(std::shared_ptr<Object> child, const std::size_t index)
+{
+  const std::size_t clampedIndex = std::min(index, m_children.size());
+  m_children.insert(m_children.begin() + static_cast<std::ptrdiff_t>(clampedIndex), std::move(child));
 }
 
 void Object::removeChild(const std::shared_ptr<Object>& child)

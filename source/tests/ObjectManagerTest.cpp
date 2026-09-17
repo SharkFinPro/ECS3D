@@ -462,3 +462,106 @@ TEST(ObjectManager, ReparentingLeavesAllObjectsAndUuidLookupUnaffectedButMovesTh
   ASSERT_EQ(parentB->getChildren().size(), 1u);
   EXPECT_EQ(parentB->getChildren().front(), child);
 }
+
+TEST(ObjectManager, AddChildAtAnIndexInsertsInTheMiddle)
+{
+  const auto parent = std::make_shared<Object>("Parent");
+  const auto first = std::make_shared<Object>("First");
+  const auto last = std::make_shared<Object>("Last");
+  parent->addChild(first);
+  parent->addChild(last);
+
+  const auto middle = std::make_shared<Object>("Middle");
+  parent->addChild(middle, 1);
+
+  ASSERT_EQ(parent->getChildren().size(), 3u);
+  EXPECT_EQ(parent->getChildren()[0], first);
+  EXPECT_EQ(parent->getChildren()[1], middle);
+  EXPECT_EQ(parent->getChildren()[2], last);
+}
+
+TEST(ObjectManager, AddChildAtIndexZeroInsertsFirst)
+{
+  const auto parent = std::make_shared<Object>("Parent");
+  const auto first = std::make_shared<Object>("First");
+  parent->addChild(first);
+
+  const auto front = std::make_shared<Object>("Front");
+  parent->addChild(front, 0);
+
+  ASSERT_EQ(parent->getChildren().size(), 2u);
+  EXPECT_EQ(parent->getChildren()[0], front);
+  EXPECT_EQ(parent->getChildren()[1], first);
+}
+
+TEST(ObjectManager, AddChildAtAnIndexPastTheEndAppends)
+{
+  const auto parent = std::make_shared<Object>("Parent");
+  const auto first = std::make_shared<Object>("First");
+  parent->addChild(first);
+
+  const auto extra = std::make_shared<Object>("Extra");
+  parent->addChild(extra, 100);
+
+  ASSERT_EQ(parent->getChildren().size(), 2u);
+  EXPECT_EQ(parent->getChildren()[0], first);
+  EXPECT_EQ(parent->getChildren()[1], extra);
+}
+
+TEST(ObjectManager, AddObjectToRootAtAnIndexInsertsInTheMiddle)
+{
+  const auto scene = makeScene();
+  const auto first = addObject(scene, "First");
+  const auto last = addObject(scene, "Last");
+
+  const auto middle = std::make_shared<Object>("Middle");
+  scene.objectManager->addObjectToRoot(middle, 1);
+
+  ASSERT_EQ(scene.objectManager->getObjects().size(), 3u);
+  EXPECT_EQ(scene.objectManager->getObjects()[0], first);
+  EXPECT_EQ(scene.objectManager->getObjects()[1], middle);
+  EXPECT_EQ(scene.objectManager->getObjects()[2], last);
+}
+
+TEST(ObjectManager, AddObjectToRootAtAnIndexPastTheEndAppends)
+{
+  const auto scene = makeScene();
+  const auto first = addObject(scene, "First");
+
+  const auto extra = std::make_shared<Object>("Extra");
+  scene.objectManager->addObjectToRoot(extra, 100);
+
+  ASSERT_EQ(scene.objectManager->getObjects().size(), 2u);
+  EXPECT_EQ(scene.objectManager->getObjects()[0], first);
+  EXPECT_EQ(scene.objectManager->getObjects()[1], extra);
+}
+
+// restoreSubtree deliberately does not go through instantiate/instantiateUnder's reassignUUIDs: the
+// undo history names a removed subtree by its original uuids, and instantiateUnder is the contrasting
+// positive control proving these uuids would otherwise change.
+TEST(ObjectManager, RestoreSubtreePreservesUuidsUnlikeInstantiateUnder)
+{
+  const auto authoring = makeScene();
+  const auto source = addObject(authoring, "Body");
+  addChildObject(authoring, "Limb", source);
+
+  const auto body = source->serialize();
+  const auto rootUUID = uuids::uuid::from_string(std::string(body.at("uuid"))).value();
+  const auto childUUID =
+    uuids::uuid::from_string(std::string(body.at("children").at(0).at("uuid"))).value();
+
+  const auto scene = makeScene();
+  const auto restored = scene.objectManager->restoreSubtree(body, nullptr, 0);
+
+  EXPECT_EQ(restored->getUUID(), rootUUID);
+  ASSERT_EQ(restored->getChildren().size(), 1u);
+  EXPECT_EQ(restored->getChildren().front()->getUUID(), childUUID);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(rootUUID), restored);
+
+  // Positive control / contrast: instantiateUnder on the very same body mints fresh uuids instead, so
+  // the preservation above is restoreSubtree's own doing and not something every builder does.
+  const auto instantiated = scene.objectManager->instantiateUnder(body, nullptr);
+  EXPECT_NE(instantiated->getUUID(), rootUUID);
+  ASSERT_EQ(instantiated->getChildren().size(), 1u);
+  EXPECT_NE(instantiated->getChildren().front()->getUUID(), childUUID);
+}
