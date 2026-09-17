@@ -1,5 +1,6 @@
 #include "ScriptSystem.h"
 #include "ScriptEngine.h"
+#include "ScriptFieldEdit.h"
 #include "bindings/BindingContext.h"
 #include <Log.h>
 #include <objects/Object.h>
@@ -388,12 +389,35 @@ void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,
     return;
   }
 
+  const auto cached = m_fieldCache.find(cacheKey(uuid, className));
+  if (cached == m_fieldCache.end())
+  {
+    return;
+  }
+
   const auto uuidStr = uuids::to_string(uuid);
 
   for (const auto& field : fields)
   {
-    if (!field.contains("name") || !field.contains("type") || !field.contains("value"))
+    const std::string* cachedType = nullptr;
+    if (field.contains("name") && field.at("name").is_string())
     {
+      const auto editedName = field.at("name").get<std::string>();
+      for (const auto& exposed : cached->second)
+      {
+        if (exposed.name == editedName)
+        {
+          cachedType = &exposed.type;
+          break;
+        }
+      }
+    }
+
+    // An editor's field list can be stale, or hostile: a tag that disagrees with what the instance
+    // really exposes would otherwise reach a setter and either throw here or fault the script.
+    if (const auto reason = scripting::rejectFieldEdit(field, cachedType); !reason.empty())
+    {
+      Log::warn(LogCategory::script, "Refused a field edit on " + uuidStr + " (" + className + "): " + reason);
       continue;
     }
 
