@@ -271,12 +271,13 @@ void ClientApp::handleStateDelta(const net::Message& message) const
 
 void ClientApp::handleEditComponent(const net::Message& message) const
 {
-  // The server applied an editor's component change; mirror it into the replicated scene. The result is
-  // ignored on purpose: a view legitimately receives edits for objects it has not been sent yet or has
-  // already dropped, and the server only rebroadcasts what it applied itself.
+  // The server applied an editor's component change; mirror it into the replicated scene. A missed edit
+  // is logged rather than silently dropped, so a real desync is distinguishable from the ordinary case
+  // of a rebroadcast for an object this view has not been sent yet or has already dropped.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    static_cast<void>(replication::applyComponentEdit(*scene->getObjectManager(), message));
+    const auto result = replication::applyComponentEdit(*scene->getObjectManager(), message);
+    replication::logMissedComponentEdit(result, message, LogCategory::client);
   }
 }
 

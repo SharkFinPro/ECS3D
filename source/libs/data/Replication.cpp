@@ -9,12 +9,14 @@
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
 #include "WireTypes.h"
+#include "Log.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <cstddef>
 #include <exception>
 #include <new>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -212,6 +214,65 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
   catch (const std::exception&)
   {
     return unpacking ? ComponentEditResult::partiallyApplied : ComponentEditResult::malformedPayload;
+  }
+}
+
+std::string_view describe(const ComponentEditResult result)
+{
+  switch (result)
+  {
+    case ComponentEditResult::malformedPayload: return "the payload does not parse";
+    case ComponentEditResult::partiallyApplied: return "the payload ran out mid-component";
+    case ComponentEditResult::unknownObject: return "no such object";
+    case ComponentEditResult::unknownComponent: return "the object has no such component";
+    case ComponentEditResult::applied: return "it was applied";
+  }
+
+  return "it was applied";
+}
+
+void logMissedComponentEdit(const ComponentEditResult result, const net::Message& edit, const LogCategory category)
+{
+  if (result == ComponentEditResult::applied)
+  {
+    return;
+  }
+
+  // Re-read the packed prefix ([object uuid][type][className]) independently of applyComponentEdit,
+  // purely to name what was skipped. A payload too broken to even name gets a placeholder instead of
+  // throwing out of a logging call.
+  std::string objectUUID = "an unreadable object";
+  std::string componentName = "an unreadable component";
+
+  try
+  {
+    net::MessageReader reader(edit);
+    objectUUID = reader.readString();
+
+    const auto componentType = reader.read<ComponentType>();
+    const auto nameIt = componentTypeToString.find(componentType);
+    componentName = nameIt != componentTypeToString.end() ? nameIt->second : "an unknown component";
+
+    if (componentType == ComponentType::script)
+    {
+      componentName += " (" + reader.readString() + ")";
+    }
+  }
+  catch (const std::exception&)
+  {
+    // Leave the placeholders above; the result and describe() still say what went wrong.
+  }
+
+  if (result == ComponentEditResult::malformedPayload || result == ComponentEditResult::partiallyApplied)
+  {
+    Log::error(category, "Could not apply a component edit of " + componentName + " on " + objectUUID +
+                          ": " + std::string(describe(result)) +
+                          "; the view may be out of sync until the next snapshot.");
+  }
+  else
+  {
+    Log::debug(category, "Skipped a component edit of " + componentName + " on " + objectUUID + ": " +
+                          std::string(describe(result)) + ".");
   }
 }
 

@@ -3,6 +3,7 @@
 
 #include <nlohmann/json_fwd.hpp>
 #include <memory>
+#include <string_view>
 #include <uuid.h>
 
 class Object;
@@ -11,6 +12,8 @@ class Component;
 class AssetRegistry;
 class SceneManager;
 class ComponentRegistry;
+
+enum class LogCategory;
 
 namespace net {
   class Message;
@@ -52,6 +55,16 @@ enum class ComponentEditResult {
 };
 
 ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const net::Message& edit);
+
+// Human-readable reason a component edit was not applied. Shared by every app (server, client, editor)
+// so the wording stays one table instead of three.
+[[nodiscard]] std::string_view describe(ComponentEditResult result);
+
+// Logs a component edit a replicated view could not apply. A missing object or component is the
+// ordinary case for a view that is a round trip behind the authority, so it goes out at debug; a
+// payload that did not parse or ran out mid-component is a real divergence and goes out at error.
+// No-op for applied.
+void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit, LogCategory category);
 
 // Structural edits (add/remove object or component). Unlike a value edit these change the scene graph,
 // so the server applies them and re-broadcasts a full Snapshot rather than replicating per-op - the

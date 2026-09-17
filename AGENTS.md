@@ -124,7 +124,10 @@ rebuilds from it, atomically (a malformed packet leaves the current project inta
 goes as a compact binary **stateDelta** (uuid + local transform per object; `data/Replication.{h,cpp}`).
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
-`--edit` server may send. (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
+`--edit` server may send. An `editComponent` a replicated view could not apply is reported through
+`replication::logMissedComponentEdit` — debug for an absent object/component (routine, since the server
+rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
+payload (a real divergence). (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
 asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
 applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —

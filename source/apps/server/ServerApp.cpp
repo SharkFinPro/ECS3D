@@ -363,20 +363,6 @@ void ServerApp::handleDisconnect(const int32_t connId)
 }
 
 namespace {
-  const char* describe(const replication::ComponentEditResult result)
-  {
-    switch (result)
-    {
-      case replication::ComponentEditResult::malformedPayload: return "the payload does not parse";
-      case replication::ComponentEditResult::partiallyApplied: return "the payload ran out mid-component";
-      case replication::ComponentEditResult::unknownObject: return "no such object";
-      case replication::ComponentEditResult::unknownComponent: return "the object has no such component";
-      case replication::ComponentEditResult::applied: return "it was applied";
-    }
-
-    return "it was applied";
-  }
-
   const char* describe(const replication::SceneEditResult result)
   {
     switch (result)
@@ -409,7 +395,7 @@ void ServerApp::handleEditComponent(const net::Message& message) const
     if (result != replication::ComponentEditResult::applied)
     {
       Log::error(LogCategory::server, "Discarded a component edit of " + std::to_string(message.size()) +
-                          " bytes: " + describe(result) + ".");
+                          " bytes: " + std::string(replication::describe(result)) + ".");
 
       // A half-written component has no delta stream to correct it for most types, so the only way back
       // to agreement is a fresh snapshot.
