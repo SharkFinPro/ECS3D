@@ -3,6 +3,7 @@
 
 #include <array>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -114,14 +115,12 @@ concept WireValue = std::is_trivially_copyable_v<T> && wirePackable<T>;
 class Message {
 public:
   explicit Message(const MessageType type) noexcept : m_type(type) {}
+  Message() = default;
 
   // The inbound path from the transport: the socket thread has a received buffer and a type byte, and
   // the payload is taken in one copy rather than a field (or a byte) at a time.
-  Message(const MessageType type, const std::span<const uint8_t> payload) : m_type(type) {
-    m_payload.assign(payload.begin(), payload.end());
-  }
-
-  Message() = default;
+  Message(const MessageType type, const std::span<const uint8_t> payload)
+    : m_type(type), m_payload(payload.begin(), payload.end()) {}
 
   template <WireValue T>
   Message& write(const T& value) {
