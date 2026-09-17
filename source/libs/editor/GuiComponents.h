@@ -3,6 +3,7 @@
 
 #include "EditorTheme.h"
 #include <imgui.h>
+#include <Log.h>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -17,6 +18,21 @@
 // (boxed axis fields, accent track sliders, pill badges, filled accent checkboxes). They are drop-in
 // replacements for the stock ImGui calls in the component editors.
 namespace gc {
+  // ImGui's ctrl-click text entry accepts whatever the C float parser accepts, including inf and nan;
+  // a non-finite value would be serialized as json null and make the file unreadable on load.
+  inline bool acceptFinite(const char* label, float* value, const float previous)
+  {
+    if (std::isfinite(*value))
+    {
+      return true;
+    }
+
+    *value = previous;
+    Log::warn(LogCategory::editor, std::string("Refused a non-finite value for ") + label);
+
+    return false;
+  }
+
   // A labelled X/Y/Z drag row. Returns true if any of the three was edited this frame.
   inline bool xyzGui(const char* label,
                      float* x,
@@ -179,6 +195,7 @@ namespace gc {
     dl->AddText(ImVec2(pos.x + padX, pos.y + (h - axisSize.y) * 0.5f), theme::u32(axisCol), axis);
 
     // Transparent DragFloat over the remaining width.
+    const float previous = *v;
     ImGui::PushID(axis);
     ImGui::SetCursorScreenPos(ImVec2(pos.x + padX + axisSize.x, pos.y));
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
@@ -186,7 +203,8 @@ namespace gc {
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     ImGui::SetNextItemWidth(width - padX * 2.0f - axisSize.x);
-    const bool edited = ImGui::DragFloat("##v", v, sensitivity, 0.0f, 0.0f, "%.3f");
+    const bool edited = ImGui::DragFloat("##v", v, sensitivity, 0.0f, 0.0f, "%.3f")
+      && acceptFinite(axis, v, previous);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     ImGui::PopID();
@@ -570,9 +588,10 @@ namespace gc {
   {
     rowLabel(label);
 
+    const float previous = *v;
     ImGui::PushID(label);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-    const bool edited = ImGui::DragFloat("##v", v, speed);
+    const bool edited = ImGui::DragFloat("##v", v, speed) && acceptFinite(label, v, previous);
     ImGui::PopID();
 
     return edited;
@@ -634,8 +653,9 @@ namespace gc {
       const float nv = min + (max - min) * t;
       if (nv != *v)
       {
+        const float previous = *v;
         *v = nv;
-        edited = true;
+        edited = acceptFinite(label, v, previous);
       }
     }
 
