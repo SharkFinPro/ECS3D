@@ -278,8 +278,7 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
 `io.WantCaptureKeyboard`, which only trips for text input, so WASD reaches the game from either view.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
-deliberately headless (`ECS3DData` only) and deliberately not wired to `EditorApp` yet - only the command
-type and the two stacks exist so far. The design decision that shapes it: **undo is a new edit, never a
+deliberately headless (`ECS3DData` only). The design decision that shapes it: **undo is a new edit, never a
 local rewind** - undoing sends an ordinary reverse edit back through the normal replication path and waits
 for the rebroadcast like any other change, so the server stays the single source of truth and every
 connected view converges the same way. A command records its target uuid(s) and a before/after state in
@@ -295,9 +294,18 @@ conflicted. Not every kind is reversible with the sceneEdit ops that exist today
 `removeComponent` would need a one-shot "recreate with this data" op that does not exist, and
 `duplicateObject`/`instantiatePrefab` create a whole subtree that `ObjectManager::removeObject` cannot
 cleanly undo (it reparents children up rather than deleting them) - those kinds are still representable in
-the history but report `notUndoable` instead of sending a lossy or structurally wrong reverse. Wiring the
-editor's four mutation callbacks (component edit, scene edit, add asset, rename/remove asset) through this
-is deliberately a separate, later change.
+the history but report `notUndoable` instead of sending a lossy or structurally wrong reverse. **Every
+editor mutation is recorded**: each of `EditorApp`'s mutation callbacks (component edit, scene edit, add
+asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it sends, deriving the
+before state from the replicated view while that view still holds it, and records what comes back; an edit
+nothing faithful can be derived for (a stale view, an op with no matching kind) is logged at debug and
+skipped, never refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid the
+registry already holds replaces a record rather than adding one (a prefab body edit, "Save as Prefab" over
+an existing name), and `addAsset`'s reverse would delete the prefab instead of restoring its previous
+body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
+(New/Open), scene switch, (re)connect, and a play start or stop - a pause/resume is not one, since it
+leaves the scene as it is. There is still **no user-visible undo** - no menu item, no keybind, and nothing
+reads the stacks back yet.
 
 ## Development Principles
 

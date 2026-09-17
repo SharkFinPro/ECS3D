@@ -3,6 +3,7 @@
 
 #include <VulkanEngine/components/window/Window.h>
 #include <Protocol.h>
+#include <edits/EditHistory.h>
 #include <scenes/SceneManager.h>
 #include <uuid.h>
 #include <cstdint>
@@ -108,6 +109,11 @@ private:
   // this class, or nothing yet - see setupKeybinds). Shared with SettingsPanel, which reads/rebinds them.
   std::shared_ptr<KeybindTable> m_keybindTable;
   std::shared_ptr<KeybindDispatcher> m_keybindDispatcher;
+
+  // Every mutation this editor sends, recorded as it goes. Nothing reads it back yet - there is no undo
+  // UI - so it is populated and cleared, and never consulted. Cleared wherever the authored scene the
+  // recorded commands refer to is replaced: load project, scene switch, (re)connect, play start/stop.
+  edits::EditHistory m_editHistory;
 
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
