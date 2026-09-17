@@ -118,7 +118,17 @@ void Transform::setRotation(const glm::vec3 rotation)
 
 void Transform::move(const glm::vec3& direction)
 {
-  m_position.set(m_position.get() + direction);
+  // Scripts reach this through the Move binding, so it needs the same guard the setters have - and the
+  // sum is checked rather than the direction, since a finite step off an already huge position
+  // overflows to infinity on its own.
+  const auto moved = m_position.get() + direction;
+
+  if (!finiteCheck::isFinite(moved))
+  {
+    return;
+  }
+
+  m_position.set(moved);
   ++m_updateID;
 }
 

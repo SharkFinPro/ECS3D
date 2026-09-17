@@ -24,6 +24,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <uuid.h>
 
 namespace {
   constexpr float infinity = std::numeric_limits<float>::infinity();

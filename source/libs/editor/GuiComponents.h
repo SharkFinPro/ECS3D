@@ -180,7 +180,10 @@ namespace gc {
   }
 
   // A single boxed axis field: rounded inset box with a colored axis letter and a borderless DragFloat.
-  inline bool axisField(const char* axis, const ImVec4& axisCol, float* v, float width, float sensitivity)
+  // `row` names the value the three axes belong to; it is not drawn, only used to say which field a
+  // refused entry was for.
+  inline bool axisField(const char* row, const char* axis, const ImVec4& axisCol, float* v, float width,
+                        float sensitivity)
   {
     const float h = ImGui::GetFrameHeight();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -204,7 +207,7 @@ namespace gc {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     ImGui::SetNextItemWidth(width - padX * 2.0f - axisSize.x);
     const bool edited = ImGui::DragFloat("##v", v, sensitivity, 0.0f, 0.0f, "%.3f")
-      && acceptFinite(axis, v, previous);
+      && acceptFinite((std::string(row) + " " + axis).c_str(), v, previous);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     ImGui::PopID();
@@ -223,11 +226,11 @@ namespace gc {
 
     bool edited = false;
     ImGui::PushID(label);
-    edited |= axisField("X", theme::axisX, x, w, sensitivity);
+    edited |= axisField(label, "X", theme::axisX, x, w, sensitivity);
     ImGui::SameLine(0.0f, gap);
-    edited |= axisField("Y", theme::axisY, y, w, sensitivity);
+    edited |= axisField(label, "Y", theme::axisY, y, w, sensitivity);
     ImGui::SameLine(0.0f, gap);
-    edited |= axisField("Z", theme::axisZ, z, w, sensitivity);
+    edited |= axisField(label, "Z", theme::axisZ, z, w, sensitivity);
     ImGui::PopID();
 
     return edited;
