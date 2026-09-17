@@ -49,9 +49,10 @@ internal sealed class TcpBackend : TransportBackend
   // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
   // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
   // once rather than ten times over. Broadcasts run on the tick thread, so the bound is what physics and
-  // scripts can lose to the network in a tick. Two seconds because a stall then costs at most one tick's
-  // worth before the peers responsible are dropped, while still being far longer than any plausible
-  // snapshot send takes on a healthy link.
+  // scripts can lose to the network in a tick. Only the connection whose own send ran out of budget is
+  // dropped; peers the broadcast never reached are skipped for that message and kept. Two seconds because
+  // a stall then costs at most one tick's worth before the peer responsible is dropped, while still being
+  // far longer than any plausible snapshot send takes on a healthy link.
   private const int SendTimeoutMs = 2000;
 
   // -- Client --
@@ -133,20 +134,17 @@ internal sealed class TcpBackend : TransportBackend
     // One budget for the whole fan-out. A per-connection timeout would still let K stalled peers hold the
     // tick thread for K times the timeout in a single broadcast, which is the stall this avoids.
     var deadline = Environment.TickCount64 + SendTimeoutMs;
-    var starved = 0;
+    var skipped = 0;
 
     foreach (var conn in clients)
     {
       var remaining = deadline - Environment.TickCount64;
       if (remaining <= 0)
       {
-        // An earlier peer spent the budget. Drop the rest of the snapshot without attempting a send that
-        // would have no time left to complete in.
-        if (Reap(conn))
-        {
-          ++starved;
-        }
-
+        // An earlier peer spent the budget. Skip the rest of this broadcast rather than dropping them:
+        // they have done nothing wrong, and reaping them would punish healthy peers for their position in
+        // the list. They miss this one message and are sent the next broadcast as usual.
+        ++skipped;
         continue;
       }
 
@@ -170,10 +168,12 @@ internal sealed class TcpBackend : TransportBackend
       }
     }
 
-    if (starved > 0)
+    // One line per broadcast rather than one per connection, so a peer stalling tick after tick is visible
+    // in the log without burying it.
+    if (skipped > 0)
     {
       Transport.Log(TransportLogLevel.Warn,
-        $"Dropping {starved} connection(s): one broadcast spent its whole {SendTimeoutMs} ms send budget.");
+        $"Skipped {skipped} connection(s): this broadcast spent its whole {SendTimeoutMs} ms budget.");
     }
   }
 
