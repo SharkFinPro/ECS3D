@@ -64,6 +64,11 @@ internal sealed class WebSocketBackend : TransportBackend
   private Thread? _clientThread;
   private volatile bool _clientRunning;
 
+  // Comfortably under the callers' 15 s retry budget so several attempts fit, and long enough for a real
+  // WAN handshake. Unbounded, one attempt against a host that routes but never answers runs to the OS
+  // connect timeout (~21 s on Windows) and outlives the whole budget on its own.
+  private const int ConnectTimeoutMs = 3000;
+
   // A WebSocket is safe for one concurrent send and one concurrent receive, but not for concurrent sends.
   // The send lock serializes broadcasts (and any future sender) onto a single connection.
   private sealed class Connection(WebSocket socket, CancellationTokenSource cts)
@@ -292,7 +297,8 @@ internal sealed class WebSocketBackend : TransportBackend
         }
       });
 
-      ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, CancellationToken.None).GetAwaiter().GetResult();
+      using var connectCts = new CancellationTokenSource(ConnectTimeoutMs);
+      ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, connectCts.Token).GetAwaiter().GetResult();
 
       _client = ws;
       _clientInvoker = invoker;
@@ -301,6 +307,12 @@ internal sealed class WebSocketBackend : TransportBackend
       // Send role + token as the first message so the server can authorize this connection (in
       // particular grant Role.editor) before any protocol message. Same wire format everywhere.
       SendHandshake(role, token);
+    }
+    catch (OperationCanceledException)
+    {
+      Transport.Log(TransportLogLevel.Warn, $"Connect to {host}:{port} timed out after {ConnectTimeoutMs} ms.");
+      DisconnectClient();
+      return 0;
     }
     catch (Exception e)
     {

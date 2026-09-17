@@ -41,6 +41,11 @@ internal sealed class TcpBackend : TransportBackend
   private Thread? _clientThread;
   private volatile bool _clientRunning;
 
+  // Comfortably under the callers' 15 s retry budget so several attempts fit, and long enough for a real
+  // WAN handshake. Unbounded, one attempt against a host that routes but never answers runs to the OS
+  // connect timeout (~21 s on Windows) and outlives the whole budget on its own.
+  private const int ConnectTimeoutMs = 3000;
+
   public override void ServerStart(int port, bool editMode, string expectedToken)
   {
     if (_serverRunning)
@@ -244,13 +249,24 @@ internal sealed class TcpBackend : TransportBackend
 
     try
     {
+      using var connectCts = new CancellationTokenSource(ConnectTimeoutMs);
+
       _client = new TcpClient();
-      _client.Connect(host, port);
+      _client.ConnectAsync(host, port, connectCts.Token).AsTask().GetAwaiter().GetResult();
       _client.NoDelay = true;
 
       // Send role + token as the first frame so the server can authorize this connection (in
       // particular grant Role.editor) before any protocol message. Same wire format everywhere.
       SendHandshake(role, token);
+    }
+    catch (OperationCanceledException)
+    {
+      Transport.Log(TransportLogLevel.Warn, $"Connect to {host}:{port} timed out after {ConnectTimeoutMs} ms.");
+
+      try { _client?.Close(); } catch { /* ignore */ }
+      _client = null;
+
+      return 0;
     }
     catch (Exception e)
     {
