@@ -325,11 +325,11 @@ EditorApp::EditorApp(LaunchOptions options)
   // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).
   // Shared by the asset browser's scene double-click and the Inspector's "Load Scene" button.
   const auto loadScene = [this](const uuids::uuid& sceneUUID) {
-    // Every recorded command names objects in the scene being left behind.
-    m_editHistory.clear();
-
     if (const auto scene = m_sceneManager->getScene(sceneUUID))
     {
+      // Every recorded command names objects in the scene being left behind.
+      m_editHistory.clear();
+
       m_sceneManager->loadScene(scene);
     }
 
@@ -764,13 +764,16 @@ void EditorApp::handleSceneStatus(const net::Message& message)
 
   // Starting a scene snapshots the authored tree and stopping it rebuilds from that snapshot, so an edit
   // recorded on either side of the transition no longer describes the objects that are there. A
-  // pause/resume leaves the scene exactly as it is, so it keeps the history.
-  if (status != m_sceneStatus
-      && (m_sceneStatus == SceneStatus::stopped || status == SceneStatus::stopped))
+  // pause/resume leaves the scene exactly as it is, so it keeps the history. Read against the last
+  // REPORTED status rather than m_sceneStatus, whose optimistic default would make the server's first
+  // report (an edit server starts stopped) look like a stop.
+  if (m_reportedSceneStatus.has_value() && m_reportedSceneStatus.value() != status
+      && (m_reportedSceneStatus.value() == SceneStatus::stopped || status == SceneStatus::stopped))
   {
     m_editHistory.clear();
   }
 
+  m_reportedSceneStatus = status;
   m_sceneStatus = status;
 }
 

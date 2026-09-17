@@ -299,10 +299,10 @@ editor mutation is recorded**: each of `EditorApp`'s mutation callbacks (compone
 asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it sends, deriving the
 before state from the replicated view while that view still holds it, and records what comes back; an edit
 nothing faithful can be derived for (a stale view, an op with no matching kind) is logged at debug and
-skipped, never refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid the
-registry already holds replaces a record rather than adding one (a prefab body edit, "Save as Prefab" over
-an existing name), and `addAsset`'s reverse would delete the prefab instead of restoring its previous
-body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
+skipped, never refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
+prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
+"Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
+and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
 (New/Open), scene switch, (re)connect, and a play start or stop - a pause/resume is not one, since it
 leaves the scene as it is. There is still **no user-visible undo** - no menu item, no keybind, and nothing
 reads the stacks back yet.

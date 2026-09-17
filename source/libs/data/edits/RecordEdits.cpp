@@ -62,7 +62,10 @@ namespace {
 
   std::size_t indexOfSibling(const ObjectManager& view, const std::shared_ptr<Object>& object)
   {
-    const auto& siblings = siblingsUnder(view, object->getParent());
+    // Named rather than inlined into the call: siblingsUnder hands back a reference into the parent, so
+    // the parent has to outlive it.
+    const auto parent = object->getParent();
+    const auto& siblings = siblingsUnder(view, parent);
 
     for (std::size_t index = 0; index < siblings.size(); ++index)
     {
@@ -246,9 +249,10 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
 
   if (op == "duplicateObject")
   {
-    return EditCommand::duplicateObject(objectUUID.value(), createdUUID(edit),
-                                        uuidOf(object->getParent()),
-                                        appendedIndex(view, object->getParent()));
+    const auto parent = object->getParent();
+
+    return EditCommand::duplicateObject(objectUUID.value(), createdUUID(edit), uuidOf(parent),
+                                        appendedIndex(view, parent));
   }
 
   return std::nullopt;
@@ -283,6 +287,22 @@ std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset, const
   {
     return EditCommand::replaceAsset(assetUUID.value(), type, record->path, record->className,
                                      record->body, path, className, body);
+  }
+
+  // registerAsset keys off the path, not the uuid, and the uuid an op carries for a new asset is minted
+  // fresh every time (see ObjectGUIManager::saveAsPrefab). So an op whose uuid is unknown but whose path
+  // is already registered does NOT create anything under that uuid: a prefab updates the record already
+  // under that name and keeps ITS uuid, and every other type is refused outright (first-wins). Recording
+  // the incoming uuid either way would put a command on the stack targeting an asset that does not exist.
+  if (const auto* byPath = !path.empty() ? view.getByPath(path) : nullptr)
+  {
+    if (type != AssetType::Prefab || byPath->type != AssetType::Prefab)
+    {
+      return std::nullopt;
+    }
+
+    return EditCommand::replaceAsset(byPath->uuid, type, byPath->path, byPath->className, byPath->body,
+                                     path, className, body);
   }
 
   return EditCommand::addAsset(assetUUID.value(), type, path, className, body);

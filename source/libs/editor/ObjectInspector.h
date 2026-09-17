@@ -57,6 +57,12 @@ public:
   // The object body: Highlight toggle, name, components, Add Component, scripts + drop zone.
   void display(const std::shared_ptr<Object>& object);
 
+  // Hands any gathered before/after pair to the committed-edit callback and clears it. display() does
+  // this itself once a gesture ends; the panel has to call it on the frames it does NOT reach display()
+  // (nothing selected, an asset selected, the selected object gone), or the pair would sit there and be
+  // reported against whatever object is inspected next.
+  void commitPendingEdit();
+
   [[nodiscard]] bool highlightEnabled() const { return m_highlightObject; }
 
 private:
@@ -108,10 +114,6 @@ private:
   void displayScriptDragDropArea(float dropZoneStartY, const std::shared_ptr<Object>& object) const;
 
   void displayComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component);
-
-  // Hands the gathered before/after pair to the committed-edit callback and clears it. A no-op when
-  // nothing is pending or the value came back to where it started.
-  void commitPendingEdit();
 };
 
 #endif //OBJECTINSPECTOR_H

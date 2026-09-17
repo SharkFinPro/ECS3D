@@ -111,6 +111,14 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
   const AssetRecord* asset = (m_assetRegistry && selectedAssetUUID.has_value())
     ? m_assetRegistry->getByUUID(selectedAssetUUID.value()) : nullptr;
 
+  // Every path below that is not the object inspector skips its own end-of-frame commit, including the
+  // empty state's early return - so a gesture interrupted by the object vanishing or the selection
+  // moving to an asset is finished here rather than left to attach itself to the next object.
+  if (!object)
+  {
+    m_objectInspector->commitPendingEdit();
+  }
+
   // Panel header: small-caps section label + a right-aligned per-kind type chip (mockup).
   gc::sectionLabel("Inspector");
   if (object)

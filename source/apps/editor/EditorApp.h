@@ -126,6 +126,10 @@ private:
 
   SceneStatus m_sceneStatus = SceneStatus::running;
 
+  // What the server has actually reported, as opposed to m_sceneStatus's optimistic default: nullopt
+  // until the first sceneStatus arrives, so that first message is not read as a start/stop transition.
+  std::optional<SceneStatus> m_reportedSceneStatus;
+
   // The object whose Camera component the viewport looks through ("View" combo in Scene Status), letting
   // the editor see what a client sees. nullopt = the editor's own free-fly camera. Purely local: it's a
   // view choice, never replicated. Cleared when the chosen object leaves the scene or loses its Camera.

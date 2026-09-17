@@ -343,6 +343,10 @@ TEST(RecordEdits, AnUnknownOpIsNotRecorded)
   };
 
   EXPECT_FALSE(edits::commandForSceneEdit(edit, *scene.objectManager).has_value());
+
+  // Positive control: the same object under an op that does have a command kind.
+  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildDuplicateObject(scene.object->getUUID()),
+                                         *scene.objectManager).has_value());
 }
 
 TEST(RecordEdits, AMalformedUUIDIsNotRecorded)
@@ -396,6 +400,67 @@ TEST(RecordEdits, AddAssetOverAnExistingUUIDRecordsAReplaceAssetCarryingTheOldBo
   ASSERT_TRUE(command.has_value());
   EXPECT_EQ(*command, edits::EditCommand::replaceAsset(someOtherUUID(), AssetType::Prefab, "Block", "",
                                                        oldPrefabBody, "Block", "", newPrefabBody));
+}
+
+// "Save as Prefab" mints a fresh uuid every time and the registry keys prefabs by name, so the incoming
+// uuid is the one thing about the op that does not survive: the record already under that name is updated
+// in place and keeps its own. Recording the incoming uuid would leave a command naming an asset that was
+// never registered.
+TEST(RecordEdits, AddAssetOverAnExistingPrefabNameReplacesTheRecordThatNameAlreadyHolds)
+{
+  AssetScene scene;
+  SceneManager sceneManager;
+
+  scene.assetRegistry.registerAsset({ .uuid = someOtherUUID(), .type = AssetType::Prefab,
+                                      .path = "Block", .body = oldPrefabBody });
+
+  const nlohmann::json asset = {
+    { "assetType", "prefab" },
+    { "uuid", uuidString(anotherUUID()) },
+    { "name", "Block" },
+    { "body", newPrefabBody }
+  };
+
+  const auto command = edits::commandForAddAsset(asset, scene.assetRegistry);
+  ASSERT_TRUE(command.has_value());
+  EXPECT_EQ(*command, edits::EditCommand::replaceAsset(someOtherUUID(), AssetType::Prefab, "Block", "",
+                                                       oldPrefabBody, "Block", "", newPrefabBody));
+
+  // What the registry actually does with that op, which is what the command has to describe.
+  replication::applyAddAsset(scene.assetRegistry, sceneManager, scene.componentRegistry, asset);
+  EXPECT_EQ(scene.assetRegistry.getByUUID(anotherUUID()), nullptr);
+  ASSERT_NE(scene.assetRegistry.getByUUID(someOtherUUID()), nullptr);
+  EXPECT_EQ(scene.assetRegistry.getByUUID(someOtherUUID())->body, newPrefabBody);
+}
+
+TEST(RecordEdits, AddAssetOverAnExistingPathOfAnyOtherTypeIsNotRecorded)
+{
+  AssetScene scene;
+  SceneManager sceneManager;
+
+  scene.assetRegistry.registerAsset({ .uuid = someOtherUUID(), .type = AssetType::Model,
+                                      .path = "models/thing.obj" });
+
+  const nlohmann::json reimport = {
+    { "assetType", "model" },
+    { "uuid", uuidString(anotherUUID()) },
+    { "path", "models/thing.obj" }
+  };
+
+  EXPECT_FALSE(edits::commandForAddAsset(reimport, scene.assetRegistry).has_value());
+
+  // registerAsset is first-wins for everything but a prefab body, so that op registers nothing at all -
+  // there is no state change to record.
+  replication::applyAddAsset(scene.assetRegistry, sceneManager, scene.componentRegistry, reimport);
+  EXPECT_EQ(scene.assetRegistry.getByUUID(anotherUUID()), nullptr);
+
+  // Positive control: the same import at a path nothing holds yet is recorded.
+  const nlohmann::json fresh = {
+    { "assetType", "model" },
+    { "uuid", uuidString(anotherUUID()) },
+    { "path", "models/other.obj" }
+  };
+  EXPECT_TRUE(edits::commandForAddAsset(fresh, scene.assetRegistry).has_value());
 }
 
 TEST(RecordEdits, RenameAndRemoveAssetCarryTheCurrentRecord)
