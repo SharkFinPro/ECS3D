@@ -201,8 +201,9 @@ managed statics as native function pointers; inbound frames are pushed from C# s
 thread-safe `MessageQueue` and drained by the app loop. The transport backend (TCP/WebSocket) is
 selected by a single field in `Transport.cs`. The transport logs through a native `setLogCallback`
 (`net::transportLog`, category `net`), falling back to the console before it is registered. Both backends
-broadcast from a snapshot of the connection list taken under the lock and send outside it, with a bounded
-send timeout, so a peer that stops reading only disconnects itself instead of stalling the tick thread.
+broadcast from a snapshot of the connection list taken under the lock and send outside it, under one
+`SendTimeoutMs` budget shared by the whole fan-out, so peers that stop reading only disconnect themselves
+instead of stalling the tick thread.
 
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is

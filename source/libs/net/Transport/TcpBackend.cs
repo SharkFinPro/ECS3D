@@ -28,7 +28,9 @@ internal sealed class TcpBackend : TransportBackend
   private readonly object _clientsLock = new();
 
   // A socket that cleared the handshake, paired with the id C++ knows it by so a send that fails on the
-  // broadcast path can name the connection it dropped.
+  // broadcast path can name the connection it dropped. A class rather than a record on purpose: the
+  // broadcast snapshot and the receive loop both drop a connection with List.Remove, which must match by
+  // reference identity so it removes that one connection and nothing that merely looks like it.
   private sealed class Connection(TcpClient client, int connId)
   {
     public readonly TcpClient Client = client;
@@ -44,10 +46,12 @@ internal sealed class TcpBackend : TransportBackend
   // a spot on the broadcast list - forever.
   private const int HandshakeTimeoutMs = 5000;
 
-  // Bounds a blocking Write to a peer that has stopped draining its socket. Broadcasts run on the tick
-  // thread, so an unbounded Write stops physics and scripts for everyone until that one peer reads again.
-  // Two seconds because a stalled peer then costs at most one such stall before it is dropped, while still
-  // being far longer than any plausible snapshot send takes on a healthy link.
+  // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
+  // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
+  // once rather than ten times over. Broadcasts run on the tick thread, so the bound is what physics and
+  // scripts can lose to the network in a tick. Two seconds because a stall then costs at most one tick's
+  // worth before the peers responsible are dropped, while still being far longer than any plausible
+  // snapshot send takes on a healthy link.
   private const int SendTimeoutMs = 2000;
 
   // -- Client --
@@ -118,38 +122,76 @@ internal sealed class TcpBackend : TransportBackend
     var frame = Frame(type, data, len);
 
     // The fan-out runs off a snapshot so the sends happen outside _clientsLock. This is the tick thread,
-    // and a Write to a peer that has stopped reading blocks until SendTimeoutMs elapses; holding the lock
-    // across that would block the accept loop and every receive loop's cleanup along with it.
+    // and a Write to a peer that has stopped reading blocks until the budget below runs out; holding the
+    // lock across that would block the accept loop and every receive loop's cleanup along with it.
     Connection[] clients;
     lock (_clientsLock)
     {
       clients = _clients.ToArray();
     }
 
+    // One budget for the whole fan-out. A per-connection timeout would still let K stalled peers hold the
+    // tick thread for K times the timeout in a single broadcast, which is the stall this avoids.
+    var deadline = Environment.TickCount64 + SendTimeoutMs;
+    var starved = 0;
+
     foreach (var conn in clients)
     {
+      var remaining = deadline - Environment.TickCount64;
+      if (remaining <= 0)
+      {
+        // An earlier peer spent the budget. Drop the rest of the snapshot without attempting a send that
+        // would have no time left to complete in.
+        if (Reap(conn))
+        {
+          ++starved;
+        }
+
+        continue;
+      }
+
+      var sent = false;
       try
       {
+        // Never zero: SocketOptionName.SendTimeout reads 0 as "no timeout", which is what this removes.
+        conn.Client.SendTimeout = (int)Math.Max(remaining, 1);
         conn.Client.GetStream().Write(frame, 0, frame.Length);
+        sent = true;
       }
       catch
       {
-        // The connection dropped mid-send, or took longer than SendTimeoutMs to accept the frame; reap it.
+        // The connection dropped mid-send, or did not accept the frame inside the remaining budget.
+      }
+
+      if (!sent && Reap(conn))
+      {
         Transport.Log(TransportLogLevel.Warn,
           $"Dropping connection {conn.ConnId}: the send failed or timed out.");
-
-        // Closing the socket makes this connection's blocked read throw, and ServerReceiveLoop's exit path
-        // owns the DeliverServerDisconnect for it - delivering one here too would free the player slot
-        // twice. Closing an already-closed socket is harmless.
-        try { conn.Client.Close(); } catch { /* ignore */ }
-
-        lock (_clientsLock)
-        {
-          // By reference rather than by index: the list may have changed since the snapshot, and if the
-          // receive loop already removed this connection the Remove is simply a no-op.
-          _clients.Remove(conn);
-        }
       }
+    }
+
+    if (starved > 0)
+    {
+      Transport.Log(TransportLogLevel.Warn,
+        $"Dropping {starved} connection(s): one broadcast spent its whole {SendTimeoutMs} ms send budget.");
+    }
+  }
+
+  // Closes a connection and takes it off the broadcast list. True only when this call is the one that
+  // removed it: a peer that closed itself is reaped by its own receive loop, and that is an ordinary
+  // disconnect rather than something to warn about.
+  //
+  // Closing the socket makes the connection's blocked read throw, and ServerReceiveLoop's exit path owns
+  // the DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing
+  // an already-closed socket is harmless.
+  private bool Reap(Connection conn)
+  {
+    try { conn.Client.Close(); } catch { /* ignore */ }
+
+    lock (_clientsLock)
+    {
+      // By reference rather than by index: the list may have changed since the broadcast's snapshot.
+      return _clients.Remove(conn);
     }
   }
 
@@ -168,6 +210,10 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       client.NoDelay = true;
+
+      // A starting value only; each broadcast narrows this to whatever is left of its own budget. It
+      // matters because a socket defaults to no send timeout at all, and this one is set before any
+      // broadcast can reach the connection.
       client.SendTimeout = SendTimeoutMs;
 
       var connId = Interlocked.Increment(ref _nextConnId);

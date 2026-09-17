@@ -38,11 +38,13 @@ internal sealed class WebSocketBackend : TransportBackend
   //    still goes async, so it degrades to plain bandwidth cost (same as TCP) instead of a 15ms hitch.
   private const int SocketBufferSize = 1 << 20; // 1 MiB per direction.
 
-  // Bounds a send to a peer that has stopped draining its socket. Broadcasts run on the tick thread, and
-  // SendAsync completes only once the message has reached the socket's send buffer, so a peer that never
-  // reads stops physics and scripts for everyone until it does. Two seconds because a stalled peer then
-  // costs at most one such stall before it is dropped, while still being far longer than any plausible
-  // snapshot send takes on a healthy link.
+  // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
+  // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
+  // once rather than ten times over. SendAsync completes only once the message has reached the socket's
+  // send buffer, and broadcasts run on the tick thread, so the bound is what physics and scripts can lose
+  // to the network in a tick. Two seconds because a stall then costs at most one tick's worth before the
+  // peers responsible are dropped, while still being far longer than any plausible snapshot send takes on
+  // a healthy link.
   private const int SendTimeoutMs = 2000;
 
   static WebSocketBackend()
@@ -138,36 +140,64 @@ internal sealed class WebSocketBackend : TransportBackend
     var message = BuildMessage(type, data, len);
 
     // The fan-out runs off a snapshot so the sends happen outside _clientsLock. This is the tick thread,
-    // and a send to a peer that has stopped reading blocks until SendTimeoutMs elapses; holding the lock
-    // across that would block the accept path and every receive loop's cleanup along with it.
+    // and a send to a peer that has stopped reading blocks until the budget below runs out; holding the
+    // lock across that would block the accept path and every receive loop's cleanup along with it.
     Connection[] connections;
     lock (_clientsLock)
     {
       connections = _connections.ToArray();
     }
 
+    // One budget for the whole fan-out. A per-connection timeout would still let K stalled peers hold the
+    // tick thread for K times the timeout in a single broadcast, which is the stall this avoids.
+    var deadline = Environment.TickCount64 + SendTimeoutMs;
+    var starved = 0;
+
     foreach (var conn in connections)
     {
-      if (SendMessage(conn, message))
+      var remaining = deadline - Environment.TickCount64;
+      if (remaining <= 0)
       {
+        // An earlier peer spent the budget. Drop the rest of the snapshot without attempting a send that
+        // would have no time left to complete in.
+        if (Reap(conn))
+        {
+          ++starved;
+        }
+
         continue;
       }
 
-      // The connection dropped mid-send, or took longer than SendTimeoutMs to accept the message; reap it.
-      Transport.Log(TransportLogLevel.Warn,
-        $"Dropping connection {conn.ConnId}: the send failed or timed out.");
-
-      // Closing makes this connection's blocked receive return, and HandleClient's cleanup owns the
-      // DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing
-      // an already-closed connection is harmless.
-      Close(conn.Socket, conn.Cts);
-
-      lock (_clientsLock)
+      // The connection dropped mid-send, or did not accept the message inside the remaining budget.
+      if (!SendMessage(conn, message, (int)remaining) && Reap(conn))
       {
-        // By reference rather than by index: the list may have changed since the snapshot, and if the
-        // receive loop already removed this connection the Remove is simply a no-op.
-        _connections.Remove(conn);
+        Transport.Log(TransportLogLevel.Warn,
+          $"Dropping connection {conn.ConnId}: the send failed or timed out.");
       }
+    }
+
+    if (starved > 0)
+    {
+      Transport.Log(TransportLogLevel.Warn,
+        $"Dropping {starved} connection(s): one broadcast spent its whole {SendTimeoutMs} ms send budget.");
+    }
+  }
+
+  // Closes a connection and takes it off the broadcast list. True only when this call is the one that
+  // removed it: a peer that closed itself is reaped by its own receive loop, and that is an ordinary
+  // disconnect rather than something to warn about.
+  //
+  // Closing makes the connection's blocked receive return, and HandleClient's cleanup owns the
+  // DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing an
+  // already-closed connection is harmless.
+  private bool Reap(Connection conn)
+  {
+    Close(conn.Socket, conn.Cts);
+
+    lock (_clientsLock)
+    {
+      // By reference rather than by index: the list may have changed since the broadcast's snapshot.
+      return _connections.Remove(conn);
     }
   }
 
@@ -582,14 +612,15 @@ internal sealed class WebSocketBackend : TransportBackend
   }
 
   // Bounded by a linked source so a peer that has stopped reading cannot hold the tick thread: the send is
-  // cancelled after SendTimeoutMs, which fails it and takes the caller's close-and-reap path.
-  private static bool SendMessage(Connection conn, byte[] message)
+  // cancelled once timeoutMs (what is left of the broadcast's budget) elapses, which fails it and takes
+  // the caller's close-and-reap path.
+  private static bool SendMessage(Connection conn, byte[] message, int timeoutMs)
   {
     CancellationTokenSource? linked = null;
     try
     {
       linked = CancellationTokenSource.CreateLinkedTokenSource(conn.Cts.Token);
-      linked.CancelAfter(SendTimeoutMs);
+      linked.CancelAfter(timeoutMs);
 
       return SendRaw(conn.Socket, conn.SendLock, message, linked.Token);
     }
@@ -629,6 +660,6 @@ internal sealed class WebSocketBackend : TransportBackend
     try { cts?.Cancel(); } catch { /* ignore */ }
     try { ws.Abort(); } catch { /* ignore */ }
     try { ws.Dispose(); } catch { /* ignore */ }
-    cts?.Dispose();
+    try { cts?.Dispose(); } catch { /* ignore */ }
   }
 }
