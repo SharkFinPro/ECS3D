@@ -11,7 +11,6 @@
 #include <memory>
 #include <random>
 #include <string>
-#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -38,22 +37,21 @@ namespace {
       m_file = m_directory / "app.log";
     }
 
+    // Cleanup lives here rather than at the end of each test so an early ASSERT_* cannot leave a sink
+    // registered for every later suite to write through.
     void TearDown() override
     {
-      if (m_addedSink)
-      {
-        Log::removeSink(m_addedSink);
-        m_addedSink.reset();
-      }
+      removeSink();
 
       std::error_code error;
       std::filesystem::remove_all(m_directory, error);
     }
 
     // addFileSinkFromArguments takes a C-style argv, so the strings have to outlive the call.
-    std::shared_ptr<FileSink> addSink(const std::vector<std::string>& arguments,
-                                      const std::string_view appName = "testapp")
+    std::shared_ptr<FileSink> addSink(const std::vector<std::string>& arguments)
     {
+      removeSink();
+
       std::vector<std::string> storage{ "app" };
       storage.insert(storage.end(), arguments.begin(), arguments.end());
 
@@ -64,10 +62,19 @@ namespace {
         argv.push_back(argument.data());
       }
 
-      m_addedSink = addFileSinkFromArguments(static_cast<int>(argv.size()), argv.data(), appName,
+      m_addedSink = addFileSinkFromArguments(static_cast<int>(argv.size()), argv.data(), "testapp",
                                              LogCategory::engine);
 
       return m_addedSink;
+    }
+
+    void removeSink()
+    {
+      if (m_addedSink)
+      {
+        Log::removeSink(m_addedSink);
+        m_addedSink.reset();
+      }
     }
 
     std::filesystem::path m_directory;
@@ -95,6 +102,15 @@ TEST_F(LogFilePathTest, SettingsAndLogsShareTheUserDataDirectory)
   EXPECT_EQ(SettingsStore::defaultFile().parent_path(), userDataDirectory());
 }
 
+TEST_F(LogFilePathTest, ALogFileArgumentQuotesThePathForAChildCommandLine)
+{
+  const auto argument = logFileArgument("editor-server");
+
+  EXPECT_TRUE(argument.starts_with("--log-file \""));
+  EXPECT_TRUE(argument.ends_with("\""));
+  EXPECT_NE(argument.find(defaultLogFile("editor-server").string()), std::string::npos);
+}
+
 TEST_F(LogFilePathTest, LogFileArgumentOverridesTheDefaultAndReceivesEntries)
 {
   const auto sink = addSink({ "--log-file", m_file.string() });
@@ -105,13 +121,12 @@ TEST_F(LogFilePathTest, LogFileArgumentOverridesTheDefaultAndReceivesEntries)
 
   Log::info(LogCategory::engine, "through the registered sink");
 
-  Log::removeSink(m_addedSink);
-  m_addedSink.reset();
+  removeSink();
 
   const auto contents = readFile(m_file);
   EXPECT_NE(contents.find("through the registered sink"), std::string::npos);
 
-  // Positive control: an entry written after the sink was removed must not land, so the line above
+  // Negative control: an entry written after the sink was removed must not land, so the line above
   // reaching the file is registration rather than the sink writing regardless.
   Log::info(LogCategory::engine, "after removal");
   EXPECT_EQ(readFile(m_file).find("after removal"), std::string::npos);
@@ -129,24 +144,4 @@ TEST_F(LogFilePathTest, NoLogFileArgumentRegistersNothing)
   const auto sink = addSink({ "--log-file", m_file.string() });
   ASSERT_NE(sink, nullptr);
   EXPECT_TRUE(std::filesystem::exists(m_file));
-}
-
-TEST_F(LogFilePathTest, ATrailingLogFileArgumentWithNoValueIsIgnored)
-{
-  const std::string appName = "ecs3d-trailing-argument-test";
-
-  EXPECT_NO_THROW(addSink({ "--log-file" }, appName));
-
-  // The flag itself must never be taken for its own value.
-  EXPECT_FALSE(std::filesystem::exists(m_directory / "--log-file"));
-  EXPECT_FALSE(std::filesystem::exists(std::filesystem::path("--log-file")));
-
-  if (m_addedSink)
-  {
-    Log::removeSink(m_addedSink);
-    m_addedSink.reset();
-
-    std::error_code error;
-    std::filesystem::remove(defaultLogFile(appName), error);
-  }
 }

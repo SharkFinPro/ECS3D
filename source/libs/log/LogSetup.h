@@ -4,6 +4,7 @@
 #include "FileSink.h"
 #include "LogEntry.h"
 #include <memory>
+#include <string>
 #include <string_view>
 
 // Every app registers the same file sink the same way, and the GUI-subsystem builds have no console to
@@ -15,5 +16,9 @@
 // again; the apps ignore it.
 std::shared_ptr<FileSink> addFileSinkFromArguments(int argc, char** argv, std::string_view appName,
                                                    LogCategory category);
+
+// A --log-file flag for a child process's command line, with the path double quoted: the user data
+// directory contains a space on macOS, and the command line is one string that the launcher splits.
+[[nodiscard]] std::string logFileArgument(std::string_view appName);
 
 #endif  // LOGSETUP_H

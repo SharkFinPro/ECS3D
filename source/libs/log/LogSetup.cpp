@@ -55,3 +55,8 @@ std::shared_ptr<FileSink> addFileSinkFromArguments(const int argc, char** argv,
     return nullptr;
   }
 }
+
+std::string logFileArgument(const std::string_view appName)
+{
+  return "--log-file \"" + defaultLogFile(appName).string() + "\"";
+}

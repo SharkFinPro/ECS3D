@@ -349,8 +349,10 @@ is deliberately a separate, later change.
   token. Links Data+Render+EditorLib+Net+ClrHost+Log.
 - Each app's `main` registers a `ConsoleSink` with `Log` before anything else runs, then a `FileSink`
   writing to `<user data dir>/logs/<app>.log` (`editor`, `client` or `server`); `--log-file <path>`
-  writes elsewhere and `--no-log-file` registers none. All app, server and net (`ECS3DNet`) output
-  goes through `Log`.
+  writes elsewhere and `--no-log-file` registers none. A server the editor or client spawns is told to
+  log to `editor-server.log` / `client-server.log` instead, so two local servers never share one file;
+  the parent's `--log-file`/`--no-log-file` are not forwarded to it. All app, server and net
+  (`ECS3DNet`) output goes through `Log`.
 - **ECS3DLauncher** (`apps/launcher`) — a standalone C# Avalonia project-management GUI. Independent of
   the C++ toolchain and the CLR-hosting path; built via `dotnet publish`. **See its own `AGENTS.md`.**
 

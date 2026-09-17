@@ -1,5 +1,7 @@
 #include "ServerProcess.h"
 #include <filesystem>
+#include <string>
+#include <utility>
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -10,13 +12,58 @@
 #include <csignal>
 #include <cstdint>
 #include <fcntl.h>
-#include <sstream>
 #include <vector>
 #include <sys/wait.h>
 #include <unistd.h>
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #endif
+#endif
+
+#if !defined(_WIN32)
+namespace {
+  // The arguments arrive as one command line and execv wants them split. Double quotes group a token so
+  // an argument can hold a path with spaces, which the caller relies on: the per-user directory the
+  // spawned server logs into contains one on macOS. Windows leaves this to the child's own CRT parser.
+  std::vector<std::string> splitArguments(const std::string& arguments)
+  {
+    std::vector<std::string> tokens;
+
+    std::string token;
+    bool quoted = false;
+    bool started = false;
+
+    for (const char character : arguments)
+    {
+      if (character == '"')
+      {
+        quoted = !quoted;
+        started = true;
+      }
+      else if (!quoted && (character == ' ' || character == '	'))
+      {
+        if (started)
+        {
+          tokens.push_back(token);
+          token.clear();
+          started = false;
+        }
+      }
+      else
+      {
+        token.push_back(character);
+        started = true;
+      }
+    }
+
+    if (started)
+    {
+      tokens.push_back(token);
+    }
+
+    return tokens;
+  }
+}
 #endif
 
 namespace net {
@@ -68,8 +115,9 @@ bool ServerProcess::launch(const std::string& exeBaseName, const std::string& ar
   std::wstring commandLine = L"\"" + applicationName + L"\"";
   if (!arguments.empty())
   {
-    // Arguments are ASCII launch flags (e.g. "--ephemeral"), so a plain widening is sufficient.
-    commandLine += L" " + std::wstring(arguments.begin(), arguments.end());
+    // Converted through path rather than widened byte by byte: the arguments can carry a file system
+    // path (the spawned server's log file), and a user name outside ASCII would not survive that.
+    commandLine += L" " + std::filesystem::path(arguments).wstring();
   }
   std::vector<wchar_t> commandBuffer(commandLine.begin(), commandLine.end());
   commandBuffer.push_back(L'\0');
@@ -125,13 +173,12 @@ bool ServerProcess::launch(const std::string& exeBaseName, const std::string& ar
   const std::string serverExePath = serverExe.string();
   const std::string workingDir = exeDir.string();
 
-  // Build argv: the server path followed by the (space-separated ASCII) launch flags. execv wants a
-  // null-terminated array of writable C strings, so keep the backing strings alive in argStorage.
+  // Build argv: the server path followed by the launch flags. execv wants a null-terminated array of
+  // writable C strings, so keep the backing strings alive in argStorage.
   std::vector<std::string> argStorage { serverExePath };
-  std::istringstream argStream(arguments);
-  for (std::string token; argStream >> token;)
+  for (auto& token : splitArguments(arguments))
   {
-    argStorage.push_back(token);
+    argStorage.push_back(std::move(token));
   }
 
   std::vector<char*> argv;
