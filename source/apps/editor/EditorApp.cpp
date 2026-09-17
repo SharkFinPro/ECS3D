@@ -403,6 +403,12 @@ void EditorApp::run()
       }
     }
 
+    if (m_netClient->takeConnectionLost())
+    {
+      logMessage("Error", "Connection to the server was lost. Save your work and restart the editor.");
+      m_serverEditable = false;
+    }
+
     sendInput();
 
     handlePicking();
