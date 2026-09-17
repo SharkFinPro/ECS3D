@@ -2,6 +2,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cstdint>
+#include <limits>
+
 namespace {
   bool isVector3Value(const nlohmann::json& value)
   {
@@ -19,6 +22,20 @@ namespace {
     }
 
     return true;
+  }
+
+  // A json integer is wider than int, and the native setter's get<int>() would narrow it silently.
+  bool fitsInInt(const nlohmann::json& value)
+  {
+    if (value.is_number_unsigned())
+    {
+      return value.get<std::uint64_t>() <= static_cast<std::uint64_t>(std::numeric_limits<int>::max());
+    }
+
+    const auto wide = value.get<std::int64_t>();
+
+    return wide >= static_cast<std::int64_t>(std::numeric_limits<int>::min())
+        && wide <= static_cast<std::int64_t>(std::numeric_limits<int>::max());
   }
 }
 
@@ -53,7 +70,16 @@ namespace scripting {
     }
     else if (tag == "int")
     {
+      if (value.is_number_integer() && !fitsInInt(value))
+      {
+        return "field '" + name + "' value is out of range for int";
+      }
+
       matches = value.is_number_integer();
+    }
+    else if (tag == "string")
+    {
+      matches = value.is_string();
     }
     else if (tag == "bool")
     {
@@ -70,7 +96,7 @@ namespace scripting {
 
     if (!matches)
     {
-      return "field '" + name + "' value is not a " + tag;
+      return "field '" + name + "' value does not match type " + tag;
     }
 
     return {};

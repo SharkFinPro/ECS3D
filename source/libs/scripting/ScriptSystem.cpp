@@ -425,6 +425,8 @@ void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,
     const std::string type = field.at("type");
     const auto fieldName = name.c_str();
 
+    // A well-formed "string" field falls through every branch below: the ABI has no string setter, so
+    // it is dropped without a warning rather than reported as bad input.
     if (type == "float")
     {
       m_engine->setFieldFloat(uuidStr.c_str(), className.c_str(), fieldName, field.at("value").get<float>());
