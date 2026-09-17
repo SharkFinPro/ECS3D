@@ -79,8 +79,15 @@ private:
     std::string type;
   };
 
+  // The (uuid, class) pair behind a cache key, kept alongside it so an entry whose Script component is
+  // gone can still be stopped and detached without parsing the key back apart.
+  struct AttachedScript {
+    uuids::uuid uuid;
+    std::string className;
+  };
+
   // key = uuid + "_" + className (cacheKey)
-  std::unordered_set<std::string> m_attached;
+  std::unordered_map<std::string, AttachedScript> m_attached;
   std::unordered_map<std::string, std::vector<ExposedField>> m_fieldCache;
 
   // Instances that have had their C# start() called. attachAll() (run every broadcastSnapshot, whether
@@ -103,6 +110,11 @@ private:
   void attach(const Object& object, const Script& script);
 
   void detach(const uuids::uuid& uuid, const std::string& className);
+
+  // Stop and detach every instance whose Script component is no longer on an object, since every other
+  // loop here only visits scripts the objects still return. Without the sweep a stale key outlives its
+  // component and a later script of the same class on the same object would silently reuse its instance.
+  void detachOrphans(const ObjectManager& objectManager);
 
   // Call the instance's C# start() exactly once - a no-op on every call after the first for the same
   // (uuid, className). Safe to call unconditionally from the running tick loop, whether the instance was

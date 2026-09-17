@@ -92,6 +92,10 @@ void ScriptSystem::stop(ObjectManager& objectManager)
       detach(uuid, className);
     }
   }
+
+  // Anything still attached belongs to a Script component or an object that left the scene during the
+  // run; the loop above cannot reach it, so the sweep is what leaves m_attached empty.
+  detachOrphans(objectManager);
 }
 
 void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
@@ -103,6 +107,10 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
   BindingContext::setObjectManager(&objectManager);
 
   checkForScriptChanges(objectManager, dt);
+
+  // Before the attach loop, so a script removed and re-added as the same class between ticks finds its
+  // old key already gone and attaches a fresh instance instead of reusing the stale one.
+  detachOrphans(objectManager);
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -227,6 +235,10 @@ void ScriptSystem::attachAll(ObjectManager& objectManager)
 
   BindingContext::setObjectManager(&objectManager);
 
+  // A script removed while the scene is stopped must not keep its instance either; sweeping first also
+  // keeps a same-class re-add from reusing the old one.
+  detachOrphans(objectManager);
+
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -345,7 +357,7 @@ void ScriptSystem::attach(const Object& object, const Script& script)
   const auto uuidStr = uuids::to_string(uuid);
 
   m_engine->attachScript(uuidStr.c_str(), className.c_str());
-  m_attached.insert(key);
+  m_attached.emplace(key, AttachedScript{ uuid, className });
 
   // Cache the instance's exposed fields (name/type) so we can read them back later for snapshots.
   auto& fields = m_fieldCache[key];
@@ -366,6 +378,45 @@ void ScriptSystem::detach(const uuids::uuid& uuid, const std::string& className)
   m_attached.erase(key);
   m_fieldCache.erase(key);
   m_started.erase(key);
+}
+
+void ScriptSystem::detachOrphans(const ObjectManager& objectManager)
+{
+  std::unordered_set<std::string> liveKeys;
+
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    for (const auto& scriptComponent : object->getScripts())
+    {
+      const auto script = std::dynamic_pointer_cast<Script>(scriptComponent);
+      if (!script)
+      {
+        continue;
+      }
+
+      liveKeys.insert(cacheKey(object->getUUID(), script->getClassName()));
+    }
+  }
+
+  // Collected first because detach() erases from m_attached.
+  std::vector<AttachedScript> orphans;
+  for (const auto& [key, attached] : m_attached)
+  {
+    if (!liveKeys.contains(key))
+    {
+      orphans.push_back(attached);
+    }
+  }
+
+  for (const auto& orphan : orphans)
+  {
+    if (m_started.contains(cacheKey(orphan.uuid, orphan.className)))
+    {
+      m_engine->stop(uuids::to_string(orphan.uuid).c_str(), orphan.className.c_str());
+    }
+
+    detach(orphan.uuid, orphan.className);
+  }
 }
 
 void ScriptSystem::startIfNeeded(const uuids::uuid& uuid, const std::string& className)

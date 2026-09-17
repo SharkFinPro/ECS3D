@@ -244,7 +244,10 @@ against bound/notYetBound/nativeOnly; a new enumerator with no row fails the bui
 without deciding its scripting story can't go unnoticed. `LogBindings` gives scripts `Log.trace/debug/
 info/warn/error` through `ECS3DLog` under `LogCategory::script`, registered first in `registerBindings` so
 everything the bridge itself logs afterwards - init, hot-reload, compilation - already has a binding to
-write through.
+write through. Instance lifetime tracks the live component set in both directions: a Script added to a
+running scene is attached and started by the next tick, and the mirror image holds too - a script removed
+mid-run (or whose object is destroyed) is stopped and detached by a per-tick orphan sweep, so a re-added
+script of the same class gets a fresh instance rather than the stale one.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.
