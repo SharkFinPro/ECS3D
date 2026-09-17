@@ -14,8 +14,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <limits>
 #include <new>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -450,8 +453,12 @@ namespace {
     std::size_t height = 0;
   };
 
+  // seenInThisBody accumulates every uuid already visited by this walk (across the whole recursion, not
+  // just siblings): checking a node's uuid only against the live manager would let two nodes in the same
+  // body share a uuid neither of which exists yet, and both would still get registered - the same
+  // uuid-keyed corruption the live-manager check exists to prevent, just from within the body itself.
   RestoreBodyWalk walkRestoreBody(const ObjectManager& objectManager, const nlohmann::json& node,
-                                  const std::size_t depth)
+                                  const std::size_t depth, std::unordered_set<uuids::uuid>& seenInThisBody)
   {
     if (depth > maxObjectDepth || !node.is_object() || !node.contains("uuid"))
     {
@@ -465,13 +472,22 @@ namespace {
     }
 
     RestoreBodyWalk result;
-    result.collides = objectManager.getObjectByUUID(nodeUUID.value()) != nullptr;
+    result.collides = objectManager.getObjectByUUID(nodeUUID.value()) != nullptr
+      || !seenInThisBody.insert(nodeUUID.value()).second;
 
     if (node.contains("children"))
     {
+      // serialize() always writes "children" as an array, and building anything from one that is not -
+      // a string, a number, whatever a malformed wire payload sends - would iterate over the wrong thing
+      // (or, for a scalar, over the node's own single value) instead of failing cleanly.
+      if (!node.at("children").is_array())
+      {
+        return { .malformed = true };
+      }
+
       for (const auto& child : node.at("children"))
       {
-        const auto childResult = walkRestoreBody(objectManager, child, depth + 1);
+        const auto childResult = walkRestoreBody(objectManager, child, depth + 1, seenInThisBody);
         if (childResult.malformed)
         {
           return childResult;
@@ -596,12 +612,35 @@ namespace {
         return SceneEditResult::malformedEdit;
       }
 
+      // Checked as an explicit range against std::size_t's own limits rather than by casting into a
+      // signed type and looking for wraparound - a value near UINT64_MAX read into a signed type is
+      // implementation-defined at best, so it should never be the thing this refusal relies on.
       const auto& indexField = edit.at("index");
-      if (!indexField.is_number_integer() || indexField.get<long long>() < 0)
+      std::size_t index = 0;
+      if (indexField.is_number_unsigned())
+      {
+        const auto rawIndex = indexField.get<std::uint64_t>();
+        if (rawIndex > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        index = static_cast<std::size_t>(rawIndex);
+      }
+      else if (indexField.is_number_integer())
+      {
+        const auto rawIndex = indexField.get<std::int64_t>();
+        if (rawIndex < 0)
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        index = static_cast<std::size_t>(rawIndex);
+      }
+      else
       {
         return SceneEditResult::malformedEdit;
       }
-      const std::size_t index = static_cast<std::size_t>(indexField.get<long long>());
 
       // Same "named parent" handling as addObject/instantiatePrefab: absent means the scene root, named
       // and unresolvable is a stale view rather than a silent root.
@@ -621,7 +660,8 @@ namespace {
         }
       }
 
-      const auto bodyWalk = walkRestoreBody(objectManager, body, 0);
+      std::unordered_set<uuids::uuid> seenInThisBody;
+      const auto bodyWalk = walkRestoreBody(objectManager, body, 0, seenInThisBody);
       if (bodyWalk.malformed)
       {
         return SceneEditResult::malformedEdit;

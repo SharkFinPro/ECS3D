@@ -730,6 +730,48 @@ TEST(SceneEdit, RestoreObjectIsRejectedWhenABodyUuidAlreadyExists)
   EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(rootCollision, nullptr, 0)), SceneEditResult::applied);
 }
 
+// Checking each node's uuid only against the live manager would miss two nodes in the same body sharing
+// a uuid that neither one has yet - both would still get registered and corrupt getObjectByUUID.
+TEST(SceneEdit, RestoreObjectIsRejectedWhenTwoNodesInTheBodyShareAUuid)
+{
+  const auto scene = makeScene();
+
+  const auto sharedUUID = anotherUUID();
+
+  nlohmann::json firstChild = trivialBody();
+  firstChild["uuid"] = uuids::to_string(sharedUUID);
+  nlohmann::json secondChild = trivialBody();
+  secondChild["uuid"] = uuids::to_string(sharedUUID);
+
+  nlohmann::json root = trivialBody();
+  root["uuid"] = uuids::to_string(uuids::uuid::from_string("00000000-0000-0000-0000-000000000004").value());
+  root["children"] = nlohmann::json::array({ firstChild, secondChild });
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(root, nullptr, 0)), SceneEditResult::rejected);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(sharedUUID), nullptr);
+
+  // Positive control: the same shape restores fine once the duplicate child gets a distinct uuid.
+  secondChild["uuid"] = uuids::to_string(uuids::uuid::from_string("00000000-0000-0000-0000-000000000005").value());
+  root["children"] = nlohmann::json::array({ firstChild, secondChild });
+
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(root, nullptr, 0)), SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before + 3);
+}
+
+TEST(SceneEdit, ReportsARestoreObjectBodyWithANonArrayChildrenFieldAsMalformed)
+{
+  const auto scene = makeScene();
+
+  nlohmann::json body = trivialBody();
+  body["children"] = "not-an-array";
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(body, nullptr, 0)), SceneEditResult::malformedEdit);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+}
+
 TEST(SceneEdit, ReportsARestoreObjectBodyWithoutAUuidAsMalformed)
 {
   const auto scene = makeScene();
