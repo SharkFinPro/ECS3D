@@ -2,12 +2,15 @@
 
 #include <Protocol.h>
 
+#include <algorithm>
 #include <bit>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 namespace {
   // Trivially copyable, and padded: the bool leaves three trailing bytes holding whatever the stack last
@@ -329,6 +332,86 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectSpawned));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectDestroyed));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::playerSlot));
+}
+
+TEST(ProtocolFraming, ConstructingFromABufferFramesItExactlyAsTheWritePathWould)
+{
+  net::Message written(net::MessageType::snapshot);
+  written.write<uint32_t>(0xDEADBEEFu);
+  written.writeString("payload");
+  written.write<float>(0.25f);
+
+  const std::vector<uint8_t> received(written.bytes().begin(), written.bytes().end());
+
+  const net::Message message(net::MessageType::snapshot, received);
+
+  EXPECT_EQ(message.getType(), net::MessageType::snapshot);
+  ASSERT_EQ(message.size(), received.size());
+  EXPECT_TRUE(std::equal(message.bytes().begin(), message.bytes().end(), received.begin()));
+
+  // The inbound path has to hand the reader the same bytes the write path produced, or a snapshot that
+  // survived the wire would be read back at the wrong offsets.
+  net::MessageReader reader(message);
+
+  EXPECT_EQ(reader.read<uint32_t>(), 0xDEADBEEFu);
+  EXPECT_EQ(reader.readString(), "payload");
+  EXPECT_EQ(reader.read<float>(), 0.25f);
+  EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ProtocolFraming, AppendedBytesSitBetweenTheValuesWrittenAroundThem)
+{
+  const std::string dumped("{\"k\":1}");
+  const std::span raw(reinterpret_cast<const uint8_t*>(dumped.data()), dumped.size());
+
+  net::Message message(net::MessageType::sceneEdit);
+  message.write<uint32_t>(static_cast<uint32_t>(dumped.size()));
+  message.appendBytes(raw);
+  message.write<int32_t>(-7);
+
+  net::MessageReader reader(message);
+
+  const auto bodySize = reader.read<uint32_t>();
+  ASSERT_EQ(bodySize, dumped.size());
+
+  std::string body;
+  for (uint32_t i = 0; i < bodySize; ++i)
+  {
+    body.push_back(static_cast<char>(reader.read<uint8_t>()));
+  }
+
+  EXPECT_EQ(body, dumped);
+  EXPECT_EQ(reader.read<int32_t>(), -7);
+  EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ProtocolFraming, AnEmptyBufferConstructsAnEmptyMessage)
+{
+  // The editor's join carries no payload and the server keys on that, so an empty span has to make an
+  // ordinary empty message rather than anything the reader trips over.
+  const net::Message message(net::MessageType::join, std::span<const uint8_t>());
+
+  EXPECT_EQ(message.getType(), net::MessageType::join);
+  EXPECT_EQ(message.size(), 0u);
+
+  net::MessageReader reader(message);
+  EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ProtocolFraming, AMessageFromABufferDoesNotAliasIt)
+{
+  std::vector<uint8_t> received{1u, 2u, 3u, 4u};
+
+  const net::Message message(net::MessageType::stateDelta, received);
+
+  received[0] = 0xFFu;
+  received.clear();
+
+  // The transport owns the buffer only for the duration of the callback; the message it produced has to
+  // keep its own copy or the inbox would be reading freed memory on the tick thread.
+  ASSERT_EQ(message.size(), 4u);
+  EXPECT_EQ(message.bytes()[0], 1u);
+  EXPECT_EQ(message.bytes()[3], 4u);
 }
 
 TEST(ProtocolFraming, ATruncatedStringPrefixLeavesTheReaderWhereItWas)
