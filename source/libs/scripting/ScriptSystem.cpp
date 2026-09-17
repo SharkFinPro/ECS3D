@@ -55,7 +55,7 @@ void ScriptSystem::start(ObjectManager& objectManager)
         continue;
       }
 
-      attach(*object, *script);
+      attach(*object, script);
       startIfNeeded(object->getUUID(), script->getClassName());
     }
   }
@@ -108,8 +108,8 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
 
   checkForScriptChanges(objectManager, dt);
 
-  // Before the attach loop, so a script removed and re-added as the same class between ticks finds its
-  // old key already gone and attaches a fresh instance instead of reusing the stale one.
+  // Before the attach loop, so an instance orphaned since the last sweep is gone by the time attach
+  // looks at the component that replaced it.
   detachOrphans(objectManager);
 
   for (const auto& object : objectManager.getAllObjects())
@@ -127,7 +127,7 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
       // spawnPrefab).
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
-        attach(*object, *script);
+        attach(*object, script);
       }
 
       // The scene is running here (fixedUpdate is only called while it is), so any instance that isn't
@@ -235,8 +235,8 @@ void ScriptSystem::attachAll(ObjectManager& objectManager)
 
   BindingContext::setObjectManager(&objectManager);
 
-  // A script removed while the scene is stopped must not keep its instance either; sweeping first also
-  // keeps a same-class re-add from reusing the old one.
+  // A script removed while the scene is stopped must not keep its instance either. This runs on every
+  // scene edit's snapshot, so an orphan is usually already gone before the next tick sees it.
   detachOrphans(objectManager);
 
   for (const auto& object : objectManager.getAllObjects())
@@ -251,7 +251,7 @@ void ScriptSystem::attachAll(ObjectManager& objectManager)
 
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
-        attach(*object, *script);
+        attach(*object, script);
       }
     }
   }
@@ -343,10 +343,10 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
   }
 }
 
-void ScriptSystem::attach(const Object& object, const Script& script)
+void ScriptSystem::attach(const Object& object, const std::shared_ptr<Script>& script)
 {
   const auto uuid = object.getUUID();
-  const auto className = script.getClassName();
+  const auto className = script->getClassName();
   const auto key = cacheKey(uuid, className);
 
   if (m_attached.contains(key))
@@ -357,7 +357,7 @@ void ScriptSystem::attach(const Object& object, const Script& script)
   const auto uuidStr = uuids::to_string(uuid);
 
   m_engine->attachScript(uuidStr.c_str(), className.c_str());
-  m_attached.emplace(key, AttachedScript{ uuid, className });
+  m_attached.emplace(key, AttachedScript{ uuid, className, script });
 
   // Cache the instance's exposed fields (name/type) so we can read them back later for snapshots.
   auto& fields = m_fieldCache[key];
@@ -367,7 +367,7 @@ void ScriptSystem::attach(const Object& object, const Script& script)
     fields.push_back({ f.at("name").get<std::string>(), f.at("type").get<std::string>() });
   }
 
-  writeFieldsToInstance(uuid, className, script.getFields());
+  writeFieldsToInstance(uuid, className, script->getFields());
 }
 
 void ScriptSystem::detach(const uuids::uuid& uuid, const std::string& className)
@@ -382,7 +382,13 @@ void ScriptSystem::detach(const uuids::uuid& uuid, const std::string& className)
 
 void ScriptSystem::detachOrphans(const ObjectManager& objectManager)
 {
-  std::unordered_set<std::string> liveKeys;
+  if (m_attached.empty())
+  {
+    return;
+  }
+
+  std::unordered_map<std::string, const Component*> liveScripts;
+  liveScripts.reserve(m_attached.size());
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -394,23 +400,26 @@ void ScriptSystem::detachOrphans(const ObjectManager& objectManager)
         continue;
       }
 
-      liveKeys.insert(cacheKey(object->getUUID(), script->getClassName()));
+      liveScripts.emplace(cacheKey(object->getUUID(), script->getClassName()), script.get());
     }
   }
 
   // Collected first because detach() erases from m_attached.
-  std::vector<AttachedScript> orphans;
+  std::vector<std::pair<std::string, AttachedScript>> orphans;
   for (const auto& [key, attached] : m_attached)
   {
-    if (!liveKeys.contains(key))
+    // A different component under the same key is a replacement, not a survivor: the instance belongs
+    // to the Script that is gone, so it is stopped and the new component attaches its own.
+    const auto live = liveScripts.find(key);
+    if (live == liveScripts.end() || live->second != attached.component.lock().get())
     {
-      orphans.push_back(attached);
+      orphans.emplace_back(key, attached);
     }
   }
 
-  for (const auto& orphan : orphans)
+  for (const auto& [key, orphan] : orphans)
   {
-    if (m_started.contains(cacheKey(orphan.uuid, orphan.className)))
+    if (m_started.contains(key))
     {
       m_engine->stop(uuids::to_string(orphan.uuid).c_str(), orphan.className.c_str());
     }
