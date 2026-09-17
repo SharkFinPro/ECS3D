@@ -249,10 +249,15 @@ internal sealed class TcpBackend : TransportBackend
 
     try
     {
-      using var connectCts = new CancellationTokenSource(ConnectTimeoutMs);
-
       _client = new TcpClient();
-      _client.ConnectAsync(host, port, connectCts.Token).AsTask().GetAwaiter().GetResult();
+
+      // Scoped to the connect alone: disposing the source kills its pending timer, so a slow but
+      // successful connect cannot be aborted once the connection is live.
+      using (var connectCts = new CancellationTokenSource(ConnectTimeoutMs))
+      {
+        _client.ConnectAsync(host, port, connectCts.Token).AsTask().GetAwaiter().GetResult();
+      }
+
       _client.NoDelay = true;
 
       // Send role + token as the first frame so the server can authorize this connection (in
@@ -271,7 +276,10 @@ internal sealed class TcpBackend : TransportBackend
     catch (Exception e)
     {
       Transport.Log(TransportLogLevel.Warn, $"Client failed to connect to {host}:{port}: {e.Message}");
+
+      try { _client?.Close(); } catch { /* ignore */ }
       _client = null;
+
       return 0;
     }
 

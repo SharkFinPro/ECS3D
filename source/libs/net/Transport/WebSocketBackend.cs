@@ -265,16 +265,20 @@ internal sealed class WebSocketBackend : TransportBackend
       return 1;
     }
 
+    // Held out here so a failure before the fields below take ownership can still dispose them.
+    ClientWebSocket? ws = null;
+    HttpMessageInvoker? invoker = null;
+
     try
     {
-      var ws = new ClientWebSocket();
+      ws = new ClientWebSocket();
       ws.Options.KeepAliveInterval = KeepAlive;
 
       // ClientWebSocket gives no way to set NoDelay on its socket, so it would otherwise leave Nagle's
       // algorithm enabled - small per-tick messages get held ~40ms (Nagle + delayed ACK), the lag the
       // TCP backend avoids by setting NoDelay on both ends. A ConnectCallback lets us own the socket and
       // disable Nagle ourselves.
-      var invoker = new HttpMessageInvoker(new SocketsHttpHandler
+      invoker = new HttpMessageInvoker(new SocketsHttpHandler
       {
         ConnectCallback = static async (context, ct) =>
         {
@@ -297,8 +301,12 @@ internal sealed class WebSocketBackend : TransportBackend
         }
       });
 
-      using var connectCts = new CancellationTokenSource(ConnectTimeoutMs);
-      ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, connectCts.Token).GetAwaiter().GetResult();
+      // Scoped to the connect alone: disposing the source kills its pending timer, so a slow but
+      // successful connect cannot be aborted once the connection is live.
+      using (var connectCts = new CancellationTokenSource(ConnectTimeoutMs))
+      {
+        ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, connectCts.Token).GetAwaiter().GetResult();
+      }
 
       _client = ws;
       _clientInvoker = invoker;
@@ -312,12 +320,14 @@ internal sealed class WebSocketBackend : TransportBackend
     {
       Transport.Log(TransportLogLevel.Warn, $"Connect to {host}:{port} timed out after {ConnectTimeoutMs} ms.");
       DisconnectClient();
+      DisposeClientPieces(ws, invoker);
       return 0;
     }
     catch (Exception e)
     {
       Transport.Log(TransportLogLevel.Warn, $"Client failed to connect to {host}:{port}: {e.Message}");
       DisconnectClient();
+      DisposeClientPieces(ws, invoker);
       return 0;
     }
 
@@ -328,6 +338,15 @@ internal sealed class WebSocketBackend : TransportBackend
 
     Transport.Log(TransportLogLevel.Info, $"Connected to {host}:{port}.");
     return 1;
+  }
+
+  // A connect that fails before the client fields take ownership leaves the socket and its invoker as
+  // locals that DisconnectClient cannot see, so a retry loop would otherwise drop a pair per attempt.
+  // Safe to call once the fields did take them: both disposals are idempotent.
+  private static void DisposeClientPieces(ClientWebSocket? ws, HttpMessageInvoker? invoker)
+  {
+    try { ws?.Dispose(); } catch { /* ignore */ }
+    try { invoker?.Dispose(); } catch { /* ignore */ }
   }
 
   public override void ClientDisconnect()
