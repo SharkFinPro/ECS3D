@@ -1,19 +1,10 @@
 #include "SettingsStore.h"
 #include <Log.h>
-#include <cstdlib>
+#include <UserDataDirectory.h>
 #include <fstream>
 #include <utility>
 
 namespace {
-  // Absent or empty is the interesting case: getenv returns null on Windows for an unset variable and
-  // an empty string is just as useless as one.
-  const char* environmentPath(const char* name)
-  {
-    const char* value = std::getenv(name);
-
-    return value && *value ? value : nullptr;
-  }
-
   // rename is specified to replace an existing regular file, but on Windows it goes through the OS move
   // and can still fail when something else has the destination open - an indexer or a virus scanner
   // holding settings.json is enough. Clearing the destination and retrying costs the atomicity of that
@@ -37,37 +28,7 @@ namespace {
 
 std::filesystem::path SettingsStore::defaultFile()
 {
-  std::filesystem::path directory;
-
-#ifdef _WIN32
-  if (const char* appData = environmentPath("APPDATA"))
-  {
-    directory = std::filesystem::path(appData) / "ECS3D";
-  }
-#elif defined(__APPLE__)
-  if (const char* home = environmentPath("HOME"))
-  {
-    directory = std::filesystem::path(home) / "Library" / "Application Support" / "ECS3D";
-  }
-#else
-  if (const char* configHome = environmentPath("XDG_CONFIG_HOME"))
-  {
-    directory = std::filesystem::path(configHome) / "ECS3D";
-  }
-  else if (const char* home = environmentPath("HOME"))
-  {
-    directory = std::filesystem::path(home) / ".config" / "ECS3D";
-  }
-#endif
-
-  // With no home directory to resolve against, a path under the working directory still lets the editor
-  // start and persist settings.
-  if (directory.empty())
-  {
-    directory = std::filesystem::path("ECS3D");
-  }
-
-  return directory / "settings.json";
+  return userDataDirectory() / "settings.json";
 }
 
 SettingsStore::SettingsStore(std::filesystem::path file, const std::chrono::milliseconds writeDelay)

@@ -2,6 +2,7 @@
 #include "ConsoleWindow.h"
 #include <Log.h>
 #include <ConsoleSink.h>
+#include <LogSetup.h>
 #include <memory>
 #include <iostream>
 #include <string>
@@ -21,6 +22,8 @@ int main(const int argc, char** argv)
         break;
       }
     }
+
+    addFileSinkFromArguments(argc, argv, "editor", LogCategory::editor);
 
     // Defaults to spawning a local edit server. --host attaches to an existing server instead.
     EditorApp::LaunchOptions options;
