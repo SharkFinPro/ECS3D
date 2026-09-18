@@ -29,9 +29,9 @@
 | `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` option, MSVC export-all-symbols. Then `add_subdirectory(source)`. |
 | `CMakePresets.json` | Configure presets only: `ecs3d-debug`, `ecs3d-release`, `ecs3d-sanitize`, writing to `cmake-build-ecs3d-debug` / `-release` / `-sanitize`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
-| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for a future editor console panel), `FileSink` (UTC-timestamped lines to a file, truncated per run), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI-subsystem apps. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` at startup. |
+| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for a future editor console panel), `FileSink` (UTC-timestamped lines to a file, truncated per run), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI-subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
-| `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk, plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW's numeric key/mod values spelled out as literals so this library still depends on nothing but json and ECS3DLog. **Not** project data: see Development Principles. |
+| `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW's numeric key/mod values spelled out as literals so this library still depends on nothing but json and ECS3DLog. **Not** project data: see Development Principles. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`, `edits/` (`EditCommand`/`EditHistory` — the undo/redo stack, see Editor Undo/Redo below). **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune), calling the GJK/EPA narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
@@ -337,19 +337,27 @@ is deliberately a separate, later change.
 
 - **ECS3DServer** (`apps/server`) — headless authoritative sim. `main.cpp` parses `--project`, `--port`,
   `--edit` (allow editor connections), `--ephemeral` (exit when the last connection drops — a spawned
-  local server), `--token`. Links Data+Sim+Scripting+Net+ClrHost+Log. Ships `defaultAssets/` and generates
-  a built-in `DefaultProject` when no `--project` is given.
+  local server), `--token`, `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
+  Ships `defaultAssets/` and generates a built-in `DefaultProject` when no `--project` is given.
 - **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project`/`--console`
-  (opens a console window; Windows builds are GUI-subsystem and have none by default). Links
+  (opens a console window; Windows builds are GUI-subsystem and have none by
+  default)/`--log-file`/`--no-log-file`. Links
   Data+Render+Net+ClrHost+Log. Spawns a local server for singleplayer; `--host` connects to an existing
   server instead.
 - **ECS3DEditor** (`apps/editor`) — client + ImGui tooling (object tree, inspector, asset browser, scene
   controls, save/load). `--host`/`--port`/`--project`/`--token` (edit token when attaching to an existing
   edit server)/`--console` (opens a console window; Windows builds are GUI-subsystem and have none by
-  default). By default spawns its own `--edit` server with a generated token. Links
-  Data+Render+EditorLib+Net+ClrHost+Log.
-- Each app's `main` registers a `ConsoleSink` with `Log` before anything else runs; all app, server and
-  net (`ECS3DNet`) output goes through `Log`.
+  default)/`--log-file`/`--no-log-file`. By default spawns its own `--edit` server with a generated
+  token. Links Data+Render+EditorLib+Net+ClrHost+Log.
+- Each app's `main` registers a `ConsoleSink` with `Log` before anything else runs, then a `FileSink`
+  writing to `<user data dir>/logs/<app>.log` (`editor`, `client` or `server`); `--log-file <path>`
+  writes elsewhere and `--no-log-file` registers none. A server the editor or client spawns is told to
+  log to `editor-server.log` / `client-server.log` instead, so two local servers never share one file;
+  the parent's `--log-file`/`--no-log-file` are not forwarded to it. All app, server and net
+  (`ECS3DNet`) output goes through `Log`.
+- `net::ServerProcess::launch` takes the child's flags as one string; a token holding spaces may be
+  double quoted (there is no escape for a quote inside one). POSIX splits the string itself, honoring
+  those quotes; Windows hands it to the child's CRT, which parses them the same way.
 - **ECS3DLauncher** (`apps/launcher`) — a standalone C# Avalonia project-management GUI. Independent of
   the C++ toolchain and the CLR-hosting path; built via `dotnet publish`. **See its own `AGENTS.md`.**
 
