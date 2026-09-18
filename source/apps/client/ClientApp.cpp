@@ -17,6 +17,7 @@
 #include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <Log.h>
+#include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <chrono>
 #include <exception>
@@ -156,7 +157,11 @@ void ClientApp::connectToServer()
     m_serverProcess = std::make_unique<net::ServerProcess>();
     // --ephemeral: this spawned server should exit when its last connection drops, so it can't outlive
     // the client if the RAII terminate is ever missed (e.g. an abnormal exit).
-    if (!m_serverProcess->launch("ECS3DServer", "--ephemeral", m_options.showServerConsole))
+    // Its own log file rather than the server's default: a client and an editor on one machine would
+    // otherwise truncate and interleave the same one. This app's --log-file/--no-log-file are not
+    // forwarded - the child's log is the child's.
+    const std::string arguments = "--ephemeral " + logFileArgument("client-server");
+    if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {
       Log::error(LogCategory::client, "Failed to launch local server (ECS3DServer) next to this executable.");
     }
