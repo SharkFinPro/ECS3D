@@ -1,6 +1,7 @@
 #include "ServerApp.h"
 #include <Log.h>
 #include <ConsoleSink.h>
+#include <LogSetup.h>
 #include <memory>
 #include <string>
 
@@ -9,6 +10,8 @@ int main(const int argc, char** argv)
   try
   {
     Log::addSink(std::make_shared<ConsoleSink>());
+
+    addFileSinkFromArguments(argc, argv, "server", LogCategory::server);
 
     // --edit is the launch-capability gate that allows editor connections; absent it the server is a
     // pure play server. --token, when set, is the secret an editor must present to be authorized.
