@@ -278,7 +278,7 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
 `io.WantCaptureKeyboard`, which only trips for text input, so WASD reaches the game from either view.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
-deliberately headless (`ECS3DData` only). The design decision that shapes it: **undo is a new edit, never a
+deliberately headless (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, never a
 local rewind** - undoing sends an ordinary reverse edit back through the normal replication path and waits
 for the rebroadcast like any other change, so the server stays the single source of truth and every
 connected view converges the same way. A command records its target uuid(s) and a before/after state in
@@ -299,7 +299,7 @@ editor mutation is recorded**: each of `EditorApp`'s mutation callbacks (compone
 asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it sends, deriving the
 before state from the replicated view while that view still holds it, and records what comes back; an edit
 nothing faithful can be derived for (a stale view, an op with no matching kind) is logged at debug and
-skipped, never refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
+skipped rather than refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
 prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
 "Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
 and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
