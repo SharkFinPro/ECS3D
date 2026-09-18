@@ -39,6 +39,7 @@
 #include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <Log.h>
+#include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
@@ -337,7 +338,11 @@ void EditorApp::connectToServer()
 
     m_serverProcess = std::make_unique<net::ServerProcess>();
     // --ephemeral makes the server exit when its last connection drops, so it can't outlive the editor.
-    const std::string arguments = "--edit --ephemeral --token " + m_authToken;
+    // Its own log file rather than the server's default: an editor and a client on one machine would
+    // otherwise truncate and interleave the same one. This app's --log-file/--no-log-file are not
+    // forwarded - the child's log is the child's. --token goes last, since it consumes what follows.
+    const std::string arguments = "--edit --ephemeral " + logFileArgument("editor-server")
+      + " --token " + m_authToken;
     if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {
       Log::error(LogCategory::editor, "Failed to launch local server (ECS3DServer) next to this executable.");

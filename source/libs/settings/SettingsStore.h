@@ -18,8 +18,7 @@
 // Not thread safe: it belongs to the app loop that calls update().
 class SettingsStore {
 public:
-  // %APPDATA%/ECS3D on Windows, $XDG_CONFIG_HOME (or ~/.config) /ECS3D on Linux,
-  // ~/Library/Application Support/ECS3D on macOS.
+  // settings.json in the directory userDataDirectory() resolves (see ECS3DLog's UserDataDirectory.h).
   [[nodiscard]] static std::filesystem::path defaultFile();
 
   // Reads the file if it is there, so a store is never half-initialized: writing without having read
