@@ -358,8 +358,12 @@ void ObjectGUIManager::displayReorderDropZone(const std::shared_ptr<Object>& par
 
   constexpr float zoneHeight = 6.0f;
   const float width = ImGui::GetContentRegionAvail().x;
-  const ImVec2 cursor = ImGui::GetCursorScreenPos();
+  const ImVec2 flowCursor = ImGui::GetCursorScreenPos();
 
+  // The zone overlays the gap between rows rather than taking layout space, so the cursor is restored
+  // afterward and row spacing stays what it was without the zones.
+  const ImVec2 cursor(flowCursor.x, flowCursor.y - ImGui::GetStyle().ItemSpacing.y * 0.5f - zoneHeight * 0.5f);
+  ImGui::SetCursorScreenPos(cursor);
   ImGui::InvisibleButton("##reorderZone", ImVec2(width, zoneHeight));
 
   if (canAcceptObjectDrop(parent) && ImGui::BeginDragDropTarget())
@@ -408,6 +412,8 @@ void ObjectGUIManager::displayReorderDropZone(const std::shared_ptr<Object>& par
 
     ImGui::EndDragDropTarget();
   }
+
+  ImGui::SetCursorScreenPos(flowCursor);
 
   ImGui::PopID();
   ImGui::PopID();
