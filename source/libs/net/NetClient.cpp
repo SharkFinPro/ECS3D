@@ -4,6 +4,7 @@
 #include <Log.h>
 #include <LogEntry.h>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <limits>
 #include <span>
@@ -20,23 +21,25 @@ namespace {
   using ClientSendFn = void(*)(uint8_t, const uint8_t*, int32_t);
   using SetCallbackFn = void(*)(void*);
 
-  // One connection per process; the C# socket thread routes inbound messages here.
-  NetClient* g_activeClient = nullptr;
+  // One connection per process; the C# socket thread routes inbound messages here. Atomic for the same
+  // reason as NetServer's g_activeServer: written on the app thread, read on the socket thread, with no
+  // other synchronization between the two.
+  std::atomic<NetClient*> g_activeClient{nullptr};
 }
 
 extern "C" void ecs3dNetClientReceive(const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  if (g_activeClient)
+  if (auto* client = g_activeClient.load(std::memory_order_acquire))
   {
-    g_activeClient->enqueue(type, data, len);
+    client->enqueue(type, data, len);
   }
 }
 
 extern "C" void ecs3dNetClientDisconnect()
 {
-  if (g_activeClient)
+  if (auto* client = g_activeClient.load(std::memory_order_acquire))
   {
-    g_activeClient->enqueueDisconnect();
+    client->enqueueDisconnect();
   }
 }
 
@@ -61,7 +64,7 @@ void NetClient::connect(const std::string& host, const int port, const Role role
   m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "clientSetDisconnectCallback");
   m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
 
-  g_activeClient = this;
+  g_activeClient.store(this, std::memory_order_release);
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetClientReceive));
   reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetClientDisconnect));
   reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
@@ -90,9 +93,12 @@ void NetClient::disconnect()
   // enqueueDisconnect before this function returns.
   m_disconnectRequested = true;
 
+  // The managed disconnect joins the client's receive thread before returning (TcpBackend/
+  // WebSocketBackend ClientDisconnect), so no socket thread can still be inside enqueue/
+  // enqueueDisconnect by the time the pointer below is cleared.
   reinterpret_cast<ClientDisconnectFn>(m_disconnectFn)();
 
-  g_activeClient = nullptr;
+  g_activeClient.store(nullptr, std::memory_order_release);
   m_connected = false;
 }
 

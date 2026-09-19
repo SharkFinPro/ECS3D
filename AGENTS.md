@@ -239,6 +239,15 @@ broadcast from a snapshot of the connection list taken under the lock and send o
 `SendTimeoutMs` budget shared by the whole fan-out, so a peer that stops reading disconnects only itself
 instead of stalling the tick thread. A connection is dropped only when its own send failed or timed out;
 peers the broadcast ran out of budget before reaching just miss that one message.
+Shutdown joins every socket thread it started before returning: `ServerStop` closes the listener and all
+connection sockets, then joins the accept thread and each per-connection thread; `ClientDisconnect` closes
+the connection then joins the receive thread. Each join is bounded by `ShutdownJoinTimeoutMs` and logs a
+warning rather than blocking forever if a thread does not exit in time, and never joins the calling thread
+itself. `NetServer::stop`/`NetClient::disconnect` rely on that join completing before they clear the
+`g_activeServer`/`g_activeClient` pointer the native callbacks read, so a socket thread can never call into
+a `NetServer`/`NetClient` whose teardown (and eventual destruction) has already started; both pointers are
+`std::atomic` because they are written on the app thread and read on the socket threads with no other
+synchronization between them.
 
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is

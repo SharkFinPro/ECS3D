@@ -27,6 +27,16 @@ internal sealed class TcpBackend : TransportBackend
   private readonly List<TcpClient> _pending = new();
   private readonly object _clientsLock = new();
 
+  // Every per-connection receive thread the accept loop has started, so ServerStop can join them all
+  // before returning - closing a socket only unblocks the thread's read, it doesn't wait for the thread
+  // to actually exit. A finished thread removes itself here from its own cleanup path.
+  private readonly List<Thread> _connectionThreads = new();
+
+  // How long ServerStop/DisconnectClient wait for a socket thread to exit after its socket is closed.
+  // Bounded so a stuck thread (e.g. one wedged in native socket teardown) cannot hang process shutdown;
+  // logged as a warning when it fires, since it should not happen in the normal case.
+  private const int ShutdownJoinTimeoutMs = 3000;
+
   // A socket that cleared the handshake, paired with the id C++ knows it by so a send that fails on the
   // broadcast path can name the connection it dropped. A class rather than a record on purpose: the
   // broadcast snapshot and the receive loop both drop a connection with List.Remove, which must match by
@@ -92,6 +102,7 @@ internal sealed class TcpBackend : TransportBackend
     try { _listener?.Stop(); } catch { /* already closed */ }
     _listener = null;
 
+    Thread[] connectionThreads;
     lock (_clientsLock)
     {
       foreach (var conn in _clients)
@@ -107,6 +118,38 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _pending.Clear();
+
+      connectionThreads = _connectionThreads.ToArray();
+    }
+
+    // Closing the sockets above only unblocks each thread's blocked read/accept; it does not wait for the
+    // thread to actually finish. Join here so ServerStop (and therefore NetServer::stop, and therefore
+    // ServerApp's destructor) does not return while a socket thread can still call back into the C++
+    // NetServer it is tearing down.
+    JoinThread(_acceptThread, "accept");
+    foreach (var thread in connectionThreads)
+    {
+      JoinThread(thread, "connection");
+    }
+
+    _acceptThread = null;
+  }
+
+  // Waits up to ShutdownJoinTimeoutMs for thread to exit, logging a warning instead of blocking forever
+  // if it doesn't. A no-op for null, an already-finished thread, or the calling thread itself - joining
+  // the current thread would deadlock, and ServerStop/DisconnectClient could in principle be reached from
+  // a callback running on one of these threads.
+  private static void JoinThread(Thread? thread, string label)
+  {
+    if (thread == null || thread == Thread.CurrentThread || !thread.IsAlive)
+    {
+      return;
+    }
+
+    if (!thread.Join(ShutdownJoinTimeoutMs))
+    {
+      Transport.Log(TransportLogLevel.Warn,
+        $"Timed out after {ShutdownJoinTimeoutMs} ms waiting for the {label} thread to exit during shutdown.");
     }
   }
 
@@ -253,6 +296,12 @@ internal sealed class TcpBackend : TransportBackend
         IsBackground = true,
         Name = "ecs3d-net-client"
       };
+
+      lock (_clientsLock)
+      {
+        _connectionThreads.Add(thread);
+      }
+
       thread.Start();
     }
   }
@@ -318,6 +367,7 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _pending.Remove(client);
+      _connectionThreads.Remove(Thread.CurrentThread);
     }
 
     try { client.Close(); } catch { /* ignore */ }
@@ -391,6 +441,12 @@ internal sealed class TcpBackend : TransportBackend
     // Take ownership atomically so a racing ClientReceiveLoop cleanup can't also close the same instance.
     var client = Interlocked.Exchange(ref _client, null);
     try { client?.Close(); } catch { /* already closed */ }
+
+    // Closing the socket only unblocks the receive loop's blocked read; join so this call (and therefore
+    // NetClient::disconnect) does not return while that thread can still call back into the C++ NetClient
+    // it is tearing down.
+    JoinThread(_clientThread, "client receive");
+    _clientThread = null;
   }
 
   public override void ClientSend(byte type, nint data, int len)
