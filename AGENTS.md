@@ -246,7 +246,9 @@ movement can be relative to wherever the camera actually faces, degrading to the
 without the `tryGet` ceremony since `ScriptBase` always constructs one for the script's own object (like
 `transform`/`rigidBody`/`input`). `bindings/BindingCoverage.h` holds a table of every `ComponentType`
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
-without deciding its scripting story can't go unnoticed. `LogBindings` gives scripts `Log.trace/debug/
+without deciding its scripting story can't go unnoticed. Script field edits are validated
+(`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
+refused with a warning and does not fault the script. `LogBindings` gives scripts `Log.trace/debug/
 info/warn/error` through `ECS3DLog` under `LogCategory::script`, registered first in `registerBindings` so
 everything the bridge itself logs afterwards - init, hot-reload, compilation - already has a binding to
 write through. Instance lifetime tracks the live component set in both directions: a Script added to a
