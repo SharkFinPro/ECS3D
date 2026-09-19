@@ -2,6 +2,7 @@
 #define SELECTION_H
 
 #include <algorithm>
+#include <functional>
 #include <optional>
 #include <span>
 #include <vector>
@@ -52,6 +53,18 @@ public:
   void toggleObject(const uuids::uuid& uuid) { toggle(Kind::Object, uuid); }
 
   void toggleAsset(const uuids::uuid& uuid) { toggle(Kind::Asset, uuid); }
+
+  // Drops every held uuid for which `exists` returns false - e.g. after a server re-snapshot rebuilt the
+  // scene behind new pointers and some previously-selected object is gone. Clears the kind too if this
+  // empties the selection. A no-op for an already-empty selection.
+  void pruneMissing(const std::function<bool(const uuids::uuid&)>& exists)
+  {
+    std::erase_if(m_items, [&exists](const uuids::uuid& id) { return !exists(id); });
+    if (m_items.empty())
+    {
+      m_kind = Kind::None;
+    }
+  }
 
   [[nodiscard]] bool contains(const uuids::uuid& uuid) const
   {

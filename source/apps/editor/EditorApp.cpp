@@ -530,10 +530,11 @@ void EditorApp::handlePicking()
   const auto window = m_renderer->getWindow();
   const bool pressed = window->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
 
-  // Select on a fresh Ctrl+Left-click over the viewport. isSelected() is the renderer's pick result
-  // from last frame.
+  // Select on a fresh Left-click over the viewport. isSelected() is the renderer's pick result from
+  // last frame. Plain click replaces the selection; Ctrl-click adds/removes the picked object instead
+  // (a click on empty space still clears, unless Ctrl is held - then it's a no-op).
   const auto mousePicker = m_renderer->getRenderingManager()->getRenderer3D()->getMousePicker();
-  if (!m_mouseWasPressed && pressed && window->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && mousePicker->canMousePick())
+  if (!m_mouseWasPressed && pressed && mousePicker->canMousePick())
   {
     std::optional<uuids::uuid> picked;
     for (const auto& object : scene->getObjectManager()->getAllObjects())
@@ -545,12 +546,23 @@ void EditorApp::handlePicking()
       }
     }
 
+    // io.KeyCtrl (not a raw GLFW key read) so either Ctrl key toggles, matching the tree's own check and
+    // KeybindDispatcher's chord matching.
+    const bool ctrl = ImGui::GetIO().KeyCtrl;
+
     // Written directly to the shared selection the object tree/inspector read.
     if (picked.has_value())
     {
-      m_selection->selectObject(picked.value());
+      if (ctrl)
+      {
+        m_selection->toggleObject(picked.value());
+      }
+      else
+      {
+        m_selection->selectObject(picked.value());
+      }
     }
-    else
+    else if (!ctrl)
     {
       m_selection->clear();
     }
