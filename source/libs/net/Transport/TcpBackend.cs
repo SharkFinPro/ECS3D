@@ -27,6 +27,11 @@ internal sealed class TcpBackend : TransportBackend
   private readonly List<TcpClient> _pending = new();
   private readonly object _clientsLock = new();
 
+  // Every per-connection receive thread the accept loop has started, so ServerStop can join them all
+  // before returning - closing a socket only unblocks the thread's read, it doesn't wait for the thread
+  // to actually exit. A finished thread removes itself here from its own cleanup path.
+  private readonly List<Thread> _connectionThreads = new();
+
   // A socket that cleared the handshake, paired with the id C++ knows it by so a send that fails on the
   // broadcast path can name the connection it dropped. A class rather than a record on purpose: the
   // broadcast snapshot and the receive loop both drop a connection with List.Remove, which must match by
@@ -87,13 +92,19 @@ internal sealed class TcpBackend : TransportBackend
 
   public override void ServerStop()
   {
-    _serverRunning = false;
-
     try { _listener?.Stop(); } catch { /* already closed */ }
     _listener = null;
 
+    Thread[] connectionThreads;
     lock (_clientsLock)
     {
+      // Flipped under the same lock AcceptLoop checks it (and registers a new connection's thread) under,
+      // and before the _connectionThreads snapshot below: either AcceptLoop's check runs first and its
+      // thread is already in the list this snapshot walks, or this flip runs first and AcceptLoop's check
+      // sees _serverRunning false and closes that socket without ever starting a thread. There is no
+      // ordering where a thread starts without being one this call joins.
+      _serverRunning = false;
+
       foreach (var conn in _clients)
       {
         try { conn.Client.Close(); } catch { /* ignore */ }
@@ -107,7 +118,21 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _pending.Clear();
+
+      connectionThreads = _connectionThreads.ToArray();
     }
+
+    // Closing the sockets above only unblocks each thread's blocked read/accept; it does not wait for the
+    // thread to actually finish. Join here so ServerStop (and therefore NetServer::stop, and therefore
+    // ServerApp's destructor) does not return while a socket thread can still call back into the C++
+    // NetServer it is tearing down.
+    JoinThread(_acceptThread, "accept");
+    foreach (var thread in connectionThreads)
+    {
+      JoinThread(thread, "connection");
+    }
+
+    _acceptThread = null;
   }
 
   public override int ServerConnectionCount()
@@ -225,13 +250,20 @@ internal sealed class TcpBackend : TransportBackend
 
       // Not added to _clients yet - it has not proven itself with a handshake, and _clients is the
       // broadcast list. Tracked in _pending instead so ServerStop can still close it.
-      //
+      var thread = new Thread(() => ServerReceiveLoop(client, connId))
+      {
+        IsBackground = true,
+        Name = "ecs3d-net-client"
+      };
+
       // ServerStop can run concurrently with this: it may have already taken _clientsLock, closed and
-      // cleared _pending, and returned by the time a connection that was queued by the OS just before
-      // _listener.Stop() reaches here. Re-checking _serverRunning inside the lock closes that window -
-      // if the server already stopped, the socket is closed here instead of being added to a list
-      // nothing will ever look at again, and its receive thread is never started (so it never reaches
-      // DeliverServerDisconnect either).
+      // cleared _pending, snapshotted _connectionThreads and returned by the time a connection that was
+      // queued by the OS just before _listener.Stop() reaches here. Checking _serverRunning and
+      // registering both the pending socket and this thread in the one critical section ServerStop also
+      // flips the flag and takes its snapshot under closes that window: either this call finds the flag
+      // already false and closes the socket without ever starting a thread, or it registers the thread
+      // before ServerStop can take its snapshot - there is no ordering where a thread starts without
+      // being one ServerStop goes on to join.
       bool accepted;
       lock (_clientsLock)
       {
@@ -239,6 +271,7 @@ internal sealed class TcpBackend : TransportBackend
         if (accepted)
         {
           _pending.Add(client);
+          _connectionThreads.Add(thread);
         }
       }
 
@@ -248,11 +281,6 @@ internal sealed class TcpBackend : TransportBackend
         continue;
       }
 
-      var thread = new Thread(() => ServerReceiveLoop(client, connId))
-      {
-        IsBackground = true,
-        Name = "ecs3d-net-client"
-      };
       thread.Start();
     }
   }
@@ -318,6 +346,7 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _pending.Remove(client);
+      _connectionThreads.Remove(Thread.CurrentThread);
     }
 
     try { client.Close(); } catch { /* ignore */ }
@@ -391,6 +420,12 @@ internal sealed class TcpBackend : TransportBackend
     // Take ownership atomically so a racing ClientReceiveLoop cleanup can't also close the same instance.
     var client = Interlocked.Exchange(ref _client, null);
     try { client?.Close(); } catch { /* already closed */ }
+
+    // Closing the socket only unblocks the receive loop's blocked read; join so this call (and therefore
+    // NetClient::disconnect) does not return while that thread can still call back into the C++ NetClient
+    // it is tearing down.
+    JoinThread(_clientThread, "client receive");
+    _clientThread = null;
   }
 
   public override void ClientSend(byte type, nint data, int len)
