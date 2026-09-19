@@ -113,6 +113,13 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
   // looks at the component that replaced it.
   detachOrphans(objectManager);
 
+  // World.spawnObject/spawnPrefab, called from a script running inside this loop, must not append
+  // straight to objectManager's live m_allObjects/m_objects: this range-for holds iterators into that
+  // vector, and a reallocation mid-loop is undefined behavior. The guard makes addObject defer the new
+  // object instead - it is still immediately usable (getObjectByUUID finds it, its transform can be set),
+  // it just doesn't join getAllObjects() until flushPendingAdditions runs after the tick.
+  const ObjectManager::ScriptPassGuard scriptPassGuard(objectManager);
+
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -149,6 +156,11 @@ void ScriptSystem::variableUpdate(ObjectManager& objectManager)
   }
 
   BindingContext::setObjectManager(&objectManager);
+
+  // Same reasoning as fixedUpdate's guard: a script below can spawn an object through World bindings while
+  // this range-for holds iterators into objectManager's live list, so additions must defer until the pass
+  // ends.
+  const ObjectManager::ScriptPassGuard scriptPassGuard(objectManager);
 
   for (const auto& object : objectManager.getAllObjects())
   {

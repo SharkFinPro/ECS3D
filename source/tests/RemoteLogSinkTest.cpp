@@ -148,6 +148,59 @@ TEST(RemoteLogSink, AMessageAtOrUnderTheCapIsNotTruncated)
   EXPECT_EQ(drained.entries[0].message, exact);
 }
 
+TEST(RemoteLogSink, TruncationBacksUpOffAUtf8ContinuationByteRatherThanSplittingIt)
+{
+  RemoteLogSink sink(10);
+
+  // "e with acute" as UTF-8 is the two bytes 0xC3 0xA9. Placed so the lead byte (0xC3) lands exactly at
+  // the cap and its continuation byte (0xA9) just past it, a plain byte-count truncation would cut
+  // between them and leave a lone lead byte - not valid UTF-8, and not something writeString's pairing
+  // read on the editor side should ever have to fail on.
+  std::string message(RemoteLogSink::maxMessageBytes - 1, 'x');
+  message += "\xC3\xA9";
+  message += std::string(1000, 'y');
+  ASSERT_GT(message.size(), RemoteLogSink::maxMessageBytes);
+
+  sink.write(entry(message));
+
+  const auto drained = sink.drain(10);
+
+  ASSERT_EQ(drained.entries.size(), 1u);
+  const auto& truncated = drained.entries[0].message;
+
+  // The whole two-byte character is dropped rather than split: the kept text ends at the last 'x', one
+  // byte short of the cap, not on the character's lead byte.
+  const auto markerStart = truncated.find(" ... [truncated]");
+  ASSERT_NE(markerStart, std::string::npos);
+  EXPECT_EQ(markerStart, RemoteLogSink::maxMessageBytes - 1);
+  EXPECT_EQ(truncated.substr(0, markerStart), std::string(RemoteLogSink::maxMessageBytes - 1, 'x'));
+}
+
+TEST(RemoteLogSink, TruncationKeepsACompleteMultiByteCharacterThatFitsExactly)
+{
+  RemoteLogSink sink(10);
+
+  // Positive control for the previous test: when the multi-byte character fits entirely within the cap,
+  // truncation must not back up past it unnecessarily.
+  std::string message(RemoteLogSink::maxMessageBytes - 2, 'x');
+  message += "\xC3\xA9";
+  message += std::string(1000, 'y');
+  ASSERT_GT(message.size(), RemoteLogSink::maxMessageBytes);
+
+  sink.write(entry(message));
+
+  const auto drained = sink.drain(10);
+
+  ASSERT_EQ(drained.entries.size(), 1u);
+  const auto& truncated = drained.entries[0].message;
+
+  const auto markerStart = truncated.find(" ... [truncated]");
+  ASSERT_NE(markerStart, std::string::npos);
+  EXPECT_EQ(markerStart, RemoteLogSink::maxMessageBytes);
+  EXPECT_EQ(truncated.substr(0, markerStart),
+            std::string(RemoteLogSink::maxMessageBytes - 2, 'x') + "\xC3\xA9");
+}
+
 TEST(RemoteLogSink, DrainStopsEarlyOnceTheByteBudgetWouldBeExceeded)
 {
   RemoteLogSink sink(10);

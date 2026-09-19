@@ -35,7 +35,7 @@
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera) - whose float and vec3 setters ignore non-finite input, since a non-finite float saves as json null and makes the file unreadable - `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load - a load that fails names the scene and the object it choked on) / `ProjectPacker` (binary wire snapshot), `Replication`, `edits/` (`EditCommand`/`EditHistory` — the undo/redo stack — plus `RecordEdits`, which derives the command for an edit the editor is about to send from its pre-edit replicated view; see Editor Undo/Redo below). **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune), calling the GJK/EPA narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
-| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` (which, beside the per-frame value send, coalesces a whole continuous edit - a slider drag mutates the component in place every frame - into one before/after pair reported once no widget is active) and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Keybinds lists every `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the Settings panel's rebind capture), `ConsolePanel` (the "Console" window — reads the editor's `RingBufferSink` through a `LogFilter`: level and category toggles with per-level counts, a text search, Copy (the filtered rows through `formatEntry` to the clipboard), Clear (remembers a sequence number rather than mutating the shared sink), and Auto-scroll; entries the connected server forwards land in this same sink, message-prefixed `"[server] "`, so they show and filter alongside the editor's own — see Logging below), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI` (also owns the unsaved-changes gate: New/Open/a dropped file/closing the window all route through a guard that prompts Save/Don't Save/Cancel when a send-path callback has marked the project dirty since the last save/load - the window-close intercept sets its own raw `glfwSetWindowCloseCallback`, since `vke::Window` sets none), `GuiComponents` (whose numeric widgets refuse a non-finite ctrl-click entry, restoring the previous value and logging a warning, since a non-finite float serializes as json null). Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
+| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` (which, beside the per-frame value send, coalesces a whole continuous edit - a slider drag mutates the component in place every frame - into one before/after pair reported once no widget is active) and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot holding an ordered set of uuids rather than a single one, `Selection.h` - the back of the list is the primary, what the Inspector/gizmo show; a plain click in the tree or viewport replaces it, Ctrl-click toggles membership, and Shift-click in the tree selects the contiguous range between an anchor uuid and the clicked row in the tree's current on-screen order, which `ObjectGUIManager` tracks itself each frame since collapsed nodes and the sort mode both affect what "on screen order" means), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Keybinds lists every `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the Settings panel's rebind capture), `ConsolePanel` (the "Console" window — reads the editor's `RingBufferSink` through a `LogFilter`: level and category toggles with per-level counts, a text search, Copy (the filtered rows through `formatEntry` to the clipboard), Clear (remembers a sequence number rather than mutating the shared sink), and Auto-scroll; entries the connected server forwards land in this same sink, message-prefixed `"[server] "`, so they show and filter alongside the editor's own — see Logging below), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI` (also owns the unsaved-changes gate: New/Open/a dropped file/closing the window all route through a guard that prompts Save/Don't Save/Cancel when a send-path callback has marked the project dirty since the last save/load - the window-close intercept sets its own raw `glfwSetWindowCloseCallback`, since `vke::Window` sets none), `GuiComponents` (whose numeric widgets refuse a non-finite ctrl-click entry, restoring the previous value and logging a warning, since a non-finite float serializes as json null). Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess`/`ServerLog` (pack/unpack for `MessageType::serverLog`, the server's forwarded log — see Logging below) (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
 | `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera, ModelRenderer; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
 | `source/libs/clrHost/` | `ECS3DClrHost` — `ManagedHost` boots CoreCLR and hands out managed statics as native fn ptrs. Owns the CMake helpers (`cmake/ECS3DManaged.cmake`, `FindDotnet.cmake`, `loadCS.cmake`). |
@@ -201,7 +201,15 @@ include it. Widths and byte order are still the caller's problem: pack fixed-wid
 carries host endianness. `NetServer`/`NetClient` own the format in C++ and hand `ECS3DNetTransport` (C#)
 opaque `(type byte, payload)` pairs. Both transports refuse an inbound message over
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
-WebSocket on what has actually arrived, since a fragmented message declares none. The handshake, the one
+WebSocket on what has actually arrived, since a fragmented message declares none. Neither backend sizes
+its read buffer to that declared length up front: TCP grows a buffer to roughly what has actually arrived
+(`TcpBackend.ReadBody` starts at 64 KiB and doubles each time the buffer fills, up to the declared
+length) and WebSocket
+grows its assembly buffer as fragments arrive, so a peer that declares a large frame and then trickles it
+in a byte at a time pins only a small multiple of what has actually landed, not the whole declared size.
+TCP backs that with a per-read progress timeout (`BodyReadTimeoutMs`, reset on every read rather than
+covering the whole frame) so a body that stalls outright still drops just that connection. The handshake,
+the one
 message read before a peer is authorized, gets the much smaller `MaxHandshakeBytes`. Oversize *outbound*
 messages are refused at the sender, where there is something useful to say about them. Object nesting has
 its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`) caps how deep
@@ -240,6 +248,18 @@ broadcast from a snapshot of the connection list taken under the lock and send o
 `SendTimeoutMs` budget shared by the whole fan-out, so a peer that stops reading disconnects only itself
 instead of stalling the tick thread. A connection is dropped only when its own send failed or timed out;
 peers the broadcast ran out of budget before reaching just miss that one message.
+Shutdown joins every socket thread it started before returning: `ServerStop` flips `_serverRunning` and
+takes its snapshot of started threads in the same lock the accept loop checks that flag and registers a
+new thread under, so a thread that starts is one this call goes on to join; it then closes the listener
+and all connection sockets and joins the accept thread and each per-connection thread.
+`ClientDisconnect` closes the connection then joins the receive thread the same way. Each join is bounded
+by `ShutdownJoinTimeoutMs`, logging a warning if a thread has not exited by then instead of waiting past
+it, and skips a thread that is the caller (joining that thread would deadlock). `NetServer::stop`/
+`NetClient::disconnect` rely on that join completing before they clear the `g_activeServer`/
+`g_activeClient` pointer the native callbacks read, so by the time a `NetServer`/`NetClient`'s teardown
+clears that pointer, no socket thread remains that could still call back into it; both pointers are
+`std::atomic` because they are written on the app thread and read on the socket threads with no other
+synchronization between them.
 
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is
@@ -263,8 +283,16 @@ requested from a script are buffered on the `RigidBody` data (pending-force queu
 another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t)` → false when
 absent/destroyed; never throws in the tick loop) — future component wrappers follow this; (2) a binding
 that mutates scene structure can't touch the net layer, so it **buffers the change on `BindingContext`**
-and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above);
-(3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
+and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above).
+Spawning is also deferred a level lower, in `ObjectManager` itself: `ScriptSystem::fixedUpdate`/
+`variableUpdate` range over `getAllObjects()` and run script code inside the loop, so `addObject` cannot
+append straight to that live vector without risking a reallocation mid-iteration. `ScriptSystem` holds an
+`ObjectManager::ScriptPassGuard` around each of those loops; while one is alive, `addObject` queues the new
+object instead (still immediately parented/started/`getObjectByUUID`-able) and `flushPendingAdditions`
+splices it into `m_allObjects`/`m_objects` once the pass ends - called from `ServerApp::
+broadcastStructuralChanges` at the same point `deleteObjectsMarkedForDeletion` drains a removal, so a
+script-spawned object joins the scene the same way a script-destroyed one leaves it: after the pass, not
+mid-iteration; (3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
 pairs and diffs them into enter/stay/exit uuid-pair lists; `ServerApp` hands those to
 `ScriptSystem::dispatchCollisionEvent` (→ `onCollisionEnter/Stay/Exit` script virtuals) after the collision
 pass — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` never links
@@ -375,8 +403,25 @@ prefab name - the registry already holds replaces a record rather than adding on
 "Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
 and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
 (New/Open), scene switch, (re)connect, and a play start or stop - a pause/resume is not one, since it
-leaves the scene as it is. There is still **no user-visible undo** - no menu item, no keybind, and nothing
-reads the stacks back yet.
+leaves the scene as it is.
+
+`EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with
+`EditHistory::nextUndoKind()`/`nextRedoKind()` before calling `undo()`/`redo()`, and only proceeds for a
+`componentEdit` - a value edit is the one kind this editor currently sends the reverse of. A structural or
+asset kind on top is refused with a "not yet undoable" log message and left in place rather than handed to
+`EditHistory::undo()`/`redo()`, which would otherwise treat "a kind this caller does not attempt" the same
+as a validation conflict and drop it (and everything older beneath it) even though nothing about it is
+actually wrong. `EditCommand`/`EditHistory` already build and validate a faithful reverse for every
+reversible kind (the round trip is exercised in `EditHistoryTest.cpp` for all of them), so extending
+`EditorApp::undo()`/`redo()` to structural and asset kinds is a matter of widening that one kind check, not
+new library work. There is still no menu item or keybind that calls `undo()`/`redo()` - a later story wires
+one in; for now they exist as entry points only. A refusal is logged the same way for a stale target
+(`targetMissing`/`targetChanged`, naming the conflicting uuid) or an empty stack. `EditHistory::
+reportUndoRejected()`/`reportRedoRejected()` exist for a server rejection of the edit undo()/redo() just
+sent, but nothing calls them yet: today's `editComponent`/`sceneEdit` handling has no wire-level
+acknowledgement back to the sender for a rejected edit to hook into (a failed edit is only logged
+server-side, and sometimes answered with a resync snapshot) - see `ServerApp::handleSceneEdit`/
+`handleEditComponent`.
 
 ## Development Principles
 

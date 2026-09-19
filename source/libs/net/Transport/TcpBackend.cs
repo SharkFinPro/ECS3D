@@ -27,6 +27,11 @@ internal sealed class TcpBackend : TransportBackend
   private readonly List<TcpClient> _pending = new();
   private readonly object _clientsLock = new();
 
+  // Every per-connection receive thread the accept loop has started, so ServerStop can join them all
+  // before returning - closing a socket only unblocks the thread's read, it doesn't wait for the thread
+  // to actually exit. A finished thread removes itself here from its own cleanup path.
+  private readonly List<Thread> _connectionThreads = new();
+
   // A socket that cleared the handshake, paired with the id C++ knows it by so a send that fails on the
   // broadcast path can name the connection it dropped. A class rather than a record on purpose: the
   // broadcast snapshot and the receive loop both drop a connection with List.Remove, which must match by
@@ -87,13 +92,19 @@ internal sealed class TcpBackend : TransportBackend
 
   public override void ServerStop()
   {
-    _serverRunning = false;
-
     try { _listener?.Stop(); } catch { /* already closed */ }
     _listener = null;
 
+    Thread[] connectionThreads;
     lock (_clientsLock)
     {
+      // Flipped under the same lock AcceptLoop checks it (and registers a new connection's thread) under,
+      // and before the _connectionThreads snapshot below: either AcceptLoop's check runs first and its
+      // thread is already in the list this snapshot walks, or this flip runs first and AcceptLoop's check
+      // sees _serverRunning false and closes that socket without ever starting a thread. There is no
+      // ordering where a thread starts without being one this call joins.
+      _serverRunning = false;
+
       foreach (var conn in _clients)
       {
         try { conn.Client.Close(); } catch { /* ignore */ }
@@ -107,7 +118,21 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _pending.Clear();
+
+      connectionThreads = _connectionThreads.ToArray();
     }
+
+    // Closing the sockets above only unblocks each thread's blocked read/accept; it does not wait for the
+    // thread to actually finish. Join here so ServerStop (and therefore NetServer::stop, and therefore
+    // ServerApp's destructor) does not return while a socket thread can still call back into the C++
+    // NetServer it is tearing down.
+    JoinThread(_acceptThread, "accept");
+    foreach (var thread in connectionThreads)
+    {
+      JoinThread(thread, "connection");
+    }
+
+    _acceptThread = null;
   }
 
   public override int ServerConnectionCount()
@@ -267,13 +292,20 @@ internal sealed class TcpBackend : TransportBackend
 
       // Not added to _clients yet - it has not proven itself with a handshake, and _clients is the
       // broadcast list. Tracked in _pending instead so ServerStop can still close it.
-      //
+      var thread = new Thread(() => ServerReceiveLoop(client, connId))
+      {
+        IsBackground = true,
+        Name = "ecs3d-net-client"
+      };
+
       // ServerStop can run concurrently with this: it may have already taken _clientsLock, closed and
-      // cleared _pending, and returned by the time a connection that was queued by the OS just before
-      // _listener.Stop() reaches here. Re-checking _serverRunning inside the lock closes that window -
-      // if the server already stopped, the socket is closed here instead of being added to a list
-      // nothing will ever look at again, and its receive thread is never started (so it never reaches
-      // DeliverServerDisconnect either).
+      // cleared _pending, snapshotted _connectionThreads and returned by the time a connection that was
+      // queued by the OS just before _listener.Stop() reaches here. Checking _serverRunning and
+      // registering both the pending socket and this thread in the one critical section ServerStop also
+      // flips the flag and takes its snapshot under closes that window: either this call finds the flag
+      // already false and closes the socket without ever starting a thread, or it registers the thread
+      // before ServerStop can take its snapshot - there is no ordering where a thread starts without
+      // being one ServerStop goes on to join.
       bool accepted;
       lock (_clientsLock)
       {
@@ -281,6 +313,7 @@ internal sealed class TcpBackend : TransportBackend
         if (accepted)
         {
           _pending.Add(client);
+          _connectionThreads.Add(thread);
         }
       }
 
@@ -290,11 +323,6 @@ internal sealed class TcpBackend : TransportBackend
         continue;
       }
 
-      var thread = new Thread(() => ServerReceiveLoop(client, connId))
-      {
-        IsBackground = true,
-        Name = "ecs3d-net-client"
-      };
       thread.Start();
     }
   }
@@ -360,6 +388,7 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _pending.Remove(client);
+      _connectionThreads.Remove(Thread.CurrentThread);
     }
 
     try { client.Close(); } catch { /* ignore */ }
@@ -433,6 +462,12 @@ internal sealed class TcpBackend : TransportBackend
     // Take ownership atomically so a racing ClientReceiveLoop cleanup can't also close the same instance.
     var client = Interlocked.Exchange(ref _client, null);
     try { client?.Close(); } catch { /* already closed */ }
+
+    // Closing the socket only unblocks the receive loop's blocked read; join so this call (and therefore
+    // NetClient::disconnect) does not return while that thread can still call back into the C++ NetClient
+    // it is tearing down.
+    JoinThread(_clientThread, "client receive");
+    _clientThread = null;
   }
 
   public override void ClientSend(byte type, nint data, int len)
@@ -567,8 +602,8 @@ internal sealed class TcpBackend : TransportBackend
       return false;
     }
 
-    var body = new byte[bodyLen];
-    if (!ReadExact(stream, body, deadline))
+    var body = ReadBody(stream, bodyLen, deadline);
+    if (body is null)
     {
       return false;
     }
@@ -577,6 +612,91 @@ internal sealed class TcpBackend : TransportBackend
     payload = new byte[bodyLen - 1];
     Array.Copy(body, 1, payload, 0, bodyLen - 1);
     return true;
+  }
+
+  // The buffer's starting size, and how far it grows past whatever has arrived once it needs to: large
+  // enough that a typical message never triggers a grow, small enough that a peer sending one byte and
+  // then stalling doesn't cost more than this either.
+  private const int BodyReadChunkBytes = 64 * 1024;
+
+  // How long the body read may go without a single byte of progress before the connection is dropped.
+  // Applied to each individual Read call via NetworkStream.ReadTimeout, so it resets on every read rather
+  // than bounding the whole frame - a real snapshot at the size ceiling over a slow link keeps making
+  // progress and never trips it; only a peer that stops sending outright does. Comfortably above how long
+  // even a very slow link takes to deliver one chunk (64 KiB at 7 KB/s, a 56k-modem-class rate, is under
+  // 10 s), so this only fires on an actual stall.
+  private const int BodyReadTimeoutMs = 20000;
+
+  // Reads a bodyLen-byte body into a buffer sized to what has actually arrived rather than to bodyLen up
+  // front: it starts at min(BodyReadChunkBytes, bodyLen) and only grows (doubling, capped at bodyLen) once
+  // it is full of real bytes, so a peer that declares a huge frame and then trickles it in a byte at a
+  // time never costs more than roughly twice what it has actually sent, not the whole declared length.
+  // A body that fits the starting size - the common case - fills it exactly with no grow and no extra
+  // copy at all; a larger one costs at most O(log(bodyLen / BodyReadChunkBytes)) resize copies on top.
+  private static byte[]? ReadBody(Stream stream, int bodyLen, long? deadline)
+  {
+    var buffer = new byte[Math.Min(BodyReadChunkBytes, bodyLen)];
+    var filled = 0;
+
+    // Restored in the finally below so it never leaks into the next header read, which must stay
+    // unbounded - a peer between messages is idle, not stalled.
+    var savedTimeout = stream.ReadTimeout;
+    stream.ReadTimeout = BodyReadTimeoutMs;
+
+    try
+    {
+      while (filled < bodyLen)
+      {
+        // Same outer bound as ReadExact uses for the handshake: a per-read timeout alone doesn't cap the
+        // total when a peer trickles one byte in just under it, every time.
+        if (deadline.HasValue && Environment.TickCount64 >= deadline.Value)
+        {
+          return null;
+        }
+
+        if (filled == buffer.Length)
+        {
+          Array.Resize(ref buffer, Math.Min(buffer.Length * 2, bodyLen));
+        }
+
+        var toRead = Math.Min(buffer.Length - filled, bodyLen - filled);
+        int n;
+        try
+        {
+          n = stream.Read(buffer, filled, toRead);
+        }
+        catch (IOException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.TimedOut })
+        {
+          // No body progress inside the timeout above - the same kind of stall the ceiling in
+          // TransportBackend guards against, just paced instead of declared outright. Logged like the
+          // oversized-frame refusal above, since both are the same suspicious pattern: worth seeing, not
+          // worth panicking over. The caller tears down only this connection, same as any other read
+          // failure.
+          Transport.Log(TransportLogLevel.Warn, $"Dropped a connection: no body progress for {BodyReadTimeoutMs} ms.");
+
+          return null;
+        }
+        catch (IOException)
+        {
+          return null;
+        }
+
+        if (n <= 0)
+        {
+          return null;
+        }
+
+        filled += n;
+      }
+    }
+    finally
+    {
+      stream.ReadTimeout = savedTimeout;
+    }
+
+    // filled == bodyLen == buffer.Length here (the last grow, if any, always lands exactly on bodyLen),
+    // so buffer already is the exact-length result.
+    return buffer;
   }
 
   private static bool ReadExact(Stream stream, Span<byte> buffer, long? deadline = null)

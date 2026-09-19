@@ -66,6 +66,11 @@ internal sealed class WebSocketBackend : TransportBackend
   // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
   private int _nextConnId;
 
+  // Every per-connection thread the accept loop has started, so ServerStop can join them all before
+  // returning - closing a socket only unblocks the thread's blocked receive, it doesn't wait for the
+  // thread to actually exit. A finished thread removes itself here from its own cleanup path.
+  private readonly List<Thread> _connectionThreads = new();
+
   // -- Client --
   // One object per connection so a swap (Interlocked.Exchange/CompareExchange) moves the whole triple
   // atomically - no torn reads of a socket from one connection paired with another's token or invoker.
@@ -119,20 +124,40 @@ internal sealed class WebSocketBackend : TransportBackend
 
   public override void ServerStop()
   {
-    _serverRunning = false;
-
     try { _listener?.Stop(); } catch { /* already closed */ }
     _listener = null;
 
+    Thread[] connectionThreads;
     lock (_clientsLock)
     {
+      // Flipped under the same lock AcceptLoop checks it (and registers a new connection's thread) under,
+      // and before the _connectionThreads snapshot below: either AcceptLoop's check runs first and its
+      // thread is already in the list this snapshot walks, or this flip runs first and AcceptLoop's check
+      // sees _serverRunning false and closes that socket without ever starting a thread. There is no
+      // ordering where a thread starts without being one this call joins.
+      _serverRunning = false;
+
       foreach (var conn in _connections)
       {
         Close(conn.Socket, conn.Cts);
       }
 
       _connections.Clear();
+
+      connectionThreads = _connectionThreads.ToArray();
     }
+
+    // Closing the sockets above only unblocks each thread's blocked accept/receive; it does not wait for
+    // the thread to actually finish. Join here so ServerStop (and therefore NetServer::stop, and therefore
+    // ServerApp's destructor) does not return while a socket thread can still call back into the C++
+    // NetServer it is tearing down.
+    JoinThread(_acceptThread, "accept");
+    foreach (var thread in connectionThreads)
+    {
+      JoinThread(thread, "connection");
+    }
+
+    _acceptThread = null;
   }
 
   public override int ServerConnectionCount()
@@ -274,6 +299,30 @@ internal sealed class WebSocketBackend : TransportBackend
         IsBackground = true,
         Name = "ecs3d-net-client"
       };
+
+      // ServerStop can run concurrently with this: it may have already taken _clientsLock, closed every
+      // connection, snapshotted _connectionThreads and returned by the time a socket that was queued by
+      // the OS just before _listener.Stop() reaches here. Checking _serverRunning and registering this
+      // thread in the one critical section ServerStop also flips the flag and takes its snapshot under
+      // closes that window: either this call finds the flag already false and closes the socket without
+      // ever starting a thread, or it registers the thread before ServerStop can take its snapshot -
+      // there is no ordering where a thread starts without being one ServerStop goes on to join.
+      bool accepted;
+      lock (_clientsLock)
+      {
+        accepted = _serverRunning;
+        if (accepted)
+        {
+          _connectionThreads.Add(thread);
+        }
+      }
+
+      if (!accepted)
+      {
+        try { tcp.Close(); } catch { /* ignore */ }
+        continue;
+      }
+
       thread.Start();
     }
   }
@@ -341,13 +390,18 @@ internal sealed class WebSocketBackend : TransportBackend
     }
     finally
     {
-      if (conn != null)
+      lock (_clientsLock)
       {
-        lock (_clientsLock)
+        if (conn != null)
         {
           _connections.Remove(conn);
         }
 
+        _connectionThreads.Remove(Thread.CurrentThread);
+      }
+
+      if (conn != null)
+      {
         // Release any player slot the server bound to this connection (only admitted connections, which
         // are the ones that got a connId, reach here with conn != null).
         Transport.DeliverServerDisconnect(connId);
@@ -472,13 +526,19 @@ internal sealed class WebSocketBackend : TransportBackend
 
     // Take ownership atomically so a racing ClientSend can't act on a connection this call is closing.
     var connection = Interlocked.Exchange(ref _connection, null);
-    if (connection is null)
+    if (connection != null)
     {
-      return;
+      Close(connection.Socket, connection.Cts);
+      connection.Invoker.Dispose();
     }
 
-    Close(connection.Socket, connection.Cts);
-    connection.Invoker.Dispose();
+    // Even when connection was already null (e.g. the receive loop just tore itself down), the thread
+    // may not have fully exited yet - join unconditionally so this call (and therefore
+    // NetClient::disconnect) never returns while that thread can still call back into the C++ NetClient
+    // it is tearing down. Closing/aborting the socket above only unblocks a blocked ReceiveAsync; it does
+    // not wait for the thread itself to finish.
+    JoinThread(_clientThread, "client receive");
+    _clientThread = null;
   }
 
   public override void ClientSend(byte type, nint data, int len)

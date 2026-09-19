@@ -95,8 +95,7 @@ const std::vector<std::shared_ptr<Object>>& Object::getChildren() const
   return m_children;
 }
 
-void Object::addComponent(const std::shared_ptr<Component>& component,
-                          const bool setOwner)
+void Object::addComponent(const std::shared_ptr<Component>& component)
 {
   if (component->getType() == ComponentType::script)
   {
@@ -120,10 +119,7 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
     return;
   }
 
-  if (setOwner)
-  {
-    component->setOwner(this);
-  }
+  component->setOwner(this);
 
   // Added to an object that is already running: without this its ComponentVariables stay backed by the
   // authored value, so a runtime write would be saved into the scene as if it had been authored.

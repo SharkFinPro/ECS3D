@@ -697,3 +697,76 @@ TEST(EditHistory, NotReversibleKindsRefuseCleanlyInsteadOfProducingAWrongReverse
   outcome = history.undo(*scene.objectManager);
   EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
 }
+
+// --- nextUndoKind()/nextRedoKind(): a caller (EditorApp::undo()/redo()) that only knows how to send the
+// reverse of some kinds peeks the top of the relevant stack before calling undo()/redo(), so it can leave
+// a kind it does not handle sitting there instead of letting undo()/redo() treat it as a conflict and
+// drop it - see EditorApp.cpp.
+
+TEST(EditHistory, NextUndoAndRedoKindAreNulloptOnEmptyStacks)
+{
+  edits::EditHistory history;
+
+  EXPECT_FALSE(history.nextUndoKind().has_value());
+  EXPECT_FALSE(history.nextRedoKind().has_value());
+}
+
+TEST(EditHistory, NextUndoKindNamesTheTopOfTheUndoStackWithoutPoppingIt)
+{
+  auto scene = makeScene();
+  const auto transform = transformOf(scene.object);
+
+  transform->setPosition({ 1, 2, 3 });
+  const auto before = transform->serialize();
+  transform->setPosition({ 4, 5, 6 });
+  const auto after = transform->serialize();
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before, after));
+  history.record(edits::EditCommand::removeObject(scene.object->getUUID(), std::nullopt, 0,
+                                                   scene.object->serialize()));
+
+  // The most recently recorded command is on top, regardless of kind.
+  ASSERT_TRUE(history.nextUndoKind().has_value());
+  EXPECT_EQ(*history.nextUndoKind(), edits::CommandKind::removeObject);
+
+  // Peeking is read-only: the stack still holds both entries, and undoing still walks them in order.
+  EXPECT_TRUE(history.canUndo());
+  const auto outcome = history.undo(*scene.objectManager);
+  EXPECT_EQ(outcome.result, edits::HistoryResult::notUndoable);
+
+  // The refused removeObject and everything older (the componentEdit beneath it) were dropped together,
+  // the same sequential-refusal rule as any other undo() conflict.
+  EXPECT_FALSE(history.canUndo());
+}
+
+TEST(EditHistory, NextRedoKindNamesTheTopOfTheRedoStackWithoutPoppingIt)
+{
+  auto scene = makeScene();
+  const auto transform = transformOf(scene.object);
+
+  transform->setPosition({ 1, 2, 3 });
+  const auto before = transform->serialize();
+  transform->setPosition({ 4, 5, 6 });
+  const auto after = transform->serialize();
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before, after));
+
+  const auto undoOutcome = history.undo(*scene.objectManager);
+  ASSERT_TRUE(undoOutcome.ok());
+  ASSERT_TRUE(undoOutcome.messagePayload.has_value());
+  // redo()'s validation compares the command's "before" state against the live scene, so - same as the
+  // round trip test above - the undo has to actually be applied, not just accepted, or the transform is
+  // still sitting at the "after" position and redo() correctly refuses it as changed underneath.
+  ASSERT_EQ(replication::applyComponentEdit(*scene.objectManager, *undoOutcome.messagePayload),
+            replication::ComponentEditResult::applied);
+
+  ASSERT_TRUE(history.nextRedoKind().has_value());
+  EXPECT_EQ(*history.nextRedoKind(), edits::CommandKind::componentEdit);
+
+  // Still there for redo() to actually use after being peeked.
+  ASSERT_TRUE(history.canRedo());
+  const auto redoOutcome = history.redo(*scene.objectManager);
+  EXPECT_TRUE(redoOutcome.ok());
+}

@@ -69,6 +69,15 @@ public:
 
   void logMessage(const std::string& level, const std::string& message);
 
+  // Entry points for a future keybind/menu story to call - this change adds no way to trigger them from
+  // the UI yet. Each sends the reverse of the top of the relevant stack through the normal send path
+  // (editComponent for a value edit) and logs a refusal instead when there is nothing to send: an empty
+  // stack, a target that no longer matches what the command recorded, or a command kind undo does not
+  // handle yet (left on the stack rather than dropped - see EditHistory::nextUndoKind()).
+  void undo();
+
+  void redo();
+
 private:
   LaunchOptions m_options;
 
@@ -117,8 +126,9 @@ private:
   std::shared_ptr<KeybindTable> m_keybindTable;
   std::shared_ptr<KeybindDispatcher> m_keybindDispatcher;
 
-  // Every mutation this editor sends, recorded as it goes. Nothing reads it back yet - there is no undo
-  // UI - so it is populated and cleared, and never consulted. Cleared wherever the authored scene the
+  // Every mutation this editor sends, recorded as it goes; undo()/redo() read it back and send the
+  // reverse edit through the normal send path (see those methods). There is still no menu item or
+  // keybind that calls them - a later story wires the trigger. Cleared wherever the authored scene the
   // recorded commands refer to is replaced: load project, scene switch, (re)connect, play start/stop.
   edits::EditHistory m_editHistory;
 
@@ -151,7 +161,7 @@ private:
   float m_lastMouseY = 0.0f;
   bool m_inputSent = false;
 
-  // Edge-detect the mouse so viewport picking only fires on a fresh Ctrl+click.
+  // Edge-detect the mouse so viewport picking only fires on a fresh click.
   bool m_mouseWasPressed = false;
 
   void createRenderer();
@@ -188,6 +198,10 @@ private:
   void sendInput();
 
   void sendSceneControl(net::SceneControlOp op) const;
+
+  // Shared tail of undo()/redo(): sends whichever payload the outcome carries through the normal send
+  // path, or logs why nothing was sent. isUndo only picks the wording ("undo" vs. "redo") for the log.
+  void reportHistoryOutcome(const edits::HistoryOutcome& outcome, bool isUndo);
 
   void updateGui();
 

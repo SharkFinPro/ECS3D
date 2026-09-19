@@ -18,7 +18,8 @@ class RemoteLogSink : public LogSink {
 public:
   // A single log call handing write() a message longer than this is truncated (with a marker appended)
   // before it is queued, so one outsized entry cannot dominate either this sink's memory or a drain's
-  // byte budget (see drain's maxBytes) on its own.
+  // byte budget (see drain's maxBytes) on its own. The cut lands on a UTF-8 character boundary - never
+  // mid-sequence - even though that can leave the kept text a few bytes short of the full cap.
   static constexpr std::size_t maxMessageBytes = 16 * 1024;
 
   explicit RemoteLogSink(std::size_t capacity = 500);

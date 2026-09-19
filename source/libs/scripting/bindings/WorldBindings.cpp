@@ -71,6 +71,17 @@ const char* WorldBindingsProvider::bindFindObjectByName(const char* name)
     }
   }
 
+  // An object a script spawned earlier in this same pass is still only pending (see ObjectManager::
+  // addObject / ScriptPassGuard) - objectExists/getObjectName/destroyObject already see it through
+  // getObjectByUUID, so a name lookup has to as well, or the world it describes is inconsistent.
+  for (const auto& object : objectManager->getPendingAdditions())
+  {
+    if (object->getName() == target)
+    {
+      return store(uuids::to_string(object->getUUID()));
+    }
+  }
+
   return store("");
 }
 
@@ -125,6 +136,18 @@ const char* WorldBindingsProvider::bindGetAllObjectUuids()
   // UUIDs never contain commas, so a comma-delimited list marshals back cleanly (see World.cs).
   std::string result;
   for (const auto& object : objectManager->getAllObjects())
+  {
+    if (!result.empty())
+    {
+      result += ',';
+    }
+    result += uuids::to_string(object->getUUID());
+  }
+
+  // Include what a script spawned earlier in this same pass but is still only pending (see
+  // ObjectManager::addObject / ScriptPassGuard) - otherwise this list would disagree with objectExists,
+  // which already resolves a pending object through getObjectByUUID.
+  for (const auto& object : objectManager->getPendingAdditions())
   {
     if (!result.empty())
     {

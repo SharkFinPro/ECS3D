@@ -4,6 +4,7 @@
 #include <Log.h>
 #include <LogEntry.h>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <limits>
 #include <span>
@@ -26,31 +27,34 @@ namespace {
   using ServerConnectionCountFn = int32_t(*)();
   using SetCallbackFn = void(*)(void*);
 
-  // One authoritative server per process; the C# socket thread routes inbound messages here.
-  NetServer* g_activeServer = nullptr;
+  // One authoritative server per process; the C# socket thread routes inbound messages here. Atomic
+  // because it is written on the tick thread (start/stop) and read on the socket threads with no other
+  // synchronization between them - a plain pointer here would be a data race even though the callbacks
+  // null-check it.
+  std::atomic<NetServer*> g_activeServer{nullptr};
 }
 
 extern "C" void ecs3dNetServerReceive(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  if (g_activeServer)
+  if (auto* server = g_activeServer.load(std::memory_order_acquire))
   {
-    g_activeServer->enqueue(connId, type, data, len);
+    server->enqueue(connId, type, data, len);
   }
 }
 
 extern "C" void ecs3dNetServerDisconnect(const int32_t connId)
 {
-  if (g_activeServer)
+  if (auto* server = g_activeServer.load(std::memory_order_acquire))
   {
-    g_activeServer->enqueueDisconnect(connId);
+    server->enqueueDisconnect(connId);
   }
 }
 
 extern "C" void ecs3dNetServerAuthorized(const int32_t connId, const uint8_t role)
 {
-  if (g_activeServer)
+  if (auto* server = g_activeServer.load(std::memory_order_acquire))
   {
-    g_activeServer->authorize(connId, role);
+    server->authorize(connId, role);
   }
 }
 
@@ -79,7 +83,7 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_setAuthorizedCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetAuthorizedCallback");
   m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
 
-  g_activeServer = this;
+  g_activeServer.store(this, std::memory_order_release);
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
   reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerDisconnect));
   reinterpret_cast<SetCallbackFn>(m_setAuthorizedCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerAuthorized));
@@ -96,9 +100,14 @@ void NetServer::stop()
     return;
   }
 
+  // The managed stop joins the accept thread and every per-connection receive thread before returning
+  // (TcpBackend/WebSocketBackend ServerStop), so no socket thread can still be inside enqueue/
+  // enqueueDisconnect/authorize by the time the pointer below is cleared. Clearing it after, rather than
+  // before, matters only for a stray callback that could otherwise race the object's destruction; the
+  // join is what actually makes that impossible.
   reinterpret_cast<ServerStopFn>(m_stopFn)();
 
-  g_activeServer = nullptr;
+  g_activeServer.store(nullptr, std::memory_order_release);
   m_started = false;
 }
 
