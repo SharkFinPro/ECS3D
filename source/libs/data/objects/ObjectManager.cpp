@@ -504,3 +504,8 @@ const std::vector<std::shared_ptr<Object>>& ObjectManager::getAllObjects() const
 {
   return m_allObjects;
 }
+
+const std::vector<std::shared_ptr<Object>>& ObjectManager::getPendingAdditions() const
+{
+  return m_pendingAdditions;
+}

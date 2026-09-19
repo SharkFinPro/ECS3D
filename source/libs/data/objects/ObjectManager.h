@@ -142,6 +142,14 @@ public:
 
   [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getAllObjects() const;
 
+  // Objects addObject deferred while a ScriptPassGuard is alive (see there), not yet spliced into
+  // getAllObjects()/getObjects() by flushPendingAdditions. getObjectByUUID already checks this list;
+  // any other caller that needs a script pass's world to look whole - not just individual uuid lookups -
+  // (e.g. a World binding that scans every object) needs to check it too, or it will miss an object a
+  // script spawned earlier in the same pass while getObjectByUUID/objectExists/destroyObject on that same
+  // object would have found it.
+  [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getPendingAdditions() const;
+
 private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
 
