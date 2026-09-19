@@ -951,6 +951,25 @@ void EditorApp::updateDockSpace() const
     gui->dockBottom("Project Errors");
     gui->dockBottom("Console");
 
+    // Floors for the dock nodes holding these panels, in unscaled pixels (the engine applies content
+    // scale itself when comparing against the dock layout). Side panels are floored on width only and
+    // top/bottom panels on height only, so the splitter can still shrink the other axis freely. Each floor
+    // sits well under the default sizes above so the default layout is never clamped; the scene view stays
+    // unfloored so it can still shrink.
+    const ImVec2 objectsMinimumSize{160.0f, 0.0f};
+    const ImVec2 inspectorMinimumSize{220.0f, 0.0f};
+    const ImVec2 sceneStatusMinimumSize{0.0f, 40.0f};
+    const ImVec2 assetsMinimumSize{0.0f, 200.0f};
+    const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
+    const ImVec2 consoleMinimumSize{0.0f, 120.0f};
+
+    gui->setDockedWindowMinimumSize("Objects", objectsMinimumSize);
+    gui->setDockedWindowMinimumSize("Inspector", inspectorMinimumSize);
+    gui->setDockedWindowMinimumSize("Scene Status", sceneStatusMinimumSize);
+    gui->setDockedWindowMinimumSize("Assets", assetsMinimumSize);
+    gui->setDockedWindowMinimumSize("Project Errors", projectErrorsMinimumSize);
+    gui->setDockedWindowMinimumSize("Console", consoleMinimumSize);
+
     dockLocationsSetup = true;
   }
 
