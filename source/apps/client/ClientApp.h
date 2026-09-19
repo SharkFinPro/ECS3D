@@ -78,11 +78,17 @@ private:
   // which object's Camera the client renders through. mutable: set from the const message-apply path.
   mutable int32_t m_playerSlot = -1;
 
+  // Set once a connection problem needs the user's attention (lost connection, failed to connect, a
+  // malformed message) and shown on screen until the user closes it. Empty means nothing to show.
+  std::string m_connectionNotice;
+
   void createRenderer();
 
   void connectToServer();
 
   void sendInput();
+
+  void displayConnectionNotice();
 
   void variableUpdate() const;
 

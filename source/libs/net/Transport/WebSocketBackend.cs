@@ -416,6 +416,11 @@ internal sealed class WebSocketBackend : TransportBackend
     }
 
     _clientRunning = false;
+
+    // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
+    // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two
+    // apart via m_disconnectRequested and no-ops the latter.
+    Transport.DeliverClientDisconnect();
   }
 
   // -- WebSocket helpers --

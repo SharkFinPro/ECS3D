@@ -194,7 +194,10 @@ messages are refused at the sender, where there is something useful to say about
 its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`) caps how deep
 `Object::unpack`/`loadChildren` and `ObjectManager::reassignUUIDs` will recurse into a wire or JSON
 payload, so a tree claiming more depth than any real hierarchy needs is refused rather than exhausting the
-stack. The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
+stack. A lost client connection is reported the same way: the transport calls
+`Transport.DeliverClientDisconnect()` once its client receive loop exits, reaching `NetClient`
+(`clientSetDisconnectCallback`) so the client and editor apps can surface it on screen.
+The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
 reported to C++ separately from the messages it sends: once `Authorize` succeeds, both backends call
 `Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered
 in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` against
