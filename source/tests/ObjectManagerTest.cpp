@@ -686,6 +686,167 @@ TEST(ObjectManager, AddObjectToRootAtAnIndexPastTheEndAppends)
   EXPECT_EQ(scene.objectManager->getObjects()[1], extra);
 }
 
+// ScriptSystem::fixedUpdate/variableUpdate range over getAllObjects() and run script code (which can call
+// World.spawn/spawnPrefab) inside the loop - a live reference to m_allObjects, so an addObject that
+// appended straight to it could reallocate the vector out from under that range-for. ObjectManager defers
+// the append instead while a ScriptPassGuard is alive, exactly like removeObject already defers to
+// deleteObjectsMarkedForDeletion; these tests drive that guard directly (ScriptSystem needs the CoreCLR
+// host the rest of the suite stays free of).
+TEST(ObjectManager, ObjectsAddedDuringAScriptPassDoNotJoinTheListUntilFlushed)
+{
+  const auto scene = makeScene();
+  const auto original = addObject(scene, "Original");
+
+  {
+    const ObjectManager::ScriptPassGuard guard(*scene.objectManager);
+
+    const auto spawned = std::make_shared<Object>("Spawned");
+    scene.objectManager->addObject(spawned);
+
+    // Deferred: the pass is still "in progress" (the guard is alive), so the object must not be a member
+    // of the list a concurrent range-for over getAllObjects() would be iterating.
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
+    EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
+
+    // But still immediately usable: a script positioning/looking up the object it just spawned must not
+    // have to wait for the flush.
+    EXPECT_EQ(scene.objectManager->getObjectByUUID(spawned->getUUID()), spawned);
+  }
+
+  scene.objectManager->flushPendingAdditions();
+
+  ASSERT_EQ(scene.objectManager->getAllObjects().size(), 2u);
+  ASSERT_EQ(scene.objectManager->getObjects().size(), 2u);
+  EXPECT_EQ(scene.objectManager->getObjects().back()->getName(), "Spawned");
+
+  // Positive control: the object that was already there the whole time is untouched by any of this.
+  EXPECT_NE(std::ranges::find(scene.objectManager->getAllObjects(), original),
+            scene.objectManager->getAllObjects().end());
+}
+
+// The actual bug: appending to m_allObjects while a range-for over it is in progress can reallocate the
+// vector and invalidate every iterator the loop holds - undefined behavior for the rest of the pass. This
+// reproduces the shape of ScriptSystem's loop (small initial capacity, enough spawns during the loop body
+// to force a reallocation) and checks every original object is still visited exactly once - it would not
+// be, reliably, against the pre-fix code that pushed straight into m_allObjects mid-iteration.
+TEST(ObjectManager, SpawningEnoughObjectsToReallocateMidPassStillVisitsEveryOriginalExactlyOnce)
+{
+  const auto scene = makeScene();
+
+  std::vector<std::shared_ptr<Object>> originals;
+  for (int i = 0; i < 8; ++i)
+  {
+    originals.push_back(addObject(scene, "Original" + std::to_string(i)));
+  }
+
+  std::vector<std::shared_ptr<Object>> visited;
+  {
+    const ObjectManager::ScriptPassGuard guard(*scene.objectManager);
+
+    // A snapshot the way ScriptSystem's range-for takes one implicitly: getAllObjects() returns a
+    // reference, and the loop below re-reads size()/operator[] off it each time, the same shape as a
+    // range-for's begin()/end() over the live vector.
+    for (std::size_t i = 0; i < scene.objectManager->getAllObjects().size(); ++i)
+    {
+      const auto& object = scene.objectManager->getAllObjects()[i];
+      visited.push_back(object);
+
+      // Spawn enough to force at least one reallocation of m_allObjects if addObject were appending to it
+      // directly - deferred, this must never grow the vector this loop is reading.
+      scene.objectManager->addObject(std::make_shared<Object>("Spawned" + std::to_string(i)));
+    }
+  }
+
+  // Every original object was visited exactly once, in order - the guarantee a reallocating vector mid
+  // range-for would not honor (a moved/reallocated backing store can skip or repeat elements, or worse).
+  ASSERT_EQ(visited.size(), originals.size());
+  for (std::size_t i = 0; i < originals.size(); ++i)
+  {
+    EXPECT_EQ(visited[i], originals[i]);
+  }
+
+  // Still deferred: the loop above never called flushPendingAdditions.
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), originals.size());
+
+  scene.objectManager->flushPendingAdditions();
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), originals.size() * 2);
+}
+
+TEST(ObjectManager, SpawningThenDestroyingInTheSamePassRemovesTheObjectOnceBothFlush)
+{
+  const auto scene = makeScene();
+
+  std::shared_ptr<Object> spawned;
+  {
+    const ObjectManager::ScriptPassGuard guard(*scene.objectManager);
+
+    spawned = std::make_shared<Object>("Spawned");
+    scene.objectManager->addObject(spawned);
+
+    // Destroying it in the very same pass (World.spawnObject immediately followed by World.destroyObject)
+    // has to find it via getObjectByUUID while it is still only pending.
+    const auto found = scene.objectManager->getObjectByUUID(spawned->getUUID());
+    ASSERT_EQ(found, spawned);
+    EXPECT_TRUE(scene.objectManager->removeObject(found));
+  }
+
+  // Flush order matters: additions have to land before the delete pass runs, or there is nothing there
+  // for it to find and remove.
+  scene.objectManager->flushPendingAdditions();
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(spawned->getUUID()), nullptr);
+  EXPECT_TRUE(scene.objectManager->getAllObjects().empty());
+  EXPECT_TRUE(scene.objectManager->getObjects().empty());
+}
+
+// A prefab spawned mid-pass (World.spawnPrefab) registers its root, then every child, all through
+// addObject - each should defer and land in the same relative order once flushed.
+TEST(ObjectManager, ASpawnedPrefabsChildJoinsAlongsideItsRootOnFlush)
+{
+  const auto scene = makeScene();
+
+  std::shared_ptr<Object> root;
+  std::shared_ptr<Object> child;
+  {
+    const ObjectManager::ScriptPassGuard guard(*scene.objectManager);
+
+    root = std::make_shared<Object>("Root");
+    scene.objectManager->addObject(root);
+
+    child = std::make_shared<Object>("Child");
+    child->setParent(root);
+    scene.objectManager->addObject(child);
+
+    // Parenting isn't deferred - only flat-list membership is - so the child is already reachable from its
+    // root during the pass, the way instantiateUnder's own tree-building depends on.
+    EXPECT_EQ(root->getChildren().size(), 1u);
+    EXPECT_EQ(root->getChildren().front(), child);
+
+    EXPECT_TRUE(scene.objectManager->getAllObjects().empty());
+  }
+
+  scene.objectManager->flushPendingAdditions();
+
+  ASSERT_EQ(scene.objectManager->getObjects().size(), 1u);
+  EXPECT_EQ(scene.objectManager->getObjects().front(), root);
+  ASSERT_EQ(scene.objectManager->getAllObjects().size(), 2u);
+  EXPECT_EQ(child->getParent(), root);
+}
+
+// Non-script callers (editor edits, snapshot unpack, Object::unpack reconciliation) never run inside a
+// ScriptPassGuard, so they must keep the old immediate semantics - the positive control proving the guard,
+// not addObject itself, is what changed.
+TEST(ObjectManager, AddObjectOutsideAScriptPassIsStillImmediate)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Immediate");
+
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
+  EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(object->getUUID()), object);
+}
+
 // restoreSubtree deliberately does not go through instantiate/instantiateUnder's reassignUUIDs: the
 // undo history names a removed subtree by its original uuids, and instantiateUnder is the contrasting
 // positive control proving these uuids would otherwise change.

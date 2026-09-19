@@ -905,11 +905,14 @@ void ServerApp::broadcastStructuralChanges() const
     m_netServer->broadcast(replication::buildObjectDestroyed(uuid));
   }
 
-  if (!destroyed.empty())
+  // Both flushes run here, once per frame, regardless of which (if either) fired this frame: a spawn-only
+  // frame still has to admit its pending objects into the scene, and flushing additions before deletions
+  // means an object spawned then destroyed in the same frame's script passes is a real member of the list
+  // by the time the delete pass looks for it.
+  if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    if (const auto scene = m_sceneManager->getCurrentScene())
-    {
-      scene->getObjectManager()->deleteObjectsMarkedForDeletion();
-    }
+    const auto objectManager = scene->getObjectManager();
+    objectManager->flushPendingAdditions();
+    objectManager->deleteObjectsMarkedForDeletion();
   }
 }
