@@ -2,6 +2,7 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
+#include <objects/components/FiniteCheck.h>
 #include <objects/components/RigidBody.h>
 #include <objects/components/Transform.h>
 #include <glm/glm.hpp>
@@ -74,7 +75,19 @@ void PhysicsSystem::applyForce(RigidBody& body, const Transform& transform, cons
 
   const auto angularImpulse = glm::cross(r, force);
 
-  body.setAngularVelocity(body.getAngularVelocity() + angularImpulse * glm::inverse(getInertiaTensor(body, transform)));
+  const auto inertiaTensor = getInertiaTensor(body, transform);
+
+  // A degenerate body (zero mass, a zeroed scale axis) puts a zero or non-finite entry on the diagonal.
+  // Inverting that gives inf/NaN angular velocity that never recovers, so skip the angular term instead
+  // of spinning the body up to garbage.
+  constexpr float minDiagonal = 1e-6f;
+  if (inertiaTensor[0][0] <= minDiagonal || inertiaTensor[1][1] <= minDiagonal || inertiaTensor[2][2] <= minDiagonal ||
+      !finiteCheck::isFinite(glm::vec3(inertiaTensor[0][0], inertiaTensor[1][1], inertiaTensor[2][2])))
+  {
+    return;
+  }
+
+  body.setAngularVelocity(body.getAngularVelocity() + angularImpulse * glm::inverse(inertiaTensor));
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
