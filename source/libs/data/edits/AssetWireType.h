@@ -5,7 +5,7 @@
 #include <string>
 
 // The addAsset blob's "assetType" strings, both directions. Internal to edits/: there is no buildAddAsset
-// in Replication.h to borrow the mapping from - the editor assembles that blob itself (see EditorApp.cpp's
+// in Replication.h to borrow the mapping from - the editor assembles that blob itself (see EditorApp's
 // addAsset/updatePrefabBody lambdas) and applyAddAsset reads it back.
 namespace edits {
 
