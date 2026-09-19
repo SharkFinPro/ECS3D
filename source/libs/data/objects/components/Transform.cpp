@@ -1,4 +1,5 @@
 #include "Transform.h"
+#include "FiniteCheck.h"
 #include "../Object.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
@@ -84,25 +85,50 @@ glm::vec3 Transform::getLocalRotation() const
 
 void Transform::setPosition(const glm::vec3 position)
 {
+  if (!finiteCheck::isFinite(position))
+  {
+    return;
+  }
+
   m_position.set(position);
   ++m_updateID;
 }
 
 void Transform::setScale(const glm::vec3 scale)
 {
+  if (!finiteCheck::isFinite(scale))
+  {
+    return;
+  }
+
   m_scale.set(scale);
   ++m_updateID;
 }
 
 void Transform::setRotation(const glm::vec3 rotation)
 {
+  if (!finiteCheck::isFinite(rotation))
+  {
+    return;
+  }
+
   m_rotation.set(rotation);
   ++m_updateID;
 }
 
 void Transform::move(const glm::vec3& direction)
 {
-  m_position.set(m_position.get() + direction);
+  // Scripts reach this through the Move binding, so it needs the same guard the setters have - and the
+  // sum is checked rather than the direction, since a finite step off an already huge position
+  // overflows to infinity on its own.
+  const auto moved = m_position.get() + direction;
+
+  if (!finiteCheck::isFinite(moved))
+  {
+    return;
+  }
+
+  m_position.set(moved);
   ++m_updateID;
 }
 

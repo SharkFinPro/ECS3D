@@ -28,6 +28,7 @@ add_executable(${PROJECT_NAME}
   AssetRegistryTest.cpp
   ComponentEditTest.cpp
   ComponentVariableTest.cpp
+  NonFiniteValuesTest.cpp
   EditHistoryTest.cpp
   RecordEditsTest.cpp
   CollisionMathTest.cpp

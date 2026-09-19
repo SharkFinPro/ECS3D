@@ -1,4 +1,5 @@
 #include "RigidBody.h"
+#include "FiniteCheck.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
@@ -36,6 +37,11 @@ glm::vec3 RigidBody::getVelocity() const
 
 void RigidBody::setVelocity(const glm::vec3& velocity)
 {
+  if (!finiteCheck::isFinite(velocity))
+  {
+    return;
+  }
+
   m_velocity.set(velocity);
 }
 
@@ -46,6 +52,11 @@ glm::vec3 RigidBody::getAngularVelocity() const
 
 void RigidBody::setAngularVelocity(const glm::vec3& angularVelocity)
 {
+  if (!finiteCheck::isFinite(angularVelocity))
+  {
+    return;
+  }
+
   m_angularVelocity.set(angularVelocity);
 }
 
@@ -56,6 +67,11 @@ float RigidBody::getMass() const
 
 void RigidBody::setMass(const float mass)
 {
+  if (!finiteCheck::isFinite(mass))
+  {
+    return;
+  }
+
   m_mass.set(mass);
 }
 
@@ -66,6 +82,11 @@ float RigidBody::getFriction() const
 
 void RigidBody::setFriction(const float friction)
 {
+  if (!finiteCheck::isFinite(friction))
+  {
+    return;
+  }
+
   m_friction.set(friction);
 }
 
@@ -76,6 +97,11 @@ float RigidBody::getGravity() const
 
 void RigidBody::setGravity(const float gravity)
 {
+  if (!finiteCheck::isFinite(gravity))
+  {
+    return;
+  }
+
   m_gravity.set(gravity);
 }
 

@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -63,7 +64,17 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
       const std::string name = sceneData.at("name");
 
       const auto scene = std::make_shared<SceneAsset>(uuid, name, m_componentRegistry);
-      scene->loadObjects(sceneData.at("objects"));
+
+      // One unreadable value anywhere takes the whole file down with it (the commit below is atomic),
+      // so the scene has to be named too - "which object" is no help across a dozen of them.
+      try
+      {
+        scene->loadObjects(sceneData.at("objects"));
+      }
+      catch (const std::exception& e)
+      {
+        throw std::runtime_error("scene '" + name + "': " + e.what());
+      }
 
       parsedScenes.push_back(scene);
     }

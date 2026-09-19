@@ -512,7 +512,17 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     }
 
     addComponent(component);
-    component->loadFromJSON(componentData);
+
+    // The whole project load is atomic, so one bad field aborts every scene in the file. Naming the
+    // object and the component here is the only thing that tells the log line which one it was.
+    try
+    {
+      component->loadFromJSON(componentData);
+    }
+    catch (const std::exception& e)
+    {
+      throw std::runtime_error(describeLoadFailure(componentType, e));
+    }
   }
 
   for (const auto& scriptData : objectData.at("scripts"))
@@ -525,6 +535,19 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     }
 
     addComponent(script);
-    script->loadFromJSON(scriptData);
+
+    try
+    {
+      script->loadFromJSON(scriptData);
+    }
+    catch (const std::exception& e)
+    {
+      throw std::runtime_error(describeLoadFailure("Script", e));
+    }
   }
+}
+
+std::string Object::describeLoadFailure(const std::string& componentType, const std::exception& error) const
+{
+  return "object '" + m_name + "' (" + uuids::to_string(m_uuid) + "): " + componentType + ": " + error.what();
 }
