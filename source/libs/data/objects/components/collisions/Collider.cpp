@@ -36,8 +36,6 @@ const BoundingBox& Collider::getBoundingBox()
   m_boundingBox.minZ = findFurthestPoint({0, 0, -1}).z;
   m_boundingBox.maxZ = findFurthestPoint({0, 0, 1}).z;
 
-  // Published only after the fields above are all written, so a reader can never observe the id/flag
-  // cleared with stale box values still in place.
   m_boundingBox.lastUpdateID = transformUpdateID;
   m_boundingBoxDirty = false;
 
