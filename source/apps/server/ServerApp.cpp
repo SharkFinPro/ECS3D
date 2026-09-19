@@ -818,7 +818,7 @@ void ServerApp::broadcastSnapshot() const
     }
     catch (const std::exception& e)
     {
-      Log::error(LogCategory::server, std::string("syncFieldsToData failed, sending snapshot with last-known field values: ") + e.what());
+      Log::error(LogCategory::server, std::string("Script attach/field sync failed, sending snapshot with last-known field values: ") + e.what());
     }
   }
 
