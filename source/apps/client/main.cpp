@@ -7,26 +7,25 @@
 #include <iostream>
 #include <string>
 
-int main(const int argc, char** argv)
+namespace
 {
-  try
+  bool hasConsoleFlag(const int argc, char** argv)
   {
-    Log::addSink(std::make_shared<ConsoleSink>());
-
-    // The client is a GUI-subsystem build with no console by default; --console opens one.
     for (int i = 1; i < argc; ++i)
     {
       if (std::string(argv[i]) == "--console")
       {
-        openConsoleWindow();
-        break;
+        return true;
       }
     }
 
-    addFileSinkFromArguments(argc, argv, "client", LogCategory::client);
+    return false;
+  }
 
-    // Defaults to singleplayer (spawn a local server). --host connects to an existing/remote server
-    // instead (no local server spawned).
+  // Defaults to singleplayer (spawn a local server). --host connects to an existing/remote server
+  // instead (no local server spawned).
+  ClientApp::ConnectOptions parseOptions(const int argc, char** argv)
+  {
     ClientApp::ConnectOptions options { .launchLocalServer = true };
 
     for (int i = 1; i < argc; ++i)
@@ -51,7 +50,25 @@ int main(const int argc, char** argv)
       }
     }
 
-    ClientApp app(options);
+    return options;
+  }
+}
+
+int main(const int argc, char** argv)
+{
+  try
+  {
+    Log::addSink(std::make_shared<ConsoleSink>());
+
+    // The client is a GUI-subsystem build with no console by default; --console opens one.
+    if (hasConsoleFlag(argc, argv))
+    {
+      openConsoleWindow();
+    }
+
+    addFileSinkFromArguments(argc, argv, "client", LogCategory::client);
+
+    ClientApp app(parseOptions(argc, argv));
 
     app.run();
   }

@@ -128,9 +128,7 @@ namespace {
     return object;
   }
 
-  // A project touching every component type, a nested object, a second scene, a prefab body and a
-  // display-name override.
-  void buildProject(const Project& project)
+  void registerProjectAssets(const Project& project)
   {
     const auto modelUUID = uuidFrom("11111111-1111-1111-1111-111111111111");
     const auto textureUUID = uuidFrom("22222222-2222-2222-2222-222222222222");
@@ -157,10 +155,13 @@ namespace {
                                            .body = prefabBody.dump() });
 
     project.assetRegistry->renameAsset(textureUUID, "Nicer Wood");
+  }
 
-    const auto scene = std::make_shared<SceneAsset>(uuidFrom("66666666-6666-6666-6666-666666666666"),
-                                                    "Main", project.componentRegistry);
-    project.sceneManager->addScene(scene);
+  // The scene's "Body" object: transform, rigid body, box collider, model renderer and a script.
+  std::shared_ptr<Object> addBody(const std::shared_ptr<SceneAsset>& scene)
+  {
+    const auto modelUUID = uuidFrom("11111111-1111-1111-1111-111111111111");
+    const auto textureUUID = uuidFrom("22222222-2222-2222-2222-222222222222");
 
     const auto body = addObject(scene, "Body");
     const auto transform = body->getComponent<Transform>(ComponentType::transform);
@@ -195,6 +196,12 @@ namespace {
     script->setFields(nlohmann::json{ { "speed", 4.5 }, { "jump", true } });
     body->addComponent(script);
 
+    return body;
+  }
+
+  // The "Child" nested under the body: sphere collider, player controller and camera.
+  void addChild(const std::shared_ptr<SceneAsset>& scene, const std::shared_ptr<Object>& body)
+  {
     const auto child = addObject(scene, "Child", body);
 
     const auto sphereCollider = std::make_shared<SphereCollider>();
@@ -212,7 +219,10 @@ namespace {
     camera->setFarPlane(500.0f);
     camera->setActive(true);
     child->addComponent(camera);
+  }
 
+  void addLamp(const std::shared_ptr<SceneAsset>& scene)
+  {
     const auto lamp = addObject(scene, "Lamp");
 
     const auto light = std::make_shared<LightRenderer>();
@@ -221,6 +231,21 @@ namespace {
     light->setSpotLight(true);
     light->setConeAngle(25.0f);
     lamp->addComponent(light);
+  }
+
+  // A project touching every component type, a nested object, a second scene, a prefab body and a
+  // display-name override.
+  void buildProject(const Project& project)
+  {
+    registerProjectAssets(project);
+
+    const auto scene = std::make_shared<SceneAsset>(uuidFrom("66666666-6666-6666-6666-666666666666"),
+                                                    "Main", project.componentRegistry);
+    project.sceneManager->addScene(scene);
+
+    const auto body = addBody(scene);
+    addChild(scene, body);
+    addLamp(scene);
 
     const auto empty = std::make_shared<SceneAsset>(uuidFrom("77777777-7777-7777-7777-777777777777"),
                                                     "Empty", project.componentRegistry);

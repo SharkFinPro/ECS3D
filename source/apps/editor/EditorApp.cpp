@@ -127,6 +127,64 @@ namespace {
     return count;
   }
 
+  // What the "View" combo shows while closed: the chosen camera's label, or the free-fly label when
+  // nothing is chosen or the choice is gone.
+  std::string cameraPreviewLabel(ObjectManager* objectManager, const std::optional<uuids::uuid>& viewCameraObject,
+                                 const char* freeFlyLabel)
+  {
+    std::string preview = freeFlyLabel;
+    if (objectManager && viewCameraObject)
+    {
+      if (const auto object = objectManager->getObjectByUUID(*viewCameraObject))
+      {
+        preview = cameraLabel(object);
+      }
+    }
+
+    return preview;
+  }
+
+  // The scene's Camera objects as combo entries; picking one makes it the viewport's camera.
+  void selectSceneCamera(ObjectManager* objectManager, std::optional<uuids::uuid>& viewCameraObject)
+  {
+    if (!objectManager)
+    {
+      return;
+    }
+
+    for (const auto& object : objectManager->getAllObjects())
+    {
+      if (!object->getComponent<Camera>(ComponentType::camera))
+      {
+        continue;
+      }
+
+      const auto uuid = object->getUUID();
+
+      // Objects can share a name, so the uuid disambiguates the ImGui id.
+      const std::string label = cameraLabel(object) + "##" + uuids::to_string(uuid);
+
+      if (ImGui::Selectable(label.c_str(), viewCameraObject == uuid))
+      {
+        viewCameraObject = uuid;
+      }
+    }
+  }
+
+  const char* sceneStatusLabel(const SceneStatus status)
+  {
+    return status == SceneStatus::running ? "Running"
+         : status == SceneStatus::paused  ? "Paused"
+                                          : "Stopped";
+  }
+
+  ImVec4 sceneStatusColor(const SceneStatus status)
+  {
+    return status == SceneStatus::running ? theme::sceneGreen
+         : status == SceneStatus::paused  ? theme::scriptAmber
+                                          : theme::t3;
+  }
+
   // Nothing faithful could be derived for an edit (see RecordEdits.h): the edit still goes out, only the
   // history entry is skipped.
   void logUnrecordedEdit(const std::string& what)
@@ -181,223 +239,12 @@ EditorApp::EditorApp(LaunchOptions options)
   m_componentEditor = std::make_shared<ComponentEditor>();
   registerEditors();
 
-  // Register a new asset: apply locally for instant feedback, then on the server (which re-snapshots).
-  // Shared by the asset browser's import/create and the object tree's "Save as Prefab".
-  const auto addAsset = [this](const nlohmann::json& asset) {
-    // Derived before the local apply: the command's before state is the record this registry is about
-    // to lose. Same for the two ops below.
-    auto command = edits::commandForAddAsset(asset, *m_assetRegistry);
-
-    replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
-
-    m_netClient->send(replication::packAddAsset(asset));
-    m_saveUI->markEdited();
-
-    if (command)
-    {
-      m_editHistory.record(std::move(*command));
-    }
-    else
-    {
-      logUnrecordedEdit("an addAsset");
-    }
-  };
-
-  // Rename an asset (display-name override only). Same local-apply-then-send shape as addAsset.
-  const auto renameAsset = [this](const uuids::uuid& assetUUID, const std::string& displayName) {
-    const auto op = replication::buildRenameAsset(assetUUID, displayName);
-    auto command = edits::commandForRenameAsset(op, *m_assetRegistry);
-
-    replication::applyRenameAsset(*m_assetRegistry, op);
-
-    m_netClient->send(replication::packRenameAsset(op));
-    m_saveUI->markEdited();
-
-    if (command)
-    {
-      m_editHistory.record(std::move(*command));
-    }
-    else
-    {
-      logUnrecordedEdit("a renameAsset");
-    }
-  };
-
-  // Delete an asset: same local-apply-then-send shape. Deletion always succeeds; references dangle
-  // (lookups null-tolerate a missing uuid).
-  const auto removeAsset = [this](const uuids::uuid& assetUUID) {
-    const auto op = replication::buildRemoveAsset(assetUUID);
-    auto command = edits::commandForRemoveAsset(op, *m_assetRegistry);
-
-    replication::applyRemoveAsset(*m_assetRegistry, op);
-
-    m_netClient->send(replication::packRemoveAsset(op));
-    m_saveUI->markEdited();
-
-    if (command)
-    {
-      m_editHistory.record(std::move(*command));
-    }
-    else
-    {
-      logUnrecordedEdit("a removeAsset");
-    }
-  };
-
-  // How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
-  // replicated scenes' objects and every prefab body - the two places an object tree lives editor-side.
-  const auto countAssetReferences = [this](const uuids::uuid& assetUUID) {
-    const auto uuidString = uuids::to_string(assetUUID);
-    int count = 0;
-
-    for (const auto& [sceneUUID, scene] : m_sceneManager->getScenes())
-    {
-      const auto objectManager = scene->getObjectManager();
-      if (!objectManager)
-      {
-        continue;
-      }
-
-      for (const auto& object : objectManager->getAllObjects())
-      {
-        if (objectReferencesAsset(object, uuidString))
-        {
-          ++count;
-        }
-      }
-    }
-
-    for (const auto& [recordUUID, record] : m_assetRegistry->getAssets())
-    {
-      if (record.type != AssetType::Prefab)
-      {
-        continue;
-      }
-
-      if (auto body = nlohmann::json::parse(record.body, nullptr, false); !body.is_discarded() && body.is_object())
-      {
-        count += countReferencesInPrefabNode(body, uuidString);
-      }
-    }
-
-    return count;
-  };
-
-  // A component value edit: send the component's new state to the server. Only the Inspector fires this.
-  const auto editComponent = [this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
-    const auto message = replication::buildComponentEdit(objectUUID, component);
-    m_netClient->send(message);
-    m_saveUI->markEdited();
-  };
-
-  // A structural change (add/remove/reparent object, add/remove component, rename, add script): the
-  // server applies it and re-snapshots. Shared by the object tree and the Inspector.
-  const auto sceneEdit = [this](const nlohmann::json& edit) {
-    const auto scene = m_sceneManager->getCurrentScene();
-    auto command = scene ? edits::commandForSceneEdit(edit, *scene->getObjectManager())
-                         : std::optional<edits::EditCommand>{};
-
-    const auto payload = edit.dump();
-
-    net::Message message(net::MessageType::sceneEdit);
-    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
-    m_netClient->send(message);
-    m_saveUI->markEdited();
-
-    if (command)
-    {
-      m_editHistory.record(std::move(*command));
-    }
-    else if (scene)
-    {
-      logUnrecordedEdit("the scene edit " + payload);
-    }
-  };
-
-  // One finished value edit, as the component looked before the gesture and after it. The per-frame
-  // editComponent send above is what keeps the server current while it is still going.
-  const auto editCommitted = [this](const uuids::uuid& objectUUID, const nlohmann::json& before,
-                                    const nlohmann::json& after) {
-    if (before == after)
-    {
-      return;
-    }
-
-    m_editHistory.record(edits::EditCommand::componentEdit(objectUUID, before, after));
-  };
-
   m_selection = std::make_shared<EditorSelection>();
 
-  // The object tree owns the hierarchy + structural tree edits + "Save as Prefab"; the Inspector owns
-  // the selected item's body. Both read/write the one selection slot.
-  m_objectGUIManager = std::make_shared<ObjectGUIManager>();
-  m_objectGUIManager->setSelection(m_selection);
-  m_objectGUIManager->setAddAssetCallback(addAsset);
-  m_objectGUIManager->setSceneEditCallback(sceneEdit);
-  m_objectGUIManager->setSettings(m_settings.get());
-
-  // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).
-  // Shared by the asset browser's scene double-click and the Inspector's "Load Scene" button.
-  const auto loadScene = [this](const uuids::uuid& sceneUUID) {
-    if (const auto scene = m_sceneManager->getScene(sceneUUID))
-    {
-      // Every recorded command names objects in the scene being left behind.
-      m_editHistory.clear();
-
-      m_sceneManager->loadScene(scene);
-    }
-
-    net::Message message(net::MessageType::sceneControl);
-    message.write(net::SceneControlOp::loadScene);
-    message.writeString(uuids::to_string(sceneUUID));
-    m_netClient->send(message);
-  };
-
-  // A prefab body edit: re-register under the existing name, updating the body in place and keeping the
-  // uuid - the same path "Save as Prefab" over an existing name takes, via the same addAsset shape.
-  const auto updatePrefabBody = [addAsset](const uuids::uuid& assetUUID, const std::string& name,
-                                           const std::string& body) {
-    addAsset({
-      { "assetType", "prefab" },
-      { "uuid", uuids::to_string(assetUUID) },
-      { "name", name },
-      { "body", body }
-    });
-  };
-
-  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_componentRegistry, m_assetCache);
-  m_inspectorPanel->setSelection(m_selection);
-  m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
-  m_inspectorPanel->setEditCallback(editComponent);
-  m_inspectorPanel->setEditCommittedCallback(editCommitted);
-  m_inspectorPanel->setSceneEditCallback(sceneEdit);
-  m_inspectorPanel->setLoadSceneCallback(loadScene);
-  m_inspectorPanel->setRenameAssetCallback(renameAsset);
-  m_inspectorPanel->setRemoveAssetCallback(removeAsset);
-  m_inspectorPanel->setAssetReferenceCountCallback(countAssetReferences);
-  m_inspectorPanel->setUpdatePrefabBodyCallback(updatePrefabBody);
-
-  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
-  m_assetBrowser->setSelection(m_selection);
-  m_assetBrowser->setLoadSceneCallback(loadScene);
-  m_assetBrowser->setAddAssetCallback(addAsset);
-
-  m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
-  m_saveUI->setLoadProjectCallback([this] {
-    // Open/New: the server owns the running sim, so send it the packed project (SaveUI already applied it
-    // to our managers); it reloads and re-snapshots.
-    m_editHistory.clear();
-
-    net::Message message(net::MessageType::loadProject);
-    m_projectPacker->pack(message);
-
-    Log::info(LogCategory::editor, "Sending loadProject (" + std::to_string(message.size()) + " bytes) to server.");
-
-    m_netClient->send(message);
-  });
+  setupObjectGUIManager();
+  setupInspectorPanel();
+  setupAssetBrowser();
+  setupSaveUI();
 
   // Save/Save As are wired to the table once SaveUI exists; toggleGui was already wired in setupKeybinds.
   m_keybindDispatcher->on(EditorAction::saveProject, [this] { static_cast<void>(m_saveUI->save()); });
@@ -409,6 +256,256 @@ EditorApp::EditorApp(LaunchOptions options)
 
   // Ask the server for the initial Snapshot.
   const net::Message message(net::MessageType::join);
+  m_netClient->send(message);
+}
+
+void EditorApp::setupObjectGUIManager()
+{
+  // The object tree owns the hierarchy + structural tree edits + "Save as Prefab"; the Inspector owns
+  // the selected item's body. Both read/write the one selection slot.
+  m_objectGUIManager = std::make_shared<ObjectGUIManager>();
+  m_objectGUIManager->setSelection(m_selection);
+  m_objectGUIManager->setAddAssetCallback([this](const nlohmann::json& asset) { onAddAsset(asset); });
+  m_objectGUIManager->setSceneEditCallback([this](const nlohmann::json& edit) { onSceneEdit(edit); });
+  m_objectGUIManager->setSettings(m_settings.get());
+}
+
+void EditorApp::setupInspectorPanel()
+{
+  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_componentRegistry, m_assetCache);
+  m_inspectorPanel->setSelection(m_selection);
+  m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
+  m_inspectorPanel->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
+    onEditComponent(objectUUID, component);
+  });
+  m_inspectorPanel->setEditCommittedCallback([this](const uuids::uuid& objectUUID, const nlohmann::json& before,
+                                                    const nlohmann::json& after) {
+    onEditCommitted(objectUUID, before, after);
+  });
+  m_inspectorPanel->setSceneEditCallback([this](const nlohmann::json& edit) { onSceneEdit(edit); });
+  m_inspectorPanel->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) { onLoadScene(sceneUUID); });
+  m_inspectorPanel->setRenameAssetCallback([this](const uuids::uuid& assetUUID, const std::string& displayName) {
+    onRenameAsset(assetUUID, displayName);
+  });
+  m_inspectorPanel->setRemoveAssetCallback([this](const uuids::uuid& assetUUID) { onRemoveAsset(assetUUID); });
+  m_inspectorPanel->setAssetReferenceCountCallback([this](const uuids::uuid& assetUUID) {
+    return countAssetReferences(assetUUID);
+  });
+  m_inspectorPanel->setUpdatePrefabBodyCallback([this](const uuids::uuid& assetUUID, const std::string& name,
+                                                       const std::string& body) {
+    onUpdatePrefabBody(assetUUID, name, body);
+  });
+}
+
+void EditorApp::setupAssetBrowser()
+{
+  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
+  m_assetBrowser->setSelection(m_selection);
+  m_assetBrowser->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) { onLoadScene(sceneUUID); });
+  m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& asset) { onAddAsset(asset); });
+}
+
+void EditorApp::setupSaveUI()
+{
+  m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
+  m_saveUI->setLoadProjectCallback([this] { onLoadProject(); });
+}
+
+// Register a new asset: apply locally for instant feedback, then on the server (which re-snapshots).
+// Shared by the asset browser's import/create and the object tree's "Save as Prefab".
+void EditorApp::onAddAsset(const nlohmann::json& asset)
+{
+  // Derived before the local apply: the command's before state is the record this registry is about
+  // to lose. Same for the two ops below.
+  auto command = edits::commandForAddAsset(asset, *m_assetRegistry);
+
+  replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
+
+  m_netClient->send(replication::packAddAsset(asset));
+  m_saveUI->markEdited();
+
+  if (command)
+  {
+    m_editHistory.record(std::move(*command));
+  }
+  else
+  {
+    logUnrecordedEdit("an addAsset");
+  }
+}
+
+// Rename an asset (display-name override only). Same local-apply-then-send shape as onAddAsset.
+void EditorApp::onRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName)
+{
+  const auto op = replication::buildRenameAsset(assetUUID, displayName);
+  auto command = edits::commandForRenameAsset(op, *m_assetRegistry);
+
+  replication::applyRenameAsset(*m_assetRegistry, op);
+
+  m_netClient->send(replication::packRenameAsset(op));
+  m_saveUI->markEdited();
+
+  if (command)
+  {
+    m_editHistory.record(std::move(*command));
+  }
+  else
+  {
+    logUnrecordedEdit("a renameAsset");
+  }
+}
+
+// Delete an asset: same local-apply-then-send shape. Deletion always succeeds; references dangle
+// (lookups null-tolerate a missing uuid).
+void EditorApp::onRemoveAsset(const uuids::uuid& assetUUID)
+{
+  const auto op = replication::buildRemoveAsset(assetUUID);
+  auto command = edits::commandForRemoveAsset(op, *m_assetRegistry);
+
+  replication::applyRemoveAsset(*m_assetRegistry, op);
+
+  m_netClient->send(replication::packRemoveAsset(op));
+  m_saveUI->markEdited();
+
+  if (command)
+  {
+    m_editHistory.record(std::move(*command));
+  }
+  else
+  {
+    logUnrecordedEdit("a removeAsset");
+  }
+}
+
+// How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
+// replicated scenes' objects and every prefab body - the two places an object tree lives editor-side.
+int EditorApp::countAssetReferences(const uuids::uuid& assetUUID) const
+{
+  const auto uuidString = uuids::to_string(assetUUID);
+  int count = 0;
+
+  for (const auto& [sceneUUID, scene] : m_sceneManager->getScenes())
+  {
+    const auto objectManager = scene->getObjectManager();
+    if (!objectManager)
+    {
+      continue;
+    }
+
+    for (const auto& object : objectManager->getAllObjects())
+    {
+      if (objectReferencesAsset(object, uuidString))
+      {
+        ++count;
+      }
+    }
+  }
+
+  for (const auto& [recordUUID, record] : m_assetRegistry->getAssets())
+  {
+    if (record.type != AssetType::Prefab)
+    {
+      continue;
+    }
+
+    if (auto body = nlohmann::json::parse(record.body, nullptr, false); !body.is_discarded() && body.is_object())
+    {
+      count += countReferencesInPrefabNode(body, uuidString);
+    }
+  }
+
+  return count;
+}
+
+// A component value edit: send the component's new state to the server. Only the Inspector fires this.
+void EditorApp::onEditComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) const
+{
+  const auto message = replication::buildComponentEdit(objectUUID, component);
+  m_netClient->send(message);
+  m_saveUI->markEdited();
+}
+
+// A structural change (add/remove/reparent object, add/remove component, rename, add script): the
+// server applies it and re-snapshots. Shared by the object tree and the Inspector.
+void EditorApp::onSceneEdit(const nlohmann::json& edit)
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+  auto command = scene ? edits::commandForSceneEdit(edit, *scene->getObjectManager())
+                       : std::optional<edits::EditCommand>{};
+
+  const auto payload = edit.dump();
+
+  net::Message message(net::MessageType::sceneEdit);
+  for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
+  {
+    message.write(chunk);
+  }
+  m_netClient->send(message);
+  m_saveUI->markEdited();
+
+  if (command)
+  {
+    m_editHistory.record(std::move(*command));
+  }
+  else if (scene)
+  {
+    logUnrecordedEdit("the scene edit " + payload);
+  }
+}
+
+// One finished value edit, as the component looked before the gesture and after it. The per-frame
+// onEditComponent send above is what keeps the server current while it is still going.
+void EditorApp::onEditCommitted(const uuids::uuid& objectUUID, const nlohmann::json& before, const nlohmann::json& after)
+{
+  if (before == after)
+  {
+    return;
+  }
+
+  m_editHistory.record(edits::EditCommand::componentEdit(objectUUID, before, after));
+}
+
+// Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).
+// Shared by the asset browser's scene double-click and the Inspector's "Load Scene" button.
+void EditorApp::onLoadScene(const uuids::uuid& sceneUUID)
+{
+  if (const auto scene = m_sceneManager->getScene(sceneUUID))
+  {
+    // Every recorded command names objects in the scene being left behind.
+    m_editHistory.clear();
+
+    m_sceneManager->loadScene(scene);
+  }
+
+  net::Message message(net::MessageType::sceneControl);
+  message.write(net::SceneControlOp::loadScene);
+  message.writeString(uuids::to_string(sceneUUID));
+  m_netClient->send(message);
+}
+
+// A prefab body edit: re-register under the existing name, updating the body in place and keeping the
+// uuid - the same path "Save as Prefab" over an existing name takes, via the same onAddAsset shape.
+void EditorApp::onUpdatePrefabBody(const uuids::uuid& assetUUID, const std::string& name, const std::string& body)
+{
+  onAddAsset({
+    { "assetType", "prefab" },
+    { "uuid", uuids::to_string(assetUUID) },
+    { "name", name },
+    { "body", body }
+  });
+}
+
+void EditorApp::onLoadProject()
+{
+  // Open/New: the server owns the running sim, so send it the packed project (SaveUI already applied it
+  // to our managers); it reloads and re-snapshots.
+  m_editHistory.clear();
+
+  net::Message message(net::MessageType::loadProject);
+  m_projectPacker->pack(message);
+
+  Log::info(LogCategory::editor, "Sending loadProject (" + std::to_string(message.size()) + " bytes) to server.");
+
   m_netClient->send(message);
 }
 
@@ -572,7 +669,7 @@ void EditorApp::handlePicking()
   m_mouseWasPressed = pressed;
 }
 
-void EditorApp::sendInput()
+input::InputSnapshot EditorApp::captureGatedInput() const
 {
   const auto& io = ImGui::GetIO();
 
@@ -600,6 +697,11 @@ void EditorApp::sendInput()
     snapshot.buttons = 0;
   }
 
+  return snapshot;
+}
+
+bool EditorApp::hasInputChanged(const input::InputSnapshot& snapshot) const
+{
   const bool discreteChanged = !m_inputSent
     || snapshot.keys != m_lastInputKeys
     || snapshot.focused != m_lastInputFocused
@@ -609,7 +711,14 @@ void EditorApp::sendInput()
 
   const bool scrolled = snapshot.scrollY != 0.0f;
 
-  if (m_inputSent && !discreteChanged && !scrolled)
+  return !m_inputSent || discreteChanged || scrolled;
+}
+
+void EditorApp::sendInput()
+{
+  const input::InputSnapshot snapshot = captureGatedInput();
+
+  if (!hasInputChanged(snapshot))
   {
     return;
   }
@@ -982,89 +1091,99 @@ void EditorApp::updateDockSpace() const
 
   if (!dockLocationsSetup && dockPercentsSetup)
   {
-    const auto gui = m_renderer->getImGuiInstance();
-
-    gui->dockCenter(m_sceneViewName.c_str());
-
-    gui->dockLeft("Objects");
-
-    gui->dockRight("Inspector");
-
-    gui->dockTop("Scene Status");
-
-    gui->dockBottom("Assets");
-    gui->dockBottom("Project Errors");
-    gui->dockBottom("Console");
-
-    // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
-    // shrink the other, and tabs sharing a dock node take the largest floor among them. In a window small
-    // enough that the default sizes fall below these, the floors win over the default layout.
-    const ImVec2 objectsMinimumSize{260.0f, 0.0f};
-    const ImVec2 inspectorMinimumSize{310.0f, 0.0f};
-    const ImVec2 sceneStatusMinimumSize{0.0f, 88.0f};
-    const ImVec2 assetsMinimumSize{0.0f, 200.0f};
-    const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
-    const ImVec2 consoleMinimumSize{0.0f, 120.0f};
-
-    gui->setDockedWindowMinimumSize("Objects", objectsMinimumSize);
-    gui->setDockedWindowMinimumSize("Inspector", inspectorMinimumSize);
-    gui->setDockedWindowMinimumSize("Scene Status", sceneStatusMinimumSize);
-    gui->setDockedWindowMinimumSize("Assets", assetsMinimumSize);
-    gui->setDockedWindowMinimumSize("Project Errors", projectErrorsMinimumSize);
-    gui->setDockedWindowMinimumSize("Console", consoleMinimumSize);
+    applyDockLocations();
 
     dockLocationsSetup = true;
   }
 
   if (!dockPercentsSetup)
   {
-    const ImVec2 viewportSize = ImGui::GetMainViewport()->Size;
-
-    // A just-opened (or minimized) window can report a zero-size viewport on its first frames; wait for a
-    // real size instead of dividing by zero or locking in a degenerate layout.
-    if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
-    {
-      return;
-    }
-
-    // Objects/Inspector: wide enough for a name/icon column and field labels, capped so a narrow window
-    // still leaves the center scene view usable.
-    constexpr float leftPanelWidth = 280.0f;
-    constexpr float rightPanelWidth = 360.0f;
-    constexpr float maxSideFraction = 0.3f;
-
-    // Assets/Project Errors: enough height for a row of thumbnails or a few log lines.
-    constexpr float bottomPanelHeight = 240.0f;
-    constexpr float maxBottomFraction = 0.35f;
-
-    const float leftWidth = std::min(leftPanelWidth, viewportSize.x * maxSideFraction);
-    const float rightWidth = std::min(rightPanelWidth, viewportSize.x * maxSideFraction);
-    const float bottomHeight = std::min(bottomPanelHeight, viewportSize.y * maxBottomFraction);
-
-    // Scene Status draws its controls on a single row (see displaySceneStatus): title bar + padding + one
-    // control row fits it exactly at any font size or DPI, with no scrollbar.
-    constexpr int sceneStatusRows = 1;
-    const float topHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f
-                           + ImGui::GetFrameHeightWithSpacing() * sceneStatusRows;
-
-    const auto gui = m_renderer->getImGuiInstance();
-
-    // DockBuilderSplitNode cuts each dock from whatever remains of the node (left, then right of that,
-    // then top, then bottom of what's left), so later percents must be relative to the reduced node, not
-    // the full viewport.
-    const float leftPercent = leftWidth / viewportSize.x;
-    const float rightPercent = rightWidth / (viewportSize.x - leftWidth);
-    const float topPercent = topHeight / viewportSize.y;
-    const float bottomPercent = bottomHeight / (viewportSize.y - topHeight);
-
-    gui->setTopDockPercent(topPercent);
-    gui->setBottomDockPercent(bottomPercent);
-
-    gui->setLeftDockPercent(leftPercent);
-    gui->setRightDockPercent(rightPercent);
-
-    dockPercentsSetup = true;
+    dockPercentsSetup = applyDockPercents();
   }
+}
+
+void EditorApp::applyDockLocations() const
+{
+  const auto gui = m_renderer->getImGuiInstance();
+
+  gui->dockCenter(m_sceneViewName.c_str());
+
+  gui->dockLeft("Objects");
+
+  gui->dockRight("Inspector");
+
+  gui->dockTop("Scene Status");
+
+  gui->dockBottom("Assets");
+  gui->dockBottom("Project Errors");
+  gui->dockBottom("Console");
+
+  // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
+  // shrink the other, and tabs sharing a dock node take the largest floor among them. In a window small
+  // enough that the default sizes fall below these, the floors win over the default layout.
+  const ImVec2 objectsMinimumSize{260.0f, 0.0f};
+  const ImVec2 inspectorMinimumSize{310.0f, 0.0f};
+  const ImVec2 sceneStatusMinimumSize{0.0f, 88.0f};
+  const ImVec2 assetsMinimumSize{0.0f, 200.0f};
+  const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
+  const ImVec2 consoleMinimumSize{0.0f, 120.0f};
+
+  gui->setDockedWindowMinimumSize("Objects", objectsMinimumSize);
+  gui->setDockedWindowMinimumSize("Inspector", inspectorMinimumSize);
+  gui->setDockedWindowMinimumSize("Scene Status", sceneStatusMinimumSize);
+  gui->setDockedWindowMinimumSize("Assets", assetsMinimumSize);
+  gui->setDockedWindowMinimumSize("Project Errors", projectErrorsMinimumSize);
+  gui->setDockedWindowMinimumSize("Console", consoleMinimumSize);
+}
+
+bool EditorApp::applyDockPercents() const
+{
+  const ImVec2 viewportSize = ImGui::GetMainViewport()->Size;
+
+  // A just-opened (or minimized) window can report a zero-size viewport on its first frames; wait for a
+  // real size instead of dividing by zero or locking in a degenerate layout.
+  if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
+  {
+    return false;
+  }
+
+  // Objects/Inspector: wide enough for a name/icon column and field labels, capped so a narrow window
+  // still leaves the center scene view usable.
+  constexpr float leftPanelWidth = 280.0f;
+  constexpr float rightPanelWidth = 360.0f;
+  constexpr float maxSideFraction = 0.3f;
+
+  // Assets/Project Errors: enough height for a row of thumbnails or a few log lines.
+  constexpr float bottomPanelHeight = 240.0f;
+  constexpr float maxBottomFraction = 0.35f;
+
+  const float leftWidth = std::min(leftPanelWidth, viewportSize.x * maxSideFraction);
+  const float rightWidth = std::min(rightPanelWidth, viewportSize.x * maxSideFraction);
+  const float bottomHeight = std::min(bottomPanelHeight, viewportSize.y * maxBottomFraction);
+
+  // Scene Status draws its controls on a single row (see displaySceneStatus): title bar + padding + one
+  // control row fits it exactly at any font size or DPI, with no scrollbar.
+  constexpr int sceneStatusRows = 1;
+  const float topHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f
+                         + ImGui::GetFrameHeightWithSpacing() * sceneStatusRows;
+
+  const auto gui = m_renderer->getImGuiInstance();
+
+  // DockBuilderSplitNode cuts each dock from whatever remains of the node (left, then right of that,
+  // then top, then bottom of what's left), so later percents must be relative to the reduced node, not
+  // the full viewport.
+  const float leftPercent = leftWidth / viewportSize.x;
+  const float rightPercent = rightWidth / (viewportSize.x - leftWidth);
+  const float topPercent = topHeight / viewportSize.y;
+  const float bottomPercent = bottomHeight / (viewportSize.y - topHeight);
+
+  gui->setTopDockPercent(topPercent);
+  gui->setBottomDockPercent(bottomPercent);
+
+  gui->setLeftDockPercent(leftPercent);
+  gui->setRightDockPercent(rightPercent);
+
+  return true;
 }
 
 void EditorApp::displayMessageLog()
@@ -1099,9 +1218,22 @@ void EditorApp::displayMessageLog()
 
 void EditorApp::displaySceneStatus()
 {
-  constexpr int sceneStatusButtonWidth = 125;
-
   ImGui::Begin("Scene Status");
+
+  displayPlayControls();
+
+  displayRayTracingToggle();
+
+  displayCameraSelector();
+
+  displaySceneReadout();
+
+  ImGui::End();
+}
+
+void EditorApp::displayPlayControls() const
+{
+  constexpr int sceneStatusButtonWidth = 125;
 
   // Play controls first (mockup's leading accent Start button).
   if (m_sceneStatus != SceneStatus::running)
@@ -1138,7 +1270,10 @@ void EditorApp::displaySceneStatus()
     }
     ImGui::EndDisabled();
   }
+}
 
+void EditorApp::displayRayTracingToggle() const
+{
   // Ray tracing toggle: a local render setting (this view's vke renderer only, never replicated), so
   // it stays enabled on a read-only server. Greyed out when the device can't ray trace.
   const auto renderingManager = m_renderer->getRenderingManager();
@@ -1157,17 +1292,14 @@ void EditorApp::displaySceneStatus()
     }
   }
   ImGui::EndDisabled();
+}
 
-  displayCameraSelector();
-
+void EditorApp::displaySceneReadout() const
+{
   // Status readout (divider + dot/label + scene name), right-aligned to the panel edge so the play
   // buttons stay put on the left regardless of the readout's width.
-  const char* label = m_sceneStatus == SceneStatus::running ? "Running"
-                    : m_sceneStatus == SceneStatus::paused  ? "Paused"
-                                                            : "Stopped";
-  const ImVec4 dotCol = m_sceneStatus == SceneStatus::running ? theme::sceneGreen
-                      : m_sceneStatus == SceneStatus::paused  ? theme::scriptAmber
-                                                              : theme::t3;
+  const char* label = sceneStatusLabel(m_sceneStatus);
+  const ImVec4 dotCol = sceneStatusColor(m_sceneStatus);
   const auto scene = m_sceneManager->getCurrentScene();
 
   constexpr float nameGap = 14.0f;     // scene name -> divider
@@ -1209,8 +1341,6 @@ void EditorApp::displaySceneStatus()
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(theme::t2, "%s", label);
   }
-
-  ImGui::End();
 }
 
 void EditorApp::displayCameraSelector()
@@ -1221,14 +1351,7 @@ void EditorApp::displayCameraSelector()
   const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
 
   // A view choice, not a scene edit, so this stays enabled on a read-only server.
-  std::string preview = freeFlyLabel;
-  if (objectManager && m_viewCameraObject)
-  {
-    if (const auto object = objectManager->getObjectByUUID(*m_viewCameraObject))
-    {
-      preview = cameraLabel(object);
-    }
-  }
+  const std::string preview = cameraPreviewLabel(objectManager, m_viewCameraObject, freeFlyLabel);
 
   ImGui::SameLine(0.0f, 18.0f);
   ImGui::AlignTextToFramePadding();
@@ -1243,26 +1366,7 @@ void EditorApp::displayCameraSelector()
       m_viewCameraObject.reset();
     }
 
-    if (objectManager)
-    {
-      for (const auto& object : objectManager->getAllObjects())
-      {
-        if (!object->getComponent<Camera>(ComponentType::camera))
-        {
-          continue;
-        }
-
-        const auto uuid = object->getUUID();
-
-        // Objects can share a name, so the uuid disambiguates the ImGui id.
-        const std::string label = cameraLabel(object) + "##" + uuids::to_string(uuid);
-
-        if (ImGui::Selectable(label.c_str(), m_viewCameraObject == uuid))
-        {
-          m_viewCameraObject = uuid;
-        }
-      }
-    }
+    selectSceneCamera(objectManager, m_viewCameraObject);
 
     ImGui::EndCombo();
   }

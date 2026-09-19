@@ -97,6 +97,12 @@ private:
   // messages like inputState land in the right slot.
   void handleClientMessage(const net::Message& message, int32_t senderId);
 
+  // A non-edit server is read-only, and on an edit-mode server only the authorized editor connection may
+  // send mutations.
+  [[nodiscard]] bool isMessageAuthorized(const net::Message& message, int32_t senderId) const;
+
+  void handleEditorMessage(const net::Message& message) const;
+
   void handleJoin(const net::Message& message, int32_t senderId);
 
   void handleEditComponent(const net::Message& message) const;
@@ -104,6 +110,12 @@ private:
   void handleSceneEdit(const net::Message& message) const;
 
   void handleLoadProject(const net::Message& message) const;
+
+  void finishProjectLoad(bool wasRunning) const;
+
+  void startScriptsLogged(ObjectManager& objectManager) const;
+
+  void stopScriptsLogged(ObjectManager& objectManager) const;
 
   void handleAddAsset(const net::Message& message) const;
 
@@ -114,6 +126,8 @@ private:
   void handleInputState(const net::Message& message, int32_t senderId);
 
   void handleSceneControl(const net::Message& message) const;
+
+  void applySceneControl(net::SceneControlOp op, ObjectManager& objectManager, bool wasStopped) const;
 
   void loadScene(const std::string& sceneUUID) const;
 

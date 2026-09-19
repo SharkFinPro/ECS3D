@@ -255,7 +255,7 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
   // never applies their edits. On an edit-mode server, a mutation is honored only from the connection the
   // transport authorized as Role::editor at the handshake - a connection that simply claims Role::player
   // (which needs no token) must not be able to reach the same handlers.
-  if (net::isMutationMessage(message.getType()) && (!m_options.editMode || !m_netServer->isEditor(senderId)))
+  if (!isMessageAuthorized(message, senderId))
   {
     Log::error(LogCategory::server, "Discarded a message of type " + std::to_string(static_cast<int>(message.getType())) +
                         " from connection " + std::to_string(senderId) + ": not an authorized editor.");
@@ -268,6 +268,20 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
       handleJoin(message, senderId);
       break;
 
+    case net::MessageType::inputState:
+      handleInputState(message, senderId);
+      break;
+
+    default:
+      handleEditorMessage(message);
+      break;
+  }
+}
+
+void ServerApp::handleEditorMessage(const net::Message& message) const
+{
+  switch (message.getType())
+  {
     case net::MessageType::editComponent:
       handleEditComponent(message);
       break;
@@ -292,16 +306,17 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
       handleRemoveAsset(message);
       break;
 
-    case net::MessageType::inputState:
-      handleInputState(message, senderId);
-      break;
-
     case net::MessageType::sceneControl:
       handleSceneControl(message);
       break;
 
     default: break;
   }
+}
+
+bool ServerApp::isMessageAuthorized(const net::Message& message, const int32_t senderId) const
+{
+  return !net::isMutationMessage(message.getType()) || (m_options.editMode && m_netServer->isEditor(senderId));
 }
 
 void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
@@ -512,14 +527,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   // Stop the current scripts before the scene is swapped out from under them.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    try
-    {
-      m_scriptSystem->stop(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      Log::error(LogCategory::server, e.what());
-    }
+    stopScriptsLogged(*scene->getObjectManager());
   }
 
   try
@@ -538,20 +546,18 @@ void ServerApp::handleLoadProject(const net::Message& message) const
     {
       if (const auto scene = m_sceneManager->getCurrentScene())
       {
-        try
-        {
-          m_scriptSystem->start(*scene->getObjectManager());
-        }
-        catch (const std::exception& startError)
-        {
-          Log::error(LogCategory::server, startError.what());
-        }
+        startScriptsLogged(*scene->getObjectManager());
       }
     }
 
     return;
   }
 
+  finishProjectLoad(wasRunning);
+}
+
+void ServerApp::finishProjectLoad(const bool wasRunning) const
+{
   // New project/scene: any contact history belongs to the project we just swapped out.
   m_collisionSystem->reset();
 
@@ -566,14 +572,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   {
     if (wasRunning)
     {
-      try
-      {
-        m_scriptSystem->start(*scene->getObjectManager());
-      }
-      catch (const std::exception& e)
-      {
-        Log::error(LogCategory::server, e.what());
-      }
+      startScriptsLogged(*scene->getObjectManager());
     }
 
     Log::info(LogCategory::server, "Loaded project from editor: scene '" + scene->getName() + "' ("
@@ -582,6 +581,30 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   }
 
   broadcastSnapshot();
+}
+
+void ServerApp::startScriptsLogged(ObjectManager& objectManager) const
+{
+  try
+  {
+    m_scriptSystem->start(objectManager);
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::server, e.what());
+  }
+}
+
+void ServerApp::stopScriptsLogged(ObjectManager& objectManager) const
+{
+  try
+  {
+    m_scriptSystem->stop(objectManager);
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::server, e.what());
+  }
 }
 
 void ServerApp::handleAddAsset(const net::Message& message) const
@@ -727,38 +750,11 @@ void ServerApp::handleSceneControl(const net::Message& message) const
   }
 
   auto& objectManager = *scene->getObjectManager();
-  const auto previousStatus = m_sceneManager->getSceneStatus();
+  const bool wasStopped = m_sceneManager->getSceneStatus() == SceneStatus::stopped;
 
   try
   {
-    if (op == net::SceneControlOp::start)
-    {
-      m_sceneManager->startScene();
-
-      // Only attach + start the scripts on a real stopped -> running transition (resume from pause
-      // keeps the live instances).
-      if (previousStatus == SceneStatus::stopped)
-      {
-        m_scriptSystem->start(objectManager);
-
-        // Fresh run: drop any contact history from the previous run so its first tick doesn't fire
-        // spurious enter/exit events against stale pairs.
-        m_collisionSystem->reset();
-      }
-    }
-    else if (op == net::SceneControlOp::pause)
-    {
-      m_sceneManager->pauseScene();
-    }
-    else if (op == net::SceneControlOp::stop)
-    {
-      if (previousStatus != SceneStatus::stopped)
-      {
-        m_scriptSystem->stop(objectManager);
-        m_sceneManager->resetScene();
-        m_collisionSystem->reset();
-      }
-    }
+    applySceneControl(op, objectManager, wasStopped);
   }
   catch (const std::exception& e)
   {
@@ -768,6 +764,38 @@ void ServerApp::handleSceneControl(const net::Message& message) const
   // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
   // every view reflects it immediately.
   broadcastSnapshot();
+}
+
+void ServerApp::applySceneControl(const net::SceneControlOp op, ObjectManager& objectManager, const bool wasStopped) const
+{
+  if (op == net::SceneControlOp::start)
+  {
+    m_sceneManager->startScene();
+
+    // Only attach + start the scripts on a real stopped -> running transition (resume from pause
+    // keeps the live instances).
+    if (wasStopped)
+    {
+      m_scriptSystem->start(objectManager);
+
+      // Fresh run: drop any contact history from the previous run so its first tick doesn't fire
+      // spurious enter/exit events against stale pairs.
+      m_collisionSystem->reset();
+    }
+  }
+  else if (op == net::SceneControlOp::pause)
+  {
+    m_sceneManager->pauseScene();
+  }
+  else if (op == net::SceneControlOp::stop)
+  {
+    if (!wasStopped)
+    {
+      m_scriptSystem->stop(objectManager);
+      m_sceneManager->resetScene();
+      m_collisionSystem->reset();
+    }
+  }
 }
 
 void ServerApp::loadScene(const std::string& sceneUUID) const

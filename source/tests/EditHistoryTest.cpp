@@ -65,6 +65,32 @@ namespace {
 
     return false;
   }
+
+  // Two component edits to one object (x: 1 -> 2, then 2 -> 4), recorded and then both undone, so both
+  // sit on the redo stack with the transform back at its first before state.
+  void recordTwoEditsAndUndoBoth(Scene& scene, edits::EditHistory& history)
+  {
+    const auto transform = transformOf(scene.object);
+
+    transform->setPosition({ 1, 0, 0 });
+    const auto before1 = transform->serialize();
+    transform->setPosition({ 2, 0, 0 });
+    const auto after1 = transform->serialize();
+
+    history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before1, after1));
+
+    const auto before2 = transform->serialize();
+    transform->setPosition({ 4, 0, 0 });
+    const auto after2 = transform->serialize();
+    history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before2, after2));
+
+    auto outcome = history.undo(*scene.objectManager);
+    ASSERT_TRUE(outcome.ok());
+    replication::applyComponentEdit(*scene.objectManager, *outcome.messagePayload);
+    outcome = history.undo(*scene.objectManager);
+    ASSERT_TRUE(outcome.ok());
+    replication::applyComponentEdit(*scene.objectManager, *outcome.messagePayload);
+  }
 }
 
 // --- Round trips: undo restores the before state, redo restores the after state, both via the exact
@@ -684,29 +710,10 @@ TEST(EditHistory, RedoRefusesWhenTheBeforeStateChangedUnderneathAndDropsTheRestO
   // Positive control: redoing both undone commands in order, without interference, succeeds.
   {
     auto scene = makeScene();
-    const auto transform = transformOf(scene.object);
-
-    transform->setPosition({ 1, 0, 0 });
-    const auto before1 = transform->serialize();
-    transform->setPosition({ 2, 0, 0 });
-    const auto after1 = transform->serialize();
-
     edits::EditHistory history;
-    history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before1, after1));
+    ASSERT_NO_FATAL_FAILURE(recordTwoEditsAndUndoBoth(scene, history));
 
-    const auto before2 = transform->serialize();
-    transform->setPosition({ 4, 0, 0 });
-    const auto after2 = transform->serialize();
-    history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before2, after2));
-
-    auto outcome = history.undo(*scene.objectManager);
-    ASSERT_TRUE(outcome.ok());
-    replication::applyComponentEdit(*scene.objectManager, *outcome.messagePayload);
-    outcome = history.undo(*scene.objectManager);
-    ASSERT_TRUE(outcome.ok());
-    replication::applyComponentEdit(*scene.objectManager, *outcome.messagePayload);
-
-    outcome = history.redo(*scene.objectManager);
+    auto outcome = history.redo(*scene.objectManager);
     EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
     replication::applyComponentEdit(*scene.objectManager, *outcome.messagePayload);
     outcome = history.redo(*scene.objectManager);
@@ -719,27 +726,10 @@ TEST(EditHistory, RedoRefusesWhenTheBeforeStateChangedUnderneathAndDropsTheRestO
   // too rather than being redone out of order.
   {
     auto scene = makeScene();
-    const auto transform = transformOf(scene.object);
-
-    transform->setPosition({ 1, 0, 0 });
-    const auto before1 = transform->serialize();
-    transform->setPosition({ 2, 0, 0 });
-    const auto after1 = transform->serialize();
-
     edits::EditHistory history;
-    history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before1, after1));
+    ASSERT_NO_FATAL_FAILURE(recordTwoEditsAndUndoBoth(scene, history));
 
-    const auto before2 = transform->serialize();
-    transform->setPosition({ 4, 0, 0 });
-    const auto after2 = transform->serialize();
-    history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before2, after2));
-
-    auto outcome = history.undo(*scene.objectManager);
-    ASSERT_TRUE(outcome.ok());
-    replication::applyComponentEdit(*scene.objectManager, *outcome.messagePayload);
-    outcome = history.undo(*scene.objectManager);
-    ASSERT_TRUE(outcome.ok());
-    replication::applyComponentEdit(*scene.objectManager, *outcome.messagePayload);
+    const auto transform = transformOf(scene.object);
 
     ASSERT_TRUE(history.canRedo());
     expectNear(transform->getLocalPosition(), { 1, 0, 0 });
