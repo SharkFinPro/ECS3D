@@ -27,7 +27,7 @@
   engine described above while following the conventions below.
 - **Tools:** CMake with `CMakePresets.json` (`cmake --preset ecs3d-debug`), the `check` target
   (`cmake --build <build-dir> --target check`, which builds and runs the GoogleTest suite through CTest),
-  and .NET 10 only through CMake. The developer runs builds and tests; see AI Agent Guidelines.
+  and .NET (Microsoft's managed runtime) version 10 only through CMake. The developer runs builds and tests; see AI Agent Guidelines.
 
 ## Repository Structure
 
@@ -37,9 +37,9 @@
 | `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` option, MSVC (the Microsoft Visual C++ compiler) export-all-symbols. Then `add_subdirectory(source)`. |
 | `CMakePresets.json` | Configure presets only: `ecs3d-debug`, `ecs3d-release`, `ecs3d-sanitize`, writing to `cmake-build-ecs3d-debug` / `-release` / `-sanitize`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
-| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for the editor's console panel), `RemoteLogSink` (a bounded queue a server drains to forward its log to editor connections over the wire — see Logging below), `FileSink` (UTC-timestamped lines to a file, truncated per run), `LogFilter` (level/category toggles + a case-insensitive text search over a `LogEntry`, headless so it is testable without ImGui) and `formatEntry` (the shared `HH:MM:SS [level][category] message` (time as hours:minutes:seconds) rendering used by the panel and its copy button), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI-subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
+| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for the editor's console panel), `RemoteLogSink` (a bounded queue a server drains to forward its log to editor connections over the wire — see Logging below), `FileSink` (UTC-timestamped lines to a file, truncated per run), `LogFilter` (level/category toggles + a case-insensitive text search over a `LogEntry`, headless so it is testable without ImGui) and `formatEntry` (the shared `HH:MM:SS [level][category] message` rendering, with SS (seconds) as its last time field used by the panel and its copy button), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI-subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
-| `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW's (the windowing library's) numeric key/mod values spelled out as literals so this library still depends on nothing but json and ECS3DLog. **Not** project data: see Development Principles. |
+| `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW (the windowing library)'s numeric key/mod values spelled out as literals so this library still depends on nothing but json and ECS3DLog. **Not** project data: see Development Principles. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera) - whose float and vec3 setters ignore non-finite input, since a non-finite float saves as json null and makes the file unreadable - `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load - a load that fails names the scene and the object it choked on) / `ProjectPacker` (binary wire snapshot), `Replication`, `edits/` (`EditCommand`/`EditHistory` — the undo/redo stack — plus `RecordEdits`, which derives the command for an edit the editor is about to send from its pre-edit replicated view; see Editor Undo/Redo below). **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune), calling the GJK/EPA narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
@@ -108,7 +108,7 @@
 **The data/systems split.** `ECS3DData` holds only *state* — component fields plus `serialize`/
 `loadFromJSON`. Behavior lives in *systems* that operate on that data from the outside: `PhysicsSystem`/
 `CollisionSystem` (sim), `RenderSystem` (render), `ScriptSystem` (scripting), the `*Editor` handlers
-(editor). A component does not reach back into a manager or renderer (unless a task explicitly says otherwise); systems iterate
+(editor). A component does not reach back into a manager or renderer; systems iterate
 `ObjectManager::getAllObjects()` and pull the components they care about. `ComponentRegistry`
 (populated by `registerDataComponents()`) is the type-name → factory table that deserialization uses,
 so no layer needs to name concrete component types across the boundary.
@@ -166,7 +166,7 @@ applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the 
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —
 a `renameAsset` sets an optional `AssetRecord::displayName` override (threaded through
 `serialize`/`loadFromJSON`/`pack`/`unpack` like every other field); the file on disk and `path` (the
-registry key, and the name-key for prefabs/scenes) are left unchanged. **Delete always succeeds and references
+registry key, and the name-key for prefabs/scenes) keep their current values. **Delete always succeeds and references
 dangle** — `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` lookups already null-tolerate a
 missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
 replicated scenes + prefab bodies for the uuid ("referenced by N objects"); no server-side refusal or
@@ -386,7 +386,7 @@ which would have meant touching both backends for one bit of routing. `PlayerScr
 object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
 gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
 movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded
-forward axis. **The editor must not gate forwarded mouse input on `io.WantCaptureMouse` while the viewport is an ImGui window**: its 3D viewport
+forward axis. **The editor does not gate forwarded mouse input on `io.WantCaptureMouse`**: its 3D viewport
 *is* an ImGui window under the dockspace, so that flag is set whenever the cursor is over the scene, and
 gating on it silently swallows the right-drag mouse-look. `EditorApp::sendInput` instead forwards the mouse
 only while the viewport looks through a scene camera (in free-fly the right-drag belongs to the editor's own
@@ -470,7 +470,7 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
   Comment only what the code cannot say for itself -- the *why* behind a non-obvious algorithm, design
   decision, workaround, or caveat -- not a restatement of *what* the line does. Keep them short (1-2
   lines). Do not narrate implementation history ("was X", "moved from Y", "Phase N", "temporary") or
-  point at external plans/roadmaps -- describe the code as it is now. **Comments are ASCII-only (plain 7-bit text):** no
+  point at external plans/roadmaps -- describe the code as it is now. **Comments are ASCII (plain 7-bit text) only:** no
   em dashes, arrows, or other Unicode -- use `-`, `->`, `<->`.
 
 ## Applications
@@ -515,9 +515,9 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
 - Add dependencies only via `source/libs/CMakeLists.txt` `FetchContent` (test-only deps belong in
   `source/tests/CMakeLists.txt`); register new files in the owning library's source list.
 - **Do not build-verify the C++/CLR/Vulkan stack — the developer does that.**
-  - Do not invoke `cmake --build`.
-  - Do not run `dotnet build`/`publish` on the C# projects directly; it breaks the CMake build with `CS0579`.
-  - State clearly that a change is unverified and needs to be compiled on the developer's machine.
+- Do not invoke `cmake --build`.
+- Do not run `dotnet build`/`publish` on the C# projects directly; it breaks the CMake build with `CS0579`.
+- State clearly that a change is unverified and needs to be compiled on the developer's machine.
 - Avoid speculative refactors. Keep changes scoped and incremental. Ask about lifetime/ownership,
   threading, and replication semantics rather than assuming.
 - Update this document when your understanding of the project meaningfully improves.
