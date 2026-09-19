@@ -6,12 +6,8 @@
 #include <Protocol.h>
 
 Transform::Transform()
-  : Component(ComponentType::transform)
-{
-  loadVariable(m_position);
-  loadVariable(m_scale);
-  loadVariable(m_rotation);
-}
+  : Transform(glm::vec3(0), glm::vec3(1), glm::vec3(0))
+{}
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
   : Component(ComponentType::transform),
