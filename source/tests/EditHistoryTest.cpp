@@ -755,6 +755,12 @@ TEST(EditHistory, NextRedoKindNamesTheTopOfTheRedoStackWithoutPoppingIt)
 
   const auto undoOutcome = history.undo(*scene.objectManager);
   ASSERT_TRUE(undoOutcome.ok());
+  ASSERT_TRUE(undoOutcome.messagePayload.has_value());
+  // redo()'s validation compares the command's "before" state against the live scene, so - same as the
+  // round trip test above - the undo has to actually be applied, not just accepted, or the transform is
+  // still sitting at the "after" position and redo() correctly refuses it as changed underneath.
+  ASSERT_EQ(replication::applyComponentEdit(*scene.objectManager, *undoOutcome.messagePayload),
+            replication::ComponentEditResult::applied);
 
   ASSERT_TRUE(history.nextRedoKind().has_value());
   EXPECT_EQ(*history.nextRedoKind(), edits::CommandKind::componentEdit);
