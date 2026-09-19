@@ -61,6 +61,31 @@ public:
                                            const std::shared_ptr<Object>& parent,
                                            const uuids::uuid* rootUUID = nullptr);
 
+  // RAII guard a caller holds around a pass that ranges over getAllObjects() and runs arbitrary user code
+  // (script callbacks) inside the loop - ScriptSystem::fixedUpdate/variableUpdate. While any guard is
+  // alive, addObject defers the m_allObjects/m_objects append that would otherwise reallocate the vector
+  // out from under that range-for; everything else addObject does (parenting, starting the object) still
+  // happens immediately, so the spawning script can use the object right away. Depth-counted so a nested
+  // guard is harmless, but the flush itself is a separate, explicit call (flushPendingAdditions) rather
+  // than something the guard's destructor triggers - see there for why.
+  class ScriptPassGuard {
+  public:
+    explicit ScriptPassGuard(ObjectManager& manager);
+    ~ScriptPassGuard();
+
+    ScriptPassGuard(const ScriptPassGuard&) = delete;
+    ScriptPassGuard& operator=(const ScriptPassGuard&) = delete;
+
+  private:
+    ObjectManager& m_manager;
+  };
+
+  // Moves every addition queued while a ScriptPassGuard was alive into m_allObjects/m_objects. Called
+  // once per server frame, at the same point deleteObjectsMarkedForDeletion is (ServerApp::
+  // broadcastStructuralChanges) - so an object a script spawns mid-pass does not tick again until the
+  // scripts' next pass, exactly like a destroyed object does not truly leave until that same point either.
+  void flushPendingAdditions();
+
   void start();
 
   void stop();
@@ -117,6 +142,14 @@ public:
 
   [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getAllObjects() const;
 
+  // Objects addObject deferred while a ScriptPassGuard is alive (see there), not yet spliced into
+  // getAllObjects()/getObjects() by flushPendingAdditions. getObjectByUUID already checks this list;
+  // any other caller that needs a script pass's world to look whole - not just individual uuid lookups -
+  // (e.g. a World binding that scans every object) needs to check it too, or it will miss an object a
+  // script spawned earlier in the same pass while getObjectByUUID/objectExists/destroyObject on that same
+  // object would have found it.
+  [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getPendingAdditions() const;
+
 private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
 
@@ -125,6 +158,13 @@ private:
   std::vector<std::shared_ptr<Object>> m_allObjects;
 
   std::vector<std::shared_ptr<Object>> m_objectsToRemove;
+
+  // Objects addObject deferred while a ScriptPassGuard was alive, waiting on flushPendingAdditions.
+  std::vector<std::shared_ptr<Object>> m_pendingAdditions;
+
+  // >0 while at least one ScriptPassGuard is alive - see there. addObject consults it to decide whether
+  // to defer.
+  int m_scriptPassDepth = 0;
 
   // Whether the scene is running, set by start and cleared by stop. addObject consults it - see there.
   bool m_started = false;

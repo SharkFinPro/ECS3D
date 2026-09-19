@@ -36,6 +36,28 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
 
   // Colliders aren't registered here: CollisionSystem discovers them by scanning the objects each tick.
 
+  if (m_scriptPassDepth > 0)
+  {
+    // A script pass is ranging over m_allObjects right now, running user code inside the loop
+    // (ScriptSystem::fixedUpdate/variableUpdate); appending straight to m_allObjects/m_objects could
+    // reallocate the vector out from under that range-for. Parenting and starting the object touch
+    // neither vector, so they still happen immediately - the spawning script can position or query the
+    // object it just created in the same call. Only the flat-list membership waits for
+    // flushPendingAdditions; getObjectByUUID checks the pending list too, so lookups keep working meanwhile.
+    if (object->getParent() != nullptr)
+    {
+      object->getParent()->addChild(object);
+    }
+
+    if (m_started)
+    {
+      object->start();
+    }
+
+    m_pendingAdditions.push_back(object);
+    return;
+  }
+
   m_allObjects.push_back(object);
 
   if (object->getParent() == nullptr)
@@ -53,6 +75,41 @@ void ObjectManager::addObject(const std::shared_ptr<Object>& object)
   if (m_started)
   {
     object->start();
+  }
+}
+
+ObjectManager::ScriptPassGuard::ScriptPassGuard(ObjectManager& manager)
+  : m_manager(manager)
+{
+  ++m_manager.m_scriptPassDepth;
+}
+
+ObjectManager::ScriptPassGuard::~ScriptPassGuard()
+{
+  --m_manager.m_scriptPassDepth;
+}
+
+void ObjectManager::flushPendingAdditions()
+{
+  if (m_pendingAdditions.empty())
+  {
+    return;
+  }
+
+  // Taken out first: deleteObjectsMarkedForDeletion runs right after this call (see
+  // ServerApp::broadcastStructuralChanges), and an object a script spawned then destroyed in the same
+  // pass has to be a real member of m_allObjects/m_objects before that pass can find and remove it.
+  const auto pending = std::move(m_pendingAdditions);
+  m_pendingAdditions.clear();
+
+  for (const auto& object : pending)
+  {
+    m_allObjects.push_back(object);
+
+    if (object->getParent() == nullptr)
+    {
+      m_objects.push_back(object);
+    }
   }
 }
 
@@ -242,6 +299,7 @@ void ObjectManager::restoreFromJSON(const nlohmann::json& objectsData)
   m_objects.clear();
   m_allObjects.clear();
   m_objectsToRemove.clear();
+  m_pendingAdditions.clear();
 
   for (const auto& objectData : objectsData)
   {
@@ -264,6 +322,7 @@ void ObjectManager::unpack(net::MessageReader& messageReader)
   m_objects.clear();
   m_allObjects.clear();
   m_objectsToRemove.clear();
+  m_pendingAdditions.clear();
 
   const uint32_t objectCount = messageReader.read<uint32_t>();
 
@@ -434,11 +493,26 @@ void ObjectManager::eraseSubtree(const std::shared_ptr<Object>& object)
   // A queued removal would otherwise outlive the discard and be reparented back into the scene by the
   // next deletion pass.
   std::erase(m_objectsToRemove, object);
+
+  // A subtree discarded mid script pass (instantiateUnder/restoreSubtree unwinding a bad body) may still
+  // be sitting in the pending-additions queue rather than m_allObjects/m_objects yet - without this,
+  // flushPendingAdditions would resurrect the wreckage this call is meant to drop.
+  std::erase(m_pendingAdditions, object);
 }
 
 std::shared_ptr<Object> ObjectManager::getObjectByUUID(const uuids::uuid uuid) const
 {
   for (const auto& object : m_allObjects)
+  {
+    if (object->getUUID() == uuid)
+    {
+      return object;
+    }
+  }
+
+  // A script that just spawned an object (World.spawn/spawnPrefab) may look it up or act on it again in
+  // the same pass, before flushPendingAdditions makes it a real m_allObjects member - see addObject.
+  for (const auto& object : m_pendingAdditions)
   {
     if (object->getUUID() == uuid)
     {
@@ -457,4 +531,9 @@ const std::vector<std::shared_ptr<Object>>& ObjectManager::getObjects() const
 const std::vector<std::shared_ptr<Object>>& ObjectManager::getAllObjects() const
 {
   return m_allObjects;
+}
+
+const std::vector<std::shared_ptr<Object>>& ObjectManager::getPendingAdditions() const
+{
+  return m_pendingAdditions;
 }

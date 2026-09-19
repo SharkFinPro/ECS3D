@@ -7,6 +7,7 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <imgui.h>
+#include <string>
 #include <utility>
 
 InspectorPanel::InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor,
@@ -99,6 +100,26 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
         m_selection->clear();
       }
     }
+  }
+
+  // Editing across a multi-selection is a separate story; for now just say how many objects are
+  // selected instead of silently showing (and letting edits reach) only the primary one.
+  if (m_selection->kind() == EditorSelection::Kind::Object && m_selection->size() > 1)
+  {
+    // Same reasoning as the empty-state early return below: finish whatever gesture was in flight on
+    // the previous single selection rather than leaving it to attach to whatever gets selected next.
+    m_objectInspector->commitPendingEdit();
+
+    gc::sectionLabel("Inspector");
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    const std::string message = std::to_string(m_selection->size()) + " objects selected";
+    gc::emptyState(gc::SecIcon::block, message.c_str(), "Multi-object editing isn't supported yet");
+
+    ImGui::End();
+    return;
   }
 
   // Resolve the current selection to a concrete inspector. A None kind (or a stale one cleared above)

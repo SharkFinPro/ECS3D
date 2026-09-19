@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using System.Threading;
 
 namespace ECS3DNetTransport;
 
@@ -94,5 +95,29 @@ internal abstract class TransportBackend
     }
 
     return true;
+  }
+
+  // How long ServerStop/DisconnectClient wait for a socket thread to exit after its socket is closed.
+  // Bounded so a stuck thread (e.g. one wedged in native socket teardown) cannot hang process shutdown;
+  // logged as a warning when it fires, since it should not happen in the normal case. Shared by both
+  // backends' shutdown paths.
+  protected const int ShutdownJoinTimeoutMs = 3000;
+
+  // Waits up to ShutdownJoinTimeoutMs for thread to exit, logging a warning if it takes longer than that
+  // instead of waiting past it. A no-op for null, an already-finished thread, or the calling thread
+  // itself - joining the current thread would deadlock, and ServerStop/DisconnectClient could in
+  // principle be reached from a callback running on one of these threads.
+  protected static void JoinThread(Thread? thread, string label)
+  {
+    if (thread == null || thread == Thread.CurrentThread || !thread.IsAlive)
+    {
+      return;
+    }
+
+    if (!thread.Join(ShutdownJoinTimeoutMs))
+    {
+      Transport.Log(TransportLogLevel.Warn,
+        $"Timed out after {ShutdownJoinTimeoutMs} ms waiting for the {label} thread to exit during shutdown.");
+    }
   }
 }
