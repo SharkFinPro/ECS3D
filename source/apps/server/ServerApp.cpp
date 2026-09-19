@@ -21,6 +21,8 @@
 #include <NetServer.h>
 #include <ManagedHost.h>
 #include <Log.h>
+#include <RemoteLogSink.h>
+#include <ServerLog.h>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <thread>
@@ -44,6 +46,11 @@ ServerApp::ServerApp(LaunchOptions options)
   m_collisionSystem = std::make_shared<CollisionSystem>();
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
+
+  // Feeds forwardLogToEditors: the server is headless, so this is the only way a connected editor - local
+  // or remote - sees anything the server (or a script running on it, via LogBindings) logs.
+  m_remoteLogSink = std::make_shared<RemoteLogSink>();
+  Log::addSink(m_remoteLogSink);
 
   // Scene queries live in sim, which scripting can't link; inject them into BindingContext so the World
   // raycast/overlapSphere bindings can call them.
@@ -179,6 +186,11 @@ void ServerApp::run()
 
       broadcastStateDelta();
     }
+
+    // Every loop iteration rather than gated on `ticked`: a log line (e.g. a startup error) can happen
+    // while the scene is stopped or paused, and an editor watching the Console shouldn't have to wait for
+    // the sim to advance to see it.
+    forwardLogToEditors();
 
     // Don't busy-spin a core between ticks.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -915,4 +927,27 @@ void ServerApp::broadcastStructuralChanges() const
     objectManager->flushPendingAdditions();
     objectManager->deleteObjectsMarkedForDeletion();
   }
+}
+
+void ServerApp::forwardLogToEditors() const
+{
+  // Caps what one call can hand to the network, so a log storm costs bounded work per loop iteration
+  // instead of one send sized by however much piled up; anything past either cap is picked up on the
+  // next iteration (or evicted by RemoteLogSink's own capacity first, and counted in `dropped` below).
+  // maxBatchBytes stays well under TransportBackend::MaxMessageBytes (64 MiB) - RemoteLogSink::drain's
+  // estimate is rough, and a batch that actually hit that ceiling would be refused and lost outright
+  // rather than sent short.
+  constexpr std::size_t maxEntriesPerBatch = 200;
+  constexpr std::size_t maxBatchBytes = 256 * 1024;
+
+  const auto drained = m_remoteLogSink->drain(maxEntriesPerBatch, maxBatchBytes);
+  if (drained.entries.empty() && drained.dropped == 0)
+  {
+    return;
+  }
+
+  // packServerLog itself never logs, and sendToEditors only does on the pathological oversized-message
+  // case (handled by the next drain, not recursively here) - so this cannot feed back into an ever-growing
+  // stream of "forwarded a log" entries about itself.
+  m_netServer->sendToEditors(net::packServerLog(drained.entries, drained.dropped));
 }

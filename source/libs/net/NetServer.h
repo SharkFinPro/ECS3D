@@ -25,6 +25,14 @@ public:
 
   void broadcast(const Message& message) const;
 
+  // Sends to every connection currently authorized as Role::editor, and no one else - for data a play
+  // client should never see, like the server's own log (MessageType::serverLog). A no-op if there are
+  // none. One call into the transport for the whole fan-out (serverSendToMany), which applies the same
+  // shared-deadline budget across every editor that ServerBroadcast applies across every connection -
+  // this runs on the authoritative tick thread, and a stalled editor must not be able to cost it more
+  // than that one shared budget no matter how many editors are connected.
+  void sendToEditors(const Message& message) const;
+
   // The number of clients currently connected to the transport. Used by an ephemeral (editor/client-
   // spawned) server to detect when its last connection drops; returns 0 before start().
   [[nodiscard]] int connectionCount() const;
@@ -80,6 +88,7 @@ private:
   void* m_setDisconnectCallbackFn = nullptr;
   void* m_setAuthorizedCallbackFn = nullptr;
   void* m_setLogCallbackFn = nullptr;
+  void* m_sendToManyFn = nullptr;
 };
 
 }

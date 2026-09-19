@@ -12,6 +12,8 @@ add_library(${PROJECT_NAME}
   ConsoleWindow.h
   FileSink.cpp
   FileSink.h
+  RemoteLogSink.cpp
+  RemoteLogSink.h
   RingBufferSink.cpp
   RingBufferSink.h
   LogFilter.cpp

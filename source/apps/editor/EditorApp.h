@@ -188,6 +188,11 @@ private:
 
   void handleSceneStatus(const net::Message& message);
 
+  // A batch of the server's own log entries (its own log, plus script output - both already reach the
+  // server's Log). Writes them straight into m_consoleSink (rather than through Log::write) so each entry
+  // keeps the timestamp it carried on the wire instead of being stamped with its arrival time.
+  void handleServerLog(const net::Message& message) const;
+
   void handlePicking();
 
   void sendInput();

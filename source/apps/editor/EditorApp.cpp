@@ -39,6 +39,7 @@
 #include <components/PlayerControllerEditor.h>
 #include <components/CameraEditor.h>
 #include <NetClient.h>
+#include <ServerLog.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <Log.h>
@@ -731,6 +732,10 @@ void EditorApp::applyMessage(const net::Message& message)
       handleSceneStatus(message);
       break;
 
+    case net::MessageType::serverLog:
+      handleServerLog(message);
+      break;
+
     default: break;
   }
 }
@@ -814,6 +819,27 @@ void EditorApp::handleSceneStatus(const net::Message& message)
 
   m_reportedSceneStatus = status;
   m_sceneStatus = status;
+}
+
+void EditorApp::handleServerLog(const net::Message& message) const
+{
+  const auto batch = net::unpackServerLog(message);
+
+  // "[server]" distinguishes these from the editor's own logging in the same category (e.g. both sides
+  // log under LogCategory::net) without collapsing every entry into one category and losing the level/
+  // category filters the Console panel already offers.
+  for (const auto& entry : batch.entries)
+  {
+    m_consoleSink->write(LogEntry{ entry.time, entry.level, entry.category, "[server] " + entry.message });
+  }
+
+  if (batch.dropped > 0)
+  {
+    m_consoleSink->write(LogEntry{ std::chrono::system_clock::now(), LogLevel::warn, LogCategory::server,
+      "[server] " + std::to_string(batch.dropped) + " log entr"
+      + (batch.dropped == 1 ? std::string("y") : std::string("ies"))
+      + " were dropped before this batch (the server's outbound log queue overflowed)." });
+  }
 }
 
 void EditorApp::updateGui()
