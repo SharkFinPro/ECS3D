@@ -85,7 +85,9 @@ public partial class MainWindowViewModel : ObservableObject
     private void UpdateActiveFlags()
     {
         foreach (var item in NavItems)
+        {
             item.IsActive = item.Key == ActiveNav;
+        }
     }
 
     // ----- Commands (UI-only; no engine backend yet) -----

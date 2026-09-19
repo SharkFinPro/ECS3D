@@ -42,7 +42,9 @@ public partial class ProjectsViewModel : ObservableObject
 
         ProjectTiles = [new() { IsNewCard = true, Name = "", Path = "", Edited = "", Version = "" }];
         foreach (var p in Projects)
+        {
             ProjectTiles.Add(p);
+        }
     }
 
     partial void OnIsGridViewChanged(bool value) => OnPropertyChanged(nameof(IsListView));
