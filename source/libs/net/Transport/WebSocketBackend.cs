@@ -67,9 +67,16 @@ internal sealed class WebSocketBackend : TransportBackend
   private int _nextConnId;
 
   // -- Client --
-  private WebSocket? _client;
-  private HttpMessageInvoker? _clientInvoker;
-  private CancellationTokenSource? _clientCts;
+  // One object per connection so a swap (Interlocked.Exchange/CompareExchange) moves the whole triple
+  // atomically - no torn reads of a socket from one connection paired with another's token or invoker.
+  private sealed class ClientConnection(WebSocket socket, CancellationTokenSource cts, HttpMessageInvoker invoker)
+  {
+    public readonly WebSocket Socket = socket;
+    public readonly CancellationTokenSource Cts = cts;
+    public readonly HttpMessageInvoker Invoker = invoker;
+  }
+
+  private ClientConnection? _connection;
   private readonly SemaphoreSlim _clientSendLock = new(1, 1);
   private Thread? _clientThread;
   private volatile bool _clientRunning;
@@ -324,9 +331,10 @@ internal sealed class WebSocketBackend : TransportBackend
       return 1;
     }
 
-    // Held out here so a failure before the fields below take ownership can still dispose them.
+    // Held out here so a failure before _connection takes ownership can still dispose them.
     ClientWebSocket? ws = null;
     HttpMessageInvoker? invoker = null;
+    ClientConnection? connection = null;
 
     try
     {
@@ -367,13 +375,12 @@ internal sealed class WebSocketBackend : TransportBackend
         ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, connectCts.Token).GetAwaiter().GetResult();
       }
 
-      _client = ws;
-      _clientInvoker = invoker;
-      _clientCts = new CancellationTokenSource();
+      connection = new ClientConnection(ws, new CancellationTokenSource(), invoker);
+      _connection = connection;
 
       // Send role + token as the first message so the server can authorize this connection (in
       // particular grant Role.editor) before any protocol message. Same wire format everywhere.
-      SendHandshake(role, token);
+      SendHandshake(connection, role, token);
     }
     catch (OperationCanceledException)
     {
@@ -392,7 +399,11 @@ internal sealed class WebSocketBackend : TransportBackend
 
     _clientRunning = true;
 
-    _clientThread = new Thread(ClientReceiveLoop) { IsBackground = true, Name = "ecs3d-net-recv" };
+    _clientThread = new Thread(() => ClientReceiveLoop(connection!))
+    {
+      IsBackground = true,
+      Name = "ecs3d-net-recv"
+    };
     _clientThread.Start();
 
     Transport.Log(TransportLogLevel.Info, $"Connected to {host}:{port}.");
@@ -417,50 +428,55 @@ internal sealed class WebSocketBackend : TransportBackend
   {
     _clientRunning = false;
 
-    var ws = _client;
-    var cts = _clientCts;
-    var invoker = _clientInvoker;
-    _client = null;
-    _clientCts = null;
-    _clientInvoker = null;
-
-    if (ws != null)
+    // Take ownership atomically so a racing ClientSend can't act on a connection this call is closing.
+    var connection = Interlocked.Exchange(ref _connection, null);
+    if (connection is null)
     {
-      Close(ws, cts);
-    }
-    else
-    {
-      cts?.Dispose();
+      return;
     }
 
-    invoker?.Dispose();
+    Close(connection.Socket, connection.Cts);
+    connection.Invoker.Dispose();
   }
 
   public override void ClientSend(byte type, nint data, int len)
   {
-    var ws = _client;
-    var cts = _clientCts;
-    if (ws is null || cts is null || TooLargeToSend(len))
+    var connection = _connection;
+    if (connection is null || TooLargeToSend(len))
     {
       return;
     }
 
     var message = BuildMessage(type, data, len);
-    if (!SendRaw(ws, _clientSendLock, message, cts.Token))
+    try
     {
-      DisconnectClient();
+      if (SendRaw(connection.Socket, _clientSendLock, message, connection.Cts.Token))
+      {
+        return;
+      }
+    }
+    catch (ObjectDisposedException)
+    {
+      // A racing teardown already disposed this connection; nothing left to do.
+      return;
+    }
+
+    // Drop this instance specifically, not whatever is current - a reconnect may have replaced it.
+    if (Interlocked.CompareExchange(ref _connection, null, connection) == connection)
+    {
+      Close(connection.Socket, connection.Cts);
+      connection.Invoker.Dispose();
     }
   }
 
-  private void ClientReceiveLoop()
+  private void ClientReceiveLoop(ClientConnection connection)
   {
     try
     {
-      var ws = _client!;
-      var token = _clientCts!.Token;
+      var token = connection.Cts.Token;
       while (_clientRunning)
       {
-        var message = ReceiveMessage(ws, token);
+        var message = ReceiveMessage(connection.Socket, token);
         if (message is null || message.Length < 1)
         {
           break;
@@ -476,10 +492,19 @@ internal sealed class WebSocketBackend : TransportBackend
 
     _clientRunning = false;
 
-    // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
-    // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two
-    // apart via m_disconnectRequested and no-ops the latter.
-    Transport.DeliverClientDisconnect();
+    // Clear before closing so ClientSend never reaches a closed instance; the CAS leaves a newer
+    // connection alone.
+    var previous = Interlocked.CompareExchange(ref _connection, null, connection);
+    Close(connection.Socket, connection.Cts);
+    connection.Invoker.Dispose();
+
+    // A different non-null value means a reconnect already replaced this connection; it was not lost.
+    if (previous == connection || previous == null)
+    {
+      // The single delivery point for a lost connection - the native side tells a real loss apart from
+      // its own ClientDisconnect via m_disconnectRequested.
+      Transport.DeliverClientDisconnect();
+    }
   }
 
   // -- WebSocket helpers --
@@ -617,7 +642,7 @@ internal sealed class WebSocketBackend : TransportBackend
     return assembled.ToArray();
   }
 
-  private void SendHandshake(byte role, string token)
+  private void SendHandshake(ClientConnection connection, byte role, string token)
   {
     var tokenBytes = Encoding.UTF8.GetBytes(token);
 
@@ -626,7 +651,7 @@ internal sealed class WebSocketBackend : TransportBackend
     message[1] = role;
     Array.Copy(tokenBytes, 0, message, 2, tokenBytes.Length);
 
-    SendRaw(_client!, _clientSendLock, message, _clientCts!.Token);
+    SendRaw(connection.Socket, _clientSendLock, message, connection.Cts.Token);
   }
 
   // Packs a native (type, payload) pair into a single [type byte][payload] message.
