@@ -386,8 +386,8 @@ TEST(EditHistory, NextRedoKindNamesTheTopOfTheRedoStackWithoutPoppingIt)
   ASSERT_TRUE(undoOutcome.ok());
   ASSERT_TRUE(undoOutcome.messagePayload.has_value());
   // redo()'s validation compares the command's "before" state against the live scene, so - same as the
-  // round trip tests in EditHistoryRoundTripTest.cpp - the undo has to actually be applied, not just accepted, or the transform is
-  // still sitting at the "after" position and redo() correctly refuses it as changed underneath.
+  // round trip tests in EditHistoryRoundTripTest.cpp - the undo has to actually be applied, not just
+  // accepted, or the transform is still sitting at the "after" position and redo() correctly refuses it as changed underneath.
   ASSERT_EQ(replication::applyComponentEdit(*scene.objectManager, *undoOutcome.messagePayload),
             replication::ComponentEditResult::applied);
 
