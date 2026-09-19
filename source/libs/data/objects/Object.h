@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_map>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <string>
@@ -16,7 +17,7 @@ namespace net {
   class MessageReader;
 }
 
-enum class ComponentType;
+enum class ComponentType : uint8_t;
 class Component;
 
 // A wire or JSON payload can claim arbitrarily deep object nesting; recursing that deep in
