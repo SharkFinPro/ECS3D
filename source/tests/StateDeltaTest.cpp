@@ -51,14 +51,14 @@ namespace {
   // The setters refuse a non-finite value, so one can no longer be planted through them. It reaches an
   // object the way a corrupt or hostile peer would deliver it instead: straight off the wire, which
   // unpack deliberately does not validate - that is what packStateDelta's own guard exists to catch.
-  // Argument order follows Transform::unpack: position, scale, rotation.
+  // Argument order follows Transform::unpack: position, rotation, scale.
   void unpackTransform(const std::shared_ptr<Object>& object, const glm::vec3& position,
-                       const glm::vec3& scale, const glm::vec3& rotation)
+                       const glm::vec3& rotation, const glm::vec3& scale)
   {
     net::Message message(net::MessageType::snapshot);
     message.write(position);
-    message.write(scale);
     message.write(rotation);
+    message.write(scale);
 
     net::MessageReader reader(message);
     transformOf(object)->unpack(reader);
@@ -193,13 +193,13 @@ TEST(StateDelta, SkipsAnObjectWhoseTransformIsNotFinite)
   constexpr float unbounded = std::numeric_limits<float>::infinity();
 
   transformOf(healthy)->setPosition({ 1, 2, 3 });
-  unpackTransform(notANumber, { notFinite, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 });
-  unpackTransform(infinite, { unbounded, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 });
+  unpackTransform(notANumber, { notFinite, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1 });
+  unpackTransform(infinite, { unbounded, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1 });
 
   // All three vectors are checked, not just the position: a non-finite rotation or scale reaches the
   // receiver's world transforms just as surely.
-  unpackTransform(spinning, { 0, 0, 0 }, { 1, 1, 1 }, { 0, notFinite, 0 });
-  unpackTransform(scaled, { 0, 0, 0 }, { 0, 0, unbounded }, { 0, 0, 0 });
+  unpackTransform(spinning, { 0, 0, 0 }, { 0, notFinite, 0 }, { 1, 1, 1 });
+  unpackTransform(scaled, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, unbounded });
 
   const auto sent = entryUuids(deltaOf(source));
 
@@ -289,9 +289,10 @@ TEST(StateDelta, AnEntryWithAnUnreadableUuidDoesNotDerailTheRest)
 
   const auto replicated = transformOf(findByName(target, "Object"));
 
-  // All three vectors, in the order the sender writes them. A round trip cannot catch a symmetric swap
-  // of rotation and scale, and this is the only place the field order is pinned against a payload
-  // written by hand - which matters, because Transform::pack orders the same three the other way.
+  // All three vectors, in the order the sender writes them (position, rotation, scale - the same order
+  // Transform::pack uses). A round trip cannot catch a symmetric swap of rotation and scale, so this is
+  // one of the two places the field order is pinned against a payload written by hand; see
+  // TransformPackOrderMatchesUnpack below for the other.
   EXPECT_EQ(replicated->getLocalPosition(), glm::vec3(7, 8, 9));
   EXPECT_EQ(replicated->getLocalRotation(), glm::vec3(90, 0, 0));
   EXPECT_EQ(replicated->getLocalScale(), glm::vec3(2, 2, 2));
@@ -331,4 +332,28 @@ TEST(StateDelta, AnEmptyPayloadThrowsRatherThanReadingACountThatIsNotThere)
   const net::Message message(net::MessageType::stateDelta);
 
   EXPECT_THROW(replication::unpackStateDelta(*target.objectManager, message), std::runtime_error);
+}
+
+TEST(StateDelta, TransformPackOrderMatchesUnpack)
+{
+  // Transform::pack and Transform::unpack are each other's only correct reader/writer, so a round trip
+  // through both would pass even if the two disagreed on order the same way position/scale disagreeing
+  // with position/rotation/scale would - a symmetric swap. This builds the payload by hand instead, in
+  // the order pack is supposed to use (position, rotation, scale, matching Transform::serialize and
+  // packStateDelta), with three distinct vectors so a swap between any two lands on the wrong member.
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Object");
+  const auto transform = transformOf(object);
+
+  net::Message message(net::MessageType::editComponent);
+  message.write(glm::vec3(1, 2, 3));
+  message.write(glm::vec3(4, 5, 6));
+  message.write(glm::vec3(7, 8, 9));
+
+  net::MessageReader reader(message);
+  transform->unpack(reader);
+
+  EXPECT_EQ(transform->getLocalPosition(), glm::vec3(1, 2, 3));
+  EXPECT_EQ(transform->getLocalRotation(), glm::vec3(4, 5, 6));
+  EXPECT_EQ(transform->getLocalScale(), glm::vec3(7, 8, 9));
 }
