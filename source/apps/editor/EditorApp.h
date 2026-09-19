@@ -151,7 +151,7 @@ private:
   float m_lastMouseY = 0.0f;
   bool m_inputSent = false;
 
-  // Edge-detect the mouse so viewport picking only fires on a fresh Ctrl+click.
+  // Edge-detect the mouse so viewport picking only fires on a fresh click.
   bool m_mouseWasPressed = false;
 
   void createRenderer();

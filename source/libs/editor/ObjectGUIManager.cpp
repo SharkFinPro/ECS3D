@@ -142,6 +142,33 @@ namespace {
 
     return dragged.has_value() ? objectManager->getObjectByUUID(dragged.value()) : nullptr;
   }
+
+  // Shift-click range: the contiguous slice of `visibleOrder` (the tree's current on-screen order) from
+  // `anchor` to `clicked`, inclusive and ordered anchor-to-clicked so the caller can add it to the
+  // selection with `clicked` landing last (the new primary). Either uuid missing from `visibleOrder` (a
+  // stale anchor, or a row hidden behind a collapsed ancestor) falls back to just `clicked`.
+  [[nodiscard]] std::vector<uuids::uuid> rangeBetween(const std::vector<uuids::uuid>& visibleOrder,
+                                                       const uuids::uuid& anchor, const uuids::uuid& clicked)
+  {
+    const auto anchorIt = std::ranges::find(visibleOrder, anchor);
+    const auto clickedIt = std::ranges::find(visibleOrder, clicked);
+    if (anchorIt == visibleOrder.end() || clickedIt == visibleOrder.end())
+    {
+      return { clicked };
+    }
+
+    std::vector<uuids::uuid> range;
+    if (anchorIt <= clickedIt)
+    {
+      range.assign(anchorIt, clickedIt + 1);
+    }
+    else
+    {
+      range.assign(clickedIt, anchorIt + 1);
+      std::ranges::reverse(range);
+    }
+    return range;
+  }
 }
 
 void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
@@ -198,6 +225,16 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 {
   ImGui::Begin("Objects");
 
+  // A fresh snapshot rebuilds every Object behind a new shared_ptr; the selection only keeps uuids
+  // (never a pointer), so this drops the ones that no longer resolve to anything rather than leaving
+  // them to linger as a selection nothing on screen matches.
+  if (objectManager && m_selection->kind() == EditorSelection::Kind::Object)
+  {
+    m_selection->pruneMissing([objectManager](const uuids::uuid& id) {
+      return objectManager->getObjectByUUID(id) != nullptr;
+    });
+  }
+
   if (!m_editable)
   {
     ImGui::TextColored(theme::scriptAmber, "Read-only - server is not in edit mode");
@@ -237,12 +274,17 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   if (objectManager)
   {
     m_dragSource = draggedObject(objectManager);
+    m_visibleOrder.clear();
 
     std::vector<std::shared_ptr<Object>> sortedRootsScratch;
     for (const auto& object : sortedForDisplay(objectManager->getObjects(), m_sortMode, sortedRootsScratch))
     {
       displayObjectTree(object);
     }
+
+    // A Shift-click range needs the full on-screen order, which isn't known until every row above has
+    // been visited - so the click a row registered this frame is only resolved now.
+    applyPendingClick();
 
     // The empty area below the tree is the scene root: drop an object there to reparent it to the root,
     // or a prefab from the asset browser to instantiate it.
@@ -329,7 +371,12 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 {
   ImGui::PushID(uuids::to_string(object->getUUID()).c_str());
 
-  const bool isSelected = m_selection->objectUUID() == object->getUUID();
+  // Recorded in display order regardless of selection - this row is on screen either way, and a
+  // Shift-click range is measured against exactly this list (see m_visibleOrder).
+  m_visibleOrder.push_back(object->getUUID());
+
+  const bool isSelected = m_selection->kind() == EditorSelection::Kind::Object &&
+                           m_selection->contains(object->getUUID());
   const bool isLeaf = object->getChildren().empty();
 
   ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_FramePadding |
@@ -357,9 +404,11 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
   {
-    // The Inspector's ObjectInspector folds its Add Component list closed on its own when it notices the
-    // selection changed, so the tree only needs to update the shared selection here.
-    m_selection->selectObject(object->getUUID());
+    // Deferred to applyPendingClick(), once the full display order for this frame is known (a
+    // Shift-click range needs it). The Inspector's ObjectInspector folds its Add Component list closed
+    // on its own when it notices the selection changed, so nothing else is needed here.
+    const auto& io = ImGui::GetIO();
+    m_pendingClick = PendingClick{ object->getUUID(), io.KeyCtrl, io.KeyShift };
   }
 
   // Icon + name + accent selection bar, drawn over the (empty-label) node row.
@@ -490,6 +539,51 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::PopID();
 }
 
+void ObjectGUIManager::applyPendingClick()
+{
+  if (!m_pendingClick.has_value())
+  {
+    return;
+  }
+
+  const auto [uuid, ctrl, shift] = m_pendingClick.value();
+  m_pendingClick.reset();
+
+  // Shift-click (plain or Ctrl+Shift): select/add the contiguous range from the anchor to this row, in
+  // the tree's current display order. The anchor itself doesn't move, so repeated Shift-clicks keep
+  // extending from the same start.
+  if (shift && m_rangeAnchor.has_value())
+  {
+    const auto range = rangeBetween(m_visibleOrder, m_rangeAnchor.value(), uuid);
+    if (!ctrl)
+    {
+      m_selection->clear();
+    }
+    for (const auto& id : range)
+    {
+      m_selection->addObject(id);
+    }
+
+    // The anchor wasn't on screen (deleted, or hidden behind a collapsed ancestor) - rangeBetween fell
+    // back to just this row, so start the next range from here instead of repeating the same fallback.
+    if (range.size() == 1)
+    {
+      m_rangeAnchor = uuid;
+    }
+    return;
+  }
+
+  if (ctrl)
+  {
+    m_selection->toggleObject(uuid);
+  }
+  else
+  {
+    m_selection->selectObject(uuid);
+  }
+  m_rangeAnchor = uuid;
+}
+
 void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objectManager)
 {
   if (!m_objectPendingDeletion.has_value())
@@ -564,9 +658,11 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
       m_sceneEditCallback(replication::buildRemoveObject(m_objectPendingDeletion.value()));
     }
 
-    if (m_selection->objectUUID() == m_objectPendingDeletion)
+    // Drop just this uuid rather than the whole selection - the deleted object may have been one of
+    // several selected, and the rest still exist.
+    if (m_selection->kind() == EditorSelection::Kind::Object && m_selection->contains(m_objectPendingDeletion.value()))
     {
-      m_selection->clear();
+      m_selection->remove(m_objectPendingDeletion.value());
     }
 
     m_objectPendingDeletion.reset();

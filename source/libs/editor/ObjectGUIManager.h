@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 #include <uuid.h>
 
 class ObjectManager;
@@ -82,11 +83,35 @@ private:
   // The object being dragged, resolved once per frame and cleared at the end of it.
   std::shared_ptr<Object> m_dragSource;
 
+  // The tree's current display order (depth-first, respecting sort mode and which nodes are open) -
+  // rebuilt fresh every displayGui() call. A Shift-click range is measured against this, not the scene's
+  // own object graph, so it always matches what is actually on screen (a row hidden behind a collapsed
+  // ancestor is not part of a range spanning past it).
+  std::vector<uuids::uuid> m_visibleOrder;
+
+  // The uuid a Shift-click range is measured from: the last row a plain or Ctrl-click landed on. Shift
+  // and Ctrl+Shift-click leave it alone, so repeated range-selects keep extending from the same start.
+  std::optional<uuids::uuid> m_rangeAnchor;
+
+  // A row click captured during this frame's tree traversal and applied once the traversal (and so
+  // m_visibleOrder) is complete - a Shift-click range needs the full display order, which isn't known
+  // until every row has been visited.
+  struct PendingClick {
+    uuids::uuid uuid;
+    bool ctrl;
+    bool shift;
+  };
+  std::optional<PendingClick> m_pendingClick;
+
   // The small sort-mode picker drawn in the panel header: a "Sort" label, a button naming the current
   // mode, and a popup to switch it.
   void displaySortControl();
 
   void displayObjectTree(const std::shared_ptr<Object>& object);
+
+  // Applies m_pendingClick (if any) against the now-complete m_visibleOrder, then clears it. See
+  // m_pendingClick for why this waits until after the whole tree has been traversed.
+  void applyPendingClick();
 
   // False for a row the current drag must not be dropped onto, so the row registers no drop target and
   // gives no drop feedback.
