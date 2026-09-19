@@ -28,7 +28,7 @@ git clone https://github.com/SharkFinPro/ECS3D.git
 cd ECS3D
 ```
 
-2. Configure and Build
+1. Configure and Build
 
 `CMakePresets.json` at the repo root defines the configure presets, each carrying the generator, the
 build type and its own binary directory, so there is nothing to remember when configuring. The build
@@ -46,7 +46,7 @@ The C# projects are built **through CMake**, never directly. Running `dotnet bui
 on them produces a second set of generated attributes and the next CMake build fails with `CS0579:
 Duplicate attribute`.
 
-3. Run the Tests
+1. Run the Tests
 
 `check` builds the test suite and runs it through CTest:
 
@@ -60,7 +60,7 @@ To re-run the tests without rebuilding:
 ctest --test-dir cmake-build-ecs3d-debug --output-on-failure
 ```
 
-4. Run the Executable
+1. Run the Executable
 
 Everything is written to the preset's `bin` directory. You can run the editor with:
 
