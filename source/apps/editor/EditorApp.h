@@ -6,6 +6,7 @@
 #include <edits/EditHistory.h>
 #include <scenes/SceneManager.h>
 #include <uuid.h>
+#include <nlohmann/json_fwd.hpp>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -17,6 +18,7 @@ namespace vke {
 }
 
 class ManagedHost;
+class Component;
 class ComponentRegistry;
 class AssetRegistry;
 class SceneManager;
@@ -36,6 +38,10 @@ class ConsolePanel;
 class RingBufferSink;
 class KeybindTable;
 class KeybindDispatcher;
+
+namespace input {
+  struct InputSnapshot;
+}
 
 namespace net {
   class NetClient;
@@ -172,6 +178,35 @@ private:
 
   void setupKeybinds();
 
+  void setupObjectGUIManager();
+
+  void setupInspectorPanel();
+
+  void setupAssetBrowser();
+
+  void setupSaveUI();
+
+  void onAddAsset(const nlohmann::json& asset);
+
+  void onRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName);
+
+  void onRemoveAsset(const uuids::uuid& assetUUID);
+
+  // How many objects reference the asset by uuid, for the delete-confirmation warning.
+  [[nodiscard]] int countAssetReferences(const uuids::uuid& assetUUID) const;
+
+  void onEditComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) const;
+
+  void onSceneEdit(const nlohmann::json& edit);
+
+  void onEditCommitted(const uuids::uuid& objectUUID, const nlohmann::json& before, const nlohmann::json& after);
+
+  void onLoadScene(const uuids::uuid& sceneUUID);
+
+  void onUpdatePrefabBody(const uuids::uuid& assetUUID, const std::string& name, const std::string& body);
+
+  void onLoadProject();
+
   void applyMessage(const net::Message& message);
 
   void handleSnapshot(const net::Message& message) const;
@@ -195,6 +230,12 @@ private:
 
   void handlePicking();
 
+  // The input this view would report, with the keyboard and mouse gated as the editor UI requires.
+  [[nodiscard]] input::InputSnapshot captureGatedInput() const;
+
+  // Whether the snapshot differs from what was last sent (or nothing was sent yet).
+  [[nodiscard]] bool hasInputChanged(const input::InputSnapshot& snapshot) const;
+
   void sendInput();
 
   void sendSceneControl(net::SceneControlOp op) const;
@@ -211,11 +252,22 @@ private:
 
   void displaySceneStatus();
 
+  void displayPlayControls() const;
+
+  void displayRayTracingToggle() const;
+
+  void displaySceneReadout() const;
+
   // The "View" combo: the editor's free-fly camera, or any Camera in the scene (a client's player camera
   // is labelled with its slot).
   void displayCameraSelector();
 
   void updateDockSpace() const;
+
+  void applyDockLocations() const;
+
+  // False while the viewport has no usable size yet, so the caller retries on a later frame.
+  [[nodiscard]] bool applyDockPercents() const;
 
   void displayMessageLog();
 

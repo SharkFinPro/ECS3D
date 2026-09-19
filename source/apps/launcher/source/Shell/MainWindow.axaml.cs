@@ -54,6 +54,11 @@ public partial class MainWindow : Window
         bool l = p.X <= ResizeBorder, r = p.X >= Bounds.Width - ResizeBorder;
         bool t = p.Y <= ResizeBorder, b = p.Y >= Bounds.Height - ResizeBorder;
 
+        return CornerEdge(l, r, t, b) ?? SideEdge(l, r, t, b);
+    }
+
+    private static WindowEdge? CornerEdge(bool l, bool r, bool t, bool b)
+    {
         if (t && l)
         {
             return WindowEdge.NorthWest;
@@ -74,6 +79,11 @@ public partial class MainWindow : Window
             return WindowEdge.SouthEast;
         }
 
+        return null;
+    }
+
+    private static WindowEdge? SideEdge(bool l, bool r, bool t, bool b)
+    {
         if (t)
         {
             return WindowEdge.North;

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <compare>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <ostream>
 #include <thread>
@@ -60,6 +61,39 @@ namespace {
     for (uint32_t sequence = 0; sequence < count; ++sequence)
     {
       queue.push(tagged(sequence), senderId);
+    }
+  }
+
+  // One consumer's drain loop: pops until the producers are finished and the queue has run dry.
+  void drainUntilProducersDone(net::MessageQueue& queue, const std::atomic<bool>& producersDone,
+                               std::vector<Delivery>& drained)
+  {
+    while (true)
+    {
+      // Read before the pop, not after. The other order loses a race: a pop can come back empty,
+      // the last producer can then push and finish, and the flag can be set - all before this
+      // thread gets to look at it - and the consumer would leave that message behind and fail a
+      // test that had found nothing wrong. Sampled first, a true flag means the store already
+      // happened-before the pop, and the producers were joined before the store.
+      const bool producersFinished = producersDone.load(std::memory_order_acquire);
+
+      net::Message message;
+      int32_t senderId = 0;
+
+      if (queue.pop(message, senderId))
+      {
+        drained.push_back({ senderId, sequenceOf(message) });
+        continue;
+      }
+
+      // Stopping on the flag rather than on a message count means a lost message fails the
+      // assertions in the test instead of hanging here.
+      if (producersFinished)
+      {
+        return;
+      }
+
+      std::this_thread::yield();
     }
   }
 
@@ -202,35 +236,8 @@ TEST(MessageQueue, ConcurrentProducersAndConsumersDeliverEachMessageExactlyOnce)
     consumerThreads.reserve(consumers);
     for (int consumer = 0; consumer < consumers; ++consumer)
     {
-      consumerThreads.emplace_back([&queue, &producersDone, &drained = perConsumer[consumer]] {
-        while (true)
-        {
-          // Read before the pop, not after. The other order loses a race: a pop can come back empty,
-          // the last producer can then push and finish, and the flag can be set - all before this
-          // thread gets to look at it - and the consumer would leave that message behind and fail a
-          // test that had found nothing wrong. Sampled first, a true flag means the store already
-          // happened-before the pop, and the producers were joined before the store.
-          const bool producersFinished = producersDone.load(std::memory_order_acquire);
-
-          net::Message message;
-          int32_t senderId = 0;
-
-          if (queue.pop(message, senderId))
-          {
-            drained.push_back({ senderId, sequenceOf(message) });
-            continue;
-          }
-
-          // Stopping on the flag rather than on a message count means a lost message fails the
-          // assertions below instead of hanging here.
-          if (producersFinished)
-          {
-            return;
-          }
-
-          std::this_thread::yield();
-        }
-      });
+      consumerThreads.emplace_back(drainUntilProducersDone, std::ref(queue), std::cref(producersDone),
+                                   std::ref(perConsumer[consumer]));
     }
 
     std::vector<std::thread> producerThreads;

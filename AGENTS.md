@@ -387,7 +387,7 @@ gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induce
 movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded
 forward axis. **The editor must not gate forwarded mouse input on `io.WantCaptureMouse`**: its 3D viewport
 *is* an ImGui window under the dockspace, so that flag is set whenever the cursor is over the scene, and
-gating on it silently swallows the right-drag mouse-look. `EditorApp::sendInput` instead forwards the mouse
+gating on it silently swallows the right-drag mouse-look. `EditorApp::captureGatedInput` (called from `sendInput`) instead forwards the mouse
 only while the viewport looks through a scene camera (in free-fly the right-drag belongs to the editor's own
 camera, so forwarding it too would turn the player at the same time) **and** `RenderingManager::isSceneFocused()`
 is true — the same signal `vke` gates its free-fly camera on. The keyboard still gates on
