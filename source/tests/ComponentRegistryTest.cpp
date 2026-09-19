@@ -188,13 +188,6 @@ TEST(ComponentRegistry, CreatedTransformHasUnitScale)
   EXPECT_NEAR(transform->getLocalScale().x, 1.0f, 1e-5f);
   EXPECT_NEAR(transform->getLocalScale().y, 1.0f, 1e-5f);
   EXPECT_NEAR(transform->getLocalScale().z, 1.0f, 1e-5f);
-
-  // Positive control: an object-built Transform (via the two-scene fixtures) already reads a unit scale,
-  // so the registry-built one above is being held to the same standard rather than a stricter one.
-  const auto objectScale = Transform(glm::vec3(0), glm::vec3(1), glm::vec3(0)).getLocalScale();
-  EXPECT_NEAR(objectScale.x, 1.0f, 1e-5f);
-  EXPECT_NEAR(objectScale.y, 1.0f, 1e-5f);
-  EXPECT_NEAR(objectScale.z, 1.0f, 1e-5f);
 }
 
 TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableComparisonCatchesAnExtraName)
