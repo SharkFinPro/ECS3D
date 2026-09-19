@@ -61,6 +61,12 @@ void ObjectManager::addObjectToRoot(const std::shared_ptr<Object>& object)
   m_objects.push_back(object);
 }
 
+void ObjectManager::addObjectToRoot(const std::shared_ptr<Object>& object, const std::size_t index)
+{
+  const std::size_t clampedIndex = std::min(index, m_objects.size());
+  m_objects.insert(m_objects.begin() + static_cast<std::ptrdiff_t>(clampedIndex), object);
+}
+
 void ObjectManager::removeObjectFromRoot(const std::shared_ptr<Object>& object)
 {
   std::erase(m_objects, object);
@@ -314,6 +320,60 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
   }
 
   m_objectsToRemove.clear();
+}
+
+std::shared_ptr<Object> ObjectManager::restoreSubtree(const nlohmann::json& body,
+                                                       const std::shared_ptr<Object>& parent,
+                                                       const std::size_t index)
+{
+  // uuids are preserved, unlike instantiateUnder (prefab drop) and duplicateObject: the undo history
+  // already names this subtree's objects by these uuids (EditCommand::RemoveObjectData), so minting
+  // fresh ones the way a prefab instantiation does would break every entry that points at them.
+  const auto root = std::make_shared<Object>(body, this);
+  root->setParent(parent);
+
+  const std::size_t baseDepth = parent ? ancestorDepth(parent) + 1 : 0;
+
+  m_allObjects.push_back(root);
+
+  if (parent)
+  {
+    parent->addChild(root, index);
+  }
+  else
+  {
+    addObjectToRoot(root, index);
+  }
+
+  if (m_started)
+  {
+    root->start();
+  }
+
+  // Same shape as instantiateUnder: a body whose child names a component this build does not know
+  // would otherwise strand a half-built subtree in the scene.
+  try
+  {
+    if (const auto childrenIt = body.find("children"); childrenIt != body.end() && !childrenIt->empty())
+    {
+      root->loadChildren(*childrenIt, baseDepth + 1);
+    }
+  }
+  catch (...)
+  {
+    discardSubtree(root);
+    throw;
+  }
+
+  return root;
+}
+
+void ObjectManager::removeSubtree(const std::shared_ptr<Object>& object)
+{
+  // discardSubtree already does exactly this for a live subtree - detach from its parent or the root
+  // list and erase it and every descendant from m_allObjects - so it is reused rather than walking the
+  // tree a second time.
+  discardSubtree(object);
 }
 
 void ObjectManager::discardSubtree(std::shared_ptr<Object> root)

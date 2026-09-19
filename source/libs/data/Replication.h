@@ -108,6 +108,18 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
                                                     const uuids::uuid* parentUUID = nullptr,
                                                     const uuids::uuid* instanceUUID = nullptr);
 
+// Rebuild a subtree from an inline serialized body (not an asset uuid, unlike instantiatePrefab) under
+// parent (absent = scene root) at sibling index. Undo of a deletion: unlike every other creating op this
+// one carries the body's own uuids, which applySceneEdit preserves rather than reassigning - see
+// ObjectManager::restoreSubtree for why.
+[[nodiscard]] nlohmann::json buildRestoreObject(const nlohmann::json& body,
+                                                const uuids::uuid* parentUUID,
+                                                std::size_t index);
+
+// Delete objectUUID and its whole subtree immediately, unlike removeObject (which defers and promotes
+// children) - see ObjectManager::removeSubtree.
+[[nodiscard]] nlohmann::json buildRemoveSubtree(const uuids::uuid& objectUUID);
+
 // Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
 // payload it could not parse apart from an op it understood and refused, because only the first says the
 // sender and the authority disagree about the wire, and only the second is a normal thing for an editor
@@ -127,7 +139,8 @@ enum class SceneEditResult {
   unknownComponent,  // names a component type that does not exist, or one the object is not carrying
   unknownAsset,      // instantiatePrefab named an asset with no usable body
   rejected,          // well formed and refused: a reparent that would cycle or that changes nothing, or
-                     // a creating op naming the nil uuid or one the scene is already using
+                     // a restoreObject whose body names a uuid already live or would exceed maxObjectDepth,
+                     // or a creating op naming the nil uuid or one the scene is already using
   failed             // threw part way through, e.g. a prefab body naming a component this build lacks
 };
 

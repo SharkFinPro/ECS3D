@@ -13,12 +13,16 @@
 #include "Log.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <limits>
 #include <new>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -403,6 +407,31 @@ nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids
   return edit;
 }
 
+nlohmann::json buildRestoreObject(const nlohmann::json& body, const uuids::uuid* parentUUID,
+                                  const std::size_t index)
+{
+  nlohmann::json edit = {
+    { "op", "restoreObject" },
+    { "body", body },
+    { "index", index }
+  };
+
+  if (parentUUID)
+  {
+    edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  return edit;
+}
+
+nlohmann::json buildRemoveSubtree(const uuids::uuid& objectUUID)
+{
+  return {
+    { "op", "removeSubtree" },
+    { "object", uuids::to_string(objectUUID) }
+  };
+}
+
 namespace {
   // Number of ancestors above object (root = 0). Every object in a live scene arrived through a
   // depth-checked unpack/load or reparent, so walking up never runs past maxObjectDepth.
@@ -445,6 +474,65 @@ namespace {
     }
 
     return height;
+  }
+
+  // Result of walking a restoreObject body before anything is built: whether any node's uuid is missing
+  // or failed to parse (malformed - the wire and the sender disagree about the payload), whether any
+  // node's uuid already names a live object (collides - refuse rather than corrupt the uuid-keyed
+  // lookups everything else relies on), and the body's own height (0 for a leaf), so the caller can add
+  // it to a target depth before building anything.
+  struct RestoreBodyWalk {
+    bool malformed = false;
+    bool collides = false;
+    std::size_t height = 0;
+  };
+
+  // seenInThisBody accumulates every uuid already visited by this walk (across the whole recursion, not
+  // just siblings): checking a node's uuid only against the live manager would let two nodes in the same
+  // body share a uuid neither of which exists yet, and both would still get registered - the same
+  // uuid-keyed corruption the live-manager check exists to prevent, just from within the body itself.
+  RestoreBodyWalk walkRestoreBody(const ObjectManager& objectManager, const nlohmann::json& node,
+                                  const std::size_t depth, std::unordered_set<uuids::uuid>& seenInThisBody)
+  {
+    if (depth > maxObjectDepth || !node.is_object() || !node.contains("uuid"))
+    {
+      return { .malformed = true };
+    }
+
+    const auto nodeUUID = uuids::uuid::from_string(std::string(node.at("uuid")));
+    if (!nodeUUID.has_value())
+    {
+      return { .malformed = true };
+    }
+
+    RestoreBodyWalk result;
+    result.collides = objectManager.getObjectByUUID(nodeUUID.value()) != nullptr
+      || !seenInThisBody.insert(nodeUUID.value()).second;
+
+    if (node.contains("children"))
+    {
+      // serialize() always writes "children" as an array, and building anything from one that is not -
+      // a string, a number, whatever a malformed wire payload sends - would iterate over the wrong thing
+      // (or, for a scalar, over the node's own single value) instead of failing cleanly.
+      if (!node.at("children").is_array())
+      {
+        return { .malformed = true };
+      }
+
+      for (const auto& child : node.at("children"))
+      {
+        const auto childResult = walkRestoreBody(objectManager, child, depth + 1, seenInThisBody);
+        if (childResult.malformed)
+        {
+          return childResult;
+        }
+
+        result.collides = result.collides || childResult.collides;
+        result.height = std::max(result.height, childResult.height + 1);
+      }
+    }
+
+    return result;
   }
 
   // What a creating op's optional "uuid" field came to: a refusal to report, a uuid to create the object
@@ -597,6 +685,100 @@ namespace {
       object->setParent(parent);
 
       objectManager.addObject(object);
+      return SceneEditResult::applied;
+    }
+
+    if (op == "restoreObject")
+    {
+      // Not keyed by an existing object either (like addObject), so this has to be handled before the
+      // generic "object" lookup below, which every other op relies on.
+      const auto& body = edit.at("body");
+      if (!body.is_object())
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      // Checked as an explicit range against std::size_t's own limits rather than by casting into a
+      // signed type and looking for wraparound - a value near UINT64_MAX read into a signed type is
+      // implementation-defined at best, so it should never be the thing this refusal relies on.
+      const auto& indexField = edit.at("index");
+      std::size_t index = 0;
+      if (indexField.is_number_unsigned())
+      {
+        const auto rawIndex = indexField.get<std::uint64_t>();
+        if (rawIndex > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        index = static_cast<std::size_t>(rawIndex);
+      }
+      else if (indexField.is_number_integer())
+      {
+        const auto rawIndex = indexField.get<std::int64_t>();
+        if (rawIndex < 0)
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        index = static_cast<std::size_t>(rawIndex);
+      }
+      else
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      // Same "named parent" handling as addObject/instantiatePrefab: absent means the scene root, named
+      // and unresolvable is a stale view rather than a silent root.
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
+      {
+        const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsedParent.has_value())
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
+        }
+      }
+
+      std::unordered_set<uuids::uuid> seenInThisBody;
+      const auto bodyWalk = walkRestoreBody(objectManager, body, 0, seenInThisBody);
+      if (bodyWalk.malformed)
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      if (bodyWalk.collides)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      const std::size_t baseDepth = parent ? ancestorDepth(parent) + 1 : 0;
+      if (baseDepth + bodyWalk.height > maxObjectDepth)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Same reasoning as instantiatePrefab/duplicateObject: a body naming a component this build does
+      // not know is a failure to apply, not a malformed edit.
+      try
+      {
+        objectManager.restoreSubtree(body, parent, index);
+      }
+      catch (const std::bad_alloc&)
+      {
+        throw;
+      }
+      catch (const std::exception&)
+      {
+        return SceneEditResult::failed;
+      }
+
       return SceneEditResult::applied;
     }
 
@@ -789,6 +971,12 @@ namespace {
       }
 
       return SceneEditResult::unknownComponent;
+    }
+
+    if (op == "removeSubtree")
+    {
+      objectManager.removeSubtree(object);
+      return SceneEditResult::applied;
     }
 
     return SceneEditResult::malformedEdit;

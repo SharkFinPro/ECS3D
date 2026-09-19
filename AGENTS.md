@@ -127,7 +127,13 @@ Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `scene
 `--edit` server may send. An `editComponent` a replicated view could not apply is reported through
 `replication::logMissedComponentEdit` — debug for an absent object/component (routine, since the server
 rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
-payload (a real divergence). (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
+payload (a real divergence). (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
+`sceneEdit` also carries two ops for undoing a deletion: `removeSubtree` deletes an object and its whole
+subtree immediately, promoting nothing, unlike `removeObject` (which defers to the next tick and promotes
+the removed object's children); `restoreObject` rebuilds a subtree from an inline serialized body under a
+parent at a sibling index, and is the one structural op that **preserves the body's uuids** rather than
+reassigning them, because the undo history (`data/edits/EditCommand.h`) already names the removed
+subtree's objects by those uuids. The
 three `sceneEdit` ops that create an object (`addObject`, `duplicateObject`, `instantiatePrefab`) may carry
 a client-chosen `"uuid"` for what they create; the server honors it and picks its own when the field is
 absent. A uuid that does not parse is a `malformedEdit`; the nil uuid, or one already in use, is

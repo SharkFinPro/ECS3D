@@ -31,6 +31,11 @@ public:
 
   void addObjectToRoot(const std::shared_ptr<Object>& object);
 
+  // Same as addObjectToRoot, but at a specific sibling index (clamped to m_objects.size(), so an index
+  // past the end appends) instead of always at the end - restoreSubtree uses this to put a restored root
+  // back exactly where it was.
+  void addObjectToRoot(const std::shared_ptr<Object>& object, std::size_t index);
+
   void removeObjectFromRoot(const std::shared_ptr<Object>& object);
 
   // rootUUID, when given, is the uuid the copy's root takes instead of a generated one; its descendants
@@ -86,6 +91,25 @@ public:
   void discardSubtree(std::shared_ptr<Object> root);
 
   void deleteObjectsMarkedForDeletion();
+
+  // Rebuild a subtree from an inline serialized body under parent (null = scene root) at sibling index,
+  // with every uuid the body carries PRESERVED rather than reassigned - unlike instantiate/instantiateUnder,
+  // which mint fresh ones for a prefab drop or a duplicate. This is the undo-of-a-deletion op: the undo
+  // history already names the removed subtree's objects by their original uuids (EditCommand's
+  // RemoveObjectData), and giving them new ones on restore would break every entry that points at them.
+  // Precondition, checked by the caller (applySceneEdit's restoreObject op): no uuid in body already names
+  // a live object. Throws (leaving nothing behind - discardSubtree, then rethrow) exactly like
+  // instantiateUnder does on a body naming a component this build does not know.
+  [[nodiscard]] std::shared_ptr<Object> restoreSubtree(const nlohmann::json& body,
+                                                       const std::shared_ptr<Object>& parent,
+                                                       std::size_t index);
+
+  // Deletes object and its whole subtree immediately, promoting nothing - the opposite of removeObject,
+  // which defers to deleteObjectsMarkedForDeletion and promotes the removed object's children up to its
+  // own parent. This is an edit-time structural op (applySceneEdit's removeSubtree): it only ever runs on
+  // a stopped scene, and the server re-snapshots right after, so there is no live tick to protect and no
+  // reason to keep the subtree's now-orphaned children in the scene at all.
+  void removeSubtree(const std::shared_ptr<Object>& object);
 
   [[nodiscard]] std::shared_ptr<Object> getObjectByUUID(uuids::uuid uuid) const;
 
