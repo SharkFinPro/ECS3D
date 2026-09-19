@@ -1,5 +1,6 @@
 #include "ScriptSystem.h"
 #include "ScriptEngine.h"
+#include "ScriptFieldEdit.h"
 #include "bindings/BindingContext.h"
 #include <Log.h>
 #include <objects/Object.h>
@@ -55,7 +56,7 @@ void ScriptSystem::start(ObjectManager& objectManager)
         continue;
       }
 
-      attach(*object, *script);
+      attach(*object, script);
       startIfNeeded(object->getUUID(), script->getClassName());
     }
   }
@@ -92,6 +93,10 @@ void ScriptSystem::stop(ObjectManager& objectManager)
       detach(uuid, className);
     }
   }
+
+  // Anything still attached belongs to a Script component or an object that left the scene during the
+  // run; the loop above cannot reach it, so the sweep is what leaves m_attached empty.
+  detachOrphans(objectManager);
 }
 
 void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
@@ -103,6 +108,10 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
   BindingContext::setObjectManager(&objectManager);
 
   checkForScriptChanges(objectManager, dt);
+
+  // Before the attach loop, so an instance orphaned since the last sweep is gone by the time attach
+  // looks at the component that replaced it.
+  detachOrphans(objectManager);
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -119,7 +128,7 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
       // spawnPrefab).
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
-        attach(*object, *script);
+        attach(*object, script);
       }
 
       // The scene is running here (fixedUpdate is only called while it is), so any instance that isn't
@@ -227,6 +236,10 @@ void ScriptSystem::attachAll(ObjectManager& objectManager)
 
   BindingContext::setObjectManager(&objectManager);
 
+  // A script removed while the scene is stopped must not keep its instance either. This runs on every
+  // scene edit's snapshot, so an orphan is usually already gone before the next tick sees it.
+  detachOrphans(objectManager);
+
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -239,7 +252,7 @@ void ScriptSystem::attachAll(ObjectManager& objectManager)
 
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
-        attach(*object, *script);
+        attach(*object, script);
       }
     }
   }
@@ -331,10 +344,10 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
   }
 }
 
-void ScriptSystem::attach(const Object& object, const Script& script)
+void ScriptSystem::attach(const Object& object, const std::shared_ptr<Script>& script)
 {
   const auto uuid = object.getUUID();
-  const auto className = script.getClassName();
+  const auto className = script->getClassName();
   const auto key = cacheKey(uuid, className);
 
   if (m_attached.contains(key))
@@ -345,7 +358,7 @@ void ScriptSystem::attach(const Object& object, const Script& script)
   const auto uuidStr = uuids::to_string(uuid);
 
   m_engine->attachScript(uuidStr.c_str(), className.c_str());
-  m_attached.insert(key);
+  m_attached.emplace(key, AttachedScript{ uuid, className, script });
 
   // Cache the instance's exposed fields (name/type) so we can read them back later for snapshots.
   auto& fields = m_fieldCache[key];
@@ -355,7 +368,7 @@ void ScriptSystem::attach(const Object& object, const Script& script)
     fields.push_back({ f.at("name").get<std::string>(), f.at("type").get<std::string>() });
   }
 
-  writeFieldsToInstance(uuid, className, script.getFields());
+  writeFieldsToInstance(uuid, className, script->getFields());
 }
 
 void ScriptSystem::detach(const uuids::uuid& uuid, const std::string& className)
@@ -366,6 +379,54 @@ void ScriptSystem::detach(const uuids::uuid& uuid, const std::string& className)
   m_attached.erase(key);
   m_fieldCache.erase(key);
   m_started.erase(key);
+}
+
+void ScriptSystem::detachOrphans(const ObjectManager& objectManager)
+{
+  if (m_attached.empty())
+  {
+    return;
+  }
+
+  std::unordered_map<std::string, const Component*> liveScripts;
+  liveScripts.reserve(m_attached.size());
+
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    for (const auto& scriptComponent : object->getScripts())
+    {
+      const auto script = std::dynamic_pointer_cast<Script>(scriptComponent);
+      if (!script)
+      {
+        continue;
+      }
+
+      liveScripts.emplace(cacheKey(object->getUUID(), script->getClassName()), script.get());
+    }
+  }
+
+  // Collected first because detach() erases from m_attached.
+  std::vector<std::pair<std::string, AttachedScript>> orphans;
+  for (const auto& [key, attached] : m_attached)
+  {
+    // A different component under the same key is a replacement, not a survivor: the instance belongs
+    // to the Script that is gone, so it is stopped and the new component attaches its own.
+    const auto live = liveScripts.find(key);
+    if (live == liveScripts.end() || live->second != attached.component.lock().get())
+    {
+      orphans.emplace_back(key, attached);
+    }
+  }
+
+  for (const auto& [key, orphan] : orphans)
+  {
+    if (m_started.contains(key))
+    {
+      m_engine->stop(uuids::to_string(orphan.uuid).c_str(), orphan.className.c_str());
+    }
+
+    detach(orphan.uuid, orphan.className);
+  }
 }
 
 void ScriptSystem::startIfNeeded(const uuids::uuid& uuid, const std::string& className)
@@ -388,12 +449,35 @@ void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,
     return;
   }
 
+  const auto cached = m_fieldCache.find(cacheKey(uuid, className));
+  if (cached == m_fieldCache.end())
+  {
+    return;
+  }
+
   const auto uuidStr = uuids::to_string(uuid);
 
   for (const auto& field : fields)
   {
-    if (!field.contains("name") || !field.contains("type") || !field.contains("value"))
+    const std::string* cachedType = nullptr;
+    if (field.contains("name") && field.at("name").is_string())
     {
+      const auto editedName = field.at("name").get<std::string>();
+      for (const auto& exposed : cached->second)
+      {
+        if (exposed.name == editedName)
+        {
+          cachedType = &exposed.type;
+          break;
+        }
+      }
+    }
+
+    // An editor's field list can be stale, or hostile: a tag that disagrees with what the instance
+    // really exposes would otherwise reach a setter and either throw here or fault the script.
+    if (const auto reason = scripting::rejectFieldEdit(field, cachedType); !reason.empty())
+    {
+      Log::warn(LogCategory::script, "Refused a field edit on " + uuidStr + " (" + className + "): " + reason);
       continue;
     }
 
@@ -401,6 +485,8 @@ void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,
     const std::string type = field.at("type");
     const auto fieldName = name.c_str();
 
+    // A well-formed "string" field falls through every branch below: the ABI has no string setter, so
+    // it is dropped without a warning rather than reported as bad input.
     if (type == "float")
     {
       m_engine->setFieldFloat(uuidStr.c_str(), className.c_str(), fieldName, field.at("value").get<float>());
