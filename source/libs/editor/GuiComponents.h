@@ -486,10 +486,10 @@ namespace gc {
     }
     else if (hovered)
     {
-      dl->AddRectFilled(pos, ImVec2(pos.x + s, pos.y + s), IM_COL32(255, 255, 255, 26), 6.0f);
+      dl->AddRectFilled(pos, ImVec2(pos.x + s, pos.y + s), theme::u32(theme::overlayHover), 6.0f);
     }
 
-    const ImU32 col = active ? theme::u32(theme::onAcc) : IM_COL32(207, 211, 218, 255);
+    const ImU32 col = active ? theme::u32(theme::onAcc) : theme::u32(theme::overlayIcon);
     drawSecIcon(dl, ImVec2(pos.x + s * 0.5f, pos.y + s * 0.5f), 16.0f, icon, col);
 
     return clicked;
@@ -791,9 +791,9 @@ namespace gc {
     const float dot = 7.0f, padL = 6.0f, gap = 5.0f, padR = 8.0f, bh = ts.y + 4.0f;
     const ImVec2 b0(pos.x + 7.0f, pos.y + 7.0f);
     const ImVec2 b1(b0.x + padL + dot + gap + ts.x + padR, b0.y + bh);
-    dl->AddRectFilled(b0, b1, IM_COL32(13, 14, 16, 180), bh * 0.5f);
+    dl->AddRectFilled(b0, b1, theme::u32(theme::cardBadgeBg), bh * 0.5f);
     dl->AddCircleFilled(ImVec2(b0.x + padL + dot * 0.5f, (b0.y + b1.y) * 0.5f), dot * 0.5f, theme::u32(kindCol));
-    dl->AddText(ImVec2(b0.x + padL + dot + gap, b0.y + 2.0f), IM_COL32(207, 211, 218, 255), kind);
+    dl->AddText(ImVec2(b0.x + padL + dot + gap, b0.y + 2.0f), theme::u32(theme::cardBadgeText), kind);
 
     return clicked;
   }

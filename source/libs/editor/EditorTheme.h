@@ -54,6 +54,14 @@ namespace theme {
     inline const ImVec4 scrollHover = v4(71, 75, 85);
     inline const ImVec4 modalDim    = v4(10, 11, 13, 150);
 
+    // GuiComponents.h chrome that used to be spelled out inline the same way. overlayHover/overlayIcon
+    // are the floating viewport tool rail's hover wash and inactive icon color; cardBadgeBg/cardBadgeText
+    // are the asset-card type badge's chip and label.
+    inline const ImVec4 overlayHover  = v4(255, 255, 255, 26);
+    inline const ImVec4 overlayIcon   = v4(207, 211, 218);
+    inline const ImVec4 cardBadgeBg   = v4(13, 14, 16, 180);
+    inline const ImVec4 cardBadgeText = v4(207, 211, 218);
+
     // Asset-type accent colors (used by the asset grid badges + the model renderer slots).
     inline const ImVec4 modelPurple = v4(167, 139, 250); // #a78bfa
     inline const ImVec4 scriptAmber = v4(230, 179, 90);  // #e6b35a
@@ -94,6 +102,11 @@ namespace theme {
   inline ImVec4 scrollHover = defaults::scrollHover;
   inline ImVec4 modalDim    = defaults::modalDim;
 
+  inline ImVec4 overlayHover  = defaults::overlayHover;
+  inline ImVec4 overlayIcon   = defaults::overlayIcon;
+  inline ImVec4 cardBadgeBg   = defaults::cardBadgeBg;
+  inline ImVec4 cardBadgeText = defaults::cardBadgeText;
+
   inline ImVec4 modelPurple = defaults::modelPurple;
   inline ImVec4 scriptAmber = defaults::scriptAmber;
   inline ImVec4 sceneGreen  = defaults::sceneGreen;
@@ -132,9 +145,11 @@ namespace theme {
       { "Surfaces", "Line (strong)",  "line2",       &line2,       &defaults::line2 },
       { "Surfaces", "Scroll (hover)", "scrollHover", &scrollHover, &defaults::scrollHover },
       { "Surfaces", "Modal dim",      "modalDim",    &modalDim,    &defaults::modalDim },
+      { "Surfaces", "Overlay (hover)", "overlayHover", &overlayHover, &defaults::overlayHover },
       { "Text",     "Primary",        "t1",          &t1,          &defaults::t1 },
       { "Text",     "Secondary",      "t2",          &t2,          &defaults::t2 },
       { "Text",     "Muted",          "t3",          &t3,          &defaults::t3 },
+      { "Text",     "Overlay icon",   "overlayIcon", &overlayIcon, &defaults::overlayIcon },
       { "Accent",   "Accent",         "accent",      &accent,      &defaults::accent },
       { "Accent",   "Accent (dim)",   "accdim",      &accdim,      &defaults::accdim },
       { "Accent",   "Accent (soft)",  "accSoft",     &accSoft,     &defaults::accSoft },
@@ -147,6 +162,8 @@ namespace theme {
       { "Assets",   "Script",         "scriptAmber", &scriptAmber, &defaults::scriptAmber },
       { "Assets",   "Scene",          "sceneGreen",  &sceneGreen,  &defaults::sceneGreen },
       { "Assets",   "Prefab",         "prefabBlue",  &prefabBlue,  &defaults::prefabBlue },
+      { "Assets",   "Badge background", "cardBadgeBg",   &cardBadgeBg,   &defaults::cardBadgeBg },
+      { "Assets",   "Badge text",       "cardBadgeText", &cardBadgeText, &defaults::cardBadgeText },
     });
 
     return list;
