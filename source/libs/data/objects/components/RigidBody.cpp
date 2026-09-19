@@ -3,6 +3,14 @@
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
+#include <algorithm>
+
+namespace {
+  // Zero or negative mass makes PhysicsSystem::getInertiaTensor produce a zero (or negative) diagonal,
+  // which is not invertible - floored here so every path that can set mass (the setter, loading a
+  // project, unpacking a replicated snapshot) shares one rule instead of each guarding it separately.
+  constexpr float kMinMass = 0.001f;
+}
 
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody)
@@ -72,7 +80,7 @@ void RigidBody::setMass(const float mass)
     return;
   }
 
-  m_mass.set(mass);
+  m_mass.set(std::max(mass, kMinMass));
 }
 
 float RigidBody::getFriction() const
@@ -172,7 +180,7 @@ void RigidBody::loadFromJSON(const nlohmann::json& componentData)
   m_friction.set(componentData.at("friction"));
   m_doGravity.set(componentData.at("doGravity"));
   m_gravity.set(componentData.at("gravity"));
-  m_mass.set(componentData.at("mass"));
+  setMass(componentData.at("mass"));
 }
 
 void RigidBody::pack(net::Message& message) const
@@ -194,5 +202,5 @@ void RigidBody::unpack(net::MessageReader& messageReader)
   m_doGravity.set(messageReader.read<bool>());
   m_gravity.set(messageReader.read<float>());
   m_angularVelocity.set(messageReader.read<glm::vec3>());
-  m_mass.set(messageReader.read<float>());
+  setMass(messageReader.read<float>());
 }

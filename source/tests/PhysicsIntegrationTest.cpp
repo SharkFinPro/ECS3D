@@ -12,6 +12,7 @@
 
 #include <glm/vec3.hpp>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <string>
@@ -208,6 +209,52 @@ TEST(PhysicsIntegration, AWiderBodyIsHarderToSpinAboutItsShortAxis)
   // Izz takes width and height: (1/12) * 10 * 0.1 * (9 + 1) = 5/6, so the same impulse spins it at 1.2
   // rather than 6. The tensor has to see the object's scale, not just its mass.
   expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, -1.2f });
+}
+
+TEST(PhysicsIntegration, ADegenerateScaleKeepsAngularVelocityFiniteInsteadOfSpinningToNaN)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Flattened", { 0, 0, 0 }, { 0, 0, 0 });
+  const auto body = addBody(object, false);
+
+  const auto transform = transformOf(object);
+
+  // Every diagonal of the inertia tensor collapses to zero at this scale, so inverting it (the pre-fix
+  // behaviour) produces inf, and inf times the zero cross product below is NaN. The off-centre push below
+  // must be skipped rather than turned into a spin that never recovers.
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 });
+
+  const auto angularVelocity = body->getAngularVelocity();
+  EXPECT_TRUE(std::isfinite(angularVelocity.x));
+  EXPECT_TRUE(std::isfinite(angularVelocity.y));
+  EXPECT_TRUE(std::isfinite(angularVelocity.z));
+
+  // Positive control: a normal body at the same lever arm does pick up spin, so the assertion above is
+  // catching the degenerate tensor rather than a guard that swallows every off-centre push.
+  const auto normalObject = addObject(scene, "Normal", { 0, 0, 0 });
+  const auto normalBody = addBody(normalObject, false);
+  PhysicsSystem::applyForce(*normalBody, *transformOf(normalObject), { 1, 0, 0 }, { 0, 1, 0 });
+
+  expectNear("angular velocity", normalBody->getAngularVelocity(), { 0, 0, -6 });
+}
+
+TEST(PhysicsIntegration, SetMassRefusesToLeaveTheBodyAtZeroOrNegativeMass)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "MassSetting", { 0, 0, 0 });
+  const auto body = addBody(object, false);
+
+  body->setMass(0.0f);
+  EXPECT_TRUE(std::isfinite(body->getMass()));
+  EXPECT_GT(body->getMass(), 0.0f);
+
+  body->setMass(-5.0f);
+  EXPECT_TRUE(std::isfinite(body->getMass()));
+  EXPECT_GT(body->getMass(), 0.0f);
+
+  // Positive control: an ordinary positive mass is kept as given, not silently floored too.
+  body->setMass(20.0f);
+  EXPECT_FLOAT_EQ(body->getMass(), 20.0f);
 }
 
 TEST(PhysicsIntegration, ACollisionAlongTheTranslationVectorCancelsTheVelocityIntoIt)
