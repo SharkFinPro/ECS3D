@@ -210,7 +210,11 @@ thread-safe `MessageQueue` and drained by the app loop. The transport backend (T
 selected by a single field in `Transport.cs`. The transport logs through a native `setLogCallback`
 (`net::transportLog`, category `net`), falling back to the console before it is registered. A client
 connect attempt is bounded to `ConnectTimeoutMs` in each backend so the apps' retry loops keep their
-deadline instead of hanging on the OS connect timeout.
+deadline instead of hanging on the OS connect timeout. Both backends
+broadcast from a snapshot of the connection list taken under the lock and send outside it, under one
+`SendTimeoutMs` budget shared by the whole fan-out, so a peer that stops reading disconnects only itself
+instead of stalling the tick thread. A connection is dropped only when its own send failed or timed out;
+peers the broadcast ran out of budget before reaching just miss that one message.
 
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is
