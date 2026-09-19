@@ -116,6 +116,11 @@ void ObjectInspector::setEditCallback(EditCallback callback)
   m_editCallback = std::move(callback);
 }
 
+void ObjectInspector::setEditCommittedCallback(EditCommittedCallback callback)
+{
+  m_editCommittedCallback = std::move(callback);
+}
+
 void ObjectInspector::setSceneEditCallback(SceneEditCallback callback)
 {
   m_sceneEditCallback = std::move(callback);
@@ -157,6 +162,8 @@ void ObjectInspector::display(const std::shared_ptr<Object>& object)
   // tree click's reset.
   if (m_nameEditObjectUUID != object->getUUID())
   {
+    commitPendingEdit();
+
     m_nameEditObjectUUID = object->getUUID();
     m_showComponentSelector = false;
     // Bounds the guard's lifetime: an entry can only accumulate while its object stays selected, and
@@ -240,6 +247,34 @@ void ObjectInspector::display(const std::shared_ptr<Object>& object)
   {
     displayScriptDragDropArea(scriptDropZoneStartY, object);
   }
+
+  // The gesture is over once no widget is still being held (the drag was released, the field left), or
+  // once the component it was moving is gone from under it.
+  if (m_pendingEdit && (m_pendingEdit->component.expired() || !ImGui::IsAnyItemActive()))
+  {
+    commitPendingEdit();
+  }
+}
+
+void ObjectInspector::commitPendingEdit()
+{
+  if (!m_pendingEdit)
+  {
+    return;
+  }
+
+  const PendingEdit pending = std::move(*m_pendingEdit);
+  m_pendingEdit.reset();
+
+  // A gesture that ended where it started is not an edit at all - a click that dragged nowhere, or a
+  // value typed back to what it was.
+  if (!m_editCommittedCallback || pending.before == pending.after)
+  {
+    return;
+  }
+
+  m_editCommittedCallback(pending.objectUUID, nlohmann::json::parse(pending.before),
+                          nlohmann::json::parse(pending.after));
 }
 
 void ObjectInspector::displayAddComponent(const std::shared_ptr<Object>& object)
@@ -365,9 +400,27 @@ void ObjectInspector::displayComponent(const uuids::uuid& objectUUID, const std:
 
   ImGui::PushID(component.get());
 
-  if (m_componentEditor->displayGui(key, component) && m_editCallback)
+  // displayGui edits the component in place, so by the time it reports a change the previous value is
+  // already gone: serializing the selected object's few components once a frame is the price of still
+  // knowing it. Skipped while this component is the one already being gathered - its "before" is the
+  // value from the frame the gesture started on, not from this one.
+  const bool gatheringThisComponent = m_pendingEdit && m_pendingEdit->component.lock() == component;
+  const std::string frameBefore = gatheringThisComponent ? std::string{} : component->serialize().dump();
+
+  if (m_componentEditor->displayGui(key, component))
   {
-    m_editCallback(objectUUID, component);
+    if (!gatheringThisComponent)
+    {
+      commitPendingEdit();
+      m_pendingEdit = PendingEdit{ objectUUID, component, frameBefore, frameBefore };
+    }
+
+    m_pendingEdit->after = component->serialize().dump();
+
+    if (m_editCallback)
+    {
+      m_editCallback(objectUUID, component);
+    }
   }
 
   // The header's "-" button marks the component deleted; turn that into a structural removeComponent
