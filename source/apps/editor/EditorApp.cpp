@@ -954,9 +954,9 @@ void EditorApp::updateDockSpace() const
     // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
     // shrink the other, and tabs sharing a dock node take the largest floor among them. In a window small
     // enough that the default sizes fall below these, the floors win over the default layout.
-    const ImVec2 objectsMinimumSize{160.0f, 0.0f};
-    const ImVec2 inspectorMinimumSize{220.0f, 0.0f};
-    const ImVec2 sceneStatusMinimumSize{0.0f, 40.0f};
+    const ImVec2 objectsMinimumSize{220.0f, 0.0f};
+    const ImVec2 inspectorMinimumSize{290.0f, 0.0f};
+    const ImVec2 sceneStatusMinimumSize{0.0f, 88.0f};
     const ImVec2 assetsMinimumSize{0.0f, 200.0f};
     const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
     const ImVec2 consoleMinimumSize{0.0f, 120.0f};
