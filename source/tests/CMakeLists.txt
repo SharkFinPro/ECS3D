@@ -30,6 +30,7 @@ add_executable(${PROJECT_NAME}
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp
   EditHistoryTest.cpp
+  RecordEditsTest.cpp
   CollisionMathTest.cpp
   NarrowPhaseTest.cpp
   SceneQueryTest.cpp
@@ -37,6 +38,7 @@ add_executable(${PROJECT_NAME}
   LightRendererTest.cpp
   LogTest.cpp
   LogBindingsTest.cpp
+  ScriptFieldEditTest.cpp
   CollisionEventTest.cpp
   SettingsStoreTest.cpp
   FileSinkTest.cpp
@@ -75,11 +77,15 @@ add_executable(${PROJECT_NAME}
   # LogBindings depends only on ECS3DLog (no data/CLR includes), so it is compiled in directly rather
   # than pulling all of ECS3DScripting - and its ManagedHost/CLR dependency - into a headless suite.
   ../libs/scripting/bindings/LogBindings.cpp
+
+  # ScriptFieldEdit depends only on json, so it is compiled in the same way.
+  ../libs/scripting/ScriptFieldEdit.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings
+  ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

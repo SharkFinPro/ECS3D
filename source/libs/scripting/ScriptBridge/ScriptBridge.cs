@@ -392,7 +392,9 @@ public static class Bridge
 
     private static void SetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, object value)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        var key = Key(uuid, className);
         var fieldName = Marshal.PtrToStringUTF8(fieldNamePtr)!;
 
         if (!_instances.TryGetValue(key, out var instance))
@@ -410,7 +412,27 @@ public static class Bridge
 
         // Convert.ChangeType only handles IConvertible (float/int/bool); a struct like Vector3 arrives as
         // the field's own type already, so assign it directly.
-        var converted = field.FieldType.IsInstanceOfType(value) ? value : Convert.ChangeType(value, field.FieldType);
+        object converted;
+        if (field.FieldType.IsInstanceOfType(value))
+        {
+            converted = value;
+        }
+        else
+        {
+            try
+            {
+                converted = Convert.ChangeType(value, field.FieldType);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+            {
+                // Bad input, not a script fault: letting this reach RunGuarded would fault the instance
+                // and skip every later call for it.
+                Log.warn($"Refused a field edit on {uuid} ({className}): field '{fieldName}' is " +
+                         $"{field.FieldType.Name}, got {value.GetType().Name}");
+                return;
+            }
+        }
+
         field.SetValue(instance, converted);
     }
 

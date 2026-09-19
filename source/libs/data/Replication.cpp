@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <exception>
 #include <new>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -276,7 +277,8 @@ void logMissedComponentEdit(const ComponentEditResult result, const net::Message
   }
 }
 
-nlohmann::json buildAddObject(const std::string& name, const uuids::uuid* parentUUID)
+nlohmann::json buildAddObject(const std::string& name, const uuids::uuid* parentUUID,
+                              const uuids::uuid* objectUUID)
 {
   nlohmann::json edit = {
     { "op", "addObject" },
@@ -286,6 +288,11 @@ nlohmann::json buildAddObject(const std::string& name, const uuids::uuid* parent
   if (parentUUID)
   {
     edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  if (objectUUID)
+  {
+    edit["uuid"] = uuids::to_string(*objectUUID);
   }
 
   return edit;
@@ -325,12 +332,19 @@ nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
   return edit;
 }
 
-nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID)
+nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID, const uuids::uuid* duplicateUUID)
 {
-  return {
+  nlohmann::json edit = {
     { "op", "duplicateObject" },
     { "object", uuids::to_string(objectUUID) }
   };
+
+  if (duplicateUUID)
+  {
+    edit["uuid"] = uuids::to_string(*duplicateUUID);
+  }
+
+  return edit;
 }
 
 nlohmann::json buildRenameObject(const uuids::uuid& objectUUID, const std::string& name)
@@ -367,7 +381,8 @@ nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::u
   return edit;
 }
 
-nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid* parentUUID)
+nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid* parentUUID,
+                                      const uuids::uuid* instanceUUID)
 {
   nlohmann::json edit = {
     { "op", "instantiatePrefab" },
@@ -377,6 +392,11 @@ nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids
   if (parentUUID)
   {
     edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  if (instanceUUID)
+  {
+    edit["uuid"] = uuids::to_string(*instanceUUID);
   }
 
   return edit;
@@ -474,6 +494,44 @@ namespace {
     transform->setScale(localScale);
   }
 
+  // What a creating op's optional "uuid" field came to: a refusal to report, a uuid to create the object
+  // with, or neither when the op named none and the manager picks one as it always has.
+  struct RequestedUUID {
+    std::optional<SceneEditResult> refusal;
+    std::optional<uuids::uuid> value;
+
+    [[nodiscard]] const uuids::uuid* pointer() const
+    {
+      return value.has_value() ? &value.value() : nullptr;
+    }
+  };
+
+  // Resolved before the op builds anything, so a uuid that cannot be honored leaves the scene untouched.
+  RequestedUUID requestedObjectUUID(const ObjectManager& objectManager, const nlohmann::json& edit)
+  {
+    if (!edit.contains("uuid"))
+    {
+      return {};
+    }
+
+    const auto parsed = uuids::uuid::from_string(std::string(edit.at("uuid")));
+    if (!parsed.has_value())
+    {
+      return { .refusal = SceneEditResult::malformedEdit };
+    }
+
+    // The nil uuid parses, so it is a well-formed request the authority simply will not honor: an object
+    // registered carrying one has the manager generate a uuid for it instead, which would leave the
+    // sender waiting for the uuid it asked for. A uuid the scene already uses is refused for the same
+    // reason - the sender would be told about an object that is not the one its edit meant to create.
+    if (parsed->is_nil() || objectManager.getObjectByUUID(parsed.value()))
+    {
+      return { .refusal = SceneEditResult::rejected };
+    }
+
+    return { .value = parsed.value() };
+  }
+
   SceneEditResult applyStructuralEdit(ObjectManager& objectManager, const nlohmann::json& edit,
                                       const AssetRegistry* assetRegistry)
   {
@@ -518,12 +576,18 @@ namespace {
         }
       }
 
+      const auto requested = requestedObjectUUID(objectManager, edit);
+      if (requested.refusal.has_value())
+      {
+        return requested.refusal.value();
+      }
+
       // Guarded here rather than left to the catch below: the body belongs to the asset, not to the
       // edit, so a prefab whose stored blob is broken is a failure to apply and not a malformed edit -
       // reporting it as one sends whoever reads the log to look at the wire.
       try
       {
-        objectManager.instantiateUnder(body, parent);
+        objectManager.instantiateUnder(body, parent, requested.pointer());
       }
       catch (const std::bad_alloc&)
       {
@@ -568,7 +632,15 @@ namespace {
         }
       }
 
-      const auto object = std::make_shared<Object>(name);
+      const auto requested = requestedObjectUUID(objectManager, edit);
+      if (requested.refusal.has_value())
+      {
+        return requested.refusal.value();
+      }
+
+      const auto object = requested.value.has_value()
+                            ? std::make_shared<Object>(name, requested.value.value())
+                            : std::make_shared<Object>(name);
       object->setParent(parent);
 
       objectManager.addObject(object);
@@ -603,11 +675,17 @@ namespace {
 
     if (op == "duplicateObject")
     {
+      const auto requested = requestedObjectUUID(objectManager, edit);
+      if (requested.refusal.has_value())
+      {
+        return requested.refusal.value();
+      }
+
       // Same reasoning as the prefab body: this re-parses the object's own serialization, so a failure
       // is the scene's and not the edit's.
       try
       {
-        objectManager.duplicateObject(object);
+        objectManager.duplicateObject(object, requested.pointer());
       }
       catch (const std::bad_alloc&)
       {

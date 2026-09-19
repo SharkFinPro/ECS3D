@@ -4,7 +4,9 @@
 #include <Log.h>
 #include <LogEntry.h>
 #include <array>
+#include <cstddef>
 #include <limits>
+#include <span>
 #include <utility>
 
 namespace net {
@@ -137,11 +139,13 @@ bool NetServer::poll(Message& message, int32_t& senderId)
 
 void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  Message message(static_cast<MessageType>(type));
-  for (const std::vector<uint8_t> chunks(data, data + len); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  // An empty payload is legal (the editor's join carries none, and ServerApp::handleJoin keys on that),
+  // so a zero or negative length, or a null buffer, is an empty message rather than a range to walk.
+  const auto payload = len > 0 && data != nullptr
+    ? std::span<const uint8_t>(data, static_cast<std::size_t>(len))
+    : std::span<const uint8_t>();
+
+  Message message(static_cast<MessageType>(type), payload);
 
   m_inbox.push(std::move(message), connId);
 }

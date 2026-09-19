@@ -27,6 +27,9 @@ class InspectorPanel {
 public:
   using EditCallback = std::function<void(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)>;
   using SceneEditCallback = std::function<void(const nlohmann::json& edit)>;
+  using EditCommittedCallback = std::function<void(const uuids::uuid& objectUUID,
+                                                   const nlohmann::json& before,
+                                                   const nlohmann::json& after)>;
 
   InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor,
                  std::shared_ptr<ComponentRegistry> componentRegistry,
@@ -45,6 +48,10 @@ public:
   void setEditable(bool editable);
 
   void setEditCallback(EditCallback callback);
+
+  // The object inspector's finished-edit pair: a whole continuous edit (a slider drag) arrives once, as
+  // the value before it and the value it settled on, rather than per frame like setEditCallback.
+  void setEditCommittedCallback(EditCommittedCallback callback);
 
   void setSceneEditCallback(SceneEditCallback callback);
 
