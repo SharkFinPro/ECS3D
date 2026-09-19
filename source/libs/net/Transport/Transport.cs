@@ -139,6 +139,15 @@ public static unsafe class Transport
     _backend.ServerBroadcast(type, data, len);
   }
 
+  // connIds points to connIdCount native int32s - the specific connections to send to (editor
+  // connections only, never every connection like serverBroadcast). One call for the whole fan-out, so
+  // the backend can apply one shared time budget across it rather than one per connection.
+  [UnmanagedCallersOnly]
+  public static void serverSendToMany(IntPtr connIds, int connIdCount, byte type, IntPtr data, int len)
+  {
+    _backend.ServerSendToMany(connIds, connIdCount, type, data, len);
+  }
+
   [UnmanagedCallersOnly]
   public static void clientSetReceiveCallback(IntPtr fn)
   {

@@ -7,6 +7,8 @@ add_library(${PROJECT_NAME}
   NetServer.h
   NetClient.cpp
   NetClient.h
+  ServerLog.cpp
+  ServerLog.h
   ServerProcess.cpp
   ServerProcess.h
   TransportLog.cpp
