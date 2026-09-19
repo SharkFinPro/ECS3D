@@ -141,7 +141,17 @@ absent. A uuid that does not parse is a `malformedEdit`; the nil uuid, or one al
 the undo history records the reverse edit against that uuid.
 `reparentObject` rewrites the moved object's local transform after reattaching so its world placement is
 unchanged, and `ObjectManager::deleteObjectsMarkedForDeletion` applies the same `objects/WorldPlacement.h`
-helper to the children of a deleted object as they move up a level. The
+helper to the children of a deleted object as they move up a level (and promotes them into the deleted
+object's own slot, preserving their relative order, rather than appending them after whatever already
+followed it there).
+`reorderObject` is `reparentObject`'s drop-BETWEEN-siblings counterpart: it carries a sibling index
+alongside the (optional) parent, so an object can land at a specific position rather than at the end of
+the list, and covers both a same-parent reorder and a move-to-a-different-parent-at-an-index in the one op.
+The index is read against the target list **after** the object is removed from wherever it sits now; an
+index past that list's end is `rejected` rather than clamped, and so is one that would cycle or leave the
+object exactly where it already was. `Object::addChild`/`ObjectManager::addObjectToRoot` each have an
+index-taking overload (clamping to the list's size) that both `reorderObject` and `restoreObject` build on.
+The
 asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
 applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —

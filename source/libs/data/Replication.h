@@ -93,6 +93,16 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
 [[nodiscard]] nlohmann::json buildReparentObject(const uuids::uuid& objectUUID,
                                                  const uuids::uuid* parentUUID = nullptr);
 
+// Place objectUUID at sibling index within parent's child list (absent parent = scene root), whether
+// that parent is the one it already has (a plain reorder) or a different one (reparentObject only ever
+// appends - this is the drop-BETWEEN-siblings counterpart). index is read against the target list AFTER
+// objectUUID is removed from wherever it sits now; applySceneEdit refuses rather than clamps an index
+// past that list's end, and preserves world placement across a parent change the same way reparentObject
+// does.
+[[nodiscard]] nlohmann::json buildReorderObject(const uuids::uuid& objectUUID,
+                                                const uuids::uuid* parentUUID,
+                                                std::size_t index);
+
 [[nodiscard]] nlohmann::json buildRenameObject(const uuids::uuid& objectUUID,
                                                const std::string& name);
 
@@ -138,9 +148,10 @@ enum class SceneEditResult {
   unknownObject,     // names an object this scene does not have
   unknownComponent,  // names a component type that does not exist, or one the object is not carrying
   unknownAsset,      // instantiatePrefab named an asset with no usable body
-  rejected,          // well formed and refused: a reparent that would cycle or that changes nothing, or
-                     // a restoreObject whose body names a uuid already live or would exceed maxObjectDepth,
-                     // or a creating op naming the nil uuid or one the scene is already using
+  rejected,          // well formed and refused: a reparent or reorder that would cycle or that changes
+                     // nothing, a reorder whose index is out of range for its target list, a restoreObject
+                     // whose body names a uuid already live or would exceed maxObjectDepth, or a creating
+                     // op naming the nil uuid or one the scene is already using
   failed             // threw part way through, e.g. a prefab body naming a component this build lacks
 };
 

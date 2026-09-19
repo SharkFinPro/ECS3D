@@ -93,6 +93,25 @@ namespace {
     return expected.has_value() && parent->getUUID() == expected.value();
   }
 
+  // object's own position among its current siblings (root list when it has no parent) - what a
+  // reorderObject's before/after index is validated against, the same way parentMatches validates a
+  // reparentObject's before/after parent.
+  std::size_t childIndex(const ObjectManager& objectManager, const std::shared_ptr<Object>& object)
+  {
+    const auto parent = object->getParent();
+    const auto& siblings = parent ? parent->getChildren() : objectManager.getObjects();
+
+    for (std::size_t index = 0; index < siblings.size(); ++index)
+    {
+      if (siblings[index] == object)
+      {
+        return index;
+      }
+    }
+
+    return siblings.size();
+  }
+
   // The asset json shape applyAddAsset/EditorApp's addAsset callback both use (see AssetWireType.h for
   // why the type strings live in edits/ rather than Replication.h).
   nlohmann::json buildAddAssetJSON(const uuids::uuid& uuid, const AssetType type, const std::string& path,
@@ -182,6 +201,24 @@ EditCommand EditCommand::reparentObject(const uuids::uuid& objectUUID,
     .objectUUID = objectUUID,
     .beforeParentUUID = beforeParentUUID,
     .afterParentUUID = afterParentUUID
+  };
+  return command;
+}
+
+EditCommand EditCommand::reorderObject(const uuids::uuid& objectUUID,
+                                       const std::optional<uuids::uuid>& beforeParentUUID,
+                                       const std::size_t beforeIndex,
+                                       const std::optional<uuids::uuid>& afterParentUUID,
+                                       const std::size_t afterIndex)
+{
+  EditCommand command;
+  command.m_kind = CommandKind::reorderObject;
+  command.m_data = ReorderObjectData{
+    .objectUUID = objectUUID,
+    .beforeParentUUID = beforeParentUUID,
+    .beforeIndex = beforeIndex,
+    .afterParentUUID = afterParentUUID,
+    .afterIndex = afterIndex
   };
   return command;
 }
@@ -360,6 +397,7 @@ uuids::uuid EditCommand::primaryUUID() const
     case CommandKind::addObject: return std::get<AddObjectData>(m_data).objectUUID;
     case CommandKind::removeObject: return std::get<RemoveObjectData>(m_data).objectUUID;
     case CommandKind::reparentObject: return std::get<ReparentObjectData>(m_data).objectUUID;
+    case CommandKind::reorderObject: return std::get<ReorderObjectData>(m_data).objectUUID;
     case CommandKind::renameObject: return std::get<RenameObjectData>(m_data).objectUUID;
     case CommandKind::addComponent: return std::get<AddComponentData>(m_data).objectUUID;
     case CommandKind::removeComponent: return std::get<RemoveComponentData>(m_data).objectUUID;
@@ -429,6 +467,24 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
       }
 
       if (!parentMatches(object, data.afterParentUUID))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      if (!parentMatches(object, data.afterParentUUID)
+          || childIndex(objectManager, object) != data.afterIndex)
       {
         return { ValidationFailure::targetChanged, data.objectUUID };
       }
@@ -596,6 +652,24 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      if (!parentMatches(object, data.beforeParentUUID)
+          || childIndex(objectManager, object) != data.beforeIndex)
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
     case CommandKind::renameObject:
     {
       const auto& data = std::get<RenameObjectData>(m_data);
@@ -715,6 +789,13 @@ nlohmann::json EditCommand::buildUndoJSON(const ObjectManager& objectManager) co
         ? replication::buildReparentObject(data.objectUUID, &*data.beforeParentUUID)
         : replication::buildReparentObject(data.objectUUID);
     }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+      return replication::buildReorderObject(data.objectUUID,
+                                             data.beforeParentUUID ? &*data.beforeParentUUID : nullptr,
+                                             data.beforeIndex);
+    }
     case CommandKind::renameObject:
     {
       const auto& data = std::get<RenameObjectData>(m_data);
@@ -750,6 +831,13 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
       return data.afterParentUUID
         ? replication::buildReparentObject(data.objectUUID, &*data.afterParentUUID)
         : replication::buildReparentObject(data.objectUUID);
+    }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+      return replication::buildReorderObject(data.objectUUID,
+                                             data.afterParentUUID ? &*data.afterParentUUID : nullptr,
+                                             data.afterIndex);
     }
     case CommandKind::renameObject:
     {

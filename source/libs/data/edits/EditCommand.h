@@ -27,6 +27,7 @@ enum class CommandKind {
   addObject,
   removeObject,
   reparentObject,
+  reorderObject,
   renameObject,
   addComponent,
   removeComponent,
@@ -100,6 +101,15 @@ public:
   [[nodiscard]] static EditCommand reparentObject(const uuids::uuid& objectUUID,
                                                   const std::optional<uuids::uuid>& beforeParentUUID,
                                                   const std::optional<uuids::uuid>& afterParentUUID);
+
+  // Drop-BETWEEN-siblings: unlike reparentObject (which always appends, so only the parent is worth
+  // recording) this also carries the sibling index on each side, since the whole point of the edit can be
+  // a same-parent move.
+  [[nodiscard]] static EditCommand reorderObject(const uuids::uuid& objectUUID,
+                                                 const std::optional<uuids::uuid>& beforeParentUUID,
+                                                 std::size_t beforeIndex,
+                                                 const std::optional<uuids::uuid>& afterParentUUID,
+                                                 std::size_t afterIndex);
 
   [[nodiscard]] static EditCommand renameObject(const uuids::uuid& objectUUID,
                                                 std::string beforeName,
@@ -225,6 +235,16 @@ private:
     friend bool operator==(const ReparentObjectData&, const ReparentObjectData&) = default;
   };
 
+  struct ReorderObjectData {
+    uuids::uuid objectUUID;
+    std::optional<uuids::uuid> beforeParentUUID;
+    std::size_t beforeIndex = 0;
+    std::optional<uuids::uuid> afterParentUUID;
+    std::size_t afterIndex = 0;
+
+    friend bool operator==(const ReorderObjectData&, const ReorderObjectData&) = default;
+  };
+
   struct RenameObjectData {
     uuids::uuid objectUUID;
     std::string beforeName;
@@ -310,9 +330,9 @@ private:
   };
 
   using CommandData = std::variant<ComponentEditData, AddObjectData, RemoveObjectData, ReparentObjectData,
-                                   RenameObjectData, AddComponentData, RemoveComponentData,
-                                   DuplicateObjectData, InstantiatePrefabData, AddAssetData,
-                                   ReplaceAssetData, RenameAssetData, RemoveAssetData>;
+                                   ReorderObjectData, RenameObjectData, AddComponentData,
+                                   RemoveComponentData, DuplicateObjectData, InstantiatePrefabData,
+                                   AddAssetData, ReplaceAssetData, RenameAssetData, RemoveAssetData>;
 
   CommandKind m_kind = CommandKind::componentEdit;
   CommandData m_data;

@@ -239,9 +239,13 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
     m_dragSource = draggedObject(objectManager);
 
     std::vector<std::shared_ptr<Object>> sortedRootsScratch;
-    for (const auto& object : sortedForDisplay(objectManager->getObjects(), m_sortMode, sortedRootsScratch))
+    const auto& roots = sortedForDisplay(objectManager->getObjects(), m_sortMode, sortedRootsScratch);
+
+    displayReorderDropZone(nullptr, 0);
+    for (std::size_t i = 0; i < roots.size(); ++i)
     {
-      displayObjectTree(object);
+      displayObjectTree(roots[i]);
+      displayReorderDropZone(nullptr, i + 1);
     }
 
     // The empty area below the tree is the scene root: drop an object there to reparent it to the root,
@@ -296,6 +300,73 @@ bool ObjectGUIManager::canAcceptObjectDrop(const std::shared_ptr<Object>& target
   // A reparent onto the dragged object itself or onto one of its own descendants would cycle the graph,
   // so the row refuses the drop instead of sending an edit the server rejects anyway.
   return !m_dragSource || (m_dragSource != target && !m_dragSource->isAncestorOf(target));
+}
+
+void ObjectGUIManager::displayReorderDropZone(const std::shared_ptr<Object>& parent, const std::size_t index)
+{
+  if (!m_editable || m_sortMode != SortMode::authored)
+  {
+    return;
+  }
+
+  ImGui::PushID(parent ? uuids::to_string(parent->getUUID()).c_str() : "root");
+  ImGui::PushID(static_cast<int>(index));
+
+  constexpr float zoneHeight = 6.0f;
+  const float width = ImGui::GetContentRegionAvail().x;
+  const ImVec2 cursor = ImGui::GetCursorScreenPos();
+
+  ImGui::InvisibleButton("##reorderZone", ImVec2(width, zoneHeight));
+
+  if (canAcceptObjectDrop(parent) && ImGui::BeginDragDropTarget())
+  {
+    // The insertion line is drawn whenever this scope is entered, which ImGui only allows while the zone
+    // is the actively hovered drop target during a drag - so it doubles as the drop's visual feedback.
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const float lineY = cursor.y + zoneHeight * 0.5f;
+    drawList->AddLine(ImVec2(cursor.x, lineY), ImVec2(cursor.x + width, lineY), theme::u32(theme::accent), 2.0f);
+
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
+    {
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto draggedUUID = uuids::uuid::from_string(uuidStr);
+          draggedUUID.has_value() && m_sceneEditCallback && m_dragSource)
+      {
+        // index names a slot in the list as it stands right now. If the dragged object is already a
+        // member of this same list, the drop is about to remove it from wherever it sits first - so a
+        // zone past that slot has to shift down by one, or the object would land one short of where the
+        // insertion line was actually drawn.
+        std::size_t targetIndex = index;
+        if (m_dragSource->getParent() == parent)
+        {
+          const auto& siblings = parent ? parent->getChildren() : m_dragSource->getManager()->getObjects();
+          if (const auto it = std::ranges::find(siblings, m_dragSource); it != siblings.end())
+          {
+            if (const auto currentIndex = static_cast<std::size_t>(it - siblings.begin());
+                currentIndex < targetIndex)
+            {
+              --targetIndex;
+            }
+          }
+        }
+
+        if (parent)
+        {
+          const auto parentUUID = parent->getUUID();
+          m_sceneEditCallback(replication::buildReorderObject(draggedUUID.value(), &parentUUID, targetIndex));
+        }
+        else
+        {
+          m_sceneEditCallback(replication::buildReorderObject(draggedUUID.value(), nullptr, targetIndex));
+        }
+      }
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
+  ImGui::PopID();
+  ImGui::PopID();
 }
 
 void ObjectGUIManager::displaySortControl()
@@ -479,9 +550,13 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   if (open && !isLeaf)
   {
     std::vector<std::shared_ptr<Object>> sortedChildrenScratch;
-    for (const auto& child : sortedForDisplay(object->getChildren(), m_sortMode, sortedChildrenScratch))
+    const auto& children = sortedForDisplay(object->getChildren(), m_sortMode, sortedChildrenScratch);
+
+    displayReorderDropZone(object, 0);
+    for (std::size_t i = 0; i < children.size(); ++i)
     {
-      displayObjectTree(child);
+      displayObjectTree(children[i]);
+      displayReorderDropZone(object, i + 1);
     }
 
     ImGui::TreePop();
