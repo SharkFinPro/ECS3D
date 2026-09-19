@@ -1,5 +1,6 @@
 #include "ObjectManager.h"
 #include "Object.h"
+#include "WorldPlacement.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 #include <algorithm>
@@ -283,6 +284,11 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
     const auto children = object->getChildren();
     for (const auto& child : children)
     {
+      // Captured while child's parent chain still runs through the deleted object, so its world
+      // placement includes that object's own transform - the delete confirmation promises children are
+      // kept in place, not left at the new parent's origin.
+      const auto placement = captureWorldPlacement(child);
+
       object->removeChild(child);
       child->setParent(parent);
 
@@ -293,6 +299,11 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
       else
       {
         addObjectToRoot(child);
+      }
+
+      if (placement)
+      {
+        restoreWorldPlacement(child, parent, *placement);
       }
     }
 

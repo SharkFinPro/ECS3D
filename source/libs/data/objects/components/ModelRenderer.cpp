@@ -1,4 +1,5 @@
 #include "ModelRenderer.h"
+#include "FiniteCheck.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
@@ -34,6 +35,11 @@ float ModelRenderer::getReflectivity() const
 
 void ModelRenderer::setReflectivity(const float reflectivity)
 {
+  if (!finiteCheck::isFinite(reflectivity))
+  {
+    return;
+  }
+
   m_reflectivity = reflectivity;
 }
 

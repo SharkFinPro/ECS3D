@@ -21,11 +21,21 @@ internal sealed class TcpBackend : TransportBackend
   private Thread? _acceptThread;
   private volatile bool _serverRunning;
 
-  private readonly List<TcpClient> _clients = new();
+  private readonly List<Connection> _clients = new();
   // Accepted sockets that have not yet cleared the handshake. Tracked separately from _clients so an
   // unauthorized peer is never on the broadcast list, and so ServerStop still closes it.
   private readonly List<TcpClient> _pending = new();
   private readonly object _clientsLock = new();
+
+  // A socket that cleared the handshake, paired with the id C++ knows it by so a send that fails on the
+  // broadcast path can name the connection it dropped. A class rather than a record on purpose: the
+  // broadcast snapshot and the receive loop both drop a connection with List.Remove, which must match by
+  // reference identity so it removes that one connection and nothing that merely looks like it.
+  private sealed class Connection(TcpClient client, int connId)
+  {
+    public readonly TcpClient Client = client;
+    public readonly int ConnId = connId;
+  }
 
   // A stable, monotonically-increasing id handed to each accepted connection, surfaced to C++ on every
   // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
@@ -35,6 +45,15 @@ internal sealed class TcpBackend : TransportBackend
   // that opens a connection and sends nothing holds a thread and a socket - and, before this change,
   // a spot on the broadcast list - forever.
   private const int HandshakeTimeoutMs = 5000;
+
+  // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
+  // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
+  // once rather than ten times over. Broadcasts run on the tick thread, so the bound is what physics and
+  // scripts can lose to the network in a tick. Only the connection whose own send ran out of budget is
+  // dropped; peers the broadcast never reached are skipped for that message and kept. Two seconds because
+  // a stall then costs at most one tick's worth before the peer responsible is dropped, while still being
+  // far longer than any plausible snapshot send takes on a healthy link.
+  private const int SendTimeoutMs = 2000;
 
   // -- Client --
   private TcpClient? _client;
@@ -75,9 +94,9 @@ internal sealed class TcpBackend : TransportBackend
 
     lock (_clientsLock)
     {
-      foreach (var client in _clients)
+      foreach (var conn in _clients)
       {
-        try { client.Close(); } catch { /* ignore */ }
+        try { conn.Client.Close(); } catch { /* ignore */ }
       }
 
       _clients.Clear();
@@ -108,21 +127,76 @@ internal sealed class TcpBackend : TransportBackend
 
     var frame = Frame(type, data, len);
 
+    // The fan-out runs off a snapshot so the sends happen outside _clientsLock. This is the tick thread,
+    // and a Write to a peer that has stopped reading blocks until the budget below runs out; holding the
+    // lock across that would block the accept loop and every receive loop's cleanup along with it.
+    Connection[] clients;
     lock (_clientsLock)
     {
-      for (var i = _clients.Count - 1; i >= 0; --i)
+      clients = _clients.ToArray();
+    }
+
+    // One budget for the whole fan-out. A per-connection timeout would still let K stalled peers hold the
+    // tick thread for K times the timeout in a single broadcast, which is the stall this avoids.
+    var deadline = Environment.TickCount64 + SendTimeoutMs;
+    var skipped = 0;
+
+    foreach (var conn in clients)
+    {
+      var remaining = deadline - Environment.TickCount64;
+      if (remaining <= 0)
       {
-        try
-        {
-          _clients[i].GetStream().Write(frame, 0, frame.Length);
-        }
-        catch
-        {
-          // The connection dropped mid-send; reap it.
-          try { _clients[i].Close(); } catch { /* ignore */ }
-          _clients.RemoveAt(i);
-        }
+        // An earlier peer spent the budget. Skip the rest of this broadcast rather than dropping them:
+        // they have done nothing wrong, and reaping them would punish healthy peers for their position in
+        // the list. They miss this one message and are sent the next broadcast as usual.
+        ++skipped;
+        continue;
       }
+
+      var sent = false;
+      try
+      {
+        // Never zero: SocketOptionName.SendTimeout reads 0 as "no timeout", which is what this removes.
+        conn.Client.SendTimeout = (int)Math.Max(remaining, 1);
+        conn.Client.GetStream().Write(frame, 0, frame.Length);
+        sent = true;
+      }
+      catch
+      {
+        // The connection dropped mid-send, or did not accept the frame inside the remaining budget.
+      }
+
+      if (!sent && Reap(conn))
+      {
+        Transport.Log(TransportLogLevel.Warn,
+          $"Dropping connection {conn.ConnId}: the send failed or timed out.");
+      }
+    }
+
+    // One line per broadcast rather than one per connection, so a peer stalling tick after tick is visible
+    // in the log without burying it.
+    if (skipped > 0)
+    {
+      Transport.Log(TransportLogLevel.Warn,
+        $"Skipped {skipped} connection(s): this broadcast spent its whole {SendTimeoutMs} ms budget.");
+    }
+  }
+
+  // Closes a connection and takes it off the broadcast list. True only when this call is the one that
+  // removed it: a peer that closed itself is reaped by its own receive loop, and that is an ordinary
+  // disconnect rather than something to warn about.
+  //
+  // Closing the socket makes the connection's blocked read throw, and ServerReceiveLoop's exit path owns
+  // the DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing
+  // an already-closed socket is harmless.
+  private bool Reap(Connection conn)
+  {
+    try { conn.Client.Close(); } catch { /* ignore */ }
+
+    lock (_clientsLock)
+    {
+      // By reference rather than by index: the list may have changed since the broadcast's snapshot.
+      return _clients.Remove(conn);
     }
   }
 
@@ -141,6 +215,11 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       client.NoDelay = true;
+
+      // A starting value only; each broadcast narrows this to whatever is left of its own budget. It
+      // matters because a socket defaults to no send timeout at all, and this one is set before any
+      // broadcast can reach the connection.
+      client.SendTimeout = SendTimeoutMs;
 
       var connId = Interlocked.Increment(ref _nextConnId);
 
@@ -180,6 +259,8 @@ internal sealed class TcpBackend : TransportBackend
 
   private void ServerReceiveLoop(TcpClient client, int connId)
   {
+    Connection? conn = null;
+
     try
     {
       var stream = client.GetStream();
@@ -201,10 +282,12 @@ internal sealed class TcpBackend : TransportBackend
 
         client.ReceiveTimeout = 0;
 
+        conn = new Connection(client, connId);
+
         lock (_clientsLock)
         {
           _pending.Remove(client);
-          _clients.Add(client);
+          _clients.Add(conn);
         }
 
         while (_serverRunning)
@@ -229,7 +312,11 @@ internal sealed class TcpBackend : TransportBackend
 
     lock (_clientsLock)
     {
-      _clients.Remove(client);
+      if (conn != null)
+      {
+        _clients.Remove(conn);
+      }
+
       _pending.Remove(client);
     }
 

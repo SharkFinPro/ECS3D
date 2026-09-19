@@ -48,6 +48,22 @@ namespace {
     target.objectManager->unpack(reader);
   }
 
+  // The setters refuse a non-finite value, so one can no longer be planted through them. It reaches an
+  // object the way a corrupt or hostile peer would deliver it instead: straight off the wire, which
+  // unpack deliberately does not validate - that is what packStateDelta's own guard exists to catch.
+  // Argument order follows Transform::unpack: position, scale, rotation.
+  void unpackTransform(const std::shared_ptr<Object>& object, const glm::vec3& position,
+                       const glm::vec3& scale, const glm::vec3& rotation)
+  {
+    net::Message message(net::MessageType::snapshot);
+    message.write(position);
+    message.write(scale);
+    message.write(rotation);
+
+    net::MessageReader reader(message);
+    transformOf(object)->unpack(reader);
+  }
+
   net::Message deltaOf(const Scene& scene)
   {
     net::Message message(net::MessageType::stateDelta);
@@ -173,14 +189,17 @@ TEST(StateDelta, SkipsAnObjectWhoseTransformIsNotFinite)
   const auto spinning = addObject(source, "Spinning");
   const auto scaled = addObject(source, "Scaled");
 
+  constexpr float notFinite = std::numeric_limits<float>::quiet_NaN();
+  constexpr float unbounded = std::numeric_limits<float>::infinity();
+
   transformOf(healthy)->setPosition({ 1, 2, 3 });
-  transformOf(notANumber)->setPosition({ std::numeric_limits<float>::quiet_NaN(), 0, 0 });
-  transformOf(infinite)->setPosition({ std::numeric_limits<float>::infinity(), 0, 0 });
+  unpackTransform(notANumber, { notFinite, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 });
+  unpackTransform(infinite, { unbounded, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 });
 
   // All three vectors are checked, not just the position: a non-finite rotation or scale reaches the
   // receiver's world transforms just as surely.
-  transformOf(spinning)->setRotation({ 0, std::numeric_limits<float>::quiet_NaN(), 0 });
-  transformOf(scaled)->setScale({ 0, 0, std::numeric_limits<float>::infinity() });
+  unpackTransform(spinning, { 0, 0, 0 }, { 1, 1, 1 }, { 0, notFinite, 0 });
+  unpackTransform(scaled, { 0, 0, 0 }, { 0, 0, unbounded }, { 0, 0, 0 });
 
   const auto sent = entryUuids(deltaOf(source));
 

@@ -1,5 +1,6 @@
 #include "ScriptEditor.h"
 #include "../ComponentEditor.h"
+#include "../GuiComponents.h"
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
@@ -38,7 +39,8 @@ void registerScriptEditor(ComponentEditor& componentEditor)
         if (type == "float")
         {
           float value = field.at("value");
-          if (ImGui::DragFloat(name.c_str(), &value, 0.1f))
+          const float previous = value;
+          if (ImGui::DragFloat(name.c_str(), &value, 0.1f) && gc::acceptFinite(name.c_str(), &value, previous))
           {
             field["value"] = value;
             edited = true;
@@ -70,10 +72,20 @@ void registerScriptEditor(ComponentEditor& componentEditor)
             value.is_array() && value.size() == 3 ? value.at(1).get<float>() : 0.0f,
             value.is_array() && value.size() == 3 ? value.at(2).get<float>() : 0.0f
           };
+          const float previous[3] = { vec[0], vec[1], vec[2] };
           if (ImGui::DragFloat3(name.c_str(), vec, 0.1f))
           {
-            field["value"] = { vec[0], vec[1], vec[2] };
-            edited = true;
+            bool finite = true;
+            for (int i = 0; i < 3; ++i)
+            {
+              finite = gc::acceptFinite(name.c_str(), &vec[i], previous[i]) && finite;
+            }
+
+            if (finite)
+            {
+              field["value"] = { vec[0], vec[1], vec[2] };
+              edited = true;
+            }
           }
         }
         else
