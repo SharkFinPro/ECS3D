@@ -197,49 +197,48 @@ glm::vec3 Polytope::findCollisionPoint() const
 
   // Both remaining colliders are boxes (the sphere cases above already returned). Rather than trust a
   // single EPA support point - which, for a flat face-to-face contact, is just whichever of several
-  // tied vertices findFurthestPoint happened to visit first - build the actual contact manifold: each
-  // box's touching feature (face/edge/vertex), projected onto the other box's footprint, averaged.
+  // tied vertices findFurthestPoint happened to visit first - build the actual contact manifold: the
+  // incident box's touching feature (face/edge/vertex), clipped onto the reference box's footprint.
+  //
+  // Only one side contributes vertices, not both averaged together: for two boxes of very different
+  // size this does not matter (the larger box's clipped corners land exactly on the smaller box's own,
+  // as folding both in would too), but for a genuine edge or corner contact - one box touching the other
+  // at a single real feature - also folding in the flat box's own (large, centred) footprint corners
+  // pulls the centroid back toward that box's centre, diluting a lever arm that should not be diluted at
+  // all. The reference is whichever box's own axis is more nearly parallel to the contact normal (the
+  // flatter, more face-on side); the incident box is the other one, contributing its own real feature.
   const auto boxA = boxGeometryOf(*m_collider);
   const auto boxB = boxGeometryOf(*m_otherCollider);
 
   const auto normal = glm::normalize(closestPoint);
 
-  // The side each box's touching feature is on: the side nearer the other box's centre, not simply
-  // +normal, so this does not depend on which collider EPA happened to call m_collider vs
-  // m_otherCollider or on the sign convention of the minimum translation vector.
-  const auto towardB = glm::dot(boxB.center - boxA.center, normal) >= 0.0f ? normal : -normal;
-  const auto towardA = -towardB;
-
-  const auto verticesA = touchingVertices(boxA, towardB);
-  const auto verticesB = touchingVertices(boxB, towardA);
-
   const auto axisIndexA = dominantAxisIndex(boxA, normal);
   const auto axisIndexB = dominantAxisIndex(boxB, normal);
 
-  // Never empty: touchingVertices always returns at least the one extreme vertex from each box, and
-  // clampToFootprint always returns a point (projected onto the other box's footprint if it overhangs
-  // past it, unchanged otherwise) rather than discarding it - so there is no glancing-contact case left
-  // that needs a separate fallback.
-  std::vector<glm::vec3> manifold;
-  manifold.reserve(verticesA.size() + verticesB.size());
+  const bool aIsReference = std::fabs(glm::dot(boxA.axes[axisIndexA], normal)) >= std::fabs(glm::dot(boxB.axes[axisIndexB], normal));
 
-  for (const auto& vertex : verticesA)
-  {
-    manifold.push_back(clampToFootprint(vertex, boxB, axisIndexB));
-  }
+  const auto& referenceBox = aIsReference ? boxA : boxB;
+  const auto& incidentBox = aIsReference ? boxB : boxA;
+  const auto referenceAxisIndex = aIsReference ? axisIndexA : axisIndexB;
 
-  for (const auto& vertex : verticesB)
-  {
-    manifold.push_back(clampToFootprint(vertex, boxA, axisIndexA));
-  }
+  // The side of the incident box's touching feature: the side nearer the reference box's centre, not
+  // simply +normal, so this does not depend on which collider EPA happened to call m_collider vs
+  // m_otherCollider or on the sign convention of the minimum translation vector.
+  const auto towardReference = glm::dot(referenceBox.center - incidentBox.center, normal) >= 0.0f ? normal : -normal;
 
+  const auto incidentVertices = touchingVertices(incidentBox, towardReference);
+
+  // Never empty: touchingVertices always returns at least the one extreme vertex, and clampToFootprint
+  // always returns a point (projected onto the reference box's footprint if it overhangs past it,
+  // unchanged otherwise) rather than discarding it - so there is no glancing-contact case left that needs
+  // a separate fallback.
   glm::vec3 centroid{ 0 };
-  for (const auto& point : manifold)
+  for (const auto& vertex : incidentVertices)
   {
-    centroid += point;
+    centroid += clampToFootprint(vertex, referenceBox, referenceAxisIndex);
   }
 
-  return centroid / static_cast<float>(manifold.size());
+  return centroid / static_cast<float>(incidentVertices.size());
 }
 
 void Polytope::EPA()
