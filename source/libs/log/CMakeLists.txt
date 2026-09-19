@@ -16,6 +16,10 @@ add_library(${PROJECT_NAME}
   RingBufferSink.h
   LogFilter.cpp
   LogFilter.h
+  UserDataDirectory.cpp
+  UserDataDirectory.h
+  LogSetup.cpp
+  LogSetup.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
