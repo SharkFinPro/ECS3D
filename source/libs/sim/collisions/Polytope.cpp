@@ -22,10 +22,8 @@ glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal)
   return normal * p;
 }
 
-// World-space box geometry, rebuilt from the same position/scale/rotation BoxCollider::getPosition,
-// getScale and getRotation already expose - the exact inputs generateTransformedMesh combines into its
-// own transform matrix - so this needs no new accessor on BoxCollider and cannot disagree with whatever
-// mesh it has cached.
+// World-space box geometry, rebuilt from the position/scale/rotation Collider already exposes rather
+// than a new accessor onto BoxCollider's own cached mesh.
 struct BoxGeometry
 {
   glm::vec3 center;
@@ -123,13 +121,8 @@ std::vector<glm::vec3> touchingVertices(const BoxGeometry& box, const glm::vec3&
 }
 
 // Projects a point onto the other box's own extent along its two axes other than the one most aligned
-// with the contact normal, leaving its position along that normal axis untouched. A vertex already
-// within the footprint comes back unchanged; one overhanging past an edge is pulled back to the nearest
-// point on that edge instead of being discarded outright - which matters for two reasons: it gives the
-// true overlap's centroid rather than just one box's whole face when a smaller box hangs partway off a
-// larger one, and it keeps a contact point at all for a same-size box resting yawed on another, where
-// every one of its corners individually pokes outside the other box's own (axis-aligned-to-itself)
-// footprint even though the two faces plainly overlap.
+// with the contact normal, leaving its normal-axis position untouched - pulling an overhanging vertex
+// back onto the nearest edge instead of discarding it outright.
 glm::vec3 clampToFootprint(const glm::vec3& point, const BoxGeometry& box, const int normalAxisIndex)
 {
   const auto relative = point - box.center;
@@ -195,18 +188,10 @@ glm::vec3 Polytope::findCollisionPoint() const
     return pointOfCollision;
   }
 
-  // Both remaining colliders are boxes (the sphere cases above already returned). Rather than trust a
-  // single EPA support point - which, for a flat face-to-face contact, is just whichever of several
-  // tied vertices findFurthestPoint happened to visit first - build the actual contact manifold: the
-  // incident box's touching feature (face/edge/vertex), clipped onto the reference box's footprint.
-  //
-  // Only one side contributes vertices, not both averaged together: for two boxes of very different
-  // size this does not matter (the larger box's clipped corners land exactly on the smaller box's own,
-  // as folding both in would too), but for a genuine edge or corner contact - one box touching the other
-  // at a single real feature - also folding in the flat box's own (large, centred) footprint corners
-  // pulls the centroid back toward that box's centre, diluting a lever arm that should not be diluted at
-  // all. The reference is whichever box's own axis is more nearly parallel to the contact normal (the
-  // flatter, more face-on side); the incident box is the other one, contributing its own real feature.
+  // Both remaining colliders are boxes (the sphere cases above already returned). Build the contact
+  // manifold from the incident box's touching feature clipped onto the reference box's footprint - the
+  // flatter side (its axis more nearly parallel to the normal) is the reference, so a real edge/corner
+  // contact is not diluted by also folding in the flat side's own footprint corners.
   const auto boxA = boxGeometryOf(*m_collider);
   const auto boxB = boxGeometryOf(*m_otherCollider);
 
@@ -221,17 +206,12 @@ glm::vec3 Polytope::findCollisionPoint() const
   const auto& incidentBox = aIsReference ? boxB : boxA;
   const auto referenceAxisIndex = aIsReference ? axisIndexA : axisIndexB;
 
-  // The side of the incident box's touching feature: the side nearer the reference box's centre, not
-  // simply +normal, so this does not depend on which collider EPA happened to call m_collider vs
-  // m_otherCollider or on the sign convention of the minimum translation vector.
+  // The side nearer the reference box's centre, regardless of the minimum translation vector's sign.
   const auto towardReference = glm::dot(referenceBox.center - incidentBox.center, normal) >= 0.0f ? normal : -normal;
 
   const auto incidentVertices = touchingVertices(incidentBox, towardReference);
 
-  // Never empty: touchingVertices always returns at least the one extreme vertex, and clampToFootprint
-  // always returns a point (projected onto the reference box's footprint if it overhangs past it,
-  // unchanged otherwise) rather than discarding it - so there is no glancing-contact case left that needs
-  // a separate fallback.
+  // Never empty (touchingVertices always returns at least one vertex), so no fallback case is needed.
   glm::vec3 centroid{ 0 };
   for (const auto& vertex : incidentVertices)
   {
