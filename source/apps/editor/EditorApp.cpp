@@ -539,7 +539,9 @@ void EditorApp::handlePicking()
       }
     }
 
-    const bool ctrl = window->keyIsPressed(GLFW_KEY_LEFT_CONTROL);
+    // io.KeyCtrl (not a raw GLFW key read) so either Ctrl key toggles, matching the tree's own check and
+    // KeybindDispatcher's chord matching.
+    const bool ctrl = ImGui::GetIO().KeyCtrl;
 
     // Written directly to the shared selection the object tree/inspector read.
     if (picked.has_value())

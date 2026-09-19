@@ -316,9 +316,11 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   }
 
   // Delete hotkey: while the Objects panel has focus, Delete queues the selected object for removal
-  // (guarded against firing while a text field is being typed into, or when read-only). The
-  // confirmation modal follows.
+  // (guarded against firing while a text field is being typed into, or when read-only). Disabled with
+  // 2+ objects selected rather than silently deleting only the primary - batch delete is a later story.
+  // The confirmation modal follows.
   if (m_editable && objectManager && m_selection->objectUUID().has_value() &&
+      m_selection->size() <= 1 &&
       ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
       !ImGui::GetIO().WantTextInput &&
       ImGui::IsKeyPressed(ImGuiKey_Delete))
@@ -378,6 +380,11 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   const bool isSelected = m_selection->kind() == EditorSelection::Kind::Object &&
                            m_selection->contains(object->getUUID());
   const bool isLeaf = object->getChildren().empty();
+
+  // Duplicate/Delete act on one well-defined object (this row), never the whole selection - batch
+  // versions are a later story, so with 2+ objects selected they're disabled rather than silently
+  // acting on just this one.
+  const bool multiSelected = m_selection->kind() == EditorSelection::Kind::Object && m_selection->size() > 1;
 
   ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_FramePadding |
                              ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap |
@@ -481,10 +488,16 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
     }
 
+    ImGui::BeginDisabled(multiSelected);
     if (ImGui::MenuItem("Duplicate") && m_sceneEditCallback)
     {
       const auto duplicate = newObjectUUID();
       m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID(), &duplicate));
+    }
+    ImGui::EndDisabled();
+    if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+      ImGui::SetTooltip("Duplicating several objects at once isn't supported yet");
     }
 
     if (ImGui::MenuItem("Save as Prefab"))
@@ -492,10 +505,16 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       saveAsPrefab(object);
     }
 
+    ImGui::BeginDisabled(multiSelected);
     if (ImGui::MenuItem("Delete"))
     {
       // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
       m_objectPendingDeletion = object->getUUID();
+    }
+    ImGui::EndDisabled();
+    if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+      ImGui::SetTooltip("Deleting several objects at once isn't supported yet");
     }
 
     ImGui::EndPopup();
@@ -519,7 +538,14 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::SameLine(0.0f, buttonGap);
 
   ImGui::SetNextItemAllowOverlap();
-  if (gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight))
+  ImGui::BeginDisabled(multiSelected);
+  const bool deleteClicked = gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight);
+  ImGui::EndDisabled();
+  if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+  {
+    ImGui::SetTooltip("Deleting several objects at once isn't supported yet");
+  }
+  if (deleteClicked)
   {
     // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
     m_objectPendingDeletion = object->getUUID();
