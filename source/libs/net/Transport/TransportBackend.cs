@@ -69,6 +69,11 @@ internal abstract class TransportBackend
   public abstract int ServerConnectionCount();
   public abstract void ServerBroadcast(byte type, nint data, int len);
 
+  // Sends to a single connection by the id C++ knows it by, rather than every connection like
+  // ServerBroadcast - for data (the server's own log) that only an authorized editor connection may see.
+  // A no-op if connId has since disconnected.
+  public abstract void ServerSend(int connId, byte type, nint data, int len);
+
   public abstract byte ClientConnect(string host, int port, byte role, string token);
   public abstract void ClientDisconnect();
   public abstract void ClientSend(byte type, nint data, int len);

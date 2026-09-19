@@ -18,6 +18,7 @@ class ProjectPacker;
 class CollisionSystem;
 class ScriptSystem;
 class ObjectManager;
+class RemoteLogSink;
 
 namespace net {
   class NetServer;
@@ -59,6 +60,11 @@ private:
 
   std::shared_ptr<CollisionSystem> m_collisionSystem;
   std::shared_ptr<ScriptSystem> m_scriptSystem;
+
+  // Registered with Log so the server's own log (including script output, which already reaches Log via
+  // LogBindings) can be forwarded to editor connections - the local console window some launches show is
+  // separate from this and keeps working either way. See forwardLogToEditors.
+  std::shared_ptr<RemoteLogSink> m_remoteLogSink;
 
   std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
@@ -110,6 +116,11 @@ private:
   void handleSceneControl(const net::Message& message) const;
 
   void loadScene(const std::string& sceneUUID) const;
+
+  // Drains m_remoteLogSink (capped, so one storm-sized batch cannot dominate a send) and forwards what
+  // comes out to editor connections as a serverLog message. Called once per run() loop iteration rather
+  // than once per fixed tick, so a log line still gets out while the scene is stopped/paused.
+  void forwardLogToEditors() const;
 
   void broadcastSnapshot() const;
 

@@ -25,6 +25,10 @@ public:
 
   void broadcast(const Message& message) const;
 
+  // Sends to every connection currently authorized as Role::editor, and no one else - for data a play
+  // client must never see, like the server's own log (MessageType::serverLog). A no-op if there are none.
+  void sendToEditors(const Message& message) const;
+
   // The number of clients currently connected to the transport. Used by an ephemeral (editor/client-
   // spawned) server to detect when its last connection drops; returns 0 before start().
   [[nodiscard]] int connectionCount() const;
@@ -80,6 +84,7 @@ private:
   void* m_setDisconnectCallbackFn = nullptr;
   void* m_setAuthorizedCallbackFn = nullptr;
   void* m_setLogCallbackFn = nullptr;
+  void* m_sendFn = nullptr;
 };
 
 }

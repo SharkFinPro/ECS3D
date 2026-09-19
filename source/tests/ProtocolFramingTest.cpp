@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <Protocol.h>
+#include <ServerLog.h>
 
 #include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cstdint>
 #include <limits>
 #include <span>
@@ -332,6 +334,7 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectSpawned));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectDestroyed));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::playerSlot));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::serverLog));
 }
 
 TEST(ProtocolFraming, ConstructingFromABufferFramesItExactlyAsTheWritePathWould)
@@ -440,4 +443,58 @@ TEST(ProtocolFraming, AWellFormedStringFollowedByAnIntStillReadsBothCorrectly)
   EXPECT_EQ(reader.readString(), "abc");
   EXPECT_EQ(reader.read<int32_t>(), 42);
   EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ServerLogMessage, RoundTripsEveryFieldOfEachEntry)
+{
+  const auto first = std::chrono::system_clock::now() - std::chrono::seconds(5);
+  const auto second = std::chrono::system_clock::now();
+
+  const std::vector<LogEntry> entries{
+    LogEntry{ first, LogLevel::warn, LogCategory::physics, "a bounce went wrong" },
+    LogEntry{ second, LogLevel::error, LogCategory::script, "NullReferenceException in Player.cs" },
+  };
+
+  const auto message = net::packServerLog(entries, 0);
+  EXPECT_EQ(message.getType(), net::MessageType::serverLog);
+
+  const auto batch = net::unpackServerLog(message);
+
+  EXPECT_EQ(batch.dropped, 0u);
+  ASSERT_EQ(batch.entries.size(), 2u);
+
+  EXPECT_EQ(batch.entries[0].level, LogLevel::warn);
+  EXPECT_EQ(batch.entries[0].category, LogCategory::physics);
+  EXPECT_EQ(batch.entries[0].message, "a bounce went wrong");
+  // Millisecond precision on the wire, not exact time_point equality.
+  EXPECT_LT(std::chrono::abs(batch.entries[0].time - first), std::chrono::milliseconds(1));
+
+  EXPECT_EQ(batch.entries[1].level, LogLevel::error);
+  EXPECT_EQ(batch.entries[1].category, LogCategory::script);
+  EXPECT_EQ(batch.entries[1].message, "NullReferenceException in Player.cs");
+  EXPECT_LT(std::chrono::abs(batch.entries[1].time - second), std::chrono::milliseconds(1));
+}
+
+TEST(ServerLogMessage, CarriesTheDroppedCountAlongsideAnEmptyBatch)
+{
+  // The forwarder sends a batch for a drop count alone, with no entries, so an editor still learns that
+  // history was lost even on a tick where nothing new came in to replace it.
+  const auto message = net::packServerLog({}, 7);
+
+  const auto batch = net::unpackServerLog(message);
+
+  EXPECT_EQ(batch.dropped, 7u);
+  EXPECT_TRUE(batch.entries.empty());
+}
+
+TEST(ServerLogMessage, AnEntryCountPastWhatThePayloadHoldsThrowsRatherThanOverreading)
+{
+  // A hand-built message claiming far more entries than its (short) payload can actually hold - the same
+  // malformed-count shape handleInputState guards against, here for the network's least trusted producer:
+  // a batch this editor did not build itself.
+  net::Message message(net::MessageType::serverLog);
+  message.write<uint64_t>(0);
+  message.write<uint32_t>(1000000);
+
+  EXPECT_THROW(static_cast<void>(net::unpackServerLog(message)), std::runtime_error);
 }

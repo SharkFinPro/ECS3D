@@ -19,6 +19,7 @@ namespace {
   using ServerStartFn = void(*)(int32_t, uint8_t, const char*);
   using ServerStopFn = void(*)();
   using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
+  using ServerSendFn = void(*)(int32_t, uint8_t, const uint8_t*, int32_t);
   using ServerConnectionCountFn = int32_t(*)();
   using SetCallbackFn = void(*)(void*);
 
@@ -68,6 +69,7 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_startFn = m_host->getDelegate(kAssembly, kType, "serverStart");
   m_stopFn = m_host->getDelegate(kAssembly, kType, "serverStop");
   m_broadcastFn = m_host->getDelegate(kAssembly, kType, "serverBroadcast");
+  m_sendFn = m_host->getDelegate(kAssembly, kType, "serverSend");
   m_connectionCountFn = m_host->getDelegate(kAssembly, kType, "serverConnectionCount");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
   m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
@@ -120,6 +122,36 @@ void NetServer::broadcast(const Message& message) const
     message.bytes().data(),
     static_cast<int32_t>(message.size())
   );
+}
+
+void NetServer::sendToEditors(const Message& message) const
+{
+  if (!m_started)
+  {
+    return;
+  }
+
+  // A size above INT32_MAX would narrow to a negative or truncated frame length on the wire; refuse it
+  // here rather than hand the cast something it cannot represent, the same guard broadcast() applies.
+  if (!fitsInWireFrameLength(message.size()))
+  {
+    Log::error(LogCategory::net, "Refusing to send a " + std::to_string(message.size())
+      + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
+    return;
+  }
+
+  // Held across every send rather than snapshotted first: the set is small (editor connections only,
+  // never players), so the risk is holding it a little longer, not blocking anything that needs it badly.
+  std::lock_guard lock(m_editorMutex);
+  for (const auto connId : m_editorConnections)
+  {
+    reinterpret_cast<ServerSendFn>(m_sendFn)(
+      connId,
+      static_cast<uint8_t>(message.getType()),
+      message.bytes().data(),
+      static_cast<int32_t>(message.size())
+    );
+  }
 }
 
 int NetServer::connectionCount() const

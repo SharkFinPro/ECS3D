@@ -140,6 +140,12 @@ public static unsafe class Transport
   }
 
   [UnmanagedCallersOnly]
+  public static void serverSend(int connId, byte type, IntPtr data, int len)
+  {
+    _backend.ServerSend(connId, type, data, len);
+  }
+
+  [UnmanagedCallersOnly]
   public static void clientSetReceiveCallback(IntPtr fn)
   {
     _clientReceive = (delegate* unmanaged<byte, byte*, int, void>)fn;

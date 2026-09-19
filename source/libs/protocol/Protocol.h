@@ -43,7 +43,11 @@ enum class MessageType : uint8_t {
                  // join carried this nonce. Broadcast + nonce correlation (no per-connection send path):
                  // every client hears it, only the one whose join nonce matches keeps it.
   renameAsset,   // editor -> server: set an asset's display-name override (replication::packRenameAsset); server re-snapshots
-  removeAsset    // editor -> server: drop an asset record by uuid (replication::packRemoveAsset); server re-snapshots
+  removeAsset,   // editor -> server: drop an asset record by uuid (replication::packRemoveAsset); server re-snapshots
+  serverLog      // server -> editor connections only: a batch of the server's own log entries
+                 // (net::packServerLog / net::unpackServerLog), so the editor's Console shows what the
+                 // server (and the scripts running on it) printed - locally spawned or remote alike. Never
+                 // sent to a Role::player connection: NetServer::sendToEditors, not broadcast().
   // editComponent/sceneEdit/sceneControl/loadProject/addAsset/renameAsset/removeAsset are the editor's mutation path; the server
   // only honors them from a connection it authorized as Role::editor at the transport handshake (which
   // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An

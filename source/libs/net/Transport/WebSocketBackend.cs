@@ -195,6 +195,33 @@ internal sealed class WebSocketBackend : TransportBackend
     }
   }
 
+  public override void ServerSend(int connId, byte type, nint data, int len)
+  {
+    if (TooLargeToSend(len))
+    {
+      return;
+    }
+
+    Connection? conn;
+    lock (_clientsLock)
+    {
+      conn = _connections.Find(c => c.ConnId == connId);
+    }
+
+    if (conn == null)
+    {
+      // Already disconnected, or never authorized as an editor in the first place - nothing to send to.
+      return;
+    }
+
+    var message = BuildMessage(type, data, len);
+
+    if (!SendMessage(conn, message, SendTimeoutMs) && Reap(conn))
+    {
+      Transport.Log(TransportLogLevel.Warn, $"Dropping connection {conn.ConnId}: a send failed or timed out.");
+    }
+  }
+
   // Closes a connection and takes it off the broadcast list. True only when this call is the one that
   // removed it: a peer that closed itself is reaped by its own receive loop, and that is an ordinary
   // disconnect rather than something to warn about.
