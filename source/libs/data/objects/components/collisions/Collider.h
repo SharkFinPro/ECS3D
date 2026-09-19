@@ -68,12 +68,19 @@ protected:
 
   BoundingBox m_boundingBox;
 
+  // A subclass's own geometry (offset, size, radius) can change without the transform's update id
+  // moving, so lastUpdateID alone can't tell getBoundingBox the cache is stale. Subclasses set this
+  // through invalidateBoundingBox() wherever they change that geometry (setters, loadFromJSON, unpack).
+  bool m_boundingBoxDirty = true;
+
   bool m_isTrigger = false;
 
   uint32_t m_layer = 0;
   uint32_t m_mask = 0xFFFFFFFFu;
 
   bool m_renderCollider = false;
+
+  void invalidateBoundingBox();
 };
 
 

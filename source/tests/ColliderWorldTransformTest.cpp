@@ -2,11 +2,13 @@
 
 #include "TestPrinters.h"
 #include "TestScene.h"
+#include "WireTypes.h"
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
+#include <Protocol.h>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <utility>
@@ -88,6 +90,95 @@ TEST(ColliderWorldTransform, TheReportedScaleIsTheOneTheCollisionMeshUses)
   expectNear(box->findFurthestPoint({ 1.0f, 0.1f, 0.1f }), worldScale);
   expectNear(box->findFurthestPoint({ -1.0f, 0.1f, 0.1f }),
              glm::vec3(-worldScale.x, worldScale.y, worldScale.z));
+}
+
+TEST(ColliderWorldTransform, StartingASceneClearsTheColliderMeshFromThePreviousRun)
+{
+  const auto [object, box] = makeBox(glm::vec3(1));
+  const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
+  object->start();
+  transform->setPosition(glm::vec3(5, 0, 0));
+
+  // Populate the cache at the moved position, the way a tick mid-run would. Only the x component is
+  // checked: +-1 on y/z all tie for furthest along +x, and which corner wins the tie is unspecified
+  // (observed to differ by platform), but the x of any winning corner is unambiguous.
+  EXPECT_NEAR(box->findFurthestPoint({ 1, 0, 0 }).x, 6.0f, 1e-5f);
+
+  object->stop();
+  object->start();
+
+  // Positive control: stop() really did revert the live position to the authored one.
+  EXPECT_EQ(transform->getPosition(), glm::vec3(0, 0, 0));
+
+  // The second run's first query must not reuse the mesh generated at the end of the first run - it has
+  // to notice the transform's live value was reseeded even though nothing called a setter.
+  EXPECT_NEAR(box->findFurthestPoint({ 1, 0, 0 }).x, 1.0f, 1e-5f);
+}
+
+TEST(ColliderWorldTransform, UnpackingNewGeometryDirtiesAnAlreadyCachedMesh)
+{
+  const auto [object, box] = makeBox(glm::vec3(1));
+
+  // Populate the cache at the collider's authored (offset-free) position. Only the x component is
+  // checked: +-1 on y/z all tie for furthest along +x, and which corner wins is unspecified.
+  EXPECT_NEAR(box->findFurthestPoint({ 1, 0, 0 }).x, 1.0f, 1e-5f);
+
+  auto moved = std::make_shared<BoxCollider>();
+  moved->setPosition(glm::vec3(5, 0, 0));
+
+  net::Message message(net::MessageType::undefined);
+  moved->pack(message);
+
+  net::MessageReader reader(message);
+  // pack writes the type discriminator first; unpack expects the reader positioned after it.
+  static_cast<void>(reader.read<ComponentType>());
+
+  // Unpacking onto a collider whose mesh is already cached and clean - the transform's update id does
+  // not change here, so only the dirty flag protects the cache.
+  box->unpack(reader);
+
+  EXPECT_NEAR(box->findFurthestPoint({ 1, 0, 0 }).x, 6.0f, 1e-5f);
+}
+
+TEST(ColliderWorldTransform, UnpackingANewOffsetDirtiesAnAlreadyCachedBoundingBox)
+{
+  const auto [object, box] = makeBox(glm::vec3(1));
+
+  // Populate the bounding box cache at the collider's authored (offset-free) position.
+  const auto initialBox = box->getBoundingBox();
+  EXPECT_NEAR(initialBox.maxX, 1.0f, 1e-5f);
+
+  auto moved = std::make_shared<BoxCollider>();
+  moved->setPosition(glm::vec3(5, 0, 0));
+
+  net::Message message(net::MessageType::undefined);
+  moved->pack(message);
+
+  net::MessageReader reader(message);
+  static_cast<void>(reader.read<ComponentType>());
+
+  // The transform's update id does not change here - getBoundingBox has to notice the collider's own
+  // geometry changed some other way, or it keeps serving the box computed before the unpack.
+  box->unpack(reader);
+
+  const auto movedBox = box->getBoundingBox();
+  EXPECT_NEAR(movedBox.maxX, 6.0f, 1e-5f);
+}
+
+TEST(ColliderWorldTransform, BoundingBoxRebuildsWhenASphereRadiusChangesWithTheTransformUntouched)
+{
+  const auto [object, sphere] = makeSphere(glm::vec3(1));
+  sphere->setRadius(1.0f);
+
+  const auto initialBox = sphere->getBoundingBox();
+  EXPECT_NEAR(initialBox.maxX, 1.0f, 1e-5f);
+
+  // Same object, same transform - only the sphere's own local radius changes.
+  sphere->setRadius(3.0f);
+
+  const auto grownBox = sphere->getBoundingBox();
+  EXPECT_NEAR(grownBox.maxX, 3.0f, 1e-5f);
 }
 
 TEST(ColliderWorldTransform, AUniformlyScaledSphereRadiusIsScaleTimesLocalRadius)

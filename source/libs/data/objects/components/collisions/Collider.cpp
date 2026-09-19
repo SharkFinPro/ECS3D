@@ -22,12 +22,10 @@ const BoundingBox& Collider::getBoundingBox()
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
   const uint8_t transformUpdateID = transform->getUpdateID();
 
-  if (m_boundingBox.lastUpdateID == transformUpdateID)
+  if (m_boundingBox.lastUpdateID == transformUpdateID && !m_boundingBoxDirty)
   {
     return m_boundingBox;
   }
-
-  m_boundingBox.lastUpdateID = transformUpdateID;
 
   m_boundingBox.minX = findFurthestPoint({-1, 0, 0}).x;
   m_boundingBox.maxX = findFurthestPoint({1, 0, 0}).x;
@@ -37,6 +35,9 @@ const BoundingBox& Collider::getBoundingBox()
 
   m_boundingBox.minZ = findFurthestPoint({0, 0, -1}).z;
   m_boundingBox.maxZ = findFurthestPoint({0, 0, 1}).z;
+
+  m_boundingBox.lastUpdateID = transformUpdateID;
+  m_boundingBoxDirty = false;
 
   return m_boundingBox;
 }
@@ -85,4 +86,9 @@ bool Collider::getRenderCollider() const
 void Collider::setRenderCollider(const bool renderCollider)
 {
   m_renderCollider = renderCollider;
+}
+
+void Collider::invalidateBoundingBox()
+{
+  m_boundingBoxDirty = true;
 }
