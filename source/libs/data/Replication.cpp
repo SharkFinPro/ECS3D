@@ -44,8 +44,19 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
   {
     const auto transform = object->getComponent<Transform>(ComponentType::transform);
 
-    if (!transform || transform->getOwner() != object.get())
+    if (!transform)
     {
+      continue;
+    }
+
+    // A component's owner is set once, by the addComponent that attaches it, and nothing in the engine
+    // can attach a component to one object while owning another - so this should be unreachable. Log
+    // loudly and skip just this object rather than let a bug elsewhere silently vanish from every delta.
+    if (transform->getOwner() != object.get())
+    {
+      Log::error(LogCategory::server, "Object " + uuids::to_string(object->getUUID()) +
+                                       " has a transform owned by a different object; skipping it in the "
+                                       "state delta.");
       continue;
     }
 

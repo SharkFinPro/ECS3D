@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include "Log.h"
 #include "Replication.h"
+#include "RingBufferSink.h"
 #include "TestPrinters.h"
 #include "TestScene.h"
 #include "objects/Object.h"
@@ -224,6 +226,36 @@ TEST(StateDelta, SkipsAnObjectWithNoTransformAtAll)
   // sender reads three vectors off a component that is not there.
   ASSERT_EQ(sent.size(), 1u);
   EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
+}
+
+TEST(StateDelta, LogsAnErrorAndSkipsAnObjectWhoseTransformHasAForeignOwner)
+{
+  Log::setMinimumLevel(LogLevel::trace);
+  const auto sink = std::make_shared<RingBufferSink>();
+  Log::addSink(sink);
+
+  const auto source = makeScene();
+
+  const auto healthy = addObject(source, "Healthy");
+  const auto misowned = addObject(source, "Misowned");
+
+  // Nothing in the engine can produce this: a component's owner is set once, by the addComponent that
+  // attaches it. Reach in directly to prove the guard fires if it ever did.
+  transformOf(misowned)->setOwner(healthy.get());
+
+  const auto sent = entryUuids(deltaOf(source));
+
+  ASSERT_EQ(sent.size(), 1u);
+  EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
+
+  const auto entries = sink->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_EQ(entries[0].level, LogLevel::error);
+  EXPECT_EQ(entries[0].category, LogCategory::server);
+  EXPECT_NE(entries[0].message.find(uuids::to_string(misowned->getUUID())), std::string::npos);
+
+  Log::removeSink(sink);
+  Log::setMinimumLevel(LogLevel::info);
 }
 
 TEST(StateDelta, AnEntryForAnObjectTheReceiverDoesNotHaveDoesNotDerailTheRest)
