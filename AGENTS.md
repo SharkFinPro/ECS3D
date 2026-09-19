@@ -36,7 +36,7 @@
 | `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` option, MSVC (the Microsoft Visual C++ compiler) export-all-symbols. Then `add_subdirectory(source)`. |
 | `CMakePresets.json` | Configure presets only: `ecs3d-debug`, `ecs3d-release`, `ecs3d-sanitize`, writing to `cmake-build-ecs3d-debug` / `-release` / `-sanitize`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
-| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for the editor's console panel), `RemoteLogSink` (a bounded queue a server drains to forward its log to editor connections over the wire — see Logging below), `FileSink` (UTC-timestamped lines to a file, truncated per run), `LogFilter` (level/category toggles + a case-insensitive text search over a `LogEntry`, headless so it is testable without ImGui) and `formatEntry` (the shared `HH:MM:SS [level][category] message` (hours:minutes:seconds) rendering used by the panel and its copy button), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI (graphical user interface) subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
+| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for the editor's console panel), `RemoteLogSink` (a bounded queue a server drains to forward its log to editor connections over the wire — see Logging below), `FileSink` (UTC-timestamped lines to a file, truncated per run), `LogFilter` (level/category toggles + a case-insensitive text search over a `LogEntry`, headless so it is testable without ImGui) and `formatEntry` (the shared `[level][category] message` rendering, prefixed with the time of day, used by the panel and its copy button), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI (graphical user interface) subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
 | `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, the numeric key/mod values of GLFW (the windowing library) spelled out as literals so this library still depends on nothing but json and ECS3DLog. **Not** project data: see Development Principles. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera) - whose float and vec3 setters ignore non-finite input, since a non-finite float saves as json null and makes the file unreadable - `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load - a load that fails names the scene and the object it choked on) / `ProjectPacker` (binary wire snapshot), `Replication`, `edits/` (`EditCommand`/`EditHistory` — the undo/redo stack — plus `RecordEdits`, which derives the command for an edit the editor is about to send from its pre-edit replicated view; see Editor Undo/Redo below). **No Vulkan, no ImGui.** |
@@ -61,7 +61,7 @@
   the libs scope so every library links them directly. **glm is declared first, on purpose:**
   FetchContent is first-wins, and VulkanEngine also fetches glm — our pinned 1.0.1 must be the single
   copy both sides resolve to. **If VulkanEngine bumps glm, bump the tag here to match.**
-- **.NET 10** (Microsoft's managed runtime) is required for the managed assemblies. `ecs3d_add_managed_assembly()` (in
+- **dotnet 10** (the C# runtime and SDK) is required for the managed assemblies. `ecs3d_add_managed_assembly()` (in
   `clrHost/cmake/ECS3DManaged.cmake`) `dotnet publish`es a C# class lib next to the executables and
   writes its `runtimeconfig.json`; `ecs3d_deploy_clr_runtime()` copies `nethost.dll` beside each exe.
   `FindDotnet.cmake` warms up the SDK's one-time first-run configuration once at configure time (a
@@ -213,8 +213,8 @@ snapshot rather than one per frame.
 integers, enums, `float` and `double` only, and carry `bool` as an explicit 0/1 byte; an aggregate goes
 across whole only by specializing `net::wirePackable`, which is a claim - assert the layout - that it has
 neither padding nor a pointer in it. `data`'s `WireTypes.h` holds those specializations, for `glm::vec3`
-and `uuids::uuid`, and any TU (translation unit) that reasons about the trait rather than just calling `write`/`read` must
-include it. Widths and byte order are still the caller's problem: pack fixed-width types, and the wire
+and `uuids::uuid`, and any translation unit that reasons about the trait rather than just calling `write`/`read` includes
+it, since otherwise it evaluates the primary template and disagrees with the rest of the program. Widths and byte order are still the caller's problem: pack fixed-width types, and the wire
 carries host endianness. `NetServer`/`NetClient` own the format in C++ and hand `ECS3DNetTransport` (C#)
 opaque `(type byte, payload)` pairs. Both transports refuse an inbound message over
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
@@ -515,7 +515,9 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
   `source/tests/CMakeLists.txt`); register new files in the owning library's source list.
 - **Do not build-verify the C++/CLR/Vulkan stack — the developer does that.**
 - Do not invoke `cmake --build`.
-- Do not run `dotnet build`/`dotnet publish` on the C# projects directly; it breaks the CMake build with `CS0579`.
+- Do not run `dotnet build` on the C# projects.
+- Do not run `dotnet publish` on the C# projects.
+- Both break the CMake build with `CS0579`, so the C# projects are built through CMake only.
 - State clearly that a change is unverified and needs to be compiled on the developer's machine.
 - Avoid speculative refactors. Keep changes scoped and incremental. Ask about lifetime/ownership,
   threading, and replication semantics rather than assuming.
