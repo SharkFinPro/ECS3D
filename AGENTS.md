@@ -18,20 +18,27 @@
   owns the data and protocol; C# owns the sockets and user script execution.
 - Four executables ship (see Applications): **ECS3DServer**, **ECS3DClient**, **ECS3DEditor** (all C++),
   and **ECS3DLauncher** (a standalone C# Avalonia app — see `source/apps/launcher/AGENTS.md`).
-- Scope today: a working editor + play/edit servers with physics (GJK/EPA collision, rigid bodies),
-  C# scripting, asset import, scene management, and full snapshot/delta replication over TCP.
+- Scope today: a working editor + play/edit servers with physics (GJK and EPA, Gilbert-Johnson-Keerthi and Expanding Polytope Algorithm, collision; rigid bodies),
+  C# scripting, asset import, scene management, and full snapshot/delta replication over TCP (Transmission Control Protocol).
+
+## Role and Tools
+
+- **Role:** you are a coding agent working for the ECS3D developer on this repository, extending the
+  engine described above while following the conventions below.
+- **Tools:** the project builds with CMake presets (`CMakePresets.json`) and tests with GoogleTest through
+  CTest. The developer runs builds and tests, not the agent; see AI Agent Guidelines.
 
 ## Repository Structure
 
 | Path | Responsibility |
 |------|----------------|
 | `.clang-format`, `.editorconfig` | The tree's style, written down: 2-space indent, 120 columns, braces on their own line for functions and control flow. **Nothing has been reformatted to match them yet** - that is a separate one-off commit, so read them as intent, not as a description of every file. |
-| `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` option, MSVC export-all-symbols. Then `add_subdirectory(source)`. |
+| `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` option, MSVC (the Microsoft Visual C++ compiler) export-all-symbols. Then `add_subdirectory(source)`. |
 | `CMakePresets.json` | Configure presets only: `ecs3d-debug`, `ecs3d-release`, `ecs3d-sanitize`, writing to `cmake-build-ecs3d-debug` / `-release` / `-sanitize`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
-| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for the editor's console panel), `RemoteLogSink` (a bounded queue a server drains to forward its log to editor connections over the wire — see Logging below), `FileSink` (UTC-timestamped lines to a file, truncated per run), `LogFilter` (level/category toggles + a case-insensitive text search over a `LogEntry`, headless so it is testable without ImGui) and `formatEntry` (the shared `HH:MM:SS [level][category] message` rendering used by the panel and its copy button), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI-subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
+| `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for the editor's console panel), `RemoteLogSink` (a bounded queue a server drains to forward its log to editor connections over the wire — see Logging below), `FileSink` (UTC-timestamped lines to a file, truncated per run), `LogFilter` (level/category toggles + a case-insensitive text search over a `LogEntry`, headless so it is testable without ImGui) and `formatEntry` (the shared `[level][category] message` rendering, prefixed with the time of day, used by the panel and its copy button), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI (graphical user interface) subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
-| `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW's numeric key/mod values spelled out as literals so this library still depends on nothing but json and ECS3DLog. **Not** project data: see Development Principles. |
+| `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, the numeric key/mod values of GLFW (the windowing library) spelled out as literals so this library still depends on nothing but json and ECS3DLog. **Not** project data: see Development Principles. |
 | `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera) - whose float and vec3 setters ignore non-finite input, since a non-finite float saves as json null and makes the file unreadable - `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load - a load that fails names the scene and the object it choked on) / `ProjectPacker` (binary wire snapshot), `Replication`, `edits/` (`EditCommand`/`EditHistory` — the undo/redo stack — plus `RecordEdits`, which derives the command for an edit the editor is about to send from its pre-edit replicated view; see Editor Undo/Redo below). **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune), calling the GJK/EPA narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
@@ -54,7 +61,7 @@
   the libs scope so every library links them directly. **glm is declared first, on purpose:**
   FetchContent is first-wins, and VulkanEngine also fetches glm — our pinned 1.0.1 must be the single
   copy both sides resolve to. **If VulkanEngine bumps glm, bump the tag here to match.**
-- **.NET 10** is required for the managed assemblies. `ecs3d_add_managed_assembly()` (in
+- **dotnet 10** (the C# runtime and SDK) is required for the managed assemblies. `ecs3d_add_managed_assembly()` (in
   `clrHost/cmake/ECS3DManaged.cmake`) `dotnet publish`es a C# class lib next to the executables and
   writes its `runtimeconfig.json`; `ecs3d_deploy_clr_runtime()` copies `nethost.dll` beside each exe.
   `FindDotnet.cmake` warms up the SDK's one-time first-run configuration once at configure time (a
@@ -63,8 +70,8 @@
   so they publish one at a time, while the launcher (`source/apps/launcher`) publishes independently.
 - **Managed assemblies deployed at build time:** `ScriptBridge` → `bin/scripts/ScriptBridge`,
   `ECS3DNetTransport` → `bin/net/Transport`, user scripts → `bin/scripts/UserScripts`. All apps boot the
-  CLR from the same runtime; the server loads `ScriptBridge` on top.
-- **Runtime CWD = the executable's directory.** Asset paths (`assets/models/...`), managed assembly
+  CLR (Common Language Runtime) from the same runtime; the server loads `ScriptBridge` on top.
+- **Runtime CWD (current working directory) = the executable's directory.** Asset paths (`assets/models/...`), managed assembly
   paths (`net/Transport/...`, `scripts/...`), and `nethost.dll` are all resolved relative to it. The
   server's `defaultAssets/` are copied into `bin/assets/` at configure time.
 - **Source lists are explicit** in each lib's `CMakeLists.txt` (not globs). **Add new engine files to
@@ -74,7 +81,7 @@
   `Components::none` constructor argument says otherwise - the setup every suite used to repeat - and the
   free functions beside it add objects, colliders and rigid bodies, and compare `glm::vec3` with a
   tolerance and a trace. Derive from `fixtures::Scene` to hang extra members off a scene. Only
-  `addObject`/`addChildObject` are reachable unqualified, by ADL through their `Scene` argument;
+  `addObject`/`addChildObject` are reachable unqualified, by ADL (argument-dependent lookup) through their `Scene` argument;
   everything else takes arguments that do not name `fixtures` (or, for `makeScene`, none at all), so it
   needs `fixtures::` or a using-declaration. **Build a scene through these rather than re-deriving the scaffolding in a new suite.**
 - **Tests** (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, `ECS3DSettings` and
@@ -83,7 +90,7 @@
   because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
   `CMakeLists.txt` before adding more. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
   `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
-  `PROJECT_IS_TOP_LEVEL AND BUILD_TESTING` — `BUILD_TESTING` is a cache variable a parent project may
+  `PROJECT_IS_TOP_LEVEL` and `BUILD_TESTING` together — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
   GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
   suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
@@ -162,7 +169,7 @@ registry key, and the name-key for prefabs/scenes) never change. **Delete always
 dangle** — `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` lookups already null-tolerate a
 missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
 replicated scenes + prefab bodies for the uuid ("referenced by N objects"); no server-side refusal or
-cascade exists (see `ROADMAP.md` B1). Rename/delete are offered only for the flat file assets
+cascade exists (a known gap, not yet scheduled). Rename/delete are offered only for the flat file assets
 (Model/Texture/Script/Prefab) that `AssetRegistry` owns — a Scene record is regenerated from the
 `SceneManager` on every snapshot, so an override on it wouldn't survive.
 Runtime structural changes from a *script* (spawn/destroy) take a third path: lightweight
@@ -186,7 +193,7 @@ of at the scene root), and a script's `World.spawnPrefab(uuid, position)`,
 which rides 1.3's existing `objectSpawned` replication (one message carries the whole subtree). The binding
 reaches the registry through **`BindingContext::setAssetRegistry`**, injected once at startup exactly like the
 sim's raycast/overlap statics. **Instances are detached copies** — nothing records which prefab an object came
-from, so overrides and prefab→instance propagation don't exist (deliberately deferred; see `ROADMAP.md`).
+from, so overrides and prefab→instance propagation don't exist (deliberately deferred).
 `DefaultProject` defines its `Block`/`Rigid Block`/`Sphere`/`Player` bodies once, registers them as prefabs
 with stable uuids, and builds its scenes by instancing them. **Editing a prefab's contents** happens in the
 Inspector: `AssetInspector` deserializes the body into a `TransientObject` (editor lib) — a detached `Object`
@@ -206,8 +213,8 @@ snapshot rather than one per frame.
 integers, enums, `float` and `double` only, and carry `bool` as an explicit 0/1 byte; an aggregate goes
 across whole only by specializing `net::wirePackable`, which is a claim - assert the layout - that it has
 neither padding nor a pointer in it. `data`'s `WireTypes.h` holds those specializations, for `glm::vec3`
-and `uuids::uuid`, and any TU that reasons about the trait rather than just calling `write`/`read` must
-include it. Widths and byte order are still the caller's problem: pack fixed-width types, and the wire
+and `uuids::uuid`, and any translation unit that reasons about the trait rather than just calling `write`/`read` includes
+it, since otherwise it evaluates the primary template and disagrees with the rest of the program. Widths and byte order are still the caller's problem: pack fixed-width types, and the wire
 carries host endianness. `NetServer`/`NetClient` own the format in C++ and hand `ECS3DNetTransport` (C#)
 opaque `(type byte, payload)` pairs. Both transports refuse an inbound message over
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
@@ -274,7 +281,7 @@ synchronization between them.
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is
 mirrored by a C# `[StructLayout(Sequential)]` struct and registered through `Bridge` (add new fields at
-the **end** of both to keep the layout matched). `BindingContext` is the bridge from the static, C-ABI
+the **end** of both to keep the layout matched). `BindingContext` is the bridge from the static, C-ABI (application binary interface)
 bindings back to the server's live scene: `ScriptSystem` points it at the current `ObjectManager` each
 tick. The headless server has no GLFW window, so input is networked: clients send `inputState`, the
 server writes it into `InputState`, and `InputUtilsBindings` reads it back for scripts. Input is
@@ -366,10 +373,10 @@ only pushes it while the scene view is focused, so without that the component ca
 The editor's **View** combo (Scene Status) picks what its viewport looks through: its own free-fly camera
 (the default) or any object in the scene carrying a `Camera`, which is how you see a client's view — a
 player camera is labelled with its `PlayerController` slot. A stale choice (object gone, `Camera` removed)
-falls back to free-fly. **FOV/near/far are
+falls back to free-fly. **FOV (field of view)/near/far are
 carried and editable but have no visible effect yet** — `vke`'s projection matrix is hardcoded
 (`RenderInfo::getProjectionMatrix`); a fix needs an upstream `VulkanRenderer` change (a projection setter
-alongside `setCameraParameters`), tracked as deliberately deferred in `ROADMAP.md`. A client picks its
+alongside `setCameraParameters`), deliberately deferred. A client picks its
 *own* camera via the player↔object association (`PlayerController.playerSlot` + a `Camera` on the same
 object) using a **nonce-over-broadcast** handshake: the client tags its `join` with a random nonce, the
 server echoes `(nonce, slot)` back over the existing broadcast (`NetServer` has no targeted-send path), and
@@ -384,7 +391,7 @@ gating on it silently swallows the right-drag mouse-look. `EditorApp::captureGat
 only while the viewport looks through a scene camera (in free-fly the right-drag belongs to the editor's own
 camera, so forwarding it too would turn the player at the same time) **and** `RenderingManager::isSceneFocused()`
 is true — the same signal `vke` gates its free-fly camera on. The keyboard still gates on
-`io.WantCaptureKeyboard`, which only trips for text input, so WASD reaches the game from either view.
+`io.WantCaptureKeyboard`, which only trips for text input, so WASD (the movement keys) reaches the game from either view.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
 headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a
@@ -462,7 +469,7 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
   Comment only what the code cannot say for itself -- the *why* behind a non-obvious algorithm, design
   decision, workaround, or caveat -- never a restatement of *what* the line does. Keep them short (1-2
   lines). Do not narrate implementation history ("was X", "moved from Y", "Phase N", "temporary") or
-  point at external plans/roadmaps -- describe the code as it is now. **Comments are ASCII-only:** no
+  point at external plans/roadmaps -- describe the code as it is now. **Comments are ASCII (plain 7-bit text) only:** no
   em dashes, arrows, or other Unicode -- use `-`, `->`, `<->`.
 
 ## Applications
@@ -491,8 +498,8 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
   the parent's `--log-file`/`--no-log-file` are not forwarded to it. All app, server and net
   (`ECS3DNet`) output goes through `Log`.
 - `net::ServerProcess::launch` takes the child's flags as one string; a token holding spaces may be
-  double quoted (there is no escape for a quote inside one). POSIX splits the string itself, honoring
-  those quotes; Windows hands it to the child's CRT, which parses them the same way.
+  double quoted (there is no escape for a quote inside one). POSIX (Linux and macOS) splits the string itself, honoring
+  those quotes; Windows hands it to the child's CRT (C runtime), which parses them the same way.
 - **ECS3DLauncher** (`apps/launcher`) — a standalone C# Avalonia project-management GUI. Independent of
   the C++ toolchain and the CLR-hosting path; built via `dotnet publish`. **See its own `AGENTS.md`.**
 
@@ -506,9 +513,12 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
   render/editor — those invariants keep it headless.
 - Add dependencies only via `source/libs/CMakeLists.txt` `FetchContent` (test-only deps belong in
   `source/tests/CMakeLists.txt`); register new files in the owning library's source list.
-- **Do not build-verify the C++/CLR/Vulkan stack — the developer does that.** Don't invoke `cmake --build`,
-  and never `dotnet build`/`publish` the C# projects directly. State clearly that a change is unverified
-  and needs to be compiled on the developer's machine.
+- **Do not build-verify the C++/CLR/Vulkan stack — the developer does that.**
+- Do not invoke `cmake --build`.
+- Do not run `dotnet build` on the C# projects.
+- Do not run `dotnet publish` on the C# projects.
+- Both break the CMake build with `CS0579`, so the C# projects are built through CMake only.
+- State clearly that a change is unverified and needs to be compiled on the developer's machine.
 - Avoid speculative refactors. Keep changes scoped and incremental. Ask about lifetime/ownership,
   threading, and replication semantics rather than assuming.
 - Update this document when your understanding of the project meaningfully improves.

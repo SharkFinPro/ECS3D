@@ -34,16 +34,22 @@ public partial class MainWindow : Window
     {
         // Ignore presses inside a TextBox - those should keep (or take) focus.
         if (e.Source is Visual v && v.FindAncestorOfType<TextBox>(includeSelf: true) is not null)
+        {
             return;
+        }
 
         if (FocusManager?.GetFocusedElement() is TextBox)
+        {
             Root.Focus();
+        }
     }
 
     private WindowEdge? EdgeAt(Point p)
     {
         if (WindowState != WindowState.Normal)
+        {
             return null;
+        }
 
         bool l = p.X <= ResizeBorder, r = p.X >= Bounds.Width - ResizeBorder;
         bool t = p.Y <= ResizeBorder, b = p.Y >= Bounds.Height - ResizeBorder;
@@ -53,19 +59,51 @@ public partial class MainWindow : Window
 
     private static WindowEdge? CornerEdge(bool l, bool r, bool t, bool b)
     {
-        if (t && l) return WindowEdge.NorthWest;
-        if (t && r) return WindowEdge.NorthEast;
-        if (b && l) return WindowEdge.SouthWest;
-        if (b && r) return WindowEdge.SouthEast;
+        if (t && l)
+        {
+            return WindowEdge.NorthWest;
+        }
+
+        if (t && r)
+        {
+            return WindowEdge.NorthEast;
+        }
+
+        if (b && l)
+        {
+            return WindowEdge.SouthWest;
+        }
+
+        if (b && r)
+        {
+            return WindowEdge.SouthEast;
+        }
+
         return null;
     }
 
     private static WindowEdge? SideEdge(bool l, bool r, bool t, bool b)
     {
-        if (t) return WindowEdge.North;
-        if (b) return WindowEdge.South;
-        if (l) return WindowEdge.West;
-        if (r) return WindowEdge.East;
+        if (t)
+        {
+            return WindowEdge.North;
+        }
+
+        if (b)
+        {
+            return WindowEdge.South;
+        }
+
+        if (l)
+        {
+            return WindowEdge.West;
+        }
+
+        if (r)
+        {
+            return WindowEdge.East;
+        }
+
         return null;
     }
 
@@ -94,12 +132,18 @@ public partial class MainWindow : Window
     private void OnTitleBarPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
             return;
+        }
 
         if (e.ClickCount == 2)
+        {
             ToggleMaximize();
+        }
         else
+        {
             BeginMoveDrag(e);
+        }
     }
 
     private void ToggleMaximize() =>

@@ -205,13 +205,13 @@ void ServerApp::fixedUpdate(const float dt) const
     return;
   }
 
-  auto& objectManager = *scene->getObjectManager();
-
   // The number crunching, in order: scripts read input (variableUpdate) then queue forces, physics
   // integrates, collisions resolve. variableUpdate runs before fixedUpdate so input-driven force is
   // applied the same tick (the server has no render frame to drive it separately).
   try
   {
+    auto& objectManager = *scene->getObjectManager();
+
     m_scriptSystem->variableUpdate(objectManager);
     m_scriptSystem->fixedUpdate(objectManager, dt);
     PhysicsSystem::fixedUpdate(objectManager, dt);
