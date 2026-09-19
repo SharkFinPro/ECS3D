@@ -92,6 +92,35 @@ namespace {
 
     return uuidStrings;
   }
+
+  // Mirrors MissedComponentEditLogTest's fixture: TearDown runs even when an ASSERT_* inside the test
+  // body returns early, so a failing assertion can never leak the ring buffer sink or the lowered minimum
+  // level into whichever test happens to run next.
+  class StateDeltaLogTest : public testing::Test {
+  protected:
+    void TearDown() override
+    {
+      for (const auto& sink : m_addedSinks)
+      {
+        Log::removeSink(sink);
+      }
+
+      Log::setMinimumLevel(LogLevel::info);
+    }
+
+    std::shared_ptr<RingBufferSink> addRingBuffer()
+    {
+      Log::setMinimumLevel(LogLevel::trace);
+
+      auto sink = std::make_shared<RingBufferSink>();
+      Log::addSink(sink);
+      m_addedSinks.push_back(sink);
+
+      return sink;
+    }
+
+    std::vector<std::shared_ptr<LogSink>> m_addedSinks;
+  };
 }
 
 TEST(StateDelta, ReproducesATransformOnTheReceivingScene)
@@ -228,11 +257,9 @@ TEST(StateDelta, SkipsAnObjectWithNoTransformAtAll)
   EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
 }
 
-TEST(StateDelta, LogsAnErrorAndSkipsAnObjectWhoseTransformHasAForeignOwner)
+TEST_F(StateDeltaLogTest, LogsAnErrorOnceAndSkipsAnObjectWhoseTransformHasAForeignOwner)
 {
-  Log::setMinimumLevel(LogLevel::trace);
-  const auto sink = std::make_shared<RingBufferSink>();
-  Log::addSink(sink);
+  const auto sink = addRingBuffer();
 
   const auto source = makeScene();
 
@@ -248,14 +275,16 @@ TEST(StateDelta, LogsAnErrorAndSkipsAnObjectWhoseTransformHasAForeignOwner)
   ASSERT_EQ(sent.size(), 1u);
   EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
 
+  // packStateDelta runs every server tick and the bad object stays bad forever, so a second call while
+  // it is still foreign-owned must not log again - only the state going from healthy to broken is worth
+  // an entry, not every tick it stays broken.
+  entryUuids(deltaOf(source));
+
   const auto entries = sink->snapshot();
   ASSERT_EQ(entries.size(), 1u);
   EXPECT_EQ(entries[0].level, LogLevel::error);
   EXPECT_EQ(entries[0].category, LogCategory::server);
   EXPECT_NE(entries[0].message.find(uuids::to_string(misowned->getUUID())), std::string::npos);
-
-  Log::removeSink(sink);
-  Log::setMinimumLevel(LogLevel::info);
 }
 
 TEST(StateDelta, AnEntryForAnObjectTheReceiverDoesNotHaveDoesNotDerailTheRest)

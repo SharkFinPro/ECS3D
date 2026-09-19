@@ -40,6 +40,13 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
   };
   std::vector<Entry> entries;
 
+  // This runs every server tick, and a foreign-owned transform stays foreign until something else fixes
+  // it, so logging unconditionally would repeat the same entry forever. Remembered across calls and
+  // rebuilt each time from only what is still foreign-owned, so an object that stops being foreign (fixed,
+  // or removed and its uuid never reused) drops out and would be logged again if it ever recurred.
+  static std::unordered_set<std::string> reportedForeignOwners;
+  std::unordered_set<std::string> stillForeignOwned;
+
   for (const auto& object : objectManager.getAllObjects())
   {
     const auto transform = object->getComponent<Transform>(ComponentType::transform);
@@ -51,12 +58,20 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
 
     // A component's owner is set once, by the addComponent that attaches it, and nothing in the engine
     // can attach a component to one object while owning another - so this should be unreachable. Log
-    // loudly and skip just this object rather than let a bug elsewhere silently vanish from every delta.
+    // loudly (once per object, not every tick) and skip just this object rather than let a bug elsewhere
+    // silently vanish from every delta.
     if (transform->getOwner() != object.get())
     {
-      Log::error(LogCategory::server, "Object " + uuids::to_string(object->getUUID()) +
-                                       " has a transform owned by a different object; skipping it in the "
-                                       "state delta.");
+      auto uuid = uuids::to_string(object->getUUID());
+
+      if (reportedForeignOwners.insert(uuid).second)
+      {
+        Log::error(LogCategory::server, "Object " + uuid +
+                                         " has a transform owned by a different object; skipping it in "
+                                         "the state delta.");
+      }
+
+      stillForeignOwned.insert(std::move(uuid));
       continue;
     }
 
@@ -77,6 +92,8 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
 
     entries.push_back({ uuids::to_string(object->getUUID()), position, rotation, scale });
   }
+
+  reportedForeignOwners = std::move(stillForeignOwned);
 
   message.write(static_cast<uint32_t>(entries.size()));
   for (const auto& entry : entries)
