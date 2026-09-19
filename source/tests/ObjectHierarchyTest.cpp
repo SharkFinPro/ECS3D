@@ -234,3 +234,54 @@ TEST(ObjectHierarchy, AddObjectUnderAParentAtTheDepthLimitIsRejected)
   EXPECT_EQ(result, replication::SceneEditResult::rejected);
   EXPECT_EQ(hierarchy.objectManager->getAllObjects().size(), before);
 }
+
+// deleteObjectsMarkedForDeletion promotes a removed object's children into its own parent - this checks
+// they land at the slot the removed object vacated, in their original relative order, rather than being
+// appended after whatever already followed it there.
+TEST(ObjectHierarchy, DeletingARemovedObjectPromotesItsChildrenInOrderAtItsOwnSlot)
+{
+  fixtures::Scene scene;
+
+  const auto grandparent = addObject(scene, "Grandparent");
+  const auto middle = addChildObject(scene, "Middle", grandparent);
+  const auto after = addChildObject(scene, "After", grandparent);
+  // grandparent's children: [Middle, After].
+
+  const auto child1 = addChildObject(scene, "Child1", middle);
+  const auto child2 = addChildObject(scene, "Child2", middle);
+  const auto child3 = addChildObject(scene, "Child3", middle);
+  // middle's children: [Child1, Child2, Child3].
+
+  scene.objectManager->removeObject(middle);
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  ASSERT_EQ(grandparent->getChildren().size(), 4u);
+  EXPECT_EQ(grandparent->getChildren()[0], child1);
+  EXPECT_EQ(grandparent->getChildren()[1], child2);
+  EXPECT_EQ(grandparent->getChildren()[2], child3);
+  EXPECT_EQ(grandparent->getChildren()[3], after);
+}
+
+// Same promotion, but the removed object is a scene root rather than someone's child - its children are
+// promoted into the root list at its own slot instead of a parent's child list.
+TEST(ObjectHierarchy, DeletingARemovedRootPromotesItsChildrenInOrderAtItsOwnSlot)
+{
+  fixtures::Scene scene;
+
+  const auto before = addObject(scene, "Before");
+  const auto removed = addObject(scene, "Removed");
+  const auto after = addObject(scene, "After");
+  // Root list: [Before, Removed, After].
+
+  const auto child1 = addChildObject(scene, "Child1", removed);
+  const auto child2 = addChildObject(scene, "Child2", removed);
+
+  scene.objectManager->removeObject(removed);
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  ASSERT_EQ(scene.objectManager->getObjects().size(), 4u);
+  EXPECT_EQ(scene.objectManager->getObjects()[0], before);
+  EXPECT_EQ(scene.objectManager->getObjects()[1], child1);
+  EXPECT_EQ(scene.objectManager->getObjects()[2], child2);
+  EXPECT_EQ(scene.objectManager->getObjects()[3], after);
+}

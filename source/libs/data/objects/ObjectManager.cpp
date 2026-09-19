@@ -85,6 +85,25 @@ namespace {
 
     return depth;
   }
+
+  // object's own position among its current siblings (root list when it has no parent), read before it
+  // is removed from that list - deleteObjectsMarkedForDeletion uses this to promote its children into the
+  // slot it vacated instead of appending them at the end.
+  std::size_t siblingIndexOf(const ObjectManager& manager, const std::shared_ptr<Object>& object)
+  {
+    const auto parent = object->getParent();
+    const auto& siblings = parent ? parent->getChildren() : manager.getObjects();
+
+    for (std::size_t index = 0; index < siblings.size(); ++index)
+    {
+      if (siblings[index] == object)
+      {
+        return index;
+      }
+    }
+
+    return siblings.size();
+  }
 }
 
 void ObjectManager::reassignUUIDs(nlohmann::json& objectData, const std::size_t depth)
@@ -278,6 +297,12 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
   for (const auto& object : m_objectsToRemove)
   {
     const auto parent = object->getParent();
+
+    // Read before the erase below shifts anything: this is the slot object occupied among its own
+    // siblings, and its children are promoted starting there so they keep the relative order they had
+    // under it instead of landing at the end of the new parent's list.
+    const std::size_t insertIndex = siblingIndexOf(*this, object);
+
     if (parent)
     {
       parent->removeChild(object);
@@ -288,8 +313,10 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
     }
 
     const auto children = object->getChildren();
-    for (const auto& child : children)
+    for (std::size_t childOffset = 0; childOffset < children.size(); ++childOffset)
     {
+      const auto& child = children[childOffset];
+
       // Captured while child's parent chain still runs through the deleted object, so its world
       // placement includes that object's own transform - the delete confirmation promises children are
       // kept in place, not left at the new parent's origin.
@@ -298,13 +325,14 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
       object->removeChild(child);
       child->setParent(parent);
 
+      const std::size_t childIndex = insertIndex + childOffset;
       if (parent)
       {
-        parent->addChild(child);
+        parent->addChild(child, childIndex);
       }
       else
       {
-        addObjectToRoot(child);
+        addObjectToRoot(child, childIndex);
       }
 
       if (placement)

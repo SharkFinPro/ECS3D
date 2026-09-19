@@ -16,6 +16,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <uuid.h>
+#include <vector>
 
 namespace {
   using replication::SceneEditResult;
@@ -106,6 +107,20 @@ namespace {
     }
 
     return current;
+  }
+
+  // The names of a sibling list in order - what every reorderObject assertion below checks, since a
+  // uuid-by-uuid comparison would not show a mis-ordering as clearly as a mismatched name sequence does.
+  std::vector<std::string> namesOf(const std::vector<std::shared_ptr<Object>>& objects)
+  {
+    std::vector<std::string> names;
+    names.reserve(objects.size());
+    for (const auto& object : objects)
+    {
+      names.push_back(object->getName());
+    }
+
+    return names;
   }
 }
 
@@ -1089,4 +1104,109 @@ TEST(SceneEdit, RefusesACreatingOpNamingAUuidTheSceneAlreadyHas)
   EXPECT_EQ(applyEdit(scene, replication::buildAddObject("Added", nullptr, &freeUUID)),
             SceneEditResult::applied);
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), before + 1);
+}
+
+TEST(SceneEdit, ReorderObjectMovesWithinTheSameParentInBothDirections)
+{
+  const auto scene = makeScene();
+
+  const auto a = addChildObject(scene, "A", scene.object);
+  const auto b = addChildObject(scene, "B", scene.object);
+  const auto c = addChildObject(scene, "C", scene.object);
+  // scene.object's children start as [A, B, C].
+
+  const auto parentUUID = scene.object->getUUID();
+
+  // Forward: move A (index 0) past the end - the post-removal list is [B, C], so index 2 appends it.
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(a->getUUID(), &parentUUID, 2)),
+            SceneEditResult::applied);
+  EXPECT_EQ(namesOf(scene.object->getChildren()), (std::vector<std::string>{ "B", "C", "A" }));
+
+  // Backward: move A (now index 2) back to the front.
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(a->getUUID(), &parentUUID, 0)),
+            SceneEditResult::applied);
+  EXPECT_EQ(namesOf(scene.object->getChildren()), (std::vector<std::string>{ "A", "B", "C" }));
+}
+
+TEST(SceneEdit, ReorderObjectMovesToAnotherParentAtIndex)
+{
+  const auto scene = makeScene();
+
+  const auto sourceParent = addObject(scene, "SourceParent");
+  const auto destParent = addObject(scene, "DestParent");
+  const auto moved = addChildObject(scene, "Moved", sourceParent);
+  addChildObject(scene, "DestA", destParent);
+  addChildObject(scene, "DestB", destParent);
+  // destParent's children start as [DestA, DestB].
+
+  const auto destUUID = destParent->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(moved->getUUID(), &destUUID, 1)),
+            SceneEditResult::applied);
+
+  EXPECT_TRUE(sourceParent->getChildren().empty());
+  EXPECT_EQ(moved->getParent(), destParent);
+  EXPECT_EQ(namesOf(destParent->getChildren()), (std::vector<std::string>{ "DestA", "Moved", "DestB" }));
+}
+
+TEST(SceneEdit, ReorderObjectReordersTheRootList)
+{
+  const auto scene = makeScene();
+  // scene.object already occupies root index 0.
+
+  addObject(scene, "Second");
+  const auto third = addObject(scene, "Third");
+  // Root list starts as [Object, Second, Third].
+
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(third->getUUID(), nullptr, 0)),
+            SceneEditResult::applied);
+
+  EXPECT_EQ(namesOf(scene.objectManager->getObjects()),
+            (std::vector<std::string>{ "Third", "Object", "Second" }));
+}
+
+TEST(SceneEdit, ReportsAReorderIndexPastTheEndOfItsTargetListAsRejected)
+{
+  const auto scene = makeScene();
+
+  const auto a = addChildObject(scene, "A", scene.object);
+  addChildObject(scene, "B", scene.object);
+  // scene.object has 2 children; reordering one of them removes it first, so the target list to insert
+  // into only ever has 1 slot free past the end.
+
+  const auto parentUUID = scene.object->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(a->getUUID(), &parentUUID, 2)),
+            SceneEditResult::rejected);
+  EXPECT_EQ(namesOf(scene.object->getChildren()), (std::vector<std::string>{ "A", "B" }));
+
+  // Positive control: the same op one index lower - the actual end of the post-removal list - applies.
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(a->getUUID(), &parentUUID, 1)),
+            SceneEditResult::applied);
+  EXPECT_EQ(namesOf(scene.object->getChildren()), (std::vector<std::string>{ "B", "A" }));
+}
+
+TEST(SceneEdit, ReportsAReorderThatWouldCycleAsRejected)
+{
+  const auto scene = makeScene();
+
+  const auto child = addChildObject(scene, "Child", scene.object);
+  const auto childUUID = child->getUUID();
+
+  // Dropping an object onto its own descendant, same refusal reparentObject gives for the same shape.
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(scene.object->getUUID(), &childUUID, 0)),
+            SceneEditResult::rejected);
+  EXPECT_EQ(scene.object->getParent(), nullptr);
+}
+
+TEST(SceneEdit, ReportsAReorderToItsOwnCurrentSlotAsRejected)
+{
+  const auto scene = makeScene();
+
+  const auto a = addChildObject(scene, "A", scene.object);
+  addChildObject(scene, "B", scene.object);
+
+  // A already sits at index 0 - asking to put it back there changes nothing.
+  const auto parentUUID = scene.object->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildReorderObject(a->getUUID(), &parentUUID, 0)),
+            SceneEditResult::rejected);
+  EXPECT_EQ(namesOf(scene.object->getChildren()), (std::vector<std::string>{ "A", "B" }));
 }

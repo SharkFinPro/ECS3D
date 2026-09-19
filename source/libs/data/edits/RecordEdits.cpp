@@ -229,6 +229,29 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
     return EditCommand::reparentObject(objectUUID.value(), uuidOf(object->getParent()), afterParentUUID);
   }
 
+  if (op == "reorderObject")
+  {
+    std::optional<uuids::uuid> afterParentUUID;
+    if (edit.contains("parent"))
+    {
+      afterParentUUID = parseUUIDField(edit, "parent");
+      if (!afterParentUUID.has_value())
+      {
+        return std::nullopt;
+      }
+    }
+
+    const auto indexField = edit.find("index");
+    if (indexField == edit.end() || !indexField->is_number_unsigned())
+    {
+      return std::nullopt;
+    }
+
+    return EditCommand::reorderObject(objectUUID.value(), uuidOf(object->getParent()),
+                                      indexOfSibling(view, object), afterParentUUID,
+                                      indexField->get<std::size_t>());
+  }
+
   if (op == "addComponent")
   {
     // buildAddScript sends the same op with the "Script" key plus a class name, which is the identity
