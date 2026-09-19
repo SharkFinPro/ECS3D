@@ -124,7 +124,10 @@ rebuilds from it, atomically (a malformed packet leaves the current project inta
 goes as a compact binary **stateDelta** (uuid + local transform per object; `data/Replication.{h,cpp}`).
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
-`--edit` server may send. (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
+`--edit` server may send. An `editComponent` a replicated view could not apply is reported through
+`replication::logMissedComponentEdit` — debug for an absent object/component (routine, since the server
+rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
+payload (a real divergence). (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.) The
 three `sceneEdit` ops that create an object (`addObject`, `duplicateObject`, `instantiatePrefab`) may carry
 a client-chosen `"uuid"` for what they create; the server honors it and picks its own when the field is
 absent. A uuid that does not parse is a `malformedEdit`; the nil uuid, or one already in use, is
