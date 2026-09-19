@@ -1,4 +1,5 @@
 #include "Camera.h"
+#include "FiniteCheck.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
@@ -14,6 +15,11 @@ glm::vec3 Camera::getDirection() const
 
 void Camera::setDirection(const glm::vec3& direction)
 {
+  if (!finiteCheck::isFinite(direction))
+  {
+    return;
+  }
+
   m_direction = direction;
 }
 
@@ -24,6 +30,11 @@ float Camera::getFov() const
 
 void Camera::setFov(const float fov)
 {
+  if (!finiteCheck::isFinite(fov))
+  {
+    return;
+  }
+
   m_fov = fov;
 }
 
@@ -34,6 +45,11 @@ float Camera::getNearPlane() const
 
 void Camera::setNearPlane(const float nearPlane)
 {
+  if (!finiteCheck::isFinite(nearPlane))
+  {
+    return;
+  }
+
   m_nearPlane = nearPlane;
 }
 
@@ -44,6 +60,11 @@ float Camera::getFarPlane() const
 
 void Camera::setFarPlane(const float farPlane)
 {
+  if (!finiteCheck::isFinite(farPlane))
+  {
+    return;
+  }
+
   m_farPlane = farPlane;
 }
 

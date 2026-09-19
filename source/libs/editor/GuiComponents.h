@@ -3,6 +3,7 @@
 
 #include "EditorTheme.h"
 #include <imgui.h>
+#include <Log.h>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -17,6 +18,21 @@
 // (boxed axis fields, accent track sliders, pill badges, filled accent checkboxes). They are drop-in
 // replacements for the stock ImGui calls in the component editors.
 namespace gc {
+  // ImGui's ctrl-click text entry accepts whatever the C float parser accepts, including inf and nan;
+  // a non-finite value would be serialized as json null and make the file unreadable on load.
+  inline bool acceptFinite(const char* label, float* value, const float previous)
+  {
+    if (std::isfinite(*value))
+    {
+      return true;
+    }
+
+    *value = previous;
+    Log::warn(LogCategory::editor, std::string("Refused a non-finite value for ") + label);
+
+    return false;
+  }
+
   // A labelled X/Y/Z drag row. Returns true if any of the three was edited this frame.
   inline bool xyzGui(const char* label,
                      float* x,
@@ -164,7 +180,10 @@ namespace gc {
   }
 
   // A single boxed axis field: rounded inset box with a colored axis letter and a borderless DragFloat.
-  inline bool axisField(const char* axis, const ImVec4& axisCol, float* v, float width, float sensitivity)
+  // `row` names the value the three axes belong to; it is not drawn, only used to say which field a
+  // refused entry was for.
+  inline bool axisField(const char* row, const char* axis, const ImVec4& axisCol, float* v, float width,
+                        float sensitivity)
   {
     const float h = ImGui::GetFrameHeight();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -179,6 +198,7 @@ namespace gc {
     dl->AddText(ImVec2(pos.x + padX, pos.y + (h - axisSize.y) * 0.5f), theme::u32(axisCol), axis);
 
     // Transparent DragFloat over the remaining width.
+    const float previous = *v;
     ImGui::PushID(axis);
     ImGui::SetCursorScreenPos(ImVec2(pos.x + padX + axisSize.x, pos.y));
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
@@ -186,7 +206,8 @@ namespace gc {
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     ImGui::SetNextItemWidth(width - padX * 2.0f - axisSize.x);
-    const bool edited = ImGui::DragFloat("##v", v, sensitivity, 0.0f, 0.0f, "%.3f");
+    const bool edited = ImGui::DragFloat("##v", v, sensitivity, 0.0f, 0.0f, "%.3f")
+      && acceptFinite((std::string(row) + " " + axis).c_str(), v, previous);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     ImGui::PopID();
@@ -205,11 +226,11 @@ namespace gc {
 
     bool edited = false;
     ImGui::PushID(label);
-    edited |= axisField("X", theme::axisX, x, w, sensitivity);
+    edited |= axisField(label, "X", theme::axisX, x, w, sensitivity);
     ImGui::SameLine(0.0f, gap);
-    edited |= axisField("Y", theme::axisY, y, w, sensitivity);
+    edited |= axisField(label, "Y", theme::axisY, y, w, sensitivity);
     ImGui::SameLine(0.0f, gap);
-    edited |= axisField("Z", theme::axisZ, z, w, sensitivity);
+    edited |= axisField(label, "Z", theme::axisZ, z, w, sensitivity);
     ImGui::PopID();
 
     return edited;
@@ -570,9 +591,10 @@ namespace gc {
   {
     rowLabel(label);
 
+    const float previous = *v;
     ImGui::PushID(label);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-    const bool edited = ImGui::DragFloat("##v", v, speed);
+    const bool edited = ImGui::DragFloat("##v", v, speed) && acceptFinite(label, v, previous);
     ImGui::PopID();
 
     return edited;
@@ -634,8 +656,9 @@ namespace gc {
       const float nv = min + (max - min) * t;
       if (nv != *v)
       {
+        const float previous = *v;
         *v = nv;
-        edited = true;
+        edited = acceptFinite(label, v, previous);
       }
     }
 

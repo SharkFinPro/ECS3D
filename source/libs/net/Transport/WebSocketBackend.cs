@@ -38,6 +38,16 @@ internal sealed class WebSocketBackend : TransportBackend
   //    still goes async, so it degrades to plain bandwidth cost (same as TCP) instead of a 15ms hitch.
   private const int SocketBufferSize = 1 << 20; // 1 MiB per direction.
 
+  // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
+  // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
+  // once rather than ten times over. SendAsync completes only once the message has reached the socket's
+  // send buffer, and broadcasts run on the tick thread, so the bound is what physics and scripts can lose
+  // to the network in a tick. Only the connection whose own send ran out of budget is dropped; peers the
+  // broadcast never reached are skipped for that message and kept. Two seconds because a stall then costs
+  // at most one tick's worth before the peer responsible is dropped, while still being far longer than any
+  // plausible snapshot send takes on a healthy link.
+  private const int SendTimeoutMs = 2000;
+
   static WebSocketBackend()
   {
     ThreadPool.GetMinThreads(out var worker, out var io);
@@ -71,11 +81,13 @@ internal sealed class WebSocketBackend : TransportBackend
 
   // A WebSocket is safe for one concurrent send and one concurrent receive, but not for concurrent sends.
   // The send lock serializes broadcasts (and any future sender) onto a single connection.
-  private sealed class Connection(WebSocket socket, CancellationTokenSource cts)
+  private sealed class Connection(WebSocket socket, CancellationTokenSource cts, int connId)
   {
     public readonly WebSocket Socket = socket;
     public readonly CancellationTokenSource Cts = cts;
     public readonly SemaphoreSlim SendLock = new(1, 1);
+    // The id C++ knows this connection by, so a send that fails on the broadcast path can name it.
+    public readonly int ConnId = connId;
   }
 
   public override void ServerStart(int port, bool editMode, string expectedToken)
@@ -133,17 +145,64 @@ internal sealed class WebSocketBackend : TransportBackend
 
     var message = BuildMessage(type, data, len);
 
+    // The fan-out runs off a snapshot so the sends happen outside _clientsLock. This is the tick thread,
+    // and a send to a peer that has stopped reading blocks until the budget below runs out; holding the
+    // lock across that would block the accept path and every receive loop's cleanup along with it.
+    Connection[] connections;
     lock (_clientsLock)
     {
-      for (var i = _connections.Count - 1; i >= 0; --i)
+      connections = _connections.ToArray();
+    }
+
+    // One budget for the whole fan-out. A per-connection timeout would still let K stalled peers hold the
+    // tick thread for K times the timeout in a single broadcast, which is the stall this avoids.
+    var deadline = Environment.TickCount64 + SendTimeoutMs;
+    var skipped = 0;
+
+    foreach (var conn in connections)
+    {
+      var remaining = deadline - Environment.TickCount64;
+      if (remaining <= 0)
       {
-        if (!SendMessage(_connections[i], message))
-        {
-          // The connection dropped mid-send; reap it.
-          Close(_connections[i].Socket, _connections[i].Cts);
-          _connections.RemoveAt(i);
-        }
+        // An earlier peer spent the budget. Skip the rest of this broadcast rather than dropping them:
+        // they have done nothing wrong, and reaping them would punish healthy peers for their position in
+        // the list. They miss this one message and are sent the next broadcast as usual.
+        ++skipped;
+        continue;
       }
+
+      // The connection dropped mid-send, or did not accept the message inside the remaining budget.
+      if (!SendMessage(conn, message, (int)remaining) && Reap(conn))
+      {
+        Transport.Log(TransportLogLevel.Warn,
+          $"Dropping connection {conn.ConnId}: the send failed or timed out.");
+      }
+    }
+
+    // One line per broadcast rather than one per connection, so a peer stalling tick after tick is visible
+    // in the log without burying it.
+    if (skipped > 0)
+    {
+      Transport.Log(TransportLogLevel.Warn,
+        $"Skipped {skipped} connection(s): this broadcast spent its whole {SendTimeoutMs} ms budget.");
+    }
+  }
+
+  // Closes a connection and takes it off the broadcast list. True only when this call is the one that
+  // removed it: a peer that closed itself is reaped by its own receive loop, and that is an ordinary
+  // disconnect rather than something to warn about.
+  //
+  // Closing makes the connection's blocked receive return, and HandleClient's cleanup owns the
+  // DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing an
+  // already-closed connection is harmless.
+  private bool Reap(Connection conn)
+  {
+    Close(conn.Socket, conn.Cts);
+
+    lock (_clientsLock)
+    {
+      // By reference rather than by index: the list may have changed since the broadcast's snapshot.
+      return _connections.Remove(conn);
     }
   }
 
@@ -210,7 +269,7 @@ internal sealed class WebSocketBackend : TransportBackend
       // can enforce that role on every later message rather than trusting one the sender claims.
       Transport.DeliverServerAuthorized(connId, handshakePayload![0]);
 
-      conn = new Connection(ws, cts);
+      conn = new Connection(ws, cts, connId);
       lock (_clientsLock)
       {
         _connections.Add(conn);
@@ -588,9 +647,29 @@ internal sealed class WebSocketBackend : TransportBackend
     return message.Length > 1 ? message[1..] : Array.Empty<byte>();
   }
 
-  private static bool SendMessage(Connection conn, byte[] message)
+  // Bounded by a linked source so a peer that has stopped reading cannot hold the tick thread: the send is
+  // cancelled once timeoutMs (what is left of the broadcast's budget) elapses, which fails it and takes
+  // the caller's close-and-reap path.
+  private static bool SendMessage(Connection conn, byte[] message, int timeoutMs)
   {
-    return SendRaw(conn.Socket, conn.SendLock, message, conn.Cts.Token);
+    CancellationTokenSource? linked = null;
+    try
+    {
+      linked = CancellationTokenSource.CreateLinkedTokenSource(conn.Cts.Token);
+      linked.CancelAfter(timeoutMs);
+
+      return SendRaw(conn.Socket, conn.SendLock, message, linked.Token);
+    }
+    catch
+    {
+      // Reading Cts.Token throws once the receive loop has closed and disposed this connection; there is
+      // nothing left to send to, so report the failure and let the caller drop it.
+      return false;
+    }
+    finally
+    {
+      linked?.Dispose();
+    }
   }
 
   private static bool SendRaw(WebSocket ws, SemaphoreSlim sendLock, byte[] message, CancellationToken token)
@@ -617,6 +696,6 @@ internal sealed class WebSocketBackend : TransportBackend
     try { cts?.Cancel(); } catch { /* ignore */ }
     try { ws.Abort(); } catch { /* ignore */ }
     try { ws.Dispose(); } catch { /* ignore */ }
-    cts?.Dispose();
+    try { cts?.Dispose(); } catch { /* ignore */ }
   }
 }

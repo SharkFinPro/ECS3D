@@ -5,10 +5,12 @@
 #include "scenes/SceneAsset.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/WorldPlacement.h"
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
 #include "WireTypes.h"
+#include "Log.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -19,6 +21,7 @@
 #include <limits>
 #include <new>
 #include <optional>
+#include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -220,6 +223,65 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
   }
 }
 
+std::string_view describe(const ComponentEditResult result)
+{
+  switch (result)
+  {
+    case ComponentEditResult::malformedPayload: return "the payload does not parse";
+    case ComponentEditResult::partiallyApplied: return "the payload ran out mid-component";
+    case ComponentEditResult::unknownObject: return "no such object";
+    case ComponentEditResult::unknownComponent: return "the object has no such component";
+    case ComponentEditResult::applied: return "it was applied";
+  }
+
+  return "it was applied";
+}
+
+void logMissedComponentEdit(const ComponentEditResult result, const net::Message& edit, const LogCategory category)
+{
+  if (result == ComponentEditResult::applied)
+  {
+    return;
+  }
+
+  // Re-read the packed prefix ([object uuid][type][className]) independently of applyComponentEdit,
+  // purely to name what was skipped. A payload too broken to even name gets a placeholder instead of
+  // throwing out of a logging call.
+  std::string objectUUID = "an unreadable object";
+  std::string componentName = "an unreadable component";
+
+  try
+  {
+    net::MessageReader reader(edit);
+    objectUUID = reader.readString();
+
+    const auto componentType = reader.read<ComponentType>();
+    const auto nameIt = componentTypeToString.find(componentType);
+    componentName = nameIt != componentTypeToString.end() ? nameIt->second : "an unknown component";
+
+    if (componentType == ComponentType::script)
+    {
+      componentName += " (" + reader.readString() + ")";
+    }
+  }
+  catch (const std::exception&)
+  {
+    // Leave the placeholders above; the result and describe() still say what went wrong.
+  }
+
+  if (result == ComponentEditResult::malformedPayload || result == ComponentEditResult::partiallyApplied)
+  {
+    Log::error(category, "Could not apply a component edit of " + componentName + " on " + objectUUID +
+                          ": " + std::string(describe(result)) +
+                          "; the view may be out of sync until the next snapshot.");
+  }
+  else
+  {
+    Log::debug(category, "Skipped a component edit of " + componentName + " on " + objectUUID + ": " +
+                          std::string(describe(result)) + ".");
+  }
+}
+
 nlohmann::json buildAddObject(const std::string& name, const uuids::uuid* parentUUID,
                               const uuids::uuid* objectUUID)
 {
@@ -412,54 +474,6 @@ namespace {
     }
 
     return height;
-  }
-
-  // Transform's local values are relative to the parent (see Transform.h/.cpp), so reattaching an
-  // object under a different parent without rewriting them changes its world placement by the
-  // difference between the old and new parent's world transform. Called after the reparent with the
-  // object's own world placement from just before it was detached, this rewrites the local values so
-  // the world placement is unchanged.
-  void restoreWorldPlacementAfterReparent(const std::shared_ptr<Object>& object,
-                                          const std::shared_ptr<Object>& newParent,
-                                          const glm::vec3& oldWorldPosition,
-                                          const glm::vec3& oldWorldRotation,
-                                          const glm::vec3& oldWorldScale)
-  {
-    const auto transform = object->getComponent<Transform>(ComponentType::transform);
-    if (!transform)
-    {
-      return;
-    }
-
-    glm::vec3 parentPosition(0.0f);
-    glm::vec3 parentRotation(0.0f);
-    glm::vec3 parentScale(1.0f);
-
-    if (newParent)
-    {
-      if (const auto parentTransform = newParent->getComponent<Transform>(ComponentType::transform))
-      {
-        parentPosition = parentTransform->getPosition();
-        parentRotation = parentTransform->getRotation();
-        parentScale = parentTransform->getScale();
-      }
-    }
-
-    auto localScale = transform->getLocalScale();
-    for (int axis = 0; axis < 3; ++axis)
-    {
-      // An axis whose compensated scale is not representable (the parent's world scale there is zero,
-      // denormal enough to overflow the division, or the division otherwise yields inf/nan) keeps the
-      // scale it already had rather than writing a value that would break every reader of this transform.
-      if (const auto compensated = oldWorldScale[axis] / parentScale[axis]; std::isfinite(compensated))
-      {
-        localScale[axis] = compensated;
-      }
-    }
-
-    transform->setPosition(oldWorldPosition - parentPosition);
-    transform->setRotation(oldWorldRotation - parentRotation);
-    transform->setScale(localScale);
   }
 
   // Result of walking a restoreObject body before anything is built: whether any node's uuid is missing
@@ -866,15 +880,7 @@ namespace {
 
       // Captured before detach: getPosition/getRotation/getScale compose with the CURRENT parent, so
       // this is the object's world placement prior to the reparent.
-      glm::vec3 oldWorldPosition(0.0f);
-      glm::vec3 oldWorldRotation(0.0f);
-      glm::vec3 oldWorldScale(1.0f);
-      if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
-      {
-        oldWorldPosition = transform->getPosition();
-        oldWorldRotation = transform->getRotation();
-        oldWorldScale = transform->getScale();
-      }
+      const auto placement = captureWorldPlacement(object);
 
       if (const auto oldParent = object->getParent())
       {
@@ -896,7 +902,10 @@ namespace {
         objectManager.addObjectToRoot(object);
       }
 
-      restoreWorldPlacementAfterReparent(object, parent, oldWorldPosition, oldWorldRotation, oldWorldScale);
+      if (placement)
+      {
+        restoreWorldPlacement(object, parent, *placement);
+      }
 
       return SceneEditResult::applied;
     }

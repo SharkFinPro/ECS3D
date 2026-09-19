@@ -29,8 +29,11 @@ add_library(${PROJECT_NAME}
   objects/Object.h
   objects/ObjectManager.cpp
   objects/ObjectManager.h
+  objects/WorldPlacement.cpp
+  objects/WorldPlacement.h
   objects/components/Component.cpp
   objects/components/Component.h
+  objects/components/FiniteCheck.h
   objects/components/Transform.cpp
   objects/components/Transform.h
   objects/components/RigidBody.cpp

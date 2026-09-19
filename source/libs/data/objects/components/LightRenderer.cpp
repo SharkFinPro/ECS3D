@@ -1,4 +1,5 @@
 #include "LightRenderer.h"
+#include "FiniteCheck.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
@@ -33,6 +34,11 @@ glm::vec3 LightRenderer::getColor() const
 
 void LightRenderer::setColor(const glm::vec3& color)
 {
+  if (!finiteCheck::isFinite(color))
+  {
+    return;
+  }
+
   m_color = color;
 }
 
@@ -43,6 +49,11 @@ float LightRenderer::getAmbient() const
 
 void LightRenderer::setAmbient(const float ambient)
 {
+  if (!finiteCheck::isFinite(ambient))
+  {
+    return;
+  }
+
   m_ambient = ambient;
 }
 
@@ -53,6 +64,11 @@ float LightRenderer::getDiffuse() const
 
 void LightRenderer::setDiffuse(const float diffuse)
 {
+  if (!finiteCheck::isFinite(diffuse))
+  {
+    return;
+  }
+
   m_diffuse = diffuse;
 }
 
@@ -63,6 +79,11 @@ float LightRenderer::getSpecular() const
 
 void LightRenderer::setSpecular(const float specular)
 {
+  if (!finiteCheck::isFinite(specular))
+  {
+    return;
+  }
+
   m_specular = specular;
 }
 
@@ -73,6 +94,11 @@ glm::vec3 LightRenderer::getDirection() const
 
 void LightRenderer::setDirection(const glm::vec3& direction)
 {
+  if (!finiteCheck::isFinite(direction))
+  {
+    return;
+  }
+
   m_direction = direction;
 }
 
@@ -83,6 +109,12 @@ float LightRenderer::getConeAngle() const
 
 void LightRenderer::setConeAngle(const float coneAngle)
 {
+  // Before the clamp: nan compares false against both bounds, so std::clamp hands it straight back.
+  if (!finiteCheck::isFinite(coneAngle))
+  {
+    return;
+  }
+
   m_coneAngle = std::clamp(coneAngle, minConeAngleDegrees, maxConeAngleDegrees);
 }
 
