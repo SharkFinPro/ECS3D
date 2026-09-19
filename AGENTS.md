@@ -215,7 +215,12 @@ bundle of socket, `HttpMessageInvoker` and `CancellationTokenSource`) instead of
 works from the instance it was started with: it clears the backing field with a compare-and-swap against
 that instance before disposing it, so a connection a concurrent `ClientConnect` has already installed in
 its place is left alone, and `ClientSend` guards its own read of the field with a matching
-compare-and-swap plus an `ObjectDisposedException` catch for the same reason.
+compare-and-swap plus an `ObjectDisposedException` catch for the same reason. The exiting loop sets
+`_clientRunning` false as soon as it stops reading, ahead of that cleanup, so a fast reconnect can start
+before the old loop finishes tearing down; the loop compares what the compare-and-swap reports the field
+held against its own connection before delivering the notice, and skips delivery when that turns out to be
+a different, live connection a concurrent `ClientConnect` already installed, so a reconnect racing the old
+loop's exit is not reported as a loss.
 The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
 reported to C++ separately from the messages it sends: once `Authorize` succeeds, both backends call
 `Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered
