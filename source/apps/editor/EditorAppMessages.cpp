@@ -4,6 +4,8 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/Object.h>
+#include <objects/components/Component.h>
 #include <RingBufferSink.h>
 #include <ServerLog.h>
 #include <Log.h>

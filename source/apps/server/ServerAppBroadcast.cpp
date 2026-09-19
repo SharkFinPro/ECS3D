@@ -5,6 +5,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/components/Component.h>
 #include <objects/Object.h>
 #include <ScriptSystem.h>
 #include <bindings/BindingContext.h>

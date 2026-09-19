@@ -2,6 +2,8 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/Object.h>
+#include <objects/components/Component.h>
 #include <CollisionSystem.h>
 #include <ScriptSystem.h>
 #include <bindings/InputState.h>
@@ -230,12 +232,11 @@ void ServerApp::handleSceneControl(const net::Message& message) const
     return;
   }
 
-  auto& objectManager = *scene->getObjectManager();
   const bool wasStopped = m_sceneManager->getSceneStatus() == SceneStatus::stopped;
 
   try
   {
-    applySceneControl(op, objectManager, wasStopped);
+    applySceneControl(op, *scene->getObjectManager(), wasStopped);
   }
   catch (const std::exception& e)
   {

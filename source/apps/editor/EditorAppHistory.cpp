@@ -3,6 +3,8 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/Object.h>
+#include <objects/components/Component.h>
 #include <SaveUI.h>
 #include <NetClient.h>
 #include <Log.h>

@@ -2,6 +2,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/components/Component.h>
 #include <RenderSystem.h>
 #include <InputCapture.h>
 #include <Selection.h>

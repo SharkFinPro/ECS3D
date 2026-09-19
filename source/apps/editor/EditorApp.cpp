@@ -8,6 +8,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/Object.h>
 #include <GpuAssetCache.h>
 #include <RenderSystem.h>
 #include <ComponentEditor.h>
