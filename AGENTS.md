@@ -129,7 +129,10 @@ three `sceneEdit` ops that create an object (`addObject`, `duplicateObject`, `in
 a client-chosen `"uuid"` for what they create; the server honors it and picks its own when the field is
 absent. A uuid that does not parse is a `malformedEdit`; the nil uuid, or one already in use, is
 `rejected` with the scene untouched. It exists so the sender knows which object its own edit produced -
-the undo history records the reverse edit against that uuid. The
+the undo history records the reverse edit against that uuid.
+`reparentObject` rewrites the moved object's local transform after reattaching so its world placement is
+unchanged, and `ObjectManager::deleteObjectsMarkedForDeletion` applies the same `objects/WorldPlacement.h`
+helper to the children of a deleted object as they move up a level. The
 asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
 applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —

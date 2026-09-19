@@ -182,6 +182,110 @@ TEST(ObjectManager, DeletingARemovedRootPromotesItsChildrenToTheSceneRoot)
             scene.objectManager->getObjects().end());
 }
 
+// The delete confirmation promises children are "kept and moved up a level" - deleting the middle object
+// of a three-deep chain must leave the bottom object exactly where it was in the world, not at the
+// grandparent's origin.
+TEST(ObjectManager, DeletingAnObjectPreservesItsChildrensWorldPosition)
+{
+  const auto scene = makeScene();
+  const auto grandparent = addObject(scene, "A");
+  const auto doomed = addChildObject(scene, "B", grandparent);
+  fixtures::transformOf(doomed)->setPosition(glm::vec3(10.0f, 0.0f, 0.0f));
+  const auto child = addChildObject(scene, "C", doomed);
+
+  // Positive control: before the delete, the child's world position already includes the doomed
+  // object's offset, while its own local position is still the origin.
+  fixtures::expectNear(fixtures::positionOf(child), glm::vec3(10.0f, 0.0f, 0.0f));
+  fixtures::expectNear(fixtures::transformOf(child)->getLocalPosition(), glm::vec3(0.0f, 0.0f, 0.0f));
+
+  scene.objectManager->removeObject(doomed);
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  EXPECT_EQ(child->getParent(), grandparent);
+  fixtures::expectNear(fixtures::positionOf(child), glm::vec3(10.0f, 0.0f, 0.0f));
+  fixtures::expectNear(fixtures::transformOf(child)->getLocalPosition(), glm::vec3(10.0f, 0.0f, 0.0f));
+}
+
+TEST(ObjectManager, DeletingARootWithANonIdentityTransformPreservesItsChildsWorldPlacement)
+{
+  const auto scene = makeScene();
+  const auto doomed = addObject(scene, "Doomed", glm::vec3(5.0f, 3.0f, -2.0f), glm::vec3(2.0f, 2.0f, 2.0f));
+  fixtures::transformOf(doomed)->setRotation(glm::vec3(0.0f, 45.0f, 0.0f));
+
+  const auto child = addChildObject(scene, "Child", doomed);
+  fixtures::transformOf(child)->setPosition(glm::vec3(1.0f, 0.0f, 0.0f));
+  fixtures::transformOf(child)->setRotation(glm::vec3(0.0f, 10.0f, 0.0f));
+
+  const auto worldPositionBefore = fixtures::transformOf(child)->getPosition();
+  const auto worldRotationBefore = fixtures::transformOf(child)->getRotation();
+  const auto worldScaleBefore = fixtures::transformOf(child)->getScale();
+
+  scene.objectManager->removeObject(doomed);
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  // Promoted to the scene root, with nothing left of the deleted root's own transform to compose with.
+  EXPECT_EQ(child->getParent(), nullptr);
+  fixtures::expectNear("world position", fixtures::transformOf(child)->getPosition(), worldPositionBefore);
+  fixtures::expectNear("world rotation", fixtures::transformOf(child)->getRotation(), worldRotationBefore);
+  fixtures::expectNear("world scale", fixtures::transformOf(child)->getScale(), worldScaleBefore);
+}
+
+// The division that compensates scale is against the NEW parent's world scale, not the deleted object's -
+// so an axis that is only zero on the grandparent (the child's new parent after B is deleted) is the one
+// that has to fall back to the child's own existing local scale, while the axes the grandparent can
+// represent are compensated for the scaling B itself used to contribute.
+TEST(ObjectManager, DeletingAnObjectCompensatesChildScaleAgainstTheNewParentExceptOnAZeroAxis)
+{
+  const auto scene = makeScene();
+  const auto grandparent = addObject(scene, "Grandparent", glm::vec3(0.0f), glm::vec3(0.0f, 2.0f, 3.0f));
+  const auto doomed = addChildObject(scene, "Doomed", grandparent);
+  fixtures::transformOf(doomed)->setScale(glm::vec3(5.0f, 2.0f, 4.0f));
+  const auto child = addChildObject(scene, "Child", doomed);
+  fixtures::transformOf(child)->setScale(glm::vec3(2.0f, 3.0f, 1.0f));
+
+  const auto worldScaleBefore = fixtures::transformOf(child)->getScale();
+  const auto localScaleBefore = fixtures::transformOf(child)->getLocalScale();
+
+  scene.objectManager->removeObject(doomed);
+  scene.objectManager->deleteObjectsMarkedForDeletion();
+
+  EXPECT_EQ(child->getParent(), grandparent);
+
+  const auto localScaleAfter = fixtures::transformOf(child)->getLocalScale();
+
+  // x is not representable (the grandparent's world scale there is zero), so the child's own existing
+  // local x is left untouched rather than compensated.
+  EXPECT_NEAR(localScaleAfter.x, localScaleBefore.x, 1e-4f);
+  // y and z divide cleanly against the grandparent's own scale there, recovering the scaling the deleted
+  // object used to contribute (2 and 4 respectively) rather than leaving it dropped.
+  EXPECT_NEAR(localScaleAfter.y, worldScaleBefore.y / 2.0f, 1e-4f);
+  EXPECT_NEAR(localScaleAfter.z, worldScaleBefore.z / 3.0f, 1e-4f);
+
+  // y and z of world scale are fully preserved; x cannot be (both the old and new chain multiply through
+  // a zero there), so it is left out of this assertion.
+  EXPECT_NEAR(fixtures::transformOf(child)->getScale().y, worldScaleBefore.y, 1e-4f);
+  EXPECT_NEAR(fixtures::transformOf(child)->getScale().z, worldScaleBefore.z, 1e-4f);
+}
+
+TEST(ObjectManager, DeletingAnObjectReparentsAChildWithNoTransformWithoutThrowing)
+{
+  const auto scene = makeScene();
+  const auto grandparent = addObject(scene, "Grandparent");
+  const auto doomed = addChildObject(scene, "Doomed", grandparent);
+
+  const auto noTransform = std::make_shared<Object>(std::vector<std::shared_ptr<Component>>{}, "NoTransform");
+  noTransform->setParent(doomed);
+  scene.objectManager->addObject(noTransform);
+  ASSERT_EQ(noTransform->getComponent<Transform>(ComponentType::transform), nullptr);
+
+  scene.objectManager->removeObject(doomed);
+  EXPECT_NO_THROW(scene.objectManager->deleteObjectsMarkedForDeletion());
+
+  // Positive control: it still made it under the new parent rather than being dropped by the throw guard.
+  EXPECT_EQ(noTransform->getParent(), grandparent);
+  EXPECT_NE(std::ranges::find(grandparent->getChildren(), noTransform), grandparent->getChildren().end());
+}
+
 TEST(ObjectManager, RemoveObjectReportsWhetherItNewlyMarkedTheObject)
 {
   const auto scene = makeScene();
