@@ -522,27 +522,29 @@ internal sealed class TcpBackend : TransportBackend
     return true;
   }
 
-  // Bounds how much of a not-yet-fully-arrived body sits in memory to what has actually landed, capped by
-  // bodyLen, rather than committing the whole declared length before a single byte turns up. A peer can
-  // declare a frame at MaxMessageBytes and then send one byte a minute; without this it costs the server
-  // that whole allocation for as long as the peer cares to hold the socket open. Chunks are stitched into
-  // the caller's exact-size result at the end - one extra copy versus the direct fill this replaces, in
-  // exchange for never paying the full frame's memory for a single declared byte.
+  // The buffer's starting size, and how far it grows past whatever has arrived once it needs to: large
+  // enough that a typical message never triggers a grow, small enough that a peer sending one byte and
+  // then stalling doesn't cost more than this either.
   private const int BodyReadChunkBytes = 64 * 1024;
 
   // How long the body read may go without a single byte of progress before the connection is dropped.
-  // Applied to each individual Read call via NetworkStream.ReadTimeout, so it resets on every chunk
-  // rather than bounding the whole frame - a real snapshot at the size ceiling over a slow link keeps
-  // making progress and never trips it; only a peer that stops sending outright does. Comfortably above
-  // how long even a very slow link takes to deliver one chunk (64 KiB at 7 KB/s, a 56k-modem-class rate,
-  // is under 10 s), so this only fires on an actual stall.
+  // Applied to each individual Read call via NetworkStream.ReadTimeout, so it resets on every read rather
+  // than bounding the whole frame - a real snapshot at the size ceiling over a slow link keeps making
+  // progress and never trips it; only a peer that stops sending outright does. Comfortably above how long
+  // even a very slow link takes to deliver one chunk (64 KiB at 7 KB/s, a 56k-modem-class rate, is under
+  // 10 s), so this only fires on an actual stall.
   private const int BodyReadTimeoutMs = 20000;
 
+  // Reads a bodyLen-byte body into a buffer sized to what has actually arrived rather than to bodyLen up
+  // front: it starts at min(BodyReadChunkBytes, bodyLen) and only grows (doubling, capped at bodyLen) once
+  // it is full of real bytes, so a peer that declares a huge frame and then trickles it in a byte at a
+  // time never costs more than roughly twice what it has actually sent, not the whole declared length.
+  // A body that fits the starting size - the common case - fills it exactly with no grow and no extra
+  // copy at all; a larger one costs at most O(log(bodyLen / BodyReadChunkBytes)) resize copies on top.
   private static byte[]? ReadBody(Stream stream, int bodyLen, long? deadline)
   {
-    var chunks = new List<byte[]>();
-    var chunkLengths = new List<int>();
-    var remaining = bodyLen;
+    var buffer = new byte[Math.Min(BodyReadChunkBytes, bodyLen)];
+    var filled = 0;
 
     // Restored in the finally below so it never leaks into the next header read, which must stay
     // unbounded - a peer between messages is idle, not stalled.
@@ -551,7 +553,7 @@ internal sealed class TcpBackend : TransportBackend
 
     try
     {
-      while (remaining > 0)
+      while (filled < bodyLen)
       {
         // Same outer bound as ReadExact uses for the handshake: a per-read timeout alone doesn't cap the
         // total when a peer trickles one byte in just under it, every time.
@@ -560,11 +562,16 @@ internal sealed class TcpBackend : TransportBackend
           return null;
         }
 
-        var chunk = new byte[Math.Min(BodyReadChunkBytes, remaining)];
+        if (filled == buffer.Length)
+        {
+          Array.Resize(ref buffer, Math.Min(buffer.Length * 2, bodyLen));
+        }
+
+        var toRead = Math.Min(buffer.Length - filled, bodyLen - filled);
         int n;
         try
         {
-          n = stream.Read(chunk, 0, chunk.Length);
+          n = stream.Read(buffer, filled, toRead);
         }
         catch (IOException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.TimedOut })
         {
@@ -587,9 +594,7 @@ internal sealed class TcpBackend : TransportBackend
           return null;
         }
 
-        chunks.Add(chunk);
-        chunkLengths.Add(n);
-        remaining -= n;
+        filled += n;
       }
     }
     finally
@@ -597,15 +602,9 @@ internal sealed class TcpBackend : TransportBackend
       stream.ReadTimeout = savedTimeout;
     }
 
-    var body = new byte[bodyLen];
-    var offset = 0;
-    for (var i = 0; i < chunks.Count; ++i)
-    {
-      Array.Copy(chunks[i], 0, body, offset, chunkLengths[i]);
-      offset += chunkLengths[i];
-    }
-
-    return body;
+    // filled == bodyLen == buffer.Length here (the last grow, if any, always lands exactly on bodyLen),
+    // so buffer already is the exact-length result.
+    return buffer;
   }
 
   private static bool ReadExact(Stream stream, Span<byte> buffer, long? deadline = null)
