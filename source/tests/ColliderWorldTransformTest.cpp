@@ -166,6 +166,28 @@ TEST(ColliderWorldTransform, UnpackingANewOffsetDirtiesAnAlreadyCachedBoundingBo
   EXPECT_NEAR(movedBox.maxX, 6.0f, 1e-5f);
 }
 
+TEST(ColliderWorldTransform, TheMeshCacheSurvivesTwoHundredFiftySixTransformUpdates)
+{
+  const auto [object, box] = makeBox(glm::vec3(1));
+  const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
+  // Populate the mesh cache at the collider's authored (offset-free) position. Only x is checked: +-1 on
+  // y/z all tie for furthest along +x, and which corner wins the tie is unspecified.
+  EXPECT_NEAR(box->findFurthestPoint({ 1, 0, 0 }).x, 1.0f, 1e-5f);
+
+  // 255 updates that leave the transform in an intermediate spot, then one more that lands somewhere
+  // the cache has never seen. If the update id were narrow enough to wrap back to the value the cache
+  // was stamped with after exactly 256 updates, this last move would be missed and the stale mesh from
+  // the cache-populating query above would still be served.
+  for (int i = 0; i < 255; ++i)
+  {
+    transform->setPosition(glm::vec3(50, 0, 0));
+  }
+  transform->setPosition(glm::vec3(100, 0, 0));
+
+  EXPECT_NEAR(box->findFurthestPoint({ 1, 0, 0 }).x, 101.0f, 1e-5f);
+}
+
 TEST(ColliderWorldTransform, BoundingBoxRebuildsWhenASphereRadiusChangesWithTheTransformUntouched)
 {
   const auto [object, sphere] = makeSphere(glm::vec3(1));

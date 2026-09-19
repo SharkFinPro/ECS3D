@@ -372,7 +372,7 @@ internal sealed class TcpBackend : TransportBackend
 
     _clientRunning = true;
 
-    _clientThread = new Thread(ClientReceiveLoop) { IsBackground = true, Name = "ecs3d-net-recv" };
+    _clientThread = new Thread(() => ClientReceiveLoop(_client!)) { IsBackground = true, Name = "ecs3d-net-recv" };
     _clientThread.Start();
 
     Transport.Log(TransportLogLevel.Info, $"Connected to {host}:{port}.");
@@ -388,14 +388,15 @@ internal sealed class TcpBackend : TransportBackend
   {
     _clientRunning = false;
 
-    try { _client?.Close(); } catch { /* already closed */ }
-    _client = null;
+    // Take ownership atomically so a racing ClientReceiveLoop cleanup can't also close the same instance.
+    var client = Interlocked.Exchange(ref _client, null);
+    try { client?.Close(); } catch { /* already closed */ }
   }
 
   public override void ClientSend(byte type, nint data, int len)
   {
-    var stream = _client?.GetStream();
-    if (stream is null || TooLargeToSend(len))
+    var client = _client;
+    if (client is null || TooLargeToSend(len))
     {
       return;
     }
@@ -403,19 +404,25 @@ internal sealed class TcpBackend : TransportBackend
     var frame = Frame(type, data, len);
     try
     {
-      stream.Write(frame, 0, frame.Length);
+      // GetStream() is in the try too: a racing teardown can dispose client between the read above and
+      // here, and that throws ObjectDisposedException out of GetStream() itself, not just Write.
+      client.GetStream().Write(frame, 0, frame.Length);
     }
     catch
     {
-      DisconnectClient();
+      // Drop this instance specifically, not whatever is current - a reconnect may have replaced it.
+      if (Interlocked.CompareExchange(ref _client, null, client) == client)
+      {
+        try { client.Close(); } catch { /* already closed */ }
+      }
     }
   }
 
-  private void ClientReceiveLoop()
+  private void ClientReceiveLoop(TcpClient client)
   {
     try
     {
-      var stream = _client!.GetStream();
+      var stream = client.GetStream();
       while (_clientRunning)
       {
         if (!ReadFrame(stream, out var type, out var payload))
@@ -433,10 +440,18 @@ internal sealed class TcpBackend : TransportBackend
 
     _clientRunning = false;
 
-    // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
-    // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two
-    // apart via m_disconnectRequested and no-ops the latter.
-    Transport.DeliverClientDisconnect();
+    // Clear before closing so ClientSend never reaches a closed instance; the CAS leaves a newer
+    // connection alone.
+    var previous = Interlocked.CompareExchange(ref _client, null, client);
+    try { client.Close(); } catch { /* already closed */ }
+
+    // A different non-null value means a reconnect already replaced this connection; it was not lost.
+    if (previous == client || previous == null)
+    {
+      // The single delivery point for a lost connection - the native side tells a real loss apart from
+      // its own ClientDisconnect via m_disconnectRequested.
+      Transport.DeliverClientDisconnect();
+    }
   }
 
   // -- Framing helpers --

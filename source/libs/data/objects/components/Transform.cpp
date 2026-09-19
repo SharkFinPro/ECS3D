@@ -6,12 +6,8 @@
 #include <Protocol.h>
 
 Transform::Transform()
-  : Component(ComponentType::transform)
-{
-  loadVariable(m_position);
-  loadVariable(m_scale);
-  loadVariable(m_rotation);
-}
+  : Transform(glm::vec3(0), glm::vec3(1), glm::vec3(0))
+{}
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
   : Component(ComponentType::transform),
@@ -24,7 +20,7 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
   loadVariable(m_rotation);
 }
 
-uint8_t Transform::getUpdateID() const
+uint64_t Transform::getUpdateID() const
 {
   return m_updateID;
 }
@@ -185,15 +181,15 @@ void Transform::pack(net::Message& message) const
   message.write(ComponentType::transform);
 
   message.write(m_position.get());
-  message.write(m_scale.get());
   message.write(m_rotation.get());
+  message.write(m_scale.get());
 }
 
 void Transform::unpack(net::MessageReader& messageReader)
 {
   m_position.set(messageReader.read<glm::vec3>());
-  m_scale.set(messageReader.read<glm::vec3>());
   m_rotation.set(messageReader.read<glm::vec3>());
+  m_scale.set(messageReader.read<glm::vec3>());
 
   // Bypasses the setters, so bump directly - see loadFromJSON.
   ++m_updateID;

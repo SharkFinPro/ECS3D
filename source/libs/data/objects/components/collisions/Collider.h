@@ -9,7 +9,7 @@
 class Transform;
 
 struct BoundingBox {
-  uint8_t lastUpdateID = 0;
+  uint64_t lastUpdateID = 0;
   float minX{};
   float maxX{};
   float minY{};
@@ -30,6 +30,13 @@ public:
   explicit Collider(ColliderType type, ComponentType subType);
 
   const BoundingBox& getBoundingBox();
+
+  // Read-only view of whatever getBoundingBox() last computed: no dirty check, no recompute, so it never
+  // writes m_boundingBox. Only safe where getBoundingBox() is known to have already warmed the cache for
+  // every collider involved and nothing has moved a transform since - e.g. CollisionSystem's parallel
+  // narrow phase, which warms every collider serially before the parallel region and defers collision
+  // responses (which do move transforms) to a serial pass after it.
+  [[nodiscard]] const BoundingBox& cachedBoundingBox() const;
 
   [[nodiscard]] ColliderType getColliderType() const;
 

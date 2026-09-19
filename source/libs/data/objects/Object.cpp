@@ -461,16 +461,70 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     script->unpack(messageReader);
   }
 
-  // Children. Each is packed as a full object (its uuid leads, read by the recursive unpack below);
-  // reconstructed fresh and wired to this parent + the manager before unpacking its own subtree.
+  // Children. Each is packed as a full object (its uuid leads, read by the recursive unpack below).
+  // Reconciled the same way as the components and scripts above: an existing child with the matching
+  // uuid is unpacked into rather than duplicated, so refreshing an object that already has children does
+  // not double its subtree. Packed order is kept, and any existing child not named in the packed data is
+  // dropped afterward.
+  // childCount comes off the wire, so it must not size anything before the bytes behind it are read -
+  // the same reasoning ServerApp::handleInputState applies to numKeys. Left unreserved rather than
+  // bounded against a per-child minimum: push_back's own growth is what pays for an oversized count, not
+  // an allocation sized from a number nothing has checked yet.
   const uint32_t childCount = messageReader.read<uint32_t>();
+  const auto oldChildren = m_children;
+  std::vector<std::shared_ptr<Object>> newChildren;
+
   for (uint32_t i = 0; i < childCount; ++i)
   {
-    auto child = std::make_shared<Object>();
-    child->setParent(shared_from_this());
-    m_manager->addObject(child);
+    // Peek the child's uuid - its first field, per pack() - on a copy of the reader, so matching it
+    // against an existing child does not disturb the real reader. Whichever object ends up unpacking
+    // below, existing or freshly built, reads the child's fields itself, uuid included.
+    net::MessageReader uuidPeek = messageReader;
+    const auto childUUID = uuids::uuid::from_string(uuidPeek.readString()).value();
+
+    // Two packed children sharing a uuid would otherwise alias one existing child twice in m_children,
+    // or create two Objects registered under the same uuid - the uuid-keyed lookups everything else
+    // relies on (ObjectManager::getObjectByUUID chief among them) assume that never happens.
+    if (std::ranges::find_if(newChildren, [&childUUID](const auto& accepted) {
+          return accepted->getUUID() == childUUID;
+        }) != newChildren.end())
+    {
+      throw std::runtime_error("Packed children contain a duplicate uuid");
+    }
+
+    std::shared_ptr<Object> child;
+    for (const auto& existing : oldChildren)
+    {
+      if (existing->getUUID() == childUUID)
+      {
+        child = existing;
+        break;
+      }
+    }
+
+    if (!child)
+    {
+      child = std::make_shared<Object>();
+      child->setParent(shared_from_this());
+      m_manager->addObject(child);
+    }
 
     child->unpack(messageReader, depth + 1);
+    newChildren.push_back(child);
+  }
+
+  m_children = newChildren;
+
+  // Drop whatever existing child was not named in the packed data. discardSubtree both detaches it here
+  // (it is this child's parent, so removeChild is a no-op against the already-updated m_children above)
+  // and unregisters it, and its own descendants, from the manager - the same tracking a caller keeping a
+  // half-built subtree already relies on it for.
+  for (const auto& existing : oldChildren)
+  {
+    if (std::ranges::find(newChildren, existing) == newChildren.end())
+    {
+      m_manager->discardSubtree(existing);
+    }
   }
 }
 
