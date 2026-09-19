@@ -22,7 +22,7 @@ namespace {
 
 // --- Round trips: undo restores the before state, redo restores the after state, both via the exact
 // applySceneEdit/applyComponentEdit path the authoritative server would run. These also serve as the
-// positive controls for the refusal tests further down, which cover the same kinds under conflict.
+// positive controls for the refusal tests in EditHistoryRefusalTest.cpp, which cover the same kinds under conflict.
 
 TEST(EditHistory, UndoAndRedoRoundTripAComponentEdit)
 {
