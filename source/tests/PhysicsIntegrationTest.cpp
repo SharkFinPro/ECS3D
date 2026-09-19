@@ -294,7 +294,7 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
 
   const auto falling = addObject(scene, "Falling", { 0, 5, 0 });
   falling->addComponent(std::make_shared<BoxCollider>());
-  const auto body = addBody(falling, true);
+  addBody(falling, true);
 
   CollisionSystem collisionSystem;
 
@@ -434,7 +434,7 @@ TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStaysSupportedRatherT
 
   const auto falling = addObject(scene, "Falling", { 2.2f, 5, 0 });
   falling->addComponent(std::make_shared<BoxCollider>());
-  addBody(falling, true);
+  const auto body = addBody(falling, true);
 
   CollisionSystem collisionSystem;
 
