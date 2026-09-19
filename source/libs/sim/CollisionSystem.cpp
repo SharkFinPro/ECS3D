@@ -59,14 +59,18 @@ void CollisionSystem::checkCollisions()
   // thread writes only its own slot). Drained serially into the pair set once the loop finishes.
   std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
 
+  // This loop has to stay read-only: findCollisions reads bounding boxes and (through the narrow phase)
+  // transformed meshes that live on the same Collider another thread's iteration can also read. That is
+  // only safe because every collider in m_collisionEdges was just warmed serially above, and nothing in
+  // this loop moves a transform - collision responses, which do, are deferred to the serial pass below.
+  // Losing either half of that (a collider left cold, or a response sneaking back into this loop) turns
+  // it into two threads racing a write on m_boundingBox / m_transformedBoxVertices.
 #pragma omp parallel for default(none) shared(perEdgeCollisions) num_threads(6)
   for (int i = 0; i < m_collisionEdges.size(); ++i)
   {
     const auto& edge = m_collisionEdges[i];
 
-    auto rigidBody = edge.object->getComponent<RigidBody>(ComponentType::rigidBody);
-
-    if (!rigidBody)
+    if (!edge.object->getComponent<RigidBody>(ComponentType::rigidBody))
     {
       continue;
     }
@@ -76,9 +80,27 @@ void CollisionSystem::checkCollisions()
 
     if (!collidedObjects.empty())
     {
-      handleCollisions(rigidBody, edge.collider, collidedObjects);
       perEdgeCollisions[i] = std::move(collidedObjects);
     }
+  }
+
+  // Applied serially, in edge order, now that the parallel region is done: a response moves the transform
+  // of either object in a pair, which would invalidate a collider cache another thread might still be
+  // reading if this ran inside the loop above.
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    if (perEdgeCollisions[i].empty())
+    {
+      continue;
+    }
+
+    const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
+    if (!rigidBody)
+    {
+      continue;
+    }
+
+    handleCollisions(rigidBody, m_collisionEdges[i].collider, perEdgeCollisions[i]);
   }
 
   recordCollisionEvents(perEdgeCollisions);
@@ -125,7 +147,11 @@ void CollisionSystem::reset()
 
 void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const
 {
-  const auto bbox = edge.collider->getBoundingBox();
+  // cachedBoundingBox(), not getBoundingBox(): this runs inside checkCollisions' parallel loop, where
+  // every collider's bounding box was already warmed serially and nothing moves a transform until the
+  // serial response pass after the loop. getBoundingBox() would recompute (and write) on a cache miss;
+  // cachedBoundingBox() only ever reads, which is what makes concurrent calls on a shared collider safe.
+  const auto& bbox = edge.collider->cachedBoundingBox();
 
   for (const auto& other : m_collisionEdges)
   {
@@ -149,7 +175,7 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
       continue;
     }
 
-    const auto otherBbox = other.collider->getBoundingBox();
+    const auto& otherBbox = other.collider->cachedBoundingBox();
 
     if (bbox.maxX < otherBbox.minX || bbox.minX > otherBbox.maxX ||
         bbox.maxY < otherBbox.minY || bbox.minY > otherBbox.maxY ||
