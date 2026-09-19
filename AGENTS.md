@@ -298,7 +298,7 @@ tick, so a line still gets out while the scene is stopped/paused) drains it (cap
 costs bounded work, not an unbounded send) and forwards what comes out as a `MessageType::serverLog`
 (`net::packServerLog`/`unpackServerLog`) via `NetServer::sendToEditors` — a per-connection send (`Transport
 .serverSend`, alongside `serverBroadcast`) to every connection authorized as `Role::editor` and no one
-else, so a play client never sees it. `RemoteLogSink::drain` also reports how many entries it had to evict
+else, so play clients do not receive it. `RemoteLogSink::drain` also reports how many entries it had to evict
 (queue full, nobody draining fast enough); the editor surfaces that count as a warning instead of silently
 missing history. `EditorApp::handleServerLog` writes each forwarded entry straight into its own
 `RingBufferSink` (bypassing `Log::write`, which would otherwise stamp it with arrival time instead of the
