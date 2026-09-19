@@ -4,7 +4,9 @@
 #include <Log.h>
 #include <LogEntry.h>
 #include <array>
+#include <cstddef>
 #include <limits>
+#include <span>
 
 namespace net {
 
@@ -110,11 +112,13 @@ bool NetClient::poll(Message& message)
 
 void NetClient::enqueue(const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  Message message(static_cast<MessageType>(type));
-  for (const std::vector<uint8_t> chunks(data, data + len); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  // An empty payload is legal, so a zero or negative length, or a null buffer, is an empty message
+  // rather than a range to walk.
+  const auto payload = len > 0 && data != nullptr
+    ? std::span<const uint8_t>(data, static_cast<std::size_t>(len))
+    : std::span<const uint8_t>();
+
+  Message message(static_cast<MessageType>(type), payload);
 
   m_inbox.push(std::move(message));
 }
