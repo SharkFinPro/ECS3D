@@ -10,7 +10,9 @@
 #include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <functional>
 #include <random>
 #include <string>
 #include <utility>
@@ -60,14 +62,40 @@ namespace {
     return scratch;
   }
 
-  // A fresh asset uuid for a saved prefab. (AssetBrowserPanel has the same one-liner for the assets it
-  // creates; asset uuids are unrelated to the scene's object uuids, so ObjectManager's generator is not
-  // the right source here.)
+  // The panel's uuid source, seeded the way ObjectManager seeds its own: a single random_device word
+  // would leave mt19937 with 2^32 possible streams, and a toolchain whose random_device is deterministic
+  // would hand every run of the editor the same sequence - so the first object created in one run would
+  // carry the uuid the first object of the previous run already has, and the server would refuse it.
+  // Held across calls rather than reseeded per uuid; only the UI thread reaches this.
+  [[nodiscard]] uuids::uuid newUUID()
+  {
+    static std::mt19937 rng = [] {
+      std::random_device rd;
+      auto seedData = std::array<int, std::mt19937::state_size>{};
+      std::ranges::generate(seedData, std::ref(rd));
+      std::seed_seq seq(seedData.begin(), seedData.end());
+      return std::mt19937(seq);
+    }();
+    static uuids::uuid_random_generator generator{ rng };
+
+    return generator();
+  }
+
+  // A fresh asset uuid for a saved prefab. (AssetBrowserPanel has its own for the assets it creates;
+  // asset uuids are unrelated to the scene's object uuids, so ObjectManager's generator is not the right
+  // source here.)
   [[nodiscard]] std::string newAssetUUID()
   {
-    std::mt19937 rng{ std::random_device{}() };
-    uuids::uuid_random_generator generator{ rng };
-    return uuids::to_string(generator());
+    return uuids::to_string(newUUID());
+  }
+
+  // The uuid this panel asks the server to give an object it is creating, so the edit it sends names the
+  // object it produces rather than one only the server knows about. The panel is only ever handed a const
+  // ObjectManager, so this generates its own instead of borrowing the manager's generator; the server
+  // refuses a uuid already in use either way.
+  [[nodiscard]] uuids::uuid newObjectUUID()
+  {
+    return newUUID();
   }
 
   // Heuristic icon for an object derived from its components (the mockup shows a per-object glyph). The
@@ -197,7 +225,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   ImGui::BeginDisabled(!m_editable || objectManager == nullptr);
   if (gc::accentButton("Create New Object", gc::SecIcon::plus))
   {
-    m_sceneEditCallback(replication::buildAddObject("Object"));
+    const auto created = newObjectUUID();
+    m_sceneEditCallback(replication::buildAddObject("Object", nullptr, &created));
   }
   ImGui::EndDisabled();
 
@@ -235,7 +264,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
         if (const auto prefab = uuids::uuid::from_string(uuidStr); prefab.has_value() && m_sceneEditCallback)
         {
           // The server resolves the prefab uuid to its body on disk, instantiates, and re-snapshots.
-          m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value()));
+          const auto instance = newObjectUUID();
+          m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), nullptr, &instance));
         }
       }
 
@@ -383,7 +413,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       {
         // Same op as the empty-space drop, but with this row as the parent instead of the scene root.
         const auto parent = object->getUUID();
-        m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), &parent));
+        const auto instance = newObjectUUID();
+        m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), &parent, &instance));
       }
     }
 
@@ -397,12 +428,14 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     if (ImGui::MenuItem("Add Child") && m_sceneEditCallback)
     {
       const auto parent = object->getUUID();
-      m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+      const auto created = newObjectUUID();
+      m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
     }
 
     if (ImGui::MenuItem("Duplicate") && m_sceneEditCallback)
     {
-      m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID()));
+      const auto duplicate = newObjectUUID();
+      m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID(), &duplicate));
     }
 
     if (ImGui::MenuItem("Save as Prefab"))
@@ -430,7 +463,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   if (gc::rowIconButton("addChild", gc::SecIcon::plus, false, buttonWidth, rowHeight))
   {
     const auto parent = object->getUUID();
-    m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+    const auto created = newObjectUUID();
+    m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
   }
 
   ImGui::SameLine(0.0f, buttonGap);

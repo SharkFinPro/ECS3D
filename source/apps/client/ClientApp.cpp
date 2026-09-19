@@ -19,6 +19,8 @@
 #include <Log.h>
 #include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/window/Window.h>
+#include <imgui.h>
 #include <chrono>
 #include <exception>
 #include <random>
@@ -91,10 +93,19 @@ void ClientApp::run()
       catch (const std::exception& e)
       {
         Log::error(LogCategory::client, std::string("Failed to apply a message from the server: ") + e.what());
+        m_connectionNotice = "Received a malformed message; see the log for details.";
       }
     }
 
+    if (m_netClient->takeConnectionLost())
+    {
+      m_connectionNotice = "Connection to the server was lost.";
+      Log::error(LogCategory::client, m_connectionNotice);
+    }
+
     sendInput();
+
+    displayConnectionNotice();
 
     variableUpdate();
   }
@@ -147,6 +158,30 @@ void ClientApp::sendInput()
   m_netClient->send(message);
 }
 
+void ClientApp::displayConnectionNotice()
+{
+  if (m_connectionNotice.empty())
+  {
+    return;
+  }
+
+  // No automatic reconnect: this is a dead end for the session, so the notice stays up until the user
+  // closes the window rather than clearing itself.
+  const auto viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(ImVec2(viewport->GetCenter().x, viewport->GetCenter().y), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+  constexpr auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove
+    | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings;
+
+  ImGui::Begin("Connection Notice", nullptr, flags);
+  ImGui::TextUnformatted(m_connectionNotice.c_str());
+  if (ImGui::Button("Close"))
+  {
+    glfwSetWindowShouldClose(m_renderer->getWindow()->getWindow(), true);
+  }
+  ImGui::End();
+}
+
 void ClientApp::connectToServer()
 {
   using namespace std::chrono_literals;
@@ -183,7 +218,8 @@ void ClientApp::connectToServer()
   }
   while (std::chrono::steady_clock::now() < deadline);
 
-  Log::error(LogCategory::client, "Could not connect to " + m_options.host + ":" + std::to_string(m_options.port) + ".");
+  m_connectionNotice = "Could not connect to " + m_options.host + ":" + std::to_string(m_options.port) + ".";
+  Log::error(LogCategory::client, m_connectionNotice);
 }
 
 void ClientApp::createRenderer()

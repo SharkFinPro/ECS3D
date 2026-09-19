@@ -3,6 +3,7 @@
 
 #include <array>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -116,6 +117,11 @@ public:
   explicit Message(const MessageType type) noexcept : m_type(type) {}
   Message() = default;
 
+  // The inbound path from the transport: the socket thread has a received buffer and a type byte, and
+  // the payload is taken in one copy rather than a field (or a byte) at a time.
+  Message(const MessageType type, const std::span<const uint8_t> payload)
+    : m_type(type), m_payload(payload.begin(), payload.end()) {}
+
   template <WireValue T>
   Message& write(const T& value) {
     // bool goes across as an explicit 0/1 byte rather than whatever sizeof(bool) is here, so the pairing
@@ -138,6 +144,14 @@ public:
 
     write(static_cast<uint32_t>(value.size()));
     m_payload.insert(m_payload.end(), value.begin(), value.end());
+    return *this;
+  }
+
+  // Raw bytes the caller has already framed - a dumped json string, a buffer received off the wire -
+  // appended as they are. Not a substitute for write<T>: that is what keeps padding and pointers off the
+  // wire, and anything with a layout belongs there instead.
+  Message& appendBytes(const std::span<const uint8_t> bytes) {
+    m_payload.insert(m_payload.end(), bytes.begin(), bytes.end());
     return *this;
   }
 

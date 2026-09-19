@@ -4,7 +4,9 @@
 #include <Log.h>
 #include <LogEntry.h>
 #include <array>
+#include <cstddef>
 #include <limits>
+#include <span>
 
 namespace net {
 
@@ -30,6 +32,14 @@ extern "C" void ecs3dNetClientReceive(const uint8_t type, const uint8_t* data, c
   }
 }
 
+extern "C" void ecs3dNetClientDisconnect()
+{
+  if (g_activeClient)
+  {
+    g_activeClient->enqueueDisconnect();
+  }
+}
+
 NetClient::NetClient(std::shared_ptr<ManagedHost> host)
   : m_host(std::move(host))
 {}
@@ -41,14 +51,19 @@ void NetClient::connect(const std::string& host, const int port, const Role role
     return;
   }
 
+  // A fresh connection attempt: any earlier lifecycle's requested-disconnect no longer applies.
+  m_disconnectRequested = false;
+
   m_connectFn = m_host->getDelegate(kAssembly, kType, "clientConnect");
   m_disconnectFn = m_host->getDelegate(kAssembly, kType, "clientDisconnect");
   m_sendFn = m_host->getDelegate(kAssembly, kType, "clientSend");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "clientSetReceiveCallback");
+  m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "clientSetDisconnectCallback");
   m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
 
   g_activeClient = this;
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetClientReceive));
+  reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetClientDisconnect));
   reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
 
   // role + authToken are sent at the handshake; the server grants Role::editor only if its edit-mode
@@ -70,6 +85,10 @@ void NetClient::disconnect()
   {
     return;
   }
+
+  // Set before the managed call: closing the socket below wakes the receive thread, which may reach
+  // enqueueDisconnect before this function returns.
+  m_disconnectRequested = true;
 
   reinterpret_cast<ClientDisconnectFn>(m_disconnectFn)();
 
@@ -110,13 +129,33 @@ bool NetClient::poll(Message& message)
 
 void NetClient::enqueue(const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  Message message(static_cast<MessageType>(type));
-  for (const std::vector<uint8_t> chunks(data, data + len); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  // An empty payload is legal, so a zero or negative length, or a null buffer, is an empty message
+  // rather than a range to walk.
+  const auto payload = len > 0 && data != nullptr
+    ? std::span<const uint8_t>(data, static_cast<std::size_t>(len))
+    : std::span<const uint8_t>();
+
+  Message message(static_cast<MessageType>(type), payload);
 
   m_inbox.push(std::move(message));
+}
+
+void NetClient::enqueueDisconnect()
+{
+  // A disconnect this side asked for is not a lost connection - disconnect() already set m_connected
+  // false and has no notice to show.
+  if (m_disconnectRequested)
+  {
+    return;
+  }
+
+  m_connected = false;
+  m_connectionLost = true;
+}
+
+bool NetClient::takeConnectionLost()
+{
+  return m_connectionLost.exchange(false);
 }
 
 }
