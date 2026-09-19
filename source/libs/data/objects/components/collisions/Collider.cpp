@@ -20,7 +20,7 @@ const BoundingBox& Collider::getBoundingBox()
   }
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
-  const uint8_t transformUpdateID = transform->getUpdateID();
+  const uint64_t transformUpdateID = transform->getUpdateID();
 
   if (m_boundingBox.lastUpdateID == transformUpdateID && !m_boundingBoxDirty)
   {

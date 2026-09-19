@@ -9,7 +9,7 @@
 class Transform;
 
 struct BoundingBox {
-  uint8_t lastUpdateID = 0;
+  uint64_t lastUpdateID = 0;
   float minX{};
   float maxX{};
   float minY{};
