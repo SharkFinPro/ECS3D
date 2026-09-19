@@ -756,6 +756,10 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
     return;
   }
 
+  // A switch keeps a stopped sim stopped. Read the status before loadScene() resets it to stopped; paused
+  // also lands stopped, since the new scene was never started and there is nothing live to resume.
+  const bool wasRunning = m_sceneManager->getSceneStatus() == SceneStatus::running;
+
   // Stop the outgoing scene's scripts before switching the active scene.
   if (const auto current = m_sceneManager->getCurrentScene())
   {
@@ -770,22 +774,27 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
   }
 
   m_sceneManager->loadScene(scene);
-  m_sceneManager->startScene();
 
   // New scene: contact history from the previous scene is meaningless here.
   m_collisionSystem->reset();
 
-  try
+  if (wasRunning)
   {
-    m_scriptSystem->start(*scene->getObjectManager());
-  }
-  catch (const std::exception& e)
-  {
-    Log::error(LogCategory::server, e.what());
+    m_sceneManager->startScene();
+
+    try
+    {
+      m_scriptSystem->start(*scene->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      Log::error(LogCategory::server, e.what());
+    }
   }
 
   Log::info(LogCategory::server, "Switched to scene '" + scene->getName() + "' ("
-    + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
+    + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, "
+    + (wasRunning ? "running" : "stopped") + ").");
 
   broadcastSnapshot();
 }
