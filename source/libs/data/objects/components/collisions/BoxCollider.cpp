@@ -42,6 +42,7 @@ void BoxCollider::setPosition(const glm::vec3& position)
 
   m_position.set(position);
   m_meshDirty = true;
+  invalidateBoundingBox();
 }
 
 void BoxCollider::setScale(const glm::vec3& scale)
@@ -53,6 +54,7 @@ void BoxCollider::setScale(const glm::vec3& scale)
 
   m_scale.set(scale);
   m_meshDirty = true;
+  invalidateBoundingBox();
 }
 
 void BoxCollider::setRotation(const glm::vec3& rotation)
@@ -64,6 +66,7 @@ void BoxCollider::setRotation(const glm::vec3& rotation)
 
   m_rotation.set(rotation);
   m_meshDirty = true;
+  invalidateBoundingBox();
 }
 
 nlohmann::json BoxCollider::serialize()
@@ -104,6 +107,7 @@ void BoxCollider::loadFromJSON(const nlohmann::json& componentData)
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
 
   m_meshDirty = true;
+  invalidateBoundingBox();
 }
 
 glm::vec3 BoxCollider::getPosition()
@@ -187,6 +191,7 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
   m_mask = messageReader.read<uint32_t>();
 
   m_meshDirty = true;
+  invalidateBoundingBox();
 }
 
 void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)

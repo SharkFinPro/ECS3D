@@ -40,6 +40,7 @@ void SphereCollider::setRadius(const float radius)
   }
 
   m_radius.set(radius);
+  invalidateBoundingBox();
 }
 
 glm::vec3 SphereCollider::getLocalPosition() const
@@ -55,6 +56,7 @@ void SphereCollider::setPosition(const glm::vec3& position)
   }
 
   m_position.set(position);
+  invalidateBoundingBox();
 }
 
 nlohmann::json SphereCollider::serialize()
@@ -88,6 +90,8 @@ void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
   m_isTrigger = componentData.value("isTrigger", false);
   setLayer(componentData.value("layer", 0u));
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
+
+  invalidateBoundingBox();
 }
 
 glm::vec3 SphereCollider::getPosition()
@@ -131,6 +135,8 @@ void SphereCollider::unpack(net::MessageReader& messageReader)
   m_isTrigger = messageReader.read<bool>();
   setLayer(messageReader.read<uint32_t>());
   m_mask = messageReader.read<uint32_t>();
+
+  invalidateBoundingBox();
 }
 
 void SphereCollider::updateTransformPointer()
