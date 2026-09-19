@@ -16,6 +16,12 @@ jobs:
     env:
       DOTNET_NOLOGO: 1
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+      # Job-scoped so the CLI's state (NuGetFallbackFolder, toolset sentinels, restore cache) lives
+      # somewhere this job owns, instead of whatever the runner image's baked-in /tmp/.dotnet /
+      # ~/.nuget already contains from image provisioning.
+      DOTNET_CLI_HOME: ${{ runner.temp }}/dotnet-cli-home
+      NUGET_PACKAGES: ${{ runner.temp }}/nuget-packages
 
     runs-on: ${{ matrix.os }}
 
@@ -91,6 +97,28 @@ jobs:
         with:
           version: 1.4.309.0
           cache: true
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+
+      - name: Clear stale dotnet shared-memory state (macOS)
+        # The macOS runner image ships a pre-warmed dotnet install, and its /tmp/.dotnet/shm session
+        # directory was created under the image-builder's session, not this job's. .NET's named-mutex
+        # implementation hardcodes its shared-memory backing store to /tmp/ regardless of
+        # DOTNET_CLI_HOME/HOME (see SharedMemoryManager.Unix.cs), so a session id collision or
+        # leftover restrictive permissions there make Mutex construction for "NuGet-Migrations" throw
+        # `IOException: The system cannot open the device or file specified` intermittently - this is
+        # the exact crash and root cause tracked in
+        # https://github.com/dotnet/runtime/issues/91987, fixed at the runtime level by
+        # https://github.com/dotnet/runtime/pull/90343 (7.0) and
+        # https://github.com/dotnet/runtime/pull/90344 (6.0), whose own PR notes list deleting these
+        # directories as the workaround when the fix isn't present. Deleting them here forces a fresh,
+        # correctly-permissioned session directory to be created under this job's own user.
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo rm -rf /tmp/.dotnet/shm /tmp/.dotnet/lockfiles
 
       - name: Warm up dotnet first-run setup
         # The first `dotnet` invocation that actually resolves the SDK (build/publish/restore, unlike
