@@ -278,7 +278,7 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
 `io.WantCaptureKeyboard`, which only trips for text input, so WASD reaches the game from either view.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
-headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, never a
+headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a
 local rewind** - undoing sends an ordinary reverse edit back through the normal replication path and waits
 for the rebroadcast like any other change, so the server stays the single source of truth and every
 connected view converges the same way. A command records its target uuid(s) and a before/after state in
