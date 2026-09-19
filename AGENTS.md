@@ -208,7 +208,11 @@ its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`
 payload, so a tree claiming more depth than any real hierarchy needs is refused rather than exhausting the
 stack. A lost client connection is reported the same way: the transport calls
 `Transport.DeliverClientDisconnect()` once its client receive loop exits, reaching `NetClient`
-(`clientSetDisconnectCallback`) so the client and editor apps can surface it on screen.
+(`clientSetDisconnectCallback`) so the client and editor apps can surface it on screen. Before that call,
+the loop also releases the connection's own resources (socket, or WebSocket plus its `HttpMessageInvoker`
+and `CancellationTokenSource`) rather than leaving that to a later `ClientDisconnect` that may never come;
+it does so by capturing the instance it was started with, so it never disposes or clears a newer connection
+a concurrent `ClientConnect` may have already installed.
 The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
 reported to C++ separately from the messages it sends: once `Authorize` succeeds, both backends call
 `Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered

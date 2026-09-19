@@ -367,9 +367,10 @@ internal sealed class WebSocketBackend : TransportBackend
         ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, connectCts.Token).GetAwaiter().GetResult();
       }
 
+      var clientCts = new CancellationTokenSource();
       _client = ws;
       _clientInvoker = invoker;
-      _clientCts = new CancellationTokenSource();
+      _clientCts = clientCts;
 
       // Send role + token as the first message so the server can authorize this connection (in
       // particular grant Role.editor) before any protocol message. Same wire format everywhere.
@@ -392,7 +393,11 @@ internal sealed class WebSocketBackend : TransportBackend
 
     _clientRunning = true;
 
-    _clientThread = new Thread(ClientReceiveLoop) { IsBackground = true, Name = "ecs3d-net-recv" };
+    _clientThread = new Thread(() => ClientReceiveLoop(ws!, clientCts, invoker!))
+    {
+      IsBackground = true,
+      Name = "ecs3d-net-recv"
+    };
     _clientThread.Start();
 
     Transport.Log(TransportLogLevel.Info, $"Connected to {host}:{port}.");
@@ -417,12 +422,11 @@ internal sealed class WebSocketBackend : TransportBackend
   {
     _clientRunning = false;
 
-    var ws = _client;
-    var cts = _clientCts;
-    var invoker = _clientInvoker;
-    _client = null;
-    _clientCts = null;
-    _clientInvoker = null;
+    // Each field is taken atomically so a concurrent ClientReceiveLoop cleanup cannot also see the same
+    // instance and double-close or double-dispose it.
+    var ws = Interlocked.Exchange(ref _client, null);
+    var cts = Interlocked.Exchange(ref _clientCts, null);
+    var invoker = Interlocked.Exchange(ref _clientInvoker, null);
 
     if (ws != null)
     {
@@ -452,12 +456,11 @@ internal sealed class WebSocketBackend : TransportBackend
     }
   }
 
-  private void ClientReceiveLoop()
+  private void ClientReceiveLoop(WebSocket ws, CancellationTokenSource cts, HttpMessageInvoker invoker)
   {
     try
     {
-      var ws = _client!;
-      var token = _clientCts!.Token;
+      var token = cts.Token;
       while (_clientRunning)
       {
         var message = ReceiveMessage(ws, token);
@@ -475,6 +478,16 @@ internal sealed class WebSocketBackend : TransportBackend
     }
 
     _clientRunning = false;
+
+    // Always release the connection this loop was started with - Close/Dispose are idempotent, so this is
+    // harmless if DisconnectClient already ran. Only clear a field if it still holds this instance: a
+    // concurrent ClientConnect may already have installed a new connection there, and this loop must not
+    // touch it.
+    Close(ws, cts);
+    invoker.Dispose();
+    Interlocked.CompareExchange(ref _client, null, ws);
+    Interlocked.CompareExchange(ref _clientCts, null, cts);
+    Interlocked.CompareExchange(ref _clientInvoker, null, invoker);
 
     // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
     // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two

@@ -372,7 +372,7 @@ internal sealed class TcpBackend : TransportBackend
 
     _clientRunning = true;
 
-    _clientThread = new Thread(ClientReceiveLoop) { IsBackground = true, Name = "ecs3d-net-recv" };
+    _clientThread = new Thread(() => ClientReceiveLoop(_client!)) { IsBackground = true, Name = "ecs3d-net-recv" };
     _clientThread.Start();
 
     Transport.Log(TransportLogLevel.Info, $"Connected to {host}:{port}.");
@@ -388,8 +388,10 @@ internal sealed class TcpBackend : TransportBackend
   {
     _clientRunning = false;
 
-    try { _client?.Close(); } catch { /* already closed */ }
-    _client = null;
+    // Take whatever is currently there so a concurrent ClientReceiveLoop cleanup cannot also see it and
+    // double-close it.
+    var client = Interlocked.Exchange(ref _client, null);
+    try { client?.Close(); } catch { /* already closed */ }
   }
 
   public override void ClientSend(byte type, nint data, int len)
@@ -411,11 +413,11 @@ internal sealed class TcpBackend : TransportBackend
     }
   }
 
-  private void ClientReceiveLoop()
+  private void ClientReceiveLoop(TcpClient client)
   {
     try
     {
-      var stream = _client!.GetStream();
+      var stream = client.GetStream();
       while (_clientRunning)
       {
         if (!ReadFrame(stream, out var type, out var payload))
@@ -432,6 +434,13 @@ internal sealed class TcpBackend : TransportBackend
     }
 
     _clientRunning = false;
+
+    // Always release the socket this loop was started with - Close is idempotent, so this is harmless if
+    // DisconnectClient already closed it. Only clear the field if it still holds this instance: a
+    // concurrent ClientConnect may already have installed a new connection there, and this loop must not
+    // touch it.
+    try { client.Close(); } catch { /* already closed */ }
+    Interlocked.CompareExchange(ref _client, null, client);
 
     // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
     // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two
