@@ -461,16 +461,57 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     script->unpack(messageReader);
   }
 
-  // Children. Each is packed as a full object (its uuid leads, read by the recursive unpack below);
-  // reconstructed fresh and wired to this parent + the manager before unpacking its own subtree.
+  // Children. Each is packed as a full object (its uuid leads, read by the recursive unpack below).
+  // Reconciled the same way as the components and scripts above: an existing child with the matching
+  // uuid is unpacked into rather than duplicated, so refreshing an object that already has children does
+  // not double its subtree. Packed order is kept, and any existing child not named in the packed data is
+  // dropped afterward.
   const uint32_t childCount = messageReader.read<uint32_t>();
+  const auto oldChildren = m_children;
+  std::vector<std::shared_ptr<Object>> newChildren;
+  newChildren.reserve(childCount);
+
   for (uint32_t i = 0; i < childCount; ++i)
   {
-    auto child = std::make_shared<Object>();
-    child->setParent(shared_from_this());
-    m_manager->addObject(child);
+    // Peek the child's uuid - its first field, per pack() - on a copy of the reader, so matching it
+    // against an existing child does not disturb the real reader. Whichever object ends up unpacking
+    // below, existing or freshly built, reads the child's fields itself, uuid included.
+    net::MessageReader uuidPeek = messageReader;
+    const auto childUUID = uuids::uuid::from_string(uuidPeek.readString()).value();
+
+    std::shared_ptr<Object> child;
+    for (const auto& existing : oldChildren)
+    {
+      if (existing->getUUID() == childUUID)
+      {
+        child = existing;
+        break;
+      }
+    }
+
+    if (!child)
+    {
+      child = std::make_shared<Object>();
+      child->setParent(shared_from_this());
+      m_manager->addObject(child);
+    }
 
     child->unpack(messageReader, depth + 1);
+    newChildren.push_back(child);
+  }
+
+  m_children = newChildren;
+
+  // Drop whatever existing child was not named in the packed data. discardSubtree both detaches it here
+  // (it is this child's parent, so removeChild is a no-op against the already-updated m_children above)
+  // and unregisters it, and its own descendants, from the manager - the same tracking a caller keeping a
+  // half-built subtree already relies on it for.
+  for (const auto& existing : oldChildren)
+  {
+    if (std::ranges::find(newChildren, existing) == newChildren.end())
+    {
+      m_manager->discardSubtree(existing);
+    }
   }
 }
 
