@@ -10,6 +10,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <cmath>
@@ -319,16 +320,106 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
   // Two unit boxes, so resting on top means their centres are exactly two apart - and because the height
   // is read after the collision pass rather than between it and the integrate, the sink of one gravity
   // step is already corrected by the time it is sampled. There is nothing loose about it to allow for.
-  // Two unit boxes, so resting on top means their centres are about two apart. The band is wide on
-  // purpose, and not for float error: the box does not land flat. EPA reports the contact at a corner of
-  // the touching face rather than at its centre, so the response has a lever arm and the box picks up a
-  // real spin - measured at roughly 0.8 on two axes - which lifts and lowers the centre as it rocks.
-  //
-  // That is a defect, filed separately, not something to pin here. This test deliberately asserts
-  // neither the spin nor an exact height, so it keeps meaning the same thing before and after the fix:
-  // the body ends up on top of the box rather than through it or thrown off it.
   EXPECT_GT(lowest, 1.5f);
   EXPECT_LT(highest, 3.0f);
+}
+
+TEST(PhysicsIntegration, ABoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
+{
+  const auto scene = makeScene();
+
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 });
+  ground->addComponent(std::make_shared<BoxCollider>());
+
+  const auto falling = addObject(scene, "Falling", { 0, 5, 0 });
+  falling->addComponent(std::make_shared<BoxCollider>());
+  const auto body = addBody(falling, true);
+
+  CollisionSystem collisionSystem;
+
+  // Two axis-aligned unit boxes dropped straight down onto each other touch across their whole
+  // footprint at once. findCollisionPoint used to report that contact at a corner of the touching
+  // face rather than its centre, giving the impulse a lever arm it should not have had and leaving the
+  // body rocking at roughly 0.8 angular velocity on two axes once it "settled". With the contact placed
+  // at the manifold's centroid there is no lever arm at all, so the body should come to rest with
+  // negligible spin.
+  float maxAngularSpeed = 0.0f;
+
+  for (int tick = 0; tick < 60; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    if (tick >= 50)
+    {
+      maxAngularSpeed = std::max(maxAngularSpeed, glm::length(body->getAngularVelocity()));
+    }
+  }
+
+  EXPECT_LT(maxAngularSpeed, 0.05f);
+}
+
+TEST(PhysicsIntegration, ABoxLandingOnACornerStillPicksUpSpin)
+{
+  const auto scene = makeScene();
+
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 });
+  ground->addComponent(std::make_shared<BoxCollider>());
+
+  // Tilted about one axis before it falls, so it comes down onto a single edge/corner of the ground box
+  // rather than landing flat - a genuine off-centre contact. This is the positive control alongside the
+  // test above: the fix that centres a flat-face contact must not also flatten this one to zero, since a
+  // real off-centre impulse should still produce torque.
+  const auto falling = addObject(scene, "Falling", { 0, 5, 0 });
+  falling->addComponent(std::make_shared<BoxCollider>());
+  const auto body = addBody(falling, true);
+  transformOf(falling)->setRotation({ 0, 0, 25 });
+
+  CollisionSystem collisionSystem;
+
+  float maxAngularSpeed = 0.0f;
+
+  for (int tick = 0; tick < 20; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    maxAngularSpeed = std::max(maxAngularSpeed, glm::length(body->getAngularVelocity()));
+  }
+
+  EXPECT_GT(maxAngularSpeed, 0.1f);
+}
+
+TEST(PhysicsIntegration, ASmallerBoxRestingNearTheEdgeOfALargerOneDoesNotSpin)
+{
+  const auto scene = makeScene();
+
+  // A larger, flat static box; the falling box's whole footprint stays within it, offset toward one
+  // edge rather than centred, so the contact face is the falling box's own bottom face rather than a
+  // clipped sliver of it.
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 3, 1, 3 });
+  ground->addComponent(std::make_shared<BoxCollider>());
+
+  const auto falling = addObject(scene, "Falling", { 1.5f, 5, 0 });
+  falling->addComponent(std::make_shared<BoxCollider>());
+  const auto body = addBody(falling, true);
+
+  CollisionSystem collisionSystem;
+
+  float maxAngularSpeed = 0.0f;
+
+  for (int tick = 0; tick < 60; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    if (tick >= 50)
+    {
+      maxAngularSpeed = std::max(maxAngularSpeed, glm::length(body->getAngularVelocity()));
+    }
+  }
+
+  EXPECT_LT(maxAngularSpeed, 0.05f);
 }
 
 TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)

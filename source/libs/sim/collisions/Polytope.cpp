@@ -40,6 +40,53 @@ glm::vec3 computeBarycentric(const glm::vec3& a, const glm::vec3& b, const glm::
   return { u, v, w };
 }
 
+// findFurthestPoint along a direction that lands exactly on a flat face (a box resting flush on
+// another face) has several tied vertices; the vertex loop inside it just keeps the first one it
+// visits, which is an arbitrary corner rather than the middle of the touching face. Nudging the
+// query direction into the four quadrants around it and collecting the distinct answers recovers the
+// whole tied set: one point for a genuine vertex/edge contact, several for a flat face, whose average
+// is then a fair stand-in for the contact manifold's centroid.
+glm::vec3 collisionManifoldCentroid(Collider& collider, const glm::vec3& direction, const glm::vec3& firstPoint)
+{
+  constexpr float tangentWeight = 0.01f;
+  constexpr float sameEpsilon = 1e-4f;
+
+  const auto reference = std::fabs(direction.x) < 0.9f ? glm::vec3{ 1, 0, 0 } : glm::vec3{ 0, 1, 0 };
+  const auto tangentA = glm::normalize(glm::cross(direction, reference));
+  const auto tangentB = glm::cross(direction, tangentA);
+
+  std::vector<glm::vec3> points{ firstPoint };
+
+  for (const float signA : { -1.0f, 1.0f })
+  {
+    for (const float signB : { -1.0f, 1.0f })
+    {
+      const auto perturbedDirection = glm::normalize(direction + tangentWeight * (signA * tangentA + signB * tangentB));
+      const auto point = collider.findFurthestPoint(perturbedDirection);
+
+      if (std::ranges::none_of(points, [&](const glm::vec3& existing) {
+            return glm::length(existing - point) < sameEpsilon;
+          }))
+      {
+        points.push_back(point);
+      }
+    }
+  }
+
+  if (points.size() == 1)
+  {
+    return firstPoint;
+  }
+
+  glm::vec3 centroid{ 0 };
+  for (const auto& point : points)
+  {
+    centroid += point;
+  }
+
+  return centroid / static_cast<float>(points.size());
+}
+
 Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
   : m_collider(&collider), m_otherCollider(&otherCollider)
 {
@@ -99,7 +146,7 @@ glm::vec3 Polytope::findCollisionPoint() const
 
   if (a == b && b == c)
   {
-    return a;
+    return collisionManifoldCentroid(*m_otherCollider, -direction0, a);
   }
 
   a = m_collider->findFurthestPoint(direction0);
@@ -108,7 +155,7 @@ glm::vec3 Polytope::findCollisionPoint() const
 
   if (a == b && b == c)
   {
-    return a;
+    return collisionManifoldCentroid(*m_collider, direction0, a);
   }
 
   auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
