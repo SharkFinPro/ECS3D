@@ -145,8 +145,8 @@ helper to the children of a deleted object as they move up a level (and promotes
 object's own slot, preserving their relative order, rather than appending them after whatever already
 followed it there).
 `reorderObject` is `reparentObject`'s drop-BETWEEN-siblings counterpart: it carries a sibling index
-alongside the (optional) parent, so an object can land at a specific position instead of always being
-appended, and covers both a same-parent reorder and a move-to-a-different-parent-at-an-index in the one op.
+alongside the (optional) parent, so an object can land at a specific position rather than at the end of
+the list, and covers both a same-parent reorder and a move-to-a-different-parent-at-an-index in the one op.
 The index is read against the target list **after** the object is removed from wherever it sits now; an
 index past that list's end is `rejected` rather than clamped, and so is one that would cycle or leave the
 object exactly where it already was. `Object::addChild`/`ObjectManager::addObjectToRoot` each have an
