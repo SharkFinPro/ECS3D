@@ -71,11 +71,6 @@ internal sealed class WebSocketBackend : TransportBackend
   // thread to actually exit. A finished thread removes itself here from its own cleanup path.
   private readonly List<Thread> _connectionThreads = new();
 
-  // How long ServerStop/DisconnectClient wait for a socket thread to exit after its socket is closed.
-  // Bounded so a stuck thread cannot hang process shutdown; logged as a warning when it fires, since it
-  // should not happen in the normal case.
-  private const int ShutdownJoinTimeoutMs = 3000;
-
   // -- Client --
   // One object per connection so a swap (Interlocked.Exchange/CompareExchange) moves the whole triple
   // atomically - no torn reads of a socket from one connection paired with another's token or invoker.
@@ -129,14 +124,19 @@ internal sealed class WebSocketBackend : TransportBackend
 
   public override void ServerStop()
   {
-    _serverRunning = false;
-
     try { _listener?.Stop(); } catch { /* already closed */ }
     _listener = null;
 
     Thread[] connectionThreads;
     lock (_clientsLock)
     {
+      // Flipped under the same lock AcceptLoop checks it (and registers a new connection's thread) under,
+      // and before the _connectionThreads snapshot below: either AcceptLoop's check runs first and its
+      // thread is already in the list this snapshot walks, or this flip runs first and AcceptLoop's check
+      // sees _serverRunning false and closes that socket without ever starting a thread. There is no
+      // ordering where a thread starts without being one this call joins.
+      _serverRunning = false;
+
       foreach (var conn in _connections)
       {
         Close(conn.Socket, conn.Cts);
@@ -158,24 +158,6 @@ internal sealed class WebSocketBackend : TransportBackend
     }
 
     _acceptThread = null;
-  }
-
-  // Waits up to ShutdownJoinTimeoutMs for thread to exit, logging a warning instead of blocking forever
-  // if it doesn't. A no-op for null, an already-finished thread, or the calling thread itself - joining
-  // the current thread would deadlock, and ServerStop/DisconnectClient could in principle be reached from
-  // a callback running on one of these threads.
-  private static void JoinThread(Thread? thread, string label)
-  {
-    if (thread == null || thread == Thread.CurrentThread || !thread.IsAlive)
-    {
-      return;
-    }
-
-    if (!thread.Join(ShutdownJoinTimeoutMs))
-    {
-      Transport.Log(TransportLogLevel.Warn,
-        $"Timed out after {ShutdownJoinTimeoutMs} ms waiting for the {label} thread to exit during shutdown.");
-    }
   }
 
   public override int ServerConnectionCount()
@@ -276,9 +258,27 @@ internal sealed class WebSocketBackend : TransportBackend
         Name = "ecs3d-net-client"
       };
 
+      // ServerStop can run concurrently with this: it may have already taken _clientsLock, closed every
+      // connection, snapshotted _connectionThreads and returned by the time a socket that was queued by
+      // the OS just before _listener.Stop() reaches here. Checking _serverRunning and registering this
+      // thread in the one critical section ServerStop also flips the flag and takes its snapshot under
+      // closes that window: either this call finds the flag already false and closes the socket without
+      // ever starting a thread, or it registers the thread before ServerStop can take its snapshot -
+      // there is no ordering where a thread starts without being one ServerStop goes on to join.
+      bool accepted;
       lock (_clientsLock)
       {
-        _connectionThreads.Add(thread);
+        accepted = _serverRunning;
+        if (accepted)
+        {
+          _connectionThreads.Add(thread);
+        }
+      }
+
+      if (!accepted)
+      {
+        try { tcp.Close(); } catch { /* ignore */ }
+        continue;
       }
 
       thread.Start();
