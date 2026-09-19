@@ -28,6 +28,13 @@ public:
 
   void move(const glm::vec3& direction);
 
+  // The live values these reseed (start from initial, stop back to initial) bypass the setters, so the
+  // update id needs its own bump here - otherwise a collider's cached mesh/bounding box from the end of
+  // the previous run survives into the next.
+  void start() override;
+
+  void stop() override;
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;

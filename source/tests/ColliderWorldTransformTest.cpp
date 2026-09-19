@@ -2,11 +2,13 @@
 
 #include "TestPrinters.h"
 #include "TestScene.h"
+#include "WireTypes.h"
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
+#include <Protocol.h>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <utility>
@@ -88,6 +90,52 @@ TEST(ColliderWorldTransform, TheReportedScaleIsTheOneTheCollisionMeshUses)
   expectNear(box->findFurthestPoint({ 1.0f, 0.1f, 0.1f }), worldScale);
   expectNear(box->findFurthestPoint({ -1.0f, 0.1f, 0.1f }),
              glm::vec3(-worldScale.x, worldScale.y, worldScale.z));
+}
+
+TEST(ColliderWorldTransform, StartingASceneClearsTheColliderMeshFromThePreviousRun)
+{
+  const auto [object, box] = makeBox(glm::vec3(1));
+  const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
+  object->start();
+  transform->setPosition(glm::vec3(5, 0, 0));
+
+  // Populate the cache at the moved position, the way a tick mid-run would.
+  expectNear(box->findFurthestPoint({ 1, 0, 0 }), glm::vec3(6, 0, 0));
+
+  object->stop();
+  object->start();
+
+  // Positive control: stop() really did revert the live position to the authored one.
+  EXPECT_EQ(transform->getPosition(), glm::vec3(0, 0, 0));
+
+  // The second run's first query must not reuse the mesh generated at the end of the first run - it has
+  // to notice the transform's live value was reseeded even though nothing called a setter.
+  expectNear(box->findFurthestPoint({ 1, 0, 0 }), glm::vec3(1, 0, 0));
+}
+
+TEST(ColliderWorldTransform, UnpackingNewGeometryDirtiesAnAlreadyCachedMesh)
+{
+  const auto [object, box] = makeBox(glm::vec3(1));
+
+  // Populate the cache at the collider's authored (offset-free) position.
+  expectNear(box->findFurthestPoint({ 1, 0, 0 }), glm::vec3(1, 0, 0));
+
+  auto moved = std::make_shared<BoxCollider>();
+  moved->setPosition(glm::vec3(5, 0, 0));
+
+  net::Message message(net::MessageType::undefined);
+  moved->pack(message);
+
+  net::MessageReader reader(message);
+  // pack writes the type discriminator first; unpack expects the reader positioned after it.
+  static_cast<void>(reader.read<ComponentType>());
+
+  // Unpacking onto a collider whose mesh is already cached and clean - the transform's update id does
+  // not change here, so only the dirty flag protects the cache.
+  box->unpack(reader);
+
+  expectNear(box->findFurthestPoint({ 1, 0, 0 }), glm::vec3(6, 0, 0));
 }
 
 TEST(ColliderWorldTransform, AUniformlyScaledSphereRadiusIsScaleTimesLocalRadius)

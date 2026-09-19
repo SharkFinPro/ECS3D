@@ -185,6 +185,8 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
   m_isTrigger = messageReader.read<bool>();
   setLayer(messageReader.read<uint32_t>());
   m_mask = messageReader.read<uint32_t>();
+
+  m_meshDirty = true;
 }
 
 void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)

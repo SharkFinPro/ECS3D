@@ -116,6 +116,23 @@ void Transform::setRotation(const glm::vec3 rotation)
   ++m_updateID;
 }
 
+void Transform::start()
+{
+  Component::start();
+
+  // Reseeds the live values from initial without going through a setter - bump here so a cached mesh or
+  // bounding box keyed on the update id rebuilds against the reseeded transform on the first tick.
+  ++m_updateID;
+}
+
+void Transform::stop()
+{
+  Component::stop();
+
+  // Same reseed, the other direction: live reverts to initial on stop.
+  ++m_updateID;
+}
+
 void Transform::move(const glm::vec3& direction)
 {
   // Scripts reach this through the Move binding, so it needs the same guard the setters have - and the
@@ -157,6 +174,10 @@ void Transform::loadFromJSON(const nlohmann::json& componentData)
   m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
   m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
   m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
+
+  // Bypasses the setters, so bump directly - a collider cache keyed on the update id has to know this
+  // geometry changed.
+  ++m_updateID;
 }
 
 void Transform::pack(net::Message& message) const
@@ -173,4 +194,7 @@ void Transform::unpack(net::MessageReader& messageReader)
   m_position.set(messageReader.read<glm::vec3>());
   m_scale.set(messageReader.read<glm::vec3>());
   m_rotation.set(messageReader.read<glm::vec3>());
+
+  // Bypasses the setters, so bump directly - see loadFromJSON.
+  ++m_updateID;
 }
