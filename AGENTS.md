@@ -205,7 +205,9 @@ boots CoreCLR and resolves
 managed statics as native function pointers; inbound frames are pushed from C# socket threads into a
 thread-safe `MessageQueue` and drained by the app loop. The transport backend (TCP/WebSocket) is
 selected by a single field in `Transport.cs`. The transport logs through a native `setLogCallback`
-(`net::transportLog`, category `net`), falling back to the console before it is registered.
+(`net::transportLog`, category `net`), falling back to the console before it is registered. A client
+connect attempt is bounded to `ConnectTimeoutMs` in each backend so the apps' retry loops keep their
+deadline instead of hanging on the OS connect timeout.
 
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is
