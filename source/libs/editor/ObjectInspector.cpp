@@ -398,7 +398,12 @@ void ObjectInspector::displayComponent(const uuids::uuid& objectUUID, const std:
   const auto key = componentTypeToString.at(
     component->getSubType() != ComponentType::SubComponentType_none ? component->getSubType() : component->getType());
 
-  ImGui::PushID(component.get());
+  // Scope every widget for this component (including the section header's open/closed state, kept in
+  // ImGuiStorage) under a stable identity rather than the component's address: a structural edit
+  // (add/remove component) round-trips through the server and rebuilds the object's components, so a
+  // surviving component can come back behind a new address (or reuse a freed one), which would otherwise
+  // reset or cross-contaminate collapsed sections. componentIdentity is stable across that rebuild.
+  ImGui::PushID(componentIdentity(objectUUID, component).c_str());
 
   // displayGui edits the component in place, so by the time it reports a change the previous value is
   // already gone: serializing the selected object's few components once a frame is the price of still

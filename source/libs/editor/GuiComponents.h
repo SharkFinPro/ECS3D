@@ -497,8 +497,11 @@ namespace gc {
 
   // A component section header matching the mockup: rounded `head` bar, a chevron that points down when
   // open / right when collapsed, an accent icon, the title, and an optional right-aligned "-" remove
-  // button. Open state is persisted in ImGui's per-window storage keyed by `label`, so callers keep the
-  // same bool-returning shape as ImGui::CollapsingHeader. Sets `*removeClicked` when the "-" is pressed.
+  // button. Open state is persisted in ImGui's per-window storage keyed by `GetID(label)`, which folds in
+  // whatever id scope the caller has pushed - callers must push a stable scope (not an address that can
+  // be freed and reused) if the state should survive the underlying object being rebuilt. Callers keep
+  // the same bool-returning shape as ImGui::CollapsingHeader. Sets `*removeClicked` when the "-" is
+  // pressed.
   inline bool sectionHeader(const char* label, const bool removable, bool* removeClicked,
                             const SecIcon icon = SecIcon::none)
   {
