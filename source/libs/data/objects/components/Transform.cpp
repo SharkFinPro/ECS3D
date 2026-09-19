@@ -24,7 +24,7 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
   loadVariable(m_rotation);
 }
 
-uint8_t Transform::getUpdateID() const
+uint64_t Transform::getUpdateID() const
 {
   return m_updateID;
 }
