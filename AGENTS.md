@@ -202,7 +202,8 @@ opaque `(type byte, payload)` pairs. Both transports refuse an inbound message o
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
 WebSocket on what has actually arrived, since a fragmented message declares none. Neither backend sizes
 its read buffer to that declared length up front: TCP grows a buffer to roughly what has actually arrived
-(`TcpBackend.ReadBody` - starts small, doubles as needed, capped at the declared length) and WebSocket
+(`TcpBackend.ReadBody` starts at 64 KiB and doubles each time the buffer fills, up to the declared
+length) and WebSocket
 grows its assembly buffer as fragments arrive, so a peer that declares a large frame and then trickles it
 in a byte at a time pins only a small multiple of what has actually landed, not the whole declared size.
 TCP backs that with a per-read progress timeout (`BodyReadTimeoutMs`, reset on every read rather than
