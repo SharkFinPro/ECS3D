@@ -2,7 +2,10 @@
 #define NARROWPHASE_H
 
 #include <glm/vec3.hpp>
+#include <array>
+#include <cstdint>
 #include <optional>
+#include <span>
 
 class Collider;
 
@@ -19,6 +22,14 @@ namespace collisions {
 
     // A point on the overlap, in world space.
     glm::vec3 point;
+
+    // Up to four points spanning the overlap on a box pair, so a resting body can be supported across its
+    // footprint. pointCount is zero when only point applies.
+    std::array<glm::vec3, 4> points{};
+    std::uint8_t pointCount = 0;
+
+    // The manifold, or just point when there is none. Refers into this Contact.
+    [[nodiscard]] std::span<const glm::vec3> contactPoints() const;
 
     [[nodiscard]] float depth() const;
 
