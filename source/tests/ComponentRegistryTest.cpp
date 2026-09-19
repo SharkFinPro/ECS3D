@@ -176,6 +176,20 @@ TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableExactly)
     << joinNames(onWireButNeverRegistered);
 }
 
+TEST(ComponentRegistry, CreatedTransformHasUnitScale)
+{
+  ComponentRegistry registry;
+  registerDataComponents(registry);
+
+  const auto component = registry.create("Transform");
+  ASSERT_NE(component, nullptr);
+
+  const auto transform = std::static_pointer_cast<Transform>(component);
+  EXPECT_NEAR(transform->getLocalScale().x, 1.0f, 1e-5f);
+  EXPECT_NEAR(transform->getLocalScale().y, 1.0f, 1e-5f);
+  EXPECT_NEAR(transform->getLocalScale().z, 1.0f, 1e-5f);
+}
+
 TEST(ComponentRegistry, RegisteredNamesMatchTheWireTypeTableComparisonCatchesAnExtraName)
 {
   // Positive control: proves the comparison above actually fails when the two sides diverge, not that it
