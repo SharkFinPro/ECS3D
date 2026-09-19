@@ -1,4 +1,5 @@
 #include "EditCommand.h"
+#include "AssetWireType.h"
 #include "Replication.h"
 #include "ComponentRegistry.h"
 #include "objects/Object.h"
@@ -92,22 +93,8 @@ namespace {
     return expected.has_value() && parent->getUUID() == expected.value();
   }
 
-  // The asset json shape applyAddAsset/EditorApp's addAsset callback both use. Not in Replication.h
-  // because there is no buildAddAsset there - the editor assembles this blob itself (see EditorApp.cpp's
-  // addAsset/updatePrefabBody lambdas) and this mirrors that shape exactly.
-  std::string assetTypeToWireString(const AssetType type)
-  {
-    switch (type)
-    {
-      case AssetType::Model: return "model";
-      case AssetType::Texture: return "texture";
-      case AssetType::Script: return "script";
-      case AssetType::Prefab: return "prefab";
-      case AssetType::Scene: return "scene";
-      default: return "";
-    }
-  }
-
+  // The asset json shape applyAddAsset/EditorApp's addAsset callback both use (see AssetWireType.h for
+  // why the type strings live in edits/ rather than Replication.h).
   nlohmann::json buildAddAssetJSON(const uuids::uuid& uuid, const AssetType type, const std::string& path,
                                    const std::string& className, const std::string& body)
   {
@@ -283,6 +270,26 @@ EditCommand EditCommand::addAsset(const uuids::uuid& assetUUID, const AssetType 
   return command;
 }
 
+EditCommand EditCommand::replaceAsset(const uuids::uuid& assetUUID, const AssetType type,
+                                      std::string beforePath, std::string beforeClassName,
+                                      std::string beforeBody, std::string afterPath,
+                                      std::string afterClassName, std::string afterBody)
+{
+  EditCommand command;
+  command.m_kind = CommandKind::replaceAsset;
+  command.m_data = ReplaceAssetData{
+    .assetUUID = assetUUID,
+    .type = type,
+    .beforePath = std::move(beforePath),
+    .beforeClassName = std::move(beforeClassName),
+    .beforeBody = std::move(beforeBody),
+    .afterPath = std::move(afterPath),
+    .afterClassName = std::move(afterClassName),
+    .afterBody = std::move(afterBody)
+  };
+  return command;
+}
+
 EditCommand EditCommand::renameAsset(const uuids::uuid& assetUUID, std::string beforeDisplayName,
                                      std::string afterDisplayName)
 {
@@ -322,6 +329,7 @@ PayloadForm EditCommand::payloadForm() const
   {
     case CommandKind::componentEdit:
     case CommandKind::addAsset:
+    case CommandKind::replaceAsset:
     case CommandKind::renameAsset:
     case CommandKind::removeAsset:
       return PayloadForm::networkMessage;
@@ -358,6 +366,7 @@ uuids::uuid EditCommand::primaryUUID() const
     case CommandKind::duplicateObject: return std::get<DuplicateObjectData>(m_data).duplicateUUID;
     case CommandKind::instantiatePrefab: return std::get<InstantiatePrefabData>(m_data).instanceUUID;
     case CommandKind::addAsset: return std::get<AddAssetData>(m_data).assetUUID;
+    case CommandKind::replaceAsset: return std::get<ReplaceAssetData>(m_data).assetUUID;
     case CommandKind::renameAsset: return std::get<RenameAssetData>(m_data).assetUUID;
     case CommandKind::removeAsset: return std::get<RemoveAssetData>(m_data).assetUUID;
   }
@@ -467,6 +476,24 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
       if (!assetRegistry || !assetRegistry->getByUUID(data.assetUUID))
       {
         return { ValidationFailure::targetMissing, data.assetUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+
+      const auto* record = assetRegistry ? assetRegistry->getByUUID(data.assetUUID) : nullptr;
+      if (!record)
+      {
+        return { ValidationFailure::targetMissing, data.assetUUID };
+      }
+
+      if (record->path != data.afterPath || record->className != data.afterClassName
+          || record->body != data.afterBody)
+      {
+        return { ValidationFailure::targetChanged, data.assetUUID };
       }
 
       return {};
@@ -614,6 +641,24 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+
+      const auto* record = assetRegistry ? assetRegistry->getByUUID(data.assetUUID) : nullptr;
+      if (!record)
+      {
+        return { ValidationFailure::targetMissing, data.assetUUID };
+      }
+
+      if (record->path != data.beforePath || record->className != data.beforeClassName
+          || record->body != data.beforeBody)
+      {
+        return { ValidationFailure::targetChanged, data.assetUUID };
+      }
+
+      return {};
+    }
     case CommandKind::renameAsset:
     {
       const auto& data = std::get<RenameAssetData>(m_data);
@@ -739,6 +784,13 @@ net::Message EditCommand::buildUndoMessage(const ObjectManager& objectManager) c
       const auto& data = std::get<AddAssetData>(m_data);
       return replication::packRemoveAsset(replication::buildRemoveAsset(data.assetUUID));
     }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+      return replication::packAddAsset(
+        buildAddAssetJSON(data.assetUUID, data.type, data.beforePath, data.beforeClassName,
+                          data.beforeBody));
+    }
     case CommandKind::renameAsset:
     {
       const auto& data = std::get<RenameAssetData>(m_data);
@@ -772,6 +824,13 @@ net::Message EditCommand::buildRedoMessage(const ObjectManager& objectManager) c
       const auto& data = std::get<AddAssetData>(m_data);
       return replication::packAddAsset(
         buildAddAssetJSON(data.assetUUID, data.type, data.path, data.className, data.body));
+    }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+      return replication::packAddAsset(
+        buildAddAssetJSON(data.assetUUID, data.type, data.afterPath, data.afterClassName,
+                          data.afterBody));
     }
     case CommandKind::renameAsset:
     {

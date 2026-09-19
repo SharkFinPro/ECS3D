@@ -33,15 +33,16 @@ enum class CommandKind {
   duplicateObject,
   instantiatePrefab,
   addAsset,
+  replaceAsset,
   renameAsset,
   removeAsset
 };
 
 // Whether a command's undo/redo payload is a structural sceneEdit op (nlohmann::json, built by
 // Replication.h's build* functions and sent as a sceneEdit message by the caller) or an already
-// wire-ready net::Message (editComponent/addAsset/renameAsset/removeAsset, built by Replication.h's
-// pack* functions). Fixed per kind, so a caller branches on this rather than guessing which accessor to
-// call.
+// wire-ready net::Message (editComponent/addAsset/replaceAsset/renameAsset/removeAsset, built by
+// Replication.h's pack* functions). Fixed per kind, so a caller branches on this rather than guessing
+// which accessor to call.
 enum class PayloadForm {
   sceneEdit,
   networkMessage
@@ -127,6 +128,14 @@ public:
 
   [[nodiscard]] static EditCommand addAsset(const uuids::uuid& assetUUID, AssetType type,
                                             std::string path, std::string className, std::string body);
+
+  // Re-registering an existing uuid with a new record: a prefab body edit, or "Save as Prefab" over a
+  // name that already exists. Distinct from addAsset because addAsset's reverse is a removeAsset, which
+  // would delete the asset rather than put its previous body back.
+  [[nodiscard]] static EditCommand replaceAsset(const uuids::uuid& assetUUID, AssetType type,
+                                                std::string beforePath, std::string beforeClassName,
+                                                std::string beforeBody, std::string afterPath,
+                                                std::string afterClassName, std::string afterBody);
 
   [[nodiscard]] static EditCommand renameAsset(const uuids::uuid& assetUUID,
                                                std::string beforeDisplayName,
@@ -269,6 +278,19 @@ private:
     friend bool operator==(const AddAssetData&, const AddAssetData&) = default;
   };
 
+  struct ReplaceAssetData {
+    uuids::uuid assetUUID;
+    AssetType type = AssetType::Unknown;
+    std::string beforePath;
+    std::string beforeClassName;
+    std::string beforeBody;
+    std::string afterPath;
+    std::string afterClassName;
+    std::string afterBody;
+
+    friend bool operator==(const ReplaceAssetData&, const ReplaceAssetData&) = default;
+  };
+
   struct RenameAssetData {
     uuids::uuid assetUUID;
     std::string beforeDisplayName;
@@ -290,7 +312,7 @@ private:
   using CommandData = std::variant<ComponentEditData, AddObjectData, RemoveObjectData, ReparentObjectData,
                                    RenameObjectData, AddComponentData, RemoveComponentData,
                                    DuplicateObjectData, InstantiatePrefabData, AddAssetData,
-                                   RenameAssetData, RemoveAssetData>;
+                                   ReplaceAssetData, RenameAssetData, RemoveAssetData>;
 
   CommandKind m_kind = CommandKind::componentEdit;
   CommandData m_data;

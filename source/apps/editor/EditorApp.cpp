@@ -6,6 +6,7 @@
 #include <ProjectPacker.h>
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
+#include <edits/RecordEdits.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
@@ -122,6 +123,13 @@ namespace {
 
     return count;
   }
+
+  // Nothing faithful could be derived for an edit (see RecordEdits.h): the edit still goes out, only the
+  // history entry is skipped.
+  void logUnrecordedEdit(const std::string& what)
+  {
+    Log::debug(LogCategory::editor, "Not recording " + what + " in the edit history.");
+  }
 }
 
 EditorApp::EditorApp(LaunchOptions options)
@@ -160,29 +168,64 @@ EditorApp::EditorApp(LaunchOptions options)
   // Register a new asset: apply locally for instant feedback, then on the server (which re-snapshots).
   // Shared by the asset browser's import/create and the object tree's "Save as Prefab".
   const auto addAsset = [this](const nlohmann::json& asset) {
+    // Derived before the local apply: the command's before state is the record this registry is about
+    // to lose. Same for the two ops below.
+    auto command = edits::commandForAddAsset(asset, *m_assetRegistry);
+
     replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
 
     m_netClient->send(replication::packAddAsset(asset));
     m_saveUI->markEdited();
+
+    if (command)
+    {
+      m_editHistory.record(std::move(*command));
+    }
+    else
+    {
+      logUnrecordedEdit("an addAsset");
+    }
   };
 
   // Rename an asset (display-name override only). Same local-apply-then-send shape as addAsset.
   const auto renameAsset = [this](const uuids::uuid& assetUUID, const std::string& displayName) {
     const auto op = replication::buildRenameAsset(assetUUID, displayName);
+    auto command = edits::commandForRenameAsset(op, *m_assetRegistry);
+
     replication::applyRenameAsset(*m_assetRegistry, op);
 
     m_netClient->send(replication::packRenameAsset(op));
     m_saveUI->markEdited();
+
+    if (command)
+    {
+      m_editHistory.record(std::move(*command));
+    }
+    else
+    {
+      logUnrecordedEdit("a renameAsset");
+    }
   };
 
   // Delete an asset: same local-apply-then-send shape. Deletion always succeeds; references dangle
   // (lookups null-tolerate a missing uuid).
   const auto removeAsset = [this](const uuids::uuid& assetUUID) {
     const auto op = replication::buildRemoveAsset(assetUUID);
+    auto command = edits::commandForRemoveAsset(op, *m_assetRegistry);
+
     replication::applyRemoveAsset(*m_assetRegistry, op);
 
     m_netClient->send(replication::packRemoveAsset(op));
     m_saveUI->markEdited();
+
+    if (command)
+    {
+      m_editHistory.record(std::move(*command));
+    }
+    else
+    {
+      logUnrecordedEdit("a removeAsset");
+    }
   };
 
   // How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
@@ -234,6 +277,10 @@ EditorApp::EditorApp(LaunchOptions options)
   // A structural change (add/remove/reparent object, add/remove component, rename, add script): the
   // server applies it and re-snapshots. Shared by the object tree and the Inspector.
   const auto sceneEdit = [this](const nlohmann::json& edit) {
+    const auto scene = m_sceneManager->getCurrentScene();
+    auto command = scene ? edits::commandForSceneEdit(edit, *scene->getObjectManager())
+                         : std::optional<edits::EditCommand>{};
+
     const auto payload = edit.dump();
 
     net::Message message(net::MessageType::sceneEdit);
@@ -243,6 +290,27 @@ EditorApp::EditorApp(LaunchOptions options)
     }
     m_netClient->send(message);
     m_saveUI->markEdited();
+
+    if (command)
+    {
+      m_editHistory.record(std::move(*command));
+    }
+    else if (scene)
+    {
+      logUnrecordedEdit("the scene edit " + payload);
+    }
+  };
+
+  // One finished value edit, as the component looked before the gesture and after it. The per-frame
+  // editComponent send above is what keeps the server current while it is still going.
+  const auto editCommitted = [this](const uuids::uuid& objectUUID, const nlohmann::json& before,
+                                    const nlohmann::json& after) {
+    if (before == after)
+    {
+      return;
+    }
+
+    m_editHistory.record(edits::EditCommand::componentEdit(objectUUID, before, after));
   };
 
   m_selection = std::make_shared<EditorSelection>();
@@ -260,6 +328,9 @@ EditorApp::EditorApp(LaunchOptions options)
   const auto loadScene = [this](const uuids::uuid& sceneUUID) {
     if (const auto scene = m_sceneManager->getScene(sceneUUID))
     {
+      // Every recorded command names objects in the scene being left behind.
+      m_editHistory.clear();
+
       m_sceneManager->loadScene(scene);
     }
 
@@ -285,6 +356,7 @@ EditorApp::EditorApp(LaunchOptions options)
   m_inspectorPanel->setSelection(m_selection);
   m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
   m_inspectorPanel->setEditCallback(editComponent);
+  m_inspectorPanel->setEditCommittedCallback(editCommitted);
   m_inspectorPanel->setSceneEditCallback(sceneEdit);
   m_inspectorPanel->setLoadSceneCallback(loadScene);
   m_inspectorPanel->setRenameAssetCallback(renameAsset);
@@ -301,6 +373,8 @@ EditorApp::EditorApp(LaunchOptions options)
   m_saveUI->setLoadProjectCallback([this] {
     // Open/New: the server owns the running sim, so send it the packed project (SaveUI already applied it
     // to our managers); it reloads and re-snapshots.
+    m_editHistory.clear();
+
     net::Message message(net::MessageType::loadProject);
     m_projectPacker->pack(message);
 
@@ -325,6 +399,10 @@ EditorApp::EditorApp(LaunchOptions options)
 void EditorApp::connectToServer()
 {
   using namespace std::chrono_literals;
+
+  // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
+  // every object it named.
+  m_editHistory.clear();
 
   // The editor edits a local project, so (in singleplayer) it spawns its own edit-mode server gated by a
   // one-off token they share, then connects as Role::editor with that token. Attaching to an existing
@@ -406,6 +484,12 @@ void EditorApp::run()
       {
         logMessage("Error", std::string("Failed to apply a message from the server: ") + e.what());
       }
+    }
+
+    if (m_netClient->takeConnectionLost())
+    {
+      logMessage("Error", "Connection to the server was lost. Save your work and restart the editor.");
+      m_serverEditable = false;
     }
 
     sendInput();
@@ -687,7 +771,21 @@ void EditorApp::handleEditStatus(const net::Message& message)
 void EditorApp::handleSceneStatus(const net::Message& message)
 {
   net::MessageReader reader(message);
-  m_sceneStatus = reader.read<SceneStatus>();
+  const auto status = reader.read<SceneStatus>();
+
+  // Starting a scene snapshots the authored tree and stopping it rebuilds from that snapshot, so an edit
+  // recorded on either side of the transition no longer describes the objects that are there. A
+  // pause/resume leaves the scene exactly as it is, so it keeps the history. Read against the last
+  // REPORTED status rather than m_sceneStatus, whose optimistic default would make the server's first
+  // report (an edit server starts stopped) look like a stop.
+  if (m_reportedSceneStatus.has_value() && m_reportedSceneStatus.value() != status
+      && (m_reportedSceneStatus.value() == SceneStatus::stopped || status == SceneStatus::stopped))
+  {
+    m_editHistory.clear();
+  }
+
+  m_reportedSceneStatus = status;
+  m_sceneStatus = status;
 }
 
 void EditorApp::updateGui()

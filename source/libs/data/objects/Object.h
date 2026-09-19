@@ -28,6 +28,11 @@ class Object : public std::enable_shared_from_this<Object> {
 public:
   explicit Object(std::string name = "Object");
 
+  // An object whose uuid the caller already knows, without routing it through the json constructor. The
+  // creating scene edits use this so the sender that chose the uuid can record what its edit produced.
+  // setManager leaves a non-nil uuid alone, so registering this object keeps the uuid given here.
+  Object(std::string name, uuids::uuid uuid);
+
   explicit Object(const std::vector<std::shared_ptr<Component>>& components,
                   std::string name = "Object");
 

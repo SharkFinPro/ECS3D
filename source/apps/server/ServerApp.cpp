@@ -481,7 +481,9 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
 
     // A refusal the sender could have predicted needs no snapshot: rejected means the authority and the
     // sender agree about the scene and the op simply changes nothing, and a malformed edit is a payload
-    // problem that resending the scene would not fix - and is the one a client can send on demand.
+    // problem that resending the scene would not fix - and is the one a client can send on demand. The
+    // exception is a creating op refused for the uuid it chose: the sender gets neither the object nor
+    // an error, so it has to notice the missing object itself rather than being resynced here.
     //
     // Everything else means the sender's view disagrees with the authority: an object or component it
     // believes exists and does not, a prefab it cannot resolve, an edit that threw part way through.
@@ -816,7 +818,7 @@ void ServerApp::broadcastSnapshot() const
     }
     catch (const std::exception& e)
     {
-      Log::error(LogCategory::server, std::string("syncFieldsToData failed, sending snapshot with last-known field values: ") + e.what());
+      Log::error(LogCategory::server, std::string("Script attach/field sync failed, sending snapshot with last-known field values: ") + e.what());
     }
   }
 

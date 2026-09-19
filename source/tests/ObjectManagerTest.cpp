@@ -519,6 +519,52 @@ TEST(ObjectManager, InstantiatingTheSameJsonTwiceProducesTwoDistinctUuidSets)
   EXPECT_TRUE(disjointUUIDs(firstUUIDs, secondUUIDs));
 }
 
+TEST(ObjectManager, InstantiateUnderGivesTheRootTheRequestedUuidAndItsChildrenFreshOnes)
+{
+  const auto authoring = makeScene();
+  const auto source = addObject(authoring, "Body");
+  const auto sourceChild = addChildObject(authoring, "Limb", source);
+
+  const auto body = source->serialize();
+
+  const auto scene = makeScene();
+  const auto requested = unknownUUID();
+  const auto instance = scene.objectManager->instantiateUnder(body, nullptr, &requested);
+
+  ASSERT_NE(instance, nullptr);
+  EXPECT_EQ(instance->getUUID(), requested);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(requested), instance);
+
+  // Only the root takes the requested uuid; the subtree below it is still copied with fresh ones.
+  ASSERT_EQ(instance->getChildren().size(), 1u);
+  const auto instanceChild = instance->getChildren().front();
+  EXPECT_NE(instanceChild->getUUID(), requested);
+  EXPECT_NE(instanceChild->getUUID(), sourceChild->getUUID());
+}
+
+TEST(ObjectManager, DuplicateObjectGivesTheCopysRootTheRequestedUuid)
+{
+  const auto scene = makeScene();
+  const auto source = addObject(scene, "Source");
+  const auto sourceChild = addChildObject(scene, "SourceChild", source);
+
+  const auto requested = unknownUUID();
+  scene.objectManager->duplicateObject(source, &requested);
+
+  const auto copy = scene.objectManager->getObjectByUUID(requested);
+  ASSERT_NE(copy, nullptr);
+  EXPECT_NE(copy, source);
+  EXPECT_EQ(copy->getName(), "Source - Copy");
+
+  ASSERT_EQ(copy->getChildren().size(), 1u);
+  const auto copyChild = copy->getChildren().front();
+  EXPECT_NE(copyChild->getUUID(), sourceChild->getUUID());
+  EXPECT_NE(copyChild->getUUID(), requested);
+
+  // The uuid named the copy's root, not the original: the source keeps the uuid it already had.
+  EXPECT_NE(source->getUUID(), requested);
+}
+
 // Unlike instantiate (a fresh copy for a prefab drop), loading a manager's own serialized form back in
 // has to reproduce the same objects, uuids included - that is what makes save/load idempotent.
 TEST(ObjectManager, SerializeThenLoadPreservesUuidsAcrossTheWholeSubtree)
