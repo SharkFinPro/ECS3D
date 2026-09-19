@@ -36,7 +36,7 @@ public:
   // every collider involved and nothing has moved a transform since - e.g. CollisionSystem's parallel
   // narrow phase, which warms every collider serially before the parallel region and defers collision
   // responses (which do move transforms) to a serial pass after it.
-  [[nodiscard]] const BoundingBox& cachedBoundingBox() const { return m_boundingBox; }
+  [[nodiscard]] const BoundingBox& cachedBoundingBox() const;
 
   [[nodiscard]] ColliderType getColliderType() const;
 

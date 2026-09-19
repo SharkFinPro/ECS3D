@@ -1,6 +1,7 @@
 #include "Collider.h"
 #include "../Transform.h"
 #include "../../Object.h"
+#include <cassert>
 #include <stdexcept>
 
 Collider::Collider(const ColliderType type, const ComponentType subType)
@@ -38,6 +39,16 @@ const BoundingBox& Collider::getBoundingBox()
 
   m_boundingBox.lastUpdateID = transformUpdateID;
   m_boundingBoxDirty = false;
+
+  return m_boundingBox;
+}
+
+const BoundingBox& Collider::cachedBoundingBox() const
+{
+  // Fails loudly in a debug build if a caller reaches this before getBoundingBox() has ever warmed the
+  // cache - the precondition documented on the declaration, not something this accessor can enforce by
+  // recomputing without breaking the whole reason it exists.
+  assert(!m_boundingBoxDirty);
 
   return m_boundingBox;
 }
