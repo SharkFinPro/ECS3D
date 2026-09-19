@@ -6,6 +6,8 @@
 #include <objects/components/RigidBody.h>
 #include <objects/components/Transform.h>
 #include <glm/glm.hpp>
+#include <algorithm>
+#include <array>
 #include <stdexcept>
 
 void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
@@ -135,6 +137,121 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   const auto impulse = dot(velocityDiff, collisionNormal) * collisionNormal;
   applyForce(body, *transform, impulse, collisionPoint);
   applyForce(*otherRb, *otherTransform, -impulse, collisionPoint);
+}
+
+void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
+                                    const glm::vec3 minimumTranslationVector, const std::span<const glm::vec3> collisionPoints)
+{
+  if (collisionPoints.size() < 2)
+  {
+    handleCollision(body, other, minimumTranslationVector, collisionPoints.empty() ? glm::vec3(0) : collisionPoints[0]);
+    return;
+  }
+
+  if (!other)
+  {
+    throw std::runtime_error("PhysicsSystem::handleCollision missing other object!");
+  }
+
+  const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform);
+  if (!transform)
+  {
+    return;
+  }
+
+  respondToCollision(body, *transform, minimumTranslationVector);
+
+  const auto normal = normalize(minimumTranslationVector);
+  const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
+
+  std::shared_ptr<Transform> otherTransform;
+  if (otherRb)
+  {
+    otherTransform = other->getComponent<Transform>(ComponentType::transform);
+    if (!otherTransform)
+    {
+      return;
+    }
+
+    respondToCollision(*otherRb, *otherTransform, -minimumTranslationVector);
+  }
+
+  struct Side
+  {
+    RigidBody* body = nullptr;
+    const Transform* transform = nullptr;
+    glm::mat3x3 inverseInertia{ 0.0f };
+  };
+
+  // A degenerate inertia (zero mass, zeroed scale axis) contributes no spin, as in applyForce.
+  const auto makeSide = [](RigidBody* rigidBody, const Transform* rigidTransform)
+  {
+    const auto inertia = getInertiaTensor(*rigidBody, *rigidTransform);
+
+    constexpr float minDiagonal = 1e-6f;
+    const bool spins = inertia[0][0] > minDiagonal && inertia[1][1] > minDiagonal && inertia[2][2] > minDiagonal &&
+                       finiteCheck::isFinite(glm::vec3(inertia[0][0], inertia[1][1], inertia[2][2]));
+
+    return Side{ rigidBody, rigidTransform, spins ? glm::inverse(inertia) : glm::mat3x3(0.0f) };
+  };
+
+  // Same lever-arm cutoff applyForce uses, so a point at the centre adds no spin on either side.
+  const auto arm = [](const Side& side, const glm::vec3& point)
+  {
+    const auto r = point - side.transform->getPosition();
+    return glm::length(r) <= 0.01f ? glm::vec3(0) : r;
+  };
+
+  const auto velocityAt = [&arm](const Side& side, const glm::vec3& point)
+  {
+    return side.body->getVelocity() + glm::cross(side.body->getAngularVelocity(), arm(side, point));
+  };
+
+  // How far one unit of impulse along the normal changes this side's velocity along it at the point.
+  const auto stiffness = [&arm, &normal](const Side& side, const glm::vec3& point)
+  {
+    const auto torqueArm = glm::cross(arm(side, point), normal);
+    return 1.0f + glm::dot(torqueArm, side.inverseInertia * torqueArm);
+  };
+
+  const auto bodySide = makeSide(&body, transform.get());
+  const auto otherSide = otherRb ? makeSide(otherRb.get(), otherTransform.get()) : Side{};
+
+  constexpr int iterations = 8;
+  std::array<float, 4> accumulated{};
+  const auto count = std::min(collisionPoints.size(), accumulated.size());
+
+  for (int iteration = 0; iteration < iterations; ++iteration)
+  {
+    for (size_t i = 0; i < count; ++i)
+    {
+      const auto& point = collisionPoints[i];
+
+      auto closing = -glm::dot(velocityAt(bodySide, point), normal);
+      auto denominator = stiffness(bodySide, point);
+
+      if (otherRb)
+      {
+        closing += glm::dot(velocityAt(otherSide, point), normal);
+        denominator += stiffness(otherSide, point);
+      }
+
+      const auto updated = std::max(accumulated[i] + closing / denominator, 0.0f);
+      const auto delta = updated - accumulated[i];
+      accumulated[i] = updated;
+
+      if (delta == 0.0f)
+      {
+        continue;
+      }
+
+      applyForce(body, *transform, delta * normal, point);
+      if (otherRb)
+      {
+        applyForce(*otherRb, *otherTransform, -delta * normal, point);
+      }
+    }
+  }
 }
 
 void PhysicsSystem::respondToCollision(RigidBody& body, Transform& transform, const glm::vec3 minimumTranslationVector)

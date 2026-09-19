@@ -294,7 +294,7 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
 
   const auto falling = addObject(scene, "Falling", { 0, 5, 0 });
   falling->addComponent(std::make_shared<BoxCollider>());
-  addBody(falling, true);
+  const auto body = addBody(falling, true);
 
   CollisionSystem collisionSystem;
 
@@ -441,15 +441,11 @@ TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStaysSupportedRatherT
   float lowest = std::numeric_limits<float>::max();
   float highest = std::numeric_limits<float>::lowest();
 
-  // This does not assert on rest spin, unlike the flush-landing cases above: this engine resolves each
-  // colliding pair through a single contact point and a single impulse, not a multi-point manifold
-  // solver, so it cannot correctly hold a box stable when its true support is a region the box's own
-  // centre sits off-centre within - once the box tips at all, its touching feature collapses from the
-  // whole clipped overlap down to a single near edge, offset enough from the centre of mass to keep
-  // rocking it. That is a known limit of the one-point contact model, tracked separately, not something
-  // this test pins down. What it does assert - the same as the flat box-on-box test above - is that the
-  // box still ends up resting on top of the ground rather than sinking through it or rocking off the edge
-  // into open space.
+  // The contact manifold spans the clipped underside, so the support impulses can balance the box
+  // about its centre of mass even though the overlap's centroid sits off it. It should come to rest
+  // without spin, on top of the ground rather than sinking through it or rocking off the edge.
+  float maxAngularSpeed = 0.0f;
+
   for (int tick = 0; tick < 150; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
@@ -460,11 +456,13 @@ TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStaysSupportedRatherT
       const float height = transformOf(falling)->getPosition().y;
       lowest = std::min(lowest, height);
       highest = std::max(highest, height);
+      maxAngularSpeed = std::max(maxAngularSpeed, glm::length(body->getAngularVelocity()));
     }
   }
 
   EXPECT_GT(lowest, 1.5f);
   EXPECT_LT(highest, 3.0f);
+  EXPECT_LT(maxAngularSpeed, 0.05f);
 }
 
 TEST(PhysicsIntegration, AYawedBoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)

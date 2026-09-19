@@ -5,6 +5,7 @@
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/glm.hpp>
+#include <algorithm>
 #include <cstdint>
 
 namespace collisions {
@@ -212,6 +213,11 @@ namespace collisions {
     }
   }
 
+  std::span<const glm::vec3> Contact::contactPoints() const
+  {
+    return pointCount > 1 ? std::span<const glm::vec3>(points.data(), pointCount) : std::span<const glm::vec3>(&point, 1);
+  }
+
   float Contact::depth() const
   {
     return length(minimumTranslationVector);
@@ -248,7 +254,16 @@ namespace collisions {
     }
 
     // Negated so it moves the first collider, matching the sphere path and what the response expects.
-    return Contact{ -minimumTranslationVector, polytope.findCollisionPoint() };
+    Contact contact{ -minimumTranslationVector, polytope.findCollisionPoint() };
+
+    const auto manifold = polytope.findContactManifold();
+    if (manifold.size() > 1)
+    {
+      contact.pointCount = static_cast<std::uint8_t>(std::min(manifold.size(), contact.points.size()));
+      std::copy_n(manifold.begin(), contact.pointCount, contact.points.begin());
+    }
+
+    return contact;
   }
 
   bool intersects(Collider& collider, Collider& other)

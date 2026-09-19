@@ -188,8 +188,47 @@ glm::vec3 Polytope::findCollisionPoint() const
     return pointOfCollision;
   }
 
-  // Both remaining colliders are boxes (the sphere cases above already returned). Build the contact
-  // manifold from the incident box's touching feature clipped onto the reference box's footprint - the
+  glm::vec3 centroid{ 0 };
+  const auto points = boxContactPoints();
+  for (const auto& point : points)
+  {
+    centroid += point;
+  }
+
+  // Never empty (touchingVertices always returns at least one vertex), so no fallback case is needed.
+  return centroid / static_cast<float>(points.size());
+}
+
+std::vector<glm::vec3> Polytope::findContactManifold() const
+{
+  if (m_collider->getColliderType() == ColliderType::sphereCollider ||
+      m_otherCollider->getColliderType() == ColliderType::sphereCollider)
+  {
+    return { findCollisionPoint() };
+  }
+
+  std::vector<glm::vec3> manifold;
+  for (const auto& point : boxContactPoints())
+  {
+    const bool duplicate = std::ranges::any_of(manifold, [&point](const glm::vec3& existing)
+    {
+      return glm::distance(existing, point) < 1e-4f;
+    });
+
+    if (!duplicate)
+    {
+      manifold.push_back(point);
+    }
+  }
+
+  return manifold;
+}
+
+std::vector<glm::vec3> Polytope::boxContactPoints() const
+{
+  const auto closestPoint = m_closestFaceData.closestPoint;
+
+  // Both colliders are boxes here. Build the contact manifold from the incident box's touching feature clipped onto the reference box's footprint - the
   // flatter side (its axis more nearly parallel to the normal) is the reference, so a real edge/corner
   // contact is not diluted by also folding in the flat side's own footprint corners.
   const auto boxA = boxGeometryOf(*m_collider);
@@ -211,14 +250,14 @@ glm::vec3 Polytope::findCollisionPoint() const
 
   const auto incidentVertices = touchingVertices(incidentBox, towardReference);
 
-  // Never empty (touchingVertices always returns at least one vertex), so no fallback case is needed.
-  glm::vec3 centroid{ 0 };
+  std::vector<glm::vec3> points;
+  points.reserve(incidentVertices.size());
   for (const auto& vertex : incidentVertices)
   {
-    centroid += clampToFootprint(vertex, referenceBox, referenceAxisIndex);
+    points.push_back(clampToFootprint(vertex, referenceBox, referenceAxisIndex));
   }
 
-  return centroid / static_cast<float>(incidentVertices.size());
+  return points;
 }
 
 void Polytope::EPA()
