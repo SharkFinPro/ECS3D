@@ -113,9 +113,20 @@ private:
   // m_pendingClick for why this waits until after the whole tree has been traversed.
   void applyPendingClick();
 
-  // False for a row the current drag must not be dropped onto, so the row registers no drop target and
-  // gives no drop feedback.
+  // False for a target (a row, for a reparent-onto-it drop, or a sibling list's own parent - null for the
+  // scene root - for a reorder-between-siblings drop) the current drag must not be dropped onto, so it
+  // registers no drop target and ImGui shows the drag its own "not allowed" cursor instead of a silent
+  // no-op once released.
   [[nodiscard]] bool canAcceptObjectDrop(const std::shared_ptr<Object>& target) const;
+
+  // A thin drop target for reordering, placed before the first sibling, between each pair, and after the
+  // last, so a drag can land BETWEEN two siblings at a specific position instead of only being reparented
+  // onto a row (which always appends). parent is the sibling list's own parent (null for the scene root);
+  // index is that list's storage position the object would occupy if the list were untouched - the drop
+  // handler itself accounts for the slot the dragged object vacates when it is already in this same list.
+  // Skipped entirely outside authored sort mode: alphabetical display order does not match the list an
+  // index addresses, so a zone there could not honestly promise where the drop would land.
+  void displayReorderDropZone(const std::shared_ptr<Object>& parent, std::size_t index);
 
   // The "Delete Object?" confirmation modal for m_objectPendingDeletion. Confirming (Yes / Enter) sends
   // a removeObject scene edit; cancelling (No / Escape), or the object vanishing, clears the prompt.

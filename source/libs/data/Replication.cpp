@@ -414,6 +414,23 @@ nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::u
   return edit;
 }
 
+nlohmann::json buildReorderObject(const uuids::uuid& objectUUID, const uuids::uuid* parentUUID,
+                                  const std::size_t index)
+{
+  nlohmann::json edit = {
+    { "op", "reorderObject" },
+    { "object", uuids::to_string(objectUUID) },
+    { "index", index }
+  };
+
+  if (parentUUID)
+  {
+    edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  return edit;
+}
+
 nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid* parentUUID,
                                       const uuids::uuid* instanceUUID)
 {
@@ -561,6 +578,37 @@ namespace {
     }
 
     return result;
+  }
+
+  // Shared by restoreObject and reorderObject: an explicit range check against std::size_t's own limits
+  // rather than casting into a signed type and looking for wraparound - a value near UINT64_MAX read into
+  // a signed type is implementation-defined at best, so it should never be the thing a refusal relies on.
+  // nullopt means the field was missing, not a number, or out of range - the caller reports malformedEdit.
+  std::optional<std::size_t> parseIndexField(const nlohmann::json& indexField)
+  {
+    if (indexField.is_number_unsigned())
+    {
+      const auto rawIndex = indexField.get<std::uint64_t>();
+      if (rawIndex > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+      {
+        return std::nullopt;
+      }
+
+      return static_cast<std::size_t>(rawIndex);
+    }
+
+    if (indexField.is_number_integer())
+    {
+      const auto rawIndex = indexField.get<std::int64_t>();
+      if (rawIndex < 0)
+      {
+        return std::nullopt;
+      }
+
+      return static_cast<std::size_t>(rawIndex);
+    }
+
+    return std::nullopt;
   }
 
   // What a creating op's optional "uuid" field came to: a refusal to report, a uuid to create the object
@@ -726,35 +774,13 @@ namespace {
         return SceneEditResult::malformedEdit;
       }
 
-      // Checked as an explicit range against std::size_t's own limits rather than by casting into a
-      // signed type and looking for wraparound - a value near UINT64_MAX read into a signed type is
-      // implementation-defined at best, so it should never be the thing this refusal relies on.
-      const auto& indexField = edit.at("index");
-      std::size_t index = 0;
-      if (indexField.is_number_unsigned())
-      {
-        const auto rawIndex = indexField.get<std::uint64_t>();
-        if (rawIndex > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
-        {
-          return SceneEditResult::malformedEdit;
-        }
-
-        index = static_cast<std::size_t>(rawIndex);
-      }
-      else if (indexField.is_number_integer())
-      {
-        const auto rawIndex = indexField.get<std::int64_t>();
-        if (rawIndex < 0)
-        {
-          return SceneEditResult::malformedEdit;
-        }
-
-        index = static_cast<std::size_t>(rawIndex);
-      }
-      else
+      const auto parsedIndex = parseIndexField(edit.at("index"));
+      if (!parsedIndex.has_value())
       {
         return SceneEditResult::malformedEdit;
       }
+
+      const std::size_t index = parsedIndex.value();
 
       // Same "named parent" handling as addObject/instantiatePrefab: absent means the scene root, named
       // and unresolvable is a stale view rather than a silent root.
@@ -928,6 +954,106 @@ namespace {
       else
       {
         objectManager.addObjectToRoot(object);
+      }
+
+      if (placement)
+      {
+        restoreWorldPlacement(object, parent, *placement);
+      }
+
+      return SceneEditResult::applied;
+    }
+
+    if (op == "reorderObject")
+    {
+      // Drop-BETWEEN-siblings: same "named parent" handling as reparentObject, but unlike reparentObject
+      // this can also target the parent the object already has, to reorder within it.
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
+      {
+        const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsedParent.has_value())
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
+        }
+      }
+
+      // Don't create a cycle (drop onto self or a descendant) - same guard as reparentObject.
+      if (object == parent || (parent && object->isAncestorOf(parent)))
+      {
+        return SceneEditResult::rejected;
+      }
+
+      const auto parsedIndex = parseIndexField(edit.at("index"));
+      if (!parsedIndex.has_value())
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      const std::size_t index = parsedIndex.value();
+
+      const auto oldParent = object->getParent();
+      const bool changesParent = oldParent != parent;
+
+      // Reordering within the same parent cannot deepen anything - only a move to a different parent
+      // needs the same depth guard reparentObject applies.
+      if (changesParent)
+      {
+        if (const std::size_t newDepth = (parent ? ancestorDepth(parent) + 1 : 0) + subtreeHeight(object);
+            newDepth > maxObjectDepth)
+        {
+          return SceneEditResult::rejected;
+        }
+      }
+
+      // index is read against the target list AFTER object is removed from wherever it sits now. Refused
+      // rather than clamped when it runs past that list's end, so a sender whose view of the list is
+      // stale learns that instead of landing somewhere it did not ask for.
+      const auto& targetSiblings = parent ? parent->getChildren() : objectManager.getObjects();
+      const auto currentIt = std::ranges::find(targetSiblings, object);
+      const std::size_t targetSize = changesParent ? targetSiblings.size()
+                                                   : targetSiblings.size() - 1;
+      if (index > targetSize)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Same slot it already occupies (removing then reinserting at its own old index reproduces the
+      // same arrangement) - well formed, but a no-op not worth a re-snapshot.
+      if (!changesParent
+          && static_cast<std::size_t>(currentIt - targetSiblings.begin()) == index)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Only a parent change needs its world placement preserved - reordering within the same parent
+      // does not touch the object's local transform at all.
+      const auto placement = changesParent ? captureWorldPlacement(object) : std::nullopt;
+
+      if (oldParent)
+      {
+        oldParent->removeChild(object);
+      }
+      else
+      {
+        objectManager.removeObjectFromRoot(object);
+      }
+
+      object->setParent(parent);
+
+      if (parent)
+      {
+        parent->addChild(object, index);
+      }
+      else
+      {
+        objectManager.addObjectToRoot(object, index);
       }
 
       if (placement)
