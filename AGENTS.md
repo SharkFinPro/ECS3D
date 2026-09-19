@@ -200,7 +200,15 @@ include it. Widths and byte order are still the caller's problem: pack fixed-wid
 carries host endianness. `NetServer`/`NetClient` own the format in C++ and hand `ECS3DNetTransport` (C#)
 opaque `(type byte, payload)` pairs. Both transports refuse an inbound message over
 `TransportBackend.MaxMessageBytes` and drop the connection - TCP on the length the peer declares,
-WebSocket on what has actually arrived, since a fragmented message declares none. The handshake, the one
+WebSocket on what has actually arrived, since a fragmented message declares none. Neither backend sizes
+its read buffer to that declared length up front: TCP grows a buffer to roughly what has actually arrived
+(`TcpBackend.ReadBody` starts at 64 KiB and doubles each time the buffer fills, up to the declared
+length) and WebSocket
+grows its assembly buffer as fragments arrive, so a peer that declares a large frame and then trickles it
+in a byte at a time pins only a small multiple of what has actually landed, not the whole declared size.
+TCP backs that with a per-read progress timeout (`BodyReadTimeoutMs`, reset on every read rather than
+covering the whole frame) so a body that stalls outright still drops just that connection. The handshake,
+the one
 message read before a peer is authorized, gets the much smaller `MaxHandshakeBytes`. Oversize *outbound*
 messages are refused at the sender, where there is something useful to say about them. Object nesting has
 its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`) caps how deep
