@@ -67,6 +67,13 @@ public:
   [[nodiscard]] bool canUndo() const;
   [[nodiscard]] bool canRedo() const;
 
+  // The kind of command undo()/redo() would act on next, without popping either stack - lets a caller
+  // that only knows how to handle some kinds (see EditorApp::undo()/redo()) decide whether to attempt it
+  // at all, and leave an entry it does not yet handle sitting on top rather than have undo()/redo() treat
+  // it as a validation conflict and drop it. nullopt when that stack is empty.
+  [[nodiscard]] std::optional<CommandKind> nextUndoKind() const;
+  [[nodiscard]] std::optional<CommandKind> nextRedoKind() const;
+
   // Validates the top of the undo stack against the live scene/registry and, on success, moves it to the
   // redo stack and returns the reverse payload to send. On refusal, drops that entry and everything older
   // still on the undo stack (entries already on the redo stack are untouched - they are newer, already-

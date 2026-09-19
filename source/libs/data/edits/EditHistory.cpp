@@ -23,6 +23,26 @@ bool EditHistory::canRedo() const
   return !m_redoStack.empty();
 }
 
+std::optional<CommandKind> EditHistory::nextUndoKind() const
+{
+  if (m_undoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_undoStack.back().kind();
+}
+
+std::optional<CommandKind> EditHistory::nextRedoKind() const
+{
+  if (m_redoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_redoStack.back().kind();
+}
+
 namespace {
   HistoryResult toHistoryResult(const ValidationFailure failure)
   {
