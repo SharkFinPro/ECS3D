@@ -77,9 +77,13 @@ glm::vec3 Polytope::findCollisionPoint() const
 
   if (m_otherCollider->getColliderType() == ColliderType::sphereCollider)
   {
+    // closestPoint is a Minkowski-difference point, so its direction runs from m_collider toward
+    // m_otherCollider - the opposite of the case above, where the sphere was m_collider itself. Adding
+    // it here would land on the far pole of the sphere, away from the other shape; subtracting it lands
+    // on the near pole, facing the other shape and inside the overlap.
     auto direction = glm::normalize(closestPoint);
 
-    pointOfCollision = otherTransform->getPosition() + direction * dynamic_cast<SphereCollider*>(m_otherCollider)->getRadius();
+    pointOfCollision = otherTransform->getPosition() - direction * dynamic_cast<SphereCollider*>(m_otherCollider)->getRadius();
 
     return pointOfCollision;
   }

@@ -60,10 +60,14 @@ namespace collisions {
 
       const auto direction = -glm::normalize(minimumTranslationVector);
 
-      // Offset from the first sphere's center by the *second* sphere's radius, which only lands on the
-      // overlap when the radii match. Kept as it was rather than corrected here: it is what the collision
-      // response has always been handed, and changing it changes how bodies spin. Filed separately.
-      return Contact{ minimumTranslationVector, collider.getPosition() + direction * sphereB.getRadius() };
+      // The midpoint of the overlap along the center line: halfway between where sphere A's surface
+      // meets the line (moving toward B) and where sphere B's surface meets it (moving toward A). That
+      // point sits inside both spheres regardless of how the radii compare, unlike either surface point
+      // alone. dist is 0 for the concentric case above, where direction is the arbitrary y axis instead
+      // of the (undefined) center line - the formula still produces a finite point on it.
+      const auto contactOffset = (sphereA.getRadius() + dist - sphereB.getRadius()) / 2.0f;
+
+      return Contact{ minimumTranslationVector, collider.getPosition() + direction * contactOffset };
     }
 
     // Leaves the terminating simplex in simplex. False means the pair does not overlap, or that GJK ran
