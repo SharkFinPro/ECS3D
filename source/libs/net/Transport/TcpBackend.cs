@@ -388,8 +388,7 @@ internal sealed class TcpBackend : TransportBackend
   {
     _clientRunning = false;
 
-    // Take whatever is currently there so a concurrent ClientReceiveLoop cleanup cannot also see it and
-    // double-close it.
+    // Take ownership atomically so a racing ClientReceiveLoop cleanup can't also close the same instance.
     var client = Interlocked.Exchange(ref _client, null);
     try { client?.Close(); } catch { /* already closed */ }
   }
@@ -405,15 +404,13 @@ internal sealed class TcpBackend : TransportBackend
     var frame = Frame(type, data, len);
     try
     {
-      // GetStream() is included in the try: a concurrent teardown (ClientDisconnect or the receive loop)
-      // may dispose this same client between the read above and here, and a disposed TcpClient throws
-      // ObjectDisposedException out of GetStream() itself, before Write ever runs.
+      // GetStream() is in the try too: a racing teardown can dispose client between the read above and
+      // here, and that throws ObjectDisposedException out of GetStream() itself, not just Write.
       client.GetStream().Write(frame, 0, frame.Length);
     }
     catch
     {
-      // The write failed on this specific connection. Drop that same instance rather than whatever is
-      // current: a reconnect may already have installed a different, healthy one by the time this runs.
+      // Drop this instance specifically, not whatever is current - a reconnect may have replaced it.
       if (Interlocked.CompareExchange(ref _client, null, client) == client)
       {
         try { client.Close(); } catch { /* already closed */ }
@@ -443,26 +440,16 @@ internal sealed class TcpBackend : TransportBackend
 
     _clientRunning = false;
 
-    // Cleared first, and only if it still holds the instance this loop owns - a concurrent ClientConnect
-    // may already have installed a newer connection, which this loop must leave alone - so ClientSend
-    // never reads a reference through the field once the close below has started. The socket itself is
-    // then closed unconditionally: Close is idempotent, so this is harmless even if ClientDisconnect
-    // already closed the same instance. The exchange's return is the field's value just before this
-    // attempt, which is what decides whether the notice below is this loop's to send.
+    // Clear before closing so ClientSend never reaches a closed instance; the CAS leaves a newer
+    // connection alone.
     var previous = Interlocked.CompareExchange(ref _client, null, client);
     try { client.Close(); } catch { /* already closed */ }
 
-    // Only report a loss if nothing else has already taken the connection's place. previous is either
-    // this loop's own client (its CAS won: nothing superseded it) or null (something else, e.g.
-    // ClientSend's failure path, already cleared the field first: the connection is still gone and this
-    // is still the one notice for it). A different, non-null value means a concurrent ClientConnect
-    // installed a new, live connection while this loop was exiting; that reconnect is not a loss, so the
-    // notice is skipped rather than reaching NetClient after it has already reset for the new connection.
+    // A different non-null value means a reconnect already replaced this connection; it was not lost.
     if (previous == client || previous == null)
     {
-      // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
-      // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two
-      // apart via m_disconnectRequested and no-ops the latter.
+      // The single delivery point for a lost connection - the native side tells a real loss apart from
+      // its own ClientDisconnect via m_disconnectRequested.
       Transport.DeliverClientDisconnect();
     }
   }

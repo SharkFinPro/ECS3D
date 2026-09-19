@@ -67,9 +67,8 @@ internal sealed class WebSocketBackend : TransportBackend
   private int _nextConnId;
 
   // -- Client --
-  // Bundled into one object, held in a single field, so ClientSend can never read a torn mix of a
-  // socket from one connection and a token or invoker from another: every read and every swap
-  // (Interlocked.Exchange/CompareExchange) moves or inspects the whole triple atomically.
+  // One object per connection so a swap (Interlocked.Exchange/CompareExchange) moves the whole triple
+  // atomically - no torn reads of a socket from one connection paired with another's token or invoker.
   private sealed class ClientConnection(WebSocket socket, CancellationTokenSource cts, HttpMessageInvoker invoker)
   {
     public readonly WebSocket Socket = socket;
@@ -332,8 +331,7 @@ internal sealed class WebSocketBackend : TransportBackend
       return 1;
     }
 
-    // Held out here so a failure before _connection takes ownership can still dispose them, and so the
-    // thread started below can still see the finished connection once the try block that builds it ends.
+    // Held out here so a failure before _connection takes ownership can still dispose them.
     ClientWebSocket? ws = null;
     HttpMessageInvoker? invoker = null;
     ClientConnection? connection = null;
@@ -430,9 +428,7 @@ internal sealed class WebSocketBackend : TransportBackend
   {
     _clientRunning = false;
 
-    // Cleared before it is disposed, so a racing ClientSend that just read the field either gets this
-    // same instance (and then fails or is caught by its own ObjectDisposedException guard) or gets null,
-    // never a reference it can act on after this method has already started tearing it down.
+    // Take ownership atomically so a racing ClientSend can't act on a connection this call is closing.
     var connection = Interlocked.Exchange(ref _connection, null);
     if (connection is null)
     {
@@ -461,14 +457,11 @@ internal sealed class WebSocketBackend : TransportBackend
     }
     catch (ObjectDisposedException)
     {
-      // A concurrent teardown (ClientDisconnect or the receive loop) disposed this connection between our
-      // read of _connection and this send. It is already being (or has been) released; nothing to do.
+      // A racing teardown already disposed this connection; nothing left to do.
       return;
     }
 
-    // The write failed on this specific connection. Drop that same instance rather than whatever is
-    // current: a reconnect may already have installed a different one by the time this returns, and that
-    // one is healthy and must be left alone.
+    // Drop this instance specifically, not whatever is current - a reconnect may have replaced it.
     if (Interlocked.CompareExchange(ref _connection, null, connection) == connection)
     {
       Close(connection.Socket, connection.Cts);
@@ -499,28 +492,17 @@ internal sealed class WebSocketBackend : TransportBackend
 
     _clientRunning = false;
 
-    // Cleared first, and only if it still holds the instance this loop owns - a concurrent ClientConnect
-    // may already have installed a newer connection, which this loop must leave alone - so ClientSend
-    // never reads a reference through the field once disposal below has started. The instance itself is
-    // then released unconditionally: Close/Dispose are idempotent, so this is harmless even if
-    // ClientDisconnect already took and released the same instance. The exchange's return is the field's
-    // value just before this attempt, which is what decides whether the notice below is this loop's to
-    // send.
+    // Clear before closing so ClientSend never reaches a closed instance; the CAS leaves a newer
+    // connection alone.
     var previous = Interlocked.CompareExchange(ref _connection, null, connection);
     Close(connection.Socket, connection.Cts);
     connection.Invoker.Dispose();
 
-    // Only report a loss if nothing else has already taken the connection's place. previous is either
-    // this loop's own connection (its CAS won: nothing superseded it) or null (something else, e.g.
-    // ClientSend's failure path, already cleared the field first: the connection is still gone and this
-    // is still the one notice for it). A different, non-null value means a concurrent ClientConnect
-    // installed a new, live connection while this loop was exiting; that reconnect is not a loss, so the
-    // notice is skipped rather than reaching NetClient after it has already reset for the new connection.
+    // A different non-null value means a reconnect already replaced this connection; it was not lost.
     if (previous == connection || previous == null)
     {
-      // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
-      // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two
-      // apart via m_disconnectRequested and no-ops the latter.
+      // The single delivery point for a lost connection - the native side tells a real loss apart from
+      // its own ClientDisconnect via m_disconnectRequested.
       Transport.DeliverClientDisconnect();
     }
   }
