@@ -493,6 +493,10 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
   Log::info(LogCategory::server, "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
 
+  // Opening/creating a project must not start the sim. Read the status before unpack(), which clears
+  // the SceneManager and resets status to stopped as a side effect.
+  const bool wasRunning = m_sceneManager->getSceneStatus() == SceneStatus::running;
+
   // Stop the current scripts before the scene is swapped out from under them.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
@@ -517,40 +521,52 @@ void ServerApp::handleLoadProject(const net::Message& message) const
     Log::error(LogCategory::server, std::string("Failed to load project from editor: ") + e.what());
 
     // unpack parses into locals and only swaps on failure-free completion, so a throw leaves the current
-    // scene untouched - the same one whose scripts were just stopped. Restart them so it keeps responding.
-    if (const auto scene = m_sceneManager->getCurrentScene())
+    // scene untouched - the same one whose scripts were just stopped. Restart them only if it was running.
+    if (wasRunning)
     {
-      try
+      if (const auto scene = m_sceneManager->getCurrentScene())
       {
-        m_scriptSystem->start(*scene->getObjectManager());
-      }
-      catch (const std::exception& startError)
-      {
-        Log::error(LogCategory::server, startError.what());
+        try
+        {
+          m_scriptSystem->start(*scene->getObjectManager());
+        }
+        catch (const std::exception& startError)
+        {
+          Log::error(LogCategory::server, startError.what());
+        }
       }
     }
 
     return;
   }
 
-  m_sceneManager->startScene();
-
   // New project/scene: any contact history belongs to the project we just swapped out.
   m_collisionSystem->reset();
 
+  // Opening/creating a project starts stopped, matching the scene-switch path: only resume the sim if
+  // it was actually running before the swap.
+  if (wasRunning)
+  {
+    m_sceneManager->startScene();
+  }
+
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    try
+    if (wasRunning)
     {
-      m_scriptSystem->start(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      Log::error(LogCategory::server, e.what());
+      try
+      {
+        m_scriptSystem->start(*scene->getObjectManager());
+      }
+      catch (const std::exception& e)
+      {
+        Log::error(LogCategory::server, e.what());
+      }
     }
 
     Log::info(LogCategory::server, "Loaded project from editor: scene '" + scene->getName() + "' ("
-      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
+      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, "
+      + (wasRunning ? "running" : "stopped") + ").");
   }
 
   broadcastSnapshot();
