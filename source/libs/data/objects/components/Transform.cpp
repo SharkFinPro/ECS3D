@@ -181,15 +181,15 @@ void Transform::pack(net::Message& message) const
   message.write(ComponentType::transform);
 
   message.write(m_position.get());
-  message.write(m_scale.get());
   message.write(m_rotation.get());
+  message.write(m_scale.get());
 }
 
 void Transform::unpack(net::MessageReader& messageReader)
 {
   m_position.set(messageReader.read<glm::vec3>());
-  m_scale.set(messageReader.read<glm::vec3>());
   m_rotation.set(messageReader.read<glm::vec3>());
+  m_scale.set(messageReader.read<glm::vec3>());
 
   // Bypasses the setters, so bump directly - see loadFromJSON.
   ++m_updateID;
