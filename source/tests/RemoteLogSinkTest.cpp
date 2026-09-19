@@ -115,3 +115,88 @@ TEST(RemoteLogSink, PreservesLevelAndCategoryPerEntry)
   EXPECT_EQ(drained.entries[1].level, LogLevel::error);
   EXPECT_EQ(drained.entries[1].category, LogCategory::script);
 }
+
+TEST(RemoteLogSink, AMessageOverTheCapIsTruncatedAtWriteTime)
+{
+  RemoteLogSink sink(10);
+
+  // One call handing a message far longer than any real log line - a script dumping a huge string, say -
+  // must not be able to queue it whole.
+  const std::string huge(RemoteLogSink::maxMessageBytes + 1000, 'x');
+  sink.write(entry(huge));
+
+  const auto drained = sink.drain(10);
+
+  ASSERT_EQ(drained.entries.size(), 1u);
+  // Kept up to the cap, plus a marker rather than being silently cut off with no sign anything was lost.
+  EXPECT_LE(drained.entries[0].message.size(), RemoteLogSink::maxMessageBytes + 32);
+  EXPECT_LT(drained.entries[0].message.size(), huge.size());
+  EXPECT_NE(drained.entries[0].message.find("truncated"), std::string::npos);
+}
+
+TEST(RemoteLogSink, AMessageAtOrUnderTheCapIsNotTruncated)
+{
+  RemoteLogSink sink(10);
+
+  // Positive control for the previous test: the cap only bites once a message actually exceeds it.
+  const std::string exact(RemoteLogSink::maxMessageBytes, 'x');
+  sink.write(entry(exact));
+
+  const auto drained = sink.drain(10);
+
+  ASSERT_EQ(drained.entries.size(), 1u);
+  EXPECT_EQ(drained.entries[0].message, exact);
+}
+
+TEST(RemoteLogSink, DrainStopsEarlyOnceTheByteBudgetWouldBeExceeded)
+{
+  RemoteLogSink sink(10);
+
+  const std::string mid(1000, 'a');
+  sink.write(entry(mid));
+  sink.write(entry(mid));
+  sink.write(entry(mid));
+
+  // A budget that fits the first entry (plus its wire overhead) but not two of them: the batch must stop
+  // there rather than pack a message a transport's own size limit could refuse outright.
+  const auto drained = sink.drain(10, mid.size() + 64);
+
+  ASSERT_EQ(drained.entries.size(), 1u);
+  EXPECT_EQ(drained.entries[0].message, mid);
+
+  // What the first drain left queued is still there for the next one - it was deferred, not dropped.
+  const auto second = sink.drain(10, mid.size() + 64);
+  ASSERT_EQ(second.entries.size(), 1u);
+  EXPECT_EQ(second.dropped, 0u);
+}
+
+TEST(RemoteLogSink, DrainAlwaysTakesAtLeastOneEntryEvenUnderABudgetItAloneExceeds)
+{
+  RemoteLogSink sink(10);
+
+  const std::string large(5000, 'a');
+  sink.write(entry(large));
+  sink.write(entry("b"));
+
+  // A budget far smaller than even the first entry alone: draining nothing would stall the queue forever
+  // rather than merely deferring the second entry to the next call.
+  const auto drained = sink.drain(10, 10);
+
+  ASSERT_EQ(drained.entries.size(), 1u);
+  EXPECT_EQ(drained.entries[0].message, large);
+}
+
+TEST(RemoteLogSink, ANonLimitingByteBudgetTakesEverythingMaxCountAllows)
+{
+  RemoteLogSink sink(10);
+
+  sink.write(entry("a"));
+  sink.write(entry("b"));
+  sink.write(entry("c"));
+
+  // The default maxBytes (used when a caller only cares about the entry-count cap) must not itself
+  // truncate a batch that easily fits.
+  const auto drained = sink.drain(10);
+
+  EXPECT_EQ(drained.entries.size(), 3u);
+}

@@ -19,7 +19,10 @@ namespace {
   using ServerStartFn = void(*)(int32_t, uint8_t, const char*);
   using ServerStopFn = void(*)();
   using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
-  using ServerSendFn = void(*)(int32_t, uint8_t, const uint8_t*, int32_t);
+  // connIds/connIdCount name the specific connections to send to (editor connections only, never every
+  // connection like ServerBroadcastFn) - one call for the whole fan-out, so the transport can apply one
+  // shared deadline across it the same way it already does for a broadcast.
+  using ServerSendToManyFn = void(*)(const int32_t*, int32_t, uint8_t, const uint8_t*, int32_t);
   using ServerConnectionCountFn = int32_t(*)();
   using SetCallbackFn = void(*)(void*);
 
@@ -69,7 +72,7 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_startFn = m_host->getDelegate(kAssembly, kType, "serverStart");
   m_stopFn = m_host->getDelegate(kAssembly, kType, "serverStop");
   m_broadcastFn = m_host->getDelegate(kAssembly, kType, "serverBroadcast");
-  m_sendFn = m_host->getDelegate(kAssembly, kType, "serverSend");
+  m_sendToManyFn = m_host->getDelegate(kAssembly, kType, "serverSendToMany");
   m_connectionCountFn = m_host->getDelegate(kAssembly, kType, "serverConnectionCount");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
   m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
@@ -140,18 +143,32 @@ void NetServer::sendToEditors(const Message& message) const
     return;
   }
 
-  // Held across every send rather than snapshotted first: the set is small (editor connections only,
-  // never players), so the risk is holding it a little longer, not blocking anything that needs it badly.
-  std::lock_guard lock(m_editorMutex);
-  for (const auto connId : m_editorConnections)
+  // Copied out and the lock released before the transport is touched at all: this runs on the
+  // authoritative tick thread, and sendToMany below can block on a stalled socket. Holding m_editorMutex
+  // across that would let a stalled editor connection block authorize()/isEditor()/takeDisconnected() -
+  // none of which have anything to do with sending - for as long as the transport's own send budget runs.
+  std::vector<int32_t> connIds;
   {
-    reinterpret_cast<ServerSendFn>(m_sendFn)(
-      connId,
-      static_cast<uint8_t>(message.getType()),
-      message.bytes().data(),
-      static_cast<int32_t>(message.size())
-    );
+    std::lock_guard lock(m_editorMutex);
+    if (m_editorConnections.empty())
+    {
+      return;
+    }
+
+    connIds.assign(m_editorConnections.begin(), m_editorConnections.end());
   }
+
+  // One call for the whole fan-out (rather than one per editor) so the transport can apply a single
+  // shared time budget across every editor, the same way ServerBroadcast already does across every
+  // connection - a per-connection call here would let K stalled editors cost this tick K times the
+  // transport's per-send timeout instead of that timeout once.
+  reinterpret_cast<ServerSendToManyFn>(m_sendToManyFn)(
+    connIds.data(),
+    static_cast<int32_t>(connIds.size()),
+    static_cast<uint8_t>(message.getType()),
+    message.bytes().data(),
+    static_cast<int32_t>(message.size())
+  );
 }
 
 int NetServer::connectionCount() const

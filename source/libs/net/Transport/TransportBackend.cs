@@ -69,10 +69,13 @@ internal abstract class TransportBackend
   public abstract int ServerConnectionCount();
   public abstract void ServerBroadcast(byte type, nint data, int len);
 
-  // Sends to a single connection by the id C++ knows it by, rather than every connection like
-  // ServerBroadcast - for data (the server's own log) that only an authorized editor connection may see.
-  // A no-op if connId has since disconnected.
-  public abstract void ServerSend(int connId, byte type, nint data, int len);
+  // Sends to exactly the connIdCount connections named by connIds (a native int32 array), rather than
+  // every connection like ServerBroadcast - for data (the server's own log) that only authorized editor
+  // connections may see. One call for the whole fan-out: implementations apply the same shared time
+  // budget across it that ServerBroadcast applies across every connection, so a stalled connection in the
+  // list cannot cost the caller more than that one shared budget no matter how many are named. A connId
+  // that has since disconnected is silently skipped.
+  public abstract void ServerSendToMany(nint connIds, int connIdCount, byte type, nint data, int len);
 
   public abstract byte ClientConnect(string host, int port, byte role, string token);
   public abstract void ClientDisconnect();

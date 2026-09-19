@@ -294,17 +294,25 @@ a re-added script of the same class gets a fresh instance rather than inheriting
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers
 a `RemoteLogSink` with `Log` alongside its file/console sinks; each `run()` iteration (not gated on a fixed
-tick, so a line still gets out while the scene is stopped/paused) drains it (capped per call - a log storm
-costs bounded work, not an unbounded send) and forwards what comes out as a `MessageType::serverLog`
-(`net::packServerLog`/`unpackServerLog`) via `NetServer::sendToEditors` — a per-connection send (`Transport
-.serverSend`, alongside `serverBroadcast`) to every connection authorized as `Role::editor` and no one
-else, so play clients do not receive it. `RemoteLogSink::drain` also reports how many entries it had to evict
-(queue full, nobody draining fast enough); the editor surfaces that count as a warning instead of silently
-missing history. `EditorApp::handleServerLog` writes each forwarded entry straight into its own
-`RingBufferSink` (bypassing `Log::write`, which would otherwise stamp it with arrival time instead of the
-time it carried on the wire), message-prefixed `"[server] "` so it reads apart from the editor's own
-logging in the same `LogCategory` (both sides log under `net`, for instance) without collapsing every
-entry into one category and losing the Console panel's level/category filters. This works for a server the
+tick, so a line still gets out while the scene is stopped/paused) drains it - capped by both entry count and
+an estimated byte size (`RemoteLogSink::drain`'s two limits; a single oversized message is truncated with a
+marker at `write()` time, so one huge entry can neither dominate the sink's memory nor stall the queue for
+everyone behind it) - and forwards what comes out as a `MessageType::serverLog` (`net::packServerLog`/
+`unpackServerLog`) via `NetServer::sendToEditors`, skipping the send entirely when there is nothing queued
+and no one to send it to. That copies out the current editor connection ids under `m_editorMutex` and
+releases the lock before calling the transport, then makes one call (`Transport.serverSendToMany`, alongside
+`serverBroadcast`) for the whole batch of editor connections rather than one call per editor, so a stalled
+editor connection costs this send one shared time budget no matter how many editors are connected - the same
+guarantee `ServerBroadcast` already gives its own per-connection sends across every connection. A
+per-connection loop on the authoritative tick thread would instead let K stalled editors block physics and
+state deltas for K times that budget. Only connections authorized as `Role::editor` are named, so play
+clients do not receive it. `RemoteLogSink::drain` also reports how many entries it had to evict (queue full, nobody
+draining fast enough); the editor surfaces that count as a warning instead of silently missing history.
+`EditorApp::handleServerLog` writes each forwarded entry straight into its own `RingBufferSink` (bypassing
+`Log::write`, which would otherwise stamp it with arrival time instead of the time it carried on the wire),
+message-prefixed `"[server] "` so it reads apart from the editor's own logging in the same `LogCategory`
+(both sides log under `net`, for instance) without collapsing every entry into one category and losing the
+Console panel's level/category filters. This works for a server the
 editor spawned *and* one it only connected to (`--host`) — it rides the same connection, not a pipe to a
 child process. The separate `--console`/`showServerConsole` window some launches show is unrelated and
 keeps behaving exactly as before.

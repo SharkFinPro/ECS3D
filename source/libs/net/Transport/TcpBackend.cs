@@ -136,19 +136,61 @@ internal sealed class TcpBackend : TransportBackend
       clients = _clients.ToArray();
     }
 
-    // One budget for the whole fan-out. A per-connection timeout would still let K stalled peers hold the
-    // tick thread for K times the timeout in a single broadcast, which is the stall this avoids.
+    SendToTargets(clients, frame, "broadcast");
+  }
+
+  public override void ServerSendToMany(nint connIds, int connIdCount, byte type, nint data, int len)
+  {
+    if (connIdCount <= 0 || TooLargeToSend(len))
+    {
+      return;
+    }
+
+    var ids = new int[connIdCount];
+    Marshal.Copy(connIds, ids, 0, connIdCount);
+    var idSet = new HashSet<int>(ids);
+
+    // Same snapshot-outside-the-lock shape as ServerBroadcast, just filtered to the named connections
+    // (editor connections only) instead of every connection.
+    var targets = new List<Connection>(idSet.Count);
+    lock (_clientsLock)
+    {
+      foreach (var conn in _clients)
+      {
+        if (idSet.Contains(conn.ConnId))
+        {
+          targets.Add(conn);
+        }
+      }
+    }
+
+    if (targets.Count == 0)
+    {
+      // Every named connection has since disconnected - nothing to send to, and no point building a frame.
+      return;
+    }
+
+    SendToTargets(targets.ToArray(), Frame(type, data, len), "send");
+  }
+
+  // Shared by ServerBroadcast (every connection) and ServerSendToMany (a named subset): sends frame to
+  // each of targets under one time budget for the whole fan-out, so K stalled peers cost this call the
+  // budget once rather than K times over - the tick thread this runs on could otherwise lose K times
+  // SendTimeoutMs to peers that have stopped reading. `what` names the operation in the log line so a
+  // stall is traceable to which path caused it.
+  private void SendToTargets(Connection[] targets, byte[] frame, string what)
+  {
     var deadline = Environment.TickCount64 + SendTimeoutMs;
     var skipped = 0;
 
-    foreach (var conn in clients)
+    foreach (var conn in targets)
     {
       var remaining = deadline - Environment.TickCount64;
       if (remaining <= 0)
       {
-        // An earlier peer spent the budget. Skip the rest of this broadcast rather than dropping them:
-        // they have done nothing wrong, and reaping them would punish healthy peers for their position in
-        // the list. They miss this one message and are sent the next broadcast as usual.
+        // An earlier peer spent the budget. Skip the rest rather than dropping them: they have done
+        // nothing wrong, and reaping them would punish healthy peers for their position in the list. They
+        // miss this one message and are sent the next one as usual.
         ++skipped;
         continue;
       }
@@ -173,50 +215,12 @@ internal sealed class TcpBackend : TransportBackend
       }
     }
 
-    // One line per broadcast rather than one per connection, so a peer stalling tick after tick is visible
-    // in the log without burying it.
+    // One line per call rather than one per connection, so a peer stalling tick after tick is visible in
+    // the log without burying it.
     if (skipped > 0)
     {
       Transport.Log(TransportLogLevel.Warn,
-        $"Skipped {skipped} connection(s): this broadcast spent its whole {SendTimeoutMs} ms budget.");
-    }
-  }
-
-  public override void ServerSend(int connId, byte type, nint data, int len)
-  {
-    if (TooLargeToSend(len))
-    {
-      return;
-    }
-
-    Connection? conn;
-    lock (_clientsLock)
-    {
-      conn = _clients.Find(c => c.ConnId == connId);
-    }
-
-    if (conn == null)
-    {
-      // Already disconnected, or never authorized as an editor in the first place - nothing to send to.
-      return;
-    }
-
-    var frame = Frame(type, data, len);
-    var sent = false;
-    try
-    {
-      conn.Client.SendTimeout = SendTimeoutMs;
-      conn.Client.GetStream().Write(frame, 0, frame.Length);
-      sent = true;
-    }
-    catch
-    {
-      // The connection dropped mid-send, or did not accept the frame inside the timeout.
-    }
-
-    if (!sent && Reap(conn))
-    {
-      Transport.Log(TransportLogLevel.Warn, $"Dropping connection {conn.ConnId}: a send failed or timed out.");
+        $"Skipped {skipped} connection(s): this {what} spent its whole {SendTimeoutMs} ms budget.");
     }
   }
 

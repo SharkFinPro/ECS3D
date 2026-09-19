@@ -929,11 +929,15 @@ void ServerApp::broadcastStructuralChanges() const
 void ServerApp::forwardLogToEditors() const
 {
   // Caps what one call can hand to the network, so a log storm costs bounded work per loop iteration
-  // instead of one send sized by however much piled up; anything past this is picked up on the next
-  // iteration (or evicted by RemoteLogSink's own capacity first, and counted in `dropped` below).
+  // instead of one send sized by however much piled up; anything past either cap is picked up on the
+  // next iteration (or evicted by RemoteLogSink's own capacity first, and counted in `dropped` below).
+  // maxBatchBytes stays well under TransportBackend::MaxMessageBytes (64 MiB) - RemoteLogSink::drain's
+  // estimate is rough, and a batch that actually hit that ceiling would be refused and lost outright
+  // rather than sent short.
   constexpr std::size_t maxEntriesPerBatch = 200;
+  constexpr std::size_t maxBatchBytes = 256 * 1024;
 
-  const auto drained = m_remoteLogSink->drain(maxEntriesPerBatch);
+  const auto drained = m_remoteLogSink->drain(maxEntriesPerBatch, maxBatchBytes);
   if (drained.entries.empty() && drained.dropped == 0)
   {
     return;
