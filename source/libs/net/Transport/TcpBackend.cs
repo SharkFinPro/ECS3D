@@ -510,8 +510,8 @@ internal sealed class TcpBackend : TransportBackend
       return false;
     }
 
-    var body = new byte[bodyLen];
-    if (!ReadExact(stream, body, deadline))
+    var body = ReadBody(stream, bodyLen, deadline);
+    if (body is null)
     {
       return false;
     }
@@ -520,6 +520,92 @@ internal sealed class TcpBackend : TransportBackend
     payload = new byte[bodyLen - 1];
     Array.Copy(body, 1, payload, 0, bodyLen - 1);
     return true;
+  }
+
+  // Bounds how much of a not-yet-fully-arrived body sits in memory to what has actually landed, capped by
+  // bodyLen, rather than committing the whole declared length before a single byte turns up. A peer can
+  // declare a frame at MaxMessageBytes and then send one byte a minute; without this it costs the server
+  // that whole allocation for as long as the peer cares to hold the socket open. Chunks are stitched into
+  // the caller's exact-size result at the end - one extra copy versus the direct fill this replaces, in
+  // exchange for never paying the full frame's memory for a single declared byte.
+  private const int BodyReadChunkBytes = 64 * 1024;
+
+  // How long the body read may go without a single byte of progress before the connection is dropped.
+  // Applied to each individual Read call via NetworkStream.ReadTimeout, so it resets on every chunk
+  // rather than bounding the whole frame - a real snapshot at the size ceiling over a slow link keeps
+  // making progress and never trips it; only a peer that stops sending outright does. Comfortably above
+  // how long even a very slow link takes to deliver one chunk (64 KiB at 7 KB/s, a 56k-modem-class rate,
+  // is under 10 s), so this only fires on an actual stall.
+  private const int BodyReadTimeoutMs = 20000;
+
+  private static byte[]? ReadBody(Stream stream, int bodyLen, long? deadline)
+  {
+    var chunks = new List<byte[]>();
+    var chunkLengths = new List<int>();
+    var remaining = bodyLen;
+
+    // Restored in the finally below so it never leaks into the next header read, which must stay
+    // unbounded - a peer between messages is idle, not stalled.
+    var savedTimeout = stream.ReadTimeout;
+    stream.ReadTimeout = BodyReadTimeoutMs;
+
+    try
+    {
+      while (remaining > 0)
+      {
+        // Same outer bound as ReadExact uses for the handshake: a per-read timeout alone doesn't cap the
+        // total when a peer trickles one byte in just under it, every time.
+        if (deadline.HasValue && Environment.TickCount64 >= deadline.Value)
+        {
+          return null;
+        }
+
+        var chunk = new byte[Math.Min(BodyReadChunkBytes, remaining)];
+        int n;
+        try
+        {
+          n = stream.Read(chunk, 0, chunk.Length);
+        }
+        catch (IOException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.TimedOut })
+        {
+          // No body progress inside the timeout above - the same kind of stall the ceiling in
+          // TransportBackend guards against, just paced instead of declared outright. Logged like the
+          // oversized-frame refusal above, since both are the same suspicious pattern: worth seeing, not
+          // worth panicking over. The caller tears down only this connection, same as any other read
+          // failure.
+          Transport.Log(TransportLogLevel.Warn, $"Dropped a connection: no body progress for {BodyReadTimeoutMs} ms.");
+
+          return null;
+        }
+        catch (IOException)
+        {
+          return null;
+        }
+
+        if (n <= 0)
+        {
+          return null;
+        }
+
+        chunks.Add(chunk);
+        chunkLengths.Add(n);
+        remaining -= n;
+      }
+    }
+    finally
+    {
+      stream.ReadTimeout = savedTimeout;
+    }
+
+    var body = new byte[bodyLen];
+    var offset = 0;
+    for (var i = 0; i < chunks.Count; ++i)
+    {
+      Array.Copy(chunks[i], 0, body, offset, chunkLengths[i]);
+      offset += chunkLengths[i];
+    }
+
+    return body;
   }
 
   private static bool ReadExact(Stream stream, Span<byte> buffer, long? deadline = null)
