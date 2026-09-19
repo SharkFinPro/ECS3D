@@ -14,6 +14,7 @@
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 
 namespace {
@@ -348,6 +349,34 @@ TEST(RuntimeObject, UnpackIntoAFreshObjectCreatesEveryPackedChild)
   ASSERT_EQ(target->getChildren().size(), 2u);
   EXPECT_EQ(target->getChildren()[0]->getUUID(), childAUUID);
   EXPECT_EQ(target->getChildren()[1]->getUUID(), childBUUID);
+}
+
+TEST(RuntimeObject, UnpackRefusesPackedChildrenSharingAUUID)
+{
+  const auto componentRegistry = std::make_shared<ComponentRegistry>();
+  const auto objectManager = makeManager(componentRegistry);
+
+  // Two children packed under the same uuid - not reachable through pack() from a live tree (addChild
+  // never checks for it, but nothing authored would produce it either), but exactly what the
+  // uuid-matching reconciliation above must not accept: either alias would leave one existing child
+  // referenced twice in m_children, or register two Objects under the one uuid every uuid-keyed lookup
+  // assumes is unique.
+  auto parent = std::make_shared<Object>("Parent");
+  auto childA = std::make_shared<Object>("ChildA", childAUUID);
+  childA->setParent(parent);
+  parent->addChild(childA);
+  auto childADuplicate = std::make_shared<Object>("ChildA again", childAUUID);
+  childADuplicate->setParent(parent);
+  parent->addChild(childADuplicate);
+
+  net::Message message(net::MessageType::objectSpawned);
+  parent->pack(message);
+
+  const auto target = std::make_shared<Object>();
+  objectManager->addObject(target);
+
+  net::MessageReader reader(message);
+  EXPECT_THROW(target->unpack(reader), std::runtime_error);
 }
 
 TEST(RuntimeObject, UnpackReconcilesExistingChildrenInsteadOfDuplicatingThem)

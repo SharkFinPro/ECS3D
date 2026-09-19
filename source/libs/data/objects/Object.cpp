@@ -466,10 +466,13 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
   // uuid is unpacked into rather than duplicated, so refreshing an object that already has children does
   // not double its subtree. Packed order is kept, and any existing child not named in the packed data is
   // dropped afterward.
+  // childCount comes off the wire, so it must not size anything before the bytes behind it are read -
+  // the same reasoning ServerApp::handleInputState applies to numKeys. Left unreserved rather than
+  // bounded against a per-child minimum: push_back's own growth is what pays for an oversized count, not
+  // an allocation sized from a number nothing has checked yet.
   const uint32_t childCount = messageReader.read<uint32_t>();
   const auto oldChildren = m_children;
   std::vector<std::shared_ptr<Object>> newChildren;
-  newChildren.reserve(childCount);
 
   for (uint32_t i = 0; i < childCount; ++i)
   {
@@ -478,6 +481,16 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     // below, existing or freshly built, reads the child's fields itself, uuid included.
     net::MessageReader uuidPeek = messageReader;
     const auto childUUID = uuids::uuid::from_string(uuidPeek.readString()).value();
+
+    // Two packed children sharing a uuid would otherwise alias one existing child twice in m_children,
+    // or create two Objects registered under the same uuid - the uuid-keyed lookups everything else
+    // relies on (ObjectManager::getObjectByUUID chief among them) assume that never happens.
+    if (std::ranges::find_if(newChildren, [&childUUID](const auto& accepted) {
+          return accepted->getUUID() == childUUID;
+        }) != newChildren.end())
+    {
+      throw std::runtime_error("Packed children contain a duplicate uuid");
+    }
 
     std::shared_ptr<Object> child;
     for (const auto& existing : oldChildren)
