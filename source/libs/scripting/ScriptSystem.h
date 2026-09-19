@@ -14,6 +14,7 @@ class ManagedHost;
 class ScriptEngine;
 class ObjectManager;
 class Object;
+class Component;
 class Script;
 
 // Which contact-lifecycle callback a dispatched collision event maps to. The integer values are the
@@ -56,8 +57,9 @@ public:
                               const uuids::uuid& objectB,
                               CollisionEvent event) const;
 
-  // Attach any scripts that haven't been attached yet (without running their lifecycle methods).
-  // Call this before syncFieldsToData so newly added scripts have a field-cache entry.
+  // Attach any scripts that haven't been attached yet, without running start()/fixedUpdate on them.
+  // Instances whose component has left the scene are stopped and detached first, so this does run
+  // stop() on them. Call this before syncFieldsToData so newly added scripts have a field-cache entry.
   void attachAll(ObjectManager& objectManager);
 
   // Refresh every Script's field blob from its live instance so a serialize()/Snapshot carries the
@@ -79,8 +81,18 @@ private:
     std::string type;
   };
 
+  // The (uuid, class) pair behind a cache key, kept alongside it so an entry whose Script component is
+  // gone can still be stopped and detached without parsing the key back apart. `component` identifies
+  // which Script the instance was created for: a key alone cannot tell a surviving component from a
+  // replacement of the same class on the same object.
+  struct AttachedScript {
+    uuids::uuid uuid;
+    std::string className;
+    std::weak_ptr<const Component> component;
+  };
+
   // key = uuid + "_" + className (cacheKey)
-  std::unordered_set<std::string> m_attached;
+  std::unordered_map<std::string, AttachedScript> m_attached;
   std::unordered_map<std::string, std::vector<ExposedField>> m_fieldCache;
 
   // Instances that have had their C# start() called. attachAll() (run every broadcastSnapshot, whether
@@ -100,9 +112,16 @@ private:
   void checkForScriptChanges(const ObjectManager& objectManager, float dt);
 
   // Create the managed instance, cache its exposed fields, and push the Script's saved field blob in.
-  void attach(const Object& object, const Script& script);
+  // Takes the component by shared_ptr so the cache entry can remember which Script it belongs to.
+  void attach(const Object& object, const std::shared_ptr<Script>& script);
 
   void detach(const uuids::uuid& uuid, const std::string& className);
+
+  // Stop and detach every instance whose Script component is no longer in the scene, since every other
+  // loop here only visits scripts the objects still return. Matching is by component identity, not by
+  // key, so a replacement Script of the same class on the same object orphans the old instance rather
+  // than silently inheriting it.
+  void detachOrphans(const ObjectManager& objectManager);
 
   // Call the instance's C# start() exactly once - a no-op on every call after the first for the same
   // (uuid, className). Safe to call unconditionally from the running tick loop, whether the instance was

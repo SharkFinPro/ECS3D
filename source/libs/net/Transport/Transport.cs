@@ -36,6 +36,10 @@ public static unsafe class Transport
   // the player slot bound to it. Optional - the C++ side may never register one.
   private static delegate* unmanaged<int, void> _serverDisconnect;
 
+  // Fired when the client's connection to the server drops, so the C++ side can stop treating the
+  // scene as live. Optional, like _serverDisconnect.
+  private static delegate* unmanaged<void> _clientDisconnect;
+
   // Fired once per connection, right after a backend's Authorize() grants it a role at the handshake, so
   // the C++ side can enforce that role on every later message (a connection cannot mutate an edit-mode
   // server's scene unless it was actually authorized as Role.editor there). Optional, like the others.
@@ -142,6 +146,12 @@ public static unsafe class Transport
   }
 
   [UnmanagedCallersOnly]
+  public static void clientSetDisconnectCallback(IntPtr fn)
+  {
+    _clientDisconnect = (delegate* unmanaged<void>)fn;
+  }
+
+  [UnmanagedCallersOnly]
   public static byte clientConnect(IntPtr hostUtf8, int port, byte role, IntPtr tokenUtf8)
   {
     var host = Marshal.PtrToStringUTF8(hostUtf8) ?? "127.0.0.1";
@@ -206,6 +216,15 @@ public static unsafe class Transport
   internal static void DeliverClient(byte type, byte[] payload)
   {
     Deliver(_clientReceive, type, payload);
+  }
+
+  internal static void DeliverClientDisconnect()
+  {
+    var callback = _clientDisconnect;
+    if (callback != null)
+    {
+      callback();
+    }
   }
 
   private static void Deliver(delegate* unmanaged<byte, byte*, int, void> callback, byte type, byte[] payload)

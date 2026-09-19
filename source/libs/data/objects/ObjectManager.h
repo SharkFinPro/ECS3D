@@ -33,7 +33,9 @@ public:
 
   void removeObjectFromRoot(const std::shared_ptr<Object>& object);
 
-  void duplicateObject(const std::shared_ptr<Object>& object);
+  // rootUUID, when given, is the uuid the copy's root takes instead of a generated one; its descendants
+  // are still given fresh ones. Passed through to instantiateUnder - see there.
+  void duplicateObject(const std::shared_ptr<Object>& object, const uuids::uuid* rootUUID = nullptr);
 
   // Build a live object (and its whole subtree) from a serialized-object blob, giving every node a fresh
   // uuid, and add it at the scene root. This is the prefab instantiation path (a prefab's body is one
@@ -46,8 +48,13 @@ public:
 
   // Same as instantiate, but rooted under parent (null = scene root) instead of always at the root - the
   // editor's instantiatePrefab op uses this when the prefab was dropped onto an existing object.
+  //
+  // rootUUID, when given, is the uuid the new root takes instead of the generated one; the descendants
+  // still get fresh uuids. The caller is the one claiming that uuid is free - nothing here checks the
+  // scene for it.
   std::shared_ptr<Object> instantiateUnder(const nlohmann::json& objectData,
-                                           const std::shared_ptr<Object>& parent);
+                                           const std::shared_ptr<Object>& parent,
+                                           const uuids::uuid* rootUUID = nullptr);
 
   void start();
 
