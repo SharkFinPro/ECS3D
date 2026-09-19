@@ -756,6 +756,14 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
     return;
   }
 
+  // A scene switch carries the sim state across it instead of always landing running: an editor author
+  // switching scenes to look around should not silently start playing the new one. loadScene() below
+  // resets the manager's status to stopped as a side effect of swapping the current scene, so the
+  // pre-switch status has to be read first. Paused counts as "land stopped" too - the new scene was
+  // never started, so there is no live run to resume into, and reporting it as paused would show controls
+  // (Resume) that don't correspond to anything actually in flight.
+  const bool wasRunning = m_sceneManager->getSceneStatus() == SceneStatus::running;
+
   // Stop the outgoing scene's scripts before switching the active scene.
   if (const auto current = m_sceneManager->getCurrentScene())
   {
@@ -770,22 +778,27 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
   }
 
   m_sceneManager->loadScene(scene);
-  m_sceneManager->startScene();
 
-  // New scene: contact history from the previous scene is meaningless here.
+  // New scene: contact history from the previous scene is meaningless here regardless of run state.
   m_collisionSystem->reset();
 
-  try
+  if (wasRunning)
   {
-    m_scriptSystem->start(*scene->getObjectManager());
-  }
-  catch (const std::exception& e)
-  {
-    Log::error(LogCategory::server, e.what());
+    m_sceneManager->startScene();
+
+    try
+    {
+      m_scriptSystem->start(*scene->getObjectManager());
+    }
+    catch (const std::exception& e)
+    {
+      Log::error(LogCategory::server, e.what());
+    }
   }
 
   Log::info(LogCategory::server, "Switched to scene '" + scene->getName() + "' ("
-    + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
+    + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, "
+    + (wasRunning ? "running" : "stopped") + ").");
 
   broadcastSnapshot();
 }
