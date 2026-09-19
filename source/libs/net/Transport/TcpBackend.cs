@@ -396,8 +396,8 @@ internal sealed class TcpBackend : TransportBackend
 
   public override void ClientSend(byte type, nint data, int len)
   {
-    var stream = _client?.GetStream();
-    if (stream is null || TooLargeToSend(len))
+    var client = _client;
+    if (client is null || TooLargeToSend(len))
     {
       return;
     }
@@ -405,11 +405,19 @@ internal sealed class TcpBackend : TransportBackend
     var frame = Frame(type, data, len);
     try
     {
-      stream.Write(frame, 0, frame.Length);
+      // GetStream() is included in the try: a concurrent teardown (ClientDisconnect or the receive loop)
+      // may dispose this same client between the read above and here, and a disposed TcpClient throws
+      // ObjectDisposedException out of GetStream() itself, before Write ever runs.
+      client.GetStream().Write(frame, 0, frame.Length);
     }
     catch
     {
-      DisconnectClient();
+      // The write failed on this specific connection. Drop that same instance rather than whatever is
+      // current: a reconnect may already have installed a different, healthy one by the time this runs.
+      if (Interlocked.CompareExchange(ref _client, null, client) == client)
+      {
+        try { client.Close(); } catch { /* already closed */ }
+      }
     }
   }
 
@@ -435,12 +443,13 @@ internal sealed class TcpBackend : TransportBackend
 
     _clientRunning = false;
 
-    // Always release the socket this loop was started with - Close is idempotent, so this is harmless if
-    // DisconnectClient already closed it. Only clear the field if it still holds this instance: a
-    // concurrent ClientConnect may already have installed a new connection there, and this loop must not
-    // touch it.
-    try { client.Close(); } catch { /* already closed */ }
+    // Cleared first, and only if it still holds the instance this loop owns - a concurrent ClientConnect
+    // may already have installed a newer connection, which this loop must leave alone - so ClientSend
+    // never reads a reference through the field once the close below has started. The socket itself is
+    // then closed unconditionally: Close is idempotent, so this is harmless even if ClientDisconnect
+    // already closed the same instance.
     Interlocked.CompareExchange(ref _client, null, client);
+    try { client.Close(); } catch { /* already closed */ }
 
     // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
     // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two

@@ -67,9 +67,17 @@ internal sealed class WebSocketBackend : TransportBackend
   private int _nextConnId;
 
   // -- Client --
-  private WebSocket? _client;
-  private HttpMessageInvoker? _clientInvoker;
-  private CancellationTokenSource? _clientCts;
+  // Bundled into one object, held in a single field, so ClientSend can never read a torn mix of a
+  // socket from one connection and a token or invoker from another: every read and every swap
+  // (Interlocked.Exchange/CompareExchange) moves or inspects the whole triple atomically.
+  private sealed class ClientConnection(WebSocket socket, CancellationTokenSource cts, HttpMessageInvoker invoker)
+  {
+    public readonly WebSocket Socket = socket;
+    public readonly CancellationTokenSource Cts = cts;
+    public readonly HttpMessageInvoker Invoker = invoker;
+  }
+
+  private ClientConnection? _connection;
   private readonly SemaphoreSlim _clientSendLock = new(1, 1);
   private Thread? _clientThread;
   private volatile bool _clientRunning;
@@ -324,9 +332,11 @@ internal sealed class WebSocketBackend : TransportBackend
       return 1;
     }
 
-    // Held out here so a failure before the fields below take ownership can still dispose them.
+    // Held out here so a failure before _connection takes ownership can still dispose them, and so the
+    // thread started below can still see the finished connection once the try block that builds it ends.
     ClientWebSocket? ws = null;
     HttpMessageInvoker? invoker = null;
+    ClientConnection? connection = null;
 
     try
     {
@@ -367,14 +377,12 @@ internal sealed class WebSocketBackend : TransportBackend
         ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, connectCts.Token).GetAwaiter().GetResult();
       }
 
-      var clientCts = new CancellationTokenSource();
-      _client = ws;
-      _clientInvoker = invoker;
-      _clientCts = clientCts;
+      connection = new ClientConnection(ws, new CancellationTokenSource(), invoker);
+      _connection = connection;
 
       // Send role + token as the first message so the server can authorize this connection (in
       // particular grant Role.editor) before any protocol message. Same wire format everywhere.
-      SendHandshake(role, token);
+      SendHandshake(connection, role, token);
     }
     catch (OperationCanceledException)
     {
@@ -393,7 +401,7 @@ internal sealed class WebSocketBackend : TransportBackend
 
     _clientRunning = true;
 
-    _clientThread = new Thread(() => ClientReceiveLoop(ws!, clientCts, invoker!))
+    _clientThread = new Thread(() => ClientReceiveLoop(connection!))
     {
       IsBackground = true,
       Name = "ecs3d-net-recv"
@@ -422,48 +430,60 @@ internal sealed class WebSocketBackend : TransportBackend
   {
     _clientRunning = false;
 
-    // Each field is taken atomically so a concurrent ClientReceiveLoop cleanup cannot also see the same
-    // instance and double-close or double-dispose it.
-    var ws = Interlocked.Exchange(ref _client, null);
-    var cts = Interlocked.Exchange(ref _clientCts, null);
-    var invoker = Interlocked.Exchange(ref _clientInvoker, null);
-
-    if (ws != null)
+    // Cleared before it is disposed, so a racing ClientSend that just read the field either gets this
+    // same instance (and then fails or is caught by its own ObjectDisposedException guard) or gets null,
+    // never a reference it can act on after this method has already started tearing it down.
+    var connection = Interlocked.Exchange(ref _connection, null);
+    if (connection is null)
     {
-      Close(ws, cts);
-    }
-    else
-    {
-      cts?.Dispose();
+      return;
     }
 
-    invoker?.Dispose();
+    Close(connection.Socket, connection.Cts);
+    connection.Invoker.Dispose();
   }
 
   public override void ClientSend(byte type, nint data, int len)
   {
-    var ws = _client;
-    var cts = _clientCts;
-    if (ws is null || cts is null || TooLargeToSend(len))
+    var connection = _connection;
+    if (connection is null || TooLargeToSend(len))
     {
       return;
     }
 
     var message = BuildMessage(type, data, len);
-    if (!SendRaw(ws, _clientSendLock, message, cts.Token))
+    try
     {
-      DisconnectClient();
+      if (SendRaw(connection.Socket, _clientSendLock, message, connection.Cts.Token))
+      {
+        return;
+      }
+    }
+    catch (ObjectDisposedException)
+    {
+      // A concurrent teardown (ClientDisconnect or the receive loop) disposed this connection between our
+      // read of _connection and this send. It is already being (or has been) released; nothing to do.
+      return;
+    }
+
+    // The write failed on this specific connection. Drop that same instance rather than whatever is
+    // current: a reconnect may already have installed a different one by the time this returns, and that
+    // one is healthy and must be left alone.
+    if (Interlocked.CompareExchange(ref _connection, null, connection) == connection)
+    {
+      Close(connection.Socket, connection.Cts);
+      connection.Invoker.Dispose();
     }
   }
 
-  private void ClientReceiveLoop(WebSocket ws, CancellationTokenSource cts, HttpMessageInvoker invoker)
+  private void ClientReceiveLoop(ClientConnection connection)
   {
     try
     {
-      var token = cts.Token;
+      var token = connection.Cts.Token;
       while (_clientRunning)
       {
-        var message = ReceiveMessage(ws, token);
+        var message = ReceiveMessage(connection.Socket, token);
         if (message is null || message.Length < 1)
         {
           break;
@@ -479,15 +499,14 @@ internal sealed class WebSocketBackend : TransportBackend
 
     _clientRunning = false;
 
-    // Always release the connection this loop was started with - Close/Dispose are idempotent, so this is
-    // harmless if DisconnectClient already ran. Only clear a field if it still holds this instance: a
-    // concurrent ClientConnect may already have installed a new connection there, and this loop must not
-    // touch it.
-    Close(ws, cts);
-    invoker.Dispose();
-    Interlocked.CompareExchange(ref _client, null, ws);
-    Interlocked.CompareExchange(ref _clientCts, null, cts);
-    Interlocked.CompareExchange(ref _clientInvoker, null, invoker);
+    // Cleared first, and only if it still holds the instance this loop owns - a concurrent ClientConnect
+    // may already have installed a newer connection, which this loop must leave alone - so ClientSend
+    // never reads a reference through the field once disposal below has started. The instance itself is
+    // then released unconditionally: Close/Dispose are idempotent, so this is harmless even if
+    // ClientDisconnect already took and released the same instance.
+    Interlocked.CompareExchange(ref _connection, null, connection);
+    Close(connection.Socket, connection.Cts);
+    connection.Invoker.Dispose();
 
     // The single delivery point for a lost connection, whether the peer closed it, a read failed, or
     // ClientDisconnect closed our own socket to make this loop exit - the native side tells the two
@@ -630,7 +649,7 @@ internal sealed class WebSocketBackend : TransportBackend
     return assembled.ToArray();
   }
 
-  private void SendHandshake(byte role, string token)
+  private void SendHandshake(ClientConnection connection, byte role, string token)
   {
     var tokenBytes = Encoding.UTF8.GetBytes(token);
 
@@ -639,7 +658,7 @@ internal sealed class WebSocketBackend : TransportBackend
     message[1] = role;
     Array.Copy(tokenBytes, 0, message, 2, tokenBytes.Length);
 
-    SendRaw(_client!, _clientSendLock, message, _clientCts!.Token);
+    SendRaw(connection.Socket, _clientSendLock, message, connection.Cts.Token);
   }
 
   // Packs a native (type, payload) pair into a single [type byte][payload] message.
