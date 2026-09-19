@@ -31,6 +31,13 @@ public:
 
   const BoundingBox& getBoundingBox();
 
+  // Read-only view of whatever getBoundingBox() last computed: no dirty check, no recompute, so it never
+  // writes m_boundingBox. Only safe where getBoundingBox() is known to have already warmed the cache for
+  // every collider involved and nothing has moved a transform since - e.g. CollisionSystem's parallel
+  // narrow phase, which warms every collider serially before the parallel region and defers collision
+  // responses (which do move transforms) to a serial pass after it.
+  [[nodiscard]] const BoundingBox& cachedBoundingBox() const { return m_boundingBox; }
+
   [[nodiscard]] ColliderType getColliderType() const;
 
   // A trigger still produces collision events but no physical response (no MTV correction, no
