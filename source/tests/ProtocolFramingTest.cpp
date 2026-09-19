@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <bit>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <span>
@@ -77,6 +78,12 @@ TEST(ProtocolFraming, RefusesTypesThatAreTriviallyCopyableButNotSafeToSend)
 {
   static_assert(std::is_trivially_copyable_v<PaddedFields> && std::is_trivially_copyable_v<HoldsAPointer>,
                 "Both would have satisfied a plain trivially-copyable constraint.");
+
+  static_assert(offsetof(PaddedFields, first) == 0 && offsetof(PaddedFields, second) == sizeof(int32_t) &&
+                offsetof(PaddedFields, third) == sizeof(int32_t) + sizeof(float) &&
+                sizeof(PaddedFields) > offsetof(PaddedFields, third) + sizeof(bool),
+                "The bool has to leave trailing padding bytes for the test to mean anything.");
+  static_assert(sizeof(HoldsAPointer::borrowed) == sizeof(void*));
 
   static_assert(GoesOnTheWire<uint32_t>);
   static_assert(GoesOnTheWire<float>);
