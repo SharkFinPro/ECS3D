@@ -24,6 +24,8 @@ add_library(${PROJECT_NAME}
   SaveUI.h
   SettingsPanel.cpp
   SettingsPanel.h
+  ConsolePanel.cpp
+  ConsolePanel.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h
   components/TransformEditor.cpp

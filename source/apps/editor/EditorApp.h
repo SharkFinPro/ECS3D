@@ -32,6 +32,8 @@ class SaveUI;
 class EditorSelection;
 class SettingsStore;
 class SettingsPanel;
+class ConsolePanel;
+class RingBufferSink;
 class KeybindTable;
 class KeybindDispatcher;
 
@@ -104,6 +106,11 @@ private:
   // tokens before the first applyStyle().
   std::unique_ptr<SettingsStore> m_settings;
   std::unique_ptr<SettingsPanel> m_settingsPanel;
+
+  // Feeds the Console panel: registered with Log so the panel can show script errors and server output
+  // that would otherwise only reach stdout. Only the editor has a panel for it, so only the editor adds it.
+  std::shared_ptr<RingBufferSink> m_consoleSink;
+  std::unique_ptr<ConsolePanel> m_consolePanel;
 
   // Named editor actions mapped to key chords, dispatched independently of who handles them (SaveUI,
   // this class, or nothing yet - see setupKeybinds). Shared with SettingsPanel, which reads/rebinds them.

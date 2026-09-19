@@ -14,6 +14,8 @@ add_library(${PROJECT_NAME}
   FileSink.h
   RingBufferSink.cpp
   RingBufferSink.h
+  LogFilter.cpp
+  LogFilter.h
   UserDataDirectory.cpp
   UserDataDirectory.h
   LogSetup.cpp

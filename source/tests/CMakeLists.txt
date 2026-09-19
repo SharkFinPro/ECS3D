@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME}
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
   LogTest.cpp
+  LogFilterTest.cpp
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
   CollisionEventTest.cpp

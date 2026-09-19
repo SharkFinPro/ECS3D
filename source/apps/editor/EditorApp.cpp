@@ -22,6 +22,8 @@
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
 #include <SettingsPanel.h>
+#include <ConsolePanel.h>
+#include <RingBufferSink.h>
 #include <SettingsStore.h>
 #include <Keybinds.h>
 #include <KeybindDispatcher.h>
@@ -158,6 +160,12 @@ EditorApp::EditorApp(LaunchOptions options)
   setupKeybinds();
 
   m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings, m_keybindTable, m_keybindDispatcher);
+
+  // Only the editor has a panel to show it, so only the editor registers the ring buffer - the console
+  // and file sinks main() already registers keep receiving everything regardless.
+  m_consoleSink = std::make_shared<RingBufferSink>(2000);
+  Log::addSink(m_consoleSink);
+  m_consolePanel = std::make_unique<ConsolePanel>(m_consoleSink);
 
   m_assetCache = std::make_shared<GpuAssetCache>(m_renderer, m_assetRegistry.get());
   m_renderSystem = std::make_shared<RenderSystem>();
@@ -828,6 +836,8 @@ void EditorApp::updateGui()
   // Draws nothing while closed. Preferences are local, so it needs no scene and no server.
   m_settingsPanel->displayGui();
 
+  m_consolePanel->displayGui();
+
   // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate
   // scene-selector widget.
 }
@@ -904,6 +914,18 @@ void EditorApp::displayWindowMenu() const
       }
     }
 
+    if (ImGui::MenuItem("Console", nullptr, m_consolePanel->isOpen()))
+    {
+      if (m_consolePanel->isOpen())
+      {
+        m_consolePanel->setOpen(false);
+      }
+      else
+      {
+        m_consolePanel->open();
+      }
+    }
+
     ImGui::EndMenu();
   }
 }
@@ -927,6 +949,7 @@ void EditorApp::updateDockSpace() const
 
     gui->dockBottom("Assets");
     gui->dockBottom("Project Errors");
+    gui->dockBottom("Console");
 
     dockLocationsSetup = true;
   }
