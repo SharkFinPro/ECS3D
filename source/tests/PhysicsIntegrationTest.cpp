@@ -422,6 +422,77 @@ TEST(PhysicsIntegration, ASmallerBoxRestingNearTheEdgeOfALargerOneDoesNotSpin)
   EXPECT_LT(maxAngularSpeed, 0.05f);
 }
 
+TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStillRestsWithoutSpinning)
+{
+  const auto scene = makeScene();
+
+  // The falling box's footprint (x from 1.2 to 3.2) hangs 0.2 past the ground's edge at x = 3, but its
+  // centre (2.2) is still comfortably over the ground - the case a real box resting near a table's edge
+  // handles fine because its whole underside, not just one corner, bears on the table.
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 3, 1, 3 });
+  ground->addComponent(std::make_shared<BoxCollider>());
+
+  const auto falling = addObject(scene, "Falling", { 2.2f, 5, 0 });
+  falling->addComponent(std::make_shared<BoxCollider>());
+  const auto body = addBody(falling, true);
+
+  CollisionSystem collisionSystem;
+
+  // A longer run and a looser bound than the flush-landing cases above: the contact point here is only
+  // an approximation of the true clipped overlap (each box's touching vertices are pulled back onto the
+  // other box's own extent rather than clipped to the exact intersection polygon), so a little residual
+  // torque is expected while it settles. What matters is that it settles rather than sustaining a rock.
+  float maxAngularSpeed = 0.0f;
+
+  for (int tick = 0; tick < 150; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    if (tick >= 120)
+    {
+      maxAngularSpeed = std::max(maxAngularSpeed, glm::length(body->getAngularVelocity()));
+    }
+  }
+
+  EXPECT_LT(maxAngularSpeed, 0.15f);
+}
+
+TEST(PhysicsIntegration, AYawedBoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
+{
+  const auto scene = makeScene();
+
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 });
+  ground->addComponent(std::make_shared<BoxCollider>());
+
+  // Yawed 45 degrees about the vertical axis before it falls, straight down onto a same-size ground
+  // box: its footprint is still centred, but rotated so each of its four bottom corners individually
+  // pokes outside the ground's own axis-aligned footprint even though the two faces plainly overlap - a
+  // vertex-inside-footprint test alone would find nothing on either side and fall through to the old,
+  // single-corner answer this change replaces.
+  const auto falling = addObject(scene, "Falling", { 0, 5, 0 });
+  falling->addComponent(std::make_shared<BoxCollider>());
+  const auto body = addBody(falling, true);
+  transformOf(falling)->setRotation({ 0, 45, 0 });
+
+  CollisionSystem collisionSystem;
+
+  float maxAngularSpeed = 0.0f;
+
+  for (int tick = 0; tick < 60; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    if (tick >= 50)
+    {
+      maxAngularSpeed = std::max(maxAngularSpeed, glm::length(body->getAngularVelocity()));
+    }
+  }
+
+  EXPECT_LT(maxAngularSpeed, 0.05f);
+}
+
 TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)
 {
   const auto scene = makeScene();

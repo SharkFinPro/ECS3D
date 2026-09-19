@@ -5,7 +5,9 @@
 #include <objects/components/collisions/SphereCollider.h>
 #include <objects/components/Transform.h>
 #include <objects/Object.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <map>
 #include <stdexcept>
@@ -20,71 +22,129 @@ glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal)
   return normal * p;
 }
 
-glm::vec3 computeBarycentric(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& p)
+// World-space box geometry, rebuilt from the same position/scale/rotation BoxCollider::getPosition,
+// getScale and getRotation already expose - the exact inputs generateTransformedMesh combines into its
+// own transform matrix - so this needs no new accessor on BoxCollider and cannot disagree with whatever
+// mesh it has cached.
+struct BoxGeometry
 {
-  const glm::vec3 v0 = c - a;
-  const glm::vec3 v1 = b - a;
-  const glm::vec3 v2 = p - a;
+  glm::vec3 center;
+  std::array<glm::vec3, 3> axes;        // world-space unit local X/Y/Z
+  std::array<float, 3> halfExtents;     // magnitude along the matching axis above
+};
 
-  const float dot00 = glm::dot(v0, v0);
-  const float dot01 = glm::dot(v0, v1);
-  const float dot02 = glm::dot(v0, v2);
-  const float dot11 = glm::dot(v1, v1);
-  const float dot12 = glm::dot(v1, v2);
+BoxGeometry boxGeometryOf(Collider& collider)
+{
+  const auto rotation = glm::radians(collider.getRotation());
+  const auto scale = collider.getScale();
 
-  const float invDenom = 1.0f / (dot00 * dot11 - dot01 * dot01);
-  const float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-  const float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-  const float w = 1.0f - u - v;
+  const auto rotationMatrix = glm::mat3(
+    glm::rotate(glm::mat4(1.0f), rotation.z, { 0, 0, 1 }) *
+    glm::rotate(glm::mat4(1.0f), rotation.y, { 0, 1, 0 }) *
+    glm::rotate(glm::mat4(1.0f), rotation.x, { 1, 0, 0 }));
 
-  return { u, v, w };
+  return {
+    .center = collider.getPosition(),
+    .axes = {
+      rotationMatrix * glm::vec3{ 1, 0, 0 },
+      rotationMatrix * glm::vec3{ 0, 1, 0 },
+      rotationMatrix * glm::vec3{ 0, 0, 1 }
+    },
+    .halfExtents = { scale.x, scale.y, scale.z }
+  };
 }
 
-// findFurthestPoint along a direction that lands exactly on a flat face (a box resting flush on
-// another face) has several tied vertices; the vertex loop inside it just keeps the first one it
-// visits, which is an arbitrary corner rather than the middle of the touching face. Nudging the
-// query direction into the four quadrants around it and collecting the distinct answers recovers the
-// whole tied set: one point for a genuine vertex/edge contact, several for a flat face, whose average
-// is then a fair stand-in for the contact manifold's centroid.
-glm::vec3 collisionManifoldCentroid(Collider& collider, const glm::vec3& direction, const glm::vec3& firstPoint)
+std::array<glm::vec3, 8> boxVerticesOf(const BoxGeometry& box)
 {
-  constexpr float tangentWeight = 0.01f;
-  constexpr float sameEpsilon = 1e-4f;
+  std::array<glm::vec3, 8> vertices;
 
-  const auto reference = std::fabs(direction.x) < 0.9f ? glm::vec3{ 1, 0, 0 } : glm::vec3{ 0, 1, 0 };
-  const auto tangentA = glm::normalize(glm::cross(direction, reference));
-  const auto tangentB = glm::cross(direction, tangentA);
-
-  std::vector<glm::vec3> points{ firstPoint };
-
-  for (const float signA : { -1.0f, 1.0f })
+  int i = 0;
+  for (const float signX : { -1.0f, 1.0f })
   {
-    for (const float signB : { -1.0f, 1.0f })
+    for (const float signY : { -1.0f, 1.0f })
     {
-      const auto perturbedDirection = glm::normalize(direction + tangentWeight * (signA * tangentA + signB * tangentB));
-      const auto point = collider.findFurthestPoint(perturbedDirection);
-
-      if (std::ranges::none_of(points, [&](const glm::vec3& existing) {
-            return glm::length(existing - point) < sameEpsilon;
-          }))
+      for (const float signZ : { -1.0f, 1.0f })
       {
-        points.push_back(point);
+        vertices[i++] = box.center
+          + signX * box.halfExtents[0] * box.axes[0]
+          + signY * box.halfExtents[1] * box.axes[1]
+          + signZ * box.halfExtents[2] * box.axes[2];
       }
     }
   }
 
-  if (points.size() == 1)
+  return vertices;
+}
+
+// Which of the box's own axes is most nearly parallel to the contact normal - the axis its touching
+// face/edge/vertex is stacked along, and so the one to ignore when checking whether another point
+// falls within its footprint.
+int dominantAxisIndex(const BoxGeometry& box, const glm::vec3& normal)
+{
+  int best = 0;
+  float bestDot = std::fabs(glm::dot(box.axes[0], normal));
+
+  for (int i = 1; i < 3; ++i)
   {
-    return firstPoint;
+    if (const float d = std::fabs(glm::dot(box.axes[i], normal)); d > bestDot)
+    {
+      bestDot = d;
+      best = i;
+    }
   }
 
-  glm::vec3 centroid{ 0 };
-  for (const auto& point : points)
+  return best;
+}
+
+// The box's own vertices nearest the other box along the contact normal - one for a corner contact, two
+// for an edge, or a whole face's four when the box rests flush against a flat surface.
+std::vector<glm::vec3> touchingVertices(const BoxGeometry& box, const glm::vec3& towardOther)
+{
+  const auto vertices = boxVerticesOf(box);
+
+  float extreme = std::numeric_limits<float>::lowest();
+  for (const auto& vertex : vertices)
   {
-    centroid += point;
+    extreme = std::max(extreme, glm::dot(vertex, towardOther));
   }
 
-  return centroid / static_cast<float>(points.size());
+  const float epsilon = 1e-3f * std::max({ box.halfExtents[0], box.halfExtents[1], box.halfExtents[2], 1.0f });
+
+  std::vector<glm::vec3> selected;
+  for (const auto& vertex : vertices)
+  {
+    if (glm::dot(vertex, towardOther) >= extreme - epsilon)
+    {
+      selected.push_back(vertex);
+    }
+  }
+
+  return selected;
+}
+
+// Projects a point onto the other box's own extent along its two axes other than the one most aligned
+// with the contact normal, leaving its position along that normal axis untouched. A vertex already
+// within the footprint comes back unchanged; one overhanging past an edge is pulled back to the nearest
+// point on that edge instead of being discarded outright - which matters for two reasons: it gives the
+// true overlap's centroid rather than just one box's whole face when a smaller box hangs partway off a
+// larger one, and it keeps a contact point at all for a same-size box resting yawed on another, where
+// every one of its corners individually pokes outside the other box's own (axis-aligned-to-itself)
+// footprint even though the two faces plainly overlap.
+glm::vec3 clampToFootprint(const glm::vec3& point, const BoxGeometry& box, const int normalAxisIndex)
+{
+  const auto relative = point - box.center;
+
+  glm::vec3 clamped = box.center;
+
+  for (int i = 0; i < 3; ++i)
+  {
+    const float coordinate = glm::dot(relative, box.axes[i]);
+    const float clampedCoordinate = i == normalAxisIndex ? coordinate : std::clamp(coordinate, -box.halfExtents[i], box.halfExtents[i]);
+
+    clamped += clampedCoordinate * box.axes[i];
+  }
+
+  return clamped;
 }
 
 Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
@@ -135,33 +195,51 @@ glm::vec3 Polytope::findCollisionPoint() const
     return pointOfCollision;
   }
 
-  auto face = m_faces[m_closestFaceData.closestFaceIndex];
-  auto [vertex0, direction0] = m_vertices[face.vertices[0]];
-  auto [vertex1, direction1] = m_vertices[face.vertices[1]];
-  auto [vertex2, direction2] = m_vertices[face.vertices[2]];
+  // Both remaining colliders are boxes (the sphere cases above already returned). Rather than trust a
+  // single EPA support point - which, for a flat face-to-face contact, is just whichever of several
+  // tied vertices findFurthestPoint happened to visit first - build the actual contact manifold: each
+  // box's touching feature (face/edge/vertex), projected onto the other box's footprint, averaged.
+  const auto boxA = boxGeometryOf(*m_collider);
+  const auto boxB = boxGeometryOf(*m_otherCollider);
 
-  auto a = m_otherCollider->findFurthestPoint(-direction0);
-  auto b = m_otherCollider->findFurthestPoint(-direction1);
-  auto c = m_otherCollider->findFurthestPoint(-direction2);
+  const auto normal = glm::normalize(closestPoint);
 
-  if (a == b && b == c)
+  // The side each box's touching feature is on: the side nearer the other box's centre, not simply
+  // +normal, so this does not depend on which collider EPA happened to call m_collider vs
+  // m_otherCollider or on the sign convention of the minimum translation vector.
+  const auto towardB = glm::dot(boxB.center - boxA.center, normal) >= 0.0f ? normal : -normal;
+  const auto towardA = -towardB;
+
+  const auto verticesA = touchingVertices(boxA, towardB);
+  const auto verticesB = touchingVertices(boxB, towardA);
+
+  const auto axisIndexA = dominantAxisIndex(boxA, normal);
+  const auto axisIndexB = dominantAxisIndex(boxB, normal);
+
+  // Never empty: touchingVertices always returns at least the one extreme vertex from each box, and
+  // clampToFootprint always returns a point (projected onto the other box's footprint if it overhangs
+  // past it, unchanged otherwise) rather than discarding it - so there is no glancing-contact case left
+  // that needs a separate fallback.
+  std::vector<glm::vec3> manifold;
+  manifold.reserve(verticesA.size() + verticesB.size());
+
+  for (const auto& vertex : verticesA)
   {
-    return collisionManifoldCentroid(*m_otherCollider, -direction0, a);
+    manifold.push_back(clampToFootprint(vertex, boxB, axisIndexB));
   }
 
-  a = m_collider->findFurthestPoint(direction0);
-  b = m_collider->findFurthestPoint(direction1);
-  c = m_collider->findFurthestPoint(direction2);
-
-  if (a == b && b == c)
+  for (const auto& vertex : verticesB)
   {
-    return collisionManifoldCentroid(*m_collider, direction0, a);
+    manifold.push_back(clampToFootprint(vertex, boxA, axisIndexA));
   }
 
-  auto barycentricCoordinates = computeBarycentric(vertex0, vertex1, vertex2, closestPoint);
-  pointOfCollision = a * barycentricCoordinates.z + c * barycentricCoordinates.x + b * barycentricCoordinates.y;
+  glm::vec3 centroid{ 0 };
+  for (const auto& point : manifold)
+  {
+    centroid += point;
+  }
 
-  return pointOfCollision;
+  return centroid / static_cast<float>(manifold.size());
 }
 
 void Polytope::EPA()
