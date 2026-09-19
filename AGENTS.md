@@ -282,8 +282,16 @@ requested from a script are buffered on the `RigidBody` data (pending-force queu
 another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t)` → false when
 absent/destroyed; never throws in the tick loop) — future component wrappers follow this; (2) a binding
 that mutates scene structure can't touch the net layer, so it **buffers the change on `BindingContext`**
-and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above);
-(3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
+and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above).
+Spawning is also deferred a level lower, in `ObjectManager` itself: `ScriptSystem::fixedUpdate`/
+`variableUpdate` range over `getAllObjects()` and run script code inside the loop, so `addObject` cannot
+append straight to that live vector without risking a reallocation mid-iteration. `ScriptSystem` holds an
+`ObjectManager::ScriptPassGuard` around each of those loops; while one is alive, `addObject` queues the new
+object instead (still immediately parented/started/`getObjectByUUID`-able) and `flushPendingAdditions`
+splices it into `m_allObjects`/`m_objects` once the pass ends - called from `ServerApp::
+broadcastStructuralChanges` at the same point `deleteObjectsMarkedForDeletion` drains a removal, so a
+script-spawned object joins the scene the same way a script-destroyed one leaves it: after the pass, not
+mid-iteration; (3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
 pairs and diffs them into enter/stay/exit uuid-pair lists; `ServerApp` hands those to
 `ScriptSystem::dispatchCollisionEvent` (→ `onCollisionEnter/Stay/Exit` script virtuals) after the collision
 pass — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` never links
