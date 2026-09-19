@@ -951,11 +951,9 @@ void EditorApp::updateDockSpace() const
     gui->dockBottom("Project Errors");
     gui->dockBottom("Console");
 
-    // Floors for the dock nodes holding these panels, in unscaled pixels (the engine applies content
-    // scale itself when comparing against the dock layout). Side panels are floored on width only and
-    // top/bottom panels on height only, so the splitter can still shrink the other axis freely. Each floor
-    // sits well under the default sizes above so the default layout is never clamped; the scene view stays
-    // unfloored so it can still shrink.
+    // Unscaled pixels; the engine applies content scale. Each floor is on one axis so the splitter can still
+    // shrink the other, and tabs sharing a dock node take the largest floor among them. In a window small
+    // enough that the default sizes fall below these, the floors win over the default layout.
     const ImVec2 objectsMinimumSize{160.0f, 0.0f};
     const ImVec2 inspectorMinimumSize{220.0f, 0.0f};
     const ImVec2 sceneStatusMinimumSize{0.0f, 40.0f};
