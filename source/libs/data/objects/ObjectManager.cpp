@@ -105,7 +105,8 @@ void ObjectManager::reassignUUIDs(nlohmann::json& objectData, const std::size_t 
 }
 
 std::shared_ptr<Object> ObjectManager::instantiateUnder(const nlohmann::json& objectData,
-                                                       const std::shared_ptr<Object>& parent)
+                                                       const std::shared_ptr<Object>& parent,
+                                                       const uuids::uuid* rootUUID)
 {
   // Work on a copy: reassignUUIDs rewrites the blob, and a prefab body is reused across instantiations.
   auto data = objectData;
@@ -119,6 +120,13 @@ std::shared_ptr<Object> ObjectManager::instantiateUnder(const nlohmann::json& ob
   // Give the new object (and every descendant) fresh uuids - reusing the originals would collide in the
   // uuid-keyed replication/picking.
   reassignUUIDs(data, baseDepth);
+
+  // Written over the freshly generated one rather than skipping the root in reassignUUIDs, so the depth
+  // walk that assigns the descendants is the same one either way.
+  if (rootUUID)
+  {
+    data["uuid"] = uuids::to_string(*rootUUID);
+  }
 
   const auto newObject = std::make_shared<Object>(data, this);
   newObject->setParent(parent);
@@ -153,13 +161,13 @@ std::shared_ptr<Object> ObjectManager::instantiate(const nlohmann::json& objectD
   return instantiateUnder(objectData, nullptr);
 }
 
-void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object)
+void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object, const uuids::uuid* rootUUID)
 {
   auto objectData = object->serialize();
   objectData["name"] = std::string(objectData.at("name")) + " - Copy";
 
   // A duplicate sits beside its original; a prefab instance (instantiate) lands at the scene root.
-  instantiateUnder(objectData, object->getParent());
+  instantiateUnder(objectData, object->getParent(), rootUUID);
 }
 
 void ObjectManager::start()

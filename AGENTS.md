@@ -32,10 +32,10 @@
 | `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for a future editor console panel), `FileSink` (UTC-timestamped lines to a file, truncated per run), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI-subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (INTERFACE lib): `Protocol.h` — the wire format (`MessageType`, `Message`/`MessageReader` binary framing, `Role`, ports). Depended on by everything that touches the wire. |
 | `source/libs/settings/` | `ECS3DSettings` — `SettingsStore`, per-user editor preferences on disk (in the directory `ECS3DLog`'s `userDataDirectory` resolves), plus `Keybinds` (`KeyChord`/`parseChord`/`formatChord`, the `EditorAction` catalogue, and the bijective `KeybindTable`) - the headless keybind model, GLFW's numeric key/mod values spelled out as literals so this library still depends on nothing but json and ECS3DLog. **Not** project data: see Development Principles. |
-| `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`, `edits/` (`EditCommand`/`EditHistory` — the undo/redo stack, see Editor Undo/Redo below). **No Vulkan, no ImGui.** |
+| `source/libs/data/` | `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders, Script, PlayerController, Camera), `Object`/`ObjectManager`, scenes, `AssetRegistry` (incl. prefab bodies), `ComponentRegistry`, `ProjectSerializer` (JSON file save/load) / `ProjectPacker` (binary wire snapshot), `Replication`, `edits/` (`EditCommand`/`EditHistory` — the undo/redo stack — plus `RecordEdits`, which derives the command for an edit the editor is about to send from its pre-edit replicated view; see Editor Undo/Redo below). **No Vulkan, no ImGui.** |
 | `source/libs/sim/` | `ECS3DSim` — `PhysicsSystem` (integration, forces, response) and `CollisionSystem` (sweep-and-prune), calling the GJK/EPA narrow phase under `collisions/` — `NarrowPhase.h`'s `findContact`/`intersects` are its entry points. Operates on `ECS3DData` via accessors. OpenMP if available. |
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
-| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Keybinds lists every `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the Settings panel's rebind capture), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI` (also owns the unsaved-changes gate: New/Open/a dropped file/closing the window all route through a guard that prompts Save/Don't Save/Cancel when a send-path callback has marked the project dirty since the last save/load - the window-close intercept sets its own raw `glfwSetWindowCloseCallback`, since `vke::Window` sets none), `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
+| `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` (which, beside the per-frame value send, coalesces a whole continuous edit - a slider drag mutates the component in place every frame - into one before/after pair reported once no widget is active) and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot, `Selection.h`), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Keybinds lists every `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the Settings panel's rebind capture), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI` (also owns the unsaved-changes gate: New/Open/a dropped file/closing the window all route through a guard that prompts Save/Don't Save/Cancel when a send-path callback has marked the project dirty since the last save/load - the window-close intercept sets its own raw `glfwSetWindowCloseCallback`, since `vke::Window` sets none), `GuiComponents`. Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess` (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
 | `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera, ModelRenderer; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
 | `source/libs/clrHost/` | `ECS3DClrHost` — `ManagedHost` boots CoreCLR and hands out managed statics as native fn ptrs. Owns the CMake helpers (`cmake/ECS3DManaged.cmake`, `FindDotnet.cmake`, `loadCS.cmake`). |
@@ -131,6 +131,11 @@ the removed object's children); `restoreObject` rebuilds a subtree from an inlin
 parent at a sibling index, and is the one structural op that **preserves the body's uuids** rather than
 reassigning them, because the undo history (`data/edits/EditCommand.h`) already names the removed
 subtree's objects by those uuids. The
+three `sceneEdit` ops that create an object (`addObject`, `duplicateObject`, `instantiatePrefab`) may carry
+a client-chosen `"uuid"` for what they create; the server honors it and picks its own when the field is
+absent. A uuid that does not parse is a `malformedEdit`; the nil uuid, or one already in use, is
+`rejected` with the scene untouched. It exists so the sender knows which object its own edit produced -
+the undo history records the reverse edit against that uuid. The
 asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
 applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —
@@ -195,7 +200,10 @@ messages are refused at the sender, where there is something useful to say about
 its own limit alongside the byte ones: `maxObjectDepth` (`data/objects/Object.h`) caps how deep
 `Object::unpack`/`loadChildren` and `ObjectManager::reassignUUIDs` will recurse into a wire or JSON
 payload, so a tree claiming more depth than any real hierarchy needs is refused rather than exhausting the
-stack. The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
+stack. A lost client connection is reported the same way: the transport calls
+`Transport.DeliverClientDisconnect()` once its client receive loop exits, reaching `NetClient`
+(`clientSetDisconnectCallback`) so the client and editor apps can surface it on screen.
+The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
 reported to C++ separately from the messages it sends: once `Authorize` succeeds, both backends call
 `Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered
 in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` against
@@ -206,7 +214,9 @@ boots CoreCLR and resolves
 managed statics as native function pointers; inbound frames are pushed from C# socket threads into a
 thread-safe `MessageQueue` and drained by the app loop. The transport backend (TCP/WebSocket) is
 selected by a single field in `Transport.cs`. The transport logs through a native `setLogCallback`
-(`net::transportLog`, category `net`), falling back to the console before it is registered.
+(`net::transportLog`, category `net`), falling back to the console before it is registered. A client
+connect attempt is bounded to `ConnectTimeoutMs` in each backend so the apps' retry loops keep their
+deadline instead of hanging on the OS connect timeout.
 
 **Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through `ManagedHost`. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World to C# via fn-ptr structs; each fn-ptr struct is
@@ -247,10 +257,16 @@ movement can be relative to wherever the camera actually faces, degrading to the
 without the `tryGet` ceremony since `ScriptBase` always constructs one for the script's own object (like
 `transform`/`rigidBody`/`input`). `bindings/BindingCoverage.h` holds a table of every `ComponentType`
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
-without deciding its scripting story can't go unnoticed. `LogBindings` gives scripts `Log.trace/debug/
+without deciding its scripting story can't go unnoticed. Script field edits are validated
+(`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
+refused with a warning and does not fault the script. `LogBindings` gives scripts `Log.trace/debug/
 info/warn/error` through `ECS3DLog` under `LogCategory::script`, registered first in `registerBindings` so
 everything the bridge itself logs afterwards - init, hot-reload, compilation - already has a binding to
-write through.
+write through. Instance lifetime tracks the live component set in both directions: a Script added to a
+running scene is attached and started by the next tick, and the mirror image holds too - a script removed
+mid-run (or whose object is destroyed) is stopped and detached by an orphan sweep that runs on every tick
+and on every scene edit's snapshot. The sweep matches by component identity, not by (uuid, class) key, so
+a re-added script of the same class gets a fresh instance rather than inheriting the stale one.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.
@@ -284,8 +300,7 @@ is true — the same signal `vke` gates its free-fly camera on. The keyboard sti
 `io.WantCaptureKeyboard`, which only trips for text input, so WASD reaches the game from either view.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
-deliberately headless (`ECS3DData` only) and deliberately not wired to `EditorApp` yet - only the command
-type and the two stacks exist so far. The design decision that shapes it: **undo is a new edit, never a
+headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a
 local rewind** - undoing sends an ordinary reverse edit back through the normal replication path and waits
 for the rebroadcast like any other change, so the server stays the single source of truth and every
 connected view converges the same way. A command records its target uuid(s) and a before/after state in
@@ -301,9 +316,18 @@ conflicted. Not every kind is reversible with the sceneEdit ops that exist today
 `removeComponent` would need a one-shot "recreate with this data" op that does not exist, and
 `duplicateObject`/`instantiatePrefab` create a whole subtree that `ObjectManager::removeObject` cannot
 cleanly undo (it reparents children up rather than deleting them) - those kinds are still representable in
-the history but report `notUndoable` instead of sending a lossy or structurally wrong reverse. Wiring the
-editor's four mutation callbacks (component edit, scene edit, add asset, rename/remove asset) through this
-is deliberately a separate, later change.
+the history but report `notUndoable` instead of sending a lossy or structurally wrong reverse. **Every
+editor mutation is recorded**: each of `EditorApp`'s mutation callbacks (component edit, scene edit, add
+asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it sends, deriving the
+before state from the replicated view while that view still holds it, and records what comes back; an edit
+nothing faithful can be derived for (a stale view, an op with no matching kind) is logged at debug and
+skipped rather than refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
+prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
+"Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
+and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
+(New/Open), scene switch, (re)connect, and a play start or stop - a pause/resume is not one, since it
+leaves the scene as it is. There is still **no user-visible undo** - no menu item, no keybind, and nothing
+reads the stacks back yet.
 
 ## Development Principles
 
