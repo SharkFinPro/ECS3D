@@ -3,6 +3,12 @@ project("ECS3DEditor")
 add_executable(${PROJECT_NAME}
   main.cpp
   EditorApp.cpp
+  EditorAppGui.cpp
+  EditorAppHandlers.cpp
+  EditorAppHistory.cpp
+  EditorAppInput.cpp
+  EditorAppMessages.cpp
+  EditorAppPanels.cpp
   EditorApp.h
   DarkTitleBar.cpp
   DarkTitleBar.h

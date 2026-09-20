@@ -429,7 +429,7 @@ asset kind on top is refused with a "not yet undoable" log message and left in p
 `EditHistory::undo()`/`redo()`, which would otherwise treat "a kind this caller does not attempt" the same
 as a validation conflict and drop it (and everything older beneath it) even though nothing about it is
 actually wrong. `EditCommand`/`EditHistory` already build and validate a faithful reverse for every
-reversible kind (the round trip is exercised in `EditHistoryTest.cpp` for all of them), so extending
+reversible kind (the round trip is exercised in `EditHistoryRoundTripTest.cpp` for all of them), so extending
 `EditorApp::undo()`/`redo()` to structural and asset kinds is a matter of widening that one kind check, not
 new library work. There is still no menu item or keybind that calls `undo()`/`redo()` - a later story wires
 one in; for now they exist as entry points only. A refusal is logged the same way for a stale target

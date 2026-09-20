@@ -3,6 +3,10 @@ project("ECS3DServer")
 add_executable(${PROJECT_NAME}
   main.cpp
   ServerApp.cpp
+  ServerAppBroadcast.cpp
+  ServerAppEdits.cpp
+  ServerAppMessages.cpp
+  ServerAppProject.cpp
   ServerApp.h
   DefaultProject.cpp
   DefaultProject.h
