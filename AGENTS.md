@@ -342,8 +342,10 @@ enum value: that value is the wire discriminator, assigned by enumerator order, 
 looked up independently could drift from what the native side actually packs. Transform is refused by
 add/remove (structural - every other system assumes an object has exactly one) but still queryable; Script
 is excluded everywhere (adding one needs a class name this API does not take). An object already marked
-for deletion this tick (`ObjectManager::isMarkedForDeletion`) refuses both too, since a change made to it
-now would never reach a client. add/remove apply to the object immediately - unlike `World.spawnObject`,
+for deletion this tick (`ObjectManager::isMarkedForDeletion`) refuses both too, since it is due to leave the
+scene in the same tick's `deleteObjectsMarkedForDeletion` pass, after the structural broadcast that would
+otherwise carry the change - a client would only see the deletion, not the change made just ahead of it.
+add/remove apply to the object immediately - unlike `World.spawnObject`,
 `Object::addComponent`/`removeComponent` for a non-Script type only ever touch `m_components`, a map
 `ScriptSystem`'s `fixedUpdate`/`variableUpdate` loops (which range over the `ObjectManager`'s object list
 and each object's `m_scripts` vector) do not read, so mutating one object's components mid-pass leaves both
