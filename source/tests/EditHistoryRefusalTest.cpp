@@ -416,6 +416,14 @@ TEST(EditHistory, NextUndoIsReversibleIsTrueForAReversibleCommandOnTopWithoutPop
 {
   auto scene = makeScene();
 
+  // validateForUndo() checks the recorded "after" state against the live scene, so the rename actually
+  // has to have happened - recording the command alone (without applying it, the mistake this test made
+  // before) leaves the object still named "Object" and undo() correctly, deterministically refuses with
+  // targetChanged on every platform, not just some.
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildRenameObject(scene.object->getUUID(), "Renamed")),
+            replication::SceneEditResult::applied);
+
   edits::EditHistory history;
   history.record(edits::EditCommand::renameObject(scene.object->getUUID(), "Object", "Renamed"));
 
