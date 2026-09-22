@@ -9,6 +9,7 @@
 #include <bindings/InputState.h>
 #include <NetServer.h>
 #include <Log.h>
+#include <Replication.h>
 #include <nlohmann/json.hpp>
 
 void ServerApp::handleClientMessage(const net::Message& message, const int32_t senderId)
@@ -155,48 +156,28 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
 {
   // The client's captured keyboard state, dropped into its player slot so two players don't clobber each
   // other. assignPlayerSlot is idempotent (the slot usually exists from the join), but bind on demand in
-  // case input arrives first.
+  // case input arrives first - done before the parse below so even a malformed message still binds the
+  // connection to a slot.
   const int32_t slot = assignPlayerSlot(senderId);
 
-  net::MessageReader reader(message);
-  const auto focused = reader.read<bool>();
-
-  // The count arrives from the network, so bound it against what is left of the payload before sizing
-  // anything: the message cannot hold more key codes than it has bytes for, and without the check a
-  // client asking for a billion keys gets the allocation attempted first and the underflow only after.
-  // It is a ceiling, not an exact length - the trailing mouse block is counted as if it could be key
-  // codes - so a client that predates that block still degrades to "no mouse" rather than being refused.
-  const auto numKeys = reader.read<uint32_t>();
-  if (numKeys > reader.remaining() / sizeof(int32_t))
+  // The parse itself (including the bound on the key count and the tolerance for a pre-mouse-block
+  // client) lives in replication::parseInputState so it can be tested without booting the CLR; this is
+  // left with just the slot routing and applying the result.
+  const auto payload = replication::parseInputState(message);
+  if (!payload.has_value())
   {
-    // Dropped rather than thrown, like every other malformed message here: the drain loop logs what it
-    // catches to a flushed stderr, which a client could otherwise spam from the tick thread.
     return;
-  }
-
-  std::vector<int> keysPressed(numKeys);
-  for (auto& key : keysPressed)
-  {
-    key = reader.read<int32_t>();
   }
 
   // Applied only once the message is known to be well formed, so a malformed one leaves the slot exactly
   // as its last good message left it instead of half-updating it.
-  InputState::setFocused(slot, focused);
-  InputState::setKeysPressed(slot, keysPressed);
+  InputState::setFocused(slot, payload->focused);
+  InputState::setKeysPressed(slot, payload->keysPressed);
 
-  // Mouse block, appended after the keys (see Protocol.h). Guard on remaining() so an older client that
-  // predates mouse input degrades to "no mouse" instead of throwing an underflow.
-  constexpr size_t mouseBytes = 5 * sizeof(float) + sizeof(uint8_t);
-  if (reader.remaining() >= mouseBytes)
+  if (payload->hasMouse)
   {
-    const auto mouseX = reader.read<float>();
-    const auto mouseY = reader.read<float>();
-    const auto mouseDeltaX = reader.read<float>();
-    const auto mouseDeltaY = reader.read<float>();
-    const auto scrollY = reader.read<float>();
-    const auto buttons = reader.read<uint8_t>();
-    InputState::setMouse(slot, mouseX, mouseY, mouseDeltaX, mouseDeltaY, scrollY, buttons);
+    InputState::setMouse(slot, payload->mouseX, payload->mouseY, payload->mouseDeltaX, payload->mouseDeltaY,
+                         payload->scrollY, payload->buttons);
   }
 }
 

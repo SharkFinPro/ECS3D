@@ -283,8 +283,10 @@ synchronization between them.
 mirrored by a C# `[StructLayout(Sequential)]` struct and registered through `Bridge` (add new fields at
 the **end** of both to keep the layout matched). `BindingContext` is the bridge from the static, C-ABI (application binary interface)
 bindings back to the server's live scene: `ScriptSystem` points it at the current `ObjectManager` each
-tick. The headless server has no GLFW window, so input is networked: clients send `inputState`, the
-server writes it into `InputState`, and `InputUtilsBindings` reads it back for scripts. Input is
+tick. The headless server has no GLFW window, so input is networked: clients send `inputState` (built by
+`replication::buildInputState`, parsed by `replication::parseInputState` in `data/Replication.{h,cpp}`,
+like every other wire payload), the server writes it into `InputState`, and `InputUtilsBindings` reads it
+back for scripts. Input is
 **per-player**: the transport tags each inbound message with a stable connection id (`NetServer::poll`'s
 `senderId`, from a monotonic id the C# backends assign); `ServerApp` binds each connection to a **player
 slot** on join (freed on disconnect via a transport disconnect callback + `NetServer::takeDisconnected`),

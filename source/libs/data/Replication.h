@@ -2,9 +2,12 @@
 #define REPLICATION_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <uuid.h>
+#include <vector>
 
 class Object;
 class ObjectManager;
@@ -205,6 +208,33 @@ void applyRemoveAsset(AssetRegistry& assetRegistry, const nlohmann::json& op);
 [[nodiscard]] net::Message packRemoveAsset(const nlohmann::json& op);
 
 [[nodiscard]] nlohmann::json unpackRemoveAsset(const net::Message& message);
+
+// The client/editor's per-frame local input, sent so the headless server (no GLFW window of its own) can
+// feed the scripts through InputState. focused/keysPressed/mouse are captured client-side; hasMouse is
+// false only when the parsed payload predates the mouse block (see parseInputState).
+struct InputStatePayload {
+  bool focused = false;
+  std::vector<int> keysPressed;
+
+  bool hasMouse = false;
+  float mouseX = 0.0f;
+  float mouseY = 0.0f;
+  float mouseDeltaX = 0.0f;
+  float mouseDeltaY = 0.0f;
+  float scrollY = 0.0f;
+  uint8_t buttons = 0;
+};
+
+[[nodiscard]] net::Message buildInputState(bool focused, const std::vector<int>& keysPressed,
+                                           float mouseX, float mouseY, float mouseDeltaX, float mouseDeltaY,
+                                           float scrollY, uint8_t buttons);
+
+// nullopt only for a key count that claims more keys than the payload has bytes left to hold - every
+// other malformed shape (a truncated bool/count, or a reader run off the end) throws std::runtime_error
+// the same way every other wire read here does. The mouse block is optional on the wire (an older client
+// may predate it): fewer bytes than the block needs leaves hasMouse false rather than throwing, so those
+// bytes (if any) are simply left unread.
+[[nodiscard]] std::optional<InputStatePayload> parseInputState(const net::Message& message);
 
 }
 
