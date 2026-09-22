@@ -171,12 +171,15 @@ void applyObjectSpawned(ObjectManager& objectManager, const net::Message& messag
 void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message);
 
 // A script added/removed a component on an already-live object (ComponentOpsBindings): unlike spawn/
-// destroy the object itself isn't new or gone, so the whole current object is re-packed and the receiver
-// unpacks it into the existing object it already has by uuid - Object::unpack reconciles both its
-// component set and its children against what was packed, so an add, a remove, or several of either in
-// one tick all converge to the same state a fresh unpack of that object would produce. Ignored (no-op) if
-// the uuid names no object the receiver currently has - routine for a view that has not been sent it yet
-// or has already dropped it, the same as an objectDestroyed for an object never spliced in.
+// destroy the object itself isn't new or gone, so its whole current subtree is re-packed (Object::pack
+// recurses through children) and the receiver unpacks it into the existing object it already has by uuid -
+// Object::unpack reconciles both a component set and children against what was packed, at every level of
+// the subtree, so an add, a remove, or several of either in one tick all converge to the same state a
+// fresh unpack of that subtree would produce. Still far narrower than the whole-project snapshot this
+// replaces the editor's sceneEdit addComponent/removeComponent ops would otherwise need for the same
+// change. Ignored (no-op) if the uuid names no object the receiver currently has - routine for a view that
+// has not been sent it yet or has already dropped it, the same as an objectDestroyed for an object never
+// spliced in.
 [[nodiscard]] net::Message buildObjectComponentsChanged(const Object& object);
 
 void applyObjectComponentsChanged(ObjectManager& objectManager, const net::Message& message);

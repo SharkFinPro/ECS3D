@@ -353,12 +353,12 @@ loops' iterators alone, even for the running script's own object - so `hasCompon
 same tick already reflects it. Replication is still deferred and batched: the changed object's uuid is
 recorded on `BindingContext` (deduped, so several add/remove calls against the same object in a tick still
 cost one resync), and `ServerApp::broadcastStructuralChanges` sends each changed object's current packed
-state as `objectComponentsChanged` after the tick - a client/editor finds the object by uuid and unpacks
-into it in place (`Object::unpack` reconciles both components and children against what was packed, the
-same way it already reconciles children). Unlike the editor's own `sceneEdit` `addComponent`/
-`removeComponent` ops, this does not re-snapshot the whole project: a resync only touches the objects that
-actually changed, the same granularity `objectSpawned`/`objectDestroyed` already use for other
-script-driven structural changes.
+subtree (`Object::pack` recurses through children) as `objectComponentsChanged` after the tick - a
+client/editor finds the root by uuid and unpacks it in place, which reconciles the component set and the
+children at every level against what was packed. Still far narrower than the whole-project snapshot the
+editor's own `sceneEdit` `addComponent`/`removeComponent` ops need for the same kind of change: a resync
+only touches the changed object's own subtree, the same granularity `objectSpawned`/`objectDestroyed`
+already use for other script-driven structural changes.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers

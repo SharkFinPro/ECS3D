@@ -31,6 +31,26 @@ namespace {
     return object;
   }
 
+  uuids::uuid childUUID()
+  {
+    return uuids::uuid::from_string("323e4567-e89b-12d3-a456-426614174002").value();
+  }
+
+  // The target object plus one child, both at fixed uuids so a server- and a client-side build of this
+  // tree name the same objects. The child carries its own RigidBody, so a test can tell "reconciled" (the
+  // component survives) apart from "rebuilt from nothing" (it would not).
+  std::shared_ptr<Object> addTargetWithChild(const Scene& scene)
+  {
+    const auto parent = addTargetObject(scene);
+
+    auto child = std::make_shared<Object>("Child", childUUID());
+    child->setParent(parent);
+    scene.objectManager->addObject(child);
+    child->addComponent(std::make_shared<RigidBody>());
+
+    return parent;
+  }
+
   bool hasRigidBody(const std::shared_ptr<Object>& object)
   {
     return object->getComponent<RigidBody>(ComponentType::rigidBody) != nullptr;
@@ -71,6 +91,34 @@ TEST(ObjectComponentsChanged, RoundTripAppliesARemovedComponent)
   replication::applyObjectComponentsChanged(*client.objectManager, message);
 
   EXPECT_FALSE(hasRigidBody(clientObject));
+}
+
+TEST(ObjectComponentsChanged, RoundTripResyncsTheWholeSubtreeAndReconcilesTheChild)
+{
+  const auto server = makeScene();
+  const auto serverParent = addTargetWithChild(server);
+  serverParent->addComponent(std::make_shared<RigidBody>());
+
+  // Object::pack recurses through children, so this one message carries the parent's added component and
+  // the untouched child together.
+  const auto message = replication::buildObjectComponentsChanged(*serverParent);
+
+  const auto client = makeScene();
+  const auto clientParent = addTargetWithChild(client);
+  ASSERT_FALSE(hasRigidBody(clientParent));
+  ASSERT_EQ(clientParent->getChildren().size(), 1u);
+  const auto clientChildBefore = clientParent->getChildren()[0];
+
+  replication::applyObjectComponentsChanged(*client.objectManager, message);
+
+  EXPECT_TRUE(hasRigidBody(clientParent));
+
+  // Reconciled in place, not duplicated or dropped: still exactly one child, the same Object instance
+  // (Object::unpack matches an existing child by uuid rather than rebuilding it), uuid and component intact.
+  ASSERT_EQ(clientParent->getChildren().size(), 1u);
+  EXPECT_EQ(clientParent->getChildren()[0], clientChildBefore);
+  EXPECT_EQ(clientParent->getChildren()[0]->getUUID(), childUUID());
+  EXPECT_TRUE(hasRigidBody(clientParent->getChildren()[0]));
 }
 
 TEST(ObjectComponentsChanged, AnUnknownUUIDIsASafeNoOp)

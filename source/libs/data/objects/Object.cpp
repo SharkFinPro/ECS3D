@@ -445,6 +445,10 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     removeComponent(stale);
   }
 
+  // Unlike the components above and the children below, an existing script whose class the payload does
+  // not name is left alone here - nothing sends a payload that omits one today, so a future path that
+  // replicates a script add/remove would need its own reconciliation, the way applyObjectComponentsChanged
+  // needed one added for components.
   const uint32_t scriptCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < scriptCount; ++i)
   {
