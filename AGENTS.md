@@ -409,10 +409,11 @@ skipping a dropped entry to reach an older one would apply reverts out of order)
 conflicted. Only one kind is not reversible with the sceneEdit ops that exist today: `removeObject`.
 `ObjectManager::deleteObjectsMarkedForDeletion` promotes the removed object's children up to its own
 parent (preserving their world placement) rather than deleting them, so a faithful undo would have to both
-recreate the removed object AND reclaim those already-live children back under it - `restoreObject` alone
+recreate the removed object and reclaim those already-live children back under it - `restoreObject` alone
 cannot do the second half (the children's uuids are already live in the scene, so its body would collide
-with them trying to recreate them too), and no other op composes the two into one atomic edit (a `Command`
-hands back exactly one payload per undo/redo, never a batch). It is still representable in the history but
+with them trying to recreate them too), and no other op composes the two into one atomic edit: a `Command`
+hands back exactly one payload per undo/redo today, with nothing in `EditHistory`'s interface for a caller
+to send a batch instead. It is still representable in the history but
 reports `notUndoable` instead of sending a lossy or structurally wrong reverse. Every other structural kind
 *is* reversible: `removeComponent` undoes through `addComponent`'s optional `"data"` field (the removed
 component's own `serialize()` blob, loaded onto the freshly created component in the same op that creates
@@ -422,9 +423,10 @@ created root's uuid alone - it deletes the whole subtree immediately, unlike `re
 none of the descendants' uuids) and redo by re-sending the original creating op. Redoing that way - rather
 than replaying a captured subtree - means a duplicate's or prefab instance's descendants get fresh uuids
 each time it is recreated, the same limitation `addObject`'s redo already has (it does not restore the
-original uuid either): the editor never applies a structural edit to its own view before the server
-confirms it, so `RecordEdits` has no way to learn what uuids the server will mint for those descendants at
-the moment it derives the command, before the edit is even sent. **Every
+original uuid either): today the editor waits for the server to confirm a structural edit and rebuild the
+snapshot rather than applying it to its own view up front, so `RecordEdits` has no way to learn what uuids
+the server will mint for those descendants at the moment it derives the command, before the edit is even
+sent. **Every
 editor mutation is recorded**: each of `EditorApp`'s mutation callbacks (component edit, scene edit, add
 asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it sends, deriving the
 before state from the replicated view while that view still holds it, and records what comes back; an edit

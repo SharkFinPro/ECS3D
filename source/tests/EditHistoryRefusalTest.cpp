@@ -419,81 +419,72 @@ TEST(EditHistory, UndoOfADuplicateObjectRefusesWhenTheDuplicateWasAlreadyRemoved
   }
 }
 
+namespace {
+  // Shared setup for the two instantiatePrefab redo tests below: registers a one-node prefab,
+  // instantiates it, records the command, and undoes it once - so a redo is sitting ready and the
+  // instance is gone, the state both the positive-control and interference tests build on.
+  void setupUndoneInstantiatePrefab(AssetScene& scene, edits::EditHistory& history,
+                                    uuids::uuid& prefabUUID, uuids::uuid& instanceUUID)
+  {
+    prefabUUID = someOtherUUID();
+    scene.assetRegistry.registerAsset({
+      .uuid = prefabUUID,
+      .type = AssetType::Prefab,
+      .path = "TestPrefab",
+      .body = nlohmann::json{ { "uuid", uuids::to_string(anotherUUID()) },
+                              { "name", "Prefab" },
+                              { "components", nlohmann::json::array() },
+                              { "scripts", nlohmann::json::array() },
+                              { "children", nlohmann::json::array() } }.dump()
+    });
+
+    instanceUUID = uuids::uuid::from_string("00000000-0000-0000-0000-000000000002").value();
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildInstantiatePrefab(prefabUUID, nullptr, &instanceUUID),
+                &scene.assetRegistry),
+              replication::SceneEditResult::applied);
+
+    history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
+
+    const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
+    ASSERT_TRUE(undoOutcome.ok());
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
+              replication::SceneEditResult::applied);
+    ASSERT_FALSE(scene.objectManager->getObjectByUUID(instanceUUID));
+  }
+}
+
+// Positive control for RedoOfAnInstantiatePrefabRefusesWhenThePrefabAssetWasRemoved below: without
+// interference, redo re-instantiates the prefab.
+TEST(EditHistory, RedoOfAnInstantiatePrefabSucceedsWithoutInterference)
+{
+  AssetScene scene;
+  edits::EditHistory history;
+  uuids::uuid prefabUUID;
+  uuids::uuid instanceUUID;
+  ASSERT_NO_FATAL_FAILURE(setupUndoneInstantiatePrefab(scene, history, prefabUUID, instanceUUID));
+
+  const auto outcome = history.redo(*scene.objectManager, &scene.assetRegistry);
+  EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
+}
+
+// Same setup, but the prefab asset is removed from the registry before redo runs: nothing left to
+// instantiate from, so it refuses by naming the prefab rather than instantiating a stale or empty body.
 TEST(EditHistory, RedoOfAnInstantiatePrefabRefusesWhenThePrefabAssetWasRemoved)
 {
-  // Positive control: without interference, redo re-instantiates the prefab.
-  {
-    AssetScene scene;
-    const auto prefabUUID = someOtherUUID();
-    scene.assetRegistry.registerAsset({
-      .uuid = prefabUUID,
-      .type = AssetType::Prefab,
-      .path = "TestPrefab",
-      .body = nlohmann::json{ { "uuid", uuids::to_string(anotherUUID()) },
-                              { "name", "Prefab" },
-                              { "components", nlohmann::json::array() },
-                              { "scripts", nlohmann::json::array() },
-                              { "children", nlohmann::json::array() } }.dump()
-    });
+  AssetScene scene;
+  edits::EditHistory history;
+  uuids::uuid prefabUUID;
+  uuids::uuid instanceUUID;
+  ASSERT_NO_FATAL_FAILURE(setupUndoneInstantiatePrefab(scene, history, prefabUUID, instanceUUID));
 
-    const auto instanceUUID = uuids::uuid::from_string("00000000-0000-0000-0000-000000000002").value();
-    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
-                replication::buildInstantiatePrefab(prefabUUID, nullptr, &instanceUUID),
-                &scene.assetRegistry),
-              replication::SceneEditResult::applied);
+  scene.assetRegistry.removeAsset(prefabUUID);
 
-    edits::EditHistory history;
-    history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
-
-    const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
-    ASSERT_TRUE(undoOutcome.ok());
-    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
-              replication::SceneEditResult::applied);
-    ASSERT_FALSE(scene.objectManager->getObjectByUUID(instanceUUID));
-
-    const auto outcome = history.redo(*scene.objectManager, &scene.assetRegistry);
-    EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
-  }
-
-  // Same setup, but the prefab asset is removed from the registry before redo runs: nothing left to
-  // instantiate from, so it refuses by naming the prefab rather than instantiating a stale or empty body.
-  {
-    AssetScene scene;
-    const auto prefabUUID = someOtherUUID();
-    scene.assetRegistry.registerAsset({
-      .uuid = prefabUUID,
-      .type = AssetType::Prefab,
-      .path = "TestPrefab",
-      .body = nlohmann::json{ { "uuid", uuids::to_string(anotherUUID()) },
-                              { "name", "Prefab" },
-                              { "components", nlohmann::json::array() },
-                              { "scripts", nlohmann::json::array() },
-                              { "children", nlohmann::json::array() } }.dump()
-    });
-
-    const auto instanceUUID = uuids::uuid::from_string("00000000-0000-0000-0000-000000000002").value();
-    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
-                replication::buildInstantiatePrefab(prefabUUID, nullptr, &instanceUUID),
-                &scene.assetRegistry),
-              replication::SceneEditResult::applied);
-
-    edits::EditHistory history;
-    history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
-
-    const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
-    ASSERT_TRUE(undoOutcome.ok());
-    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
-              replication::SceneEditResult::applied);
-    ASSERT_FALSE(scene.objectManager->getObjectByUUID(instanceUUID));
-
-    scene.assetRegistry.removeAsset(prefabUUID);
-
-    const auto outcome = history.redo(*scene.objectManager, &scene.assetRegistry);
-    EXPECT_EQ(outcome.result, edits::HistoryResult::targetMissing);
-    ASSERT_TRUE(outcome.conflict.has_value());
-    EXPECT_EQ(*outcome.conflict, prefabUUID);
-    EXPECT_FALSE(history.canRedo());
-  }
+  const auto outcome = history.redo(*scene.objectManager, &scene.assetRegistry);
+  EXPECT_EQ(outcome.result, edits::HistoryResult::targetMissing);
+  ASSERT_TRUE(outcome.conflict.has_value());
+  EXPECT_EQ(*outcome.conflict, prefabUUID);
+  EXPECT_FALSE(history.canRedo());
 }
 
 // --- nextUndoKind()/nextRedoKind(): a caller (EditorApp::undo()/redo()) that only knows how to send the
