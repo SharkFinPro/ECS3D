@@ -23,6 +23,7 @@
 #include <RemoteLogSink.h>
 #include <nlohmann/json.hpp>
 #include <chrono>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <string>

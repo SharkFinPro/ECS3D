@@ -10,6 +10,8 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <optional>
 #include <string>

@@ -13,6 +13,7 @@
 #include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>

@@ -10,6 +10,8 @@
 #include <NetServer.h>
 #include <Log.h>
 #include <nlohmann/json.hpp>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <string>
 #include <vector>
