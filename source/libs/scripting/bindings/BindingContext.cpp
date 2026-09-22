@@ -6,6 +6,7 @@ AssetRegistry* BindingContext::s_assetRegistry = nullptr;
 std::vector<std::shared_ptr<Object>> BindingContext::s_spawned;
 std::vector<uuids::uuid> BindingContext::s_destroyed;
 std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> BindingContext::s_componentEdits;
+bool BindingContext::s_structuralComponentChange = false;
 BindingContext::RaycastFn BindingContext::s_raycast = nullptr;
 BindingContext::OverlapSphereFn BindingContext::s_overlapSphere = nullptr;
 
@@ -68,6 +69,16 @@ void BindingContext::recordComponentEdit(const uuids::uuid& objectUUID, const st
 std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> BindingContext::takeComponentEdits()
 {
   return std::exchange(s_componentEdits, {});
+}
+
+void BindingContext::recordStructuralComponentChange()
+{
+  s_structuralComponentChange = true;
+}
+
+bool BindingContext::takeStructuralComponentChange()
+{
+  return std::exchange(s_structuralComponentChange, false);
 }
 
 void BindingContext::setRaycast(const RaycastFn raycast)

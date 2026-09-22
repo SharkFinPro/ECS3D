@@ -116,6 +116,16 @@ void ServerApp::broadcastStructuralChanges() const
     objectManager->flushPendingAdditions();
     objectManager->deleteObjectsMarkedForDeletion();
   }
+
+  // A script's addComponent/removeComponent (ComponentOpsBindings) already applied to the live object -
+  // unlike spawn/destroy there is nothing further to apply here - but it changed the scene graph, so it
+  // needs the same full re-snapshot the editor's sceneEdit addComponent/removeComponent ops trigger rather
+  // than a targeted component-edit broadcast. Checked last so it captures a tick that also spawned,
+  // destroyed or edited components.
+  if (BindingContext::takeStructuralComponentChange())
+  {
+    broadcastSnapshot();
+  }
 }
 
 void ServerApp::forwardLogToEditors() const

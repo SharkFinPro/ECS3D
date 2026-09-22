@@ -59,6 +59,15 @@ public:
 
   [[nodiscard]] static std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> takeComponentEdits();
 
+  // A script added/removed a component (ComponentOpsBindings): unlike a value edit this changes the
+  // scene graph, so there is no single component blob to rebroadcast - the app re-snapshots instead, the
+  // same as the editor's own sceneEdit addComponent/removeComponent ops. The change itself already
+  // applied to the live object by the time this is called; only the network side is deferred.
+  static void recordStructuralComponentChange();
+
+  // Whether any recordStructuralComponentChange happened since the last call, clearing the flag.
+  [[nodiscard]] static bool takeStructuralComponentChange();
+
   static void setRaycast(RaycastFn raycast);
   [[nodiscard]] static RaycastFn getRaycast();
 
@@ -72,6 +81,8 @@ private:
   static std::vector<std::shared_ptr<Object>> s_spawned;
   static std::vector<uuids::uuid> s_destroyed;
   static std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> s_componentEdits;
+
+  static bool s_structuralComponentChange;
 
   static RaycastFn s_raycast;
   static OverlapSphereFn s_overlapSphere;

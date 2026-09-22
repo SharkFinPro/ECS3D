@@ -335,6 +335,20 @@ running scene is attached and started by the next tick, and the mirror image hol
 mid-run (or whose object is destroyed) is stopped and detached by an orphan sweep that runs on every tick
 and on every scene edit's snapshot. The sweep matches by component identity, not by (uuid, class) key, so
 a re-added script of the same class gets a fresh instance rather than inheriting the stale one.
+`ComponentOpsBindings` (`World.hasComponent`/`addComponent`/`removeComponent`/`getComponentTypes`) gives
+scripts generic access to an object's component set, keyed by the same `ComponentRegistry` type-name
+strings unpack/loadFromJSON use ("RigidBody", "Box", "Sphere", ...) rather than `ComponentType`'s packed
+enum value, since that value is a wire discriminator the managed side must not derive independently.
+Transform is refused by add/remove (structural - every other system assumes an object has exactly one) but
+still queryable; Script is excluded everywhere (adding one needs a class name this API does not take).
+add/remove apply to the object immediately - unlike `World.spawnObject`, `Object::addComponent`/
+`removeComponent` for a non-Script type never touch the `m_scripts` vector or the `ObjectManager`'s own
+object list that `ScriptSystem`'s tick loops range over, so mutating one object's components mid-pass
+cannot invalidate either loop even when it is the running script's own object - so `hasComponent` called
+later in the same tick already reflects it. Replication is still deferred: the change flags
+`BindingContext::recordStructuralComponentChange`, and `ServerApp::broadcastStructuralChanges` re-broadcasts
+a full snapshot after the tick when the flag is set - the same structural path the editor's own `sceneEdit`
+`addComponent`/`removeComponent` ops already take, reused here instead of a new wire message.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers

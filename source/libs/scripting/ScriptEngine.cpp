@@ -4,6 +4,7 @@
 #include "bindings/RigidBodyBindings.h"
 #include "bindings/InputUtilsBindings.h"
 #include "bindings/WorldBindings.h"
+#include "bindings/ComponentOpsBindings.h"
 #include "bindings/CameraBindings.h"
 #include "bindings/ModelRendererBindings.h"
 #include "bindings/LogBindings.h"
@@ -99,6 +100,12 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerWorld =
     reinterpret_cast<RegisterWorldFn>(m_host->getDelegate(assemblyPath, typeName, "registerWorldBindings"));
   registerWorld(WorldBindingsProvider::getBindings());
+
+  // Generic add/remove/query component operations, keyed by the ComponentRegistry's type-name strings.
+  using RegisterComponentOpsFn = void(*)(ComponentOpsBindings);
+  const auto registerComponentOps =
+    reinterpret_cast<RegisterComponentOpsFn>(m_host->getDelegate(assemblyPath, typeName, "registerComponentOpsBindings"));
+  registerComponentOps(ComponentOpsBindingsProvider::getBindings());
 
   // InputUtils reads the networked InputState (ServerApp writes it from the client's inputState
   // messages), since the headless server has no GLFW window of its own.

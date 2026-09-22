@@ -18,6 +18,8 @@ add_library(${PROJECT_NAME}
   bindings/InputUtilsBindings.h
   bindings/WorldBindings.cpp
   bindings/WorldBindings.h
+  bindings/ComponentOpsBindings.cpp
+  bindings/ComponentOpsBindings.h
   bindings/CameraBindings.cpp
   bindings/CameraBindings.h
   bindings/ModelRendererBindings.cpp
