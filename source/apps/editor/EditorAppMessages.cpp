@@ -87,7 +87,11 @@ void EditorApp::handleEditComponent(const net::Message& message)
   }
 
   // The rebroadcast a component-edit undo/redo request is waiting on - see the in-flight gate on
-  // requestUndo()/requestRedo().
+  // requestUndo()/requestRedo(). Any inbound editComponent releases it, not just the echo of this
+  // editor's own request - including another editor's unrelated edit in a multi-editor session, which can
+  // release the gate earlier than the request it was actually waiting on. Accepted: a stale second press
+  // let through early is still caught by EditHistory's own validation against the live scene, the same
+  // safety net a single-editor session relies on for every other refusal.
   clearUndoRedoPending();
 }
 

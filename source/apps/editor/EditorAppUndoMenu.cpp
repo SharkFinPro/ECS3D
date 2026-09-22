@@ -16,6 +16,20 @@ namespace {
     const auto chord = table.binding(action);
     return chord ? formatChord(*chord) : std::string();
   }
+
+  // Whether a request actually sent something, read from the OPPOSITE stack's depth (redo's for undo(),
+  // undo's for redo()) rather than the one undo()/redo() popped from. A refusal (notUndoable/
+  // targetMissing/targetChanged) clears the popped-from stack down to 0 exactly the same way a legitimate
+  // pop shrinks it by one, so comparing that stack alone cannot tell a refusal from a send - and either
+  // would otherwise sit the gate for 500ms over nothing, swallowing a legitimate follow-up undo. The
+  // opposite stack is untouched by a refusal (see EditHistory::undo()/redo() to the closing brace) and only
+  // ever gains exactly one entry on success: both push straight onto it, bypassing record() - the only
+  // place maxDepth trimming happens - so there is no trim to make a +1 read as unchanged. That keeps this a
+  // depth comparison rather than needing a dedicated counter on EditHistory.
+  bool gainedOneEntry(const std::size_t before, const std::size_t after)
+  {
+    return after == before + 1;
+  }
 }
 
 void EditorApp::requestUndo()
@@ -25,10 +39,10 @@ void EditorApp::requestUndo()
     return;
   }
 
-  const auto depthBefore = m_editHistory.undoDepth();
+  const auto redoDepthBefore = m_editHistory.redoDepth();
   undo();
 
-  if (m_editHistory.undoDepth() != depthBefore)
+  if (gainedOneEntry(redoDepthBefore, m_editHistory.redoDepth()))
   {
     beginUndoRedoPending();
   }
@@ -41,10 +55,10 @@ void EditorApp::requestRedo()
     return;
   }
 
-  const auto depthBefore = m_editHistory.redoDepth();
+  const auto undoDepthBefore = m_editHistory.undoDepth();
   redo();
 
-  if (m_editHistory.redoDepth() != depthBefore)
+  if (gainedOneEntry(undoDepthBefore, m_editHistory.undoDepth()))
   {
     beginUndoRedoPending();
   }

@@ -260,7 +260,7 @@ private:
 
   // What the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit menu actually call (EditorAppUndoMenu.cpp): a
   // no-op while undoRedoRequestBlocked(), otherwise calls undo()/redo() and starts the in-flight gate if
-  // the relevant stack's depth changed - see undoRedoPendingTimeout.
+  // it actually sent something - see undoRedoPendingTimeout and EditorAppUndoMenu.cpp's gainedOneEntry().
   void requestUndo();
 
   void requestRedo();
