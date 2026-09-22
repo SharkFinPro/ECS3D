@@ -105,10 +105,11 @@ TEST(CameraRange, LoadFromJSONWithInconsistentValuesYieldsAValidCamera)
   EXPECT_GT(camera->getFarPlane(), camera->getNearPlane());
 }
 
-TEST(CameraRange, LoadFromJSONIsOrderIndependent)
+TEST(CameraRange, LoadFromJSONGivesTheSameResultRegardlessOfJsonKeyOrder)
 {
-  // Same fields as above but inserted far-then-near; nlohmann::json is a map, but the component's own
-  // loadFromJSON must not read them in a way that produces a different result either way.
+  // nlohmann::json is a map, so componentData.value(...) lookups can never actually depend on the order
+  // keys were inserted in - this exists to pin that down as intentional, not to test setNearFarPlanes
+  // itself (see the setter-order test below for that).
   const auto camera = makeCamera();
   ASSERT_NE(camera, nullptr);
 
@@ -131,6 +132,64 @@ TEST(CameraRange, LoadFromJSONIsOrderIndependent)
   EXPECT_FLOAT_EQ(camera->getFov(), reference->getFov());
   EXPECT_FLOAT_EQ(camera->getNearPlane(), reference->getNearPlane());
   EXPECT_FLOAT_EQ(camera->getFarPlane(), reference->getFarPlane());
+}
+
+TEST(CameraRange, SingleFieldSettersAreOrderDependentUnlikeLoadFromJSON)
+{
+  // Unlike loadFromJSON/unpack (which apply both values atomically through setNearFarPlanes), the public
+  // setNearPlane/setFarPlane each react only to whatever the *other* plane currently holds - see the
+  // header comment on setNearPlane/setFarPlane. Starting from the defaults (near 0.1, far 1000):
+  //
+  // near-then-far: setNearPlane clamps near to the minimum against the still-default far (1000, so far
+  // is untouched), then setFarPlane pushes the requested far up against that new, small near.
+  const auto nearThenFar = makeCamera();
+  ASSERT_NE(nearThenFar, nullptr);
+  nearThenFar->setNearPlane(0.0005f);
+  nearThenFar->setFarPlane(0.0015f);
+
+  EXPECT_FLOAT_EQ(nearThenFar->getNearPlane(), Camera::minNearPlane);
+  EXPECT_GT(nearThenFar->getFarPlane(), nearThenFar->getNearPlane());
+  // Far stayed close to near; it was never pushed up against the stale default far plane.
+  EXPECT_LT(nearThenFar->getFarPlane(), 0.01f);
+
+  // far-then-near: setFarPlane pushes the requested far up against the still-default near (0.1), then
+  // setNearPlane only lowers near - it never pulls an already-too-large far back down.
+  const auto farThenNear = makeCamera();
+  ASSERT_NE(farThenNear, nullptr);
+  farThenNear->setFarPlane(0.0015f);
+  farThenNear->setNearPlane(0.0005f);
+
+  EXPECT_FLOAT_EQ(farThenNear->getNearPlane(), Camera::minNearPlane);
+  EXPECT_GT(farThenNear->getFarPlane(), farThenNear->getNearPlane());
+  EXPECT_GT(farThenNear->getFarPlane(), nearThenFar->getFarPlane());
+}
+
+TEST(CameraRange, SetNearPlaneAtALargeMagnitudeKeepsFarStrictlyGreater)
+{
+  // Past roughly a near of 32768, float's representable spacing exceeds minFarPlaneClearance, so
+  // near + minFarPlaneClearance alone can round back down to near itself.
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+
+  camera->setNearPlane(1e6f);
+  EXPECT_GT(camera->getFarPlane(), camera->getNearPlane());
+
+  camera->setNearPlane(1e7f);
+  EXPECT_GT(camera->getFarPlane(), camera->getNearPlane());
+}
+
+TEST(CameraRange, LoadFromJSONAtALargeMagnitudeKeepsFarStrictlyGreater)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+
+  nlohmann::json data;
+  data["type"] = "Camera";
+  data["nearPlane"] = 1e7f;
+  data["farPlane"] = 1e7f;
+  camera->loadFromJSON(data);
+
+  EXPECT_GT(camera->getFarPlane(), camera->getNearPlane());
 }
 
 TEST(CameraRange, NonFiniteSettersAreIgnored)

@@ -19,6 +19,10 @@ public:
   [[nodiscard]] float getFov() const;
   void setFov(float fov);
 
+  // Each of these reacts only to whatever the *other* plane currently holds, so two calls in different
+  // orders are not guaranteed to converge (e.g. setFarPlane before setNearPlane pushes far against the
+  // near plane that was active at the time, which setNearPlane afterward does not revisit). loadFromJSON
+  // and unpack apply both values atomically through setNearFarPlanes instead, which is order-independent.
   [[nodiscard]] float getNearPlane() const;
   void setNearPlane(float nearPlane);
 
@@ -35,6 +39,13 @@ public:
   static constexpr float minNearPlane = 0.001f;
   // Far must stay strictly beyond near; this is how far past it far is pushed when the two collide.
   static constexpr float minFarPlaneClearance = 0.001f;
+
+  // The smallest far-plane value that is strictly greater than nearPlane. Past roughly a near of 32768,
+  // float's representable spacing exceeds minFarPlaneClearance, so nearPlane + minFarPlaneClearance can
+  // round back down to nearPlane itself; this falls back to the next representable float above nearPlane
+  // so far > near holds for every finite near. Shared by the component's own clamp and the editor UI so
+  // the widget never sends a value the component immediately overrides.
+  [[nodiscard]] static float minFarPlaneFor(float nearPlane);
 
   [[nodiscard]] nlohmann::json serialize() override;
 

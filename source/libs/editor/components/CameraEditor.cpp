@@ -59,7 +59,7 @@ void registerCameraEditor(ComponentEditor& componentEditor)
 
       if (gc::labeledDrag("Far Plane", &farPlane, 1.0f))
       {
-        camera->setFarPlane(std::max(farPlane, nearPlane + Camera::minFarPlaneClearance));
+        camera->setFarPlane(std::max(farPlane, Camera::minFarPlaneFor(nearPlane)));
         edited = true;
       }
     }

@@ -2,6 +2,8 @@
 #include "FiniteCheck.h"
 #include "WireTypes.h"
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 
@@ -60,6 +62,16 @@ void Camera::setFarPlane(const float farPlane)
   setNearFarPlanes(m_nearPlane, farPlane);
 }
 
+float Camera::minFarPlaneFor(const float nearPlane)
+{
+  const float withClearance = nearPlane + minFarPlaneClearance;
+  const float nextRepresentable = std::nextafter(nearPlane, std::numeric_limits<float>::infinity());
+
+  // withClearance can round back down to nearPlane once float's ULP exceeds minFarPlaneClearance; taking
+  // the max with the next representable float guarantees the result is still strictly greater than near.
+  return std::max(withClearance, nextRepresentable);
+}
+
 void Camera::setNearFarPlanes(const float nearPlane, const float farPlane)
 {
   const float newNear = finiteCheck::isFinite(nearPlane) ? std::max(nearPlane, minNearPlane) : m_nearPlane;
@@ -68,7 +80,7 @@ void Camera::setNearFarPlanes(const float nearPlane, const float farPlane)
   // far is always the one adjusted to satisfy the relation, never near, so a caller's near value is
   // never silently overridden by a stale far.
   m_nearPlane = newNear;
-  m_farPlane = std::max(newFar, newNear + minFarPlaneClearance);
+  m_farPlane = std::max(newFar, minFarPlaneFor(newNear));
 }
 
 bool Camera::isActive() const
