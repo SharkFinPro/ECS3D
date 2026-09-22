@@ -38,6 +38,16 @@ namespace {
 
     return camera;
   }
+
+  // The component setters below silently ignore a non-finite write (Camera::setFov etc.), so calling
+  // recordComponentEdit unconditionally would broadcast a full component for a set that did nothing. Exact
+  // compare is correct here - it is only asking whether the setter actually wrote a new value, not doing
+  // float math of its own.
+  template<typename T>
+  bool valueChanged(const T& before, const T& after)
+  {
+    return before != after;
+  }
 }
 
 CameraBindings CameraBindingsProvider::getBindings()
@@ -89,11 +99,16 @@ void CameraBindingsProvider::bindSetDirection(const char* uuid, float x, float y
     return;
   }
 
+  const auto before = camera->getDirection();
   camera->setDirection({ x, y, z });
 
   // Not covered by the per-tick state delta (Transform only), so replicate it like the editor's own
-  // component edits: buffer it here (scripting can't reach the net layer) for the app to broadcast.
-  BindingContext::recordComponentEdit(objectUUID, camera);
+  // component edits: buffer it here (scripting can't reach the net layer) for the app to broadcast. Only
+  // when the setter actually changed the value - a non-finite direction is a silent no-op.
+  if (valueChanged(before, camera->getDirection()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
 }
 
 float CameraBindingsProvider::bindGetFov(const char* uuid)
@@ -111,9 +126,13 @@ void CameraBindingsProvider::bindSetFov(const char* uuid, float fov)
     return;
   }
 
+  const auto before = camera->getFov();
   camera->setFov(fov);
 
-  BindingContext::recordComponentEdit(objectUUID, camera);
+  if (valueChanged(before, camera->getFov()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
 }
 
 float CameraBindingsProvider::bindGetNearPlane(const char* uuid)
@@ -131,9 +150,13 @@ void CameraBindingsProvider::bindSetNearPlane(const char* uuid, float nearPlane)
     return;
   }
 
+  const auto before = camera->getNearPlane();
   camera->setNearPlane(nearPlane);
 
-  BindingContext::recordComponentEdit(objectUUID, camera);
+  if (valueChanged(before, camera->getNearPlane()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
 }
 
 float CameraBindingsProvider::bindGetFarPlane(const char* uuid)
@@ -151,9 +174,13 @@ void CameraBindingsProvider::bindSetFarPlane(const char* uuid, float farPlane)
     return;
   }
 
+  const auto before = camera->getFarPlane();
   camera->setFarPlane(farPlane);
 
-  BindingContext::recordComponentEdit(objectUUID, camera);
+  if (valueChanged(before, camera->getFarPlane()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
 }
 
 bool CameraBindingsProvider::bindIsActive(const char* uuid)
@@ -171,7 +198,11 @@ void CameraBindingsProvider::bindSetActive(const char* uuid, bool active)
     return;
   }
 
+  const auto before = camera->isActive();
   camera->setActive(active);
 
-  BindingContext::recordComponentEdit(objectUUID, camera);
+  if (valueChanged(before, camera->isActive()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
 }

@@ -38,6 +38,16 @@ namespace {
 
     return rigidBody;
   }
+
+  // The component setters below silently ignore a non-finite write (RigidBody::setMass etc.), so calling
+  // recordComponentEdit unconditionally would broadcast a full component for a set that did nothing. Exact
+  // compare is correct here - it is only asking whether the setter actually wrote a new value, not doing
+  // float math of its own.
+  template<typename T>
+  bool valueChanged(const T& before, const T& after)
+  {
+    return before != after;
+  }
 }
 
 RigidBodyBindings RigidBodyBindingsProvider::getBindings()
@@ -155,11 +165,16 @@ void RigidBodyBindingsProvider::bindSetMass(const char* uuid, const float mass)
     return;
   }
 
+  const auto before = rigidBody->getMass();
   rigidBody->setMass(mass);
 
   // Not covered by the per-tick state delta (Transform only), so replicate it like the editor's own
-  // component edits: buffer it here (scripting can't reach the net layer) for the app to broadcast.
-  BindingContext::recordComponentEdit(objectUUID, rigidBody);
+  // component edits: buffer it here (scripting can't reach the net layer) for the app to broadcast. Only
+  // when the setter actually changed the value - a non-finite mass is a silent no-op.
+  if (valueChanged(before, rigidBody->getMass()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, rigidBody);
+  }
 }
 
 float RigidBodyBindingsProvider::bindGetFriction(const char* uuid)
@@ -177,9 +192,13 @@ void RigidBodyBindingsProvider::bindSetFriction(const char* uuid, const float fr
     return;
   }
 
+  const auto before = rigidBody->getFriction();
   rigidBody->setFriction(friction);
 
-  BindingContext::recordComponentEdit(objectUUID, rigidBody);
+  if (valueChanged(before, rigidBody->getFriction()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, rigidBody);
+  }
 }
 
 float RigidBodyBindingsProvider::bindGetGravity(const char* uuid)
@@ -197,9 +216,13 @@ void RigidBodyBindingsProvider::bindSetGravity(const char* uuid, const float gra
     return;
   }
 
+  const auto before = rigidBody->getGravity();
   rigidBody->setGravity(gravity);
 
-  BindingContext::recordComponentEdit(objectUUID, rigidBody);
+  if (valueChanged(before, rigidBody->getGravity()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, rigidBody);
+  }
 }
 
 bool RigidBodyBindingsProvider::bindGetDoGravity(const char* uuid)
@@ -217,7 +240,11 @@ void RigidBodyBindingsProvider::bindSetDoGravity(const char* uuid, const bool do
     return;
   }
 
+  const auto before = rigidBody->getDoGravity();
   rigidBody->setDoGravity(doGravity);
 
-  BindingContext::recordComponentEdit(objectUUID, rigidBody);
+  if (valueChanged(before, rigidBody->getDoGravity()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, rigidBody);
+  }
 }

@@ -337,13 +337,18 @@ and on every scene edit's snapshot. The sweep matches by component identity, not
 a re-added script of the same class gets a fresh instance rather than inheriting the stale one.
 
 **Script binding coverage.** Each *Bindings provider exposes its component's full public surface except
-for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight.
-`TransformBindings` leaves out `getUpdateID` (a cache-invalidation counter for colliders, not scene data)
-and `serialize`/`loadFromJSON`/`pack`/`unpack` (project/wire plumbing, not gameplay state).
-`RigidBodyBindings` leaves out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already
-writes to; PhysicsSystem drains it) and `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own
-double-buffered falling state; `isFalling` is the read-only query scripts get). `CameraBindings` now
-covers every field on `Camera`. `InputUtilsBindings` already covers everything `InputState` queries;
+for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight. Every
+component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the same way across all four
+(project/wire plumbing, not gameplay state), not just Transform's. `TransformBindings` also leaves out
+`getUpdateID` (a cache-invalidation counter for colliders, not scene data). `RigidBodyBindings` leaves
+out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writes to; PhysicsSystem
+drains it) and `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
+falling state; `isFalling` is the read-only query scripts get). `CameraBindings` covers every field on
+`Camera`, but its setters only reject non-finite input, the same rule every other setter here applies -
+the range clamps the editor UI enforces (`CameraEditor.cpp`: fov 1-179, near plane >= 0.001, far plane >
+near) live only there, not in the component, so a script can currently set a degenerate projection; that
+is inert today since the renderer's projection is otherwise hardcoded, but worth revisiting if that
+changes. `InputUtilsBindings` already covers everything `InputState` queries;
 `setKeysPressed`/`setFocused`/`setMouse`/`clearMouseDeltas`/`commitInputEdges`/`removeSlot` stay
 unexposed because they are the write side ServerApp feeds from the network and the per-tick bookkeeping
 that resets it - in this design scripts only consume input, so that side belongs to ServerApp - and

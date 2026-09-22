@@ -198,6 +198,33 @@ namespace {
     EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
   }
 
+  TEST_F(ScriptBindingGapsTest, RigidBodyNonFiniteSetRecordsNoEditWithPositiveControl)
+  {
+    const auto object = fixtures::addObject(scene, "object");
+    const auto rigidBody = fixtures::addRigidBody(object);
+    const auto bindings = RigidBodyBindingsProvider::getBindings();
+    const auto uuid = uuidOf(object);
+    const auto defaultMass = rigidBody->getMass();
+    const auto defaultGravity = rigidBody->getGravity();
+
+    // Negative control: the component setter silently ignores a non-finite write, so the value never
+    // actually changes - the binding must not buffer a replicated edit for a set that did nothing.
+    bindings.setMass(uuid.c_str(), std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FLOAT_EQ(rigidBody->getMass(), defaultMass);
+    EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+    bindings.setGravity(uuid.c_str(), std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(rigidBody->getGravity(), defaultGravity);
+    EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+    // Positive control on the same object: a genuinely different value does buffer an edit.
+    bindings.setMass(uuid.c_str(), defaultMass + 1.0f);
+    EXPECT_FLOAT_EQ(rigidBody->getMass(), defaultMass + 1.0f);
+    const auto edits = BindingContext::takeComponentEdits();
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].second, rigidBody);
+  }
+
   TEST_F(ScriptBindingGapsTest, RigidBodyUnknownUUIDReadsNeutralDefaultAndRecordsNoEdit)
   {
     const auto bindings = RigidBodyBindingsProvider::getBindings();
@@ -265,12 +292,39 @@ namespace {
     EXPECT_FLOAT_EQ(camera->getFarPlane(), 200.0f);
     EXPECT_FALSE(camera->isActive());
 
-    // Positive control: Camera isn't covered by the state delta, so every setter call above (six, one
-    // non-finite no-op included since it still resolves the component) must have buffered exactly one
-    // coalesced edit for this object - see BindingContext::recordComponentEdit's dedupe.
+    // Positive control: Camera isn't covered by the state delta, so the five setter calls above that
+    // actually changed a value (the sixth, the non-finite setFov, changed nothing - see
+    // CameraNonFiniteSetRecordsNoEditWithPositiveControl below) must have buffered exactly one coalesced
+    // edit for this object - see BindingContext::recordComponentEdit's dedupe.
     const auto edits = BindingContext::takeComponentEdits();
     ASSERT_EQ(edits.size(), 1u);
     EXPECT_EQ(edits[0].first, object->getUUID());
+    EXPECT_EQ(edits[0].second, camera);
+  }
+
+  TEST_F(ScriptBindingGapsTest, CameraNonFiniteSetRecordsNoEditWithPositiveControl)
+  {
+    const auto object = fixtures::addObject(scene, "object");
+    const auto camera = std::make_shared<Camera>();
+    object->addComponent(camera);
+    const auto bindings = CameraBindingsProvider::getBindings();
+    const auto uuid = uuidOf(object);
+
+    // Negative control: the component setter silently ignores a non-finite write, so the value never
+    // actually changes - the binding must not buffer a replicated edit for a set that did nothing.
+    bindings.setFov(uuid.c_str(), std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FLOAT_EQ(camera->getFov(), 45.0f);
+    EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+    bindings.setDirection(uuid.c_str(), std::numeric_limits<float>::infinity(), 0.0f, 0.0f);
+    fixtures::expectNear("direction", camera->getDirection(), glm::vec3(0, 0, -1));
+    EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+    // Positive control on the same object: a genuinely different value does buffer an edit.
+    bindings.setFov(uuid.c_str(), 90.0f);
+    EXPECT_FLOAT_EQ(camera->getFov(), 90.0f);
+    const auto edits = BindingContext::takeComponentEdits();
+    ASSERT_EQ(edits.size(), 1u);
     EXPECT_EQ(edits[0].second, camera);
   }
 
