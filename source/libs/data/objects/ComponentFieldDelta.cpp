@@ -206,9 +206,15 @@ namespace componentFieldDelta {
 
     for (const auto& [key, value] : serializedForms[0].items())
     {
-      if (isNamedEntryArray(value))
+      // Copied out of the structured binding before the lambdas below capture them: some older clang
+      // versions (the ubuntu-22.04 CI image's, in C++20 mode) refuse to capture a structured binding by
+      // reference at all, even though the standard has allowed it since C++20.
+      const std::string keyName = key;
+      const nlohmann::json& keyValue = value;
+
+      if (isNamedEntryArray(keyValue))
       {
-        for (const auto& entry : value)
+        for (const auto& entry : keyValue)
         {
           if (!entry.contains("name"))
           {
@@ -220,7 +226,7 @@ namespace componentFieldDelta {
 
           const bool disagrees = std::any_of(serializedForms.begin() + 1, serializedForms.end(),
             [&](const nlohmann::json& form) {
-              const auto it = form.find(key);
+              const auto it = form.find(keyName);
               if (it == form.end())
               {
                 return true;
@@ -232,7 +238,7 @@ namespace componentFieldDelta {
 
           if (disagrees)
           {
-            mixed.push_back(key + "." + name);
+            mixed.push_back(keyName + "." + name);
           }
         }
 
@@ -241,13 +247,13 @@ namespace componentFieldDelta {
 
       const bool disagrees = std::any_of(serializedForms.begin() + 1, serializedForms.end(),
         [&](const nlohmann::json& form) {
-          const auto it = form.find(key);
-          return it == form.end() || *it != value;
+          const auto it = form.find(keyName);
+          return it == form.end() || *it != keyValue;
         });
 
       if (disagrees)
       {
-        mixed.push_back(key);
+        mixed.push_back(keyName);
       }
     }
 
