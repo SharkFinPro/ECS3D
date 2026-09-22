@@ -39,6 +39,63 @@ namespace componentFieldDelta {
 
       return signatures;
     }
+
+    // Whether `value` looks like Script::m_fields: an array of json objects each carrying a "name" - a
+    // shape check rather than naming the Script component type, so this stays generic to whatever else
+    // might serialize a named-entry list the same way. An empty array has no entries to disagree about, so
+    // it is treated as an ordinary value instead (falls through to the whole-value path).
+    bool isNamedEntryArray(const nlohmann::json& value)
+    {
+      if (!value.is_array() || value.empty())
+      {
+        return false;
+      }
+
+      return std::ranges::all_of(value, [](const nlohmann::json& entry) {
+        return entry.is_object() && entry.contains("name");
+      });
+    }
+
+    const nlohmann::json* findEntryByName(const nlohmann::json& entries, const std::string& name)
+    {
+      for (const auto& entry : entries)
+      {
+        if (entry.contains("name") && entry.at("name") == name)
+        {
+          return &entry;
+        }
+      }
+
+      return nullptr;
+    }
+
+    // Entry names in `after` whose "value" differs from the same-named entry in `before` (including one
+    // `before` has no matching entry for at all).
+    std::vector<std::string> changedEntryNames(const nlohmann::json& before, const nlohmann::json& after)
+    {
+      std::vector<std::string> changed;
+
+      for (const auto& entry : after)
+      {
+        if (!entry.contains("name"))
+        {
+          continue;
+        }
+
+        const std::string name = entry.at("name");
+        const auto* beforeEntry = findEntryByName(before, name);
+        const auto afterValue = entry.contains("value") ? entry.at("value") : nlohmann::json();
+        const auto beforeValue = beforeEntry && beforeEntry->contains("value")
+          ? beforeEntry->at("value") : nlohmann::json();
+
+        if (!beforeEntry || beforeValue != afterValue)
+        {
+          changed.push_back(name);
+        }
+      }
+
+      return changed;
+    }
   }
 
   std::vector<std::string> commonComponentSignatures(const std::vector<std::shared_ptr<Object>>& objects)
@@ -149,6 +206,39 @@ namespace componentFieldDelta {
 
     for (const auto& [key, value] : serializedForms[0].items())
     {
+      if (isNamedEntryArray(value))
+      {
+        for (const auto& entry : value)
+        {
+          if (!entry.contains("name"))
+          {
+            continue;
+          }
+
+          const std::string name = entry.at("name");
+          const auto entryValue = entry.contains("value") ? entry.at("value") : nlohmann::json();
+
+          const bool disagrees = std::any_of(serializedForms.begin() + 1, serializedForms.end(),
+            [&](const nlohmann::json& form) {
+              const auto it = form.find(key);
+              if (it == form.end())
+              {
+                return true;
+              }
+              const auto* other = findEntryByName(*it, name);
+              const auto otherValue = other && other->contains("value") ? other->at("value") : nlohmann::json();
+              return !other || otherValue != entryValue;
+            });
+
+          if (disagrees)
+          {
+            mixed.push_back(key + "." + name);
+          }
+        }
+
+        continue;
+      }
+
       const bool disagrees = std::any_of(serializedForms.begin() + 1, serializedForms.end(),
         [&](const nlohmann::json& form) {
           const auto it = form.find(key);
@@ -164,17 +254,52 @@ namespace componentFieldDelta {
     return mixed;
   }
 
-  nlohmann::json applyKeyDelta(const nlohmann::json& target, const nlohmann::json& source,
-                               const std::vector<std::string>& keys)
+  nlohmann::json applyKeyDelta(const nlohmann::json& target, const nlohmann::json& before,
+                               const nlohmann::json& after, const std::vector<std::string>& keys)
   {
     nlohmann::json merged = target;
 
     for (const auto& key : keys)
     {
-      if (const auto it = source.find(key); it != source.end())
+      const auto afterIt = after.find(key);
+      if (afterIt == after.end())
       {
-        merged[key] = *it;
+        continue;
       }
+
+      // A Script-shaped fields array: merge per entry (by name) instead of replacing the whole array, or
+      // every other object's untouched fields would be clobbered by the primary's whole field list.
+      if (isNamedEntryArray(*afterIt) && merged.contains(key) && merged.at(key).is_array())
+      {
+        const auto beforeIt = before.find(key);
+        const auto changed = changedEntryNames(beforeIt != before.end() ? *beforeIt : nlohmann::json::array(),
+                                               *afterIt);
+
+        for (auto& targetEntry : merged.at(key))
+        {
+          if (!targetEntry.contains("name"))
+          {
+            continue;
+          }
+
+          const std::string name = targetEntry.at("name");
+          if (std::ranges::find(changed, name) == changed.end())
+          {
+            continue;
+          }
+
+          // Only the value crosses over; an entry target doesn't have is left alone rather than added.
+          if (const auto* sourceEntry = findEntryByName(*afterIt, name);
+              sourceEntry && sourceEntry->contains("value"))
+          {
+            targetEntry["value"] = sourceEntry->at("value");
+          }
+        }
+
+        continue;
+      }
+
+      merged[key] = *afterIt;
     }
 
     return merged;

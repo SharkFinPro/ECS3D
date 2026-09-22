@@ -4,6 +4,7 @@
 #include "objects/ComponentFieldDelta.h"
 #include "objects/Object.h"
 #include "objects/components/RigidBody.h"
+#include "objects/components/Script.h"
 #include "objects/components/Transform.h"
 
 #include <glm/vec3.hpp>
@@ -135,7 +136,7 @@ TEST(MultiSelectEdit, ApplyingAChangedFieldLeavesTheTargetsOtherFieldsAlone)
   ASSERT_EQ(changedKeys.size(), 1u);
   EXPECT_EQ(changedKeys.front(), "mass");
 
-  const auto merged = componentFieldDelta::applyKeyDelta(bBefore, after, changedKeys);
+  const auto merged = componentFieldDelta::applyKeyDelta(bBefore, before, after, changedKeys);
 
   EXPECT_FLOAT_EQ(merged.at("mass").get<float>(), 7.0f);
   // b's own friction, which a never touched and which differs from a's, must survive the merge.
@@ -171,7 +172,7 @@ TEST(MultiSelectEdit, ApplyingAChangedVec3KeyReplacesTheWholeArray)
   ASSERT_EQ(changedKeys.size(), 1u);
   EXPECT_EQ(changedKeys.front(), "position");
 
-  const auto merged = componentFieldDelta::applyKeyDelta(bBefore, after, changedKeys);
+  const auto merged = componentFieldDelta::applyKeyDelta(bBefore, before, after, changedKeys);
 
   ASSERT_TRUE(merged.at("position").is_array());
   EXPECT_FLOAT_EQ(merged.at("position").at(0).get<float>(), 4.0f);
@@ -183,4 +184,73 @@ TEST(MultiSelectEdit, ApplyingAChangedVec3KeyReplacesTheWholeArray)
   EXPECT_FLOAT_EQ(merged.at("rotation").at(0).get<float>(), 9.0f);
   EXPECT_FLOAT_EQ(merged.at("rotation").at(1).get<float>(), 9.0f);
   EXPECT_FLOAT_EQ(merged.at("rotation").at(2).get<float>(), 9.0f);
+}
+
+namespace {
+  // A "Mover" script instance with the two exposed float fields ScriptEditor.cpp's widgets read/write:
+  // {name, type, value}. Shared by the two Script tests below.
+  std::shared_ptr<Script> addMoverScript(const std::shared_ptr<Object>& object, const float speed,
+                                         const float power)
+  {
+    auto script = std::make_shared<Script>("Mover");
+    script->setFields(nlohmann::json::array({
+      { { "name", "speed" }, { "type", "float" }, { "value", speed } },
+      { { "name", "power" }, { "type", "float" }, { "value", power } }
+    }));
+    object->addComponent(script);
+
+    return script;
+  }
+}
+
+// Regression for the clobber bug: Script components serialize every exposed field under one top-level
+// "fields" array, so a naive whole-key replace would overwrite every other object's unrelated fields
+// whenever any one field changed. This must fail before the per-entry merge fix.
+TEST(MultiSelectEdit, ApplyingAChangedScriptFieldLeavesOtherFieldsAlone)
+{
+  fixtures::Scene scene;
+  const auto a = fixtures::addObject(scene, "A");
+  const auto b = fixtures::addObject(scene, "B");
+
+  const auto scriptA = addMoverScript(a, 1.0f, 5.0f);
+  const auto scriptB = addMoverScript(b, 1.0f, 9.0f);
+
+  const auto before = scriptA->serialize();
+
+  // Simulate the widget editing only a's "speed" field this frame.
+  auto fields = scriptA->getFields();
+  fields[0]["value"] = 2.0f;
+  scriptA->setFields(fields);
+  const auto after = scriptA->serialize();
+
+  const auto changedKeys = componentFieldDelta::changedTopLevelKeys(before, after);
+  ASSERT_EQ(changedKeys.size(), 1u);
+  EXPECT_EQ(changedKeys.front(), "fields");
+
+  const auto merged = componentFieldDelta::applyKeyDelta(scriptB->serialize(), before, after, changedKeys);
+  scriptB->loadFromJSON(merged);
+
+  const auto resultFields = scriptB->getFields();
+  ASSERT_EQ(resultFields.size(), 2u);
+  EXPECT_FLOAT_EQ(resultFields[0].at("value").get<float>(), 2.0f); // speed propagated from a
+  EXPECT_FLOAT_EQ(resultFields[1].at("value").get<float>(), 9.0f); // b's own power, untouched
+}
+
+// Mixed detection at field-entry granularity: a field that differs is named ("fields.speed"), a field
+// that matches everywhere ("power") is the negative control.
+TEST(MultiSelectEdit, MixedTopLevelKeysReportsScriptFieldsByName)
+{
+  fixtures::Scene scene;
+  const auto a = fixtures::addObject(scene, "A");
+  const auto b = fixtures::addObject(scene, "B");
+
+  const auto scriptA = addMoverScript(a, 1.0f, 5.0f);
+  const auto scriptB = addMoverScript(b, 9.0f, 5.0f);
+
+  const auto mixed = componentFieldDelta::mixedTopLevelKeys({ scriptA->serialize(), scriptB->serialize() });
+
+  EXPECT_NE(std::ranges::find(mixed, std::string("fields.speed")), mixed.end());
+  EXPECT_EQ(std::ranges::find(mixed, std::string("fields.power")), mixed.end());
+  // The whole "fields" key itself is not reported - the per-entry names are more precise.
+  EXPECT_EQ(std::ranges::find(mixed, std::string("fields")), mixed.end());
 }

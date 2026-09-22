@@ -45,17 +45,24 @@ namespace componentFieldDelta {
 
   // The top-level keys where any of `serializedForms` disagrees with the first entry - the fields the
   // multi-select view shows as mixed instead of silently picking one object's value. Empty or single-
-  // element input is never mixed.
+  // element input is never mixed. A key whose value is a Script-shaped "fields" array (a list of json
+  // objects each carrying a "name") is compared entry by entry instead of as one opaque blob, and a
+  // disagreeing entry is reported as "<key>.<entryName>" (e.g. "fields.speed") rather than just "fields" -
+  // otherwise one differing script field would read as the whole field list being mixed.
   [[nodiscard]] std::vector<std::string> mixedTopLevelKeys(
     const std::vector<nlohmann::json>& serializedForms);
 
-  // `target` with each of `keys` replaced by `source`'s value for that key - a whole-value replacement, so
-  // a nested vec3 (stored as an array) is swapped in whole rather than merged element-by-element. Keys
-  // outside `keys` (a target object's own differing fields) are left untouched, which is the point: this
-  // is how one field's edit is applied to every other selected object without overwriting the rest of
-  // their state.
-  [[nodiscard]] nlohmann::json applyKeyDelta(const nlohmann::json& target, const nlohmann::json& source,
-                                             const std::vector<std::string>& keys);
+  // `target` with each of `keys` updated from `after`, using `before` to tell which part of a key actually
+  // changed. For most keys this is a whole-value replacement (a nested vec3, stored as an array, is
+  // swapped in whole rather than merged element-by-element). A key whose `before`/`after` value is a
+  // Script-shaped "fields" array is handled per entry instead: only the entries whose "value" differs
+  // between `before` and `after` are copied into `target`'s own array (by matching "name"), and only when
+  // `target` already has an entry of that name - every other entry in `target`'s array, and any entry
+  // `target` doesn't have, is left exactly as it was. Keys outside `keys` (a target object's own differing
+  // fields) are untouched either way, which is the point: this is how one field's edit is applied to every
+  // other selected object without overwriting the rest of their state.
+  [[nodiscard]] nlohmann::json applyKeyDelta(const nlohmann::json& target, const nlohmann::json& before,
+                                             const nlohmann::json& after, const std::vector<std::string>& keys);
 }
 
 #endif //COMPONENTFIELDDELTA_H

@@ -120,15 +120,35 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
       }
     }
 
+    // Every selected uuid but one went stale (e.g. a fresh snapshot dropped them): show the one that's
+    // left the same way a plain single-object selection would, rather than an empty state a selection
+    // that still names a live object shouldn't reach.
+    if (objects.size() == 1)
+    {
+      // Flushes a multi-selection gesture that may still be in flight from a prior frame (the rest of the
+      // selection just dropped out from under it) before switching to the single-object display below.
+      m_objectInspector->commitPendingEdit();
+
+      gc::sectionLabel("Inspector");
+      m_objectInspector->displayTypeChip(objects.front());
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Spacing();
+      m_objectInspector->display(objects.front());
+
+      ImGui::End();
+      return;
+    }
+
     gc::sectionLabel("Inspector");
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    if (objects.size() < 2)
+    if (objects.empty())
     {
-      // The selection referenced objects that no longer exist (e.g. a fresh snapshot replaced the
-      // scene): finish whatever gesture was in flight rather than leave it to attach to what's next.
+      // Nothing in the selection resolved to a live object at all: finish whatever gesture was in
+      // flight rather than leave it to attach to what's next.
       m_objectInspector->commitPendingEdit();
       gc::emptyState(gc::SecIcon::block, "Nothing selected", "Select an object or asset to inspect it");
     }

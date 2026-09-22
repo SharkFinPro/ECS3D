@@ -454,7 +454,8 @@ void ObjectInspector::displayMultiComponent(const std::vector<std::shared_ptr<Ob
     // through the same path a single-selection edit uses.
     for (std::size_t i = 1; i < objects.size(); ++i)
     {
-      const auto merged = componentFieldDelta::applyKeyDelta(components[i]->serialize(), primaryAfter, changedKeys);
+      const auto merged = componentFieldDelta::applyKeyDelta(components[i]->serialize(), primaryBefore, primaryAfter,
+                                                             changedKeys);
       components[i]->loadFromJSON(merged);
 
       if (m_editCallback)
