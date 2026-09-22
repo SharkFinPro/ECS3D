@@ -16,8 +16,12 @@ class ObjectManager;
 // still goes out - only the history entry is skipped.
 namespace edits {
 
+// assetRegistry is only read for instantiatePrefab, to capture the prefab's current body alongside the
+// command (see EditCommand::instantiatePrefab) - nullopt when omitted, the same as every other kind's
+// derivation reading only the ObjectManager view.
 [[nodiscard]] std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit,
-                                                             const ObjectManager& view);
+                                                             const ObjectManager& view,
+                                                             const AssetRegistry* assetRegistry = nullptr);
 
 // An addAsset over a uuid the registry already holds is a record replacement (a prefab body edit, or
 // "Save as Prefab" over an existing name), so it derives a replaceAsset carrying the current record as

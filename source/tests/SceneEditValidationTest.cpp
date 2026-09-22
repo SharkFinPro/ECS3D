@@ -6,6 +6,8 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/RigidBody.h"
+#include "objects/components/Transform.h"
 #include "SceneEditFixtures.h"
 
 #include <memory>
@@ -76,6 +78,36 @@ TEST(SceneEdit, ReportsAComponentTypeThatDoesNotExistAsUnknown)
 
   EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "Nope")),
             SceneEditResult::unknownComponent);
+}
+
+TEST(SceneEdit, ReportsAnAddComponentDataBlobForTheWrongTypeAsMalformed)
+{
+  const auto scene = makeScene();
+
+  // "data" names RigidBody's own blob shape, not the Transform edit.at("component") asked to create -
+  // an editor-role client could send this by mistake or maliciously, so it has to be checked rather than
+  // trusted to loadFromJSON, which would happily misread RigidBody's mass/velocity fields as Transform's
+  // position/rotation/scale.
+  const auto rigidBodyBlob = RigidBody().serialize();
+
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "Transform",
+                                                            &rigidBodyBlob)),
+            SceneEditResult::malformedEdit);
+  EXPECT_FALSE(scene.object->getComponents().contains(ComponentType::rigidBody));
+}
+
+// Positive control for the mismatch test above: a data blob whose own type matches "component" is
+// accepted and loaded.
+TEST(SceneEdit, AppliesAnAddComponentDataBlobForTheMatchingType)
+{
+  const auto scene = makeScene();
+
+  const auto rigidBodyBlob = RigidBody().serialize();
+
+  EXPECT_EQ(applyEdit(scene, replication::buildAddComponent(scene.object->getUUID(), "RigidBody",
+                                                            &rigidBodyBlob)),
+            SceneEditResult::applied);
+  EXPECT_TRUE(scene.object->getComponents().contains(ComponentType::rigidBody));
 }
 
 TEST(SceneEdit, ReportsRemovingAComponentTheObjectDoesNotCarryAsUnknown)

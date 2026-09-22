@@ -420,23 +420,27 @@ TEST(EditHistory, UndoOfADuplicateObjectRefusesWhenTheDuplicateWasAlreadyRemoved
 }
 
 namespace {
-  // Shared setup for the two instantiatePrefab redo tests below: registers a one-node prefab,
-  // instantiates it, records the command, and undoes it once - so a redo is sitting ready and the
-  // instance is gone, the state both the positive-control and interference tests build on.
+  // A minimal but well-formed prefab body (see Object::loadFromJSON) - its content does not matter to
+  // these tests beyond being distinguishable from a differently-named one, for the "re-saved body" test.
+  std::string minimalPrefabBody(const std::string& name = "Prefab")
+  {
+    return nlohmann::json{ { "uuid", uuids::to_string(anotherUUID()) },
+                           { "name", name },
+                           { "components", nlohmann::json::array() },
+                           { "scripts", nlohmann::json::array() },
+                           { "children", nlohmann::json::array() } }.dump();
+  }
+
+  // Shared setup for the instantiatePrefab redo tests below: registers a one-node prefab, instantiates
+  // it, records the command, and undoes it once - so a redo is sitting ready and the instance is gone,
+  // the state the positive-control and interference tests all build on.
   void setupUndoneInstantiatePrefab(AssetScene& scene, edits::EditHistory& history,
                                     uuids::uuid& prefabUUID, uuids::uuid& instanceUUID)
   {
     prefabUUID = someOtherUUID();
-    scene.assetRegistry.registerAsset({
-      .uuid = prefabUUID,
-      .type = AssetType::Prefab,
-      .path = "TestPrefab",
-      .body = nlohmann::json{ { "uuid", uuids::to_string(anotherUUID()) },
-                              { "name", "Prefab" },
-                              { "components", nlohmann::json::array() },
-                              { "scripts", nlohmann::json::array() },
-                              { "children", nlohmann::json::array() } }.dump()
-    });
+    const auto body = minimalPrefabBody();
+    scene.assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab,
+                                        .path = "TestPrefab", .body = body });
 
     instanceUUID = uuids::uuid::from_string("00000000-0000-0000-0000-000000000002").value();
     ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
@@ -444,7 +448,8 @@ namespace {
                 &scene.assetRegistry),
               replication::SceneEditResult::applied);
 
-    history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
+    history.record(
+      edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0, body));
 
     const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
     ASSERT_TRUE(undoOutcome.ok());
@@ -482,6 +487,29 @@ TEST(EditHistory, RedoOfAnInstantiatePrefabRefusesWhenThePrefabAssetWasRemoved)
 
   const auto outcome = history.redo(*scene.objectManager, &scene.assetRegistry);
   EXPECT_EQ(outcome.result, edits::HistoryResult::targetMissing);
+  ASSERT_TRUE(outcome.conflict.has_value());
+  EXPECT_EQ(*outcome.conflict, prefabUUID);
+  EXPECT_FALSE(history.canRedo());
+}
+
+// Positive control: RedoOfAnInstantiatePrefabSucceedsWithoutInterference above already redoes with the
+// prefab body untouched. Here the same uuid is re-saved with different content (AssetRegistry updates a
+// Prefab's body in place for a path it already holds - see registerAsset) before redo runs: the recorded
+// command would otherwise silently instantiate the new body instead of the one the user actually
+// duplicated from, so it refuses instead.
+TEST(EditHistory, RedoOfAnInstantiatePrefabRefusesWhenThePrefabBodyWasReplaced)
+{
+  AssetScene scene;
+  edits::EditHistory history;
+  uuids::uuid prefabUUID;
+  uuids::uuid instanceUUID;
+  ASSERT_NO_FATAL_FAILURE(setupUndoneInstantiatePrefab(scene, history, prefabUUID, instanceUUID));
+
+  scene.assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab,
+                                      .path = "TestPrefab", .body = minimalPrefabBody("ReSavedPrefab") });
+
+  const auto outcome = history.redo(*scene.objectManager, &scene.assetRegistry);
+  EXPECT_EQ(outcome.result, edits::HistoryResult::targetChanged);
   ASSERT_TRUE(outcome.conflict.has_value());
   EXPECT_EQ(*outcome.conflict, prefabUUID);
   EXPECT_FALSE(history.canRedo());

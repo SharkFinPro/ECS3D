@@ -420,7 +420,10 @@ component's own `serialize()` blob, loaded onto the freshly created component in
 it, rather than the blank default a bare `addComponent` normally makes) and redoes through the ordinary
 `removeComponent` op; `duplicateObject`/`instantiatePrefab` undo through `removeSubtree` (named by the
 created root's uuid alone - it deletes the whole subtree immediately, unlike `removeObject`, so it needs
-none of the descendants' uuids) and redo by re-sending the original creating op. Redoing that way - rather
+none of the descendants' uuids) and redo by re-sending the original creating op (`instantiatePrefab`'s
+command also carries the prefab asset's body as it was at record time, since `AssetRegistry` lets a
+prefab's body be replaced in place under the same uuid - a re-save between undo and redo - and
+`validateForRedo` refuses rather than silently instantiating whatever the registry holds now). Redoing that way - rather
 than replaying a captured subtree - means a duplicate's or prefab instance's descendants get fresh uuids
 each time it is recreated, the same limitation `addObject`'s redo already has (it does not restore the
 original uuid either): today the editor waits for the server to confirm a structural edit and rebuild the

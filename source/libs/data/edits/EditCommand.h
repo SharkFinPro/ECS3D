@@ -133,11 +133,16 @@ public:
                                                    const std::optional<uuids::uuid>& parentUUID,
                                                    std::size_t siblingIndex);
 
-  // siblingIndex is informational only, not enforced on redo, the same as addObject's.
+  // siblingIndex is informational only, not enforced on redo, the same as addObject's. prefabBody is the
+  // prefab asset's body at record time (AssetRecord::body, the raw string - never parsed here, the same
+  // way ReplaceAssetData carries its before/after bodies): redo re-instantiates from whatever the
+  // registry holds for prefabUUID now, and the registry lets a prefab body be replaced in place (a save
+  // over the same uuid), so validateForRedo compares this against the live record to refuse a redo that
+  // would instantiate a body the user never actually duplicated/instantiated from.
   [[nodiscard]] static EditCommand instantiatePrefab(const uuids::uuid& prefabUUID,
                                                      const uuids::uuid& instanceUUID,
                                                      const std::optional<uuids::uuid>& parentUUID,
-                                                     std::size_t siblingIndex);
+                                                     std::size_t siblingIndex, std::string prefabBody);
 
   [[nodiscard]] static EditCommand addAsset(const uuids::uuid& assetUUID, AssetType type,
                                             std::string path, std::string className, std::string body);
@@ -288,6 +293,7 @@ private:
     uuids::uuid instanceUUID;
     std::optional<uuids::uuid> parentUUID;
     std::size_t siblingIndex = 0;
+    std::string prefabBodyJSON; // AssetRecord::body at record time - see the factory's comment
 
     friend bool operator==(const InstantiatePrefabData&, const InstantiatePrefabData&) = default;
   };

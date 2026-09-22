@@ -279,7 +279,7 @@ EditCommand EditCommand::duplicateObject(const uuids::uuid& sourceUUID, const uu
 
 EditCommand EditCommand::instantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid& instanceUUID,
                                            const std::optional<uuids::uuid>& parentUUID,
-                                           const std::size_t siblingIndex)
+                                           const std::size_t siblingIndex, std::string prefabBody)
 {
   EditCommand command;
   command.m_kind = CommandKind::instantiatePrefab;
@@ -287,7 +287,8 @@ EditCommand EditCommand::instantiatePrefab(const uuids::uuid& prefabUUID, const 
     .prefabUUID = prefabUUID,
     .instanceUUID = instanceUUID,
     .parentUUID = parentUUID,
-    .siblingIndex = siblingIndex
+    .siblingIndex = siblingIndex,
+    .prefabBodyJSON = std::move(prefabBody)
   };
   return command;
 }
@@ -788,9 +789,19 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
     {
       const auto& data = std::get<InstantiatePrefabData>(m_data);
 
-      if (!assetRegistry || !assetRegistry->getByUUIDOfType(data.prefabUUID, AssetType::Prefab))
+      const auto* prefab = assetRegistry ? assetRegistry->getByUUIDOfType(data.prefabUUID, AssetType::Prefab)
+                                         : nullptr;
+      if (!prefab)
       {
         return { ValidationFailure::targetMissing, data.prefabUUID };
+      }
+
+      // AssetRegistry lets a prefab body be replaced in place (a re-save over the same uuid): redoing
+      // from whatever the registry holds now, without this check, would silently instantiate a body the
+      // user never actually duplicated/instantiated from.
+      if (prefab->body != data.prefabBodyJSON)
+      {
+        return { ValidationFailure::targetChanged, data.prefabUUID };
       }
 
       if (data.parentUUID && !objectManager.getObjectByUUID(*data.parentUUID))

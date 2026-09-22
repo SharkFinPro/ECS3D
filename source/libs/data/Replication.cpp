@@ -588,6 +588,38 @@ namespace {
     return result;
   }
 
+  // The registry key a component blob's own "type"/"subType" identify - the same resolution
+  // Object::loadFromJSON uses to turn a serialized blob back into a registry lookup (a Collider blob
+  // carries a "subType" of Box/Sphere; every other type's own "type" field is the key). nullopt for a
+  // blob missing or misshaping either field - addComponent's "data" handling refuses rather than hands a
+  // blob to loadFromJSON that was never this component's own serialize() output.
+  std::optional<std::string> registryKeyFromComponentBlob(const nlohmann::json& data)
+  {
+    if (!data.is_object())
+    {
+      return std::nullopt;
+    }
+
+    const auto typeField = data.find("type");
+    if (typeField == data.end() || !typeField->is_string())
+    {
+      return std::nullopt;
+    }
+
+    if (typeField->get<std::string>() != "Collider")
+    {
+      return typeField->get<std::string>();
+    }
+
+    const auto subTypeField = data.find("subType");
+    if (subTypeField == data.end() || !subTypeField->is_string())
+    {
+      return std::nullopt;
+    }
+
+    return subTypeField->get<std::string>();
+  }
+
   // Shared by restoreObject and reorderObject: an explicit range check against std::size_t's own limits
   // rather than casting into a signed type and looking for wraparound - a value near UINT64_MAX read into
   // a signed type is implementation-defined at best, so it should never be the thing a refusal relies on.
@@ -1083,10 +1115,17 @@ namespace {
       }
 
       // "data" is a full serialize() blob - undo of a removeComponent putting the exact removed
-      // component back in one op, rather than the blank default this branch otherwise creates.
-      // Malformed data is the component's problem, not the edit's, same reasoning as the prefab body.
+      // component back in one op, rather than the blank default this branch otherwise creates. This is a
+      // wire entry point any editor-role client can reach, so the blob's own identity is checked against
+      // "component" before it is trusted with loadFromJSON: a blob for the wrong type would otherwise be
+      // interpreted field-by-field as if it were the one just created.
       if (edit.contains("data"))
       {
+        if (registryKeyFromComponentBlob(edit.at("data")) != key)
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
         try
         {
           component->loadFromJSON(edit.at("data"));

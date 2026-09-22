@@ -300,23 +300,41 @@ TEST(RecordEdits, DuplicateObjectRecordsTheSourcesParentAndAnAppendedIndex)
                                                                  scene.object->getUUID(), 1));
 }
 
-TEST(RecordEdits, InstantiatePrefabRecordsThePrefabParentAndAnAppendedIndex)
+TEST(RecordEdits, InstantiatePrefabRecordsThePrefabParentAppendedIndexAndCurrentBody)
+{
+  AssetScene scene;
+  const auto object = addObject(scene, "Object");
+
+  const auto prefabUUID = someOtherUUID();
+  const std::string body = R"({"name":"Prefab"})";
+  scene.assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Prefab",
+                                      .body = body });
+
+  const auto atRoot = edits::commandForSceneEdit(replication::buildInstantiatePrefab(prefabUUID),
+                                                 *scene.objectManager, &scene.assetRegistry);
+  ASSERT_TRUE(atRoot.has_value());
+  EXPECT_EQ(*atRoot,
+            edits::EditCommand::instantiatePrefab(prefabUUID, uuids::uuid{}, std::nullopt, 1, body));
+
+  const auto parentUUID = object->getUUID();
+  nlohmann::json underParent = replication::buildInstantiatePrefab(prefabUUID, &parentUUID);
+  underParent["uuid"] = uuidString(anotherUUID());
+
+  const auto command = edits::commandForSceneEdit(underParent, *scene.objectManager, &scene.assetRegistry);
+  ASSERT_TRUE(command.has_value());
+  EXPECT_EQ(*command,
+            edits::EditCommand::instantiatePrefab(prefabUUID, anotherUUID(), parentUUID, 0, body));
+}
+
+TEST(RecordEdits, InstantiatePrefabIsNotRecordedWithoutTheAssetRegistry)
 {
   const auto scene = makeScene();
 
-  const auto atRoot = edits::commandForSceneEdit(replication::buildInstantiatePrefab(someOtherUUID()),
-                                                 *scene.objectManager);
-  ASSERT_TRUE(atRoot.has_value());
-  EXPECT_EQ(*atRoot, edits::EditCommand::instantiatePrefab(someOtherUUID(), uuids::uuid{},
-                                                           std::nullopt, 1));
-
-  const auto parentUUID = scene.object->getUUID();
-  nlohmann::json underParent = replication::buildInstantiatePrefab(someOtherUUID(), &parentUUID);
-  underParent["uuid"] = uuidString(anotherUUID());
-
-  const auto command = edits::commandForSceneEdit(underParent, *scene.objectManager);
-  ASSERT_TRUE(command.has_value());
-  EXPECT_EQ(*command, edits::EditCommand::instantiatePrefab(someOtherUUID(), anotherUUID(), parentUUID, 0));
+  // Positive control lives in InstantiatePrefabRecordsThePrefabParentAppendedIndexAndCurrentBody above -
+  // the same op derives a command once an AssetRegistry holding the prefab is passed. Without one, there
+  // is no way to capture the body redo needs to validate against, so nothing faithful can be recorded.
+  EXPECT_FALSE(edits::commandForSceneEdit(replication::buildInstantiatePrefab(someOtherUUID()),
+                                          *scene.objectManager).has_value());
 }
 
 // --- Nothing faithful to record.

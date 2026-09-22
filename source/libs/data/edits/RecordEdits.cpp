@@ -139,7 +139,8 @@ namespace {
   }
 }
 
-std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const ObjectManager& view)
+std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const ObjectManager& view,
+                                               const AssetRegistry* assetRegistry)
 {
   if (!edit.is_object())
   {
@@ -174,6 +175,16 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
       return std::nullopt;
     }
 
+    // Without the registry there is no way to capture the body redo will need to validate against (see
+    // EditCommand::instantiatePrefab), so nothing faithful can be recorded - same as any other kind whose
+    // pre-edit state the view cannot supply.
+    const auto* prefab = assetRegistry ? assetRegistry->getByUUIDOfType(prefabUUID.value(), AssetType::Prefab)
+                                       : nullptr;
+    if (!prefab)
+    {
+      return std::nullopt;
+    }
+
     std::shared_ptr<Object> parent;
     if (!resolveParent(edit, view, parent))
     {
@@ -181,7 +192,7 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
     }
 
     return EditCommand::instantiatePrefab(prefabUUID.value(), createdUUID(edit), uuidOf(parent),
-                                          appendedIndex(view, parent));
+                                          appendedIndex(view, parent), prefab->body);
   }
 
   // Every other op targets an object that has to be in the view for its before state to be readable.

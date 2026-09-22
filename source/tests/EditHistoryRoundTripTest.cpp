@@ -408,31 +408,48 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveComponent)
   EXPECT_FALSE(scene.object->getComponents().contains(ComponentType::rigidBody));
 }
 
+namespace {
+  // Shared shape assertion for the duplicateObject/instantiatePrefab round trips below: one child at the
+  // recorded local position, carrying a RigidBody with the recorded mass - a non-Transform component,
+  // looked up by ComponentType (never positionally), to prove component data survives the round trip too,
+  // not just the transform every other structural round trip already covers.
+  void expectSubtreeShape(const std::shared_ptr<Object>& root, const glm::vec3& rootPosition,
+                          const glm::vec3& childPosition, float childMass)
+  {
+    ASSERT_TRUE(root);
+    ASSERT_EQ(root->getChildren().size(), 1u);
+    expectNear(transformOf(root)->getLocalPosition(), rootPosition);
+
+    const auto& child = root->getChildren().front();
+    expectNear(transformOf(child)->getLocalPosition(), childPosition);
+
+    const auto rigidBody = std::dynamic_pointer_cast<RigidBody>(
+      child->getComponents().at(ComponentType::rigidBody));
+    ASSERT_TRUE(rigidBody);
+    EXPECT_NEAR(rigidBody->getMass(), childMass, 1e-5f);
+  }
+}
+
 TEST(EditHistory, UndoAndRedoRoundTripADuplicateObjectWithAChildAndANonIdentityTransform)
 {
   auto scene = makeScene();
   const auto source = addObject(scene, "Source", { 1, 2, 3 }, { 2, 2, 2 });
   const auto child = addChildObject(scene, "Child", source);
   transformOf(child)->setPosition({ 5, 6, 7 });
+  fixtures::addRigidBody(child)->setMass(9.5f);
 
   const auto duplicateUUID = someOtherUUID();
-
   ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
               replication::buildDuplicateObject(source->getUUID(), &duplicateUUID)),
             replication::SceneEditResult::applied);
-
-  const auto duplicate = scene.objectManager->getObjectByUUID(duplicateUUID);
-  ASSERT_TRUE(duplicate);
-  ASSERT_EQ(duplicate->getChildren().size(), 1u);
-  expectNear(transformOf(duplicate)->getLocalPosition(), { 1, 2, 3 });
-  expectNear(transformOf(duplicate->getChildren().front())->getLocalPosition(), { 5, 6, 7 });
+  ASSERT_NO_FATAL_FAILURE(expectSubtreeShape(scene.objectManager->getObjectByUUID(duplicateUUID),
+                                             { 1, 2, 3 }, { 5, 6, 7 }, 9.5f));
 
   edits::EditHistory history;
   history.record(edits::EditCommand::duplicateObject(source->getUUID(), duplicateUUID, std::nullopt, 1));
 
   const auto undoOutcome = history.undo(*scene.objectManager);
   ASSERT_TRUE(undoOutcome.ok());
-  ASSERT_TRUE(undoOutcome.jsonPayload.has_value());
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
   EXPECT_FALSE(scene.objectManager->getObjectByUUID(duplicateUUID));
@@ -442,15 +459,10 @@ TEST(EditHistory, UndoAndRedoRoundTripADuplicateObjectWithAChildAndANonIdentityT
 
   const auto redoOutcome = history.redo(*scene.objectManager);
   ASSERT_TRUE(redoOutcome.ok());
-  ASSERT_TRUE(redoOutcome.jsonPayload.has_value());
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
-
-  const auto redoneDuplicate = scene.objectManager->getObjectByUUID(duplicateUUID);
-  ASSERT_TRUE(redoneDuplicate);
-  ASSERT_EQ(redoneDuplicate->getChildren().size(), 1u);
-  expectNear(transformOf(redoneDuplicate)->getLocalPosition(), { 1, 2, 3 });
-  expectNear(transformOf(redoneDuplicate->getChildren().front())->getLocalPosition(), { 5, 6, 7 });
+  ASSERT_NO_FATAL_FAILURE(expectSubtreeShape(scene.objectManager->getObjectByUUID(duplicateUUID),
+                                             { 1, 2, 3 }, { 5, 6, 7 }, 9.5f));
 }
 
 TEST(EditHistory, UndoAndRedoRoundTripAnInstantiatePrefabWithAChildAndANonIdentityTransform)
@@ -463,53 +475,40 @@ TEST(EditHistory, UndoAndRedoRoundTripAnInstantiatePrefabWithAChildAndANonIdenti
     const auto root = addObject(bodyScene, "Prefab", { 1, 2, 3 });
     const auto child = addChildObject(bodyScene, "PrefabChild", root);
     transformOf(child)->setPosition({ 5, 6, 7 });
+    fixtures::addRigidBody(child)->setMass(4.25f);
     body = root->serialize();
   }
 
   AssetScene scene;
   const auto prefabUUID = someOtherUUID();
-  scene.assetRegistry.registerAsset({
-    .uuid = prefabUUID,
-    .type = AssetType::Prefab,
-    .path = "TestPrefab",
-    .body = body.dump()
-  });
+  scene.assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab,
+                                      .path = "TestPrefab", .body = body.dump() });
 
   const auto instanceUUID = anotherUUID();
-
   ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
               replication::buildInstantiatePrefab(prefabUUID, nullptr, &instanceUUID),
               &scene.assetRegistry),
             replication::SceneEditResult::applied);
-
-  const auto instance = scene.objectManager->getObjectByUUID(instanceUUID);
-  ASSERT_TRUE(instance);
-  ASSERT_EQ(instance->getChildren().size(), 1u);
-  expectNear(transformOf(instance)->getLocalPosition(), { 1, 2, 3 });
-  expectNear(transformOf(instance->getChildren().front())->getLocalPosition(), { 5, 6, 7 });
+  ASSERT_NO_FATAL_FAILURE(expectSubtreeShape(scene.objectManager->getObjectByUUID(instanceUUID),
+                                             { 1, 2, 3 }, { 5, 6, 7 }, 4.25f));
 
   edits::EditHistory history;
-  history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
+  history.record(
+    edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0, body.dump()));
 
   const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(undoOutcome.ok());
-  ASSERT_TRUE(undoOutcome.jsonPayload.has_value());
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
   EXPECT_FALSE(scene.objectManager->getObjectByUUID(instanceUUID));
 
   const auto redoOutcome = history.redo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(redoOutcome.ok());
-  ASSERT_TRUE(redoOutcome.jsonPayload.has_value());
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload,
               &scene.assetRegistry),
             replication::SceneEditResult::applied);
-
-  const auto redoneInstance = scene.objectManager->getObjectByUUID(instanceUUID);
-  ASSERT_TRUE(redoneInstance);
-  ASSERT_EQ(redoneInstance->getChildren().size(), 1u);
-  expectNear(transformOf(redoneInstance)->getLocalPosition(), { 1, 2, 3 });
-  expectNear(transformOf(redoneInstance->getChildren().front())->getLocalPosition(), { 5, 6, 7 });
+  ASSERT_NO_FATAL_FAILURE(expectSubtreeShape(scene.objectManager->getObjectByUUID(instanceUUID),
+                                             { 1, 2, 3 }, { 5, 6, 7 }, 4.25f));
 }
 
 TEST(EditHistory, UndoAndRedoRoundTripAnAddAsset)
