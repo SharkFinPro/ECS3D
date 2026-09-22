@@ -356,6 +356,15 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
 
   const auto& registry = m_manager->getComponentRegistry();
 
+  // Reconciled the same way the children below already are: every lookup key (m_components slot) the
+  // payload actually names is recorded here, and anything left over afterward - a component this object
+  // had that the payload no longer carries - is dropped. Every caller today unpacks into a freshly built
+  // object (just its constructor's Transform), so this has never had anything to drop before; it starts
+  // mattering once something unpacks a script's post-tick component change into the live object it already
+  // is (replication::applyObjectComponentsChanged).
+  std::vector<ComponentType> packedComponentSlots;
+  packedComponentSlots.reserve(m_components.size());
+
   const uint32_t componentCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < componentCount; ++i)
   {
@@ -384,6 +393,8 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     {
       lookupType = parentIt->second;
     }
+
+    packedComponentSlots.push_back(lookupType);
 
     // Look up directly (not via getComponent, which falls back to the parent's rigidBody) so a fresh
     // object reconstructs its own components instead of unpacking into an inherited one.
@@ -416,6 +427,22 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     }
 
     component->unpack(messageReader);
+  }
+
+  // Drop whatever existing component slot the payload did not name - collected first (removeComponent
+  // erases from m_components, the map this loop would otherwise be mutating while it walks it).
+  std::vector<std::shared_ptr<Component>> staleComponents;
+  for (const auto& [slot, existingComponent] : m_components)
+  {
+    if (std::ranges::find(packedComponentSlots, slot) == packedComponentSlots.end())
+    {
+      staleComponents.push_back(existingComponent);
+    }
+  }
+
+  for (const auto& stale : staleComponents)
+  {
+    removeComponent(stale);
   }
 
   const uint32_t scriptCount = messageReader.read<uint32_t>();

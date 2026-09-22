@@ -110,6 +110,13 @@ public:
   // the result.
   bool removeObject(const std::shared_ptr<Object>& object);
 
+  // Whether object is queued for the next deleteObjectsMarkedForDeletion pass. A caller deciding whether
+  // to mutate an object this tick (ComponentOpsBindings' add/remove) checks this first: the object is
+  // still live and iterable right up to that pass, but a structural change to something already on its
+  // way out would be wasted work at best and a change the client-facing replication never catches up to at
+  // worst, since deleteObjectsMarkedForDeletion runs after the same tick's structural broadcast.
+  [[nodiscard]] bool isMarkedForDeletion(const std::shared_ptr<Object>& object) const;
+
   // Drop a subtree that was never fully built. Not the deletion lifecycle: it defers nothing and does not
   // reparent children, it just unregisters what was registered. For a subtree that is already live in the
   // scene, removeObject is the one you want. Taken by value because it erases from vectors it may alias.

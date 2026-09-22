@@ -338,17 +338,25 @@ a re-added script of the same class gets a fresh instance rather than inheriting
 `ComponentOpsBindings` (`World.hasComponent`/`addComponent`/`removeComponent`/`getComponentTypes`) gives
 scripts generic access to an object's component set, keyed by the same `ComponentRegistry` type-name
 strings unpack/loadFromJSON use ("RigidBody", "Box", "Sphere", ...) rather than `ComponentType`'s packed
-enum value, since that value is a wire discriminator the managed side must not derive independently.
-Transform is refused by add/remove (structural - every other system assumes an object has exactly one) but
-still queryable; Script is excluded everywhere (adding one needs a class name this API does not take).
-add/remove apply to the object immediately - unlike `World.spawnObject`, `Object::addComponent`/
-`removeComponent` for a non-Script type never touch the `m_scripts` vector or the `ObjectManager`'s own
-object list that `ScriptSystem`'s tick loops range over, so mutating one object's components mid-pass
-cannot invalidate either loop even when it is the running script's own object - so `hasComponent` called
-later in the same tick already reflects it. Replication is still deferred: the change flags
-`BindingContext::recordStructuralComponentChange`, and `ServerApp::broadcastStructuralChanges` re-broadcasts
-a full snapshot after the tick when the flag is set - the same structural path the editor's own `sceneEdit`
-`addComponent`/`removeComponent` ops already take, reused here instead of a new wire message.
+enum value: that value is the wire discriminator, assigned by enumerator order, so a name the managed side
+looked up independently could drift from what the native side actually packs. Transform is refused by
+add/remove (structural - every other system assumes an object has exactly one) but still queryable; Script
+is excluded everywhere (adding one needs a class name this API does not take). An object already marked
+for deletion this tick (`ObjectManager::isMarkedForDeletion`) refuses both too, since a change made to it
+now would never reach a client. add/remove apply to the object immediately - unlike `World.spawnObject`,
+`Object::addComponent`/`removeComponent` for a non-Script type only ever touch `m_components`, a map
+`ScriptSystem`'s `fixedUpdate`/`variableUpdate` loops (which range over the `ObjectManager`'s object list
+and each object's `m_scripts` vector) do not read, so mutating one object's components mid-pass leaves both
+loops' iterators alone, even for the running script's own object - so `hasComponent` called later in the
+same tick already reflects it. Replication is still deferred and batched: the changed object's uuid is
+recorded on `BindingContext` (deduped, so several add/remove calls against the same object in a tick still
+cost one resync), and `ServerApp::broadcastStructuralChanges` sends each changed object's current packed
+state as `objectComponentsChanged` after the tick - a client/editor finds the object by uuid and unpacks
+into it in place (`Object::unpack` reconciles both components and children against what was packed, the
+same way it already reconciles children). Unlike the editor's own `sceneEdit` `addComponent`/
+`removeComponent` ops, this does not re-snapshot the whole project: a resync only touches the objects that
+actually changed, the same granularity `objectSpawned`/`objectDestroyed` already use for other
+script-driven structural changes.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers

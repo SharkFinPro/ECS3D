@@ -104,6 +104,8 @@ private:
 
   void handleObjectDestroyed(const net::Message& message) const;
 
+  void handleObjectComponentsChanged(const net::Message& message) const;
+
   void handlePlayerSlot(const net::Message& message) const;
 
   // The object this client should render through: the one carrying a PlayerController for this client's

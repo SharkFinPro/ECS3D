@@ -33,7 +33,7 @@ namespace {
     void TearDown() override
     {
       BindingContext::setObjectManager(nullptr);
-      (void)BindingContext::takeStructuralComponentChange();
+      (void)BindingContext::takeStructuralComponentChanges();
       (void)BindingContext::takeSpawned();
       (void)BindingContext::takeDestroyed();
       (void)BindingContext::takeComponentEdits();
@@ -183,6 +183,27 @@ TEST_F(ScriptComponentOpsTest, RemoveRefusesWhenTheComponentIsAbsent)
   EXPECT_FALSE(remove(object, "RigidBody"));
 }
 
+TEST_F(ScriptComponentOpsTest, AddAndRemoveRefuseAnObjectMarkedForDeletion)
+{
+  const auto object = fixtures::addObject(scene, "Object");
+
+  // Positive control: both operations succeed on this object while it is not marked for deletion.
+  ASSERT_TRUE(add(object, "RigidBody"));
+  ASSERT_TRUE(remove(object, "RigidBody"));
+  ASSERT_TRUE(add(object, "Box"));
+
+  // Queued for the next deleteObjectsMarkedForDeletion pass, not yet actually removed - still live and
+  // gettable, the state a script's own object could be in mid-tick after another script destroyed it.
+  ASSERT_TRUE(scene.objectManager->removeObject(object));
+  ASSERT_TRUE(scene.objectManager->isMarkedForDeletion(object));
+
+  EXPECT_FALSE(add(object, "RigidBody"));
+  EXPECT_FALSE(has(object, "RigidBody"));
+
+  EXPECT_FALSE(remove(object, "Box"));
+  EXPECT_TRUE(has(object, "Box"));
+}
+
 TEST_F(ScriptComponentOpsTest, GetComponentTypesListsExactlyWhatIsPresent)
 {
   const auto object = fixtures::addObject(scene, "Object");
@@ -224,24 +245,41 @@ TEST_F(ScriptComponentOpsTest, AnAppliedAddOrRemoveFlagsAStructuralChangeForRepl
   const auto object = fixtures::addObject(scene, "Object");
 
   // Clear whatever the fixture's own setup left pending, so the assertions below see only this test's ops.
-  (void)BindingContext::takeStructuralComponentChange();
+  (void)BindingContext::takeStructuralComponentChanges();
 
   ASSERT_TRUE(add(object, "RigidBody"));
-  EXPECT_TRUE(BindingContext::takeStructuralComponentChange());
-  // Consuming it clears the flag - a second read with nothing new since must come back false.
-  EXPECT_FALSE(BindingContext::takeStructuralComponentChange());
+  auto changed = BindingContext::takeStructuralComponentChanges();
+  ASSERT_EQ(changed.size(), 1u);
+  EXPECT_EQ(changed[0], object->getUUID());
+  // Consuming it clears the list - a second read with nothing new since must come back empty.
+  EXPECT_TRUE(BindingContext::takeStructuralComponentChanges().empty());
 
   ASSERT_TRUE(remove(object, "RigidBody"));
-  EXPECT_TRUE(BindingContext::takeStructuralComponentChange());
+  changed = BindingContext::takeStructuralComponentChanges();
+  ASSERT_EQ(changed.size(), 1u);
+  EXPECT_EQ(changed[0], object->getUUID());
+}
+
+TEST_F(ScriptComponentOpsTest, SeveralChangesToOneObjectInATickDedupeToOneEntry)
+{
+  const auto object = fixtures::addObject(scene, "Object");
+  (void)BindingContext::takeStructuralComponentChanges();
+
+  ASSERT_TRUE(add(object, "RigidBody"));
+  ASSERT_TRUE(add(object, "Box"));
+  ASSERT_TRUE(remove(object, "RigidBody"));
+
+  const auto changed = BindingContext::takeStructuralComponentChanges();
+  EXPECT_EQ(changed.size(), 1u);
 }
 
 TEST_F(ScriptComponentOpsTest, ARefusedAddOrRemoveDoesNotFlagAStructuralChange)
 {
   const auto object = fixtures::addObject(scene, "Object");
-  (void)BindingContext::takeStructuralComponentChange();
+  (void)BindingContext::takeStructuralComponentChanges();
 
   EXPECT_FALSE(add(object, "Transform"));
   EXPECT_FALSE(remove(object, "RigidBody"));
 
-  EXPECT_FALSE(BindingContext::takeStructuralComponentChange());
+  EXPECT_TRUE(BindingContext::takeStructuralComponentChanges().empty());
 }

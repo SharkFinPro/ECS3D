@@ -170,6 +170,17 @@ void applyObjectSpawned(ObjectManager& objectManager, const net::Message& messag
 
 void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& message);
 
+// A script added/removed a component on an already-live object (ComponentOpsBindings): unlike spawn/
+// destroy the object itself isn't new or gone, so the whole current object is re-packed and the receiver
+// unpacks it into the existing object it already has by uuid - Object::unpack reconciles both its
+// component set and its children against what was packed, so an add, a remove, or several of either in
+// one tick all converge to the same state a fresh unpack of that object would produce. Ignored (no-op) if
+// the uuid names no object the receiver currently has - routine for a view that has not been sent it yet
+// or has already dropped it, the same as an objectDestroyed for an object never spliced in.
+[[nodiscard]] net::Message buildObjectComponentsChanged(const Object& object);
+
+void applyObjectComponentsChanged(ObjectManager& objectManager, const net::Message& message);
+
 // Register an imported/created asset ({ assetType, uuid, path|name, [className], [body] }). Shared by the
 // server (authoritative) and the editor (instant local feedback). Models/textures/scripts/prefabs go
 // into the AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager. A prefab carries its

@@ -36,6 +36,10 @@ void EditorApp::applyMessage(const net::Message& message)
       handleObjectDestroyed(message);
       break;
 
+    case net::MessageType::objectComponentsChanged:
+      handleObjectComponentsChanged(message);
+      break;
+
     case net::MessageType::editStatus:
       handleEditStatus(message);
       break;
@@ -97,6 +101,15 @@ void EditorApp::handleObjectDestroyed(const net::Message& message) const
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     replication::applyObjectDestroyed(*scene->getObjectManager(), message);
+  }
+}
+
+void EditorApp::handleObjectComponentsChanged(const net::Message& message) const
+{
+  // A script added/removed a component on an object that already exists here; reconcile it in place.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    replication::applyObjectComponentsChanged(*scene->getObjectManager(), message);
   }
 }
 

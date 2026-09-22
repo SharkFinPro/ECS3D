@@ -1220,6 +1220,40 @@ void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& mess
   objectManager.deleteObjectsMarkedForDeletion();
 }
 
+net::Message buildObjectComponentsChanged(const Object& object)
+{
+  net::Message message(net::MessageType::objectComponentsChanged);
+  object.pack(message);
+  return message;
+}
+
+void applyObjectComponentsChanged(ObjectManager& objectManager, const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  // Peek the uuid - Object::pack's leading field - on a copy of the reader, so resolving the target below
+  // does not disturb the read Object::unpack performs on the real one.
+  net::MessageReader uuidPeek = reader;
+  const auto parsed = uuids::uuid::from_string(uuidPeek.readString());
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  const auto object = objectManager.getObjectByUUID(parsed.value());
+  if (!object)
+  {
+    // Routine: this view may not have the object yet (a round trip behind) or has already dropped it.
+    return;
+  }
+
+  // Unlike applyObjectSpawned this unpacks into an object that already lives in the scene, so a payload
+  // that runs out part way through is not this function's to clean up - the object stays exactly as far
+  // unpacked as it got, the same partially-applied risk applyComponentEdit already accepts for a value
+  // edit. Object::unpack's own stop/start bracket still protects a running object's live values either way.
+  object->unpack(reader);
+}
+
 void applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,

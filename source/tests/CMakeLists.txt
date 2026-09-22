@@ -57,6 +57,7 @@ add_executable(${PROJECT_NAME}
   PhysicsIntegrationTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp
+  ObjectComponentsChangedTest.cpp
   RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
   ObjectManagerLifecycleTest.cpp

@@ -346,6 +346,11 @@ bool ObjectManager::removeObject(const std::shared_ptr<Object>& object)
   return true;
 }
 
+bool ObjectManager::isMarkedForDeletion(const std::shared_ptr<Object>& object) const
+{
+  return std::ranges::find(m_objectsToRemove, object) != m_objectsToRemove.end();
+}
+
 void ObjectManager::deleteObjectsMarkedForDeletion()
 {
   if (m_objectsToRemove.empty())

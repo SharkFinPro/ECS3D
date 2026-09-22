@@ -85,6 +85,14 @@ bool ComponentOpsBindingsProvider::bindAddComponent(const char* uuid, const char
     return false;
   }
 
+  // The object is on its way out (removeObject was already called this tick) - deleteObjectsMarkedForDeletion
+  // will drop it after this tick's structural broadcast, so a change made to it now would never reach a
+  // client and is wasted work at best.
+  if (objectManager->isMarkedForDeletion(object))
+  {
+    return false;
+  }
+
   const std::string key(componentType);
 
   // Script needs a class name this API does not take (see the header), and Transform is structural -
@@ -111,8 +119,8 @@ bool ComponentOpsBindingsProvider::bindAddComponent(const char* uuid, const char
   object->addComponent(component);
 
   // Structural: not covered by the per-tick state delta or a targeted component-edit broadcast, so flag
-  // it for the app to re-snapshot after the tick, the same as the editor's sceneEdit addComponent op.
-  BindingContext::recordStructuralComponentChange();
+  // the object for the app to resync after the tick, the same as the editor's sceneEdit addComponent op.
+  BindingContext::recordStructuralComponentChange(object->getUUID());
 
   return true;
 }
@@ -120,7 +128,13 @@ bool ComponentOpsBindingsProvider::bindAddComponent(const char* uuid, const char
 bool ComponentOpsBindingsProvider::bindRemoveComponent(const char* uuid, const char* componentType)
 {
   const auto object = findObject(uuid);
-  if (!object || !componentType)
+  const auto objectManager = BindingContext::getObjectManager();
+  if (!object || !objectManager || !componentType)
+  {
+    return false;
+  }
+
+  if (objectManager->isMarkedForDeletion(object))
   {
     return false;
   }
@@ -143,7 +157,7 @@ bool ComponentOpsBindingsProvider::bindRemoveComponent(const char* uuid, const c
 
   object->removeComponent(component);
 
-  BindingContext::recordStructuralComponentChange();
+  BindingContext::recordStructuralComponentChange(object->getUUID());
 
   return true;
 }

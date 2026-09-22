@@ -59,14 +59,16 @@ public:
 
   [[nodiscard]] static std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> takeComponentEdits();
 
-  // A script added/removed a component (ComponentOpsBindings): unlike a value edit this changes the
-  // scene graph, so there is no single component blob to rebroadcast - the app re-snapshots instead, the
-  // same as the editor's own sceneEdit addComponent/removeComponent ops. The change itself already
-  // applied to the live object by the time this is called; only the network side is deferred.
-  static void recordStructuralComponentChange();
+  // A script added/removed a component (ComponentOpsBindings) on objectUUID: unlike a value edit this
+  // changes the scene graph, so there is no single component blob to rebroadcast - the app resyncs the
+  // whole object instead (replication::buildObjectComponentsChanged), the same structural path the
+  // editor's own sceneEdit addComponent/removeComponent ops apply through. The change itself already
+  // applied to the live object by the time this is called; only the network side is deferred. Deduped so
+  // several add/remove calls against one object in a tick still cost one resync.
+  static void recordStructuralComponentChange(const uuids::uuid& objectUUID);
 
-  // Whether any recordStructuralComponentChange happened since the last call, clearing the flag.
-  [[nodiscard]] static bool takeStructuralComponentChange();
+  // The distinct object uuids recordStructuralComponentChange saw since the last call, clearing the list.
+  [[nodiscard]] static std::vector<uuids::uuid> takeStructuralComponentChanges();
 
   static void setRaycast(RaycastFn raycast);
   [[nodiscard]] static RaycastFn getRaycast();
@@ -82,7 +84,7 @@ private:
   static std::vector<uuids::uuid> s_destroyed;
   static std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> s_componentEdits;
 
-  static bool s_structuralComponentChange;
+  static std::vector<uuids::uuid> s_structuralComponentChanges;
 
   static RaycastFn s_raycast;
   static OverlapSphereFn s_overlapSphere;
