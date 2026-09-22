@@ -431,8 +431,15 @@ as a validation conflict and drop it (and everything older beneath it) even thou
 actually wrong. `EditCommand`/`EditHistory` already build and validate a faithful reverse for every
 reversible kind (the round trip is exercised in `EditHistoryRoundTripTest.cpp` for all of them), so extending
 `EditorApp::undo()`/`redo()` to structural and asset kinds is a matter of widening that one kind check, not
-new library work. There is still no menu item or keybind that calls `undo()`/`redo()` - a later story wires
-one in; for now they exist as entry points only. A refusal is logged the same way for a stale target
+new library work. Ctrl+Z/Ctrl+Shift+Z and an Edit menu (between File and Window) call `undo()`/`redo()`
+through `requestUndo()`/`requestRedo()` (`EditorAppUndoMenu.cpp`); the menu items read
+`EditHistory::nextUndoLabel()`/`nextRedoLabel()` (built from `EditCommand::describeForMenu()`) to name the
+action they would perform ("Undo Rename Cube") instead of showing a bare "Undo"/"Redo", and disable
+themselves with nothing to act on, a read-only server, or a request already in flight - `requestUndo()`/
+`requestRedo()` ignore a further request once one has actually popped a stack entry until the server's
+rebroadcast lands (`handleSnapshot`/`handleEditComponent`) or a short timeout passes, since undo validates
+against the editor's replicated view, which only updates on that rebroadcast, and a second press inside one
+round trip would otherwise validate against a still-stale value. A refusal is logged the same way for a stale target
 (`targetMissing`/`targetChanged`, naming the conflicting uuid) or an empty stack. `EditHistory::
 reportUndoRejected()`/`reportRedoRejected()` exist for a server rejection of the edit undo()/redo() just
 sent, but nothing calls them yet: today's `editComponent`/`sceneEdit` handling has no wire-level

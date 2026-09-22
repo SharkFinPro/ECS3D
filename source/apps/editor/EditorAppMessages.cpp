@@ -52,7 +52,7 @@ void EditorApp::applyMessage(const net::Message& message)
   }
 }
 
-void EditorApp::handleSnapshot(const net::Message& message) const
+void EditorApp::handleSnapshot(const net::Message& message)
 {
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
@@ -61,6 +61,11 @@ void EditorApp::handleSnapshot(const net::Message& message) const
   Log::info(LogCategory::editor, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "
     + (scene ? scene->getName() : "<none>") + " ("
     + std::to_string(scene ? scene->getObjectManager()->getAllObjects().size() : 0) + " objects).");
+
+  // The server re-snapshots (rather than echoing a targeted result) after every sceneEdit and asset
+  // mutation, so this is the rebroadcast a structural or asset undo/redo request is waiting on - see the
+  // in-flight gate on requestUndo()/requestRedo().
+  clearUndoRedoPending();
 }
 
 void EditorApp::handleStateDelta(const net::Message& message) const
@@ -71,7 +76,7 @@ void EditorApp::handleStateDelta(const net::Message& message) const
   }
 }
 
-void EditorApp::handleEditComponent(const net::Message& message) const
+void EditorApp::handleEditComponent(const net::Message& message)
 {
   // Another editor (or this one, echoed by the server) changed a component. Like the client, a missed
   // edit is logged rather than ignored, so a real desync stands out from the ordinary rebroadcast race.
@@ -80,6 +85,10 @@ void EditorApp::handleEditComponent(const net::Message& message) const
     const auto result = replication::applyComponentEdit(*scene->getObjectManager(), message);
     replication::logMissedComponentEdit(result, message, LogCategory::editor);
   }
+
+  // The rebroadcast a component-edit undo/redo request is waiting on - see the in-flight gate on
+  // requestUndo()/requestRedo().
+  clearUndoRedoPending();
 }
 
 void EditorApp::handleObjectSpawned(const net::Message& message) const
@@ -127,6 +136,7 @@ void EditorApp::handleSceneStatus(const net::Message& message)
       && (m_reportedSceneStatus.value() == SceneStatus::stopped || status == SceneStatus::stopped))
   {
     m_editHistory.clear();
+    clearUndoRedoPending();
   }
 
   m_reportedSceneStatus = status;

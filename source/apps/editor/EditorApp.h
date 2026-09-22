@@ -7,6 +7,7 @@
 #include <scenes/SceneManager.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -75,11 +76,12 @@ public:
 
   void logMessage(const std::string& level, const std::string& message);
 
-  // Entry points for a future keybind/menu story to call - this change adds no way to trigger them from
-  // the UI yet. Each sends the reverse of the top of the relevant stack through the normal send path
-  // (editComponent for a value edit) and logs a refusal instead when there is nothing to send: an empty
-  // stack, a target that no longer matches what the command recorded, or a command kind undo does not
-  // handle yet (left on the stack rather than dropped - see EditHistory::nextUndoKind()).
+  // Sends the reverse of the top of the relevant stack through the normal send path (editComponent for a
+  // value edit) and logs a refusal instead when there is nothing to send: an empty stack, a target that no
+  // longer matches what the command recorded, or a command kind undo does not handle yet (left on the
+  // stack rather than dropped - see EditHistory::nextUndoKind()). Called through requestUndo()/
+  // requestRedo() (see EditorAppUndoMenu.cpp), which is what the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit
+  // menu actually invoke - they add the in-flight gate documented there.
   void undo();
 
   void redo();
@@ -133,10 +135,20 @@ private:
   std::shared_ptr<KeybindDispatcher> m_keybindDispatcher;
 
   // Every mutation this editor sends, recorded as it goes; undo()/redo() read it back and send the
-  // reverse edit through the normal send path (see those methods). There is still no menu item or
-  // keybind that calls them - a later story wires the trigger. Cleared wherever the authored scene the
-  // recorded commands refer to is replaced: load project, scene switch, (re)connect, play start/stop.
+  // reverse edit through the normal send path (see those methods). Ctrl+Z/Ctrl+Shift+Z and the Edit menu
+  // call them through requestUndo()/requestRedo() (see EditorAppUndoMenu.cpp). Cleared wherever the
+  // authored scene the recorded commands refer to is replaced: load project, scene switch, (re)connect,
+  // play start/stop.
   edits::EditHistory m_editHistory;
+
+  // See requestUndo()/requestRedo() in EditorAppUndoMenu.cpp: while true, a further undo/redo request is
+  // ignored (and the Edit menu's items disabled) until the server's rebroadcast of the one already sent
+  // lands (cleared in handleSnapshot/handleEditComponent) or this much time passes, whichever comes
+  // first - undo validates against the editor's replicated view, which only updates on that rebroadcast,
+  // so a second press inside one round trip would validate against a still-stale value.
+  static constexpr std::chrono::milliseconds undoRedoPendingTimeout{500};
+  bool m_undoRedoPending = false;
+  std::chrono::steady_clock::time_point m_undoRedoPendingSince;
 
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
@@ -209,11 +221,13 @@ private:
 
   void applyMessage(const net::Message& message);
 
-  void handleSnapshot(const net::Message& message) const;
+  // Not const: clears the undo/redo in-flight gate (see m_undoRedoPending) as the rebroadcast a request
+  // was waiting on.
+  void handleSnapshot(const net::Message& message);
 
   void handleStateDelta(const net::Message& message) const;
 
-  void handleEditComponent(const net::Message& message) const;
+  void handleEditComponent(const net::Message& message);
 
   void handleObjectSpawned(const net::Message& message) const;
 
@@ -244,9 +258,35 @@ private:
   // path, or logs why nothing was sent. isUndo only picks the wording ("undo" vs. "redo") for the log.
   void reportHistoryOutcome(const edits::HistoryOutcome& outcome, bool isUndo);
 
+  // What the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit menu actually call (EditorAppUndoMenu.cpp): a
+  // no-op while undoRedoRequestBlocked(), otherwise calls undo()/redo() and starts the in-flight gate if
+  // the relevant stack's depth changed - see undoRedoPendingTimeout.
+  void requestUndo();
+
+  void requestRedo();
+
+  // True while a previously sent undo/redo request is still awaiting its rebroadcast and the gate's
+  // timeout has not yet elapsed; clears the gate itself as a side effect once the timeout has elapsed, so
+  // a caller need not poll it separately.
+  [[nodiscard]] bool undoRedoRequestBlocked();
+
+  void beginUndoRedoPending();
+
+  // Called from handleSnapshot/handleEditComponent (the rebroadcast this gate is waiting on) and
+  // wherever m_editHistory.clear() already is (load project, scene switch, reconnect, play start/stop) -
+  // there is nothing left in flight to wait on once the history itself is gone.
+  void clearUndoRedoPending();
+
   void updateGui();
 
-  void displayMenuBar() const;
+  // Not const: unlike the rest of the menu bar, Edit's items call requestUndo()/requestRedo(), which
+  // mutate the in-flight gate above.
+  void displayMenuBar();
+
+  // Between File and Window: "Undo <label>"/"Redo <label>" naming the next action (see
+  // EditCommand::describeForMenu), disabled with nothing to act on, a read-only server, or a request
+  // already in flight.
+  void displayEditMenu();
 
   void displayWindowMenu() const;
 

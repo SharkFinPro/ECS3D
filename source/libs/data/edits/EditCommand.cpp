@@ -8,6 +8,7 @@
 #include "objects/components/Script.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
+#include <filesystem>
 #include <stdexcept>
 
 namespace edits {
@@ -143,6 +144,56 @@ namespace {
     }
 
     return asset;
+  }
+
+  // Reads a string field out of a stored JSON blob for a menu label, tolerating a corrupted blob (an
+  // unparseable stored before/after/subtree) by falling back rather than throwing - unlike undo()/redo()'s
+  // build* calls, describeForMenu runs every frame the menu is open, not just at the moment of undo.
+  std::string jsonFieldOr(const std::string& json, const std::string& key, const std::string& fallback)
+  {
+    try
+    {
+      return nlohmann::json::parse(json).value(key, fallback);
+    }
+    catch (const std::exception&)
+    {
+      return fallback;
+    }
+  }
+
+  // A live object's current name for a menu label, or fallback when it no longer exists (the same
+  // divergence undo's own validation would catch - a label just needs something to show).
+  std::string objectNameOr(const ObjectManager& objectManager, const uuids::uuid& uuid,
+                           const std::string& fallback)
+  {
+    const auto object = objectManager.getObjectByUUID(uuid);
+    return object ? object->getName() : fallback;
+  }
+
+  // Same display-name derivation as editor/AssetDisplay.h's assetDisplay::name, minus the displayName
+  // override (a command's own recorded fields never carry one) - kept local rather than shared because
+  // that header pulls in ImGui/theme types this data-library file cannot depend on.
+  std::string assetFieldName(const AssetType type, const std::string& path, const std::string& className)
+  {
+    switch (type)
+    {
+      case AssetType::Scene:
+      case AssetType::Prefab: return path;
+      case AssetType::Script: return className;
+      default: return std::filesystem::path(path).filename().string();
+    }
+  }
+
+  // "Transform", "Script MyScript" - the same (registryKey, className) descriptor findComponent matches
+  // components by, worded for a menu label.
+  std::string componentLabel(const std::string& registryKey, const std::string& className)
+  {
+    if (registryKey.empty())
+    {
+      return "Component";
+    }
+
+    return registryKey == "Script" && !className.empty() ? "Script " + className : registryKey;
   }
 }
 
@@ -410,6 +461,88 @@ uuids::uuid EditCommand::primaryUUID() const
   }
 
   throw std::logic_error("EditCommand: unhandled kind");
+}
+
+std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
+                                         const AssetRegistry* assetRegistry) const
+{
+  switch (m_kind)
+  {
+    case CommandKind::componentEdit:
+    {
+      const auto& data = std::get<ComponentEditData>(m_data);
+      return "Edit " + componentLabel(data.registryKey, data.className);
+    }
+    case CommandKind::addObject:
+    {
+      const auto& data = std::get<AddObjectData>(m_data);
+      return "Add " + (data.name.empty() ? std::string("Object") : data.name);
+    }
+    case CommandKind::removeObject:
+    {
+      const auto& data = std::get<RemoveObjectData>(m_data);
+      return "Delete " + jsonFieldOr(data.removedSubtreeJSON, "name", "Object");
+    }
+    case CommandKind::reparentObject:
+    {
+      const auto& data = std::get<ReparentObjectData>(m_data);
+      return "Move " + objectNameOr(objectManager, data.objectUUID, "Object");
+    }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+      return "Reorder " + objectNameOr(objectManager, data.objectUUID, "Object");
+    }
+    case CommandKind::renameObject:
+    {
+      const auto& data = std::get<RenameObjectData>(m_data);
+      return "Rename " + (data.afterName.empty() ? std::string("Object") : data.afterName);
+    }
+    case CommandKind::addComponent:
+    {
+      const auto& data = std::get<AddComponentData>(m_data);
+      return "Add " + componentLabel(data.registryKey, data.className);
+    }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+      return "Remove " + componentLabel(data.registryKey, data.className);
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+      return "Duplicate " + objectNameOr(objectManager, data.sourceUUID, "Object");
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+      const auto* record = assetRegistry ? assetRegistry->getByUUID(data.prefabUUID) : nullptr;
+      return "Instantiate "
+        + (record ? assetFieldName(record->type, record->path, record->className) : std::string("Prefab"));
+    }
+    case CommandKind::addAsset:
+    {
+      const auto& data = std::get<AddAssetData>(m_data);
+      return "Add Asset " + assetFieldName(data.type, data.path, data.className);
+    }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+      return "Replace Asset " + assetFieldName(data.type, data.afterPath, data.afterClassName);
+    }
+    case CommandKind::renameAsset:
+    {
+      const auto& data = std::get<RenameAssetData>(m_data);
+      return "Rename Asset " + (data.afterDisplayName.empty() ? std::string("Asset") : data.afterDisplayName);
+    }
+    case CommandKind::removeAsset:
+    {
+      const auto& data = std::get<RemoveAssetData>(m_data);
+      return "Delete Asset " + assetFieldName(data.type, data.path, data.className);
+    }
+  }
+
+  throw std::logic_error("EditCommand::describeForMenu: unhandled kind");
 }
 
 Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
