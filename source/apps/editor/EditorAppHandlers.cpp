@@ -13,7 +13,11 @@
 #include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <memory>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace {
   // Whether any of the object's components mention the asset uuid in their serialized form. Searching the

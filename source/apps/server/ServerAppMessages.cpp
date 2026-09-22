@@ -10,6 +10,9 @@
 #include <NetServer.h>
 #include <Log.h>
 #include <nlohmann/json.hpp>
+#include <exception>
+#include <string>
+#include <vector>
 
 void ServerApp::handleClientMessage(const net::Message& message, const int32_t senderId)
 {

@@ -22,8 +22,12 @@
 #include <Log.h>
 #include <RemoteLogSink.h>
 #include <nlohmann/json.hpp>
+#include <chrono>
+#include <exception>
+#include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 
 ServerApp::ServerApp(LaunchOptions options)
   : m_options(std::move(options)),

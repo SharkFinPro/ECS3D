@@ -14,7 +14,10 @@
 #include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <algorithm>
+#include <memory>
 #include <optional>
+#include <string>
 
 namespace {
   // How a camera reads in the editor's "View" combo: the owning object's name, the player slot when it's a
