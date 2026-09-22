@@ -28,6 +28,14 @@ public:
   [[nodiscard]] bool isActive() const;
   void setActive(bool active);
 
+  // Outside this range the projection matrix degenerates (fov at or past 180 degrees, or a near/far
+  // plane that collapses the frustum). Shared by the editor slider and the setters' own clamps.
+  static constexpr float minFovDegrees = 1.0f;
+  static constexpr float maxFovDegrees = 179.0f;
+  static constexpr float minNearPlane = 0.001f;
+  // Far must stay strictly beyond near; this is how far past it far is pushed when the two collide.
+  static constexpr float minFarPlaneClearance = 0.001f;
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -37,6 +45,11 @@ public:
   void unpack(net::MessageReader& messageReader) override;
 
 private:
+  // Applies both planes together so the far > near rule reads the same regardless of which of near/far
+  // was set last (loadFromJSON and unpack set both, and field order in a save file isn't guaranteed).
+  // Non-finite inputs are left at their prior value.
+  void setNearFarPlanes(float nearPlane, float farPlane);
+
   // Local look direction (object space); (0,0,-1) faces the object's forward, matching model orientation.
   glm::vec3 m_direction = glm::vec3(0.0f, 0.0f, -1.0f);
   float m_fov = 45.0f;

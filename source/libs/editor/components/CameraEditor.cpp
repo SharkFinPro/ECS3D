@@ -43,21 +43,23 @@ void registerCameraEditor(ComponentEditor& componentEditor)
         edited = true;
       }
 
-      if (gc::accentSlider("FOV", &fov, 1.0f, 179.0f))
+      if (gc::accentSlider("FOV", &fov, Camera::minFovDegrees, Camera::maxFovDegrees))
       {
         camera->setFov(fov);
         edited = true;
       }
 
+      // The component itself enforces the minimum/relation now; these std::max calls just keep the
+      // widget's own displayed value from visibly snapping back next frame.
       if (gc::labeledDrag("Near Plane", &nearPlane, 0.01f))
       {
-        camera->setNearPlane(std::max(nearPlane, 0.001f));
+        camera->setNearPlane(std::max(nearPlane, Camera::minNearPlane));
         edited = true;
       }
 
       if (gc::labeledDrag("Far Plane", &farPlane, 1.0f))
       {
-        camera->setFarPlane(std::max(farPlane, nearPlane + 0.001f));
+        camera->setFarPlane(std::max(farPlane, nearPlane + Camera::minFarPlaneClearance));
         edited = true;
       }
     }
