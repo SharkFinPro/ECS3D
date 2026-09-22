@@ -162,6 +162,19 @@ TEST_F(LightRendererBindingsTest, SetAmbientIgnoresNonFiniteInput)
   EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
 }
 
+TEST_F(LightRendererBindingsTest, SetAmbientToItsCurrentValueRecordsNothing)
+{
+  const auto id = uuid();
+  const auto current = m_light->getAmbient();
+
+  m_bindings.setAmbient(id.c_str(), current);
+
+  // Nothing changed, so there is nothing to replicate - this is not the non-finite guard above, it is
+  // the ordinary case of a script re-sending a value the component already holds.
+  EXPECT_NEAR(m_light->getAmbient(), current, 1e-5f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
 TEST_F(LightRendererBindingsTest, SetDiffuseChangesTheComponentAndRecordsOneEdit)
 {
   const auto id = uuid();
@@ -172,6 +185,17 @@ TEST_F(LightRendererBindingsTest, SetDiffuseChangesTheComponentAndRecordsOneEdit
   EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
 }
 
+TEST_F(LightRendererBindingsTest, SetDiffuseIgnoresNonFiniteInput)
+{
+  const auto id = uuid();
+  const auto before = m_light->getDiffuse();
+
+  m_bindings.setDiffuse(id.c_str(), std::nanf(""));
+
+  EXPECT_NEAR(m_light->getDiffuse(), before, 1e-5f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
 TEST_F(LightRendererBindingsTest, SetSpecularChangesTheComponentAndRecordsOneEdit)
 {
   const auto id = uuid();
@@ -180,6 +204,17 @@ TEST_F(LightRendererBindingsTest, SetSpecularChangesTheComponentAndRecordsOneEdi
 
   EXPECT_NEAR(m_light->getSpecular(), 0.6f, 1e-5f);
   EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+}
+
+TEST_F(LightRendererBindingsTest, SetSpecularIgnoresNonFiniteInput)
+{
+  const auto id = uuid();
+  const auto before = m_light->getSpecular();
+
+  m_bindings.setSpecular(id.c_str(), std::nanf(""));
+
+  EXPECT_NEAR(m_light->getSpecular(), before, 1e-5f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
 }
 
 TEST_F(LightRendererBindingsTest, SetDirectionChangesTheComponentAndRecordsOneEdit)

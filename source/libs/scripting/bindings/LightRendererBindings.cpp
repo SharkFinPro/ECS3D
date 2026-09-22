@@ -8,6 +8,27 @@
 #include <string>
 
 namespace {
+  // The component's own setter can leave the value exactly where it found it - a non-finite input is
+  // ignored outright, and a set to the value already there is a legitimate no-op - and neither case has
+  // anything to replicate. Reads the getter before and after applying the setter and only records the
+  // edit when they differ; an exact compare is correct here since this is detecting whether the setter
+  // wrote at all, not comparing two independently computed values.
+  template <typename Value, typename Apply>
+  void applyAndRecordIfChanged(const uuids::uuid& objectUUID, const std::shared_ptr<LightRenderer>& lightRenderer,
+                               Value (LightRenderer::*getter)() const, Apply apply)
+  {
+    const auto before = (lightRenderer.get()->*getter)();
+    apply();
+    const auto after = (lightRenderer.get()->*getter)();
+
+    if (!(before == after))
+    {
+      // Not covered by the per-tick state delta (Transform only), so replicate it like the editor's own
+      // component edits: buffer it here (scripting can't reach the net layer) for the app to broadcast.
+      BindingContext::recordComponentEdit(objectUUID, lightRenderer);
+    }
+  }
+
   // Also hands back the parsed object uuid, so a setter that needs to record a replicated edit doesn't
   // have to re-parse the string it just resolved.
   std::shared_ptr<LightRenderer> find(const char* uuid, uuids::uuid* outObjectUUID = nullptr)
@@ -153,11 +174,8 @@ void LightRendererBindingsProvider::bindSetSpotLight(const char* uuid, const boo
     return;
   }
 
-  lightRenderer->setSpotLight(isSpotLight);
-
-  // Not covered by the per-tick state delta (Transform only), so replicate it like the editor's own
-  // component edits: buffer it here (scripting can't reach the net layer) for the app to broadcast.
-  BindingContext::recordComponentEdit(objectUUID, lightRenderer);
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::isSpotLight,
+                          [&] { lightRenderer->setSpotLight(isSpotLight); });
 }
 
 void LightRendererBindingsProvider::bindSetColor(const char* uuid, const float r, const float g, const float b)
@@ -169,9 +187,8 @@ void LightRendererBindingsProvider::bindSetColor(const char* uuid, const float r
     return;
   }
 
-  lightRenderer->setColor({ r, g, b });
-
-  BindingContext::recordComponentEdit(objectUUID, lightRenderer);
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getColor,
+                          [&] { lightRenderer->setColor({ r, g, b }); });
 }
 
 void LightRendererBindingsProvider::bindSetAmbient(const char* uuid, const float ambient)
@@ -183,9 +200,8 @@ void LightRendererBindingsProvider::bindSetAmbient(const char* uuid, const float
     return;
   }
 
-  lightRenderer->setAmbient(ambient);
-
-  BindingContext::recordComponentEdit(objectUUID, lightRenderer);
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getAmbient,
+                          [&] { lightRenderer->setAmbient(ambient); });
 }
 
 void LightRendererBindingsProvider::bindSetDiffuse(const char* uuid, const float diffuse)
@@ -197,9 +213,8 @@ void LightRendererBindingsProvider::bindSetDiffuse(const char* uuid, const float
     return;
   }
 
-  lightRenderer->setDiffuse(diffuse);
-
-  BindingContext::recordComponentEdit(objectUUID, lightRenderer);
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getDiffuse,
+                          [&] { lightRenderer->setDiffuse(diffuse); });
 }
 
 void LightRendererBindingsProvider::bindSetSpecular(const char* uuid, const float specular)
@@ -211,9 +226,8 @@ void LightRendererBindingsProvider::bindSetSpecular(const char* uuid, const floa
     return;
   }
 
-  lightRenderer->setSpecular(specular);
-
-  BindingContext::recordComponentEdit(objectUUID, lightRenderer);
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getSpecular,
+                          [&] { lightRenderer->setSpecular(specular); });
 }
 
 void LightRendererBindingsProvider::bindSetDirection(const char* uuid, const float x, const float y, const float z)
@@ -225,9 +239,8 @@ void LightRendererBindingsProvider::bindSetDirection(const char* uuid, const flo
     return;
   }
 
-  lightRenderer->setDirection({ x, y, z });
-
-  BindingContext::recordComponentEdit(objectUUID, lightRenderer);
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getDirection,
+                          [&] { lightRenderer->setDirection({ x, y, z }); });
 }
 
 void LightRendererBindingsProvider::bindSetConeAngle(const char* uuid, const float coneAngle)
@@ -239,9 +252,8 @@ void LightRendererBindingsProvider::bindSetConeAngle(const char* uuid, const flo
     return;
   }
 
-  lightRenderer->setConeAngle(coneAngle);
-
-  BindingContext::recordComponentEdit(objectUUID, lightRenderer);
+  applyAndRecordIfChanged(objectUUID, lightRenderer, &LightRenderer::getConeAngle,
+                          [&] { lightRenderer->setConeAngle(coneAngle); });
 }
 
 bool LightRendererBindingsProvider::bindHas(const char* uuid)
