@@ -37,6 +37,7 @@ add_executable(${PROJECT_NAME}
   NarrowPhaseTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
+  ColliderBindingsTest.cpp
   LightRendererTest.cpp
   LogTest.cpp
   LogFilterTest.cpp
@@ -86,10 +87,15 @@ add_executable(${PROJECT_NAME}
   ../libs/net/MessageQueue.cpp
   ../libs/net/ServerLog.cpp
   ../libs/net/TransportLog.cpp
+  ../libs/scripting/bindings/ColliderBindings.cpp
 
   # LogBindings depends only on ECS3DLog (no data/CLR includes), so it is compiled in directly rather
   # than pulling all of ECS3DScripting - and its ManagedHost/CLR dependency - into a headless suite.
   ../libs/scripting/bindings/LogBindings.cpp
+
+  # BindingContext and the component binding providers depend only on ECS3DData, so they are compiled in
+  # directly for the same reason as LogBindings.
+  ../libs/scripting/bindings/BindingContext.cpp
 
   # ScriptFieldEdit depends only on json, so it is compiled in the same way.
   ../libs/scripting/ScriptFieldEdit.cpp

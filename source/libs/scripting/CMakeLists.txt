@@ -20,6 +20,8 @@ add_library(${PROJECT_NAME}
   bindings/WorldBindings.h
   bindings/CameraBindings.cpp
   bindings/CameraBindings.h
+  bindings/ColliderBindings.cpp
+  bindings/ColliderBindings.h
   bindings/ModelRendererBindings.cpp
   bindings/ModelRendererBindings.h
   bindings/LogBindings.cpp

@@ -113,6 +113,18 @@ public static unsafe class World
         return false;
     }
 
+    public static bool tryGetCollider(string uuid, out Collider collider)
+    {
+        if (has(NativeBindings.Collider.has, uuid))
+        {
+            collider = new Collider(uuid);
+            return true;
+        }
+
+        collider = null!;
+        return false;
+    }
+
     public static bool tryGetModelRenderer(string uuid, out ModelRenderer modelRenderer)
     {
         if (has(NativeBindings.ModelRenderer.has, uuid))
