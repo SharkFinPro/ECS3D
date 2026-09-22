@@ -16,8 +16,11 @@
 //
 // The box-only and sphere-only accessors fail safely when the collider is the other shape (or missing):
 // a getter returns false and leaves its out params untouched, a setter returns false and changes nothing.
-// Every successful setter calls BindingContext::recordComponentEdit so the edit replicates (Collider
-// isn't covered by the per-tick state delta, like ModelRenderer).
+// A setter that returns true but whose underlying component setter can silently ignore its input (a
+// non-finite offset/size/radius, a layer clamped to a value already in effect) only calls
+// BindingContext::recordComponentEdit when the stored value actually changed - checked before/after
+// through the same getter, not by re-deriving the ignore rule here (Collider isn't covered by the
+// per-tick state delta, like ModelRenderer, so a real change still has to replicate).
 struct ColliderBindings
 {
   int(*getShape)(const char* uuid);

@@ -256,6 +256,43 @@ TEST_F(ColliderBindingsTest, EachSuccessfulSetRecordsExactlyOneComponentEdit)
   EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
 }
 
+TEST_F(ColliderBindingsTest, ANonFiniteSetIsAcceptedButRecordsNoComponentEdit)
+{
+  const auto boxUUID = uuidOf(m_boxObject);
+  const auto sphereUUID = uuidOf(m_sphereObject);
+  const auto nan = std::numeric_limits<float>::quiet_NaN();
+
+  // The component setter behind each of these silently drops non-finite input and leaves its value
+  // untouched, so the binding must not queue a no-op edit even though it returns true (shape matched).
+  EXPECT_TRUE(m_bindings.setBoxOffset(boxUUID.c_str(), nan, 0.0f, 0.0f));
+  EXPECT_TRUE(m_bindings.setBoxSize(boxUUID.c_str(), nan, 1.0f, 1.0f));
+  EXPECT_TRUE(m_bindings.setSphereOffset(sphereUUID.c_str(), nan, 0.0f, 0.0f));
+  EXPECT_TRUE(m_bindings.setSphereRadius(sphereUUID.c_str(), nan));
+
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  // Positive control: the same accessors with finite input on the same objects do record, so the empty
+  // result above reflects the non-finite no-op rather than these setters never recording at all.
+  EXPECT_TRUE(m_bindings.setBoxOffset(boxUUID.c_str(), 1.0f, 0.0f, 0.0f));
+  EXPECT_FALSE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(ColliderBindingsTest, ALayerClampedToItsAlreadyStoredValueRecordsNoEditButADifferentClampDoes)
+{
+  const auto boxUUID = uuidOf(m_boxObject);
+
+  // Layer starts at 0; clamping an out-of-range request down to the value already in effect (0) is a
+  // no-op on the stored state and must not queue an edit.
+  EXPECT_TRUE(m_bindings.setLayer(boxUUID.c_str(), 0u));
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  // An out-of-range request that clamps to a value different from the one already stored still records,
+  // even though the stored value (31) differs from the requested one (999).
+  EXPECT_TRUE(m_bindings.setLayer(boxUUID.c_str(), 999u));
+  EXPECT_EQ(m_bindings.getLayer(boxUUID.c_str()), 31u);
+  EXPECT_FALSE(BindingContext::takeComponentEdits().empty());
+}
+
 TEST_F(ColliderBindingsTest, AGetOrARefusedSetRecordsNoComponentEdit)
 {
   const auto boxUUID = uuidOf(m_boxObject);

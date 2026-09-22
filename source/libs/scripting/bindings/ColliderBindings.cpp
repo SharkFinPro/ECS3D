@@ -137,9 +137,16 @@ bool ColliderBindingsProvider::bindSetLayer(const char* uuid, const uint32_t lay
     return false;
   }
 
-  collider->setLayer(layer); // clamped to 0-31 by the setter
+  // setLayer clamps to 0-31, so the stored value can differ from the requested one either way - compare
+  // before/after (not the requested value) to decide whether anything actually changed.
+  const auto before = collider->getLayer();
+  collider->setLayer(layer);
+  const auto after = collider->getLayer();
 
-  BindingContext::recordComponentEdit(objectUUID, collider);
+  if (after != before)
+  {
+    BindingContext::recordComponentEdit(objectUUID, collider);
+  }
 
   return true;
 }
@@ -191,10 +198,16 @@ bool ColliderBindingsProvider::bindSetBoxOffset(const char* uuid, const float x,
     return false;
   }
 
-  // Non-finite input is dropped by the setter itself (BoxCollider::setPosition), not rechecked here.
+  // BoxCollider::setPosition drops non-finite input and leaves the offset untouched; compare before/after
+  // rather than recording unconditionally, so a refused (non-finite) set doesn't queue a no-op edit.
+  const auto before = box->getLocalPosition();
   box->setPosition({ x, y, z });
+  const auto after = box->getLocalPosition();
 
-  BindingContext::recordComponentEdit(objectUUID, box);
+  if (after != before)
+  {
+    BindingContext::recordComponentEdit(objectUUID, box);
+  }
 
   return true;
 }
@@ -224,9 +237,15 @@ bool ColliderBindingsProvider::bindSetBoxSize(const char* uuid, const float x, c
     return false;
   }
 
+  // Same non-finite-is-a-no-op rule as setBoxOffset above.
+  const auto before = box->getLocalScale();
   box->setScale({ x, y, z });
+  const auto after = box->getLocalScale();
 
-  BindingContext::recordComponentEdit(objectUUID, box);
+  if (after != before)
+  {
+    BindingContext::recordComponentEdit(objectUUID, box);
+  }
 
   return true;
 }
@@ -256,9 +275,16 @@ bool ColliderBindingsProvider::bindSetSphereOffset(const char* uuid, const float
     return false;
   }
 
+  // SphereCollider::setPosition drops non-finite input the same way BoxCollider::setPosition does - same
+  // before/after compare so a refused set doesn't queue a no-op edit.
+  const auto before = sphere->getLocalPosition();
   sphere->setPosition({ x, y, z });
+  const auto after = sphere->getLocalPosition();
 
-  BindingContext::recordComponentEdit(objectUUID, sphere);
+  if (after != before)
+  {
+    BindingContext::recordComponentEdit(objectUUID, sphere);
+  }
 
   return true;
 }
@@ -285,9 +311,15 @@ bool ColliderBindingsProvider::bindSetSphereRadius(const char* uuid, const float
     return false;
   }
 
+  // SphereCollider::setRadius drops non-finite input too - same before/after compare.
+  const auto before = sphere->getLocalRadius();
   sphere->setRadius(radius);
+  const auto after = sphere->getLocalRadius();
 
-  BindingContext::recordComponentEdit(objectUUID, sphere);
+  if (after != before)
+  {
+    BindingContext::recordComponentEdit(objectUUID, sphere);
+  }
 
   return true;
 }
