@@ -336,6 +336,20 @@ mid-run (or whose object is destroyed) is stopped and detached by an orphan swee
 and on every scene edit's snapshot. The sweep matches by component identity, not by (uuid, class) key, so
 a re-added script of the same class gets a fresh instance rather than inheriting the stale one.
 
+**Script binding coverage.** Each *Bindings provider exposes its component's full public surface except
+for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight.
+`TransformBindings` leaves out `getUpdateID` (a cache-invalidation counter for colliders, not scene data)
+and `serialize`/`loadFromJSON`/`pack`/`unpack` (project/wire plumbing, not gameplay state).
+`RigidBodyBindings` leaves out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already
+writes to; PhysicsSystem drains it) and `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own
+double-buffered falling state; `isFalling` is the read-only query scripts get). `CameraBindings` now
+covers every field on `Camera`. `InputUtilsBindings` already covers everything `InputState` queries;
+`setKeysPressed`/`setFocused`/`setMouse`/`clearMouseDeltas`/`commitInputEdges`/`removeSlot` stay
+unexposed because they are the write side ServerApp feeds from the network and the per-tick bookkeeping
+that resets it - a script is an input consumer, never a producer - and there is no player-agnostic
+aggregate for mouse position/delta/scroll/buttons because, unlike a key or focus, a position has no
+sensible "any player" combination; only the per-object reads make sense there.
+
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers
 a `RemoteLogSink` with `Log` alongside its file/console sinks; each `run()` iteration (not gated on a fixed

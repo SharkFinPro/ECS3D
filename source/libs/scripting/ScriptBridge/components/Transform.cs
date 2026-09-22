@@ -16,6 +16,11 @@ public unsafe struct TransformBindings
     public delegate* unmanaged<IntPtr, void> start;
     public delegate* unmanaged<IntPtr, void> stop;
     public delegate* unmanaged<IntPtr, bool> has;
+    // New fields go at the END to keep the layout matched with the native TransformBindings struct.
+    public delegate* unmanaged<IntPtr, float*, float*, float*, void> getLocalPosition;
+    public delegate* unmanaged<IntPtr, float*, float*, float*, void> getLocalScale;
+    public delegate* unmanaged<IntPtr, float*, float*, float*, void> getLocalRotation;
+    public delegate* unmanaged<IntPtr, float, float, float, void> setPosition;
 }
 
 public unsafe class Transform
@@ -68,4 +73,36 @@ public unsafe class Transform
     public void start() => NativeBindings.Transform.start(_uuid);
 
     public void stop() => NativeBindings.Transform.stop(_uuid);
+
+    // getPosition/getScale/getRotation are parent-combined (world); these read this object's own local
+    // values.
+    public Vector3 getLocalPosition()
+    {
+        float x = 0, y = 0, z = 0;
+        NativeBindings.Transform.getLocalPosition(_uuid, &x, &y, &z);
+
+        return new Vector3(x, y, z);
+    }
+
+    public Vector3 getLocalScale()
+    {
+        float x = 0, y = 0, z = 0;
+        NativeBindings.Transform.getLocalScale(_uuid, &x, &y, &z);
+
+        return new Vector3(x, y, z);
+    }
+
+    public Vector3 getLocalRotation()
+    {
+        float x = 0, y = 0, z = 0;
+        NativeBindings.Transform.getLocalRotation(_uuid, &x, &y, &z);
+
+        return new Vector3(x, y, z);
+    }
+
+    // Overwrites the local position outright (setScale/setRotation's sibling); move() is additive.
+    public void setPosition(float x, float y, float z) =>
+        NativeBindings.Transform.setPosition(_uuid, x, y, z);
+
+    public void setPosition(Vector3 position) => setPosition(position.X, position.Y, position.Z);
 }
