@@ -288,6 +288,15 @@ private:
   // already in flight.
   void displayEditMenu();
 
+  // One "Undo <label>"/"Redo <label>" menu item, split out of displayEditMenu() to keep that function's
+  // branching down: isUndo picks the verb, the EditorAction the shortcut comes from, and which of
+  // requestUndo()/requestRedo() a click invokes.
+  void displayUndoRedoMenuItem(bool isUndo, const std::optional<std::string>& label, bool enabled);
+
+  // The condition shared by the undo and redo items: something to act on, an editable server, and no
+  // request already in flight.
+  [[nodiscard]] bool canActOnHistoryItem(const std::optional<std::string>& label, bool requestInFlight) const;
+
   void displayWindowMenu() const;
 
   void displaySceneStatus();

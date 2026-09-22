@@ -77,6 +77,37 @@ void EditorApp::clearUndoRedoPending()
   m_undoRedoPending = false;
 }
 
+bool EditorApp::canActOnHistoryItem(const std::optional<std::string>& label, const bool requestInFlight) const
+{
+  return label.has_value() && m_serverEditable && !requestInFlight;
+}
+
+void EditorApp::displayUndoRedoMenuItem(const bool isUndo, const std::optional<std::string>& label,
+                                        const bool enabled)
+{
+  const char* verb = isUndo ? "Undo" : "Redo";
+  const std::string text = std::string(verb) + (label ? " " + *label : std::string());
+
+  const std::string shortcut = shortcutFor(*m_keybindTable, isUndo ? EditorAction::undo : EditorAction::redo);
+  // nullptr rather than "" for an unbound action - an empty shortcut column still reserves the same
+  // layout space "Ctrl+Z" would, which reads as a blank rather than nothing.
+  const char* shortcutText = shortcut.empty() ? nullptr : shortcut.c_str();
+
+  ImGui::BeginDisabled(!enabled);
+  if (ImGui::MenuItem(text.c_str(), shortcutText))
+  {
+    if (isUndo)
+    {
+      requestUndo();
+    }
+    else
+    {
+      requestRedo();
+    }
+  }
+  ImGui::EndDisabled();
+}
+
 void EditorApp::displayEditMenu()
 {
   if (!ImGui::BeginMenu("Edit"))
@@ -99,29 +130,8 @@ void EditorApp::displayEditMenu()
   // neither handler below got a chance to.
   const bool requestInFlight = undoRedoRequestBlocked();
 
-  const std::string undoText = "Undo" + (undoLabel ? " " + *undoLabel : std::string());
-  const std::string redoText = "Redo" + (redoLabel ? " " + *redoLabel : std::string());
-  const std::string undoShortcut = shortcutFor(*m_keybindTable, EditorAction::undo);
-  const std::string redoShortcut = shortcutFor(*m_keybindTable, EditorAction::redo);
-
-  // nullptr rather than "" for an unbound action - an empty shortcut column still reserves the same
-  // layout space "Ctrl+Z" would, which reads as a blank rather than nothing.
-  const char* undoShortcutText = undoShortcut.empty() ? nullptr : undoShortcut.c_str();
-  const char* redoShortcutText = redoShortcut.empty() ? nullptr : redoShortcut.c_str();
-
-  ImGui::BeginDisabled(!undoLabel || !m_serverEditable || requestInFlight);
-  if (ImGui::MenuItem(undoText.c_str(), undoShortcutText))
-  {
-    requestUndo();
-  }
-  ImGui::EndDisabled();
-
-  ImGui::BeginDisabled(!redoLabel || !m_serverEditable || requestInFlight);
-  if (ImGui::MenuItem(redoText.c_str(), redoShortcutText))
-  {
-    requestRedo();
-  }
-  ImGui::EndDisabled();
+  displayUndoRedoMenuItem(true, undoLabel, canActOnHistoryItem(undoLabel, requestInFlight));
+  displayUndoRedoMenuItem(false, redoLabel, canActOnHistoryItem(redoLabel, requestInFlight));
 
   ImGui::EndMenu();
 }
