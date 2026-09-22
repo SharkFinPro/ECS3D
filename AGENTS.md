@@ -111,8 +111,9 @@
   only when ctest runs it, not as a step of a plain `cmake --build`: add a new managed test by adding a
   `.cs` file under `source/tests/managed/` (globbed automatically, unlike the native suite's explicit
   source list) and running it through `check`, the same way as every other test here. On a machine with
-  a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio` and
-  `Microsoft.NET.Test.Sdk` for this project, which needs network access.
+  a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio` and the
+  test-SDK package this project references (see `ECS3DManagedTests.csproj`), which needs network
+  access.
 - **Dependency direction (must hold):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd + log. `net`/`scripting` →
