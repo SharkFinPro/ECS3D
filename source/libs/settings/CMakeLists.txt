@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   SettingsStore.h
   Keybinds.cpp
   Keybinds.h
+  EditorCameraSettings.cpp
+  EditorCameraSettings.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
