@@ -36,7 +36,9 @@ public class FrameCodecTests
     var payload = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
     var frame = TcpBackend.FrameBytes(0x42, payload);
 
-    using var stream = new MemoryStream(frame);
+    // ReadFrame's body read touches stream.ReadTimeout, which a plain MemoryStream does not support -
+    // see TimeoutCapableMemoryStream for why.
+    using var stream = new TimeoutCapableMemoryStream(frame);
     var ok = TcpBackend.ReadFrame(stream, out var type, out var decodedPayload);
 
     Assert.True(ok);
@@ -66,7 +68,9 @@ public class FrameCodecTests
     var frame = TcpBackend.FrameBytes(0x01, new byte[] { 1, 2, 3, 4 });
     var truncated = frame[..^2];
 
-    using var stream = new MemoryStream(truncated);
+    // Same timeout-support requirement as ReadFrame_RoundTripsWhatFrameBytesWrote above: the header
+    // is intact so ReadFrame reaches the body read, which touches stream.ReadTimeout.
+    using var stream = new TimeoutCapableMemoryStream(truncated);
     var ok = TcpBackend.ReadFrame(stream, out _, out _);
 
     Assert.False(ok);
