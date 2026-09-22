@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME}
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   LightRendererTest.cpp
+  LightRendererBindingsTest.cpp
   LogTest.cpp
   LogFilterTest.cpp
   LogBindingsTest.cpp
@@ -91,8 +92,13 @@ add_executable(${PROJECT_NAME}
   # than pulling all of ECS3DScripting - and its ManagedHost/CLR dependency - into a headless suite.
   ../libs/scripting/bindings/LogBindings.cpp
 
+  # BindingContext and the component binding providers depend only on ECS3DData, so they are compiled in
+  # directly for the same reason as LogBindings.
+  ../libs/scripting/bindings/BindingContext.cpp
+
   # ScriptFieldEdit depends only on json, so it is compiled in the same way.
   ../libs/scripting/ScriptFieldEdit.cpp
+  ../libs/scripting/bindings/LightRendererBindings.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

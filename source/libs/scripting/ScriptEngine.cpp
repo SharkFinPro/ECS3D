@@ -6,6 +6,7 @@
 #include "bindings/WorldBindings.h"
 #include "bindings/CameraBindings.h"
 #include "bindings/ModelRendererBindings.h"
+#include "bindings/LightRendererBindings.h"
 #include "bindings/LogBindings.h"
 #include <Log.h>
 #include <ManagedHost.h>
@@ -117,6 +118,11 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerModelRenderer =
     reinterpret_cast<RegisterModelRendererFn>(m_host->getDelegate(assemblyPath, typeName, "registerModelRendererBindings"));
   registerModelRenderer(ModelRendererBindingsProvider::getBindings());
+
+  using RegisterLightRendererFn = void(*)(LightRendererBindings);
+  const auto registerLightRenderer =
+    reinterpret_cast<RegisterLightRendererFn>(m_host->getDelegate(assemblyPath, typeName, "registerLightRendererBindings"));
+  registerLightRenderer(LightRendererBindingsProvider::getBindings());
 }
 
 void ScriptEngine::reloadScripts() const
