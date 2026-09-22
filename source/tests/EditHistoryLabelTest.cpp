@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TestScene.h"
+#include "Replication.h"
 #include "edits/EditCommand.h"
 #include "edits/EditHistory.h"
 #include "objects/Object.h"
@@ -56,9 +57,17 @@ TEST(EditHistoryLabel, DescribesARenameByItsRecordedAfterName)
   edits::EditHistory history;
   history.record(edits::EditCommand::renameObject(scene.object->getUUID(), "Object", "Renamed"));
 
+  // The live object is still named "Object" here - describeForMenu's renameObject case reads the
+  // recorded afterName directly rather than looking the object up, so the label already reads "Renamed".
   const auto undoLabel = history.nextUndoLabel(*scene.objectManager);
   ASSERT_TRUE(undoLabel.has_value());
   EXPECT_EQ(*undoLabel, "Rename Renamed");
+
+  // Apply the rename for real so undo()'s own validation - which does compare the recorded afterName
+  // against the live object (see EditCommand::validateForUndo) - has something to revert.
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildRenameObject(scene.object->getUUID(), "Renamed")),
+            replication::SceneEditResult::applied);
 
   const auto outcome = history.undo(*scene.objectManager);
   ASSERT_TRUE(outcome.ok());
@@ -78,8 +87,11 @@ TEST(EditHistoryLabel, DescribesAnInstantiatePrefabByResolvingTheLiveAssetName)
   const auto prefabUUID = someOtherUUID();
   const auto instanceUUID = anotherUUID();
 
+  // AssetRegistry::registerAsset silently refuses a Prefab record whose body does not parse as a JSON
+  // object (see isUsablePrefabBody) - an empty body would leave the registry never actually holding this
+  // record, and the lookup below would fall through to the generic fallback instead of the live name.
   assetRegistry.registerAsset(
-    { .uuid = prefabUUID, .type = AssetType::Prefab, .path = "MyPrefab" });
+    { .uuid = prefabUUID, .type = AssetType::Prefab, .path = "MyPrefab", .body = "{}" });
 
   edits::EditHistory history;
   history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
