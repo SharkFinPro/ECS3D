@@ -58,6 +58,7 @@ add_executable(${PROJECT_NAME}
   RuntimeComponentTest.cpp
   RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
+  MultiSelectEditTest.cpp
   ObjectManagerLifecycleTest.cpp
   ObjectManagerInstantiationTest.cpp
   ObjectManagerScriptPassTest.cpp
