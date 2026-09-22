@@ -346,9 +346,9 @@ double-buffered falling state; `isFalling` is the read-only query scripts get). 
 covers every field on `Camera`. `InputUtilsBindings` already covers everything `InputState` queries;
 `setKeysPressed`/`setFocused`/`setMouse`/`clearMouseDeltas`/`commitInputEdges`/`removeSlot` stay
 unexposed because they are the write side ServerApp feeds from the network and the per-tick bookkeeping
-that resets it - a script is an input consumer, never a producer - and there is no player-agnostic
-aggregate for mouse position/delta/scroll/buttons because, unlike a key or focus, a position has no
-sensible "any player" combination; only the per-object reads make sense there.
+that resets it - in this design scripts only consume input, so that side belongs to ServerApp - and
+there is no player-agnostic aggregate for mouse position/delta/scroll/buttons because, unlike a key or
+focus, a position has no sensible "any player" combination; only the per-object reads make sense there.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers
