@@ -35,6 +35,9 @@ public unsafe struct ColliderBindings
 // concrete type up front, plus the shape-shared trigger/layer/mask fields and per-shape shape/offset
 // accessors. New shapes (capsule, convex mesh) add their own group of accessors the same way, without
 // touching ColliderShape or the common members here.
+//
+// Values must be kept in step with the native switch in ColliderBindingsProvider::bindGetShape
+// (source/libs/scripting/bindings/ColliderBindings.cpp), which is the only thing that assigns them.
 public enum ColliderShape
 {
     None = 0,

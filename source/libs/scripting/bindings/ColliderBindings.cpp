@@ -84,7 +84,18 @@ int ColliderBindingsProvider::bindGetShape(const char* uuid)
     return 0; // none
   }
 
-  return collider->getColliderType() == ColliderType::boxCollider ? 1 : 2;
+  // No default case: a ColliderType enumerator added without a case here trips -Wswitch, rather than
+  // silently falling through to the wrong shape number. Keep this in step with the managed ColliderShape
+  // enum in Collider.cs - see the pointer left on ColliderType's declaration.
+  switch (collider->getColliderType())
+  {
+    case ColliderType::boxCollider:
+      return 1;
+    case ColliderType::sphereCollider:
+      return 2;
+  }
+
+  return 0; // unreachable for a valid ColliderType; keeps this a well-formed non-void function under gcc
 }
 
 bool ColliderBindingsProvider::bindGetIsTrigger(const char* uuid)
