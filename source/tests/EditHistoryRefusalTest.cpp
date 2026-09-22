@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <uuid.h>
 
 namespace {
   using namespace editHistoryFixtures;
@@ -285,7 +286,12 @@ TEST(EditHistory, UndoRefusesWhenTheObjectNoLongerExists)
   EXPECT_EQ(controlOutcome.result, edits::HistoryResult::applied);
 }
 
-TEST(EditHistory, NotReversibleKindsRefuseCleanlyInsteadOfProducingAWrongReverse)
+// removeObject is the one structural kind with no faithful reverse: deleteObjectsMarkedForDeletion
+// promotes the removed object's children up to its own parent rather than deleting them, and no existing
+// sceneEdit op can both recreate the removed object and reclaim those already-live children in one atomic
+// edit (see EditCommand.h's isReversible). removeComponent/duplicateObject/instantiatePrefab are covered
+// as ordinary reversible kinds in EditHistoryRoundTripTest.cpp instead.
+TEST(EditHistory, RemoveObjectRefusesCleanlyInsteadOfProducingAWrongReverse)
 {
   auto scene = makeScene();
 
@@ -299,22 +305,6 @@ TEST(EditHistory, NotReversibleKindsRefuseCleanlyInsteadOfProducingAWrongReverse
   EXPECT_FALSE(outcome.messagePayload.has_value());
   EXPECT_FALSE(history.canUndo());
 
-  history.record(edits::EditCommand::removeComponent(scene.object->getUUID(),
-                                                      transformOf(scene.object)->serialize()));
-  outcome = history.undo(*scene.objectManager);
-  EXPECT_EQ(outcome.result, edits::HistoryResult::notUndoable);
-  EXPECT_FALSE(history.canUndo());
-
-  history.record(edits::EditCommand::duplicateObject(scene.object->getUUID(), someOtherUUID(), std::nullopt, 1));
-  outcome = history.undo(*scene.objectManager);
-  EXPECT_EQ(outcome.result, edits::HistoryResult::notUndoable);
-  EXPECT_FALSE(history.canUndo());
-
-  history.record(edits::EditCommand::instantiatePrefab(someOtherUUID(), anotherUUID(), std::nullopt, 0));
-  outcome = history.undo(*scene.objectManager);
-  EXPECT_EQ(outcome.result, edits::HistoryResult::notUndoable);
-  EXPECT_FALSE(history.canUndo());
-
   // Positive control: an ordinary reversible command recorded in the same history still undoes fine.
   const auto transform = transformOf(scene.object);
   transform->setPosition({ 1, 0, 0 });
@@ -325,6 +315,185 @@ TEST(EditHistory, NotReversibleKindsRefuseCleanlyInsteadOfProducingAWrongReverse
 
   outcome = history.undo(*scene.objectManager);
   EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
+}
+
+TEST(EditHistory, UndoOfARemoveComponentRefusesWhenSomethingAlreadyReaddedTheComponent)
+{
+  // Positive control: without interference, undo puts the removed component back.
+  {
+    auto scene = makeScene();
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildAddComponent(scene.object->getUUID(), "RigidBody")),
+              replication::SceneEditResult::applied);
+    const auto rigidBody = scene.object->getComponents().at(ComponentType::rigidBody);
+    const auto removedJSON = rigidBody->serialize();
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildRemoveComponent(scene.object->getUUID(), rigidBody)),
+              replication::SceneEditResult::applied);
+
+    edits::EditHistory history;
+    history.record(edits::EditCommand::removeComponent(scene.object->getUUID(), removedJSON));
+
+    const auto outcome = history.undo(*scene.objectManager);
+    EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
+  }
+
+  // Same setup, but something else adds a RigidBody back onto the object before undo runs: the slot this
+  // entry expects to be empty is not, so undo refuses rather than adding a second one.
+  {
+    auto scene = makeScene();
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildAddComponent(scene.object->getUUID(), "RigidBody")),
+              replication::SceneEditResult::applied);
+    const auto rigidBody = scene.object->getComponents().at(ComponentType::rigidBody);
+    const auto removedJSON = rigidBody->serialize();
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildRemoveComponent(scene.object->getUUID(), rigidBody)),
+              replication::SceneEditResult::applied);
+
+    edits::EditHistory history;
+    history.record(edits::EditCommand::removeComponent(scene.object->getUUID(), removedJSON));
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildAddComponent(scene.object->getUUID(), "RigidBody")),
+              replication::SceneEditResult::applied);
+
+    const auto outcome = history.undo(*scene.objectManager);
+    EXPECT_EQ(outcome.result, edits::HistoryResult::targetChanged);
+    ASSERT_TRUE(outcome.conflict.has_value());
+    EXPECT_EQ(*outcome.conflict, scene.object->getUUID());
+    EXPECT_FALSE(history.canUndo());
+
+    // The interference is left exactly as it was - the refused undo touched nothing.
+    EXPECT_TRUE(scene.object->getComponents().contains(ComponentType::rigidBody));
+  }
+}
+
+TEST(EditHistory, UndoOfADuplicateObjectRefusesWhenTheDuplicateWasAlreadyRemoved)
+{
+  // Positive control: without interference, undo removes the whole duplicated subtree.
+  {
+    auto scene = makeScene();
+    const auto duplicateUUID = someOtherUUID();
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildDuplicateObject(scene.object->getUUID(), &duplicateUUID)),
+              replication::SceneEditResult::applied);
+
+    edits::EditHistory history;
+    history.record(
+      edits::EditCommand::duplicateObject(scene.object->getUUID(), duplicateUUID, std::nullopt, 1));
+
+    const auto outcome = history.undo(*scene.objectManager);
+    EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
+  }
+
+  // Same setup, but the duplicate is already gone (undone some other way, or removed directly) before
+  // undo runs: nothing to reclaim, so it refuses by name rather than silently doing nothing.
+  {
+    auto scene = makeScene();
+    const auto duplicateUUID = someOtherUUID();
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildDuplicateObject(scene.object->getUUID(), &duplicateUUID)),
+              replication::SceneEditResult::applied);
+
+    edits::EditHistory history;
+    history.record(
+      edits::EditCommand::duplicateObject(scene.object->getUUID(), duplicateUUID, std::nullopt, 1));
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildRemoveSubtree(duplicateUUID)),
+              replication::SceneEditResult::applied);
+    ASSERT_FALSE(scene.objectManager->getObjectByUUID(duplicateUUID));
+
+    const auto outcome = history.undo(*scene.objectManager);
+    EXPECT_EQ(outcome.result, edits::HistoryResult::targetMissing);
+    ASSERT_TRUE(outcome.conflict.has_value());
+    EXPECT_EQ(*outcome.conflict, duplicateUUID);
+    EXPECT_FALSE(history.canUndo());
+  }
+}
+
+TEST(EditHistory, RedoOfAnInstantiatePrefabRefusesWhenThePrefabAssetWasRemoved)
+{
+  // Positive control: without interference, redo re-instantiates the prefab.
+  {
+    AssetScene scene;
+    const auto prefabUUID = someOtherUUID();
+    scene.assetRegistry.registerAsset({
+      .uuid = prefabUUID,
+      .type = AssetType::Prefab,
+      .path = "TestPrefab",
+      .body = nlohmann::json{ { "uuid", uuids::to_string(anotherUUID()) },
+                              { "name", "Prefab" },
+                              { "components", nlohmann::json::array() },
+                              { "scripts", nlohmann::json::array() },
+                              { "children", nlohmann::json::array() } }.dump()
+    });
+
+    const auto instanceUUID = uuids::uuid::from_string("00000000-0000-0000-0000-000000000002").value();
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildInstantiatePrefab(prefabUUID, nullptr, &instanceUUID),
+                &scene.assetRegistry),
+              replication::SceneEditResult::applied);
+
+    edits::EditHistory history;
+    history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
+
+    const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
+    ASSERT_TRUE(undoOutcome.ok());
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
+              replication::SceneEditResult::applied);
+    ASSERT_FALSE(scene.objectManager->getObjectByUUID(instanceUUID));
+
+    const auto outcome = history.redo(*scene.objectManager, &scene.assetRegistry);
+    EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
+  }
+
+  // Same setup, but the prefab asset is removed from the registry before redo runs: nothing left to
+  // instantiate from, so it refuses by naming the prefab rather than instantiating a stale or empty body.
+  {
+    AssetScene scene;
+    const auto prefabUUID = someOtherUUID();
+    scene.assetRegistry.registerAsset({
+      .uuid = prefabUUID,
+      .type = AssetType::Prefab,
+      .path = "TestPrefab",
+      .body = nlohmann::json{ { "uuid", uuids::to_string(anotherUUID()) },
+                              { "name", "Prefab" },
+                              { "components", nlohmann::json::array() },
+                              { "scripts", nlohmann::json::array() },
+                              { "children", nlohmann::json::array() } }.dump()
+    });
+
+    const auto instanceUUID = uuids::uuid::from_string("00000000-0000-0000-0000-000000000002").value();
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildInstantiatePrefab(prefabUUID, nullptr, &instanceUUID),
+                &scene.assetRegistry),
+              replication::SceneEditResult::applied);
+
+    edits::EditHistory history;
+    history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
+
+    const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
+    ASSERT_TRUE(undoOutcome.ok());
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
+              replication::SceneEditResult::applied);
+    ASSERT_FALSE(scene.objectManager->getObjectByUUID(instanceUUID));
+
+    scene.assetRegistry.removeAsset(prefabUUID);
+
+    const auto outcome = history.redo(*scene.objectManager, &scene.assetRegistry);
+    EXPECT_EQ(outcome.result, edits::HistoryResult::targetMissing);
+    ASSERT_TRUE(outcome.conflict.has_value());
+    EXPECT_EQ(*outcome.conflict, prefabUUID);
+    EXPECT_FALSE(history.canRedo());
+  }
 }
 
 // --- nextUndoKind()/nextRedoKind(): a caller (EditorApp::undo()/redo()) that only knows how to send the

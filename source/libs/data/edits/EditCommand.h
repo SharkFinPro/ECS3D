@@ -119,18 +119,21 @@ public:
                                                 std::string registryKey,
                                                 std::string className = {});
 
-  // Not reversible (see isReversible). removedComponent is the removed component's serialize() blob;
-  // registryKey/className are derived from it the same way componentEdit derives them.
+  // removedComponent is the removed component's serialize() blob; registryKey/className are derived from
+  // it the same way componentEdit derives them. Undo puts it back with an addComponent that carries this
+  // blob as "data" - see Replication.h's buildAddComponent.
   [[nodiscard]] static EditCommand removeComponent(const uuids::uuid& objectUUID,
                                                    const nlohmann::json& removedComponent);
 
-  // Not reversible (see isReversible).
+  // parentUUID/siblingIndex are the source's own position at record time (duplicateObject always lands
+  // the copy as the source's next sibling) - informational only, not enforced on redo, the same as
+  // addObject's siblingIndex.
   [[nodiscard]] static EditCommand duplicateObject(const uuids::uuid& sourceUUID,
                                                    const uuids::uuid& duplicateUUID,
                                                    const std::optional<uuids::uuid>& parentUUID,
                                                    std::size_t siblingIndex);
 
-  // Not reversible (see isReversible).
+  // siblingIndex is informational only, not enforced on redo, the same as addObject's.
   [[nodiscard]] static EditCommand instantiatePrefab(const uuids::uuid& prefabUUID,
                                                      const uuids::uuid& instanceUUID,
                                                      const std::optional<uuids::uuid>& parentUUID,
@@ -159,16 +162,17 @@ public:
 
   [[nodiscard]] PayloadForm payloadForm() const;
 
-  // False for a kind whose reverse cannot be built without either losing data or corrupting the scene:
-  // - removeObject/removeComponent would have to recreate something WITH its prior field values in a
-  //   single wire op, and addComponent/addObject only ever create blank defaults - there is no one-shot
-  //   "add with this data" op to build a faithful reverse from.
-  // - duplicateObject/instantiatePrefab create a whole subtree (fresh uuids throughout); undoing by
-  //   removing just the created root would not remove the subtree, because ObjectManager::removeObject
-  //   reparents children up to the removed object's parent rather than deleting them (see
-  //   ObjectManager::deleteObjectsMarkedForDeletion) - so the created children would be stranded in the
-  //   scene instead of gone.
-  // Every other kind targets an object/asset whose uuid is already stable, so its reverse is exact.
+  // False only for removeObject: ObjectManager::deleteObjectsMarkedForDeletion promotes the removed
+  // object's children to its own parent (preserving their world placement) rather than deleting them, so
+  // "undo" would have to both recreate the removed object AND reclaim those already-live children back
+  // under it - restoreObject alone cannot do the second half (the children's uuids are already live in
+  // the scene, so its body would collide with them), and no other op composes the two into one atomic
+  // sceneEdit (EditCommand hands back exactly one payload per undo/redo). removeComponent is reversible
+  // via addComponent's "data" field (see Replication.h's buildAddComponent); duplicateObject/
+  // instantiatePrefab are reversible via removeSubtree (undo, by the created root's uuid alone - it
+  // deletes the whole subtree immediately, unlike removeObject) and by re-running the original creating
+  // op (redo - see buildRedoJSON). Every other kind targets an object/asset whose uuid is already stable,
+  // so its reverse is exact.
   [[nodiscard]] bool isReversible() const;
 
   // Compares this command's "after" state against the live scene/registry - what undo is about to

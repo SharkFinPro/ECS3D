@@ -339,13 +339,21 @@ nlohmann::json buildRemoveObject(const uuids::uuid& objectUUID)
   };
 }
 
-nlohmann::json buildAddComponent(const uuids::uuid& objectUUID, const std::string& componentKey)
+nlohmann::json buildAddComponent(const uuids::uuid& objectUUID, const std::string& componentKey,
+                                 const nlohmann::json* data)
 {
-  return {
+  nlohmann::json edit = {
     { "op", "addComponent" },
     { "object", uuids::to_string(objectUUID) },
     { "component", componentKey }
   };
+
+  if (data)
+  {
+    edit["data"] = *data;
+  }
+
+  return edit;
 }
 
 nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
@@ -1074,7 +1082,25 @@ namespace {
         return SceneEditResult::unknownComponent;
       }
 
-      if (edit.contains("className"))
+      // "data" is a full serialize() blob - undo of a removeComponent putting the exact removed
+      // component back in one op, rather than the blank default this branch otherwise creates.
+      // Malformed data is the component's problem, not the edit's, same reasoning as the prefab body.
+      if (edit.contains("data"))
+      {
+        try
+        {
+          component->loadFromJSON(edit.at("data"));
+        }
+        catch (const std::bad_alloc&)
+        {
+          throw;
+        }
+        catch (const std::exception&)
+        {
+          return SceneEditResult::failed;
+        }
+      }
+      else if (edit.contains("className"))
       {
         if (const auto script = std::dynamic_pointer_cast<Script>(component))
         {

@@ -380,9 +380,6 @@ bool EditCommand::isReversible() const
   switch (m_kind)
   {
     case CommandKind::removeObject:
-    case CommandKind::removeComponent:
-    case CommandKind::duplicateObject:
-    case CommandKind::instantiatePrefab:
       return false;
     default:
       return true;
@@ -521,6 +518,47 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
       if (!findComponent(object, data.registryKey, data.className))
       {
         return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      // "after" a removal is absence; a component already sitting in that slot is a divergence (someone
+      // else re-added one), not the thing this undo can safely reverse.
+      if (findComponent(object, data.registryKey, data.className))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+
+      if (!objectManager.getObjectByUUID(data.duplicateUUID))
+      {
+        return { ValidationFailure::targetMissing, data.duplicateUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+
+      if (!objectManager.getObjectByUUID(data.instanceUUID))
+      {
+        return { ValidationFailure::targetMissing, data.instanceUUID };
       }
 
       return {};
@@ -704,6 +742,69 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      // "before" a removal is the component sitting there with exactly the data this command captured -
+      // what redo is about to remove again.
+      const auto component = findComponent(object, data.registryKey, data.className);
+      if (!component)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      if (component->serialize() != nlohmann::json::parse(data.removedComponentJSON))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+
+      // "before" is the source still there to re-duplicate and the duplicate's uuid free again.
+      if (!objectManager.getObjectByUUID(data.sourceUUID))
+      {
+        return { ValidationFailure::targetMissing, data.sourceUUID };
+      }
+
+      if (objectManager.getObjectByUUID(data.duplicateUUID))
+      {
+        return { ValidationFailure::targetChanged, data.duplicateUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+
+      if (!assetRegistry || !assetRegistry->getByUUIDOfType(data.prefabUUID, AssetType::Prefab))
+      {
+        return { ValidationFailure::targetMissing, data.prefabUUID };
+      }
+
+      if (data.parentUUID && !objectManager.getObjectByUUID(*data.parentUUID))
+      {
+        return { ValidationFailure::targetMissing, *data.parentUUID };
+      }
+
+      if (objectManager.getObjectByUUID(data.instanceUUID))
+      {
+        return { ValidationFailure::targetChanged, data.instanceUUID };
+      }
+
+      return {};
+    }
     case CommandKind::addAsset:
     {
       const auto& data = std::get<AddAssetData>(m_data);
@@ -807,6 +908,22 @@ nlohmann::json EditCommand::buildUndoJSON(const ObjectManager& objectManager) co
       const auto descriptor = buildDescriptorComponent(objectManager, data.registryKey, data.className);
       return replication::buildRemoveComponent(data.objectUUID, descriptor);
     }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+      const auto removed = nlohmann::json::parse(data.removedComponentJSON);
+      return replication::buildAddComponent(data.objectUUID, data.registryKey, &removed);
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+      return replication::buildRemoveSubtree(data.duplicateUUID);
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+      return replication::buildRemoveSubtree(data.instanceUUID);
+    }
     default:
       throw std::logic_error("EditCommand::buildUndoJSON: not a sceneEdit-form command");
   }
@@ -850,6 +967,24 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
       return data.registryKey == "Script"
         ? replication::buildAddScript(data.objectUUID, data.className)
         : replication::buildAddComponent(data.objectUUID, data.registryKey);
+    }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+      const auto descriptor = buildDescriptorComponent(objectManager, data.registryKey, data.className);
+      return replication::buildRemoveComponent(data.objectUUID, descriptor);
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+      return replication::buildDuplicateObject(data.sourceUUID, &data.duplicateUUID);
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+      return data.parentUUID
+        ? replication::buildInstantiatePrefab(data.prefabUUID, &*data.parentUUID, &data.instanceUUID)
+        : replication::buildInstantiatePrefab(data.prefabUUID, nullptr, &data.instanceUUID);
     }
     default:
       throw std::logic_error("EditCommand::buildRedoJSON: not a sceneEdit-form command");
