@@ -18,6 +18,12 @@
   <PropertyGroup>
     <BaseIntermediateOutputPath Condition="'$(BuildRoot)' != ''">$(BuildRoot)obj/tests/</BaseIntermediateOutputPath>
     <BaseOutputPath Condition="'$(BuildRoot)' != ''">$(BuildRoot)bin/tests/</BaseOutputPath>
+
+    <!-- When obj/bin are relocated out of the project (above), the SDK's default `obj/**` and
+         `bin/**` compile exclusions stop covering the local folders. Re-exclude them explicitly so a
+         stray *.cs left in a local obj/ or bin/ (e.g. from an earlier standalone build) can never be
+         double-compiled into the CMake build — that produces CS0579 duplicate-attribute errors. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildThisFileDirectory)obj\**;$(MSBuildThisFileDirectory)bin\**</DefaultItemExcludes>
   </PropertyGroup>
 
 </Project>
