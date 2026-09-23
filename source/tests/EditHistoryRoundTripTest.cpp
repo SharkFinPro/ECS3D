@@ -79,6 +79,21 @@ TEST(EditHistory, UndoAndRedoRoundTripAnAddObject)
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
   EXPECT_EQ(scene.objectManager->getObjects().size(), 2u);
+
+  // The redone object must come back with the uuid the command already recorded - the entry undo() just
+  // moved onto the undo stack still names added->getUUID(), so a server-minted uuid here would leave that
+  // entry targeting an object the scene never actually lost, and the next undo would refuse with
+  // targetMissing against a live object instead of removing it.
+  const auto redone = scene.objectManager->getObjectByUUID(added->getUUID());
+  ASSERT_NE(redone, nullptr);
+
+  const auto secondUndoOutcome = history.undo(*scene.objectManager);
+  ASSERT_TRUE(secondUndoOutcome.ok());
+  ASSERT_TRUE(secondUndoOutcome.jsonPayload.has_value());
+  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *secondUndoOutcome.jsonPayload),
+            replication::SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getObjects().size(), 1u);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(added->getUUID()), nullptr);
 }
 
 TEST(EditHistory, UndoAndRedoRoundTripAReparent)

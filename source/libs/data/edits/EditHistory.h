@@ -74,6 +74,12 @@ public:
   [[nodiscard]] std::optional<CommandKind> nextUndoKind() const;
   [[nodiscard]] std::optional<CommandKind> nextRedoKind() const;
 
+  // Whether undo()/redo() would actually produce a payload for the top of that stack, without popping
+  // either stack - false for an empty stack as well as for a non-reversible entry, so a caller can gate
+  // an attempt on this alone rather than also checking canUndo()/canRedo().
+  [[nodiscard]] bool nextUndoIsReversible() const;
+  [[nodiscard]] bool nextRedoIsReversible() const;
+
   // Validates the top of the undo stack against the live scene/registry and, on success, moves it to the
   // redo stack and returns the reverse payload to send. On refusal, drops that entry and everything older
   // still on the undo stack (entries already on the redo stack are untouched - they are newer, already-

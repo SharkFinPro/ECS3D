@@ -441,17 +441,19 @@ and `addAsset`'s reverse would delete the prefab instead of restoring its previo
 leaves the scene as it is.
 
 `EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with
-`EditHistory::nextUndoKind()`/`nextRedoKind()` before calling `undo()`/`redo()`, and only proceeds for a
-`componentEdit` - a value edit is the one kind this editor currently sends the reverse of. A structural or
-asset kind on top is refused with a "not yet undoable" log message and left in place rather than handed to
-`EditHistory::undo()`/`redo()`, which would otherwise treat "a kind this caller does not attempt" the same
-as a validation conflict and drop it (and everything older beneath it) even though nothing about it is
-actually wrong. `EditCommand`/`EditHistory` already build and validate a faithful reverse for every
-reversible kind (the round trip is exercised in `EditHistoryRoundTripTest.cpp` for all of them), so extending
-`EditorApp::undo()`/`redo()` to structural and asset kinds is a matter of widening that one kind check, not
-new library work. There is still no menu item or keybind that calls `undo()`/`redo()` - a later story wires
-one in; for now they exist as entry points only. A refusal is logged the same way for a stale target
-(`targetMissing`/`targetChanged`, naming the conflicting uuid) or an empty stack. `EditHistory::
+`EditHistory::nextUndoIsReversible()`/`nextRedoIsReversible()` before calling `undo()`/`redo()`, and sends
+whatever payload comes back for any reversible kind - not just `componentEdit`. A non-reversible kind
+(`removeObject`, `removeComponent`, `duplicateObject`, `instantiatePrefab`) on top is refused with a
+log message naming those four kinds and left in place rather than handed to `EditHistory::undo()`/`redo()`,
+which would otherwise treat "a kind with no reverse" the same as a validation conflict and drop it (and
+everything older beneath it) even though nothing about it is actually wrong. `reportHistoryOutcome` sends
+whichever of `jsonPayload`/`messagePayload` `HistoryOutcome` set, matching `payloadForm()`: a sceneEdit
+json payload (`addObject`, `reparentObject`, `reorderObject`, `renameObject`, `addComponent`) is chunked
+into a `sceneEdit` message the same way `EditorApp::onSceneEdit` does for a normal edit; a networkMessage
+payload (`componentEdit` and every asset kind) is sent as-is. There is still no menu item or keybind that
+calls `undo()`/`redo()` - a later story wires one in; for now they exist as entry points only. A refusal is
+logged the same way for a stale target (`targetMissing`/`targetChanged`, naming the conflicting uuid) or an
+empty stack. `EditHistory::
 reportUndoRejected()`/`reportRedoRejected()` exist for a server rejection of the edit undo()/redo() just
 sent, but nothing calls them yet: today's `editComponent`/`sceneEdit` handling has no wire-level
 acknowledgement back to the sender for a rejected edit to hook into (a failed edit is only logged
