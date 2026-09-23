@@ -498,8 +498,8 @@ TEST(ServerLogMessage, CarriesTheDroppedCountAlongsideAnEmptyBatch)
 TEST(ServerLogMessage, AnEntryCountPastWhatThePayloadHoldsThrowsRatherThanOverreading)
 {
   // A hand-built message claiming far more entries than its (short) payload can actually hold - the same
-  // malformed-count shape handleInputState guards against, here for the network's least trusted producer:
-  // a batch this editor did not build itself.
+  // malformed-count shape replication::parseInputState guards against, here for the network's least
+  // trusted producer: a batch this editor did not build itself.
   net::Message message(net::MessageType::serverLog);
   message.write<uint64_t>(0);
   message.write<uint32_t>(1000000);

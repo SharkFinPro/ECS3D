@@ -71,6 +71,7 @@ add_executable(${PROJECT_NAME}
   SceneEditRestoreTest.cpp
   SceneEditCreateAndReorderTest.cpp
   ProtocolFramingTest.cpp
+  InputStatePayloadTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
   TransportLogTest.cpp

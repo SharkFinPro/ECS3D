@@ -140,20 +140,9 @@ void ClientApp::sendInput()
   m_lastMouseY = snapshot.mouseY;
   m_inputSent = true;
 
-  net::Message message(net::MessageType::inputState);
-  message.write(snapshot.focused);
-  message.write(static_cast<uint32_t>(snapshot.keys.size()));
-  for (const auto& key : snapshot.keys)
-  {
-    message.write(static_cast<int32_t>(key));
-  }
-
-  message.write(snapshot.mouseX);
-  message.write(snapshot.mouseY);
-  message.write(snapshot.mouseDeltaX);
-  message.write(snapshot.mouseDeltaY);
-  message.write(snapshot.scrollY);
-  message.write(snapshot.buttons);
+  const auto message = replication::buildInputState(snapshot.focused, snapshot.keys, snapshot.mouseX,
+                                                     snapshot.mouseY, snapshot.mouseDeltaX,
+                                                     snapshot.mouseDeltaY, snapshot.scrollY, snapshot.buttons);
 
   m_netClient->send(message);
 }

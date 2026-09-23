@@ -494,7 +494,7 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
   // not double its subtree. Packed order is kept, and any existing child not named in the packed data is
   // dropped afterward.
   // childCount comes off the wire, so it must not size anything before the bytes behind it are read -
-  // the same reasoning ServerApp::handleInputState applies to numKeys. Left unreserved rather than
+  // the same reasoning replication::parseInputState applies to numKeys. Left unreserved rather than
   // bounded against a per-child minimum: push_back's own growth is what pays for an oversized count, not
   // an allocation sized from a number nothing has checked yet.
   const uint32_t childCount = messageReader.read<uint32_t>();

@@ -1471,4 +1471,69 @@ nlohmann::json unpackRemoveAsset(const net::Message& message)
   return op;
 }
 
+net::Message buildInputState(const bool focused, const std::vector<int>& keysPressed,
+                             const float mouseX, const float mouseY, const float mouseDeltaX,
+                             const float mouseDeltaY, const float scrollY, const uint8_t buttons)
+{
+  net::Message message(net::MessageType::inputState);
+  message.write(focused);
+  message.write(static_cast<uint32_t>(keysPressed.size()));
+  for (const auto& key : keysPressed)
+  {
+    message.write(static_cast<int32_t>(key));
+  }
+
+  message.write(mouseX);
+  message.write(mouseY);
+  message.write(mouseDeltaX);
+  message.write(mouseDeltaY);
+  message.write(scrollY);
+  message.write(buttons);
+
+  return message;
+}
+
+std::optional<InputStatePayload> parseInputState(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  InputStatePayload payload;
+  payload.focused = reader.read<bool>();
+
+  // The count arrives from the network, so bound it against what is left of the payload before sizing
+  // anything: the message cannot hold more key codes than it has bytes for, and without the check a
+  // client asking for a billion keys gets the allocation attempted first and the underflow only after.
+  // It is a ceiling, not an exact length - the trailing mouse block is counted as if it could be key
+  // codes - so a client that predates that block still degrades to "no mouse" rather than being refused.
+  const auto numKeys = reader.read<uint32_t>();
+  if (numKeys > reader.remaining() / sizeof(int32_t))
+  {
+    // Dropped rather than thrown, like every other malformed message here: the drain loop logs what it
+    // catches to a flushed stderr, which a client could otherwise spam from the tick thread.
+    return std::nullopt;
+  }
+
+  payload.keysPressed.resize(numKeys);
+  for (auto& key : payload.keysPressed)
+  {
+    key = reader.read<int32_t>();
+  }
+
+  // Mouse block, appended after the keys (see Protocol.h). Guard on remaining() so an older client that
+  // predates mouse input degrades to "no mouse" instead of throwing an underflow.
+  constexpr size_t mouseBytes = 5 * sizeof(float) + sizeof(uint8_t);
+  if (reader.remaining() >= mouseBytes)
+  {
+    payload.hasMouse = true;
+    payload.mouseX = reader.read<float>();
+    payload.mouseY = reader.read<float>();
+    payload.mouseDeltaX = reader.read<float>();
+    payload.mouseDeltaY = reader.read<float>();
+    payload.scrollY = reader.read<float>();
+    payload.buttons = reader.read<uint8_t>();
+  }
+
+  return payload;
+}
+
 }
