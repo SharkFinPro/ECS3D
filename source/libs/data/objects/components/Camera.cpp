@@ -1,6 +1,9 @@
 #include "Camera.h"
 #include "FiniteCheck.h"
 #include "WireTypes.h"
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 
@@ -30,12 +33,13 @@ float Camera::getFov() const
 
 void Camera::setFov(const float fov)
 {
+  // Before the clamp: nan compares false against both bounds, so std::clamp hands it straight back.
   if (!finiteCheck::isFinite(fov))
   {
     return;
   }
 
-  m_fov = fov;
+  m_fov = std::clamp(fov, minFovDegrees, maxFovDegrees);
 }
 
 float Camera::getNearPlane() const
@@ -45,12 +49,7 @@ float Camera::getNearPlane() const
 
 void Camera::setNearPlane(const float nearPlane)
 {
-  if (!finiteCheck::isFinite(nearPlane))
-  {
-    return;
-  }
-
-  m_nearPlane = nearPlane;
+  setNearFarPlanes(nearPlane, m_farPlane);
 }
 
 float Camera::getFarPlane() const
@@ -60,12 +59,28 @@ float Camera::getFarPlane() const
 
 void Camera::setFarPlane(const float farPlane)
 {
-  if (!finiteCheck::isFinite(farPlane))
-  {
-    return;
-  }
+  setNearFarPlanes(m_nearPlane, farPlane);
+}
 
-  m_farPlane = farPlane;
+float Camera::minFarPlaneFor(const float nearPlane)
+{
+  const float withClearance = nearPlane + minFarPlaneClearance;
+  const float nextRepresentable = std::nextafter(nearPlane, std::numeric_limits<float>::infinity());
+
+  // withClearance can round back down to nearPlane once float's ULP exceeds minFarPlaneClearance; taking
+  // the max with the next representable float guarantees the result is still strictly greater than near.
+  return std::max(withClearance, nextRepresentable);
+}
+
+void Camera::setNearFarPlanes(const float nearPlane, const float farPlane)
+{
+  const float newNear = finiteCheck::isFinite(nearPlane) ? std::max(nearPlane, minNearPlane) : m_nearPlane;
+  const float newFar = finiteCheck::isFinite(farPlane) ? farPlane : m_farPlane;
+
+  // far is always the one adjusted to satisfy the relation, never near, so a caller's near value is
+  // never silently overridden by a stale far.
+  m_nearPlane = newNear;
+  m_farPlane = std::max(newFar, minFarPlaneFor(newNear));
 }
 
 bool Camera::isActive() const
@@ -98,9 +113,8 @@ void Camera::loadFromJSON(const nlohmann::json& componentData)
     m_direction = glm::vec3(it->at(0), it->at(1), it->at(2));
   }
 
-  m_fov = componentData.value("fov", 45.0f);
-  m_nearPlane = componentData.value("nearPlane", 0.1f);
-  m_farPlane = componentData.value("farPlane", 1000.0f);
+  setFov(componentData.value("fov", 45.0f));
+  setNearFarPlanes(componentData.value("nearPlane", 0.1f), componentData.value("farPlane", 1000.0f));
   m_active = componentData.value("active", true);
 }
 
@@ -118,8 +132,11 @@ void Camera::pack(net::Message& message) const
 void Camera::unpack(net::MessageReader& messageReader)
 {
   m_direction = messageReader.read<glm::vec3>();
-  m_fov = messageReader.read<float>();
-  m_nearPlane = messageReader.read<float>();
-  m_farPlane = messageReader.read<float>();
+
+  setFov(messageReader.read<float>());
+  const float nearPlane = messageReader.read<float>();
+  const float farPlane = messageReader.read<float>();
+  setNearFarPlanes(nearPlane, farPlane);
+
   m_active = messageReader.read<bool>();
 }
