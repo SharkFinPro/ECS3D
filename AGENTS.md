@@ -506,10 +506,9 @@ leaves the scene as it is.
 
 `EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with
 `EditHistory::nextUndoIsReversible()`/`nextRedoIsReversible()` before calling `undo()`/`redo()`, and sends
-whatever payload comes back for any reversible kind - not just `componentEdit`. A non-reversible kind
-(`removeObject`, `removeComponent`, `duplicateObject`, `instantiatePrefab`) on top is refused with a
-log message naming those four kinds and left in place rather than handed to `EditHistory::undo()`/`redo()`,
-which would otherwise treat "a kind with no reverse" the same as a validation conflict and drop it (and
+whatever payload comes back for any reversible kind - not just `componentEdit`. The one non-reversible kind
+(`removeObject`) on top is refused with a log message naming it and left in place rather than handed
+to `EditHistory::undo()`/`redo()`, which would otherwise treat "a kind with no reverse" the same as a validation conflict and drop it (and
 everything older beneath it) even though nothing about it is actually wrong. `reportHistoryOutcome` sends
 whichever of `jsonPayload`/`messagePayload` `HistoryOutcome` set, matching `payloadForm()`: a sceneEdit
 json payload (`addObject`, `reparentObject`, `reorderObject`, `renameObject`, `addComponent`) is chunked
