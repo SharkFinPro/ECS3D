@@ -22,6 +22,8 @@ add_library(${PROJECT_NAME}
   bindings/CameraBindings.h
   bindings/ModelRendererBindings.cpp
   bindings/ModelRendererBindings.h
+  bindings/LightRendererBindings.cpp
+  bindings/LightRendererBindings.h
   bindings/LogBindings.cpp
   bindings/LogBindings.h
   bindings/InputState.cpp

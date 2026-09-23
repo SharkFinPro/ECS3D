@@ -2,8 +2,11 @@
 #include "EditorTheme.h"
 #include "GuiComponents.h"
 #include "KeybindDispatcher.h"
+#include <EditorCameraSettings.h>
 #include <Keybinds.h>
 #include <SettingsStore.h>
+#include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/camera/Camera.h>
 #include <imgui.h>
 #include <cstring>
 #include <string>
@@ -44,9 +47,10 @@ namespace {
   }
 }
 
-SettingsPanel::SettingsPanel(SettingsStore& settings, std::shared_ptr<KeybindTable> keybindTable,
+SettingsPanel::SettingsPanel(SettingsStore& settings, std::shared_ptr<vke::VulkanEngine> renderer,
+                             std::shared_ptr<KeybindTable> keybindTable,
                              std::shared_ptr<KeybindDispatcher> keybindDispatcher)
-  : m_settings(&settings), m_keybindTable(std::move(keybindTable)),
+  : m_settings(&settings), m_renderer(std::move(renderer)), m_keybindTable(std::move(keybindTable)),
     m_keybindDispatcher(std::move(keybindDispatcher)), m_open(settings.get<bool>(openKey, false))
 {}
 
@@ -110,6 +114,10 @@ void SettingsPanel::displayGui()
         displayAppearance();
         break;
 
+      case Section::viewport:
+        displayViewport();
+        break;
+
       case Section::keybinds:
         displayKeybinds();
         break;
@@ -135,6 +143,11 @@ void SettingsPanel::displayNav()
   if (gc::menuRow("Appearance", gc::SecIcon::image, 34.0f, m_section == Section::appearance))
   {
     m_section = Section::appearance;
+  }
+
+  if (gc::menuRow("Viewport", gc::SecIcon::pan, 34.0f, m_section == Section::viewport))
+  {
+    m_section = Section::viewport;
   }
 
   if (gc::menuRow("Keybinds", gc::SecIcon::block, 34.0f, m_section == Section::keybinds))
@@ -197,6 +210,31 @@ void SettingsPanel::displayAppearance()
 
       ImGui::PopID();
     }
+  }
+}
+
+void SettingsPanel::displayViewport()
+{
+  gc::sectionLabel("Viewport");
+
+  ImGui::TextColored(theme::t2, "Speed of the editor's free-fly camera - movement, mouse-look and "
+                                 "scroll zoom together. Applies as you drag.");
+
+  ImGui::Spacing();
+
+  float speed = editorCameraSettings::readSpeed(*m_settings);
+  if (gc::accentSlider("Camera Speed", &speed, editorCameraSettings::minSpeed, editorCameraSettings::maxSpeed))
+  {
+    editorCameraSettings::writeSpeed(*m_settings, speed);
+    m_renderer->getCamera()->setSpeed(speed);
+  }
+
+  ImGui::Spacing();
+
+  if (ImGui::Button("Reset to default"))
+  {
+    editorCameraSettings::writeSpeed(*m_settings, editorCameraSettings::defaultSpeed);
+    m_renderer->getCamera()->setSpeed(editorCameraSettings::defaultSpeed);
   }
 }
 

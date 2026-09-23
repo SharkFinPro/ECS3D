@@ -10,8 +10,12 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace {
   // What to call the conflicting uuid a targetMissing/targetChanged refusal names, when undo()/redo()
@@ -52,20 +56,19 @@ void EditorApp::undo()
     return;
   }
 
-  // Value edits are the only kind this method currently sends the reverse of (see AGENTS.md's Editor
-  // Undo/Redo section) - a structural or asset command stays on top of the stack, refused, rather than
-  // being handed to EditHistory::undo(), which would treat "a kind this caller does not attempt" as a
-  // conflict and drop it along with everything older beneath it.
-  const auto nextKind = m_editHistory.nextUndoKind();
-  if (!nextKind)
+  // A non-reversible command (see AGENTS.md's Editor Undo/Redo section) stays on top of the stack,
+  // refused, rather than being handed to EditHistory::undo(), which would treat "a kind with no reverse"
+  // as a validation conflict and drop it along with everything older beneath it.
+  if (!m_editHistory.canUndo())
   {
     logMessage("Info", "Nothing to undo.");
     return;
   }
 
-  if (*nextKind != edits::CommandKind::componentEdit)
+  if (!m_editHistory.nextUndoIsReversible())
   {
-    logMessage("Info", "Can't undo: only component value edits can be undone right now.");
+    logMessage("Info", "Can't undo: that edit (object removal, component removal, duplication or prefab "
+                        "instantiation) can't be undone yet.");
     return;
   }
 
@@ -102,16 +105,16 @@ void EditorApp::redo()
     return;
   }
 
-  const auto nextKind = m_editHistory.nextRedoKind();
-  if (!nextKind)
+  if (!m_editHistory.canRedo())
   {
     logMessage("Info", "Nothing to redo.");
     return;
   }
 
-  if (*nextKind != edits::CommandKind::componentEdit)
+  if (!m_editHistory.nextRedoIsReversible())
   {
-    logMessage("Info", "Can't redo: only component value edits can be redone right now.");
+    logMessage("Info", "Can't redo: that edit (object removal, component removal, duplication or prefab "
+                        "instantiation) can't be redone yet.");
     return;
   }
 
@@ -144,8 +147,11 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
   switch (outcome.result)
   {
     case edits::HistoryResult::applied:
-      // Exactly one of these is set (see HistoryOutcome) - a component value edit is always the
-      // networkMessage form (an editComponent message), never the sceneEdit json form.
+      // Exactly one of these is set (see HistoryOutcome), fixed per command kind by payloadForm(): a
+      // component value edit or asset op is the networkMessage form (editComponent/addAsset/
+      // replaceAsset/renameAsset/removeAsset), everything else (addObject, reparentObject,
+      // reorderObject, renameObject, addComponent) is the sceneEdit json form, chunked into a
+      // sceneEdit message the same way EditorApp::onSceneEdit does for a normal (non-undo) edit.
       if (outcome.messagePayload)
       {
         m_netClient->send(*outcome.messagePayload);

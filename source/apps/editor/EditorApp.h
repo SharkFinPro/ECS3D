@@ -77,9 +77,10 @@ public:
 
   // Entry points for a future keybind/menu story to call - this change adds no way to trigger them from
   // the UI yet. Each sends the reverse of the top of the relevant stack through the normal send path
-  // (editComponent for a value edit) and logs a refusal instead when there is nothing to send: an empty
-  // stack, a target that no longer matches what the command recorded, or a command kind undo does not
-  // handle yet (left on the stack rather than dropped - see EditHistory::nextUndoKind()).
+  // (editComponent/sceneEdit/asset messages, matching the command's payloadForm()) and logs a refusal
+  // instead when there is nothing to send: an empty stack, a target that no longer matches what the
+  // command recorded, or a non-reversible command kind (left on the stack rather than dropped - see
+  // EditHistory::nextUndoIsReversible()).
   void undo();
 
   void redo();
