@@ -443,11 +443,30 @@ the whole stack on every structural edit even in single-user editing. It compare
 after-state (undo) or before-state (redo) against the live scene/registry; a mismatch refuses the whole
 edit and drops that entry and everything older still on the stack being popped (undo is sequential -
 skipping a dropped entry to reach an older one would apply reverts out of order), naming which uuid
-conflicted. Not every kind is reversible with the sceneEdit ops that exist today: `removeObject`/
-`removeComponent` would need a one-shot "recreate with this data" op that does not exist, and
-`duplicateObject`/`instantiatePrefab` create a whole subtree that `ObjectManager::removeObject` cannot
-cleanly undo (it reparents children up rather than deleting them) - those kinds are still representable in
-the history but report `notUndoable` instead of sending a lossy or structurally wrong reverse. **Every
+conflicted. Only one kind is not reversible with the sceneEdit ops that exist today: `removeObject`.
+`ObjectManager::deleteObjectsMarkedForDeletion` promotes the removed object's children up to its own
+parent (preserving their world placement) rather than deleting them, so a faithful undo would have to both
+recreate the removed object and reclaim those already-live children back under it - `restoreObject` alone
+cannot do the second half (the children's uuids are already live in the scene, so its body would collide
+with them trying to recreate them too), and no other op composes the two into one atomic edit: a `Command`
+hands back exactly one payload per undo/redo today, with nothing in `EditHistory`'s interface for a caller
+to send a batch instead. It is still representable in the history but
+reports `notUndoable` instead of sending a lossy or structurally wrong reverse. Every other structural kind
+*is* reversible: `removeComponent` undoes through `addComponent`'s optional `"data"` field (the removed
+component's own `serialize()` blob, loaded onto the freshly created component in the same op that creates
+it, rather than the blank default a bare `addComponent` normally makes) and redoes through the ordinary
+`removeComponent` op; `duplicateObject`/`instantiatePrefab` undo through `removeSubtree` (named by the
+created root's uuid alone - it deletes the whole subtree immediately, unlike `removeObject`, so it needs
+none of the descendants' uuids) and redo by re-sending the original creating op (`instantiatePrefab`'s
+command also carries the prefab asset's body as it was at record time, since `AssetRegistry` lets a
+prefab's body be replaced in place under the same uuid - a re-save between undo and redo - and
+`validateForRedo` refuses rather than silently instantiating whatever the registry holds now). Redoing that way - rather
+than replaying a captured subtree - means a duplicate's or prefab instance's descendants get fresh uuids
+each time it is recreated, the same limitation `addObject`'s redo already has (it does not restore the
+original uuid either): today the editor waits for the server to confirm a structural edit and rebuild the
+snapshot rather than applying it to its own view up front, so `RecordEdits` has no way to learn what uuids
+the server will mint for those descendants at the moment it derives the command, before the edit is even
+sent. **Every
 editor mutation is recorded**: each of `EditorApp`'s mutation callbacks (component edit, scene edit, add
 asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it sends, deriving the
 before state from the replicated view while that view still holds it, and records what comes back; an edit

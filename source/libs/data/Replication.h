@@ -81,8 +81,12 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
 
 [[nodiscard]] nlohmann::json buildRemoveObject(const uuids::uuid& objectUUID);
 
+// data, when given, is the component's own serialize() blob (loadFromJSON'd onto the freshly created
+// component before it is attached) - what undo of a removeComponent needs to put the exact removed
+// component back in one op, rather than a blank default the way a fresh addComponent normally creates.
 [[nodiscard]] nlohmann::json buildAddComponent(const uuids::uuid& objectUUID,
-                                               const std::string& componentKey);
+                                               const std::string& componentKey,
+                                               const nlohmann::json* data = nullptr);
 
 [[nodiscard]] nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
                                                   const std::shared_ptr<Component>& component);

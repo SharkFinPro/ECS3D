@@ -339,13 +339,21 @@ nlohmann::json buildRemoveObject(const uuids::uuid& objectUUID)
   };
 }
 
-nlohmann::json buildAddComponent(const uuids::uuid& objectUUID, const std::string& componentKey)
+nlohmann::json buildAddComponent(const uuids::uuid& objectUUID, const std::string& componentKey,
+                                 const nlohmann::json* data)
 {
-  return {
+  nlohmann::json edit = {
     { "op", "addComponent" },
     { "object", uuids::to_string(objectUUID) },
     { "component", componentKey }
   };
+
+  if (data)
+  {
+    edit["data"] = *data;
+  }
+
+  return edit;
 }
 
 nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
@@ -578,6 +586,38 @@ namespace {
     }
 
     return result;
+  }
+
+  // The registry key a component blob's own "type"/"subType" identify - the same resolution
+  // Object::loadFromJSON uses to turn a serialized blob back into a registry lookup (a Collider blob
+  // carries a "subType" of Box/Sphere; every other type's own "type" field is the key). nullopt for a
+  // blob missing or misshaping either field - addComponent's "data" handling refuses rather than hands a
+  // blob to loadFromJSON that was never this component's own serialize() output.
+  std::optional<std::string> registryKeyFromComponentBlob(const nlohmann::json& data)
+  {
+    if (!data.is_object())
+    {
+      return std::nullopt;
+    }
+
+    const auto typeField = data.find("type");
+    if (typeField == data.end() || !typeField->is_string())
+    {
+      return std::nullopt;
+    }
+
+    if (typeField->get<std::string>() != "Collider")
+    {
+      return typeField->get<std::string>();
+    }
+
+    const auto subTypeField = data.find("subType");
+    if (subTypeField == data.end() || !subTypeField->is_string())
+    {
+      return std::nullopt;
+    }
+
+    return subTypeField->get<std::string>();
   }
 
   // Shared by restoreObject and reorderObject: an explicit range check against std::size_t's own limits
@@ -1074,7 +1114,32 @@ namespace {
         return SceneEditResult::unknownComponent;
       }
 
-      if (edit.contains("className"))
+      // "data" is a full serialize() blob - undo of a removeComponent putting the exact removed
+      // component back in one op, rather than the blank default this branch otherwise creates. This is a
+      // wire entry point any editor-role client can reach, so the blob's own identity is checked against
+      // "component" before it is trusted with loadFromJSON: a blob for the wrong type would otherwise be
+      // interpreted field-by-field as if it were the one just created.
+      if (edit.contains("data"))
+      {
+        if (registryKeyFromComponentBlob(edit.at("data")) != key)
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        try
+        {
+          component->loadFromJSON(edit.at("data"));
+        }
+        catch (const std::bad_alloc&)
+        {
+          throw;
+        }
+        catch (const std::exception&)
+        {
+          return SceneEditResult::failed;
+        }
+      }
+      else if (edit.contains("className"))
       {
         if (const auto script = std::dynamic_pointer_cast<Script>(component))
         {
