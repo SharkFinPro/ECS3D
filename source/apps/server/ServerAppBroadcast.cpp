@@ -14,6 +14,9 @@
 #include <RemoteLogSink.h>
 #include <ServerLog.h>
 #include <nlohmann/json.hpp>
+#include <uuid.h>
+#include <cstddef>
+#include <exception>
 #include <string>
 
 void ServerApp::broadcastSnapshot() const

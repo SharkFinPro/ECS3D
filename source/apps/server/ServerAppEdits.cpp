@@ -10,6 +10,8 @@
 #include <NetServer.h>
 #include <Log.h>
 #include <nlohmann/json.hpp>
+#include <uuid.h>
+#include <exception>
 #include <string>
 
 namespace {

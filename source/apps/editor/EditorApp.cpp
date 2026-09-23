@@ -48,8 +48,11 @@
 #include <uuid.h>
 #include <chrono>
 #include <exception>
+#include <memory>
 #include <random>
+#include <string>
 #include <thread>
+#include <utility>
 
 EditorApp::EditorApp(LaunchOptions options)
   : m_options(std::move(options)),

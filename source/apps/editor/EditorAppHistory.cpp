@@ -10,8 +10,12 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace {
   // What to call the conflicting uuid a targetMissing/targetChanged refusal names, when undo()/redo()
