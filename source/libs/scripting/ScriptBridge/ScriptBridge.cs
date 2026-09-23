@@ -497,6 +497,12 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static unsafe void registerComponentOpsBindings(ComponentOpsBindings bindings)
+    {
+        NativeBindings.ComponentOps = bindings;
+    }
+
+    [UnmanagedCallersOnly]
     public static unsafe void registerCameraBindings(CameraBindings bindings)
     {
         NativeBindings.Camera = bindings;

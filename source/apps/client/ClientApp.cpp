@@ -281,6 +281,10 @@ void ClientApp::applyMessage(const net::Message& message) const
       handleObjectDestroyed(message);
       break;
 
+    case net::MessageType::objectComponentsChanged:
+      handleObjectComponentsChanged(message);
+      break;
+
     case net::MessageType::playerSlot:
       handlePlayerSlot(message);
       break;
@@ -337,6 +341,15 @@ void ClientApp::handleObjectDestroyed(const net::Message& message) const
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     replication::applyObjectDestroyed(*scene->getObjectManager(), message);
+  }
+}
+
+void ClientApp::handleObjectComponentsChanged(const net::Message& message) const
+{
+  // A script added/removed a component on an object that already exists here; reconcile it in place.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    replication::applyObjectComponentsChanged(*scene->getObjectManager(), message);
   }
 }
 

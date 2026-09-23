@@ -342,6 +342,7 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectDestroyed));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::playerSlot));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::serverLog));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectComponentsChanged));
 }
 
 TEST(ProtocolFraming, ConstructingFromABufferFramesItExactlyAsTheWritePathWould)

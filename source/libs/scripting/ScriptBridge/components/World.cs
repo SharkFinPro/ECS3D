@@ -19,6 +19,15 @@ public unsafe struct WorldBindings
     public delegate* unmanaged<IntPtr, float, float, float, IntPtr> spawnPrefab;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct ComponentOpsBindings
+{
+    public delegate* unmanaged<IntPtr, IntPtr, bool> hasComponent;
+    public delegate* unmanaged<IntPtr, IntPtr, bool> addComponent;
+    public delegate* unmanaged<IntPtr, IntPtr, bool> removeComponent;
+    public delegate* unmanaged<IntPtr, IntPtr> getComponentTypes;
+}
+
 // The result of a successful World.raycast: the object hit and where.
 public struct RaycastHit
 {
@@ -272,6 +281,59 @@ public static unsafe class World
         finally
         {
             Marshal.FreeCoTaskMem(ignorePtr);
+        }
+    }
+
+    // Generic component operations, keyed by the same type-name strings the editor's component list and
+    // ComponentRegistry use ("RigidBody", "Box", "Sphere", "ModelRenderer", "LightRenderer",
+    // "PlayerController", "Camera", "Transform"). Transform is queryable but not addable/removable (it is
+    // structural); Script is not addressable through this API at all (adding one needs a class name).
+    //
+    // addComponent/removeComponent apply immediately - a hasComponent call later in the same tick already
+    // reflects them - but replicate to clients via a full re-snapshot after the tick finishes, the same as
+    // the editor's own structural edits, so a burst of calls in one tick costs one re-snapshot, not one
+    // per call.
+    public static bool hasComponent(string uuid, string componentType) =>
+        withTwoStrings(NativeBindings.ComponentOps.hasComponent, uuid, componentType);
+
+    // Fails safely (returns false, no change) for: an unknown uuid, an unrecognized type name, Transform,
+    // Script, or a unique-per-type component the object already carries.
+    public static bool addComponent(string uuid, string componentType) =>
+        withTwoStrings(NativeBindings.ComponentOps.addComponent, uuid, componentType);
+
+    // Fails safely (returns false, no change) for: an unknown uuid, an unrecognized type name, Transform,
+    // Script, or a component the object does not currently carry.
+    public static bool removeComponent(string uuid, string componentType) =>
+        withTwoStrings(NativeBindings.ComponentOps.removeComponent, uuid, componentType);
+
+    // Every component type name the object currently carries (Transform included, Script excluded, order
+    // unspecified). Empty for an unknown uuid.
+    public static string[] getComponentTypes(string uuid)
+    {
+        var uuidPtr = Marshal.StringToCoTaskMemUTF8(uuid);
+        try
+        {
+            var raw = Marshal.PtrToStringUTF8(NativeBindings.ComponentOps.getComponentTypes(uuidPtr)) ?? "";
+            return raw.Length == 0 ? Array.Empty<string>() : raw.Split(',');
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(uuidPtr);
+        }
+    }
+
+    private static bool withTwoStrings(delegate* unmanaged<IntPtr, IntPtr, bool> native, string a, string b)
+    {
+        var aPtr = Marshal.StringToCoTaskMemUTF8(a);
+        var bPtr = Marshal.StringToCoTaskMemUTF8(b);
+        try
+        {
+            return native(aPtr, bPtr);
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(aPtr);
+            Marshal.FreeCoTaskMem(bPtr);
         }
     }
 }

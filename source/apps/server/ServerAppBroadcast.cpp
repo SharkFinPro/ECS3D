@@ -119,6 +119,27 @@ void ServerApp::broadcastStructuralChanges() const
     objectManager->flushPendingAdditions();
     objectManager->deleteObjectsMarkedForDeletion();
   }
+
+  // A script's addComponent/removeComponent (ComponentOpsBindings) already applied to each object listed
+  // here - unlike spawn/destroy there is nothing further to apply locally - but the change isn't covered
+  // by the per-tick state delta or a single-component buildComponentEdit either, so each changed object's
+  // current packed state goes out as its own objectComponentsChanged message: cheaper than the editor's
+  // own sceneEdit addComponent/removeComponent ops, which re-snapshot the whole project, since only the
+  // objects that actually changed need to reach a client. Read after the deletion pass above, so a uuid
+  // whose object left the scene this same tick (already covered by an objectDestroyed above) is silently
+  // skipped rather than resent for an object that no longer exists.
+  const auto changedUUIDs = BindingContext::takeStructuralComponentChanges();
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    const auto objectManager = scene->getObjectManager();
+    for (const auto& objectUUID : changedUUIDs)
+    {
+      if (const auto object = objectManager->getObjectByUUID(objectUUID))
+      {
+        m_netServer->broadcast(replication::buildObjectComponentsChanged(*object));
+      }
+    }
+  }
 }
 
 void ServerApp::forwardLogToEditors() const

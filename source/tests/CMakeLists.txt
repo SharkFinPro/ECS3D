@@ -59,6 +59,8 @@ add_executable(${PROJECT_NAME}
   PrefabTest.cpp
   PhysicsIntegrationTest.cpp
   RuntimeComponentTest.cpp
+  ScriptComponentOpsTest.cpp
+  ObjectComponentsChangedTest.cpp
   RuntimeObjectTest.cpp
   ObjectHierarchyTest.cpp
   ObjectManagerLifecycleTest.cpp
@@ -95,6 +97,7 @@ add_executable(${PROJECT_NAME}
   ../libs/scripting/bindings/InputUtilsBindings.cpp
   ../libs/scripting/bindings/InputState.cpp
   ../libs/net/ServerLog.cpp
+  ../libs/scripting/bindings/ComponentOpsBindings.cpp
   ../libs/net/TransportLog.cpp
 
   # LogBindings depends only on ECS3DLog (no data/CLR includes), so it is compiled in directly rather

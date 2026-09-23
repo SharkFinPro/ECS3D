@@ -353,6 +353,30 @@ running scene is attached and started by the next tick, and the mirror image hol
 mid-run (or whose object is destroyed) is stopped and detached by an orphan sweep that runs on every tick
 and on every scene edit's snapshot. The sweep matches by component identity, not by (uuid, class) key, so
 a re-added script of the same class gets a fresh instance rather than inheriting the stale one.
+`ComponentOpsBindings` (`World.hasComponent`/`addComponent`/`removeComponent`/`getComponentTypes`) gives
+scripts generic access to an object's component set, keyed by the same `ComponentRegistry` type-name
+strings unpack/loadFromJSON use ("RigidBody", "Box", "Sphere", ...) rather than `ComponentType`'s packed
+enum value: that value is the wire discriminator, assigned by enumerator order, so a name the managed side
+looked up independently could drift from what the native side actually packs. Transform is refused by
+add/remove (structural - every other system assumes an object has exactly one) but still queryable; Script
+is excluded everywhere (adding one needs a class name this API does not take). An object already marked
+for deletion this tick (`ObjectManager::isMarkedForDeletion`) refuses both too, since it is due to leave the
+scene in the same tick's `deleteObjectsMarkedForDeletion` pass, after the structural broadcast that would
+otherwise carry the change - a client would only see the deletion, not the change made just ahead of it.
+add/remove apply to the object immediately - unlike `World.spawnObject`,
+`Object::addComponent`/`removeComponent` for a non-Script type only ever touch `m_components`, a map
+`ScriptSystem`'s `fixedUpdate`/`variableUpdate` loops (which range over the `ObjectManager`'s object list
+and each object's `m_scripts` vector) do not read, so mutating one object's components mid-pass leaves both
+loops' iterators alone, even for the running script's own object - so `hasComponent` called later in the
+same tick already reflects it. Replication is still deferred and batched: the changed object's uuid is
+recorded on `BindingContext` (deduped, so several add/remove calls against the same object in a tick still
+cost one resync), and `ServerApp::broadcastStructuralChanges` sends each changed object's current packed
+subtree (`Object::pack` recurses through children) as `objectComponentsChanged` after the tick - a
+client/editor finds the root by uuid and unpacks it in place, which reconciles the component set and the
+children at every level against what was packed. Still far narrower than the whole-project snapshot the
+editor's own `sceneEdit` `addComponent`/`removeComponent` ops need for the same kind of change: a resync
+only touches the changed object's own subtree, the same granularity `objectSpawned`/`objectDestroyed`
+already use for other script-driven structural changes.
 
 **Script binding coverage.** Each *Bindings provider exposes its component's full public surface except
 for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight. Every
