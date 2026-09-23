@@ -18,6 +18,9 @@ struct BoundingBox {
   float maxZ{};
 };
 
+// Adding a shape here also needs a case in ColliderBindingsProvider::bindGetShape
+// (source/libs/scripting/bindings/ColliderBindings.cpp) and a matching value in the managed ColliderShape
+// enum (source/libs/scripting/ScriptBridge/components/Collider.cs).
 enum class ColliderType {
   boxCollider,
   sphereCollider

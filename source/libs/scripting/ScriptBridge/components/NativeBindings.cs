@@ -14,6 +14,8 @@ internal static unsafe class NativeBindings
 
     internal static CameraBindings Camera;
 
+    internal static ColliderBindings Collider;
+
     internal static ModelRendererBindings ModelRenderer;
 
     internal static LightRendererBindings LightRenderer;

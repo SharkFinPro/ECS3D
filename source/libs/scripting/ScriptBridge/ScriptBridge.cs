@@ -509,6 +509,12 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static unsafe void registerColliderBindings(ColliderBindings bindings)
+    {
+        NativeBindings.Collider = bindings;
+    }
+
+    [UnmanagedCallersOnly]
     public static unsafe void registerModelRendererBindings(ModelRendererBindings bindings)
     {
         NativeBindings.ModelRenderer = bindings;

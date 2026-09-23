@@ -6,6 +6,7 @@
 #include "bindings/WorldBindings.h"
 #include "bindings/ComponentOpsBindings.h"
 #include "bindings/CameraBindings.h"
+#include "bindings/ColliderBindings.h"
 #include "bindings/ModelRendererBindings.h"
 #include "bindings/LightRendererBindings.h"
 #include "bindings/LogBindings.h"
@@ -120,6 +121,11 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerCamera =
     reinterpret_cast<RegisterCameraFn>(m_host->getDelegate(assemblyPath, typeName, "registerCameraBindings"));
   registerCamera(CameraBindingsProvider::getBindings());
+
+  using RegisterColliderFn = void(*)(ColliderBindings);
+  const auto registerCollider =
+    reinterpret_cast<RegisterColliderFn>(m_host->getDelegate(assemblyPath, typeName, "registerColliderBindings"));
+  registerCollider(ColliderBindingsProvider::getBindings());
 
   using RegisterModelRendererFn = void(*)(ModelRendererBindings);
   const auto registerModelRenderer =

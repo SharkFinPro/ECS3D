@@ -25,11 +25,11 @@ constexpr std::array<BindingCoverageEntry, static_cast<size_t>(ComponentType::co
   { ComponentType::transform,                      BindingStatus::bound },        // TransformBindings
   { ComponentType::modelRenderer,                  BindingStatus::bound },        // ModelRendererBindings
   { ComponentType::rigidBody,                      BindingStatus::bound },        // RigidBodyBindings
-  { ComponentType::collider,                       BindingStatus::notYetBound },  // no ColliderBindings yet
+  { ComponentType::collider,                       BindingStatus::bound },        // ColliderBindings
   { ComponentType::lightRenderer,                  BindingStatus::bound },        // LightRendererBindings
   { ComponentType::SubComponentType_none,          BindingStatus::nativeOnly },   // a collider's default subtype, not itself an addressable component
-  { ComponentType::SubComponentType_boxCollider,   BindingStatus::notYetBound },  // no ColliderBindings yet
-  { ComponentType::SubComponentType_sphereCollider,BindingStatus::notYetBound },  // no ColliderBindings yet
+  { ComponentType::SubComponentType_boxCollider,   BindingStatus::bound },        // ColliderBindings
+  { ComponentType::SubComponentType_sphereCollider,BindingStatus::bound },        // ColliderBindings
   { ComponentType::script,                         BindingStatus::nativeOnly },   // the scripting system itself; a script doesn't bind to its own component
   { ComponentType::playerController,               BindingStatus::nativeOnly },   // read internally to resolve a player's input slot (InputUtilsBindings), no direct script surface
   { ComponentType::camera,                         BindingStatus::bound }         // CameraBindings
