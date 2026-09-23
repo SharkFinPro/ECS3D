@@ -94,7 +94,7 @@ TEST(EditHistoryLabel, DescribesAnInstantiatePrefabByResolvingTheLiveAssetName)
     { .uuid = prefabUUID, .type = AssetType::Prefab, .path = "MyPrefab", .body = "{}" });
 
   edits::EditHistory history;
-  history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
+  history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0, "{}"));
 
   const auto label = history.nextUndoLabel(*scene.objectManager, &assetRegistry);
   ASSERT_TRUE(label.has_value());
@@ -110,7 +110,7 @@ TEST(EditHistoryLabel, DescribesAnInstantiatePrefabWithAGenericFallbackWhenTheAs
   const auto instanceUUID = anotherUUID();
 
   edits::EditHistory history;
-  history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0));
+  history.record(edits::EditCommand::instantiatePrefab(prefabUUID, instanceUUID, std::nullopt, 0, "{}"));
 
   const auto label = history.nextUndoLabel(*scene.objectManager);
   ASSERT_TRUE(label.has_value());
