@@ -7,8 +7,10 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <imgui.h>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 InspectorPanel::InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor,
                                std::shared_ptr<ComponentRegistry> componentRegistry,
@@ -102,21 +104,58 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
     }
   }
 
-  // Editing across a multi-selection is a separate story; for now just say how many objects are
-  // selected instead of silently showing (and letting edits reach) only the primary one.
+  // A multi-object selection: show/edit the components common to every selected object rather than only
+  // the primary one (see ObjectInspector::displayMulti).
   if (m_selection->kind() == EditorSelection::Kind::Object && m_selection->size() > 1)
   {
-    // Same reasoning as the empty-state early return below: finish whatever gesture was in flight on
-    // the previous single selection rather than leaving it to attach to whatever gets selected next.
-    m_objectInspector->commitPendingEdit();
+    std::vector<std::shared_ptr<Object>> objects;
+    if (objectManager)
+    {
+      for (const auto& uuid : m_selection->items())
+      {
+        if (auto object = objectManager->getObjectByUUID(uuid))
+        {
+          objects.push_back(std::move(object));
+        }
+      }
+    }
+
+    // Every selected uuid but one went stale (e.g. a fresh snapshot dropped them): show the one that's
+    // left the same way a plain single-object selection would, rather than an empty state a selection
+    // that still names a live object shouldn't reach.
+    if (objects.size() == 1)
+    {
+      // Flushes a multi-selection gesture that may still be in flight from a prior frame (the rest of the
+      // selection just dropped out from under it) before switching to the single-object display below.
+      m_objectInspector->commitPendingEdit();
+
+      gc::sectionLabel("Inspector");
+      m_objectInspector->displayTypeChip(objects.front());
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Spacing();
+      m_objectInspector->display(objects.front());
+
+      ImGui::End();
+      return;
+    }
 
     gc::sectionLabel("Inspector");
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    const std::string message = std::to_string(m_selection->size()) + " objects selected";
-    gc::emptyState(gc::SecIcon::block, message.c_str(), "Multi-object editing isn't supported yet");
+    if (objects.empty())
+    {
+      // Nothing in the selection resolved to a live object at all: finish whatever gesture was in
+      // flight rather than leave it to attach to what's next.
+      m_objectInspector->commitPendingEdit();
+      gc::emptyState(gc::SecIcon::block, "Nothing selected", "Select an object or asset to inspect it");
+    }
+    else
+    {
+      m_objectInspector->displayMulti(objects);
+    }
 
     ImGui::End();
     return;
