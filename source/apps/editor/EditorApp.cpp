@@ -23,6 +23,7 @@
 #include <RingBufferSink.h>
 #include <SettingsStore.h>
 #include <Keybinds.h>
+#include <EditorCameraSettings.h>
 #include <KeybindDispatcher.h>
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
@@ -41,13 +42,17 @@
 #include <Log.h>
 #include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/camera/Camera.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <chrono>
 #include <exception>
+#include <memory>
 #include <random>
+#include <string>
 #include <thread>
+#include <utility>
 
 EditorApp::EditorApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -74,7 +79,7 @@ EditorApp::EditorApp(LaunchOptions options)
 
   setupKeybinds();
 
-  m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings, m_keybindTable, m_keybindDispatcher);
+  m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings, m_renderer, m_keybindTable, m_keybindDispatcher);
 
   // Only the editor has a panel to show it, so only the editor registers the ring buffer - the console
   // and file sinks main() already registers keep receiving everything regardless.
@@ -288,6 +293,10 @@ void EditorApp::createRenderer()
   };
 
   m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
+
+  // Overrides the engine-config default above with whatever the user last set, so a restart comes back
+  // at the tuned speed rather than resetting to 1x.
+  m_renderer->getCamera()->setSpeed(editorCameraSettings::readSpeed(*m_settings));
 
   m_sceneViewName = engineConfig.imGui.sceneViewName;
 

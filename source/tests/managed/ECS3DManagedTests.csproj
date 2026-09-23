@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <RootNamespace>ECS3DManagedTests</RootNamespace>
+        <AssemblyName>ECS3DManagedTests</AssemblyName>
+        <IsPackable>false</IsPackable>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+        <PackageReference Include="xunit" Version="2.9.2" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    </ItemGroup>
+
+    <!-- The transport assembly has pure, testable framing/handshake logic and no native host dependency
+         (unlike ScriptBridge, which needs native function pointers wired up before its code paths do
+         anything). A plain ProjectReference is safe here rather than compiling files in by Link: the
+         BuildRoot isolation in Directory.Build.props (this directory) keeps its build output separate
+         from Transport's own. -->
+    <ItemGroup>
+        <ProjectReference Include="../../libs/net/Transport/ECS3DNetTransport.csproj" />
+    </ItemGroup>
+
+</Project>

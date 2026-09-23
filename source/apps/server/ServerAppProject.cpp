@@ -11,6 +11,8 @@
 #include <ScriptSystem.h>
 #include <Log.h>
 #include <nlohmann/json.hpp>
+#include <uuid.h>
+#include <exception>
 #include <string>
 
 void ServerApp::handleLoadProject(const net::Message& message) const

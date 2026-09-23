@@ -953,10 +953,13 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
   {
     case CommandKind::addObject:
     {
+      // Recreate with the same uuid the command already names - the entry that stays on the undo stack
+      // after this redo still targets data.objectUUID, so a fresh, server-minted uuid here would leave
+      // the next undo refusing with targetMissing against an object the scene never actually lost.
       const auto& data = std::get<AddObjectData>(m_data);
       return data.parentUUID
-        ? replication::buildAddObject(data.name, &*data.parentUUID)
-        : replication::buildAddObject(data.name);
+        ? replication::buildAddObject(data.name, &*data.parentUUID, &data.objectUUID)
+        : replication::buildAddObject(data.name, nullptr, &data.objectUUID);
     }
     case CommandKind::reparentObject:
     {

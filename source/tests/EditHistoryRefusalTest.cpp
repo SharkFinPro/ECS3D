@@ -399,3 +399,97 @@ TEST(EditHistory, NextRedoKindNamesTheTopOfTheRedoStackWithoutPoppingIt)
   const auto redoOutcome = history.redo(*scene.objectManager);
   EXPECT_TRUE(redoOutcome.ok());
 }
+
+// --- nextUndoIsReversible()/nextRedoIsReversible(): EditorApp::undo()/redo() gate on these instead of
+// comparing nextUndoKind()/nextRedoKind() against a single allowed kind, so every reversible kind (not
+// just componentEdit) gets sent, while the four non-reversible kinds stay refused and left on the stack.
+
+TEST(EditHistory, NextUndoAndRedoIsReversibleAreFalseOnEmptyStacks)
+{
+  edits::EditHistory history;
+
+  EXPECT_FALSE(history.nextUndoIsReversible());
+  EXPECT_FALSE(history.nextRedoIsReversible());
+}
+
+TEST(EditHistory, NextUndoIsReversibleIsTrueForAReversibleCommandOnTopWithoutPoppingIt)
+{
+  auto scene = makeScene();
+
+  // validateForUndo() checks the recorded "after" state against the live scene, so the rename actually
+  // has to have happened - recording the command alone (without applying it, the mistake this test made
+  // before) leaves the object still named "Object" and undo() correctly, deterministically refuses with
+  // targetChanged on every platform, not just some.
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildRenameObject(scene.object->getUUID(), "Renamed")),
+            replication::SceneEditResult::applied);
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::renameObject(scene.object->getUUID(), "Object", "Renamed"));
+
+  EXPECT_TRUE(history.nextUndoIsReversible());
+
+  // Peeking is read-only: the entry is still there to actually undo.
+  ASSERT_TRUE(history.canUndo());
+  const auto outcome = history.undo(*scene.objectManager);
+  EXPECT_TRUE(outcome.ok());
+}
+
+TEST(EditHistory, NextUndoIsReversibleIsFalseForANonReversibleCommandOnTopAndLeavesItInPlace)
+{
+  auto scene = makeScene();
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::removeObject(scene.object->getUUID(), std::nullopt, 0,
+                                                   scene.object->serialize()));
+
+  EXPECT_FALSE(history.nextUndoIsReversible());
+
+  // Positive control: the stack is untouched by the peek - the same removeObject is still on top,
+  // reported the same way nextUndoKind() would name it.
+  ASSERT_TRUE(history.canUndo());
+  ASSERT_TRUE(history.nextUndoKind().has_value());
+  EXPECT_EQ(*history.nextUndoKind(), edits::CommandKind::removeObject);
+}
+
+TEST(EditHistory, NextRedoIsReversibleIsTrueForAReversibleCommandOnTopWithoutPoppingIt)
+{
+  auto scene = makeScene();
+  const auto transform = transformOf(scene.object);
+
+  transform->setPosition({ 1, 2, 3 });
+  const auto before = transform->serialize();
+  transform->setPosition({ 4, 5, 6 });
+  const auto after = transform->serialize();
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before, after));
+
+  const auto undoOutcome = history.undo(*scene.objectManager);
+  ASSERT_TRUE(undoOutcome.ok());
+  ASSERT_TRUE(undoOutcome.messagePayload.has_value());
+  ASSERT_EQ(replication::applyComponentEdit(*scene.objectManager, *undoOutcome.messagePayload),
+            replication::ComponentEditResult::applied);
+
+  EXPECT_TRUE(history.nextRedoIsReversible());
+
+  // Still there for redo() to actually use after being peeked.
+  ASSERT_TRUE(history.canRedo());
+  const auto redoOutcome = history.redo(*scene.objectManager);
+  EXPECT_TRUE(redoOutcome.ok());
+}
+
+TEST(EditHistory, NextRedoIsReversibleIsFalseOnAnEmptyRedoStackEvenWithAnUndoStackPresent)
+{
+  auto scene = makeScene();
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::removeObject(scene.object->getUUID(), std::nullopt, 0,
+                                                   scene.object->serialize()));
+
+  // Positive control: the undo side reports a real (non-reversible) entry, while the redo side is simply
+  // empty - two different reasons the peek can come back false.
+  ASSERT_TRUE(history.canUndo());
+  EXPECT_FALSE(history.canRedo());
+  EXPECT_FALSE(history.nextRedoIsReversible());
+}

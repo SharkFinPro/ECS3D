@@ -545,7 +545,10 @@ internal sealed class TcpBackend : TransportBackend
     _client!.GetStream().Write(frame, 0, frame.Length);
   }
 
-  private static byte[] FrameBytes(byte type, byte[] payload)
+  // Internal (rather than private) so the wire framing - a 4-byte big-endian length covering the type
+  // byte plus payload, followed by the bytes - is covered directly by ECS3DManagedTests via
+  // InternalsVisibleTo (see Transport/AssemblyInfo.cs) instead of through a socket.
+  internal static byte[] FrameBytes(byte type, byte[] payload)
   {
     var frame = new byte[4 + 1 + payload.Length];
     BinaryPrimitives.WriteInt32BigEndian(frame, 1 + payload.Length);
@@ -571,7 +574,10 @@ internal sealed class TcpBackend : TransportBackend
   // deadline is an Environment.TickCount64 value the whole frame must be read by, or null for no outer
   // bound - every caller but the handshake read leaves it null, since the steady-state message loop must
   // stay blocking and untimed.
-  private static bool ReadFrame(Stream stream, out byte type, out byte[] payload, int maxBytes = MaxMessageBytes,
+  //
+  // Internal (rather than private) so ECS3DManagedTests can decode a frame straight off a MemoryStream
+  // via InternalsVisibleTo (see Transport/AssemblyInfo.cs), the counterpart to FrameBytes above.
+  internal static bool ReadFrame(Stream stream, out byte type, out byte[] payload, int maxBytes = MaxMessageBytes,
     long? deadline = null)
   {
     type = 0;

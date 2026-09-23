@@ -43,6 +43,16 @@ std::optional<CommandKind> EditHistory::nextRedoKind() const
   return m_redoStack.back().kind();
 }
 
+bool EditHistory::nextUndoIsReversible() const
+{
+  return !m_undoStack.empty() && m_undoStack.back().isReversible();
+}
+
+bool EditHistory::nextRedoIsReversible() const
+{
+  return !m_redoStack.empty() && m_redoStack.back().isReversible();
+}
+
 namespace {
   HistoryResult toHistoryResult(const ValidationFailure failure)
   {

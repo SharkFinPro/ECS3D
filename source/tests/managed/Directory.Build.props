@@ -1,0 +1,29 @@
+<Project>
+
+  <!-- Build-output locations for the managed test project.
+
+       These live here (not in ECS3DManagedTests.csproj) for the same reason as the launcher's:
+       BaseIntermediateOutputPath must be set before Microsoft.NET.Sdk imports Microsoft.Common.props
+       (setting it in the .csproj is too late - MSB3539) and must also be visible to `restore`, which
+       evaluates Directory.Build.props but not late .csproj PropertyGroups.
+
+       Nested one level deeper than Transport/ScriptBridge's own Directory.Build.props ($(BuildRoot)obj/
+       tests/ here vs. $(BuildRoot)obj/ there): this project references ECS3DNetTransport.csproj via
+       ProjectReference, and a ProjectReference build inherits the global BuildRoot property passed on
+       the `dotnet test` command line (see source/tests/CMakeLists.txt). Reusing the exact same BuildRoot
+       for both projects without the extra "tests/" segment would point both projects' generated
+       obj output at the same directory - the isolation this whole BuildRoot scheme exists to avoid
+       (see ECS3DManaged.cmake). The extra segment keeps this project's obj/bin out of Transport's,
+       whether or not the two ever land under a literally identical BuildRoot value. -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath Condition="'$(BuildRoot)' != ''">$(BuildRoot)obj/tests/</BaseIntermediateOutputPath>
+    <BaseOutputPath Condition="'$(BuildRoot)' != ''">$(BuildRoot)bin/tests/</BaseOutputPath>
+
+    <!-- When obj/bin are relocated out of the project (above), the SDK's default `obj/**` and
+         `bin/**` compile exclusions stop covering the local folders. Re-exclude them explicitly so a
+         stray *.cs left in a local obj/ or bin/ (e.g. from an earlier standalone build) can never be
+         double-compiled into the CMake build — that produces CS0579 duplicate-attribute errors. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildThisFileDirectory)obj\**;$(MSBuildThisFileDirectory)bin\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+</Project>

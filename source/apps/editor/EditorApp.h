@@ -76,12 +76,13 @@ public:
 
   void logMessage(const std::string& level, const std::string& message);
 
-  // Sends the reverse of the top of the relevant stack through the normal send path (editComponent for a
-  // value edit) and logs a refusal instead when there is nothing to send: an empty stack, a target that no
-  // longer matches what the command recorded, or a command kind undo does not handle yet (left on the
-  // stack rather than dropped - see EditHistory::nextUndoKind()). Called through requestUndo()/
-  // requestRedo() (see EditorAppUndoMenu.cpp), which is what the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit
-  // menu actually invoke - they add the in-flight gate documented there.
+  // Sends the reverse of the top of the relevant stack through the normal send path (editComponent/
+  // sceneEdit/asset messages, matching the command's payloadForm()) and logs a refusal instead when there
+  // is nothing to send: an empty stack, a target that no longer matches what the command recorded, or a
+  // non-reversible command kind (left on the stack rather than dropped - see
+  // EditHistory::nextUndoIsReversible()). Called through requestUndo()/requestRedo() (see
+  // EditorAppUndoMenu.cpp), which is what the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit menu actually
+  // invoke - they add the in-flight gate documented there.
   void undo();
 
   void redo();

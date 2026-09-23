@@ -11,6 +11,7 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <chrono>
+#include <string>
 
 void EditorApp::applyMessage(const net::Message& message)
 {

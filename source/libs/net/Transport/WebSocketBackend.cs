@@ -611,6 +611,15 @@ internal sealed class WebSocketBackend : TransportBackend
 
   // -- WebSocket helpers --
 
+  // RFC 6455 section 4.2.2 step 5.4: concatenate the client's Sec-WebSocket-Key with the magic GUID,
+  // SHA-1 the result and base64-encode it. Split out (rather than inlined in PerformServerHandshake) so
+  // it is covered by the RFC's own worked example in ECS3DManagedTests via InternalsVisibleTo (see
+  // Transport/AssemblyInfo.cs) without going through a socket.
+  internal static string ComputeAcceptKey(string secWebSocketKey)
+  {
+    return Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(secWebSocketKey + WebSocketGuid)));
+  }
+
   // Reads the HTTP/1.1 Upgrade request, replies with the 101 Switching Protocols handshake, and leaves
   // the stream positioned at the first WebSocket frame. Returns false if the request isn't a valid
   // WebSocket upgrade.
@@ -643,7 +652,7 @@ internal sealed class WebSocketBackend : TransportBackend
       return false;
     }
 
-    var accept = Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(key + WebSocketGuid)));
+    var accept = ComputeAcceptKey(key);
     var response =
       "HTTP/1.1 101 Switching Protocols\r\n" +
       "Upgrade: websocket\r\n" +
