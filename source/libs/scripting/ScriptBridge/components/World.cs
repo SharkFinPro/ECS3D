@@ -137,6 +137,18 @@ public static unsafe class World
         return false;
     }
 
+    public static bool tryGetLightRenderer(string uuid, out LightRenderer lightRenderer)
+    {
+        if (has(NativeBindings.LightRenderer.has, uuid))
+        {
+            lightRenderer = new LightRenderer(uuid);
+            return true;
+        }
+
+        lightRenderer = null!;
+        return false;
+    }
+
     private static bool has(delegate* unmanaged<IntPtr, bool> nativeHas, string uuid)
     {
         var uuidPtr = Marshal.StringToCoTaskMemUTF8(uuid);

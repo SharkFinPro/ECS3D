@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "EditorCameraSettings.h"
 #include "Log.h"
 #include "LogSink.h"
 #include "RingBufferSink.h"
@@ -11,6 +12,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -389,4 +391,56 @@ TEST_F(SettingsStoreTest, DefaultFileIsAbsoluteWhenTheresAHomeToResolveAgainst)
   // Only meaningful when the environment actually names one: the fallback is deliberately relative, so
   // asserting absoluteness unconditionally would fail a container that sets none of these.
   EXPECT_TRUE(SettingsStore::defaultFile().is_absolute());
+}
+
+TEST_F(SettingsStoreTest, EditorCameraSpeedFallsBackToTheEngineDefault)
+{
+  const SettingsStore store(m_file);
+
+  EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(store), editorCameraSettings::defaultSpeed);
+}
+
+TEST_F(SettingsStoreTest, EditorCameraSpeedRoundTripsThroughTheFile)
+{
+  {
+    SettingsStore store(m_file);
+    editorCameraSettings::writeSpeed(store, 4.5f);
+    store.flush();
+  }
+
+  const SettingsStore reloaded(m_file);
+  EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(reloaded), 4.5f);
+}
+
+TEST_F(SettingsStoreTest, EditorCameraSpeedClampsAnOutOfRangeStoredValue)
+{
+  writeFile(R"({"editor.viewport.cameraSpeed": 999.0})");
+
+  const SettingsStore store(m_file);
+
+  EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(store), editorCameraSettings::maxSpeed);
+
+  // Positive control: a value already inside the range comes back unchanged, so the clamp above is
+  // actually clamping rather than always snapping to the max.
+  writeFile(R"({"editor.viewport.cameraSpeed": 2.0})");
+  const SettingsStore inRange(m_file);
+  EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(inRange), 2.0f);
+}
+
+TEST_F(SettingsStoreTest, EditorCameraSpeedClampsBelowTheMinimumOnWrite)
+{
+  SettingsStore store(m_file);
+
+  editorCameraSettings::writeSpeed(store, -3.0f);
+
+  EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(store), editorCameraSettings::minSpeed);
+}
+
+TEST_F(SettingsStoreTest, EditorCameraSpeedRejectsANonFiniteValue)
+{
+  SettingsStore store(m_file);
+
+  editorCameraSettings::writeSpeed(store, std::numeric_limits<float>::infinity());
+
+  EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(store), editorCameraSettings::defaultSpeed);
 }

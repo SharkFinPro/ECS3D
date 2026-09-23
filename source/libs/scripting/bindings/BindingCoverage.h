@@ -23,10 +23,10 @@ struct BindingCoverageEntry {
 
 constexpr std::array<BindingCoverageEntry, static_cast<size_t>(ComponentType::count)> kComponentBindingCoverage {{
   { ComponentType::transform,                      BindingStatus::bound },        // TransformBindings
-  { ComponentType::modelRenderer,                  BindingStatus::notYetBound },  // ModelRendererBindings landing on another branch
+  { ComponentType::modelRenderer,                  BindingStatus::bound },        // ModelRendererBindings
   { ComponentType::rigidBody,                      BindingStatus::bound },        // RigidBodyBindings
   { ComponentType::collider,                       BindingStatus::bound },        // ColliderBindings
-  { ComponentType::lightRenderer,                  BindingStatus::notYetBound },  // no LightRendererBindings yet
+  { ComponentType::lightRenderer,                  BindingStatus::bound },        // LightRendererBindings
   { ComponentType::SubComponentType_none,          BindingStatus::nativeOnly },   // a collider's default subtype, not itself an addressable component
   { ComponentType::SubComponentType_boxCollider,   BindingStatus::bound },        // ColliderBindings
   { ComponentType::SubComponentType_sphereCollider,BindingStatus::bound },        // ColliderBindings

@@ -16,5 +16,7 @@ internal static unsafe class NativeBindings
 
     internal static ModelRendererBindings ModelRenderer;
 
+    internal static LightRendererBindings LightRenderer;
+
     internal static LogBindings Log;
 }

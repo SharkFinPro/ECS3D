@@ -15,6 +15,7 @@
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <objects/Object.h>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <optional>
 
 void EditorApp::updateGui()

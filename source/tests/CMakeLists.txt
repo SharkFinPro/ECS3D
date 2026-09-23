@@ -39,6 +39,7 @@ add_executable(${PROJECT_NAME}
   ColliderWorldTransformTest.cpp
   ColliderBindingsTest.cpp
   LightRendererTest.cpp
+  LightRendererBindingsTest.cpp
   LogTest.cpp
   LogFilterTest.cpp
   LogBindingsTest.cpp
@@ -99,6 +100,7 @@ add_executable(${PROJECT_NAME}
 
   # ScriptFieldEdit depends only on json, so it is compiled in the same way.
   ../libs/scripting/ScriptFieldEdit.cpp
+  ../libs/scripting/bindings/LightRendererBindings.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -132,6 +134,40 @@ include(GoogleTest)
 # output, which reads like a test hanging rather than a binary that had not finished loading - and it is
 # borderline rather than deterministic, so it comes and goes with the size of the suite.
 gtest_discover_tests(${PROJECT_NAME} DISCOVERY_TIMEOUT 120)
+
+# The managed (C#) test project, run through `dotnet test` rather than a native executable - registered
+# as its own CTest test so `check` (and CI) covers the managed assemblies the same way it covers the
+# native ones. Guarded on DOTNET_EXE (set by find_package(Dotnet REQUIRED), which every
+# managed-assembly-owning lib already pulls in via clrHost/cmake/loadCS.cmake by the time this directory
+# is processed - libs/ is added before tests/ in source/CMakeLists.txt) rather than unconditionally,
+# mirroring how the suite above is gated on BUILD_TESTING: a configure that somehow never reached the
+# managed toolchain skips this test instead of failing here on an unset DOTNET_EXE.
+if(DOTNET_EXE)
+  set(ECS3D_MANAGED_TESTS_ROOT "${CMAKE_BINARY_DIR}/ECS3DManagedTests")
+  set(ECS3D_MANAGED_TESTS_CSPROJ "${CMAKE_CURRENT_SOURCE_DIR}/managed/ECS3DManagedTests.csproj")
+
+  # `dotnet test` both builds and runs the suite in one command, and nothing here runs at CMake build
+  # time - only when ctest (directly, or through `check`) runs this test. That is what keeps a plain
+  # `cmake --build` from ever invoking a build-time `dotnet build`/`test` on the C# tree (AGENTS.md says
+  # never to do that): this project is built only as a side effect of ctest running it, on whichever
+  # machine runs the test step, so there is nothing to chain into ECS3DManaged.cmake's serialized
+  # managed-assembly targets. -p:BuildRoot isolates its obj/bin under $(BuildRoot)obj/tests/ and
+  # $(BuildRoot)bin/tests/ (see source/tests/managed/Directory.Build.props) from every other managed
+  # build in the tree, the same way
+  # ecs3d_add_managed_assembly() isolates ScriptBridge/ECS3DNetTransport from each other and from a
+  # developer's own `dotnet` invocations - the isolation CS0579 depends on.
+  add_test(
+    NAME ECS3DManagedTests
+    COMMAND ${DOTNET_EXE} test "${ECS3D_MANAGED_TESTS_CSPROJ}"
+      -c Release
+      -p:BuildRoot=${ECS3D_MANAGED_TESTS_ROOT}/
+      --nologo
+  )
+
+  set_tests_properties(ECS3DManagedTests PROPERTIES
+    LABELS "managed"
+  )
+endif()
 
 # Builds the suite and runs it through CTest in one command. --test-dir keeps it to this suite rather
 # than every test in the tree. --no-tests=error is the difference between a red build and a green one

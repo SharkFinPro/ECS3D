@@ -515,6 +515,12 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static unsafe void registerLightRendererBindings(LightRendererBindings bindings)
+    {
+        NativeBindings.LightRenderer = bindings;
+    }
+
+    [UnmanagedCallersOnly]
     public static void attachScript(IntPtr uuidPtr, IntPtr classNamePtr)
     {
         var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;

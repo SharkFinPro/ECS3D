@@ -17,6 +17,7 @@
 #include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <cstdint>
 #include <optional>
 
 void EditorApp::handlePicking()
