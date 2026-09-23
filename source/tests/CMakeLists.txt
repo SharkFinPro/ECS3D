@@ -43,6 +43,7 @@ add_executable(${PROJECT_NAME}
   LogFilterTest.cpp
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
+  ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
   SettingsStoreTest.cpp
   FileSinkTest.cpp
@@ -85,6 +86,13 @@ add_executable(${PROJECT_NAME}
   # else in net that needs covering will hit the same wall. TransportLog.cpp and ServerLog.cpp are
   # compiled in the same way, since both depend only on ECS3DLog + ECS3DNetProtocol.
   ../libs/net/MessageQueue.cpp
+  # The Transform/RigidBody/Camera/InputUtils binding providers (and InputState, which InputUtilsBindings
+  # reads) depend only on ECS3DData, so they are compiled in directly for the same reason as LogBindings.
+  ../libs/scripting/bindings/TransformBindings.cpp
+  ../libs/scripting/bindings/RigidBodyBindings.cpp
+  ../libs/scripting/bindings/CameraBindings.cpp
+  ../libs/scripting/bindings/InputUtilsBindings.cpp
+  ../libs/scripting/bindings/InputState.cpp
   ../libs/net/ServerLog.cpp
   ../libs/net/TransportLog.cpp
 
@@ -100,6 +108,7 @@ add_executable(${PROJECT_NAME}
   ../libs/scripting/ScriptFieldEdit.cpp
   ../libs/scripting/bindings/LightRendererBindings.cpp
 )
+
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net

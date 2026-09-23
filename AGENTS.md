@@ -354,6 +354,25 @@ mid-run (or whose object is destroyed) is stopped and detached by an orphan swee
 and on every scene edit's snapshot. The sweep matches by component identity, not by (uuid, class) key, so
 a re-added script of the same class gets a fresh instance rather than inheriting the stale one.
 
+**Script binding coverage.** Each *Bindings provider exposes its component's full public surface except
+for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight. Every
+component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the same way across all four
+(project/wire plumbing, not gameplay state), not just Transform's. `TransformBindings` also leaves out
+`getUpdateID` (a cache-invalidation counter for colliders, not scene data). `RigidBodyBindings` leaves
+out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writes to; PhysicsSystem
+drains it) and `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
+falling state; `isFalling` is the read-only query scripts get). `CameraBindings` covers every field on
+`Camera`, but its setters only reject non-finite input, the same rule every other setter here applies -
+the range clamps the editor UI enforces (`CameraEditor.cpp`: fov 1-179, near plane >= 0.001, far plane >
+near) live only there, not in the component, so a script can currently set a degenerate projection; that
+is inert today since the renderer's projection is otherwise hardcoded, but worth revisiting if that
+changes. `InputUtilsBindings` already covers everything `InputState` queries;
+`setKeysPressed`/`setFocused`/`setMouse`/`clearMouseDeltas`/`commitInputEdges`/`removeSlot` stay
+unexposed because they are the write side ServerApp feeds from the network and the per-tick bookkeeping
+that resets it - in this design scripts only consume input, so that side belongs to ServerApp - and
+there is no player-agnostic aggregate for mouse position/delta/scroll/buttons because, unlike a key or
+focus, a position has no sensible "any player" combination; only the per-object reads make sense there.
+
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers
 a `RemoteLogSink` with `Log` alongside its file/console sinks; each `run()` iteration (not gated on a fixed

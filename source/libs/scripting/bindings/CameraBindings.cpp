@@ -8,7 +8,9 @@
 #include <string>
 
 namespace {
-  std::shared_ptr<Camera> find(const char* uuid)
+  // Also hands back the parsed object uuid, so a setter that needs to record a replicated edit doesn't
+  // have to re-parse the string it just resolved (see ModelRendererBindings).
+  std::shared_ptr<Camera> find(const char* uuid, uuids::uuid* outObjectUUID = nullptr)
   {
     const auto objectManager = BindingContext::getObjectManager();
     if (!objectManager || !uuid)
@@ -28,7 +30,23 @@ namespace {
       return nullptr;
     }
 
-    return object->getComponent<Camera>(ComponentType::camera);
+    const auto camera = object->getComponent<Camera>(ComponentType::camera);
+    if (camera && outObjectUUID)
+    {
+      *outObjectUUID = parsed.value();
+    }
+
+    return camera;
+  }
+
+  // The component setters below silently ignore a non-finite write (Camera::setFov etc.), so calling
+  // recordComponentEdit unconditionally would broadcast a full component for a set that did nothing. Exact
+  // compare is correct here - it is only asking whether the setter actually wrote a new value, not doing
+  // float math of its own.
+  template<typename T>
+  bool valueChanged(const T& before, const T& after)
+  {
+    return before != after;
   }
 }
 
@@ -36,7 +54,16 @@ CameraBindings CameraBindingsProvider::getBindings()
 {
   return CameraBindings {
     .getDirection = &bindGetDirection,
-    .has = &bindHas
+    .has = &bindHas,
+    .setDirection = &bindSetDirection,
+    .getFov = &bindGetFov,
+    .setFov = &bindSetFov,
+    .getNearPlane = &bindGetNearPlane,
+    .setNearPlane = &bindSetNearPlane,
+    .getFarPlane = &bindGetFarPlane,
+    .setFarPlane = &bindSetFarPlane,
+    .isActive = &bindIsActive,
+    .setActive = &bindSetActive
   };
 }
 
@@ -61,4 +88,121 @@ void CameraBindingsProvider::bindGetDirection(const char* uuid, float* x, float*
 bool CameraBindingsProvider::bindHas(const char* uuid)
 {
   return find(uuid) != nullptr;
+}
+
+void CameraBindingsProvider::bindSetDirection(const char* uuid, float x, float y, float z)
+{
+  uuids::uuid objectUUID;
+  const auto camera = find(uuid, &objectUUID);
+  if (!camera)
+  {
+    return;
+  }
+
+  const auto before = camera->getDirection();
+  camera->setDirection({ x, y, z });
+
+  // Not covered by the per-tick state delta (Transform only), so replicate it like the editor's own
+  // component edits: buffer it here (scripting can't reach the net layer) for the app to broadcast. Only
+  // when the setter actually changed the value - a non-finite direction is a silent no-op.
+  if (valueChanged(before, camera->getDirection()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
+}
+
+float CameraBindingsProvider::bindGetFov(const char* uuid)
+{
+  const auto camera = find(uuid);
+  return camera ? camera->getFov() : 45.0f;
+}
+
+void CameraBindingsProvider::bindSetFov(const char* uuid, float fov)
+{
+  uuids::uuid objectUUID;
+  const auto camera = find(uuid, &objectUUID);
+  if (!camera)
+  {
+    return;
+  }
+
+  const auto before = camera->getFov();
+  camera->setFov(fov);
+
+  if (valueChanged(before, camera->getFov()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
+}
+
+float CameraBindingsProvider::bindGetNearPlane(const char* uuid)
+{
+  const auto camera = find(uuid);
+  return camera ? camera->getNearPlane() : 0.1f;
+}
+
+void CameraBindingsProvider::bindSetNearPlane(const char* uuid, float nearPlane)
+{
+  uuids::uuid objectUUID;
+  const auto camera = find(uuid, &objectUUID);
+  if (!camera)
+  {
+    return;
+  }
+
+  const auto before = camera->getNearPlane();
+  camera->setNearPlane(nearPlane);
+
+  if (valueChanged(before, camera->getNearPlane()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
+}
+
+float CameraBindingsProvider::bindGetFarPlane(const char* uuid)
+{
+  const auto camera = find(uuid);
+  return camera ? camera->getFarPlane() : 1000.0f;
+}
+
+void CameraBindingsProvider::bindSetFarPlane(const char* uuid, float farPlane)
+{
+  uuids::uuid objectUUID;
+  const auto camera = find(uuid, &objectUUID);
+  if (!camera)
+  {
+    return;
+  }
+
+  const auto before = camera->getFarPlane();
+  camera->setFarPlane(farPlane);
+
+  if (valueChanged(before, camera->getFarPlane()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
+}
+
+bool CameraBindingsProvider::bindIsActive(const char* uuid)
+{
+  const auto camera = find(uuid);
+  return camera ? camera->isActive() : true;
+}
+
+void CameraBindingsProvider::bindSetActive(const char* uuid, bool active)
+{
+  uuids::uuid objectUUID;
+  const auto camera = find(uuid, &objectUUID);
+  if (!camera)
+  {
+    return;
+  }
+
+  const auto before = camera->isActive();
+  camera->setActive(active);
+
+  if (valueChanged(before, camera->isActive()))
+  {
+    BindingContext::recordComponentEdit(objectUUID, camera);
+  }
 }
