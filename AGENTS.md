@@ -514,10 +514,17 @@ everything older beneath it) even though nothing about it is actually wrong. `re
 whichever of `jsonPayload`/`messagePayload` `HistoryOutcome` set, matching `payloadForm()`: a sceneEdit
 json payload (`addObject`, `reparentObject`, `reorderObject`, `renameObject`, `addComponent`) is chunked
 into a `sceneEdit` message the same way `EditorApp::onSceneEdit` does for a normal edit; a networkMessage
-payload (`componentEdit` and every asset kind) is sent as-is. There is still no menu item or keybind that
-calls `undo()`/`redo()` - a later story wires one in; for now they exist as entry points only. A refusal is
-logged the same way for a stale target (`targetMissing`/`targetChanged`, naming the conflicting uuid) or an
-empty stack. `EditHistory::
+payload (`componentEdit` and every asset kind) is sent as-is. Ctrl+Z/Ctrl+Shift+Z and an Edit menu (between
+File and Window) call `undo()`/`redo()` through `requestUndo()`/`requestRedo()` (`EditorAppUndoMenu.cpp`);
+the menu items read `EditHistory::nextUndoLabel()`/`nextRedoLabel()` (built from
+`EditCommand::describeForMenu()`) to name the action they would perform ("Undo Rename Cube") instead of
+showing a bare "Undo"/"Redo", and disable themselves with nothing to act on, a read-only server, or a
+request already in flight - `requestUndo()`/`requestRedo()` ignore a further request once one has actually
+popped a stack entry until the server's rebroadcast lands (`handleSnapshot`/`handleEditComponent`) or a
+short timeout passes, since undo validates against the editor's replicated view, which only updates on that
+rebroadcast, and a second press inside one round trip would otherwise validate against a still-stale value.
+A refusal is logged the same way for a stale target (`targetMissing`/`targetChanged`, naming the conflicting
+uuid) or an empty stack. `EditHistory::
 reportUndoRejected()`/`reportRedoRejected()` exist for a server rejection of the edit undo()/redo() just
 sent, but nothing calls them yet: today's `editComponent`/`sceneEdit` handling has no wire-level
 acknowledgement back to the sender for a rejected edit to hook into (a failed edit is only logged

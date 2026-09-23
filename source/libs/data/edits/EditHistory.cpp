@@ -163,4 +163,36 @@ void EditHistory::clear()
   m_redoStack.clear();
 }
 
+std::optional<std::string> EditHistory::nextUndoLabel(const ObjectManager& objectManager,
+                                                       const AssetRegistry* assetRegistry) const
+{
+  if (m_undoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_undoStack.back().describeForMenu(objectManager, assetRegistry);
+}
+
+std::optional<std::string> EditHistory::nextRedoLabel(const ObjectManager& objectManager,
+                                                       const AssetRegistry* assetRegistry) const
+{
+  if (m_redoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_redoStack.back().describeForMenu(objectManager, assetRegistry);
+}
+
+std::size_t EditHistory::undoDepth() const
+{
+  return m_undoStack.size();
+}
+
+std::size_t EditHistory::redoDepth() const
+{
+  return m_redoStack.size();
+}
+
 }

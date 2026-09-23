@@ -205,6 +205,15 @@ public:
   // which is not always this one - e.g. an addObject redo can conflict on its parent instead.
   [[nodiscard]] uuids::uuid primaryUUID() const;
 
+  // A human-readable one-line description of this command ("Rename Cube", "Edit Transform", "Delete Asset
+  // Rock"), for an Edit menu that names the next undo/redo action rather than showing a bare "Undo"/"Redo"
+  // label. Resolves a name from what the command itself recorded (an object's before/after name, an
+  // asset's own path/className) when it can, falling back to the live scene/registry, and finally to a
+  // generic kind label when neither is available. A single switch over every CommandKind with no default,
+  // so a new kind is a compiler warning here instead of a silently generic label.
+  [[nodiscard]] std::string describeForMenu(const ObjectManager& objectManager,
+                                            const AssetRegistry* assetRegistry) const;
+
   [[nodiscard]] friend bool operator==(const EditCommand&, const EditCommand&) = default;
 
 private:

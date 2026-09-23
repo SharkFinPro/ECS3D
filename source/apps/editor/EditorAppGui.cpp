@@ -63,7 +63,7 @@ void EditorApp::updateGui()
   // scene-selector widget.
 }
 
-void EditorApp::displayMenuBar() const
+void EditorApp::displayMenuBar()
 {
   if (ImGui::BeginMainMenuBar())
   {
@@ -99,6 +99,8 @@ void EditorApp::displayMenuBar() const
 
       ImGui::EndMenu();
     }
+
+    displayEditMenu();
 
     m_assetBrowser->displayMenuWidget();
 

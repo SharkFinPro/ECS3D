@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <deque>
 #include <optional>
+#include <string>
 
 class ObjectManager;
 class AssetRegistry;
@@ -103,6 +104,19 @@ public:
   // directions at once (see EditCommand.h's module comment) - stopping play restores the authored scene,
   // which neither stack's recorded state has any relation to any more.
   void clear();
+
+  // Human-readable description of the command undo()/redo() would act on next ("Rename Cube"), for an
+  // Edit menu that names the next action instead of showing a bare "Undo"/"Redo" - see
+  // EditCommand::describeForMenu. nullopt when that stack is empty.
+  [[nodiscard]] std::optional<std::string> nextUndoLabel(const ObjectManager& objectManager,
+                                                         const AssetRegistry* assetRegistry = nullptr) const;
+  [[nodiscard]] std::optional<std::string> nextRedoLabel(const ObjectManager& objectManager,
+                                                         const AssetRegistry* assetRegistry = nullptr) const;
+
+  // Stack sizes, for a caller that needs to detect whether undo()/redo() actually popped an entry (sent a
+  // request) without reading their bodies - see EditorApp's in-flight gate on repeated undo/redo requests.
+  [[nodiscard]] std::size_t undoDepth() const;
+  [[nodiscard]] std::size_t redoDepth() const;
 
 private:
   std::deque<EditCommand> m_undoStack;

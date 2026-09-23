@@ -172,6 +172,7 @@ void EditorApp::connectToServer()
   // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
   // every object it named.
   m_editHistory.clear();
+  clearUndoRedoPending();
 
   // The editor edits a local project, so (in singleplayer) it spawns its own edit-mode server gated by a
   // one-off token they share, then connects as Role::editor with that token. Attaching to an existing
@@ -326,9 +327,14 @@ void EditorApp::setupKeybinds()
 
   m_keybindDispatcher->on(EditorAction::toggleGui, [this] { m_shouldDisplayGui = !m_shouldDisplayGui; });
 
-  // Save/Save As are registered later, once m_saveUI exists. Undo/redo/delete/duplicate/focus/gizmo stay
-  // in the table with no handler - bindable and shown in Settings, but a no-op until a later feature
-  // gives them behavior.
+  // requestUndo()/requestRedo() (EditorAppUndoMenu.cpp) add the in-flight gate on top of undo()/redo() -
+  // the Edit menu calls the same two methods.
+  m_keybindDispatcher->on(EditorAction::undo, [this] { requestUndo(); });
+  m_keybindDispatcher->on(EditorAction::redo, [this] { requestRedo(); });
+
+  // Save/Save As are registered later, once m_saveUI exists. Delete/duplicate/focus/gizmo stay in the
+  // table with no handler - bindable and shown in Settings, but a no-op until a later feature gives them
+  // behavior.
 }
 
 void EditorApp::variableUpdate()
