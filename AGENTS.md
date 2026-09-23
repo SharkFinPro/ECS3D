@@ -49,7 +49,7 @@
 | `source/apps/` | The executables. `apps/CMakeLists.txt` orders them (server first — client/editor depend on it). |
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
 | `source/apps/launcher/` | The standalone C# Avalonia launcher. **Has its own `AGENTS.md`** — treat it as an independent project. |
-| `source/tests/` | `ECS3DTests` — the GoogleTest suite. Headless by construction (no window, GPU or server), registered with CTest. |
+| `source/tests/` | `ECS3DTests` — the GoogleTest suite. Headless by construction (no window, GPU or server), registered with CTest. `tests/managed/` — `ECS3DManagedTests`, an xUnit project covering `ECS3DNetTransport`, also registered with CTest. |
 | `.github/workflows/` | `cmake-multi-platform.yml` — builds Release **and** Debug on Windows (MSVC), Linux (gcc+clang), macOS (clang) with the Vulkan SDK, then runs the suite through the `check` target. |
 
 ## Build System
@@ -96,6 +96,24 @@
   suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
   defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
   empty test set and would otherwise report green for a suite that registered nothing.
+- **Managed tests** (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered
+  as a single CTest test through `add_test` in `tests/CMakeLists.txt` (guarded on `DOTNET_EXE`) rather
+  than a native executable. It covers pure, testable logic in `ECS3DNetTransport` via
+  a `ProjectReference` to `Transport/ECS3DNetTransport.csproj` — start there for a new managed test; move
+  to `ScriptBridge` only once something in it doesn't need the native host wired up. Private product
+  logic is exposed to it through `internal` + `InternalsVisibleTo` (see `Transport/AssemblyInfo.cs`), not
+  reflection. Its `Directory.Build.props` redirects `obj`/`bin` under `$(BuildRoot)obj/tests/` and
+  `$(BuildRoot)bin/tests/` — one level deeper than `Transport`/`ScriptBridge`'s own `$(BuildRoot)obj/`,
+  so referencing `ECS3DNetTransport` by `ProjectReference` (which inherits the `BuildRoot` global
+  property `dotnet test` is invoked with) keeps the two projects' generated `obj` output in separate
+  directories — the CS0579 trap below. The
+  CTest command is `dotnet test <csproj> -c Release -p:BuildRoot=...`, so building the project happens
+  only when ctest runs it, not as a step of a plain `cmake --build`: add a new managed test by adding a
+  `.cs` file under `source/tests/managed/` (globbed automatically, unlike the native suite's explicit
+  source list) and running it through `check`, the same way as every other test here. On a machine with
+  a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio` and the
+  test-SDK package this project references (see `ECS3DManagedTests.csproj`), which needs network
+  access.
 - **Dependency direction (must hold):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd + log. `net`/`scripting` →
@@ -517,7 +535,10 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
 - Do not invoke `cmake --build`.
 - Do not run `dotnet build` on the C# projects.
 - Do not run `dotnet publish` on the C# projects.
-- Both break the CMake build with `CS0579`, so the C# projects are built through CMake only.
+- Do not run `dotnet test` on `ECS3DManagedTests` yourself either — like the others, it breaks the CMake
+  build with `CS0579` if its `BuildRoot` isolation is bypassed. Let `ctest`/`check` invoke it.
+- Both break the CMake build with `CS0579`, so the C# projects are built through CMake (or, for the
+  managed test project, ctest) only.
 - State clearly that a change is unverified and needs to be compiled on the developer's machine.
 - Avoid speculative refactors. Keep changes scoped and incremental. Ask about lifetime/ownership,
   threading, and replication semantics rather than assuming.
