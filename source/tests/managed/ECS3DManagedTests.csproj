@@ -6,6 +6,10 @@
         <AssemblyName>ECS3DManagedTests</AssemblyName>
         <IsPackable>false</IsPackable>
         <Nullable>enable</Nullable>
+        <!-- BridgeNativeBindingsLayoutTests takes sizeof() of ScriptBridge's *Bindings structs, which are
+             blocks of delegate* unmanaged<...> function pointers - an unsafe context is needed to size
+             them the same way ScriptBridge itself does. -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -14,13 +18,17 @@
         <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     </ItemGroup>
 
-    <!-- The transport assembly has pure, testable framing/handshake logic and no native host dependency
-         (unlike ScriptBridge, which needs native function pointers wired up before its code paths do
-         anything). A plain ProjectReference is safe here rather than compiling files in by Link: the
-         BuildRoot isolation in Directory.Build.props (this directory) keeps its build output separate
-         from Transport's own. -->
+    <!-- Both assemblies have pure, testable logic that does not need their native host wired up: Transport's
+         wire framing/handshake, and ScriptBridge's [ExposeToEditor] field reflection/JSON and value
+         conversion (its native-function-pointer calls - Transform/RigidBody/Camera/etc. wrappers, the
+         [UnmanagedCallersOnly] entry points themselves - stay untested here). A plain ProjectReference is
+         safe for both rather than compiling files in by Link: the BuildRoot isolation in Directory.Build.props
+         (this directory) keeps this project's own build output separate from theirs, and ScriptBridge's own
+         Directory.Build.props gives it a "ScriptBridge/" obj subfolder so its output does not collide with
+         Transport's when both are referenced under this project's shared BuildRoot. -->
     <ItemGroup>
         <ProjectReference Include="../../libs/net/Transport/ECS3DNetTransport.csproj" />
+        <ProjectReference Include="../../libs/scripting/ScriptBridge/ScriptBridge.csproj" />
     </ItemGroup>
 
 </Project>

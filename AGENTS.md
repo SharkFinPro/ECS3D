@@ -98,22 +98,37 @@
   empty test set and would otherwise report green for a suite that registered nothing.
 - **Managed tests** (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered
   as a single CTest test through `add_test` in `tests/CMakeLists.txt` (guarded on `DOTNET_EXE`) rather
-  than a native executable. It covers pure, testable logic in `ECS3DNetTransport` via
-  a `ProjectReference` to `Transport/ECS3DNetTransport.csproj` — start there for a new managed test; move
-  to `ScriptBridge` only once something in it doesn't need the native host wired up. Private product
-  logic is exposed to it through `internal` + `InternalsVisibleTo` (see `Transport/AssemblyInfo.cs`), not
-  reflection. Its `Directory.Build.props` redirects `obj`/`bin` under `$(BuildRoot)obj/tests/` and
-  `$(BuildRoot)bin/tests/` — one level deeper than `Transport`/`ScriptBridge`'s own `$(BuildRoot)obj/`,
-  so referencing `ECS3DNetTransport` by `ProjectReference` (which inherits the `BuildRoot` global
-  property `dotnet test` is invoked with) keeps the two projects' generated `obj` output in separate
-  directories — the CS0579 trap below. The
+  than a native executable. It covers pure, testable logic via `ProjectReference`s to
+  `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
+  (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
+  `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
+  `TryConvertFieldValue`/`MapTypeName`/`Key`). What stays uncovered here is whatever actually calls a
+  native function pointer (the `Transform`/`RigidBody`/`Camera`/... wrapper methods, once
+  `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry point (can't be called
+  from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
+  reachable the same way, as pure code over plain objects. Private product logic is exposed to this
+  project through `internal` + `InternalsVisibleTo` (see `Transport/AssemblyInfo.cs` and
+  `ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`
+  under `$(BuildRoot)obj/tests/` and `$(BuildRoot)bin/tests/` — one level deeper than `Transport`'s own
+  `$(BuildRoot)obj/` — so referencing `ECS3DNetTransport` by `ProjectReference` (which inherits the
+  `BuildRoot` global property `dotnet test` is invoked with) keeps the two projects' generated `obj`
+  output in separate directories — the CS0579 trap below. `ScriptBridge`'s own `Directory.Build.props`
+  additionally checks `ecs3d_add_managed_assembly`'s `DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH` env var
+  itself (not the `.csproj` body, which is imported too late for `BaseIntermediateOutputPath` to reliably
+  take a value set there — the same `MSB3539` timing this file's own `Directory.Build.props` notes): when
+  that env var is set (the CMake publish), it wins unchanged; otherwise (a `ProjectReference` build under
+  someone else's `BuildRoot`, as `ECS3DManagedTests` now makes) the fallback nests under a `ScriptBridge/`
+  subfolder (`$(BuildRoot)obj/ScriptBridge/`) rather than the literal `$(BuildRoot)obj/` `Transport` uses,
+  so referencing both from this project under one shared `BuildRoot` does not point their generated `obj`
+  output at the same directory — the same trap between the two referenced assemblies instead of between
+  this project and one of them. The
   CTest command is `dotnet test <csproj> -c Release -p:BuildRoot=...`, so building the project happens
   only when ctest runs it, not as a step of a plain `cmake --build`: add a new managed test by adding a
   `.cs` file under `source/tests/managed/` (globbed automatically, unlike the native suite's explicit
   source list) and running it through `check`, the same way as every other test here. On a machine with
-  a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio` and the
-  test-SDK package this project references (see `ECS3DManagedTests.csproj`), which needs network
-  access.
+  a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio`, the
+  test-SDK package, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (see
+  `ECS3DManagedTests.csproj`), which needs network access.
 - **Dependency direction (must hold):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd + log. `net`/`scripting` →
