@@ -31,7 +31,7 @@ constexpr std::array<BindingCoverageEntry, static_cast<size_t>(ComponentType::co
   { ComponentType::SubComponentType_boxCollider,   BindingStatus::bound },        // ColliderBindings
   { ComponentType::SubComponentType_sphereCollider,BindingStatus::bound },        // ColliderBindings
   { ComponentType::script,                         BindingStatus::nativeOnly },   // the scripting system itself; a script doesn't bind to its own component
-  { ComponentType::playerController,               BindingStatus::nativeOnly },   // read internally to resolve a player's input slot (InputUtilsBindings), no direct script surface
+  { ComponentType::playerController,               BindingStatus::bound },        // PlayerControllerBindings
   { ComponentType::camera,                         BindingStatus::bound }         // CameraBindings
 }};
 
