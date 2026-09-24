@@ -400,8 +400,9 @@ there is no player-agnostic aggregate for mouse position/delta/scroll/buttons be
 focus, a position has no sensible "any player" combination; only the per-object reads make sense there.
 `PlayerControllerBindings` covers the component's only field, `playerSlot` - `getPlayerSlot`/`setPlayerSlot`
 plus `has` - reached via `World.tryGetPlayerController` (including a script's own object, by passing
-`ScriptBase.EntityId`); `setPlayerSlot` has no validation to defer to, since `PlayerController::setPlayerSlot`
-accepts any `int32_t` and negative/out-of-range slots simply never match a connected player.
+`ScriptBase.EntityId`). `PlayerController::setPlayerSlot` does not constrain the value it is given, so
+neither does the setter: a negative or unassigned slot matches no connected player, so the object reads
+no input.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers
