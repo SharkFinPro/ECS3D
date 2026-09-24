@@ -67,7 +67,7 @@ void EditorApp::undo()
 
   if (!m_editHistory.nextUndoIsReversible())
   {
-    logMessage("Info", "Can't undo: an object removal can't be undone yet.");
+    logMessage("Info", "Can't undo: that command has no reverse yet.");
     return;
   }
 
@@ -112,7 +112,7 @@ void EditorApp::redo()
 
   if (!m_editHistory.nextRedoIsReversible())
   {
-    logMessage("Info", "Can't redo: an object removal can't be redone yet.");
+    logMessage("Info", "Can't redo: that command has no reverse yet.");
     return;
   }
 

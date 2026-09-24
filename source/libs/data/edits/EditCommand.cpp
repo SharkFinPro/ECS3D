@@ -195,6 +195,50 @@ namespace {
 
     return registryKey == "Script" && !className.empty() ? "Script " + className : registryKey;
   }
+
+  // The Transform component's own serialize() blob out of a serialized object node - every object always
+  // carries one (Object's constructor adds it), so an empty result here only means a corrupted stored
+  // blob, not a real object without a Transform.
+  nlohmann::json transformBlobOf(const nlohmann::json& objectNode)
+  {
+    for (const auto& component : objectNode.value("components", nlohmann::json::array()))
+    {
+      if (component.value("type", std::string{}) == "Transform")
+      {
+        return component;
+      }
+    }
+
+    return nlohmann::json::object();
+  }
+
+  // A removeObject's undo needs to reclaim its still-live promoted children back under the object it is
+  // recreating (see EditCommand.h's isReversible and Replication.h's buildRestoreObject): one entry per
+  // direct child recorded on the removed subtree, naming its uuid, the sibling index it held under that
+  // object, and its own recorded local Transform - the exact pre-removal values,
+  // deleteObjectsMarkedForDeletion's own WorldPlacement rewrite is never seen by undo at all.
+  nlohmann::json buildRestoreAdoptList(const nlohmann::json& removedSubtree)
+  {
+    nlohmann::json adopt = nlohmann::json::array();
+
+    if (!removedSubtree.contains("children"))
+    {
+      return adopt;
+    }
+
+    const auto& children = removedSubtree.at("children");
+    for (std::size_t index = 0; index < children.size(); ++index)
+    {
+      const auto& child = children.at(index);
+      adopt.push_back({
+        { "object", child.at("uuid") },
+        { "index", index },
+        { "transform", transformBlobOf(child) }
+      });
+    }
+
+    return adopt;
+  }
 }
 
 EditCommand EditCommand::componentEdit(const uuids::uuid& objectUUID, const nlohmann::json& before,
@@ -429,13 +473,8 @@ PayloadForm EditCommand::payloadForm() const
 
 bool EditCommand::isReversible() const
 {
-  switch (m_kind)
-  {
-    case CommandKind::removeObject:
-      return false;
-    default:
-      return true;
-  }
+  // Every kind undoes today - see the header's comment on why this stays a real check.
+  return true;
 }
 
 uuids::uuid EditCommand::primaryUUID() const
@@ -583,6 +622,50 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
       if (!objectManager.getObjectByUUID(data.objectUUID))
       {
         return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::removeObject:
+    {
+      const auto& data = std::get<RemoveObjectData>(m_data);
+
+      // "after" a removal is: the object absent, its recorded parent (if any) still there, and every
+      // direct child this command recorded still living under that same parent -
+      // deleteObjectsMarkedForDeletion promotes them there, so that is exactly what undo is about to
+      // reclaim back under the object it recreates.
+      if (objectManager.getObjectByUUID(data.objectUUID))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      if (data.parentUUID && !objectManager.getObjectByUUID(*data.parentUUID))
+      {
+        return { ValidationFailure::targetMissing, *data.parentUUID };
+      }
+
+      const auto removedSubtree = nlohmann::json::parse(data.removedSubtreeJSON);
+      if (removedSubtree.contains("children"))
+      {
+        for (const auto& child : removedSubtree.at("children"))
+        {
+          const auto childUUID = uuids::uuid::from_string(std::string(child.at("uuid")));
+          if (!childUUID.has_value())
+          {
+            return { ValidationFailure::targetChanged, data.objectUUID };
+          }
+
+          const auto liveChild = objectManager.getObjectByUUID(childUUID.value());
+          if (!liveChild)
+          {
+            return { ValidationFailure::targetMissing, childUUID.value() };
+          }
+
+          if (!parentMatches(liveChild, data.parentUUID))
+          {
+            return { ValidationFailure::targetChanged, childUUID.value() };
+          }
+        }
       }
 
       return {};
@@ -807,6 +890,25 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::removeObject:
+    {
+      const auto& data = std::get<RemoveObjectData>(m_data);
+
+      // "before" a removal is the object sitting there under the recorded parent - what redo (an ordinary
+      // removeObject) is about to remove again.
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      if (!parentMatches(object, data.parentUUID))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
     case CommandKind::reparentObject:
     {
       const auto& data = std::get<ReparentObjectData>(m_data);
@@ -1027,6 +1129,21 @@ nlohmann::json EditCommand::buildUndoJSON(const ObjectManager& objectManager) co
       const auto& data = std::get<AddObjectData>(m_data);
       return replication::buildRemoveObject(data.objectUUID);
     }
+    case CommandKind::removeObject:
+    {
+      // Recreate the removed object from its recorded subtree, then reclaim its direct children (still
+      // live, promoted to its parent by deleteObjectsMarkedForDeletion) back under it via "adopt" - see
+      // Replication.h's buildRestoreObject. The body's own "children" would otherwise collide with those
+      // already-live uuids, so it goes in empty; the adopt list is what actually restores them.
+      const auto& data = std::get<RemoveObjectData>(m_data);
+      auto body = nlohmann::json::parse(data.removedSubtreeJSON);
+      const auto adopt = buildRestoreAdoptList(body);
+      body["children"] = nlohmann::json::array();
+
+      return data.parentUUID
+        ? replication::buildRestoreObject(body, &*data.parentUUID, data.siblingIndex, &adopt)
+        : replication::buildRestoreObject(body, nullptr, data.siblingIndex, &adopt);
+    }
     case CommandKind::reparentObject:
     {
       const auto& data = std::get<ReparentObjectData>(m_data);
@@ -1088,6 +1205,14 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
       return data.parentUUID
         ? replication::buildAddObject(data.name, &*data.parentUUID, &data.objectUUID)
         : replication::buildAddObject(data.name, nullptr, &data.objectUUID);
+    }
+    case CommandKind::removeObject:
+    {
+      // The ordinary removeObject op, by uuid - the entry undo() moved onto the redo stack still targets
+      // data.objectUUID (undo() preserves it, unlike a fresh-uuid creation), so redoing it is exactly what
+      // the original edit did.
+      const auto& data = std::get<RemoveObjectData>(m_data);
+      return replication::buildRemoveObject(data.objectUUID);
     }
     case CommandKind::reparentObject:
     {

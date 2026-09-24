@@ -286,23 +286,96 @@ TEST(EditHistory, UndoRefusesWhenTheObjectNoLongerExists)
   EXPECT_EQ(controlOutcome.result, edits::HistoryResult::applied);
 }
 
-// removeObject is the one structural kind with no faithful reverse: deleteObjectsMarkedForDeletion
-// promotes the removed object's children up to its own parent rather than deleting them, and no existing
-// sceneEdit op can both recreate the removed object and reclaim those already-live children in one atomic
-// edit (see EditCommand.h's isReversible). removeComponent/duplicateObject/instantiatePrefab are covered
-// as ordinary reversible kinds in EditHistoryRoundTripTest.cpp instead.
-TEST(EditHistory, RemoveObjectRefusesCleanlyInsteadOfProducingAWrongReverse)
+// removeObject's undo (restoreObject's "adopt" field - see EditCommand.h's isReversible) validates
+// against the live scene the same way every other kind does: it is refused, naming the conflicting uuid,
+// when a recorded direct child has moved out from under the parent it was promoted to before undo runs.
+// The ordinary round trip (no interference) is EditHistoryRoundTripTest.cpp's
+// UndoAndRedoRoundTripARemoveObjectWithAPromotedChild - this is its refusal counterpart.
+TEST(EditHistory, UndoOfARemoveObjectRefusesWhenAPromotedChildWasMovedElsewhereFirst)
+{
+  // Positive control: without interference, undo restores the object and reclaims its child, as the round
+  // trip test already covers in detail - checked minimally here to prove the setup below is otherwise sound.
+  {
+    auto scene = makeScene();
+    const auto parent = addObject(scene, "Parent");
+    const auto x = addChildObject(scene, "X", parent);
+    const auto c1 = addChildObject(scene, "C1", x);
+
+    const auto xUUID = x->getUUID();
+    const auto parentUUID = parent->getUUID();
+    const auto preRemovalBody = x->serialize();
+
+    edits::EditHistory history;
+    history.record(edits::EditCommand::removeObject(xUUID, parentUUID, 0, preRemovalBody));
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRemoveObject(xUUID)),
+              replication::SceneEditResult::applied);
+    ASSERT_EQ(c1->getParent(), parent);
+
+    const auto outcome = history.undo(*scene.objectManager);
+    EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
+    ASSERT_TRUE(outcome.jsonPayload.has_value());
+    EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *outcome.jsonPayload),
+              replication::SceneEditResult::applied);
+    EXPECT_NE(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+    EXPECT_EQ(c1->getParent(), scene.objectManager->getObjectByUUID(xUUID));
+  }
+
+  // Same setup, but something else reparents the promoted child away from Parent before undo runs: the
+  // slot this entry expects to reclaim C1 from is no longer where C1 lives, so undo refuses by naming C1
+  // rather than reclaiming the wrong object or silently doing nothing.
+  {
+    auto scene = makeScene();
+    const auto parent = addObject(scene, "Parent");
+    const auto elsewhere = addObject(scene, "Elsewhere");
+    const auto x = addChildObject(scene, "X", parent);
+    const auto c1 = addChildObject(scene, "C1", x);
+
+    const auto xUUID = x->getUUID();
+    const auto parentUUID = parent->getUUID();
+    const auto preRemovalBody = x->serialize();
+
+    edits::EditHistory history;
+    history.record(edits::EditCommand::removeObject(xUUID, parentUUID, 0, preRemovalBody));
+
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRemoveObject(xUUID)),
+              replication::SceneEditResult::applied);
+    ASSERT_EQ(c1->getParent(), parent);
+
+    const auto elsewhereUUID = elsewhere->getUUID();
+    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+                replication::buildReparentObject(c1->getUUID(), &elsewhereUUID)),
+              replication::SceneEditResult::applied);
+    ASSERT_EQ(c1->getParent(), elsewhere);
+
+    const auto outcome = history.undo(*scene.objectManager);
+    EXPECT_EQ(outcome.result, edits::HistoryResult::targetChanged);
+    ASSERT_TRUE(outcome.conflict.has_value());
+    EXPECT_EQ(*outcome.conflict, c1->getUUID());
+    EXPECT_FALSE(history.canUndo());
+
+    // The interference is left exactly as it was - the refused undo touched nothing, and X is still gone.
+    EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+    EXPECT_EQ(c1->getParent(), elsewhere);
+  }
+}
+
+// Same shape, but the divergence is the removed object itself reappearing (someone else restored an
+// object under the same uuid) rather than one of its children moving.
+TEST(EditHistory, UndoOfARemoveObjectRefusesWhenTheObjectItselfAlreadyExists)
 {
   auto scene = makeScene();
 
   edits::EditHistory history;
-
   history.record(edits::EditCommand::removeObject(scene.object->getUUID(), std::nullopt, 0,
                                                    scene.object->serialize()));
-  auto outcome = history.undo(*scene.objectManager);
-  EXPECT_EQ(outcome.result, edits::HistoryResult::notUndoable);
-  EXPECT_FALSE(outcome.jsonPayload.has_value());
-  EXPECT_FALSE(outcome.messagePayload.has_value());
+
+  // The object was never actually removed (only the command was recorded, the way a stale/duplicated
+  // history entry could arise) - "after" a removal is absence, and it is still right there.
+  const auto outcome = history.undo(*scene.objectManager);
+  EXPECT_EQ(outcome.result, edits::HistoryResult::targetChanged);
+  ASSERT_TRUE(outcome.conflict.has_value());
+  EXPECT_EQ(*outcome.conflict, scene.object->getUUID());
   EXPECT_FALSE(history.canUndo());
 
   // Positive control: an ordinary reversible command recorded in the same history still undoes fine.
@@ -313,8 +386,8 @@ TEST(EditHistory, RemoveObjectRefusesCleanlyInsteadOfProducingAWrongReverse)
   const auto after = transform->serialize();
   history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before, after));
 
-  outcome = history.undo(*scene.objectManager);
-  EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
+  const auto controlOutcome = history.undo(*scene.objectManager);
+  EXPECT_EQ(controlOutcome.result, edits::HistoryResult::applied);
 }
 
 TEST(EditHistory, UndoOfARemoveComponentRefusesWhenSomethingAlreadyReaddedTheComponent)
@@ -540,6 +613,9 @@ TEST(EditHistory, NextUndoKindNamesTheTopOfTheUndoStackWithoutPoppingIt)
 
   edits::EditHistory history;
   history.record(edits::EditCommand::componentEdit(scene.object->getUUID(), before, after));
+  // Recorded but never actually applied to the scene, so "after" a removal (the object being absent) does
+  // not hold - undo() will refuse this one as targetChanged rather than apply it, which is exactly what
+  // this test wants: something on top for nextUndoKind() to name regardless of kind.
   history.record(edits::EditCommand::removeObject(scene.object->getUUID(), std::nullopt, 0,
                                                    scene.object->serialize()));
 
@@ -550,7 +626,7 @@ TEST(EditHistory, NextUndoKindNamesTheTopOfTheUndoStackWithoutPoppingIt)
   // Peeking is read-only: the stack still holds both entries, and undoing still walks them in order.
   EXPECT_TRUE(history.canUndo());
   const auto outcome = history.undo(*scene.objectManager);
-  EXPECT_EQ(outcome.result, edits::HistoryResult::notUndoable);
+  EXPECT_EQ(outcome.result, edits::HistoryResult::targetChanged);
 
   // The refused removeObject and everything older (the componentEdit beneath it) were dropped together,
   // the same sequential-refusal rule as any other undo() conflict.
@@ -589,8 +665,10 @@ TEST(EditHistory, NextRedoKindNamesTheTopOfTheRedoStackWithoutPoppingIt)
 }
 
 // --- nextUndoIsReversible()/nextRedoIsReversible(): EditorApp::undo()/redo() gate on these instead of
-// comparing nextUndoKind()/nextRedoKind() against a single allowed kind, so every reversible kind (not
-// just componentEdit) gets sent, while the four non-reversible kinds stay refused and left on the stack.
+// comparing nextUndoKind()/nextRedoKind() against a single allowed kind, so every reversible kind gets
+// sent. Every CommandKind is reversible today (see EditCommand.h's isReversible), so there is no longer a
+// kind that exercises the "false for a real entry" case below beyond the empty-stack ones - the mechanism
+// stays as the extension point for a future kind that has none.
 
 TEST(EditHistory, NextUndoAndRedoIsReversibleAreFalseOnEmptyStacks)
 {
@@ -621,23 +699,6 @@ TEST(EditHistory, NextUndoIsReversibleIsTrueForAReversibleCommandOnTopWithoutPop
   ASSERT_TRUE(history.canUndo());
   const auto outcome = history.undo(*scene.objectManager);
   EXPECT_TRUE(outcome.ok());
-}
-
-TEST(EditHistory, NextUndoIsReversibleIsFalseForANonReversibleCommandOnTopAndLeavesItInPlace)
-{
-  auto scene = makeScene();
-
-  edits::EditHistory history;
-  history.record(edits::EditCommand::removeObject(scene.object->getUUID(), std::nullopt, 0,
-                                                   scene.object->serialize()));
-
-  EXPECT_FALSE(history.nextUndoIsReversible());
-
-  // Positive control: the stack is untouched by the peek - the same removeObject is still on top,
-  // reported the same way nextUndoKind() would name it.
-  ASSERT_TRUE(history.canUndo());
-  ASSERT_TRUE(history.nextUndoKind().has_value());
-  EXPECT_EQ(*history.nextUndoKind(), edits::CommandKind::removeObject);
 }
 
 TEST(EditHistory, NextRedoIsReversibleIsTrueForAReversibleCommandOnTopWithoutPoppingIt)
@@ -672,12 +733,13 @@ TEST(EditHistory, NextRedoIsReversibleIsFalseOnAnEmptyRedoStackEvenWithAnUndoSta
   auto scene = makeScene();
 
   edits::EditHistory history;
-  history.record(edits::EditCommand::removeObject(scene.object->getUUID(), std::nullopt, 0,
-                                                   scene.object->serialize()));
+  history.record(edits::EditCommand::renameObject(scene.object->getUUID(), "Object", "Renamed"));
 
-  // Positive control: the undo side reports a real (non-reversible) entry, while the redo side is simply
-  // empty - two different reasons the peek can come back false.
+  // Positive control: the undo side reports a real, reversible entry, while the redo side is simply empty
+  // (nothing has been undone yet) - two different reasons the peek can come back false for the redo side
+  // specifically, not the same reason as an empty undo stack.
   ASSERT_TRUE(history.canUndo());
+  EXPECT_TRUE(history.nextUndoIsReversible());
   EXPECT_FALSE(history.canRedo());
   EXPECT_FALSE(history.nextRedoIsReversible());
 }

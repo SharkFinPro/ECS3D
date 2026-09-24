@@ -423,6 +423,82 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveComponent)
   EXPECT_FALSE(scene.object->getComponents().contains(ComponentType::rigidBody));
 }
 
+// removeObject undoes through restoreObject's "adopt" field: deleteObjectsMarkedForDeletion promotes the
+// removed object's direct children up to its own parent rather than deleting them, so undo has to both
+// recreate the removed object AND reclaim those still-live children back under it - see AGENTS.md's Editor
+// Undo/Redo section and EditCommand.h's isReversible.
+TEST(EditHistory, UndoAndRedoRoundTripARemoveObjectWithAPromotedChild)
+{
+  auto scene = makeScene();
+  const auto parent = addObject(scene, "Parent");
+  const auto a = addChildObject(scene, "A", parent);
+  const auto x = addChildObject(scene, "X", parent);
+  const auto b = addChildObject(scene, "B", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+
+  // X sits off-origin so promoting C1 to Parent actually rewrites its local values - the recorded
+  // pre-removal value {1,2,3} has to differ from whatever it is promoted to for this to prove anything.
+  transformOf(x)->setPosition({ 10, 0, 0 });
+  transformOf(c1)->setPosition({ 1, 2, 3 });
+
+  const auto xUUID = x->getUUID();
+  const auto parentUUID = parent->getUUID();
+  const auto preRemovalBody = x->serialize();
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::removeObject(xUUID, parentUUID, 1, preRemovalBody));
+
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRemoveObject(xUUID)),
+            replication::SceneEditResult::applied);
+  ASSERT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+  ASSERT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, b }));
+  ASSERT_EQ(c1->getParent(), parent);
+
+  // Undo: X comes back at its old index between A and B, C1 is its child again at its recorded
+  // pre-removal local transform - not whatever WorldPlacement left it at while promoted under Parent.
+  const auto undoOutcome = history.undo(*scene.objectManager);
+  ASSERT_TRUE(undoOutcome.ok());
+  ASSERT_TRUE(undoOutcome.jsonPayload.has_value());
+  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
+            replication::SceneEditResult::applied);
+
+  ASSERT_EQ(parent->getChildren().size(), 3u);
+  const auto restoredX = parent->getChildren()[1];
+  EXPECT_EQ(restoredX->getUUID(), xUUID);
+  EXPECT_EQ(restoredX->getName(), "X");
+  EXPECT_EQ(parent->getChildren()[0], a);
+  EXPECT_EQ(parent->getChildren()[2], b);
+  ASSERT_EQ(restoredX->getChildren().size(), 1u);
+  EXPECT_EQ(restoredX->getChildren().front(), c1);
+  EXPECT_EQ(c1->getParent(), restoredX);
+  expectNear(transformOf(c1)->getLocalPosition(), { 1, 2, 3 });
+  expectNear(transformOf(restoredX)->getLocalPosition(), { 10, 0, 0 });
+
+  // Redo: deleted again, C1 promoted back to Parent exactly as the first removal left it.
+  const auto redoOutcome = history.redo(*scene.objectManager);
+  ASSERT_TRUE(redoOutcome.ok());
+  ASSERT_TRUE(redoOutcome.jsonPayload.has_value());
+  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload),
+            replication::SceneEditResult::applied);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+  EXPECT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, b }));
+  EXPECT_EQ(c1->getParent(), parent);
+
+  // Undo again: the round trip still works a second time.
+  const auto secondUndoOutcome = history.undo(*scene.objectManager);
+  ASSERT_TRUE(secondUndoOutcome.ok());
+  ASSERT_TRUE(secondUndoOutcome.jsonPayload.has_value());
+  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *secondUndoOutcome.jsonPayload),
+            replication::SceneEditResult::applied);
+
+  ASSERT_EQ(parent->getChildren().size(), 3u);
+  const auto restoredAgain = parent->getChildren()[1];
+  EXPECT_EQ(restoredAgain->getUUID(), xUUID);
+  ASSERT_EQ(restoredAgain->getChildren().size(), 1u);
+  EXPECT_EQ(restoredAgain->getChildren().front(), c1);
+  expectNear(transformOf(c1)->getLocalPosition(), { 1, 2, 3 });
+}
+
 namespace {
   // Shared shape assertion for the duplicateObject/instantiatePrefab round trips below: one child at the
   // recorded local position, carrying a RigidBody with the recorded mass - a non-Transform component,
