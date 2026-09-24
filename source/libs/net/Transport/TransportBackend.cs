@@ -62,8 +62,10 @@ internal abstract class TransportBackend
 
   // editMode is the launch-capability gate: only an edit-mode server may grant Role.editor at the
   // handshake, and only when the presented token matches expectedToken (see Authorize). Set at ServerStart.
-  protected bool EditMode;
-  protected string ExpectedToken = "";
+  // Internal (rather than protected) so ECS3DManagedTests can drive Authorize directly against a concrete
+  // backend instance via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
+  internal bool EditMode;
+  internal string ExpectedToken = "";
 
   public abstract void ServerStart(int port, bool editMode, string expectedToken);
   public abstract void ServerStop();
@@ -87,7 +89,9 @@ internal abstract class TransportBackend
   // non-edit server, where it gets a read-only view (the server simply honors no edits from it). The one
   // hard rejection is a real auth failure: an editor offering the wrong token to an edit server that
   // configured one. Whether an admitted editor may actually edit is conveyed separately via editStatus.
-  protected bool Authorize(byte[] payload)
+  // Internal (rather than protected) so ECS3DManagedTests can call it directly against a concrete backend
+  // instance via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
+  internal bool Authorize(byte[] payload)
   {
     if (payload.Length < 1)
     {
