@@ -23,11 +23,12 @@ void ComponentEditor::registerHandler(const std::string& typeName, GuiHandler ha
   m_handlers[typeName] = std::move(handler);
 }
 
-bool ComponentEditor::displayGui(const std::string& typeName, const std::shared_ptr<Component>& component) const
+bool ComponentEditor::displayGui(const std::string& typeName, const std::shared_ptr<Component>& component,
+                                 const MixedFields& mixedFields) const
 {
   if (const auto it = m_handlers.find(typeName); it != m_handlers.end())
   {
-    return it->second(component);
+    return it->second(component, mixedFields);
   }
 
   return false;

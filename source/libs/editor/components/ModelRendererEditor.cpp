@@ -2,6 +2,7 @@
 #include "../ComponentEditor.h"
 #include "../AssetDragDrop.h"
 #include "../GuiComponents.h"
+#include "../MixedFields.h"
 #include <objects/components/ModelRenderer.h>
 #include <assets/AssetRegistry.h>
 #include <GpuAssetCache.h>
@@ -73,7 +74,8 @@ void registerModelRendererEditor(ComponentEditor& componentEditor,
                                  const AssetRegistry* assetRegistry)
 {
   componentEditor.registerHandler("Model Renderer",
-    [cache = std::move(assetCache), registry = assetRegistry](const std::shared_ptr<Component>& component) -> bool {
+    [cache = std::move(assetCache), registry = assetRegistry](const std::shared_ptr<Component>& component,
+                                                               const MixedFields& mixed) -> bool {
     const auto modelRenderer = std::dynamic_pointer_cast<ModelRenderer>(component);
     if (!modelRenderer)
     {
@@ -87,20 +89,20 @@ void registerModelRendererEditor(ComponentEditor& componentEditor,
       bool useStandardPipeline = modelRenderer->getUseStandardPipeline();
       bool shouldRender = modelRenderer->getShouldRender();
 
-      if (gc::accentCheckbox("Use Standard Pipeline", &useStandardPipeline))
+      if (gc::accentCheckbox("Use Standard Pipeline", &useStandardPipeline, mixed.contains("useStandardPipeline")))
       {
         modelRenderer->setUseStandardPipeline(useStandardPipeline);
         edited = true;
       }
 
-      if (gc::accentCheckbox("Render", &shouldRender))
+      if (gc::accentCheckbox("Render", &shouldRender, mixed.contains("shouldRender")))
       {
         modelRenderer->setShouldRender(shouldRender);
         edited = true;
       }
 
       float reflectivity = modelRenderer->getReflectivity();
-      if (gc::accentSlider("Reflectivity", &reflectivity, 0.0f, 1.0f))
+      if (gc::accentSlider("Reflectivity", &reflectivity, 0.0f, 1.0f, mixed.contains("reflectivity")))
       {
         modelRenderer->setReflectivity(reflectivity);
         edited = true;

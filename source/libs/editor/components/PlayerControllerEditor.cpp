@@ -1,6 +1,7 @@
 #include "PlayerControllerEditor.h"
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
+#include "../MixedFields.h"
 #include <objects/components/PlayerController.h>
 #include <imgui.h>
 #include <algorithm>
@@ -9,7 +10,8 @@
 void registerPlayerControllerEditor(ComponentEditor& componentEditor)
 {
   // Keyed by the componentTypeToString display name (what ObjectGUIManager looks the handler up by).
-  componentEditor.registerHandler("Player Controller", [](const std::shared_ptr<Component>& component) -> bool {
+  componentEditor.registerHandler("Player Controller",
+    [](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
     const auto playerController = std::dynamic_pointer_cast<PlayerController>(component);
     if (!playerController)
     {
@@ -39,10 +41,12 @@ void registerPlayerControllerEditor(ComponentEditor& componentEditor)
       }
       ImGui::SameLine();
       ImGui::SetNextItemWidth(dragWidth);
+      ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, mixed.contains("playerSlot"));
       if (ImGui::DragInt("##playerSlot", &slot, 0.1f, 0, 255))
       {
         slotEdited = true;
       }
+      ImGui::PopItemFlag();
       ImGui::SameLine();
       if (ImGui::Button("+", ImVec2(step, step)))
       {

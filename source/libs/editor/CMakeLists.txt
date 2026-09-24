@@ -5,6 +5,7 @@ add_library(${PROJECT_NAME}
   ComponentEditor.h
   EditorTheme.h
   GuiComponents.h
+  MixedFields.h
   ObjectGUIManager.cpp
   ObjectGUIManager.h
   InspectorPanel.cpp

@@ -1,6 +1,7 @@
 #include "TransformEditor.h"
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
+#include "../MixedFields.h"
 #include <objects/components/Transform.h>
 #include <glm/vec3.hpp>
 #include <imgui.h>
@@ -8,7 +9,8 @@
 
 void registerTransformEditor(ComponentEditor& componentEditor)
 {
-  componentEditor.registerHandler("Transform", [](const std::shared_ptr<Component>& component) -> bool {
+  componentEditor.registerHandler("Transform",
+    [](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
     const auto transform = std::dynamic_pointer_cast<Transform>(component);
     if (!transform)
     {
@@ -25,26 +27,26 @@ void registerTransformEditor(ComponentEditor& componentEditor)
       glm::vec3 rotation = transform->getLocalRotation();
       glm::vec3 scale = transform->getLocalScale();
 
-      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z))
+      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z, 0.1f, mixed.contains("position")))
       {
         transform->setPosition(position);
         edited = true;
       }
 
-      if (gc::xyzGuiBoxed("Rotation", &rotation.x, &rotation.y, &rotation.z))
+      if (gc::xyzGuiBoxed("Rotation", &rotation.x, &rotation.y, &rotation.z, 0.1f, mixed.contains("rotation")))
       {
         transform->setRotation(rotation);
         edited = true;
       }
 
-      if (gc::xyzGuiBoxed("Scale", &scale.x, &scale.y, &scale.z))
+      if (gc::xyzGuiBoxed("Scale", &scale.x, &scale.y, &scale.z, 0.1f, mixed.contains("scale")))
       {
         transform->setScale(scale);
         edited = true;
       }
 
       float combinedScale = (scale.x + scale.y + scale.z) / 3.0f;
-      if (gc::accentSlider("Scale All", &combinedScale, 0.0f, 10.0f))
+      if (gc::accentSlider("Scale All", &combinedScale, 0.0f, 10.0f, mixed.contains("scale")))
       {
         transform->setScale(glm::vec3(combinedScale));
         edited = true;
