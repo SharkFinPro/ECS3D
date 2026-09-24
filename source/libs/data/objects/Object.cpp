@@ -131,13 +131,36 @@ void Object::addComponent(const std::shared_ptr<Component>& component)
 
 void Object::removeComponent(const std::shared_ptr<Component>& component)
 {
+  // Erase by identity, not just by type/slot: a component instance that is not actually the one this
+  // object holds (a stale pointer, or the wrong instance of the same type) must not be stopped, and
+  // must not evict whatever this object actually has in that slot.
   if (component->getType() == ComponentType::script)
   {
-    std::erase(m_scripts, component);
+    const auto scriptIt = std::ranges::find(m_scripts, component);
+    if (scriptIt == m_scripts.end())
+    {
+      return;
+    }
+
+    m_scripts.erase(scriptIt);
   }
   else
   {
-    m_components.erase(component->getType());
+    const auto componentIt = m_components.find(component->getType());
+    if (componentIt == m_components.end() || componentIt->second != component)
+    {
+      return;
+    }
+
+    m_components.erase(componentIt);
+  }
+
+  // Mirrors addComponent: a component removed from a running object stays live (its ComponentVariables
+  // still backed by the runtime value) unless stopped here, so it would serialize with whatever the run
+  // last wrote to it instead of its authored value if the object is saved after removal.
+  if (m_started)
+  {
+    component->stop();
   }
 }
 
