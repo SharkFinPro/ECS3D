@@ -113,12 +113,15 @@
   `$(BuildRoot)obj/` — so referencing `ECS3DNetTransport` by `ProjectReference` (which inherits the
   `BuildRoot` global property `dotnet test` is invoked with) keeps the two projects' generated `obj`
   output in separate directories — the CS0579 trap below. `ScriptBridge`'s own `Directory.Build.props`
-  additionally nests its fallback `obj` path under a `ScriptBridge/` subfolder
-  (`$(BuildRoot)obj/ScriptBridge/`, used only when `ecs3d_add_managed_assembly`'s
-  `DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH` override isn't set): without it, a `ScriptBridge` reference
-  here would fall back to the same literal `$(BuildRoot)obj/` that `Transport` already uses under this
-  project's shared `BuildRoot`, hitting the same trap between the two referenced assemblies instead of
-  between this project and one of them. The
+  additionally checks `ecs3d_add_managed_assembly`'s `DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH` env var
+  itself (not the `.csproj` body, which is imported too late for `BaseIntermediateOutputPath` to reliably
+  take a value set there — the same `MSB3539` timing this file's own `Directory.Build.props` notes): when
+  that env var is set (the CMake publish), it wins unchanged; otherwise (a `ProjectReference` build under
+  someone else's `BuildRoot`, as `ECS3DManagedTests` now makes) the fallback nests under a `ScriptBridge/`
+  subfolder (`$(BuildRoot)obj/ScriptBridge/`) rather than the literal `$(BuildRoot)obj/` `Transport` uses,
+  so referencing both from this project under one shared `BuildRoot` does not point their generated `obj`
+  output at the same directory — the same trap between the two referenced assemblies instead of between
+  this project and one of them. The
   CTest command is `dotnet test <csproj> -c Release -p:BuildRoot=...`, so building the project happens
   only when ctest runs it, not as a step of a plain `cmake --build`: add a new managed test by adding a
   `.cs` file under `source/tests/managed/` (globbed automatically, unlike the native suite's explicit
