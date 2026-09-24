@@ -2,6 +2,7 @@
 #include "AssetDragDrop.h"
 #include "ComponentEditor.h"
 #include "GuiComponents.h"
+#include "MixedFields.h"
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <objects/ComponentFieldDelta.h>
@@ -404,8 +405,9 @@ void ObjectInspector::displayMultiComponent(const std::vector<std::shared_ptr<Ob
   const auto mixedKeys = componentFieldDelta::mixedTopLevelKeys(jsons);
   if (!mixedKeys.empty())
   {
-    // Distinct mixed-value affordance: naming the differing fields rather than silently showing the
-    // primary object's value, which would invite overwriting the rest of the selection by accident.
+    // Still worth naming even though the widgets below show their own mixed state now: a few fields
+    // (an asset reference slot, the collider layer mask popup, a non-numeric script field) have no
+    // per-widget mixed affordance, so this is the only place those show up as differing.
     std::string mixedLabel = "Mixed values: ";
     for (std::size_t i = 0; i < mixedKeys.size(); ++i)
     {
@@ -418,11 +420,13 @@ void ObjectInspector::displayMultiComponent(const std::vector<std::shared_ptr<Ob
     ImGui::TextColored(theme::t3, "%s", mixedLabel.c_str());
   }
 
+  const MixedFields mixedFields(std::unordered_set<std::string>(mixedKeys.begin(), mixedKeys.end()));
+
   const bool gatheringThisComponent = m_multiPendingSignature == signature;
   const auto key = componentTypeToString.at(
     primary->getSubType() != ComponentType::SubComponentType_none ? primary->getSubType() : primary->getType());
 
-  if (m_componentEditor->displayGui(key, primary))
+  if (m_componentEditor->displayGui(key, primary, mixedFields))
   {
     if (!gatheringThisComponent)
     {

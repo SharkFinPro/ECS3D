@@ -1,6 +1,7 @@
 #include "ColliderEditor.h"
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
+#include "../MixedFields.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
@@ -54,13 +55,14 @@ namespace {
   // Layer index (0-31) + collision mask rows, shared by both collider shapes since the fields live on the
   // Collider base. The mask is edited as per-layer checkboxes in a popup rather than a raw bitmask.
   // Returns true if either was edited this frame.
-  bool colliderLayerMaskEditor(const std::shared_ptr<Collider>& collider)
+  bool colliderLayerMaskEditor(const std::shared_ptr<Collider>& collider, const MixedFields& mixed)
   {
     bool edited = false;
 
     // This collider's own layer: a drag field flanked by -/+ steppers.
     int layer = static_cast<int>(collider->getLayer());
     bool layerEdited = false;
+    const bool layerMixed = mixed.contains("layer");
 
     gc::rowLabel("Layer");
     ImGui::PushID("ColliderLayer");
@@ -75,10 +77,12 @@ namespace {
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(dragWidth);
+    ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, layerMixed);
     if (ImGui::DragInt("##layer", &layer, 0.1f, 0, 31))
     {
       layerEdited = true;
     }
+    ImGui::PopItemFlag();
     ImGui::SameLine();
     if (ImGui::Button("+", ImVec2(step, step)) && layer < 31)
     {
@@ -93,13 +97,17 @@ namespace {
       edited = true;
     }
 
-    // Which layers this collider collides with, as a checklist popup (bit N = layer N).
+    // Which layers this collider collides with, as a checklist popup (bit N = layer N). The button is
+    // custom-drawn text rather than a stock widget ImGuiItemFlags_MixedValue can format, so a disagreeing
+    // mask shows "Mixed" on the button face directly instead.
     uint32_t mask = collider->getMask();
     bool maskEdited = false;
+    const bool maskMixed = mixed.contains("mask");
 
     gc::rowLabel("Collides With");
     ImGui::PushID("ColliderMask");
-    if (ImGui::Button(maskSummary(mask).c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
+    if (ImGui::Button(maskMixed ? "Mixed" : maskSummary(mask).c_str(),
+                      ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
     {
       ImGui::OpenPopup("maskPopup");
     }
@@ -150,10 +158,10 @@ namespace {
 
   // "Render Collider" checkbox, shared by both collider shapes since the flag lives on the Collider base.
   // Returns true if it was edited this frame.
-  bool colliderRenderGizmoEditor(const std::shared_ptr<Collider>& collider)
+  bool colliderRenderGizmoEditor(const std::shared_ptr<Collider>& collider, const MixedFields& mixed)
   {
     bool renderCollider = collider->getRenderCollider();
-    if (gc::accentCheckbox("Render Collider", &renderCollider))
+    if (gc::accentCheckbox("Render Collider", &renderCollider, mixed.contains("renderCollider")))
     {
       collider->setRenderCollider(renderCollider);
       return true;
@@ -167,7 +175,8 @@ void registerColliderEditors(ComponentEditor& componentEditor)
 {
   // Keyed by display name (componentTypeToString), since both colliders share a component type and
   // differ only by subType.
-  componentEditor.registerHandler("Box Collider", [](const std::shared_ptr<Component>& component) -> bool {
+  componentEditor.registerHandler("Box Collider",
+    [](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
     const auto box = std::dynamic_pointer_cast<BoxCollider>(component);
     if (!box)
     {
@@ -178,35 +187,35 @@ void registerColliderEditors(ComponentEditor& componentEditor)
 
     if (ComponentEditor::displayHeader(component))
     {
-      edited |= colliderRenderGizmoEditor(box);
+      edited |= colliderRenderGizmoEditor(box, mixed);
 
       bool isTrigger = box->isTrigger();
-      if (gc::accentCheckbox("Is Trigger", &isTrigger))
+      if (gc::accentCheckbox("Is Trigger", &isTrigger, mixed.contains("isTrigger")))
       {
         box->setIsTrigger(isTrigger);
         edited = true;
       }
 
-      edited |= colliderLayerMaskEditor(box);
+      edited |= colliderLayerMaskEditor(box, mixed);
 
       glm::vec3 position = box->getLocalPosition();
       glm::vec3 rotation = box->getLocalRotation();
       glm::vec3 scale = box->getLocalScale();
 
       ImGui::PushID("BoxCollider");
-      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z))
+      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z, 0.1f, mixed.contains("position")))
       {
         box->setPosition(position);
         edited = true;
       }
 
-      if (gc::xyzGuiBoxed("Rotation", &rotation.x, &rotation.y, &rotation.z))
+      if (gc::xyzGuiBoxed("Rotation", &rotation.x, &rotation.y, &rotation.z, 0.1f, mixed.contains("rotation")))
       {
         box->setRotation(rotation);
         edited = true;
       }
 
-      if (gc::xyzGuiBoxed("Scale", &scale.x, &scale.y, &scale.z))
+      if (gc::xyzGuiBoxed("Scale", &scale.x, &scale.y, &scale.z, 0.1f, mixed.contains("scale")))
       {
         box->setScale(scale);
         edited = true;
@@ -217,7 +226,8 @@ void registerColliderEditors(ComponentEditor& componentEditor)
     return edited;
   });
 
-  componentEditor.registerHandler("Sphere Collider", [](const std::shared_ptr<Component>& component) -> bool {
+  componentEditor.registerHandler("Sphere Collider",
+    [](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
     const auto sphere = std::dynamic_pointer_cast<SphereCollider>(component);
     if (!sphere)
     {
@@ -228,19 +238,19 @@ void registerColliderEditors(ComponentEditor& componentEditor)
 
     if (ComponentEditor::displayHeader(component))
     {
-      edited |= colliderRenderGizmoEditor(sphere);
+      edited |= colliderRenderGizmoEditor(sphere, mixed);
 
       bool isTrigger = sphere->isTrigger();
-      if (gc::accentCheckbox("Is Trigger", &isTrigger))
+      if (gc::accentCheckbox("Is Trigger", &isTrigger, mixed.contains("isTrigger")))
       {
         sphere->setIsTrigger(isTrigger);
         edited = true;
       }
 
-      edited |= colliderLayerMaskEditor(sphere);
+      edited |= colliderLayerMaskEditor(sphere, mixed);
 
       float radius = sphere->getLocalRadius();
-      if (gc::labeledDrag("Radius", &radius))
+      if (gc::labeledDrag("Radius", &radius, 0.1f, mixed.contains("radius")))
       {
         sphere->setRadius(radius);
         edited = true;
@@ -248,7 +258,7 @@ void registerColliderEditors(ComponentEditor& componentEditor)
 
       glm::vec3 position = sphere->getLocalPosition();
       ImGui::PushID("SphereCollider");
-      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z))
+      if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z, 0.1f, mixed.contains("position")))
       {
         sphere->setPosition(position);
         edited = true;

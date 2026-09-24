@@ -138,8 +138,11 @@ namespace gc {
   }
 
   // A filled-accent checkbox matching the mockup (rounded inset box, accent fill + check when on).
-  // Behaves like ImGui::Checkbox: returns true on the frame the value changes.
-  inline bool accentCheckbox(const char* label, bool* v)
+  // Behaves like ImGui::Checkbox: returns true on the frame the value changes. `mixed` draws a dash in
+  // place of the check/empty states (a multi-selection where the selected objects disagree on this field);
+  // a click from that state settles the whole selection to true - this widget's own rule, not something
+  // ImGui's ImGuiItemFlags_MixedValue gives for free (that flag only changes the rendering).
+  inline bool accentCheckbox(const char* label, bool* v, const bool mixed = false)
   {
     const float box = 18.0f;
     const float h = std::max(box, ImGui::GetFrameHeight());
@@ -150,15 +153,21 @@ namespace gc {
     ImGui::PopID();
     if (pressed)
     {
-      *v = !*v;
+      *v = mixed ? true : !*v;
     }
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 boxMin(pos.x, pos.y + (h - box) * 0.5f);
     const ImVec2 boxMax(boxMin.x + box, boxMin.y + box);
 
-    dl->AddRectFilled(boxMin, boxMax, theme::u32(*v ? theme::accent : theme::inset), 5.0f);
-    if (!*v)
+    dl->AddRectFilled(boxMin, boxMax, theme::u32(!mixed && *v ? theme::accent : theme::inset), 5.0f);
+    if (mixed)
+    {
+      dl->AddRect(boxMin, boxMax, theme::u32(theme::line2), 5.0f);
+      dl->AddLine(ImVec2(boxMin.x + box * 0.24f, boxMin.y + box * 0.5f),
+                  ImVec2(boxMax.x - box * 0.24f, boxMin.y + box * 0.5f), theme::u32(theme::accent), 2.2f);
+    }
+    else if (!*v)
     {
       dl->AddRect(boxMin, boxMax, theme::u32(theme::line2), 5.0f);
     }
@@ -181,9 +190,11 @@ namespace gc {
 
   // A single boxed axis field: rounded inset box with a colored axis letter and a borderless DragFloat.
   // `row` names the value the three axes belong to; it is not drawn, only used to say which field a
-  // refused entry was for.
+  // refused entry was for. `mixed` marks the underlying DragFloat as ImGuiItemFlags_MixedValue - it is a
+  // stock ImGui::DragFloat call under the hood, so ImGui itself replaces the shown value with "-" and only
+  // applies the edit once the user actually changes it.
   inline bool axisField(const char* row, const char* axis, const ImVec4& axisCol, float* v, float width,
-                        float sensitivity)
+                        float sensitivity, const bool mixed = false)
   {
     const float h = ImGui::GetFrameHeight();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -206,8 +217,10 @@ namespace gc {
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     ImGui::SetNextItemWidth(width - padX * 2.0f - axisSize.x);
+    ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, mixed);
     const bool edited = ImGui::DragFloat("##v", v, sensitivity, 0.0f, 0.0f, "%.3f")
       && acceptFinite((std::string(row) + " " + axis).c_str(), v, previous);
+    ImGui::PopItemFlag();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     ImGui::PopID();
@@ -215,8 +228,11 @@ namespace gc {
     return edited;
   }
 
-  // Boxed X/Y/Z row matching the mockup: label column, then three equal-width axis fields.
-  inline bool xyzGuiBoxed(const char* label, float* x, float* y, float* z, const float sensitivity = 0.1f)
+  // Boxed X/Y/Z row matching the mockup: label column, then three equal-width axis fields. `mixed` marks
+  // all three axes mixed together - the vec3 is one serialize() key, so a disagreement is reported (and
+  // shown) at that whole-key granularity rather than per axis.
+  inline bool xyzGuiBoxed(const char* label, float* x, float* y, float* z, const float sensitivity = 0.1f,
+                          const bool mixed = false)
   {
     rowLabel(label);
 
@@ -226,11 +242,11 @@ namespace gc {
 
     bool edited = false;
     ImGui::PushID(label);
-    edited |= axisField(label, "X", theme::axisX, x, w, sensitivity);
+    edited |= axisField(label, "X", theme::axisX, x, w, sensitivity, mixed);
     ImGui::SameLine(0.0f, gap);
-    edited |= axisField(label, "Y", theme::axisY, y, w, sensitivity);
+    edited |= axisField(label, "Y", theme::axisY, y, w, sensitivity, mixed);
     ImGui::SameLine(0.0f, gap);
-    edited |= axisField(label, "Z", theme::axisZ, z, w, sensitivity);
+    edited |= axisField(label, "Z", theme::axisZ, z, w, sensitivity, mixed);
     ImGui::PopID();
 
     return edited;
@@ -589,15 +605,19 @@ namespace gc {
   }
 
   // A labelled single-value drag field: muted label in the left column, framed value box filling the
-  // rest of the row (the mockup's Gravity / Radius rows). Returns true if edited.
-  inline bool labeledDrag(const char* label, float* v, const float speed = 0.1f)
+  // rest of the row (the mockup's Gravity / Radius rows). Returns true if edited. `mixed` marks the
+  // underlying stock DragFloat as ImGuiItemFlags_MixedValue, so ImGui shows "-" instead of the primary
+  // object's value.
+  inline bool labeledDrag(const char* label, float* v, const float speed = 0.1f, const bool mixed = false)
   {
     rowLabel(label);
 
     const float previous = *v;
     ImGui::PushID(label);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, mixed);
     const bool edited = ImGui::DragFloat("##v", v, speed) && acceptFinite(label, v, previous);
+    ImGui::PopItemFlag();
     ImGui::PopID();
 
     return edited;
@@ -636,8 +656,14 @@ namespace gc {
   }
 
   // An accent track slider with a glowing thumb (Friction / Mass / Scale All in the mockup).
-  // Label sits in the left column; the value is drawn right-aligned inside the track.
-  inline bool accentSlider(const char* label, float* v, const float min, const float max)
+  // Label sits in the left column; the value is drawn right-aligned inside the track. `mixed` (the
+  // selected objects disagree on this field) draws an empty track with a neutral thumb and "-" instead of
+  // a fill/thumb position derived from `*v`, which would otherwise misrepresent it as the settled value -
+  // this widget is hand-drawn rather than a stock ImGui slider, so it has no ImGuiItemFlags_MixedValue to
+  // lean on and renders its own mixed state instead. Dragging still sets a concrete value for the whole
+  // selection, same as any other edit here.
+  inline bool accentSlider(const char* label, float* v, const float min, const float max,
+                           const bool mixed = false)
   {
     rowLabel(label);
 
@@ -665,19 +691,37 @@ namespace gc {
       }
     }
 
-    const float t = std::clamp((*v - min) / (max - min), 0.0f, 1.0f);
     const float cy = pos.y + h * 0.5f;
     const float trackH = 6.0f;
+    const float trackTop = cy - trackH * 0.5f;
+    const float trackBottom = cy + trackH * 0.5f;
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Track + filled portion.
-    dl->AddRectFilled(ImVec2(pos.x, cy - trackH * 0.5f), ImVec2(pos.x + width, cy + trackH * 0.5f),
+    // Track (background).
+    dl->AddRectFilled(ImVec2(pos.x, trackTop), ImVec2(pos.x + width, trackBottom),
                       theme::u32(theme::inset), trackH * 0.5f);
-    dl->AddRect(ImVec2(pos.x, cy - trackH * 0.5f), ImVec2(pos.x + width, cy + trackH * 0.5f),
+    dl->AddRect(ImVec2(pos.x, trackTop), ImVec2(pos.x + width, trackBottom),
                 theme::u32(theme::line), trackH * 0.5f);
+
+    if (mixed)
+    {
+      // A centered, neutral thumb - not at any particular fraction of [min, max], since there is no one
+      // value to place it at - and "-" where the number would read.
+      const ImVec2 center(pos.x + width * 0.5f, cy);
+      dl->AddCircleFilled(center, 9.0f, theme::u32(theme::line2));
+      dl->AddCircleFilled(center, 7.0f, theme::u32(theme::inset));
+
+      const ImVec2 vts = ImGui::CalcTextSize("-");
+      const ImVec2 textPos(pos.x + width - vts.x - 10.0f, cy - vts.y * 0.5f);
+      dl->AddText(textPos, theme::u32(contrastOn(theme::panel)), "-");
+
+      return edited;
+    }
+
+    const float t = std::clamp((*v - min) / (max - min), 0.0f, 1.0f);
     const float fillX = pos.x + width * t;
-    dl->AddRectFilled(ImVec2(pos.x, cy - trackH * 0.5f), ImVec2(fillX, cy + trackH * 0.5f),
-                      theme::u32(theme::accent), trackH * 0.5f);
+    dl->AddRectFilled(ImVec2(pos.x, trackTop), ImVec2(fillX, trackBottom), theme::u32(theme::accent),
+                      trackH * 0.5f);
 
     // Thumb with accent glow ring.
     dl->AddCircleFilled(ImVec2(fillX, cy), 9.0f, theme::u32(theme::accdim));
@@ -698,9 +742,6 @@ namespace gc {
     const ImU32 colOnFill = theme::u32(contrastOn(fillVisible));
     const ImU32 colOnTrack = theme::u32(contrastOn(trackVisible));
     const ImU32 colOnPanel = theme::u32(contrastOn(theme::panel));
-
-    const float trackTop = cy - trackH * 0.5f;
-    const float trackBottom = cy + trackH * 0.5f;
 
     dl->PushClipRect(ImVec2(pos.x, pos.y), ImVec2(pos.x + width, trackTop), true);
     dl->AddText(textPos, colOnPanel, buf);
