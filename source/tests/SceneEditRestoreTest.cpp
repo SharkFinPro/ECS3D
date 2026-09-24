@@ -13,6 +13,28 @@
 
 namespace {
   using namespace sceneEditFixtures;
+
+  // The Transform component blob out of a serialized object node - what a restoreObject "adopt" entry's
+  // own "transform" field carries (see Replication.h's buildRestoreObject).
+  nlohmann::json transformComponentOf(const nlohmann::json& objectNode)
+  {
+    for (const auto& component : objectNode.at("components"))
+    {
+      if (component.value("type", std::string{}) == "Transform")
+      {
+        return component;
+      }
+    }
+
+    return nlohmann::json::object();
+  }
+
+  nlohmann::json adoptEntry(const std::shared_ptr<Object>& child, const std::size_t index,
+                            const nlohmann::json& childBody)
+  {
+    return { { "object", uuids::to_string(child->getUUID()) }, { "index", index },
+             { "transform", transformComponentOf(childBody) } };
+  }
 }
 
 TEST(SceneEdit, RestoreObjectRoundTripsARemovedSubtreeWithUuidsAndComponentValuesIntact)
@@ -312,4 +334,342 @@ TEST(SceneEdit, RemoveSubtreeOnAChildKeepsItsSiblingsInOrder)
   ASSERT_EQ(scene.object->getChildren().size(), 2u);
   EXPECT_EQ(scene.object->getChildren()[0], first);
   EXPECT_EQ(scene.object->getChildren()[1], last);
+}
+
+// --- restoreObject's "adopt" field: undo of a removeObject, reclaiming the still-live children
+// deleteObjectsMarkedForDeletion promoted to the removed object's own parent back under the object this op
+// recreates - see AGENTS.md's Editor Undo/Redo section and Replication.h's buildRestoreObject.
+
+TEST(SceneEdit, RestoreObjectWithAdoptReclaimsPromotedChildrenUnderAParentedRestoredObject)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto a = addChildObject(scene, "A", parent);
+  const auto x = addChildObject(scene, "X", parent);
+  const auto b = addChildObject(scene, "B", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+  const auto c2 = addChildObject(scene, "C2", x);
+
+  // X itself sits off-origin so promoting c1/c2 to Parent actually rewrites their local values (a
+  // WorldPlacement no-op here would hide the bug this adopt list exists to route around).
+  transformOf(x)->setPosition({ 10, 0, 0 });
+  transformOf(c1)->setPosition({ 1, 2, 3 });
+  transformOf(c2)->setPosition({ 4, 5, 6 });
+
+  const auto xUUID = x->getUUID();
+  const auto c1UUID = c1->getUUID();
+  const auto c2UUID = c2->getUUID();
+  const auto body = x->serialize(); // pre-removal: c1/c2 still carry their own local values
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+
+  // c1/c2 were promoted into X's old slot under Parent, and their local values were rewritten to keep
+  // their world placement - no longer {1,2,3}/{4,5,6}.
+  ASSERT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, c2, b }));
+  EXPECT_EQ(c1->getParent(), parent);
+  EXPECT_EQ(c2->getParent(), parent);
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const auto& recordedChildren = body.at("children");
+  const nlohmann::json adopt = nlohmann::json::array(
+    { adoptEntry(c1, 0, recordedChildren.at(0)), adoptEntry(c2, 1, recordedChildren.at(1)) });
+
+  const auto parentUUID = parent->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 1, &adopt)),
+            SceneEditResult::applied);
+
+  // X is back at its old index, A and B untouched on either side.
+  ASSERT_EQ(parent->getChildren().size(), 3u);
+  const auto restoredX = parent->getChildren()[1];
+  EXPECT_EQ(restoredX->getUUID(), xUUID);
+  EXPECT_EQ(parent->getChildren()[0], a);
+  EXPECT_EQ(parent->getChildren()[2], b);
+
+  // c1/c2 are X's children again, in order, at their recorded (pre-removal) local values - not whatever
+  // WorldPlacement left them at while they sat promoted under Parent.
+  ASSERT_EQ(restoredX->getChildren().size(), 2u);
+  EXPECT_EQ(restoredX->getChildren()[0], c1);
+  EXPECT_EQ(restoredX->getChildren()[1], c2);
+  EXPECT_EQ(c1->getParent(), restoredX);
+  EXPECT_EQ(c2->getParent(), restoredX);
+  expectNear(transformOf(c1)->getLocalPosition(), { 1, 2, 3 });
+  expectNear(transformOf(c2)->getLocalPosition(), { 4, 5, 6 });
+  expectNear(transformOf(restoredX)->getLocalPosition(), { 10, 0, 0 });
+}
+
+TEST(SceneEdit, RestoreObjectWithAdoptReclaimsPromotedChildrenAtTheSceneRoot)
+{
+  const auto scene = makeScene();
+  // scene.object ("A") already sits at root index 0.
+
+  const auto x = addObject(scene, "X");
+  const auto b = addObject(scene, "B");
+  const auto c1 = addChildObject(scene, "C1", x);
+
+  transformOf(x)->setPosition({ 10, 0, 0 });
+  transformOf(c1)->setPosition({ 1, 2, 3 });
+
+  const auto xUUID = x->getUUID();
+  const auto body = x->serialize();
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+  ASSERT_EQ(scene.objectManager->getObjects(),
+            (std::vector<std::shared_ptr<Object>>{ scene.object, c1, b }));
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, body.at("children").at(0)) });
+
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, nullptr, 1, &adopt)),
+            SceneEditResult::applied);
+
+  ASSERT_EQ(scene.objectManager->getObjects().size(), 3u);
+  const auto restoredX = scene.objectManager->getObjects()[1];
+  EXPECT_EQ(restoredX->getUUID(), xUUID);
+  EXPECT_EQ(scene.objectManager->getObjects()[0], scene.object);
+  EXPECT_EQ(scene.objectManager->getObjects()[2], b);
+
+  ASSERT_EQ(restoredX->getChildren().size(), 1u);
+  EXPECT_EQ(restoredX->getChildren().front(), c1);
+  EXPECT_EQ(c1->getParent(), restoredX);
+  expectNear(transformOf(c1)->getLocalPosition(), { 1, 2, 3 });
+}
+
+TEST(SceneEdit, RestoreObjectWithoutAdoptStillBehavesExactlyAsBefore)
+{
+  // Positive control proving the adopt field is purely additive: a restoreObject that omits it applies
+  // exactly like the existing (pre-adopt) tests above already exercise.
+  const auto scene = makeScene();
+
+  nlohmann::json body = trivialBody();
+  body["uuid"] = uuids::to_string(anotherUUID());
+
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(body, nullptr, 0)), SceneEditResult::applied);
+  EXPECT_NE(scene.objectManager->getObjectByUUID(anotherUUID()), nullptr);
+}
+
+TEST(SceneEdit, RestoreObjectWithAdoptIsRejectedWhenAnAdopteeIsMissing)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto x = addChildObject(scene, "X", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+
+  const auto xUUID = x->getUUID();
+  const auto c1UUID = c1->getUUID();
+  const auto body = x->serialize();
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, body.at("children").at(0)) });
+  const auto parentUUID = parent->getUUID();
+
+  // c1 is removed outright (not just reparented) before the restore attempt runs.
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveSubtree(c1UUID)), SceneEditResult::applied);
+  ASSERT_EQ(scene.objectManager->getObjectByUUID(c1UUID), nullptr);
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0, &adopt)),
+            SceneEditResult::unknownObject);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+
+  // Positive control: with c1 actually there (undoing the removeSubtree above by re-adding an equivalent
+  // child under Parent so c1UUID lives again as C1's stand-in), the same adopt shape applies fine.
+  const auto standIn = addChildObject(scene, "C1", parent);
+  const nlohmann::json standInAdopt =
+    nlohmann::json::array({ adoptEntry(standIn, 0, body.at("children").at(0)) });
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0, &standInAdopt)),
+            SceneEditResult::applied);
+}
+
+TEST(SceneEdit, RestoreObjectWithAdoptIsRejectedWhenAnAdopteeLivesUnderADifferentParent)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto elsewhere = addObject(scene, "Elsewhere");
+  const auto x = addChildObject(scene, "X", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+
+  const auto xUUID = x->getUUID();
+  const auto body = x->serialize();
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+  ASSERT_EQ(c1->getParent(), parent);
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, body.at("children").at(0)) });
+  const auto parentUUID = parent->getUUID();
+
+  // Something else moves c1 out from under Parent before the restore attempt runs.
+  const auto elsewhereUUID = elsewhere->getUUID();
+  ASSERT_EQ(applyEdit(scene, replication::buildReparentObject(c1->getUUID(), &elsewhereUUID)),
+            SceneEditResult::applied);
+  ASSERT_EQ(c1->getParent(), elsewhere);
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0, &adopt)),
+            SceneEditResult::rejected);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+  EXPECT_EQ(c1->getParent(), elsewhere);
+
+  // Positive control: move c1 back under Parent and the same adopt shape applies fine.
+  ASSERT_EQ(applyEdit(scene, replication::buildReparentObject(c1->getUUID(), &parentUUID)),
+            SceneEditResult::applied);
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0, &adopt)),
+            SceneEditResult::applied);
+}
+
+TEST(SceneEdit, RestoreObjectWithAdoptIsRejectedWhenTheAdoptListNamesADuplicateUuid)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto x = addChildObject(scene, "X", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+
+  const auto xUUID = x->getUUID();
+  const auto body = x->serialize();
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const auto& childBody = body.at("children").at(0);
+  const nlohmann::json duplicateAdopt =
+    nlohmann::json::array({ adoptEntry(c1, 0, childBody), adoptEntry(c1, 1, childBody) });
+  const auto parentUUID = parent->getUUID();
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0, &duplicateAdopt)),
+            SceneEditResult::rejected);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+  EXPECT_EQ(c1->getParent(), parent);
+
+  // Positive control: the same shape with the duplicate entry dropped applies fine.
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, childBody) });
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0, &adopt)),
+            SceneEditResult::applied);
+}
+
+TEST(SceneEdit, RestoreObjectWithAdoptReportsMalformedEntriesWithoutMutatingTheScene)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto x = addChildObject(scene, "X", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+
+  const auto xUUID = x->getUUID();
+  const auto body = x->serialize();
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const auto& childBody = body.at("children").at(0);
+  const auto parentUUID = parent->getUUID();
+  const auto before = scene.objectManager->getAllObjects().size();
+
+  // "adopt" not an array.
+  {
+    nlohmann::json edit = replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0);
+    edit["adopt"] = "not-an-array";
+    EXPECT_EQ(applyEdit(scene, edit), SceneEditResult::malformedEdit);
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  }
+
+  // An entry missing "index".
+  {
+    nlohmann::json entry = adoptEntry(c1, 0, childBody);
+    entry.erase("index");
+    nlohmann::json edit = replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0);
+    edit["adopt"] = nlohmann::json::array({ entry });
+    EXPECT_EQ(applyEdit(scene, edit), SceneEditResult::malformedEdit);
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  }
+
+  // An entry whose "object" does not parse as a uuid.
+  {
+    nlohmann::json entry = adoptEntry(c1, 0, childBody);
+    entry["object"] = "not-a-uuid";
+    nlohmann::json edit = replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0);
+    edit["adopt"] = nlohmann::json::array({ entry });
+    EXPECT_EQ(applyEdit(scene, edit), SceneEditResult::malformedEdit);
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  }
+
+  // An entry whose "transform" is missing the fields Transform::loadFromJSON needs.
+  {
+    nlohmann::json entry = adoptEntry(c1, 0, childBody);
+    entry["transform"] = nlohmann::json::object({ { "type", "Transform" } });
+    nlohmann::json edit = replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0);
+    edit["adopt"] = nlohmann::json::array({ entry });
+    EXPECT_EQ(applyEdit(scene, edit), SceneEditResult::malformedEdit);
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  }
+
+  EXPECT_EQ(c1->getParent(), parent);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+
+  // Positive control: the same c1, in a well-formed entry, restores fine - proving the refusals above are
+  // about the malformed shapes and not something else broken in this setup.
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, childBody) });
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0, &adopt)),
+            SceneEditResult::applied);
+}
+
+TEST(SceneEdit, RestoreObjectWithAdoptIsRejectedWhenDepthWouldExceedTheLimit)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto x = addChildObject(scene, "X", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+  // c1 has its own child, so reclaiming it under the restored X adds 2 levels (X -> c1 -> grandchild),
+  // not just 1.
+  const auto grandchild = addChildObject(scene, "Grandchild", c1);
+
+  const auto xUUID = x->getUUID();
+  const auto body = x->serialize();
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, body.at("children").at(0)) });
+
+  // parent sits deep enough that X (depth+1) plus the reclaimed c1/grandchild (2 more levels) lands one
+  // step past the limit. descendantAtDepth chains `levels` steps below parent (parent is itself a root,
+  // depth 0), so ancestorDepth(deepParent) == levels; X's own baseDepth is one more than that, and the
+  // reclaimed c1/grandchild add 2 further levels (requiredHeight = max(bodyHeight=0, 1+subtreeHeight(c1)=1)
+  // == 2), so levels == maxObjectDepth - 2 is exactly one step past the limit.
+  const auto deepParent = descendantAtDepth(scene, parent, maxObjectDepth - 2);
+  const auto deepParentUUID = deepParent->getUUID();
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &deepParentUUID, 0, &adopt)),
+            SceneEditResult::rejected);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+
+  // Positive control: the same shape one level shallower fits exactly.
+  const auto shallowerParent = descendantAtDepth(scene, parent, maxObjectDepth - 3);
+  const auto shallowerParentUUID = shallowerParent->getUUID();
+
+  const auto beforeApply = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &shallowerParentUUID, 0, &adopt)),
+            SceneEditResult::applied);
+  // Only X itself is newly created by restoreSubtree - c1/grandchild already existed (they were promoted,
+  // never deleted) and are only reattached, not recreated.
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), beforeApply + 1);
 }
