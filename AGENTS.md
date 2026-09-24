@@ -155,8 +155,10 @@ only, unicast via `NetServer::sendToEditors` rather than broadcast to every conn
 rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
 payload (a real divergence). (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
 `sceneEdit` also carries two ops for undoing a deletion: `removeSubtree` deletes an object and its whole
-subtree immediately, promoting nothing, unlike `removeObject` (which defers to the next tick and promotes
-the removed object's children); `restoreObject` rebuilds a subtree from an inline serialized body under a
+subtree immediately, promoting nothing, unlike `removeObject` (which promotes the removed object's
+children to its own parent in the same call - `applyStructuralEdit`'s `removeObject` branch calls
+`ObjectManager::deleteObjectsMarkedForDeletion` itself rather than waiting for the next tick, the way a
+script-driven destroy does; `ServerApp::handleSceneEdit` re-snapshots right after); `restoreObject` rebuilds a subtree from an inline serialized body under a
 parent at a sibling index, and is the one structural op that **preserves the body's uuids** rather than
 reassigning them, because the undo history (`data/edits/EditCommand.h`) already names the removed
 subtree's objects by those uuids. `restoreObject` also takes an optional `"adopt"` list, each entry naming

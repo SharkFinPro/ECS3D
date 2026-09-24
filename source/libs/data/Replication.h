@@ -144,8 +144,8 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
                                                 std::size_t index,
                                                 const nlohmann::json* adopt = nullptr);
 
-// Delete objectUUID and its whole subtree immediately, unlike removeObject (which defers and promotes
-// children) - see ObjectManager::removeSubtree.
+// Delete objectUUID and its whole subtree immediately, unlike removeObject (which promotes the removed
+// object's own children to its parent instead) - see ObjectManager::removeSubtree.
 [[nodiscard]] nlohmann::json buildRemoveSubtree(const uuids::uuid& objectUUID);
 
 // Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a

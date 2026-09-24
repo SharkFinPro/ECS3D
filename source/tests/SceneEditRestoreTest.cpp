@@ -673,3 +673,79 @@ TEST(SceneEdit, RestoreObjectWithAdoptIsRejectedWhenDepthWouldExceedTheLimit)
   // never deleted) and are only reattached, not recreated.
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), beforeApply + 1);
 }
+
+// A new sibling can arrive at Parent between the deletion and the undo - it is not one of the adoptees, so
+// index is still read against "the pre-removal list minus the removed object" (see Replication.h's
+// buildRestoreObject): only the adoptee (C1) is detached before X is reinserted at its recorded index, so
+// the new sibling simply keeps whatever place it already has in the list.
+TEST(SceneEdit, RestoreObjectWithAdoptPlacesTheRestoredObjectAtItsRecordedIndexAroundANewSibling)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto a = addChildObject(scene, "A", parent);
+  const auto x = addChildObject(scene, "X", parent);
+  const auto b = addChildObject(scene, "B", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+
+  const auto xUUID = x->getUUID();
+  const auto body = x->serialize();
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+  ASSERT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, b }));
+
+  // N arrives after the deletion but before undo runs; addChildObject appends, so it lands at the end.
+  const auto n = addChildObject(scene, "N", parent);
+  ASSERT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, b, n }));
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, body.at("children").at(0)) });
+  const auto parentUUID = parent->getUUID();
+
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 1, &adopt)),
+            SceneEditResult::applied);
+
+  // X lands at its recorded index (1) in the list with just C1 detached ([A, B, N]), giving [A, X, B, N]:
+  // N shifts one slot later rather than pinning X's spot to the far side of it.
+  ASSERT_EQ(parent->getChildren().size(), 4u);
+  const auto restoredX = parent->getChildren()[1];
+  EXPECT_EQ(restoredX->getUUID(), xUUID);
+  EXPECT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, restoredX, b, n }));
+  ASSERT_EQ(restoredX->getChildren().size(), 1u);
+  EXPECT_EQ(restoredX->getChildren().front(), c1);
+}
+
+TEST(SceneEdit, RestoreObjectWithAdoptReportsANegativeEntryIndexAsMalformed)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto x = addChildObject(scene, "X", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+
+  const auto xUUID = x->getUUID();
+  const auto body = x->serialize();
+
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+
+  nlohmann::json bodyNoChildren = body;
+  bodyNoChildren["children"] = nlohmann::json::array();
+  const auto& childBody = body.at("children").at(0);
+  const auto parentUUID = parent->getUUID();
+
+  nlohmann::json negativeEntry = adoptEntry(c1, 0, childBody);
+  negativeEntry["index"] = -1;
+  nlohmann::json edit = replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0);
+  edit["adopt"] = nlohmann::json::array({ negativeEntry });
+
+  const auto before = scene.objectManager->getAllObjects().size();
+  EXPECT_EQ(applyEdit(scene, edit), SceneEditResult::malformedEdit);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  EXPECT_EQ(c1->getParent(), parent);
+
+  // Positive control: the same entry with a non-negative index restores fine.
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, childBody) });
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &parentUUID, 0, &adopt)),
+            SceneEditResult::applied);
+}

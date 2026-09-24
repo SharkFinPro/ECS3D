@@ -137,9 +137,11 @@ public:
                                                        std::size_t index);
 
   // Deletes object and its whole subtree immediately, promoting nothing - the opposite of removeObject,
-  // which defers to deleteObjectsMarkedForDeletion and promotes the removed object's children up to its
-  // own parent. This is an edit-time structural op (applySceneEdit's removeSubtree): it only ever runs on
-  // a stopped scene, and the server re-snapshots right after, so there is no live tick to protect and no
+  // whose own deleteObjectsMarkedForDeletion pass promotes the removed object's children up to its own
+  // parent instead (marks the object first, then a caller drains it - applySceneEdit's removeObject op
+  // calls both in the same op; a script-driven destroy queues the mark and lets the next tick's pass drain
+  // it). This is an edit-time structural op (applySceneEdit's removeSubtree): it only ever runs on a
+  // stopped scene, and the server re-snapshots right after, so there is no live tick to protect and no
   // reason to keep the subtree's now-orphaned children in the scene at all.
   void removeSubtree(const std::shared_ptr<Object>& object);
 
