@@ -44,7 +44,7 @@
 | `source/libs/render/` | `ECS3DRender` — `RenderSystem` (draws models/lights, pick feedback, selection highlight, collider gizmos, and drives the `vke::Camera`/`Renderer3D` view from the scene's active `Camera` component), `GpuAssetCache` (UUID → `vke` GPU objects), `InputCapture`. Depends on `ECS3DData` + `VulkanEngine`. |
 | `source/libs/editor/` | `ECS3DEditorLib` — ImGui editing UI: `ComponentEditor` (per-type handlers), `ObjectGUIManager` (object tree), `InspectorPanel` (the "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` (which, beside the per-frame value send, coalesces a whole continuous edit - a slider drag mutates the component in place every frame - into one before/after pair reported once no widget is active; a multi-object selection (`ObjectInspector::displayMulti`) shows the components shared across the selected objects - matched by `componentFieldDelta::componentSignature`, a collider's subtype or a script's class name counting as part of the "kind" - renders each shared component once against the first object, and propagates the top-level `serialize()` key(s) that changed to the other objects' own components via `ComponentFieldDelta.h`'s field-delta helpers, so an edit lands on the field that actually moved while each object's other fields keep whatever values they already had; the disagreeing keys are threaded into `ComponentEditor::GuiHandler` as a `MixedFields` set (empty on the single-selection path) so each differing field's own widget shows a distinct mixed state - a dash - instead of silently displaying the primary object's value, via ImGui's `ImGuiItemFlags_MixedValue` for the stock Drag/Checkbox/ColorEdit3 widgets this wraps (a Script field's bool still resolves a mixed click to true itself, since the flag only changes the rendering), and hand-drawn for `accentCheckbox`/`accentSlider`, which are not built on a stock widget; a residual "Mixed values" line still names the few fields with no per-widget indicator (an asset reference slot, the collider mask popup, a non-numeric script field), and each object's edit still goes out and is recorded through the normal single-object path, so undo records one entry per object; Add/Remove Component and the name field are left out of this view for now, since wiring them up would mean deciding which object they act on) and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a display-name rename field and a delete button with a reference-count warning for the flat file assets; the **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused `ObjectInspector`, see Prefabs), `EditorSelection` (shared kind-tagged selection slot holding an ordered set of uuids rather than a single one, `Selection.h` - the back of the list is the primary, what the Inspector/gizmo show; a plain click in the tree or viewport replaces it, Ctrl-click toggles membership, and Shift-click in the tree selects the contiguous range between an anchor uuid and the clicked row in the tree's current on-screen order, which `ObjectGUIManager` tracks itself each frame since collapsed nodes and the sort mode both affect what "on screen order" means), `SettingsPanel` (the "Settings" window — a section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Viewport drags the free-fly camera speed (`EditorCameraSettings`, applied to `vke::Camera::setSpeed` immediately); Keybinds lists every `EditorAction`, its current chord, and Rebind/Unbind/Reset controls, driving `KeybindDispatcher`'s capture mode and showing a conflict modal - naming the holding action, no reassign option - when a rebind targets an already-held chord), `KeybindDispatcher` (the one `vke::KeyCallbackEvent` listener that resolves a press against a `KeybindTable` and calls the registered handler, suppressed while ImGui wants the keyboard; also drives the Settings panel's rebind capture), `ConsolePanel` (the "Console" window — reads the editor's `RingBufferSink` through a `LogFilter`: level and category toggles with per-level counts, a text search, Copy (the filtered rows through `formatEntry` to the clipboard), Clear (remembers a sequence number rather than mutating the shared sink), and Auto-scroll; entries the connected server forwards land in this same sink, message-prefixed `"[server] "`, so they show and filter alongside the editor's own — see Logging below), `AssetBrowserPanel`, `AssetDisplay` (shared asset label/name/icon/color rules, header-only), `SaveUI` (also owns the unsaved-changes gate: New/Open/a dropped file/closing the window all route through a guard that prompts Save/Don't Save/Cancel when a send-path callback has marked the project dirty since the last save/load - the window-close intercept sets its own raw `glfwSetWindowCloseCallback`, since `vke::Window` sets none), `GuiComponents` (whose numeric widgets refuse a non-finite ctrl-click entry, restoring the previous value and logging a warning, since a non-finite float serializes as json null). Depends on `ECS3DData` + `ECS3DRender` + `ECS3DSettings` + `nfd`. |
 | `source/libs/net/` | `ECS3DNet` — `NetServer`/`NetClient`/`MessageQueue`/`ServerProcess`/`ServerLog` (pack/unpack for `MessageType::serverLog`, the server's forwarded log — see Logging below) (C++), plus the `Transport/` C# assembly (`ECS3DNetTransport`, TCP + WebSocket backends). |
-| `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera, Collider, ModelRenderer, LightRenderer; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
+| `source/libs/scripting/` | `ECS3DScripting` — `ScriptSystem`/`ScriptEngine` + native `bindings/` (Transform, RigidBody, InputUtils, World, Camera, Collider, ModelRenderer, LightRenderer, PlayerController; `InputState`, `BindingContext`), plus the `ScriptBridge/` C# assembly and example `UserScripts/`. |
 | `source/libs/clrHost/` | `ECS3DClrHost` — `ManagedHost` boots CoreCLR and hands out managed statics as native fn ptrs. Owns the CMake helpers (`cmake/ECS3DManaged.cmake`, `FindDotnet.cmake`, `loadCS.cmake`). |
 | `source/apps/` | The executables. `apps/CMakeLists.txt` orders them (server first — client/editor depend on it). |
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
@@ -98,22 +98,37 @@
   empty test set and would otherwise report green for a suite that registered nothing.
 - **Managed tests** (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered
   as a single CTest test through `add_test` in `tests/CMakeLists.txt` (guarded on `DOTNET_EXE`) rather
-  than a native executable. It covers pure, testable logic in `ECS3DNetTransport` via
-  a `ProjectReference` to `Transport/ECS3DNetTransport.csproj` — start there for a new managed test; move
-  to `ScriptBridge` only once something in it doesn't need the native host wired up. Private product
-  logic is exposed to it through `internal` + `InternalsVisibleTo` (see `Transport/AssemblyInfo.cs`), not
-  reflection. Its `Directory.Build.props` redirects `obj`/`bin` under `$(BuildRoot)obj/tests/` and
-  `$(BuildRoot)bin/tests/` — one level deeper than `Transport`/`ScriptBridge`'s own `$(BuildRoot)obj/`,
-  so referencing `ECS3DNetTransport` by `ProjectReference` (which inherits the `BuildRoot` global
-  property `dotnet test` is invoked with) keeps the two projects' generated `obj` output in separate
-  directories — the CS0579 trap below. The
+  than a native executable. It covers pure, testable logic via `ProjectReference`s to
+  `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
+  (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
+  `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
+  `TryConvertFieldValue`/`MapTypeName`/`Key`). What stays uncovered here is whatever actually calls a
+  native function pointer (the `Transform`/`RigidBody`/`Camera`/... wrapper methods, once
+  `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry point (can't be called
+  from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
+  reachable the same way, as pure code over plain objects. Private product logic is exposed to this
+  project through `internal` + `InternalsVisibleTo` (see `Transport/AssemblyInfo.cs` and
+  `ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`
+  under `$(BuildRoot)obj/tests/` and `$(BuildRoot)bin/tests/` — one level deeper than `Transport`'s own
+  `$(BuildRoot)obj/` — so referencing `ECS3DNetTransport` by `ProjectReference` (which inherits the
+  `BuildRoot` global property `dotnet test` is invoked with) keeps the two projects' generated `obj`
+  output in separate directories — the CS0579 trap below. `ScriptBridge`'s own `Directory.Build.props`
+  additionally checks `ecs3d_add_managed_assembly`'s `DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH` env var
+  itself (not the `.csproj` body, which is imported too late for `BaseIntermediateOutputPath` to reliably
+  take a value set there — the same `MSB3539` timing this file's own `Directory.Build.props` notes): when
+  that env var is set (the CMake publish), it wins unchanged; otherwise (a `ProjectReference` build under
+  someone else's `BuildRoot`, as `ECS3DManagedTests` now makes) the fallback nests under a `ScriptBridge/`
+  subfolder (`$(BuildRoot)obj/ScriptBridge/`) rather than the literal `$(BuildRoot)obj/` `Transport` uses,
+  so referencing both from this project under one shared `BuildRoot` does not point their generated `obj`
+  output at the same directory — the same trap between the two referenced assemblies instead of between
+  this project and one of them. The
   CTest command is `dotnet test <csproj> -c Release -p:BuildRoot=...`, so building the project happens
   only when ctest runs it, not as a step of a plain `cmake --build`: add a new managed test by adding a
   `.cs` file under `source/tests/managed/` (globbed automatically, unlike the native suite's explicit
   source list) and running it through `check`, the same way as every other test here. On a machine with
-  a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio` and the
-  test-SDK package this project references (see `ECS3DManagedTests.csproj`), which needs network
-  access.
+  a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio`, the
+  test-SDK package, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (see
+  `ECS3DManagedTests.csproj`), which needs network access.
 - **Dependency direction (must hold):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd + log. `net`/`scripting` →
@@ -382,7 +397,7 @@ already use for other script-driven structural changes.
 
 **Script binding coverage.** Each *Bindings provider exposes its component's full public surface except
 for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight. Every
-component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the same way across all four
+component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the same way across all five
 (project/wire plumbing, not gameplay state), not just Transform's. `TransformBindings` also leaves out
 `getUpdateID` (a cache-invalidation counter for colliders, not scene data). `RigidBodyBindings` leaves
 out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writes to; PhysicsSystem
@@ -398,6 +413,11 @@ unexposed because they are the write side ServerApp feeds from the network and t
 that resets it - in this design scripts only consume input, so that side belongs to ServerApp - and
 there is no player-agnostic aggregate for mouse position/delta/scroll/buttons because, unlike a key or
 focus, a position has no sensible "any player" combination; only the per-object reads make sense there.
+`PlayerControllerBindings` covers the component's only field, `playerSlot` - `getPlayerSlot`/`setPlayerSlot`
+plus `has` - reached via `World.tryGetPlayerController` (including a script's own object, by passing
+`ScriptBase.EntityId`). `PlayerController::setPlayerSlot` does not constrain the value it is given, so
+neither does the setter: a negative or unassigned slot matches no connected player, so the object reads
+no input.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers

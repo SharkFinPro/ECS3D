@@ -20,5 +20,7 @@ internal static unsafe class NativeBindings
 
     internal static LightRendererBindings LightRenderer;
 
+    internal static PlayerControllerBindings PlayerController;
+
     internal static LogBindings Log;
 }

@@ -219,3 +219,130 @@ TEST(CameraRange, NonFiniteSettersAreIgnored)
   camera->setFarPlane(nan);
   EXPECT_FLOAT_EQ(camera->getFarPlane(), 500.0f);
 }
+
+namespace {
+  // Builds the wire payload Camera::pack() writes (tag, direction, fov, nearPlane, farPlane, active),
+  // with the direction field replaced by the caller's own value.
+  net::Message packedCameraWithDirection(const glm::vec3& direction)
+  {
+    net::Message message(net::MessageType::undefined);
+    message.write(ComponentType::camera);
+    message.write(direction);
+    message.write(70.0f);
+    message.write(0.05f);
+    message.write(500.0f);
+    message.write(true);
+    return message;
+  }
+
+  net::MessageReader readerPastTag(const net::Message& message)
+  {
+    net::MessageReader reader(message);
+    // pack writes the type discriminator first; unpack expects the reader positioned after it.
+    static_cast<void>(reader.read<ComponentType>());
+    return reader;
+  }
+}
+
+TEST(CameraRange, UnpackWithANonFiniteDirectionKeepsThePriorDirection)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+  camera->setDirection({ 1.0f, 0.0f, 0.0f });
+
+  constexpr float nan = std::numeric_limits<float>::quiet_NaN();
+  const auto message = packedCameraWithDirection({ nan, nan, nan });
+  auto reader = readerPastTag(message);
+
+  camera->unpack(reader);
+
+  EXPECT_EQ(camera->getDirection(), glm::vec3(1.0f, 0.0f, 0.0f));
+
+  // The reader must stay aligned past the rejected direction: the fields that follow still unpack.
+  EXPECT_FLOAT_EQ(camera->getFov(), 70.0f);
+  EXPECT_FLOAT_EQ(camera->getNearPlane(), 0.05f);
+  EXPECT_FLOAT_EQ(camera->getFarPlane(), 500.0f);
+  EXPECT_TRUE(camera->isActive());
+}
+
+TEST(CameraRange, UnpackWithAnInfiniteDirectionKeepsThePriorDirection)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+  camera->setDirection({ 0.0f, 1.0f, 0.0f });
+
+  constexpr float infinity = std::numeric_limits<float>::infinity();
+  const auto message = packedCameraWithDirection({ infinity, 0.0f, 0.0f });
+  auto reader = readerPastTag(message);
+
+  camera->unpack(reader);
+
+  EXPECT_EQ(camera->getDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  EXPECT_FLOAT_EQ(camera->getFov(), 70.0f);
+  EXPECT_FLOAT_EQ(camera->getNearPlane(), 0.05f);
+  EXPECT_FLOAT_EQ(camera->getFarPlane(), 500.0f);
+  EXPECT_TRUE(camera->isActive());
+}
+
+TEST(CameraRange, UnpackWithAFiniteDirectionAppliesIt)
+{
+  // Positive control for the two tests above.
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+  camera->setDirection({ 1.0f, 0.0f, 0.0f });
+
+  const auto message = packedCameraWithDirection({ 0.0f, 0.0f, 1.0f });
+  auto reader = readerPastTag(message);
+
+  camera->unpack(reader);
+
+  EXPECT_EQ(camera->getDirection(), glm::vec3(0.0f, 0.0f, 1.0f));
+  EXPECT_FLOAT_EQ(camera->getFov(), 70.0f);
+  EXPECT_FLOAT_EQ(camera->getNearPlane(), 0.05f);
+  EXPECT_FLOAT_EQ(camera->getFarPlane(), 500.0f);
+  EXPECT_TRUE(camera->isActive());
+}
+
+TEST(CameraRange, LoadFromJSONWithANullDirectionElementKeepsThePriorDirection)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+  camera->setDirection({ 1.0f, 0.0f, 0.0f });
+
+  nlohmann::json data;
+  data["type"] = "Camera";
+  data["direction"] = { nullptr, 0.0f, 0.0f };
+  camera->loadFromJSON(data);
+
+  EXPECT_EQ(camera->getDirection(), glm::vec3(1.0f, 0.0f, 0.0f));
+}
+
+TEST(CameraRange, LoadFromJSONWithANonFiniteDirectionElementKeepsThePriorDirection)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+  camera->setDirection({ 0.0f, 1.0f, 0.0f });
+
+  nlohmann::json data;
+  data["type"] = "Camera";
+  data["direction"] = { std::numeric_limits<double>::quiet_NaN(), 0.0f, 0.0f };
+  camera->loadFromJSON(data);
+
+  EXPECT_EQ(camera->getDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
+}
+
+TEST(CameraRange, LoadFromJSONWithAFiniteDirectionAppliesIt)
+{
+  // Positive control for the two tests above.
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+  camera->setDirection({ 1.0f, 0.0f, 0.0f });
+
+  nlohmann::json data;
+  data["type"] = "Camera";
+  data["direction"] = { 0.0f, 0.0f, 1.0f };
+  camera->loadFromJSON(data);
+
+  EXPECT_EQ(camera->getDirection(), glm::vec3(0.0f, 0.0f, 1.0f));
+}
