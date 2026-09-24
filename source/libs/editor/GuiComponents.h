@@ -140,8 +140,8 @@ namespace gc {
   // A filled-accent checkbox matching the mockup (rounded inset box, accent fill + check when on).
   // Behaves like ImGui::Checkbox: returns true on the frame the value changes. `mixed` draws a dash in
   // place of the check/empty states (a multi-selection where the selected objects disagree on this field);
-  // a click from that state settles the whole selection to true, the same "click resolves it" behavior
-  // ImGui's own ImGuiItemFlags_MixedValue gives a Checkbox.
+  // a click from that state settles the whole selection to true - this widget's own rule, not something
+  // ImGui's ImGuiItemFlags_MixedValue gives for free (that flag only changes the rendering).
   inline bool accentCheckbox(const char* label, bool* v, const bool mixed = false)
   {
     const float box = 18.0f;

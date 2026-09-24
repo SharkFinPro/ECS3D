@@ -2,6 +2,7 @@
 #include "AssetDragDrop.h"
 #include "ComponentEditor.h"
 #include "GuiComponents.h"
+#include "MixedFields.h"
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <objects/ComponentFieldDelta.h>

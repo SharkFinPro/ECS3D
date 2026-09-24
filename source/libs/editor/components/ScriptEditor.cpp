@@ -74,7 +74,10 @@ void registerScriptEditor(ComponentEditor& componentEditor)
           ImGui::PopItemFlag();
           if (changed)
           {
-            field["value"] = value;
+            // ImGui's MixedValue only changes the rendering (the dash) - a click still flips whichever
+            // value the primary object happened to hold, which can land on false. A click on a mixed
+            // checkbox resolves the whole selection to true, matching accentCheckbox's own rule.
+            field["value"] = fieldMixed ? true : value;
             edited = true;
           }
         }
