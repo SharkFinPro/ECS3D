@@ -158,6 +158,19 @@ public static unsafe class World
         return false;
     }
 
+    // Also reaches the script's own object's PlayerController: pass ScriptBase.EntityId as uuid.
+    public static bool tryGetPlayerController(string uuid, out PlayerController playerController)
+    {
+        if (has(NativeBindings.PlayerController.has, uuid))
+        {
+            playerController = new PlayerController(uuid);
+            return true;
+        }
+
+        playerController = null!;
+        return false;
+    }
+
     private static bool has(delegate* unmanaged<IntPtr, bool> nativeHas, string uuid)
     {
         var uuidPtr = Marshal.StringToCoTaskMemUTF8(uuid);

@@ -18,7 +18,7 @@ public static class Bridge
     private static ScriptContext? _ctx;
 
     private static readonly Dictionary<string, ScriptBase> _instances = new();
-    private static string Key(string uuid, string className) => $"{uuid}_{className}";
+    internal static string Key(string uuid, string className) => $"{uuid}_{className}";
 
     // A script that throws once must not take the process down, and must not spam the log every tick
     // after that. Once a key is here, every entry point below skips it silently instead of calling in;
@@ -277,17 +277,7 @@ public static class Bridge
 
         try
         {
-            var fields = instance.GetType()
-                .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null)
-                .Select(f => new {
-                    name        = f.Name,
-                    displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
-                    type        = MapTypeName(f.FieldType)!
-                })
-                .ToArray();
-
-            return Marshal.StringToCoTaskMemUTF8(JsonSerializer.Serialize(fields));
+            return Marshal.StringToCoTaskMemUTF8(BuildExposedFieldsJson(instance));
         }
         catch (Exception ex)
         {
@@ -295,6 +285,23 @@ public static class Bridge
             ReportFault(uuid, className, nameof(getExposedFields), ex);
             return Marshal.StringToCoTaskMemUTF8("[]");
         }
+    }
+
+    // The reflection + JSON side of getExposedFields, pulled out of the [UnmanagedCallersOnly] entry
+    // point so it is reachable without an IntPtr uuid/className pair or a live _instances entry.
+    internal static string BuildExposedFieldsJson(object instance)
+    {
+        var fields = instance.GetType()
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null)
+            .Select(f => new {
+                name        = f.Name,
+                displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
+                type        = MapTypeName(f.FieldType)!
+            })
+            .ToArray();
+
+        return JsonSerializer.Serialize(fields);
     }
 
     [UnmanagedCallersOnly]
@@ -350,11 +357,19 @@ public static class Bridge
             return null;
         }
 
-        return instance.GetType()
-            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null)
-            ?.GetValue(instance);
+        return ReadExposedField(instance, fieldName);
     }
+
+    // Finds an [ExposeToEditor] field by name, shared by the read and write paths below - pulled out of
+    // GetField/SetField so it is reachable without an IntPtr uuid/className pair or a live _instances
+    // entry.
+    internal static FieldInfo? FindExposedField(object instance, string fieldName) =>
+        instance.GetType()
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null);
+
+    internal static object? ReadExposedField(object instance, string fieldName) =>
+        FindExposedField(instance, fieldName)?.GetValue(instance);
 
     [UnmanagedCallersOnly]
     public static void setFieldFloat(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, float value)
@@ -401,42 +416,49 @@ public static class Bridge
         {
             return;
         }
-        var field = instance.GetType()
-            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null);
+        var field = FindExposedField(instance, fieldName);
 
         if (field == null)
         {
             return;
         }
 
-        // Convert.ChangeType only handles IConvertible (float/int/bool); a struct like Vector3 arrives as
-        // the field's own type already, so assign it directly.
-        object converted;
-        if (field.FieldType.IsInstanceOfType(value))
+        if (!TryConvertFieldValue(field.FieldType, value, out var converted))
         {
-            converted = value;
-        }
-        else
-        {
-            try
-            {
-                converted = Convert.ChangeType(value, field.FieldType);
-            }
-            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
-            {
-                // Bad input, not a script fault: letting this reach RunGuarded would fault the instance
-                // and skip every later call for it.
-                Log.warn($"Refused a field edit on {uuid} ({className}): field '{fieldName}' is " +
-                         $"{field.FieldType.Name}, got {value.GetType().Name}");
-                return;
-            }
+            // Bad input, not a script fault: letting this reach RunGuarded would fault the instance
+            // and skip every later call for it.
+            Log.warn($"Refused a field edit on {uuid} ({className}): field '{fieldName}' is " +
+                     $"{field.FieldType.Name}, got {value.GetType().Name}");
+            return;
         }
 
         field.SetValue(instance, converted);
     }
 
-    private static string? MapTypeName(Type t)
+    // Convert.ChangeType only handles IConvertible (float/int/bool); a struct like Vector3 arrives as the
+    // field's own type already, so it is assigned directly rather than routed through ChangeType. Pulled
+    // out of SetField so the conversion/refusal rule is reachable without an IntPtr uuid/className pair.
+    internal static bool TryConvertFieldValue(Type fieldType, object value, out object? converted)
+    {
+        if (fieldType.IsInstanceOfType(value))
+        {
+            converted = value;
+            return true;
+        }
+
+        try
+        {
+            converted = Convert.ChangeType(value, fieldType);
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+        {
+            converted = null;
+            return false;
+        }
+    }
+
+    internal static string? MapTypeName(Type t)
     {
         if (t == typeof(float))
         {
@@ -524,6 +546,12 @@ public static class Bridge
     public static unsafe void registerLightRendererBindings(LightRendererBindings bindings)
     {
         NativeBindings.LightRenderer = bindings;
+    }
+
+    [UnmanagedCallersOnly]
+    public static unsafe void registerPlayerControllerBindings(PlayerControllerBindings bindings)
+    {
+        NativeBindings.PlayerController = bindings;
     }
 
     [UnmanagedCallersOnly]

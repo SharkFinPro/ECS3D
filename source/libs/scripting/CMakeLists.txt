@@ -28,6 +28,8 @@ add_library(${PROJECT_NAME}
   bindings/ModelRendererBindings.h
   bindings/LightRendererBindings.cpp
   bindings/LightRendererBindings.h
+  bindings/PlayerControllerBindings.cpp
+  bindings/PlayerControllerBindings.h
   bindings/LogBindings.cpp
   bindings/LogBindings.h
   bindings/InputState.cpp

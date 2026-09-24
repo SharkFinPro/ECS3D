@@ -1,5 +1,19 @@
 <Project>
     <PropertyGroup>
-        <BaseIntermediateOutputPath>$(BuildRoot)obj/</BaseIntermediateOutputPath>
+        <!-- BaseIntermediateOutputPath must land on its final value here, before Sdk.props imports
+             Microsoft.Common.props - the same MSB3539 timing ECS3DManagedTests/Directory.Build.props
+             documents. Setting it conditionally in the .csproj body (as that file does too) is too late to
+             be relied on for this property specifically, so the env-var check has to live here instead:
+             ecs3d_add_managed_assembly's standalone publish sets DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH to
+             ${CMAKE_BINARY_DIR}/ScriptBridge/obj/ and expects that exact path, unchanged from before this
+             project started using Directory.Build.props at all. Only when that env var is absent - a
+             ProjectReference build under someone else's BuildRoot, as ECS3DManagedTests now makes - does
+             the "ScriptBridge/" segment below apply, to keep this project's obj output out of Transport's:
+             without it, this path would collapse to the literal $(BuildRoot)obj/ that Transport's own
+             Directory.Build.props also uses, so referencing both from one project under one shared BuildRoot
+             would point their generated obj output at the same directory - the CS0579 trap
+             ECS3DManagedTests/Directory.Build.props already describes for the test project itself. -->
+        <BaseIntermediateOutputPath Condition="'$(DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH)' != ''">$(DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH)</BaseIntermediateOutputPath>
+        <BaseIntermediateOutputPath Condition="'$(DOTNET_BASE_INTERMEDIATE_OUTPUT_PATH)' == ''">$(BuildRoot)obj/ScriptBridge/</BaseIntermediateOutputPath>
     </PropertyGroup>
 </Project>

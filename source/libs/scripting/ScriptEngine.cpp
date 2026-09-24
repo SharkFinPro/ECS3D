@@ -9,6 +9,7 @@
 #include "bindings/ColliderBindings.h"
 #include "bindings/ModelRendererBindings.h"
 #include "bindings/LightRendererBindings.h"
+#include "bindings/PlayerControllerBindings.h"
 #include "bindings/LogBindings.h"
 #include <Log.h>
 #include <ManagedHost.h>
@@ -136,6 +137,11 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   const auto registerLightRenderer =
     reinterpret_cast<RegisterLightRendererFn>(m_host->getDelegate(assemblyPath, typeName, "registerLightRendererBindings"));
   registerLightRenderer(LightRendererBindingsProvider::getBindings());
+
+  using RegisterPlayerControllerFn = void(*)(PlayerControllerBindings);
+  const auto registerPlayerController =
+    reinterpret_cast<RegisterPlayerControllerFn>(m_host->getDelegate(assemblyPath, typeName, "registerPlayerControllerBindings"));
+  registerPlayerController(PlayerControllerBindingsProvider::getBindings());
 }
 
 void ScriptEngine::reloadScripts() const
