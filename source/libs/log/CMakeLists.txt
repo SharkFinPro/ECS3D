@@ -8,8 +8,20 @@ add_library(${PROJECT_NAME}
   LogSink.h
   ConsoleSink.cpp
   ConsoleSink.h
+  ConsoleWindow.cpp
+  ConsoleWindow.h
+  FileSink.cpp
+  FileSink.h
+  RemoteLogSink.cpp
+  RemoteLogSink.h
   RingBufferSink.cpp
   RingBufferSink.h
+  LogFilter.cpp
+  LogFilter.h
+  UserDataDirectory.cpp
+  UserDataDirectory.h
+  LogSetup.cpp
+  LogSetup.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

@@ -14,6 +14,7 @@
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 
 namespace {
@@ -307,4 +308,141 @@ TEST(RuntimeObject, RestoringWithoutOrAfterAlreadyConsumingACaptureIsANoOp)
   scene->stop();
   ASSERT_EQ(objectManager.getAllObjects().size(), 1u);
   EXPECT_EQ(objectManager.getObjects().front(), afterFirstStop);
+}
+
+namespace {
+  const auto childAUUID = uuids::uuid::from_string("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa").value();
+  const auto childBUUID = uuids::uuid::from_string("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").value();
+
+  // A parent carrying two children with fixed uuids, wired but not registered with any manager - enough
+  // to pack(), which does not need one.
+  std::shared_ptr<Object> parentWithTwoChildren()
+  {
+    auto parent = std::make_shared<Object>("Parent");
+
+    auto childA = std::make_shared<Object>("ChildA", childAUUID);
+    childA->setParent(parent);
+    parent->addChild(childA);
+
+    auto childB = std::make_shared<Object>("ChildB", childBUUID);
+    childB->setParent(parent);
+    parent->addChild(childB);
+
+    return parent;
+  }
+}
+
+TEST(RuntimeObject, UnpackIntoAFreshObjectCreatesEveryPackedChild)
+{
+  const auto componentRegistry = std::make_shared<ComponentRegistry>();
+  const auto objectManager = makeManager(componentRegistry);
+
+  net::Message message(net::MessageType::objectSpawned);
+  parentWithTwoChildren()->pack(message);
+
+  const auto target = std::make_shared<Object>();
+  objectManager->addObject(target);
+
+  net::MessageReader reader(message);
+  target->unpack(reader);
+
+  ASSERT_EQ(target->getChildren().size(), 2u);
+  EXPECT_EQ(target->getChildren()[0]->getUUID(), childAUUID);
+  EXPECT_EQ(target->getChildren()[1]->getUUID(), childBUUID);
+}
+
+TEST(RuntimeObject, UnpackRefusesPackedChildrenSharingAUUID)
+{
+  const auto componentRegistry = std::make_shared<ComponentRegistry>();
+  const auto objectManager = makeManager(componentRegistry);
+
+  // Two children packed under the same uuid - not reachable through pack() from a live tree (addChild
+  // never checks for it, but nothing authored would produce it either), but exactly what the
+  // uuid-matching reconciliation above must not accept: either alias would leave one existing child
+  // referenced twice in m_children, or register two Objects under the one uuid every uuid-keyed lookup
+  // assumes is unique.
+  auto parent = std::make_shared<Object>("Parent");
+  auto childA = std::make_shared<Object>("ChildA", childAUUID);
+  childA->setParent(parent);
+  parent->addChild(childA);
+  auto childADuplicate = std::make_shared<Object>("ChildA again", childAUUID);
+  childADuplicate->setParent(parent);
+  parent->addChild(childADuplicate);
+
+  net::Message message(net::MessageType::objectSpawned);
+  parent->pack(message);
+
+  const auto target = std::make_shared<Object>();
+  objectManager->addObject(target);
+
+  net::MessageReader reader(message);
+  EXPECT_THROW(target->unpack(reader), std::runtime_error);
+}
+
+TEST(RuntimeObject, UnpackReconcilesExistingChildrenInsteadOfDuplicatingThem)
+{
+  const auto componentRegistry = std::make_shared<ComponentRegistry>();
+  const auto objectManager = makeManager(componentRegistry);
+
+  net::Message message(net::MessageType::objectSpawned);
+  parentWithTwoChildren()->pack(message);
+
+  const auto target = std::make_shared<Object>();
+  objectManager->addObject(target);
+
+  net::MessageReader firstReader(message);
+  target->unpack(firstReader);
+
+  ASSERT_EQ(target->getChildren().size(), 2u);
+  const auto firstChild = target->getChildren()[0];
+  const auto secondChild = target->getChildren()[1];
+  const auto allObjectsAfterFirstUnpack = objectManager->getAllObjects().size();
+
+  // The same payload, unpacked again into the object it already populated - the case Object::unpack's
+  // own comment invites ("works on a fresh, empty Object as well as an existing one") but that the
+  // children section did not actually support: it built a fresh Object per packed child regardless of
+  // what was already there, doubling the subtree instead of reconciling it the way components and
+  // scripts above already do.
+  net::MessageReader secondReader(message);
+  target->unpack(secondReader);
+
+  ASSERT_EQ(target->getChildren().size(), 2u);
+  EXPECT_EQ(target->getChildren()[0], firstChild);
+  EXPECT_EQ(target->getChildren()[1], secondChild);
+  EXPECT_EQ(objectManager->getAllObjects().size(), allObjectsAfterFirstUnpack);
+}
+
+TEST(RuntimeObject, UnpackDropsAnExistingChildNoLongerPresentInThePackedData)
+{
+  const auto componentRegistry = std::make_shared<ComponentRegistry>();
+  const auto objectManager = makeManager(componentRegistry);
+
+  net::Message firstMessage(net::MessageType::objectSpawned);
+  parentWithTwoChildren()->pack(firstMessage);
+
+  const auto target = std::make_shared<Object>();
+  objectManager->addObject(target);
+
+  net::MessageReader firstReader(firstMessage);
+  target->unpack(firstReader);
+  ASSERT_EQ(target->getChildren().size(), 2u);
+
+  // The same parent, packed again with only the first child - as if the second had been removed before
+  // this packing.
+  auto updatedParent = std::make_shared<Object>("Parent");
+  auto updatedChildA = std::make_shared<Object>("ChildA", childAUUID);
+  updatedChildA->setParent(updatedParent);
+  updatedParent->addChild(updatedChildA);
+
+  net::Message secondMessage(net::MessageType::objectSpawned);
+  updatedParent->pack(secondMessage);
+
+  net::MessageReader secondReader(secondMessage);
+  target->unpack(secondReader);
+
+  ASSERT_EQ(target->getChildren().size(), 1u);
+  EXPECT_EQ(target->getChildren()[0]->getUUID(), childAUUID);
+
+  // Dropped, not just detached: gone from the manager's own tracking too, not merely off the parent.
+  EXPECT_EQ(objectManager->getObjectByUUID(childBUUID), nullptr);
 }

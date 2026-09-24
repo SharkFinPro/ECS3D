@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 #include <uuid.h>
 
 class ObjectManager;
@@ -82,15 +83,50 @@ private:
   // The object being dragged, resolved once per frame and cleared at the end of it.
   std::shared_ptr<Object> m_dragSource;
 
+  // The tree's current display order (depth-first, respecting sort mode and which nodes are open) -
+  // rebuilt fresh every displayGui() call. A Shift-click range is measured against this, not the scene's
+  // own object graph, so it always matches what is actually on screen (a row hidden behind a collapsed
+  // ancestor is not part of a range spanning past it).
+  std::vector<uuids::uuid> m_visibleOrder;
+
+  // The uuid a Shift-click range is measured from: the last row a plain or Ctrl-click landed on. Shift
+  // and Ctrl+Shift-click leave it alone, so repeated range-selects keep extending from the same start.
+  std::optional<uuids::uuid> m_rangeAnchor;
+
+  // A row click captured during this frame's tree traversal and applied once the traversal (and so
+  // m_visibleOrder) is complete - a Shift-click range needs the full display order, which isn't known
+  // until every row has been visited.
+  struct PendingClick {
+    uuids::uuid uuid;
+    bool ctrl;
+    bool shift;
+  };
+  std::optional<PendingClick> m_pendingClick;
+
   // The small sort-mode picker drawn in the panel header: a "Sort" label, a button naming the current
   // mode, and a popup to switch it.
   void displaySortControl();
 
   void displayObjectTree(const std::shared_ptr<Object>& object);
 
-  // False for a row the current drag must not be dropped onto, so the row registers no drop target and
-  // gives no drop feedback.
+  // Applies m_pendingClick (if any) against the now-complete m_visibleOrder, then clears it. See
+  // m_pendingClick for why this waits until after the whole tree has been traversed.
+  void applyPendingClick();
+
+  // False for a target (a row, for a reparent-onto-it drop, or a sibling list's own parent - null for the
+  // scene root - for a reorder-between-siblings drop) the current drag must not be dropped onto, so it
+  // registers no drop target and ImGui shows the drag its own "not allowed" cursor instead of a silent
+  // no-op once released.
   [[nodiscard]] bool canAcceptObjectDrop(const std::shared_ptr<Object>& target) const;
+
+  // A thin drop target for reordering, placed before the first sibling, between each pair, and after the
+  // last, so a drag can land BETWEEN two siblings at a specific position instead of only being reparented
+  // onto a row (which always appends). parent is the sibling list's own parent (null for the scene root);
+  // index is that list's storage position the object would occupy if the list were untouched - the drop
+  // handler itself accounts for the slot the dragged object vacates when it is already in this same list.
+  // Skipped entirely outside authored sort mode: alphabetical display order does not match the list an
+  // index addresses, so a zone there could not honestly promise where the drop would land.
+  void displayReorderDropZone(const std::shared_ptr<Object>& parent, std::size_t index);
 
   // The "Delete Object?" confirmation modal for m_objectPendingDeletion. Confirming (Yes / Enter) sends
   // a removeObject scene edit; cancelling (No / Escape), or the object vanishing, clears the prompt.

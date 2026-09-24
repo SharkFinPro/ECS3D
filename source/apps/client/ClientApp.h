@@ -34,6 +34,7 @@ public:
     std::string host = "127.0.0.1";
     int port = net::defaultPort;
     bool launchLocalServer = false;
+    bool showServerConsole = true;  // whether the spawned local server gets its own console window
     std::string project;
   };
 
@@ -77,11 +78,17 @@ private:
   // which object's Camera the client renders through. mutable: set from the const message-apply path.
   mutable int32_t m_playerSlot = -1;
 
+  // Set once a connection problem needs the user's attention (lost connection, failed to connect, a
+  // malformed message) and shown on screen until the user closes it. Empty means nothing to show.
+  std::string m_connectionNotice;
+
   void createRenderer();
 
   void connectToServer();
 
   void sendInput();
+
+  void displayConnectionNotice();
 
   void variableUpdate() const;
 
@@ -96,6 +103,8 @@ private:
   void handleObjectSpawned(const net::Message& message) const;
 
   void handleObjectDestroyed(const net::Message& message) const;
+
+  void handleObjectComponentsChanged(const net::Message& message) const;
 
   void handlePlayerSlot(const net::Message& message) const;
 

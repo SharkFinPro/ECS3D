@@ -1,6 +1,7 @@
 #include "CameraEditor.h"
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
+#include "../MixedFields.h"
 #include <objects/components/Camera.h>
 #include <glm/vec3.hpp>
 #include <imgui.h>
@@ -10,7 +11,8 @@
 void registerCameraEditor(ComponentEditor& componentEditor)
 {
   // Keyed by the componentTypeToString display name ("Camera") ObjectGUIManager looks the handler up by.
-  componentEditor.registerHandler("Camera", [](const std::shared_ptr<Component>& component) -> bool {
+  componentEditor.registerHandler("Camera",
+    [](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
     const auto camera = std::dynamic_pointer_cast<Camera>(component);
     if (!camera)
     {
@@ -30,34 +32,37 @@ void registerCameraEditor(ComponentEditor& componentEditor)
       // Only an active camera is picked up by RenderSystem::updateCamera. Note: fov/near/far are carried
       // and serialized, but the engine's projection is currently hardcoded, so editing them has no visible
       // effect until VulkanEngine exposes a projection setter.
-      if (gc::accentCheckbox("Active", &active))
+      if (gc::accentCheckbox("Active", &active, mixed.contains("active")))
       {
         camera->setActive(active);
         edited = true;
       }
 
       // The direction the camera looks, relative to the object's rotation. (0,0,-1) = the object's forward.
-      if (gc::xyzGuiBoxed("Direction", &direction.x, &direction.y, &direction.z, 0.01f))
+      if (gc::xyzGuiBoxed("Direction", &direction.x, &direction.y, &direction.z, 0.01f,
+                          mixed.contains("direction")))
       {
         camera->setDirection(direction);
         edited = true;
       }
 
-      if (gc::accentSlider("FOV", &fov, 1.0f, 179.0f))
+      if (gc::accentSlider("FOV", &fov, Camera::minFovDegrees, Camera::maxFovDegrees, mixed.contains("fov")))
       {
         camera->setFov(fov);
         edited = true;
       }
 
-      if (gc::labeledDrag("Near Plane", &nearPlane, 0.01f))
+      // The component itself enforces the minimum/relation now; these std::max calls just keep the
+      // widget's own displayed value from visibly snapping back next frame.
+      if (gc::labeledDrag("Near Plane", &nearPlane, 0.01f, mixed.contains("nearPlane")))
       {
-        camera->setNearPlane(std::max(nearPlane, 0.001f));
+        camera->setNearPlane(std::max(nearPlane, Camera::minNearPlane));
         edited = true;
       }
 
-      if (gc::labeledDrag("Far Plane", &farPlane, 1.0f))
+      if (gc::labeledDrag("Far Plane", &farPlane, 1.0f, mixed.contains("farPlane")))
       {
-        camera->setFarPlane(std::max(farPlane, nearPlane + 0.001f));
+        camera->setFarPlane(std::max(farPlane, Camera::minFarPlaneFor(nearPlane)));
         edited = true;
       }
     }

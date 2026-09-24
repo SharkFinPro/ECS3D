@@ -14,10 +14,13 @@ add_library(${PROJECT_NAME}
   WireTypes.h
   assets/AssetRegistry.cpp
   assets/AssetRegistry.h
+  edits/AssetWireType.h
   edits/EditCommand.cpp
   edits/EditCommand.h
   edits/EditHistory.cpp
   edits/EditHistory.h
+  edits/RecordEdits.cpp
+  edits/RecordEdits.h
   scenes/SceneManager.cpp
   scenes/SceneManager.h
   scenes/SceneAsset.cpp
@@ -26,8 +29,13 @@ add_library(${PROJECT_NAME}
   objects/Object.h
   objects/ObjectManager.cpp
   objects/ObjectManager.h
+  objects/ComponentFieldDelta.cpp
+  objects/ComponentFieldDelta.h
+  objects/WorldPlacement.cpp
+  objects/WorldPlacement.h
   objects/components/Component.cpp
   objects/components/Component.h
+  objects/components/FiniteCheck.h
   objects/components/Transform.cpp
   objects/components/Transform.h
   objects/components/RigidBody.cpp
@@ -59,6 +67,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   glm::glm
   stduuid
   ECS3DNetProtocol
+  ECS3DLog
 )
 
 # ECS3DData is feature-complete: all component data, Object/ObjectManager, scenes (SceneManager/

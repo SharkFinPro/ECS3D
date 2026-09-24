@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   ScriptSystem.h
   ScriptEngine.cpp
   ScriptEngine.h
+  ScriptFieldEdit.cpp
+  ScriptFieldEdit.h
   bindings/BindingContext.cpp
   bindings/BindingContext.h
   bindings/BindingCoverage.h
@@ -16,10 +18,20 @@ add_library(${PROJECT_NAME}
   bindings/InputUtilsBindings.h
   bindings/WorldBindings.cpp
   bindings/WorldBindings.h
+  bindings/ComponentOpsBindings.cpp
+  bindings/ComponentOpsBindings.h
   bindings/CameraBindings.cpp
   bindings/CameraBindings.h
+  bindings/ColliderBindings.cpp
+  bindings/ColliderBindings.h
   bindings/ModelRendererBindings.cpp
   bindings/ModelRendererBindings.h
+  bindings/LightRendererBindings.cpp
+  bindings/LightRendererBindings.h
+  bindings/PlayerControllerBindings.cpp
+  bindings/PlayerControllerBindings.h
+  bindings/LogBindings.cpp
+  bindings/LogBindings.h
   bindings/InputState.cpp
   bindings/InputState.h
 )
@@ -31,6 +43,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DData
   ECS3DClrHost
+  ECS3DLog
 )
 
 # The InputUtils binding reads the networked InputState (the headless server has no GLFW window):

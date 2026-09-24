@@ -5,12 +5,20 @@
 #include "components/Script.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 #include <Protocol.h>
 
 Object::Object(std::string name)
   : m_name(std::move(name))
+{
+  addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
+}
+
+Object::Object(std::string name, const uuids::uuid uuid)
+  : m_uuid(uuid),
+    m_name(std::move(name))
 {
   addComponent(std::make_shared<Transform>(glm::vec3(0), glm::vec3(1), glm::vec3(0)));
 }
@@ -71,6 +79,12 @@ void Object::addChild(std::shared_ptr<Object> child)
   m_children.emplace_back(std::move(child));
 }
 
+void Object::addChild(std::shared_ptr<Object> child, const std::size_t index)
+{
+  const std::size_t clampedIndex = std::min(index, m_children.size());
+  m_children.insert(m_children.begin() + static_cast<std::ptrdiff_t>(clampedIndex), std::move(child));
+}
+
 void Object::removeChild(const std::shared_ptr<Object>& child)
 {
   std::erase(m_children, child);
@@ -81,8 +95,7 @@ const std::vector<std::shared_ptr<Object>>& Object::getChildren() const
   return m_children;
 }
 
-void Object::addComponent(const std::shared_ptr<Component>& component,
-                          const bool setOwner)
+void Object::addComponent(const std::shared_ptr<Component>& component)
 {
   if (component->getType() == ComponentType::script)
   {
@@ -106,10 +119,7 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
     return;
   }
 
-  if (setOwner)
-  {
-    component->setOwner(this);
-  }
+  component->setOwner(this);
 
   // Added to an object that is already running: without this its ComponentVariables stay backed by the
   // authored value, so a runtime write would be saved into the scene as if it had been authored.
@@ -121,13 +131,36 @@ void Object::addComponent(const std::shared_ptr<Component>& component,
 
 void Object::removeComponent(const std::shared_ptr<Component>& component)
 {
+  // Erase by identity, not just by type/slot: a component instance that is not actually the one this
+  // object holds (a stale pointer, or the wrong instance of the same type) must not be stopped, and
+  // must not evict whatever this object actually has in that slot.
   if (component->getType() == ComponentType::script)
   {
-    std::erase(m_scripts, component);
+    const auto scriptIt = std::ranges::find(m_scripts, component);
+    if (scriptIt == m_scripts.end())
+    {
+      return;
+    }
+
+    m_scripts.erase(scriptIt);
   }
   else
   {
-    m_components.erase(component->getType());
+    const auto componentIt = m_components.find(component->getType());
+    if (componentIt == m_components.end() || componentIt->second != component)
+    {
+      return;
+    }
+
+    m_components.erase(componentIt);
+  }
+
+  // Mirrors addComponent: a component removed from a running object stays live (its ComponentVariables
+  // still backed by the runtime value) unless stopped here, so it would serialize with whatever the run
+  // last wrote to it instead of its authored value if the object is saved after removal.
+  if (m_started)
+  {
+    component->stop();
   }
 }
 
@@ -346,6 +379,15 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
 
   const auto& registry = m_manager->getComponentRegistry();
 
+  // Reconciled the same way the children below already are: every lookup key (m_components slot) the
+  // payload actually names is recorded here, and anything left over afterward - a component this object
+  // had that the payload no longer carries - is dropped. Every caller today unpacks into a freshly built
+  // object (just its constructor's Transform), so this has never had anything to drop before; it starts
+  // mattering once something unpacks a script's post-tick component change into the live object it already
+  // is (replication::applyObjectComponentsChanged).
+  std::vector<ComponentType> packedComponentSlots;
+  packedComponentSlots.reserve(m_components.size());
+
   const uint32_t componentCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < componentCount; ++i)
   {
@@ -374,6 +416,8 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     {
       lookupType = parentIt->second;
     }
+
+    packedComponentSlots.push_back(lookupType);
 
     // Look up directly (not via getComponent, which falls back to the parent's rigidBody) so a fresh
     // object reconstructs its own components instead of unpacking into an inherited one.
@@ -408,6 +452,26 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     component->unpack(messageReader);
   }
 
+  // Drop whatever existing component slot the payload did not name - collected first (removeComponent
+  // erases from m_components, the map this loop would otherwise be mutating while it walks it).
+  std::vector<std::shared_ptr<Component>> staleComponents;
+  for (const auto& [slot, existingComponent] : m_components)
+  {
+    if (std::ranges::find(packedComponentSlots, slot) == packedComponentSlots.end())
+    {
+      staleComponents.push_back(existingComponent);
+    }
+  }
+
+  for (const auto& stale : staleComponents)
+  {
+    removeComponent(stale);
+  }
+
+  // Unlike the components above and the children below, an existing script whose class the payload does
+  // not name is left alone here - nothing sends a payload that omits one today, so a future path that
+  // replicates a script add/remove would need its own reconciliation, the way applyObjectComponentsChanged
+  // needed one added for components.
   const uint32_t scriptCount = messageReader.read<uint32_t>();
   for (uint32_t i = 0; i < scriptCount; ++i)
   {
@@ -447,16 +511,70 @@ void Object::unpackFields(net::MessageReader& messageReader, const std::size_t d
     script->unpack(messageReader);
   }
 
-  // Children. Each is packed as a full object (its uuid leads, read by the recursive unpack below);
-  // reconstructed fresh and wired to this parent + the manager before unpacking its own subtree.
+  // Children. Each is packed as a full object (its uuid leads, read by the recursive unpack below).
+  // Reconciled the same way as the components and scripts above: an existing child with the matching
+  // uuid is unpacked into rather than duplicated, so refreshing an object that already has children does
+  // not double its subtree. Packed order is kept, and any existing child not named in the packed data is
+  // dropped afterward.
+  // childCount comes off the wire, so it must not size anything before the bytes behind it are read -
+  // the same reasoning replication::parseInputState applies to numKeys. Left unreserved rather than
+  // bounded against a per-child minimum: push_back's own growth is what pays for an oversized count, not
+  // an allocation sized from a number nothing has checked yet.
   const uint32_t childCount = messageReader.read<uint32_t>();
+  const auto oldChildren = m_children;
+  std::vector<std::shared_ptr<Object>> newChildren;
+
   for (uint32_t i = 0; i < childCount; ++i)
   {
-    auto child = std::make_shared<Object>();
-    child->setParent(shared_from_this());
-    m_manager->addObject(child);
+    // Peek the child's uuid - its first field, per pack() - on a copy of the reader, so matching it
+    // against an existing child does not disturb the real reader. Whichever object ends up unpacking
+    // below, existing or freshly built, reads the child's fields itself, uuid included.
+    net::MessageReader uuidPeek = messageReader;
+    const auto childUUID = uuids::uuid::from_string(uuidPeek.readString()).value();
+
+    // Two packed children sharing a uuid would otherwise alias one existing child twice in m_children,
+    // or create two Objects registered under the same uuid - the uuid-keyed lookups everything else
+    // relies on (ObjectManager::getObjectByUUID chief among them) assume that never happens.
+    if (std::ranges::find_if(newChildren, [&childUUID](const auto& accepted) {
+          return accepted->getUUID() == childUUID;
+        }) != newChildren.end())
+    {
+      throw std::runtime_error("Packed children contain a duplicate uuid");
+    }
+
+    std::shared_ptr<Object> child;
+    for (const auto& existing : oldChildren)
+    {
+      if (existing->getUUID() == childUUID)
+      {
+        child = existing;
+        break;
+      }
+    }
+
+    if (!child)
+    {
+      child = std::make_shared<Object>();
+      child->setParent(shared_from_this());
+      m_manager->addObject(child);
+    }
 
     child->unpack(messageReader, depth + 1);
+    newChildren.push_back(child);
+  }
+
+  m_children = newChildren;
+
+  // Drop whatever existing child was not named in the packed data. discardSubtree both detaches it here
+  // (it is this child's parent, so removeChild is a no-op against the already-updated m_children above)
+  // and unregisters it, and its own descendants, from the manager - the same tracking a caller keeping a
+  // half-built subtree already relies on it for.
+  for (const auto& existing : oldChildren)
+  {
+    if (std::ranges::find(newChildren, existing) == newChildren.end())
+    {
+      m_manager->discardSubtree(existing);
+    }
   }
 }
 
@@ -505,7 +623,17 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     }
 
     addComponent(component);
-    component->loadFromJSON(componentData);
+
+    // The whole project load is atomic, so one bad field aborts every scene in the file. Naming the
+    // object and the component here is the only thing that tells the log line which one it was.
+    try
+    {
+      component->loadFromJSON(componentData);
+    }
+    catch (const std::exception& e)
+    {
+      throw std::runtime_error(describeLoadFailure(componentType, e));
+    }
   }
 
   for (const auto& scriptData : objectData.at("scripts"))
@@ -518,6 +646,19 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
     }
 
     addComponent(script);
-    script->loadFromJSON(scriptData);
+
+    try
+    {
+      script->loadFromJSON(scriptData);
+    }
+    catch (const std::exception& e)
+    {
+      throw std::runtime_error(describeLoadFailure("Script", e));
+    }
   }
+}
+
+std::string Object::describeLoadFailure(const std::string& componentType, const std::exception& error) const
+{
+  return "object '" + m_name + "' (" + uuids::to_string(m_uuid) + "): " + componentType + ": " + error.what();
 }

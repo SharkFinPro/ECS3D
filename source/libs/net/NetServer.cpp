@@ -1,8 +1,13 @@
 #include "NetServer.h"
+#include "TransportLog.h"
 #include <ManagedHost.h>
+#include <Log.h>
+#include <LogEntry.h>
 #include <array>
-#include <iostream>
+#include <atomic>
+#include <cstddef>
 #include <limits>
+#include <span>
 #include <utility>
 
 namespace net {
@@ -15,34 +20,41 @@ namespace {
   using ServerStartFn = void(*)(int32_t, uint8_t, const char*);
   using ServerStopFn = void(*)();
   using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
+  // connIds/connIdCount name the specific connections to send to (editor connections only, never every
+  // connection like ServerBroadcastFn) - one call for the whole fan-out, so the transport can apply one
+  // shared deadline across it the same way it already does for a broadcast.
+  using ServerSendToManyFn = void(*)(const int32_t*, int32_t, uint8_t, const uint8_t*, int32_t);
   using ServerConnectionCountFn = int32_t(*)();
   using SetCallbackFn = void(*)(void*);
 
-  // One authoritative server per process; the C# socket thread routes inbound messages here.
-  NetServer* g_activeServer = nullptr;
+  // One authoritative server per process; the C# socket thread routes inbound messages here. Atomic
+  // because it is written on the tick thread (start/stop) and read on the socket threads with no other
+  // synchronization between them - a plain pointer here would be a data race even though the callbacks
+  // null-check it.
+  std::atomic<NetServer*> g_activeServer{nullptr};
 }
 
 extern "C" void ecs3dNetServerReceive(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  if (g_activeServer)
+  if (auto* server = g_activeServer.load(std::memory_order_acquire))
   {
-    g_activeServer->enqueue(connId, type, data, len);
+    server->enqueue(connId, type, data, len);
   }
 }
 
 extern "C" void ecs3dNetServerDisconnect(const int32_t connId)
 {
-  if (g_activeServer)
+  if (auto* server = g_activeServer.load(std::memory_order_acquire))
   {
-    g_activeServer->enqueueDisconnect(connId);
+    server->enqueueDisconnect(connId);
   }
 }
 
 extern "C" void ecs3dNetServerAuthorized(const int32_t connId, const uint8_t role)
 {
-  if (g_activeServer)
+  if (auto* server = g_activeServer.load(std::memory_order_acquire))
   {
-    g_activeServer->authorize(connId, role);
+    server->authorize(connId, role);
   }
 }
 
@@ -64,15 +76,18 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   m_startFn = m_host->getDelegate(kAssembly, kType, "serverStart");
   m_stopFn = m_host->getDelegate(kAssembly, kType, "serverStop");
   m_broadcastFn = m_host->getDelegate(kAssembly, kType, "serverBroadcast");
+  m_sendToManyFn = m_host->getDelegate(kAssembly, kType, "serverSendToMany");
   m_connectionCountFn = m_host->getDelegate(kAssembly, kType, "serverConnectionCount");
   m_setCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetReceiveCallback");
   m_setDisconnectCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetDisconnectCallback");
   m_setAuthorizedCallbackFn = m_host->getDelegate(kAssembly, kType, "serverSetAuthorizedCallback");
+  m_setLogCallbackFn = m_host->getDelegate(kAssembly, kType, "setLogCallback");
 
-  g_activeServer = this;
+  g_activeServer.store(this, std::memory_order_release);
   reinterpret_cast<SetCallbackFn>(m_setCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerReceive));
   reinterpret_cast<SetCallbackFn>(m_setDisconnectCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerDisconnect));
   reinterpret_cast<SetCallbackFn>(m_setAuthorizedCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerAuthorized));
+  reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
 
   reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0, authToken.c_str());
   m_started = true;
@@ -85,9 +100,14 @@ void NetServer::stop()
     return;
   }
 
+  // The managed stop joins the accept thread and every per-connection receive thread before returning
+  // (TcpBackend/WebSocketBackend ServerStop), so no socket thread can still be inside enqueue/
+  // enqueueDisconnect/authorize by the time the pointer below is cleared. Clearing it after, rather than
+  // before, matters only for a stray callback that could otherwise race the object's destruction; the
+  // join is what actually makes that impossible.
   reinterpret_cast<ServerStopFn>(m_stopFn)();
 
-  g_activeServer = nullptr;
+  g_activeServer.store(nullptr, std::memory_order_release);
   m_started = false;
 }
 
@@ -103,13 +123,57 @@ void NetServer::broadcast(const Message& message) const
   // there is no caller to throw to - log the refusal instead.
   if (!fitsInWireFrameLength(message.size()))
   {
-    std::cerr << "[NetServer] Refusing to broadcast a " << message.size() << " byte message; the limit is "
-              << std::numeric_limits<int32_t>::max() << "." << std::endl;
+    Log::error(LogCategory::net, "Refusing to broadcast a " + std::to_string(message.size())
+      + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
     return;
   }
 
   // Snapshots on join, state deltas per tick. The C# transport sends to every connected client.
   reinterpret_cast<ServerBroadcastFn>(m_broadcastFn)(
+    static_cast<uint8_t>(message.getType()),
+    message.bytes().data(),
+    static_cast<int32_t>(message.size())
+  );
+}
+
+void NetServer::sendToEditors(const Message& message) const
+{
+  if (!m_started)
+  {
+    return;
+  }
+
+  // A size above INT32_MAX would narrow to a negative or truncated frame length on the wire; refuse it
+  // here rather than hand the cast something it cannot represent, the same guard broadcast() applies.
+  if (!fitsInWireFrameLength(message.size()))
+  {
+    Log::error(LogCategory::net, "Refusing to send a " + std::to_string(message.size())
+      + " byte message; the limit is " + std::to_string(std::numeric_limits<int32_t>::max()) + ".");
+    return;
+  }
+
+  // Copied out and the lock released before the transport is touched at all: this runs on the
+  // authoritative tick thread, and sendToMany below can block on a stalled socket. Holding m_editorMutex
+  // across that would let a stalled editor connection block authorize()/isEditor()/takeDisconnected() -
+  // none of which have anything to do with sending - for as long as the transport's own send budget runs.
+  std::vector<int32_t> connIds;
+  {
+    std::lock_guard lock(m_editorMutex);
+    if (m_editorConnections.empty())
+    {
+      return;
+    }
+
+    connIds.assign(m_editorConnections.begin(), m_editorConnections.end());
+  }
+
+  // One call for the whole fan-out (rather than one per editor) so the transport can apply a single
+  // shared time budget across every editor, the same way ServerBroadcast already does across every
+  // connection - a per-connection call here would let K stalled editors cost this tick K times the
+  // transport's per-send timeout instead of that timeout once.
+  reinterpret_cast<ServerSendToManyFn>(m_sendToManyFn)(
+    connIds.data(),
+    static_cast<int32_t>(connIds.size()),
     static_cast<uint8_t>(message.getType()),
     message.bytes().data(),
     static_cast<int32_t>(message.size())
@@ -133,11 +197,13 @@ bool NetServer::poll(Message& message, int32_t& senderId)
 
 void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  Message message(static_cast<MessageType>(type));
-  for (const std::vector<uint8_t> chunks(data, data + len); const auto& chunk : chunks)
-  {
-    message.write(chunk);
-  }
+  // An empty payload is legal (the editor's join carries none, and ServerApp::handleJoin keys on that),
+  // so a zero or negative length, or a null buffer, is an empty message rather than a range to walk.
+  const auto payload = len > 0 && data != nullptr
+    ? std::span<const uint8_t>(data, static_cast<std::size_t>(len))
+    : std::span<const uint8_t>();
+
+  Message message(static_cast<MessageType>(type), payload);
 
   m_inbox.push(std::move(message), connId);
 }

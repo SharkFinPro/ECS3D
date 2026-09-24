@@ -38,6 +38,16 @@ internal sealed class WebSocketBackend : TransportBackend
   //    still goes async, so it degrades to plain bandwidth cost (same as TCP) instead of a 15ms hitch.
   private const int SocketBufferSize = 1 << 20; // 1 MiB per direction.
 
+  // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
+  // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
+  // once rather than ten times over. SendAsync completes only once the message has reached the socket's
+  // send buffer, and broadcasts run on the tick thread, so the bound is what physics and scripts can lose
+  // to the network in a tick. Only the connection whose own send ran out of budget is dropped; peers the
+  // broadcast never reached are skipped for that message and kept. Two seconds because a stall then costs
+  // at most one tick's worth before the peer responsible is dropped, while still being far longer than any
+  // plausible snapshot send takes on a healthy link.
+  private const int SendTimeoutMs = 2000;
+
   static WebSocketBackend()
   {
     ThreadPool.GetMinThreads(out var worker, out var io);
@@ -56,21 +66,40 @@ internal sealed class WebSocketBackend : TransportBackend
   // inbound message so the server can keep per-client state (e.g. input). Never reused within a run.
   private int _nextConnId;
 
+  // Every per-connection thread the accept loop has started, so ServerStop can join them all before
+  // returning - closing a socket only unblocks the thread's blocked receive, it doesn't wait for the
+  // thread to actually exit. A finished thread removes itself here from its own cleanup path.
+  private readonly List<Thread> _connectionThreads = new();
+
   // -- Client --
-  private WebSocket? _client;
-  private HttpMessageInvoker? _clientInvoker;
-  private CancellationTokenSource? _clientCts;
+  // One object per connection so a swap (Interlocked.Exchange/CompareExchange) moves the whole triple
+  // atomically - no torn reads of a socket from one connection paired with another's token or invoker.
+  private sealed class ClientConnection(WebSocket socket, CancellationTokenSource cts, HttpMessageInvoker invoker)
+  {
+    public readonly WebSocket Socket = socket;
+    public readonly CancellationTokenSource Cts = cts;
+    public readonly HttpMessageInvoker Invoker = invoker;
+  }
+
+  private ClientConnection? _connection;
   private readonly SemaphoreSlim _clientSendLock = new(1, 1);
   private Thread? _clientThread;
   private volatile bool _clientRunning;
 
+  // Comfortably under the callers' 15 s retry budget so several attempts fit, and long enough for a real
+  // WAN handshake. Unbounded, one attempt against a host that routes but never answers runs to the OS
+  // connect timeout (~21 s on Windows) and outlives the whole budget on its own.
+  private const int ConnectTimeoutMs = 3000;
+
   // A WebSocket is safe for one concurrent send and one concurrent receive, but not for concurrent sends.
   // The send lock serializes broadcasts (and any future sender) onto a single connection.
-  private sealed class Connection(WebSocket socket, CancellationTokenSource cts)
+  private sealed class Connection(WebSocket socket, CancellationTokenSource cts, int connId)
   {
     public readonly WebSocket Socket = socket;
     public readonly CancellationTokenSource Cts = cts;
     public readonly SemaphoreSlim SendLock = new(1, 1);
+    // The id C++ knows this connection by, so a send that fails on the broadcast path can name it.
+    public readonly int ConnId = connId;
   }
 
   public override void ServerStart(int port, bool editMode, string expectedToken)
@@ -90,25 +119,45 @@ internal sealed class WebSocketBackend : TransportBackend
     _acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "ecs3d-net-accept" };
     _acceptThread.Start();
 
-    Console.WriteLine($"[Transport] WebSocket server listening on port {port} (editMode={EditMode}).");
+    Transport.Log(TransportLogLevel.Info, $"WebSocket server listening on port {port} (editMode={EditMode}).");
   }
 
   public override void ServerStop()
   {
-    _serverRunning = false;
-
     try { _listener?.Stop(); } catch { /* already closed */ }
     _listener = null;
 
+    Thread[] connectionThreads;
     lock (_clientsLock)
     {
+      // Flipped under the same lock AcceptLoop checks it (and registers a new connection's thread) under,
+      // and before the _connectionThreads snapshot below: either AcceptLoop's check runs first and its
+      // thread is already in the list this snapshot walks, or this flip runs first and AcceptLoop's check
+      // sees _serverRunning false and closes that socket without ever starting a thread. There is no
+      // ordering where a thread starts without being one this call joins.
+      _serverRunning = false;
+
       foreach (var conn in _connections)
       {
         Close(conn.Socket, conn.Cts);
       }
 
       _connections.Clear();
+
+      connectionThreads = _connectionThreads.ToArray();
     }
+
+    // Closing the sockets above only unblocks each thread's blocked accept/receive; it does not wait for
+    // the thread to actually finish. Join here so ServerStop (and therefore NetServer::stop, and therefore
+    // ServerApp's destructor) does not return while a socket thread can still call back into the C++
+    // NetServer it is tearing down.
+    JoinThread(_acceptThread, "accept");
+    foreach (var thread in connectionThreads)
+    {
+      JoinThread(thread, "connection");
+    }
+
+    _acceptThread = null;
   }
 
   public override int ServerConnectionCount()
@@ -128,17 +177,106 @@ internal sealed class WebSocketBackend : TransportBackend
 
     var message = BuildMessage(type, data, len);
 
+    // The fan-out runs off a snapshot so the sends happen outside _clientsLock. This is the tick thread,
+    // and a send to a peer that has stopped reading blocks until the budget below runs out; holding the
+    // lock across that would block the accept path and every receive loop's cleanup along with it.
+    Connection[] connections;
     lock (_clientsLock)
     {
-      for (var i = _connections.Count - 1; i >= 0; --i)
+      connections = _connections.ToArray();
+    }
+
+    SendToTargets(connections, message, "broadcast");
+  }
+
+  public override void ServerSendToMany(nint connIds, int connIdCount, byte type, nint data, int len)
+  {
+    if (connIdCount <= 0 || TooLargeToSend(len))
+    {
+      return;
+    }
+
+    var ids = new int[connIdCount];
+    Marshal.Copy(connIds, ids, 0, connIdCount);
+    var idSet = new HashSet<int>(ids);
+
+    // Same snapshot-outside-the-lock shape as ServerBroadcast, just filtered to the named connections
+    // (editor connections only) instead of every connection.
+    var targets = new List<Connection>(idSet.Count);
+    lock (_clientsLock)
+    {
+      foreach (var conn in _connections)
       {
-        if (!SendMessage(_connections[i], message))
+        if (idSet.Contains(conn.ConnId))
         {
-          // The connection dropped mid-send; reap it.
-          Close(_connections[i].Socket, _connections[i].Cts);
-          _connections.RemoveAt(i);
+          targets.Add(conn);
         }
       }
+    }
+
+    if (targets.Count == 0)
+    {
+      // Every named connection has since disconnected - nothing to send to, and no point building a message.
+      return;
+    }
+
+    SendToTargets(targets.ToArray(), BuildMessage(type, data, len), "send");
+  }
+
+  // Shared by ServerBroadcast (every connection) and ServerSendToMany (a named subset): sends message to
+  // each of targets under one time budget for the whole fan-out, so K stalled peers cost this call the
+  // budget once rather than K times over - the tick thread this runs on could otherwise lose K times
+  // SendTimeoutMs to peers that have stopped reading. `what` names the operation in the log line so a
+  // stall is traceable to which path caused it.
+  private void SendToTargets(Connection[] targets, byte[] message, string what)
+  {
+    var deadline = Environment.TickCount64 + SendTimeoutMs;
+    var skipped = 0;
+
+    foreach (var conn in targets)
+    {
+      var remaining = deadline - Environment.TickCount64;
+      if (remaining <= 0)
+      {
+        // An earlier peer spent the budget. Skip the rest rather than dropping them: they have done
+        // nothing wrong, and reaping them would punish healthy peers for their position in the list. They
+        // miss this one message and are sent the next one as usual.
+        ++skipped;
+        continue;
+      }
+
+      // The connection dropped mid-send, or did not accept the message inside the remaining budget.
+      if (!SendMessage(conn, message, (int)remaining) && Reap(conn))
+      {
+        Transport.Log(TransportLogLevel.Warn,
+          $"Dropping connection {conn.ConnId}: the send failed or timed out.");
+      }
+    }
+
+    // One line per call rather than one per connection, so a peer stalling tick after tick is visible in
+    // the log without burying it.
+    if (skipped > 0)
+    {
+      Transport.Log(TransportLogLevel.Warn,
+        $"Skipped {skipped} connection(s): this {what} spent its whole {SendTimeoutMs} ms budget.");
+    }
+  }
+
+  // Closes a connection and takes it off the broadcast list. True only when this call is the one that
+  // removed it: a peer that closed itself is reaped by its own receive loop, and that is an ordinary
+  // disconnect rather than something to warn about.
+  //
+  // Closing makes the connection's blocked receive return, and HandleClient's cleanup owns the
+  // DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing an
+  // already-closed connection is harmless.
+  private bool Reap(Connection conn)
+  {
+    Close(conn.Socket, conn.Cts);
+
+    lock (_clientsLock)
+    {
+      // By reference rather than by index: the list may have changed since the broadcast's snapshot.
+      return _connections.Remove(conn);
     }
   }
 
@@ -161,6 +299,30 @@ internal sealed class WebSocketBackend : TransportBackend
         IsBackground = true,
         Name = "ecs3d-net-client"
       };
+
+      // ServerStop can run concurrently with this: it may have already taken _clientsLock, closed every
+      // connection, snapshotted _connectionThreads and returned by the time a socket that was queued by
+      // the OS just before _listener.Stop() reaches here. Checking _serverRunning and registering this
+      // thread in the one critical section ServerStop also flips the flag and takes its snapshot under
+      // closes that window: either this call finds the flag already false and closes the socket without
+      // ever starting a thread, or it registers the thread before ServerStop can take its snapshot -
+      // there is no ordering where a thread starts without being one ServerStop goes on to join.
+      bool accepted;
+      lock (_clientsLock)
+      {
+        accepted = _serverRunning;
+        if (accepted)
+        {
+          _connectionThreads.Add(thread);
+        }
+      }
+
+      if (!accepted)
+      {
+        try { tcp.Close(); } catch { /* ignore */ }
+        continue;
+      }
+
       thread.Start();
     }
   }
@@ -195,7 +357,7 @@ internal sealed class WebSocketBackend : TransportBackend
       var handshakePayload = first is null ? null : Payload(first);
       if (first is null || first.Length < 1 || first[0] != HandshakeType || !Authorize(handshakePayload!))
       {
-        Console.Error.WriteLine("[Transport] Rejected a connection that failed the handshake.");
+        Transport.Log(TransportLogLevel.Warn, "Rejected a connection that failed the handshake.");
         return;
       }
 
@@ -205,7 +367,7 @@ internal sealed class WebSocketBackend : TransportBackend
       // can enforce that role on every later message rather than trusting one the sender claims.
       Transport.DeliverServerAuthorized(connId, handshakePayload![0]);
 
-      conn = new Connection(ws, cts);
+      conn = new Connection(ws, cts, connId);
       lock (_clientsLock)
       {
         _connections.Add(conn);
@@ -228,13 +390,18 @@ internal sealed class WebSocketBackend : TransportBackend
     }
     finally
     {
-      if (conn != null)
+      lock (_clientsLock)
       {
-        lock (_clientsLock)
+        if (conn != null)
         {
           _connections.Remove(conn);
         }
 
+        _connectionThreads.Remove(Thread.CurrentThread);
+      }
+
+      if (conn != null)
+      {
         // Release any player slot the server bound to this connection (only admitted connections, which
         // are the ones that got a connId, reach here with conn != null).
         Transport.DeliverServerDisconnect(connId);
@@ -260,16 +427,21 @@ internal sealed class WebSocketBackend : TransportBackend
       return 1;
     }
 
+    // Held out here so a failure before _connection takes ownership can still dispose them.
+    ClientWebSocket? ws = null;
+    HttpMessageInvoker? invoker = null;
+    ClientConnection? connection = null;
+
     try
     {
-      var ws = new ClientWebSocket();
+      ws = new ClientWebSocket();
       ws.Options.KeepAliveInterval = KeepAlive;
 
       // ClientWebSocket gives no way to set NoDelay on its socket, so it would otherwise leave Nagle's
       // algorithm enabled - small per-tick messages get held ~40ms (Nagle + delayed ACK), the lag the
       // TCP backend avoids by setting NoDelay on both ends. A ConnectCallback lets us own the socket and
       // disable Nagle ourselves.
-      var invoker = new HttpMessageInvoker(new SocketsHttpHandler
+      invoker = new HttpMessageInvoker(new SocketsHttpHandler
       {
         ConnectCallback = static async (context, ct) =>
         {
@@ -292,30 +464,55 @@ internal sealed class WebSocketBackend : TransportBackend
         }
       });
 
-      ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, CancellationToken.None).GetAwaiter().GetResult();
+      // Scoped to the connect alone: disposing the source kills its pending timer, so a slow but
+      // successful connect cannot be aborted once the connection is live.
+      using (var connectCts = new CancellationTokenSource(ConnectTimeoutMs))
+      {
+        ws.ConnectAsync(new Uri($"ws://{host}:{port}/"), invoker, connectCts.Token).GetAwaiter().GetResult();
+      }
 
-      _client = ws;
-      _clientInvoker = invoker;
-      _clientCts = new CancellationTokenSource();
+      connection = new ClientConnection(ws, new CancellationTokenSource(), invoker);
+      _connection = connection;
 
       // Send role + token as the first message so the server can authorize this connection (in
       // particular grant Role.editor) before any protocol message. Same wire format everywhere.
-      SendHandshake(role, token);
+      SendHandshake(connection, role, token);
+    }
+    catch (OperationCanceledException)
+    {
+      Transport.Log(TransportLogLevel.Warn, $"Connect to {host}:{port} timed out after {ConnectTimeoutMs} ms.");
+      DisconnectClient();
+      DisposeClientPieces(ws, invoker);
+      return 0;
     }
     catch (Exception e)
     {
-      Console.Error.WriteLine($"[Transport] Client failed to connect to {host}:{port}: {e.Message}");
+      Transport.Log(TransportLogLevel.Warn, $"Client failed to connect to {host}:{port}: {e.Message}");
       DisconnectClient();
+      DisposeClientPieces(ws, invoker);
       return 0;
     }
 
     _clientRunning = true;
 
-    _clientThread = new Thread(ClientReceiveLoop) { IsBackground = true, Name = "ecs3d-net-recv" };
+    _clientThread = new Thread(() => ClientReceiveLoop(connection!))
+    {
+      IsBackground = true,
+      Name = "ecs3d-net-recv"
+    };
     _clientThread.Start();
 
-    Console.WriteLine($"[Transport] Connected to {host}:{port}.");
+    Transport.Log(TransportLogLevel.Info, $"Connected to {host}:{port}.");
     return 1;
+  }
+
+  // A connect that fails before the client fields take ownership leaves the socket and its invoker as
+  // locals that DisconnectClient cannot see, so a retry loop would otherwise drop a pair per attempt.
+  // Safe to call once the fields did take them: both disposals are idempotent.
+  private static void DisposeClientPieces(ClientWebSocket? ws, HttpMessageInvoker? invoker)
+  {
+    try { ws?.Dispose(); } catch { /* ignore */ }
+    try { invoker?.Dispose(); } catch { /* ignore */ }
   }
 
   public override void ClientDisconnect()
@@ -327,50 +524,61 @@ internal sealed class WebSocketBackend : TransportBackend
   {
     _clientRunning = false;
 
-    var ws = _client;
-    var cts = _clientCts;
-    var invoker = _clientInvoker;
-    _client = null;
-    _clientCts = null;
-    _clientInvoker = null;
-
-    if (ws != null)
+    // Take ownership atomically so a racing ClientSend can't act on a connection this call is closing.
+    var connection = Interlocked.Exchange(ref _connection, null);
+    if (connection != null)
     {
-      Close(ws, cts);
-    }
-    else
-    {
-      cts?.Dispose();
+      Close(connection.Socket, connection.Cts);
+      connection.Invoker.Dispose();
     }
 
-    invoker?.Dispose();
+    // Even when connection was already null (e.g. the receive loop just tore itself down), the thread
+    // may not have fully exited yet - join unconditionally so this call (and therefore
+    // NetClient::disconnect) never returns while that thread can still call back into the C++ NetClient
+    // it is tearing down. Closing/aborting the socket above only unblocks a blocked ReceiveAsync; it does
+    // not wait for the thread itself to finish.
+    JoinThread(_clientThread, "client receive");
+    _clientThread = null;
   }
 
   public override void ClientSend(byte type, nint data, int len)
   {
-    var ws = _client;
-    var cts = _clientCts;
-    if (ws is null || cts is null || TooLargeToSend(len))
+    var connection = _connection;
+    if (connection is null || TooLargeToSend(len))
     {
       return;
     }
 
     var message = BuildMessage(type, data, len);
-    if (!SendRaw(ws, _clientSendLock, message, cts.Token))
+    try
     {
-      DisconnectClient();
+      if (SendRaw(connection.Socket, _clientSendLock, message, connection.Cts.Token))
+      {
+        return;
+      }
+    }
+    catch (ObjectDisposedException)
+    {
+      // A racing teardown already disposed this connection; nothing left to do.
+      return;
+    }
+
+    // Drop this instance specifically, not whatever is current - a reconnect may have replaced it.
+    if (Interlocked.CompareExchange(ref _connection, null, connection) == connection)
+    {
+      Close(connection.Socket, connection.Cts);
+      connection.Invoker.Dispose();
     }
   }
 
-  private void ClientReceiveLoop()
+  private void ClientReceiveLoop(ClientConnection connection)
   {
     try
     {
-      var ws = _client!;
-      var token = _clientCts!.Token;
+      var token = connection.Cts.Token;
       while (_clientRunning)
       {
-        var message = ReceiveMessage(ws, token);
+        var message = ReceiveMessage(connection.Socket, token);
         if (message is null || message.Length < 1)
         {
           break;
@@ -385,14 +593,41 @@ internal sealed class WebSocketBackend : TransportBackend
     }
 
     _clientRunning = false;
+
+    // Clear before closing so ClientSend never reaches a closed instance; the CAS leaves a newer
+    // connection alone.
+    var previous = Interlocked.CompareExchange(ref _connection, null, connection);
+    Close(connection.Socket, connection.Cts);
+    connection.Invoker.Dispose();
+
+    // A different non-null value means a reconnect already replaced this connection; it was not lost.
+    if (previous == connection || previous == null)
+    {
+      // The single delivery point for a lost connection - the native side tells a real loss apart from
+      // its own ClientDisconnect via m_disconnectRequested.
+      Transport.DeliverClientDisconnect();
+    }
   }
 
   // -- WebSocket helpers --
 
+  // RFC 6455 section 4.2.2 step 5.4: concatenate the client's Sec-WebSocket-Key with the magic GUID,
+  // SHA-1 the result and base64-encode it. Split out (rather than inlined in PerformServerHandshake) so
+  // it is covered by the RFC's own worked example in ECS3DManagedTests via InternalsVisibleTo (see
+  // Transport/AssemblyInfo.cs) without going through a socket.
+  internal static string ComputeAcceptKey(string secWebSocketKey)
+  {
+    return Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(secWebSocketKey + WebSocketGuid)));
+  }
+
   // Reads the HTTP/1.1 Upgrade request, replies with the 101 Switching Protocols handshake, and leaves
   // the stream positioned at the first WebSocket frame. Returns false if the request isn't a valid
   // WebSocket upgrade.
-  private static bool PerformServerHandshake(NetworkStream stream)
+  //
+  // Takes Stream rather than NetworkStream (its only caller passes a NetworkStream, which is one) and is
+  // internal rather than private so ECS3DManagedTests can drive it off an in-memory duplex stream via
+  // InternalsVisibleTo (see Transport/AssemblyInfo.cs), without a real socket.
+  internal static bool PerformServerHandshake(Stream stream)
   {
     var request = ReadHttpHeaders(stream);
     if (request is null)
@@ -421,7 +656,7 @@ internal sealed class WebSocketBackend : TransportBackend
       return false;
     }
 
-    var accept = Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(key + WebSocketGuid)));
+    var accept = ComputeAcceptKey(key);
     var response =
       "HTTP/1.1 101 Switching Protocols\r\n" +
       "Upgrade: websocket\r\n" +
@@ -435,7 +670,10 @@ internal sealed class WebSocketBackend : TransportBackend
 
   // Reads request lines up to (and consuming) the terminating blank line. Reads one byte at a time so we
   // never swallow bytes belonging to the first WebSocket frame.
-  private static List<string>? ReadHttpHeaders(Stream stream)
+  //
+  // Internal (rather than private) so ECS3DManagedTests can exercise it directly - including the exact
+  // stream position it leaves behind - via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
+  internal static List<string>? ReadHttpHeaders(Stream stream)
   {
     var lines = new List<string>();
     var line = new StringBuilder();
@@ -479,7 +717,10 @@ internal sealed class WebSocketBackend : TransportBackend
 
   // Receives one whole WebSocket message (reassembling fragments) as [type byte][payload]. Returns null
   // on close or error.
-  private static byte[]? ReceiveMessage(WebSocket ws, CancellationToken token, int maxBytes = MaxMessageBytes)
+  //
+  // Internal (rather than private) so ECS3DManagedTests can drive it against a server-side WebSocket
+  // built over hand-built client frames via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
+  internal static byte[]? ReceiveMessage(WebSocket ws, CancellationToken token, int maxBytes = MaxMessageBytes)
   {
     var buffer = new byte[8192];
     using var assembled = new MemoryStream();
@@ -506,7 +747,7 @@ internal sealed class WebSocketBackend : TransportBackend
       // grows until the process gives out. Slower than the TCP case, and the same ending.
       if (assembled.Length + result.Count > maxBytes)
       {
-        Console.Error.WriteLine($"[Transport] Refused a message past {maxBytes} bytes; the peer kept sending.");
+        Transport.Log(TransportLogLevel.Warn, $"Refused a message past {maxBytes} bytes; the peer kept sending.");
 
         return null;
       }
@@ -522,7 +763,7 @@ internal sealed class WebSocketBackend : TransportBackend
     return assembled.ToArray();
   }
 
-  private void SendHandshake(byte role, string token)
+  private void SendHandshake(ClientConnection connection, byte role, string token)
   {
     var tokenBytes = Encoding.UTF8.GetBytes(token);
 
@@ -531,7 +772,7 @@ internal sealed class WebSocketBackend : TransportBackend
     message[1] = role;
     Array.Copy(tokenBytes, 0, message, 2, tokenBytes.Length);
 
-    SendRaw(_client!, _clientSendLock, message, _clientCts!.Token);
+    SendRaw(connection.Socket, _clientSendLock, message, connection.Cts.Token);
   }
 
   // Packs a native (type, payload) pair into a single [type byte][payload] message.
@@ -552,9 +793,29 @@ internal sealed class WebSocketBackend : TransportBackend
     return message.Length > 1 ? message[1..] : Array.Empty<byte>();
   }
 
-  private static bool SendMessage(Connection conn, byte[] message)
+  // Bounded by a linked source so a peer that has stopped reading cannot hold the tick thread: the send is
+  // cancelled once timeoutMs (what is left of the broadcast's budget) elapses, which fails it and takes
+  // the caller's close-and-reap path.
+  private static bool SendMessage(Connection conn, byte[] message, int timeoutMs)
   {
-    return SendRaw(conn.Socket, conn.SendLock, message, conn.Cts.Token);
+    CancellationTokenSource? linked = null;
+    try
+    {
+      linked = CancellationTokenSource.CreateLinkedTokenSource(conn.Cts.Token);
+      linked.CancelAfter(timeoutMs);
+
+      return SendRaw(conn.Socket, conn.SendLock, message, linked.Token);
+    }
+    catch
+    {
+      // Reading Cts.Token throws once the receive loop has closed and disposed this connection; there is
+      // nothing left to send to, so report the failure and let the caller drop it.
+      return false;
+    }
+    finally
+    {
+      linked?.Dispose();
+    }
   }
 
   private static bool SendRaw(WebSocket ws, SemaphoreSlim sendLock, byte[] message, CancellationToken token)
@@ -581,6 +842,6 @@ internal sealed class WebSocketBackend : TransportBackend
     try { cts?.Cancel(); } catch { /* ignore */ }
     try { ws.Abort(); } catch { /* ignore */ }
     try { ws.Dispose(); } catch { /* ignore */ }
-    cts?.Dispose();
+    try { cts?.Dispose(); } catch { /* ignore */ }
   }
 }

@@ -43,7 +43,11 @@ TransformBindings TransformBindingsProvider::getBindings()
     .move = &bindMove,
     .start = &bindStart,
     .stop = &bindStop,
-    .has = &bindHas
+    .has = &bindHas,
+    .getLocalPosition = &bindGetLocalPosition,
+    .getLocalScale = &bindGetLocalScale,
+    .getLocalRotation = &bindGetLocalRotation,
+    .setPosition = &bindSetPosition
   };
 }
 
@@ -147,4 +151,59 @@ void TransformBindingsProvider::bindStop(const char* uuid)
 bool TransformBindingsProvider::bindHas(const char* uuid)
 {
   return find(uuid) != nullptr;
+}
+
+void TransformBindingsProvider::bindGetLocalPosition(const char* uuid, float* x, float* y, float* z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  const auto position = transform->getLocalPosition();
+  *x = position.x;
+  *y = position.y;
+  *z = position.z;
+}
+
+void TransformBindingsProvider::bindGetLocalScale(const char* uuid, float* x, float* y, float* z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  const auto scale = transform->getLocalScale();
+  *x = scale.x;
+  *y = scale.y;
+  *z = scale.z;
+}
+
+void TransformBindingsProvider::bindGetLocalRotation(const char* uuid, float* x, float* y, float* z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  const auto rotation = transform->getLocalRotation();
+  *x = rotation.x;
+  *y = rotation.y;
+  *z = rotation.z;
+}
+
+void TransformBindingsProvider::bindSetPosition(const char* uuid, float x, float y, float z)
+{
+  const auto transform = find(uuid);
+  if (!transform)
+  {
+    return;
+  }
+
+  // Not recorded on BindingContext: Transform rides the per-tick state delta (position/rotation/scale),
+  // unlike RigidBody/Camera.
+  transform->setPosition({ x, y, z });
 }

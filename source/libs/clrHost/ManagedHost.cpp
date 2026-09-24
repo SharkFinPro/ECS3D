@@ -1,9 +1,9 @@
 #include "ManagedHost.h"
+#include <Log.h>
 #include <coreclr_delegates.h>
 #include <hostfxr.h>
 #include <nethost.h>
 #include <filesystem>
-#include <iostream>
 #include <stdexcept>
 
 #if defined(_WIN32)
@@ -52,7 +52,7 @@ void ManagedHost::init(const std::string& assemblyDir)
   std::string hostfxr_str(hostfxr_path);
 #endif
 
-  std::cout << "[ManagedHost] Loading hostfxr: " << hostfxr_str << "\n";
+  Log::info(LogCategory::engine, "Loading hostfxr: " + hostfxr_str);
   m_hostfxrLib = loadLib(hostfxr_str);
   if (!m_hostfxrLib)
   {
@@ -123,7 +123,7 @@ void ManagedHost::init(const std::string& assemblyDir)
   m_loadAssembly = reinterpret_cast<void*>(load_assembly);
   m_initialized = true;
 
-  std::cout << "[ManagedHost] Runtime booted from: " << runtimeConfig.string() << "\n";
+  Log::info(LogCategory::engine, "Runtime booted from: " + runtimeConfig.string());
 }
 
 void ManagedHost::shutdown()
@@ -159,7 +159,7 @@ void ManagedHost::shutdown()
   m_loadAssembly = nullptr;
   m_initialized = false;
 
-  std::cout << "[ManagedHost] Shutdown complete.\n";
+  Log::info(LogCategory::engine, "Shutdown complete.");
 }
 
 void* ManagedHost::getDelegate(const std::string& assemblyPath,

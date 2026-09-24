@@ -3,6 +3,17 @@ using System.Runtime.InteropServices;
 
 namespace ECS3DNetTransport;
 
+// Matches net::LogLevel's trace..error == 0..4 (asserted on the native side); passed as the int in
+// Transport.Log/setLogCallback.
+internal enum TransportLogLevel
+{
+  Trace = 0,
+  Debug = 1,
+  Info = 2,
+  Warn = 3,
+  Error = 4,
+}
+
 // The C# socket half of ECS3DNet. The C++ side (NetServer/NetClient) owns the protocol - it only ever
 // hands us an opaque (type byte + payload bytes) pair and gets the same back.
 //
@@ -25,10 +36,19 @@ public static unsafe class Transport
   // the player slot bound to it. Optional - the C++ side may never register one.
   private static delegate* unmanaged<int, void> _serverDisconnect;
 
+  // Fired when the client's connection to the server drops, so the C++ side can stop treating the
+  // scene as live. Optional, like _serverDisconnect.
+  private static delegate* unmanaged<void> _clientDisconnect;
+
   // Fired once per connection, right after a backend's Authorize() grants it a role at the handshake, so
   // the C++ side can enforce that role on every later message (a connection cannot mutate an edit-mode
   // server's scene unless it was actually authorized as Role.editor there). Optional, like the others.
   private static delegate* unmanaged<int, byte, void> _serverAuthorized;
+
+  // Registered by NetServer/NetClient (whichever loads the assembly first) so Transport.Log reaches
+  // ECS3DLog under category net instead of the console. delegate* unmanaged<int, IntPtr, void> matches
+  // net::transportLog(int level, const char* message).
+  private static delegate* unmanaged<int, IntPtr, void> _log;
 
   private static readonly TransportBackend _backend = CreateBackend();
 
@@ -40,6 +60,41 @@ public static unsafe class Transport
       TransportProtocol.WebSocket => new WebSocketBackend(),
       _ => throw new NotSupportedException($"Transport protocol {Protocol} is not implemented yet."),
     };
+  }
+
+  [UnmanagedCallersOnly]
+  public static void setLogCallback(IntPtr fn)
+  {
+    _log = (delegate* unmanaged<int, IntPtr, void>)fn;
+  }
+
+  // Falls back to the console while no callback is registered yet (e.g. before NetServer/NetClient's
+  // first getDelegate call). Never throws - this runs on the socket threads that carry the actual work.
+  internal static void Log(TransportLogLevel level, string message)
+  {
+    try
+    {
+      var callback = _log;
+      if (callback == null)
+      {
+        (level >= TransportLogLevel.Warn ? Console.Error : Console.Out).WriteLine(message);
+        return;
+      }
+
+      var messagePtr = Marshal.StringToCoTaskMemUTF8(message);
+      try
+      {
+        callback((int)level, messagePtr);
+      }
+      finally
+      {
+        Marshal.FreeCoTaskMem(messagePtr);
+      }
+    }
+    catch
+    {
+      // Logging must never be the reason a socket thread dies.
+    }
   }
 
   [UnmanagedCallersOnly]
@@ -84,10 +139,25 @@ public static unsafe class Transport
     _backend.ServerBroadcast(type, data, len);
   }
 
+  // connIds points to connIdCount native int32s - the specific connections to send to (editor
+  // connections only, never every connection like serverBroadcast). One call for the whole fan-out, so
+  // the backend can apply one shared time budget across it rather than one per connection.
+  [UnmanagedCallersOnly]
+  public static void serverSendToMany(IntPtr connIds, int connIdCount, byte type, IntPtr data, int len)
+  {
+    _backend.ServerSendToMany(connIds, connIdCount, type, data, len);
+  }
+
   [UnmanagedCallersOnly]
   public static void clientSetReceiveCallback(IntPtr fn)
   {
     _clientReceive = (delegate* unmanaged<byte, byte*, int, void>)fn;
+  }
+
+  [UnmanagedCallersOnly]
+  public static void clientSetDisconnectCallback(IntPtr fn)
+  {
+    _clientDisconnect = (delegate* unmanaged<void>)fn;
   }
 
   [UnmanagedCallersOnly]
@@ -155,6 +225,15 @@ public static unsafe class Transport
   internal static void DeliverClient(byte type, byte[] payload)
   {
     Deliver(_clientReceive, type, payload);
+  }
+
+  internal static void DeliverClientDisconnect()
+  {
+    var callback = _clientDisconnect;
+    if (callback != null)
+    {
+      callback();
+    }
   }
 
   private static void Deliver(delegate* unmanaged<byte, byte*, int, void> callback, byte type, byte[] payload)

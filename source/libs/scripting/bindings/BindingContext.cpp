@@ -1,4 +1,5 @@
 #include "BindingContext.h"
+#include <algorithm>
 #include <utility>
 
 ObjectManager* BindingContext::s_objectManager = nullptr;
@@ -6,6 +7,7 @@ AssetRegistry* BindingContext::s_assetRegistry = nullptr;
 std::vector<std::shared_ptr<Object>> BindingContext::s_spawned;
 std::vector<uuids::uuid> BindingContext::s_destroyed;
 std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> BindingContext::s_componentEdits;
+std::vector<uuids::uuid> BindingContext::s_structuralComponentChanges;
 BindingContext::RaycastFn BindingContext::s_raycast = nullptr;
 BindingContext::OverlapSphereFn BindingContext::s_overlapSphere = nullptr;
 
@@ -68,6 +70,19 @@ void BindingContext::recordComponentEdit(const uuids::uuid& objectUUID, const st
 std::vector<std::pair<uuids::uuid, std::shared_ptr<Component>>> BindingContext::takeComponentEdits()
 {
   return std::exchange(s_componentEdits, {});
+}
+
+void BindingContext::recordStructuralComponentChange(const uuids::uuid& objectUUID)
+{
+  if (std::ranges::find(s_structuralComponentChanges, objectUUID) == s_structuralComponentChanges.end())
+  {
+    s_structuralComponentChanges.push_back(objectUUID);
+  }
+}
+
+std::vector<uuids::uuid> BindingContext::takeStructuralComponentChanges()
+{
+  return std::exchange(s_structuralComponentChanges, {});
 }
 
 void BindingContext::setRaycast(const RaycastFn raycast)

@@ -3,6 +3,10 @@ project("ECS3DServer")
 add_executable(${PROJECT_NAME}
   main.cpp
   ServerApp.cpp
+  ServerAppBroadcast.cpp
+  ServerAppEdits.cpp
+  ServerAppMessages.cpp
+  ServerAppProject.cpp
   ServerApp.h
   DefaultProject.cpp
   DefaultProject.h
@@ -16,6 +20,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   ECS3DScripting
   ECS3DNet
   ECS3DClrHost
+  ECS3DLog
 )
 
 # Copy nethost.dll next to the executable so it can boot the CLR (the C# transport + ScriptBridge).

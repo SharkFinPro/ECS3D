@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <deque>
 #include <optional>
+#include <string>
 
 class ObjectManager;
 class AssetRegistry;
@@ -67,6 +68,19 @@ public:
   [[nodiscard]] bool canUndo() const;
   [[nodiscard]] bool canRedo() const;
 
+  // The kind of command undo()/redo() would act on next, without popping either stack - lets a caller
+  // that only knows how to handle some kinds (see EditorApp::undo()/redo()) decide whether to attempt it
+  // at all, and leave an entry it does not yet handle sitting on top rather than have undo()/redo() treat
+  // it as a validation conflict and drop it. nullopt when that stack is empty.
+  [[nodiscard]] std::optional<CommandKind> nextUndoKind() const;
+  [[nodiscard]] std::optional<CommandKind> nextRedoKind() const;
+
+  // Whether undo()/redo() would actually produce a payload for the top of that stack, without popping
+  // either stack - false for an empty stack as well as for a non-reversible entry, so a caller can gate
+  // an attempt on this alone rather than also checking canUndo()/canRedo().
+  [[nodiscard]] bool nextUndoIsReversible() const;
+  [[nodiscard]] bool nextRedoIsReversible() const;
+
   // Validates the top of the undo stack against the live scene/registry and, on success, moves it to the
   // redo stack and returns the reverse payload to send. On refusal, drops that entry and everything older
   // still on the undo stack (entries already on the redo stack are untouched - they are newer, already-
@@ -90,6 +104,19 @@ public:
   // directions at once (see EditCommand.h's module comment) - stopping play restores the authored scene,
   // which neither stack's recorded state has any relation to any more.
   void clear();
+
+  // Human-readable description of the command undo()/redo() would act on next ("Rename Cube"), for an
+  // Edit menu that names the next action instead of showing a bare "Undo"/"Redo" - see
+  // EditCommand::describeForMenu. nullopt when that stack is empty.
+  [[nodiscard]] std::optional<std::string> nextUndoLabel(const ObjectManager& objectManager,
+                                                         const AssetRegistry* assetRegistry = nullptr) const;
+  [[nodiscard]] std::optional<std::string> nextRedoLabel(const ObjectManager& objectManager,
+                                                         const AssetRegistry* assetRegistry = nullptr) const;
+
+  // Stack sizes, for a caller that needs to detect whether undo()/redo() actually popped an entry (sent a
+  // request) without reading their bodies - see EditorApp's in-flight gate on repeated undo/redo requests.
+  [[nodiscard]] std::size_t undoDepth() const;
+  [[nodiscard]] std::size_t redoDepth() const;
 
 private:
   std::deque<EditCommand> m_undoStack;

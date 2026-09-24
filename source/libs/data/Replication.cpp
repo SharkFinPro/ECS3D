@@ -5,16 +5,24 @@
 #include "scenes/SceneAsset.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/WorldPlacement.h"
 #include "objects/components/Component.h"
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
 #include "WireTypes.h"
+#include "Log.h"
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <limits>
 #include <new>
+#include <optional>
+#include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -32,12 +40,38 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
   };
   std::vector<Entry> entries;
 
+  // This runs every server tick, and a foreign-owned transform stays foreign until something else fixes
+  // it, so logging unconditionally would repeat the same entry forever. Remembered across calls and
+  // rebuilt each time from only what is still foreign-owned, so an object that stops being foreign (fixed,
+  // or removed and its uuid never reused) drops out and would be logged again if it ever recurred.
+  static std::unordered_set<std::string> reportedForeignOwners;
+  std::unordered_set<std::string> stillForeignOwned;
+
   for (const auto& object : objectManager.getAllObjects())
   {
     const auto transform = object->getComponent<Transform>(ComponentType::transform);
 
-    if (!transform || transform->getOwner() != object.get())
+    if (!transform)
     {
+      continue;
+    }
+
+    // A component's owner is set once, by the addComponent that attaches it, and nothing in the engine
+    // can attach a component to one object while owning another - so this should be unreachable. Log
+    // loudly (once per object, not every tick) and skip just this object rather than let a bug elsewhere
+    // silently vanish from every delta.
+    if (transform->getOwner() != object.get())
+    {
+      auto uuid = uuids::to_string(object->getUUID());
+
+      if (reportedForeignOwners.insert(uuid).second)
+      {
+        Log::error(LogCategory::server, "Object " + uuid +
+                                         " has a transform owned by a different object; skipping it in "
+                                         "the state delta.");
+      }
+
+      stillForeignOwned.insert(std::move(uuid));
       continue;
     }
 
@@ -58,6 +92,8 @@ void packStateDelta(net::Message& message, const ObjectManager& objectManager)
 
     entries.push_back({ uuids::to_string(object->getUUID()), position, rotation, scale });
   }
+
+  reportedForeignOwners = std::move(stillForeignOwned);
 
   message.write(static_cast<uint32_t>(entries.size()));
   for (const auto& entry : entries)
@@ -215,7 +251,67 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
   }
 }
 
-nlohmann::json buildAddObject(const std::string& name, const uuids::uuid* parentUUID)
+std::string_view describe(const ComponentEditResult result)
+{
+  switch (result)
+  {
+    case ComponentEditResult::malformedPayload: return "the payload does not parse";
+    case ComponentEditResult::partiallyApplied: return "the payload ran out mid-component";
+    case ComponentEditResult::unknownObject: return "no such object";
+    case ComponentEditResult::unknownComponent: return "the object has no such component";
+    case ComponentEditResult::applied: return "it was applied";
+  }
+
+  return "it was applied";
+}
+
+void logMissedComponentEdit(const ComponentEditResult result, const net::Message& edit, const LogCategory category)
+{
+  if (result == ComponentEditResult::applied)
+  {
+    return;
+  }
+
+  // Re-read the packed prefix ([object uuid][type][className]) independently of applyComponentEdit,
+  // purely to name what was skipped. A payload too broken to even name gets a placeholder instead of
+  // throwing out of a logging call.
+  std::string objectUUID = "an unreadable object";
+  std::string componentName = "an unreadable component";
+
+  try
+  {
+    net::MessageReader reader(edit);
+    objectUUID = reader.readString();
+
+    const auto componentType = reader.read<ComponentType>();
+    const auto nameIt = componentTypeToString.find(componentType);
+    componentName = nameIt != componentTypeToString.end() ? nameIt->second : "an unknown component";
+
+    if (componentType == ComponentType::script)
+    {
+      componentName += " (" + reader.readString() + ")";
+    }
+  }
+  catch (const std::exception&)
+  {
+    // Leave the placeholders above; the result and describe() still say what went wrong.
+  }
+
+  if (result == ComponentEditResult::malformedPayload || result == ComponentEditResult::partiallyApplied)
+  {
+    Log::error(category, "Could not apply a component edit of " + componentName + " on " + objectUUID +
+                          ": " + std::string(describe(result)) +
+                          "; the view may be out of sync until the next snapshot.");
+  }
+  else
+  {
+    Log::debug(category, "Skipped a component edit of " + componentName + " on " + objectUUID + ": " +
+                          std::string(describe(result)) + ".");
+  }
+}
+
+nlohmann::json buildAddObject(const std::string& name, const uuids::uuid* parentUUID,
+                              const uuids::uuid* objectUUID)
 {
   nlohmann::json edit = {
     { "op", "addObject" },
@@ -225,6 +321,11 @@ nlohmann::json buildAddObject(const std::string& name, const uuids::uuid* parent
   if (parentUUID)
   {
     edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  if (objectUUID)
+  {
+    edit["uuid"] = uuids::to_string(*objectUUID);
   }
 
   return edit;
@@ -238,13 +339,21 @@ nlohmann::json buildRemoveObject(const uuids::uuid& objectUUID)
   };
 }
 
-nlohmann::json buildAddComponent(const uuids::uuid& objectUUID, const std::string& componentKey)
+nlohmann::json buildAddComponent(const uuids::uuid& objectUUID, const std::string& componentKey,
+                                 const nlohmann::json* data)
 {
-  return {
+  nlohmann::json edit = {
     { "op", "addComponent" },
     { "object", uuids::to_string(objectUUID) },
     { "component", componentKey }
   };
+
+  if (data)
+  {
+    edit["data"] = *data;
+  }
+
+  return edit;
 }
 
 nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
@@ -264,12 +373,19 @@ nlohmann::json buildRemoveComponent(const uuids::uuid& objectUUID,
   return edit;
 }
 
-nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID)
+nlohmann::json buildDuplicateObject(const uuids::uuid& objectUUID, const uuids::uuid* duplicateUUID)
 {
-  return {
+  nlohmann::json edit = {
     { "op", "duplicateObject" },
     { "object", uuids::to_string(objectUUID) }
   };
+
+  if (duplicateUUID)
+  {
+    edit["uuid"] = uuids::to_string(*duplicateUUID);
+  }
+
+  return edit;
 }
 
 nlohmann::json buildRenameObject(const uuids::uuid& objectUUID, const std::string& name)
@@ -306,7 +422,25 @@ nlohmann::json buildReparentObject(const uuids::uuid& objectUUID, const uuids::u
   return edit;
 }
 
-nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid* parentUUID)
+nlohmann::json buildReorderObject(const uuids::uuid& objectUUID, const uuids::uuid* parentUUID,
+                                  const std::size_t index)
+{
+  nlohmann::json edit = {
+    { "op", "reorderObject" },
+    { "object", uuids::to_string(objectUUID) },
+    { "index", index }
+  };
+
+  if (parentUUID)
+  {
+    edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  return edit;
+}
+
+nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid* parentUUID,
+                                      const uuids::uuid* instanceUUID)
 {
   nlohmann::json edit = {
     { "op", "instantiatePrefab" },
@@ -318,7 +452,42 @@ nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids
     edit["parent"] = uuids::to_string(*parentUUID);
   }
 
+  if (instanceUUID)
+  {
+    edit["uuid"] = uuids::to_string(*instanceUUID);
+  }
+
   return edit;
+}
+
+nlohmann::json buildRestoreObject(const nlohmann::json& body, const uuids::uuid* parentUUID,
+                                  const std::size_t index, const nlohmann::json* adopt)
+{
+  nlohmann::json edit = {
+    { "op", "restoreObject" },
+    { "body", body },
+    { "index", index }
+  };
+
+  if (parentUUID)
+  {
+    edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  if (adopt)
+  {
+    edit["adopt"] = *adopt;
+  }
+
+  return edit;
+}
+
+nlohmann::json buildRemoveSubtree(const uuids::uuid& objectUUID)
+{
+  return {
+    { "op", "removeSubtree" },
+    { "object", uuids::to_string(objectUUID) }
+  };
 }
 
 namespace {
@@ -365,52 +534,276 @@ namespace {
     return height;
   }
 
-  // Transform's local values are relative to the parent (see Transform.h/.cpp), so reattaching an
-  // object under a different parent without rewriting them changes its world placement by the
-  // difference between the old and new parent's world transform. Called after the reparent with the
-  // object's own world placement from just before it was detached, this rewrites the local values so
-  // the world placement is unchanged.
-  void restoreWorldPlacementAfterReparent(const std::shared_ptr<Object>& object,
-                                          const std::shared_ptr<Object>& newParent,
-                                          const glm::vec3& oldWorldPosition,
-                                          const glm::vec3& oldWorldRotation,
-                                          const glm::vec3& oldWorldScale)
+  // Result of walking a restoreObject body before anything is built: whether any node's uuid is missing
+  // or failed to parse (malformed - the wire and the sender disagree about the payload), whether any
+  // node's uuid already names a live object (collides - refuse rather than corrupt the uuid-keyed
+  // lookups everything else relies on), and the body's own height (0 for a leaf), so the caller can add
+  // it to a target depth before building anything.
+  struct RestoreBodyWalk {
+    bool malformed = false;
+    bool collides = false;
+    std::size_t height = 0;
+  };
+
+  // seenInThisBody accumulates every uuid already visited by this walk (across the whole recursion, not
+  // just siblings): checking a node's uuid only against the live manager would let two nodes in the same
+  // body share a uuid neither of which exists yet, and both would still get registered - the same
+  // uuid-keyed corruption the live-manager check exists to prevent, just from within the body itself.
+  RestoreBodyWalk walkRestoreBody(const ObjectManager& objectManager, const nlohmann::json& node,
+                                  const std::size_t depth, std::unordered_set<uuids::uuid>& seenInThisBody)
   {
-    const auto transform = object->getComponent<Transform>(ComponentType::transform);
-    if (!transform)
+    if (depth > maxObjectDepth || !node.is_object() || !node.contains("uuid"))
     {
-      return;
+      return { .malformed = true };
     }
 
-    glm::vec3 parentPosition(0.0f);
-    glm::vec3 parentRotation(0.0f);
-    glm::vec3 parentScale(1.0f);
-
-    if (newParent)
+    const auto nodeUUID = uuids::uuid::from_string(std::string(node.at("uuid")));
+    if (!nodeUUID.has_value())
     {
-      if (const auto parentTransform = newParent->getComponent<Transform>(ComponentType::transform))
+      return { .malformed = true };
+    }
+
+    RestoreBodyWalk result;
+    result.collides = objectManager.getObjectByUUID(nodeUUID.value()) != nullptr
+      || !seenInThisBody.insert(nodeUUID.value()).second;
+
+    if (node.contains("children"))
+    {
+      // serialize() always writes "children" as an array, and building anything from one that is not -
+      // a string, a number, whatever a malformed wire payload sends - would iterate over the wrong thing
+      // (or, for a scalar, over the node's own single value) instead of failing cleanly.
+      if (!node.at("children").is_array())
       {
-        parentPosition = parentTransform->getPosition();
-        parentRotation = parentTransform->getRotation();
-        parentScale = parentTransform->getScale();
+        return { .malformed = true };
+      }
+
+      for (const auto& child : node.at("children"))
+      {
+        const auto childResult = walkRestoreBody(objectManager, child, depth + 1, seenInThisBody);
+        if (childResult.malformed)
+        {
+          return childResult;
+        }
+
+        result.collides = result.collides || childResult.collides;
+        result.height = std::max(result.height, childResult.height + 1);
       }
     }
 
-    auto localScale = transform->getLocalScale();
-    for (int axis = 0; axis < 3; ++axis)
+    return result;
+  }
+
+  // The registry key a component blob's own "type"/"subType" identify - the same resolution
+  // Object::loadFromJSON uses to turn a serialized blob back into a registry lookup (a Collider blob
+  // carries a "subType" of Box/Sphere; every other type's own "type" field is the key). nullopt for a
+  // blob missing or misshaping either field - addComponent's "data" handling refuses rather than hands a
+  // blob to loadFromJSON that was never this component's own serialize() output.
+  std::optional<std::string> registryKeyFromComponentBlob(const nlohmann::json& data)
+  {
+    if (!data.is_object())
     {
-      // An axis whose compensated scale is not representable (the parent's world scale there is zero,
-      // denormal enough to overflow the division, or the division otherwise yields inf/nan) keeps the
-      // scale it already had rather than writing a value that would break every reader of this transform.
-      if (const auto compensated = oldWorldScale[axis] / parentScale[axis]; std::isfinite(compensated))
+      return std::nullopt;
+    }
+
+    const auto typeField = data.find("type");
+    if (typeField == data.end() || !typeField->is_string())
+    {
+      return std::nullopt;
+    }
+
+    if (typeField->get<std::string>() != "Collider")
+    {
+      return typeField->get<std::string>();
+    }
+
+    const auto subTypeField = data.find("subType");
+    if (subTypeField == data.end() || !subTypeField->is_string())
+    {
+      return std::nullopt;
+    }
+
+    return subTypeField->get<std::string>();
+  }
+
+  // Shared by restoreObject and reorderObject: an explicit range check against std::size_t's own limits
+  // rather than casting into a signed type and looking for wraparound - a value near UINT64_MAX read into
+  // a signed type is implementation-defined at best, so it should never be the thing a refusal relies on.
+  // nullopt means the field was missing, not a number, or out of range - the caller reports malformedEdit.
+  std::optional<std::size_t> parseIndexField(const nlohmann::json& indexField)
+  {
+    if (indexField.is_number_unsigned())
+    {
+      const auto rawIndex = indexField.get<std::uint64_t>();
+      if (rawIndex > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
       {
-        localScale[axis] = compensated;
+        return std::nullopt;
+      }
+
+      return static_cast<std::size_t>(rawIndex);
+    }
+
+    if (indexField.is_number_integer())
+    {
+      const auto rawIndex = indexField.get<std::int64_t>();
+      if (rawIndex < 0)
+      {
+        return std::nullopt;
+      }
+
+      return static_cast<std::size_t>(rawIndex);
+    }
+
+    return std::nullopt;
+  }
+
+  // A restoreObject's own recorded local Transform for one reclaimed child - checked structurally (the
+  // same fields Transform::loadFromJSON reads) so a malformed entry is refused before anything mutates,
+  // rather than throwing loadFromJSON's own way into the generic "failed" result after the child has
+  // already been detached.
+  bool isPlausibleTransformBlob(const nlohmann::json& blob)
+  {
+    if (!blob.is_object())
+    {
+      return false;
+    }
+
+    for (const char* key : { "position", "rotation", "scale" })
+    {
+      const auto field = blob.find(key);
+      if (field == blob.end() || !field->is_array() || field->size() < 3)
+      {
+        return false;
       }
     }
 
-    transform->setPosition(oldWorldPosition - parentPosition);
-    transform->setRotation(oldWorldRotation - parentRotation);
-    transform->setScale(localScale);
+    return true;
+  }
+
+  // One entry of a restoreObject's "adopt" list, resolved against the live scene: the still-live object a
+  // removeObject undo is reclaiming, the sibling index it held under the object being restored, and its
+  // own recorded local Transform. Resolved before anything mutates, same as every other restoreObject
+  // check - see applyStructuralEdit's restoreObject handling.
+  struct ResolvedAdoptee {
+    std::shared_ptr<Object> object;
+    std::size_t index = 0;
+    const nlohmann::json* transform = nullptr;
+  };
+
+  // Result of parsing and resolving a restoreObject's "adopt" field: a refusal to report (leaving the
+  // scene untouched), or the resolved list. seenBodyUUIDs is the restoreObject body's own uuid set (see
+  // walkRestoreBody) - an adoptee uuid the body also names would double-register that uuid.
+  struct AdoptResolution {
+    std::optional<SceneEditResult> refusal;
+    std::vector<ResolvedAdoptee> adoptees;
+  };
+
+  AdoptResolution resolveAdoptList(const ObjectManager& objectManager, const nlohmann::json& edit,
+                                   const std::shared_ptr<Object>& targetParent,
+                                   const std::unordered_set<uuids::uuid>& seenBodyUUIDs)
+  {
+    if (!edit.contains("adopt"))
+    {
+      return {};
+    }
+
+    const auto& adoptField = edit.at("adopt");
+    if (!adoptField.is_array())
+    {
+      return { .refusal = SceneEditResult::malformedEdit };
+    }
+
+    AdoptResolution result;
+    std::unordered_set<uuids::uuid> seenAdoptees;
+
+    for (const auto& entry : adoptField)
+    {
+      if (!entry.is_object() || !entry.contains("object") || !entry.contains("index")
+          || !entry.contains("transform"))
+      {
+        return { .refusal = SceneEditResult::malformedEdit };
+      }
+
+      const auto parsedUUID = uuids::uuid::from_string(std::string(entry.at("object")));
+      if (!parsedUUID.has_value())
+      {
+        return { .refusal = SceneEditResult::malformedEdit };
+      }
+
+      const auto parsedIndex = parseIndexField(entry.at("index"));
+      if (!parsedIndex.has_value())
+      {
+        return { .refusal = SceneEditResult::malformedEdit };
+      }
+
+      if (!isPlausibleTransformBlob(entry.at("transform")))
+      {
+        return { .refusal = SceneEditResult::malformedEdit };
+      }
+
+      // A uuid this adopt list already named, or the body itself names, would otherwise double-register
+      // the same object once as a reclaimed child and once (again) as a body node.
+      if (!seenAdoptees.insert(parsedUUID.value()).second || seenBodyUUIDs.contains(parsedUUID.value()))
+      {
+        return { .refusal = SceneEditResult::rejected };
+      }
+
+      const auto object = objectManager.getObjectByUUID(parsedUUID.value());
+      if (!object)
+      {
+        return { .refusal = SceneEditResult::unknownObject };
+      }
+
+      // The adoptee has to be living exactly where deleteObjectsMarkedForDeletion would have promoted it
+      // to - under the removed object's own parent - or reclaiming it under the restored object would
+      // pull it out from wherever it actually is now.
+      if (object->getParent() != targetParent)
+      {
+        return { .refusal = SceneEditResult::rejected };
+      }
+
+      result.adoptees.push_back({ .object = object, .index = parsedIndex.value(),
+                                  .transform = &entry.at("transform") });
+    }
+
+    return result;
+  }
+
+  // What a creating op's optional "uuid" field came to: a refusal to report, a uuid to create the object
+  // with, or neither when the op named none and the manager picks one as it always has.
+  struct RequestedUUID {
+    std::optional<SceneEditResult> refusal;
+    std::optional<uuids::uuid> value;
+
+    [[nodiscard]] const uuids::uuid* pointer() const
+    {
+      return value.has_value() ? &value.value() : nullptr;
+    }
+  };
+
+  // Resolved before the op builds anything, so a uuid that cannot be honored leaves the scene untouched.
+  RequestedUUID requestedObjectUUID(const ObjectManager& objectManager, const nlohmann::json& edit)
+  {
+    if (!edit.contains("uuid"))
+    {
+      return {};
+    }
+
+    const auto parsed = uuids::uuid::from_string(std::string(edit.at("uuid")));
+    if (!parsed.has_value())
+    {
+      return { .refusal = SceneEditResult::malformedEdit };
+    }
+
+    // The nil uuid parses, so it is a well-formed request the authority simply will not honor: an object
+    // registered carrying one has the manager generate a uuid for it instead, which would leave the
+    // sender waiting for the uuid it asked for. A uuid the scene already uses is refused for the same
+    // reason - the sender would be told about an object that is not the one its edit meant to create.
+    if (parsed->is_nil() || objectManager.getObjectByUUID(parsed.value()))
+    {
+      return { .refusal = SceneEditResult::rejected };
+    }
+
+    return { .value = parsed.value() };
   }
 
   SceneEditResult applyStructuralEdit(ObjectManager& objectManager, const nlohmann::json& edit,
@@ -457,12 +850,18 @@ namespace {
         }
       }
 
+      const auto requested = requestedObjectUUID(objectManager, edit);
+      if (requested.refusal.has_value())
+      {
+        return requested.refusal.value();
+      }
+
       // Guarded here rather than left to the catch below: the body belongs to the asset, not to the
       // edit, so a prefab whose stored blob is broken is a failure to apply and not a malformed edit -
       // reporting it as one sends whoever reads the log to look at the wire.
       try
       {
-        objectManager.instantiateUnder(body, parent);
+        objectManager.instantiateUnder(body, parent, requested.pointer());
       }
       catch (const std::bad_alloc&)
       {
@@ -507,10 +906,175 @@ namespace {
         }
       }
 
-      const auto object = std::make_shared<Object>(name);
+      const auto requested = requestedObjectUUID(objectManager, edit);
+      if (requested.refusal.has_value())
+      {
+        return requested.refusal.value();
+      }
+
+      const auto object = requested.value.has_value()
+                            ? std::make_shared<Object>(name, requested.value.value())
+                            : std::make_shared<Object>(name);
       object->setParent(parent);
 
       objectManager.addObject(object);
+      return SceneEditResult::applied;
+    }
+
+    if (op == "restoreObject")
+    {
+      // Not keyed by an existing object either (like addObject), so this has to be handled before the
+      // generic "object" lookup below, which every other op relies on.
+      const auto& body = edit.at("body");
+      if (!body.is_object())
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      const auto parsedIndex = parseIndexField(edit.at("index"));
+      if (!parsedIndex.has_value())
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      const std::size_t index = parsedIndex.value();
+
+      // Same "named parent" handling as addObject/instantiatePrefab: absent means the scene root, named
+      // and unresolvable is a stale view rather than a silent root.
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
+      {
+        const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsedParent.has_value())
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
+        }
+      }
+
+      std::unordered_set<uuids::uuid> seenInThisBody;
+      const auto bodyWalk = walkRestoreBody(objectManager, body, 0, seenInThisBody);
+      if (bodyWalk.malformed)
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      if (bodyWalk.collides)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Undo of a removeObject: the still-live children deleteObjectsMarkedForDeletion promoted to
+      // parent, reclaimed back under the object this op is about to recreate. Resolved (and validated)
+      // before anything mutates, same as the body above - see resolveAdoptList.
+      const auto adoptResolution = resolveAdoptList(objectManager, edit, parent, seenInThisBody);
+      if (adoptResolution.refusal.has_value())
+      {
+        return adoptResolution.refusal.value();
+      }
+
+      const auto& adoptees = adoptResolution.adoptees;
+
+      std::size_t requiredHeight = bodyWalk.height;
+      if (!adoptees.empty())
+      {
+        std::size_t maxAdopteeHeight = 0;
+        for (const auto& adoptee : adoptees)
+        {
+          maxAdopteeHeight = std::max(maxAdopteeHeight, subtreeHeight(adoptee.object));
+        }
+
+        requiredHeight = std::max(requiredHeight, 1 + maxAdopteeHeight);
+      }
+
+      const std::size_t baseDepth = parent ? ancestorDepth(parent) + 1 : 0;
+      if (baseDepth + requiredHeight > maxObjectDepth)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Detached from their current list FIRST: index (the restored object's own position) is read
+      // against the list with the adoptees already removed, which is exactly the pre-removal list minus
+      // the removed object - deleteObjectsMarkedForDeletion spliced them into its slot, so removing them
+      // again here undoes exactly that splice before the removed object is reinserted at its old index.
+      // Each detached object's own position is remembered (in removal order) so a restoreSubtree failure
+      // can put every one of them back exactly where it was, in reverse order, before this op fails.
+      std::vector<std::pair<std::shared_ptr<Object>, std::size_t>> detachedInOrder;
+      detachedInOrder.reserve(adoptees.size());
+
+      for (const auto& adoptee : adoptees)
+      {
+        const auto& currentSiblings = parent ? parent->getChildren() : objectManager.getObjects();
+        const auto currentIt = std::ranges::find(currentSiblings, adoptee.object);
+        detachedInOrder.emplace_back(adoptee.object,
+                                     static_cast<std::size_t>(currentIt - currentSiblings.begin()));
+
+        if (parent)
+        {
+          parent->removeChild(adoptee.object);
+        }
+        else
+        {
+          objectManager.removeObjectFromRoot(adoptee.object);
+        }
+      }
+
+      const auto restoreAdoptees = [&] {
+        for (auto it = detachedInOrder.rbegin(); it != detachedInOrder.rend(); ++it)
+        {
+          if (parent)
+          {
+            parent->addChild(it->first, it->second);
+          }
+          else
+          {
+            objectManager.addObjectToRoot(it->first, it->second);
+          }
+        }
+      };
+
+      // Same reasoning as instantiatePrefab/duplicateObject: a body naming a component this build does
+      // not know is a failure to apply, not a malformed edit.
+      std::shared_ptr<Object> restored;
+      try
+      {
+        restored = objectManager.restoreSubtree(body, parent, index);
+      }
+      catch (const std::bad_alloc&)
+      {
+        restoreAdoptees();
+        throw;
+      }
+      catch (const std::exception&)
+      {
+        restoreAdoptees();
+        return SceneEditResult::failed;
+      }
+
+      // Reattach each reclaimed child under the restored object, in ascending recorded-index order so the
+      // index-taking addChild overload reproduces the original arrangement exactly, then put its own
+      // local Transform back to the value it held just before the removal - the exact pre-removal values,
+      // not what deleteObjectsMarkedForDeletion's WorldPlacement rewrite left it with while it sat
+      // promoted under parent.
+      std::vector<ResolvedAdoptee> orderedAdoptees = adoptees;
+      std::ranges::sort(orderedAdoptees, {}, &ResolvedAdoptee::index);
+
+      for (const auto& adoptee : orderedAdoptees)
+      {
+        adoptee.object->setParent(restored);
+        restored->addChild(adoptee.object, adoptee.index);
+
+        if (const auto transform = adoptee.object->getComponent<Transform>(ComponentType::transform))
+        {
+          transform->loadFromJSON(*adoptee.transform);
+        }
+      }
+
       return SceneEditResult::applied;
     }
 
@@ -542,11 +1106,17 @@ namespace {
 
     if (op == "duplicateObject")
     {
+      const auto requested = requestedObjectUUID(objectManager, edit);
+      if (requested.refusal.has_value())
+      {
+        return requested.refusal.value();
+      }
+
       // Same reasoning as the prefab body: this re-parses the object's own serialization, so a failure
       // is the scene's and not the edit's.
       try
       {
-        objectManager.duplicateObject(object);
+        objectManager.duplicateObject(object, requested.pointer());
       }
       catch (const std::bad_alloc&)
       {
@@ -606,15 +1176,7 @@ namespace {
 
       // Captured before detach: getPosition/getRotation/getScale compose with the CURRENT parent, so
       // this is the object's world placement prior to the reparent.
-      glm::vec3 oldWorldPosition(0.0f);
-      glm::vec3 oldWorldRotation(0.0f);
-      glm::vec3 oldWorldScale(1.0f);
-      if (const auto transform = object->getComponent<Transform>(ComponentType::transform))
-      {
-        oldWorldPosition = transform->getPosition();
-        oldWorldRotation = transform->getRotation();
-        oldWorldScale = transform->getScale();
-      }
+      const auto placement = captureWorldPlacement(object);
 
       if (const auto oldParent = object->getParent())
       {
@@ -636,7 +1198,110 @@ namespace {
         objectManager.addObjectToRoot(object);
       }
 
-      restoreWorldPlacementAfterReparent(object, parent, oldWorldPosition, oldWorldRotation, oldWorldScale);
+      if (placement)
+      {
+        restoreWorldPlacement(object, parent, *placement);
+      }
+
+      return SceneEditResult::applied;
+    }
+
+    if (op == "reorderObject")
+    {
+      // Drop-BETWEEN-siblings: same "named parent" handling as reparentObject, but unlike reparentObject
+      // this can also target the parent the object already has, to reorder within it.
+      std::shared_ptr<Object> parent;
+      if (edit.contains("parent"))
+      {
+        const auto parsedParent = uuids::uuid::from_string(std::string(edit.at("parent")));
+        if (!parsedParent.has_value())
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        parent = objectManager.getObjectByUUID(parsedParent.value());
+        if (!parent)
+        {
+          return SceneEditResult::unknownObject;
+        }
+      }
+
+      // Don't create a cycle (drop onto self or a descendant) - same guard as reparentObject.
+      if (object == parent || (parent && object->isAncestorOf(parent)))
+      {
+        return SceneEditResult::rejected;
+      }
+
+      const auto parsedIndex = parseIndexField(edit.at("index"));
+      if (!parsedIndex.has_value())
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      const std::size_t index = parsedIndex.value();
+
+      const auto oldParent = object->getParent();
+      const bool changesParent = oldParent != parent;
+
+      // Reordering within the same parent cannot deepen anything - only a move to a different parent
+      // needs the same depth guard reparentObject applies.
+      if (changesParent)
+      {
+        if (const std::size_t newDepth = (parent ? ancestorDepth(parent) + 1 : 0) + subtreeHeight(object);
+            newDepth > maxObjectDepth)
+        {
+          return SceneEditResult::rejected;
+        }
+      }
+
+      // index is read against the target list AFTER object is removed from wherever it sits now. Refused
+      // rather than clamped when it runs past that list's end, so a sender whose view of the list is
+      // stale learns that instead of landing somewhere it did not ask for.
+      const auto& targetSiblings = parent ? parent->getChildren() : objectManager.getObjects();
+      const auto currentIt = std::ranges::find(targetSiblings, object);
+      const std::size_t targetSize = changesParent ? targetSiblings.size()
+                                                   : targetSiblings.size() - 1;
+      if (index > targetSize)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Same slot it already occupies (removing then reinserting at its own old index reproduces the
+      // same arrangement) - well formed, but a no-op not worth a re-snapshot.
+      if (!changesParent
+          && static_cast<std::size_t>(currentIt - targetSiblings.begin()) == index)
+      {
+        return SceneEditResult::rejected;
+      }
+
+      // Only a parent change needs its world placement preserved - reordering within the same parent
+      // does not touch the object's local transform at all.
+      const auto placement = changesParent ? captureWorldPlacement(object) : std::nullopt;
+
+      if (oldParent)
+      {
+        oldParent->removeChild(object);
+      }
+      else
+      {
+        objectManager.removeObjectFromRoot(object);
+      }
+
+      object->setParent(parent);
+
+      if (parent)
+      {
+        parent->addChild(object, index);
+      }
+      else
+      {
+        objectManager.addObjectToRoot(object, index);
+      }
+
+      if (placement)
+      {
+        restoreWorldPlacement(object, parent, *placement);
+      }
 
       return SceneEditResult::applied;
     }
@@ -651,7 +1316,32 @@ namespace {
         return SceneEditResult::unknownComponent;
       }
 
-      if (edit.contains("className"))
+      // "data" is a full serialize() blob - undo of a removeComponent putting the exact removed
+      // component back in one op, rather than the blank default this branch otherwise creates. This is a
+      // wire entry point any editor-role client can reach, so the blob's own identity is checked against
+      // "component" before it is trusted with loadFromJSON: a blob for the wrong type would otherwise be
+      // interpreted field-by-field as if it were the one just created.
+      if (edit.contains("data"))
+      {
+        if (registryKeyFromComponentBlob(edit.at("data")) != key)
+        {
+          return SceneEditResult::malformedEdit;
+        }
+
+        try
+        {
+          component->loadFromJSON(edit.at("data"));
+        }
+        catch (const std::bad_alloc&)
+        {
+          throw;
+        }
+        catch (const std::exception&)
+        {
+          return SceneEditResult::failed;
+        }
+      }
+      else if (edit.contains("className"))
       {
         if (const auto script = std::dynamic_pointer_cast<Script>(component))
         {
@@ -702,6 +1392,12 @@ namespace {
       }
 
       return SceneEditResult::unknownComponent;
+    }
+
+    if (op == "removeSubtree")
+    {
+      objectManager.removeSubtree(object);
+      return SceneEditResult::applied;
     }
 
     return SceneEditResult::malformedEdit;
@@ -789,6 +1485,40 @@ void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& mess
 
   objectManager.removeObject(object);
   objectManager.deleteObjectsMarkedForDeletion();
+}
+
+net::Message buildObjectComponentsChanged(const Object& object)
+{
+  net::Message message(net::MessageType::objectComponentsChanged);
+  object.pack(message);
+  return message;
+}
+
+void applyObjectComponentsChanged(ObjectManager& objectManager, const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  // Peek the uuid - Object::pack's leading field - on a copy of the reader, so resolving the target below
+  // does not disturb the read Object::unpack performs on the real one.
+  net::MessageReader uuidPeek = reader;
+  const auto parsed = uuids::uuid::from_string(uuidPeek.readString());
+  if (!parsed.has_value())
+  {
+    return;
+  }
+
+  const auto object = objectManager.getObjectByUUID(parsed.value());
+  if (!object)
+  {
+    // Routine: this view may not have the object yet (a round trip behind) or has already dropped it.
+    return;
+  }
+
+  // Unlike applyObjectSpawned this unpacks into an object that already lives in the scene, so a payload
+  // that runs out part way through is not this function's to clean up - the object stays exactly as far
+  // unpacked as it got, the same partially-applied risk applyComponentEdit already accepts for a value
+  // edit. Object::unpack's own stop/start bracket still protects a running object's live values either way.
+  object->unpack(reader);
 }
 
 void applyAddAsset(AssetRegistry& assetRegistry,
@@ -941,6 +1671,71 @@ nlohmann::json unpackRemoveAsset(const net::Message& message)
   op["uuid"] = reader.readString();
 
   return op;
+}
+
+net::Message buildInputState(const bool focused, const std::vector<int>& keysPressed,
+                             const float mouseX, const float mouseY, const float mouseDeltaX,
+                             const float mouseDeltaY, const float scrollY, const uint8_t buttons)
+{
+  net::Message message(net::MessageType::inputState);
+  message.write(focused);
+  message.write(static_cast<uint32_t>(keysPressed.size()));
+  for (const auto& key : keysPressed)
+  {
+    message.write(static_cast<int32_t>(key));
+  }
+
+  message.write(mouseX);
+  message.write(mouseY);
+  message.write(mouseDeltaX);
+  message.write(mouseDeltaY);
+  message.write(scrollY);
+  message.write(buttons);
+
+  return message;
+}
+
+std::optional<InputStatePayload> parseInputState(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  InputStatePayload payload;
+  payload.focused = reader.read<bool>();
+
+  // The count arrives from the network, so bound it against what is left of the payload before sizing
+  // anything: the message cannot hold more key codes than it has bytes for, and without the check a
+  // client asking for a billion keys gets the allocation attempted first and the underflow only after.
+  // It is a ceiling, not an exact length - the trailing mouse block is counted as if it could be key
+  // codes - so a client that predates that block still degrades to "no mouse" rather than being refused.
+  const auto numKeys = reader.read<uint32_t>();
+  if (numKeys > reader.remaining() / sizeof(int32_t))
+  {
+    // Dropped rather than thrown, like every other malformed message here: the drain loop logs what it
+    // catches to a flushed stderr, which a client could otherwise spam from the tick thread.
+    return std::nullopt;
+  }
+
+  payload.keysPressed.resize(numKeys);
+  for (auto& key : payload.keysPressed)
+  {
+    key = reader.read<int32_t>();
+  }
+
+  // Mouse block, appended after the keys (see Protocol.h). Guard on remaining() so an older client that
+  // predates mouse input degrades to "no mouse" instead of throwing an underflow.
+  constexpr size_t mouseBytes = 5 * sizeof(float) + sizeof(uint8_t);
+  if (reader.remaining() >= mouseBytes)
+  {
+    payload.hasMouse = true;
+    payload.mouseX = reader.read<float>();
+    payload.mouseY = reader.read<float>();
+    payload.mouseDeltaX = reader.read<float>();
+    payload.mouseDeltaY = reader.read<float>();
+    payload.scrollY = reader.read<float>();
+    payload.buttons = reader.read<uint8_t>();
+  }
+
+  return payload;
 }
 
 }

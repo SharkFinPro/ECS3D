@@ -27,21 +27,23 @@ enum class CommandKind {
   addObject,
   removeObject,
   reparentObject,
+  reorderObject,
   renameObject,
   addComponent,
   removeComponent,
   duplicateObject,
   instantiatePrefab,
   addAsset,
+  replaceAsset,
   renameAsset,
   removeAsset
 };
 
 // Whether a command's undo/redo payload is a structural sceneEdit op (nlohmann::json, built by
 // Replication.h's build* functions and sent as a sceneEdit message by the caller) or an already
-// wire-ready net::Message (editComponent/addAsset/renameAsset/removeAsset, built by Replication.h's
-// pack* functions). Fixed per kind, so a caller branches on this rather than guessing which accessor to
-// call.
+// wire-ready net::Message (editComponent/addAsset/replaceAsset/renameAsset/removeAsset, built by
+// Replication.h's pack* functions). Fixed per kind, so a caller branches on this rather than guessing
+// which accessor to call.
 enum class PayloadForm {
   sceneEdit,
   networkMessage
@@ -89,8 +91,11 @@ public:
                                              std::string name,
                                              std::size_t siblingIndex);
 
-  // Not reversible (see isReversible) but still representable: removedSubtree is the removed object's
-  // full Object::serialize() blob, kept in case a future piece gains a way to replay it.
+  // removedSubtree is the removed object's full Object::serialize() blob (children included, in sibling
+  // order, each with its pre-removal local Transform) - undo needs the whole thing, not just the removed
+  // object's own fields, because deleteObjectsMarkedForDeletion promotes its direct children up to its own
+  // parent rather than deleting them; see isReversible and Replication.h's buildRestoreObject for how undo
+  // both recreates the object and reclaims those children in one op.
   [[nodiscard]] static EditCommand removeObject(const uuids::uuid& objectUUID,
                                                 const std::optional<uuids::uuid>& parentUUID,
                                                 std::size_t siblingIndex,
@@ -100,6 +105,15 @@ public:
                                                   const std::optional<uuids::uuid>& beforeParentUUID,
                                                   const std::optional<uuids::uuid>& afterParentUUID);
 
+  // Drop-BETWEEN-siblings: unlike reparentObject (which always appends, so only the parent is worth
+  // recording) this also carries the sibling index on each side, since the whole point of the edit can be
+  // a same-parent move.
+  [[nodiscard]] static EditCommand reorderObject(const uuids::uuid& objectUUID,
+                                                 const std::optional<uuids::uuid>& beforeParentUUID,
+                                                 std::size_t beforeIndex,
+                                                 const std::optional<uuids::uuid>& afterParentUUID,
+                                                 std::size_t afterIndex);
+
   [[nodiscard]] static EditCommand renameObject(const uuids::uuid& objectUUID,
                                                 std::string beforeName,
                                                 std::string afterName);
@@ -108,25 +122,41 @@ public:
                                                 std::string registryKey,
                                                 std::string className = {});
 
-  // Not reversible (see isReversible). removedComponent is the removed component's serialize() blob;
-  // registryKey/className are derived from it the same way componentEdit derives them.
+  // removedComponent is the removed component's serialize() blob; registryKey/className are derived from
+  // it the same way componentEdit derives them. Undo puts it back with an addComponent that carries this
+  // blob as "data" - see Replication.h's buildAddComponent.
   [[nodiscard]] static EditCommand removeComponent(const uuids::uuid& objectUUID,
                                                    const nlohmann::json& removedComponent);
 
-  // Not reversible (see isReversible).
+  // parentUUID/siblingIndex are the source's own position at record time (duplicateObject always lands
+  // the copy as the source's next sibling) - informational only, not enforced on redo, the same as
+  // addObject's siblingIndex.
   [[nodiscard]] static EditCommand duplicateObject(const uuids::uuid& sourceUUID,
                                                    const uuids::uuid& duplicateUUID,
                                                    const std::optional<uuids::uuid>& parentUUID,
                                                    std::size_t siblingIndex);
 
-  // Not reversible (see isReversible).
+  // siblingIndex is informational only, not enforced on redo, the same as addObject's. prefabBody is the
+  // prefab asset's body at record time (AssetRecord::body, the raw string - never parsed here, the same
+  // way ReplaceAssetData carries its before/after bodies): redo re-instantiates from whatever the
+  // registry holds for prefabUUID now, and the registry lets a prefab body be replaced in place (a save
+  // over the same uuid), so validateForRedo compares this against the live record to refuse a redo that
+  // would instantiate a body the user never actually duplicated/instantiated from.
   [[nodiscard]] static EditCommand instantiatePrefab(const uuids::uuid& prefabUUID,
                                                      const uuids::uuid& instanceUUID,
                                                      const std::optional<uuids::uuid>& parentUUID,
-                                                     std::size_t siblingIndex);
+                                                     std::size_t siblingIndex, std::string prefabBody);
 
   [[nodiscard]] static EditCommand addAsset(const uuids::uuid& assetUUID, AssetType type,
                                             std::string path, std::string className, std::string body);
+
+  // Re-registering an existing uuid with a new record: a prefab body edit, or "Save as Prefab" over a
+  // name that already exists. Distinct from addAsset because addAsset's reverse is a removeAsset, which
+  // would delete the asset rather than put its previous body back.
+  [[nodiscard]] static EditCommand replaceAsset(const uuids::uuid& assetUUID, AssetType type,
+                                                std::string beforePath, std::string beforeClassName,
+                                                std::string beforeBody, std::string afterPath,
+                                                std::string afterClassName, std::string afterBody);
 
   [[nodiscard]] static EditCommand renameAsset(const uuids::uuid& assetUUID,
                                                std::string beforeDisplayName,
@@ -140,16 +170,21 @@ public:
 
   [[nodiscard]] PayloadForm payloadForm() const;
 
-  // False for a kind whose reverse cannot be built without either losing data or corrupting the scene:
-  // - removeObject/removeComponent would have to recreate something WITH its prior field values in a
-  //   single wire op, and addComponent/addObject only ever create blank defaults - there is no one-shot
-  //   "add with this data" op to build a faithful reverse from.
-  // - duplicateObject/instantiatePrefab create a whole subtree (fresh uuids throughout); undoing by
-  //   removing just the created root would not remove the subtree, because ObjectManager::removeObject
-  //   reparents children up to the removed object's parent rather than deleting them (see
-  //   ObjectManager::deleteObjectsMarkedForDeletion) - so the created children would be stranded in the
-  //   scene instead of gone.
-  // Every other kind targets an object/asset whose uuid is already stable, so its reverse is exact.
+  // Every kind is currently reversible. removeObject was the one exception until restoreObject grew an
+  // "adopt" field (see Replication.h's buildRestoreObject): ObjectManager::deleteObjectsMarkedForDeletion
+  // promotes the removed object's direct children to its own parent (preserving their world placement)
+  // rather than deleting them, so undo has to both recreate the removed object AND reclaim those
+  // already-live children back under it in one atomic sceneEdit - buildUndoJSON's removeObject case builds
+  // exactly that, from the recorded subtree. removeComponent is reversible via addComponent's "data" field
+  // (see Replication.h's buildAddComponent); duplicateObject/instantiatePrefab are reversible via
+  // removeSubtree (undo, by the created root's uuid alone - it deletes the whole subtree immediately,
+  // unlike removeObject) and by re-running the original creating op (redo - see buildRedoJSON). Every other
+  // kind targets an object/asset whose uuid is already stable, so its reverse is exact.
+  //
+  // Kept as a real check (not just `return true`) rather than removed outright: it is the extension point
+  // a future kind with no faithful reverse would use, and EditorApp/the Edit menu already gate on it
+  // through EditHistory::nextUndoIsReversible()/nextRedoIsReversible() rather than assuming every kind
+  // undoes.
   [[nodiscard]] bool isReversible() const;
 
   // Compares this command's "after" state against the live scene/registry - what undo is about to
@@ -176,6 +211,15 @@ public:
   // or the history has nothing else to name). Validation failures carry their own conflicting uuid,
   // which is not always this one - e.g. an addObject redo can conflict on its parent instead.
   [[nodiscard]] uuids::uuid primaryUUID() const;
+
+  // A human-readable one-line description of this command ("Rename Cube", "Edit Transform", "Delete Asset
+  // Rock"), for an Edit menu that names the next undo/redo action rather than showing a bare "Undo"/"Redo"
+  // label. Resolves a name from what the command itself recorded (an object's before/after name, an
+  // asset's own path/className) when it can, falling back to the live scene/registry, and finally to a
+  // generic kind label when neither is available. A single switch over every CommandKind with no default,
+  // so a new kind is a compiler warning here instead of a silently generic label.
+  [[nodiscard]] std::string describeForMenu(const ObjectManager& objectManager,
+                                            const AssetRegistry* assetRegistry) const;
 
   [[nodiscard]] friend bool operator==(const EditCommand&, const EditCommand&) = default;
 
@@ -214,6 +258,16 @@ private:
     std::optional<uuids::uuid> afterParentUUID;
 
     friend bool operator==(const ReparentObjectData&, const ReparentObjectData&) = default;
+  };
+
+  struct ReorderObjectData {
+    uuids::uuid objectUUID;
+    std::optional<uuids::uuid> beforeParentUUID;
+    std::size_t beforeIndex = 0;
+    std::optional<uuids::uuid> afterParentUUID;
+    std::size_t afterIndex = 0;
+
+    friend bool operator==(const ReorderObjectData&, const ReorderObjectData&) = default;
   };
 
   struct RenameObjectData {
@@ -255,6 +309,7 @@ private:
     uuids::uuid instanceUUID;
     std::optional<uuids::uuid> parentUUID;
     std::size_t siblingIndex = 0;
+    std::string prefabBodyJSON; // AssetRecord::body at record time - see the factory's comment
 
     friend bool operator==(const InstantiatePrefabData&, const InstantiatePrefabData&) = default;
   };
@@ -267,6 +322,19 @@ private:
     std::string body;      // prefabs only
 
     friend bool operator==(const AddAssetData&, const AddAssetData&) = default;
+  };
+
+  struct ReplaceAssetData {
+    uuids::uuid assetUUID;
+    AssetType type = AssetType::Unknown;
+    std::string beforePath;
+    std::string beforeClassName;
+    std::string beforeBody;
+    std::string afterPath;
+    std::string afterClassName;
+    std::string afterBody;
+
+    friend bool operator==(const ReplaceAssetData&, const ReplaceAssetData&) = default;
   };
 
   struct RenameAssetData {
@@ -288,9 +356,9 @@ private:
   };
 
   using CommandData = std::variant<ComponentEditData, AddObjectData, RemoveObjectData, ReparentObjectData,
-                                   RenameObjectData, AddComponentData, RemoveComponentData,
-                                   DuplicateObjectData, InstantiatePrefabData, AddAssetData,
-                                   RenameAssetData, RemoveAssetData>;
+                                   ReorderObjectData, RenameObjectData, AddComponentData,
+                                   RemoveComponentData, DuplicateObjectData, InstantiatePrefabData,
+                                   AddAssetData, ReplaceAssetData, RenameAssetData, RemoveAssetData>;
 
   CommandKind m_kind = CommandKind::componentEdit;
   CommandData m_data;

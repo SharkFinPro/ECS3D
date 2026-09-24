@@ -3,6 +3,7 @@
 
 #include <array>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -42,7 +43,19 @@ enum class MessageType : uint8_t {
                  // join carried this nonce. Broadcast + nonce correlation (no per-connection send path):
                  // every client hears it, only the one whose join nonce matches keeps it.
   renameAsset,   // editor -> server: set an asset's display-name override (replication::packRenameAsset); server re-snapshots
-  removeAsset    // editor -> server: drop an asset record by uuid (replication::packRemoveAsset); server re-snapshots
+  removeAsset,   // editor -> server: drop an asset record by uuid (replication::packRemoveAsset); server re-snapshots
+  serverLog,     // server -> editor connections only: a batch of the server's own log entries
+                 // (net::packServerLog / net::unpackServerLog), so the editor's Console shows what the
+                 // server (and the scripts running on it) printed - locally spawned or remote alike. Never
+                 // sent to a Role::player connection: NetServer::sendToEditors, not broadcast().
+  objectComponentsChanged // server -> client: a script added/removed a component on an existing object
+                 // (Object::pack of its whole current subtree - pack recurses through children); the
+                 // receiver finds the root by uuid and unpacks in place
+                 // (replication::applyObjectComponentsChanged), which reconciles the component set and the
+                 // children at every level of the subtree to match what was packed. Ignored if the uuid is
+                 // unknown - routine for a view that has not been sent the object yet or already dropped
+                 // it. Appended last, like every enumerator here: this is the wire discriminator, so
+                 // existing values must keep their number.
   // editComponent/sceneEdit/sceneControl/loadProject/addAsset/renameAsset/removeAsset are the editor's mutation path; the server
   // only honors them from a connection it authorized as Role::editor at the transport handshake (which
   // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An
@@ -116,6 +129,11 @@ public:
   explicit Message(const MessageType type) noexcept : m_type(type) {}
   Message() = default;
 
+  // The inbound path from the transport: the socket thread has a received buffer and a type byte, and
+  // the payload is taken in one copy rather than a field (or a byte) at a time.
+  Message(const MessageType type, const std::span<const uint8_t> payload)
+    : m_type(type), m_payload(payload.begin(), payload.end()) {}
+
   template <WireValue T>
   Message& write(const T& value) {
     // bool goes across as an explicit 0/1 byte rather than whatever sizeof(bool) is here, so the pairing
@@ -138,6 +156,14 @@ public:
 
     write(static_cast<uint32_t>(value.size()));
     m_payload.insert(m_payload.end(), value.begin(), value.end());
+    return *this;
+  }
+
+  // Raw bytes the caller has already framed - a dumped json string, a buffer received off the wire -
+  // appended as they are. Not a substitute for write<T>: that is what keeps padding and pointers off the
+  // wire, and anything with a layout belongs there instead.
+  Message& appendBytes(const std::span<const uint8_t> bytes) {
+    m_payload.insert(m_payload.end(), bytes.begin(), bytes.end());
     return *this;
   }
 

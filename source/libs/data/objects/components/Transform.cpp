@@ -1,16 +1,13 @@
 #include "Transform.h"
+#include "FiniteCheck.h"
 #include "../Object.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 
 Transform::Transform()
-  : Component(ComponentType::transform)
-{
-  loadVariable(m_position);
-  loadVariable(m_scale);
-  loadVariable(m_rotation);
-}
+  : Transform(glm::vec3(0), glm::vec3(1), glm::vec3(0))
+{}
 
 Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation)
   : Component(ComponentType::transform),
@@ -23,7 +20,7 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
   loadVariable(m_rotation);
 }
 
-uint8_t Transform::getUpdateID() const
+uint64_t Transform::getUpdateID() const
 {
   return m_updateID;
 }
@@ -84,25 +81,67 @@ glm::vec3 Transform::getLocalRotation() const
 
 void Transform::setPosition(const glm::vec3 position)
 {
+  if (!finiteCheck::isFinite(position))
+  {
+    return;
+  }
+
   m_position.set(position);
   ++m_updateID;
 }
 
 void Transform::setScale(const glm::vec3 scale)
 {
+  if (!finiteCheck::isFinite(scale))
+  {
+    return;
+  }
+
   m_scale.set(scale);
   ++m_updateID;
 }
 
 void Transform::setRotation(const glm::vec3 rotation)
 {
+  if (!finiteCheck::isFinite(rotation))
+  {
+    return;
+  }
+
   m_rotation.set(rotation);
+  ++m_updateID;
+}
+
+void Transform::start()
+{
+  Component::start();
+
+  // Reseeds the live values from initial without going through a setter - bump here so a cached mesh or
+  // bounding box keyed on the update id rebuilds against the reseeded transform on the first tick.
+  ++m_updateID;
+}
+
+void Transform::stop()
+{
+  Component::stop();
+
+  // Same reseed, the other direction: live reverts to initial on stop.
   ++m_updateID;
 }
 
 void Transform::move(const glm::vec3& direction)
 {
-  m_position.set(m_position.get() + direction);
+  // Scripts reach this through the Move binding, so it needs the same guard the setters have - and the
+  // sum is checked rather than the direction, since a finite step off an already huge position
+  // overflows to infinity on its own.
+  const auto moved = m_position.get() + direction;
+
+  if (!finiteCheck::isFinite(moved))
+  {
+    return;
+  }
+
+  m_position.set(moved);
   ++m_updateID;
 }
 
@@ -131,6 +170,10 @@ void Transform::loadFromJSON(const nlohmann::json& componentData)
   m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
   m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
   m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
+
+  // Bypasses the setters, so bump directly - a collider cache keyed on the update id has to know this
+  // geometry changed.
+  ++m_updateID;
 }
 
 void Transform::pack(net::Message& message) const
@@ -138,13 +181,16 @@ void Transform::pack(net::Message& message) const
   message.write(ComponentType::transform);
 
   message.write(m_position.get());
-  message.write(m_scale.get());
   message.write(m_rotation.get());
+  message.write(m_scale.get());
 }
 
 void Transform::unpack(net::MessageReader& messageReader)
 {
   m_position.set(messageReader.read<glm::vec3>());
-  m_scale.set(messageReader.read<glm::vec3>());
   m_rotation.set(messageReader.read<glm::vec3>());
+  m_scale.set(messageReader.read<glm::vec3>());
+
+  // Bypasses the setters, so bump directly - see loadFromJSON.
+  ++m_updateID;
 }

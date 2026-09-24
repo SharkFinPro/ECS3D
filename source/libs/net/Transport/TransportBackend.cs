@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using System.Threading;
 
 namespace ECS3DNetTransport;
 
@@ -54,20 +55,30 @@ internal abstract class TransportBackend
       return false;
     }
 
-    Console.Error.WriteLine($"[Transport] Refusing to send a {1 + len} byte message; the limit is {MaxMessageBytes}.");
+    Transport.Log(TransportLogLevel.Error, $"Refusing to send a {1 + len} byte message; the limit is {MaxMessageBytes}.");
 
     return true;
   }
 
   // editMode is the launch-capability gate: only an edit-mode server may grant Role.editor at the
   // handshake, and only when the presented token matches expectedToken (see Authorize). Set at ServerStart.
-  protected bool EditMode;
-  protected string ExpectedToken = "";
+  // Internal (rather than protected) so ECS3DManagedTests can drive Authorize directly against a concrete
+  // backend instance via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
+  internal bool EditMode;
+  internal string ExpectedToken = "";
 
   public abstract void ServerStart(int port, bool editMode, string expectedToken);
   public abstract void ServerStop();
   public abstract int ServerConnectionCount();
   public abstract void ServerBroadcast(byte type, nint data, int len);
+
+  // Sends to exactly the connIdCount connections named by connIds (a native int32 array), rather than
+  // every connection like ServerBroadcast - for data (the server's own log) that only authorized editor
+  // connections may see. One call for the whole fan-out: implementations apply the same shared time
+  // budget across it that ServerBroadcast applies across every connection, so a stalled connection in the
+  // list cannot cost the caller more than that one shared budget no matter how many are named. A connId
+  // that has since disconnected is silently skipped.
+  public abstract void ServerSendToMany(nint connIds, int connIdCount, byte type, nint data, int len);
 
   public abstract byte ClientConnect(string host, int port, byte role, string token);
   public abstract void ClientDisconnect();
@@ -78,7 +89,9 @@ internal abstract class TransportBackend
   // non-edit server, where it gets a read-only view (the server simply honors no edits from it). The one
   // hard rejection is a real auth failure: an editor offering the wrong token to an edit server that
   // configured one. Whether an admitted editor may actually edit is conveyed separately via editStatus.
-  protected bool Authorize(byte[] payload)
+  // Internal (rather than protected) so ECS3DManagedTests can call it directly against a concrete backend
+  // instance via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
+  internal bool Authorize(byte[] payload)
   {
     if (payload.Length < 1)
     {
@@ -94,5 +107,29 @@ internal abstract class TransportBackend
     }
 
     return true;
+  }
+
+  // How long ServerStop/DisconnectClient wait for a socket thread to exit after its socket is closed.
+  // Bounded so a stuck thread (e.g. one wedged in native socket teardown) cannot hang process shutdown;
+  // logged as a warning when it fires, since it should not happen in the normal case. Shared by both
+  // backends' shutdown paths.
+  protected const int ShutdownJoinTimeoutMs = 3000;
+
+  // Waits up to ShutdownJoinTimeoutMs for thread to exit, logging a warning if it takes longer than that
+  // instead of waiting past it. A no-op for null, an already-finished thread, or the calling thread
+  // itself - joining the current thread would deadlock, and ServerStop/DisconnectClient could in
+  // principle be reached from a callback running on one of these threads.
+  protected static void JoinThread(Thread? thread, string label)
+  {
+    if (thread == null || thread == Thread.CurrentThread || !thread.IsAlive)
+    {
+      return;
+    }
+
+    if (!thread.Join(ShutdownJoinTimeoutMs))
+    {
+      Transport.Log(TransportLogLevel.Warn,
+        $"Timed out after {ShutdownJoinTimeoutMs} ms waiting for the {label} thread to exit during shutdown.");
+    }
   }
 }

@@ -1,7 +1,25 @@
 #include "Camera.h"
+#include "FiniteCheck.h"
 #include "WireTypes.h"
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
+
+namespace {
+  // A non-finite float serializes to json null, so a saved direction component may not be a number at
+  // all; NaN reads back this way rather than throwing, so setDirection's finite check still catches it.
+  float readFloatOrNaN(const nlohmann::json& value)
+  {
+    if (!value.is_number())
+    {
+      return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    return value.get<float>();
+  }
+}
 
 Camera::Camera()
   : Component(ComponentType::camera)
@@ -14,6 +32,11 @@ glm::vec3 Camera::getDirection() const
 
 void Camera::setDirection(const glm::vec3& direction)
 {
+  if (!finiteCheck::isFinite(direction))
+  {
+    return;
+  }
+
   m_direction = direction;
 }
 
@@ -24,7 +47,13 @@ float Camera::getFov() const
 
 void Camera::setFov(const float fov)
 {
-  m_fov = fov;
+  // Before the clamp: nan compares false against both bounds, so std::clamp hands it straight back.
+  if (!finiteCheck::isFinite(fov))
+  {
+    return;
+  }
+
+  m_fov = std::clamp(fov, minFovDegrees, maxFovDegrees);
 }
 
 float Camera::getNearPlane() const
@@ -34,7 +63,7 @@ float Camera::getNearPlane() const
 
 void Camera::setNearPlane(const float nearPlane)
 {
-  m_nearPlane = nearPlane;
+  setNearFarPlanes(nearPlane, m_farPlane);
 }
 
 float Camera::getFarPlane() const
@@ -44,7 +73,28 @@ float Camera::getFarPlane() const
 
 void Camera::setFarPlane(const float farPlane)
 {
-  m_farPlane = farPlane;
+  setNearFarPlanes(m_nearPlane, farPlane);
+}
+
+float Camera::minFarPlaneFor(const float nearPlane)
+{
+  const float withClearance = nearPlane + minFarPlaneClearance;
+  const float nextRepresentable = std::nextafter(nearPlane, std::numeric_limits<float>::infinity());
+
+  // withClearance can round back down to nearPlane once float's ULP exceeds minFarPlaneClearance; taking
+  // the max with the next representable float guarantees the result is still strictly greater than near.
+  return std::max(withClearance, nextRepresentable);
+}
+
+void Camera::setNearFarPlanes(const float nearPlane, const float farPlane)
+{
+  const float newNear = finiteCheck::isFinite(nearPlane) ? std::max(nearPlane, minNearPlane) : m_nearPlane;
+  const float newFar = finiteCheck::isFinite(farPlane) ? farPlane : m_farPlane;
+
+  // far is always the one adjusted to satisfy the relation, never near, so a caller's near value is
+  // never silently overridden by a stale far.
+  m_nearPlane = newNear;
+  m_farPlane = std::max(newFar, minFarPlaneFor(newNear));
 }
 
 bool Camera::isActive() const
@@ -74,12 +124,11 @@ void Camera::loadFromJSON(const nlohmann::json& componentData)
   // value(...) so an older scene without a field defaults cleanly.
   if (const auto it = componentData.find("direction"); it != componentData.end() && it->size() == 3)
   {
-    m_direction = glm::vec3(it->at(0), it->at(1), it->at(2));
+    setDirection(glm::vec3(readFloatOrNaN(it->at(0)), readFloatOrNaN(it->at(1)), readFloatOrNaN(it->at(2))));
   }
 
-  m_fov = componentData.value("fov", 45.0f);
-  m_nearPlane = componentData.value("nearPlane", 0.1f);
-  m_farPlane = componentData.value("farPlane", 1000.0f);
+  setFov(componentData.value("fov", 45.0f));
+  setNearFarPlanes(componentData.value("nearPlane", 0.1f), componentData.value("farPlane", 1000.0f));
   m_active = componentData.value("active", true);
 }
 
@@ -96,9 +145,14 @@ void Camera::pack(net::Message& message) const
 
 void Camera::unpack(net::MessageReader& messageReader)
 {
-  m_direction = messageReader.read<glm::vec3>();
-  m_fov = messageReader.read<float>();
-  m_nearPlane = messageReader.read<float>();
-  m_farPlane = messageReader.read<float>();
+  // Read unconditionally so the reader stays aligned for the fields after it; a non-finite value is
+  // dropped by setDirection, leaving the previous direction in place.
+  setDirection(messageReader.read<glm::vec3>());
+
+  setFov(messageReader.read<float>());
+  const float nearPlane = messageReader.read<float>();
+  const float farPlane = messageReader.read<float>();
+  setNearFarPlanes(nearPlane, farPlane);
+
   m_active = messageReader.read<bool>();
 }

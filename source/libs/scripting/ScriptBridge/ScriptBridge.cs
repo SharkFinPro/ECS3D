@@ -18,7 +18,7 @@ public static class Bridge
     private static ScriptContext? _ctx;
 
     private static readonly Dictionary<string, ScriptBase> _instances = new();
-    private static string Key(string uuid, string className) => $"{uuid}_{className}";
+    internal static string Key(string uuid, string className) => $"{uuid}_{className}";
 
     // A script that throws once must not take the process down, and must not spam the log every tick
     // after that. Once a key is here, every entry point below skips it silently instead of calling in;
@@ -26,14 +26,15 @@ public static class Bridge
     // faulted script's code can change or go away.
     private static readonly HashSet<string> _faulted = new();
 
-    // Console.Error.WriteLine can itself throw (a closed/redirected stderr handle in a service context),
-    // and that must not escape any further than the fault it was reporting would have. Best effort only -
-    // if this fails too there is nothing left to do without risking the same escape again.
+    // Log.error can itself throw (its fallback writes to Console.Error, which can be a closed/redirected
+    // handle in a service context), and that must not escape any further than the fault it was reporting
+    // would have. Best effort only - if this fails too there is nothing left to do without risking the
+    // same escape again.
     private static void SafeWriteError(string message)
     {
         try
         {
-            Console.Error.WriteLine(message);
+            Log.error(message);
         }
         catch
         {
@@ -48,12 +49,12 @@ public static class Bridge
         string message;
         try
         {
-            message = $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}; the script has been stopped.\n" +
+            message = $"Script '{className}' on object {uuid} threw in {methodName}; the script has been stopped.\n" +
                       $"{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
         }
         catch
         {
-            message = $"[Bridge] Script '{className}' on object {uuid} threw in {methodName}, and the exception " +
+            message = $"Script '{className}' on object {uuid} threw in {methodName}, and the exception " +
                       "could not be described; the script has been stopped.";
         }
 
@@ -68,12 +69,12 @@ public static class Bridge
         string message;
         try
         {
-            message = $"[Bridge] Script '{className}' on object {uuid} threw in stop() during reload cleanup; " +
+            message = $"Script '{className}' on object {uuid} threw in stop() during reload cleanup; " +
                       $"continuing the reload.\n{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
         }
         catch
         {
-            message = $"[Bridge] Script '{className}' on object {uuid} threw in stop() during reload cleanup, and " +
+            message = $"Script '{className}' on object {uuid} threw in stop() during reload cleanup, and " +
                       "the exception could not be described; continuing the reload.";
         }
 
@@ -165,7 +166,7 @@ public static class Bridge
         _scriptDir = Marshal.PtrToStringUTF8(scriptDirPtr)
                      ?? throw new ArgumentNullException(nameof(scriptDirPtr));
 
-        Console.WriteLine($"[Bridge] Script directory: {_scriptDir}");
+        Log.info($"Script directory: {_scriptDir}");
         CompileAndLoad();
     }
 
@@ -200,18 +201,18 @@ public static class Bridge
     {
         if (!Directory.Exists(_scriptDir))
         {
-            Console.Error.WriteLine($"[Bridge] Script directory not found: {_scriptDir}");
+            Log.error($"Script directory not found: {_scriptDir}");
             return;
         }
 
         var sourceFiles = Directory.GetFiles(_scriptDir, "*.cs", SearchOption.AllDirectories);
         if (sourceFiles.Length == 0)
         {
-            Console.WriteLine("[Bridge] No .cs files found in script directory.");
+            Log.warn("No .cs files found in script directory.");
             return;
         }
 
-        Console.WriteLine($"[Bridge] Compiling {sourceFiles.Length} script file(s)...");
+        Log.info($"Compiling {sourceFiles.Length} script file(s)...");
 
         var syntaxTrees = sourceFiles
             .Select(path => CSharpSyntaxTree.ParseText(ReadFileSafe(path), path: path))
@@ -238,28 +239,28 @@ public static class Bridge
 
         foreach (var diag in result.Diagnostics.Where(d => d.Severity >= DiagnosticSeverity.Warning))
         {
-            Console.WriteLine($"[Bridge]     {diag}");
+            Log.info($"    {diag}");
         }
 
         if (!result.Success)
         {
-            Console.Error.WriteLine("[Bridge] Compilation failed:");
+            Log.error("Compilation failed:");
             foreach (var e in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
             {
-                Console.Error.WriteLine($"    {e}");
+                Log.error($"    {e}");
             }
             return;
         }
 
-        Console.WriteLine("[Bridge] Compilation succeeded.");
+        Log.info("Compilation succeeded.");
 
         ms.Seek(0, SeekOrigin.Begin);
         _ctx = new ScriptContext(ms);
 
-        Console.WriteLine($"[Bridge] {_ctx.ScriptTypes.Length} script type(s) available.");
+        Log.info($"{_ctx.ScriptTypes.Length} script type(s) available.");
         foreach (var t in _ctx.ScriptTypes)
         {
-            Console.WriteLine($"    + {t.Name}");
+            Log.info($"    + {t.Name}");
         }
     }
 
@@ -276,17 +277,7 @@ public static class Bridge
 
         try
         {
-            var fields = instance.GetType()
-                .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null)
-                .Select(f => new {
-                    name        = f.Name,
-                    displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
-                    type        = MapTypeName(f.FieldType)!
-                })
-                .ToArray();
-
-            return Marshal.StringToCoTaskMemUTF8(JsonSerializer.Serialize(fields));
+            return Marshal.StringToCoTaskMemUTF8(BuildExposedFieldsJson(instance));
         }
         catch (Exception ex)
         {
@@ -294,6 +285,23 @@ public static class Bridge
             ReportFault(uuid, className, nameof(getExposedFields), ex);
             return Marshal.StringToCoTaskMemUTF8("[]");
         }
+    }
+
+    // The reflection + JSON side of getExposedFields, pulled out of the [UnmanagedCallersOnly] entry
+    // point so it is reachable without an IntPtr uuid/className pair or a live _instances entry.
+    internal static string BuildExposedFieldsJson(object instance)
+    {
+        var fields = instance.GetType()
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null)
+            .Select(f => new {
+                name        = f.Name,
+                displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
+                type        = MapTypeName(f.FieldType)!
+            })
+            .ToArray();
+
+        return JsonSerializer.Serialize(fields);
     }
 
     [UnmanagedCallersOnly]
@@ -349,11 +357,19 @@ public static class Bridge
             return null;
         }
 
-        return instance.GetType()
-            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null)
-            ?.GetValue(instance);
+        return ReadExposedField(instance, fieldName);
     }
+
+    // Finds an [ExposeToEditor] field by name, shared by the read and write paths below - pulled out of
+    // GetField/SetField so it is reachable without an IntPtr uuid/className pair or a live _instances
+    // entry.
+    internal static FieldInfo? FindExposedField(object instance, string fieldName) =>
+        instance.GetType()
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null);
+
+    internal static object? ReadExposedField(object instance, string fieldName) =>
+        FindExposedField(instance, fieldName)?.GetValue(instance);
 
     [UnmanagedCallersOnly]
     public static void setFieldFloat(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, float value)
@@ -391,29 +407,58 @@ public static class Bridge
 
     private static void SetField(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, object value)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        var key = Key(uuid, className);
         var fieldName = Marshal.PtrToStringUTF8(fieldNamePtr)!;
 
         if (!_instances.TryGetValue(key, out var instance))
         {
             return;
         }
-        var field = instance.GetType()
-            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .FirstOrDefault(f => f.Name == fieldName && f.GetCustomAttribute<ExposeToEditorAttribute>() != null);
+        var field = FindExposedField(instance, fieldName);
 
         if (field == null)
         {
             return;
         }
 
-        // Convert.ChangeType only handles IConvertible (float/int/bool); a struct like Vector3 arrives as
-        // the field's own type already, so assign it directly.
-        var converted = field.FieldType.IsInstanceOfType(value) ? value : Convert.ChangeType(value, field.FieldType);
+        if (!TryConvertFieldValue(field.FieldType, value, out var converted))
+        {
+            // Bad input, not a script fault: letting this reach RunGuarded would fault the instance
+            // and skip every later call for it.
+            Log.warn($"Refused a field edit on {uuid} ({className}): field '{fieldName}' is " +
+                     $"{field.FieldType.Name}, got {value.GetType().Name}");
+            return;
+        }
+
         field.SetValue(instance, converted);
     }
 
-    private static string? MapTypeName(Type t)
+    // Convert.ChangeType only handles IConvertible (float/int/bool); a struct like Vector3 arrives as the
+    // field's own type already, so it is assigned directly rather than routed through ChangeType. Pulled
+    // out of SetField so the conversion/refusal rule is reachable without an IntPtr uuid/className pair.
+    internal static bool TryConvertFieldValue(Type fieldType, object value, out object? converted)
+    {
+        if (fieldType.IsInstanceOfType(value))
+        {
+            converted = value;
+            return true;
+        }
+
+        try
+        {
+            converted = Convert.ChangeType(value, fieldType);
+            return true;
+        }
+        catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+        {
+            converted = null;
+            return false;
+        }
+    }
+
+    internal static string? MapTypeName(Type t)
     {
         if (t == typeof(float))
         {
@@ -444,6 +489,12 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static unsafe void registerLogBindings(LogBindings bindings)
+    {
+        NativeBindings.Log = bindings;
+    }
+
+    [UnmanagedCallersOnly]
     public static unsafe void registerInputUtilsBindings(InputUtilsBindings bindings)
     {
         NativeBindings.InputUtils = bindings;
@@ -468,15 +519,39 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static unsafe void registerComponentOpsBindings(ComponentOpsBindings bindings)
+    {
+        NativeBindings.ComponentOps = bindings;
+    }
+
+    [UnmanagedCallersOnly]
     public static unsafe void registerCameraBindings(CameraBindings bindings)
     {
         NativeBindings.Camera = bindings;
     }
 
     [UnmanagedCallersOnly]
+    public static unsafe void registerColliderBindings(ColliderBindings bindings)
+    {
+        NativeBindings.Collider = bindings;
+    }
+
+    [UnmanagedCallersOnly]
     public static unsafe void registerModelRendererBindings(ModelRendererBindings bindings)
     {
         NativeBindings.ModelRenderer = bindings;
+    }
+
+    [UnmanagedCallersOnly]
+    public static unsafe void registerLightRendererBindings(LightRendererBindings bindings)
+    {
+        NativeBindings.LightRenderer = bindings;
+    }
+
+    [UnmanagedCallersOnly]
+    public static unsafe void registerPlayerControllerBindings(PlayerControllerBindings bindings)
+    {
+        NativeBindings.PlayerController = bindings;
     }
 
     [UnmanagedCallersOnly]

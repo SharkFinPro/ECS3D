@@ -318,6 +318,36 @@ TEST(CollisionEvent, ASolidContactPushesTheBodyOut)
   EXPECT_NE(positionOf(moving), glm::vec3(0, 0, 0));
 }
 
+TEST(CollisionEvent, SeveralIndependentDynamicPairsAllResolveInOneTick)
+{
+  // Three dynamic-vs-static pairs, far enough apart that no pair's colliders are ever candidates for
+  // another pair's sweep. Each edge that finds a collision has its own rigid body, so all three run as
+  // separate parallel-loop iterations and each applies its own response - the shape checkCollisions'
+  // narrow phase takes whenever more than one body is moving in the same tick. The narrow phase used to
+  // apply that response from inside the parallel loop, which is safe here only because the pairs never
+  // share a collider; the fix moves it to a serial pass after the loop, and this test pins that the
+  // three independent contacts still resolve to the same result that shape had before.
+  const auto scene = makeScene();
+
+  const auto moverA = addBody(scene, "MoverA", { 0, 0, 0 }, true);
+  addBody(scene, "RestingA", { 1, 0, 0 }, false);
+
+  const auto moverB = addBody(scene, "MoverB", { 100, 0, 0 }, true);
+  addBody(scene, "RestingB", { 101, 0, 0 }, false);
+
+  const auto moverC = addBody(scene, "MoverC", { 200, 0, 0 }, true);
+  addBody(scene, "RestingC", { 201, 0, 0 }, false);
+
+  CollisionSystem collisionSystem;
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  // Same geometry as ASolidContactPushesTheBodyOut's single pair (unit boxes one apart, a full unit of
+  // overlap), repeated three times, so each mover is pushed exactly 1 clear on x and nowhere else.
+  expectNear(positionOf(moverA), { -1.0f, 0, 0 }, 1e-3f);
+  expectNear(positionOf(moverB), { 99.0f, 0, 0 }, 1e-3f);
+  expectNear(positionOf(moverC), { 199.0f, 0, 0 }, 1e-3f);
+}
+
 TEST(CollisionEvent, TwoGenuineContactsInOneTickBothPushTheBodyClear)
 {
   const auto scene = makeScene();

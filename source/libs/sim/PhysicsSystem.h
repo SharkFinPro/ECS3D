@@ -4,6 +4,7 @@
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
+#include <span>
 
 class ObjectManager;
 class Object;
@@ -19,6 +20,12 @@ public:
 
   static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
                               glm::vec3 minimumTranslationVector, glm::vec3 collisionPoint);
+
+  // Resolves the pair across a contact manifold: a sequential-impulse pass over its points that accounts
+  // for each body's spin, so a body resting on several points is held still rather than torqued about
+  // one. A single point resolves exactly like the overload above.
+  static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
+                              glm::vec3 minimumTranslationVector, std::span<const glm::vec3> collisionPoints);
 
 private:
   static void integrate(RigidBody& body, Transform& transform, float dt);

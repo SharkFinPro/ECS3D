@@ -23,11 +23,12 @@ void ComponentEditor::registerHandler(const std::string& typeName, GuiHandler ha
   m_handlers[typeName] = std::move(handler);
 }
 
-bool ComponentEditor::displayGui(const std::string& typeName, const std::shared_ptr<Component>& component) const
+bool ComponentEditor::displayGui(const std::string& typeName, const std::shared_ptr<Component>& component,
+                                 const MixedFields& mixedFields) const
 {
   if (const auto it = m_handlers.find(typeName); it != m_handlers.end())
   {
-    return it->second(component);
+    return it->second(component, mixedFields);
   }
 
   return false;
@@ -46,7 +47,10 @@ bool ComponentEditor::displayHeader(const std::shared_ptr<Component>& component,
   // Transform is intrinsic to every object, so it has no remove button.
   const bool removable = component->getType() != ComponentType::transform;
 
-  ImGui::PushID(component.get());
+  // No PushID(component.get()) here: the caller (ObjectInspector::displayComponent) already scopes the
+  // whole component body under a uuid/type-based id that survives a structural edit rebuilding the
+  // object's components, so the section's open/closed state (kept in ImGuiStorage under that scope)
+  // does not reset when this component comes back behind a new address.
   bool removeClicked = false;
   const bool open = gc::sectionHeader(componentDisplayName.c_str(), removable, &removeClicked,
                                       iconForComponent(component->getType()));
@@ -54,7 +58,6 @@ bool ComponentEditor::displayHeader(const std::shared_ptr<Component>& component,
   {
     component->markAsDeleted();
   }
-  ImGui::PopID();
 
   return open;
 }

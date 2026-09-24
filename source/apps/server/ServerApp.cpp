@@ -4,7 +4,6 @@
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
-#include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
@@ -20,10 +19,16 @@
 #include <bindings/BindingContext.h>
 #include <NetServer.h>
 #include <ManagedHost.h>
+#include <Log.h>
+#include <RemoteLogSink.h>
 #include <nlohmann/json.hpp>
-#include <iostream>
+#include <chrono>
+#include <cstdint>
+#include <exception>
+#include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 
 ServerApp::ServerApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -45,6 +50,11 @@ ServerApp::ServerApp(LaunchOptions options)
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
+  // Feeds forwardLogToEditors: the server is headless, so this is the only way a connected editor - local
+  // or remote - sees anything the server (or a script running on it, via LogBindings) logs.
+  m_remoteLogSink = std::make_shared<RemoteLogSink>();
+  Log::addSink(m_remoteLogSink);
+
   // Scene queries live in sim, which scripting can't link; inject them into BindingContext so the World
   // raycast/overlapSphere bindings can call them.
   BindingContext::setRaycast(&SceneQueries::raycast);
@@ -62,7 +72,7 @@ ServerApp::ServerApp(LaunchOptions options)
   }
   else if (!m_projectSerializer->load(m_options.project) || !m_sceneManager->getCurrentScene())
   {
-    logMessage("Error", "No scene loaded from project '" + m_options.project
+    Log::error(LogCategory::server, "No scene loaded from project '" + m_options.project
       + "' - the server will run but simulate nothing. Check the project path and working directory.");
   }
 
@@ -78,12 +88,12 @@ ServerApp::ServerApp(LaunchOptions options)
     }
     catch (const std::exception& e)
     {
-      logMessage("Error", e.what());
+      Log::error(LogCategory::server, e.what());
     }
 
     // The server is headless (no window), so announce that it's up - otherwise a running server looks
     // like it never started.
-    logMessage("Info", "Running scene '" + scene->getName() + "' ("
+    Log::info(LogCategory::server, "Running scene '" + scene->getName() + "' ("
       + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects) on port "
       + std::to_string(m_options.port) + ".");
   }
@@ -131,7 +141,7 @@ void ServerApp::run()
       }
       catch (const std::exception& e)
       {
-        logMessage("Error", std::string("Failed to handle client message: ") + e.what());
+        Log::error(LogCategory::server, std::string("Failed to handle client message: ") + e.what());
       }
     }
 
@@ -180,6 +190,11 @@ void ServerApp::run()
       broadcastStateDelta();
     }
 
+    // Every loop iteration rather than gated on `ticked`: a log line (e.g. a startup error) can happen
+    // while the scene is stopped or paused, and an editor watching the Console shouldn't have to wait for
+    // the sim to advance to see it.
+    forwardLogToEditors();
+
     // Don't busy-spin a core between ticks.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
@@ -193,13 +208,13 @@ void ServerApp::fixedUpdate(const float dt) const
     return;
   }
 
-  auto& objectManager = *scene->getObjectManager();
-
   // The number crunching, in order: scripts read input (variableUpdate) then queue forces, physics
   // integrates, collisions resolve. variableUpdate runs before fixedUpdate so input-driven force is
   // applied the same tick (the server has no render frame to drive it separately).
   try
   {
+    auto& objectManager = *scene->getObjectManager();
+
     m_scriptSystem->variableUpdate(objectManager);
     m_scriptSystem->fixedUpdate(objectManager, dt);
     PhysicsSystem::fixedUpdate(objectManager, dt);
@@ -212,7 +227,7 @@ void ServerApp::fixedUpdate(const float dt) const
   }
   catch (const std::exception& e)
   {
-    logMessage("Error", e.what());
+    Log::error(LogCategory::server, e.what());
   }
 }
 
@@ -235,673 +250,4 @@ void ServerApp::dispatchCollisionEvents(ObjectManager& objectManager) const
   {
     m_scriptSystem->dispatchCollisionEvent(objectManager, pair.a, pair.b, CollisionEvent::exit);
   }
-}
-
-void ServerApp::handleClientMessage(const net::Message& message, const int32_t senderId)
-{
-  // A non-edit server is read-only: it serves snapshots/deltas to editors that connect to view it, but
-  // never applies their edits. On an edit-mode server, a mutation is honored only from the connection the
-  // transport authorized as Role::editor at the handshake - a connection that simply claims Role::player
-  // (which needs no token) must not be able to reach the same handlers.
-  if (net::isMutationMessage(message.getType()) && (!m_options.editMode || !m_netServer->isEditor(senderId)))
-  {
-    logMessage("Error", "Discarded a message of type " + std::to_string(static_cast<int>(message.getType())) +
-                        " from connection " + std::to_string(senderId) + ": not an authorized editor.");
-    return;
-  }
-
-  switch (message.getType())
-  {
-    case net::MessageType::join:
-      handleJoin(message, senderId);
-      break;
-
-    case net::MessageType::editComponent:
-      handleEditComponent(message);
-      break;
-
-    case net::MessageType::sceneEdit:
-      handleSceneEdit(message);
-      break;
-
-    case net::MessageType::loadProject:
-      handleLoadProject(message);
-      break;
-
-    case net::MessageType::addAsset:
-      handleAddAsset(message);
-      break;
-
-    case net::MessageType::renameAsset:
-      handleRenameAsset(message);
-      break;
-
-    case net::MessageType::removeAsset:
-      handleRemoveAsset(message);
-      break;
-
-    case net::MessageType::inputState:
-      handleInputState(message, senderId);
-      break;
-
-    case net::MessageType::sceneControl:
-      handleSceneControl(message);
-      break;
-
-    default: break;
-  }
-}
-
-void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
-{
-  // A client joined: bind it to a player slot (so its input routes to that player), tell it whether this
-  // server is editable, then send the full project/scene as a Snapshot. Record that a connection has been
-  // seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
-  m_hasConnected = true;
-  const int32_t slot = assignPlayerSlot(senderId);
-
-  // If the client tagged its join with a nonce (players do; the editor sends none), tell it which slot it
-  // got so it can render through that player's camera. Broadcasting with nonce correlation avoids a
-  // per-connection send path - every client hears it, only the matching one keeps it.
-  net::MessageReader reader(message);
-  if (reader.remaining() >= sizeof(uint64_t))
-  {
-    const auto nonce = reader.read<uint64_t>();
-    net::Message reply(net::MessageType::playerSlot);
-    reply.write(nonce);
-    reply.write(slot);
-    m_netServer->broadcast(reply);
-  }
-
-  broadcastEditStatus();
-  broadcastSnapshot();
-}
-
-int32_t ServerApp::assignPlayerSlot(const int32_t connId)
-{
-  if (const auto it = m_connectionSlots.find(connId); it != m_connectionSlots.end())
-  {
-    return it->second;
-  }
-
-  // Lowest free slot: scan upward until a slot no connection currently holds is found.
-  int32_t slot = 0;
-  const auto slotTaken = [this](const int32_t candidate) {
-    for (const auto& [conn, taken] : m_connectionSlots)
-    {
-      if (taken == candidate)
-      {
-        return true;
-      }
-    }
-    return false;
-  };
-  while (slotTaken(slot))
-  {
-    ++slot;
-  }
-
-  m_connectionSlots.emplace(connId, slot);
-  logMessage("Info", "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
-  return slot;
-}
-
-void ServerApp::handleDisconnect(const int32_t connId)
-{
-  const auto it = m_connectionSlots.find(connId);
-  if (it == m_connectionSlots.end())
-  {
-    return;
-  }
-
-  const int32_t slot = it->second;
-  m_connectionSlots.erase(it);
-  InputState::removeSlot(slot);
-
-  logMessage("Info", "Connection " + std::to_string(connId) + " dropped; freed player slot "
-    + std::to_string(slot) + ".");
-}
-
-namespace {
-  const char* describe(const replication::ComponentEditResult result)
-  {
-    switch (result)
-    {
-      case replication::ComponentEditResult::malformedPayload: return "the payload does not parse";
-      case replication::ComponentEditResult::partiallyApplied: return "the payload ran out mid-component";
-      case replication::ComponentEditResult::unknownObject: return "no such object";
-      case replication::ComponentEditResult::unknownComponent: return "the object has no such component";
-      case replication::ComponentEditResult::applied: return "it was applied";
-    }
-
-    return "it was applied";
-  }
-
-  const char* describe(const replication::SceneEditResult result)
-  {
-    switch (result)
-    {
-      case replication::SceneEditResult::malformedEdit: return "the edit is missing a field it needs";
-      case replication::SceneEditResult::unknownObject: return "no such object";
-      case replication::SceneEditResult::unknownComponent: return "no such component";
-      case replication::SceneEditResult::unknownAsset: return "no such prefab";
-      case replication::SceneEditResult::rejected: return "it would change nothing, or make a cycle";
-      case replication::SceneEditResult::failed: return "it threw part way through";
-      case replication::SceneEditResult::applied: return "it was applied";
-    }
-
-    return "it was applied";
-  }
-}
-
-void ServerApp::handleEditComponent(const net::Message& message) const
-{
-  // An editor changed a component: apply it to the authoritative scene, then re-broadcast so every
-  // other view (and the editing client, idempotently) converges.
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    // Only an edit the authority actually applied gets rebroadcast. Rebroadcasting one it could not
-    // apply would push every client away from the authoritative state, and a payload it could not parse
-    // would fail identically on every one of them. Nothing below this point can rely on the message
-    // being well formed either, since it re-reads it.
-    const auto result = replication::applyComponentEdit(*scene->getObjectManager(), message);
-
-    if (result != replication::ComponentEditResult::applied)
-    {
-      logMessage("Error", "Discarded a component edit of " + std::to_string(message.size()) +
-                          " bytes: " + describe(result) + ".");
-
-      // A half-written component has no delta stream to correct it for most types, so the only way back
-      // to agreement is a fresh snapshot.
-      if (result == replication::ComponentEditResult::partiallyApplied)
-      {
-        broadcastSnapshot();
-      }
-
-      return;
-    }
-
-    m_netServer->broadcast(message);
-
-    // If the edit targets a Script, push the new field values into the live C# instance so the
-    // running behavior reflects the change immediately (applyComponentEdit only updates the data
-    // layer; the C# instance is owned by ScriptSystem and needs an explicit write). The packed layout
-    // mirrors Script::pack: [object uuid][type][className][fields].
-    net::MessageReader reader(message);
-    const auto objectUUID = uuids::uuid::from_string(reader.readString());
-
-    if (objectUUID.has_value() && reader.read<ComponentType>() == ComponentType::script)
-    {
-      const auto className = reader.readString();
-      const auto fields = nlohmann::json::parse(reader.readString(), nullptr, false);
-
-      if (!fields.is_discarded())
-      {
-        m_scriptSystem->applyScriptFieldEdit(objectUUID.value(), className, fields);
-      }
-    }
-  }
-}
-
-void ServerApp::handleSceneEdit(const net::Message& message) const
-{
-  // An editor changed the scene graph (add/remove object or component, or instantiate a prefab): apply
-  // it, then re-snapshot so every view rebuilds (structural changes aren't replicated per-op). The
-  // registry is passed so the prefab op can resolve its asset uuid to the body on disk.
-  const auto scene = m_sceneManager->getCurrentScene();
-  if (!scene)
-  {
-    logMessage("Error", "Discarded a scene edit: no scene is loaded.");
-    return;
-  }
-
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (json.is_discarded())
-  {
-    logMessage("Error", "Discarded a scene edit of " + std::to_string(message.size()) +
-                        " bytes: it is not JSON.");
-    return;
-  }
-
-  const auto result = replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
-
-  if (result != replication::SceneEditResult::applied)
-  {
-    // Read defensively. A payload of [] or {"op": 5} is valid JSON, so it reaches here - and value()
-    // throws on a json that is not an object, or on a key that will not convert. Throwing out of the
-    // log line would put this back in the run loop's generic catch, which is the outcome this handler
-    // exists to replace.
-    const auto op = json.is_object() && json.contains("op") && json.at("op").is_string()
-      ? json.at("op").get<std::string>()
-      : std::string("no op");
-
-    logMessage("Error", "Discarded a scene edit (" + op + "): " + describe(result) + ".");
-
-    // A refusal the sender could have predicted needs no snapshot: rejected means the authority and the
-    // sender agree about the scene and the op simply changes nothing, and a malformed edit is a payload
-    // problem that resending the scene would not fix - and is the one a client can send on demand.
-    //
-    // Everything else means the sender's view disagrees with the authority: an object or component it
-    // believes exists and does not, a prefab it cannot resolve, an edit that threw part way through.
-    // Those are exactly the cases a snapshot repairs, and there is no client-initiated resync to fall
-    // back on - a structural edit was the only thing that rebuilt a drifted view.
-    if (result != replication::SceneEditResult::rejected &&
-        result != replication::SceneEditResult::malformedEdit)
-    {
-      broadcastSnapshot();
-    }
-
-    return;
-  }
-
-  broadcastSnapshot();
-}
-
-void ServerApp::handleLoadProject(const net::Message& message) const
-{
-  // An editor opened a different project: stop the current scripts, swap the project in, restart,
-  // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
-  logMessage("Info", "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
-
-  // Stop the current scripts before the scene is swapped out from under them.
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    try
-    {
-      m_scriptSystem->stop(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      logMessage("Error", e.what());
-    }
-  }
-
-  try
-  {
-    // Same packed shape as a snapshot: unpack clears + rebuilds the AssetRegistry/SceneManager and loads
-    // the current scene. ProjectSerializer stays the JSON path for file save/load.
-    m_projectPacker->unpack(message);
-  }
-  catch (const std::exception& e)
-  {
-    logMessage("Error", std::string("Failed to load project from editor: ") + e.what());
-
-    // unpack parses into locals and only swaps on failure-free completion, so a throw leaves the current
-    // scene untouched - the same one whose scripts were just stopped. Restart them so it keeps responding.
-    if (const auto scene = m_sceneManager->getCurrentScene())
-    {
-      try
-      {
-        m_scriptSystem->start(*scene->getObjectManager());
-      }
-      catch (const std::exception& startError)
-      {
-        logMessage("Error", startError.what());
-      }
-    }
-
-    return;
-  }
-
-  m_sceneManager->startScene();
-
-  // New project/scene: any contact history belongs to the project we just swapped out.
-  m_collisionSystem->reset();
-
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    try
-    {
-      m_scriptSystem->start(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      logMessage("Error", e.what());
-    }
-
-    logMessage("Info", "Loaded project from editor: scene '" + scene->getName() + "' ("
-      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
-  }
-
-  broadcastSnapshot();
-}
-
-void ServerApp::handleAddAsset(const net::Message& message) const
-{
-  // An editor imported/created an asset: register it in the authoritative registry and re-snapshot.
-  nlohmann::json asset;
-  try
-  {
-    asset = replication::unpackAddAsset(message);
-  }
-  catch (const std::exception&)
-  {
-    return;
-  }
-
-  replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
-
-  logMessage("Info", "Registered asset (" + asset.value("assetType", std::string{}) + ").");
-
-  broadcastSnapshot();
-}
-
-void ServerApp::handleRenameAsset(const net::Message& message) const
-{
-  // An editor renamed an asset (display-name override only): apply it authoritatively and re-snapshot.
-  nlohmann::json op;
-  try
-  {
-    op = replication::unpackRenameAsset(message);
-  }
-  catch (const std::exception&)
-  {
-    return;
-  }
-
-  replication::applyRenameAsset(*m_assetRegistry, op);
-
-  logMessage("Info", "Renamed asset.");
-
-  broadcastSnapshot();
-}
-
-void ServerApp::handleRemoveAsset(const net::Message& message) const
-{
-  // An editor deleted an asset: drop the record and re-snapshot. References dangle by design (lookups
-  // null-tolerate a missing uuid).
-  nlohmann::json op;
-  try
-  {
-    op = replication::unpackRemoveAsset(message);
-  }
-  catch (const std::exception&)
-  {
-    return;
-  }
-
-  replication::applyRemoveAsset(*m_assetRegistry, op);
-
-  logMessage("Info", "Removed asset.");
-
-  broadcastSnapshot();
-}
-
-void ServerApp::handleInputState(const net::Message& message, const int32_t senderId)
-{
-  // The client's captured keyboard state, dropped into its player slot so two players don't clobber each
-  // other. assignPlayerSlot is idempotent (the slot usually exists from the join), but bind on demand in
-  // case input arrives first.
-  const int32_t slot = assignPlayerSlot(senderId);
-
-  net::MessageReader reader(message);
-  const auto focused = reader.read<bool>();
-
-  // The count arrives from the network, so bound it against what is left of the payload before sizing
-  // anything: the message cannot hold more key codes than it has bytes for, and without the check a
-  // client asking for a billion keys gets the allocation attempted first and the underflow only after.
-  // It is a ceiling, not an exact length - the trailing mouse block is counted as if it could be key
-  // codes - so a client that predates that block still degrades to "no mouse" rather than being refused.
-  const auto numKeys = reader.read<uint32_t>();
-  if (numKeys > reader.remaining() / sizeof(int32_t))
-  {
-    // Dropped rather than thrown, like every other malformed message here: the drain loop logs what it
-    // catches to a flushed stderr, which a client could otherwise spam from the tick thread.
-    return;
-  }
-
-  std::vector<int> keysPressed(numKeys);
-  for (auto& key : keysPressed)
-  {
-    key = reader.read<int32_t>();
-  }
-
-  // Applied only once the message is known to be well formed, so a malformed one leaves the slot exactly
-  // as its last good message left it instead of half-updating it.
-  InputState::setFocused(slot, focused);
-  InputState::setKeysPressed(slot, keysPressed);
-
-  // Mouse block, appended after the keys (see Protocol.h). Guard on remaining() so an older client that
-  // predates mouse input degrades to "no mouse" instead of throwing an underflow.
-  constexpr size_t mouseBytes = 5 * sizeof(float) + sizeof(uint8_t);
-  if (reader.remaining() >= mouseBytes)
-  {
-    const auto mouseX = reader.read<float>();
-    const auto mouseY = reader.read<float>();
-    const auto mouseDeltaX = reader.read<float>();
-    const auto mouseDeltaY = reader.read<float>();
-    const auto scrollY = reader.read<float>();
-    const auto buttons = reader.read<uint8_t>();
-    InputState::setMouse(slot, mouseX, mouseY, mouseDeltaX, mouseDeltaY, scrollY, buttons);
-  }
-}
-
-void ServerApp::handleSceneControl(const net::Message& message) const
-{
-  net::MessageReader reader(message);
-
-  net::SceneControlOp op;
-  try
-  {
-    op = reader.read<net::SceneControlOp>();
-  }
-  catch (const std::exception&)
-  {
-    return;
-  }
-
-  if (op == net::SceneControlOp::loadScene)
-  {
-    try
-    {
-      loadScene(reader.readString());
-    }
-    catch (const std::exception&)
-    {
-    }
-    return;
-  }
-
-  const auto scene = m_sceneManager->getCurrentScene();
-  if (!scene)
-  {
-    return;
-  }
-
-  auto& objectManager = *scene->getObjectManager();
-  const auto previousStatus = m_sceneManager->getSceneStatus();
-
-  try
-  {
-    if (op == net::SceneControlOp::start)
-    {
-      m_sceneManager->startScene();
-
-      // Only attach + start the scripts on a real stopped -> running transition (resume from pause
-      // keeps the live instances).
-      if (previousStatus == SceneStatus::stopped)
-      {
-        m_scriptSystem->start(objectManager);
-
-        // Fresh run: drop any contact history from the previous run so its first tick doesn't fire
-        // spurious enter/exit events against stale pairs.
-        m_collisionSystem->reset();
-      }
-    }
-    else if (op == net::SceneControlOp::pause)
-    {
-      m_sceneManager->pauseScene();
-    }
-    else if (op == net::SceneControlOp::stop)
-    {
-      if (previousStatus != SceneStatus::stopped)
-      {
-        m_scriptSystem->stop(objectManager);
-        m_sceneManager->resetScene();
-        m_collisionSystem->reset();
-      }
-    }
-  }
-  catch (const std::exception& e)
-  {
-    logMessage("Error", e.what());
-  }
-
-  // Stop resets transforms to their initial values and start/pause change the sim state; re-snapshot so
-  // every view reflects it immediately.
-  broadcastSnapshot();
-}
-
-void ServerApp::loadScene(const std::string& sceneUUID) const
-{
-  const auto parsed = uuids::uuid::from_string(sceneUUID);
-  if (!parsed.has_value())
-  {
-    return;
-  }
-
-  const auto scene = m_sceneManager->getScene(parsed.value());
-  if (!scene)
-  {
-    return;
-  }
-
-  // Stop the outgoing scene's scripts before switching the active scene.
-  if (const auto current = m_sceneManager->getCurrentScene())
-  {
-    try
-    {
-      m_scriptSystem->stop(*current->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      logMessage("Error", e.what());
-    }
-  }
-
-  m_sceneManager->loadScene(scene);
-  m_sceneManager->startScene();
-
-  // New scene: contact history from the previous scene is meaningless here.
-  m_collisionSystem->reset();
-
-  try
-  {
-    m_scriptSystem->start(*scene->getObjectManager());
-  }
-  catch (const std::exception& e)
-  {
-    logMessage("Error", e.what());
-  }
-
-  logMessage("Info", "Switched to scene '" + scene->getName() + "' ("
-    + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects).");
-
-  broadcastSnapshot();
-}
-
-void ServerApp::broadcastSnapshot() const
-{
-  // Refresh each Script's field blob from its live C# instance so the snapshot carries current values.
-  // This reaches into the script bridge, so guard it: a field-sync hiccup must NOT stop the snapshot
-  // from going out (that would leave the client with no scene at all).
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    try
-    {
-      m_scriptSystem->attachAll(*scene->getObjectManager());
-      m_scriptSystem->syncFieldsToData(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      logMessage("Error", std::string("syncFieldsToData failed, sending snapshot with last-known field values: ") + e.what());
-    }
-  }
-
-  // Binary snapshot: ProjectPacker writes the same project state ProjectSerializer::serialize would,
-  // but tightly packed instead of JSON. ProjectSerializer stays the JSON path for file save/load.
-  net::Message message(net::MessageType::snapshot);
-  m_projectPacker->pack(message);
-
-  const auto currentScene = m_sceneManager->getCurrentScene();
-  logMessage("Info", "Broadcasting snapshot: " + std::to_string(m_sceneManager->getScenes().size())
-    + " scene(s), " + std::to_string(message.size()) + " bytes, currentScene='"
-    + (currentScene ? uuids::to_string(currentScene->getUUID()) : std::string{}) + "'.");
-
-  m_netServer->broadcast(message);
-
-  broadcastSceneStatus();
-}
-
-void ServerApp::broadcastSceneStatus() const
-{
-  net::Message message(net::MessageType::sceneStatus);
-  message.write(m_sceneManager->getSceneStatus());
-
-  m_netServer->broadcast(message);
-}
-
-void ServerApp::broadcastEditStatus() const
-{
-  net::Message message(net::MessageType::editStatus);
-  message.write(m_options.editMode);
-
-  m_netServer->broadcast(message);
-}
-
-void ServerApp::broadcastStateDelta() const
-{
-  const auto scene = m_sceneManager->getCurrentScene();
-  if (!scene)
-  {
-    return;
-  }
-
-  // Binary state delta: packStateDelta writes each object's uuid + local transform straight into the
-  // message, rather than a heavier per-tick JSON dump.
-  net::Message message(net::MessageType::stateDelta);
-  replication::packStateDelta(message, *scene->getObjectManager());
-  m_netServer->broadcast(message);
-}
-
-void ServerApp::broadcastStructuralChanges() const
-{
-  // A script's component edit (e.g. ModelRendererBindings swapping a model/texture) isn't covered by the
-  // per-tick state delta, which only carries Transform - so it replicates like an editor edit instead:
-  // rebuild the wire message from the mutated component and broadcast it the same way applyComponentEdit's
-  // caller does above.
-  for (const auto& [objectUUID, component] : BindingContext::takeComponentEdits())
-  {
-    m_netServer->broadcast(replication::buildComponentEdit(objectUUID, component));
-  }
-
-  // The spawn/destroy bindings buffered what the scripts did on BindingContext (scripting can't reach the
-  // net layer). Broadcast spawns before destroys, then remove the marked objects from the authoritative
-  // scene. A spawned object is still live here, so its packed blob carries current transform/components.
-  const auto spawned = BindingContext::takeSpawned();
-  for (const auto& object : spawned)
-  {
-    m_netServer->broadcast(replication::buildObjectSpawned(*object));
-  }
-
-  const auto destroyed = BindingContext::takeDestroyed();
-  for (const auto& uuid : destroyed)
-  {
-    m_netServer->broadcast(replication::buildObjectDestroyed(uuid));
-  }
-
-  if (!destroyed.empty())
-  {
-    if (const auto scene = m_sceneManager->getCurrentScene())
-    {
-      scene->getObjectManager()->deleteObjectsMarkedForDeletion();
-    }
-  }
-}
-
-void ServerApp::logMessage(const std::string& level, const std::string& message)
-{
-  std::cerr << "[" << level << "] " << message << std::endl;
 }

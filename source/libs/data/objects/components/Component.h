@@ -2,6 +2,7 @@
 #define COMPONENT_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -13,7 +14,9 @@ namespace net {
 
 class Object;
 
-enum class ComponentType {
+// uint8_t: this is the packed discriminator every component writes first on the wire (see
+// getPackedType() below) - pinning the width keeps it at one byte instead of inheriting int's four.
+enum class ComponentType : uint8_t {
   transform,
   modelRenderer,
   rigidBody,

@@ -1,6 +1,7 @@
 #ifndef SCENEMANAGER_H
 #define SCENEMANAGER_H
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -8,7 +9,9 @@
 
 class SceneAsset;
 
-enum class SceneStatus {
+// uint8_t: this is what broadcastSceneStatus/handleSceneStatus send as the sceneStatus payload, so the
+// width is pinned to one byte instead of inheriting int's four.
+enum class SceneStatus : uint8_t {
   running,
   stopped,
   paused

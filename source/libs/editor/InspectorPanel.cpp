@@ -7,7 +7,10 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <imgui.h>
+#include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 InspectorPanel::InspectorPanel(std::shared_ptr<ComponentEditor> componentEditor,
                                std::shared_ptr<ComponentRegistry> componentRegistry,
@@ -44,6 +47,11 @@ void InspectorPanel::setEditable(const bool editable)
 void InspectorPanel::setEditCallback(EditCallback callback)
 {
   m_objectInspector->setEditCallback(std::move(callback));
+}
+
+void InspectorPanel::setEditCommittedCallback(EditCommittedCallback callback)
+{
+  m_objectInspector->setEditCommittedCallback(std::move(callback));
 }
 
 void InspectorPanel::setSceneEditCallback(SceneEditCallback callback)
@@ -96,6 +104,63 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
     }
   }
 
+  // A multi-object selection: show/edit the components common to every selected object rather than only
+  // the primary one (see ObjectInspector::displayMulti).
+  if (m_selection->kind() == EditorSelection::Kind::Object && m_selection->size() > 1)
+  {
+    std::vector<std::shared_ptr<Object>> objects;
+    if (objectManager)
+    {
+      for (const auto& uuid : m_selection->items())
+      {
+        if (auto object = objectManager->getObjectByUUID(uuid))
+        {
+          objects.push_back(std::move(object));
+        }
+      }
+    }
+
+    // Every selected uuid but one went stale (e.g. a fresh snapshot dropped them): show the one that's
+    // left the same way a plain single-object selection would, rather than an empty state a selection
+    // that still names a live object shouldn't reach.
+    if (objects.size() == 1)
+    {
+      // Flushes a multi-selection gesture that may still be in flight from a prior frame (the rest of the
+      // selection just dropped out from under it) before switching to the single-object display below.
+      m_objectInspector->commitPendingEdit();
+
+      gc::sectionLabel("Inspector");
+      m_objectInspector->displayTypeChip(objects.front());
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Spacing();
+      m_objectInspector->display(objects.front());
+
+      ImGui::End();
+      return;
+    }
+
+    gc::sectionLabel("Inspector");
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (objects.empty())
+    {
+      // Nothing in the selection resolved to a live object at all: finish whatever gesture was in
+      // flight rather than leave it to attach to what's next.
+      m_objectInspector->commitPendingEdit();
+      gc::emptyState(gc::SecIcon::block, "Nothing selected", "Select an object or asset to inspect it");
+    }
+    else
+    {
+      m_objectInspector->displayMulti(objects);
+    }
+
+    ImGui::End();
+    return;
+  }
+
   // Resolve the current selection to a concrete inspector. A None kind (or a stale one cleared above)
   // leaves both null and falls through to the empty state.
   const auto selectedObjectUUID = m_selection->objectUUID();
@@ -105,6 +170,14 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
   const auto selectedAssetUUID = m_selection->assetUUID();
   const AssetRecord* asset = (m_assetRegistry && selectedAssetUUID.has_value())
     ? m_assetRegistry->getByUUID(selectedAssetUUID.value()) : nullptr;
+
+  // Every path below that is not the object inspector skips its own end-of-frame commit, including the
+  // empty state's early return - so a gesture interrupted by the object vanishing or the selection
+  // moving to an asset is finished here rather than left to attach itself to the next object.
+  if (!object)
+  {
+    m_objectInspector->commitPendingEdit();
+  }
 
   // Panel header: small-caps section label + a right-aligned per-kind type chip (mockup).
   gc::sectionLabel("Inspector");

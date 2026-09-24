@@ -1,19 +1,10 @@
 #include "SettingsStore.h"
-#include <cstdlib>
+#include <Log.h>
+#include <UserDataDirectory.h>
 #include <fstream>
-#include <iostream>
 #include <utility>
 
 namespace {
-  // Absent or empty is the interesting case: getenv returns null on Windows for an unset variable and
-  // an empty string is just as useless as one.
-  const char* environmentPath(const char* name)
-  {
-    const char* value = std::getenv(name);
-
-    return value && *value ? value : nullptr;
-  }
-
   // rename is specified to replace an existing regular file, but on Windows it goes through the OS move
   // and can still fail when something else has the destination open - an indexer or a virus scanner
   // holding settings.json is enough. Clearing the destination and retrying costs the atomicity of that
@@ -37,37 +28,7 @@ namespace {
 
 std::filesystem::path SettingsStore::defaultFile()
 {
-  std::filesystem::path directory;
-
-#ifdef _WIN32
-  if (const char* appData = environmentPath("APPDATA"))
-  {
-    directory = std::filesystem::path(appData) / "ECS3D";
-  }
-#elif defined(__APPLE__)
-  if (const char* home = environmentPath("HOME"))
-  {
-    directory = std::filesystem::path(home) / "Library" / "Application Support" / "ECS3D";
-  }
-#else
-  if (const char* configHome = environmentPath("XDG_CONFIG_HOME"))
-  {
-    directory = std::filesystem::path(configHome) / "ECS3D";
-  }
-  else if (const char* home = environmentPath("HOME"))
-  {
-    directory = std::filesystem::path(home) / ".config" / "ECS3D";
-  }
-#endif
-
-  // With no home directory to resolve against, a path under the working directory still lets the editor
-  // start and persist settings.
-  if (directory.empty())
-  {
-    directory = std::filesystem::path("ECS3D");
-  }
-
-  return directory / "settings.json";
+  return userDataDirectory() / "settings.json";
 }
 
 SettingsStore::SettingsStore(std::filesystem::path file, const std::chrono::milliseconds writeDelay)
@@ -101,7 +62,7 @@ void SettingsStore::load()
   std::ifstream in(m_file);
   if (!in)
   {
-    std::cerr << "[SettingsStore] Could not open '" << m_file.string() << "'; using defaults." << std::endl;
+    Log::warn(LogCategory::editor, "Could not open settings file '" + m_file.string() + "'; using defaults.");
     return;
   }
 
@@ -112,8 +73,8 @@ void SettingsStore::load()
   }
   catch (const nlohmann::json::exception& e)
   {
-    std::cerr << "[SettingsStore] '" << m_file.string() << "' is not valid JSON (" << e.what()
-              << "); using defaults." << std::endl;
+    Log::warn(LogCategory::editor, "Settings file '" + m_file.string() + "' is not valid JSON ("
+      + e.what() + "); using defaults.");
     in.close();
     setAside();
     return;
@@ -121,7 +82,8 @@ void SettingsStore::load()
 
   if (!parsed.is_object())
   {
-    std::cerr << "[SettingsStore] '" << m_file.string() << "' is not a JSON object; using defaults." << std::endl;
+    Log::warn(LogCategory::editor,
+      "Settings file '" + m_file.string() + "' is not a JSON object; using defaults.");
     in.close();
     setAside();
     return;
@@ -202,8 +164,8 @@ void SettingsStore::write()
     std::filesystem::create_directories(directory, error);
     if (error)
     {
-      std::cerr << "[SettingsStore] Could not create '" << directory.string() << "': " << error.message()
-                << std::endl;
+      Log::error(LogCategory::editor,
+        "Could not create settings directory '" + directory.string() + "': " + error.message());
       scheduleWrite();
       return;
     }
@@ -218,7 +180,7 @@ void SettingsStore::write()
   }
   catch (const std::exception& e)
   {
-    std::cerr << "[SettingsStore] Could not serialize settings: " << e.what() << std::endl;
+    Log::error(LogCategory::editor, std::string("Could not serialize settings: ") + e.what());
     scheduleWrite();
     return;
   }
@@ -232,7 +194,7 @@ void SettingsStore::write()
     std::ofstream out(temporary, std::ios::trunc);
     if (!out)
     {
-      std::cerr << "[SettingsStore] Could not write '" << temporary.string() << "'." << std::endl;
+      Log::error(LogCategory::editor, "Could not write settings file '" + temporary.string() + "'.");
       scheduleWrite();
       return;
     }
@@ -242,8 +204,8 @@ void SettingsStore::write()
 
   if (!moveOnto(temporary, m_file, error))
   {
-    std::cerr << "[SettingsStore] Could not move '" << temporary.string() << "' into place: "
-              << error.message() << std::endl;
+    Log::error(LogCategory::editor,
+      "Could not move settings file '" + temporary.string() + "' into place: " + error.message());
 
     std::error_code ignored;
     std::filesystem::remove(temporary, ignored);
@@ -260,11 +222,10 @@ void SettingsStore::setAside() const
   std::error_code error;
   if (!moveOnto(m_file, spoiled, error))
   {
-    std::cerr << "[SettingsStore] Could not move '" << m_file.string() << "' aside: " << error.message()
-              << std::endl;
+    Log::error(LogCategory::editor,
+      "Could not move settings file '" + m_file.string() + "' aside: " + error.message());
     return;
   }
 
-  std::cerr << "[SettingsStore] Moved the unreadable settings file to '" << spoiled.string() << "'."
-            << std::endl;
+  Log::warn(LogCategory::editor, "Moved the unreadable settings file to '" + spoiled.string() + "'.");
 }

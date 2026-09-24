@@ -1,7 +1,16 @@
 #include "RigidBody.h"
+#include "FiniteCheck.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
+#include <algorithm>
+
+namespace {
+  // Zero or negative mass makes PhysicsSystem::getInertiaTensor produce a zero (or negative) diagonal,
+  // which is not invertible - floored here so every path that can set mass (the setter, loading a
+  // project, unpacking a replicated snapshot) shares one rule instead of each guarding it separately.
+  constexpr float kMinMass = 0.001f;
+}
 
 RigidBody::RigidBody()
   : Component(ComponentType::rigidBody)
@@ -36,6 +45,11 @@ glm::vec3 RigidBody::getVelocity() const
 
 void RigidBody::setVelocity(const glm::vec3& velocity)
 {
+  if (!finiteCheck::isFinite(velocity))
+  {
+    return;
+  }
+
   m_velocity.set(velocity);
 }
 
@@ -46,6 +60,11 @@ glm::vec3 RigidBody::getAngularVelocity() const
 
 void RigidBody::setAngularVelocity(const glm::vec3& angularVelocity)
 {
+  if (!finiteCheck::isFinite(angularVelocity))
+  {
+    return;
+  }
+
   m_angularVelocity.set(angularVelocity);
 }
 
@@ -56,7 +75,12 @@ float RigidBody::getMass() const
 
 void RigidBody::setMass(const float mass)
 {
-  m_mass.set(mass);
+  if (!finiteCheck::isFinite(mass))
+  {
+    return;
+  }
+
+  m_mass.set(std::max(mass, kMinMass));
 }
 
 float RigidBody::getFriction() const
@@ -66,6 +90,11 @@ float RigidBody::getFriction() const
 
 void RigidBody::setFriction(const float friction)
 {
+  if (!finiteCheck::isFinite(friction))
+  {
+    return;
+  }
+
   m_friction.set(friction);
 }
 
@@ -76,6 +105,11 @@ float RigidBody::getGravity() const
 
 void RigidBody::setGravity(const float gravity)
 {
+  if (!finiteCheck::isFinite(gravity))
+  {
+    return;
+  }
+
   m_gravity.set(gravity);
 }
 
@@ -146,7 +180,7 @@ void RigidBody::loadFromJSON(const nlohmann::json& componentData)
   m_friction.set(componentData.at("friction"));
   m_doGravity.set(componentData.at("doGravity"));
   m_gravity.set(componentData.at("gravity"));
-  m_mass.set(componentData.at("mass"));
+  setMass(componentData.at("mass"));
 }
 
 void RigidBody::pack(net::Message& message) const
@@ -168,5 +202,5 @@ void RigidBody::unpack(net::MessageReader& messageReader)
   m_doGravity.set(messageReader.read<bool>());
   m_gravity.set(messageReader.read<float>());
   m_angularVelocity.set(messageReader.read<glm::vec3>());
-  m_mass.set(messageReader.read<float>());
+  setMass(messageReader.read<float>());
 }

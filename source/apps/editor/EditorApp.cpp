@@ -4,25 +4,26 @@
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
-#include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/Object.h>
 #include <GpuAssetCache.h>
 #include <RenderSystem.h>
-#include <InputCapture.h>
 #include <ComponentEditor.h>
 #include <ObjectGUIManager.h>
 #include <InspectorPanel.h>
 #include <Selection.h>
 #include <EditorTheme.h>
-#include <GuiComponents.h>
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
 #include <SettingsPanel.h>
+#include <ConsolePanel.h>
+#include <RingBufferSink.h>
 #include <SettingsStore.h>
 #include <Keybinds.h>
+#include <EditorCameraSettings.h>
 #include <KeybindDispatcher.h>
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
@@ -38,90 +39,20 @@
 #include <NetClient.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
+#include <Log.h>
+#include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/camera/Camera.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
-#include <VulkanEngine/components/renderingManager/RenderingManager.h>
-#include <VulkanEngine/components/renderingManager/renderer3D/Renderer3D.h>
-#include <VulkanEngine/components/renderingManager/renderer3D/MousePicker.h>
-#include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <chrono>
-#include <cstddef>
 #include <exception>
-#include <iostream>
-#include <optional>
+#include <memory>
 #include <random>
+#include <string>
 #include <thread>
-
-namespace {
-  // How a camera reads in the editor's "View" combo: the owning object's name, the player slot when it's a
-  // client's player camera, and a cue when the Camera is inactive (RenderSystem only renders through active
-  // cameras, so selecting one shows the free-fly view instead).
-  std::string cameraLabel(const std::shared_ptr<Object>& object)
-  {
-    std::string label = object->getName();
-
-    if (const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController))
-    {
-      label += " (Player " + std::to_string(playerController->getPlayerSlot()) + ")";
-    }
-
-    if (const auto camera = object->getComponent<Camera>(ComponentType::camera); camera && !camera->isActive())
-    {
-      label += " - inactive";
-    }
-
-    return label;
-  }
-
-  // Whether any of the object's components mention the asset uuid in their serialized form. Searching the
-  // serialized form keeps this generic (no component type named here); only model/texture references -
-  // the ones that would dangle - ever match.
-  bool objectReferencesAsset(const std::shared_ptr<Object>& object, const std::string& uuidString)
-  {
-    for (const auto& [type, component] : object->getComponents())
-    {
-      if (component->serialize().dump().find(uuidString) != std::string::npos)
-      {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  // Count the object nodes within a serialized prefab body (one Object tree) that reference the uuid.
-  int countReferencesInPrefabNode(const nlohmann::json& node, const std::string& uuidString)
-  {
-    int count = 0;
-
-    if (const auto components = node.find("components"); components != node.end() && components->is_array())
-    {
-      for (const auto& component : *components)
-      {
-        if (component.dump().find(uuidString) != std::string::npos)
-        {
-          ++count;
-          break;
-        }
-      }
-    }
-
-    if (const auto children = node.find("children"); children != node.end() && children->is_array())
-    {
-      for (const auto& child : *children)
-      {
-        if (child.is_object())
-        {
-          count += countReferencesInPrefabNode(child, uuidString);
-        }
-      }
-    }
-
-    return count;
-  }
-}
+#include <utility>
 
 EditorApp::EditorApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -148,7 +79,13 @@ EditorApp::EditorApp(LaunchOptions options)
 
   setupKeybinds();
 
-  m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings, m_keybindTable, m_keybindDispatcher);
+  m_settingsPanel = std::make_unique<SettingsPanel>(*m_settings, m_renderer, m_keybindTable, m_keybindDispatcher);
+
+  // Only the editor has a panel to show it, so only the editor registers the ring buffer - the console
+  // and file sinks main() already registers keep receiving everything regardless.
+  m_consoleSink = std::make_shared<RingBufferSink>(2000);
+  Log::addSink(m_consoleSink);
+  m_consolePanel = std::make_unique<ConsolePanel>(m_consoleSink);
 
   m_assetCache = std::make_shared<GpuAssetCache>(m_renderer, m_assetRegistry.get());
   m_renderSystem = std::make_shared<RenderSystem>();
@@ -156,157 +93,12 @@ EditorApp::EditorApp(LaunchOptions options)
   m_componentEditor = std::make_shared<ComponentEditor>();
   registerEditors();
 
-  // Register a new asset: apply locally for instant feedback, then on the server (which re-snapshots).
-  // Shared by the asset browser's import/create and the object tree's "Save as Prefab".
-  const auto addAsset = [this](const nlohmann::json& asset) {
-    replication::applyAddAsset(*m_assetRegistry, *m_sceneManager, m_componentRegistry, asset);
-
-    m_netClient->send(replication::packAddAsset(asset));
-    m_saveUI->markEdited();
-  };
-
-  // Rename an asset (display-name override only). Same local-apply-then-send shape as addAsset.
-  const auto renameAsset = [this](const uuids::uuid& assetUUID, const std::string& displayName) {
-    const auto op = replication::buildRenameAsset(assetUUID, displayName);
-    replication::applyRenameAsset(*m_assetRegistry, op);
-
-    m_netClient->send(replication::packRenameAsset(op));
-    m_saveUI->markEdited();
-  };
-
-  // Delete an asset: same local-apply-then-send shape. Deletion always succeeds; references dangle
-  // (lookups null-tolerate a missing uuid).
-  const auto removeAsset = [this](const uuids::uuid& assetUUID) {
-    const auto op = replication::buildRemoveAsset(assetUUID);
-    replication::applyRemoveAsset(*m_assetRegistry, op);
-
-    m_netClient->send(replication::packRemoveAsset(op));
-    m_saveUI->markEdited();
-  };
-
-  // How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
-  // replicated scenes' objects and every prefab body - the two places an object tree lives editor-side.
-  const auto countAssetReferences = [this](const uuids::uuid& assetUUID) {
-    const auto uuidString = uuids::to_string(assetUUID);
-    int count = 0;
-
-    for (const auto& [sceneUUID, scene] : m_sceneManager->getScenes())
-    {
-      const auto objectManager = scene->getObjectManager();
-      if (!objectManager)
-      {
-        continue;
-      }
-
-      for (const auto& object : objectManager->getAllObjects())
-      {
-        if (objectReferencesAsset(object, uuidString))
-        {
-          ++count;
-        }
-      }
-    }
-
-    for (const auto& [recordUUID, record] : m_assetRegistry->getAssets())
-    {
-      if (record.type != AssetType::Prefab)
-      {
-        continue;
-      }
-
-      if (auto body = nlohmann::json::parse(record.body, nullptr, false); !body.is_discarded() && body.is_object())
-      {
-        count += countReferencesInPrefabNode(body, uuidString);
-      }
-    }
-
-    return count;
-  };
-
-  // A component value edit: send the component's new state to the server. Only the Inspector fires this.
-  const auto editComponent = [this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
-    const auto message = replication::buildComponentEdit(objectUUID, component);
-    m_netClient->send(message);
-    m_saveUI->markEdited();
-  };
-
-  // A structural change (add/remove/reparent object, add/remove component, rename, add script): the
-  // server applies it and re-snapshots. Shared by the object tree and the Inspector.
-  const auto sceneEdit = [this](const nlohmann::json& edit) {
-    const auto payload = edit.dump();
-
-    net::Message message(net::MessageType::sceneEdit);
-    for (const std::vector<uint8_t> chunks(payload.begin(), payload.end()); const auto& chunk : chunks)
-    {
-      message.write(chunk);
-    }
-    m_netClient->send(message);
-    m_saveUI->markEdited();
-  };
-
   m_selection = std::make_shared<EditorSelection>();
 
-  // The object tree owns the hierarchy + structural tree edits + "Save as Prefab"; the Inspector owns
-  // the selected item's body. Both read/write the one selection slot.
-  m_objectGUIManager = std::make_shared<ObjectGUIManager>();
-  m_objectGUIManager->setSelection(m_selection);
-  m_objectGUIManager->setAddAssetCallback(addAsset);
-  m_objectGUIManager->setSceneEditCallback(sceneEdit);
-  m_objectGUIManager->setSettings(m_settings.get());
-
-  // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).
-  // Shared by the asset browser's scene double-click and the Inspector's "Load Scene" button.
-  const auto loadScene = [this](const uuids::uuid& sceneUUID) {
-    if (const auto scene = m_sceneManager->getScene(sceneUUID))
-    {
-      m_sceneManager->loadScene(scene);
-    }
-
-    net::Message message(net::MessageType::sceneControl);
-    message.write(net::SceneControlOp::loadScene);
-    message.writeString(uuids::to_string(sceneUUID));
-    m_netClient->send(message);
-  };
-
-  // A prefab body edit: re-register under the existing name, updating the body in place and keeping the
-  // uuid - the same path "Save as Prefab" over an existing name takes, via the same addAsset shape.
-  const auto updatePrefabBody = [addAsset](const uuids::uuid& assetUUID, const std::string& name,
-                                           const std::string& body) {
-    addAsset({
-      { "assetType", "prefab" },
-      { "uuid", uuids::to_string(assetUUID) },
-      { "name", name },
-      { "body", body }
-    });
-  };
-
-  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_componentRegistry, m_assetCache);
-  m_inspectorPanel->setSelection(m_selection);
-  m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
-  m_inspectorPanel->setEditCallback(editComponent);
-  m_inspectorPanel->setSceneEditCallback(sceneEdit);
-  m_inspectorPanel->setLoadSceneCallback(loadScene);
-  m_inspectorPanel->setRenameAssetCallback(renameAsset);
-  m_inspectorPanel->setRemoveAssetCallback(removeAsset);
-  m_inspectorPanel->setAssetReferenceCountCallback(countAssetReferences);
-  m_inspectorPanel->setUpdatePrefabBodyCallback(updatePrefabBody);
-
-  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
-  m_assetBrowser->setSelection(m_selection);
-  m_assetBrowser->setLoadSceneCallback(loadScene);
-  m_assetBrowser->setAddAssetCallback(addAsset);
-
-  m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
-  m_saveUI->setLoadProjectCallback([this] {
-    // Open/New: the server owns the running sim, so send it the packed project (SaveUI already applied it
-    // to our managers); it reloads and re-snapshots.
-    net::Message message(net::MessageType::loadProject);
-    m_projectPacker->pack(message);
-
-    std::cerr << "[Editor] Sending loadProject (" << message.size() << " bytes) to server." << std::endl;
-
-    m_netClient->send(message);
-  });
+  setupObjectGUIManager();
+  setupInspectorPanel();
+  setupAssetBrowser();
+  setupSaveUI();
 
   // Save/Save As are wired to the table once SaveUI exists; toggleGui was already wired in setupKeybinds.
   m_keybindDispatcher->on(EditorAction::saveProject, [this] { static_cast<void>(m_saveUI->save()); });
@@ -321,9 +113,66 @@ EditorApp::EditorApp(LaunchOptions options)
   m_netClient->send(message);
 }
 
+void EditorApp::setupObjectGUIManager()
+{
+  // The object tree owns the hierarchy + structural tree edits + "Save as Prefab"; the Inspector owns
+  // the selected item's body. Both read/write the one selection slot.
+  m_objectGUIManager = std::make_shared<ObjectGUIManager>();
+  m_objectGUIManager->setSelection(m_selection);
+  m_objectGUIManager->setAddAssetCallback([this](const nlohmann::json& asset) { onAddAsset(asset); });
+  m_objectGUIManager->setSceneEditCallback([this](const nlohmann::json& edit) { onSceneEdit(edit); });
+  m_objectGUIManager->setSettings(m_settings.get());
+}
+
+void EditorApp::setupInspectorPanel()
+{
+  m_inspectorPanel = std::make_shared<InspectorPanel>(m_componentEditor, m_componentRegistry, m_assetCache);
+  m_inspectorPanel->setSelection(m_selection);
+  m_inspectorPanel->setAssetRegistry(m_assetRegistry.get());
+  m_inspectorPanel->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
+    onEditComponent(objectUUID, component);
+  });
+  m_inspectorPanel->setEditCommittedCallback([this](const uuids::uuid& objectUUID, const nlohmann::json& before,
+                                                    const nlohmann::json& after) {
+    onEditCommitted(objectUUID, before, after);
+  });
+  m_inspectorPanel->setSceneEditCallback([this](const nlohmann::json& edit) { onSceneEdit(edit); });
+  m_inspectorPanel->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) { onLoadScene(sceneUUID); });
+  m_inspectorPanel->setRenameAssetCallback([this](const uuids::uuid& assetUUID, const std::string& displayName) {
+    onRenameAsset(assetUUID, displayName);
+  });
+  m_inspectorPanel->setRemoveAssetCallback([this](const uuids::uuid& assetUUID) { onRemoveAsset(assetUUID); });
+  m_inspectorPanel->setAssetReferenceCountCallback([this](const uuids::uuid& assetUUID) {
+    return countAssetReferences(assetUUID);
+  });
+  m_inspectorPanel->setUpdatePrefabBodyCallback([this](const uuids::uuid& assetUUID, const std::string& name,
+                                                       const std::string& body) {
+    onUpdatePrefabBody(assetUUID, name, body);
+  });
+}
+
+void EditorApp::setupAssetBrowser()
+{
+  m_assetBrowser = std::make_shared<AssetBrowserPanel>(m_assetRegistry.get(), m_assetCache);
+  m_assetBrowser->setSelection(m_selection);
+  m_assetBrowser->setLoadSceneCallback([this](const uuids::uuid& sceneUUID) { onLoadScene(sceneUUID); });
+  m_assetBrowser->setAddAssetCallback([this](const nlohmann::json& asset) { onAddAsset(asset); });
+}
+
+void EditorApp::setupSaveUI()
+{
+  m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
+  m_saveUI->setLoadProjectCallback([this] { onLoadProject(); });
+}
+
 void EditorApp::connectToServer()
 {
   using namespace std::chrono_literals;
+
+  // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
+  // every object it named.
+  m_editHistory.clear();
+  clearUndoRedoPending();
 
   // The editor edits a local project, so (in singleplayer) it spawns its own edit-mode server gated by a
   // one-off token they share, then connects as Role::editor with that token. Attaching to an existing
@@ -337,10 +186,14 @@ void EditorApp::connectToServer()
 
     m_serverProcess = std::make_unique<net::ServerProcess>();
     // --ephemeral makes the server exit when its last connection drops, so it can't outlive the editor.
-    const std::string arguments = "--edit --ephemeral --token " + m_authToken;
-    if (!m_serverProcess->launch("ECS3DServer", arguments))
+    // Its own log file rather than the server's default: an editor and a client on one machine would
+    // otherwise truncate and interleave the same one. This app's --log-file/--no-log-file are not
+    // forwarded - the child's log is the child's. --token goes last, since it consumes what follows.
+    const std::string arguments = "--edit --ephemeral " + logFileArgument("editor-server")
+      + " --token " + m_authToken;
+    if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {
-      std::cerr << "[Editor] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
+      Log::error(LogCategory::editor, "Failed to launch local server (ECS3DServer) next to this executable.");
     }
   }
   else
@@ -363,7 +216,7 @@ void EditorApp::connectToServer()
   }
   while (std::chrono::steady_clock::now() < deadline);
 
-  std::cerr << "[Editor] Could not connect to " << m_options.host << ":" << m_options.port << "." << std::endl;
+  Log::error(LogCategory::editor, "Could not connect to " + m_options.host + ":" + std::to_string(m_options.port) + ".");
 }
 
 EditorApp::~EditorApp()
@@ -403,6 +256,12 @@ void EditorApp::run()
       }
     }
 
+    if (m_netClient->takeConnectionLost())
+    {
+      logMessage("Error", "Connection to the server was lost. Save your work and restart the editor.");
+      m_serverEditable = false;
+    }
+
     sendInput();
 
     handlePicking();
@@ -413,120 +272,6 @@ void EditorApp::run()
 
     variableUpdate();
   }
-}
-
-void EditorApp::handlePicking()
-{
-  const auto scene = m_sceneManager->getCurrentScene();
-  if (!scene)
-  {
-    return;
-  }
-
-  const auto window = m_renderer->getWindow();
-  const bool pressed = window->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
-
-  // Select on a fresh Ctrl+Left-click over the viewport. isSelected() is the renderer's pick result
-  // from last frame.
-  const auto mousePicker = m_renderer->getRenderingManager()->getRenderer3D()->getMousePicker();
-  if (!m_mouseWasPressed && pressed && window->keyIsPressed(GLFW_KEY_LEFT_CONTROL) && mousePicker->canMousePick())
-  {
-    std::optional<uuids::uuid> picked;
-    for (const auto& object : scene->getObjectManager()->getAllObjects())
-    {
-      if (m_renderSystem->isSelected(object->getUUID()))
-      {
-        picked = object->getUUID();
-        break;
-      }
-    }
-
-    // Written directly to the shared selection the object tree/inspector read.
-    if (picked.has_value())
-    {
-      m_selection->selectObject(picked.value());
-    }
-    else
-    {
-      m_selection->clear();
-    }
-  }
-
-  m_mouseWasPressed = pressed;
-}
-
-void EditorApp::sendInput()
-{
-  const auto& io = ImGui::GetIO();
-
-  // Don't let editor UI typing drive the game: when ImGui wants the keyboard, report no keys. focused
-  // stays true so this view never disables another connected view's input.
-  input::InputSnapshot snapshot = input::capture(*m_renderer);
-
-  if (io.WantCaptureKeyboard)
-  {
-    snapshot.keys.clear();
-  }
-
-  // The mouse can't be gated on io.WantCaptureMouse: the viewport is itself an ImGui window, so that
-  // flag is set whenever the cursor is over it, which would swallow the right-drag mouse-look a script
-  // reads. Forward the mouse only while looking through a scene camera (in free-fly the right-drag is
-  // the editor's own camera) and while the scene view is focused.
-  const bool mouseDrivesGame = m_viewCameraObject.has_value()
-                            && m_renderer->getRenderingManager()->isSceneFocused();
-
-  if (!mouseDrivesGame)
-  {
-    snapshot.mouseDeltaX = 0.0f;
-    snapshot.mouseDeltaY = 0.0f;
-    snapshot.scrollY = 0.0f;
-    snapshot.buttons = 0;
-  }
-
-  const bool discreteChanged = !m_inputSent
-    || snapshot.keys != m_lastInputKeys
-    || snapshot.focused != m_lastInputFocused
-    || snapshot.buttons != m_lastButtons
-    || snapshot.mouseX != m_lastMouseX
-    || snapshot.mouseY != m_lastMouseY;
-
-  const bool scrolled = snapshot.scrollY != 0.0f;
-
-  if (m_inputSent && !discreteChanged && !scrolled)
-  {
-    return;
-  }
-
-  m_lastInputKeys = snapshot.keys;
-  m_lastInputFocused = snapshot.focused;
-  m_lastButtons = snapshot.buttons;
-  m_lastMouseX = snapshot.mouseX;
-  m_lastMouseY = snapshot.mouseY;
-  m_inputSent = true;
-
-  net::Message message(net::MessageType::inputState);
-  message.write(snapshot.focused);
-  message.write(static_cast<uint32_t>(snapshot.keys.size()));
-  for (const auto& key : snapshot.keys)
-  {
-    message.write(static_cast<int32_t>(key));
-  }
-
-  message.write(snapshot.mouseX);
-  message.write(snapshot.mouseY);
-  message.write(snapshot.mouseDeltaX);
-  message.write(snapshot.mouseDeltaY);
-  message.write(snapshot.scrollY);
-  message.write(snapshot.buttons);
-
-  m_netClient->send(message);
-}
-
-void EditorApp::sendSceneControl(const net::SceneControlOp op) const
-{
-  net::Message message(net::MessageType::sceneControl);
-  message.write(op);
-  m_netClient->send(message);
 }
 
 void EditorApp::createRenderer()
@@ -548,6 +293,10 @@ void EditorApp::createRenderer()
   };
 
   m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
+
+  // Overrides the engine-config default above with whatever the user last set, so a restart comes back
+  // at the tuned speed rather than resetting to 1x.
+  m_renderer->getCamera()->setSpeed(editorCameraSettings::readSpeed(*m_settings));
 
   m_sceneViewName = engineConfig.imGui.sceneViewName;
 
@@ -578,505 +327,14 @@ void EditorApp::setupKeybinds()
 
   m_keybindDispatcher->on(EditorAction::toggleGui, [this] { m_shouldDisplayGui = !m_shouldDisplayGui; });
 
-  // Save/Save As are registered later, once m_saveUI exists. Undo/redo/delete/duplicate/focus/gizmo stay
-  // in the table with no handler - bindable and shown in Settings, but a no-op until a later feature
-  // gives them behavior.
-}
-
-void EditorApp::applyMessage(const net::Message& message)
-{
-  switch (message.getType())
-  {
-    case net::MessageType::snapshot:
-      handleSnapshot(message);
-      break;
-
-    case net::MessageType::stateDelta:
-      handleStateDelta(message);
-      break;
-
-    case net::MessageType::editComponent:
-      handleEditComponent(message);
-      break;
-
-    case net::MessageType::objectSpawned:
-      handleObjectSpawned(message);
-      break;
-
-    case net::MessageType::objectDestroyed:
-      handleObjectDestroyed(message);
-      break;
-
-    case net::MessageType::editStatus:
-      handleEditStatus(message);
-      break;
-
-    case net::MessageType::sceneStatus:
-      handleSceneStatus(message);
-      break;
-
-    default: break;
-  }
-}
-
-void EditorApp::handleSnapshot(const net::Message& message) const
-{
-  // Full state on join: rebuild the replicated scene from the packed project blob.
-  m_projectPacker->unpack(message);
-
-  const auto scene = m_sceneManager->getCurrentScene();
-  std::cerr << "[Editor] Applied snapshot (" << message.size() << " bytes). Current scene: "
-            << (scene ? scene->getName() : "<none>") << " ("
-            << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
-}
-
-void EditorApp::handleStateDelta(const net::Message& message) const
-{
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    replication::unpackStateDelta(*scene->getObjectManager(), message);
-  }
-}
-
-void EditorApp::handleEditComponent(const net::Message& message) const
-{
-  // Another editor (or this one, echoed by the server) changed a component. Like the client, the result
-  // is ignored: every failure is routine on a replicated view.
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    static_cast<void>(replication::applyComponentEdit(*scene->getObjectManager(), message));
-  }
-}
-
-void EditorApp::handleObjectSpawned(const net::Message& message) const
-{
-  // A script spawned an object at runtime; splice the packed object into the replicated scene.
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    replication::applyObjectSpawned(*scene->getObjectManager(), message);
-  }
-}
-
-void EditorApp::handleObjectDestroyed(const net::Message& message) const
-{
-  // A script destroyed an object at runtime; drop it from the replicated scene.
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    replication::applyObjectDestroyed(*scene->getObjectManager(), message);
-  }
-}
-
-void EditorApp::handleEditStatus(const net::Message& message)
-{
-  net::MessageReader reader(message);
-
-  // The server told us whether it's editable; a non-edit server makes the editor a read-only viewer.
-  m_serverEditable = reader.read<bool>();
-
-  if (!m_serverEditable)
-  {
-    logMessage("Info", "Connected to a non-edit server - the editor is read-only.");
-  }
-}
-
-void EditorApp::handleSceneStatus(const net::Message& message)
-{
-  net::MessageReader reader(message);
-  m_sceneStatus = reader.read<SceneStatus>();
-}
-
-void EditorApp::updateGui()
-{
-  // Drawn regardless of the GUI toggle below: a window-close request can arrive while the GUI is
-  // hidden, and the prompt must not be hideable out from under the user.
-  m_saveUI->displayUnsavedChangesModal();
-
-  if (!m_shouldDisplayGui)
-  {
-    return;
-  }
-
-  // Propagate the server's editability so the panels disable their mutating affordances (and show a
-  // read-only cue) on a non-edit server.
-  m_objectGUIManager->setEditable(m_serverEditable);
-  m_inspectorPanel->setEditable(m_serverEditable);
-  m_assetBrowser->setEditable(m_serverEditable);
-  m_saveUI->setEditable(m_serverEditable);
-
-  displayMenuBar();
-
-  updateDockSpace();
-
-  m_assetBrowser->displayGui();
-
-  displayMessageLog();
-
-  displaySceneStatus();
-
-  // The object tree + Inspector panels (always drawn so they stay present/dockable; empty when no scene
-  // is loaded yet). Edits fire the callbacks wired in the ctor.
-  const auto scene = m_sceneManager->getCurrentScene();
-  const auto* objectManager = scene ? scene->getObjectManager().get() : nullptr;
-  const auto activeSceneUUID = scene ? std::optional(scene->getUUID()) : std::nullopt;
-  m_objectGUIManager->displayGui(objectManager);
-  m_inspectorPanel->displayGui(objectManager, activeSceneUUID);
-
-  // Draws nothing while closed. Preferences are local, so it needs no scene and no server.
-  m_settingsPanel->displayGui();
-
-  // Scenes are browsed/switched from the "Assets" panel (double-click a scene tile), not a separate
-  // scene-selector widget.
-}
-
-void EditorApp::displayMenuBar() const
-{
-  if (ImGui::BeginMainMenuBar())
-  {
-    m_renderer->getImGuiInstance()->setMenuBarHeight(ImGui::GetWindowSize().y);
-
-    if (ImGui::BeginMenu("File"))
-    {
-      // Save serializes the replicated project to disk; New/Open send it to the server (which reloads +
-      // re-snapshots). New/Open are mutations, disabled on a read-only server; Save stays available.
-      ImGui::BeginDisabled(!m_serverEditable);
-      if (ImGui::MenuItem("New"))
-      {
-        m_saveUI->requestNewProject();
-      }
-
-      if (ImGui::MenuItem("Open"))
-      {
-        m_saveUI->requestOpen();
-      }
-      ImGui::EndDisabled();
-
-      ImGui::Separator();
-
-      if (ImGui::MenuItem("Save", "Ctrl+S"))
-      {
-        static_cast<void>(m_saveUI->save());
-      }
-
-      if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
-      {
-        m_saveUI->saveAs();
-      }
-
-      ImGui::EndMenu();
-    }
-
-    m_assetBrowser->displayMenuWidget();
-
-    displayWindowMenu();
-
-    // A persistent read-only badge, right-aligned, whenever the connected server isn't in edit mode.
-    if (!m_serverEditable)
-    {
-      const char* badge = "READ-ONLY (server not in edit mode)";
-      const float badgeWidth = ImGui::CalcTextSize(badge).x;
-      ImGui::SameLine(ImGui::GetWindowWidth() - badgeWidth - ImGui::GetStyle().WindowPadding.x * 2.0f);
-      ImGui::TextColored(theme::scriptAmber, "%s", badge);
-    }
-
-    ImGui::EndMainMenuBar();
-  }
-}
-
-void EditorApp::displayWindowMenu() const
-{
-  if (ImGui::BeginMenu("Window"))
-  {
-    // Checked rather than a plain item, so the menu says whether the panel is already up: it is a
-    // dockable window that may be sitting behind another tab rather than closed.
-    if (ImGui::MenuItem("Settings", nullptr, m_settingsPanel->isOpen()))
-    {
-      if (m_settingsPanel->isOpen())
-      {
-        m_settingsPanel->setOpen(false);
-      }
-      else
-      {
-        m_settingsPanel->open();
-      }
-    }
-
-    ImGui::EndMenu();
-  }
-}
-
-void EditorApp::updateDockSpace() const
-{
-  static bool dockPercentsSetup = false;
-  static bool dockLocationsSetup = false;
-
-  if (!dockLocationsSetup && dockPercentsSetup)
-  {
-    const auto gui = m_renderer->getImGuiInstance();
-
-    gui->dockCenter(m_sceneViewName.c_str());
-
-    gui->dockLeft("Objects");
-
-    gui->dockRight("Inspector");
-
-    gui->dockTop("Scene Status");
-
-    gui->dockBottom("Assets");
-    gui->dockBottom("Project Errors");
-
-    dockLocationsSetup = true;
-  }
-
-  if (!dockPercentsSetup)
-  {
-    const ImVec2 viewportSize = ImGui::GetMainViewport()->Size;
-
-    // A just-opened (or minimized) window can report a zero-size viewport on its first frames; wait for a
-    // real size instead of dividing by zero or locking in a degenerate layout.
-    if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
-    {
-      return;
-    }
-
-    // Objects/Inspector: wide enough for a name/icon column and field labels, capped so a narrow window
-    // still leaves the center scene view usable.
-    constexpr float leftPanelWidth = 280.0f;
-    constexpr float rightPanelWidth = 360.0f;
-    constexpr float maxSideFraction = 0.3f;
-
-    // Assets/Project Errors: enough height for a row of thumbnails or a few log lines.
-    constexpr float bottomPanelHeight = 240.0f;
-    constexpr float maxBottomFraction = 0.35f;
-
-    const float leftWidth = std::min(leftPanelWidth, viewportSize.x * maxSideFraction);
-    const float rightWidth = std::min(rightPanelWidth, viewportSize.x * maxSideFraction);
-    const float bottomHeight = std::min(bottomPanelHeight, viewportSize.y * maxBottomFraction);
-
-    // Scene Status draws its controls on a single row (see displaySceneStatus): title bar + padding + one
-    // control row fits it exactly at any font size or DPI, with no scrollbar.
-    constexpr int sceneStatusRows = 1;
-    const float topHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f
-                           + ImGui::GetFrameHeightWithSpacing() * sceneStatusRows;
-
-    const auto gui = m_renderer->getImGuiInstance();
-
-    // DockBuilderSplitNode cuts each dock from whatever remains of the node (left, then right of that,
-    // then top, then bottom of what's left), so later percents must be relative to the reduced node, not
-    // the full viewport.
-    const float leftPercent = leftWidth / viewportSize.x;
-    const float rightPercent = rightWidth / (viewportSize.x - leftWidth);
-    const float topPercent = topHeight / viewportSize.y;
-    const float bottomPercent = bottomHeight / (viewportSize.y - topHeight);
-
-    gui->setTopDockPercent(topPercent);
-    gui->setBottomDockPercent(bottomPercent);
-
-    gui->setLeftDockPercent(leftPercent);
-    gui->setRightDockPercent(rightPercent);
-
-    dockPercentsSetup = true;
-  }
-}
-
-void EditorApp::displayMessageLog()
-{
-  ImGui::Begin("Project Errors");
-
-  if (m_errorMessages.empty())
-  {
-    // Mockup's reassuring empty state instead of a bare, blank panel.
-    gc::successEmptyState("No problems detected");
-    ImGui::End();
-    return;
-  }
-
-  // Count badge + Clear on the header row.
-  gc::pill(std::to_string(m_errorMessages.size()).c_str(), theme::t3);
-  ImGui::SameLine();
-  if (ImGui::Button("Clear"))
-  {
-    m_errorMessages.clear();
-  }
-
-  ImGui::Spacing();
-
-  for (const auto& message : m_errorMessages)
-  {
-    ImGui::TextWrapped("%s", message.c_str());
-  }
-
-  ImGui::End();
-}
-
-void EditorApp::displaySceneStatus()
-{
-  constexpr int sceneStatusButtonWidth = 125;
-
-  ImGui::Begin("Scene Status");
-
-  // Play controls first (mockup's leading accent Start button).
-  if (m_sceneStatus != SceneStatus::running)
-  {
-    ImGui::BeginDisabled(!m_serverEditable);
-    ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
-    ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
-    if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
-    {
-      sendSceneControl(net::SceneControlOp::start);
-    }
-    ImGui::PopStyleColor(4);
-    ImGui::EndDisabled();
-  }
-  else
-  {
-    ImGui::BeginDisabled(!m_serverEditable);
-    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
-    {
-      sendSceneControl(net::SceneControlOp::pause);
-    }
-    ImGui::EndDisabled();
-  }
-
-  if (m_sceneStatus != SceneStatus::stopped)
-  {
-    ImGui::SameLine();
-    ImGui::BeginDisabled(!m_serverEditable);
-    if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
-    {
-      sendSceneControl(net::SceneControlOp::stop);
-    }
-    ImGui::EndDisabled();
-  }
-
-  // Ray tracing toggle: a local render setting (this view's vke renderer only, never replicated), so
-  // it stays enabled on a read-only server. Greyed out when the device can't ray trace.
-  const auto renderingManager = m_renderer->getRenderingManager();
-  ImGui::SameLine(0.0f, 18.0f);
-  ImGui::BeginDisabled(!renderingManager->supportsRayTracing());
-  bool rayTracing = renderingManager->isRayTracingEnabled();
-  if (gc::accentCheckboxCompact("Ray Tracing", &rayTracing))
-  {
-    if (rayTracing)
-    {
-      renderingManager->enableRayTracing();
-    }
-    else
-    {
-      renderingManager->disableRayTracing();
-    }
-  }
-  ImGui::EndDisabled();
-
-  displayCameraSelector();
-
-  // Status readout (divider + dot/label + scene name), right-aligned to the panel edge so the play
-  // buttons stay put on the left regardless of the readout's width.
-  const char* label = m_sceneStatus == SceneStatus::running ? "Running"
-                    : m_sceneStatus == SceneStatus::paused  ? "Paused"
-                                                            : "Stopped";
-  const ImVec4 dotCol = m_sceneStatus == SceneStatus::running ? theme::sceneGreen
-                      : m_sceneStatus == SceneStatus::paused  ? theme::scriptAmber
-                                                              : theme::t3;
-  const auto scene = m_sceneManager->getCurrentScene();
-
-  constexpr float nameGap = 14.0f;     // scene name -> divider
-  constexpr float dividerGap = 14.0f;  // divider -> dot block
-  constexpr float dotToLabel = 18.0f;  // dot block start -> label text
-  float readoutWidth = dividerGap + dotToLabel + ImGui::CalcTextSize(label).x;
-  if (scene)
-  {
-    readoutWidth += ImGui::CalcTextSize(scene->getName().c_str()).x + nameGap;
-  }
-
-  // Anchor to the right edge, but never overlap the play buttons on a narrow panel.
-  ImGui::SameLine();
-  const float readoutX = std::max(ImGui::GetCursorPosX() + 4.0f,
-                                  ImGui::GetContentRegionMax().x - readoutWidth);
-  ImGui::SetCursorPosX(readoutX);
-
-  // Current scene name (muted) first, mirroring the mockup's toolbar.
-  if (scene)
-  {
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(theme::t3, "%s", scene->getName().c_str());
-    ImGui::SameLine(0.0f, nameGap);
-  }
-
-  // Divider between the scene name and the status readout.
-  const ImVec2 dp = ImGui::GetCursorScreenPos();
-  const float frameH = ImGui::GetFrameHeight();
-  ImGui::GetWindowDrawList()->AddLine(ImVec2(dp.x, dp.y + frameH * 0.2f),
-                                      ImVec2(dp.x, dp.y + frameH * 0.8f), theme::u32(theme::line));
-  ImGui::SetCursorScreenPos(ImVec2(dp.x + dividerGap, dp.y));
-
-  // Status indicator dot + label (green running / amber paused / muted stopped).
-  {
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float cy = p.y + ImGui::GetFrameHeight() * 0.5f;
-    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(p.x + 5.0f, cy), 4.0f, theme::u32(dotCol));
-    ImGui::SetCursorScreenPos(ImVec2(p.x + dotToLabel, p.y));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(theme::t2, "%s", label);
-  }
-
-  ImGui::End();
-}
-
-void EditorApp::displayCameraSelector()
-{
-  constexpr auto freeFlyLabel = "Editor Camera";
-
-  const auto scene = m_sceneManager->getCurrentScene();
-  const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
-
-  // A view choice, not a scene edit, so this stays enabled on a read-only server.
-  std::string preview = freeFlyLabel;
-  if (objectManager && m_viewCameraObject)
-  {
-    if (const auto object = objectManager->getObjectByUUID(*m_viewCameraObject))
-    {
-      preview = cameraLabel(object);
-    }
-  }
-
-  ImGui::SameLine(0.0f, 18.0f);
-  ImGui::AlignTextToFramePadding();
-  ImGui::TextColored(theme::t2, "%s", "View");
-  ImGui::SameLine();
-
-  ImGui::SetNextItemWidth(200.0f);
-  if (ImGui::BeginCombo("##ViewCamera", preview.c_str()))
-  {
-    if (ImGui::Selectable(freeFlyLabel, !m_viewCameraObject))
-    {
-      m_viewCameraObject.reset();
-    }
-
-    if (objectManager)
-    {
-      for (const auto& object : objectManager->getAllObjects())
-      {
-        if (!object->getComponent<Camera>(ComponentType::camera))
-        {
-          continue;
-        }
-
-        const auto uuid = object->getUUID();
-
-        // Objects can share a name, so the uuid disambiguates the ImGui id.
-        const std::string label = cameraLabel(object) + "##" + uuids::to_string(uuid);
-
-        if (ImGui::Selectable(label.c_str(), m_viewCameraObject == uuid))
-        {
-          m_viewCameraObject = uuid;
-        }
-      }
-    }
-
-    ImGui::EndCombo();
-  }
+  // requestUndo()/requestRedo() (EditorAppUndoMenu.cpp) add the in-flight gate on top of undo()/redo() -
+  // the Edit menu calls the same two methods.
+  m_keybindDispatcher->on(EditorAction::undo, [this] { requestUndo(); });
+  m_keybindDispatcher->on(EditorAction::redo, [this] { requestRedo(); });
+
+  // Save/Save As are registered later, once m_saveUI exists. Delete/duplicate/focus/gizmo stay in the
+  // table with no handler - bindable and shown in Settings, but a no-op until a later feature gives them
+  // behavior.
 }
 
 void EditorApp::variableUpdate()
@@ -1112,19 +370,6 @@ void EditorApp::variableUpdate()
   }
 
   m_renderer->render();
-}
-
-void EditorApp::logMessage(const std::string& level, const std::string& message)
-{
-  // Capped, and oldest first: a message stream the editor cannot parse produces one of these per tick,
-  // and the panel re-renders every line it holds each frame.
-  constexpr size_t maxMessages = 200;
-  if (m_errorMessages.size() >= maxMessages)
-  {
-    m_errorMessages.erase(m_errorMessages.begin());
-  }
-
-  m_errorMessages.push_back("[" + level + "] " + message);
 }
 
 void EditorApp::setupImGuiStyle()

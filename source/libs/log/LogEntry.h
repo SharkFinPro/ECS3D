@@ -13,6 +13,9 @@ enum class LogLevel {
   error
 };
 
+// Count of LogLevel values, for callers that size a per-level array (the console panel's filter).
+inline constexpr int levelCount = static_cast<int>(LogLevel::error) + 1;
+
 [[nodiscard]] std::string_view toString(LogLevel level);
 
 // What part of the engine an entry came from, so a future console panel can filter by it.
@@ -26,6 +29,9 @@ enum class LogCategory {
   server,
   client
 };
+
+// Count of LogCategory values, for callers that size a per-category array (the console panel's filter).
+inline constexpr int categoryCount = static_cast<int>(LogCategory::client) + 1;
 
 [[nodiscard]] std::string_view toString(LogCategory category);
 

@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   SettingsStore.h
   Keybinds.cpp
   Keybinds.h
+  EditorCameraSettings.cpp
+  EditorCameraSettings.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -13,4 +15,5 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
   nlohmann_json::nlohmann_json
+  ECS3DLog
 )

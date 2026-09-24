@@ -6,6 +6,8 @@
 #include <vector>
 #include <unordered_map>
 #include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <memory>
 #include <string>
 #include <uuid.h>
@@ -15,7 +17,7 @@ namespace net {
   class MessageReader;
 }
 
-enum class ComponentType;
+enum class ComponentType : uint8_t;
 class Component;
 
 // A wire or JSON payload can claim arbitrarily deep object nesting; recursing that deep in
@@ -27,6 +29,11 @@ inline constexpr std::size_t maxObjectDepth = 64;
 class Object : public std::enable_shared_from_this<Object> {
 public:
   explicit Object(std::string name = "Object");
+
+  // An object whose uuid the caller already knows, without routing it through the json constructor. The
+  // creating scene edits use this so the sender that chose the uuid can record what its edit produced.
+  // setManager leaves a non-nil uuid alone, so registering this object keeps the uuid given here.
+  Object(std::string name, uuids::uuid uuid);
 
   explicit Object(const std::vector<std::shared_ptr<Component>>& components,
                   std::string name = "Object");
@@ -45,12 +52,16 @@ public:
 
   void addChild(std::shared_ptr<Object> child);
 
+  // Same as addChild, but at a specific sibling index (clamped to m_children.size(), so an index past
+  // the end appends) instead of always at the end - restoreSubtree uses this to put a restored child
+  // back exactly where it was.
+  void addChild(std::shared_ptr<Object> child, std::size_t index);
+
   void removeChild(const std::shared_ptr<Object>& child);
 
   [[nodiscard]] const std::vector<std::shared_ptr<Object>>& getChildren() const;
 
-  void addComponent(const std::shared_ptr<Component>& component,
-                    bool setOwner = true);
+  void addComponent(const std::shared_ptr<Component>& component);
 
   void removeComponent(const std::shared_ptr<Component>& component);
 
@@ -105,6 +116,11 @@ private:
   [[nodiscard]] std::shared_ptr<Component> getComponent(ComponentType type) const;
 
   void loadFromJSON(const nlohmann::json& objectData);
+
+  // A component's own exception says what was wrong with the value but not whose value it was, and the
+  // project load aborts on the first one, so the name and uuid are prepended before it propagates.
+  [[nodiscard]] std::string describeLoadFailure(const std::string& componentType,
+                                                const std::exception& error) const;
 
   // The body of unpack, split out so unpack itself is only the stop/start bracket around it and can
   // restore the running state whichever way this exits.

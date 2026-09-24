@@ -16,10 +16,13 @@
 #include <NetClient.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
+#include <Log.h>
+#include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
+#include <VulkanEngine/components/window/Window.h>
+#include <imgui.h>
 #include <chrono>
 #include <exception>
-#include <iostream>
 #include <random>
 #include <thread>
 
@@ -89,11 +92,20 @@ void ClientApp::run()
       }
       catch (const std::exception& e)
       {
-        std::cerr << "[Client] Failed to apply a message from the server: " << e.what() << std::endl;
+        Log::error(LogCategory::client, std::string("Failed to apply a message from the server: ") + e.what());
+        m_connectionNotice = "Received a malformed message; see the log for details.";
       }
     }
 
+    if (m_netClient->takeConnectionLost())
+    {
+      m_connectionNotice = "Connection to the server was lost.";
+      Log::error(LogCategory::client, m_connectionNotice);
+    }
+
     sendInput();
+
+    displayConnectionNotice();
 
     variableUpdate();
   }
@@ -128,22 +140,35 @@ void ClientApp::sendInput()
   m_lastMouseY = snapshot.mouseY;
   m_inputSent = true;
 
-  net::Message message(net::MessageType::inputState);
-  message.write(snapshot.focused);
-  message.write(static_cast<uint32_t>(snapshot.keys.size()));
-  for (const auto& key : snapshot.keys)
-  {
-    message.write(static_cast<int32_t>(key));
-  }
-
-  message.write(snapshot.mouseX);
-  message.write(snapshot.mouseY);
-  message.write(snapshot.mouseDeltaX);
-  message.write(snapshot.mouseDeltaY);
-  message.write(snapshot.scrollY);
-  message.write(snapshot.buttons);
+  const auto message = replication::buildInputState(snapshot.focused, snapshot.keys, snapshot.mouseX,
+                                                     snapshot.mouseY, snapshot.mouseDeltaX,
+                                                     snapshot.mouseDeltaY, snapshot.scrollY, snapshot.buttons);
 
   m_netClient->send(message);
+}
+
+void ClientApp::displayConnectionNotice()
+{
+  if (m_connectionNotice.empty())
+  {
+    return;
+  }
+
+  // No automatic reconnect: this is a dead end for the session, so the notice stays up until the user
+  // closes the window rather than clearing itself.
+  const auto viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(ImVec2(viewport->GetCenter().x, viewport->GetCenter().y), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+  constexpr auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove
+    | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings;
+
+  ImGui::Begin("Connection Notice", nullptr, flags);
+  ImGui::TextUnformatted(m_connectionNotice.c_str());
+  if (ImGui::Button("Close"))
+  {
+    glfwSetWindowShouldClose(m_renderer->getWindow()->getWindow(), true);
+  }
+  ImGui::End();
 }
 
 void ClientApp::connectToServer()
@@ -156,9 +181,13 @@ void ClientApp::connectToServer()
     m_serverProcess = std::make_unique<net::ServerProcess>();
     // --ephemeral: this spawned server should exit when its last connection drops, so it can't outlive
     // the client if the RAII terminate is ever missed (e.g. an abnormal exit).
-    if (!m_serverProcess->launch("ECS3DServer", "--ephemeral"))
+    // Its own log file rather than the server's default: a client and an editor on one machine would
+    // otherwise truncate and interleave the same one. This app's --log-file/--no-log-file are not
+    // forwarded - the child's log is the child's.
+    const std::string arguments = "--ephemeral " + logFileArgument("client-server");
+    if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {
-      std::cerr << "[Client] Failed to launch local server (ECS3DServer) next to this executable." << std::endl;
+      Log::error(LogCategory::client, "Failed to launch local server (ECS3DServer) next to this executable.");
     }
   }
 
@@ -178,7 +207,8 @@ void ClientApp::connectToServer()
   }
   while (std::chrono::steady_clock::now() < deadline);
 
-  std::cerr << "[Client] Could not connect to " << m_options.host << ":" << m_options.port << "." << std::endl;
+  m_connectionNotice = "Could not connect to " + m_options.host + ":" + std::to_string(m_options.port) + ".";
+  Log::error(LogCategory::client, m_connectionNotice);
 }
 
 void ClientApp::createRenderer()
@@ -240,6 +270,10 @@ void ClientApp::applyMessage(const net::Message& message) const
       handleObjectDestroyed(message);
       break;
 
+    case net::MessageType::objectComponentsChanged:
+      handleObjectComponentsChanged(message);
+      break;
+
     case net::MessageType::playerSlot:
       handlePlayerSlot(message);
       break;
@@ -254,9 +288,9 @@ void ClientApp::handleSnapshot(const net::Message& message) const
   m_projectPacker->unpack(message);
 
   const auto scene = m_sceneManager->getCurrentScene();
-  std::cerr << "[Client] Applied snapshot (" << message.size() << " bytes). Current scene: "
-            << (scene ? scene->getName() : "<none>") << " ("
-            << (scene ? scene->getObjectManager()->getAllObjects().size() : 0) << " objects)." << std::endl;
+  Log::info(LogCategory::client, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "
+    + (scene ? scene->getName() : "<none>") + " ("
+    + std::to_string(scene ? scene->getObjectManager()->getAllObjects().size() : 0) + " objects).");
 }
 
 void ClientApp::handleStateDelta(const net::Message& message) const
@@ -271,12 +305,13 @@ void ClientApp::handleStateDelta(const net::Message& message) const
 
 void ClientApp::handleEditComponent(const net::Message& message) const
 {
-  // The server applied an editor's component change; mirror it into the replicated scene. The result is
-  // ignored on purpose: a view legitimately receives edits for objects it has not been sent yet or has
-  // already dropped, and the server only rebroadcasts what it applied itself.
+  // The server applied an editor's component change; mirror it into the replicated scene. A missed edit
+  // is logged rather than silently dropped, so a real desync is distinguishable from the ordinary case
+  // of a rebroadcast for an object this view has not been sent yet or has already dropped.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    static_cast<void>(replication::applyComponentEdit(*scene->getObjectManager(), message));
+    const auto result = replication::applyComponentEdit(*scene->getObjectManager(), message);
+    replication::logMissedComponentEdit(result, message, LogCategory::client);
   }
 }
 
@@ -295,6 +330,15 @@ void ClientApp::handleObjectDestroyed(const net::Message& message) const
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     replication::applyObjectDestroyed(*scene->getObjectManager(), message);
+  }
+}
+
+void ClientApp::handleObjectComponentsChanged(const net::Message& message) const
+{
+  // A script added/removed a component on an object that already exists here; reconcile it in place.
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    replication::applyObjectComponentsChanged(*scene->getObjectManager(), message);
   }
 }
 

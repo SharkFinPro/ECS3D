@@ -1,4 +1,5 @@
 #include "EditCommand.h"
+#include "AssetWireType.h"
 #include "Replication.h"
 #include "ComponentRegistry.h"
 #include "objects/Object.h"
@@ -7,6 +8,7 @@
 #include "objects/components/Script.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
+#include <filesystem>
 #include <stdexcept>
 
 namespace edits {
@@ -92,22 +94,27 @@ namespace {
     return expected.has_value() && parent->getUUID() == expected.value();
   }
 
-  // The asset json shape applyAddAsset/EditorApp's addAsset callback both use. Not in Replication.h
-  // because there is no buildAddAsset there - the editor assembles this blob itself (see EditorApp.cpp's
-  // addAsset/updatePrefabBody lambdas) and this mirrors that shape exactly.
-  std::string assetTypeToWireString(const AssetType type)
+  // object's own position among its current siblings (root list when it has no parent) - what a
+  // reorderObject's before/after index is validated against, the same way parentMatches validates a
+  // reparentObject's before/after parent.
+  std::size_t childIndex(const ObjectManager& objectManager, const std::shared_ptr<Object>& object)
   {
-    switch (type)
+    const auto parent = object->getParent();
+    const auto& siblings = parent ? parent->getChildren() : objectManager.getObjects();
+
+    for (std::size_t index = 0; index < siblings.size(); ++index)
     {
-      case AssetType::Model: return "model";
-      case AssetType::Texture: return "texture";
-      case AssetType::Script: return "script";
-      case AssetType::Prefab: return "prefab";
-      case AssetType::Scene: return "scene";
-      default: return "";
+      if (siblings[index] == object)
+      {
+        return index;
+      }
     }
+
+    return siblings.size();
   }
 
+  // The asset json shape applyAddAsset/EditorApp's addAsset callback both use (see AssetWireType.h for
+  // why the type strings live in edits/ rather than Replication.h).
   nlohmann::json buildAddAssetJSON(const uuids::uuid& uuid, const AssetType type, const std::string& path,
                                    const std::string& className, const std::string& body)
   {
@@ -137,6 +144,100 @@ namespace {
     }
 
     return asset;
+  }
+
+  // Reads a string field out of a stored JSON blob for a menu label, tolerating a corrupted blob (an
+  // unparseable stored before/after/subtree) by falling back rather than throwing - unlike undo()/redo()'s
+  // build* calls, describeForMenu runs every frame the menu is open, not just at the moment of undo.
+  std::string jsonFieldOr(const std::string& json, const std::string& key, const std::string& fallback)
+  {
+    try
+    {
+      return nlohmann::json::parse(json).value(key, fallback);
+    }
+    catch (const std::exception&)
+    {
+      return fallback;
+    }
+  }
+
+  // A live object's current name for a menu label, or fallback when it no longer exists (the same
+  // divergence undo's own validation would catch - a label just needs something to show).
+  std::string objectNameOr(const ObjectManager& objectManager, const uuids::uuid& uuid,
+                           const std::string& fallback)
+  {
+    const auto object = objectManager.getObjectByUUID(uuid);
+    return object ? object->getName() : fallback;
+  }
+
+  // Same display-name derivation as editor/AssetDisplay.h's assetDisplay::name, minus the displayName
+  // override (a command's own recorded fields never carry one) - kept local rather than shared because
+  // that header pulls in ImGui/theme types this data-library file cannot depend on.
+  std::string assetFieldName(const AssetType type, const std::string& path, const std::string& className)
+  {
+    switch (type)
+    {
+      case AssetType::Scene:
+      case AssetType::Prefab: return path;
+      case AssetType::Script: return className;
+      default: return std::filesystem::path(path).filename().string();
+    }
+  }
+
+  // "Transform", "Script MyScript" - the same (registryKey, className) descriptor findComponent matches
+  // components by, worded for a menu label.
+  std::string componentLabel(const std::string& registryKey, const std::string& className)
+  {
+    if (registryKey.empty())
+    {
+      return "Component";
+    }
+
+    return registryKey == "Script" && !className.empty() ? "Script " + className : registryKey;
+  }
+
+  // The Transform component's own serialize() blob out of a serialized object node - every object always
+  // carries one (Object's constructor adds it), so an empty result here only means a corrupted stored
+  // blob, not a real object without a Transform.
+  nlohmann::json transformBlobOf(const nlohmann::json& objectNode)
+  {
+    for (const auto& component : objectNode.value("components", nlohmann::json::array()))
+    {
+      if (component.value("type", std::string{}) == "Transform")
+      {
+        return component;
+      }
+    }
+
+    return nlohmann::json::object();
+  }
+
+  // A removeObject's undo needs to reclaim its still-live promoted children back under the object it is
+  // recreating (see EditCommand.h's isReversible and Replication.h's buildRestoreObject): one entry per
+  // direct child recorded on the removed subtree, naming its uuid, the sibling index it held under that
+  // object, and its own recorded local Transform - the exact pre-removal values,
+  // deleteObjectsMarkedForDeletion's own WorldPlacement rewrite is never seen by undo at all.
+  nlohmann::json buildRestoreAdoptList(const nlohmann::json& removedSubtree)
+  {
+    nlohmann::json adopt = nlohmann::json::array();
+
+    if (!removedSubtree.contains("children"))
+    {
+      return adopt;
+    }
+
+    const auto& children = removedSubtree.at("children");
+    for (std::size_t index = 0; index < children.size(); ++index)
+    {
+      const auto& child = children.at(index);
+      adopt.push_back({
+        { "object", child.at("uuid") },
+        { "index", index },
+        { "transform", transformBlobOf(child) }
+      });
+    }
+
+    return adopt;
   }
 }
 
@@ -199,6 +300,24 @@ EditCommand EditCommand::reparentObject(const uuids::uuid& objectUUID,
   return command;
 }
 
+EditCommand EditCommand::reorderObject(const uuids::uuid& objectUUID,
+                                       const std::optional<uuids::uuid>& beforeParentUUID,
+                                       const std::size_t beforeIndex,
+                                       const std::optional<uuids::uuid>& afterParentUUID,
+                                       const std::size_t afterIndex)
+{
+  EditCommand command;
+  command.m_kind = CommandKind::reorderObject;
+  command.m_data = ReorderObjectData{
+    .objectUUID = objectUUID,
+    .beforeParentUUID = beforeParentUUID,
+    .beforeIndex = beforeIndex,
+    .afterParentUUID = afterParentUUID,
+    .afterIndex = afterIndex
+  };
+  return command;
+}
+
 EditCommand EditCommand::renameObject(const uuids::uuid& objectUUID, std::string beforeName,
                                       std::string afterName)
 {
@@ -255,7 +374,7 @@ EditCommand EditCommand::duplicateObject(const uuids::uuid& sourceUUID, const uu
 
 EditCommand EditCommand::instantiatePrefab(const uuids::uuid& prefabUUID, const uuids::uuid& instanceUUID,
                                            const std::optional<uuids::uuid>& parentUUID,
-                                           const std::size_t siblingIndex)
+                                           const std::size_t siblingIndex, std::string prefabBody)
 {
   EditCommand command;
   command.m_kind = CommandKind::instantiatePrefab;
@@ -263,7 +382,8 @@ EditCommand EditCommand::instantiatePrefab(const uuids::uuid& prefabUUID, const 
     .prefabUUID = prefabUUID,
     .instanceUUID = instanceUUID,
     .parentUUID = parentUUID,
-    .siblingIndex = siblingIndex
+    .siblingIndex = siblingIndex,
+    .prefabBodyJSON = std::move(prefabBody)
   };
   return command;
 }
@@ -279,6 +399,26 @@ EditCommand EditCommand::addAsset(const uuids::uuid& assetUUID, const AssetType 
     .path = std::move(path),
     .className = std::move(className),
     .body = std::move(body)
+  };
+  return command;
+}
+
+EditCommand EditCommand::replaceAsset(const uuids::uuid& assetUUID, const AssetType type,
+                                      std::string beforePath, std::string beforeClassName,
+                                      std::string beforeBody, std::string afterPath,
+                                      std::string afterClassName, std::string afterBody)
+{
+  EditCommand command;
+  command.m_kind = CommandKind::replaceAsset;
+  command.m_data = ReplaceAssetData{
+    .assetUUID = assetUUID,
+    .type = type,
+    .beforePath = std::move(beforePath),
+    .beforeClassName = std::move(beforeClassName),
+    .beforeBody = std::move(beforeBody),
+    .afterPath = std::move(afterPath),
+    .afterClassName = std::move(afterClassName),
+    .afterBody = std::move(afterBody)
   };
   return command;
 }
@@ -322,6 +462,7 @@ PayloadForm EditCommand::payloadForm() const
   {
     case CommandKind::componentEdit:
     case CommandKind::addAsset:
+    case CommandKind::replaceAsset:
     case CommandKind::renameAsset:
     case CommandKind::removeAsset:
       return PayloadForm::networkMessage;
@@ -332,16 +473,8 @@ PayloadForm EditCommand::payloadForm() const
 
 bool EditCommand::isReversible() const
 {
-  switch (m_kind)
-  {
-    case CommandKind::removeObject:
-    case CommandKind::removeComponent:
-    case CommandKind::duplicateObject:
-    case CommandKind::instantiatePrefab:
-      return false;
-    default:
-      return true;
-  }
+  // Every kind undoes today - see the header's comment on why this stays a real check.
+  return true;
 }
 
 uuids::uuid EditCommand::primaryUUID() const
@@ -352,17 +485,101 @@ uuids::uuid EditCommand::primaryUUID() const
     case CommandKind::addObject: return std::get<AddObjectData>(m_data).objectUUID;
     case CommandKind::removeObject: return std::get<RemoveObjectData>(m_data).objectUUID;
     case CommandKind::reparentObject: return std::get<ReparentObjectData>(m_data).objectUUID;
+    case CommandKind::reorderObject: return std::get<ReorderObjectData>(m_data).objectUUID;
     case CommandKind::renameObject: return std::get<RenameObjectData>(m_data).objectUUID;
     case CommandKind::addComponent: return std::get<AddComponentData>(m_data).objectUUID;
     case CommandKind::removeComponent: return std::get<RemoveComponentData>(m_data).objectUUID;
     case CommandKind::duplicateObject: return std::get<DuplicateObjectData>(m_data).duplicateUUID;
     case CommandKind::instantiatePrefab: return std::get<InstantiatePrefabData>(m_data).instanceUUID;
     case CommandKind::addAsset: return std::get<AddAssetData>(m_data).assetUUID;
+    case CommandKind::replaceAsset: return std::get<ReplaceAssetData>(m_data).assetUUID;
     case CommandKind::renameAsset: return std::get<RenameAssetData>(m_data).assetUUID;
     case CommandKind::removeAsset: return std::get<RemoveAssetData>(m_data).assetUUID;
   }
 
   throw std::logic_error("EditCommand: unhandled kind");
+}
+
+std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
+                                         const AssetRegistry* assetRegistry) const
+{
+  switch (m_kind)
+  {
+    case CommandKind::componentEdit:
+    {
+      const auto& data = std::get<ComponentEditData>(m_data);
+      return "Edit " + componentLabel(data.registryKey, data.className);
+    }
+    case CommandKind::addObject:
+    {
+      const auto& data = std::get<AddObjectData>(m_data);
+      return "Add " + (data.name.empty() ? std::string("Object") : data.name);
+    }
+    case CommandKind::removeObject:
+    {
+      const auto& data = std::get<RemoveObjectData>(m_data);
+      return "Delete " + jsonFieldOr(data.removedSubtreeJSON, "name", "Object");
+    }
+    case CommandKind::reparentObject:
+    {
+      const auto& data = std::get<ReparentObjectData>(m_data);
+      return "Move " + objectNameOr(objectManager, data.objectUUID, "Object");
+    }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+      return "Reorder " + objectNameOr(objectManager, data.objectUUID, "Object");
+    }
+    case CommandKind::renameObject:
+    {
+      const auto& data = std::get<RenameObjectData>(m_data);
+      return "Rename " + (data.afterName.empty() ? std::string("Object") : data.afterName);
+    }
+    case CommandKind::addComponent:
+    {
+      const auto& data = std::get<AddComponentData>(m_data);
+      return "Add " + componentLabel(data.registryKey, data.className);
+    }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+      return "Remove " + componentLabel(data.registryKey, data.className);
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+      return "Duplicate " + objectNameOr(objectManager, data.sourceUUID, "Object");
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+      const auto* record = assetRegistry ? assetRegistry->getByUUID(data.prefabUUID) : nullptr;
+      return "Instantiate "
+        + (record ? assetFieldName(record->type, record->path, record->className) : std::string("Prefab"));
+    }
+    case CommandKind::addAsset:
+    {
+      const auto& data = std::get<AddAssetData>(m_data);
+      return "Add Asset " + assetFieldName(data.type, data.path, data.className);
+    }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+      return "Replace Asset " + assetFieldName(data.type, data.afterPath, data.afterClassName);
+    }
+    case CommandKind::renameAsset:
+    {
+      const auto& data = std::get<RenameAssetData>(m_data);
+      return "Rename Asset " + (data.afterDisplayName.empty() ? std::string("Asset") : data.afterDisplayName);
+    }
+    case CommandKind::removeAsset:
+    {
+      const auto& data = std::get<RemoveAssetData>(m_data);
+      return "Delete Asset " + assetFieldName(data.type, data.path, data.className);
+    }
+  }
+
+  throw std::logic_error("EditCommand::describeForMenu: unhandled kind");
 }
 
 Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
@@ -409,6 +626,50 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::removeObject:
+    {
+      const auto& data = std::get<RemoveObjectData>(m_data);
+
+      // "after" a removal is: the object absent, its recorded parent (if any) still there, and every
+      // direct child this command recorded still living under that same parent -
+      // deleteObjectsMarkedForDeletion promotes them there, so that is exactly what undo is about to
+      // reclaim back under the object it recreates.
+      if (objectManager.getObjectByUUID(data.objectUUID))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      if (data.parentUUID && !objectManager.getObjectByUUID(*data.parentUUID))
+      {
+        return { ValidationFailure::targetMissing, *data.parentUUID };
+      }
+
+      const auto removedSubtree = nlohmann::json::parse(data.removedSubtreeJSON);
+      if (removedSubtree.contains("children"))
+      {
+        for (const auto& child : removedSubtree.at("children"))
+        {
+          const auto childUUID = uuids::uuid::from_string(std::string(child.at("uuid")));
+          if (!childUUID.has_value())
+          {
+            return { ValidationFailure::targetChanged, data.objectUUID };
+          }
+
+          const auto liveChild = objectManager.getObjectByUUID(childUUID.value());
+          if (!liveChild)
+          {
+            return { ValidationFailure::targetMissing, childUUID.value() };
+          }
+
+          if (!parentMatches(liveChild, data.parentUUID))
+          {
+            return { ValidationFailure::targetChanged, childUUID.value() };
+          }
+        }
+      }
+
+      return {};
+    }
     case CommandKind::reparentObject:
     {
       const auto& data = std::get<ReparentObjectData>(m_data);
@@ -420,6 +681,24 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
       }
 
       if (!parentMatches(object, data.afterParentUUID))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      if (!parentMatches(object, data.afterParentUUID)
+          || childIndex(objectManager, object) != data.afterIndex)
       {
         return { ValidationFailure::targetChanged, data.objectUUID };
       }
@@ -460,6 +739,47 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      // "after" a removal is absence; a component already sitting in that slot is a divergence (someone
+      // else re-added one), not the thing this undo can safely reverse.
+      if (findComponent(object, data.registryKey, data.className))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+
+      if (!objectManager.getObjectByUUID(data.duplicateUUID))
+      {
+        return { ValidationFailure::targetMissing, data.duplicateUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+
+      if (!objectManager.getObjectByUUID(data.instanceUUID))
+      {
+        return { ValidationFailure::targetMissing, data.instanceUUID };
+      }
+
+      return {};
+    }
     case CommandKind::addAsset:
     {
       const auto& data = std::get<AddAssetData>(m_data);
@@ -467,6 +787,24 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
       if (!assetRegistry || !assetRegistry->getByUUID(data.assetUUID))
       {
         return { ValidationFailure::targetMissing, data.assetUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+
+      const auto* record = assetRegistry ? assetRegistry->getByUUID(data.assetUUID) : nullptr;
+      if (!record)
+      {
+        return { ValidationFailure::targetMissing, data.assetUUID };
+      }
+
+      if (record->path != data.afterPath || record->className != data.afterClassName
+          || record->body != data.afterBody)
+      {
+        return { ValidationFailure::targetChanged, data.assetUUID };
       }
 
       return {};
@@ -552,6 +890,25 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::removeObject:
+    {
+      const auto& data = std::get<RemoveObjectData>(m_data);
+
+      // "before" a removal is the object sitting there under the recorded parent - what redo (an ordinary
+      // removeObject) is about to remove again.
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      if (!parentMatches(object, data.parentUUID))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
     case CommandKind::reparentObject:
     {
       const auto& data = std::get<ReparentObjectData>(m_data);
@@ -563,6 +920,24 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
       }
 
       if (!parentMatches(object, data.beforeParentUUID))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      if (!parentMatches(object, data.beforeParentUUID)
+          || childIndex(objectManager, object) != data.beforeIndex)
       {
         return { ValidationFailure::targetChanged, data.objectUUID };
       }
@@ -603,11 +978,102 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+
+      const auto object = objectManager.getObjectByUUID(data.objectUUID);
+      if (!object)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      // "before" a removal is the component sitting there with exactly the data this command captured -
+      // what redo is about to remove again.
+      const auto component = findComponent(object, data.registryKey, data.className);
+      if (!component)
+      {
+        return { ValidationFailure::targetMissing, data.objectUUID };
+      }
+
+      if (component->serialize() != nlohmann::json::parse(data.removedComponentJSON))
+      {
+        return { ValidationFailure::targetChanged, data.objectUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+
+      // "before" is the source still there to re-duplicate and the duplicate's uuid free again.
+      if (!objectManager.getObjectByUUID(data.sourceUUID))
+      {
+        return { ValidationFailure::targetMissing, data.sourceUUID };
+      }
+
+      if (objectManager.getObjectByUUID(data.duplicateUUID))
+      {
+        return { ValidationFailure::targetChanged, data.duplicateUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+
+      const auto* prefab = assetRegistry ? assetRegistry->getByUUIDOfType(data.prefabUUID, AssetType::Prefab)
+                                         : nullptr;
+      if (!prefab)
+      {
+        return { ValidationFailure::targetMissing, data.prefabUUID };
+      }
+
+      // AssetRegistry lets a prefab body be replaced in place (a re-save over the same uuid): redoing
+      // from whatever the registry holds now, without this check, would silently instantiate a body the
+      // user never actually duplicated/instantiated from.
+      if (prefab->body != data.prefabBodyJSON)
+      {
+        return { ValidationFailure::targetChanged, data.prefabUUID };
+      }
+
+      if (data.parentUUID && !objectManager.getObjectByUUID(*data.parentUUID))
+      {
+        return { ValidationFailure::targetMissing, *data.parentUUID };
+      }
+
+      if (objectManager.getObjectByUUID(data.instanceUUID))
+      {
+        return { ValidationFailure::targetChanged, data.instanceUUID };
+      }
+
+      return {};
+    }
     case CommandKind::addAsset:
     {
       const auto& data = std::get<AddAssetData>(m_data);
 
       if (assetRegistry && assetRegistry->getByUUID(data.assetUUID))
+      {
+        return { ValidationFailure::targetChanged, data.assetUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+
+      const auto* record = assetRegistry ? assetRegistry->getByUUID(data.assetUUID) : nullptr;
+      if (!record)
+      {
+        return { ValidationFailure::targetMissing, data.assetUUID };
+      }
+
+      if (record->path != data.beforePath || record->className != data.beforeClassName
+          || record->body != data.beforeBody)
       {
         return { ValidationFailure::targetChanged, data.assetUUID };
       }
@@ -663,12 +1129,34 @@ nlohmann::json EditCommand::buildUndoJSON(const ObjectManager& objectManager) co
       const auto& data = std::get<AddObjectData>(m_data);
       return replication::buildRemoveObject(data.objectUUID);
     }
+    case CommandKind::removeObject:
+    {
+      // Recreate the removed object from its recorded subtree, then reclaim its direct children (still
+      // live, promoted to its parent by deleteObjectsMarkedForDeletion) back under it via "adopt" - see
+      // Replication.h's buildRestoreObject. The body's own "children" would otherwise collide with those
+      // already-live uuids, so it goes in empty; the adopt list is what actually restores them.
+      const auto& data = std::get<RemoveObjectData>(m_data);
+      auto body = nlohmann::json::parse(data.removedSubtreeJSON);
+      const auto adopt = buildRestoreAdoptList(body);
+      body["children"] = nlohmann::json::array();
+
+      return data.parentUUID
+        ? replication::buildRestoreObject(body, &*data.parentUUID, data.siblingIndex, &adopt)
+        : replication::buildRestoreObject(body, nullptr, data.siblingIndex, &adopt);
+    }
     case CommandKind::reparentObject:
     {
       const auto& data = std::get<ReparentObjectData>(m_data);
       return data.beforeParentUUID
         ? replication::buildReparentObject(data.objectUUID, &*data.beforeParentUUID)
         : replication::buildReparentObject(data.objectUUID);
+    }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+      return replication::buildReorderObject(data.objectUUID,
+                                             data.beforeParentUUID ? &*data.beforeParentUUID : nullptr,
+                                             data.beforeIndex);
     }
     case CommandKind::renameObject:
     {
@@ -680,6 +1168,22 @@ nlohmann::json EditCommand::buildUndoJSON(const ObjectManager& objectManager) co
       const auto& data = std::get<AddComponentData>(m_data);
       const auto descriptor = buildDescriptorComponent(objectManager, data.registryKey, data.className);
       return replication::buildRemoveComponent(data.objectUUID, descriptor);
+    }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+      const auto removed = nlohmann::json::parse(data.removedComponentJSON);
+      return replication::buildAddComponent(data.objectUUID, data.registryKey, &removed);
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+      return replication::buildRemoveSubtree(data.duplicateUUID);
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+      return replication::buildRemoveSubtree(data.instanceUUID);
     }
     default:
       throw std::logic_error("EditCommand::buildUndoJSON: not a sceneEdit-form command");
@@ -694,10 +1198,21 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
   {
     case CommandKind::addObject:
     {
+      // Recreate with the same uuid the command already names - the entry that stays on the undo stack
+      // after this redo still targets data.objectUUID, so a fresh, server-minted uuid here would leave
+      // the next undo refusing with targetMissing against an object the scene never actually lost.
       const auto& data = std::get<AddObjectData>(m_data);
       return data.parentUUID
-        ? replication::buildAddObject(data.name, &*data.parentUUID)
-        : replication::buildAddObject(data.name);
+        ? replication::buildAddObject(data.name, &*data.parentUUID, &data.objectUUID)
+        : replication::buildAddObject(data.name, nullptr, &data.objectUUID);
+    }
+    case CommandKind::removeObject:
+    {
+      // The ordinary removeObject op, by uuid - the entry undo() moved onto the redo stack still targets
+      // data.objectUUID (undo() preserves it, unlike a fresh-uuid creation), so redoing it is exactly what
+      // the original edit did.
+      const auto& data = std::get<RemoveObjectData>(m_data);
+      return replication::buildRemoveObject(data.objectUUID);
     }
     case CommandKind::reparentObject:
     {
@@ -705,6 +1220,13 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
       return data.afterParentUUID
         ? replication::buildReparentObject(data.objectUUID, &*data.afterParentUUID)
         : replication::buildReparentObject(data.objectUUID);
+    }
+    case CommandKind::reorderObject:
+    {
+      const auto& data = std::get<ReorderObjectData>(m_data);
+      return replication::buildReorderObject(data.objectUUID,
+                                             data.afterParentUUID ? &*data.afterParentUUID : nullptr,
+                                             data.afterIndex);
     }
     case CommandKind::renameObject:
     {
@@ -717,6 +1239,24 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
       return data.registryKey == "Script"
         ? replication::buildAddScript(data.objectUUID, data.className)
         : replication::buildAddComponent(data.objectUUID, data.registryKey);
+    }
+    case CommandKind::removeComponent:
+    {
+      const auto& data = std::get<RemoveComponentData>(m_data);
+      const auto descriptor = buildDescriptorComponent(objectManager, data.registryKey, data.className);
+      return replication::buildRemoveComponent(data.objectUUID, descriptor);
+    }
+    case CommandKind::duplicateObject:
+    {
+      const auto& data = std::get<DuplicateObjectData>(m_data);
+      return replication::buildDuplicateObject(data.sourceUUID, &data.duplicateUUID);
+    }
+    case CommandKind::instantiatePrefab:
+    {
+      const auto& data = std::get<InstantiatePrefabData>(m_data);
+      return data.parentUUID
+        ? replication::buildInstantiatePrefab(data.prefabUUID, &*data.parentUUID, &data.instanceUUID)
+        : replication::buildInstantiatePrefab(data.prefabUUID, nullptr, &data.instanceUUID);
     }
     default:
       throw std::logic_error("EditCommand::buildRedoJSON: not a sceneEdit-form command");
@@ -738,6 +1278,13 @@ net::Message EditCommand::buildUndoMessage(const ObjectManager& objectManager) c
     {
       const auto& data = std::get<AddAssetData>(m_data);
       return replication::packRemoveAsset(replication::buildRemoveAsset(data.assetUUID));
+    }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+      return replication::packAddAsset(
+        buildAddAssetJSON(data.assetUUID, data.type, data.beforePath, data.beforeClassName,
+                          data.beforeBody));
     }
     case CommandKind::renameAsset:
     {
@@ -772,6 +1319,13 @@ net::Message EditCommand::buildRedoMessage(const ObjectManager& objectManager) c
       const auto& data = std::get<AddAssetData>(m_data);
       return replication::packAddAsset(
         buildAddAssetJSON(data.assetUUID, data.type, data.path, data.className, data.body));
+    }
+    case CommandKind::replaceAsset:
+    {
+      const auto& data = std::get<ReplaceAssetData>(m_data);
+      return replication::packAddAsset(
+        buildAddAssetJSON(data.assetUUID, data.type, data.afterPath, data.afterClassName,
+                          data.afterBody));
     }
     case CommandKind::renameAsset:
     {

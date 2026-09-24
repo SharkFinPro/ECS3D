@@ -2,10 +2,11 @@
 #include "assets/AssetRegistry.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneAsset.h"
+#include <Log.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -63,7 +64,17 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
       const std::string name = sceneData.at("name");
 
       const auto scene = std::make_shared<SceneAsset>(uuid, name, m_componentRegistry);
-      scene->loadObjects(sceneData.at("objects"));
+
+      // One unreadable value anywhere takes the whole file down with it (the commit below is atomic),
+      // so the scene has to be named too - "which object" is no help across a dozen of them.
+      try
+      {
+        scene->loadObjects(sceneData.at("objects"));
+      }
+      catch (const std::exception& e)
+      {
+        throw std::runtime_error("scene '" + name + "': " + e.what());
+      }
 
       parsedScenes.push_back(scene);
     }
@@ -114,7 +125,7 @@ bool ProjectSerializer::save(const std::string& path) const
   std::ofstream outFile(path);
   if (!outFile.is_open())
   {
-    std::cerr << "[ProjectSerializer] Could not open project file for writing: " << path << std::endl;
+    Log::error(LogCategory::assets, "Could not open project file for writing: " + path);
     return false;
   }
 
@@ -129,8 +140,8 @@ bool ProjectSerializer::load(const std::string& path) const
   {
     // Don't fail silently - the server would otherwise just idle with no scene and no clue why. The
     // path is relative to the working directory, which is the usual culprit (run from the bin dir).
-    std::cerr << "[ProjectSerializer] Could not open project file: " << path
-              << " (cwd: " << std::filesystem::current_path().string() << ")" << std::endl;
+    Log::error(LogCategory::assets, "Could not open project file: " + path
+      + " (cwd: " + std::filesystem::current_path().string() + ")");
     return false;
   }
 
@@ -141,7 +152,7 @@ bool ProjectSerializer::load(const std::string& path) const
   }
   catch (const std::exception& e)
   {
-    std::cerr << "[ProjectSerializer] Failed to load project '" << path << "': " << e.what() << std::endl;
+    Log::error(LogCategory::assets, "Failed to load project '" + path + "': " + e.what());
     return false;
   }
 }

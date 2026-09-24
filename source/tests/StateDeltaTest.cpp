@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include "Log.h"
 #include "Replication.h"
+#include "RingBufferSink.h"
 #include "TestPrinters.h"
 #include "TestScene.h"
 #include "objects/Object.h"
@@ -48,6 +50,22 @@ namespace {
     target.objectManager->unpack(reader);
   }
 
+  // The setters refuse a non-finite value, so one can no longer be planted through them. It reaches an
+  // object the way a corrupt or hostile peer would deliver it instead: straight off the wire, which
+  // unpack deliberately does not validate - that is what packStateDelta's own guard exists to catch.
+  // Argument order follows Transform::unpack: position, rotation, scale.
+  void unpackTransform(const std::shared_ptr<Object>& object, const glm::vec3& position,
+                       const glm::vec3& rotation, const glm::vec3& scale)
+  {
+    net::Message message(net::MessageType::snapshot);
+    message.write(position);
+    message.write(rotation);
+    message.write(scale);
+
+    net::MessageReader reader(message);
+    transformOf(object)->unpack(reader);
+  }
+
   net::Message deltaOf(const Scene& scene)
   {
     net::Message message(net::MessageType::stateDelta);
@@ -74,6 +92,35 @@ namespace {
 
     return uuidStrings;
   }
+
+  // Mirrors MissedComponentEditLogTest's fixture: TearDown runs even when an ASSERT_* inside the test
+  // body returns early, so a failing assertion can never leak the ring buffer sink or the lowered minimum
+  // level into whichever test happens to run next.
+  class StateDeltaLogTest : public testing::Test {
+  protected:
+    void TearDown() override
+    {
+      for (const auto& sink : m_addedSinks)
+      {
+        Log::removeSink(sink);
+      }
+
+      Log::setMinimumLevel(LogLevel::info);
+    }
+
+    std::shared_ptr<RingBufferSink> addRingBuffer()
+    {
+      Log::setMinimumLevel(LogLevel::trace);
+
+      auto sink = std::make_shared<RingBufferSink>();
+      Log::addSink(sink);
+      m_addedSinks.push_back(sink);
+
+      return sink;
+    }
+
+    std::vector<std::shared_ptr<LogSink>> m_addedSinks;
+  };
 }
 
 TEST(StateDelta, ReproducesATransformOnTheReceivingScene)
@@ -173,14 +220,17 @@ TEST(StateDelta, SkipsAnObjectWhoseTransformIsNotFinite)
   const auto spinning = addObject(source, "Spinning");
   const auto scaled = addObject(source, "Scaled");
 
+  constexpr float notFinite = std::numeric_limits<float>::quiet_NaN();
+  constexpr float unbounded = std::numeric_limits<float>::infinity();
+
   transformOf(healthy)->setPosition({ 1, 2, 3 });
-  transformOf(notANumber)->setPosition({ std::numeric_limits<float>::quiet_NaN(), 0, 0 });
-  transformOf(infinite)->setPosition({ std::numeric_limits<float>::infinity(), 0, 0 });
+  unpackTransform(notANumber, { notFinite, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1 });
+  unpackTransform(infinite, { unbounded, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1 });
 
   // All three vectors are checked, not just the position: a non-finite rotation or scale reaches the
   // receiver's world transforms just as surely.
-  transformOf(spinning)->setRotation({ 0, std::numeric_limits<float>::quiet_NaN(), 0 });
-  transformOf(scaled)->setScale({ 0, 0, std::numeric_limits<float>::infinity() });
+  unpackTransform(spinning, { 0, 0, 0 }, { 0, notFinite, 0 }, { 1, 1, 1 });
+  unpackTransform(scaled, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, unbounded });
 
   const auto sent = entryUuids(deltaOf(source));
 
@@ -205,6 +255,36 @@ TEST(StateDelta, SkipsAnObjectWithNoTransformAtAll)
   // sender reads three vectors off a component that is not there.
   ASSERT_EQ(sent.size(), 1u);
   EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
+}
+
+TEST_F(StateDeltaLogTest, LogsAnErrorOnceAndSkipsAnObjectWhoseTransformHasAForeignOwner)
+{
+  const auto sink = addRingBuffer();
+
+  const auto source = makeScene();
+
+  const auto healthy = addObject(source, "Healthy");
+  const auto misowned = addObject(source, "Misowned");
+
+  // Nothing in the engine can produce this: a component's owner is set once, by the addComponent that
+  // attaches it. Reach in directly to prove the guard fires if it ever did.
+  transformOf(misowned)->setOwner(healthy.get());
+
+  const auto sent = entryUuids(deltaOf(source));
+
+  ASSERT_EQ(sent.size(), 1u);
+  EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
+
+  // packStateDelta runs every server tick and the bad object stays bad forever, so a second call while
+  // it is still foreign-owned must not log again - only the state going from healthy to broken is worth
+  // an entry, not every tick it stays broken.
+  entryUuids(deltaOf(source));
+
+  const auto entries = sink->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_EQ(entries[0].level, LogLevel::error);
+  EXPECT_EQ(entries[0].category, LogCategory::server);
+  EXPECT_NE(entries[0].message.find(uuids::to_string(misowned->getUUID())), std::string::npos);
 }
 
 TEST(StateDelta, AnEntryForAnObjectTheReceiverDoesNotHaveDoesNotDerailTheRest)
@@ -270,9 +350,10 @@ TEST(StateDelta, AnEntryWithAnUnreadableUuidDoesNotDerailTheRest)
 
   const auto replicated = transformOf(findByName(target, "Object"));
 
-  // All three vectors, in the order the sender writes them. A round trip cannot catch a symmetric swap
-  // of rotation and scale, and this is the only place the field order is pinned against a payload
-  // written by hand - which matters, because Transform::pack orders the same three the other way.
+  // All three vectors, in the order the sender writes them (position, rotation, scale - the same order
+  // Transform::pack uses). A round trip cannot catch a symmetric swap of rotation and scale, so this is
+  // one of the two places the field order is pinned against a payload written by hand; see
+  // TransformPackOrderMatchesUnpack below for the other.
   EXPECT_EQ(replicated->getLocalPosition(), glm::vec3(7, 8, 9));
   EXPECT_EQ(replicated->getLocalRotation(), glm::vec3(90, 0, 0));
   EXPECT_EQ(replicated->getLocalScale(), glm::vec3(2, 2, 2));
@@ -312,4 +393,28 @@ TEST(StateDelta, AnEmptyPayloadThrowsRatherThanReadingACountThatIsNotThere)
   const net::Message message(net::MessageType::stateDelta);
 
   EXPECT_THROW(replication::unpackStateDelta(*target.objectManager, message), std::runtime_error);
+}
+
+TEST(StateDelta, TransformPackOrderMatchesUnpack)
+{
+  // Transform::pack and Transform::unpack are each other's only correct reader/writer, so a round trip
+  // through both would pass even if the two disagreed on order the same way position/scale disagreeing
+  // with position/rotation/scale would - a symmetric swap. This builds the payload by hand instead, in
+  // the order pack is supposed to use (position, rotation, scale, matching Transform::serialize and
+  // packStateDelta), with three distinct vectors so a swap between any two lands on the wrong member.
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Object");
+  const auto transform = transformOf(object);
+
+  net::Message message(net::MessageType::editComponent);
+  message.write(glm::vec3(1, 2, 3));
+  message.write(glm::vec3(4, 5, 6));
+  message.write(glm::vec3(7, 8, 9));
+
+  net::MessageReader reader(message);
+  transform->unpack(reader);
+
+  EXPECT_EQ(transform->getLocalPosition(), glm::vec3(1, 2, 3));
+  EXPECT_EQ(transform->getLocalRotation(), glm::vec3(4, 5, 6));
+  EXPECT_EQ(transform->getLocalScale(), glm::vec3(7, 8, 9));
 }

@@ -16,6 +16,7 @@ jobs:
     env:
       DOTNET_NOLOGO: 1
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
     runs-on: ${{ matrix.os }}
 
@@ -61,12 +62,18 @@ jobs:
       - name: Set reusable strings
         # Only configure presets exist; build and test go through the binary directory the preset pins.
         # Derive both names once here from the matrix build type rather than repeating the mapping.
+        # Also exports DOTNET_CLI_HOME/NUGET_PACKAGES for every later step: `runner.temp` isn't in the
+        # context available to job-level `env:` (only `github, needs, strategy, matrix, vars, secrets,
+        # inputs` - see the Actions context-availability table), so it has to be resolved here, inside a
+        # step, and forwarded to the rest of the job through $GITHUB_ENV instead.
         id: strings
         shell: bash
         run: |
           lower=$(echo '${{ matrix.build_type }}' | tr '[:upper:]' '[:lower:]')
           echo "preset=ecs3d-$lower" >> "$GITHUB_OUTPUT"
           echo "build_dir=cmake-build-ecs3d-$lower" >> "$GITHUB_OUTPUT"
+          echo "DOTNET_CLI_HOME=${{ runner.temp }}/dotnet-cli-home" >> "$GITHUB_ENV"
+          echo "NUGET_PACKAGES=${{ runner.temp }}/nuget-packages" >> "$GITHUB_ENV"
 
       - name: Install dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-22.04' }}
@@ -84,13 +91,35 @@ jobs:
 
       - name: Set up MSVC environment (Windows)
         if: ${{ matrix.os == 'windows-latest' }}
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
 
       - name: Prepare Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@main
+        uses: humbletim/install-vulkan-sdk@e7d6e7b937bde4503c7ba5c9584c9dc68f44c4b8 # main
         with:
           version: 1.4.309.0
           cache: true
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+
+      - name: Clear stale dotnet shared-memory state (macOS)
+        # The macOS runner image ships a pre-warmed dotnet install, and its /tmp/.dotnet/shm session
+        # directory was created under the image-builder's session, not this job's. .NET's named-mutex
+        # implementation hardcodes its shared-memory backing store to /tmp/ regardless of
+        # DOTNET_CLI_HOME/HOME (see SharedMemoryManager.Unix.cs), so a session id collision or
+        # leftover restrictive permissions there make Mutex construction for "NuGet-Migrations" throw
+        # `IOException: The system cannot open the device or file specified` intermittently - this is
+        # the exact crash and root cause tracked in
+        # https://github.com/dotnet/runtime/issues/91987, fixed at the runtime level by
+        # https://github.com/dotnet/runtime/pull/90343 (7.0) and
+        # https://github.com/dotnet/runtime/pull/90344 (6.0), whose own PR notes list deleting these
+        # directories as the workaround when the fix isn't present. Deleting them here forces a fresh,
+        # correctly-permissioned session directory to be created under this job's own user.
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo rm -rf /tmp/.dotnet/shm /tmp/.dotnet/lockfiles
 
       - name: Warm up dotnet first-run setup
         # The first `dotnet` invocation that actually resolves the SDK (build/publish/restore, unlike

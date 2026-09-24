@@ -2,14 +2,18 @@
 #include "AssetDragDrop.h"
 #include "ComponentEditor.h"
 #include "GuiComponents.h"
+#include "MixedFields.h"
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
+#include <objects/ComponentFieldDelta.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -116,6 +120,11 @@ void ObjectInspector::setEditCallback(EditCallback callback)
   m_editCallback = std::move(callback);
 }
 
+void ObjectInspector::setEditCommittedCallback(EditCommittedCallback callback)
+{
+  m_editCommittedCallback = std::move(callback);
+}
+
 void ObjectInspector::setSceneEditCallback(SceneEditCallback callback)
 {
   m_sceneEditCallback = std::move(callback);
@@ -157,6 +166,8 @@ void ObjectInspector::display(const std::shared_ptr<Object>& object)
   // tree click's reset.
   if (m_nameEditObjectUUID != object->getUUID())
   {
+    commitPendingEdit();
+
     m_nameEditObjectUUID = object->getUUID();
     m_showComponentSelector = false;
     // Bounds the guard's lifetime: an entry can only accumulate while its object stays selected, and
@@ -240,6 +251,226 @@ void ObjectInspector::display(const std::shared_ptr<Object>& object)
   {
     displayScriptDragDropArea(scriptDropZoneStartY, object);
   }
+
+  // The gesture is over once no widget is still being held (the drag was released, the field left), or
+  // once the component it was moving is gone from under it.
+  if (m_pendingEdit && (m_pendingEdit->component.expired() || !ImGui::IsAnyItemActive()))
+  {
+    commitPendingEdit();
+  }
+}
+
+void ObjectInspector::commitPendingEdit()
+{
+  // Whichever selection kind (single or multi) had a gesture in flight, flush it - the caller just wants
+  // any pending edit resolved before moving on.
+  commitPendingMultiEdit();
+
+  if (!m_pendingEdit)
+  {
+    return;
+  }
+
+  const PendingEdit pending = std::move(*m_pendingEdit);
+  m_pendingEdit.reset();
+
+  // A gesture that ended where it started is not an edit at all - a click that dragged nowhere, or a
+  // value typed back to what it was.
+  if (!m_editCommittedCallback || pending.before == pending.after)
+  {
+    return;
+  }
+
+  m_editCommittedCallback(pending.objectUUID, nlohmann::json::parse(pending.before),
+                          nlohmann::json::parse(pending.after));
+}
+
+void ObjectInspector::commitPendingMultiEdit()
+{
+  if (m_multiPendingEdits.empty())
+  {
+    return;
+  }
+
+  const std::vector<PendingEdit> pending = std::move(m_multiPendingEdits);
+  m_multiPendingEdits.clear();
+  m_multiPendingSignature.reset();
+
+  if (!m_editCommittedCallback)
+  {
+    return;
+  }
+
+  // One EditCommittedCallback per object, same as a single-selection edit would send for its one object -
+  // so undo records one entry per object rather than one entry for the whole multi-edit.
+  for (const auto& edit : pending)
+  {
+    if (edit.before == edit.after)
+    {
+      continue;
+    }
+
+    m_editCommittedCallback(edit.objectUUID, nlohmann::json::parse(edit.before), nlohmann::json::parse(edit.after));
+  }
+}
+
+void ObjectInspector::displayMulti(const std::vector<std::shared_ptr<Object>>& objects)
+{
+  // A fingerprint of the selected uuids in order: if it changed since last frame (a different set of
+  // objects, even if still more than one), whatever gesture was gathering belongs to the old selection.
+  std::string selectionKey;
+  for (const auto& object : objects)
+  {
+    selectionKey += to_string(object->getUUID()) + ";";
+  }
+
+  if (m_multiSelectionKey != selectionKey)
+  {
+    commitPendingMultiEdit();
+    m_multiSelectionKey = selectionKey;
+  }
+
+  const auto common = componentFieldDelta::commonComponentSignatures(objects);
+  const auto all = componentFieldDelta::allComponentSignatures(objects);
+
+  const std::string countLabel = std::to_string(objects.size()) + " objects selected";
+  ImGui::TextColored(theme::t2, "%s", countLabel.c_str());
+
+  if (all.size() > common.size())
+  {
+    const auto hiddenCount = all.size() - common.size();
+    const std::string message = std::to_string(hiddenCount) +
+      (hiddenCount == 1 ? " component not shared" : " components not shared") +
+      " by every selected object are hidden";
+    ImGui::TextColored(theme::t3, "%s", message.c_str());
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+
+  // No Add/Remove Component or name field here: every one of those would act on a single object (the
+  // first one), which is exactly the silent-overwrite this view exists to avoid, so they are left out of
+  // the multi-selection body entirely rather than wired to just one object.
+  ImGui::BeginDisabled(!m_editable);
+
+  for (const auto& signature : common)
+  {
+    displayMultiComponent(objects, signature);
+  }
+
+  ImGui::EndDisabled();
+
+  // Same end-of-gesture check as the single-selection display(): the drag ended (released, or the
+  // component it was moving is gone from under it) once no widget is active any more.
+  if (!m_multiPendingEdits.empty())
+  {
+    const bool anyGone = std::ranges::any_of(m_multiPendingEdits,
+      [](const PendingEdit& edit) { return edit.component.expired(); });
+
+    if (anyGone || !ImGui::IsAnyItemActive())
+    {
+      commitPendingMultiEdit();
+    }
+  }
+}
+
+void ObjectInspector::displayMultiComponent(const std::vector<std::shared_ptr<Object>>& objects,
+                                            const std::string& signature)
+{
+  std::vector<std::shared_ptr<Component>> components;
+  components.reserve(objects.size());
+  for (const auto& object : objects)
+  {
+    const auto component = componentFieldDelta::findComponentBySignature(object, signature);
+    if (!component)
+    {
+      // Shouldn't happen - displayMulti only calls this for a signature common to every object - but bail
+      // rather than dereference a missing component if the scene changed mid-frame.
+      return;
+    }
+    components.push_back(component);
+  }
+
+  const auto& primary = components.front();
+
+  ImGui::PushID(signature.c_str());
+
+  std::vector<nlohmann::json> jsons;
+  jsons.reserve(components.size());
+  for (const auto& component : components)
+  {
+    jsons.push_back(component->serialize());
+  }
+
+  const auto mixedKeys = componentFieldDelta::mixedTopLevelKeys(jsons);
+  if (!mixedKeys.empty())
+  {
+    // Still worth naming even though the widgets below show their own mixed state now: a few fields
+    // (an asset reference slot, the collider layer mask popup, a non-numeric script field) have no
+    // per-widget mixed affordance, so this is the only place those show up as differing.
+    std::string mixedLabel = "Mixed values: ";
+    for (std::size_t i = 0; i < mixedKeys.size(); ++i)
+    {
+      if (i > 0)
+      {
+        mixedLabel += ", ";
+      }
+      mixedLabel += mixedKeys[i];
+    }
+    ImGui::TextColored(theme::t3, "%s", mixedLabel.c_str());
+  }
+
+  const MixedFields mixedFields(std::unordered_set<std::string>(mixedKeys.begin(), mixedKeys.end()));
+
+  const bool gatheringThisComponent = m_multiPendingSignature == signature;
+  const auto key = componentTypeToString.at(
+    primary->getSubType() != ComponentType::SubComponentType_none ? primary->getSubType() : primary->getType());
+
+  if (m_componentEditor->displayGui(key, primary, mixedFields))
+  {
+    if (!gatheringThisComponent)
+    {
+      // A different component started gathering (or nothing was): flush it first, then capture every
+      // object's own pre-edit state as this gesture's "before".
+      commitPendingMultiEdit();
+      m_multiPendingSignature = signature;
+      m_multiPendingEdits.clear();
+      for (std::size_t i = 0; i < objects.size(); ++i)
+      {
+        m_multiPendingEdits.push_back(PendingEdit{ objects[i]->getUUID(), components[i], jsons[i].dump(), jsons[i].dump() });
+      }
+    }
+
+    // The field(s) that changed on the primary since the gesture started - not just since last frame, so
+    // a multi-frame drag still resolves to the one field the user is actually moving.
+    const auto primaryBefore = nlohmann::json::parse(m_multiPendingEdits.front().before);
+    const auto primaryAfter = primary->serialize();
+    const auto changedKeys = componentFieldDelta::changedTopLevelKeys(primaryBefore, primaryAfter);
+
+    if (m_editCallback)
+    {
+      m_editCallback(objects.front()->getUUID(), primary);
+    }
+    m_multiPendingEdits[0].after = primaryAfter.dump();
+
+    // Apply just the changed field(s) to every other object's own component - never the whole component,
+    // which would overwrite whatever else already differs about it - then send each object's own edit
+    // through the same path a single-selection edit uses.
+    for (std::size_t i = 1; i < objects.size(); ++i)
+    {
+      const auto merged = componentFieldDelta::applyKeyDelta(components[i]->serialize(), primaryBefore, primaryAfter,
+                                                             changedKeys);
+      components[i]->loadFromJSON(merged);
+
+      if (m_editCallback)
+      {
+        m_editCallback(objects[i]->getUUID(), components[i]);
+      }
+      m_multiPendingEdits[i].after = components[i]->serialize().dump();
+    }
+  }
+
+  ImGui::PopID();
 }
 
 void ObjectInspector::displayAddComponent(const std::shared_ptr<Object>& object)
@@ -363,11 +594,34 @@ void ObjectInspector::displayComponent(const uuids::uuid& objectUUID, const std:
   const auto key = componentTypeToString.at(
     component->getSubType() != ComponentType::SubComponentType_none ? component->getSubType() : component->getType());
 
-  ImGui::PushID(component.get());
+  // Scope every widget for this component (including the section header's open/closed state, kept in
+  // ImGuiStorage) under a stable identity rather than the component's address: a structural edit
+  // (add/remove component) round-trips through the server and rebuilds the object's components, so a
+  // surviving component can come back behind a new address (or reuse a freed one), which would otherwise
+  // reset or cross-contaminate collapsed sections. componentIdentity is stable across that rebuild.
+  ImGui::PushID(componentIdentity(objectUUID, component).c_str());
 
-  if (m_componentEditor->displayGui(key, component) && m_editCallback)
+  // displayGui edits the component in place, so by the time it reports a change the previous value is
+  // already gone: serializing the selected object's few components once a frame is the price of still
+  // knowing it. Skipped while this component is the one already being gathered - its "before" is the
+  // value from the frame the gesture started on, not from this one.
+  const bool gatheringThisComponent = m_pendingEdit && m_pendingEdit->component.lock() == component;
+  const std::string frameBefore = gatheringThisComponent ? std::string{} : component->serialize().dump();
+
+  if (m_componentEditor->displayGui(key, component))
   {
-    m_editCallback(objectUUID, component);
+    if (!gatheringThisComponent)
+    {
+      commitPendingEdit();
+      m_pendingEdit = PendingEdit{ objectUUID, component, frameBefore, frameBefore };
+    }
+
+    m_pendingEdit->after = component->serialize().dump();
+
+    if (m_editCallback)
+    {
+      m_editCallback(objectUUID, component);
+    }
   }
 
   // The header's "-" button marks the component deleted; turn that into a structural removeComponent

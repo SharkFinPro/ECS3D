@@ -7,7 +7,8 @@
 // Marks an object as owned by a player. playerSlot is the player index the object belongs to; the
 // server binds each connection to a slot (see ServerApp), so a script on this object reads that
 // player's input via ScriptBase.input. The slot is a ComponentVariable so a script/spawner can rebind it
-// at runtime and it resets on scene stop.
+// at runtime and it resets on scene stop. Exposed to scripts read/write via PlayerControllerBindings
+// (World.tryGetPlayerController).
 class PlayerController final : public Component {
 public:
   PlayerController();

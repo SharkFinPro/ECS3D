@@ -1,4 +1,5 @@
 #include "SphereCollider.h"
+#include "../FiniteCheck.h"
 #include "../Transform.h"
 #include "../../Object.h"
 #include "WireTypes.h"
@@ -33,7 +34,13 @@ float SphereCollider::getLocalRadius() const
 
 void SphereCollider::setRadius(const float radius)
 {
+  if (!finiteCheck::isFinite(radius))
+  {
+    return;
+  }
+
   m_radius.set(radius);
+  invalidateBoundingBox();
 }
 
 glm::vec3 SphereCollider::getLocalPosition() const
@@ -43,7 +50,13 @@ glm::vec3 SphereCollider::getLocalPosition() const
 
 void SphereCollider::setPosition(const glm::vec3& position)
 {
+  if (!finiteCheck::isFinite(position))
+  {
+    return;
+  }
+
   m_position.set(position);
+  invalidateBoundingBox();
 }
 
 nlohmann::json SphereCollider::serialize()
@@ -77,6 +90,8 @@ void SphereCollider::loadFromJSON(const nlohmann::json& componentData)
   m_isTrigger = componentData.value("isTrigger", false);
   setLayer(componentData.value("layer", 0u));
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
+
+  invalidateBoundingBox();
 }
 
 glm::vec3 SphereCollider::getPosition()
@@ -120,6 +135,8 @@ void SphereCollider::unpack(net::MessageReader& messageReader)
   m_isTrigger = messageReader.read<bool>();
   setLayer(messageReader.read<uint32_t>());
   m_mask = messageReader.read<uint32_t>();
+
+  invalidateBoundingBox();
 }
 
 void SphereCollider::updateTransformPointer()

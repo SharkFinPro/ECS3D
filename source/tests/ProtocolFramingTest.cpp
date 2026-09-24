@@ -1,13 +1,19 @@
 #include <gtest/gtest.h>
 
 #include <Protocol.h>
+#include <ServerLog.h>
 
+#include <algorithm>
 #include <bit>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 namespace {
   // Trivially copyable, and padded: the bool leaves three trailing bytes holding whatever the stack last
@@ -72,6 +78,12 @@ TEST(ProtocolFraming, RefusesTypesThatAreTriviallyCopyableButNotSafeToSend)
 {
   static_assert(std::is_trivially_copyable_v<PaddedFields> && std::is_trivially_copyable_v<HoldsAPointer>,
                 "Both would have satisfied a plain trivially-copyable constraint.");
+
+  static_assert(offsetof(PaddedFields, first) == 0 && offsetof(PaddedFields, second) == sizeof(int32_t) &&
+                offsetof(PaddedFields, third) == sizeof(int32_t) + sizeof(float) &&
+                sizeof(PaddedFields) > offsetof(PaddedFields, third) + sizeof(bool),
+                "The bool has to leave trailing padding bytes for the test to mean anything.");
+  static_assert(sizeof(HoldsAPointer::borrowed) == sizeof(void*));
 
   static_assert(GoesOnTheWire<uint32_t>);
   static_assert(GoesOnTheWire<float>);
@@ -329,6 +341,88 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectSpawned));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectDestroyed));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::playerSlot));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::serverLog));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectComponentsChanged));
+}
+
+TEST(ProtocolFraming, ConstructingFromABufferFramesItExactlyAsTheWritePathWould)
+{
+  net::Message written(net::MessageType::snapshot);
+  written.write<uint32_t>(0xDEADBEEFu);
+  written.writeString("payload");
+  written.write<float>(0.25f);
+
+  const std::vector<uint8_t> received(written.bytes().begin(), written.bytes().end());
+
+  const net::Message message(net::MessageType::snapshot, received);
+
+  EXPECT_EQ(message.getType(), net::MessageType::snapshot);
+  ASSERT_EQ(message.size(), received.size());
+  EXPECT_TRUE(std::equal(message.bytes().begin(), message.bytes().end(), received.begin()));
+
+  // The inbound path has to hand the reader the same bytes the write path produced, or a snapshot that
+  // survived the wire would be read back at the wrong offsets.
+  net::MessageReader reader(message);
+
+  EXPECT_EQ(reader.read<uint32_t>(), 0xDEADBEEFu);
+  EXPECT_EQ(reader.readString(), "payload");
+  EXPECT_EQ(reader.read<float>(), 0.25f);
+  EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ProtocolFraming, AppendedBytesSitBetweenTheValuesWrittenAroundThem)
+{
+  const std::string dumped("{\"k\":1}");
+  const std::span raw(reinterpret_cast<const uint8_t*>(dumped.data()), dumped.size());
+
+  net::Message message(net::MessageType::sceneEdit);
+  message.write<uint32_t>(static_cast<uint32_t>(dumped.size()));
+  message.appendBytes(raw);
+  message.write<int32_t>(-7);
+
+  net::MessageReader reader(message);
+
+  const auto bodySize = reader.read<uint32_t>();
+  ASSERT_EQ(bodySize, dumped.size());
+
+  std::string body;
+  for (uint32_t i = 0; i < bodySize; ++i)
+  {
+    body.push_back(static_cast<char>(reader.read<uint8_t>()));
+  }
+
+  EXPECT_EQ(body, dumped);
+  EXPECT_EQ(reader.read<int32_t>(), -7);
+  EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ProtocolFraming, AnEmptyBufferConstructsAnEmptyMessage)
+{
+  // The editor's join carries no payload and the server keys on that, so an empty span has to make an
+  // ordinary empty message rather than anything the reader trips over.
+  const net::Message message(net::MessageType::join, std::span<const uint8_t>());
+
+  EXPECT_EQ(message.getType(), net::MessageType::join);
+  EXPECT_EQ(message.size(), 0u);
+
+  net::MessageReader reader(message);
+  EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ProtocolFraming, AMessageFromABufferDoesNotAliasIt)
+{
+  std::vector<uint8_t> received{1u, 2u, 3u, 4u};
+
+  const net::Message message(net::MessageType::stateDelta, received);
+
+  received[0] = 0xFFu;
+  received.clear();
+
+  // The transport owns the buffer only for the duration of the callback; the message it produced has to
+  // keep its own copy or the inbox would be reading freed memory on the tick thread.
+  ASSERT_EQ(message.size(), 4u);
+  EXPECT_EQ(message.bytes()[0], 1u);
+  EXPECT_EQ(message.bytes()[3], 4u);
 }
 
 TEST(ProtocolFraming, ATruncatedStringPrefixLeavesTheReaderWhereItWas)
@@ -357,4 +451,58 @@ TEST(ProtocolFraming, AWellFormedStringFollowedByAnIntStillReadsBothCorrectly)
   EXPECT_EQ(reader.readString(), "abc");
   EXPECT_EQ(reader.read<int32_t>(), 42);
   EXPECT_EQ(reader.remaining(), 0u);
+}
+
+TEST(ServerLogMessage, RoundTripsEveryFieldOfEachEntry)
+{
+  const auto first = std::chrono::system_clock::now() - std::chrono::seconds(5);
+  const auto second = std::chrono::system_clock::now();
+
+  const std::vector<LogEntry> entries{
+    LogEntry{ first, LogLevel::warn, LogCategory::physics, "a bounce went wrong" },
+    LogEntry{ second, LogLevel::error, LogCategory::script, "NullReferenceException in Player.cs" },
+  };
+
+  const auto message = net::packServerLog(entries, 0);
+  EXPECT_EQ(message.getType(), net::MessageType::serverLog);
+
+  const auto batch = net::unpackServerLog(message);
+
+  EXPECT_EQ(batch.dropped, 0u);
+  ASSERT_EQ(batch.entries.size(), 2u);
+
+  EXPECT_EQ(batch.entries[0].level, LogLevel::warn);
+  EXPECT_EQ(batch.entries[0].category, LogCategory::physics);
+  EXPECT_EQ(batch.entries[0].message, "a bounce went wrong");
+  // Millisecond precision on the wire, not exact time_point equality.
+  EXPECT_LT(std::chrono::abs(batch.entries[0].time - first), std::chrono::milliseconds(1));
+
+  EXPECT_EQ(batch.entries[1].level, LogLevel::error);
+  EXPECT_EQ(batch.entries[1].category, LogCategory::script);
+  EXPECT_EQ(batch.entries[1].message, "NullReferenceException in Player.cs");
+  EXPECT_LT(std::chrono::abs(batch.entries[1].time - second), std::chrono::milliseconds(1));
+}
+
+TEST(ServerLogMessage, CarriesTheDroppedCountAlongsideAnEmptyBatch)
+{
+  // The forwarder sends a batch for a drop count alone, with no entries, so an editor still learns that
+  // history was lost even on a tick where nothing new came in to replace it.
+  const auto message = net::packServerLog({}, 7);
+
+  const auto batch = net::unpackServerLog(message);
+
+  EXPECT_EQ(batch.dropped, 7u);
+  EXPECT_TRUE(batch.entries.empty());
+}
+
+TEST(ServerLogMessage, AnEntryCountPastWhatThePayloadHoldsThrowsRatherThanOverreading)
+{
+  // A hand-built message claiming far more entries than its (short) payload can actually hold - the same
+  // malformed-count shape replication::parseInputState guards against, here for the network's least
+  // trusted producer: a batch this editor did not build itself.
+  net::Message message(net::MessageType::serverLog);
+  message.write<uint64_t>(0);
+  message.write<uint32_t>(1000000);
+
+  EXPECT_THROW(static_cast<void>(net::unpackServerLog(message)), std::runtime_error);
 }

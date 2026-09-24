@@ -23,6 +23,36 @@ bool EditHistory::canRedo() const
   return !m_redoStack.empty();
 }
 
+std::optional<CommandKind> EditHistory::nextUndoKind() const
+{
+  if (m_undoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_undoStack.back().kind();
+}
+
+std::optional<CommandKind> EditHistory::nextRedoKind() const
+{
+  if (m_redoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_redoStack.back().kind();
+}
+
+bool EditHistory::nextUndoIsReversible() const
+{
+  return !m_undoStack.empty() && m_undoStack.back().isReversible();
+}
+
+bool EditHistory::nextRedoIsReversible() const
+{
+  return !m_redoStack.empty() && m_redoStack.back().isReversible();
+}
+
 namespace {
   HistoryResult toHistoryResult(const ValidationFailure failure)
   {
@@ -131,6 +161,38 @@ void EditHistory::clear()
 {
   m_undoStack.clear();
   m_redoStack.clear();
+}
+
+std::optional<std::string> EditHistory::nextUndoLabel(const ObjectManager& objectManager,
+                                                       const AssetRegistry* assetRegistry) const
+{
+  if (m_undoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_undoStack.back().describeForMenu(objectManager, assetRegistry);
+}
+
+std::optional<std::string> EditHistory::nextRedoLabel(const ObjectManager& objectManager,
+                                                       const AssetRegistry* assetRegistry) const
+{
+  if (m_redoStack.empty())
+  {
+    return std::nullopt;
+  }
+
+  return m_redoStack.back().describeForMenu(objectManager, assetRegistry);
+}
+
+std::size_t EditHistory::undoDepth() const
+{
+  return m_undoStack.size();
+}
+
+std::size_t EditHistory::redoDepth() const
+{
+  return m_redoStack.size();
 }
 
 }

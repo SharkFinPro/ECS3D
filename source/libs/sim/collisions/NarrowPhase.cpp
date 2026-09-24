@@ -5,6 +5,7 @@
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/glm.hpp>
+#include <algorithm>
 #include <cstdint>
 
 namespace collisions {
@@ -60,10 +61,14 @@ namespace collisions {
 
       const auto direction = -glm::normalize(minimumTranslationVector);
 
-      // Offset from the first sphere's center by the *second* sphere's radius, which only lands on the
-      // overlap when the radii match. Kept as it was rather than corrected here: it is what the collision
-      // response has always been handed, and changing it changes how bodies spin. Filed separately.
-      return Contact{ minimumTranslationVector, collider.getPosition() + direction * sphereB.getRadius() };
+      // The midpoint of the overlap along the center line: halfway between where sphere A's surface
+      // meets the line (moving toward B) and where sphere B's surface meets it (moving toward A). That
+      // point sits inside both spheres regardless of how the radii compare, unlike either surface point
+      // alone. dist is 0 for the concentric case above, where direction is the arbitrary y axis instead
+      // of the (undefined) center line - the formula still produces a finite point on it.
+      const auto contactOffset = (sphereA.getRadius() + dist - sphereB.getRadius()) / 2.0f;
+
+      return Contact{ minimumTranslationVector, collider.getPosition() + direction * contactOffset };
     }
 
     // Leaves the terminating simplex in simplex. False means the pair does not overlap, or that GJK ran
@@ -208,6 +213,11 @@ namespace collisions {
     }
   }
 
+  std::span<const glm::vec3> Contact::contactPoints() const
+  {
+    return pointCount > 1 ? std::span<const glm::vec3>(points.data(), pointCount) : std::span<const glm::vec3>(&point, 1);
+  }
+
   float Contact::depth() const
   {
     return length(minimumTranslationVector);
@@ -244,7 +254,16 @@ namespace collisions {
     }
 
     // Negated so it moves the first collider, matching the sphere path and what the response expects.
-    return Contact{ -minimumTranslationVector, polytope.findCollisionPoint() };
+    Contact contact{ -minimumTranslationVector, polytope.findCollisionPoint() };
+
+    const auto manifold = polytope.findContactManifold();
+    if (manifold.size() > 1)
+    {
+      contact.pointCount = static_cast<std::uint8_t>(std::min(manifold.size(), contact.points.size()));
+      std::copy_n(manifold.begin(), contact.pointCount, contact.points.begin());
+    }
+
+    return contact;
   }
 
   bool intersects(Collider& collider, Collider& other)

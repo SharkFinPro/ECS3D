@@ -10,7 +10,9 @@
 #include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <functional>
 #include <random>
 #include <string>
 #include <utility>
@@ -60,14 +62,40 @@ namespace {
     return scratch;
   }
 
-  // A fresh asset uuid for a saved prefab. (AssetBrowserPanel has the same one-liner for the assets it
-  // creates; asset uuids are unrelated to the scene's object uuids, so ObjectManager's generator is not
-  // the right source here.)
+  // The panel's uuid source, seeded the way ObjectManager seeds its own: a single random_device word
+  // would leave mt19937 with 2^32 possible streams, and a toolchain whose random_device is deterministic
+  // would hand every run of the editor the same sequence - so the first object created in one run would
+  // carry the uuid the first object of the previous run already has, and the server would refuse it.
+  // Held across calls rather than reseeded per uuid; only the UI thread reaches this.
+  [[nodiscard]] uuids::uuid newUUID()
+  {
+    static std::mt19937 rng = [] {
+      std::random_device rd;
+      auto seedData = std::array<int, std::mt19937::state_size>{};
+      std::ranges::generate(seedData, std::ref(rd));
+      std::seed_seq seq(seedData.begin(), seedData.end());
+      return std::mt19937(seq);
+    }();
+    static uuids::uuid_random_generator generator{ rng };
+
+    return generator();
+  }
+
+  // A fresh asset uuid for a saved prefab. (AssetBrowserPanel has its own for the assets it creates;
+  // asset uuids are unrelated to the scene's object uuids, so ObjectManager's generator is not the right
+  // source here.)
   [[nodiscard]] std::string newAssetUUID()
   {
-    std::mt19937 rng{ std::random_device{}() };
-    uuids::uuid_random_generator generator{ rng };
-    return uuids::to_string(generator());
+    return uuids::to_string(newUUID());
+  }
+
+  // The uuid this panel asks the server to give an object it is creating, so the edit it sends names the
+  // object it produces rather than one only the server knows about. The panel is only ever handed a const
+  // ObjectManager, so this generates its own instead of borrowing the manager's generator; the server
+  // refuses a uuid already in use either way.
+  [[nodiscard]] uuids::uuid newObjectUUID()
+  {
+    return newUUID();
   }
 
   // Heuristic icon for an object derived from its components (the mockup shows a per-object glyph). The
@@ -113,6 +141,33 @@ namespace {
     const auto dragged = uuids::uuid::from_string(uuidStr);
 
     return dragged.has_value() ? objectManager->getObjectByUUID(dragged.value()) : nullptr;
+  }
+
+  // Shift-click range: the contiguous slice of `visibleOrder` (the tree's current on-screen order) from
+  // `anchor` to `clicked`, inclusive and ordered anchor-to-clicked so the caller can add it to the
+  // selection with `clicked` landing last (the new primary). Either uuid missing from `visibleOrder` (a
+  // stale anchor, or a row hidden behind a collapsed ancestor) falls back to just `clicked`.
+  [[nodiscard]] std::vector<uuids::uuid> rangeBetween(const std::vector<uuids::uuid>& visibleOrder,
+                                                       const uuids::uuid& anchor, const uuids::uuid& clicked)
+  {
+    const auto anchorIt = std::ranges::find(visibleOrder, anchor);
+    const auto clickedIt = std::ranges::find(visibleOrder, clicked);
+    if (anchorIt == visibleOrder.end() || clickedIt == visibleOrder.end())
+    {
+      return { clicked };
+    }
+
+    std::vector<uuids::uuid> range;
+    if (anchorIt <= clickedIt)
+    {
+      range.assign(anchorIt, clickedIt + 1);
+    }
+    else
+    {
+      range.assign(clickedIt, anchorIt + 1);
+      std::ranges::reverse(range);
+    }
+    return range;
   }
 }
 
@@ -170,6 +225,16 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
 {
   ImGui::Begin("Objects");
 
+  // A fresh snapshot rebuilds every Object behind a new shared_ptr; the selection only keeps uuids
+  // (never a pointer), so this drops the ones that no longer resolve to anything rather than leaving
+  // them to linger as a selection nothing on screen matches.
+  if (objectManager && m_selection->kind() == EditorSelection::Kind::Object)
+  {
+    m_selection->pruneMissing([objectManager](const uuids::uuid& id) {
+      return objectManager->getObjectByUUID(id) != nullptr;
+    });
+  }
+
   if (!m_editable)
   {
     ImGui::TextColored(theme::scriptAmber, "Read-only - server is not in edit mode");
@@ -197,7 +262,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   ImGui::BeginDisabled(!m_editable || objectManager == nullptr);
   if (gc::accentButton("Create New Object", gc::SecIcon::plus))
   {
-    m_sceneEditCallback(replication::buildAddObject("Object"));
+    const auto created = newObjectUUID();
+    m_sceneEditCallback(replication::buildAddObject("Object", nullptr, &created));
   }
   ImGui::EndDisabled();
 
@@ -208,12 +274,21 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   if (objectManager)
   {
     m_dragSource = draggedObject(objectManager);
+    m_visibleOrder.clear();
 
     std::vector<std::shared_ptr<Object>> sortedRootsScratch;
-    for (const auto& object : sortedForDisplay(objectManager->getObjects(), m_sortMode, sortedRootsScratch))
+    const auto& roots = sortedForDisplay(objectManager->getObjects(), m_sortMode, sortedRootsScratch);
+
+    displayReorderDropZone(nullptr, 0);
+    for (std::size_t i = 0; i < roots.size(); ++i)
     {
-      displayObjectTree(object);
+      displayObjectTree(roots[i]);
+      displayReorderDropZone(nullptr, i + 1);
     }
+
+    // A Shift-click range needs the full on-screen order, which isn't known until every row above has
+    // been visited - so the click a row registered this frame is only resolved now.
+    applyPendingClick();
 
     // The empty area below the tree is the scene root: drop an object there to reparent it to the root,
     // or a prefab from the asset browser to instantiate it.
@@ -235,7 +310,8 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
         if (const auto prefab = uuids::uuid::from_string(uuidStr); prefab.has_value() && m_sceneEditCallback)
         {
           // The server resolves the prefab uuid to its body on disk, instantiates, and re-snapshots.
-          m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value()));
+          const auto instance = newObjectUUID();
+          m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), nullptr, &instance));
         }
       }
 
@@ -244,9 +320,11 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   }
 
   // Delete hotkey: while the Objects panel has focus, Delete queues the selected object for removal
-  // (guarded against firing while a text field is being typed into, or when read-only). The
-  // confirmation modal follows.
+  // (guarded against firing while a text field is being typed into, or when read-only). Disabled with
+  // 2+ objects selected rather than silently deleting only the primary - batch delete is a later story.
+  // The confirmation modal follows.
   if (m_editable && objectManager && m_selection->objectUUID().has_value() &&
+      m_selection->size() <= 1 &&
       ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
       !ImGui::GetIO().WantTextInput &&
       ImGui::IsKeyPressed(ImGuiKey_Delete))
@@ -266,6 +344,79 @@ bool ObjectGUIManager::canAcceptObjectDrop(const std::shared_ptr<Object>& target
   // A reparent onto the dragged object itself or onto one of its own descendants would cycle the graph,
   // so the row refuses the drop instead of sending an edit the server rejects anyway.
   return !m_dragSource || (m_dragSource != target && !m_dragSource->isAncestorOf(target));
+}
+
+void ObjectGUIManager::displayReorderDropZone(const std::shared_ptr<Object>& parent, const std::size_t index)
+{
+  if (!m_editable || m_sortMode != SortMode::authored)
+  {
+    return;
+  }
+
+  ImGui::PushID(parent ? uuids::to_string(parent->getUUID()).c_str() : "root");
+  ImGui::PushID(static_cast<int>(index));
+
+  constexpr float zoneHeight = 6.0f;
+  const float width = ImGui::GetContentRegionAvail().x;
+  const ImVec2 flowCursor = ImGui::GetCursorScreenPos();
+
+  // The zone overlays the gap between rows rather than taking layout space, so the cursor is restored
+  // afterward and row spacing stays what it was without the zones.
+  const ImVec2 cursor(flowCursor.x, flowCursor.y - ImGui::GetStyle().ItemSpacing.y * 0.5f - zoneHeight * 0.5f);
+  ImGui::SetCursorScreenPos(cursor);
+  ImGui::InvisibleButton("##reorderZone", ImVec2(width, zoneHeight));
+
+  if (canAcceptObjectDrop(parent) && ImGui::BeginDragDropTarget())
+  {
+    // The insertion line is drawn whenever this scope is entered, which ImGui only allows while the zone
+    // is the actively hovered drop target during a drag - so it doubles as the drop's visual feedback.
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const float lineY = cursor.y + zoneHeight * 0.5f;
+    drawList->AddLine(ImVec2(cursor.x, lineY), ImVec2(cursor.x + width, lineY), theme::u32(theme::accent), 2.0f);
+
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("object"))
+    {
+      const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
+      if (const auto draggedUUID = uuids::uuid::from_string(uuidStr);
+          draggedUUID.has_value() && m_sceneEditCallback && m_dragSource)
+      {
+        // index names a slot in the list as it stands right now. If the dragged object is already a
+        // member of this same list, the drop is about to remove it from wherever it sits first - so a
+        // zone past that slot has to shift down by one, or the object would land one short of where the
+        // insertion line was actually drawn.
+        std::size_t targetIndex = index;
+        if (m_dragSource->getParent() == parent)
+        {
+          const auto& siblings = parent ? parent->getChildren() : m_dragSource->getManager()->getObjects();
+          if (const auto it = std::ranges::find(siblings, m_dragSource); it != siblings.end())
+          {
+            if (const auto currentIndex = static_cast<std::size_t>(it - siblings.begin());
+                currentIndex < targetIndex)
+            {
+              --targetIndex;
+            }
+          }
+        }
+
+        if (parent)
+        {
+          const auto parentUUID = parent->getUUID();
+          m_sceneEditCallback(replication::buildReorderObject(draggedUUID.value(), &parentUUID, targetIndex));
+        }
+        else
+        {
+          m_sceneEditCallback(replication::buildReorderObject(draggedUUID.value(), nullptr, targetIndex));
+        }
+      }
+    }
+
+    ImGui::EndDragDropTarget();
+  }
+
+  ImGui::SetCursorScreenPos(flowCursor);
+
+  ImGui::PopID();
+  ImGui::PopID();
 }
 
 void ObjectGUIManager::displaySortControl()
@@ -299,8 +450,18 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 {
   ImGui::PushID(uuids::to_string(object->getUUID()).c_str());
 
-  const bool isSelected = m_selection->objectUUID() == object->getUUID();
+  // Recorded in display order regardless of selection - this row is on screen either way, and a
+  // Shift-click range is measured against exactly this list (see m_visibleOrder).
+  m_visibleOrder.push_back(object->getUUID());
+
+  const bool isSelected = m_selection->kind() == EditorSelection::Kind::Object &&
+                           m_selection->contains(object->getUUID());
   const bool isLeaf = object->getChildren().empty();
+
+  // Duplicate/Delete act on one well-defined object (this row), never the whole selection - batch
+  // versions are a later story, so with 2+ objects selected they're disabled rather than silently
+  // acting on just this one.
+  const bool multiSelected = m_selection->kind() == EditorSelection::Kind::Object && m_selection->size() > 1;
 
   ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_FramePadding |
                              ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap |
@@ -327,9 +488,11 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
 
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
   {
-    // The Inspector's ObjectInspector folds its Add Component list closed on its own when it notices the
-    // selection changed, so the tree only needs to update the shared selection here.
-    m_selection->selectObject(object->getUUID());
+    // Deferred to applyPendingClick(), once the full display order for this frame is known (a
+    // Shift-click range needs it). The Inspector's ObjectInspector folds its Add Component list closed
+    // on its own when it notices the selection changed, so nothing else is needed here.
+    const auto& io = ImGui::GetIO();
+    m_pendingClick = PendingClick{ object->getUUID(), io.KeyCtrl, io.KeyShift };
   }
 
   // Icon + name + accent selection bar, drawn over the (empty-label) node row.
@@ -383,7 +546,8 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       {
         // Same op as the empty-space drop, but with this row as the parent instead of the scene root.
         const auto parent = object->getUUID();
-        m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), &parent));
+        const auto instance = newObjectUUID();
+        m_sceneEditCallback(replication::buildInstantiatePrefab(prefab.value(), &parent, &instance));
       }
     }
 
@@ -397,12 +561,20 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
     if (ImGui::MenuItem("Add Child") && m_sceneEditCallback)
     {
       const auto parent = object->getUUID();
-      m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+      const auto created = newObjectUUID();
+      m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
     }
 
+    ImGui::BeginDisabled(multiSelected);
     if (ImGui::MenuItem("Duplicate") && m_sceneEditCallback)
     {
-      m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID()));
+      const auto duplicate = newObjectUUID();
+      m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID(), &duplicate));
+    }
+    ImGui::EndDisabled();
+    if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+      ImGui::SetTooltip("Duplicating several objects at once isn't supported yet");
     }
 
     if (ImGui::MenuItem("Save as Prefab"))
@@ -410,10 +582,16 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       saveAsPrefab(object);
     }
 
+    ImGui::BeginDisabled(multiSelected);
     if (ImGui::MenuItem("Delete"))
     {
       // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
       m_objectPendingDeletion = object->getUUID();
+    }
+    ImGui::EndDisabled();
+    if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+      ImGui::SetTooltip("Deleting several objects at once isn't supported yet");
     }
 
     ImGui::EndPopup();
@@ -430,13 +608,21 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   if (gc::rowIconButton("addChild", gc::SecIcon::plus, false, buttonWidth, rowHeight))
   {
     const auto parent = object->getUUID();
-    m_sceneEditCallback(replication::buildAddObject("Object", &parent));
+    const auto created = newObjectUUID();
+    m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
   }
 
   ImGui::SameLine(0.0f, buttonGap);
 
   ImGui::SetNextItemAllowOverlap();
-  if (gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight))
+  ImGui::BeginDisabled(multiSelected);
+  const bool deleteClicked = gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight);
+  ImGui::EndDisabled();
+  if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+  {
+    ImGui::SetTooltip("Deleting several objects at once isn't supported yet");
+  }
+  if (deleteClicked)
   {
     // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
     m_objectPendingDeletion = object->getUUID();
@@ -445,15 +631,64 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   if (open && !isLeaf)
   {
     std::vector<std::shared_ptr<Object>> sortedChildrenScratch;
-    for (const auto& child : sortedForDisplay(object->getChildren(), m_sortMode, sortedChildrenScratch))
+    const auto& children = sortedForDisplay(object->getChildren(), m_sortMode, sortedChildrenScratch);
+
+    displayReorderDropZone(object, 0);
+    for (std::size_t i = 0; i < children.size(); ++i)
     {
-      displayObjectTree(child);
+      displayObjectTree(children[i]);
+      displayReorderDropZone(object, i + 1);
     }
 
     ImGui::TreePop();
   }
 
   ImGui::PopID();
+}
+
+void ObjectGUIManager::applyPendingClick()
+{
+  if (!m_pendingClick.has_value())
+  {
+    return;
+  }
+
+  const auto [uuid, ctrl, shift] = m_pendingClick.value();
+  m_pendingClick.reset();
+
+  // Shift-click (plain or Ctrl+Shift): select/add the contiguous range from the anchor to this row, in
+  // the tree's current display order. The anchor itself doesn't move, so repeated Shift-clicks keep
+  // extending from the same start.
+  if (shift && m_rangeAnchor.has_value())
+  {
+    const auto range = rangeBetween(m_visibleOrder, m_rangeAnchor.value(), uuid);
+    if (!ctrl)
+    {
+      m_selection->clear();
+    }
+    for (const auto& id : range)
+    {
+      m_selection->addObject(id);
+    }
+
+    // The anchor wasn't on screen (deleted, or hidden behind a collapsed ancestor) - rangeBetween fell
+    // back to just this row, so start the next range from here instead of repeating the same fallback.
+    if (range.size() == 1)
+    {
+      m_rangeAnchor = uuid;
+    }
+    return;
+  }
+
+  if (ctrl)
+  {
+    m_selection->toggleObject(uuid);
+  }
+  else
+  {
+    m_selection->selectObject(uuid);
+  }
+  m_rangeAnchor = uuid;
 }
 
 void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objectManager)
@@ -530,9 +765,11 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
       m_sceneEditCallback(replication::buildRemoveObject(m_objectPendingDeletion.value()));
     }
 
-    if (m_selection->objectUUID() == m_objectPendingDeletion)
+    // Drop just this uuid rather than the whole selection - the deleted object may have been one of
+    // several selected, and the rest still exist.
+    if (m_selection->kind() == EditorSelection::Kind::Object && m_selection->contains(m_objectPendingDeletion.value()))
     {
-      m_selection->clear();
+      m_selection->remove(m_objectPendingDeletion.value());
     }
 
     m_objectPendingDeletion.reset();

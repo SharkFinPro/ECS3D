@@ -1,5 +1,6 @@
 #include "WorldBindings.h"
 #include "BindingContext.h"
+#include <Log.h>
 #include <assets/AssetRegistry.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
@@ -8,7 +9,6 @@
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <exception>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -64,6 +64,17 @@ const char* WorldBindingsProvider::bindFindObjectByName(const char* name)
 
   const std::string target(name);
   for (const auto& object : objectManager->getAllObjects())
+  {
+    if (object->getName() == target)
+    {
+      return store(uuids::to_string(object->getUUID()));
+    }
+  }
+
+  // An object a script spawned earlier in this same pass is still only pending (see ObjectManager::
+  // addObject / ScriptPassGuard) - objectExists/getObjectName/destroyObject already see it through
+  // getObjectByUUID, so a name lookup has to as well, or the world it describes is inconsistent.
+  for (const auto& object : objectManager->getPendingAdditions())
   {
     if (object->getName() == target)
     {
@@ -133,6 +144,18 @@ const char* WorldBindingsProvider::bindGetAllObjectUuids()
     result += uuids::to_string(object->getUUID());
   }
 
+  // Include what a script spawned earlier in this same pass but is still only pending (see
+  // ObjectManager::addObject / ScriptPassGuard) - otherwise this list would disagree with objectExists,
+  // which already resolves a pending object through getObjectByUUID.
+  for (const auto& object : objectManager->getPendingAdditions())
+  {
+    if (!result.empty())
+    {
+      result += ',';
+    }
+    result += uuids::to_string(object->getUUID());
+  }
+
   return store(result);
 }
 
@@ -180,7 +203,7 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
   const auto body = assetRegistry->getPrefabBody(parsed.value());
   if (!body.is_object())
   {
-    std::cerr << "[WorldBindings] No prefab body for " << prefabUuid << std::endl;
+    Log::warn(LogCategory::script, std::string("No prefab body for ") + prefabUuid);
     return store("");
   }
 
@@ -196,7 +219,8 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
   {
     // instantiate throws on a malformed body (e.g. a component type this build doesn't know). A bad prefab
     // must degrade to "no spawn", never take down the tick loop.
-    std::cerr << "[WorldBindings] Failed to instantiate prefab " << prefabUuid << ": " << e.what() << std::endl;
+    Log::error(LogCategory::script,
+               std::string("Failed to instantiate prefab ") + prefabUuid + ": " + e.what());
     return store("");
   }
 

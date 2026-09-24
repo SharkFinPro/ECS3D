@@ -9,7 +9,7 @@
 class Transform;
 
 struct BoundingBox {
-  uint8_t lastUpdateID = 0;
+  uint64_t lastUpdateID = 0;
   float minX{};
   float maxX{};
   float minY{};
@@ -18,6 +18,9 @@ struct BoundingBox {
   float maxZ{};
 };
 
+// Adding a shape here also needs a case in ColliderBindingsProvider::bindGetShape
+// (source/libs/scripting/bindings/ColliderBindings.cpp) and a matching value in the managed ColliderShape
+// enum (source/libs/scripting/ScriptBridge/components/Collider.cs).
 enum class ColliderType {
   boxCollider,
   sphereCollider
@@ -30,6 +33,13 @@ public:
   explicit Collider(ColliderType type, ComponentType subType);
 
   const BoundingBox& getBoundingBox();
+
+  // Read-only view of whatever getBoundingBox() last computed: no dirty check, no recompute, so it never
+  // writes m_boundingBox. Only safe where getBoundingBox() is known to have already warmed the cache for
+  // every collider involved and nothing has moved a transform since - e.g. CollisionSystem's parallel
+  // narrow phase, which warms every collider serially before the parallel region and defers collision
+  // responses (which do move transforms) to a serial pass after it.
+  [[nodiscard]] const BoundingBox& cachedBoundingBox() const;
 
   [[nodiscard]] ColliderType getColliderType() const;
 
@@ -68,12 +78,19 @@ protected:
 
   BoundingBox m_boundingBox;
 
+  // A subclass's own geometry (offset, size, radius) can change without the transform's update id
+  // moving, so lastUpdateID alone can't tell getBoundingBox the cache is stale. Subclasses set this
+  // through invalidateBoundingBox() wherever they change that geometry (setters, loadFromJSON, unpack).
+  bool m_boundingBoxDirty = true;
+
   bool m_isTrigger = false;
 
   uint32_t m_layer = 0;
   uint32_t m_mask = 0xFFFFFFFFu;
 
   bool m_renderCollider = false;
+
+  void invalidateBoundingBox();
 };
 
 

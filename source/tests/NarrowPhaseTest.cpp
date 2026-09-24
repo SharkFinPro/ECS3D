@@ -129,11 +129,34 @@ TEST(NarrowPhase, MeasuresSpherePenetrationFromTheCentersAndRadii)
   EXPECT_NEAR(contact->depth(), 0.5f, tolerance);
   expectNear("normal", contact->normal(), { -1, 0, 0 });
 
-  // On the surface of the first sphere, on the line between the centers - which is where it lands only
-  // because both radii are 1. The contact point is offset from the first sphere's center by the second
-  // sphere's radius, so an unequal pair reports a point that is on neither surface. Filed as a defect;
-  // this suite deliberately does not pin that behavior in place by asserting it.
-  expectNear("point", contact->point, { 1, 0, 0 });
+  // The midpoint of the overlap along the center line: sphere A spans -1 to 1, sphere B spans 0.5 to
+  // 2.5, so the overlap is 0.5 to 1 and its midpoint is 0.75. (This used to assert {1, 0, 0} - the first
+  // sphere's surface point toward B - which only looked right here because both radii are 1; that
+  // formula put an unequal pair's point outside the overlap entirely, which is the defect this change
+  // fixes.)
+  expectNear("point", contact->point, { 0.75f, 0, 0 });
+}
+
+TEST(NarrowPhase, ContactPointForUnequalRadiusSpheresLandsInsideBoth)
+{
+  const auto [firstObject, first] = makeCollider<SphereCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<SphereCollider>({ 1.5f, 0, 0 });
+
+  // Radii 1 and 2, centers 1.5 apart: the spheres overlap from -0.5 to 1 on x, and neither surface
+  // point alone (nor the pre-fix formula) sits inside that range.
+  second->setRadius(2.0f);
+
+  const auto contact = collisions::findContact(*first, *second);
+  ASSERT_TRUE(contact.has_value());
+
+  // The control this pair exists for: offsetting from the first sphere's center by the *second*
+  // sphere's radius (the pre-fix behavior) lands at (2, 0, 0), which is outside both spheres and would
+  // fail these checks.
+  const auto distanceFromFirst = glm::length(contact->point - first->getPosition());
+  const auto distanceFromSecond = glm::length(contact->point - second->getPosition());
+
+  EXPECT_LE(distanceFromFirst, first->getRadius() + tolerance);
+  EXPECT_LE(distanceFromSecond, second->getRadius() + tolerance);
 }
 
 TEST(NarrowPhase, PushesConcentricSpheresApartAlongY)
@@ -199,6 +222,24 @@ TEST(NarrowPhase, ContactPointForABoxAgainstASphereLandsOnTheSphereSurface)
   // this distance from the sphere's center.
   const auto distanceFromSphereCenter = glm::length(contact->point - second->getPosition());
   EXPECT_NEAR(distanceFromSphereCenter, second->getRadius(), tolerance);
+}
+
+TEST(NarrowPhase, ContactPointForABoxAgainstASphereFacesTheBoxRatherThanTheFarPole)
+{
+  const auto [firstObject, first] = makeCollider<BoxCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<SphereCollider>({ 1.5f, 0, 0 });
+
+  // The box spans -1 to 1 on x, the sphere 0.5 to 2.5, so the overlap is 0.5 to 1. The pre-fix code
+  // added the separating direction to the sphere's center instead of subtracting it, landing on the far
+  // pole at (2.5, 0, 0) - on the sphere's surface, so the sibling test above would not catch it, but
+  // nowhere near the box or the overlap.
+  const auto contact = collisions::findContact(*first, *second);
+  ASSERT_TRUE(contact.has_value());
+
+  constexpr float curvedTolerance = 1e-2f;
+
+  EXPECT_LE(contact->point.x, 1.0f + curvedTolerance);
+  EXPECT_GE(contact->point.x, 0.5f - curvedTolerance);
 }
 
 TEST(NarrowPhase, DepthGrowsWithTheOverlap)
