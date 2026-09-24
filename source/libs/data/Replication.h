@@ -129,12 +129,23 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
 // parent (absent = scene root) at sibling index. Undo of a deletion: unlike every other creating op this
 // one carries the body's own uuids, which applySceneEdit preserves rather than reassigning - see
 // ObjectManager::restoreSubtree for why.
+//
+// adopt, when given, is the { "object", "index", "transform" } list for undoing a removeObject
+// specifically: deleteObjectsMarkedForDeletion promotes the removed object's direct children up to its
+// own parent rather than deleting them, so undoing the removal has to both recreate the removed object
+// AND reclaim those still-live children back under it, in the same atomic op - restoreObject's own body
+// cannot carry them (their uuids are already live, which the body-walk collision check would refuse). Each
+// entry names a still-live child by uuid, the sibling index it held under the removed object, and that
+// object's own recorded local Transform blob (the exact pre-removal values - deleteObjectsMarkedForDeletion
+// rewrote the live ones via WorldPlacement math when it promoted the child). See applySceneEdit's
+// restoreObject handling for the validation and apply order.
 [[nodiscard]] nlohmann::json buildRestoreObject(const nlohmann::json& body,
                                                 const uuids::uuid* parentUUID,
-                                                std::size_t index);
+                                                std::size_t index,
+                                                const nlohmann::json* adopt = nullptr);
 
-// Delete objectUUID and its whole subtree immediately, unlike removeObject (which defers and promotes
-// children) - see ObjectManager::removeSubtree.
+// Delete objectUUID and its whole subtree immediately, unlike removeObject (which promotes the removed
+// object's own children to its parent instead) - see ObjectManager::removeSubtree.
 [[nodiscard]] nlohmann::json buildRemoveSubtree(const uuids::uuid& objectUUID);
 
 // Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
@@ -157,7 +168,9 @@ enum class SceneEditResult {
   unknownAsset,      // instantiatePrefab named an asset with no usable body
   rejected,          // well formed and refused: a reparent or reorder that would cycle or that changes
                      // nothing, a reorder whose index is out of range for its target list, a restoreObject
-                     // whose body names a uuid already live or would exceed maxObjectDepth, or a creating
+                     // whose body names a uuid already live or would exceed maxObjectDepth, a restoreObject
+                     // whose adopt list names a uuid twice (or one the body also names) or a uuid living
+                     // under a different parent than the one it is being restored under, or a creating
                      // op naming the nil uuid or one the scene is already using
   failed             // threw part way through, e.g. a prefab body naming a component this build lacks
 };

@@ -170,11 +170,26 @@ only, unicast via `NetServer::sendToEditors` rather than broadcast to every conn
 rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
 payload (a real divergence). (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
 `sceneEdit` also carries two ops for undoing a deletion: `removeSubtree` deletes an object and its whole
-subtree immediately, promoting nothing, unlike `removeObject` (which defers to the next tick and promotes
-the removed object's children); `restoreObject` rebuilds a subtree from an inline serialized body under a
+subtree immediately, promoting nothing, unlike `removeObject` (which promotes the removed object's
+children to its own parent in the same call - `applyStructuralEdit`'s `removeObject` branch calls
+`ObjectManager::deleteObjectsMarkedForDeletion` itself rather than waiting for the next tick, the way a
+script-driven destroy does; `ServerApp::handleSceneEdit` re-snapshots right after); `restoreObject` rebuilds a subtree from an inline serialized body under a
 parent at a sibling index, and is the one structural op that **preserves the body's uuids** rather than
 reassigning them, because the undo history (`data/edits/EditCommand.h`) already names the removed
-subtree's objects by those uuids. The
+subtree's objects by those uuids. `restoreObject` also takes an optional `"adopt"` list, each entry naming
+a still-live uuid, the sibling index it should hold under the restored object, and its own recorded local
+Transform blob — undo of a `removeObject`, which needs to reclaim the still-live children
+`deleteObjectsMarkedForDeletion` promoted to the removed object's own parent back under it in the same
+atomic op (the body alone cannot carry them back: their uuids are already live, which the body-walk
+collision check would refuse). The op validates the adopt entries before it changes the scene: it resolves
+each uuid to a live object and checks its current parent against `restoreObject`'s own target parent,
+checks for a repeated uuid or one the body itself already names, and computes the combined depth (the
+body's own height, or one more than the tallest adopted subtree when any are given) - a mismatch, a
+duplicate, or a combined depth that would exceed `maxObjectDepth` is refused rather than applied. On apply,
+each named child is detached from that parent's list before the restored object is inserted (so its own index reads
+against the list with the adoptees already removed, exactly the pre-removal list), then reattached under
+it at its recorded index with its recorded Transform reloaded; a `restoreSubtree` failure after that point
+puts the detached children back where they were before returning `failed`. The
 three `sceneEdit` ops that create an object (`addObject`, `duplicateObject`, `instantiatePrefab`) may carry
 a client-chosen `"uuid"` for what they create; the server honors it and picks its own when the field is
 absent. A uuid that does not parse is a `malformedEdit`; the nil uuid, or one already in use, is
@@ -489,16 +504,16 @@ the whole stack on every structural edit even in single-user editing. It compare
 after-state (undo) or before-state (redo) against the live scene/registry; a mismatch refuses the whole
 edit and drops that entry and everything older still on the stack being popped (undo is sequential -
 skipping a dropped entry to reach an older one would apply reverts out of order), naming which uuid
-conflicted. Only one kind is not reversible with the sceneEdit ops that exist today: `removeObject`.
-`ObjectManager::deleteObjectsMarkedForDeletion` promotes the removed object's children up to its own
-parent (preserving their world placement) rather than deleting them, so a faithful undo would have to both
-recreate the removed object and reclaim those already-live children back under it - `restoreObject` alone
-cannot do the second half (the children's uuids are already live in the scene, so its body would collide
-with them trying to recreate them too), and no other op composes the two into one atomic edit: a `Command`
-hands back exactly one payload per undo/redo today, with nothing in `EditHistory`'s interface for a caller
-to send a batch instead. It is still representable in the history but
-reports `notUndoable` instead of sending a lossy or structurally wrong reverse. Every other structural kind
-*is* reversible: `removeComponent` undoes through `addComponent`'s optional `"data"` field (the removed
+conflicted. Every kind is reversible today. `removeObject` was the one exception until `restoreObject`
+grew its `"adopt"` field (see the Replication paragraph above): `ObjectManager::deleteObjectsMarkedForDeletion`
+promotes the removed object's children up to its own parent (preserving their world placement) rather than
+deleting them, so undo has to both recreate the removed object and reclaim those already-live children
+back under it, in one atomic `Command` payload - `EditCommand::buildUndoJSON`'s `removeObject` case builds
+exactly that from the recorded subtree, and its `validateForUndo` checks the object is absent, the
+recorded parent exists, and every recorded direct child is still living under that parent (where
+`deleteObjectsMarkedForDeletion` left it) before undo is attempted. `isReversible()` stays a real check
+(not a constant `true`) as the extension point for a future kind with no faithful reverse. Every structural
+kind *is* reversible: `removeComponent` undoes through `addComponent`'s optional `"data"` field (the removed
 component's own `serialize()` blob, loaded onto the freshly created component in the same op that creates
 it, rather than the blank default a bare `addComponent` normally makes) and redoes through the ordinary
 `removeComponent` op; `duplicateObject`/`instantiatePrefab` undo through `removeSubtree` (named by the
@@ -526,8 +541,8 @@ leaves the scene as it is.
 
 `EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with
 `EditHistory::nextUndoIsReversible()`/`nextRedoIsReversible()` before calling `undo()`/`redo()`, and sends
-whatever payload comes back for any reversible kind - not just `componentEdit`. The one non-reversible kind
-(`removeObject`) on top is refused with a log message naming it and left in place rather than handed
+whatever payload comes back for any reversible kind - every kind today, but a future non-reversible kind on
+top would be refused with a log message and left in place rather than handed
 to `EditHistory::undo()`/`redo()`, which would otherwise treat "a kind with no reverse" the same as a validation conflict and drop it (and
 everything older beneath it) even though nothing about it is actually wrong. `reportHistoryOutcome` sends
 whichever of `jsonPayload`/`messagePayload` `HistoryOutcome` set, matching `payloadForm()`: a sceneEdit

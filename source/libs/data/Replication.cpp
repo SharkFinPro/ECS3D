@@ -461,7 +461,7 @@ nlohmann::json buildInstantiatePrefab(const uuids::uuid& prefabUUID, const uuids
 }
 
 nlohmann::json buildRestoreObject(const nlohmann::json& body, const uuids::uuid* parentUUID,
-                                  const std::size_t index)
+                                  const std::size_t index, const nlohmann::json* adopt)
 {
   nlohmann::json edit = {
     { "op", "restoreObject" },
@@ -472,6 +472,11 @@ nlohmann::json buildRestoreObject(const nlohmann::json& body, const uuids::uuid*
   if (parentUUID)
   {
     edit["parent"] = uuids::to_string(*parentUUID);
+  }
+
+  if (adopt)
+  {
+    edit["adopt"] = *adopt;
   }
 
   return edit;
@@ -649,6 +654,118 @@ namespace {
     }
 
     return std::nullopt;
+  }
+
+  // A restoreObject's own recorded local Transform for one reclaimed child - checked structurally (the
+  // same fields Transform::loadFromJSON reads) so a malformed entry is refused before anything mutates,
+  // rather than throwing loadFromJSON's own way into the generic "failed" result after the child has
+  // already been detached.
+  bool isPlausibleTransformBlob(const nlohmann::json& blob)
+  {
+    if (!blob.is_object())
+    {
+      return false;
+    }
+
+    for (const char* key : { "position", "rotation", "scale" })
+    {
+      const auto field = blob.find(key);
+      if (field == blob.end() || !field->is_array() || field->size() < 3)
+      {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // One entry of a restoreObject's "adopt" list, resolved against the live scene: the still-live object a
+  // removeObject undo is reclaiming, the sibling index it held under the object being restored, and its
+  // own recorded local Transform. Resolved before anything mutates, same as every other restoreObject
+  // check - see applyStructuralEdit's restoreObject handling.
+  struct ResolvedAdoptee {
+    std::shared_ptr<Object> object;
+    std::size_t index = 0;
+    const nlohmann::json* transform = nullptr;
+  };
+
+  // Result of parsing and resolving a restoreObject's "adopt" field: a refusal to report (leaving the
+  // scene untouched), or the resolved list. seenBodyUUIDs is the restoreObject body's own uuid set (see
+  // walkRestoreBody) - an adoptee uuid the body also names would double-register that uuid.
+  struct AdoptResolution {
+    std::optional<SceneEditResult> refusal;
+    std::vector<ResolvedAdoptee> adoptees;
+  };
+
+  AdoptResolution resolveAdoptList(const ObjectManager& objectManager, const nlohmann::json& edit,
+                                   const std::shared_ptr<Object>& targetParent,
+                                   const std::unordered_set<uuids::uuid>& seenBodyUUIDs)
+  {
+    if (!edit.contains("adopt"))
+    {
+      return {};
+    }
+
+    const auto& adoptField = edit.at("adopt");
+    if (!adoptField.is_array())
+    {
+      return { .refusal = SceneEditResult::malformedEdit };
+    }
+
+    AdoptResolution result;
+    std::unordered_set<uuids::uuid> seenAdoptees;
+
+    for (const auto& entry : adoptField)
+    {
+      if (!entry.is_object() || !entry.contains("object") || !entry.contains("index")
+          || !entry.contains("transform"))
+      {
+        return { .refusal = SceneEditResult::malformedEdit };
+      }
+
+      const auto parsedUUID = uuids::uuid::from_string(std::string(entry.at("object")));
+      if (!parsedUUID.has_value())
+      {
+        return { .refusal = SceneEditResult::malformedEdit };
+      }
+
+      const auto parsedIndex = parseIndexField(entry.at("index"));
+      if (!parsedIndex.has_value())
+      {
+        return { .refusal = SceneEditResult::malformedEdit };
+      }
+
+      if (!isPlausibleTransformBlob(entry.at("transform")))
+      {
+        return { .refusal = SceneEditResult::malformedEdit };
+      }
+
+      // A uuid this adopt list already named, or the body itself names, would otherwise double-register
+      // the same object once as a reclaimed child and once (again) as a body node.
+      if (!seenAdoptees.insert(parsedUUID.value()).second || seenBodyUUIDs.contains(parsedUUID.value()))
+      {
+        return { .refusal = SceneEditResult::rejected };
+      }
+
+      const auto object = objectManager.getObjectByUUID(parsedUUID.value());
+      if (!object)
+      {
+        return { .refusal = SceneEditResult::unknownObject };
+      }
+
+      // The adoptee has to be living exactly where deleteObjectsMarkedForDeletion would have promoted it
+      // to - under the removed object's own parent - or reclaiming it under the restored object would
+      // pull it out from wherever it actually is now.
+      if (object->getParent() != targetParent)
+      {
+        return { .refusal = SceneEditResult::rejected };
+      }
+
+      result.adoptees.push_back({ .object = object, .index = parsedIndex.value(),
+                                  .transform = &entry.at("transform") });
+    }
+
+    return result;
   }
 
   // What a creating op's optional "uuid" field came to: a refusal to report, a uuid to create the object
@@ -852,25 +969,110 @@ namespace {
         return SceneEditResult::rejected;
       }
 
+      // Undo of a removeObject: the still-live children deleteObjectsMarkedForDeletion promoted to
+      // parent, reclaimed back under the object this op is about to recreate. Resolved (and validated)
+      // before anything mutates, same as the body above - see resolveAdoptList.
+      const auto adoptResolution = resolveAdoptList(objectManager, edit, parent, seenInThisBody);
+      if (adoptResolution.refusal.has_value())
+      {
+        return adoptResolution.refusal.value();
+      }
+
+      const auto& adoptees = adoptResolution.adoptees;
+
+      std::size_t requiredHeight = bodyWalk.height;
+      if (!adoptees.empty())
+      {
+        std::size_t maxAdopteeHeight = 0;
+        for (const auto& adoptee : adoptees)
+        {
+          maxAdopteeHeight = std::max(maxAdopteeHeight, subtreeHeight(adoptee.object));
+        }
+
+        requiredHeight = std::max(requiredHeight, 1 + maxAdopteeHeight);
+      }
+
       const std::size_t baseDepth = parent ? ancestorDepth(parent) + 1 : 0;
-      if (baseDepth + bodyWalk.height > maxObjectDepth)
+      if (baseDepth + requiredHeight > maxObjectDepth)
       {
         return SceneEditResult::rejected;
       }
 
+      // Detached from their current list FIRST: index (the restored object's own position) is read
+      // against the list with the adoptees already removed, which is exactly the pre-removal list minus
+      // the removed object - deleteObjectsMarkedForDeletion spliced them into its slot, so removing them
+      // again here undoes exactly that splice before the removed object is reinserted at its old index.
+      // Each detached object's own position is remembered (in removal order) so a restoreSubtree failure
+      // can put every one of them back exactly where it was, in reverse order, before this op fails.
+      std::vector<std::pair<std::shared_ptr<Object>, std::size_t>> detachedInOrder;
+      detachedInOrder.reserve(adoptees.size());
+
+      for (const auto& adoptee : adoptees)
+      {
+        const auto& currentSiblings = parent ? parent->getChildren() : objectManager.getObjects();
+        const auto currentIt = std::ranges::find(currentSiblings, adoptee.object);
+        detachedInOrder.emplace_back(adoptee.object,
+                                     static_cast<std::size_t>(currentIt - currentSiblings.begin()));
+
+        if (parent)
+        {
+          parent->removeChild(adoptee.object);
+        }
+        else
+        {
+          objectManager.removeObjectFromRoot(adoptee.object);
+        }
+      }
+
+      const auto restoreAdoptees = [&] {
+        for (auto it = detachedInOrder.rbegin(); it != detachedInOrder.rend(); ++it)
+        {
+          if (parent)
+          {
+            parent->addChild(it->first, it->second);
+          }
+          else
+          {
+            objectManager.addObjectToRoot(it->first, it->second);
+          }
+        }
+      };
+
       // Same reasoning as instantiatePrefab/duplicateObject: a body naming a component this build does
       // not know is a failure to apply, not a malformed edit.
+      std::shared_ptr<Object> restored;
       try
       {
-        objectManager.restoreSubtree(body, parent, index);
+        restored = objectManager.restoreSubtree(body, parent, index);
       }
       catch (const std::bad_alloc&)
       {
+        restoreAdoptees();
         throw;
       }
       catch (const std::exception&)
       {
+        restoreAdoptees();
         return SceneEditResult::failed;
+      }
+
+      // Reattach each reclaimed child under the restored object, in ascending recorded-index order so the
+      // index-taking addChild overload reproduces the original arrangement exactly, then put its own
+      // local Transform back to the value it held just before the removal - the exact pre-removal values,
+      // not what deleteObjectsMarkedForDeletion's WorldPlacement rewrite left it with while it sat
+      // promoted under parent.
+      std::vector<ResolvedAdoptee> orderedAdoptees = adoptees;
+      std::ranges::sort(orderedAdoptees, {}, &ResolvedAdoptee::index);
+
+      for (const auto& adoptee : orderedAdoptees)
+      {
+        adoptee.object->setParent(restored);
+        restored->addChild(adoptee.object, adoptee.index);
+
+        if (const auto transform = adoptee.object->getComponent<Transform>(ComponentType::transform))
+        {
+          transform->loadFromJSON(*adoptee.transform);
+        }
       }
 
       return SceneEditResult::applied;

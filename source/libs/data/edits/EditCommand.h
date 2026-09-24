@@ -91,8 +91,11 @@ public:
                                              std::string name,
                                              std::size_t siblingIndex);
 
-  // Not reversible (see isReversible) but still representable: removedSubtree is the removed object's
-  // full Object::serialize() blob, kept in case a future piece gains a way to replay it.
+  // removedSubtree is the removed object's full Object::serialize() blob (children included, in sibling
+  // order, each with its pre-removal local Transform) - undo needs the whole thing, not just the removed
+  // object's own fields, because deleteObjectsMarkedForDeletion promotes its direct children up to its own
+  // parent rather than deleting them; see isReversible and Replication.h's buildRestoreObject for how undo
+  // both recreates the object and reclaims those children in one op.
   [[nodiscard]] static EditCommand removeObject(const uuids::uuid& objectUUID,
                                                 const std::optional<uuids::uuid>& parentUUID,
                                                 std::size_t siblingIndex,
@@ -167,17 +170,21 @@ public:
 
   [[nodiscard]] PayloadForm payloadForm() const;
 
-  // False only for removeObject: ObjectManager::deleteObjectsMarkedForDeletion promotes the removed
-  // object's children to its own parent (preserving their world placement) rather than deleting them, so
-  // "undo" would have to both recreate the removed object AND reclaim those already-live children back
-  // under it - restoreObject alone cannot do the second half (the children's uuids are already live in
-  // the scene, so its body would collide with them), and no other op composes the two into one atomic
-  // sceneEdit (EditCommand hands back exactly one payload per undo/redo). removeComponent is reversible
-  // via addComponent's "data" field (see Replication.h's buildAddComponent); duplicateObject/
-  // instantiatePrefab are reversible via removeSubtree (undo, by the created root's uuid alone - it
-  // deletes the whole subtree immediately, unlike removeObject) and by re-running the original creating
-  // op (redo - see buildRedoJSON). Every other kind targets an object/asset whose uuid is already stable,
-  // so its reverse is exact.
+  // Every kind is currently reversible. removeObject was the one exception until restoreObject grew an
+  // "adopt" field (see Replication.h's buildRestoreObject): ObjectManager::deleteObjectsMarkedForDeletion
+  // promotes the removed object's direct children to its own parent (preserving their world placement)
+  // rather than deleting them, so undo has to both recreate the removed object AND reclaim those
+  // already-live children back under it in one atomic sceneEdit - buildUndoJSON's removeObject case builds
+  // exactly that, from the recorded subtree. removeComponent is reversible via addComponent's "data" field
+  // (see Replication.h's buildAddComponent); duplicateObject/instantiatePrefab are reversible via
+  // removeSubtree (undo, by the created root's uuid alone - it deletes the whole subtree immediately,
+  // unlike removeObject) and by re-running the original creating op (redo - see buildRedoJSON). Every other
+  // kind targets an object/asset whose uuid is already stable, so its reverse is exact.
+  //
+  // Kept as a real check (not just `return true`) rather than removed outright: it is the extension point
+  // a future kind with no faithful reverse would use, and EditorApp/the Edit menu already gate on it
+  // through EditHistory::nextUndoIsReversible()/nextRedoIsReversible() rather than assuming every kind
+  // undoes.
   [[nodiscard]] bool isReversible() const;
 
   // Compares this command's "after" state against the live scene/registry - what undo is about to
