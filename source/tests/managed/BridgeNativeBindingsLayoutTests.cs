@@ -58,11 +58,18 @@ public unsafe class BridgeNativeBindingsLayoutTests
   // the mismatch survives trailing alignment padding: one stray byte alone pads out to the same total size
   // a second pointer field would have taken, which would make this "bad" struct pass by coincidence.
   [StructLayout(LayoutKind.Sequential)]
-  private unsafe struct BadBindingsWithStrayFields
+  private readonly struct BadBindingsWithStrayFields : IEquatable<BadBindingsWithStrayFields>
   {
-    public delegate* unmanaged<IntPtr, bool> has;
-    public byte strayFieldOne;
-    public byte strayFieldTwo;
+    public readonly delegate* unmanaged<IntPtr, bool> has;
+    public readonly byte strayFieldOne;
+    public readonly byte strayFieldTwo;
+
+    public bool Equals(BadBindingsWithStrayFields other) =>
+      has == other.has && strayFieldOne == other.strayFieldOne && strayFieldTwo == other.strayFieldTwo;
+
+    public override bool Equals(object? obj) => obj is BadBindingsWithStrayFields other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine((IntPtr)has, strayFieldOne, strayFieldTwo);
   }
 
   [Fact]

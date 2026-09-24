@@ -107,8 +107,14 @@ public class BridgeFieldMarshallingTests
     foreach (var element in doc.RootElement.EnumerateArray())
     {
       var name = element.GetProperty("name").GetString();
-      if (name == "speed") speed = element;
-      if (name == "count") count = element;
+      if (name == "speed")
+      {
+        speed = element;
+      }
+      if (name == "count")
+      {
+        count = element;
+      }
     }
 
     Assert.NotNull(speed);
@@ -172,8 +178,8 @@ public class BridgeFieldMarshallingTests
   [Fact]
   public void TryConvertFieldValue_ConvertsBetweenConvertibleTypes()
   {
-    // int -> float is what setFieldFloat feeds through when the native side hands over a whole number;
-    // Convert.ChangeType handles the widening.
+    // Exercises the widening conversion the native side relies on when a whole number arrives for a
+    // float field, the same path setFieldFloat feeds through.
     var ok = Bridge.TryConvertFieldValue(typeof(float), 3, out var converted);
 
     Assert.True(ok);
