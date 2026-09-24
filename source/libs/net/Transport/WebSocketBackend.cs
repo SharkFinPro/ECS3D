@@ -623,7 +623,11 @@ internal sealed class WebSocketBackend : TransportBackend
   // Reads the HTTP/1.1 Upgrade request, replies with the 101 Switching Protocols handshake, and leaves
   // the stream positioned at the first WebSocket frame. Returns false if the request isn't a valid
   // WebSocket upgrade.
-  private static bool PerformServerHandshake(NetworkStream stream)
+  //
+  // Takes Stream rather than NetworkStream (its only caller passes a NetworkStream, which is one) and is
+  // internal rather than private so ECS3DManagedTests can drive it off an in-memory duplex stream via
+  // InternalsVisibleTo (see Transport/AssemblyInfo.cs), without a real socket.
+  internal static bool PerformServerHandshake(Stream stream)
   {
     var request = ReadHttpHeaders(stream);
     if (request is null)
@@ -666,7 +670,10 @@ internal sealed class WebSocketBackend : TransportBackend
 
   // Reads request lines up to (and consuming) the terminating blank line. Reads one byte at a time so we
   // never swallow bytes belonging to the first WebSocket frame.
-  private static List<string>? ReadHttpHeaders(Stream stream)
+  //
+  // Internal (rather than private) so ECS3DManagedTests can exercise it directly - including the exact
+  // stream position it leaves behind - via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
+  internal static List<string>? ReadHttpHeaders(Stream stream)
   {
     var lines = new List<string>();
     var line = new StringBuilder();
@@ -710,7 +717,10 @@ internal sealed class WebSocketBackend : TransportBackend
 
   // Receives one whole WebSocket message (reassembling fragments) as [type byte][payload]. Returns null
   // on close or error.
-  private static byte[]? ReceiveMessage(WebSocket ws, CancellationToken token, int maxBytes = MaxMessageBytes)
+  //
+  // Internal (rather than private) so ECS3DManagedTests can drive it against a server-side WebSocket
+  // built over hand-built client frames via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
+  internal static byte[]? ReceiveMessage(WebSocket ws, CancellationToken token, int maxBytes = MaxMessageBytes)
   {
     var buffer = new byte[8192];
     using var assembled = new MemoryStream();
