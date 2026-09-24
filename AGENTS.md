@@ -164,11 +164,12 @@ a still-live uuid, the sibling index it should hold under the restored object, a
 Transform blob — undo of a `removeObject`, which needs to reclaim the still-live children
 `deleteObjectsMarkedForDeletion` promoted to the removed object's own parent back under it in the same
 atomic op (the body alone cannot carry them back: their uuids are already live, which the body-walk
-collision check would refuse). Every adopt entry is validated before anything mutates — the uuid must name
-a live object whose current parent is `restoreObject`'s own target parent, no uuid may repeat or collide
-with one the body itself names, and the combined depth (the body's own height, or one more than the
-tallest adopted subtree if any are given) must fit under `maxObjectDepth` — and, on apply, every named
-child is detached from that parent's list before the restored object is inserted (so its own index reads
+collision check would refuse). The op validates the adopt entries before it changes the scene: it resolves
+each uuid to a live object and checks its current parent against `restoreObject`'s own target parent,
+checks for a repeated uuid or one the body itself already names, and computes the combined depth (the
+body's own height, or one more than the tallest adopted subtree when any are given) - a mismatch, a
+duplicate, or a combined depth that would exceed `maxObjectDepth` is refused rather than applied. On apply,
+each named child is detached from that parent's list before the restored object is inserted (so its own index reads
 against the list with the adoptees already removed, exactly the pre-removal list), then reattached under
 it at its recorded index with its recorded Transform reloaded; a `restoreSubtree` failure after that point
 puts the detached children back where they were before returning `failed`. The

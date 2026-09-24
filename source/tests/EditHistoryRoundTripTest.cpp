@@ -423,6 +423,66 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveComponent)
   EXPECT_FALSE(scene.object->getComponents().contains(ComponentType::rigidBody));
 }
 
+namespace {
+  // Parent's children so a removeObject round trip can check them by name: A/B never move, X is what gets
+  // deleted and undone, C1 is X's own child (the one deleteObjectsMarkedForDeletion promotes to Parent).
+  struct RemovedX {
+    std::shared_ptr<Object> parent;
+    std::shared_ptr<Object> a;
+    std::shared_ptr<Object> b;
+    std::shared_ptr<Object> c1;
+    uuids::uuid xUUID;
+  };
+
+  // Builds Parent with children [A, X, B] (X with its own child C1), records the removeObject command from
+  // X's pre-removal state, and applies the removal for real - the shared setup every removeObject round
+  // trip / refusal test below needs. X sits off-origin so promoting C1 to Parent actually rewrites its
+  // local values, which is what proves undo restores the recorded pre-removal transform rather than
+  // whatever WorldPlacement left it at.
+  RemovedX buildAndRemoveX(editHistoryFixtures::Scene& scene, edits::EditHistory& history)
+  {
+    RemovedX removed;
+    removed.parent = addObject(scene, "Parent");
+    removed.a = addChildObject(scene, "A", removed.parent);
+    const auto x = addChildObject(scene, "X", removed.parent);
+    removed.b = addChildObject(scene, "B", removed.parent);
+    removed.c1 = addChildObject(scene, "C1", x);
+
+    transformOf(x)->setPosition({ 10, 0, 0 });
+    transformOf(removed.c1)->setPosition({ 1, 2, 3 });
+
+    removed.xUUID = x->getUUID();
+    const auto parentUUID = removed.parent->getUUID();
+    history.record(edits::EditCommand::removeObject(removed.xUUID, parentUUID, 1, x->serialize()));
+
+    EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRemoveObject(removed.xUUID)),
+              replication::SceneEditResult::applied);
+    EXPECT_EQ(scene.objectManager->getObjectByUUID(removed.xUUID), nullptr);
+    EXPECT_EQ(removed.parent->getChildren(),
+              (std::vector<std::shared_ptr<Object>>{ removed.a, removed.c1, removed.b }));
+    EXPECT_EQ(removed.c1->getParent(), removed.parent);
+
+    return removed;
+  }
+
+  // X is back at its old index between A and B, C1 is its child again at its recorded pre-removal local
+  // transform - what both undos below (the first, and the one after a redo) need to check.
+  void expectXRestoredWithC1(const RemovedX& removed)
+  {
+    ASSERT_EQ(removed.parent->getChildren().size(), 3u);
+    const auto restoredX = removed.parent->getChildren()[1];
+    EXPECT_EQ(restoredX->getUUID(), removed.xUUID);
+    EXPECT_EQ(restoredX->getName(), "X");
+    EXPECT_EQ(removed.parent->getChildren()[0], removed.a);
+    EXPECT_EQ(removed.parent->getChildren()[2], removed.b);
+    ASSERT_EQ(restoredX->getChildren().size(), 1u);
+    EXPECT_EQ(restoredX->getChildren().front(), removed.c1);
+    EXPECT_EQ(removed.c1->getParent(), restoredX);
+    expectNear(transformOf(removed.c1)->getLocalPosition(), { 1, 2, 3 });
+    expectNear(transformOf(restoredX)->getLocalPosition(), { 10, 0, 0 });
+  }
+}
+
 // removeObject undoes through restoreObject's "adopt" field: deleteObjectsMarkedForDeletion promotes the
 // removed object's direct children up to its own parent rather than deleting them, so undo has to both
 // recreate the removed object AND reclaim those still-live children back under it - see AGENTS.md's Editor
@@ -430,49 +490,15 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveComponent)
 TEST(EditHistory, UndoAndRedoRoundTripARemoveObjectWithAPromotedChild)
 {
   auto scene = makeScene();
-  const auto parent = addObject(scene, "Parent");
-  const auto a = addChildObject(scene, "A", parent);
-  const auto x = addChildObject(scene, "X", parent);
-  const auto b = addChildObject(scene, "B", parent);
-  const auto c1 = addChildObject(scene, "C1", x);
-
-  // X sits off-origin so promoting C1 to Parent actually rewrites its local values - the recorded
-  // pre-removal value {1,2,3} has to differ from whatever it is promoted to for this to prove anything.
-  transformOf(x)->setPosition({ 10, 0, 0 });
-  transformOf(c1)->setPosition({ 1, 2, 3 });
-
-  const auto xUUID = x->getUUID();
-  const auto parentUUID = parent->getUUID();
-  const auto preRemovalBody = x->serialize();
-
   edits::EditHistory history;
-  history.record(edits::EditCommand::removeObject(xUUID, parentUUID, 1, preRemovalBody));
+  const auto removed = buildAndRemoveX(scene, history);
 
-  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRemoveObject(xUUID)),
-            replication::SceneEditResult::applied);
-  ASSERT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
-  ASSERT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, b }));
-  ASSERT_EQ(c1->getParent(), parent);
-
-  // Undo: X comes back at its old index between A and B, C1 is its child again at its recorded
-  // pre-removal local transform - not whatever WorldPlacement left it at while promoted under Parent.
   const auto undoOutcome = history.undo(*scene.objectManager);
   ASSERT_TRUE(undoOutcome.ok());
   ASSERT_TRUE(undoOutcome.jsonPayload.has_value());
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *undoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
-
-  ASSERT_EQ(parent->getChildren().size(), 3u);
-  const auto restoredX = parent->getChildren()[1];
-  EXPECT_EQ(restoredX->getUUID(), xUUID);
-  EXPECT_EQ(restoredX->getName(), "X");
-  EXPECT_EQ(parent->getChildren()[0], a);
-  EXPECT_EQ(parent->getChildren()[2], b);
-  ASSERT_EQ(restoredX->getChildren().size(), 1u);
-  EXPECT_EQ(restoredX->getChildren().front(), c1);
-  EXPECT_EQ(c1->getParent(), restoredX);
-  expectNear(transformOf(c1)->getLocalPosition(), { 1, 2, 3 });
-  expectNear(transformOf(restoredX)->getLocalPosition(), { 10, 0, 0 });
+  expectXRestoredWithC1(removed);
 
   // Redo: deleted again, C1 promoted back to Parent exactly as the first removal left it.
   const auto redoOutcome = history.redo(*scene.objectManager);
@@ -480,9 +506,9 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveObjectWithAPromotedChild)
   ASSERT_TRUE(redoOutcome.jsonPayload.has_value());
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
-  EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
-  EXPECT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, b }));
-  EXPECT_EQ(c1->getParent(), parent);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(removed.xUUID), nullptr);
+  EXPECT_EQ(removed.parent->getChildren(),
+            (std::vector<std::shared_ptr<Object>>{ removed.a, removed.c1, removed.b }));
 
   // Undo again: the round trip still works a second time.
   const auto secondUndoOutcome = history.undo(*scene.objectManager);
@@ -490,13 +516,7 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveObjectWithAPromotedChild)
   ASSERT_TRUE(secondUndoOutcome.jsonPayload.has_value());
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *secondUndoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
-
-  ASSERT_EQ(parent->getChildren().size(), 3u);
-  const auto restoredAgain = parent->getChildren()[1];
-  EXPECT_EQ(restoredAgain->getUUID(), xUUID);
-  ASSERT_EQ(restoredAgain->getChildren().size(), 1u);
-  EXPECT_EQ(restoredAgain->getChildren().front(), c1);
-  expectNear(transformOf(c1)->getLocalPosition(), { 1, 2, 3 });
+  expectXRestoredWithC1(removed);
 }
 
 namespace {

@@ -286,6 +286,34 @@ TEST(EditHistory, UndoRefusesWhenTheObjectNoLongerExists)
   EXPECT_EQ(controlOutcome.result, edits::HistoryResult::applied);
 }
 
+namespace {
+  struct RemovedXWithOneChild {
+    std::shared_ptr<Object> parent;
+    std::shared_ptr<Object> c1;
+    uuids::uuid xUUID;
+  };
+
+  // Parent with a single child X, X with a single child C1 - removed for real (recorded, then applied),
+  // the minimal shape every removeObject-undo refusal test below needs (C1 promoted to Parent).
+  RemovedXWithOneChild buildAndRemoveXWithOneChild(Scene& scene, edits::EditHistory& history)
+  {
+    RemovedXWithOneChild removed;
+    removed.parent = addObject(scene, "Parent");
+    const auto x = addChildObject(scene, "X", removed.parent);
+    removed.c1 = addChildObject(scene, "C1", x);
+
+    removed.xUUID = x->getUUID();
+    const auto parentUUID = removed.parent->getUUID();
+    history.record(edits::EditCommand::removeObject(removed.xUUID, parentUUID, 0, x->serialize()));
+
+    EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRemoveObject(removed.xUUID)),
+              replication::SceneEditResult::applied);
+    EXPECT_EQ(removed.c1->getParent(), removed.parent);
+
+    return removed;
+  }
+}
+
 // removeObject's undo (restoreObject's "adopt" field - see EditCommand.h's isReversible) validates
 // against the live scene the same way every other kind does: it is refused, naming the conflicting uuid,
 // when a recorded direct child has moved out from under the parent it was promoted to before undo runs.
@@ -297,28 +325,16 @@ TEST(EditHistory, UndoOfARemoveObjectRefusesWhenAPromotedChildWasMovedElsewhereF
   // trip test already covers in detail - checked minimally here to prove the setup below is otherwise sound.
   {
     auto scene = makeScene();
-    const auto parent = addObject(scene, "Parent");
-    const auto x = addChildObject(scene, "X", parent);
-    const auto c1 = addChildObject(scene, "C1", x);
-
-    const auto xUUID = x->getUUID();
-    const auto parentUUID = parent->getUUID();
-    const auto preRemovalBody = x->serialize();
-
     edits::EditHistory history;
-    history.record(edits::EditCommand::removeObject(xUUID, parentUUID, 0, preRemovalBody));
-
-    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRemoveObject(xUUID)),
-              replication::SceneEditResult::applied);
-    ASSERT_EQ(c1->getParent(), parent);
+    const auto removed = buildAndRemoveXWithOneChild(scene, history);
 
     const auto outcome = history.undo(*scene.objectManager);
     EXPECT_EQ(outcome.result, edits::HistoryResult::applied);
     ASSERT_TRUE(outcome.jsonPayload.has_value());
     EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *outcome.jsonPayload),
               replication::SceneEditResult::applied);
-    EXPECT_NE(scene.objectManager->getObjectByUUID(xUUID), nullptr);
-    EXPECT_EQ(c1->getParent(), scene.objectManager->getObjectByUUID(xUUID));
+    EXPECT_NE(scene.objectManager->getObjectByUUID(removed.xUUID), nullptr);
+    EXPECT_EQ(removed.c1->getParent(), scene.objectManager->getObjectByUUID(removed.xUUID));
   }
 
   // Same setup, but something else reparents the promoted child away from Parent before undo runs: the
@@ -326,37 +342,25 @@ TEST(EditHistory, UndoOfARemoveObjectRefusesWhenAPromotedChildWasMovedElsewhereF
   // rather than reclaiming the wrong object or silently doing nothing.
   {
     auto scene = makeScene();
-    const auto parent = addObject(scene, "Parent");
-    const auto elsewhere = addObject(scene, "Elsewhere");
-    const auto x = addChildObject(scene, "X", parent);
-    const auto c1 = addChildObject(scene, "C1", x);
-
-    const auto xUUID = x->getUUID();
-    const auto parentUUID = parent->getUUID();
-    const auto preRemovalBody = x->serialize();
-
     edits::EditHistory history;
-    history.record(edits::EditCommand::removeObject(xUUID, parentUUID, 0, preRemovalBody));
-
-    ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, replication::buildRemoveObject(xUUID)),
-              replication::SceneEditResult::applied);
-    ASSERT_EQ(c1->getParent(), parent);
+    const auto removed = buildAndRemoveXWithOneChild(scene, history);
+    const auto elsewhere = addObject(scene, "Elsewhere");
 
     const auto elsewhereUUID = elsewhere->getUUID();
     ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
-                replication::buildReparentObject(c1->getUUID(), &elsewhereUUID)),
+                replication::buildReparentObject(removed.c1->getUUID(), &elsewhereUUID)),
               replication::SceneEditResult::applied);
-    ASSERT_EQ(c1->getParent(), elsewhere);
+    ASSERT_EQ(removed.c1->getParent(), elsewhere);
 
     const auto outcome = history.undo(*scene.objectManager);
     EXPECT_EQ(outcome.result, edits::HistoryResult::targetChanged);
     ASSERT_TRUE(outcome.conflict.has_value());
-    EXPECT_EQ(*outcome.conflict, c1->getUUID());
+    EXPECT_EQ(*outcome.conflict, removed.c1->getUUID());
     EXPECT_FALSE(history.canUndo());
 
     // The interference is left exactly as it was - the refused undo touched nothing, and X is still gone.
-    EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
-    EXPECT_EQ(c1->getParent(), elsewhere);
+    EXPECT_EQ(scene.objectManager->getObjectByUUID(removed.xUUID), nullptr);
+    EXPECT_EQ(removed.c1->getParent(), elsewhere);
   }
 }
 
