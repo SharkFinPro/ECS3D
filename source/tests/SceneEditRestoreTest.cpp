@@ -632,46 +632,48 @@ TEST(SceneEdit, RestoreObjectWithAdoptIsRejectedWhenDepthWouldExceedTheLimit)
 {
   const auto scene = makeScene();
 
-  const auto parent = addObject(scene, "Parent");
-  const auto x = addChildObject(scene, "X", parent);
+  // D sits at depth (maxObjectDepth - 3); X is built directly under it, so restoring X back under D gives
+  // baseDepth = ancestorDepth(D) + 1 == maxObjectDepth - 2. C1's own subtree (C1 -> Grandchild -> Extra,
+  // height 2) makes requiredHeight = max(bodyHeight=0, 1 + subtreeHeight(C1)=2) == 3, landing the combined
+  // depth (maxObjectDepth - 2 + 3 == maxObjectDepth + 1) exactly one step past the limit.
+  const auto d = descendantAtDepth(scene, scene.object, maxObjectDepth - 3);
+  const auto x = addChildObject(scene, "X", d);
   const auto c1 = addChildObject(scene, "C1", x);
-  // c1 has its own child, so reclaiming it under the restored X adds 2 levels (X -> c1 -> grandchild),
-  // not just 1.
   const auto grandchild = addChildObject(scene, "Grandchild", c1);
+  const auto extra = addChildObject(scene, "Extra", grandchild);
 
   const auto xUUID = x->getUUID();
-  const auto body = x->serialize();
+  const auto dUUID = d->getUUID();
+  const auto body = x->serialize(); // C1's own Transform blob (all this test's adopt entry needs) is
+                                    // unaffected by Extra being removed for the positive control below.
 
   ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(xUUID)), SceneEditResult::applied);
+  // C1 (with Grandchild/Extra still hanging off it) was promoted to D, not some unrelated node - this is
+  // what resolveAdoptList's "adoptee lives under the restore target" check is about to validate.
+  ASSERT_EQ(c1->getParent(), d);
 
   nlohmann::json bodyNoChildren = body;
   bodyNoChildren["children"] = nlohmann::json::array();
   const nlohmann::json adopt = nlohmann::json::array({ adoptEntry(c1, 0, body.at("children").at(0)) });
 
-  // parent sits deep enough that X (depth+1) plus the reclaimed c1/grandchild (2 more levels) lands one
-  // step past the limit. descendantAtDepth chains `levels` steps below parent (parent is itself a root,
-  // depth 0), so ancestorDepth(deepParent) == levels; X's own baseDepth is one more than that, and the
-  // reclaimed c1/grandchild add 2 further levels (requiredHeight = max(bodyHeight=0, 1+subtreeHeight(c1)=1)
-  // == 2), so levels == maxObjectDepth - 2 is exactly one step past the limit.
-  const auto deepParent = descendantAtDepth(scene, parent, maxObjectDepth - 2);
-  const auto deepParentUUID = deepParent->getUUID();
-
   const auto before = scene.objectManager->getAllObjects().size();
-  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &deepParentUUID, 0, &adopt)),
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &dUUID, 0, &adopt)),
             SceneEditResult::rejected);
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
   EXPECT_EQ(scene.objectManager->getObjectByUUID(xUUID), nullptr);
+  EXPECT_EQ(c1->getParent(), d);
 
-  // Positive control: the same shape one level shallower fits exactly.
-  const auto shallowerParent = descendantAtDepth(scene, parent, maxObjectDepth - 3);
-  const auto shallowerParentUUID = shallowerParent->getUUID();
+  // Positive control: drop Extra (C1's subtree height back to 1, requiredHeight back to 2) and the exact
+  // same restore fits at the limit - depth is the only thing that changed.
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveSubtree(extra->getUUID())), SceneEditResult::applied);
 
   const auto beforeApply = scene.objectManager->getAllObjects().size();
-  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &shallowerParentUUID, 0, &adopt)),
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(bodyNoChildren, &dUUID, 0, &adopt)),
             SceneEditResult::applied);
-  // Only X itself is newly created by restoreSubtree - c1/grandchild already existed (they were promoted,
-  // never deleted) and are only reattached, not recreated.
+  // Only X itself is newly created by restoreSubtree - C1 already existed (promoted, never deleted) and
+  // is only reattached, not recreated.
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), beforeApply + 1);
+  EXPECT_EQ(c1->getParent(), scene.objectManager->getObjectByUUID(xUUID));
 }
 
 // A new sibling can arrive at Parent between the deletion and the undo - it is not one of the adoptees, so
