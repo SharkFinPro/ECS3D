@@ -399,6 +399,26 @@ TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
   }
 }
 
+TEST(CollisionEvent, AContactTheFirstResponseAlreadyClearedIsNotAppliedAgain)
+{
+  const auto scene = makeScene();
+
+  // Deep sits 0.5 into Moving from below. Shallow overlaps a corner of Moving, 0.1 on x and 0.2 on y,
+  // so on its own it would push Moving 0.1 along -x. Resolving Deep first lifts Moving by 0.5, clear of
+  // Shallow entirely, so Shallow's 0.1 measured before that lift must not be applied afterwards.
+  const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true);
+  const auto deep = addBody(scene, "Deep", { 0, -1.5f, 0 }, false);
+  const auto shallow = addBody(scene, "Shallow", { 1.9f, -1.8f, 0 }, false);
+
+  CollisionSystem collisionSystem;
+  collisionSystem.fixedUpdate(*scene.objectManager);
+
+  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, deep));
+  ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, shallow));
+
+  expectNear(positionOf(moving), { 0, 0.5f, 0 }, 1e-3f);
+}
+
 TEST(CollisionEvent, ResetForgetsThePreviousTick)
 {
   const auto scene = makeScene();
