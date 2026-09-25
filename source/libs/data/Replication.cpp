@@ -1534,26 +1534,33 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 
   const auto uuid = parsed.value();
   const std::string type = asset.value("assetType", std::string{});
+  const std::string displayName = asset.value("displayName", std::string{});
 
   if (type == "model")
   {
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Model, .path = asset.value("path", std::string{}) });
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Model,
+      .path = asset.value("path", std::string{}), .displayName = displayName });
   }
   else if (type == "texture")
   {
-    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Texture, .path = asset.value("path", std::string{}) });
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Texture,
+      .path = asset.value("path", std::string{}), .displayName = displayName });
   }
   else if (type == "script")
   {
     assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Script,
-      .path = asset.value("path", std::string{}), .className = asset.value("className", std::string{}) });
+      .path = asset.value("path", std::string{}), .className = asset.value("className", std::string{}),
+      .displayName = displayName });
   }
   else if (type == "prefab")
   {
     // Keyed by display name (like a scene) and carrying its body inline. Re-registering an existing name
-    // updates that prefab's body in place, so "Save as Prefab" over an existing name means "update it".
+    // updates that prefab's body in place, so "Save as Prefab" over an existing name means "update it" -
+    // registerAsset's in-place branch only touches body, so an existing record's own displayName survives
+    // a body-only update untouched even though this record carries an empty one.
     assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Prefab,
-      .path = asset.value("name", std::string{}), .body = asset.value("body", std::string{}) });
+      .path = asset.value("name", std::string{}), .body = asset.value("body", std::string{}),
+      .displayName = displayName });
   }
   else if (type == "scene")
   {
@@ -1577,6 +1584,7 @@ net::Message packAddAsset(const nlohmann::json& asset)
   message.writeString(asset.value("name", std::string{}));
   message.writeString(asset.value("className", std::string{}));
   message.writeString(asset.value("body", std::string{}));
+  message.writeString(asset.value("displayName", std::string{}));
 
   return message;
 }
@@ -1592,6 +1600,9 @@ nlohmann::json unpackAddAsset(const net::Message& message)
   asset["name"] = reader.readString();
   asset["className"] = reader.readString();
   asset["body"] = reader.readString();
+  // Appended after the original six fields - a message packed before displayName existed has nothing left
+  // to read here, so leave it empty rather than let readString() underflow.
+  asset["displayName"] = reader.remaining() > 0 ? reader.readString() : std::string{};
 
   return asset;
 }

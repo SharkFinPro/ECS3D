@@ -385,7 +385,7 @@ std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const
   }
 
   return EditCommand::removeAsset(assetUUID.value(), record->type, record->path, record->className,
-                                  record->body);
+                                  record->body, record->displayName);
 }
 
 }

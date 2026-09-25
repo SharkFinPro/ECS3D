@@ -162,9 +162,11 @@ public:
                                                std::string beforeDisplayName,
                                                std::string afterDisplayName);
 
-  // The whole removed record (including a prefab body), so undo can re-add it exactly as addAsset would.
+  // The whole removed record (including a prefab body and its displayName rename override), so undo can
+  // re-add it exactly as addAsset would.
   [[nodiscard]] static EditCommand removeAsset(const uuids::uuid& assetUUID, AssetType type,
-                                               std::string path, std::string className, std::string body);
+                                               std::string path, std::string className, std::string body,
+                                               std::string displayName);
 
   [[nodiscard]] CommandKind kind() const;
 
@@ -351,6 +353,7 @@ private:
     std::string path;
     std::string className;
     std::string body;
+    std::string displayName;
 
     friend bool operator==(const RemoveAssetData&, const RemoveAssetData&) = default;
   };
