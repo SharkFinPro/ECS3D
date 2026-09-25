@@ -164,6 +164,10 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
 // exception is a reparent, which detaches before it reattaches - an allocation failure between the two
 // would strand the object. failed covers what is reachable; a bad_alloc there is rethrown.
 //
+// A batch is all-or-nothing only because every op is deterministic in the manager's own state: it dry-runs
+// on a scratch copy, then replays the same ops on the real manager, so an op whose outcome could differ
+// between the two runs would let the replay stop part way and return failed with earlier ops applied.
+//
 // Not [[nodiscard]], for the same reason: an editor applying an edit to its own scratch scene has
 // nothing to do with the answer. The authority does.
 enum class SceneEditResult {
