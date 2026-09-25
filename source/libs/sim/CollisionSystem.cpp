@@ -242,9 +242,8 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
     return;
   }
 
-  // Each candidate's contact (found once here) alongside its squared penetration depth, so the deepest
-  // overlap is resolved first without re-running the narrow phase for the candidate chosen below. A pair
-  // with no contact scores zero, which the loop below stops at.
+  // Each candidate's contact alongside its squared penetration depth, so the deepest overlap is resolved
+  // first. A pair with no contact scores zero, which the loop below stops at.
   std::vector<ScoredContact> scoredContacts;
   scoredContacts.reserve(collidedObjects.size());
 
@@ -262,6 +261,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
     return a.distance > b.distance;
   });
 
+  bool bodyMoved = false;
   for (const auto& scoredContact : scoredContacts)
   {
     if (scoredContact.distance == 0)
@@ -274,11 +274,17 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
       continue;
     }
 
-    if (scoredContact.contact)
+    // Once a response has moved the body, the contacts scored before it no longer describe the overlap -
+    // the earlier push may have cleared this one, or changed its depth - so it is measured again.
+    const auto contact = bodyMoved ? contactWith(collider, scoredContact.object) : scoredContact.contact;
+    if (!contact)
     {
-      PhysicsSystem::handleCollision(*rigidBody, scoredContact.object, scoredContact.contact->minimumTranslationVector,
-                                     scoredContact.contact->contactPoints());
+      continue;
     }
+
+    PhysicsSystem::handleCollision(*rigidBody, scoredContact.object, contact->minimumTranslationVector,
+                                   contact->contactPoints());
+    bodyMoved = true;
   }
 }
 
