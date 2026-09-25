@@ -285,8 +285,8 @@ TEST(NonFiniteValues, AFailedLoadNamesTheSceneTheObjectAndTheComponent)
       {
         if (component.at("type") == "Transform")
         {
-          // Exactly what dump() writes where a non-finite float was stored.
-          component.at("position").at(0) = nullptr;
+          // A null float now loads as a rejected value, so a missing required key is what breaks the load.
+          component.erase("position");
           injected = true;
           break;
         }
@@ -296,7 +296,7 @@ TEST(NonFiniteValues, AFailedLoadNamesTheSceneTheObjectAndTheComponent)
 
   ASSERT_TRUE(injected);
 
-  // Positive control: the same blob without the null loads, so the throw below is about the null rather
+  // Positive control: the same blob without the null loads, so the throw below is about the missing key rather
   // than about a blob that was never loadable.
   const auto control = makeProject();
   EXPECT_NO_THROW(control.serializer->deserialize(blob));
@@ -308,7 +308,7 @@ TEST(NonFiniteValues, AFailedLoadNamesTheSceneTheObjectAndTheComponent)
   try
   {
     target.serializer->deserialize(broken);
-    FAIL() << "a null where a float belongs must not load";
+    FAIL() << "a Transform with no position must not load";
   }
   catch (const std::runtime_error& error)
   {

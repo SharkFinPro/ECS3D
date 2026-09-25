@@ -36,14 +36,43 @@ public class FrameCodecTests
     var payload = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
     var frame = TcpBackend.FrameBytes(0x42, payload);
 
-    // ReadFrame's body read touches stream.ReadTimeout, which a plain MemoryStream does not support -
-    // see TimeoutCapableMemoryStream for why.
+    // A timeout-capable stream exercises the path where ReadBody applies and restores ReadTimeout.
     using var stream = new TimeoutCapableMemoryStream(frame);
     var ok = TcpBackend.ReadFrame(stream, out var type, out var decodedPayload);
 
     Assert.True(ok);
     Assert.Equal(0x42, type);
     Assert.Equal(payload, decodedPayload);
+  }
+
+  [Fact]
+  public void ReadFrame_ReadsFromAStreamThatCannotTimeOut()
+  {
+    var payload = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
+    var frame = TcpBackend.FrameBytes(0x42, payload);
+
+    using var stream = new MemoryStream(frame);
+    Assert.False(stream.CanTimeout);
+    var ok = TcpBackend.ReadFrame(stream, out var type, out var decodedPayload);
+
+    Assert.True(ok);
+    Assert.Equal(0x42, type);
+    Assert.Equal(payload, decodedPayload);
+  }
+
+  [Theory]
+  [InlineData(false)]
+  [InlineData(true)]
+  public void ReadFrame_RestoresTheStreamReadTimeout(bool truncate)
+  {
+    var frame = TcpBackend.FrameBytes(0x01, new byte[] { 1, 2, 3, 4 });
+    var bytes = truncate ? frame[..^2] : frame;
+
+    using var stream = new TimeoutCapableMemoryStream(bytes) { ReadTimeout = 1234 };
+    var ok = TcpBackend.ReadFrame(stream, out _, out _);
+
+    Assert.Equal(!truncate, ok);
+    Assert.Equal(1234, stream.ReadTimeout);
   }
 
   [Fact]
@@ -68,8 +97,7 @@ public class FrameCodecTests
     var frame = TcpBackend.FrameBytes(0x01, new byte[] { 1, 2, 3, 4 });
     var truncated = frame[..^2];
 
-    // Same timeout-support requirement as ReadFrame_RoundTripsWhatFrameBytesWrote above: the header
-    // is intact so ReadFrame reaches the body read, which touches stream.ReadTimeout.
+    // The header is intact so ReadFrame reaches the body read, with the timeout applied.
     using var stream = new TimeoutCapableMemoryStream(truncated);
     var ok = TcpBackend.ReadFrame(stream, out _, out _);
 

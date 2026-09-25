@@ -646,8 +646,14 @@ internal sealed class TcpBackend : TransportBackend
 
     // Restored in the finally below so it never leaks into the next header read, which must stay
     // unbounded - a peer between messages is idle, not stalled.
-    var savedTimeout = stream.ReadTimeout;
-    stream.ReadTimeout = BodyReadTimeoutMs;
+    // Skipped for a stream that cannot time out; the deadline alone bounds it then.
+    var applyTimeout = stream.CanTimeout;
+    var savedTimeout = 0;
+    if (applyTimeout)
+    {
+      savedTimeout = stream.ReadTimeout;
+      stream.ReadTimeout = BodyReadTimeoutMs;
+    }
 
     try
     {
@@ -697,7 +703,10 @@ internal sealed class TcpBackend : TransportBackend
     }
     finally
     {
-      stream.ReadTimeout = savedTimeout;
+      if (applyTimeout)
+      {
+        stream.ReadTimeout = savedTimeout;
+      }
     }
 
     // filled == bodyLen == buffer.Length here (the last grow, if any, always lands exactly on bodyLen),

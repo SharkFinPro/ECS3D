@@ -14,6 +14,9 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <Log.h>
+#include <stdexcept>
+#include <string>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/camera/Camera.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
@@ -37,21 +40,11 @@ namespace {
     return glm::normalize(direction);
   }
 
-  // Hand the viewport back to the built-in free-fly camera. render() only pushes the free-fly pose while
-  // the scene view is focused, so push it once here too: otherwise the component camera's last pose would
-  // linger until the user happens to focus the viewport.
-  void enableFreeFlyCamera(const std::shared_ptr<vke::VulkanEngine>& renderer)
-  {
-    const auto camera = renderer->getCamera();
-
-    if (camera->isEnabled())
-    {
-      return;
-    }
-
-    camera->enable();
-    renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(camera->getPosition(), camera->getViewMatrix());
-  }
+  // Renderer3D's own defaults before setProjectionParameters is ever called; named here so the editor's
+  // free-fly view keeps exactly today's look.
+  constexpr float defaultFreeFlyFovDegrees = 45.0f;
+  constexpr float defaultFreeFlyNearPlane = 0.1f;
+  constexpr float defaultFreeFlyFarPlane = 1000.0f;
 }
 
 void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
@@ -243,6 +236,7 @@ void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCach
     // Take over from the built-in free-fly camera (render() skips it while disabled, so this pose sticks).
     renderer->getCamera()->disable();
     renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(position, viewMatrix);
+    applyProjection(renderer, { camera->getFov(), camera->getNearPlane(), camera->getFarPlane() });
     return;
   }
 
@@ -250,7 +244,46 @@ void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCach
   enableFreeFlyCamera(renderer);
 }
 
-void RenderSystem::useFreeFlyCamera(GpuAssetCache& assetCache) const
+void RenderSystem::applyProjection(const std::shared_ptr<vke::VulkanEngine>& renderer, const ProjectionParams& params)
+{
+  if (m_appliedProjection == params || m_rejectedProjection == params)
+  {
+    return;
+  }
+
+  try
+  {
+    renderer->getRenderingManager()->getRenderer3D()->setProjectionParameters(params.fov, params.nearPlane, params.farPlane);
+    m_appliedProjection = params;
+    m_rejectedProjection.reset();
+  }
+  catch (const std::invalid_argument& e)
+  {
+    Log::warn(LogCategory::engine, "Rejected camera projection (fov=" + std::to_string(params.fov) +
+      ", near=" + std::to_string(params.nearPlane) + ", far=" + std::to_string(params.farPlane) + "): " + e.what());
+    m_rejectedProjection = params;
+  }
+}
+
+void RenderSystem::enableFreeFlyCamera(const std::shared_ptr<vke::VulkanEngine>& renderer)
+{
+  // Hand the viewport back to the built-in free-fly camera. render() only pushes the free-fly pose while
+  // the scene view is focused, so push it once here too: otherwise the component camera's last pose would
+  // linger until the user happens to focus the viewport.
+  const auto camera = renderer->getCamera();
+
+  if (!camera->isEnabled())
+  {
+    camera->enable();
+    renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(camera->getPosition(), camera->getViewMatrix());
+  }
+
+  // Always reconciled, even when the camera itself was already enabled, so switching back from a
+  // component camera (which may have changed the projection) still resets it.
+  applyProjection(renderer, { defaultFreeFlyFovDegrees, defaultFreeFlyNearPlane, defaultFreeFlyFarPlane });
+}
+
+void RenderSystem::useFreeFlyCamera(GpuAssetCache& assetCache)
 {
   enableFreeFlyCamera(assetCache.getRenderer());
 }

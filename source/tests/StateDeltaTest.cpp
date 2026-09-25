@@ -210,7 +210,7 @@ TEST(StateDelta, AnEmptySceneStillPacksACount)
   EXPECT_EQ(reader.read<uint32_t>(), 0u);
 }
 
-TEST(StateDelta, SkipsAnObjectWhoseTransformIsNotFinite)
+TEST(StateDelta, NeverCarriesANonFiniteTransformReadOffTheWire)
 {
   const auto source = makeScene();
 
@@ -226,17 +226,19 @@ TEST(StateDelta, SkipsAnObjectWhoseTransformIsNotFinite)
   transformOf(healthy)->setPosition({ 1, 2, 3 });
   unpackTransform(notANumber, { notFinite, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1 });
   unpackTransform(infinite, { unbounded, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1 });
-
-  // All three vectors are checked, not just the position: a non-finite rotation or scale reaches the
-  // receiver's world transforms just as surely.
   unpackTransform(spinning, { 0, 0, 0 }, { 0, notFinite, 0 }, { 1, 1, 1 });
   unpackTransform(scaled, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, unbounded });
 
+  // Transform::unpack drops a non-finite vector and keeps the previous one, so the bad value never
+  // reaches the scene and every object still goes out with finite data.
+  EXPECT_EQ(transformOf(notANumber)->getLocalPosition(), glm::vec3(0, 0, 0));
+  EXPECT_EQ(transformOf(infinite)->getLocalPosition(), glm::vec3(0, 0, 0));
+  EXPECT_EQ(transformOf(spinning)->getLocalRotation(), glm::vec3(0, 0, 0));
+  EXPECT_EQ(transformOf(scaled)->getLocalScale(), glm::vec3(1, 1, 1));
+
   const auto sent = entryUuids(deltaOf(source));
 
-  // A NaN written into the receiver's scene spreads through every world transform below it and never
-  // comes back, so it is dropped at the sender rather than filtered at the far end.
-  ASSERT_EQ(sent.size(), 1u);
+  ASSERT_EQ(sent.size(), 5u);
   EXPECT_EQ(sent.front(), uuids::to_string(healthy->getUUID()));
 }
 
