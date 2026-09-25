@@ -105,7 +105,8 @@ void CollisionSystem::checkCollisions()
   recordCollisionEvents(perEdgeCollisions);
 }
 
-std::vector<size_t> CollisionSystem::responseOrder(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const
+std::vector<size_t> CollisionSystem::responseOrder(
+  const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const
 {
   std::vector<std::pair<size_t, float>> bottoms;
   for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
