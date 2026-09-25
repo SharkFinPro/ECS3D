@@ -148,6 +148,12 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
 // object's own children to its parent instead) - see ObjectManager::removeSubtree.
 [[nodiscard]] nlohmann::json buildRemoveSubtree(const uuids::uuid& objectUUID);
 
+// Several ops applied as one atomic edit: applySceneEdit dry-runs every op in ops, in order, against a
+// scratch copy of the scene first, and only applies them for real if every one of them would have. Used
+// to make a multi-object action (deleting or duplicating a whole editor selection) one sceneEdit, one
+// snapshot, and one undo/redo entry. Not nestable - an op in ops that is itself "batch" is malformedEdit.
+[[nodiscard]] nlohmann::json buildBatch(const std::vector<nlohmann::json>& ops);
+
 // Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
 // payload it could not parse apart from an op it understood and refused, because only the first says the
 // sender and the authority disagree about the wire, and only the second is a normal thing for an editor
@@ -157,6 +163,10 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
 // not: the one that builds as it goes (instantiatePrefab) unwinds its own subtree before it throws. The
 // exception is a reparent, which detaches before it reattaches - an allocation failure between the two
 // would strand the object. failed covers what is reachable; a bad_alloc there is rethrown.
+//
+// A batch is all-or-nothing only because every op is deterministic in the manager's own state: it dry-runs
+// on a scratch copy, then replays the same ops on the real manager, so an op whose outcome could differ
+// between the two runs would let the replay stop part way and return failed with earlier ops applied.
 //
 // Not [[nodiscard]], for the same reason: an editor applying an edit to its own scratch scene has
 // nothing to do with the answer. The authority does.

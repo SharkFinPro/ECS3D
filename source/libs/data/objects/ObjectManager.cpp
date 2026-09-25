@@ -542,3 +542,10 @@ const std::vector<std::shared_ptr<Object>>& ObjectManager::getPendingAdditions()
 {
   return m_pendingAdditions;
 }
+
+std::unique_ptr<ObjectManager> makeScratchCopy(const ObjectManager& source)
+{
+  auto copy = std::make_unique<ObjectManager>(source.getComponentRegistry());
+  copy->restoreFromJSON(source.serialize().at("objects"));
+  return copy;
+}

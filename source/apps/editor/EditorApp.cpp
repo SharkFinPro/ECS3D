@@ -332,9 +332,14 @@ void EditorApp::setupKeybinds()
   m_keybindDispatcher->on(EditorAction::undo, [this] { requestUndo(); });
   m_keybindDispatcher->on(EditorAction::redo, [this] { requestRedo(); });
 
-  // Save/Save As are registered later, once m_saveUI exists. Delete/duplicate/focus/gizmo stay in the
-  // table with no handler - bindable and shown in Settings, but a no-op until a later feature gives them
-  // behavior.
+  m_keybindDispatcher->on(EditorAction::deleteSelection, [this] { m_objectGUIManager->requestDeleteSelection(); });
+  m_keybindDispatcher->on(EditorAction::duplicateSelection, [this] {
+    const auto scene = m_sceneManager->getCurrentScene();
+    m_objectGUIManager->duplicateSelection(scene ? scene->getObjectManager().get() : nullptr);
+  });
+
+  // Save/Save As are registered later, once m_saveUI exists. focus/gizmo stay in the table with no
+  // handler - bindable and shown in Settings, but a no-op until a later feature gives them behavior.
 }
 
 void EditorApp::variableUpdate()

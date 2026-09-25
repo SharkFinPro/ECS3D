@@ -35,6 +35,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryRoundTripTest.cpp
   EditHistoryLabelTest.cpp
   EditHistoryRefusalTest.cpp
+  EditHistoryBatchTest.cpp
   RecordEditsTest.cpp
   CollisionMathTest.cpp
   NarrowPhaseTest.cpp
@@ -75,6 +76,7 @@ add_executable(${PROJECT_NAME}
   SceneEditReparentTest.cpp
   SceneEditRestoreTest.cpp
   SceneEditCreateAndReorderTest.cpp
+  SceneEditBatchTest.cpp
   ProtocolFramingTest.cpp
   InputStatePayloadTest.cpp
   WireTypesTest.cpp
