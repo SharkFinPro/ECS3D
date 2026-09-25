@@ -207,8 +207,8 @@ The index is read against the target list **after** the object is removed from w
 index past that list's end is `rejected` rather than clamped, and so is one that would cycle or leave the
 object exactly where it already was. `Object::addChild`/`ObjectManager::addObjectToRoot` each have an
 index-taking overload (clamping to the list's size) that both `reorderObject` and `restoreObject` build on.
-`sceneEdit` also carries a `batch` op: `{ "op": "batch", "ops": [...] }`, a list of other ops (never
-another `batch`) applied atomically - `applySceneEdit` dry-runs every op in order against a scratch copy
+`sceneEdit` also carries a `batch` op: `{ "op": "batch", "ops": [...] }`, a list of other ops (a nested
+`batch` is refused as malformed) applied atomically - `applySceneEdit` dry-runs every op in order against a scratch copy
 of the scene (`ObjectManager::makeScratchCopy`, an independent copy sharing uuids and tree shape, wired to
 no `SceneManager`/replication/scripts) and only applies them for real, in order, if every one of them
 would have; one message, one `applySceneEdit` call, one re-snapshot. It is how the editor's multi-object
@@ -547,7 +547,7 @@ leaves the scene as it is.
 
 A history entry can also group several commands (`EditHistory::recordBatch`), sent and undone/redone as
 one unit - the editor's multi-object delete/duplicate (see the `ECS3DEditorLib` row above) records one of
-these instead of one entry per object. The editor never applies a structural edit to its own replicated
+these instead of one entry per object. The editor does not apply a structural edit to its own replicated
 view before sending it (see above), so that view is still pre-batch when `undo()`/`redo()` reverse a
 group; each simulates the reverse on a scratch copy of the live scene (`ObjectManager::makeScratchCopy`),
 validating and building each command's undo/redo op in turn against what the ones before it in that same

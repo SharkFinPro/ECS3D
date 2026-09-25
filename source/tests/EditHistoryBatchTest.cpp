@@ -37,6 +37,18 @@ namespace {
     tree.g = addChildObject(scene, "G", tree.c);
     return tree;
   }
+
+  // Undo rebuilds a removed object as a new instance under its original uuid, so the tree is compared by
+  // uuid rather than by pointer.
+  std::vector<uuids::uuid> uuidsOf(const std::vector<std::shared_ptr<Object>>& objects)
+  {
+    std::vector<uuids::uuid> result;
+    for (const auto& object : objects)
+    {
+      result.push_back(object->getUUID());
+    }
+    return result;
+  }
 }
 
 // --- Recording and undoing/redoing a grouped batch delete of a parent and its own child together.
@@ -62,7 +74,8 @@ TEST(EditHistoryBatch, RecordAndUndoAndRedoADeleteOfAParentAndItsOwnChild)
   // Applied to the live scene exactly as the server would: P is removed (D and C promoted to root), then
   // C is removed (G promoted to root in turn).
   ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, batch), replication::SceneEditResult::applied);
-  ASSERT_EQ(scene.objectManager->getObjects(), (std::vector<std::shared_ptr<Object>>{ tree.d, tree.g }));
+  ASSERT_EQ(uuidsOf(scene.objectManager->getObjects()),
+            (std::vector<uuids::uuid>{ tree.d->getUUID(), tree.g->getUUID() }));
   ASSERT_EQ(scene.objectManager->getObjectByUUID(tree.p->getUUID()), nullptr);
   ASSERT_EQ(scene.objectManager->getObjectByUUID(tree.c->getUUID()), nullptr);
 
@@ -82,13 +95,13 @@ TEST(EditHistoryBatch, RecordAndUndoAndRedoADeleteOfAParentAndItsOwnChild)
 
   // P is back with its original uuid, at the scene root, with D and C restored as its children (in their
   // original order) and G restored under C.
-  ASSERT_EQ(scene.objectManager->getObjects(), (std::vector<std::shared_ptr<Object>>{ tree.p }));
+  ASSERT_EQ(uuidsOf(scene.objectManager->getObjects()), (std::vector<uuids::uuid>{ tree.p->getUUID() }));
   const auto restoredP = scene.objectManager->getObjectByUUID(tree.p->getUUID());
   ASSERT_NE(restoredP, nullptr);
-  EXPECT_EQ(restoredP->getChildren(), (std::vector<std::shared_ptr<Object>>{ tree.d, tree.c }));
+  EXPECT_EQ(uuidsOf(restoredP->getChildren()), (std::vector<uuids::uuid>{ tree.d->getUUID(), tree.c->getUUID() }));
   const auto restoredC = scene.objectManager->getObjectByUUID(tree.c->getUUID());
   ASSERT_NE(restoredC, nullptr);
-  EXPECT_EQ(restoredC->getChildren(), (std::vector<std::shared_ptr<Object>>{ tree.g }));
+  EXPECT_EQ(uuidsOf(restoredC->getChildren()), (std::vector<uuids::uuid>{ tree.g->getUUID() }));
   EXPECT_NE(scene.objectManager->getObjectByUUID(tree.g->getUUID()), nullptr);
 
   // Redo: one sceneEdit batch reapplies both removals, leaving G and D promoted exactly as the original
@@ -102,7 +115,8 @@ TEST(EditHistoryBatch, RecordAndUndoAndRedoADeleteOfAParentAndItsOwnChild)
 
   ASSERT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
-  EXPECT_EQ(scene.objectManager->getObjects(), (std::vector<std::shared_ptr<Object>>{ tree.d, tree.g }));
+  EXPECT_EQ(uuidsOf(scene.objectManager->getObjects()),
+            (std::vector<uuids::uuid>{ tree.d->getUUID(), tree.g->getUUID() }));
   EXPECT_EQ(scene.objectManager->getObjectByUUID(tree.p->getUUID()), nullptr);
   EXPECT_EQ(scene.objectManager->getObjectByUUID(tree.c->getUUID()), nullptr);
 }
