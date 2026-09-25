@@ -48,6 +48,8 @@ void ManagedHost::init(const std::string& assemblyDir)
   const int len = WideCharToMultiByte(CP_UTF8, 0, hostfxr_path, -1, nullptr, 0, nullptr, nullptr);
   std::string hostfxr_str(len, 0);
   WideCharToMultiByte(CP_UTF8, 0, hostfxr_path, -1, hostfxr_str.data(), len, nullptr, nullptr);
+  // With -1 the count includes the terminator; keeping it would embed a NUL in every log line built from this.
+  hostfxr_str.resize(len > 0 ? len - 1 : 0);
 #else
   std::string hostfxr_str(hostfxr_path);
 #endif
