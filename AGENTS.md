@@ -273,7 +273,7 @@ length) and WebSocket
 grows its assembly buffer as fragments arrive, so a peer that declares a large frame and then trickles it
 in a byte at a time pins only a small multiple of what has actually landed, not the whole declared size.
 TCP backs that with a per-read progress timeout (`BodyReadTimeoutMs`, reset on every read rather than
-covering the whole frame) so a body that stalls outright still drops just that connection. The handshake,
+covering the whole frame) so a body that stalls outright still drops just that connection (applied only when the stream `CanTimeout`; otherwise the deadline alone bounds it). The handshake,
 the one
 message read before a peer is authorized, gets the much smaller `MaxHandshakeBytes`. Oversize *outbound*
 messages are refused at the sender, where there is something useful to say about them. Object nesting has
