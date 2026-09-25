@@ -13,6 +13,7 @@
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -591,6 +592,58 @@ TEST(PhysicsIntegration, TwoBodiesAlreadyMovingApartAreSeparatedButNotSlowed)
   expectNear("left velocity", leftBody->getVelocity(), { 1, 0, 0 });
   expectNear("right velocity", right->getComponent<RigidBody>(ComponentType::rigidBody)->getVelocity(),
              { -1, 0, 0 });
+}
+
+TEST(PhysicsIntegration, ASpinningBoxResolvedAcrossAManifoldIsNotFlungByItsOwnSpin)
+{
+  const auto scene = makeScene();
+
+  const auto box = addObject(scene, "Box", { 0, 0, 0 });
+  const auto body = addBody(box, false);
+  const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
+
+  // Angular velocity is in degrees per second and linear velocity in units per tick. Read as the same
+  // unit, this spin has two underside corners closing on the ground at 90 units per tick, which a solve
+  // over the manifold turned into a linear kick of that order.
+  body->setAngularVelocity({ 180, 0, 0 });
+
+  const std::array<glm::vec3, 4> underside{
+    glm::vec3{ -0.5f, -0.5f, -0.5f }, glm::vec3{ 0.5f, -0.5f, -0.5f },
+    glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f }
+  };
+
+  PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, underside);
+
+  expectNear("velocity", body->getVelocity(), { 0, 0, 0 });
+  expectNear("angular velocity", body->getAngularVelocity(), { 180, 0, 0 });
+}
+
+TEST(PhysicsIntegration, TheSupportPointIsTheCenterOfMassProjectedOntoTheManifoldWhenItIsOverIt)
+{
+  const std::array<glm::vec3, 4> square{
+    glm::vec3{ -0.5f, -0.5f, -0.5f }, glm::vec3{ 0.5f, -0.5f, 0.5f },
+    glm::vec3{ 0.5f, -0.5f, -0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f }
+  };
+
+  // The corners are deliberately out of winding order: containment must not depend on it.
+  expectNear("support point", PhysicsSystem::supportPoint({ 0.3f, 4, 0.2f }, { 0, 1, 0 }, square),
+             { 0.3f, -0.5f, 0.2f });
+}
+
+TEST(PhysicsIntegration, TheSupportPointIsClampedToTheNearestManifoldEdgeWhenTheCenterOfMassOverhangsIt)
+{
+  const std::array<glm::vec3, 4> square{
+    glm::vec3{ -0.5f, -0.5f, -0.5f }, glm::vec3{ 0.5f, -0.5f, -0.5f },
+    glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f }
+  };
+
+  expectNear("support point", PhysicsSystem::supportPoint({ 2, 1, 0.1f }, { 0, 1, 0 }, square),
+             { 0.5f, -0.5f, 0.1f });
+
+  const std::array<glm::vec3, 2> edge{ glm::vec3{ -0.5f, -0.5f, 0 }, glm::vec3{ 0.5f, -0.5f, 0 } };
+
+  expectNear("edge support point", PhysicsSystem::supportPoint({ 0.2f, 0, 3 }, { 0, 1, 0 }, edge),
+             { 0.2f, -0.5f, 0 });
 }
 
 TEST(PhysicsIntegration, AStallLongerThanTheStepCapHasItsBankedTimeDroppedNotCarriedForward)
