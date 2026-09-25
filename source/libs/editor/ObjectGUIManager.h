@@ -13,7 +13,7 @@ class Object;
 class EditorSelection;
 class SettingsStore;
 
-// The editor's object tree ("Objects" panel): the hierarchy, its per-row context menu, "Save as Prefab",
+// The editor's object tree ("Objects" panel): the hierarchy, its per-row context menu, and "Save as Prefab".
 // It reports structural changes back:
 //   - a STRUCTURAL change (add/remove/reparent/duplicate object) -> SceneEditCallback(<built edit json>)
 //   - a new prefab asset ("Save as Prefab") -> AddAssetCallback(<built addAsset json>)

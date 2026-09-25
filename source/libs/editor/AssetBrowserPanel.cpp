@@ -443,7 +443,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   ImGui::Separator();
   ImGui::Spacing();
 
-  // Accent confirm; neutral cancel (mirrors the Scene Status Start button + delete modal).
+  // Accent confirm; neutral cancel (mirrors the Scene Status Start button).
   ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
   ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));

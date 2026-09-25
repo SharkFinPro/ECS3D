@@ -551,7 +551,7 @@ void AssetInspector::displayDeleteConfirmationModal(const AssetRecord& record)
     ImGui::Separator();
     ImGui::Spacing();
 
-    // Danger-red confirm; neutral cancel (mirrors ObjectGUIManager's delete modal).
+    // Danger-red confirm; neutral cancel.
     ImGui::PushStyleColor(ImGuiCol_Button, theme::danger);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(240, 110, 114));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(210, 70, 75));

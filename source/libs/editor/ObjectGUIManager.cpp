@@ -443,7 +443,6 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
   ImGui::End();
 
   m_dragSource.reset();
-
 }
 
 bool ObjectGUIManager::canAcceptObjectDrop(const std::shared_ptr<Object>& target) const
