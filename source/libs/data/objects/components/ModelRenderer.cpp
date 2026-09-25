@@ -99,7 +99,14 @@ void ModelRenderer::loadFromJSON(const nlohmann::json& componentData)
 
   // value() with defaults: these fields are absent from projects saved before they existed.
   m_useStandardPipeline = componentData.value("useStandardPipeline", true);
-  m_reflectivity = componentData.value("reflectivity", 0.0f);
+  if (const auto it = componentData.find("reflectivity"); it != componentData.end())
+  {
+    setReflectivity(finiteCheck::readFloatOrNaN(*it));
+  }
+  else
+  {
+    setReflectivity(0.0f);
+  }
 
   if (const auto modelUUID = uuids::uuid::from_string(std::string(componentData.at("modelUUID"))); modelUUID.has_value())
   {
@@ -134,7 +141,7 @@ void ModelRenderer::unpack(net::MessageReader& messageReader)
 {
   m_shouldRender = messageReader.read<bool>();
   m_useStandardPipeline = messageReader.read<bool>();
-  m_reflectivity = messageReader.read<float>();
+  setReflectivity(messageReader.read<float>());
 
   m_modelUUID = messageReader.read<uuids::uuid>();
   m_textureUUID = messageReader.read<uuids::uuid>();

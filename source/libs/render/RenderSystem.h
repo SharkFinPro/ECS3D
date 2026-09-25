@@ -10,6 +10,7 @@
 namespace vke {
   class PointLight;
   class SpotLight;
+  class VulkanEngine;
 }
 
 class ObjectManager;
@@ -34,7 +35,7 @@ public:
 
   // Hands the viewport back to the built-in free-fly camera (the editor's default view). Idempotent, so
   // it's safe to call every frame.
-  void useFreeFlyCamera(GpuAssetCache& assetCache) const;
+  void useFreeFlyCamera(GpuAssetCache& assetCache);
 
   // True for the object under the cursor; the editor reads it to drive Ctrl-click selection.
   [[nodiscard]] bool isSelected(const uuids::uuid& uuid) const;
@@ -47,11 +48,35 @@ private:
     std::shared_ptr<vke::SpotLight> spotLight;
   };
 
+  // The values last pushed to (or rejected by) Renderer3D::setProjectionParameters, so a per-frame call
+  // only reaches the renderer when the active camera's fov/near/far actually changed, and a persistently
+  // invalid triple is only logged once instead of every frame.
+  struct ProjectionParams {
+    float fov;
+    float nearPlane;
+    float farPlane;
+
+    bool operator==(const ProjectionParams&) const = default;
+  };
+
+  // Applies params to Renderer3D unless they match what was last applied or last rejected. Renderer3D
+  // throws std::invalid_argument for a degenerate triple; that is caught and logged rather than crashing,
+  // since it is a safety net - the Camera component's own setters already clamp to a valid range.
+  void applyProjection(const std::shared_ptr<vke::VulkanEngine>& renderer, const ProjectionParams& params);
+
+  // Re-enables the built-in free-fly camera if it was disabled, and always applies the free-fly
+  // projection default - even when the camera was already enabled, so switching back from a component
+  // camera still resets the projection it may have changed.
+  void enableFreeFlyCamera(const std::shared_ptr<vke::VulkanEngine>& renderer);
+
   // Render-side state keyed by the owning object. The vke lights are stateful (created once via the
   // lighting manager, updated each frame from the LightRenderer data).
   std::unordered_map<uuids::uuid, CachedLight> m_lights;
 
   std::unordered_map<uuids::uuid, bool> m_selected;
+
+  std::optional<ProjectionParams> m_appliedProjection;
+  std::optional<ProjectionParams> m_rejectedProjection;
 
   // Reused across calls to avoid a per-frame allocation: variableUpdate refills it with every uuid
   // seen this frame, then prunes m_lights/m_selected/GpuAssetCache's per-object caches of any uuid
