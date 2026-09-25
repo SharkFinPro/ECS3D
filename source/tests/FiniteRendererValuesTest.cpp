@@ -14,7 +14,7 @@
 #include <nlohmann/json.hpp>
 
 namespace {
-  constexpr float nan = std::numeric_limits<float>::quiet_NaN();
+  constexpr float notANumber = std::numeric_limits<float>::quiet_NaN();
   constexpr float infinity = std::numeric_limits<float>::infinity();
 
   template <typename T>
@@ -95,7 +95,7 @@ namespace {
 
 TEST(FiniteRendererValues, LightUnpackKeepsPriorValuesForNonFiniteInput)
 {
-  for (const float bad : { nan, infinity })
+  for (const float bad : { notANumber, infinity })
   {
     const auto light = makeComponent<LightRenderer>("LightRenderer");
     ASSERT_NE(light, nullptr);
@@ -169,7 +169,7 @@ TEST(FiniteRendererValues, LightLoadFromJSONAppliesFiniteInput)
 
 TEST(FiniteRendererValues, ModelUnpackKeepsPriorReflectivityForNonFiniteInput)
 {
-  for (const float bad : { nan, infinity })
+  for (const float bad : { notANumber, infinity })
   {
     const auto model = makeComponent<ModelRenderer>("ModelRenderer");
     ASSERT_NE(model, nullptr);
@@ -242,7 +242,7 @@ TEST(FiniteRendererValues, ModelLoadFromJSONAppliesFiniteReflectivityAndDefaults
 
 TEST(FiniteRendererValues, TransformUnpackKeepsPriorValuesForNonFiniteInput)
 {
-  for (const float bad : { nan, infinity })
+  for (const float bad : { notANumber, infinity })
   {
     const auto transform = makeComponent<Transform>("Transform");
     ASSERT_NE(transform, nullptr);
