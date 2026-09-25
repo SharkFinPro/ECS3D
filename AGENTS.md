@@ -418,11 +418,9 @@ component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the s
 out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writes to; PhysicsSystem
 drains it) and `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
 falling state; `isFalling` is the read-only query scripts get). `CameraBindings` covers every field on
-`Camera`, but its setters only reject non-finite input, the same rule every other setter here applies -
-the range clamps the editor UI enforces (`CameraEditor.cpp`: fov 1-179, near plane >= 0.001, far plane >
-near) live only there, not in the component, so a script can currently set a degenerate projection; that
-is inert today since the renderer's projection is otherwise hardcoded, but worth revisiting if that
-changes. `InputUtilsBindings` already covers everything `InputState` queries;
+`Camera`; its setters clamp fov/near/far to the same valid range as the editor UI (`Camera::minFovDegrees`/
+`maxFovDegrees`/`minNearPlane`/`minFarPlaneFor`), so a script cannot produce a degenerate projection.
+`InputUtilsBindings` already covers everything `InputState` queries;
 `setKeysPressed`/`setFocused`/`setMouse`/`clearMouseDeltas`/`commitInputEdges`/`removeSlot` stay
 unexposed because they are the write side ServerApp feeds from the network and the per-tick bookkeeping
 that resets it - in this design scripts only consume input, so that side belongs to ServerApp - and
@@ -471,10 +469,14 @@ only pushes it while the scene view is focused, so without that the component ca
 The editor's **View** combo (Scene Status) picks what its viewport looks through: its own free-fly camera
 (the default) or any object in the scene carrying a `Camera`, which is how you see a client's view — a
 player camera is labelled with its `PlayerController` slot. A stale choice (object gone, `Camera` removed)
-falls back to free-fly. **FOV (field of view)/near/far are
-carried and editable but have no visible effect yet** — `vke`'s projection matrix is hardcoded
-(`RenderInfo::getProjectionMatrix`); a fix needs an upstream `VulkanRenderer` change (a projection setter
-alongside `setCameraParameters`), deliberately deferred. A client picks its
+falls back to free-fly. **Field of view (FOV) and near/far drive the actual projection**:
+`RenderSystem::updateCamera` also pushes the active `Camera`'s fov/near/far into `Renderer3D::setProjectionParameters` (only when they
+differ from what was last applied), and the free-fly fallback (`RenderSystem::enableFreeFlyCamera`) resets
+it to a named default (45/0.1/1000, `vke`'s own defaults) unless that default is already applied.
+`setProjectionParameters` throws for a degenerate triple; `RenderSystem` catches that and logs once, though
+the `Camera` setters already clamp to a valid range so it should not fire in practice.
+One upstream caveat carries through: raster geometry is clipped at roughly twice the near plane,
+since the projection maps depth to -1..1 while Vulkan clips at 0. A client picks its
 *own* camera via the player↔object association (`PlayerController.playerSlot` + a `Camera` on the same
 object) using a **nonce-over-broadcast** handshake: the client tags its `join` with a random nonce, the
 server echoes `(nonce, slot)` back over the existing broadcast (`NetServer` has no targeted-send path), and
