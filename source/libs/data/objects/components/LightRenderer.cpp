@@ -136,15 +136,12 @@ nlohmann::json LightRenderer::serialize()
 
 void LightRenderer::loadFromJSON(const nlohmann::json& componentData)
 {
-  const auto& color = componentData.at("color");
-  m_color = glm::vec3(color.at(0), color.at(1), color.at(2));
+  setColor(finiteCheck::readVec3OrNaN(componentData.at("color")));
+  setDirection(finiteCheck::readVec3OrNaN(componentData.at("direction")));
 
-  const auto& direction = componentData.at("direction");
-  m_direction = glm::vec3(direction.at(0), direction.at(1), direction.at(2));
-
-  m_ambient = componentData.at("ambient");
-  m_diffuse = componentData.at("diffuse");
-  m_specular = componentData.at("specular");
+  setAmbient(finiteCheck::readFloatOrNaN(componentData.at("ambient")));
+  setDiffuse(finiteCheck::readFloatOrNaN(componentData.at("diffuse")));
+  setSpecular(finiteCheck::readFloatOrNaN(componentData.at("specular")));
   setConeAngle(componentData.at("coneAngle"));
 
   m_isSpotLight = componentData.at("isSpotlight");
@@ -169,11 +166,13 @@ void LightRenderer::unpack(net::MessageReader& messageReader)
 {
   m_isSpotLight = messageReader.read<bool>();
 
-  m_color = messageReader.read<glm::vec3>();
-  m_ambient = messageReader.read<float>();
-  m_diffuse = messageReader.read<float>();
-  m_specular = messageReader.read<float>();
+  // Every value is read unconditionally so the reader stays aligned; a non-finite one is dropped by its
+  // setter, leaving the previous value in place.
+  setColor(messageReader.read<glm::vec3>());
+  setAmbient(messageReader.read<float>());
+  setDiffuse(messageReader.read<float>());
+  setSpecular(messageReader.read<float>());
 
-  m_direction = messageReader.read<glm::vec3>();
+  setDirection(messageReader.read<glm::vec3>());
   setConeAngle(messageReader.read<float>());
 }
