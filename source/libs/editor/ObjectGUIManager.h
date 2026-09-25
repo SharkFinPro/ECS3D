@@ -14,7 +14,7 @@ class EditorSelection;
 class SettingsStore;
 
 // The editor's object tree ("Objects" panel): the hierarchy, its per-row context menu, "Save as Prefab",
-// and the delete-confirmation modal. It reports structural changes back:
+// It reports structural changes back:
 //   - a STRUCTURAL change (add/remove/reparent/duplicate object) -> SceneEditCallback(<built edit json>)
 //   - a new prefab asset ("Save as Prefab") -> AddAssetCallback(<built addAsset json>)
 // The EditorApp turns both into network messages for the authoritative server. The selected object's
@@ -56,8 +56,8 @@ public:
   // viewed/inspected, but the add/remove/reparent affordances are disabled.
   void setEditable(bool editable);
 
-  // Queues the current selection for delete confirmation (the Delete keybind's handler - the context menu
-  // and row minus button funnel into the same private queueing logic). No-op unless the selection is of
+  // Deletes the current selection (the Delete keybind's handler - the context menu and row minus button
+  // funnel into the same private performDelete()). No-op unless the selection is of
   // Object kind, non-empty, and m_editable.
   void requestDeleteSelection();
 
@@ -75,11 +75,6 @@ private:
   // The editor-wide selection, owned by EditorApp and shared with the other panels. The Object kind is
   // what this manager cares about; asset selections are inspected by other panels.
   std::shared_ptr<EditorSelection> m_selection;
-
-  // The objects awaiting delete confirmation (set by the context-menu "Delete", the row minus button, or
-  // the Delete keybind). While non-empty, the delete confirmation modal is shown; confirming sends a
-  // removeObject scene edit (one object) or a batch of them (several).
-  std::vector<uuids::uuid> m_objectPendingDeletion;
 
   // False when the connected server is read-only (not in edit mode); gates the mutating UI.
   bool m_editable = true;
@@ -141,11 +136,6 @@ private:
   // index addresses, so a zone there could not honestly promise where the drop would land.
   void displayReorderDropZone(const std::shared_ptr<Object>& parent, std::size_t index);
 
-  // The delete confirmation modal for m_objectPendingDeletion (one object, or several). Confirming sends
-  // a removeObject scene edit (one) or one batch of them (several); cancelling, or every pending object
-  // vanishing, clears the prompt.
-  void displayDeleteConfirmationModal(const ObjectManager* objectManager);
-
   // Register the object's serialized blob as a Prefab asset (body carried inline, no file on disk).
   // Re-saving under the same name updates that prefab's body in place, keeping its uuid.
   void saveAsPrefab(const std::shared_ptr<Object>& object) const;
@@ -155,9 +145,10 @@ private:
   // duplicateSelection() (which always act on the whole current selection, with no particular row).
   [[nodiscard]] std::vector<uuids::uuid> targetsFor(const std::shared_ptr<Object>& row) const;
 
-  // Queues targets for delete confirmation - the shared tail of requestDeleteSelection() and the
-  // context-menu/row-button Delete paths.
-  void queueDeletion(std::vector<uuids::uuid> targets);
+  // Sends targets as one removeObject op (a single target) or one batch of them (several), then drops
+  // them from the selection - the shared tail of requestDeleteSelection() and the context-menu/row-button
+  // Delete paths.
+  void performDelete(const std::vector<uuids::uuid>& targets);
 
   // Sends targets as one duplicateObject op (a single target) or one batch of them (several, after
   // dropping any target whose ancestor is also a target) - the shared tail of duplicateSelection() and
