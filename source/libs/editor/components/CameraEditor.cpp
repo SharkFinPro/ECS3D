@@ -29,9 +29,8 @@ void registerCameraEditor(ComponentEditor& componentEditor)
       float nearPlane = camera->getNearPlane();
       float farPlane = camera->getFarPlane();
 
-      // Only an active camera is picked up by RenderSystem::updateCamera. Note: fov/near/far are carried
-      // and serialized, but the engine's projection is currently hardcoded, so editing them has no visible
-      // effect until VulkanEngine exposes a projection setter.
+      // Only an active camera is picked up by RenderSystem::updateCamera, which also pushes fov/near/far
+      // into Renderer3D's projection each frame they change.
       if (gc::accentCheckbox("Active", &active, mixed.contains("active")))
       {
         camera->setActive(active);
