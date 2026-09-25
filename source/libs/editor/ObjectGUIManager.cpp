@@ -171,6 +171,99 @@ namespace {
   }
 }
 
+std::vector<uuids::uuid> ObjectGUIManager::targetsFor(const std::shared_ptr<Object>& row) const
+{
+  if (m_selection->kind() == EditorSelection::Kind::Object && m_selection->size() > 1 &&
+      m_selection->contains(row->getUUID()))
+  {
+    return { m_selection->items().begin(), m_selection->items().end() };
+  }
+
+  return { row->getUUID() };
+}
+
+void ObjectGUIManager::queueDeletion(std::vector<uuids::uuid> targets)
+{
+  m_objectPendingDeletion = std::move(targets);
+}
+
+void ObjectGUIManager::performDuplicate(const ObjectManager* objectManager,
+                                        const std::vector<uuids::uuid>& targets)
+{
+  if (targets.empty() || !m_sceneEditCallback)
+  {
+    return;
+  }
+
+  if (targets.size() == 1)
+  {
+    const auto duplicate = newObjectUUID();
+    m_sceneEditCallback(replication::buildDuplicateObject(targets.front(), &duplicate));
+    return;
+  }
+
+  if (!objectManager)
+  {
+    return;
+  }
+
+  // Drop a target whose ancestor is also a target: duplicating the ancestor already copies it, so
+  // duplicating both would produce two copies of the descendant.
+  std::vector<nlohmann::json> ops;
+  ops.reserve(targets.size());
+  for (const auto& targetUUID : targets)
+  {
+    const auto object = objectManager->getObjectByUUID(targetUUID);
+    if (!object)
+    {
+      continue;
+    }
+
+    bool hasSelectedAncestor = false;
+    for (auto ancestor = object->getParent(); ancestor; ancestor = ancestor->getParent())
+    {
+      if (std::ranges::find(targets, ancestor->getUUID()) != targets.end())
+      {
+        hasSelectedAncestor = true;
+        break;
+      }
+    }
+
+    if (hasSelectedAncestor)
+    {
+      continue;
+    }
+
+    const auto duplicate = newObjectUUID();
+    ops.push_back(replication::buildDuplicateObject(targetUUID, &duplicate));
+  }
+
+  if (!ops.empty())
+  {
+    m_sceneEditCallback(replication::buildBatch(ops));
+  }
+}
+
+void ObjectGUIManager::requestDeleteSelection()
+{
+  if (!m_editable || m_selection->kind() != EditorSelection::Kind::Object || m_selection->empty())
+  {
+    return;
+  }
+
+  queueDeletion({ m_selection->items().begin(), m_selection->items().end() });
+}
+
+void ObjectGUIManager::duplicateSelection(const ObjectManager* objectManager)
+{
+  if (!m_editable || m_selection->kind() != EditorSelection::Kind::Object || m_selection->empty())
+  {
+    return;
+  }
+
+  performDuplicate(objectManager, { m_selection->items().begin(), m_selection->items().end() });
+}
+
 void ObjectGUIManager::setSceneEditCallback(SceneEditCallback callback)
 {
   m_sceneEditCallback = std::move(callback);
@@ -319,19 +412,6 @@ void ObjectGUIManager::displayGui(const ObjectManager* objectManager)
     }
   }
 
-  // Delete hotkey: while the Objects panel has focus, Delete queues the selected object for removal
-  // (guarded against firing while a text field is being typed into, or when read-only). Disabled with
-  // 2+ objects selected rather than silently deleting only the primary - batch delete is a later story.
-  // The confirmation modal follows.
-  if (m_editable && objectManager && m_selection->objectUUID().has_value() &&
-      m_selection->size() <= 1 &&
-      ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-      !ImGui::GetIO().WantTextInput &&
-      ImGui::IsKeyPressed(ImGuiKey_Delete))
-  {
-    m_objectPendingDeletion = m_selection->objectUUID();
-  }
-
   ImGui::End();
 
   m_dragSource.reset();
@@ -458,11 +538,6 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
                            m_selection->contains(object->getUUID());
   const bool isLeaf = object->getChildren().empty();
 
-  // Duplicate/Delete act on one well-defined object (this row), never the whole selection - batch
-  // versions are a later story, so with 2+ objects selected they're disabled rather than silently
-  // acting on just this one.
-  const bool multiSelected = m_selection->kind() == EditorSelection::Kind::Object && m_selection->size() > 1;
-
   ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_FramePadding |
                              ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap |
                              ImGuiTreeNodeFlags_OpenOnDoubleClick;
@@ -565,16 +640,9 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       m_sceneEditCallback(replication::buildAddObject("Object", &parent, &created));
     }
 
-    ImGui::BeginDisabled(multiSelected);
-    if (ImGui::MenuItem("Duplicate") && m_sceneEditCallback)
+    if (ImGui::MenuItem("Duplicate"))
     {
-      const auto duplicate = newObjectUUID();
-      m_sceneEditCallback(replication::buildDuplicateObject(object->getUUID(), &duplicate));
-    }
-    ImGui::EndDisabled();
-    if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-    {
-      ImGui::SetTooltip("Duplicating several objects at once isn't supported yet");
+      performDuplicate(object->getManager(), targetsFor(object));
     }
 
     if (ImGui::MenuItem("Save as Prefab"))
@@ -582,16 +650,10 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
       saveAsPrefab(object);
     }
 
-    ImGui::BeginDisabled(multiSelected);
     if (ImGui::MenuItem("Delete"))
     {
-      // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
-      m_objectPendingDeletion = object->getUUID();
-    }
-    ImGui::EndDisabled();
-    if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-    {
-      ImGui::SetTooltip("Deleting several objects at once isn't supported yet");
+      // Queue the target(s); displayDeleteConfirmationModal() prompts before actually removing them.
+      queueDeletion(targetsFor(object));
     }
 
     ImGui::EndPopup();
@@ -615,17 +677,10 @@ void ObjectGUIManager::displayObjectTree(const std::shared_ptr<Object>& object)
   ImGui::SameLine(0.0f, buttonGap);
 
   ImGui::SetNextItemAllowOverlap();
-  ImGui::BeginDisabled(multiSelected);
-  const bool deleteClicked = gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight);
-  ImGui::EndDisabled();
-  if (multiSelected && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+  if (gc::rowIconButton("deleteObject", gc::SecIcon::minus, true, buttonWidth, rowHeight))
   {
-    ImGui::SetTooltip("Deleting several objects at once isn't supported yet");
-  }
-  if (deleteClicked)
-  {
-    // Queue the object; displayDeleteConfirmationModal() prompts before actually removing it.
-    m_objectPendingDeletion = object->getUUID();
+    // Queue the target(s); displayDeleteConfirmationModal() prompts before actually removing them.
+    queueDeletion(targetsFor(object));
   }
 
   if (open && !isLeaf)
@@ -693,17 +748,27 @@ void ObjectGUIManager::applyPendingClick()
 
 void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objectManager)
 {
-  if (!m_objectPendingDeletion.has_value())
+  if (m_objectPendingDeletion.empty())
   {
     return;
   }
 
-  // The pending object can disappear out from under us (a fresh snapshot, or another editor removing
-  // it): drop the prompt rather than confirming a stale delete.
-  const auto object = objectManager ? objectManager->getObjectByUUID(m_objectPendingDeletion.value()) : nullptr;
-  if (!object)
+  // A pending object can disappear out from under us (a fresh snapshot, or another editor removing it):
+  // drop it rather than confirming a stale delete. If none remain, the whole prompt drops.
+  std::vector<std::shared_ptr<Object>> pendingObjects;
+  std::vector<uuids::uuid> stillPending;
+  for (const auto& uuid : m_objectPendingDeletion)
   {
-    m_objectPendingDeletion.reset();
+    if (const auto object = objectManager ? objectManager->getObjectByUUID(uuid) : nullptr)
+    {
+      pendingObjects.push_back(object);
+      stillPending.push_back(uuid);
+    }
+  }
+  m_objectPendingDeletion = std::move(stillPending);
+
+  if (pendingObjects.empty())
+  {
     return;
   }
 
@@ -713,23 +778,42 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
 
   if (ImGui::BeginPopupModal("Delete Object?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
   {
-    ImGui::TextUnformatted("Are you sure you want to delete");
-    ImGui::SameLine();
-    ImGui::TextColored(theme::accent, "%s", object->getName().c_str());
-    ImGui::SameLine();
-    ImGui::TextUnformatted("?");
-
-    // Children survive a delete (ObjectManager::deleteObjectsMarkedForDeletion reparents them to the
-    // deleted object's own parent, or the scene root) - say so, since that's easy to miss.
-    if (const auto& children = object->getChildren(); !children.empty())
+    if (pendingObjects.size() == 1)
     {
-      const auto parent = object->getParent();
-      const std::string destination = parent ? parent->getName() : "the scene root";
-      ImGui::TextColored(theme::scriptAmber, "Its %zu %s will be kept and moved to %s.", children.size(),
-                         children.size() == 1 ? "child" : "children", destination.c_str());
-    }
+      const auto& object = pendingObjects.front();
+      ImGui::TextUnformatted("Are you sure you want to delete");
+      ImGui::SameLine();
+      ImGui::TextColored(theme::accent, "%s", object->getName().c_str());
+      ImGui::SameLine();
+      ImGui::TextUnformatted("?");
 
-    ImGui::TextColored(theme::t3, "This action cannot be undone.");
+      // Children survive a delete (ObjectManager::deleteObjectsMarkedForDeletion reparents them to the
+      // deleted object's own parent, or the scene root) - say so, since that's easy to miss.
+      if (const auto& children = object->getChildren(); !children.empty())
+      {
+        const auto parent = object->getParent();
+        const std::string destination = parent ? parent->getName() : "the scene root";
+        ImGui::TextColored(theme::scriptAmber, "Its %zu %s will be kept and moved to %s.", children.size(),
+                           children.size() == 1 ? "child" : "children", destination.c_str());
+      }
+    }
+    else
+    {
+      ImGui::Text("Are you sure you want to delete %zu objects?", pendingObjects.size());
+
+      // Same note as the single-object case, generalized: a child not itself being deleted survives,
+      // promoted a level - worth calling out once for the whole batch rather than per object.
+      const bool anyChildKept = std::ranges::any_of(pendingObjects, [this](const std::shared_ptr<Object>& object) {
+        return std::ranges::any_of(object->getChildren(), [this](const std::shared_ptr<Object>& child) {
+          return std::ranges::find(m_objectPendingDeletion, child->getUUID()) == m_objectPendingDeletion.end();
+        });
+      });
+
+      if (anyChildKept)
+      {
+        ImGui::TextColored(theme::scriptAmber, "Children not also being deleted will be kept and moved up a level.");
+      }
+    }
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -751,7 +835,7 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
 
     if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
     {
-      m_objectPendingDeletion.reset();
+      m_objectPendingDeletion.clear();
       ImGui::CloseCurrentPopup();
     }
 
@@ -762,17 +846,33 @@ void ObjectGUIManager::displayDeleteConfirmationModal(const ObjectManager* objec
   {
     if (m_sceneEditCallback)
     {
-      m_sceneEditCallback(replication::buildRemoveObject(m_objectPendingDeletion.value()));
+      if (m_objectPendingDeletion.size() == 1)
+      {
+        m_sceneEditCallback(replication::buildRemoveObject(m_objectPendingDeletion.front()));
+      }
+      else
+      {
+        std::vector<nlohmann::json> ops;
+        ops.reserve(m_objectPendingDeletion.size());
+        for (const auto& uuid : m_objectPendingDeletion)
+        {
+          ops.push_back(replication::buildRemoveObject(uuid));
+        }
+        m_sceneEditCallback(replication::buildBatch(ops));
+      }
     }
 
-    // Drop just this uuid rather than the whole selection - the deleted object may have been one of
-    // several selected, and the rest still exist.
-    if (m_selection->kind() == EditorSelection::Kind::Object && m_selection->contains(m_objectPendingDeletion.value()))
+    // Drop just these uuids rather than the whole selection - the deleted objects may have been part of
+    // a larger selection, and the rest still exist.
+    if (m_selection->kind() == EditorSelection::Kind::Object)
     {
-      m_selection->remove(m_objectPendingDeletion.value());
+      for (const auto& uuid : m_objectPendingDeletion)
+      {
+        m_selection->remove(uuid);
+      }
     }
 
-    m_objectPendingDeletion.reset();
+    m_objectPendingDeletion.clear();
   }
 }
 

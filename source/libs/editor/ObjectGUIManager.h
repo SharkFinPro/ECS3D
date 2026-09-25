@@ -56,6 +56,18 @@ public:
   // viewed/inspected, but the add/remove/reparent affordances are disabled.
   void setEditable(bool editable);
 
+  // Queues the current selection for delete confirmation (the Delete keybind's handler - the context menu
+  // and row minus button funnel into the same private queueing logic). No-op unless the selection is of
+  // Object kind, non-empty, and m_editable.
+  void requestDeleteSelection();
+
+  // Duplicates the current selection (the Ctrl+D keybind's handler). Same guard as
+  // requestDeleteSelection(). A single selected object sends a plain duplicateObject op; several send one
+  // batch of duplicateObject ops for the top-most selected objects (an object whose ancestor is also
+  // selected is skipped - duplicating the ancestor already copies it). The selection itself is unchanged.
+  // objectManager resolves the selection's uuids to Objects to find those top-most ancestors.
+  void duplicateSelection(const ObjectManager* objectManager);
+
 private:
   SceneEditCallback m_sceneEditCallback;
   AddAssetCallback m_addAssetCallback;
@@ -64,9 +76,10 @@ private:
   // what this manager cares about; asset selections are inspected by other panels.
   std::shared_ptr<EditorSelection> m_selection;
 
-  // The object awaiting delete confirmation (set by the context-menu "Delete" or the Delete hotkey).
-  // While set, the "Delete Object?" modal is shown; confirming sends a removeObject scene edit.
-  std::optional<uuids::uuid> m_objectPendingDeletion;
+  // The objects awaiting delete confirmation (set by the context-menu "Delete", the row minus button, or
+  // the Delete keybind). While non-empty, the delete confirmation modal is shown; confirming sends a
+  // removeObject scene edit (one object) or a batch of them (several).
+  std::vector<uuids::uuid> m_objectPendingDeletion;
 
   // False when the connected server is read-only (not in edit mode); gates the mutating UI.
   bool m_editable = true;
@@ -128,13 +141,28 @@ private:
   // index addresses, so a zone there could not honestly promise where the drop would land.
   void displayReorderDropZone(const std::shared_ptr<Object>& parent, std::size_t index);
 
-  // The "Delete Object?" confirmation modal for m_objectPendingDeletion. Confirming (Yes / Enter) sends
-  // a removeObject scene edit; cancelling (No / Escape), or the object vanishing, clears the prompt.
+  // The delete confirmation modal for m_objectPendingDeletion (one object, or several). Confirming sends
+  // a removeObject scene edit (one) or one batch of them (several); cancelling, or every pending object
+  // vanishing, clears the prompt.
   void displayDeleteConfirmationModal(const ObjectManager* objectManager);
 
   // Register the object's serialized blob as a Prefab asset (body carried inline, no file on disk).
   // Re-saving under the same name updates that prefab's body in place, keeping its uuid.
   void saveAsPrefab(const std::shared_ptr<Object>& object) const;
+
+  // row alone, unless row is part of a multi-object selection - then the whole selection, in selection
+  // order. Shared by the context menu, the row minus/duplicate button, and requestDeleteSelection()/
+  // duplicateSelection() (which always act on the whole current selection, with no particular row).
+  [[nodiscard]] std::vector<uuids::uuid> targetsFor(const std::shared_ptr<Object>& row) const;
+
+  // Queues targets for delete confirmation - the shared tail of requestDeleteSelection() and the
+  // context-menu/row-button Delete paths.
+  void queueDeletion(std::vector<uuids::uuid> targets);
+
+  // Sends targets as one duplicateObject op (a single target) or one batch of them (several, after
+  // dropping any target whose ancestor is also a target) - the shared tail of duplicateSelection() and
+  // the context-menu Duplicate path.
+  void performDuplicate(const ObjectManager* objectManager, const std::vector<uuids::uuid>& targets);
 };
 
 
