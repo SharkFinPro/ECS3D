@@ -147,9 +147,11 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
     case edits::HistoryResult::applied:
       // Exactly one of these is set (see HistoryOutcome), fixed per command kind by payloadForm(): a
       // component value edit or asset op is the networkMessage form (editComponent/addAsset/
-      // replaceAsset/renameAsset/removeAsset), everything else (addObject, reparentObject,
-      // reorderObject, renameObject, addComponent) is the sceneEdit json form, chunked into a
-      // sceneEdit message the same way EditorApp::onSceneEdit does for a normal (non-undo) edit.
+      // replaceAsset/renameAsset/removeAsset), every structural kind (addObject, removeObject,
+      // reparentObject, reorderObject, renameObject, addComponent, removeComponent, duplicateObject,
+      // instantiatePrefab) is the sceneEdit json form - a single command's own op, or one replication::
+      // buildBatch of a grouped entry's ops (see EditHistory::undo/redo) - chunked into a sceneEdit
+      // message the same way EditorApp::onSceneEdit does for a normal (non-undo) edit.
       if (outcome.messagePayload)
       {
         m_netClient->send(*outcome.messagePayload);

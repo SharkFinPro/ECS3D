@@ -148,6 +148,12 @@ void logMissedComponentEdit(ComponentEditResult result, const net::Message& edit
 // object's own children to its parent instead) - see ObjectManager::removeSubtree.
 [[nodiscard]] nlohmann::json buildRemoveSubtree(const uuids::uuid& objectUUID);
 
+// Several ops applied as one atomic edit: applySceneEdit dry-runs every op in ops, in order, against a
+// scratch copy of the scene first, and only applies them for real if every one of them would have. Used
+// to make a multi-object action (deleting or duplicating a whole editor selection) one sceneEdit, one
+// snapshot, and one undo/redo entry. Not nestable - an op in ops that is itself "batch" is malformedEdit.
+[[nodiscard]] nlohmann::json buildBatch(const std::vector<nlohmann::json>& ops);
+
 // Why a structural edit did not take. Same reasoning as ComponentEditResult: the authority has to tell a
 // payload it could not parse apart from an op it understood and refused, because only the first says the
 // sender and the authority disagree about the wire, and only the second is a normal thing for an editor

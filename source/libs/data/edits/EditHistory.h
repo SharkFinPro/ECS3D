@@ -8,6 +8,7 @@
 #include <deque>
 #include <optional>
 #include <string>
+#include <vector>
 
 class ObjectManager;
 class AssetRegistry;
@@ -65,19 +66,28 @@ public:
   // oldest entry (front) rather than refusing to record, once the stack exceeds maxDepth.
   void record(EditCommand command);
 
+  // Groups several commands into one undo/redo entry (a multi-object delete or duplicate): one Ctrl+Z
+  // reverses the whole group. Empty is ignored; one command behaves exactly like record(); otherwise every
+  // command must have payloadForm() == PayloadForm::sceneEdit (a group is sent as one batch sceneEdit) or
+  // this throws std::invalid_argument. Same maxDepth/redo-clearing semantics as record(), counting entries
+  // rather than commands.
+  void recordBatch(std::vector<EditCommand> commands);
+
   [[nodiscard]] bool canUndo() const;
   [[nodiscard]] bool canRedo() const;
 
   // The kind of command undo()/redo() would act on next, without popping either stack - lets a caller
   // that only knows how to handle some kinds (see EditorApp::undo()/redo()) decide whether to attempt it
   // at all, and leave an entry it does not yet handle sitting on top rather than have undo()/redo() treat
-  // it as a validation conflict and drop it. nullopt when that stack is empty.
+  // it as a validation conflict and drop it. nullopt when that stack is empty. For a grouped entry
+  // (recordBatch), this is the kind of the group's last command.
   [[nodiscard]] std::optional<CommandKind> nextUndoKind() const;
   [[nodiscard]] std::optional<CommandKind> nextRedoKind() const;
 
   // Whether undo()/redo() would actually produce a payload for the top of that stack, without popping
-  // either stack - false for an empty stack as well as for a non-reversible entry, so a caller can gate
-  // an attempt on this alone rather than also checking canUndo()/canRedo().
+  // either stack - false for an empty stack as well as for a non-reversible entry (every command in a
+  // grouped entry, for a group), so a caller can gate an attempt on this alone rather than also checking
+  // canUndo()/canRedo().
   [[nodiscard]] bool nextUndoIsReversible() const;
   [[nodiscard]] bool nextRedoIsReversible() const;
 
@@ -85,11 +95,19 @@ public:
   // redo stack and returns the reverse payload to send. On refusal, drops that entry and everything older
   // still on the undo stack (entries already on the redo stack are untouched - they are newer, already-
   // undone commands, not part of this chain) and reports which uuid conflicted.
+  //
+  // A grouped entry (recordBatch) is validated and reversed as one unit: a scratch copy of objectManager
+  // simulates the group's commands in reverse order (each one's validateForUndo, then its buildUndoJSON
+  // applied to the scratch so the next command's validation sees what the one before it would have
+  // undone), and the payload sent is one replication::buildBatch of the collected per-command undo ops -
+  // so one Ctrl+Z reverses the whole group in one sceneEdit. A single-command entry skips the scratch copy
+  // and batch wrapping entirely, so its payload is unchanged from before grouping existed.
   [[nodiscard]] HistoryOutcome undo(const ObjectManager& objectManager,
                                     const AssetRegistry* assetRegistry = nullptr);
 
   // Symmetric with undo(): validates the top of the redo stack, moves it back to the undo stack on
-  // success, or drops it and everything older still on the redo stack on refusal.
+  // success, or drops it and everything older still on the redo stack on refusal. A grouped entry replays
+  // its commands forward (validateForRedo/buildRedoJSON) the same way undo() replays them in reverse.
   [[nodiscard]] HistoryOutcome redo(const ObjectManager& objectManager,
                                     const AssetRegistry* assetRegistry = nullptr);
 
@@ -107,7 +125,8 @@ public:
 
   // Human-readable description of the command undo()/redo() would act on next ("Rename Cube"), for an
   // Edit menu that names the next action instead of showing a bare "Undo"/"Redo" - see
-  // EditCommand::describeForMenu. nullopt when that stack is empty.
+  // EditCommand::describeForMenu. nullopt when that stack is empty. A grouped entry (recordBatch) is
+  // "Delete N Objects"/"Duplicate N Objects" when every command in it shares that kind, else "N Edits".
   [[nodiscard]] std::optional<std::string> nextUndoLabel(const ObjectManager& objectManager,
                                                          const AssetRegistry* assetRegistry = nullptr) const;
   [[nodiscard]] std::optional<std::string> nextRedoLabel(const ObjectManager& objectManager,
@@ -119,8 +138,10 @@ public:
   [[nodiscard]] std::size_t redoDepth() const;
 
 private:
-  std::deque<EditCommand> m_undoStack;
-  std::deque<EditCommand> m_redoStack;
+  // Each entry is one undo/redo step: one command for an ordinary edit, several for a group recorded
+  // through recordBatch (a multi-object delete or duplicate), reversed as one unit.
+  std::deque<std::vector<EditCommand>> m_undoStack;
+  std::deque<std::vector<EditCommand>> m_redoStack;
 };
 
 }

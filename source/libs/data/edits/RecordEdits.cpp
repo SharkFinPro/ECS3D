@@ -1,5 +1,6 @@
 #include "RecordEdits.h"
 #include "AssetWireType.h"
+#include "Replication.h"
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -290,6 +291,58 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
   }
 
   return std::nullopt;
+}
+
+std::optional<std::vector<EditCommand>> commandsForSceneEdit(const nlohmann::json& edit, const ObjectManager& view,
+                                                              const AssetRegistry* assetRegistry)
+{
+  if (!edit.is_object())
+  {
+    return std::nullopt;
+  }
+
+  if (stringField(edit, "op") != "batch")
+  {
+    auto command = commandForSceneEdit(edit, view, assetRegistry);
+    if (!command.has_value())
+    {
+      return std::nullopt;
+    }
+
+    return std::vector<EditCommand>{ std::move(command.value()) };
+  }
+
+  const auto opsIt = edit.find("ops");
+  if (opsIt == edit.end() || !opsIt->is_array() || opsIt->empty())
+  {
+    return std::nullopt;
+  }
+
+  // The editor never applies a structural edit to its own view before sending it, so view stays pre-batch
+  // for every op here - a scratch copy simulates the batch as it derives each op's command, so an op that
+  // depends on one before it (deleting a parent and its child together) sees the tree the way the
+  // authority will when it applies the batch for real.
+  const auto scratch = makeScratchCopy(view);
+  std::vector<EditCommand> commands;
+  commands.reserve(opsIt->size());
+
+  for (const auto& subEdit : *opsIt)
+  {
+    auto command = commandForSceneEdit(subEdit, *scratch, assetRegistry);
+    if (!command.has_value())
+    {
+      return std::nullopt;
+    }
+
+    commands.push_back(std::move(command.value()));
+
+    if (replication::applySceneEdit(*scratch, subEdit, assetRegistry) != replication::SceneEditResult::applied)
+    {
+      return std::nullopt;
+    }
+  }
+
+  return commands;
 }
 
 std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset, const AssetRegistry& view)

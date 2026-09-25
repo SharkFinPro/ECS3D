@@ -188,6 +188,9 @@ private:
   void reassignUUIDs(nlohmann::json& objectData, std::size_t depth = 0);
 };
 
-
+// An independent copy of source: same uuids and tree shape, wired to no SceneManager/replication/scripts.
+// Used to simulate a batch of structural edits against a throwaway scene before committing them to the
+// real one - see Replication.cpp's "batch" sceneEdit op and EditHistory's undo/redo of a grouped entry.
+[[nodiscard]] std::unique_ptr<ObjectManager> makeScratchCopy(const ObjectManager& source);
 
 #endif //OBJECTMANAGER_H

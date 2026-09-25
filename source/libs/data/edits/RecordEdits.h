@@ -4,6 +4,7 @@
 #include "EditCommand.h"
 #include <nlohmann/json_fwd.hpp>
 #include <optional>
+#include <vector>
 
 class ObjectManager;
 
@@ -22,6 +23,18 @@ namespace edits {
 [[nodiscard]] std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit,
                                                              const ObjectManager& view,
                                                              const AssetRegistry* assetRegistry = nullptr);
+
+// A "batch" sceneEdit's commands, one per op in order. Since the editor never applies a structural edit
+// to its own view (see the module comment), the view stays pre-batch for every op - so this simulates the
+// batch on a scratch copy of view as it derives each op's command, the same way EditHistory::undo/redo
+// simulate a group's reverse, applying each op to the scratch after deriving its command so the next op's
+// derivation sees what it would actually see once the ops before it had landed. nullopt if any op's
+// command cannot be derived, or if a dry-run apply of an op (needed to keep the scratch in sync for the
+// ops after it) does not return applied - the same "nothing faithful can be recorded" contract as a single
+// op. A non-batch edit is passed straight through to commandForSceneEdit.
+[[nodiscard]] std::optional<std::vector<EditCommand>> commandsForSceneEdit(const nlohmann::json& edit,
+                                                                          const ObjectManager& view,
+                                                                          const AssetRegistry* assetRegistry = nullptr);
 
 // An addAsset over a uuid the registry already holds is a record replacement (a prefab body edit, or
 // "Save as Prefab" over an existing name), so it derives a replaceAsset carrying the current record as

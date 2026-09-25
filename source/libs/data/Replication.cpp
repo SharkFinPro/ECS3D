@@ -490,6 +490,14 @@ nlohmann::json buildRemoveSubtree(const uuids::uuid& objectUUID)
   };
 }
 
+nlohmann::json buildBatch(const std::vector<nlohmann::json>& ops)
+{
+  return {
+    { "op", "batch" },
+    { "ops", ops }
+  };
+}
+
 namespace {
   // Number of ancestors above object (root = 0). Every object in a live scene arrived through a
   // depth-checked unpack/load or reparent, so walking up never runs past maxObjectDepth.
@@ -810,6 +818,47 @@ namespace {
                                       const AssetRegistry* assetRegistry)
   {
     const std::string op = edit.at("op");
+
+    if (op == "batch")
+    {
+      const auto opsIt = edit.find("ops");
+      if (opsIt == edit.end() || !opsIt->is_array() || opsIt->empty())
+      {
+        return SceneEditResult::malformedEdit;
+      }
+
+      for (const auto& subEdit : *opsIt)
+      {
+        if (!subEdit.is_object() || subEdit.value("op", std::string{}) == "batch")
+        {
+          return SceneEditResult::malformedEdit;
+        }
+      }
+
+      // Dry run against a scratch copy first: a batch is all-or-nothing, so a later op refusing must
+      // leave the real scene untouched by every op before it.
+      const auto scratch = makeScratchCopy(objectManager);
+      for (const auto& subEdit : *opsIt)
+      {
+        if (const auto result = applySceneEdit(*scratch, subEdit, assetRegistry);
+            result != SceneEditResult::applied)
+        {
+          return result;
+        }
+      }
+
+      for (const auto& subEdit : *opsIt)
+      {
+        if (applySceneEdit(objectManager, subEdit, assetRegistry) != SceneEditResult::applied)
+        {
+          // The dry run just said every op applies - a real-manager failure here means the scene and the
+          // scratch copy have diverged in some way the dry run could not predict, not a malformed edit.
+          return SceneEditResult::failed;
+        }
+      }
+
+      return SceneEditResult::applied;
+    }
 
     if (op == "instantiatePrefab")
     {

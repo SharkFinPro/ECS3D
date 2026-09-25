@@ -195,8 +195,8 @@ void EditorApp::onEditComponent(const uuids::uuid& objectUUID, const std::shared
 void EditorApp::onSceneEdit(const nlohmann::json& edit)
 {
   const auto scene = m_sceneManager->getCurrentScene();
-  auto command = scene ? edits::commandForSceneEdit(edit, *scene->getObjectManager(), m_assetRegistry.get())
-                       : std::optional<edits::EditCommand>{};
+  auto commands = scene ? edits::commandsForSceneEdit(edit, *scene->getObjectManager(), m_assetRegistry.get())
+                       : std::optional<std::vector<edits::EditCommand>>{};
 
   const auto payload = edit.dump();
 
@@ -208,9 +208,9 @@ void EditorApp::onSceneEdit(const nlohmann::json& edit)
   m_netClient->send(message);
   m_saveUI->markEdited();
 
-  if (command)
+  if (commands)
   {
-    m_editHistory.record(std::move(*command));
+    m_editHistory.recordBatch(std::move(*commands));
   }
   else if (scene)
   {
