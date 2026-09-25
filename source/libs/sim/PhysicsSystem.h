@@ -3,6 +3,7 @@
 
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
+#include <cstddef>
 #include <memory>
 #include <span>
 
@@ -21,13 +22,23 @@ public:
   static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
                               glm::vec3 minimumTranslationVector, glm::vec3 collisionPoint);
 
-  // Resolves the pair across a contact manifold: a sequential-impulse pass over its points that accounts
-  // for each body's spin, so a body resting on several points is held still rather than torqued about
-  // one. A single point resolves exactly like the overload above.
+  // Resolves the pair through a single impulse at supportPoint, so a body whose center of mass sits over
+  // its manifold is pushed without being torqued. A single point resolves exactly like the overload above.
   static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
                               glm::vec3 minimumTranslationVector, std::span<const glm::vec3> collisionPoints);
 
+  // The center of mass projected onto the contact plane, clamped into the hull of the first
+  // maxSupportPoints points. Linear and angular velocity are in different units here (per tick vs
+  // degrees per second), so the impulse is placed geometrically rather than solved against spin.
+  [[nodiscard]] static glm::vec3 supportPoint(const glm::vec3& centerOfMass, const glm::vec3& normal,
+                                              std::span<const glm::vec3> collisionPoints);
+
+  static constexpr size_t maxSupportPoints = 4;
+
 private:
+  [[nodiscard]] static bool triangleContains(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
+                                             const glm::vec3& point);
+
   static void integrate(RigidBody& body, Transform& transform, float dt);
 
   static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 minimumTranslationVector);

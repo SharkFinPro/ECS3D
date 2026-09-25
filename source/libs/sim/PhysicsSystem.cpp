@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <stdexcept>
 
 void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
@@ -148,110 +149,110 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
     return;
   }
 
-  if (!other)
-  {
-    throw std::runtime_error("PhysicsSystem::handleCollision missing other object!");
-  }
-
   const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform);
   if (!transform)
   {
     return;
   }
 
-  respondToCollision(body, *transform, minimumTranslationVector);
+  const auto point = supportPoint(transform->getPosition(), normalize(minimumTranslationVector), collisionPoints);
+  handleCollision(body, other, minimumTranslationVector, point);
+}
 
-  const auto normal = normalize(minimumTranslationVector);
-  const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
-
-  std::shared_ptr<Transform> otherTransform;
-  if (otherRb)
+glm::vec3 PhysicsSystem::supportPoint(const glm::vec3& centerOfMass, const glm::vec3& normal,
+                                      const std::span<const glm::vec3> collisionPoints)
+{
+  if (collisionPoints.empty())
   {
-    otherTransform = other->getComponent<Transform>(ComponentType::transform);
-    if (!otherTransform)
-    {
-      return;
-    }
-
-    respondToCollision(*otherRb, *otherTransform, -minimumTranslationVector);
+    return centerOfMass;
   }
 
-  struct Side
+  const auto count = std::min(collisionPoints.size(), maxSupportPoints);
+
+  glm::vec3 centroid{ 0 };
+  for (size_t i = 0; i < count; ++i)
   {
-    RigidBody* body = nullptr;
-    const Transform* transform = nullptr;
-    glm::mat3x3 inverseInertia{ 0.0f };
+    centroid += collisionPoints[i];
+  }
+  centroid /= static_cast<float>(count);
+
+  const auto onPlane = [&centroid, &normal](const glm::vec3& point)
+  {
+    return point - glm::dot(point - centroid, normal) * normal;
   };
 
-  // A degenerate inertia (zero mass, zeroed scale axis) contributes no spin, as in applyForce.
-  const auto makeSide = [](RigidBody* rigidBody, const Transform* rigidTransform)
+  std::array<glm::vec3, maxSupportPoints> points{};
+  for (size_t i = 0; i < count; ++i)
   {
-    const auto inertia = getInertiaTensor(*rigidBody, *rigidTransform);
+    points[i] = onPlane(collisionPoints[i]);
+  }
 
-    constexpr float minDiagonal = 1e-6f;
-    const bool spins = inertia[0][0] > minDiagonal && inertia[1][1] > minDiagonal && inertia[2][2] > minDiagonal &&
-                       finiteCheck::isFinite(glm::vec3(inertia[0][0], inertia[1][1], inertia[2][2]));
+  const auto target = onPlane(centerOfMass);
 
-    return Side{ rigidBody, rigidTransform, spins ? glm::inverse(inertia) : glm::mat3x3(0.0f) };
-  };
-
-  // Same lever-arm cutoff applyForce uses, so a point at the centre adds no spin on either side.
-  const auto arm = [](const Side& side, const glm::vec3& point)
+  // In the plane, the hull of at most four points is covered by the triangles among them, so the center
+  // of mass is over the support region exactly when one of those triangles contains it.
+  for (size_t a = 0; a < count; ++a)
   {
-    const auto r = point - side.transform->getPosition();
-    return glm::length(r) <= 0.01f ? glm::vec3(0) : r;
-  };
-
-  const auto velocityAt = [&arm](const Side& side, const glm::vec3& point)
-  {
-    return side.body->getVelocity() + glm::cross(side.body->getAngularVelocity(), arm(side, point));
-  };
-
-  // How far one unit of impulse along the normal changes this side's velocity along it at the point.
-  const auto stiffness = [&arm, &normal](const Side& side, const glm::vec3& point)
-  {
-    const auto torqueArm = glm::cross(arm(side, point), normal);
-    return 1.0f + glm::dot(torqueArm, side.inverseInertia * torqueArm);
-  };
-
-  const auto bodySide = makeSide(&body, transform.get());
-  const auto otherSide = otherRb ? makeSide(otherRb.get(), otherTransform.get()) : Side{};
-
-  constexpr int iterations = 8;
-  std::array<float, 4> accumulated{};
-  const auto count = std::min(collisionPoints.size(), accumulated.size());
-
-  for (int iteration = 0; iteration < iterations; ++iteration)
-  {
-    for (size_t i = 0; i < count; ++i)
+    for (size_t b = a + 1; b < count; ++b)
     {
-      const auto& point = collisionPoints[i];
-
-      auto closing = -glm::dot(velocityAt(bodySide, point), normal);
-      auto denominator = stiffness(bodySide, point);
-
-      if (otherRb)
+      for (size_t c = b + 1; c < count; ++c)
       {
-        closing += glm::dot(velocityAt(otherSide, point), normal);
-        denominator += stiffness(otherSide, point);
-      }
-
-      const auto updated = std::max(accumulated[i] + closing / denominator, 0.0f);
-      const auto delta = updated - accumulated[i];
-      accumulated[i] = updated;
-
-      if (delta == 0.0f)
-      {
-        continue;
-      }
-
-      applyForce(body, *transform, delta * normal, point);
-      if (otherRb)
-      {
-        applyForce(*otherRb, *otherTransform, -delta * normal, point);
+        if (triangleContains(points[a], points[b], points[c], target))
+        {
+          return target;
+        }
       }
     }
   }
+
+  // Outside the hull, the nearest hull point lies on a segment between two of the points.
+  glm::vec3 closest = points[0];
+  float closestDistance = std::numeric_limits<float>::max();
+  for (size_t a = 0; a < count; ++a)
+  {
+    for (size_t b = a + 1; b < count; ++b)
+    {
+      const auto segment = points[b] - points[a];
+      const auto lengthSquared = glm::dot(segment, segment);
+      const auto t = lengthSquared > 1e-12f ? std::clamp(glm::dot(target - points[a], segment) / lengthSquared, 0.0f, 1.0f)
+                                            : 0.0f;
+      const auto candidate = points[a] + t * segment;
+
+      const auto distance = glm::distance(candidate, target);
+      if (distance < closestDistance)
+      {
+        closestDistance = distance;
+        closest = candidate;
+      }
+    }
+  }
+
+  return closest;
+}
+
+bool PhysicsSystem::triangleContains(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& point)
+{
+  const auto ab = b - a;
+  const auto ac = c - a;
+  const auto ap = point - a;
+
+  const auto abab = glm::dot(ab, ab);
+  const auto abac = glm::dot(ab, ac);
+  const auto acac = glm::dot(ac, ac);
+  const auto apab = glm::dot(ap, ab);
+  const auto apac = glm::dot(ap, ac);
+
+  const auto denominator = abab * acac - abac * abac;
+  if (denominator <= 1e-12f)
+  {
+    return false;
+  }
+
+  constexpr float tolerance = 1e-5f;
+  const auto v = (acac * apab - abac * apac) / denominator;
+  const auto w = (abab * apac - abac * apab) / denominator;
+
+  return v >= -tolerance && w >= -tolerance && v + w <= 1.0f + tolerance;
 }
 
 void PhysicsSystem::respondToCollision(RigidBody& body, Transform& transform, const glm::vec3 minimumTranslationVector)
