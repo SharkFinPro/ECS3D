@@ -469,15 +469,13 @@ only pushes it while the scene view is focused, so without that the component ca
 The editor's **View** combo (Scene Status) picks what its viewport looks through: its own free-fly camera
 (the default) or any object in the scene carrying a `Camera`, which is how you see a client's view — a
 player camera is labelled with its `PlayerController` slot. A stale choice (object gone, `Camera` removed)
-falls back to free-fly. **FOV/near/far drive the actual projection**: `RenderSystem::updateCamera` also
-pushes the active `Camera`'s fov/near/far into `Renderer3D::setProjectionParameters` (only when they
-differ from what was last applied, tracked in a private `ProjectionParams`), and the free-fly fallback
-(`RenderSystem::enableFreeFlyCamera`, reached from both `updateCamera`'s no-active-camera path and
-`useFreeFlyCamera`) always reconciles it back to a named default (45/0.1/1000, `vke`'s own defaults) even
-when the free-fly camera was already enabled. `setProjectionParameters` throws for a degenerate triple;
-`RenderSystem` catches that as a safety net and logs once rather than repeating it every frame, though the
-`Camera` component's own setters already clamp fov/near/far to a valid range so it should not fire in
-practice. One upstream caveat carries through: raster geometry is clipped at roughly twice the near plane,
+falls back to free-fly. **Field of view (FOV) and near/far drive the actual projection**:
+`RenderSystem::updateCamera` also pushes the active `Camera`'s fov/near/far into `Renderer3D::setProjectionParameters` (only when they
+differ from what was last applied), and the free-fly fallback (`RenderSystem::enableFreeFlyCamera`) resets
+it to a named default (45/0.1/1000, `vke`'s own defaults) unless that default is already applied.
+`setProjectionParameters` throws for a degenerate triple; `RenderSystem` catches that and logs once, though
+the `Camera` setters already clamp to a valid range so it should not fire in practice.
+One upstream caveat carries through: raster geometry is clipped at roughly twice the near plane,
 since the projection maps depth to -1..1 while Vulkan clips at 0. A client picks its
 *own* camera via the player↔object association (`PlayerController.playerSlot` + a `Camera` on the same
 object) using a **nonce-over-broadcast** handshake: the client tags its `join` with a random nonce, the
