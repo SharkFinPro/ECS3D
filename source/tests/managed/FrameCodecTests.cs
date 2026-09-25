@@ -60,6 +60,21 @@ public class FrameCodecTests
     Assert.Equal(payload, decodedPayload);
   }
 
+  [Theory]
+  [InlineData(false)]
+  [InlineData(true)]
+  public void ReadFrame_RestoresTheStreamReadTimeout(bool truncate)
+  {
+    var frame = TcpBackend.FrameBytes(0x01, new byte[] { 1, 2, 3, 4 });
+    var bytes = truncate ? frame[..^2] : frame;
+
+    using var stream = new TimeoutCapableMemoryStream(bytes) { ReadTimeout = 1234 };
+    var ok = TcpBackend.ReadFrame(stream, out _, out _);
+
+    Assert.Equal(!truncate, ok);
+    Assert.Equal(1234, stream.ReadTimeout);
+  }
+
   [Fact]
   public void ReadFrame_RefusesAFrameOverMaxBytes()
   {
