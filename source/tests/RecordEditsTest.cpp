@@ -11,6 +11,7 @@
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
 #include "objects/components/Script.h"
+#include <Protocol.h>
 
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -481,6 +482,93 @@ TEST(RecordEdits, AddAssetOverAnExistingPathOfAnyOtherTypeIsNotRecorded)
   EXPECT_TRUE(edits::commandForAddAsset(fresh, scene.assetRegistry).has_value());
 }
 
+// --- addAsset's displayName field: carried on the wire, applied to a new record, and left alone by a
+// prefab body update in place (see AGENTS.md's note on undo restoring the whole removed record).
+
+TEST(RecordEdits, PackAndUnpackAddAssetRoundTripTheDisplayName)
+{
+  const nlohmann::json asset = {
+    { "assetType", "model" },
+    { "uuid", uuidString(someOtherUUID()) },
+    { "path", "models/rock.obj" },
+    { "displayName", "Rock" }
+  };
+
+  const auto unpacked = replication::unpackAddAsset(replication::packAddAsset(asset));
+  EXPECT_EQ(unpacked.value("displayName", std::string{}), "Rock");
+}
+
+// A message packed before displayName existed carries only the original six strings; unpackAddAsset must
+// still parse it (empty displayName) rather than underflow reading a seventh field that was never written.
+TEST(RecordEdits, UnpackAddAssetToleratesAMessageWithNoDisplayNameField)
+{
+  net::Message legacy(net::MessageType::addAsset);
+  legacy.writeString("model");
+  legacy.writeString(uuidString(someOtherUUID()));
+  legacy.writeString("models/rock.obj");
+  legacy.writeString("");
+  legacy.writeString("");
+  legacy.writeString("");
+
+  const auto unpacked = replication::unpackAddAsset(legacy);
+  EXPECT_EQ(unpacked.value("displayName", std::string{}), "");
+  EXPECT_EQ(unpacked.value("path", std::string{}), "models/rock.obj");
+
+  AssetScene scene;
+  SceneManager sceneManager;
+  replication::applyAddAsset(scene.assetRegistry, sceneManager, scene.componentRegistry, unpacked);
+
+  const auto* record = scene.assetRegistry.getByUUID(someOtherUUID());
+  ASSERT_NE(record, nullptr);
+  EXPECT_EQ(record->path, "models/rock.obj");
+  EXPECT_EQ(record->displayName, "");
+}
+
+TEST(RecordEdits, ApplyAddAssetWithADisplayNameRegistersTheRecordWithIt)
+{
+  AssetScene scene;
+  SceneManager sceneManager;
+
+  const nlohmann::json asset = {
+    { "assetType", "model" },
+    { "uuid", uuidString(someOtherUUID()) },
+    { "path", "models/rock.obj" },
+    { "displayName", "Rock" }
+  };
+
+  replication::applyAddAsset(scene.assetRegistry, sceneManager, scene.componentRegistry, asset);
+
+  const auto* record = scene.assetRegistry.getByUUID(someOtherUUID());
+  ASSERT_NE(record, nullptr);
+  EXPECT_EQ(record->displayName, "Rock");
+}
+
+TEST(RecordEdits, ApplyAddAssetOverAnExistingPrefabNameKeepsTheExistingDisplayName)
+{
+  AssetScene scene;
+  SceneManager sceneManager;
+
+  scene.assetRegistry.registerAsset({ .uuid = someOtherUUID(), .type = AssetType::Prefab,
+                                      .path = "Block", .body = oldPrefabBody });
+  scene.assetRegistry.renameAsset(someOtherUUID(), "Old Block");
+
+  const nlohmann::json update = {
+    { "assetType", "prefab" },
+    { "uuid", uuidString(anotherUUID()) },
+    { "name", "Block" },
+    { "body", newPrefabBody }
+  };
+
+  replication::applyAddAsset(scene.assetRegistry, sceneManager, scene.componentRegistry, update);
+
+  const auto* record = scene.assetRegistry.getByUUID(someOtherUUID());
+  ASSERT_NE(record, nullptr);
+  // Positive control: the body did change...
+  EXPECT_EQ(record->body, newPrefabBody);
+  // ...but the in-place update never touched the existing displayName override.
+  EXPECT_EQ(record->displayName, "Old Block");
+}
+
 TEST(RecordEdits, RenameAndRemoveAssetCarryTheCurrentRecord)
 {
   AssetScene scene;
@@ -498,7 +586,7 @@ TEST(RecordEdits, RenameAndRemoveAssetCarryTheCurrentRecord)
                                                     scene.assetRegistry);
   ASSERT_TRUE(removed.has_value());
   EXPECT_EQ(*removed, edits::EditCommand::removeAsset(someOtherUUID(), AssetType::Script,
-                                                      "scripts/Player.cs", "PlayerScript", ""));
+                                                      "scripts/Player.cs", "PlayerScript", "", "Player"));
 
   // An asset the registry does not hold has no before state to read.
   EXPECT_FALSE(edits::commandForRenameAsset(replication::buildRenameAsset(anotherUUID(), "Hero"),

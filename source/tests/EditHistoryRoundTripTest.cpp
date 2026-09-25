@@ -4,6 +4,7 @@
 #include "Replication.h"
 #include "edits/EditCommand.h"
 #include "edits/EditHistory.h"
+#include "edits/RecordEdits.h"
 #include "scenes/SceneManager.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -684,7 +685,7 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveAsset)
   ASSERT_EQ(scene.assetRegistry.getByUUID(assetUUID), nullptr);
 
   edits::EditHistory history;
-  history.record(edits::EditCommand::removeAsset(assetUUID, AssetType::Model, "models/thing.obj", "", ""));
+  history.record(edits::EditCommand::removeAsset(assetUUID, AssetType::Model, "models/thing.obj", "", "", ""));
 
   const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(undoOutcome.ok());
@@ -693,6 +694,50 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveAsset)
                              replication::unpackAddAsset(*undoOutcome.messagePayload));
   EXPECT_NE(scene.assetRegistry.getByUUID(assetUUID), nullptr);
 
+  const auto redoOutcome = history.redo(*scene.objectManager, &scene.assetRegistry);
+  ASSERT_TRUE(redoOutcome.ok());
+  ASSERT_TRUE(redoOutcome.messagePayload.has_value());
+  replication::applyRemoveAsset(scene.assetRegistry, replication::unpackRemoveAsset(*redoOutcome.messagePayload));
+  EXPECT_EQ(scene.assetRegistry.getByUUID(assetUUID), nullptr);
+}
+
+// A deleted asset's undo restores its whole record, including a rename override set before the deletion -
+// the display name is part of "the record", not just the file/path/body an addAsset without it would
+// leave the asset under its derived name.
+TEST(EditHistory, UndoOfARemoveAssetRestoresTheDisplayName)
+{
+  AssetScene scene;
+  SceneManager sceneManager;
+  const auto assetUUID = someOtherUUID();
+
+  scene.assetRegistry.registerAsset({ .uuid = assetUUID, .type = AssetType::Model, .path = "models/rock.obj" });
+  scene.assetRegistry.renameAsset(assetUUID, "Rock");
+  ASSERT_EQ(scene.assetRegistry.getByUUID(assetUUID)->displayName, "Rock");
+
+  const auto removeCommand = edits::commandForRemoveAsset(replication::buildRemoveAsset(assetUUID),
+                                                           scene.assetRegistry);
+  ASSERT_TRUE(removeCommand.has_value());
+
+  replication::applyRemoveAsset(scene.assetRegistry, replication::buildRemoveAsset(assetUUID));
+  ASSERT_EQ(scene.assetRegistry.getByUUID(assetUUID), nullptr);
+
+  edits::EditHistory history;
+  history.record(*removeCommand);
+
+  const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
+  ASSERT_TRUE(undoOutcome.ok());
+  ASSERT_TRUE(undoOutcome.messagePayload.has_value());
+  replication::applyAddAsset(scene.assetRegistry, sceneManager, scene.componentRegistry,
+                             replication::unpackAddAsset(*undoOutcome.messagePayload));
+
+  const auto* restored = scene.assetRegistry.getByUUID(assetUUID);
+  ASSERT_NE(restored, nullptr);
+  EXPECT_EQ(restored->uuid, assetUUID);
+  EXPECT_EQ(restored->path, "models/rock.obj");
+  EXPECT_EQ(restored->displayName, "Rock");
+
+  // Redo validates the live record against what undo just restored (including the display name), so it
+  // still succeeds and removes the asset again.
   const auto redoOutcome = history.redo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(redoOutcome.ok());
   ASSERT_TRUE(redoOutcome.messagePayload.has_value());

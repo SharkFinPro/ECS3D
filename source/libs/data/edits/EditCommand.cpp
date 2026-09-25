@@ -116,11 +116,17 @@ namespace {
   // The asset json shape applyAddAsset/EditorApp's addAsset callback both use (see AssetWireType.h for
   // why the type strings live in edits/ rather than Replication.h).
   nlohmann::json buildAddAssetJSON(const uuids::uuid& uuid, const AssetType type, const std::string& path,
-                                   const std::string& className, const std::string& body)
+                                   const std::string& className, const std::string& body,
+                                   const std::string& displayName = {})
   {
     nlohmann::json asset;
     asset["assetType"] = assetTypeToWireString(type);
     asset["uuid"] = uuids::to_string(uuid);
+
+    if (!displayName.empty())
+    {
+      asset["displayName"] = displayName;
+    }
 
     switch (type)
     {
@@ -437,7 +443,7 @@ EditCommand EditCommand::renameAsset(const uuids::uuid& assetUUID, std::string b
 }
 
 EditCommand EditCommand::removeAsset(const uuids::uuid& assetUUID, const AssetType type, std::string path,
-                                     std::string className, std::string body)
+                                     std::string className, std::string body, std::string displayName)
 {
   EditCommand command;
   command.m_kind = CommandKind::removeAsset;
@@ -446,7 +452,8 @@ EditCommand EditCommand::removeAsset(const uuids::uuid& assetUUID, const AssetTy
     .type = type,
     .path = std::move(path),
     .className = std::move(className),
-    .body = std::move(body)
+    .body = std::move(body),
+    .displayName = std::move(displayName)
   };
   return command;
 }
@@ -1108,7 +1115,7 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
       }
 
       if (record->type != data.type || record->path != data.path || record->className != data.className
-          || record->body != data.body)
+          || record->body != data.body || record->displayName != data.displayName)
       {
         return { ValidationFailure::targetChanged, data.assetUUID };
       }
@@ -1296,7 +1303,8 @@ net::Message EditCommand::buildUndoMessage(const ObjectManager& objectManager) c
     {
       const auto& data = std::get<RemoveAssetData>(m_data);
       return replication::packAddAsset(
-        buildAddAssetJSON(data.assetUUID, data.type, data.path, data.className, data.body));
+        buildAddAssetJSON(data.assetUUID, data.type, data.path, data.className, data.body,
+                          data.displayName));
     }
     default:
       throw std::logic_error("EditCommand::buildUndoMessage: not a networkMessage-form command");

@@ -204,10 +204,12 @@ void applyObjectDestroyed(ObjectManager& objectManager, const net::Message& mess
 
 void applyObjectComponentsChanged(ObjectManager& objectManager, const net::Message& message);
 
-// Register an imported/created asset ({ assetType, uuid, path|name, [className], [body] }). Shared by the
-// server (authoritative) and the editor (instant local feedback). Models/textures/scripts/prefabs go
-// into the AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager. A prefab carries its
-// serialized-object `body` inline (there is no file on disk).
+// Register an imported/created asset ({ assetType, uuid, path|name, [className], [body], [displayName] }).
+// Shared by the server (authoritative) and the editor (instant local feedback). Models/textures/scripts/
+// prefabs go into the AssetRegistry; a scene also gets an empty SceneAsset in the SceneManager. A prefab
+// carries its serialized-object `body` inline (there is no file on disk). `displayName`, when present,
+// restores a rename override on the record - undo of a removeAsset carries the removed record's own
+// displayName this way, so the asset comes back under whatever name it was renamed to.
 void applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,
@@ -215,7 +217,9 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 
 // Wire (de)serialization for an addAsset blob. The schema is open-ended per asset type, but only a fixed
 // set of string fields is ever consumed (see applyAddAsset), so each is packed length-prefixed (empty
-// when absent) instead of as JSON. The pairing unpack rebuilds the blob applyAddAsset expects.
+// when absent) instead of as JSON. The pairing unpack rebuilds the blob applyAddAsset expects. displayName
+// is appended after the original six fields so a message packed before it existed still unpacks (see
+// unpackAddAsset).
 [[nodiscard]] net::Message packAddAsset(const nlohmann::json& asset);
 
 [[nodiscard]] nlohmann::json unpackAddAsset(const net::Message& message);

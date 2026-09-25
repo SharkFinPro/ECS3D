@@ -124,7 +124,7 @@ TEST(EditHistoryLabel, DescribesARemoveAssetByItsOwnRecordedPath)
   auto scene = makeScene();
 
   edits::EditHistory history;
-  history.record(edits::EditCommand::removeAsset(someOtherUUID(), AssetType::Prefab, "OldPrefab", "", ""));
+  history.record(edits::EditCommand::removeAsset(someOtherUUID(), AssetType::Prefab, "OldPrefab", "", "", ""));
 
   const auto label = history.nextUndoLabel(*scene.objectManager);
   ASSERT_TRUE(label.has_value());

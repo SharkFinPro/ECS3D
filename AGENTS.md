@@ -219,7 +219,8 @@ missing uuid so referencing slots just show "None". The editor warns before dele
 replicated scenes + prefab bodies for the uuid ("referenced by N objects"); no server-side refusal or
 cascade exists (a known gap, not yet scheduled). Rename/delete are offered only for the flat file assets
 (Model/Texture/Script/Prefab) that `AssetRegistry` owns — a Scene record is regenerated from the
-`SceneManager` on every snapshot, so an override on it wouldn't survive.
+`SceneManager` on every snapshot, so an override on it wouldn't survive. Undoing a delete re-adds the whole
+record, rename override included — the `addAsset` payload carries an optional `displayName`.
 Runtime structural changes from a *script* (spawn/destroy) take a third path: lightweight
 `objectSpawned` (one packed `Object`) / `objectDestroyed` (a uuid) messages the client splices into/out of
 its scene incrementally — kept off the full-snapshot path so frequent spawning stays cheap. Build/apply

@@ -545,7 +545,7 @@ void AssetInspector::displayDeleteConfirmationModal(const AssetRecord& record)
                          m_pendingRefCount, m_pendingRefCount == 1 ? "" : "s");
     }
 
-    ImGui::TextColored(theme::t3, "This action cannot be undone.");
+    ImGui::TextColored(theme::t3, "You can undo this with Edit > Undo.");
 
     ImGui::Spacing();
     ImGui::Separator();
