@@ -501,6 +501,58 @@ TEST(PhysicsIntegration, AYawedBoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
   EXPECT_LT(maxAngularSpeed, 0.05f);
 }
 
+namespace {
+  // A unit box resting on a static ground box, with a unit sphere resting on the box offset along x.
+  // Returns the lowest the box's center sits, read after each collision pass once the stack has settled.
+  float lowestSettledHeightOfABoxUnderASphere(const float sphereOffsetX)
+  {
+    const auto scene = makeScene();
+
+    const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 5, 1, 5 });
+    fixtures::addBoxCollider(ground);
+
+    const auto box = addObject(scene, "Box", { 0, 2, 0 });
+    fixtures::addBoxCollider(box);
+    addBody(box, true);
+
+    const auto sphere = addObject(scene, "Sphere", { sphereOffsetX, 4, 0 });
+    fixtures::addSphereCollider(sphere, 1.0f);
+    addBody(sphere, true);
+
+    CollisionSystem collisionSystem;
+
+    float lowest = std::numeric_limits<float>::max();
+
+    for (int tick = 0; tick < 60; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+      collisionSystem.fixedUpdate(*scene.objectManager);
+
+      if (tick >= 40)
+      {
+        lowest = std::min(lowest, transformOf(box)->getPosition().y);
+      }
+    }
+
+    return lowest;
+  }
+}
+
+TEST(PhysicsIntegration, ABoxUnderASphereStaysOnTheGroundWhicheverSideOfItTheSphereSits)
+{
+  // The box and the sphere are both two wide, so a sphere offset toward +x puts the box ahead of it in
+  // the sweep's minX order and one offset toward -x puts it behind. Resolving the box first let the
+  // sphere's push drive it back into the ground for the rest of every tick, about halfway through;
+  // the mirrored stack stayed put.
+  const float sphereTowardPositiveX = lowestSettledHeightOfABoxUnderASphere(0.5f);
+  const float sphereTowardNegativeX = lowestSettledHeightOfABoxUnderASphere(-0.5f);
+
+  // Resting on the ground puts the box's center at 2.
+  EXPECT_GT(sphereTowardPositiveX, 1.9f);
+  EXPECT_GT(sphereTowardNegativeX, 1.9f);
+  EXPECT_NEAR(sphereTowardPositiveX, sphereTowardNegativeX, 0.01f);
+}
+
 TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)
 {
   const auto scene = makeScene();

@@ -68,6 +68,10 @@ private:
   // previous tick to refresh m_enters/m_stays/m_exits.
   void recordCollisionEvents(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions);
 
+  // Indices of the edges with something to resolve, in the order their responses should run. Reads the
+  // bounding boxes the sweep just warmed, so it has to run before any response moves a transform.
+  [[nodiscard]] std::vector<size_t> responseOrder(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const;
+
   void findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,

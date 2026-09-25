@@ -9,7 +9,11 @@
 #include <objects/components/collisions/Collider.h>
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <cmath>
+#include <functional>
 #include <iterator>
+#include <limits>
+#include <utility>
 
 namespace {
   // One candidate's narrow-phase result, kept beside its squared penetration depth so
@@ -84,16 +88,11 @@ void CollisionSystem::checkCollisions()
     }
   }
 
-  // Applied serially, in edge order, now that the parallel region is done: a response moves the transform
-  // of either object in a pair, which would invalidate a collider cache another thread might still be
-  // reading if this ran inside the loop above.
-  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  // Applied serially, now that the parallel region is done: a response moves the transform of either
+  // object in a pair, which would invalidate a collider cache another thread might still be reading if
+  // this ran inside the loop above.
+  for (const auto i : responseOrder(perEdgeCollisions))
   {
-    if (perEdgeCollisions[i].empty())
-    {
-      continue;
-    }
-
     const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
     if (!rigidBody)
     {
@@ -104,6 +103,37 @@ void CollisionSystem::checkCollisions()
   }
 
   recordCollisionEvents(perEdgeCollisions);
+}
+
+std::vector<size_t> CollisionSystem::responseOrder(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const
+{
+  std::vector<std::pair<size_t, float>> bottoms;
+  for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
+  {
+    if (perEdgeCollisions[i].empty())
+    {
+      continue;
+    }
+
+    // A blown-up transform gives a NaN bound, which would break the sort's ordering; resolve it last.
+    const float bottom = m_collisionEdges[i].collider->cachedBoundingBox().minY;
+    bottoms.emplace_back(i, std::isnan(bottom) ? std::numeric_limits<float>::lowest() : bottom);
+  }
+
+  // Highest first, not sweep (minX) order. A response pushes both bodies of a dynamic pair apart, so
+  // resolving a body before the one resting on it lets that later push drive it back into its own support
+  // for the rest of the tick. Top-down, each push is absorbed by the contact beneath it, and the order no
+  // longer depends on horizontal position. Gravity only acts along -y, which is what makes y "up" here.
+  std::ranges::stable_sort(bottoms, std::ranges::greater{}, &std::pair<size_t, float>::second);
+
+  std::vector<size_t> order;
+  order.reserve(bottoms.size());
+  for (const auto& entry : bottoms)
+  {
+    order.push_back(entry.first);
+  }
+
+  return order;
 }
 
 void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions)
