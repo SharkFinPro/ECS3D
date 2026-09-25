@@ -7,20 +7,6 @@
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 
-namespace {
-  // A non-finite float serializes to json null, so a saved direction component may not be a number at
-  // all; NaN reads back this way rather than throwing, so setDirection's finite check still catches it.
-  float readFloatOrNaN(const nlohmann::json& value)
-  {
-    if (!value.is_number())
-    {
-      return std::numeric_limits<float>::quiet_NaN();
-    }
-
-    return value.get<float>();
-  }
-}
-
 Camera::Camera()
   : Component(ComponentType::camera)
 {}
@@ -124,7 +110,7 @@ void Camera::loadFromJSON(const nlohmann::json& componentData)
   // value(...) so an older scene without a field defaults cleanly.
   if (const auto it = componentData.find("direction"); it != componentData.end() && it->size() == 3)
   {
-    setDirection(glm::vec3(readFloatOrNaN(it->at(0)), readFloatOrNaN(it->at(1)), readFloatOrNaN(it->at(2))));
+    setDirection(glm::vec3(finiteCheck::readFloatOrNaN(it->at(0)), finiteCheck::readFloatOrNaN(it->at(1)), finiteCheck::readFloatOrNaN(it->at(2))));
   }
 
   setFov(componentData.value("fov", 45.0f));

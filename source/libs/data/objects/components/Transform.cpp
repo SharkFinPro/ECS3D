@@ -5,6 +5,17 @@
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 
+namespace {
+  // Drops a non-finite value, keeping the previous one.
+  void setFiniteLocal(ComponentVariable<glm::vec3>& variable, const glm::vec3& value)
+  {
+    if (finiteCheck::isFinite(value))
+    {
+      variable.set(value);
+    }
+  }
+}
+
 Transform::Transform()
   : Transform(glm::vec3(0), glm::vec3(1), glm::vec3(0))
 {}
@@ -167,9 +178,9 @@ void Transform::loadFromJSON(const nlohmann::json& componentData)
   const auto& rotation = componentData.at("rotation");
   const auto& scale = componentData.at("scale");
 
-  m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
-  m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
-  m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
+  setFiniteLocal(m_position, finiteCheck::readVec3OrNaN(position));
+  setFiniteLocal(m_rotation, finiteCheck::readVec3OrNaN(rotation));
+  setFiniteLocal(m_scale, finiteCheck::readVec3OrNaN(scale));
 
   // Bypasses the setters, so bump directly - a collider cache keyed on the update id has to know this
   // geometry changed.
@@ -187,9 +198,9 @@ void Transform::pack(net::Message& message) const
 
 void Transform::unpack(net::MessageReader& messageReader)
 {
-  m_position.set(messageReader.read<glm::vec3>());
-  m_rotation.set(messageReader.read<glm::vec3>());
-  m_scale.set(messageReader.read<glm::vec3>());
+  setFiniteLocal(m_position, messageReader.read<glm::vec3>());
+  setFiniteLocal(m_rotation, messageReader.read<glm::vec3>());
+  setFiniteLocal(m_scale, messageReader.read<glm::vec3>());
 
   // Bypasses the setters, so bump directly - see loadFromJSON.
   ++m_updateID;
