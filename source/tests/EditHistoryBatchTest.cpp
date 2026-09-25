@@ -59,7 +59,7 @@ TEST(EditHistoryBatch, RecordAndUndoAndRedoADeleteOfAParentAndItsOwnChild)
   const auto tree = buildParentAndChild(scene);
 
   // Selection order [P, C]: P first, then C added to the selection - the shape ObjectGUIManager's
-  // queueDeletion sends.
+  // performDelete sends.
   const auto batch = replication::buildBatch({
     replication::buildRemoveObject(tree.p->getUUID()),
     replication::buildRemoveObject(tree.c->getUUID())

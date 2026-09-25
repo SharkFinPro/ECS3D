@@ -382,7 +382,7 @@ void ObjectManager::deleteObjectsMarkedForDeletion()
       const auto& child = children[childOffset];
 
       // Captured while child's parent chain still runs through the deleted object, so its world
-      // placement includes that object's own transform - the delete confirmation promises children are
+      // placement includes that object's own transform - children are
       // kept in place, not left at the new parent's origin.
       const auto placement = captureWorldPlacement(child);
 
