@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 
 namespace {
@@ -91,24 +92,10 @@ void PhysicsSystem::applyForce(RigidBody& body, const Transform& transform, cons
     return;
   }
 
-  const auto angularImpulse = glm::cross(r, force);
-
-  const auto inertiaTensor = getInertiaTensor(body, transform);
-
-  // A degenerate body (zero mass, a zeroed scale axis) puts a zero or non-finite entry on the diagonal.
-  // Inverting that gives inf/NaN angular velocity that never recovers, so skip the angular term instead
-  // of spinning the body up to garbage.
-  constexpr float minDiagonal = 1e-6f;
-  if (inertiaTensor[0][0] <= minDiagonal || inertiaTensor[1][1] <= minDiagonal || inertiaTensor[2][2] <= minDiagonal ||
-      !finiteCheck::isFinite(glm::vec3(inertiaTensor[0][0], inertiaTensor[1][1], inertiaTensor[2][2])))
+  if (const auto inverseInertia = worldInverseInertia(body, transform))
   {
-    return;
+    body.setAngularVelocity(body.getAngularVelocity() + *inverseInertia * glm::cross(r, force));
   }
-
-  // The tensor is diagonal in the body's own axes; the impulse is in world space.
-  const auto orientation = glm::mat3_cast(orientationOf(transform));
-  const auto localImpulse = glm::transpose(orientation) * angularImpulse;
-  body.setAngularVelocity(body.getAngularVelocity() + orientation * (glm::inverse(inertiaTensor) * localImpulse));
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
@@ -161,9 +148,9 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
                                     const glm::vec3 minimumTranslationVector, const std::span<const glm::vec3> collisionPoints)
 {
-  if (collisionPoints.size() < 2)
+  if (collisionPoints.empty())
   {
-    handleCollision(body, other, minimumTranslationVector, collisionPoints.empty() ? glm::vec3(0) : collisionPoints[0]);
+    handleCollision(body, other, minimumTranslationVector, glm::vec3(0));
     return;
   }
 
@@ -173,8 +160,56 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
     return;
   }
 
-  const auto point = supportPoint(transform->getPosition(), normalize(minimumTranslationVector), collisionPoints);
+  const auto normal = normalize(minimumTranslationVector);
+  const auto point = collisionPoints.size() < 2 ? collisionPoints[0]
+                                                : supportPoint(transform->getPosition(), normal, collisionPoints);
   handleCollision(body, other, minimumTranslationVector, point);
+
+  stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
+}
+
+void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
+                                        const glm::vec3& normal, const std::span<const glm::vec3> contactPoints)
+{
+  const auto inverseInertia = worldInverseInertia(body, transform);
+  if (!inverseInertia)
+  {
+    return;
+  }
+
+  const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
+  const auto otherTransform = other->getComponent<Transform>(ComponentType::transform);
+  const bool supportSpins = otherBody && otherTransform;
+  const auto supportSpin = supportSpins ? otherBody->getAngularVelocity() : glm::vec3(0);
+
+  // Contact responses only cancel linear velocity, so without this a box rocking from edge to edge coasts
+  // through its flat pose and the next edge kicks it back, forever. Each point sheds only the spin driving
+  // it into the support, weighted by the inertia, so a body tipping away from a contact keeps its spin.
+  auto angularVelocity = body.getAngularVelocity();
+  for (const auto& point : contactPoints.first(std::min(contactPoints.size(), maxSupportPoints)))
+  {
+    const auto arm = glm::cross(point - transform.getPosition(), normal);
+    const float surfaceRate = supportSpins ? glm::dot(glm::cross(supportSpin, point - otherTransform->getPosition()), normal)
+                                           : 0.0f;
+    const float closingRate = glm::dot(angularVelocity, arm) - surfaceRate;
+
+    const auto response = *inverseInertia * arm;
+    const float resistance = glm::dot(arm, response);
+
+    if (closingRate < 0.0f && resistance > 1e-12f)
+    {
+      angularVelocity -= closingRate / resistance * response;
+    }
+  }
+
+  // Spin about the contact normal is left to the damping, which only approaches zero. A body resting on
+  // something below it is brought the rest of the way once it is too slow to see.
+  if (normal.y > 0.0f && glm::length(angularVelocity - supportSpin) < restAngularSpeed)
+  {
+    angularVelocity = supportSpin;
+  }
+
+  body.setAngularVelocity(angularVelocity);
 }
 
 glm::vec3 PhysicsSystem::supportPoint(const glm::vec3& centerOfMass, const glm::vec3& normal,
@@ -295,6 +330,25 @@ void PhysicsSystem::limitMovement(RigidBody& body, const Transform& transform)
   const glm::vec2 frictionForce = -horizontalVelocity * body.getFriction();
 
   applyForce(body, transform, { frictionForce.x, 0.0f, frictionForce.y }, transform.getPosition());
+}
+
+std::optional<glm::mat3> PhysicsSystem::worldInverseInertia(const RigidBody& body, const Transform& transform)
+{
+  const auto inertiaTensor = getInertiaTensor(body, transform);
+
+  // A degenerate body (zero mass, a zeroed scale axis) puts a zero or non-finite entry on the diagonal.
+  // Inverting that gives inf/NaN angular velocity that never recovers, so the body gets no angular response
+  // instead of spinning up to garbage.
+  constexpr float minDiagonal = 1e-6f;
+  if (inertiaTensor[0][0] <= minDiagonal || inertiaTensor[1][1] <= minDiagonal || inertiaTensor[2][2] <= minDiagonal ||
+      !finiteCheck::isFinite(glm::vec3(inertiaTensor[0][0], inertiaTensor[1][1], inertiaTensor[2][2])))
+  {
+    return std::nullopt;
+  }
+
+  // The tensor is diagonal in the body's own axes; angular impulses are in world space.
+  const auto orientation = glm::mat3_cast(orientationOf(transform));
+  return orientation * glm::inverse(inertiaTensor) * glm::transpose(orientation);
 }
 
 glm::mat3x3 PhysicsSystem::getInertiaTensor(const RigidBody& body, const Transform& transform)

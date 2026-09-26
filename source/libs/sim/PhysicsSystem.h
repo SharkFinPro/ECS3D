@@ -5,6 +5,7 @@
 #include <glm/vec3.hpp>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <span>
 
 class ObjectManager;
@@ -35,15 +36,24 @@ public:
 
   static constexpr size_t maxSupportPoints = 4;
 
+  // Degrees per second. Spin a resting body still carries relative to its support below this is dropped.
+  static constexpr float restAngularSpeed = 0.01f;
+
 private:
   [[nodiscard]] static bool triangleContains(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
                                              const glm::vec3& point);
 
   static void integrate(RigidBody& body, Transform& transform, float dt);
 
+  static void stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
+                                  const glm::vec3& normal, std::span<const glm::vec3> contactPoints);
+
   static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 minimumTranslationVector);
 
   static void limitMovement(RigidBody& body, const Transform& transform);
+
+  // Empty for a body too degenerate to invert, which then gets no angular response.
+  [[nodiscard]] static std::optional<glm::mat3> worldInverseInertia(const RigidBody& body, const Transform& transform);
 
   [[nodiscard]] static glm::mat3x3 getInertiaTensor(const RigidBody& body, const Transform& transform);
 };
