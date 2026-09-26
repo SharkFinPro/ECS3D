@@ -123,7 +123,8 @@ namespace {
     for (int i = 0; i < 3; ++i)
     {
       const float coordinate = glm::dot(point - box.center, box.axes[i]);
-      clamped += (i == normalAxis ? coordinate : std::clamp(coordinate, -box.halfExtents[i], box.halfExtents[i])) * box.axes[i];
+      const float kept = i == normalAxis ? coordinate : std::clamp(coordinate, -box.halfExtents[i], box.halfExtents[i]);
+      clamped += kept * box.axes[i];
     }
 
     return clamped;
@@ -211,7 +212,8 @@ void PhysicsSystem::applyForce(RigidBody& body, const Transform& transform, cons
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
-                                    const glm::vec3 minimumTranslationVector, const glm::vec3 collisionPoint, const float dt)
+                                    const glm::vec3 minimumTranslationVector, const glm::vec3 collisionPoint,
+                                    const float dt)
 {
   if (!other)
   {
@@ -241,8 +243,8 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
-                                    const glm::vec3 minimumTranslationVector, const std::span<const glm::vec3> collisionPoints,
-                                    const float dt)
+                                    const glm::vec3 minimumTranslationVector,
+                                    const std::span<const glm::vec3> collisionPoints, const float dt)
 {
   if (collisionPoints.empty())
   {
@@ -289,7 +291,8 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
       if (const auto flatFace = restingFace(body, other, supportFace))
       {
         stopSpinIntoSupport(body, *transform, other, normal, *flatFace);
-        applyContactImpulse(body, *transform, other, normal, findSupport(transform->getPosition(), normal, *flatFace).point, dt);
+        const auto faceSupport = findSupport(transform->getPosition(), normal, *flatFace);
+        applyContactImpulse(body, *transform, other, normal, faceSupport.point, dt);
       }
     }
   }
@@ -297,12 +300,14 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   comeToRest(body, other, normal);
 }
 
-void PhysicsSystem::applyContactImpulse(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
-                                        const glm::vec3& normal, const glm::vec3& point, const float dt)
+void PhysicsSystem::applyContactImpulse(RigidBody& body, const Transform& transform,
+                                        const std::shared_ptr<Object>& other, const glm::vec3& normal,
+                                        const glm::vec3& point, const float dt)
 {
   const auto velocityAt = [&point, dt](const RigidBody& rigidBody, const Transform& center)
   {
-    return rigidBody.getVelocity() + glm::cross(spinPerTick(rigidBody.getAngularVelocity(), dt), point - center.getPosition());
+    const auto spin = spinPerTick(rigidBody.getAngularVelocity(), dt);
+    return rigidBody.getVelocity() + glm::cross(spin, point - center.getPosition());
   };
 
   const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -326,9 +331,9 @@ void PhysicsSystem::applyContactImpulse(RigidBody& body, const Transform& transf
   }
 
   // Twice the share that would only stop the pair, so they trade their closing speed rather than lose it.
-  const auto impulse = 2.0f * closingSpeed /
-                       (inverseEffectiveMass(transform, point, normal) + inverseEffectiveMass(*otherTransform, point, normal)) *
-                       normal;
+  const float resistance = inverseEffectiveMass(transform, point, normal) +
+                           inverseEffectiveMass(*otherTransform, point, normal);
+  const auto impulse = 2.0f * closingSpeed / resistance * normal;
   applyForce(body, transform, impulse, point, dt);
   applyForce(*otherRb, *otherTransform, -impulse, point, dt);
 }
@@ -347,8 +352,9 @@ float PhysicsSystem::inverseEffectiveMass(const Transform& transform, const glm:
   return 1.0f + glm::dot(torqueAxis, *inverseInertia * torqueAxis);
 }
 
-bool PhysicsSystem::turnsFlatThisTick(const RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
-                                      const glm::vec3& supportFace, const float dt)
+bool PhysicsSystem::turnsFlatThisTick(const RigidBody& body, const Transform& transform,
+                                      const std::shared_ptr<Object>& other, const glm::vec3& supportFace,
+                                      const float dt)
 {
   const auto bodyFace = faceNormalToward(glm::mat3_cast(orientationOf(transform)), supportFace);
   const auto axis = glm::cross(bodyFace, supportFace);
@@ -364,7 +370,8 @@ bool PhysicsSystem::turnsFlatThisTick(const RigidBody& body, const Transform& tr
   return turn >= tilt;
 }
 
-std::optional<std::array<glm::vec3, 4>> PhysicsSystem::restingFace(const RigidBody& body, const std::shared_ptr<Object>& other,
+std::optional<std::array<glm::vec3, 4>> PhysicsSystem::restingFace(const RigidBody& body,
+                                                                   const std::shared_ptr<Object>& other,
                                                                    const glm::vec3& supportFace)
 {
   const auto ownBox = boxOf(body.getOwner()->getComponent<Collider>(ComponentType::collider));
