@@ -624,14 +624,14 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
   Ships `defaultAssets/` and generates a built-in `DefaultProject` when no `--project` is given. Also
   registers a `RemoteLogSink` with `Log` and forwards it to editor connections every `run()` iteration —
   see Logging above.
-- **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project`/`--console`
+- **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project`/`--console`/`--server-console`
   (opens a console window; Windows builds are GUI-subsystem and have none by
   default)/`--log-file`/`--no-log-file`. Links
   Data+Render+Net+ClrHost+Log. Spawns a local server for singleplayer; `--host` connects to an existing
   server instead.
 - **ECS3DEditor** (`apps/editor`) — client + ImGui tooling (object tree, inspector, asset browser, scene
   controls, save/load). `--host`/`--port`/`--project`/`--token` (edit token when attaching to an existing
-  edit server)/`--console` (opens a console window; Windows builds are GUI-subsystem and have none by
+  edit server)/`--console`/`--server-console` (`--console` opens a console window; Windows builds are GUI-subsystem and have none by
   default)/`--log-file`/`--no-log-file`. By default spawns its own `--edit` server with a generated
   token. Links Data+Render+EditorLib+Net+ClrHost+Log. It also registers a `RingBufferSink` for its Console panel, since
   it is the only app with a panel to show one.
