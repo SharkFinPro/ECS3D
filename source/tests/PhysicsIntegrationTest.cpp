@@ -650,6 +650,27 @@ TEST(PhysicsIntegration, SpinTurnsABodyAboutTheWorldAxisEvenWhenItIsAlreadyTurne
              { 0, glm::cos(glm::radians(10.0f)), -glm::sin(glm::radians(10.0f)) });
 }
 
+TEST(PhysicsIntegration, ASpinTooSlowToSeeIsKeptButDoesNotRewriteTheRotation)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Drifting", { 0, 0, 0 });
+  const auto body = addBody(object, false);
+
+  const glm::vec3 rotation{ 10, 20, 30 };
+  transformOf(object)->setRotation(rotation);
+  body->setAngularVelocity({ 0, 0.005f, 0 });
+
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+
+  // Compared exactly: turning by a spin this small only rewrites the angles by float noise, every tick.
+  EXPECT_EQ(transformOf(object)->getRotation().x, rotation.x);
+  EXPECT_EQ(transformOf(object)->getRotation().y, rotation.y);
+  EXPECT_EQ(transformOf(object)->getRotation().z, rotation.z);
+
+  // Still there for a torque to build on, so a slow start to tipping is not lost - just damped as usual.
+  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0.005f * 0.99f, 0 });
+}
+
 TEST(PhysicsIntegration, TwoBodiesClosingOnEachOtherAreSeparatedAndSlowed)
 {
   const auto scene = makeScene();

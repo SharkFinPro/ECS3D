@@ -36,7 +36,8 @@ public:
 
   static constexpr size_t maxSupportPoints = 4;
 
-  // Degrees per second. Spin a resting body still carries relative to its support below this is dropped.
+  // Degrees per second. Spin a resting body still carries relative to its support below this is dropped,
+  // and any spin below it is too slow to turn a body at all.
   static constexpr float restAngularSpeed = 0.01f;
 
 private:

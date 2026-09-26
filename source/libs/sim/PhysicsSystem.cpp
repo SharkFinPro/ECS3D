@@ -65,7 +65,9 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
   // partly rotated axes, so a restoring torque could never right it and the body would keep spinning.
   const auto angularVelocity = body.getAngularVelocity();
   const float angularSpeed = glm::length(angularVelocity);
-  if (angularSpeed > 0.0f)
+  // Slower spin is kept for torque to build on, but turning by it would only rewrite a resting body's angles
+  // with float noise every tick.
+  if (angularSpeed >= restAngularSpeed)
   {
     const auto turn = glm::angleAxis(glm::radians(angularSpeed) * dt, angularVelocity / angularSpeed);
     transform.setRotation(glm::degrees(glm::eulerAngles(turn * orientationOf(transform))));
@@ -177,8 +179,9 @@ void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transf
     return;
   }
 
+  // The support turns about its rigid body's own center, which a child collider's owner may not be.
   const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
-  const auto otherTransform = other->getComponent<Transform>(ComponentType::transform);
+  const auto otherTransform = otherBody ? otherBody->getOwner()->getComponent<Transform>(ComponentType::transform) : nullptr;
   const bool supportSpins = otherBody && otherTransform;
   const auto supportSpin = supportSpins ? otherBody->getAngularVelocity() : glm::vec3(0);
 
