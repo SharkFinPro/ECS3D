@@ -44,9 +44,9 @@ namespace
       {
         options.project = argv[++i];
       }
-      else if (arg == "--no-server-console")
+      else if (arg == "--server-console")
       {
-        options.showServerConsole = false;
+        options.showServerConsole = true;
       }
     }
 
