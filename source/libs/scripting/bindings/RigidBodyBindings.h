@@ -31,7 +31,7 @@ private:
   static void bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz);
   static void bindSetVelocity(const char* uuid, float x, float y, float z);
 
-  // Overwrite the angular velocity (rad/s). A player script zeroes it to keep mouse-look authoritative
+  // Overwrite the angular velocity (degrees per second). A player script zeroes it to keep mouse-look authoritative
   // (physics integrates rotation from angular velocity, which a collision-induced spin would otherwise fight).
   static void bindSetAngularVelocity(const char* uuid, float x, float y, float z);
 

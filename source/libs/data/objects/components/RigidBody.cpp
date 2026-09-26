@@ -6,9 +6,8 @@
 #include <algorithm>
 
 namespace {
-  // Zero or negative mass makes PhysicsSystem::getInertiaTensor produce a zero (or negative) diagonal,
-  // which is not invertible - floored here so every path that can set mass (the setter, loading a
-  // project, unpacking a replicated snapshot) shares one rule instead of each guarding it separately.
+  // Zero or negative mass is no body at all - floored here so every path that can set mass (the setter,
+  // loading a project, unpacking a replicated snapshot) shares one rule instead of each guarding it separately.
   constexpr float kMinMass = 0.001f;
 }
 
