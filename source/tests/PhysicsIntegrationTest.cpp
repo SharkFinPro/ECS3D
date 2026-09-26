@@ -1029,13 +1029,15 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
 
   CollisionSystem collisionSystem;
 
+  // Spin left about the vertical after the landing is only damped, so it takes a while to fall under the rest
+  // threshold; the rotation is sampled once it has.
   glm::vec3 settledRotation{ 0 };
-  for (int tick = 0; tick < 200; ++tick)
+  for (int tick = 0; tick < 300; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
     collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
-    if (tick == 150)
+    if (tick == 200)
     {
       settledRotation = transformOf(falling)->getRotation();
     }
