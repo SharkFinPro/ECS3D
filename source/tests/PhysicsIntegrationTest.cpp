@@ -10,6 +10,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 
+#include <glm/ext/scalar_constants.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
@@ -20,10 +21,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
   // The tick length the engine runs at. Every number below is derived from it rather than measured, so
@@ -1098,6 +1101,87 @@ TEST(PhysicsIntegration, AStackHoldsWhateverTheMassesInIt)
   }
 }
 
+namespace {
+  // A linear congruential generator, so the pile below comes out the same on every platform; the standard
+  // distributions are free to differ between library implementations.
+  class PileRandom {
+  public:
+    float between(const float low, const float high)
+    {
+      m_state = m_state * 1664525u + 1013904223u;
+      return low + (high - low) * static_cast<float>(static_cast<double>(m_state) / 4294967296.0);
+    }
+
+  private:
+    std::uint32_t m_state = 1;
+  };
+}
+
+TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
+{
+  const auto scene = makeScene();
+
+  const auto ground = addObject(scene, "Ground", { 0, -9, 0 }, { 100, 10, 100 });
+  fixtures::addBoxCollider(ground);
+
+  // Scene 3 of the default project in miniature: a grid of spheres and turned boxes of random sizes, each as
+  // heavy as its volume, so the pile they fall into mixes masses a hundred times apart.
+  PileRandom random;
+  std::vector<std::shared_ptr<RigidBody>> bodies;
+  for (int level = 0; level < 4; ++level)
+  {
+    for (int row = 0; row < 4; ++row)
+    {
+      for (int column = 0; column < 4; ++column)
+      {
+        const float x = static_cast<float>(row) * 5.0f + random.between(-0.75f, 0.75f) - 7.5f;
+        const float y = static_cast<float>(level) * 5.0f + 6.0f;
+        const float z = static_cast<float>(column) * 5.0f + random.between(-0.75f, 0.75f) - 7.5f;
+
+        if (random.between(0.0f, 1.0f) < 0.5f)
+        {
+          const float radius = random.between(0.25f, 1.5f);
+          const auto sphere = addObject(scene, "Sphere", { x, y, z }, glm::vec3(radius));
+          fixtures::addSphereCollider(sphere, 1.0f);
+          bodies.push_back(addBody(sphere, true));
+          bodies.back()->setMass(4.0f / 3.0f * glm::pi<float>() * radius * radius * radius);
+          continue;
+        }
+
+        const glm::vec3 scale{ random.between(0.25f, 1.5f), random.between(0.25f, 1.5f), random.between(0.25f, 1.5f) };
+        const glm::vec3 rotation{ random.between(0, 360), random.between(0, 360), random.between(0, 360) };
+        const auto box = addObject(scene, "Box", { x, y, z }, scale);
+        transformOf(box)->setRotation(rotation);
+        fixtures::addBoxCollider(box);
+        bodies.push_back(addBody(box, true));
+        bodies.back()->setMass(8.0f * scale.x * scale.y * scale.z);
+      }
+    }
+  }
+
+  // The server's tick, for six seconds: long enough for the whole grid to land and the pile to settle.
+  constexpr float serverDt = 1.0f / 50.0f;
+  CollisionSystem collisionSystem;
+
+  float fastestSideways = 0.0f;
+  for (int tick = 0; tick < 300; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, serverDt);
+    collisionSystem.fixedUpdate(*scene.objectManager, serverDt);
+
+    for (const auto& body : bodies)
+    {
+      const auto velocity = body->getVelocity();
+      fastestSideways = std::max(fastestSideways, glm::length(glm::vec2(velocity.x, velocity.z)) / serverDt);
+    }
+  }
+
+  // Units per second. The bodies land at up to 35 falling straight down, and knock each other sideways at up to
+  // about 30. A heavy body used to squeeze a light one out at hundreds, and spin it to thousands of degrees a
+  // second, which flung it further still.
+  EXPECT_LT(fastestSideways, 60.0f);
+}
+
 TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)
 {
   const auto scene = makeScene();
@@ -1311,6 +1395,117 @@ TEST(PhysicsIntegration, ABodyLandingOnAnotherRestingOnASupportStopsAsOnStaticGe
 
   EXPECT_LT(falling.upperVelocity.y, -0.9f);
   EXPECT_LT(falling.lowerVelocity.y, -1.5f);
+}
+
+namespace {
+  // A body of mass 10 lands at unit speed on one of mass 0.1 resting on a support, touching along normal, the
+  // way a heavy box comes down on a small one at an angle in a pile.
+  struct Squeeze {
+    glm::vec3 lowerVelocity;
+    glm::vec3 lowerSpin;
+    float closingAfter;
+  };
+
+  Squeeze landObliquely(const glm::vec3& normal, const float friction)
+  {
+    const auto scene = makeScene();
+
+    const auto lower = addObject(scene, "Lower", { 0, 0, 0 });
+    const auto lowerBody = addBody(lower, false);
+    const auto upper = addObject(scene, "Upper", 2.0f * normal);
+    const auto upperBody = addBody(upper, false);
+
+    lowerBody->setMass(0.1f);
+    lowerBody->setFriction(friction);
+    lowerBody->setFalling(false);
+    upperBody->setMass(10.0f);
+    upperBody->setFriction(friction);
+    upperBody->setVelocity({ 0, -1, 0 });
+
+    PhysicsSystem::handleCollision(*upperBody, lower, 0.01f * normal, normal, dt);
+
+    return { lowerBody->getVelocity(), lowerBody->getAngularVelocity(),
+             -glm::dot(upperBody->getVelocity() - lowerBody->getVelocity(), normal) };
+  }
+}
+
+TEST(PhysicsIntegration, ABodyLandingOnALightRestingOneInsideItsFrictionConeLeavesItWhereItIs)
+{
+  // Seventeen degrees off vertical, inside the cone a friction of 0.5 holds. The light body's support takes the
+  // whole push, as its friction would: it is neither shot sideways nor spun, and the heavy one stops on it. Its
+  // horizontal share was once all the light body's, which at a hundred to one sent it off at six units a tick.
+  const auto squeeze = landObliquely(glm::normalize(glm::vec3(0.3f, 1, 0)), 0.5f);
+
+  expectNear("lower velocity", squeeze.lowerVelocity, { 0, 0, 0 });
+  expectNear("lower spin", squeeze.lowerSpin, { 0, 0, 0 });
+  EXPECT_NEAR(squeeze.closingAfter, 0.0f, 1e-4f);
+}
+
+TEST(PhysicsIntegration, ABodyLandingOnALightRestingOneOutsideItsFrictionConeSqueezesItOutByTheSlope)
+{
+  // Frictionless, so nothing holds the light body sideways: it moves out of the way just fast enough for the
+  // heavy one to stop closing on it - set by the slope of the contact, not by the hundred-to-one masses - and
+  // its support still keeps it from turning.
+  const auto squeeze = landObliquely(glm::normalize(glm::vec3(1, 1, 0)), 0.0f);
+
+  EXPECT_NEAR(squeeze.closingAfter, 0.0f, 1e-4f);
+  expectNear("lower velocity", squeeze.lowerVelocity, { -0.98039f, 0, 0 });
+  expectNear("lower spin", squeeze.lowerSpin, { 0, 0, 0 });
+}
+
+TEST(PhysicsIntegration, AHeavyBodySlidingOverALightRestingOneDoesNotSpinItOrDragItAlong)
+{
+  const auto scene = makeScene();
+
+  const auto lower = addObject(scene, "Lower", { 0, 0, 0 });
+  const auto lowerBody = addBody(lower, false);
+  const auto upper = addObject(scene, "Upper", { 0.5f, 2, 0 });
+  const auto upperBody = addBody(upper, false);
+
+  lowerBody->setMass(1.0f);
+  lowerBody->setFalling(false);
+  upperBody->setMass(100.0f);
+  upperBody->setVelocity({ 1, -0.1f, 0 });
+
+  // Off the lower body's center, where a drag sized for the heavy body used to turn the light one thousands of
+  // degrees a second.
+  PhysicsSystem::handleCollision(*upperBody, lower, { 0, 0.01f, 0 }, glm::vec3{ 0.5f, 1, 0 }, dt);
+
+  // The support holds it against the drag, up to what friction there can take - here the whole of it, since the
+  // heavy body's weight presses it down.
+  expectNear("lower velocity", lowerBody->getVelocity(), { 0, 0, 0 });
+  expectNear("lower spin", lowerBody->getAngularVelocity(), { 0, 0, 0 });
+
+  // Positive control: the heavy body is slowed by friction times the weight it presses down with.
+  expectNear("upper velocity", upperBody->getVelocity(), { 0.95f, 0, 0 });
+}
+
+TEST(PhysicsIntegration, TwoBodiesMeetingSlowlyDoNotBounce)
+{
+  const auto velocitiesAfterMeeting = [](const float unitsPerSecond)
+  {
+    const auto scene = makeScene();
+    const auto left = addObject(scene, "Left", { 0, 0, 0 });
+    const auto leftBody = addBody(left, false);
+    const auto right = addObject(scene, "Right", { 2, 0, 0 });
+    const auto rightBody = addBody(right, false);
+
+    leftBody->setVelocity({ unitsPerSecond * dt, 0, 0 });
+    PhysicsSystem::handleCollision(*leftBody, right, { -0.01f, 0, 0 }, glm::vec3{ 1, 0, 0 }, dt);
+
+    return std::pair{ leftBody->getVelocity() / dt, rightBody->getVelocity() / dt };
+  };
+
+  // At a unit a second - about the speed one tick of gravity presses bodies in a pile together - they move on
+  // together rather than trading it, or a resting pile would keep hopping.
+  const auto [slowLeft, slowRight] = velocitiesAfterMeeting(1.0f);
+  expectNear("slow left", slowLeft, { 0.5f, 0, 0 });
+  expectNear("slow right", slowRight, { 0.5f, 0, 0 });
+
+  // Positive control: a real impact still trades the velocities of equal masses.
+  const auto [fastLeft, fastRight] = velocitiesAfterMeeting(30.0f);
+  expectNear("fast left", fastLeft, { 0, 0, 0 });
+  expectNear("fast right", fastRight, { 30.0f, 0, 0 });
 }
 
 TEST(PhysicsIntegration, ARestingBodyPushedFromTheSideMovesByItsMass)

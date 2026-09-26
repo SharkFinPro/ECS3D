@@ -29,6 +29,10 @@ namespace {
   // Radians per tick. Slower relative spin is left to the damping.
   constexpr float minSpinRate = 1e-7f;
 
+  // Units per second. Two bodies closing slower than this - one settling, or pressed on by gravity each tick - do
+  // not bounce, or a resting pile would keep hopping.
+  constexpr float minBounceSpeed = 2.0f;
+
   // Rolling resistance as a share of the friction coefficient: a ball on a rough floor stops within a few of its
   // own widths rather than rolling on until the angular damping wears it down.
   constexpr float rollingResistanceShare = 0.1f;
@@ -217,6 +221,7 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
   body.setFalling(body.getNextFalling());
   body.setNextFalling(true);
   body.setStackedLoad(0.0f);
+  body.setSpentGrip(0.0f);
 
   if (body.getDoGravity())
   {
@@ -414,15 +419,47 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     return;
   }
 
-  const float resistance = inverseEffectiveMass(pair, point, pair.normal);
-  if (resistance <= 0.0f)
-  {
-    return;
-  }
+  const float target = (1.0f + restitution(pair, closingSpeed, dt)) * closingSpeed;
 
-  const float impulse = (1.0f + restitution(pair)) * closingSpeed / resistance;
-  push(pair.body, impulse * pair.normal, point, true, dt);
-  push(pair.other, -impulse * pair.normal, point, true, dt);
+  const Side* held = pair.other.resting && pair.normal.y > 0.0f ? &pair.other
+                     : pair.body.resting && pair.normal.y < 0.0f ? &pair.body
+                                                                 : nullptr;
+  float impulse = 0.0f;
+
+  if (!held)
+  {
+    const float resistance = inverseEffectiveMass(pair, point, pair.normal);
+    if (resistance <= 0.0f)
+    {
+      return;
+    }
+
+    impulse = target / resistance;
+    push(pair.body, impulse * pair.normal, point, true, dt);
+    push(pair.other, -impulse * pair.normal, point, true, dt);
+  }
+  else
+  {
+    // The free side is the one pressing down on the held one.
+    const Side& freeSide = held == &pair.other ? pair.body : pair.other;
+    const auto freeDirection = held == &pair.other ? pair.normal : -pair.normal;
+
+    const float freeResistance = glm::dot(freeDirection, responseAt(freeSide, point, freeDirection, true));
+    if (freeResistance <= 0.0f)
+    {
+      return;
+    }
+
+    // Held by its support from turning as well, the held side is pushed through its center. Measured at the point,
+    // its turning would enter a response to a push it only partly takes, which can come out near zero or below
+    // and have it squeezed out as if it weighed nothing.
+    const float heldResistance = glm::dot(-freeDirection, responseAt(*held, point, -freeDirection, false));
+    const auto [pressed, squeezed] = squeeze(*held, pair.normal, target, freeResistance, heldResistance);
+    impulse = pressed;
+
+    push(freeSide, impulse * freeDirection, point, true, dt);
+    push(*held, -squeezed * freeDirection, point, false, dt);
+  }
 
   // What rests on the body presses it into this contact too, and passes on to a resting support below.
   const float load = impulse + pair.body.body->getStackedLoad() * std::max(pair.normal.y, 0.0f);
@@ -534,8 +571,10 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
 
   // Resting on a face, friction does not tip the body over: its weight shifts toward the leading edge instead.
   const bool turns = !faceContact;
+  const bool otherHeld = pair.other.resting && pair.normal.y > 0.0f;
+  const bool otherTurns = turns && !otherHeld;
   const float bodyResistance = glm::dot(-direction, responseAt(pair.body, point, -direction, turns));
-  const float otherResistance = glm::dot(direction, responseAt(pair.other, point, direction, turns));
+  const float otherResistance = glm::dot(direction, responseAt(pair.other, point, direction, otherTurns));
   if (bodyResistance <= 0.0f)
   {
     return;
@@ -543,14 +582,60 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
 
   // A resting body's own support takes the drag first, as far as friction there can hold, so a light box under
   // a heavy one stays put rather than being swept along and letting the heavy one slide on.
-  const float held = pair.other.resting && pair.normal.y > 0.0f ? holdingCapacity(pair.other) : 0.0f;
+  const float held = otherHeld ? holdingCapacity(pair.other) : 0.0f;
   const float stopping = speed <= held * bodyResistance
                            ? speed / bodyResistance
                            : (speed + held * otherResistance) / (bodyResistance + otherResistance);
 
-  const float impulse = std::min(stopping, friction * load);
+  // A support that has already held a drag from above this tick has only the rest of its grip for this body.
+  const float grip = friction * load - (pair.normal.y > 0.0f ? pair.body.body->getSpentGrip() : 0.0f);
+  if (grip <= 0.0f)
+  {
+    return;
+  }
+
+  const float impulse = std::min(stopping, grip);
   push(pair.body, -impulse * direction, point, turns, dt);
-  push(pair.other, impulse * direction, point, turns, dt);
+
+  // The support takes the part it can hold, and holds the resting body from turning, so only the rest moves it.
+  // Turning it by the whole drag of something far heavier would spin a light body up to thousands of degrees a
+  // second.
+  push(pair.other, std::max(impulse - held, 0.0f) * direction, point, otherTurns, dt);
+  if (held > 0.0f)
+  {
+    pair.other.body->setSpentGrip(pair.other.body->getSpentGrip() + std::min(impulse, held));
+  }
+}
+
+std::pair<float, float> PhysicsSystem::squeeze(const Side& held, const glm::vec3& normal, const float target,
+                                               const float freeResistance, const float heldResistance)
+{
+  const float anchored = target / freeResistance;
+
+  // The held side takes only the horizontal part of the push, and its support's friction holds even that inside
+  // the friction cone. Past it, the held side is squeezed out sideways by what its support cannot hold - but
+  // only by that, rather than by the whole weight of what presses on it.
+  const float slope = std::sqrt(normal.x * normal.x + normal.z * normal.z);
+  const float cone = std::max(held.body->getFriction(), 0.0f) * std::fabs(normal.y);
+  if (slope <= cone || slope <= 1e-6f)
+  {
+    held.body->setSpentGrip(held.body->getSpentGrip() + anchored * slope);
+    return { anchored, 0.0f };
+  }
+
+  const float share = 1.0f - cone / slope;
+  const float holding = holdingCapacity(held) / slope;
+  if (anchored * share <= holding)
+  {
+    held.body->setSpentGrip(held.body->getSpentGrip() + anchored * slope);
+    return { anchored, 0.0f };
+  }
+
+  const float pressed = (target + heldResistance * holding) / (freeResistance + heldResistance * share);
+  const float squeezed = pressed * share - holding;
+  held.body->setSpentGrip(held.body->getSpentGrip() + (pressed - squeezed) * slope);
+
+  return { pressed, squeezed };
 }
 
 float PhysicsSystem::frictionOf(const Pair& pair)
@@ -568,21 +653,21 @@ float PhysicsSystem::holdingCapacity(const Side& side)
   const float pressing = side.body->getMass() * std::max(-side.body->getVelocity().y, 0.0f) +
                          side.body->getStackedLoad();
 
-  return std::max(side.body->getFriction(), 0.0f) * pressing;
+  return std::max(std::max(side.body->getFriction(), 0.0f) * pressing - side.body->getSpentGrip(), 0.0f);
 }
 
-float PhysicsSystem::restitution(const Pair& pair)
+float PhysicsSystem::restitution(const Pair& pair, const float closingSpeed, const float dt)
 {
-  if (!pair.other.body)
+  if (!pair.other.body || closingSpeed < minBounceSpeed * dt)
   {
     return 0.0f;
   }
 
-  // Free bodies trade their closing speed. What a resting body's support takes lands on the support, and like
-  // anything landing on static geometry it does not bounce.
+  // Free bodies trade their closing speed. What lands on a resting body lands on its support too, and like anything
+  // landing on static geometry it does not bounce.
   const bool supported = (pair.body.resting && pair.normal.y < 0.0f) || (pair.other.resting && pair.normal.y > 0.0f);
 
-  return supported ? 1.0f - pair.normal.y * pair.normal.y : 1.0f;
+  return supported ? 0.0f : 1.0f;
 }
 
 glm::vec3 PhysicsSystem::takenBy(const Side& side, const glm::vec3& direction)

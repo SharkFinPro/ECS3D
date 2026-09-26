@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <utility>
 
 class ObjectManager;
 class Object;
@@ -113,7 +114,13 @@ private:
   // impulse.
   static void resistSpin(const Pair& pair, const glm::vec3& axis, float rate, float limit, float dt);
 
-  [[nodiscard]] static float restitution(const Pair& pair);
+  // closingSpeed is in units per tick.
+  [[nodiscard]] static float restitution(const Pair& pair, float closingSpeed, float dt);
+
+  // The normal impulse, pressed, that brings a pair where one side rests on a support to target along the
+  // normal, and the part of it, squeezed, the held side takes itself rather than handing to its support.
+  [[nodiscard]] static std::pair<float, float> squeeze(const Side& held, const glm::vec3& normal, float target,
+                                                       float freeResistance, float heldResistance);
 
   // The geometric mean of the two bodies' coefficients.
   [[nodiscard]] static float frictionOf(const Pair& pair);

@@ -152,6 +152,16 @@ void RigidBody::setStackedLoad(const float stackedLoad)
   m_stackedLoad = stackedLoad;
 }
 
+float RigidBody::getSpentGrip() const
+{
+  return m_spentGrip;
+}
+
+void RigidBody::setSpentGrip(const float spentGrip)
+{
+  m_spentGrip = spentGrip;
+}
+
 nlohmann::json RigidBody::serialize()
 {
   const auto velocity = m_velocity.getInitialValue();

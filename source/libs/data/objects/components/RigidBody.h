@@ -65,6 +65,11 @@ public:
   [[nodiscard]] float getStackedLoad() const;
   void setStackedLoad(float stackedLoad);
 
+  // The friction impulse its support has already spent this tick holding it against what rests on it, which that
+  // support no longer has for this body's own sliding.
+  [[nodiscard]] float getSpentGrip() const;
+  void setSpentGrip(float spentGrip);
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -85,6 +90,8 @@ private:
   bool m_nextFalling = true;
 
   float m_stackedLoad = 0.0f;
+
+  float m_spentGrip = 0.0f;
 
   std::vector<PendingForce> m_pendingForces;
 };
