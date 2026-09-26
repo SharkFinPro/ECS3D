@@ -754,7 +754,8 @@ namespace {
       collisionSystem.fixedUpdate(*scene.objectManager, dt);
     }
 
-    return { transformOf(lower)->getPosition(), transformOf(upper)->getPosition(), glm::length(upperBody->getVelocity()) };
+    return { transformOf(lower)->getPosition(), transformOf(upper)->getPosition(),
+             glm::length(upperBody->getVelocity()) };
   }
 }
 

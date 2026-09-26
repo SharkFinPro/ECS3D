@@ -63,6 +63,7 @@ add_executable(${PROJECT_NAME}
   SceneManagerTest.cpp
   PrefabTest.cpp
   PhysicsIntegrationTest.cpp
+  DefaultProjectTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp
   ObjectComponentsChangedTest.cpp
@@ -121,10 +122,15 @@ add_executable(${PROJECT_NAME}
   ../libs/scripting/ScriptFieldEdit.cpp
   ../libs/scripting/bindings/LightRendererBindings.cpp
   ../libs/scripting/bindings/PlayerControllerBindings.cpp
+
+  # The server's built-in project is plain JSON over json, glm and uuid, so it is compiled in the same way
+  # rather than linking the server app.
+  ../apps/server/DefaultProject.cpp
 )
 
 
 target_include_directories(${PROJECT_NAME} PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../apps/server
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting

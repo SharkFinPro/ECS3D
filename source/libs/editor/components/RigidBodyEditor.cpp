@@ -38,16 +38,30 @@ void registerRigidBodyEditor(ComponentEditor& componentEditor)
         edited = true;
       }
 
-      if (gc::accentSlider("Friction", &friction, 0.001f, 1.0f, mixed.contains("friction")))
+      if (gc::accentSlider("Friction", &friction, 0.0f, 1.0f, mixed.contains("friction")))
       {
         rigidBody->setFriction(friction);
         edited = true;
       }
 
-      if (gc::accentSlider("Mass", &mass, 1.0f, 50.0f, mixed.contains("mass")))
+      if (ImGui::IsItemHovered())
+      {
+        ImGui::SetTooltip("How much sliding a contact can stop: up to this times how hard the bodies press\n"
+                          "together. Two bodies use the geometric mean of theirs; static geometry uses this\n"
+                          "body's. 0 is frictionless.");
+      }
+
+      if (gc::labeledDrag("Mass", &mass, 0.1f, mixed.contains("mass")))
       {
         rigidBody->setMass(mass);
         edited = true;
+      }
+
+      if (ImGui::IsItemHovered())
+      {
+        ImGui::SetTooltip("How heavy the body is. When two bodies collide or push, the lighter one moves more,\n"
+                          "and a script's force or impulse moves a heavier body less. Gravity and friction slow\n"
+                          "every body alike, whatever its mass.");
       }
     }
 

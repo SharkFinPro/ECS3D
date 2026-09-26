@@ -71,8 +71,8 @@ RigidBodyBindings RigidBodyBindingsProvider::getBindings()
   };
 }
 
-void RigidBodyBindingsProvider::bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz,
-                                               const int mode)
+void RigidBodyBindingsProvider::bindApplyForce(const char* uuid, float x, float y, float z, float px, float py,
+                                               float pz, const int mode)
 {
   const auto rigidBody = find(uuid);
   if (!rigidBody || mode < 0 || mode > static_cast<int>(ForceMode::velocityChange))
