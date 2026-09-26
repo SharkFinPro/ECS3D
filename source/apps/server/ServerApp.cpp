@@ -218,7 +218,7 @@ void ServerApp::fixedUpdate(const float dt) const
     m_scriptSystem->variableUpdate(objectManager);
     m_scriptSystem->fixedUpdate(objectManager, dt);
     PhysicsSystem::fixedUpdate(objectManager, dt);
-    m_collisionSystem->fixedUpdate(objectManager);
+    m_collisionSystem->fixedUpdate(objectManager, dt);
 
     // Contact events for this tick: hand CollisionSystem's diffed pair lists to the scripts. Done here
     // in the app (not as a library call) so sim stays independent of scripting - the collision system

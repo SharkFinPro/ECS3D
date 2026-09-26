@@ -25,6 +25,9 @@ namespace {
   using fixtures::positionOf;
   using fixtures::Scene;
 
+  // The server's tick, which the responses to the contacts below are worked out at.
+  constexpr float dt = 1.0f / 50.0f;
+
   // Whether the object gets a RigidBody decides whether it is a collision *source*: the sweep skips an
   // edge with no rigid body entirely, so a pair of static colliders is never even tested.
   std::shared_ptr<Object> addBody(const Scene& scene, const std::string& name, const glm::vec3& position,
@@ -110,26 +113,26 @@ TEST(CollisionEvent, AContactEntersThenStaysThenExits)
 
   CollisionSystem collisionSystem;
 
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
   EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
   EXPECT_TRUE(collisionSystem.getCollisionExits().empty());
 
   // Nothing moved, so the same contact is a stay rather than a second enter.
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
   EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
   EXPECT_TRUE(contains(collisionSystem.getCollisionStays(), moving, resting));
   EXPECT_TRUE(collisionSystem.getCollisionExits().empty());
 
   moving->getComponent<Transform>(ComponentType::transform)->setPosition({ 50, 0, 0 });
 
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
   EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
   EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
   EXPECT_TRUE(contains(collisionSystem.getCollisionExits(), moving, resting));
 
   // And the exit is reported once, not every tick after it.
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
   EXPECT_TRUE(collisionSystem.getCollisionExits().empty());
 }
 
@@ -140,7 +143,7 @@ TEST(CollisionEvent, ObjectsThatNeverTouchProduceNothing)
   const auto b = addBody(scene, "B", { 50, 0, 0 }, true, true);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
   EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
@@ -149,7 +152,7 @@ TEST(CollisionEvent, ObjectsThatNeverTouchProduceNothing)
   // Moved into contact, so the silence above is the distance and not a narrow phase that answers no to
   // everything. Every absence assertion in this file carries one of these.
   b->getComponent<Transform>(ComponentType::transform)->setPosition({ 1, 0, 0 });
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), a, b));
 }
@@ -161,7 +164,7 @@ TEST(CollisionEvent, APairSeenFromBothSidesIsRecordedOnce)
   const auto b = addBody(scene, "B", { 1, 0, 0 }, true, true);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   // Both are dynamic, so both edges find the contact. Scripts would otherwise get onCollisionEnter twice
   // for one collision.
@@ -176,7 +179,7 @@ TEST(CollisionEvent, AStaticPairIsNeverEvenTested)
   const auto b = addBody(scene, "B", { 1, 0, 0 }, false, true);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   // Overlapping, but neither is a collision source: the sweep skips an edge with no rigid body, so two
   // pieces of static geometry sharing a space cost nothing and report nothing.
@@ -185,7 +188,7 @@ TEST(CollisionEvent, AStaticPairIsNeverEvenTested)
   // The same overlap, with one of them given a body. This is what makes the silence above about the
   // missing body rather than about the boxes not touching.
   a->addComponent(std::make_shared<RigidBody>());
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), a, b));
 }
@@ -202,7 +205,7 @@ TEST(CollisionEvent, LayersThatDoNotShareAMaskProduceNoEvent)
   b->getComponent<Collider>(ComponentType::collider)->setMask(1u << 2);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   // The filter sits ahead of the narrow phase, so a filtered pair produces neither a response nor an
   // event - not an event without a response, which is what a trigger is.
@@ -212,7 +215,7 @@ TEST(CollisionEvent, LayersThatDoNotShareAMaskProduceNoEvent)
   a->getComponent<Collider>(ComponentType::collider)->setMask(1u << 2);
   b->getComponent<Collider>(ComponentType::collider)->setMask(1u << 1);
 
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), a, b));
 }
 
@@ -236,14 +239,14 @@ TEST(CollisionEvent, OneSidedMaskAgreementIsNotEnough)
   b->getComponent<Collider>(ComponentType::collider)->setMask(1u << 2);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(collisionSystem.getCollisionEnters().empty());
 
   // B admitting A as well turns the same overlap into a contact, so the refusal above is the one-sided
   // mask and not the geometry.
   b->getComponent<Collider>(ComponentType::collider)->setMask(1u << 1);
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), a, b));
 }
@@ -270,7 +273,7 @@ TEST(CollisionEvent, AParentAndItsChildDoNotCollide)
   ASSERT_NE(child->getComponent<RigidBody>(ComponentType::rigidBody), nullptr);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   // A child's transform is relative to its parent, so the two occupy the same space by construction.
   // Reporting that as a contact would fire an event on every tick of every composed object.
@@ -283,7 +286,7 @@ TEST(CollisionEvent, AParentAndItsChildDoNotCollide)
   scene.objectManager->addObjectToRoot(child);
   child->addComponent(std::make_shared<RigidBody>());
 
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), parent, child));
 }
@@ -295,7 +298,7 @@ TEST(CollisionEvent, ATriggerReportsTheContactWithoutMovingAnything)
   const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
 
@@ -310,7 +313,7 @@ TEST(CollisionEvent, ASolidContactPushesTheBodyOut)
   const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   // The contrast with the trigger above, and what makes that test mean something: the same overlap
   // between solid colliders both reports the contact and corrects the overlap.
@@ -339,7 +342,7 @@ TEST(CollisionEvent, SeveralIndependentDynamicPairsAllResolveInOneTick)
   addBody(scene, "RestingC", { 201, 0, 0 }, false);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   // Same geometry as ASolidContactPushesTheBodyOut's single pair (unit boxes one apart, a full unit of
   // overlap), repeated three times, so each mover is pushed exactly 1 clear on x and nowhere else.
@@ -361,7 +364,7 @@ TEST(CollisionEvent, TwoGenuineContactsInOneTickBothPushTheBodyClear)
   const auto deep = addBody(scene, "Deep", { 0, 1.0f, 0 }, false);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, shallow));
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, deep));
@@ -382,7 +385,7 @@ TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
     addBody(scene, "Shallow", { 1.5f, 0, 0 }, false);
 
     CollisionSystem collisionSystem;
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     expectNear(positionOf(moving), { -0.5f, 0, 0 }, 1e-3f);
   }
@@ -393,7 +396,7 @@ TEST(CollisionEvent, EachContactAloneMatchesItsShareOfTheCombinedResponse)
     addBody(scene, "Deep", { 0, 1.0f, 0 }, false);
 
     CollisionSystem collisionSystem;
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     expectNear(positionOf(moving), { 0, -1.0f, 0 }, 1e-3f);
   }
@@ -411,7 +414,7 @@ TEST(CollisionEvent, AContactTheFirstResponseAlreadyClearedIsNotAppliedAgain)
   const auto shallow = addBody(scene, "Shallow", { 1.9f, -1.8f, 0 }, false);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, deep));
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, shallow));
@@ -426,7 +429,7 @@ TEST(CollisionEvent, ResetForgetsThePreviousTick)
   const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
 
   collisionSystem.reset();
@@ -437,7 +440,7 @@ TEST(CollisionEvent, ResetForgetsThePreviousTick)
 
   // A scene stop and start runs the diff against an empty history, so the first tick of the new run
   // reports the contact as new rather than as a stay carried over from the previous one.
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
   EXPECT_TRUE(collisionSystem.getCollisionStays().empty());
@@ -450,7 +453,7 @@ TEST(CollisionEvent, AnObjectLeavingTheSceneExitsRatherThanLingering)
   const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
 
   CollisionSystem collisionSystem;
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, resting));
 
   scene.objectManager->removeObject(resting);
@@ -458,7 +461,7 @@ TEST(CollisionEvent, AnObjectLeavingTheSceneExitsRatherThanLingering)
 
   // The pair has to leave through the exit list rather than being dropped silently, or a script that
   // paired an onCollisionEnter with an onCollisionExit never gets the second half.
-  collisionSystem.fixedUpdate(*scene.objectManager);
+  collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionExits(), moving, resting));
 }
@@ -484,7 +487,7 @@ TEST(CollisionEvent, ASphereMissingItsTransformDoesNotAbandonTheTick)
   const auto boxB = addBody(scene, "BoxB", { 51, 0, 0 }, true);
 
   CollisionSystem collisionSystem;
-  EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager));
+  EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager, dt));
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), boxA, boxB));
 }
@@ -514,7 +517,7 @@ TEST(CollisionEvent, ABoxMissingItsTransformDoesNotAbandonTheTick)
   fixtures::addRigidBody(sphereB);
 
   CollisionSystem collisionSystem;
-  EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager));
+  EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager, dt));
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), sphereA, sphereB));
 }

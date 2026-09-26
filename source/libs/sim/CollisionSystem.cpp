@@ -25,7 +25,7 @@ namespace {
   };
 }
 
-void CollisionSystem::fixedUpdate(const ObjectManager& objectManager)
+void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
 {
   m_collisionEdges.clear();
 
@@ -44,10 +44,10 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager)
     }
   }
 
-  checkCollisions();
+  checkCollisions(dt);
 }
 
-void CollisionSystem::checkCollisions()
+void CollisionSystem::checkCollisions(const float dt)
 {
   for (auto& edge : m_collisionEdges)
   {
@@ -99,7 +99,7 @@ void CollisionSystem::checkCollisions()
       continue;
     }
 
-    handleCollisions(rigidBody, m_collisionEdges[i].collider, perEdgeCollisions[i]);
+    handleCollisions(rigidBody, m_collisionEdges[i].collider, perEdgeCollisions[i], dt);
   }
 
   recordCollisionEvents(perEdgeCollisions);
@@ -223,7 +223,7 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
 }
 
 void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
-                                       const std::vector<std::shared_ptr<Object>>& collidedObjects)
+                                       const std::vector<std::shared_ptr<Object>>& collidedObjects, const float dt)
 {
   if (collidedObjects.size() == 1)
   {
@@ -236,7 +236,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
     if (const auto contact = contactWith(collider, collidedObjects[0]))
     {
       PhysicsSystem::handleCollision(*rigidBody, collidedObjects[0], contact->minimumTranslationVector,
-                                     contact->contactPoints());
+                                     contact->contactPoints(), dt);
     }
 
     return;
@@ -283,7 +283,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
     }
 
     PhysicsSystem::handleCollision(*rigidBody, scoredContact.object, contact->minimumTranslationVector,
-                                   contact->contactPoints());
+                                   contact->contactPoints(), dt);
     bodyMoved = true;
   }
 }

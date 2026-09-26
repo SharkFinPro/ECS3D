@@ -39,7 +39,8 @@ struct CollisionPair {
 
 class CollisionSystem {
 public:
-  void fixedUpdate(const ObjectManager& objectManager);
+  // dt is the tick length, which contact responses need to combine per-tick velocity with spin.
+  void fixedUpdate(const ObjectManager& objectManager, float dt);
 
   // Collision events for the most recent tick, diffed against the tick before it. enters = pairs new
   // this tick, stays = pairs present both ticks, exits = pairs gone this tick. Sorted; consumed by the
@@ -62,7 +63,7 @@ private:
   std::vector<CollisionPair> m_stays;
   std::vector<CollisionPair> m_exits;
 
-  void checkCollisions();
+  void checkCollisions(float dt);
 
   // Build this tick's sorted pair set from the per-edge collision results and diff it against the
   // previous tick to refresh m_enters/m_stays/m_exits.
@@ -76,7 +77,7 @@ private:
   void findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
-                               const std::vector<std::shared_ptr<Object>>& collidedObjects);
+                               const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt);
 
   // A contact is a trigger (events fire, but no physical response) if either collider is flagged as one.
   static bool isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other);

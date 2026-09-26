@@ -57,6 +57,13 @@ namespace {
     fixtures::expectNear(what, actual, expected, 1e-4f);
   }
 
+  // A body's spin in radians per tick, the units a push is in, rather than the degrees per second it is
+  // stored in.
+  glm::vec3 spinPerTickOf(const RigidBody& body)
+  {
+    return glm::radians(body.getAngularVelocity()) * dt;
+  }
+
   // Where a body's local up axis points, composed the way BoxCollider places its vertices, so the tests
   // read a rotation the way collisions do rather than through the code under test.
   glm::vec3 localUpOf(const glm::vec3& rotationDegrees)
@@ -158,7 +165,7 @@ TEST(PhysicsIntegration, AForceThroughTheCentreOfMassDoesNotSpinTheBody)
   const auto body = addBody(object, false);
 
   const auto transform = transformOf(object);
-  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, transform->getPosition());
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, transform->getPosition(), dt);
 
   expectNear("velocity", body->getVelocity(), { 1, 0, 0 });
   expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
@@ -175,7 +182,7 @@ TEST(PhysicsIntegration, AForceAlmostThroughTheCentreIsTreatedAsThroughIt)
   // Five thousandths off centre, inside the one-centimetre lever arm applyForce refuses to divide by.
   // The exactly-centred case above proves nothing about that guard - the cross product of a zero vector
   // is zero whether the guard is there or not - so this is the one that would notice it going away.
-  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 0.005f, 0 });
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 0.005f, 0 }, dt);
 
   expectNear("velocity", body->getVelocity(), { 1, 0, 0 });
   expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
@@ -189,15 +196,15 @@ TEST(PhysicsIntegration, AForceOffTheCentreSpinsTheBodyThroughItsInertiaTensor)
 
   const auto transform = transformOf(object);
 
-  // Pushed along +x one unit above the centre. The impulse is r x F = (0,1,0) x (1,0,0) = (0,0,-1),
-  // divided by the inertia tensor. At the default mass of 10 and unit scale the tensor is
-  // (1/12) * 10 * 0.1 * (1 + 1) = 1/6 on every diagonal, so its inverse is 6.
-  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 });
+  // Pushed along +x one unit above the centre: r x F = (0,1,0) x (1,0,0) = (0,0,-1), through the inverse of
+  // the inertia tensor. The push is a change of velocity, so the tensor is per unit mass too. A unit-scale box
+  // reaches one unit from its centre on every axis, so each diagonal is (1 + 1) / 3 and its inverse 1.5.
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 }, dt);
 
-  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, -6 });
+  expectNear("spin per tick", spinPerTickOf(*body), { 0, 0, -1.5f });
 }
 
-TEST(PhysicsIntegration, AHeavierBodyIsHarderToSpin)
+TEST(PhysicsIntegration, MassScalesNeitherThePushNorTheSpinItGives)
 {
   const auto scene = makeScene();
   const auto object = addObject(scene, "Heavy", { 0, 0, 0 });
@@ -206,11 +213,12 @@ TEST(PhysicsIntegration, AHeavierBodyIsHarderToSpin)
   body->setMass(20.0f);
 
   const auto transform = transformOf(object);
-  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 });
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 }, dt);
 
-  // Twice the mass, twice the inertia, half the spin from the same impulse. Mass entering the tensor is
-  // the part a refactor is most likely to drop, and nothing else in the engine would notice.
-  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, -3 });
+  // A push is a change of velocity, which mass does not scale for the body's travel. Scaling only the spin by
+  // it would have a contact resolve a heavy body's tipping into more fall and less turn than it allows.
+  expectNear("velocity", body->getVelocity(), { 1, 0, 0 });
+  expectNear("spin per tick", spinPerTickOf(*body), { 0, 0, -1.5f });
 }
 
 TEST(PhysicsIntegration, AWiderBodyIsHarderToSpinAboutItsShortAxis)
@@ -221,11 +229,11 @@ TEST(PhysicsIntegration, AWiderBodyIsHarderToSpinAboutItsShortAxis)
 
   const auto transform = transformOf(object);
   transform->setScale({ 3, 1, 1 });
-  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 });
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 }, dt);
 
-  // Izz takes width and height: (1/12) * 10 * 0.1 * (9 + 1) = 5/6, so the same impulse spins it at 1.2
-  // rather than 6. The tensor has to see the object's scale, not just its mass.
-  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, -1.2f });
+  // Izz takes width and height: (9 + 1) / 3, so the same push spins it at 0.3 rather than 1.5. The tensor
+  // has to see the object's scale.
+  expectNear("spin per tick", spinPerTickOf(*body), { 0, 0, -0.3f });
 }
 
 TEST(PhysicsIntegration, ATurnedBodySpinsThroughTheInertiaOfTheAxisNowLyingAlongTheTorque)
@@ -239,12 +247,12 @@ TEST(PhysicsIntegration, ATurnedBodySpinsThroughTheInertiaOfTheAxisNowLyingAlong
   transform->setRotation({ 0, 90, 0 });
 
   // The same push as above, but the long axis is turned from world x onto world z, the axis the torque
-  // (0,0,-1) is about. The body now turns about one of its short axes, whose inertia is
-  // (1/12) * 10 * 0.1 * (1 + 1) = 1/6, so it spins at 6 - not the 1.2 of its long axis, which is what
-  // applying the body-frame tensor to a world-space torque gives.
-  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 });
+  // (0,0,-1) is about. The body now turns about one of its short axes, whose inertia is (1 + 1) / 3, so it
+  // spins at 1.5 - not the 0.3 of its long axis, which is what applying the body-frame tensor to a
+  // world-space torque gives.
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 }, dt);
 
-  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, -6 });
+  expectNear("spin per tick", spinPerTickOf(*body), { 0, 0, -1.5f });
 }
 
 TEST(PhysicsIntegration, ADegenerateScaleKeepsAngularVelocityFiniteInsteadOfSpinningToNaN)
@@ -258,7 +266,7 @@ TEST(PhysicsIntegration, ADegenerateScaleKeepsAngularVelocityFiniteInsteadOfSpin
   // Every diagonal of the inertia tensor collapses to zero at this scale, so inverting it (the pre-fix
   // behaviour) produces inf, and inf times the zero cross product below is NaN. The off-centre push below
   // must be skipped rather than turned into a spin that never recovers.
-  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 });
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 }, dt);
 
   const auto angularVelocity = body->getAngularVelocity();
   EXPECT_TRUE(std::isfinite(angularVelocity.x));
@@ -269,9 +277,9 @@ TEST(PhysicsIntegration, ADegenerateScaleKeepsAngularVelocityFiniteInsteadOfSpin
   // catching the degenerate tensor rather than a guard that swallows every off-centre push.
   const auto normalObject = addObject(scene, "Normal", { 0, 0, 0 });
   const auto normalBody = addBody(normalObject, false);
-  PhysicsSystem::applyForce(*normalBody, *transformOf(normalObject), { 1, 0, 0 }, { 0, 1, 0 });
+  PhysicsSystem::applyForce(*normalBody, *transformOf(normalObject), { 1, 0, 0 }, { 0, 1, 0 }, dt);
 
-  expectNear("angular velocity", normalBody->getAngularVelocity(), { 0, 0, -6 });
+  expectNear("spin per tick", spinPerTickOf(*normalBody), { 0, 0, -1.5f });
 }
 
 TEST(PhysicsIntegration, SetMassRefusesToLeaveTheBodyAtZeroOrNegativeMass)
@@ -306,7 +314,7 @@ TEST(PhysicsIntegration, ACollisionAlongTheTranslationVectorCancelsTheVelocityIn
   body->setVelocity({ 0, -1, 0 });
 
   // Pushed a quarter unit back up out of the ground, with the contact directly under the body.
-  PhysicsSystem::handleCollision(*body, ground, { 0, 0.25f, 0 }, { 0, -1, 0 });
+  PhysicsSystem::handleCollision(*body, ground, { 0, 0.25f, 0 }, { 0, -1, 0 }, dt);
 
   // The correction moves the body clear, and the impulse removes exactly the velocity that was driving
   // it into the surface - so it rests rather than accumulating downward speed against something solid.
@@ -318,6 +326,48 @@ TEST(PhysicsIntegration, ACollisionAlongTheTranslationVectorCancelsTheVelocityIn
   // and the impulse are parallel, so a swapped argument order or a sign slip in there would show up here
   // and nowhere else.
   expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
+}
+
+TEST(PhysicsIntegration, AStaticContactDoesNotHoldBackABodyAlreadyLeavingIt)
+{
+  const auto scene = makeScene();
+
+  const auto rising = addObject(scene, "Rising", { 0, 0, 0 });
+  const auto body = addBody(rising, false);
+  const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
+
+  body->setVelocity({ 0, 1, 0 });
+
+  PhysicsSystem::handleCollision(*body, ground, { 0, 0.25f, 0 }, { 0, -1, 0 }, dt);
+
+  // Still moved clear of the overlap, but its velocity is kept: it is already leaving, and stopping it would
+  // pull a body tipping up off an edge back down onto it.
+  EXPECT_NEAR(transformOf(rising)->getPosition().y, 0.25f, 1e-5f);
+  EXPECT_NEAR(body->getVelocity().y, 1.0f, 1e-5f);
+}
+
+TEST(PhysicsIntegration, AContactOffTheCenterStopsThePointItTouchesRatherThanTheWholeBody)
+{
+  const auto scene = makeScene();
+
+  const auto box = addObject(scene, "Box", { 0, 0, 0 });
+  const auto body = addBody(box, false);
+  const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
+
+  body->setVelocity({ 0, -1, 0 });
+
+  // Under an edge, one unit to the side of the centre: r = (1, -1.01, 0) once the correction lifts the body.
+  const glm::vec3 edge{ 1, -1, 0 };
+  PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, edge, dt);
+
+  // |r x n| is 1 and the inverse inertia 1.5, so the push that stops the point is 1 / (1 + 1.5) = 0.4 of the
+  // fall, and it spins the body at 1.5 * 0.4 radians per tick. Stopping the whole fall and adding that spin
+  // on top, as before, gave the body more energy than it landed with.
+  EXPECT_NEAR(body->getVelocity().y, -0.6f, 1e-5f);
+  expectNear("spin per tick", spinPerTickOf(*body), { 0, 0, 0.6f });
+
+  const auto arm = edge - transformOf(box)->getPosition();
+  EXPECT_NEAR(body->getVelocity().y + glm::cross(spinPerTickOf(*body), arm).y, 0.0f, 1e-5f);
 }
 
 TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
@@ -341,7 +391,7 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
   for (int tick = 0; tick < 60; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     // Sampled only once it has had every chance to settle, so the fall itself is not measured.
     if (tick >= 50)
@@ -383,7 +433,7 @@ TEST(PhysicsIntegration, ABoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
   for (int tick = 0; tick < 60; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     if (tick >= 50)
     {
@@ -417,12 +467,64 @@ TEST(PhysicsIntegration, ABoxLandingOnACornerStillPicksUpSpin)
   for (int tick = 0; tick < 20; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     maxAngularSpeed = std::max(maxAngularSpeed, glm::length(body->getAngularVelocity()));
   }
 
   EXPECT_GT(maxAngularSpeed, 0.1f);
+}
+
+TEST(PhysicsIntegration, ABoxLandingOnAnEdgeFallsOntoItsFaceRatherThanCreepingOver)
+{
+  const auto scene = makeScene();
+
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 });
+  fixtures::addBoxCollider(ground);
+
+  // Tilted 25 degrees, it lands on one edge with its center of mass over the ground, so the support at that
+  // edge turns it down onto its face. The spin a support gives used to be thousands of times too weak, and
+  // after these thirty ticks the box was still leaning more than ten degrees.
+  const auto falling = addObject(scene, "Falling", { 0, 5, 0 });
+  fixtures::addBoxCollider(falling);
+  addBody(falling, true);
+  transformOf(falling)->setRotation({ 0, 0, 25 });
+
+  CollisionSystem collisionSystem;
+
+  for (int tick = 0; tick < 30; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+  }
+
+  fixtures::expectNear("up", localUpOf(transformOf(falling)->getRotation()), { 0, 1, 0 }, 1e-3f);
+  EXPECT_NEAR(transformOf(falling)->getPosition().y, 2.0f, 0.1f);
+}
+
+TEST(PhysicsIntegration, ABoxWhoseCenterOverhangsALedgeTipsOffIt)
+{
+  const auto scene = makeScene();
+
+  // The ground ends at x = 3, and the box's center sits 0.3 past it: the support is only the strip of its
+  // underside still over the ground, all on one side of the center.
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 3, 1, 3 });
+  fixtures::addBoxCollider(ground);
+
+  const auto box = addObject(scene, "Box", { 3.3f, 2, 0 });
+  fixtures::addBoxCollider(box);
+  addBody(box, true);
+
+  CollisionSystem collisionSystem;
+
+  for (int tick = 0; tick < 10; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+  }
+
+  // A second in, it has tipped well over the edge. It used to have turned about a degree.
+  EXPECT_LT(localUpOf(transformOf(box)->getRotation()).y, std::cos(glm::radians(20.0f)));
 }
 
 TEST(PhysicsIntegration, ASmallerBoxRestingNearTheEdgeOfALargerOneDoesNotSpin)
@@ -446,7 +548,7 @@ TEST(PhysicsIntegration, ASmallerBoxRestingNearTheEdgeOfALargerOneDoesNotSpin)
   for (int tick = 0; tick < 60; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     if (tick >= 50)
     {
@@ -484,7 +586,7 @@ TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStaysSupportedRatherT
   for (int tick = 0; tick < 150; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     if (tick >= 120)
     {
@@ -524,7 +626,7 @@ TEST(PhysicsIntegration, AYawedBoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
   for (int tick = 0; tick < 60; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     if (tick >= 50)
     {
@@ -560,7 +662,7 @@ namespace {
     for (int tick = 0; tick < 60; ++tick)
     {
       PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-      collisionSystem.fixedUpdate(*scene.objectManager);
+      collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
       if (tick >= 40)
       {
@@ -685,7 +787,7 @@ TEST(PhysicsIntegration, TwoBodiesClosingOnEachOtherAreSeparatedAndSlowed)
 
   // Both bodies are corrected, in opposite directions - unlike the static case, where only the one with
   // a body moves. The contact is placed along the normal so the impulse produces no torque of its own.
-  PhysicsSystem::handleCollision(*leftBody, right, { 1, 0, 0 }, { 2, 0, 0 });
+  PhysicsSystem::handleCollision(*leftBody, right, { 1, 0, 0 }, { 2, 0, 0 }, dt);
 
   expectNear("left position", transformOf(left)->getPosition(), { 1, 0, 0 });
   expectNear("right position", transformOf(right)->getPosition(), { -1, 0, 0 });
@@ -713,7 +815,7 @@ TEST(PhysicsIntegration, TwoBodiesAlreadyMovingApartAreSeparatedButNotSlowed)
   leftBody->setVelocity({ 1, 0, 0 });
   right->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity({ -1, 0, 0 });
 
-  PhysicsSystem::handleCollision(*leftBody, right, { 1, 0, 0 }, { 2, 0, 0 });
+  PhysicsSystem::handleCollision(*leftBody, right, { 1, 0, 0 }, { 2, 0, 0 }, dt);
 
   // Still pushed apart - an overlap is an overlap - but no impulse to either body, because they are
   // already separating and adding one would fling apart two bodies that were resolving themselves.
@@ -733,7 +835,7 @@ TEST(PhysicsIntegration, ASpinningBoxResolvedAcrossAManifoldIsNotFlungByItsOwnSp
 
   // Angular velocity is in degrees per second and linear velocity in units per tick. Read as the same
   // unit, this spin has two underside corners closing on the ground at 90 units per tick, which a solve
-  // over the manifold turned into a linear kick of that order.
+  // over the manifold once turned into a linear kick of that order.
   body->setAngularVelocity({ 180, 0, 0 });
 
   const std::array<glm::vec3, 4> underside{
@@ -741,7 +843,7 @@ TEST(PhysicsIntegration, ASpinningBoxResolvedAcrossAManifoldIsNotFlungByItsOwnSp
     glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f }
   };
 
-  PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, underside);
+  PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, underside, dt);
 
   // The ground stops the spin driving those corners into it, and none of it becomes linear velocity.
   expectNear("velocity", body->getVelocity(), { 0, 0, 0 });
@@ -764,7 +866,7 @@ namespace {
     const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
 
     body->setAngularVelocity(angularVelocity);
-    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, flatUnderside);
+    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, flatUnderside, dt);
 
     return body->getAngularVelocity();
   }
@@ -789,7 +891,7 @@ TEST(PhysicsIntegration, ASpinLiftingAContactOffItsSupportIsLeftAlone)
     const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
 
     body->setAngularVelocity(angularVelocity);
-    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, edge);
+    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, edge, dt);
 
     return body->getAngularVelocity();
   };
@@ -822,7 +924,7 @@ TEST(PhysicsIntegration, ARestingBodysLeftoverSpinIsBroughtExactlyToRest)
   };
 
   body->setAngularVelocity({ 0, 0.005f, 0 });
-  PhysicsSystem::handleCollision(*body, ceiling, { 0, -0.01f, 0 }, topside);
+  PhysicsSystem::handleCollision(*body, ceiling, { 0, -0.01f, 0 }, topside, dt);
 
   expectNear("under a ceiling", body->getAngularVelocity(), { 0, 0.005f, 0 });
 }
@@ -841,7 +943,7 @@ TEST(PhysicsIntegration, ABodyTurningWithItsSupportKeepsTheSpinTheyShare)
 
   body->setAngularVelocity({ 0, 0, 2 });
   supportBody->setAngularVelocity({ 0, 0, 2 });
-  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, flatUnderside);
+  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, flatUnderside, dt);
 
   expectNear("on a turning support", body->getAngularVelocity(), { 0, 0, 2 });
 }
@@ -859,7 +961,7 @@ TEST(PhysicsIntegration, AContactUnderTheCenterIsNotSpunUpToChaseATurningSupport
   supportBody->setAngularVelocity({ 0, 0, -2 });
   const std::array<glm::vec3, 1> underneath{ glm::vec3{ 1e-6f, -0.5f, 0 } };
 
-  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, underneath);
+  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, underneath, dt);
 
   EXPECT_LT(glm::length(body->getAngularVelocity()), 1e-3f);
 }
@@ -876,7 +978,7 @@ namespace {
 
     transformOf(box)->setRotation(rotation);
     PhysicsSystem::handleCollision(*box->getComponent<RigidBody>(ComponentType::rigidBody), ground,
-                                   minimumTranslationVector, contactPoints);
+                                   minimumTranslationVector, contactPoints, dt);
 
     return transformOf(box)->getRotation();
   }
@@ -931,7 +1033,7 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
   for (int tick = 0; tick < 200; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
-    collisionSystem.fixedUpdate(*scene.objectManager);
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     if (tick == 150)
     {
