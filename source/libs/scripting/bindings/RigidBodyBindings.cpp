@@ -71,17 +71,18 @@ RigidBodyBindings RigidBodyBindingsProvider::getBindings()
   };
 }
 
-void RigidBodyBindingsProvider::bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz)
+void RigidBodyBindingsProvider::bindApplyForce(const char* uuid, float x, float y, float z, float px, float py,
+                                               float pz, const int mode)
 {
   const auto rigidBody = find(uuid);
-  if (!rigidBody)
+  if (!rigidBody || mode < 0 || mode > static_cast<int>(ForceMode::velocityChange))
   {
     return;
   }
 
   // Queue the force on the data instead of reaching into ECS3DSim from here; PhysicsSystem drains the
   // pending forces during its tick (keeping scripting independent of sim).
-  rigidBody->addPendingForce({ x, y, z }, { px, py, pz });
+  rigidBody->addPendingForce({ x, y, z }, { px, py, pz }, static_cast<ForceMode>(mode));
 }
 
 void RigidBodyBindingsProvider::bindSetVelocity(const char* uuid, float x, float y, float z)

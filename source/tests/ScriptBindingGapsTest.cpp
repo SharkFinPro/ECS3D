@@ -157,6 +157,30 @@ namespace {
     EXPECT_FALSE(bindings.getDoGravity(uuid.c_str()));
   }
 
+  TEST_F(ScriptBindingGapsTest, RigidBodyApplyForceQueuesTheForceInTheModeItNames)
+  {
+    const auto object = fixtures::addObject(scene, "object");
+    const auto rigidBody = fixtures::addRigidBody(object);
+    const auto bindings = RigidBodyBindingsProvider::getBindings();
+    const auto uuid = uuidOf(object);
+
+    bindings.applyForce(uuid.c_str(), 1, 2, 3, 4, 5, 6, static_cast<int>(ForceMode::impulse));
+
+    ASSERT_EQ(rigidBody->getPendingForces().size(), 1u);
+    const auto& pending = rigidBody->getPendingForces().front();
+    fixtures::expectNear("force", pending.force, glm::vec3(1, 2, 3));
+    fixtures::expectNear("position", pending.position, glm::vec3(4, 5, 6));
+    EXPECT_EQ(pending.mode, ForceMode::impulse);
+
+    // A mode the native side does not know queues nothing, rather than a force in units nobody asked for.
+    bindings.applyForce(uuid.c_str(), 1, 2, 3, 4, 5, 6, -1);
+    bindings.applyForce(uuid.c_str(), 1, 2, 3, 4, 5, 6, static_cast<int>(ForceMode::velocityChange) + 1);
+    EXPECT_EQ(rigidBody->getPendingForces().size(), 1u);
+
+    // Applying a force is a physics input, not an edit to replicate.
+    EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+  }
+
   TEST_F(ScriptBindingGapsTest, RigidBodySetMassGoesThroughTheSetterFloorAndRecordsAnEdit)
   {
     const auto object = fixtures::addObject(scene, "object");

@@ -22,9 +22,9 @@ RigidBody::RigidBody()
   loadVariable(m_mass);
 }
 
-void RigidBody::addPendingForce(const glm::vec3& force, const glm::vec3& position)
+void RigidBody::addPendingForce(const glm::vec3& force, const glm::vec3& position, const ForceMode mode)
 {
-  m_pendingForces.push_back({ force, position });
+  m_pendingForces.push_back({ force, position, mode });
 }
 
 const std::vector<RigidBody::PendingForce>& RigidBody::getPendingForces() const
@@ -140,6 +140,26 @@ bool RigidBody::getNextFalling() const
 void RigidBody::setNextFalling(const bool nextFalling)
 {
   m_nextFalling = nextFalling;
+}
+
+float RigidBody::getStackedLoad() const
+{
+  return m_stackedLoad;
+}
+
+void RigidBody::setStackedLoad(const float stackedLoad)
+{
+  m_stackedLoad = stackedLoad;
+}
+
+glm::vec3 RigidBody::getHeldImpulse() const
+{
+  return m_heldImpulse;
+}
+
+void RigidBody::setHeldImpulse(const glm::vec3& heldImpulse)
+{
+  m_heldImpulse = heldImpulse;
 }
 
 nlohmann::json RigidBody::serialize()

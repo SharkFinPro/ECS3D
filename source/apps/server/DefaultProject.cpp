@@ -2,6 +2,7 @@
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
 #include <glm/geometric.hpp>
+#include <algorithm>
 #include <random>
 #include <string>
 #include <uuid.h>
@@ -24,6 +25,15 @@ const std::string blockPrefab = "0a1e5c2d-7b3f-4a91-8c60-1d4e2f6a8b03";
 const std::string rigidBlockPrefab = "3f8c1a47-92d5-4e08-b1a6-5c7e09f4d2b1";
 const std::string spherePrefab = "6d2b4f19-08ac-4d73-9e52-b83a1c6f0e47";
 const std::string playerPrefab = "9c7f0e83-4d16-4b52-a09e-27f5b3d81c6a";
+
+// Masses are volumes at a density of one, so bodies of one material push each other by their size. A Block's
+// half-extents are its scale, so the unit Block is 2 x 2 x 2; a unit Sphere or Player has a radius of one.
+constexpr float blockMass = 8.0f;
+constexpr float sphereMass = 4.18879f;
+
+constexpr float propFriction = 0.5f;
+// PlayerScript steers the player's velocity itself; friction with the ground would only fight it.
+constexpr float playerFriction = 0.0f;
 
 std::string newUUID()
 {
@@ -63,16 +73,16 @@ json modelRenderer(const std::string& model, const std::string& texture, const s
   };
 }
 
-json rigidBody()
+json rigidBody(const float mass, const float friction)
 {
   return {
     { "type", "RigidBody" },
     { "velocity", vec(glm::vec3(0)) },
     { "angularVelocity", vec(glm::vec3(0)) },
-    { "friction", 0.1 },
+    { "friction", friction },
     { "doGravity", true },
     { "gravity", -9.81 },
-    { "mass", 10.0 }
+    { "mass", mass }
   };
 }
 
@@ -139,7 +149,7 @@ const json& blockBody()
   static const json body = makeObject("Block", json::array({
     transform(glm::vec3(0)),
     modelRenderer(cubeModel, whiteTexture, whiteTexture),
-    rigidBody(),
+    rigidBody(blockMass, propFriction),
     boxCollider()
   }));
 
@@ -162,7 +172,7 @@ const json& sphereBody()
   static const json body = makeObject("Sphere", json::array({
     transform(glm::vec3(0)),
     modelRenderer(sphereModel, earthTexture, earthSpecularTexture),
-    rigidBody(),
+    rigidBody(sphereMass, propFriction),
     sphereCollider()
   }));
 
@@ -174,7 +184,7 @@ const json& playerBody()
   static const json body = makeObject("Player", json::array({
     transform(glm::vec3(0)),
     modelRenderer(playerModel, whiteTexture, whiteTexture),
-    rigidBody(),
+    rigidBody(sphereMass, playerFriction),
     sphereCollider(),
     playerController(),
     camera()
@@ -183,8 +193,8 @@ const json& playerBody()
       { "type", "Script" },
       { "className", "PlayerScript" },
       { "fields", json::array({
-        { { "name", "m_speed" }, { "type", "float" }, { "value", 1.0 } },
-        { { "name", "m_jumpForce" }, { "type", "float" }, { "value", 15.0 } }
+        { { "name", "m_topSpeed" }, { "type", "float" }, { "value", 9.0 } },
+        { { "name", "m_jumpSpeed" }, { "type", "float" }, { "value", 15.0 } }
       })}
     }
   }));
@@ -224,11 +234,26 @@ json instanceOf(json body,
   return body;
 }
 
+// An instance scaled away from its prefab keeps the prefab's density rather than its mass.
+json withMass(json object, const float mass)
+{
+  for (auto& component : object.at("components"))
+  {
+    if (component.at("type") == "RigidBody")
+    {
+      component["mass"] = mass;
+      break;
+    }
+  }
+
+  return object;
+}
+
 json block(const glm::vec3& position,
            const glm::vec3& scale = glm::vec3(1),
            const glm::vec3& rotation = glm::vec3(0))
 {
-  return instanceOf(blockBody(), position, scale, rotation);
+  return withMass(instanceOf(blockBody(), position, scale, rotation), blockMass * scale.x * scale.y * scale.z);
 }
 
 json rigidBlock(const glm::vec3& position,
@@ -240,7 +265,10 @@ json rigidBlock(const glm::vec3& position,
 
 json sphere(const glm::vec3& position, const glm::vec3& scale = glm::vec3(1))
 {
-  return instanceOf(sphereBody(), position, scale);
+  // A sphere collider's radius takes the largest scale axis.
+  const float radius = std::max({ scale.x, scale.y, scale.z });
+
+  return withMass(instanceOf(sphereBody(), position, scale), sphereMass * radius * radius * radius);
 }
 
 json player(const glm::vec3& position, const int slot = 0,
