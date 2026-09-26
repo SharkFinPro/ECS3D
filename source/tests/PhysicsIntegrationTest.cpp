@@ -1480,6 +1480,57 @@ TEST(PhysicsIntegration, AHeavyBodySlidingOverALightRestingOneDoesNotSpinItOrDra
   expectNear("upper velocity", upperBody->getVelocity(), { 0.95f, 0, 0 });
 }
 
+namespace {
+  // A unit ball dropped half a unit off center onto another resting on a wide static ground, both as heavy as
+  // their volume, the upper one upperMass. Returns the furthest the lower ball moves toward the side the upper
+  // one falls off, and where it ends up, over three seconds of the server's ticks.
+  std::pair<float, float> lowerBallAfterTheUpperRollsOff(const float upperMass)
+  {
+    const auto scene = makeScene();
+
+    const auto ground = addObject(scene, "Ground", { 0, -9, 0 }, { 100, 10, 100 });
+    fixtures::addBoxCollider(ground);
+
+    const auto lower = addObject(scene, "Lower", { 0, 2, 0 });
+    fixtures::addSphereCollider(lower, 1.0f);
+    addBody(lower, true)->setMass(4.19f);
+
+    const auto upper = addObject(scene, "Upper", { 0.5f, 5, 0 });
+    fixtures::addSphereCollider(upper, 1.0f);
+    addBody(upper, true)->setMass(upperMass);
+
+    constexpr float serverDt = 1.0f / 50.0f;
+    CollisionSystem collisionSystem;
+
+    float furthestToward = std::numeric_limits<float>::lowest();
+    for (int tick = 0; tick < 150; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, serverDt);
+      collisionSystem.fixedUpdate(*scene.objectManager, serverDt);
+
+      furthestToward = std::max(furthestToward, transformOf(lower)->getPosition().x);
+    }
+
+    return { furthestToward, transformOf(lower)->getPosition().x };
+  }
+}
+
+TEST(PhysicsIntegration, ABallRollingOffAnotherPushesItAwayRatherThanPullingItAlong)
+{
+  // The contact pushes the lower ball away from the side the upper one leaves by, while friction drags it that
+  // way; its support holds the difference. Held as separate amounts, the two used up its grip between them and
+  // the drag of a heavy ball pulled the lower one after it.
+  for (const float upperMass : { 4.19f, 20.0f })
+  {
+    SCOPED_TRACE(testing::Message() << "upper mass " << upperMass);
+
+    const auto [furthestToward, finalX] = lowerBallAfterTheUpperRollsOff(upperMass);
+
+    EXPECT_LT(furthestToward, 0.01f);
+    EXPECT_LT(finalX, 0.0f);
+  }
+}
+
 TEST(PhysicsIntegration, TwoBodiesMeetingSlowlyDoNotBounce)
 {
   const auto velocitiesAfterMeeting = [](const float unitsPerSecond)

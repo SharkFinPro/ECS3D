@@ -152,14 +152,14 @@ void RigidBody::setStackedLoad(const float stackedLoad)
   m_stackedLoad = stackedLoad;
 }
 
-float RigidBody::getSpentGrip() const
+glm::vec3 RigidBody::getHeldImpulse() const
 {
-  return m_spentGrip;
+  return m_heldImpulse;
 }
 
-void RigidBody::setSpentGrip(const float spentGrip)
+void RigidBody::setHeldImpulse(const glm::vec3& heldImpulse)
 {
-  m_spentGrip = spentGrip;
+  m_heldImpulse = heldImpulse;
 }
 
 nlohmann::json RigidBody::serialize()

@@ -65,10 +65,10 @@ public:
   [[nodiscard]] float getStackedLoad() const;
   void setStackedLoad(float stackedLoad);
 
-  // The friction impulse its support has already spent this tick holding it against what rests on it, which that
-  // support no longer has for this body's own sliding.
-  [[nodiscard]] float getSpentGrip() const;
-  void setSpentGrip(float spentGrip);
+  // The horizontal impulse its support has held for it this tick against what presses on it from above. Friction
+  // there has only the rest of its grip for this body's own sliding, and pushes the opposite way cancel.
+  [[nodiscard]] glm::vec3 getHeldImpulse() const;
+  void setHeldImpulse(const glm::vec3& heldImpulse);
 
   [[nodiscard]] nlohmann::json serialize() override;
 
@@ -91,7 +91,7 @@ private:
 
   float m_stackedLoad = 0.0f;
 
-  float m_spentGrip = 0.0f;
+  glm::vec3 m_heldImpulse{ 0 };
 
   std::vector<PendingForce> m_pendingForces;
 };

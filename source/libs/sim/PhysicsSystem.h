@@ -119,14 +119,15 @@ private:
 
   // The normal impulse, pressed, that brings a pair where one side rests on a support to target along the
   // normal, and the part of it, squeezed, the held side takes itself rather than handing to its support.
-  [[nodiscard]] static std::pair<float, float> squeeze(const Side& held, const glm::vec3& normal, float target,
+  // pushDirection is the way the contact pushes the held side.
+  [[nodiscard]] static std::pair<float, float> squeeze(const Side& held, const glm::vec3& pushDirection, float target,
                                                        float freeResistance, float heldResistance);
 
   // The geometric mean of the two bodies' coefficients.
   [[nodiscard]] static float frictionOf(const Pair& pair);
 
-  // The friction impulse a resting side's own support can take for it this tick.
-  [[nodiscard]] static float holdingCapacity(const Side& side);
+  // The horizontal impulse along the unit direction a resting side's own support can still hold for it this tick.
+  [[nodiscard]] static float holdingCapacity(const Side& side, const glm::vec3& direction);
 
   // The part of a push along direction the side takes itself.
   [[nodiscard]] static glm::vec3 takenBy(const Side& side, const glm::vec3& direction);

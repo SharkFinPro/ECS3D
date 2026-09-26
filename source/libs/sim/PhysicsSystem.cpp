@@ -122,6 +122,21 @@ namespace {
     return 2.0f / 3.0f * total / static_cast<float>(points.size());
   }
 
+  glm::vec3 horizontalOf(const glm::vec3& vector)
+  {
+    return { vector.x, 0.0f, vector.z };
+  }
+
+  // How much more horizontal impulse along the unit direction a support can hold, having held already this tick,
+  // before friction there reaches limit. A push the other way first cancels what it has held.
+  float remainingHold(const glm::vec3& held, const glm::vec3& direction, const float limit)
+  {
+    const float along = glm::dot(held, direction);
+    const float room = along * along + limit * limit - glm::dot(held, held);
+
+    return room < 0.0f ? 0.0f : std::max(std::sqrt(room) - along, 0.0f);
+  }
+
   bool isSphere(const std::shared_ptr<Collider>& collider)
   {
     return collider && collider->getColliderType() == ColliderType::sphereCollider;
@@ -221,7 +236,7 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
   body.setFalling(body.getNextFalling());
   body.setNextFalling(true);
   body.setStackedLoad(0.0f);
-  body.setSpentGrip(0.0f);
+  body.setHeldImpulse(glm::vec3(0));
 
   if (body.getDoGravity())
   {
@@ -454,7 +469,7 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     // its turning would enter a response to a push it only partly takes, which can come out near zero or below
     // and have it squeezed out as if it weighed nothing.
     const float heldResistance = glm::dot(-freeDirection, responseAt(*held, point, -freeDirection, false));
-    const auto [pressed, squeezed] = squeeze(*held, pair.normal, target, freeResistance, heldResistance);
+    const auto [pressed, squeezed] = squeeze(*held, -freeDirection, target, freeResistance, heldResistance);
     impulse = pressed;
 
     push(freeSide, impulse * freeDirection, point, true, dt);
@@ -582,13 +597,33 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
 
   // A resting body's own support takes the drag first, as far as friction there can hold, so a light box under
   // a heavy one stays put rather than being swept along and letting the heavy one slide on.
-  const float held = otherHeld ? holdingCapacity(pair.other) : 0.0f;
+  // In units of this impulse, which moves the resting body sideways by only the horizontal part of direction. A
+  // straight-down drag goes to the support whole; a straight-up one it cannot hold at all.
+  const auto sideways = horizontalOf(direction);
+  const float sidewaysShare = glm::length(sideways);
+  float held = 0.0f;
+  if (otherHeld && sidewaysShare > 1e-6f)
+  {
+    held = holdingCapacity(pair.other, sideways / sidewaysShare) / sidewaysShare;
+  }
+  else if (otherHeld && direction.y < 0.0f)
+  {
+    held = std::numeric_limits<float>::max();
+  }
   const float stopping = speed <= held * bodyResistance
                            ? speed / bodyResistance
                            : (speed + held * otherResistance) / (bodyResistance + otherResistance);
 
-  // A support that has already held a drag from above this tick has only the rest of its grip for this body.
-  const float grip = friction * load - (pair.normal.y > 0.0f ? pair.body.body->getSpentGrip() : 0.0f);
+  // A support that has already held a push from above this tick has only the rest of its grip for this body -
+  // or all of it, if that push was the other way.
+  float grip = friction * load;
+  const auto slide = horizontalOf(direction);
+  const float slideShare = glm::length(slide);
+  if (pair.normal.y > 0.0f && slideShare > 1e-6f)
+  {
+    grip = std::min(grip, remainingHold(pair.body.body->getHeldImpulse(), slide / slideShare, grip) / slideShare);
+  }
+
   if (grip <= 0.0f)
   {
     return;
@@ -603,37 +638,42 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   push(pair.other, std::max(impulse - held, 0.0f) * direction, point, otherTurns, dt);
   if (held > 0.0f)
   {
-    pair.other.body->setSpentGrip(pair.other.body->getSpentGrip() + std::min(impulse, held));
+    pair.other.body->setHeldImpulse(pair.other.body->getHeldImpulse() + std::min(impulse, held) * sideways);
   }
 }
 
-std::pair<float, float> PhysicsSystem::squeeze(const Side& held, const glm::vec3& normal, const float target,
+std::pair<float, float> PhysicsSystem::squeeze(const Side& held, const glm::vec3& pushDirection, const float target,
                                                const float freeResistance, const float heldResistance)
 {
   const float anchored = target / freeResistance;
+  const auto sideways = horizontalOf(pushDirection);
+  const auto hold = [&held, &sideways](const float impulse)
+  {
+    held.body->setHeldImpulse(held.body->getHeldImpulse() + impulse * sideways);
+  };
 
   // The held side takes only the horizontal part of the push, and its support's friction holds even that inside
   // the friction cone. Past it, the held side is squeezed out sideways by what its support cannot hold - but
   // only by that, rather than by the whole weight of what presses on it.
-  const float slope = std::sqrt(normal.x * normal.x + normal.z * normal.z);
-  const float cone = std::max(held.body->getFriction(), 0.0f) * std::fabs(normal.y);
+  const float slope = glm::length(sideways);
+  const float cone = std::max(held.body->getFriction(), 0.0f) * std::fabs(pushDirection.y);
   if (slope <= cone || slope <= 1e-6f)
   {
-    held.body->setSpentGrip(held.body->getSpentGrip() + anchored * slope);
+    hold(anchored);
     return { anchored, 0.0f };
   }
 
   const float share = 1.0f - cone / slope;
-  const float holding = holdingCapacity(held) / slope;
+  const float holding = holdingCapacity(held, sideways / slope) / slope;
   if (anchored * share <= holding)
   {
-    held.body->setSpentGrip(held.body->getSpentGrip() + anchored * slope);
+    hold(anchored);
     return { anchored, 0.0f };
   }
 
   const float pressed = (target + heldResistance * holding) / (freeResistance + heldResistance * share);
   const float squeezed = pressed * share - holding;
-  held.body->setSpentGrip(held.body->getSpentGrip() + (pressed - squeezed) * slope);
+  hold(pressed - squeezed);
 
   return { pressed, squeezed };
 }
@@ -646,14 +686,14 @@ float PhysicsSystem::frictionOf(const Pair& pair)
   return pair.other.body ? std::sqrt(own * std::max(pair.other.body->getFriction(), 0.0f)) : own;
 }
 
-float PhysicsSystem::holdingCapacity(const Side& side)
+float PhysicsSystem::holdingCapacity(const Side& side, const glm::vec3& direction)
 {
   // What the side presses its support with this tick: its own fall, which that contact is about to stop, and
   // what is stacked on it.
   const float pressing = side.body->getMass() * std::max(-side.body->getVelocity().y, 0.0f) +
                          side.body->getStackedLoad();
 
-  return std::max(std::max(side.body->getFriction(), 0.0f) * pressing - side.body->getSpentGrip(), 0.0f);
+  return remainingHold(side.body->getHeldImpulse(), direction, std::max(side.body->getFriction(), 0.0f) * pressing);
 }
 
 float PhysicsSystem::restitution(const Pair& pair, const float closingSpeed, const float dt)
