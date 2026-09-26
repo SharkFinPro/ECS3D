@@ -355,7 +355,16 @@ void PhysicsSystem::separate(const Pair& pair, const glm::vec3 minimumTranslatio
 
   const auto bodyShare = takenBy(pair.body, pair.normal) / pair.body.body->getMass();
   const auto otherShare = takenBy(pair.other, -pair.normal) / pair.other.body->getMass();
-  const float scale = glm::length(minimumTranslationVector) / glm::dot(pair.normal, bodyShare - otherShare);
+  // Positive while at most one side has its push cut down by a support, which holds because the two are pushed
+  // opposite ways; if both ever were, the overlap goes to the body alone, as against static geometry.
+  const float resistance = glm::dot(pair.normal, bodyShare - otherShare);
+  if (resistance <= 0.0f)
+  {
+    respondToCollision(*pair.body.body, *pair.body.transform, minimumTranslationVector);
+    return;
+  }
+
+  const float scale = glm::length(minimumTranslationVector) / resistance;
 
   respondToCollision(*pair.body.body, *pair.body.transform, bodyShare * scale);
   respondToCollision(*pair.other.body, *pair.other.transform, otherShare * scale);
