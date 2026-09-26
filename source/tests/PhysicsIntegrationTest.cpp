@@ -11,7 +11,11 @@
 #include "objects/components/collisions/BoxCollider.h"
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/mat4x4.hpp>
+#include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -51,6 +55,17 @@ namespace {
   void expectNear(const char* what, const glm::vec3& actual, const glm::vec3& expected)
   {
     fixtures::expectNear(what, actual, expected, 1e-4f);
+  }
+
+  // Where a body's local up axis points, composed the way BoxCollider places its vertices, so the tests
+  // read a rotation the way collisions do rather than through the code under test.
+  glm::vec3 localUpOf(const glm::vec3& rotationDegrees)
+  {
+    const auto orientation = glm::rotate(glm::mat4(1.0f), glm::radians(rotationDegrees.z), { 0, 0, 1 })
+      * glm::rotate(glm::mat4(1.0f), glm::radians(rotationDegrees.y), { 0, 1, 0 })
+      * glm::rotate(glm::mat4(1.0f), glm::radians(rotationDegrees.x), { 1, 0, 0 });
+
+    return glm::vec3(orientation * glm::vec4(0, 1, 0, 0));
   }
 }
 
@@ -211,6 +226,25 @@ TEST(PhysicsIntegration, AWiderBodyIsHarderToSpinAboutItsShortAxis)
   // Izz takes width and height: (1/12) * 10 * 0.1 * (9 + 1) = 5/6, so the same impulse spins it at 1.2
   // rather than 6. The tensor has to see the object's scale, not just its mass.
   expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, -1.2f });
+}
+
+TEST(PhysicsIntegration, ATurnedBodySpinsThroughTheInertiaOfTheAxisNowLyingAlongTheTorque)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Turned", { 0, 0, 0 });
+  const auto body = addBody(object, false);
+
+  const auto transform = transformOf(object);
+  transform->setScale({ 3, 1, 1 });
+  transform->setRotation({ 0, 90, 0 });
+
+  // The same push as above, but the long axis is turned from world x onto world z, the axis the torque
+  // (0,0,-1) is about. The body now turns about one of its short axes, whose inertia is
+  // (1/12) * 10 * 0.1 * (1 + 1) = 1/6, so it spins at 6 - not the 1.2 of its long axis, which is what
+  // applying the body-frame tensor to a world-space torque gives.
+  PhysicsSystem::applyForce(*body, *transform, { 1, 0, 0 }, { 0, 1, 0 });
+
+  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, -6 });
 }
 
 TEST(PhysicsIntegration, ADegenerateScaleKeepsAngularVelocityFiniteInsteadOfSpinningToNaN)
@@ -592,6 +626,28 @@ TEST(PhysicsIntegration, ARotationTakesTheTimestepWhereAMoveDoesNot)
 
   // And the spin is damped a percent per tick afterwards, so a body left alone stops turning.
   expectNear("angular velocity", body->getAngularVelocity(), { 0, 9.9f, 0 });
+}
+
+TEST(PhysicsIntegration, SpinTurnsABodyAboutTheWorldAxisEvenWhenItIsAlreadyTurned)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Tilted", { 0, 0, 0 });
+  const auto body = addBody(object, false);
+
+  // Turned half way round and tilted 20 degrees, so its up axis leans toward -z. Spin about world +x
+  // leans it back toward +z: ten degrees in one tick at 100 degrees per second.
+  const glm::vec3 tilted{ 20, 180, 0 };
+  expectNear("initial up", localUpOf(tilted), { 0, glm::cos(glm::radians(20.0f)), -glm::sin(glm::radians(20.0f)) });
+
+  transformOf(object)->setRotation(tilted);
+  body->setAngularVelocity({ 100, 0, 0 });
+
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+
+  // Adding the spin to the x angle turns about the body's own x axis instead, which the half turn has
+  // reversed - the tilt grows to 30 degrees, and a torque meant to right the body topples it.
+  expectNear("up", localUpOf(transformOf(object)->getRotation()),
+             { 0, glm::cos(glm::radians(10.0f)), -glm::sin(glm::radians(10.0f)) });
 }
 
 TEST(PhysicsIntegration, TwoBodiesClosingOnEachOtherAreSeparatedAndSlowed)
