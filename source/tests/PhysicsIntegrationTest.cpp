@@ -650,6 +650,27 @@ TEST(PhysicsIntegration, SpinTurnsABodyAboutTheWorldAxisEvenWhenItIsAlreadyTurne
              { 0, glm::cos(glm::radians(10.0f)), -glm::sin(glm::radians(10.0f)) });
 }
 
+TEST(PhysicsIntegration, ASpinTooSlowToSeeIsKeptButDoesNotRewriteTheRotation)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Drifting", { 0, 0, 0 });
+  const auto body = addBody(object, false);
+
+  const glm::vec3 rotation{ 10, 20, 30 };
+  transformOf(object)->setRotation(rotation);
+  body->setAngularVelocity({ 0, 0.005f, 0 });
+
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+
+  // Compared exactly: turning by a spin this small only rewrites the angles by float noise, every tick.
+  EXPECT_EQ(transformOf(object)->getRotation().x, rotation.x);
+  EXPECT_EQ(transformOf(object)->getRotation().y, rotation.y);
+  EXPECT_EQ(transformOf(object)->getRotation().z, rotation.z);
+
+  // Still there for a torque to build on, so a slow start to tipping is not lost - just damped as usual.
+  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0.005f * 0.99f, 0 });
+}
+
 TEST(PhysicsIntegration, TwoBodiesClosingOnEachOtherAreSeparatedAndSlowed)
 {
   const auto scene = makeScene();
@@ -722,8 +743,213 @@ TEST(PhysicsIntegration, ASpinningBoxResolvedAcrossAManifoldIsNotFlungByItsOwnSp
 
   PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, underside);
 
+  // The ground stops the spin driving those corners into it, and none of it becomes linear velocity.
   expectNear("velocity", body->getVelocity(), { 0, 0, 0 });
-  expectNear("angular velocity", body->getAngularVelocity(), { 180, 0, 0 });
+  expectNear("angular velocity", body->getAngularVelocity(), { 0, 0, 0 });
+}
+
+namespace {
+  // A unit square underside a box centered at the origin rests on, as a box-on-box manifold reports it.
+  constexpr std::array<glm::vec3, 4> flatUnderside{
+    glm::vec3{ -0.5f, -0.5f, -0.5f }, glm::vec3{ 0.5f, -0.5f, -0.5f },
+    glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f }
+  };
+
+  // Spin a flat box resting on a static ground still has after one contact response.
+  glm::vec3 spinAfterRestingOnStaticGround(const glm::vec3& angularVelocity)
+  {
+    const auto scene = makeScene();
+    const auto box = addObject(scene, "Box", { 0, 0, 0 });
+    const auto body = addBody(box, false);
+    const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
+
+    body->setAngularVelocity(angularVelocity);
+    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, flatUnderside);
+
+    return body->getAngularVelocity();
+  }
+}
+
+TEST(PhysicsIntegration, ASupportStopsTheSpinDrivingItsContactsIntoItButNotTheSpinAboutItsNormal)
+{
+  // Tipping about x drives the +z corners into the ground; turning about y moves every corner along it.
+  // The unit box's inertia is the same on every axis, so the tipping part is removed outright.
+  expectNear("angular velocity", spinAfterRestingOnStaticGround({ 4, 3, 0 }), { 0, 3, 0 });
+}
+
+TEST(PhysicsIntegration, ASpinLiftingAContactOffItsSupportIsLeftAlone)
+{
+  const std::array<glm::vec3, 2> edge{ glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ 0.5f, -0.5f, -0.5f } };
+
+  const auto spinAfterRestingOnTheEdge = [&edge](const glm::vec3& angularVelocity)
+  {
+    const auto scene = makeScene();
+    const auto box = addObject(scene, "Box", { 0, 0, 0 });
+    const auto body = addBody(box, false);
+    const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
+
+    body->setAngularVelocity(angularVelocity);
+    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, edge);
+
+    return body->getAngularVelocity();
+  };
+
+  // Resting on its +x edge, spin about +z lifts that edge off the ground, as when the box falls back onto
+  // its face or tips over a ledge on the far side of its center, so the contact leaves it alone. The
+  // opposite spin drives the edge down into the ground and is stopped.
+  expectNear("tipping away", spinAfterRestingOnTheEdge({ 0, 0, 5 }), { 0, 0, 5 });
+  expectNear("driving into it", spinAfterRestingOnTheEdge({ 0, 0, -5 }), { 0, 0, 0 });
+}
+
+TEST(PhysicsIntegration, ARestingBodysLeftoverSpinIsBroughtExactlyToRest)
+{
+  // Spin about the normal only decays by the per-tick damping, which never reaches zero, and any spin at
+  // all rewrites the rotation every tick. Compared exactly, since only exactly zero stops that rewrite.
+  EXPECT_EQ(glm::length(spinAfterRestingOnStaticGround({ 0, 0.005f, 0 })), 0.0f);
+
+  // Positive controls: a spin fast enough to see is kept, and so is a slow one against a contact from
+  // above, which is not holding the body up.
+  expectNear("visible spin", spinAfterRestingOnStaticGround({ 0, 0.05f, 0 }), { 0, 0.05f, 0 });
+
+  const auto scene = makeScene();
+  const auto box = addObject(scene, "Box", { 0, 0, 0 });
+  const auto body = addBody(box, false);
+  const auto ceiling = addObject(scene, "Ceiling", { 0, 1, 0 });
+
+  const std::array<glm::vec3, 4> topside{
+    glm::vec3{ -0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
+    glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, 0.5f }
+  };
+
+  body->setAngularVelocity({ 0, 0.005f, 0 });
+  PhysicsSystem::handleCollision(*body, ceiling, { 0, -0.01f, 0 }, topside);
+
+  expectNear("under a ceiling", body->getAngularVelocity(), { 0, 0.005f, 0 });
+}
+
+TEST(PhysicsIntegration, ABodyTurningWithItsSupportKeepsTheSpinTheyShare)
+{
+  // Stopped on a static ground: the -x corners are closing on it.
+  expectNear("on static ground", spinAfterRestingOnStaticGround({ 0, 0, 2 }), { 0, 0, 0 });
+
+  // On a support turning at the same rate, its surface moves with the corners and nothing is closing.
+  const auto scene = makeScene();
+  const auto box = addObject(scene, "Box", { 0, 0, 0 });
+  const auto body = addBody(box, false);
+  const auto support = addObject(scene, "Support", { 0, -1, 0 });
+  const auto supportBody = addBody(support, false);
+
+  body->setAngularVelocity({ 0, 0, 2 });
+  supportBody->setAngularVelocity({ 0, 0, 2 });
+  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, flatUnderside);
+
+  expectNear("on a turning support", body->getAngularVelocity(), { 0, 0, 2 });
+}
+
+TEST(PhysicsIntegration, AContactUnderTheCenterIsNotSpunUpToChaseATurningSupport)
+{
+  const auto scene = makeScene();
+  const auto ball = addObject(scene, "Ball", { 0, 0, 0 });
+  const auto body = addBody(ball, false);
+  const auto support = addObject(scene, "Support", { 1, -1, 0 });
+  const auto supportBody = addBody(support, false);
+
+  // A sphere's contact sits on the normal through its center, up to float noise, so spin cannot move that
+  // point along the normal at all. The support turning under it still moves its own surface there.
+  supportBody->setAngularVelocity({ 0, 0, -2 });
+  const std::array<glm::vec3, 1> underneath{ glm::vec3{ 1e-6f, -0.5f, 0 } };
+
+  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, underneath);
+
+  EXPECT_LT(glm::length(body->getAngularVelocity()), 1e-3f);
+}
+
+namespace {
+  // The rotation of a unit box after one contact response resting its underside on a static ground.
+  glm::vec3 rotationAfterRestingOn(const glm::vec3& rotation, const glm::vec3& minimumTranslationVector,
+                                   const std::array<glm::vec3, 4>& contactPoints)
+  {
+    const auto scene = makeScene();
+    const auto box = addObject(scene, "Box", { 0, 0, 0 });
+    addBody(box, false);
+    const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
+
+    transformOf(box)->setRotation(rotation);
+    PhysicsSystem::handleCollision(*box->getComponent<RigidBody>(ComponentType::rigidBody), ground,
+                                   minimumTranslationVector, contactPoints);
+
+    return transformOf(box)->getRotation();
+  }
+}
+
+TEST(PhysicsIntegration, ABoxRestingOnAFaceWithinTheManifoldsToleranceIsLaidFlushWithIt)
+{
+  // Inside the tilt at which the manifold still reports all four corners, the support is centered and
+  // nothing torques the box the rest of the way down; it used to stay there.
+  const auto rotation = rotationAfterRestingOn({ -0.001f, 30, 0.016f }, { 0, 0.01f, 0 }, flatUnderside);
+
+  fixtures::expectNear("up", localUpOf(rotation), { 0, 1, 0 }, 1e-5f);
+
+  // Only the tilt is taken out: which way the box faces about the normal stays as it was.
+  EXPECT_NEAR(rotation.y, 30.0f, 1e-3f);
+}
+
+TEST(PhysicsIntegration, ARealTiltOrAContactFromAboveIsNotLaidFlush)
+{
+  // Two degrees is past anything the manifold rounds to a whole face, so it is a real tilt, left alone.
+  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 2 }, { 0, 0.01f, 0 }, flatUnderside), glm::vec3(0, 0, 2));
+
+  // A face pressed down on from above is not what the body rests on.
+  const std::array<glm::vec3, 4> topside{
+    glm::vec3{ -0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
+    glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, 0.5f }
+  };
+  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, -0.01f, 0 }, topside), glm::vec3(0, 0, 0.016f));
+
+  // Positive control: the same small tilt resting on the face below is laid flush.
+  fixtures::expectNear("up", localUpOf(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, 0.01f, 0 }, flatUnderside)),
+                       { 0, 1, 0 }, 1e-5f);
+}
+
+TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning)
+{
+  const auto scene = makeScene();
+
+  const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 5, 1, 5 });
+  fixtures::addBoxCollider(ground);
+
+  // A long, flat box tilted half a degree: too far off flat for all four underside corners to count as
+  // touching, so it lands on an edge. It used to rock edge to edge through its flat pose indefinitely.
+  const auto falling = addObject(scene, "Falling", { 0, 2, 0 }, { 2, 0.5f, 1 });
+  fixtures::addBoxCollider(falling);
+  const auto body = addBody(falling, true);
+  transformOf(falling)->setRotation({ 0, 0, 0.5f });
+
+  CollisionSystem collisionSystem;
+
+  glm::vec3 settledRotation{ 0 };
+  for (int tick = 0; tick < 200; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisionSystem.fixedUpdate(*scene.objectManager);
+
+    if (tick == 150)
+    {
+      settledRotation = transformOf(falling)->getRotation();
+    }
+  }
+
+  // Compared exactly: the complaint is a rotation that never stops changing, however slightly.
+  EXPECT_EQ(transformOf(falling)->getRotation().x, settledRotation.x);
+  EXPECT_EQ(transformOf(falling)->getRotation().y, settledRotation.y);
+  EXPECT_EQ(transformOf(falling)->getRotation().z, settledRotation.z);
+  EXPECT_EQ(glm::length(body->getAngularVelocity()), 0.0f);
+
+  // Lying flat, not frozen at whatever small tilt the manifold already counts as a whole face.
+  fixtures::expectNear("up", localUpOf(transformOf(falling)->getRotation()), { 0, 1, 0 }, 1e-5f);
+
+  // Resting on the ground (its top is at 1, the box's half height 0.5), not stuck in or above it.
+  EXPECT_NEAR(transformOf(falling)->getPosition().y, 1.5f, 0.1f);
 }
 
 TEST(PhysicsIntegration, TheSupportPointIsTheCenterOfMassProjectedOntoTheManifoldWhenItIsOverIt)
