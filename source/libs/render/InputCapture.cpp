@@ -62,6 +62,14 @@ InputSnapshot capture(const vke::VulkanEngine& renderer)
     snapshot.buttons = 0;
   }
 
+  // Look motion is a right-drag gesture, as with the free-fly camera: cursor movement with the button up
+  // never leaves the client, so no consumer can turn a view from it.
+  if ((snapshot.buttons & mouseButtonRight) == 0)
+  {
+    snapshot.mouseDeltaX = 0.0f;
+    snapshot.mouseDeltaY = 0.0f;
+  }
+
   return snapshot;
 }
 
