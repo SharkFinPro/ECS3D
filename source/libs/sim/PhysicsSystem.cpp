@@ -194,14 +194,18 @@ void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transf
     const auto arm = glm::cross(point - transform.getPosition(), normal);
     const float surfaceRate = supportSpins ? glm::dot(glm::cross(supportSpin, point - otherTransform->getPosition()), normal)
                                            : 0.0f;
-    const float closingRate = glm::dot(angularVelocity, arm) - surfaceRate;
+    const float ownRate = glm::dot(angularVelocity, arm);
+    const float closingRate = ownRate - surfaceRate;
 
     const auto response = *inverseInertia * arm;
     const float resistance = glm::dot(arm, response);
 
-    if (closingRate < 0.0f && resistance > 1e-12f)
+    // Only the body's own spin toward the support is taken out. Chasing a moving surface instead would divide
+    // its speed by the arm squared, which for a point under the center - any sphere's - is float noise.
+    const float removedRate = std::max(closingRate, ownRate);
+    if (removedRate < 0.0f && resistance > 1e-12f)
     {
-      angularVelocity -= closingRate / resistance * response;
+      angularVelocity -= removedRate / resistance * response;
     }
   }
 

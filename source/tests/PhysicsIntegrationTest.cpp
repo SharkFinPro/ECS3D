@@ -846,6 +846,24 @@ TEST(PhysicsIntegration, ABodyTurningWithItsSupportKeepsTheSpinTheyShare)
   expectNear("on a turning support", body->getAngularVelocity(), { 0, 0, 2 });
 }
 
+TEST(PhysicsIntegration, AContactUnderTheCenterIsNotSpunUpToChaseATurningSupport)
+{
+  const auto scene = makeScene();
+  const auto ball = addObject(scene, "Ball", { 0, 0, 0 });
+  const auto body = addBody(ball, false);
+  const auto support = addObject(scene, "Support", { 1, -1, 0 });
+  const auto supportBody = addBody(support, false);
+
+  // A sphere's contact sits on the normal through its center, up to float noise, so spin cannot move that
+  // point along the normal at all. The support turning under it still moves its own surface there.
+  supportBody->setAngularVelocity({ 0, 0, -2 });
+  const std::array<glm::vec3, 1> underneath{ glm::vec3{ 1e-6f, -0.5f, 0 } };
+
+  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, underneath);
+
+  EXPECT_LT(glm::length(body->getAngularVelocity()), 1e-3f);
+}
+
 TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning)
 {
   const auto scene = makeScene();
