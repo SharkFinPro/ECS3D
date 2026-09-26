@@ -28,7 +28,9 @@ public class PlayerScript : ScriptBase
     public override void start()
     {
         // Seed from any editor-set body rotation so mouse-look starts from the placed facing.
-        seedLookFromRotation();
+        Vector3 rotation = transform.getRotation();
+        m_pitch = rotation.X;
+        m_yaw = rotation.Y;
 
         Log.info("Player is ready!");
     }
@@ -75,35 +77,32 @@ public class PlayerScript : ScriptBase
     {
         transform.stop();
         transform.start();
-        seedLookFromRotation();
         rigidBody.setVelocity(0, 0, 0);
-    }
-
-    private void seedLookFromRotation()
-    {
-        Vector3 rotation = transform.getRotation();
-        m_pitch = rotation.X;
-        m_yaw = rotation.Y;
     }
 
     private void handleLook()
     {
-        // Only look while the right mouse button is held (same convention as the free-fly camera), so plain
-        // cursor movement doesn't swing the view.
-        if (input.windowIsFocused() && input.mouseButton(MouseButton.Right))
+        if (!input.windowIsFocused())
         {
-            Vector2 delta = input.mouseDelta();
-
-            // Mouse right -> look right; mouse up -> look up (flip the vertical with Invert Look). Pitch is
-            // clamped shy of straight up/down so the view can't roll past vertical.
-            m_yaw -= delta.X * m_lookSensitivity;
-            float pitchStep = delta.Y * m_lookSensitivity;
-            m_pitch += m_invertLook ? pitchStep : -pitchStep;
-            m_pitch = Math.Clamp(m_pitch, -89.0f, 89.0f);
+            return;
         }
 
-        // Written every tick, not only while looking: the camera follows the body's rotation, and collision
-        // responses can turn the body directly, which would otherwise turn the view with no input.
+        // Only look while the right mouse button is held (same convention as the free-fly camera), so plain
+        // cursor movement doesn't swing the view.
+        if (!input.mouseButton(MouseButton.Right))
+        {
+            return;
+        }
+
+        Vector2 delta = input.mouseDelta();
+
+        // Mouse right -> look right; mouse up -> look up (flip the vertical with Invert Look). Pitch is
+        // clamped shy of straight up/down so the view can't roll past vertical.
+        m_yaw -= delta.X * m_lookSensitivity;
+        float pitchStep = delta.Y * m_lookSensitivity;
+        m_pitch += m_invertLook ? pitchStep : -pitchStep;
+        m_pitch = Math.Clamp(m_pitch, -89.0f, 89.0f);
+
         transform.setRotation(m_pitch, m_yaw, 0.0f);
     }
 
