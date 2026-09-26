@@ -26,6 +26,13 @@ namespace {
   // Units per tick. Slower sliding has no direction worth normalizing.
   constexpr float minSlidingSpeed = 1e-6f;
 
+  // Radians per tick. Slower relative spin is left to the damping.
+  constexpr float minSpinRate = 1e-7f;
+
+  // Rolling resistance as a share of the friction coefficient: a ball on a rough floor stops within a few of its
+  // own widths rather than rolling on until the angular damping wears it down.
+  constexpr float rollingResistanceShare = 0.1f;
+
   // Each contact point sheds its share of the spin in turn, which can drive a point already visited back into
   // the support, so the points are visited again until they settle.
   constexpr int maxSpinPasses = 16;
@@ -90,6 +97,30 @@ namespace {
     }
 
     return glm::vec3(0);
+  }
+
+  // The mean lever arm of a face's friction against turning about its normal: for an even pressure over a disc, two
+  // thirds of the radius. The manifold's corners stand in for the face's edge.
+  float grindingRadius(const glm::vec3& support, const std::span<const glm::vec3> contactPoints)
+  {
+    const auto points = contactPoints.first(std::min(contactPoints.size(), PhysicsSystem::maxSupportPoints));
+    if (points.empty())
+    {
+      return 0.0f;
+    }
+
+    float total = 0.0f;
+    for (const auto& point : points)
+    {
+      total += glm::distance(point, support);
+    }
+
+    return 2.0f / 3.0f * total / static_cast<float>(points.size());
+  }
+
+  bool isSphere(const std::shared_ptr<Collider>& collider)
+  {
+    return collider && collider->getColliderType() == ColliderType::sphereCollider;
   }
 
   glm::vec3 spinOf(const std::shared_ptr<Object>& object)
@@ -258,7 +289,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   }
 
   resolve(pairOf(body, *transform, other, normalize(minimumTranslationVector)), minimumTranslationVector,
-          collisionPoint, false, dt);
+          collisionPoint, 0.0f, dt);
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
@@ -290,7 +321,8 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
   stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
-  resolve(pair, minimumTranslationVector, support.point, support.underCenterOfMass, dt);
+  const float faceRadius = support.underCenterOfMass ? grindingRadius(support.point, collisionPoints) : 0.0f;
+  resolve(pair, minimumTranslationVector, support.point, faceRadius, dt);
 
   if (normal.y > 0.0f && support.underCenterOfMass)
   {
@@ -312,7 +344,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
       {
         stopSpinIntoSupport(body, *transform, other, normal, *flatFace);
         const auto faceSupport = findSupport(transform->getPosition(), normal, *flatFace);
-        applyContactImpulse(pair, faceSupport.point, true, dt);
+        applyContactImpulse(pair, faceSupport.point, grindingRadius(faceSupport.point, *flatFace), dt);
       }
     }
   }
@@ -323,7 +355,8 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
 PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform, const std::shared_ptr<Object>& other,
                                           const glm::vec3& normal)
 {
-  Pair pair{ { &body, &transform, false }, {}, normal };
+  Pair pair{ { &body, &transform, false, isSphere(body.getOwner()->getComponent<Collider>(ComponentType::collider)) },
+              {}, normal };
 
   // The other body turns about its rigid body's own center, which a child collider's owner may not be.
   const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -331,7 +364,8 @@ PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
                                         : nullptr;
   if (otherBody && otherTransform)
   {
-    pair.other = { otherBody.get(), otherTransform.get(), !otherBody->isFalling() };
+    pair.other = { otherBody.get(), otherTransform.get(), !otherBody->isFalling(),
+                   isSphere(other->getComponent<Collider>(ComponentType::collider)) };
     pair.body.resting = !body.isFalling();
   }
 
@@ -339,10 +373,10 @@ PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
 }
 
 void PhysicsSystem::resolve(const Pair& pair, const glm::vec3 minimumTranslationVector, const glm::vec3& point,
-                            const bool faceContact, const float dt)
+                            const float faceRadius, const float dt)
 {
   separate(pair, minimumTranslationVector);
-  applyContactImpulse(pair, point, faceContact, dt);
+  applyContactImpulse(pair, point, faceRadius, dt);
 }
 
 void PhysicsSystem::separate(const Pair& pair, const glm::vec3 minimumTranslationVector)
@@ -370,7 +404,7 @@ void PhysicsSystem::separate(const Pair& pair, const glm::vec3 minimumTranslatio
   respondToCollision(*pair.other.body, *pair.other.transform, otherShare * scale);
 }
 
-void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point, const bool faceContact,
+void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point, const float faceRadius,
                                         const float dt)
 {
   const float closingSpeed = -glm::dot(velocityAt(pair.body, point, pair.normal, dt) -
@@ -397,7 +431,86 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     pair.other.body->setStackedLoad(pair.other.body->getStackedLoad() + load * pair.normal.y);
   }
 
-  applyFriction(pair, point, load, faceContact, dt);
+  applyFriction(pair, point, load, faceRadius > 0.0f, dt);
+  applySpinFriction(pair, load, faceRadius, dt);
+  applyRollingResistance(pair, point, load, dt);
+}
+
+void PhysicsSystem::applySpinFriction(const Pair& pair, const float load, const float faceRadius, const float dt)
+{
+  const float friction = frictionOf(pair);
+  if (friction <= 0.0f || faceRadius <= 0.0f)
+  {
+    return;
+  }
+
+  const float rate = glm::dot(relativeSpin(pair, dt), pair.normal);
+  if (std::fabs(rate) <= minSpinRate)
+  {
+    return;
+  }
+
+  resistSpin(pair, rate > 0.0f ? pair.normal : -pair.normal, std::fabs(rate), friction * load * faceRadius, dt);
+}
+
+void PhysicsSystem::applyRollingResistance(const Pair& pair, const glm::vec3& point, const float load, const float dt)
+{
+  const float resistance = rollingResistanceShare * frictionOf(pair);
+  if ((!pair.body.rolls && !pair.other.rolls) || resistance <= 0.0f)
+  {
+    return;
+  }
+
+  const auto spin = relativeSpin(pair, dt);
+  const auto rolling = spin - glm::dot(spin, pair.normal) * pair.normal;
+  const float rate = glm::length(rolling);
+  if (rate <= minSpinRate)
+  {
+    return;
+  }
+
+  const float arm = glm::distance(point, pair.body.transform->getPosition());
+  resistSpin(pair, rolling / rate, rate, resistance * load * arm, dt);
+}
+
+glm::vec3 PhysicsSystem::relativeSpin(const Pair& pair, const float dt)
+{
+  const auto otherSpin = pair.other.body ? pair.other.body->getAngularVelocity() : glm::vec3(0);
+
+  return spinPerTick(pair.body.body->getAngularVelocity() - otherSpin, dt);
+}
+
+void PhysicsSystem::resistSpin(const Pair& pair, const glm::vec3& axis, const float rate, const float limit,
+                               const float dt)
+{
+  const auto bodyInertia = worldInverseInertia(*pair.body.transform);
+  if (!bodyInertia)
+  {
+    return;
+  }
+
+  const auto otherInertia = pair.other.body ? worldInverseInertia(*pair.other.transform) : std::nullopt;
+  const float bodyMass = pair.body.body->getMass();
+  const float otherMass = pair.other.body ? pair.other.body->getMass() : 0.0f;
+
+  const float resistance = glm::dot(axis, *bodyInertia * axis) / bodyMass +
+                           (otherInertia ? glm::dot(axis, *otherInertia * axis) / otherMass : 0.0f);
+  if (resistance <= 0.0f)
+  {
+    return;
+  }
+
+  const float impulse = std::min(rate / resistance, limit);
+
+  auto& body = *pair.body.body;
+  body.setAngularVelocity(body.getAngularVelocity() - glm::degrees(*bodyInertia * axis * (impulse / bodyMass)) / dt);
+
+  if (otherInertia)
+  {
+    auto& other = *pair.other.body;
+    other.setAngularVelocity(other.getAngularVelocity() +
+                             glm::degrees(*otherInertia * axis * (impulse / otherMass)) / dt);
+  }
 }
 
 void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, const float load, const bool faceContact,

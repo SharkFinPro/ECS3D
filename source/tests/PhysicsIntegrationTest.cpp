@@ -761,6 +761,86 @@ namespace {
   }
 }
 
+namespace {
+  // A unit box resting on a wide static ground, turning a full circle a second about the vertical. Returns its
+  // spin two seconds later.
+  glm::vec3 spinAfterTurningInPlace(const float friction)
+  {
+    const auto scene = makeScene();
+
+    const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 50, 1, 50 });
+    fixtures::addBoxCollider(ground);
+
+    const auto box = addObject(scene, "Box", { 0, 2, 0 });
+    fixtures::addBoxCollider(box);
+    const auto body = addBody(box, true);
+    body->setFriction(friction);
+    body->setAngularVelocity({ 0, 360, 0 });
+
+    CollisionSystem collisionSystem;
+
+    for (int tick = 0; tick < 20; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+    }
+
+    return body->getAngularVelocity();
+  }
+
+  // A unit ball set moving at three units per second along a wide static ground. Returns where it is and how fast
+  // it moves ten seconds later.
+  std::pair<glm::vec3, glm::vec3> ballAfterRolling(const float friction)
+  {
+    const auto scene = makeScene();
+
+    const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 50, 1, 50 });
+    fixtures::addBoxCollider(ground);
+
+    const auto ball = addObject(scene, "Ball", { 0, 2, 0 });
+    fixtures::addSphereCollider(ball, 1.0f);
+    const auto body = addBody(ball, true);
+    body->setFriction(friction);
+    body->setVelocity({ 3.0f * dt, 0, 0 });
+
+    CollisionSystem collisionSystem;
+
+    for (int tick = 0; tick < 100; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+    }
+
+    return { transformOf(ball)->getPosition(), body->getVelocity() };
+  }
+}
+
+TEST(PhysicsIntegration, ABoxTurningInPlaceOnItsFaceIsStoppedByFriction)
+{
+  // The support point sits under the center, where turning about the normal does not slide it, so only the face
+  // grinding on the ground can stop the box; it used to spin down by the angular damping alone.
+  EXPECT_LT(glm::length(spinAfterTurningInPlace(0.5f)), 1.0f);
+
+  // Positive control: frictionless, it is still turning most of a circle a second.
+  EXPECT_GT(spinAfterTurningInPlace(0.0f).y, 200.0f);
+}
+
+TEST(PhysicsIntegration, ABallRollingAlongTheGroundComesToRest)
+{
+  // Friction soon has the ball rolling rather than sliding, and then no longer slows it: rolling resistance stops
+  // it within a few of its own widths.
+  const auto [position, velocity] = ballAfterRolling(0.5f);
+
+  EXPECT_LT(position.x, 8.0f);
+  EXPECT_LT(glm::length(velocity), 1e-3f);
+
+  // Positive control: frictionless, it slides the whole way at the speed it started with.
+  const auto [slidPosition, slidVelocity] = ballAfterRolling(0.0f);
+
+  EXPECT_GT(slidPosition.x, 25.0f);
+  EXPECT_GT(slidVelocity.x, 0.9f * 3.0f * dt);
+}
+
 TEST(PhysicsIntegration, ABoxSlidingOnAnotherIsHeldBackByFrictionWhileTheOneUnderItStaysPut)
 {
   // The lower box's own support holds it against the drag, since friction there carries the weight of the

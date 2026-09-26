@@ -67,6 +67,8 @@ private:
     // Rested on a support last tick. In a pair of bodies the support takes the downward part of a push, so a
     // stack holds up whatever its masses, and what lands on it stops as it would on static geometry.
     bool resting = false;
+    // A sphere, which can roll on its contact.
+    bool rolls = false;
   };
 
   // The body resolving a contact, pushed along normal, and what it touches, pushed the other way.
@@ -81,8 +83,9 @@ private:
 
   static void integrate(RigidBody& body, Transform& transform, float dt);
 
-  // faceContact: the support is a face under the center of mass rather than an edge or a point.
-  static void resolve(const Pair& pair, glm::vec3 minimumTranslationVector, const glm::vec3& point, bool faceContact,
+  // faceRadius: the lever arm of the friction against turning on a face under the center of mass, or zero for an
+  // edge or a point.
+  static void resolve(const Pair& pair, glm::vec3 minimumTranslationVector, const glm::vec3& point, float faceRadius,
                       float dt);
 
   // Moves the pair apart by the translation vector, the lighter body the further.
@@ -90,11 +93,25 @@ private:
 
   // Stops the velocity of the contact point along the normal, spin included. A pair of free bodies trades it
   // instead, each moving by its inverse mass. Friction follows.
-  static void applyContactImpulse(const Pair& pair, const glm::vec3& point, bool faceContact, float dt);
+  static void applyContactImpulse(const Pair& pair, const glm::vec3& point, float faceRadius, float dt);
 
   // Coulomb: opposes the contact point's sliding, up to the friction coefficient times load, the impulse
   // pressing the pair together this tick.
   static void applyFriction(const Pair& pair, const glm::vec3& point, float load, bool faceContact, float dt);
+
+  // A face resting on a face grinds against turning about the normal, which friction at a single support point under
+  // the center cannot see.
+  static void applySpinFriction(const Pair& pair, float load, float faceRadius, float dt);
+
+  // A rolling contact does not slide, so friction does not slow it; this does.
+  static void applyRollingResistance(const Pair& pair, const glm::vec3& point, float load, float dt);
+
+  // The body's spin less the other's, in radians per tick.
+  [[nodiscard]] static glm::vec3 relativeSpin(const Pair& pair, float dt);
+
+  // Takes up to rate of relative spin about axis out of the pair, radians per tick, with at most limit of angular
+  // impulse.
+  static void resistSpin(const Pair& pair, const glm::vec3& axis, float rate, float limit, float dt);
 
   [[nodiscard]] static float restitution(const Pair& pair);
 
