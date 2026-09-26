@@ -41,6 +41,15 @@ public:
   static constexpr float restAngularSpeed = 0.01f;
 
 private:
+  struct Support {
+    glm::vec3 point;
+    bool underCenterOfMass;
+  };
+
+  // supportPoint, and whether the center of mass is over the manifold rather than clamped onto its edge.
+  [[nodiscard]] static Support findSupport(const glm::vec3& centerOfMass, const glm::vec3& normal,
+                                           std::span<const glm::vec3> collisionPoints);
+
   [[nodiscard]] static bool triangleContains(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
                                              const glm::vec3& point);
 
@@ -48,6 +57,8 @@ private:
 
   static void stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
                                   const glm::vec3& normal, std::span<const glm::vec3> contactPoints);
+
+  static void layFlush(Transform& transform, const std::shared_ptr<Object>& other, const glm::vec3& normal);
 
   static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 minimumTranslationVector);
 

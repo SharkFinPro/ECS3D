@@ -864,6 +864,53 @@ TEST(PhysicsIntegration, AContactUnderTheCenterIsNotSpunUpToChaseATurningSupport
   EXPECT_LT(glm::length(body->getAngularVelocity()), 1e-3f);
 }
 
+namespace {
+  // The rotation of a unit box after one contact response resting its underside on a static ground.
+  glm::vec3 rotationAfterRestingOn(const glm::vec3& rotation, const glm::vec3& minimumTranslationVector,
+                                   const std::array<glm::vec3, 4>& contactPoints)
+  {
+    const auto scene = makeScene();
+    const auto box = addObject(scene, "Box", { 0, 0, 0 });
+    addBody(box, false);
+    const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
+
+    transformOf(box)->setRotation(rotation);
+    PhysicsSystem::handleCollision(*box->getComponent<RigidBody>(ComponentType::rigidBody), ground,
+                                   minimumTranslationVector, contactPoints);
+
+    return transformOf(box)->getRotation();
+  }
+}
+
+TEST(PhysicsIntegration, ABoxRestingOnAFaceWithinTheManifoldsToleranceIsLaidFlushWithIt)
+{
+  // Inside the tilt at which the manifold still reports all four corners, the support is centered and
+  // nothing torques the box the rest of the way down; it used to stay there.
+  const auto rotation = rotationAfterRestingOn({ -0.001f, 30, 0.016f }, { 0, 0.01f, 0 }, flatUnderside);
+
+  fixtures::expectNear("up", localUpOf(rotation), { 0, 1, 0 }, 1e-5f);
+
+  // Only the tilt is taken out: which way the box faces about the normal stays as it was.
+  EXPECT_NEAR(rotation.y, 30.0f, 1e-3f);
+}
+
+TEST(PhysicsIntegration, ARealTiltOrAContactFromAboveIsNotLaidFlush)
+{
+  // Two degrees is past anything the manifold rounds to a whole face, so it is a real tilt, left alone.
+  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 2 }, { 0, 0.01f, 0 }, flatUnderside), glm::vec3(0, 0, 2));
+
+  // A face pressed down on from above is not what the body rests on.
+  const std::array<glm::vec3, 4> topside{
+    glm::vec3{ -0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
+    glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, 0.5f }
+  };
+  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, -0.01f, 0 }, topside), glm::vec3(0, 0, 0.016f));
+
+  // Positive control: the same small tilt resting on the face below is laid flush.
+  fixtures::expectNear("up", localUpOf(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, 0.01f, 0 }, flatUnderside)),
+                       { 0, 1, 0 }, 1e-5f);
+}
+
 TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning)
 {
   const auto scene = makeScene();
@@ -897,6 +944,9 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
   EXPECT_EQ(transformOf(falling)->getRotation().y, settledRotation.y);
   EXPECT_EQ(transformOf(falling)->getRotation().z, settledRotation.z);
   EXPECT_EQ(glm::length(body->getAngularVelocity()), 0.0f);
+
+  // Lying flat, not frozen at whatever small tilt the manifold already counts as a whole face.
+  fixtures::expectNear("up", localUpOf(transformOf(falling)->getRotation()), { 0, 1, 0 }, 1e-5f);
 
   // Resting on the ground (its top is at 1, the box's half height 0.5), not stuck in or above it.
   EXPECT_NEAR(transformOf(falling)->getPosition().y, 1.5f, 0.1f);

@@ -5,10 +5,12 @@
 #include <objects/components/FiniteCheck.h>
 #include <objects/components/RigidBody.h>
 #include <objects/components/Transform.h>
+#include <objects/components/collisions/Collider.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -18,6 +20,23 @@ namespace {
   glm::quat orientationOf(const Transform& transform)
   {
     return glm::quat(glm::radians(transform.getRotation()));
+  }
+
+  // The axis of orientation nearest to direction, signed to point along it: the normal of the face that way.
+  glm::vec3 faceNormalToward(const glm::quat& orientation, const glm::vec3& direction)
+  {
+    const auto axes = glm::mat3_cast(orientation);
+
+    auto nearest = axes[0];
+    for (int i = 1; i < 3; ++i)
+    {
+      if (std::fabs(glm::dot(axes[i], direction)) > std::fabs(glm::dot(nearest, direction)))
+      {
+        nearest = axes[i];
+      }
+    }
+
+    return glm::dot(nearest, direction) < 0.0f ? -nearest : nearest;
   }
 }
 
@@ -163,11 +182,45 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   }
 
   const auto normal = normalize(minimumTranslationVector);
-  const auto point = collisionPoints.size() < 2 ? collisionPoints[0]
-                                                : supportPoint(transform->getPosition(), normal, collisionPoints);
-  handleCollision(body, other, minimumTranslationVector, point);
+  const auto support = collisionPoints.size() < 2 ? Support{ collisionPoints[0], false }
+                                                  : findSupport(transform->getPosition(), normal, collisionPoints);
+  handleCollision(body, other, minimumTranslationVector, support.point);
 
   stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
+
+  if (support.underCenterOfMass && normal.y > 0.0f)
+  {
+    layFlush(*transform, other, normal);
+  }
+}
+
+void PhysicsSystem::layFlush(Transform& transform, const std::shared_ptr<Object>& other, const glm::vec3& normal)
+{
+  // The support's own face, not the contact normal: across two nearly parallel faces the narrow phase may
+  // report either one, and the resting body's own face would leave it exactly as tilted as it is.
+  const auto supportCollider = other->getComponent<Collider>(ComponentType::collider);
+  const auto supportFace = supportCollider ? faceNormalToward(glm::quat(glm::radians(supportCollider->getRotation())), normal)
+                                           : normal;
+
+  const auto orientation = orientationOf(transform);
+  const auto bodyFace = faceNormalToward(orientation, supportFace);
+
+  const float cosine = glm::dot(bodyFace, supportFace);
+  const auto axis = glm::cross(bodyFace, supportFace);
+  const float sine = glm::length(axis);
+
+  // The manifold counts every corner of a face as touching up to a small tilt, where the support is centered
+  // and nothing torques the body the rest of the way down. Anything past a degree is a real tilt, and
+  // anything under float noise is already flush - rewriting it would change the rotation every tick.
+  constexpr float minTiltSine = 1e-5f;
+  constexpr float maxTiltSine = 0.0175f;
+  if (sine < minTiltSine || sine > maxTiltSine)
+  {
+    return;
+  }
+
+  const auto turn = glm::angleAxis(std::atan2(sine, cosine), axis / sine);
+  transform.setRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
 }
 
 void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
@@ -222,9 +275,15 @@ void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transf
 glm::vec3 PhysicsSystem::supportPoint(const glm::vec3& centerOfMass, const glm::vec3& normal,
                                       const std::span<const glm::vec3> collisionPoints)
 {
+  return findSupport(centerOfMass, normal, collisionPoints).point;
+}
+
+PhysicsSystem::Support PhysicsSystem::findSupport(const glm::vec3& centerOfMass, const glm::vec3& normal,
+                                                  const std::span<const glm::vec3> collisionPoints)
+{
   if (collisionPoints.empty())
   {
-    return centerOfMass;
+    return { centerOfMass, false };
   }
 
   const auto count = std::min(collisionPoints.size(), maxSupportPoints);
@@ -259,7 +318,7 @@ glm::vec3 PhysicsSystem::supportPoint(const glm::vec3& centerOfMass, const glm::
       {
         if (triangleContains(points[a], points[b], points[c], target))
         {
-          return target;
+          return { target, true };
         }
       }
     }
@@ -287,7 +346,7 @@ glm::vec3 PhysicsSystem::supportPoint(const glm::vec3& centerOfMass, const glm::
     }
   }
 
-  return closest;
+  return { closest, false };
 }
 
 bool PhysicsSystem::triangleContains(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& point)
