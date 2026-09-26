@@ -223,9 +223,12 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
   ImGui::End();
 }
 
-std::optional<uuids::uuid> InspectorPanel::getHighlightUUID() const
+std::span<const uuids::uuid> InspectorPanel::getHighlightUUIDs() const
 {
-  // Only object selections highlight in the viewport; objectUUID() already returns nullopt for the
-  // None/Asset kinds, so this naturally suppresses the highlight for those.
-  return m_objectInspector->highlightEnabled() ? m_selection->objectUUID() : std::nullopt;
+  if (!m_objectInspector->highlightEnabled() || m_selection->kind() != EditorSelection::Kind::Object)
+  {
+    return {};
+  }
+
+  return m_selection->items();
 }

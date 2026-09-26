@@ -349,7 +349,7 @@ void EditorApp::variableUpdate()
 
   if (objectManager)
   {
-    m_renderSystem->variableUpdate(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUID());
+    m_renderSystem->variableUpdate(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
   }
 
   // Drop a stale choice (the object left the scene, or lost its Camera) rather than freezing the viewport
