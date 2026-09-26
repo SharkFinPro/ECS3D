@@ -6,10 +6,19 @@
 #include <objects/components/RigidBody.h>
 #include <objects/components/Transform.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <array>
 #include <limits>
 #include <stdexcept>
+
+namespace {
+  // glm's Euler constructor composes Rz * Ry * Rx, the same order the colliders and renderer apply.
+  glm::quat orientationOf(const Transform& transform)
+  {
+    return glm::quat(glm::radians(transform.getRotation()));
+  }
+}
 
 void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
 {
@@ -51,9 +60,15 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
 
   transform.move(body.getVelocity());
 
-  const auto rotation = transform.getRotation();
-  const auto newRotation = rotation + body.getAngularVelocity() * dt;
-  transform.setRotation(newRotation);
+  // Angular velocity is a world-space axis. Added to the Euler angles, it would turn a tilted body about
+  // partly rotated axes, so a restoring torque could never right it and the body would keep spinning.
+  const auto angularVelocity = body.getAngularVelocity();
+  const float angularSpeed = glm::length(angularVelocity);
+  if (angularSpeed > 0.0f)
+  {
+    const auto turn = glm::angleAxis(glm::radians(angularSpeed) * dt, angularVelocity / angularSpeed);
+    transform.setRotation(glm::degrees(glm::eulerAngles(turn * orientationOf(transform))));
+  }
 
   constexpr float damping = 0.99f;
   body.setAngularVelocity(body.getAngularVelocity() * damping);
@@ -90,7 +105,10 @@ void PhysicsSystem::applyForce(RigidBody& body, const Transform& transform, cons
     return;
   }
 
-  body.setAngularVelocity(body.getAngularVelocity() + angularImpulse * glm::inverse(inertiaTensor));
+  // The tensor is diagonal in the body's own axes; the impulse is in world space.
+  const auto orientation = glm::mat3_cast(orientationOf(transform));
+  const auto localImpulse = glm::transpose(orientation) * angularImpulse;
+  body.setAngularVelocity(body.getAngularVelocity() + orientation * (glm::inverse(inertiaTensor) * localImpulse));
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
