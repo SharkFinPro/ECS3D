@@ -148,7 +148,7 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
     // clear them, before integrating.
     for (const auto& pending : rigidBody->getPendingForces())
     {
-      applyForce(*rigidBody, *transform, pending.force, pending.position, dt);
+      applyVelocityChange(*rigidBody, *transform, pending.force, pending.position, dt);
     }
     rigidBody->clearPendingForces();
 
@@ -164,7 +164,7 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
   if (body.getDoGravity())
   {
     const glm::vec3 gravity = { 0, body.getGravity() * dt * 0.1f, 0 };
-    applyForce(body, transform, gravity, transform.getPosition(), dt);
+    applyVelocityChange(body, transform, gravity, transform.getPosition(), dt);
   }
 
   limitMovement(body, transform, dt);
@@ -187,13 +187,13 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
   body.setAngularVelocity(body.getAngularVelocity() * damping);
 }
 
-void PhysicsSystem::applyForce(RigidBody& body, const Transform& transform, const glm::vec3& force, const glm::vec3& position,
-                               const float dt)
+void PhysicsSystem::applyVelocityChange(RigidBody& body, const Transform& transform, const glm::vec3& velocityChange,
+                                        const glm::vec3& position, const float dt)
 {
-  const auto velocity = body.getVelocity() + force;
+  const auto velocity = body.getVelocity() + velocityChange;
   body.setVelocity(velocity);
 
-  if (velocity.y > 0 && velocity.y - force.y < 0)
+  if (velocity.y > 0 && velocity.y - velocityChange.y < 0)
   {
     body.setFalling(true);
     body.setNextFalling(true);
@@ -207,8 +207,15 @@ void PhysicsSystem::applyForce(RigidBody& body, const Transform& transform, cons
 
   if (const auto inverseInertia = worldInverseInertia(transform))
   {
-    body.setAngularVelocity(body.getAngularVelocity() + glm::degrees(*inverseInertia * glm::cross(r, force)) / dt);
+    body.setAngularVelocity(body.getAngularVelocity() +
+                            glm::degrees(*inverseInertia * glm::cross(r, velocityChange)) / dt);
   }
+}
+
+void PhysicsSystem::applyImpulse(RigidBody& body, const Transform& transform, const glm::vec3& impulse,
+                                 const glm::vec3& position, const float dt)
+{
+  applyVelocityChange(body, transform, impulse / body.getMass(), position, dt);
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
@@ -226,20 +233,8 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
     return;
   }
 
-  respondToCollision(body, *transform, minimumTranslationVector);
-
-  if (const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody))
-  {
-    const auto otherTransform = other->getComponent<Transform>(ComponentType::transform);
-    if (!otherTransform)
-    {
-      return;
-    }
-
-    respondToCollision(*otherRb, *otherTransform, -minimumTranslationVector);
-  }
-
-  applyContactImpulse(body, *transform, other, normalize(minimumTranslationVector), collisionPoint, dt);
+  resolve(pairOf(body, *transform, other, normalize(minimumTranslationVector)), minimumTranslationVector,
+          collisionPoint, dt);
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
@@ -266,11 +261,12 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   const auto normal = normalize(minimumTranslationVector);
   const auto support = collisionPoints.size() < 2 ? Support{ collisionPoints[0], false }
                                                   : findSupport(transform->getPosition(), normal, collisionPoints);
+  const auto pair = pairOf(body, *transform, other, normal);
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
   stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
-  handleCollision(body, other, minimumTranslationVector, support.point, dt);
+  resolve(pair, minimumTranslationVector, support.point, dt);
 
   if (normal.y > 0.0f && support.underCenterOfMass)
   {
@@ -292,7 +288,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
       {
         stopSpinIntoSupport(body, *transform, other, normal, *flatFace);
         const auto faceSupport = findSupport(transform->getPosition(), normal, *flatFace);
-        applyContactImpulse(body, *transform, other, normal, faceSupport.point, dt);
+        applyContactImpulse(pair, faceSupport.point, dt);
       }
     }
   }
@@ -300,56 +296,137 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   comeToRest(body, other, normal);
 }
 
-void PhysicsSystem::applyContactImpulse(RigidBody& body, const Transform& transform,
-                                        const std::shared_ptr<Object>& other, const glm::vec3& normal,
-                                        const glm::vec3& point, const float dt)
+PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform, const std::shared_ptr<Object>& other,
+                                          const glm::vec3& normal)
 {
-  const auto velocityAt = [&point, dt](const RigidBody& rigidBody, const Transform& center)
+  Pair pair{ { &body, &transform, false }, {}, normal };
+
+  // The other body turns about its rigid body's own center, which a child collider's owner may not be.
+  const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
+  const auto otherTransform = otherBody ? otherBody->getOwner()->getComponent<Transform>(ComponentType::transform)
+                                        : nullptr;
+  if (otherBody && otherTransform)
   {
-    const auto spin = spinPerTick(rigidBody.getAngularVelocity(), dt);
-    return rigidBody.getVelocity() + glm::cross(spin, point - center.getPosition());
-  };
+    pair.other = { otherBody.get(), otherTransform.get(), !otherBody->isFalling() };
+    pair.body.resting = !body.isFalling();
+  }
 
-  const auto otherRb = other->getComponent<RigidBody>(ComponentType::rigidBody);
-  const auto otherTransform = otherRb ? other->getComponent<Transform>(ComponentType::transform) : nullptr;
+  return pair;
+}
 
-  if (!otherRb || !otherTransform)
+void PhysicsSystem::resolve(const Pair& pair, const glm::vec3 minimumTranslationVector, const glm::vec3& point,
+                            const float dt)
+{
+  separate(pair, minimumTranslationVector);
+  applyContactImpulse(pair, point, dt);
+}
+
+void PhysicsSystem::separate(const Pair& pair, const glm::vec3 minimumTranslationVector)
+{
+  if (!pair.other.body)
   {
-    const float closingSpeed = -glm::dot(velocityAt(body, transform), normal);
-    if (closingSpeed > 0.0f)
-    {
-      applyForce(body, transform, closingSpeed / inverseEffectiveMass(transform, point, normal) * normal, point, dt);
-    }
-
+    respondToCollision(*pair.body.body, *pair.body.transform, minimumTranslationVector);
     return;
   }
 
-  const float closingSpeed = glm::dot(velocityAt(*otherRb, *otherTransform) - velocityAt(body, transform), normal);
+  const auto bodyShare = takenBy(pair.body, pair.normal) / pair.body.body->getMass();
+  const auto otherShare = takenBy(pair.other, -pair.normal) / pair.other.body->getMass();
+  const float scale = glm::length(minimumTranslationVector) / glm::dot(pair.normal, bodyShare - otherShare);
+
+  respondToCollision(*pair.body.body, *pair.body.transform, bodyShare * scale);
+  respondToCollision(*pair.other.body, *pair.other.transform, otherShare * scale);
+}
+
+void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point, const float dt)
+{
+  const float closingSpeed = -glm::dot(velocityAt(pair.body, point, pair.normal, dt) -
+                                       velocityAt(pair.other, point, -pair.normal, dt), pair.normal);
   if (closingSpeed <= 0.0f)
   {
     return;
   }
 
-  // Twice the share that would only stop the pair, so they trade their closing speed rather than lose it.
-  const float resistance = inverseEffectiveMass(transform, point, normal) +
-                           inverseEffectiveMass(*otherTransform, point, normal);
-  const auto impulse = 2.0f * closingSpeed / resistance * normal;
-  applyForce(body, transform, impulse, point, dt);
-  applyForce(*otherRb, *otherTransform, -impulse, point, dt);
-}
-
-float PhysicsSystem::inverseEffectiveMass(const Transform& transform, const glm::vec3& point, const glm::vec3& normal)
-{
-  const auto arm = point - transform.getPosition();
-  const auto inverseInertia = worldInverseInertia(transform);
-  if (glm::length(arm) <= minLeverArm || !inverseInertia)
+  const float resistance = inverseEffectiveMass(pair, point, pair.normal);
+  if (resistance <= 0.0f)
   {
-    return 1.0f;
+    return;
   }
 
-  const auto torqueAxis = glm::cross(arm, normal);
+  const float impulse = (1.0f + restitution(pair)) * closingSpeed / resistance;
+  push(pair.body, impulse * pair.normal, point, dt);
+  push(pair.other, -impulse * pair.normal, point, dt);
+}
 
-  return 1.0f + glm::dot(torqueAxis, *inverseInertia * torqueAxis);
+float PhysicsSystem::restitution(const Pair& pair)
+{
+  if (!pair.other.body)
+  {
+    return 0.0f;
+  }
+
+  // Free bodies trade their closing speed. What a resting body's support takes lands on the support, and like
+  // anything landing on static geometry it does not bounce.
+  const bool supported = (pair.body.resting && pair.normal.y < 0.0f) || (pair.other.resting && pair.normal.y > 0.0f);
+
+  return supported ? 1.0f - pair.normal.y * pair.normal.y : 1.0f;
+}
+
+glm::vec3 PhysicsSystem::takenBy(const Side& side, const glm::vec3& direction)
+{
+  return side.resting && direction.y < 0.0f ? glm::vec3(direction.x, 0.0f, direction.z) : direction;
+}
+
+glm::vec3 PhysicsSystem::velocityAt(const Side& side, const glm::vec3& point, const glm::vec3& pushDirection,
+                                     const float dt)
+{
+  if (!side.body)
+  {
+    return glm::vec3(0);
+  }
+
+  // Gravity has a resting body falling until its own support's contact stops it later in the tick, which would
+  // hide how fast whatever lands on it is closing.
+  auto velocity = side.body->getVelocity();
+  if (side.resting && pushDirection.y < 0.0f)
+  {
+    velocity.y = std::max(velocity.y, 0.0f);
+  }
+
+  return velocity + glm::cross(spinPerTick(side.body->getAngularVelocity(), dt), point - side.transform->getPosition());
+}
+
+glm::vec3 PhysicsSystem::responseAt(const Side& side, const glm::vec3& point, const glm::vec3& direction)
+{
+  if (!side.body)
+  {
+    return glm::vec3(0);
+  }
+
+  const float inverseMass = 1.0f / side.body->getMass();
+  const auto taken = takenBy(side, direction);
+  auto response = taken * inverseMass;
+
+  const auto arm = point - side.transform->getPosition();
+  const auto inverseInertia = worldInverseInertia(*side.transform);
+  if (glm::length(arm) > minLeverArm && inverseInertia)
+  {
+    response += glm::cross(*inverseInertia * glm::cross(arm, taken) * inverseMass, arm);
+  }
+
+  return response;
+}
+
+float PhysicsSystem::inverseEffectiveMass(const Pair& pair, const glm::vec3& point, const glm::vec3& direction)
+{
+  return glm::dot(direction, responseAt(pair.body, point, direction) - responseAt(pair.other, point, -direction));
+}
+
+void PhysicsSystem::push(const Side& side, const glm::vec3& impulse, const glm::vec3& point, const float dt)
+{
+  if (side.body)
+  {
+    applyImpulse(*side.body, *side.transform, takenBy(side, impulse), point, dt);
+  }
 }
 
 bool PhysicsSystem::turnsFlatThisTick(const RigidBody& body, const Transform& transform,
@@ -568,15 +645,15 @@ bool PhysicsSystem::triangleContains(const glm::vec3& a, const glm::vec3& b, con
   return v >= -tolerance && w >= -tolerance && v + w <= 1.0f + tolerance;
 }
 
-void PhysicsSystem::respondToCollision(RigidBody& body, Transform& transform, const glm::vec3 minimumTranslationVector)
+void PhysicsSystem::respondToCollision(RigidBody& body, Transform& transform, const glm::vec3 displacement)
 {
-  if (minimumTranslationVector.y > 1e-5f && body.getVelocity().y <= 1e-5f)
+  if (displacement.y > 1e-5f && body.getVelocity().y <= 1e-5f)
   {
     body.setFalling(false);
     body.setNextFalling(false);
   }
 
-  transform.move(minimumTranslationVector);
+  transform.move(displacement);
 }
 
 void PhysicsSystem::limitMovement(RigidBody& body, const Transform& transform, const float dt)
@@ -589,7 +666,7 @@ void PhysicsSystem::limitMovement(RigidBody& body, const Transform& transform, c
   const glm::vec2 horizontalVelocity(body.getVelocity().x, body.getVelocity().z);
   const glm::vec2 frictionForce = -horizontalVelocity * body.getFriction();
 
-  applyForce(body, transform, { frictionForce.x, 0.0f, frictionForce.y }, transform.getPosition(), dt);
+  applyVelocityChange(body, transform, { frictionForce.x, 0.0f, frictionForce.y }, transform.getPosition(), dt);
 }
 
 std::optional<glm::mat3> PhysicsSystem::worldInverseInertia(const Transform& transform)
@@ -612,8 +689,8 @@ std::optional<glm::mat3> PhysicsSystem::worldInverseInertia(const Transform& tra
 
 glm::mat3x3 PhysicsSystem::getInertiaTensor(const Transform& transform)
 {
-  // A solid box per unit mass, with half-extents of its scale as BoxCollider builds it. Mass divides out:
-  // a force is already a change of velocity, so it scales neither the push nor the spin.
+  // A solid box per unit mass, with half-extents of its scale as BoxCollider builds it. responseAt divides by
+  // the mass, and a change of velocity turns a body whatever its mass.
   const auto scale = transform.getScale();
 
   const auto widthSquared = scale.x * scale.x;

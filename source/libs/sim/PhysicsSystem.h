@@ -18,11 +18,15 @@ class PhysicsSystem {
 public:
   static void fixedUpdate(const ObjectManager& objectManager, float dt);
 
-  // Public so CollisionSystem can forward collisions here and script bindings can apply forces. force is a
-  // change of velocity in units per tick, like the velocity it is added to; the spin it adds is stored in
-  // degrees per second, which is what needs dt.
-  static void applyForce(RigidBody& body, const Transform& transform, const glm::vec3& force, const glm::vec3& position,
-                         float dt);
+  // A change of velocity at position, in units per tick like the velocity it is added to. Mass does not scale
+  // it: off the center it turns the body as far as an impulse of mass times the change would. The spin is
+  // stored in degrees per second, which is what needs dt.
+  static void applyVelocityChange(RigidBody& body, const Transform& transform, const glm::vec3& velocityChange,
+                                  const glm::vec3& position, float dt);
+
+  // In mass times units per tick, so the same impulse moves and turns a body of twice the mass half as far.
+  static void applyImpulse(RigidBody& body, const Transform& transform, const glm::vec3& impulse,
+                           const glm::vec3& position, float dt);
 
   static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
                               glm::vec3 minimumTranslationVector, glm::vec3 collisionPoint, float dt);
@@ -56,16 +60,53 @@ private:
   [[nodiscard]] static bool triangleContains(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
                                              const glm::vec3& point);
 
+  // One body of a contact, or none for static geometry.
+  struct Side {
+    RigidBody* body = nullptr;
+    Transform* transform = nullptr;
+    // Rested on a support last tick. In a pair of bodies the support takes the downward part of a push, so a
+    // stack holds up whatever its masses, and what lands on it stops as it would on static geometry.
+    bool resting = false;
+  };
+
+  // The body resolving a contact, pushed along normal, and what it touches, pushed the other way.
+  struct Pair {
+    Side body;
+    Side other;
+    glm::vec3 normal;
+  };
+
+  [[nodiscard]] static Pair pairOf(RigidBody& body, Transform& transform, const std::shared_ptr<Object>& other,
+                                   const glm::vec3& normal);
+
   static void integrate(RigidBody& body, Transform& transform, float dt);
 
-  // Stops the velocity of the contact point along normal, or for a dynamic pair exchanges it, spin included.
-  static void applyContactImpulse(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
-                                  const glm::vec3& normal, const glm::vec3& point, float dt);
+  static void resolve(const Pair& pair, glm::vec3 minimumTranslationVector, const glm::vec3& point, float dt);
 
-  // How much less a push at point moves the contact than it would a body that cannot turn: 1 plus the
-  // share the spin takes.
-  [[nodiscard]] static float inverseEffectiveMass(const Transform& transform, const glm::vec3& point,
-                                                  const glm::vec3& normal);
+  // Moves the pair apart by the translation vector, the lighter body the further.
+  static void separate(const Pair& pair, glm::vec3 minimumTranslationVector);
+
+  // Stops the velocity of the contact point along the normal, spin included. A pair of free bodies trades it
+  // instead, each moving by its inverse mass.
+  static void applyContactImpulse(const Pair& pair, const glm::vec3& point, float dt);
+
+  [[nodiscard]] static float restitution(const Pair& pair);
+
+  // The part of a push along direction the side takes itself.
+  [[nodiscard]] static glm::vec3 takenBy(const Side& side, const glm::vec3& direction);
+
+  // The velocity of the side's point, pushed along pushDirection, which says whether its support stops it sinking.
+  [[nodiscard]] static glm::vec3 velocityAt(const Side& side, const glm::vec3& point, const glm::vec3& pushDirection,
+                                            float dt);
+
+  // How the side's point moves per unit of impulse pushing the side along direction.
+  [[nodiscard]] static glm::vec3 responseAt(const Side& side, const glm::vec3& point, const glm::vec3& direction);
+
+  // How fast a unit impulse along direction, on the body and back on the other, changes their relative velocity
+  // at point along it.
+  [[nodiscard]] static float inverseEffectiveMass(const Pair& pair, const glm::vec3& point, const glm::vec3& direction);
+
+  static void push(const Side& side, const glm::vec3& impulse, const glm::vec3& point, float dt);
 
   static void stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
                                   const glm::vec3& normal, std::span<const glm::vec3> contactPoints);
@@ -86,12 +127,12 @@ private:
   static void layFlush(Transform& transform, const std::shared_ptr<Object>& other, const glm::vec3& normal,
                        float maxTiltSine);
 
-  static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 minimumTranslationVector);
+  static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 displacement);
 
   static void limitMovement(RigidBody& body, const Transform& transform, float dt);
 
-  // Per unit mass: a force here is already a change of velocity. Empty for a body too degenerate to invert,
-  // which then gets no angular response.
+  // Per unit mass, as a change of velocity turns the body whatever its mass. Empty for a body too degenerate to
+  // invert, which then gets no angular response.
   [[nodiscard]] static std::optional<glm::mat3> worldInverseInertia(const Transform& transform);
 
   [[nodiscard]] static glm::mat3x3 getInertiaTensor(const Transform& transform);
