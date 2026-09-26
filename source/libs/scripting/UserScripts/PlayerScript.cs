@@ -28,9 +28,7 @@ public class PlayerScript : ScriptBase
     public override void start()
     {
         // Seed from any editor-set body rotation so mouse-look starts from the placed facing.
-        Vector3 rotation = transform.getRotation();
-        m_pitch = rotation.X;
-        m_yaw = rotation.Y;
+        seedLookFromRotation();
 
         Log.info("Player is ready!");
     }
@@ -77,7 +75,15 @@ public class PlayerScript : ScriptBase
     {
         transform.stop();
         transform.start();
+        seedLookFromRotation();
         rigidBody.setVelocity(0, 0, 0);
+    }
+
+    private void seedLookFromRotation()
+    {
+        Vector3 rotation = transform.getRotation();
+        m_pitch = rotation.X;
+        m_yaw = rotation.Y;
     }
 
     private void handleLook()
