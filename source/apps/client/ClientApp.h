@@ -34,7 +34,7 @@ public:
     std::string host = "127.0.0.1";
     int port = net::defaultPort;
     bool launchLocalServer = false;
-    bool showServerConsole = true;  // whether the spawned local server gets its own console window
+    bool showServerConsole = false;  // whether the spawned local server gets its own console window
     std::string project;
   };
 

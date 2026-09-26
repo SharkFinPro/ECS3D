@@ -54,9 +54,9 @@ namespace
         // server gets its own generated token instead.
         options.authToken = argv[++i];
       }
-      else if (arg == "--no-server-console")
+      else if (arg == "--server-console")
       {
-        options.showServerConsole = false;
+        options.showServerConsole = true;
       }
     }
 

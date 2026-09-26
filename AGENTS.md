@@ -151,7 +151,7 @@ so no layer needs to name concrete component types across the boundary.
 input, linking `ECS3DRender` but never sim/scripting. `EditorApp` is a client plus the ImGui tooling
 (`ECS3DEditorLib`); the authoritative scene lives on a spawned `--edit` server, so edits become
 *commands sent back*, not local mutations. Client/editor spawn a child `ECS3DServer` via `ServerProcess`
-for singleplayer (`--no-server-console` launches it without a console window; the default shows one).
+for singleplayer (it has no console window by default; `--server-console` gives it one).
 **Stopping a scene discards every runtime change**, not just component values:
 `SceneAsset::start()` snapshots the current object tree before the run, and `stop()` rebuilds it from
 that snapshot with uuids preserved, undoing any script spawn/destroy/reparent (and any editor edit made
