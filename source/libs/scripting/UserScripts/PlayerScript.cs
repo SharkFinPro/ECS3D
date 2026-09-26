@@ -4,11 +4,13 @@ using ScriptBridge;
 
 public class PlayerScript : ScriptBase
 {
-    [ExposeToEditor("Movement Speed")]
-    private float m_speed = 1.0f;
+    // Units per second, at a full stride.
+    [ExposeToEditor("Top Speed")]
+    private float m_topSpeed = 9.0f;
 
-    [ExposeToEditor("Jump Force")]
-    private float m_jumpForce = 15.0f;
+    // Units per second, straight up.
+    [ExposeToEditor("Jump Speed")]
+    private float m_jumpSpeed = 15.0f;
 
     [ExposeToEditor("Look Sensitivity")]
     private float m_lookSensitivity = 0.15f;
@@ -16,7 +18,14 @@ public class PlayerScript : ScriptBase
     [ExposeToEditor("Invert Look")]
     private bool m_invertLook = false;
 
-    private Vector3 m_appliedForce = new Vector3(0, 0, 0);
+    // The share of the gap between the player's horizontal velocity and the one it steers for that it closes each
+    // tick, on the ground or in the air.
+    private const float Grip = 0.1f;
+
+    // The way the player steers this tick, of unit length or zero, read from input.
+    private Vector3 m_heading = Vector3.Zero;
+
+    private bool m_jumpRequested = false;
 
     private bool m_wasJumping = true;
 
@@ -42,14 +51,24 @@ public class PlayerScript : ScriptBase
             respawn();
         }
 
-        if (m_appliedForce.Y == 0)
+        if (!m_jumpRequested)
         {
             m_wasJumping = false;
         }
 
-        rigidBody.applyForce(m_appliedForce * dt, transform.getPosition());
+        // Changes of velocity, so the player moves the same whatever its mass; the mass only decides how hard it
+        // pushes what it runs into. Velocity is in units per tick, hence dt.
+        Vector3 velocity = rigidBody.getVelocity();
+        Vector3 steer = (m_heading * (m_topSpeed * dt) - new Vector3(velocity.X, 0.0f, velocity.Z)) * Grip;
+        if (m_jumpRequested)
+        {
+            steer.Y = m_jumpSpeed * dt;
+        }
 
-        m_appliedForce *= 0;
+        rigidBody.applyForce(steer, transform.getPosition(), ForceMode.VelocityChange);
+
+        m_heading = Vector3.Zero;
+        m_jumpRequested = false;
 
         // Mouse-look owns rotation, so cancel any physics spin (e.g. from a collision) before physics
         // integrates it this tick - otherwise the view would fight/jitter against the look direction.
@@ -161,16 +180,13 @@ public class PlayerScript : ScriptBase
             Vector3 move = forward * forwardInput + right * strafeInput;
             if (move.LengthSquared() > 0.0f)
             {
-                move = Vector3.Normalize(move) * m_speed;
+                m_heading = Vector3.Normalize(move);
             }
-
-            m_appliedForce.X = move.X;
-            m_appliedForce.Z = move.Z;
         }
 
         if (!m_wasJumping && !rigidBody.isFalling() && input.keyIsPressed(Key.X))
         {
-            m_appliedForce.Y = m_jumpForce;
+            m_jumpRequested = true;
             m_wasJumping = true;
         }
     }

@@ -7,7 +7,7 @@ namespace ScriptBridge;
 [StructLayout(LayoutKind.Sequential)]
 public unsafe struct RigidBodyBindings
 {
-    public delegate* unmanaged<IntPtr, float, float, float, float, float, float, void> applyForce;
+    public delegate* unmanaged<IntPtr, float, float, float, float, float, float, int, void> applyForce;
     public delegate* unmanaged<IntPtr, float, float, float, void> setVelocity;
     public delegate* unmanaged<IntPtr, bool> isFalling;
     public delegate* unmanaged<IntPtr, bool> has;
@@ -25,6 +25,21 @@ public unsafe struct RigidBodyBindings
     public delegate* unmanaged<IntPtr, bool, void> setDoGravity;
 }
 
+// How RigidBody.applyForce turns a force into a change of velocity. Velocity is in units per tick, as getVelocity
+// and setVelocity read and write it; a force or an acceleration acts for the tick's dt seconds, the way gravity
+// does. The values must match the native ForceMode in RigidBody.h.
+public enum ForceMode
+{
+    // Mass times units per tick, per second: the velocity changes by force * dt / mass.
+    Force = 0,
+    // Units per tick, per second: the velocity changes by acceleration * dt, whatever the mass.
+    Acceleration = 1,
+    // Mass times units per tick: the velocity changes by impulse / mass.
+    Impulse = 2,
+    // Units per tick, added to the velocity whatever the mass.
+    VelocityChange = 3
+}
+
 public unsafe class RigidBody
 {
     private readonly IntPtr _uuid;
@@ -39,11 +54,12 @@ public unsafe class RigidBody
         Marshal.FreeCoTaskMem(_uuid);
     }
 
-    public void applyForce(float x, float y, float z, float px, float py, float pz) =>
-        NativeBindings.RigidBody.applyForce(_uuid, x, y, z, px, py, pz);
+    // Applied when physics next runs, this tick, at position in world space; off the center it turns the body too.
+    public void applyForce(float x, float y, float z, float px, float py, float pz, ForceMode mode = ForceMode.Force) =>
+        NativeBindings.RigidBody.applyForce(_uuid, x, y, z, px, py, pz, (int)mode);
 
-    public void applyForce(Vector3 force, Vector3 position)
-        => applyForce(force.X, force.Y, force.Z, position.X, position.Y, position.Z);
+    public void applyForce(Vector3 force, Vector3 position, ForceMode mode = ForceMode.Force)
+        => applyForce(force.X, force.Y, force.Z, position.X, position.Y, position.Z, mode);
 
     public void setVelocity(float x, float y, float z) =>
         NativeBindings.RigidBody.setVelocity(_uuid, x, y, z);

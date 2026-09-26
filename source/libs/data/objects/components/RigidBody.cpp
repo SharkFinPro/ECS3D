@@ -22,9 +22,9 @@ RigidBody::RigidBody()
   loadVariable(m_mass);
 }
 
-void RigidBody::addPendingForce(const glm::vec3& force, const glm::vec3& position)
+void RigidBody::addPendingForce(const glm::vec3& force, const glm::vec3& position, const ForceMode mode)
 {
-  m_pendingForces.push_back({ force, position });
+  m_pendingForces.push_back({ force, position, mode });
 }
 
 const std::vector<RigidBody::PendingForce>& RigidBody::getPendingForces() const

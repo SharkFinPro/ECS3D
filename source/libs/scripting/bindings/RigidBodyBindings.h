@@ -3,7 +3,7 @@
 
 struct RigidBodyBindings
 {
-  void(*applyForce)(const char* uuid, float x, float y, float z, float px, float py, float pz);
+  void(*applyForce)(const char* uuid, float x, float y, float z, float px, float py, float pz, int mode);
   void(*setVelocity)(const char* uuid, float x, float y, float z);
   bool(*isFalling)(const char* uuid);
   bool(*has)(const char* uuid);
@@ -27,8 +27,9 @@ public:
 
 private:
   // find() resolves uuid -> RigidBody via BindingContext. applyForce queues a force on the RigidBody
-  // data (PhysicsSystem drains it each tick) so scripting stays independent of ECS3DSim.
-  static void bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz);
+  // data (PhysicsSystem drains it each tick) so scripting stays independent of ECS3DSim. mode is a ForceMode,
+  // which says what units the force is in; one out of range queues nothing.
+  static void bindApplyForce(const char* uuid, float x, float y, float z, float px, float py, float pz, int mode);
   static void bindSetVelocity(const char* uuid, float x, float y, float z);
 
   // Overwrite the angular velocity (degrees per second). A player script zeroes it to keep mouse-look authoritative

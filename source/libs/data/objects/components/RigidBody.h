@@ -3,7 +3,22 @@
 
 #include "Component.h"
 #include <glm/vec3.hpp>
+#include <cstdint>
 #include <vector>
+
+// How a queued force becomes a change of velocity. Velocity is in units per tick; a force or an acceleration
+// acts for the tick's dt seconds, the way gravity does. The values cross the scripting ABI as ScriptBridge's
+// ForceMode, so they are fixed.
+enum class ForceMode : std::uint8_t {
+  // Mass times units per tick, per second: the velocity changes by force * dt / mass.
+  force = 0,
+  // Units per tick, per second: the velocity changes by acceleration * dt, whatever the mass.
+  acceleration = 1,
+  // Mass times units per tick: the velocity changes by impulse / mass.
+  impulse = 2,
+  // Units per tick, added to the velocity whatever the mass.
+  velocityChange = 3
+};
 
 class RigidBody final : public Component {
 public:
@@ -14,9 +29,10 @@ public:
   struct PendingForce {
     glm::vec3 force;
     glm::vec3 position;
+    ForceMode mode;
   };
 
-  void addPendingForce(const glm::vec3& force, const glm::vec3& position);
+  void addPendingForce(const glm::vec3& force, const glm::vec3& position, ForceMode mode);
   [[nodiscard]] const std::vector<PendingForce>& getPendingForces() const;
   void clearPendingForces();
 

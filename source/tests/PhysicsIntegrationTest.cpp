@@ -146,7 +146,7 @@ TEST(PhysicsIntegration, AQueuedForceIsAppliedOnceAndThenForgotten)
   const auto object = addObject(scene, "Pushed", { 0, 0, 0 });
   const auto body = addBody(object, false);
 
-  body->addPendingForce({ 0, 5, 0 }, transformOf(object)->getPosition());
+  body->addPendingForce({ 0, 5, 0 }, transformOf(object)->getPosition(), ForceMode::velocityChange);
 
   PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
 
@@ -161,6 +161,34 @@ TEST(PhysicsIntegration, AQueuedForceIsAppliedOnceAndThenForgotten)
 
   EXPECT_NEAR(body->getVelocity().y, 5.0f, 1e-5f);
   EXPECT_NEAR(transformOf(object)->getPosition().y, 10.0f, 1e-5f);
+}
+
+TEST(PhysicsIntegration, AQueuedForceChangesTheVelocityByItsMode)
+{
+  const auto velocityAfter = [](const ForceMode mode, const float mass)
+  {
+    const auto scene = makeScene();
+    const auto object = addObject(scene, "Pushed", { 0, 0, 0 });
+    const auto body = addBody(object, false);
+
+    body->setMass(mass);
+    body->addPendingForce({ 4, 0, 0 }, transformOf(object)->getPosition(), mode);
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+
+    return body->getVelocity().x;
+  };
+
+  // Acting for the tick, a force and an acceleration are scaled by dt, the way gravity is; a force and an
+  // impulse are divided by the mass.
+  EXPECT_NEAR(velocityAfter(ForceMode::force, 2.0f), 4.0f * dt / 2.0f, 1e-6f);
+  EXPECT_NEAR(velocityAfter(ForceMode::acceleration, 2.0f), 4.0f * dt, 1e-6f);
+  EXPECT_NEAR(velocityAfter(ForceMode::impulse, 2.0f), 4.0f / 2.0f, 1e-6f);
+  EXPECT_NEAR(velocityAfter(ForceMode::velocityChange, 2.0f), 4.0f, 1e-6f);
+
+  // The same impulse moves a body of twice the mass half as fast, and so half as far; a velocity change
+  // moves both alike.
+  EXPECT_NEAR(velocityAfter(ForceMode::impulse, 4.0f), velocityAfter(ForceMode::impulse, 2.0f) / 2.0f, 1e-6f);
+  EXPECT_NEAR(velocityAfter(ForceMode::velocityChange, 4.0f), velocityAfter(ForceMode::velocityChange, 2.0f), 1e-6f);
 }
 
 TEST(PhysicsIntegration, AForceThroughTheCentreOfMassDoesNotSpinTheBody)

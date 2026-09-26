@@ -75,6 +75,23 @@ namespace {
     return glm::radians(angularVelocity) * dt;
   }
 
+  glm::vec3 velocityChangeOf(const RigidBody::PendingForce& pending, const float mass, const float dt)
+  {
+    switch (pending.mode)
+    {
+      case ForceMode::force:
+        return pending.force * dt / mass;
+      case ForceMode::acceleration:
+        return pending.force * dt;
+      case ForceMode::impulse:
+        return pending.force / mass;
+      case ForceMode::velocityChange:
+        return pending.force;
+    }
+
+    return glm::vec3(0);
+  }
+
   glm::vec3 spinOf(const std::shared_ptr<Object>& object)
   {
     const auto body = object->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -155,7 +172,8 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
     // clear them, before integrating.
     for (const auto& pending : rigidBody->getPendingForces())
     {
-      applyVelocityChange(*rigidBody, *transform, pending.force, pending.position, dt);
+      applyVelocityChange(*rigidBody, *transform, velocityChangeOf(pending, rigidBody->getMass(), dt),
+                          pending.position, dt);
     }
     rigidBody->clearPendingForces();
 
