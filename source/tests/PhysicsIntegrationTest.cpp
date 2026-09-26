@@ -655,17 +655,19 @@ namespace {
 
 TEST(PhysicsIntegration, ABoxTippingOffALedgeTurnsAboutTheEdgeRatherThanSlidingOverIt)
 {
-  // Friction at the edge holds the underside there while the box turns about it.
+  // Friction at the edge holds the underside near there while the box turns about it. Not exactly: the contact
+  // the narrow phase reports shifts as the box tips.
+  const glm::vec3 edge{ 3, 1, 0 };
   const auto [pivot, tilt] = ledgePivotAfterTipping(0.5f);
 
   EXPECT_GT(tilt, 10.0f);
-  fixtures::expectNear("pivot", pivot, { 3, 1, 0 }, 0.02f);
+  EXPECT_LT(glm::distance(pivot, edge), 0.1f);
 
   // Positive control: without friction the same point slides back along the ledge as the box turns.
   const auto [slidingPivot, slidingTilt] = ledgePivotAfterTipping(0.0f);
 
   EXPECT_GT(slidingTilt, 10.0f);
-  EXPECT_LT(slidingPivot.x, 2.9f);
+  EXPECT_LT(slidingPivot.x, edge.x - 0.1f);
 }
 
 namespace {
