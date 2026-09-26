@@ -1,6 +1,7 @@
 #include "InputCapture.h"
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
+#include <GLFW/glfw3.h>
 
 namespace input {
 
@@ -13,6 +14,8 @@ InputSnapshot capture(const vke::VulkanEngine& renderer)
   {
     return snapshot;
   }
+
+  snapshot.focused = glfwGetWindowAttrib(window->getWindow(), GLFW_FOCUSED) == GLFW_TRUE;
 
   // Poll the keys the ScriptBridge Key enum exposes: space, the arrow keys, and A-Z. The window only
   // reports a key as pressed while it has focus, so this naturally goes quiet when the user tabs away.
@@ -48,6 +51,16 @@ InputSnapshot capture(const vke::VulkanEngine& renderer)
   if (window->buttonIsPressed(0)) { snapshot.buttons |= mouseButtonLeft; }
   if (window->buttonIsPressed(1)) { snapshot.buttons |= mouseButtonRight; }
   if (window->buttonIsPressed(2)) { snapshot.buttons |= mouseButtonMiddle; }
+
+  // GLFW still reports the cursor and buttons while the window is unfocused; without this an unfocused
+  // window would keep steering the player's look.
+  if (!snapshot.focused)
+  {
+    snapshot.mouseDeltaX = 0.0f;
+    snapshot.mouseDeltaY = 0.0f;
+    snapshot.scrollY = 0.0f;
+    snapshot.buttons = 0;
+  }
 
   return snapshot;
 }
