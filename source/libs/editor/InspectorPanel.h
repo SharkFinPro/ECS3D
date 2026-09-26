@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <uuid.h>
 
@@ -78,9 +79,9 @@ public:
   // by the scene inspector's is-active indicator (nullopt when no scene is loaded).
   void displayGui(const ObjectManager* objectManager, const std::optional<uuids::uuid>& activeSceneUUID);
 
-  // The object to highlight in the viewport: the object selection when the object inspector's Highlight
-  // toggle is on, else nullopt (also nullopt for the None/Asset kinds).
-  [[nodiscard]] std::optional<uuids::uuid> getHighlightUUID() const;
+  // The objects to highlight in the viewport: the whole object selection when the object inspector's
+  // Highlight toggle is on, else empty (also empty for the None/Asset kinds).
+  [[nodiscard]] std::span<const uuids::uuid> getHighlightUUIDs() const;
 
 private:
   std::shared_ptr<EditorSelection> m_selection;

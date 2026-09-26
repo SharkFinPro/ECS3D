@@ -15,6 +15,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <Log.h>
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <VulkanEngine/VulkanEngine.h>
@@ -48,7 +49,7 @@ namespace {
 }
 
 void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
-                                 const std::optional<uuids::uuid>& highlightUUID)
+                                 std::span<const uuids::uuid> highlightUUIDs)
 {
   const auto renderer = assetCache.getRenderer();
   const auto lightingManager = renderer->getLightingManager();
@@ -90,8 +91,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
           &m_selected[uuid]
         );
 
-        // The editor's selected object gets a second pass with the highlight pipeline (an outline).
-        if (highlightUUID == uuid)
+        // The editor's selected objects get a second pass with the highlight pipeline (an outline).
+        if (std::ranges::find(highlightUUIDs, uuid) != highlightUUIDs.end())
         {
           renderer->getRenderingManager()->getRenderer3D()->renderObject(renderObject, vke::PipelineType::objectHighlight);
         }

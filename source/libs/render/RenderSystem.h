@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 #include <uuid.h>
@@ -18,10 +19,10 @@ class GpuAssetCache;
 
 class RenderSystem {
 public:
-  // highlightUUID (the editor's selected object) is re-drawn with the objectHighlight pipeline. The
-  // client passes nullopt.
+  // Every object in highlightUUIDs (the editor's selected objects) is re-drawn with the objectHighlight
+  // pipeline. The client passes none.
   void variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
-                      const std::optional<uuids::uuid>& highlightUUID = std::nullopt);
+                      std::span<const uuids::uuid> highlightUUIDs = {});
 
   // Drives the vke camera from a component Camera. Finds the active Camera object, builds a
   // view matrix from its Transform pose, disables the built-in free-fly camera, and pushes the pose into
