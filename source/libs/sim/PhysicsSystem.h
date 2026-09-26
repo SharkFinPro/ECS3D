@@ -81,16 +81,28 @@ private:
 
   static void integrate(RigidBody& body, Transform& transform, float dt);
 
-  static void resolve(const Pair& pair, glm::vec3 minimumTranslationVector, const glm::vec3& point, float dt);
+  // faceContact: the support is a face under the center of mass rather than an edge or a point.
+  static void resolve(const Pair& pair, glm::vec3 minimumTranslationVector, const glm::vec3& point, bool faceContact,
+                      float dt);
 
   // Moves the pair apart by the translation vector, the lighter body the further.
   static void separate(const Pair& pair, glm::vec3 minimumTranslationVector);
 
   // Stops the velocity of the contact point along the normal, spin included. A pair of free bodies trades it
-  // instead, each moving by its inverse mass.
-  static void applyContactImpulse(const Pair& pair, const glm::vec3& point, float dt);
+  // instead, each moving by its inverse mass. Friction follows.
+  static void applyContactImpulse(const Pair& pair, const glm::vec3& point, bool faceContact, float dt);
+
+  // Coulomb: opposes the contact point's sliding, up to the friction coefficient times load, the impulse
+  // pressing the pair together this tick.
+  static void applyFriction(const Pair& pair, const glm::vec3& point, float load, bool faceContact, float dt);
 
   [[nodiscard]] static float restitution(const Pair& pair);
+
+  // The geometric mean of the two bodies' coefficients.
+  [[nodiscard]] static float frictionOf(const Pair& pair);
+
+  // The friction impulse a resting side's own support can take for it this tick.
+  [[nodiscard]] static float holdingCapacity(const Side& side);
 
   // The part of a push along direction the side takes itself.
   [[nodiscard]] static glm::vec3 takenBy(const Side& side, const glm::vec3& direction);
@@ -99,14 +111,16 @@ private:
   [[nodiscard]] static glm::vec3 velocityAt(const Side& side, const glm::vec3& point, const glm::vec3& pushDirection,
                                             float dt);
 
-  // How the side's point moves per unit of impulse pushing the side along direction.
-  [[nodiscard]] static glm::vec3 responseAt(const Side& side, const glm::vec3& point, const glm::vec3& direction);
+  // How the side's point moves per unit of impulse pushing the side along direction; turns is whether it
+  // acts at the point rather than through the center.
+  [[nodiscard]] static glm::vec3 responseAt(const Side& side, const glm::vec3& point, const glm::vec3& direction,
+                                            bool turns);
 
   // How fast a unit impulse along direction, on the body and back on the other, changes their relative velocity
   // at point along it.
   [[nodiscard]] static float inverseEffectiveMass(const Pair& pair, const glm::vec3& point, const glm::vec3& direction);
 
-  static void push(const Side& side, const glm::vec3& impulse, const glm::vec3& point, float dt);
+  static void push(const Side& side, const glm::vec3& impulse, const glm::vec3& point, bool turns, float dt);
 
   static void stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
                                   const glm::vec3& normal, std::span<const glm::vec3> contactPoints);
@@ -128,8 +142,6 @@ private:
                        float maxTiltSine);
 
   static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 displacement);
-
-  static void limitMovement(RigidBody& body, const Transform& transform, float dt);
 
   // Per unit mass, as a change of velocity turns the body whatever its mass. Empty for a body too degenerate to
   // invert, which then gets no angular response.

@@ -14,6 +14,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/trigonometric.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <algorithm>
@@ -119,21 +120,24 @@ TEST(PhysicsIntegration, ABodyWithGravityOffDoesNotMoveOnItsOwn)
   EXPECT_NEAR(transformOf(object)->getPosition().y, 2.0f + gravityPerTick, 1e-5f);
 }
 
-TEST(PhysicsIntegration, FrictionBleedsHorizontalVelocityAndLeavesTheVerticalAlone)
+TEST(PhysicsIntegration, ABodyInFlightKeepsItsHorizontalSpeed)
 {
   const auto scene = makeScene();
-  const auto object = addObject(scene, "Sliding", { 0, 0, 0 });
-  const auto body = addBody(object, false);
+  const auto object = addObject(scene, "Thrown", { 0, 0, 0 });
+  const auto body = addBody(object, true);
 
-  body->setFriction(0.1f);
-  body->setVelocity({ 1, 1, 1 });
+  body->setVelocity({ 1, 0, 1 });
 
-  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+  for (int tick = 0; tick < 10; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+  }
 
-  // Friction is applied to the horizontal plane only, so a body sliding and falling loses the slide and
-  // keeps the fall. Taking the vertical with it would make everything drift to a halt in mid-air.
-  expectNear("velocity", body->getVelocity(), { 0.9f, 1.0f, 0.9f });
-  expectNear("position", transformOf(object)->getPosition(), { 0.9f, 1.0f, 0.9f });
+  // Friction acts where a body touches something. It used to damp every body's horizontal velocity every
+  // tick, so anything thrown drifted to a halt in mid-air.
+  EXPECT_FLOAT_EQ(body->getVelocity().x, 1.0f);
+  EXPECT_FLOAT_EQ(body->getVelocity().z, 1.0f);
+  EXPECT_NEAR(body->getVelocity().y, 10.0f * gravityPerTick, 1e-5f);
 }
 
 TEST(PhysicsIntegration, AQueuedForceIsAppliedOnceAndThenForgotten)
@@ -377,6 +381,8 @@ TEST(PhysicsIntegration, AContactOffTheCenterStopsThePointItTouchesRatherThanThe
   const auto body = addBody(box, false);
   const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
 
+  // The spin leaves the edge sliding along the ground, which friction would then act on too.
+  body->setFriction(0.0f);
   body->setVelocity({ 0, -1, 0 });
 
   // Under an edge, one unit to the side of the centre: r = (1, -1.01, 0) once the correction lifts the body.
@@ -405,6 +411,7 @@ TEST(PhysicsIntegration, AStaticContactStopsABodyAlikeWhateverItsMass)
     const auto ground = addObject(scene, "Ground", { 0, -2, 0 });
 
     body->setMass(mass);
+    body->setFriction(0.0f);
     body->setVelocity({ 0, -1, 0 });
     PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, { 1, -1, 0 }, dt);
 
@@ -576,6 +583,170 @@ TEST(PhysicsIntegration, ABoxWhoseCenterOverhangsALedgeTipsOffIt)
 
   // A second in, it has tipped well over the edge. It used to have turned about a degree.
   EXPECT_LT(localUpOf(transformOf(box)->getRotation()).y, std::cos(glm::radians(20.0f)));
+}
+
+namespace {
+  // Where a point fixed in a body at local, relative to its center, is now, composed the way localUpOf is.
+  glm::vec3 worldPointOf(const Transform& transform, const glm::vec3& local)
+  {
+    const auto rotation = transform.getRotation();
+    const auto orientation = glm::rotate(glm::mat4(1.0f), glm::radians(rotation.z), { 0, 0, 1 })
+      * glm::rotate(glm::mat4(1.0f), glm::radians(rotation.y), { 0, 1, 0 })
+      * glm::rotate(glm::mat4(1.0f), glm::radians(rotation.x), { 1, 0, 0 });
+
+    return transform.getPosition() + glm::vec3(orientation * glm::vec4(local, 0));
+  }
+
+  // The same box as above, tipping over the ledge, after six ticks. Returns where the point of its underside
+  // that started on the ledge's edge is then, and how far the box has turned.
+  std::pair<glm::vec3, float> ledgePivotAfterTipping(const float friction)
+  {
+    const auto scene = makeScene();
+
+    const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 3, 1, 3 });
+    fixtures::addBoxCollider(ground);
+
+    const auto box = addObject(scene, "Box", { 3.3f, 2, 0 });
+    fixtures::addBoxCollider(box);
+    addBody(box, true)->setFriction(friction);
+
+    CollisionSystem collisionSystem;
+
+    for (int tick = 0; tick < 6; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+    }
+
+    const auto& transform = *transformOf(box);
+    const float tilt = glm::degrees(std::acos(std::clamp(localUpOf(transform.getRotation()).y, -1.0f, 1.0f)));
+
+    return { worldPointOf(transform, { -0.3f, -1, 0 }), tilt };
+  }
+}
+
+TEST(PhysicsIntegration, ABoxTippingOffALedgeTurnsAboutTheEdgeRatherThanSlidingOverIt)
+{
+  // Friction at the edge holds the underside there while the box turns about it.
+  const auto [pivot, tilt] = ledgePivotAfterTipping(0.5f);
+
+  EXPECT_GT(tilt, 10.0f);
+  fixtures::expectNear("pivot", pivot, { 3, 1, 0 }, 0.02f);
+
+  // Positive control: without friction the same point slides back along the ledge as the box turns.
+  const auto [slidingPivot, slidingTilt] = ledgePivotAfterTipping(0.0f);
+
+  EXPECT_GT(slidingTilt, 10.0f);
+  EXPECT_LT(slidingPivot.x, 2.9f);
+}
+
+namespace {
+  // A unit box dropped a unit onto a wide static ground while moving sideways at three units per second.
+  struct Landed {
+    glm::vec3 position;
+    glm::vec3 velocity;
+    glm::vec3 up;
+  };
+
+  Landed landSliding(const float friction)
+  {
+    const auto scene = makeScene();
+
+    const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 50, 1, 50 });
+    fixtures::addBoxCollider(ground);
+
+    const auto box = addObject(scene, "Box", { 0, 3, 0 });
+    fixtures::addBoxCollider(box);
+    const auto body = addBody(box, true);
+    body->setFriction(friction);
+    body->setVelocity({ 3.0f * dt, 0, 0 });
+
+    CollisionSystem collisionSystem;
+
+    for (int tick = 0; tick < 30; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+    }
+
+    return { transformOf(box)->getPosition(), body->getVelocity(), localUpOf(transformOf(box)->getRotation()) };
+  }
+}
+
+TEST(PhysicsIntegration, ABoxLandingWithSidewaysSpeedStopsSlidingWithinAShortDistance)
+{
+  // The landing's own impulse takes a share of the slide, and each resting tick after it takes friction times
+  // the weight that tick: the box stops about a unit and a half from where it came down, lying flat.
+  const auto landed = landSliding(0.5f);
+
+  EXPECT_LT(landed.position.x, 2.0f);
+  EXPECT_LT(glm::length(glm::vec2(landed.velocity.x, landed.velocity.z)), 1e-4f);
+  fixtures::expectNear("up", landed.up, { 0, 1, 0 }, 1e-3f);
+  EXPECT_NEAR(landed.position.y, 2.0f, 0.05f);
+
+  // Positive control: on a frictionless contact it keeps all thirty ticks of its slide.
+  EXPECT_GT(landSliding(0.0f).position.x, 8.0f);
+}
+
+namespace {
+  // A heavy box resting on a light one, which rests on a wide static ground, is set sliding. Returns where both
+  // boxes are and how fast the top one still moves forty ticks later.
+  struct Slid {
+    glm::vec3 lower;
+    glm::vec3 upper;
+    float upperSpeed;
+  };
+
+  Slid slideTheTopOfAStack(const float lowerMass, const float upperMass)
+  {
+    const auto scene = makeScene();
+
+    const auto ground = addObject(scene, "Ground", { 0, 0, 0 }, { 20, 1, 20 });
+    fixtures::addBoxCollider(ground);
+
+    const auto lower = addObject(scene, "Lower", { 0, 2, 0 });
+    fixtures::addBoxCollider(lower);
+    addBody(lower, true)->setMass(lowerMass);
+
+    const auto upper = addObject(scene, "Upper", { 0, 4, 0 });
+    fixtures::addBoxCollider(upper);
+    const auto upperBody = addBody(upper, true);
+    upperBody->setMass(upperMass);
+
+    CollisionSystem collisionSystem;
+
+    for (int tick = 0; tick < 50; ++tick)
+    {
+      if (tick == 10)
+      {
+        upperBody->setVelocity({ 2.0f * dt, 0, 0 });
+      }
+
+      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+      collisionSystem.fixedUpdate(*scene.objectManager, dt);
+    }
+
+    return { transformOf(lower)->getPosition(), transformOf(upper)->getPosition(), glm::length(upperBody->getVelocity()) };
+  }
+}
+
+TEST(PhysicsIntegration, ABoxSlidingOnAnotherIsHeldBackByFrictionWhileTheOneUnderItStaysPut)
+{
+  // The lower box's own support holds it against the drag, since friction there carries the weight of the
+  // whole stack, so the upper box slows at friction times its weight whatever the masses. Sized as if the light
+  // box could move freely, the heavy one would barely slow and slide off.
+  for (const auto& [lowerMass, upperMass] : { std::pair{ 10.0f, 100.0f }, std::pair{ 100.0f, 10.0f } })
+  {
+    SCOPED_TRACE(testing::Message() << "lower mass " << lowerMass << ", upper mass " << upperMass);
+
+    const auto slid = slideTheTopOfAStack(lowerMass, upperMass);
+
+    fixtures::expectNear("lower", slid.lower, { 0, 2, 0 }, 0.02f);
+    EXPECT_GT(slid.upper.x, 0.2f);
+    EXPECT_LT(slid.upper.x, 0.8f);
+    EXPECT_GT(slid.upper.y, 3.8f);
+    EXPECT_LT(slid.upperSpeed, 1e-3f);
+  }
 }
 
 TEST(PhysicsIntegration, ASmallerBoxRestingNearTheEdgeOfALargerOneDoesNotSpin)
@@ -1099,6 +1270,35 @@ namespace {
   }
 }
 
+TEST(PhysicsIntegration, FrictionAtAContactIsBoundedByFrictionTimesTheImpulsePressingItThere)
+{
+  const auto slidAfterOneContact = [](const glm::vec3& velocity)
+  {
+    const auto scene = makeScene();
+    const auto box = addObject(scene, "Box", { 0, 0, 0 });
+    const auto body = addBody(box, false);
+    const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
+
+    body->setFriction(0.5f);
+    body->setVelocity(velocity);
+    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, flatUnderside, dt);
+
+    return std::pair{ body->getVelocity(), body->getAngularVelocity() };
+  };
+
+  // Landing at 0.1 per tick presses the box into the ground with 0.1 per unit mass, so friction can take up to
+  // half of that off a slide of 0.3.
+  const auto [fastVelocity, fastSpin] = slidAfterOneContact({ 0.3f, -0.1f, 0 });
+  expectNear("fast slide", fastVelocity, { 0.25f, 0, 0 });
+
+  // Resting on its face, the box is not tipped over by the drag at its underside.
+  expectNear("spin", fastSpin, { 0, 0, 0 });
+
+  // A slide slower than that limit is stopped outright rather than reversed.
+  const auto [slowVelocity, slowSpin] = slidAfterOneContact({ 0.02f, -0.1f, 0 });
+  expectNear("slow slide", slowVelocity, { 0, 0, 0 });
+}
+
 TEST(PhysicsIntegration, ASupportStopsTheSpinDrivingItsContactsIntoItButNotTheSpinAboutItsNormal)
 {
   // Tipping about x drives the +z corners into the ground; turning about y moves every corner along it.
@@ -1184,7 +1384,9 @@ TEST(PhysicsIntegration, AContactUnderTheCenterIsNotSpunUpToChaseATurningSupport
   const auto supportBody = addBody(support, false);
 
   // A sphere's contact sits on the normal through its center, up to float noise, so spin cannot move that
-  // point along the normal at all. The support turning under it still moves its own surface there.
+  // point along the normal at all. The support turning under it still moves its own surface there. Its surface
+  // also slides under the ball, which friction would rightly turn it with.
+  body->setFriction(0.0f);
   supportBody->setAngularVelocity({ 0, 0, -2 });
   const std::array<glm::vec3, 1> underneath{ glm::vec3{ 1e-6f, -0.5f, 0 } };
 

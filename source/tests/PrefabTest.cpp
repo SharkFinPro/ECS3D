@@ -143,7 +143,7 @@ TEST(Prefab, InstantiatingBuildsTheWholeSubtreeFromTheRegisteredBody)
   const auto rigidBody = instance->getComponent<RigidBody>(ComponentType::rigidBody);
   ASSERT_NE(rigidBody, nullptr);
   EXPECT_FLOAT_EQ(rigidBody->getMass(), 10.0f);
-  EXPECT_FLOAT_EQ(rigidBody->getFriction(), 0.1f);
+  EXPECT_FLOAT_EQ(rigidBody->getFriction(), 0.5f);
 
   ASSERT_NE(instance->getComponent<BoxCollider>(ComponentType::collider), nullptr);
 

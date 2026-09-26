@@ -44,6 +44,11 @@ public:
   [[nodiscard]] bool getNextFalling() const;
   void setNextFalling(bool nextFalling);
 
+  // What the bodies resting on this one press it down with this tick, as an impulse. Its own support carries
+  // that too, so friction there holds the whole stack rather than this body alone.
+  [[nodiscard]] float getStackedLoad() const;
+  void setStackedLoad(float stackedLoad);
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -54,7 +59,7 @@ public:
 
 private:
   ComponentVariable<glm::vec3> m_velocity{glm::vec3(0)};
-  ComponentVariable<float> m_friction{0.1f};
+  ComponentVariable<float> m_friction{0.5f};
   ComponentVariable<bool> m_doGravity{true};
   ComponentVariable<float> m_gravity{-9.81f};
   ComponentVariable<glm::vec3> m_angularVelocity{glm::vec3(0)};
@@ -62,6 +67,8 @@ private:
 
   bool m_falling = true;
   bool m_nextFalling = true;
+
+  float m_stackedLoad = 0.0f;
 
   std::vector<PendingForce> m_pendingForces;
 };

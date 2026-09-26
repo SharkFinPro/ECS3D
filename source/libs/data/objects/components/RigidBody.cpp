@@ -142,6 +142,16 @@ void RigidBody::setNextFalling(const bool nextFalling)
   m_nextFalling = nextFalling;
 }
 
+float RigidBody::getStackedLoad() const
+{
+  return m_stackedLoad;
+}
+
+void RigidBody::setStackedLoad(const float stackedLoad)
+{
+  m_stackedLoad = stackedLoad;
+}
+
 nlohmann::json RigidBody::serialize()
 {
   const auto velocity = m_velocity.getInitialValue();
