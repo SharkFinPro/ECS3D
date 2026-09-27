@@ -31,6 +31,11 @@ add_library(${PROJECT_NAME}
   KeybindDispatcher.h
   Gizmo.cpp
   Gizmo.h
+  GizmoRenderer.h
+  ImGuiGizmoRenderer.cpp
+  ImGuiGizmoRenderer.h
+  ViewportGizmo.cpp
+  ViewportGizmo.h
   components/TransformEditor.cpp
   components/TransformEditor.h
   components/RigidBodyEditor.cpp

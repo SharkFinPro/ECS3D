@@ -1,6 +1,7 @@
 #ifndef RENDERSYSTEM_H
 #define RENDERSYSTEM_H
 
+#include <glm/mat4x4.hpp>
 #include <memory>
 #include <optional>
 #include <span>
@@ -41,6 +42,20 @@ public:
   // True for the object under the cursor; the editor reads it to drive Ctrl-click selection.
   [[nodiscard]] bool isSelected(const uuids::uuid& uuid) const;
 
+  // What the viewport is currently looking through: the last view matrix updateCamera pushed for a
+  // component camera, or the free-fly camera's own live view matrix when no component camera is active.
+  // Projection is the last values applied (or rejected) by applyProjection, else the free-fly defaults -
+  // the same fallback updateCamera/enableFreeFlyCamera use before the first frame. The editor's viewport
+  // gizmo builds its gizmo::View from this rather than reaching into vke itself.
+  struct ViewParams {
+    glm::mat4 view{ 1.0f };
+    float fovDegrees;
+    float nearPlane;
+    float farPlane;
+  };
+
+  [[nodiscard]] ViewParams viewParams(const GpuAssetCache& assetCache) const;
+
 private:
   // Only the kind the LightRenderer currently uses is ever populated; toggling spot/point releases
   // the old shared_ptr (and its vke light) before creating the new one.
@@ -78,6 +93,11 @@ private:
 
   std::optional<ProjectionParams> m_appliedProjection;
   std::optional<ProjectionParams> m_rejectedProjection;
+
+  // Which camera viewParams() should read from: true once enableFreeFlyCamera has (re-)taken over,
+  // false the frame updateCamera pushes a component camera's pose - see m_componentCameraView.
+  bool m_freeFlyActive = true;
+  glm::mat4 m_componentCameraView{ 1.0f };
 
   // Reused across calls to avoid a per-frame allocation: variableUpdate refills it with every uuid
   // seen this frame, then prunes m_lights/m_selected/GpuAssetCache's per-object caches of any uuid

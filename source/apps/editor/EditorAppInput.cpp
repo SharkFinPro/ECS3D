@@ -9,6 +9,7 @@
 #include <Selection.h>
 #include <EditorTheme.h>
 #include <KeybindDispatcher.h>
+#include <ViewportGizmo.h>
 #include <NetClient.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
@@ -31,6 +32,13 @@ void EditorApp::handlePicking()
 
   const auto window = m_renderer->getWindow();
   const bool pressed = window->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
+
+  // A click on (or drag of) a gizmo handle neither re-picks nor clears the selection.
+  if (m_viewportGizmo->capturesMouse())
+  {
+    m_mouseWasPressed = pressed;
+    return;
+  }
 
   // Select on a fresh Left-click over the viewport. isSelected() is the renderer's pick result from
   // last frame. Plain click replaces the selection; Ctrl-click adds/removes the picked object instead

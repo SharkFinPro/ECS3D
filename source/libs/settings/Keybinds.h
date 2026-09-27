@@ -26,9 +26,8 @@ struct KeyChord {
 // The inverse of parseChord: formatChord(*parseChord(x)) is always the canonical spelling of x.
 [[nodiscard]] std::string formatChord(const KeyChord& chord);
 
-// The full catalogue of named editor actions a key chord can be bound to. Actions whose behavior does
-// not exist yet (undo/redo/gizmo) are still bindable, so a later feature binds into the existing table
-// rather than adding its own hardcoded handler.
+// The full catalogue of named editor actions a key chord can be bound to. focusSelection has no handler
+// yet; it stays bindable so a later feature can attach behavior without a table change.
 enum class EditorAction {
   toggleGui,
   saveProject,

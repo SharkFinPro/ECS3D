@@ -24,7 +24,10 @@
 #include <SettingsStore.h>
 #include <Keybinds.h>
 #include <EditorCameraSettings.h>
+#include <EditorGizmoSettings.h>
 #include <KeybindDispatcher.h>
+#include <ViewportGizmo.h>
+#include <Gizmo.h>
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
 #include <objects/components/PlayerController.h>
@@ -44,6 +47,7 @@
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/camera/Camera.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <chrono>
@@ -99,10 +103,39 @@ EditorApp::EditorApp(LaunchOptions options)
   setupInspectorPanel();
   setupAssetBrowser();
   setupSaveUI();
+  setupViewportGizmo();
 
   // Save/Save As are wired to the table once SaveUI exists; toggleGui was already wired in setupKeybinds.
   m_keybindDispatcher->on(EditorAction::saveProject, [this] { static_cast<void>(m_saveUI->save()); });
   m_keybindDispatcher->on(EditorAction::saveProjectAs, [this] { m_saveUI->saveAs(); });
+
+  // Runs once per frame inside m_renderer->render(), right after the scene image is drawn - safe before
+  // the first snapshot, since getCurrentScene()/objectUUID() are both null-tolerant.
+  m_renderer->getRenderingManager()->setSceneOverlay(
+    [this](ImDrawList* drawList, const vke::SceneViewRect& rect) {
+      const auto scene = m_sceneManager->getCurrentScene();
+      const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
+
+      const auto renderView = m_renderSystem->viewParams(*m_assetCache);
+
+      gizmo::View view;
+      view.view = renderView.view;
+      view.fovDegrees = renderView.fovDegrees;
+      view.nearPlane = renderView.nearPlane;
+      view.farPlane = renderView.farPlane;
+      view.viewport = { rect.x, rect.y, rect.width, rect.height };
+
+      gizmo::Snap snap;
+      snap.enabled = editorGizmoSettings::readSnapEnabled(*m_settings);
+      snap.translateStep = editorGizmoSettings::readTranslateStep(*m_settings);
+      snap.rotateStepDegrees = editorGizmoSettings::readRotateStepDegrees(*m_settings);
+      snap.scaleStep = editorGizmoSettings::readScaleStep(*m_settings);
+
+      const bool sceneHovered = m_renderer->getRenderingManager()->isSceneHovered();
+
+      m_viewportGizmo->update(objectManager, m_selection->objectUUID(), view, drawList, m_serverEditable,
+                              snap, sceneHovered);
+    });
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
 
@@ -111,6 +144,18 @@ EditorApp::EditorApp(LaunchOptions options)
   // Ask the server for the initial Snapshot.
   const net::Message message(net::MessageType::join);
   m_netClient->send(message);
+}
+
+void EditorApp::setupViewportGizmo()
+{
+  m_viewportGizmo = std::make_unique<ViewportGizmo>();
+  m_viewportGizmo->setEditCallback([this](const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) {
+    onEditComponent(objectUUID, component);
+  });
+  m_viewportGizmo->setEditCommittedCallback([this](const uuids::uuid& objectUUID, const nlohmann::json& before,
+                                                   const nlohmann::json& after) {
+    onEditCommitted(objectUUID, before, after);
+  });
 }
 
 void EditorApp::setupObjectGUIManager()
@@ -221,6 +266,12 @@ void EditorApp::connectToServer()
 
 EditorApp::~EditorApp()
 {
+  // The overlay lambda captures this and reaches m_selection/m_viewportGizmo/m_settings through it, but
+  // other shared_ptr holders (GpuAssetCache, SettingsPanel, SaveUI, KeybindDispatcher) can keep m_renderer
+  // - and its RenderingManager - alive past those members' own destruction, so the callback is dropped
+  // here rather than left to outlive what it captures.
+  m_renderer->getRenderingManager()->setSceneOverlay({});
+
   if (m_netClient)
   {
     m_netClient->disconnect();
@@ -338,8 +389,14 @@ void EditorApp::setupKeybinds()
     m_objectGUIManager->duplicateSelection(scene ? scene->getObjectManager().get() : nullptr);
   });
 
-  // Save/Save As are registered later, once m_saveUI exists. focus/gizmo stay in the table with no
-  // handler - bindable and shown in Settings, but a no-op until a later feature gives them behavior.
+  // gizmo::State snapshots mode/space at drag start, so switching mode mid-drag is safe - it just applies
+  // to the next drag.
+  m_keybindDispatcher->on(EditorAction::gizmoTranslate, [this] { m_viewportGizmo->setMode(gizmo::Mode::translate); });
+  m_keybindDispatcher->on(EditorAction::gizmoRotate, [this] { m_viewportGizmo->setMode(gizmo::Mode::rotate); });
+  m_keybindDispatcher->on(EditorAction::gizmoScale, [this] { m_viewportGizmo->setMode(gizmo::Mode::scale); });
+
+  // Save/Save As are registered later, once m_saveUI exists. focus stays in the table with no handler -
+  // bindable and shown in Settings, but a no-op until a later feature gives it behavior.
 }
 
 void EditorApp::variableUpdate()
