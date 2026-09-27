@@ -524,12 +524,11 @@ is instead handled by `ViewportGizmo::capturesMouseAt(mouse)`, which re-runs the
 the last frame it actually drew (no side effects) with the given mouse position and the button up, so
 `handlePicking` can ask "is this mouse over a handle" without waiting for this frame's own overlay to run.
 Picking skips a click `capturesMouseAt` reports as captured, so grabbing a handle leaves the selection as it
-is. Viewport clicks need Ctrl, so plain clicks (used to focus the viewport or drag a gizmo handle) never
-touch the selection: Ctrl+click selects the picked object (replacing the selection) or clears it on empty
-space; Ctrl+Shift+click toggles the picked object in/out of the selection, and is a no-op on empty space; a
-click with no Ctrl held does nothing. A detached scene window sets
-`ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true` (in `setupImGuiStyle`) so a drag inside the
-window's body drives the gizmo instead of moving the OS window.
+is. Viewport picking is Ctrl-gated: Ctrl+click selects the picked object (replacing the selection) or
+clears it on empty space; Ctrl+Shift+click toggles the picked object in/out of the selection, and does
+nothing on empty space; a plain click (focusing the viewport, dragging a gizmo handle) leaves the selection
+as it is. The editor sets `ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true` (in `setupImGuiStyle`)
+so a drag inside a detached scene window's body drives the gizmo instead of moving the OS window.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
 headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a
