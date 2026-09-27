@@ -255,7 +255,7 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
   if (angularSpeed >= restAngularSpeed)
   {
     const auto turn = glm::angleAxis(glm::radians(angularSpeed) * dt, angularVelocity / angularSpeed);
-    transform.setRotation(glm::degrees(glm::eulerAngles(turn * orientationOf(transform))));
+    transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientationOf(transform))));
   }
 
   constexpr float damping = 0.99f;
@@ -830,7 +830,7 @@ void PhysicsSystem::layFlush(Transform& transform, const std::shared_ptr<Object>
   }
 
   const auto turn = glm::angleAxis(std::atan2(sine, cosine), axis / sine);
-  transform.setRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
+  transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
 }
 
 void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,

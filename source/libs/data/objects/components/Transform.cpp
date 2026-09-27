@@ -123,6 +123,20 @@ void Transform::setRotation(const glm::vec3 rotation)
   ++m_updateID;
 }
 
+void Transform::setWorldRotation(const glm::vec3 rotation)
+{
+  if (m_owner->getParent())
+  {
+    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
+    {
+      setRotation(rotation - parentTransform->getRotation());
+      return;
+    }
+  }
+
+  setRotation(rotation);
+}
+
 void Transform::start()
 {
   Component::start();

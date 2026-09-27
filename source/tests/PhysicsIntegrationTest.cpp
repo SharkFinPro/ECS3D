@@ -1245,6 +1245,28 @@ TEST(PhysicsIntegration, SpinTurnsABodyAboutTheWorldAxisEvenWhenItIsAlreadyTurne
              { 0, glm::cos(glm::radians(10.0f)), -glm::sin(glm::radians(10.0f)) });
 }
 
+TEST(PhysicsIntegration, ASpinningChildOfATurnedParentTurnsOnlyByItsOwnSpin)
+{
+  const auto scene = makeScene();
+  const auto parent = addObject(scene, "Parent", { 5, 0, 0 });
+  transformOf(parent)->setRotation({ 0, 30, 0 });
+
+  const auto child = addChildObject(scene, "Child", parent);
+  const auto body = addBody(child, false);
+  body->setVelocity({ 1, 0, 0 });
+  body->setAngularVelocity({ 0, 10, 0 });
+
+  PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+
+  // The turned world rotation written back as the local one adds the parent's 30 degrees again every tick.
+  expectNear("local rotation", transformOf(child)->getLocalRotation(), { 0, 10.0f * dt, 0 });
+  expectNear("rotation", transformOf(child)->getRotation(), { 0, 30.0f + 10.0f * dt, 0 });
+
+  // Positions combine by addition alone, so a world-space move is already the local one.
+  expectNear("local position", transformOf(child)->getLocalPosition(), { 1, 0, 0 });
+  expectNear("position", transformOf(child)->getPosition(), { 6, 0, 0 });
+}
+
 TEST(PhysicsIntegration, ASpinTooSlowToSeeIsKeptButDoesNotRewriteTheRotation)
 {
   const auto scene = makeScene();
@@ -1797,6 +1819,24 @@ TEST(PhysicsIntegration, ARealTiltOrAContactFromAboveIsNotLaidFlush)
   // Positive control: the same small tilt resting on the face below is laid flush.
   fixtures::expectNear("up", localUpOf(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, 0.01f, 0 }, flatUnderside)),
                        { 0, 1, 0 }, 1e-5f);
+}
+
+TEST(PhysicsIntegration, AChildOfATurnedParentIsLaidFlushWithoutTakingOnTheParentsTurn)
+{
+  const auto scene = makeScene();
+  const auto parent = addObject(scene, "Parent", { 0, 0, 0 });
+  transformOf(parent)->setRotation({ 0, 30, 0 });
+
+  const auto box = addChildObject(scene, "Box", parent);
+  const auto body = addBody(box, false);
+  transformOf(box)->setRotation({ 0, 0, 0.016f });
+  const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
+
+  PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, flatUnderside, dt);
+
+  fixtures::expectNear("up", localUpOf(transformOf(box)->getRotation()), { 0, 1, 0 }, 1e-5f);
+  EXPECT_NEAR(transformOf(box)->getRotation().y, 30.0f, 1e-3f);
+  EXPECT_NEAR(transformOf(box)->getLocalRotation().y, 0.0f, 1e-3f);
 }
 
 TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning)
