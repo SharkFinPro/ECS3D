@@ -30,6 +30,12 @@ namespace {
   {
     return { transform->getPosition(), transform->getRotation(), transform->getScale() };
   }
+
+  [[nodiscard]] bool insideViewport(const gizmo::Rect& viewport, const glm::vec2 mouse)
+  {
+    return mouse.x >= viewport.x && mouse.x <= viewport.x + viewport.width
+      && mouse.y >= viewport.y && mouse.y <= viewport.y + viewport.height;
+  }
 }
 
 ViewportGizmo::ViewportGizmo()
@@ -63,6 +69,9 @@ bool ViewportGizmo::capturesMouseAt(const glm::vec2 mouse) const
   gizmo::State stateCopy = m_state;
   gizmo::Input inputCopy = *m_lastInput;
   inputCopy.mouse = mouse;
+  // Last frame's mouseOverView was taken at last frame's cursor; a cursor that just jumped onto a handle
+  // from outside the scene would otherwise read as not hovering it.
+  inputCopy.mouseOverView = insideViewport(inputCopy.view.viewport, mouse);
   inputCopy.mouseDown = false;
   stateCopy.mouseDownLastFrame = false;
 
@@ -139,10 +148,7 @@ void ViewportGizmo::update(ObjectManager* objectManager, const std::optional<uui
   }
 
   const auto& io = ImGui::GetIO();
-  const bool mouseInsideViewport = io.MousePos.x >= view.viewport.x
-    && io.MousePos.x <= view.viewport.x + view.viewport.width
-    && io.MousePos.y >= view.viewport.y
-    && io.MousePos.y <= view.viewport.y + view.viewport.height;
+  const bool mouseInsideViewport = insideViewport(view.viewport, { io.MousePos.x, io.MousePos.y });
 
   gizmo::Input input;
   input.view = view;
