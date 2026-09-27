@@ -57,6 +57,7 @@ add_executable(${PROJECT_NAME}
   RemoteLogSinkTest.cpp
   KeybindsTest.cpp
   GizmoTest.cpp
+  GizmoDragTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
   ProjectSerializerLogTest.cpp
@@ -91,6 +92,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryFixtures.h
   ObjectManagerFixtures.h
   SceneEditFixtures.h
+  GizmoFixtures.h
 
   # net's MessageQueue is compiled in rather than linked: it is the one piece of ECS3DNet with no CLR
   # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a
