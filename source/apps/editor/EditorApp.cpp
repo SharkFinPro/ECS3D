@@ -135,6 +135,12 @@ EditorApp::EditorApp(LaunchOptions options)
 
       m_viewportGizmo->update(objectManager, m_selection->objectUUID(), view, drawList, m_serverEditable,
                               snap, sceneHovered);
+
+      // Picking has to see THIS frame's capturesMouse(), not the one from before the gizmo moved: run()
+      // calls this overlay (via render()) after building the frame's ImGui, so handling a click here -
+      // right after the gizmo used it - is the earliest point capturesMouse() is current for a mouse
+      // that just moved onto a handle and pressed in the same frame.
+      handlePicking();
     });
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
@@ -315,8 +321,8 @@ void EditorApp::run()
 
     sendInput();
 
-    handlePicking();
-
+    // Viewport picking runs inside the scene overlay callback below (right after the gizmo update), not
+    // here - it needs this frame's capturesMouse(), not last frame's.
     m_settings->update();
 
     updateGui();

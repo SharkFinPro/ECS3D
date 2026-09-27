@@ -514,9 +514,12 @@ builds a `gizmo::Input` from the target's `Transform` each frame, runs the headl
 testing and drag math, `source/libs/editor/Gizmo.{h,cpp}`), and draws the result through `GizmoRenderer` -
 an interface so a native backend could replace `ImGuiGizmoRenderer` later without `ViewportGizmo` changing.
 A drag sends a per-frame `editComponent` while it moves (matching the Inspector's own slider drags, so
-other connected views see it move smoothly) and one committed edit - one undo entry - on release;
-`EditorApp::handlePicking` skips its own click handling while the gizmo reports `capturesMouse()`, so
-grabbing a handle never re-picks or clears the selection underneath it.
+other connected views see it move smoothly) and one committed edit - one undo entry - on release.
+`EditorApp::handlePicking` runs from inside this same overlay callback, right after the gizmo update, not
+from the main loop - it needs the frame's own `capturesMouse()`, not the previous frame's, so a mouse that
+moves onto a handle and presses in the same frame still starts a drag instead of re-picking. Picking runs
+after the gizmo each frame and skips a click the gizmo captured, so grabbing a handle leaves the selection
+as it is.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
 headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a
