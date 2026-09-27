@@ -29,6 +29,8 @@ add_library(${PROJECT_NAME}
   ConsolePanel.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h
+  Gizmo.cpp
+  Gizmo.h
   components/TransformEditor.cpp
   components/TransformEditor.h
   components/RigidBodyEditor.cpp
