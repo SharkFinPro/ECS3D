@@ -116,6 +116,12 @@ namespace gizmo {
     Handle activeHandle = Handle::none;
     bool mouseDownLastFrame = false;
 
+    // Snapshotted from mode/space at beginDrag and used by processDrag for the rest of that drag, so a
+    // caller mutating mode/space mid-drag cannot run one mode's math against another's bookkeeping - the
+    // change only takes effect on the next drag.
+    Mode dragMode = Mode::translate;
+    Space dragSpace = Space::world;
+
     Pose dragStartLocal;
     Pose dragStartWorld;
     Pose lastResultLocal;

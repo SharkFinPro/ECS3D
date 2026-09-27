@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 
 namespace {
   // The screen-space length every handle is sized to, whatever the camera distance - the "constant
@@ -15,6 +16,10 @@ namespace {
   constexpr float uniformHandleHalfPixels = 6.0f;
   constexpr int ringSegments = 64;
   constexpr float minScaleFactor = 0.01f;
+
+  // Two handles within this of each other in screen distance are treated as a tie, broken by which one is
+  // more reliable to have meant (see handleReliability).
+  constexpr float hitTestTieEpsilonPixels = 0.5f;
 
   // Below this, the mouse ray and the drag axis/plane are treated as degenerate and the previous frame's
   // result is kept instead of dividing by (near) zero.
@@ -153,6 +158,16 @@ namespace {
     return ray.origin + ray.direction * t;
   }
 
+  // Any unit vector perpendicular to axis - used where a fallback "current grab direction" is needed but
+  // there is no real hit to derive one from. A fixed world axis would be degenerate (or nearly so) when
+  // axis itself is close to that world axis, e.g. rotating about X - picking whichever of X/Y is farther
+  // from axis avoids that.
+  [[nodiscard]] glm::vec3 anyPerpendicular(const glm::vec3& axis)
+  {
+    const glm::vec3 helper = std::abs(axis.x) < 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+    return glm::normalize(glm::cross(axis, helper));
+  }
+
   [[nodiscard]] std::vector<glm::vec3> buildRingPoints(const glm::vec3& center, const glm::vec3& normal,
                                                         const float radius)
   {
@@ -221,6 +236,64 @@ namespace {
     return result;
   }
 
+  // The screen-space distance from mouse to g's hover geometry (a ring's 64-segment polyline for rotate,
+  // otherwise the center-to-tip shaft), or nullopt when none of it projects (behind the camera).
+  [[nodiscard]] std::optional<float> nearestDistanceForHandle(const gizmo::Mode mode, const HandleGeom& g,
+                                                               const gizmo::View& view, const glm::vec2& mouse)
+  {
+    if (mode == gizmo::Mode::rotate)
+    {
+      std::optional<float> best;
+
+      for (std::size_t i = 0; i < g.ringPoints.size(); ++i)
+      {
+        const auto pa = gizmo::project(view, g.ringPoints[i]);
+        const auto pb = gizmo::project(view, g.ringPoints[(i + 1) % g.ringPoints.size()]);
+
+        if (!pa || !pb)
+        {
+          continue;
+        }
+
+        const float d = distancePointToSegment(mouse, *pa, *pb);
+        if (!best || d < *best)
+        {
+          best = d;
+        }
+      }
+
+      return best;
+    }
+
+    const auto pa = gizmo::project(view, g.center);
+    const auto pb = gizmo::project(view, g.tip);
+
+    if (!pa || !pb)
+    {
+      return std::nullopt;
+    }
+
+    return distancePointToSegment(mouse, *pa, *pb);
+  }
+
+  [[nodiscard]] glm::vec3 viewForward(const gizmo::View& view)
+  {
+    return glm::normalize(glm::vec3(glm::inverse(view.view) * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+  }
+
+  // How reliable a handle is to have actually meant, for breaking a screen-distance tie between two of
+  // them - higher wins. A rotate ring is most reliable (most circular, easiest to read) when its plane
+  // faces the camera, i.e. its normal is aligned with the view direction; an edge-on ring, normal
+  // perpendicular to view, degenerates to a line (the scenario this tie-break exists for). A translate/
+  // scale shaft is the opposite: it is most reliable (longest, clearest on screen) when its axis is
+  // perpendicular to view, and least when the axis points straight down the view (foreshortened to a
+  // point).
+  [[nodiscard]] float handleReliability(const gizmo::Mode mode, const glm::vec3& axis, const glm::vec3& forward)
+  {
+    const float alignment = std::abs(glm::dot(axis, forward));
+    return mode == gizmo::Mode::rotate ? alignment : -alignment;
+  }
+
   [[nodiscard]] gizmo::Handle hitTest(const gizmo::Mode mode, const std::vector<HandleGeom>& handles,
                                       const glm::vec3& center, const gizmo::View& view, const glm::vec2& mouse)
   {
@@ -236,8 +309,14 @@ namespace {
       }
     }
 
-    gizmo::Handle best = gizmo::Handle::none;
-    float bestDist = hoverPixels;
+    struct Candidate {
+      gizmo::Handle handle;
+      float dist;
+      float reliability; // see handleReliability
+    };
+
+    const glm::vec3 forward = viewForward(view);
+    std::vector<Candidate> candidates;
 
     for (const auto& g : handles)
     {
@@ -246,40 +325,39 @@ namespace {
         continue;
       }
 
-      if (mode == gizmo::Mode::rotate)
+      const auto dist = nearestDistanceForHandle(mode, g, view, mouse);
+      if (!dist || *dist >= hoverPixels)
       {
-        for (std::size_t i = 0; i < g.ringPoints.size(); ++i)
-        {
-          const auto pa = gizmo::project(view, g.ringPoints[i]);
-          const auto pb = gizmo::project(view, g.ringPoints[(i + 1) % g.ringPoints.size()]);
-
-          if (!pa || !pb)
-          {
-            continue;
-          }
-
-          if (const float d = distancePointToSegment(mouse, *pa, *pb); d < bestDist)
-          {
-            bestDist = d;
-            best = g.handle;
-          }
-        }
+        continue;
       }
-      else
+
+      candidates.push_back({ g.handle, *dist, handleReliability(mode, g.axis, forward) });
+    }
+
+    if (candidates.empty())
+    {
+      return gizmo::Handle::none;
+    }
+
+    // Two handles can genuinely tie in screen distance - e.g. a rotate ring viewed edge-on projects to a
+    // line through the center, which a face-on ring's own circle can also pass through. Rather than let
+    // iteration order settle that arbitrarily, the closest handle wins outright, and among handles within
+    // hitTestTieEpsilonPixels of it, the more reliable one wins (see handleReliability).
+    float minDist = candidates.front().dist;
+    for (const auto& c : candidates)
+    {
+      minDist = std::min(minDist, c.dist);
+    }
+
+    gizmo::Handle best = gizmo::Handle::none;
+    float bestReliability = -std::numeric_limits<float>::infinity();
+
+    for (const auto& c : candidates)
+    {
+      if (c.dist <= minDist + hitTestTieEpsilonPixels && c.reliability > bestReliability)
       {
-        const auto pa = gizmo::project(view, g.center);
-        const auto pb = gizmo::project(view, g.tip);
-
-        if (!pa || !pb)
-        {
-          continue;
-        }
-
-        if (const float d = distancePointToSegment(mouse, *pa, *pb); d < bestDist)
-        {
-          bestDist = d;
-          best = g.handle;
-        }
+        bestReliability = c.reliability;
+        best = c.handle;
       }
     }
 
@@ -422,12 +500,14 @@ namespace {
   {
     state.dragging = true;
     state.activeHandle = handle;
+    state.dragMode = state.mode;
+    state.dragSpace = state.space;
     state.dragStartLocal = input.local;
     state.dragStartWorld = input.world;
     state.lastResultLocal = input.local;
-    state.dragAxis = axisForHandle(state.mode, state.space, handle, input.world.rotation);
+    state.dragAxis = axisForHandle(state.dragMode, state.dragSpace, handle, input.world.rotation);
 
-    switch (state.mode)
+    switch (state.dragMode)
     {
       case gizmo::Mode::translate:
       {
@@ -440,7 +520,7 @@ namespace {
       {
         const gizmo::Ray ray = gizmo::mouseRay(input.view, input.mouse);
         const auto hit = rayPlaneHit(ray, worldCenter, state.dragAxis);
-        state.dragPrevV = hit ? (*hit - worldCenter) : glm::vec3(1.0f, 0.0f, 0.0f);
+        state.dragPrevV = hit ? (*hit - worldCenter) : anyPerpendicular(state.dragAxis);
         state.dragTotalAngleDegrees = 0.0f;
         state.dragMousePrev = input.mouse;
         break;
@@ -590,7 +670,7 @@ namespace {
   {
     gizmo::Pose result;
 
-    switch (state.mode)
+    switch (state.dragMode)
     {
       case gizmo::Mode::translate:
         result = processTranslate(state, input);
@@ -636,6 +716,16 @@ namespace gizmo {
 
   Ray mouseRay(const View& view, const glm::vec2& mouse)
   {
+    const glm::vec3 origin = cameraPosition(view);
+
+    if (!viewportIsUsable(view.viewport))
+    {
+      // No pixel-to-ray mapping is meaningful without a real viewport (the aspect ratio and NDC mapping
+      // below would divide by zero) - fall back to where the camera is looking rather than a NaN
+      // direction, the same way project() reports no screen position at all in this case.
+      return Ray{ origin, viewForward(view) };
+    }
+
     const glm::mat4 inv = glm::inverse(projectionMatrix(view) * view.view);
     const float ndcX = ((mouse.x - view.viewport.x) / view.viewport.width) * 2.0f - 1.0f;
     const float ndcY = (1.0f - (mouse.y - view.viewport.y) / view.viewport.height) * 2.0f - 1.0f;
@@ -643,7 +733,6 @@ namespace gizmo {
     glm::vec4 farPoint = inv * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
     farPoint /= farPoint.w;
 
-    const glm::vec3 origin = cameraPosition(view);
     const glm::vec3 direction = glm::normalize(glm::vec3(farPoint) - origin);
 
     return Ray{ origin, direction };
