@@ -123,7 +123,7 @@ void Transform::setRotation(const glm::vec3 rotation)
   ++m_updateID;
 }
 
-void Transform::setWorldRotation(const glm::vec3& rotation)
+void Transform::setWorldRotation(const glm::vec3 rotation)
 {
   if (m_owner->getParent())
   {
