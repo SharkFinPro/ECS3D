@@ -7,6 +7,8 @@ add_library(${PROJECT_NAME}
   Keybinds.h
   EditorCameraSettings.cpp
   EditorCameraSettings.h
+  EditorGizmoSettings.cpp
+  EditorGizmoSettings.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

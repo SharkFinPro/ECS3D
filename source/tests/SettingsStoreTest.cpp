@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "EditorCameraSettings.h"
+#include "EditorGizmoSettings.h"
 #include "Log.h"
 #include "LogSink.h"
 #include "RingBufferSink.h"
@@ -443,4 +444,87 @@ TEST_F(SettingsStoreTest, EditorCameraSpeedRejectsANonFiniteValue)
   editorCameraSettings::writeSpeed(store, std::numeric_limits<float>::infinity());
 
   EXPECT_FLOAT_EQ(editorCameraSettings::readSpeed(store), editorCameraSettings::defaultSpeed);
+}
+
+TEST_F(SettingsStoreTest, GizmoSettingsFallBackToTheCompiledInDefaults)
+{
+  const SettingsStore store(m_file);
+
+  EXPECT_EQ(editorGizmoSettings::readSnapEnabled(store), editorGizmoSettings::defaultSnapEnabled);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readTranslateStep(store), editorGizmoSettings::defaultTranslateStep);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(store), editorGizmoSettings::defaultRotateStepDegrees);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(store), editorGizmoSettings::defaultScaleStep);
+}
+
+TEST_F(SettingsStoreTest, GizmoSettingsRoundTripThroughTheFile)
+{
+  {
+    SettingsStore store(m_file);
+    editorGizmoSettings::writeSnapEnabled(store, false);
+    editorGizmoSettings::writeTranslateStep(store, 2.0f);
+    editorGizmoSettings::writeRotateStepDegrees(store, 45.0f);
+    editorGizmoSettings::writeScaleStep(store, 0.25f);
+    store.flush();
+  }
+
+  const SettingsStore reloaded(m_file);
+
+  EXPECT_EQ(editorGizmoSettings::readSnapEnabled(reloaded), false);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readTranslateStep(reloaded), 2.0f);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(reloaded), 45.0f);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(reloaded), 0.25f);
+}
+
+TEST_F(SettingsStoreTest, GizmoStepsClampAnOutOfRangeStoredValue)
+{
+  writeFile(R"({
+    "editor.gizmo.translateStep": 9999.0,
+    "editor.gizmo.rotateStep": 9999.0,
+    "editor.gizmo.scaleStep": 9999.0
+  })");
+
+  const SettingsStore store(m_file);
+
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readTranslateStep(store), editorGizmoSettings::maxTranslateStep);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(store), editorGizmoSettings::maxRotateStepDegrees);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(store), editorGizmoSettings::maxScaleStep);
+
+  // Positive control: values already inside range come back unchanged, so the clamp above is actually
+  // clamping rather than always snapping to the max.
+  writeFile(R"({
+    "editor.gizmo.translateStep": 1.0,
+    "editor.gizmo.rotateStep": 30.0,
+    "editor.gizmo.scaleStep": 0.2
+  })");
+  const SettingsStore inRange(m_file);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readTranslateStep(inRange), 1.0f);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(inRange), 30.0f);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(inRange), 0.2f);
+}
+
+TEST_F(SettingsStoreTest, GizmoStepsClampBelowTheMinimumOnWrite)
+{
+  SettingsStore store(m_file);
+
+  editorGizmoSettings::writeTranslateStep(store, -1.0f);
+  editorGizmoSettings::writeRotateStepDegrees(store, -1.0f);
+  editorGizmoSettings::writeScaleStep(store, -1.0f);
+
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readTranslateStep(store), editorGizmoSettings::minTranslateStep);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(store), editorGizmoSettings::minRotateStepDegrees);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(store), editorGizmoSettings::minScaleStep);
+}
+
+TEST_F(SettingsStoreTest, GizmoStepsRejectANonFiniteValue)
+{
+  SettingsStore store(m_file);
+
+  const float inf = std::numeric_limits<float>::infinity();
+  editorGizmoSettings::writeTranslateStep(store, inf);
+  editorGizmoSettings::writeRotateStepDegrees(store, inf);
+  editorGizmoSettings::writeScaleStep(store, inf);
+
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readTranslateStep(store), editorGizmoSettings::defaultTranslateStep);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(store), editorGizmoSettings::defaultRotateStepDegrees);
+  EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(store), editorGizmoSettings::defaultScaleStep);
 }

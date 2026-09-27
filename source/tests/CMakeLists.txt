@@ -56,6 +56,7 @@ add_executable(${PROJECT_NAME}
   LogFilePathTest.cpp
   RemoteLogSinkTest.cpp
   KeybindsTest.cpp
+  GizmoTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
   ProjectSerializerLogTest.cpp
@@ -126,6 +127,10 @@ add_executable(${PROJECT_NAME}
   # The server's built-in project is plain JSON over json, glm and uuid, so it is compiled in the same way
   # rather than linking the server app.
   ../apps/server/DefaultProject.cpp
+
+  # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
+  # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).
+  ../libs/editor/Gizmo.cpp
 )
 
 
@@ -134,6 +139,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting
+  ${CMAKE_CURRENT_SOURCE_DIR}/../libs/editor
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
