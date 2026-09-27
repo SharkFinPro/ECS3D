@@ -439,4 +439,8 @@ void EditorApp::setupImGuiStyle()
   ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 
   theme::applyStyle();
+
+  // Otherwise dragging inside a window's body moves the window, so undocking the scene view into its own
+  // OS window would drag that window instead of a gizmo handle under the cursor.
+  ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
 }

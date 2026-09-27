@@ -527,7 +527,9 @@ Picking skips a click `capturesMouseAt` reports as captured, so grabbing a handl
 is. Viewport clicks need Ctrl, so plain clicks (used to focus the viewport or drag a gizmo handle) never
 touch the selection: Ctrl+click selects the picked object (replacing the selection) or clears it on empty
 space; Ctrl+Shift+click toggles the picked object in/out of the selection, and is a no-op on empty space; a
-click with no Ctrl held does nothing.
+click with no Ctrl held does nothing. A detached scene window sets
+`ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true` (in `setupImGuiStyle`) so a drag inside the
+window's body drives the gizmo instead of moving the OS window.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
 headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a
