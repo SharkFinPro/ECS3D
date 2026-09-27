@@ -48,9 +48,26 @@ void ViewportGizmo::setEditCommittedCallback(EditCommittedCallback callback)
   m_editCommittedCallback = std::move(callback);
 }
 
-bool ViewportGizmo::capturesMouse() const
+bool ViewportGizmo::capturesMouseAt(const glm::vec2 mouse) const
 {
-  return m_capturesMouse;
+  if (m_state.dragging)
+  {
+    return true;
+  }
+
+  if (!m_lastInput)
+  {
+    return false;
+  }
+
+  gizmo::State stateCopy = m_state;
+  gizmo::Input inputCopy = *m_lastInput;
+  inputCopy.mouse = mouse;
+  inputCopy.mouseDown = false;
+  stateCopy.mouseDownLastFrame = false;
+
+  const gizmo::Frame frame = gizmo::update(stateCopy, inputCopy);
+  return frame.hovered != gizmo::Handle::none;
 }
 
 gizmo::Mode ViewportGizmo::mode() const
@@ -117,7 +134,7 @@ void ViewportGizmo::update(ObjectManager* objectManager, const std::optional<uui
   if (!transform || !editable || targetChanged)
   {
     abandonDrag(objectManager);
-    m_capturesMouse = false;
+    m_lastInput.reset();
     return;
   }
 
@@ -139,7 +156,7 @@ void ViewportGizmo::update(ObjectManager* objectManager, const std::optional<uui
 
   const gizmo::Frame frame = gizmo::update(m_state, input);
 
-  m_capturesMouse = frame.capturesMouse;
+  m_lastInput = input;
 
   if (drawList)
   {

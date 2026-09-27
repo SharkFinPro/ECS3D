@@ -515,11 +515,16 @@ testing and drag math, `source/libs/editor/Gizmo.{h,cpp}`), and draws the result
 an interface so a native backend could replace `ImGuiGizmoRenderer` later without `ViewportGizmo` changing.
 A drag sends a per-frame `editComponent` while it moves (matching the Inspector's own slider drags, so
 other connected views see it move smoothly) and one committed edit - one undo entry - on release.
-`EditorApp::handlePicking` runs from inside this same overlay callback, right after the gizmo update, not
-from the main loop - it needs the frame's own `capturesMouse()`, not the previous frame's, so a mouse that
-moves onto a handle and presses in the same frame still starts a drag instead of re-picking. Picking runs
-after the gizmo each frame and skips a click the gizmo captured, so grabbing a handle leaves the selection
-as it is.
+`EditorApp::handlePicking` runs from `run()`, in its original spot after `sendInput()` - not from the
+overlay callback, because picking reads `RenderSystem::isSelected`, vke's `MousePicker` flags, which
+`variableUpdate()` clears at the start of every frame and only sets again inside `render()`, after the
+overlay runs; reading them from the overlay saw every flag already cleared for the frame. The same-frame
+race the overlay placement was chasing - a mouse that moves onto a handle and presses in the same frame -
+is instead handled by `ViewportGizmo::capturesMouseAt(mouse)`, which re-runs the headless core on copies of
+the last frame it actually drew (no side effects) with the given mouse position and the button up, so
+`handlePicking` can ask "is this mouse over a handle" without waiting for this frame's own overlay to run.
+Picking skips a click `capturesMouseAt` reports as captured, so grabbing a handle leaves the selection as it
+is.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
 headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a

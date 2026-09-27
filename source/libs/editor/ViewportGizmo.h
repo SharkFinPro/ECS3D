@@ -39,9 +39,12 @@ public:
   void update(ObjectManager* objectManager, std::optional<uuids::uuid> target, const gizmo::View& view,
              ImDrawList* drawList, bool editable, const gizmo::Snap& snap, bool sceneHovered);
 
-  // Last frame's Frame::capturesMouse - the caller skips its own viewport click handling while this
-  // is true, so a click on a handle neither re-picks nor clears the selection.
-  [[nodiscard]] bool capturesMouse() const;
+  // True while a drag is active; otherwise re-runs the headless core against last frame's target/state
+  // with mouse moved to the given position (button up), so the caller can ask "would this click land on
+  // a handle" for a mouse that moved onto one and pressed in the same frame this class doesn't see until
+  // its own update() runs next. No side effects - never touches the real state or fires a callback. False
+  // if the gizmo drew nothing last frame (no target, not editable, ...).
+  [[nodiscard]] bool capturesMouseAt(glm::vec2 mouse) const;
 
   [[nodiscard]] gizmo::Mode mode() const;
   void setMode(gizmo::Mode mode);
@@ -62,7 +65,9 @@ private:
   std::optional<uuids::uuid> m_dragTarget;
   std::string m_dragBefore;
 
-  bool m_capturesMouse = false;
+  // The gizmo::Input update() last built, kept so capturesMouseAt can re-test a hover without the caller
+  // having to rebuild a View/Snap it doesn't otherwise need. Reset whenever update() draws nothing.
+  std::optional<gizmo::Input> m_lastInput;
 
   // Ends an in-flight drag (if any) without restoring anything: reports the committed edit against the
   // old target's current state when it still exists and has a Transform, otherwise just drops it.
