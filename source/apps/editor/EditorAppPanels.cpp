@@ -101,6 +101,41 @@ namespace {
          : status == SceneStatus::paused  ? theme::scriptAmber
                                           : theme::t3;
   }
+
+  // The Move/Rotate/Scale mode buttons: the active mode is styled like the mockup's accent Start button.
+  // Named `viewportGizmo` rather than `gizmo` so it doesn't shadow the `gizmo::` namespace below.
+  void displayGizmoModeButtons(ViewportGizmo& viewportGizmo)
+  {
+    constexpr int modeButtonWidth = 60;
+
+    const auto modeButton = [&](const char* label, const gizmo::Mode mode) {
+      const bool active = viewportGizmo.mode() == mode;
+
+      if (active)
+      {
+        ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
+      }
+
+      if (ImGui::Button(label, { modeButtonWidth, 0 }))
+      {
+        viewportGizmo.setMode(mode);
+      }
+
+      if (active)
+      {
+        ImGui::PopStyleColor(4);
+      }
+    };
+
+    modeButton("Move", gizmo::Mode::translate);
+    ImGui::SameLine();
+    modeButton("Rotate", gizmo::Mode::rotate);
+    ImGui::SameLine();
+    modeButton("Scale", gizmo::Mode::scale);
+  }
 }
 
 void EditorApp::displayMessageLog()
@@ -293,38 +328,10 @@ void EditorApp::displayCameraSelector()
 
 void EditorApp::displayGizmoControls() const
 {
-  constexpr int modeButtonWidth = 60;
-
-  const auto modeButton = [&](const char* label, const gizmo::Mode mode) {
-    const bool active = m_viewportGizmo->mode() == mode;
-
-    if (active)
-    {
-      ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
-      ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
-      ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
-    }
-
-    if (ImGui::Button(label, { modeButtonWidth, 0 }))
-    {
-      m_viewportGizmo->setMode(mode);
-    }
-
-    if (active)
-    {
-      ImGui::PopStyleColor(4);
-    }
-  };
-
   ImGui::SameLine(0.0f, 18.0f);
   ImGui::BeginDisabled(!m_serverEditable);
 
-  modeButton("Move", gizmo::Mode::translate);
-  ImGui::SameLine();
-  modeButton("Rotate", gizmo::Mode::rotate);
-  ImGui::SameLine();
-  modeButton("Scale", gizmo::Mode::scale);
+  displayGizmoModeButtons(*m_viewportGizmo);
 
   ImGui::SameLine(0.0f, 14.0f);
 
