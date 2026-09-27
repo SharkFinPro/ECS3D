@@ -3,8 +3,10 @@
 #include "Gizmo.h"
 #include "TestScene.h"
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <cmath>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -180,6 +182,10 @@ TEST(GizmoTest, TranslateAlongXMatchesTheScreenMovement)
   const auto initial = gizmo::update(f.state, f.input);
   const glm::vec3 xTip = findLine(initial, gizmo::Handle::x)->b;
   const glm::vec2 xTipScreen = *gizmo::project(f.view, xTip);
+  const glm::vec2 centerScreenAtStart = *gizmo::project(f.view, glm::vec3(0.0f));
+  // The handle was grabbed here, not at the center, so it is this point - not the object's origin - that
+  // tracks the cursor; the center trails it by however far it started from the center on screen.
+  const glm::vec2 grabOffset = xTipScreen - centerScreenAtStart;
 
   const auto pressFrame = beginDragOnHandle(f, xTipScreen);
   EXPECT_TRUE(pressFrame.dragStarted);
@@ -195,7 +201,7 @@ TEST(GizmoTest, TranslateAlongXMatchesTheScreenMovement)
 
   const auto projectedBack = gizmo::project(f.view, frame.local->position);
   ASSERT_TRUE(projectedBack.has_value());
-  EXPECT_NEAR(projectedBack->x, moveTo.x, 0.5f);
+  EXPECT_NEAR(projectedBack->x, moveTo.x - grabOffset.x, 0.5f);
 
   f.input.mouseDown = false;
   EXPECT_TRUE(gizmo::update(f.state, f.input).dragFinished);
@@ -266,6 +272,11 @@ TEST(GizmoTest, TranslateOnAParentedObjectMovesLocalByTheWorldDelta)
 
   const auto initial = gizmo::update(f.state, f.input);
   const glm::vec2 xTipScreen = *gizmo::project(f.view, findLine(initial, gizmo::Handle::x)->b);
+  const glm::vec2 centerScreenAtStart = *gizmo::project(f.view, f.input.world.position);
+  // See TranslateAlongXMatchesTheScreenMovement: the grabbed point, not the object's origin, tracks the
+  // cursor.
+  const glm::vec2 grabOffset = xTipScreen - centerScreenAtStart;
+
   beginDragOnHandle(f, xTipScreen);
 
   const glm::vec2 moveTo = xTipScreen + glm::vec2(50.0f, 0.0f);
@@ -279,7 +290,7 @@ TEST(GizmoTest, TranslateOnAParentedObjectMovesLocalByTheWorldDelta)
   const glm::vec3 reconstructedWorld = f.input.world.position + glm::vec3(localDelta, 0.0f, 0.0f);
   const auto projectedBack = gizmo::project(f.view, reconstructedWorld);
   ASSERT_TRUE(projectedBack.has_value());
-  EXPECT_NEAR(projectedBack->x, moveTo.x, 0.5f);
+  EXPECT_NEAR(projectedBack->x, moveTo.x - grabOffset.x, 0.5f);
 }
 
 TEST(GizmoTest, FrameFlagsMarkExactlyThePressAndReleaseFrames)
@@ -323,21 +334,36 @@ TEST(GizmoTest, FrameFlagsMarkExactlyThePressAndReleaseFrames)
   EXPECT_FALSE(idleFrame.local.has_value());
 }
 
+namespace {
+  // The lookAt((0,0,10),(0,0,0),(0,1,0)) fixture camera looks straight down Z, so the X and Y rings (each
+  // in a plane that contains the camera) project to lines through the center - the horizontal one (Y) and
+  // the vertical one (X) - while only the Z ring, facing the camera, projects to a full circle. A point at
+  // exactly 0/90/180/270 degrees around that circle also sits exactly on one of those degenerate lines, so
+  // grab the ring at 45 degrees instead, comfortably off both.
+  constexpr float rotateGrabAngle = 0.25f * glm::pi<float>();
+
+  glm::vec2 ringPointScreen(const glm::vec2& centerScreen, const float angle)
+  {
+    return centerScreen + glm::vec2(100.0f * std::cos(rotateGrabAngle + angle), 100.0f * std::sin(rotateGrabAngle + angle));
+  }
+}
+
 TEST(GizmoTest, RotateAboutZSweepsToAQuarterTurn)
 {
   GizmoFixture f;
   f.state.mode = gizmo::Mode::rotate;
   const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
 
-  const auto hoverFrame = beginDragOnHandle(f, centerScreen + glm::vec2(100.0f, 0.0f));
+  const auto hoverFrame = beginDragOnHandle(f, ringPointScreen(centerScreen, 0.0f));
   ASSERT_TRUE(hoverFrame.dragStarted);
+  ASSERT_EQ(hoverFrame.active, gizmo::Handle::z);
 
   gizmo::Frame frame;
   constexpr int steps = 12;
   for (int i = 1; i <= steps; ++i)
   {
     const float angle = glm::radians(90.0f) * static_cast<float>(i) / static_cast<float>(steps);
-    f.input.mouse = centerScreen + glm::vec2(100.0f * std::cos(angle), 100.0f * std::sin(angle));
+    f.input.mouse = ringPointScreen(centerScreen, angle);
     frame = gizmo::update(f.state, f.input);
   }
 
@@ -352,13 +378,14 @@ TEST(GizmoTest, RotateAccumulatesPastOneEightyDegrees)
   f.state.mode = gizmo::Mode::rotate;
   const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
 
-  beginDragOnHandle(f, centerScreen + glm::vec2(100.0f, 0.0f));
+  const auto pressFrame = beginDragOnHandle(f, ringPointScreen(centerScreen, 0.0f));
+  ASSERT_EQ(pressFrame.active, gizmo::Handle::z);
 
   constexpr int steps = 40;
   for (int i = 1; i <= steps; ++i)
   {
     const float angle = glm::radians(300.0f) * static_cast<float>(i) / static_cast<float>(steps);
-    f.input.mouse = centerScreen + glm::vec2(100.0f * std::cos(angle), 100.0f * std::sin(angle));
+    f.input.mouse = ringPointScreen(centerScreen, angle);
     gizmo::update(f.state, f.input);
   }
 
@@ -372,14 +399,15 @@ TEST(GizmoTest, RotateSnapsToTheConfiguredStep)
   f.input.snap.enabled = true;
   const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
 
-  beginDragOnHandle(f, centerScreen + glm::vec2(100.0f, 0.0f));
+  const auto pressFrame = beginDragOnHandle(f, ringPointScreen(centerScreen, 0.0f));
+  ASSERT_EQ(pressFrame.active, gizmo::Handle::z);
 
   gizmo::Frame frame;
   constexpr int steps = 20;
   for (int i = 1; i <= steps; ++i)
   {
     const float angle = glm::radians(50.0f) * static_cast<float>(i) / static_cast<float>(steps);
-    f.input.mouse = centerScreen + glm::vec2(100.0f * std::cos(angle), 100.0f * std::sin(angle));
+    f.input.mouse = ringPointScreen(centerScreen, angle);
     frame = gizmo::update(f.state, f.input);
   }
 
@@ -389,6 +417,55 @@ TEST(GizmoTest, RotateSnapsToTheConfiguredStep)
   EXPECT_NEAR(angleDeg, std::round(angleDeg / 15.0f) * 15.0f, 0.5f);
   // Positive control: the unsnapped sweep really was ~50 degrees, so the snap above actually moved it.
   EXPECT_GT(std::abs(angleDeg - 50.0f), 2.0f);
+}
+
+TEST(GizmoTest, RotateSignMatchesTheScreenSweepDirection)
+{
+  // The camera sits on +Z looking down -Z, so by the right-hand rule a positive rotation about +Z is the
+  // one a viewer standing where the camera is would call counter-clockwise: +X turns toward +Y. Screen
+  // space has y down, so tracing that counter-clockwise path (3 o'clock -> 12 o'clock -> 9 o'clock) means
+  // the screen angle used to build ringPointScreen's offset must DECREASE (12 o'clock is up, i.e. a
+  // smaller screen y, which sits at a negative angle in (cos, sin) terms) - hence sweeping with a
+  // negative `angle` argument below.
+  const auto sweepAndGetRotatedX = [](const float sweepDegrees) {
+    GizmoFixture f;
+    f.state.mode = gizmo::Mode::rotate;
+    const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
+
+    const auto pressFrame = beginDragOnHandle(f, ringPointScreen(centerScreen, 0.0f));
+    if (pressFrame.active != gizmo::Handle::z)
+    {
+      return glm::vec3(std::numeric_limits<float>::quiet_NaN());
+    }
+
+    gizmo::Frame frame;
+    constexpr int steps = 12;
+    for (int i = 1; i <= steps; ++i)
+    {
+      const float angle = glm::radians(sweepDegrees) * static_cast<float>(i) / static_cast<float>(steps);
+      f.input.mouse = ringPointScreen(centerScreen, angle);
+      frame = gizmo::update(f.state, f.input);
+    }
+
+    if (!frame.local)
+    {
+      return glm::vec3(std::numeric_limits<float>::quiet_NaN());
+    }
+
+    const glm::quat q(glm::radians(frame.local->rotation));
+    return q * glm::vec3(1.0f, 0.0f, 0.0f);
+  };
+
+  // Counter-clockwise on screen (negative parametric angle, see above) -> positive rotation about +Z ->
+  // +X rotates toward +Y.
+  const glm::vec3 ccw = sweepAndGetRotatedX(-90.0f);
+  ASSERT_TRUE(std::isfinite(ccw.y));
+  EXPECT_GT(ccw.y, 0.0f);
+
+  // The mirror image: clockwise on screen gives the opposite sign.
+  const glm::vec3 cw = sweepAndGetRotatedX(90.0f);
+  ASSERT_TRUE(std::isfinite(cw.y));
+  EXPECT_LT(cw.y, 0.0f);
 }
 
 TEST(GizmoTest, NearestEquivalentEulerMatchesTheBriefExample)
@@ -503,6 +580,41 @@ TEST(GizmoTest, CancelAbandonsAnActiveDragWithNoResult)
 
   EXPECT_FALSE(frame.local.has_value());
   EXPECT_EQ(frame.active, gizmo::Handle::none);
+}
+
+TEST(GizmoTest, ChangingModeMidDragKeepsRunningTheDragItStartedWith)
+{
+  GizmoFixture f;
+  f.state.mode = gizmo::Mode::translate;
+
+  const auto initial = gizmo::update(f.state, f.input);
+  const glm::vec2 xTipScreen = *gizmo::project(f.view, findLine(initial, gizmo::Handle::x)->b);
+  const auto pressFrame = beginDragOnHandle(f, xTipScreen);
+  ASSERT_TRUE(pressFrame.dragStarted);
+
+  // A caller (e.g. a keybind handler) flips the mode mid-drag - the drag already in progress was set up
+  // for translate (dragAxis, dragS0, ...) and must keep running that math to completion; the new mode
+  // only takes effect on the next drag.
+  f.state.mode = gizmo::Mode::rotate;
+
+  f.input.mouse = xTipScreen + glm::vec2(50.0f, 0.0f);
+  const auto dragFrame = gizmo::update(f.state, f.input);
+  ASSERT_TRUE(dragFrame.local.has_value());
+  EXPECT_GT(dragFrame.local->position.x, 0.0f);
+  EXPECT_NEAR(dragFrame.local->rotation.x, 0.0f, 1e-4f);
+  EXPECT_NEAR(dragFrame.local->rotation.y, 0.0f, 1e-4f);
+  EXPECT_NEAR(dragFrame.local->rotation.z, 0.0f, 1e-4f);
+
+  f.input.mouseDown = false;
+  const auto releaseFrame = gizmo::update(f.state, f.input);
+  EXPECT_TRUE(releaseFrame.dragFinished);
+  ASSERT_TRUE(releaseFrame.local.has_value());
+  // Positive control: the result really is a translation (not a no-op the rotation checks below would
+  // pass vacuously).
+  EXPECT_GT(releaseFrame.local->position.x, 0.0f);
+  EXPECT_NEAR(releaseFrame.local->rotation.x, 0.0f, 1e-4f);
+  EXPECT_NEAR(releaseFrame.local->rotation.y, 0.0f, 1e-4f);
+  EXPECT_NEAR(releaseFrame.local->rotation.z, 0.0f, 1e-4f);
 }
 
 TEST(GizmoTest, DegenerateViewportEmitsNothingAndNeverHovers)
