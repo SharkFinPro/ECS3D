@@ -26,6 +26,10 @@ public:
   void setScale(glm::vec3 scale);
   void setRotation(glm::vec3 rotation);
 
+  // Takes a rotation in getRotation's parent-combined terms and stores the local rotation that combines with
+  // the parent's into it, so a system that turns a body in world space does not bake the parent's in again.
+  void setWorldRotation(const glm::vec3& rotation);
+
   void move(const glm::vec3& direction);
 
   // The live values these reseed (start from initial, stop back to initial) bypass the setters, so the
