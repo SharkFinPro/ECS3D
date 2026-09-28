@@ -113,10 +113,10 @@ TEST_F(Keybinds, DefaultTableMatchesTheSpecCatalogue)
   EXPECT_EQ(formatChord(*table.binding(EditorAction::duplicateSelection)), "Ctrl+D");
   EXPECT_EQ(formatChord(*table.binding(EditorAction::focusSelection)), "F");
 
-  // Behavior arrives later, but the gizmo actions are already bindable, per spec - unbound by default.
-  EXPECT_FALSE(table.binding(EditorAction::gizmoTranslate).has_value());
-  EXPECT_FALSE(table.binding(EditorAction::gizmoRotate).has_value());
-  EXPECT_FALSE(table.binding(EditorAction::gizmoScale).has_value());
+  // 1/2/3 rather than W/E/R, which the free-fly camera's WASD movement already claims.
+  EXPECT_EQ(formatChord(*table.binding(EditorAction::gizmoTranslate)), "1");
+  EXPECT_EQ(formatChord(*table.binding(EditorAction::gizmoRotate)), "2");
+  EXPECT_EQ(formatChord(*table.binding(EditorAction::gizmoScale)), "3");
 }
 
 TEST_F(Keybinds, AssignRefusesAChordAlreadyHeldByAnotherAction)
@@ -239,21 +239,42 @@ TEST_F(Keybinds, PositiveControlResetSucceedsOnceTheHolderIsUnbound)
   EXPECT_EQ(table.binding(EditorAction::saveProject), parseChord("Ctrl+S"));
 }
 
-TEST_F(Keybinds, ResettingAnActionWhoseDefaultIsUnboundClearsItsBinding)
+TEST_F(Keybinds, ResetRestoresTheDefaultAfterUnbinding)
 {
-  // Gizmo actions default to unbound, so resetting one is never a conflict - it always clears.
+  // Unbind (rather than reassign) an action with a real, bound default, then reset it - the plain path
+  // reset() is for, and the positive control for the gizmo-action version below.
   SettingsStore settings(m_file);
   KeybindTable table;
   table.load(settings);
 
-  ASSERT_EQ(table.assign(EditorAction::gizmoTranslate, *parseChord("Ctrl+Alt+K"), settings).result,
-           KeybindTable::AssignResult::assigned);
+  table.unbind(EditorAction::focusSelection, settings);
+  ASSERT_FALSE(table.binding(EditorAction::focusSelection).has_value());
 
-  const auto outcome = table.reset(EditorAction::gizmoTranslate, settings);
+  const auto outcome = table.reset(EditorAction::focusSelection, settings);
 
   EXPECT_EQ(outcome.result, KeybindTable::AssignResult::assigned);
   EXPECT_FALSE(outcome.heldBy.has_value());
-  EXPECT_FALSE(table.binding(EditorAction::gizmoTranslate).has_value());
+  EXPECT_EQ(table.binding(EditorAction::focusSelection), parseChord("F"));
+}
+
+TEST_F(Keybinds, ResetRestoresAGizmoActionsDefaultChord)
+{
+  // The gizmo actions ship with real defaults (1/2/3) now rather than unbound, so resetting one after
+  // unbinding it follows the same path as any other action's default - unlike the old unbound-default
+  // case (removed: no catalogue action ships with an unbound default anymore, so that reset path has no
+  // instance to exercise it through the public API).
+  SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  table.unbind(EditorAction::gizmoRotate, settings);
+  ASSERT_FALSE(table.binding(EditorAction::gizmoRotate).has_value());
+
+  const auto outcome = table.reset(EditorAction::gizmoRotate, settings);
+
+  EXPECT_EQ(outcome.result, KeybindTable::AssignResult::assigned);
+  EXPECT_FALSE(outcome.heldBy.has_value());
+  EXPECT_EQ(formatChord(*table.binding(EditorAction::gizmoRotate)), "2");
 }
 
 TEST_F(Keybinds, ResetAllClearsEveryStoredKeyAndRestoresAllDefaults)

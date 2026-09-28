@@ -238,6 +238,9 @@ void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCach
     renderer->getCamera()->disable();
     renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(position, viewMatrix);
     applyProjection(renderer, { camera->getFov(), camera->getNearPlane(), camera->getFarPlane() });
+
+    m_freeFlyActive = false;
+    m_componentCameraView = viewMatrix;
     return;
   }
 
@@ -282,6 +285,8 @@ void RenderSystem::enableFreeFlyCamera(const std::shared_ptr<vke::VulkanEngine>&
   // Always reconciled, even when the camera itself was already enabled, so switching back from a
   // component camera (which may have changed the projection) still resets it.
   applyProjection(renderer, { defaultFreeFlyFovDegrees, defaultFreeFlyNearPlane, defaultFreeFlyFarPlane });
+
+  m_freeFlyActive = true;
 }
 
 void RenderSystem::useFreeFlyCamera(GpuAssetCache& assetCache)
@@ -294,4 +299,16 @@ bool RenderSystem::isSelected(const uuids::uuid& uuid) const
   const auto it = m_selected.find(uuid);
 
   return it != m_selected.end() && it->second;
+}
+
+RenderSystem::ViewParams RenderSystem::viewParams(const GpuAssetCache& assetCache) const
+{
+  const auto renderer = assetCache.getRenderer();
+
+  const glm::mat4 view = m_freeFlyActive ? renderer->getCamera()->getViewMatrix() : m_componentCameraView;
+
+  const auto projection = m_appliedProjection.value_or(
+    ProjectionParams{ defaultFreeFlyFovDegrees, defaultFreeFlyNearPlane, defaultFreeFlyFarPlane });
+
+  return { view, projection.fov, projection.nearPlane, projection.farPlane };
 }

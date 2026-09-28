@@ -39,6 +39,7 @@ class ConsolePanel;
 class RingBufferSink;
 class KeybindTable;
 class KeybindDispatcher;
+class ViewportGizmo;
 
 namespace input {
   struct InputSnapshot;
@@ -119,6 +120,10 @@ private:
   std::shared_ptr<AssetBrowserPanel> m_assetBrowser;
   std::shared_ptr<SaveUI> m_saveUI;
 
+  // Drives the viewport translate/rotate/scale gizmo for the current object selection, drawn each frame
+  // through the VulkanEngine scene overlay hook registered in the ctor (see createRenderer/the ctor body).
+  std::unique_ptr<ViewportGizmo> m_viewportGizmo;
+
   // User preferences: per-user and per-machine, never project data, so this is read and written locally
   // rather than through the server. Built before the renderer, since the stored theme has to be on the
   // tokens before the first applyStyle().
@@ -198,6 +203,8 @@ private:
   void setupAssetBrowser();
 
   void setupSaveUI();
+
+  void setupViewportGizmo();
 
   void onAddAsset(const nlohmann::json& asset);
 
@@ -313,6 +320,10 @@ private:
   // The "View" combo: the editor's free-fly camera, or any Camera in the scene (a client's player camera
   // is labelled with its slot).
   void displayCameraSelector();
+
+  // Move/Rotate/Scale mode buttons, the World/Local toggle, and the Snap checkbox - the viewport gizmo's
+  // controls, disabled on a read-only server.
+  void displayGizmoControls() const;
 
   void updateDockSpace() const;
 

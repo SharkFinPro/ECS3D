@@ -3,6 +3,7 @@
 #include "GuiComponents.h"
 #include "KeybindDispatcher.h"
 #include <EditorCameraSettings.h>
+#include <EditorGizmoSettings.h>
 #include <Keybinds.h>
 #include <SettingsStore.h>
 #include <VulkanEngine/VulkanEngine.h>
@@ -235,6 +236,51 @@ void SettingsPanel::displayViewport()
   {
     editorCameraSettings::writeSpeed(*m_settings, editorCameraSettings::defaultSpeed);
     m_renderer->getCamera()->setSpeed(editorCameraSettings::defaultSpeed);
+  }
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+
+  gc::sectionLabel("Gizmo");
+
+  bool snapEnabled = editorGizmoSettings::readSnapEnabled(*m_settings);
+  if (gc::accentCheckbox("Snap", &snapEnabled))
+  {
+    editorGizmoSettings::writeSnapEnabled(*m_settings, snapEnabled);
+  }
+
+  ImGui::Spacing();
+
+  float translateStep = editorGizmoSettings::readTranslateStep(*m_settings);
+  if (gc::accentSlider("Translate Step", &translateStep, editorGizmoSettings::minTranslateStep,
+                       editorGizmoSettings::maxTranslateStep))
+  {
+    editorGizmoSettings::writeTranslateStep(*m_settings, translateStep);
+  }
+
+  float rotateStep = editorGizmoSettings::readRotateStepDegrees(*m_settings);
+  if (gc::accentSlider("Rotate Step (degrees)", &rotateStep, editorGizmoSettings::minRotateStepDegrees,
+                       editorGizmoSettings::maxRotateStepDegrees))
+  {
+    editorGizmoSettings::writeRotateStepDegrees(*m_settings, rotateStep);
+  }
+
+  float scaleStep = editorGizmoSettings::readScaleStep(*m_settings);
+  if (gc::accentSlider("Scale Step", &scaleStep, editorGizmoSettings::minScaleStep,
+                       editorGizmoSettings::maxScaleStep))
+  {
+    editorGizmoSettings::writeScaleStep(*m_settings, scaleStep);
+  }
+
+  ImGui::Spacing();
+
+  if (ImGui::Button("Reset Gizmo to defaults"))
+  {
+    editorGizmoSettings::writeSnapEnabled(*m_settings, editorGizmoSettings::defaultSnapEnabled);
+    editorGizmoSettings::writeTranslateStep(*m_settings, editorGizmoSettings::defaultTranslateStep);
+    editorGizmoSettings::writeRotateStepDegrees(*m_settings, editorGizmoSettings::defaultRotateStepDegrees);
+    editorGizmoSettings::writeScaleStep(*m_settings, editorGizmoSettings::defaultScaleStep);
   }
 }
 

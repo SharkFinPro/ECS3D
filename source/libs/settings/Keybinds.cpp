@@ -189,9 +189,10 @@ const std::array<EditorActionInfo, editorActionCount>& editorActions()
     set(EditorAction::deleteSelection, "deleteSelection", "Delete Selection", parseChord("Delete"));
     set(EditorAction::duplicateSelection, "duplicateSelection", "Duplicate Selection", parseChord("Ctrl+D"));
     set(EditorAction::focusSelection, "focusSelection", "Focus Selection", parseChord("F"));
-    set(EditorAction::gizmoTranslate, "gizmoTranslate", "Gizmo: Translate", std::nullopt);
-    set(EditorAction::gizmoRotate, "gizmoRotate", "Gizmo: Rotate", std::nullopt);
-    set(EditorAction::gizmoScale, "gizmoScale", "Gizmo: Scale", std::nullopt);
+    // 1/2/3 rather than W/E/R, which the free-fly camera's WASD movement already claims.
+    set(EditorAction::gizmoTranslate, "gizmoTranslate", "Gizmo: Translate", parseChord("1"));
+    set(EditorAction::gizmoRotate, "gizmoRotate", "Gizmo: Rotate", parseChord("2"));
+    set(EditorAction::gizmoScale, "gizmoScale", "Gizmo: Scale", parseChord("3"));
 
     return result;
   }();

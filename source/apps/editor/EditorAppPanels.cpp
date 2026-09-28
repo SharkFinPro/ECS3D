@@ -5,6 +5,10 @@
 #include <RenderSystem.h>
 #include <EditorTheme.h>
 #include <GuiComponents.h>
+#include <ViewportGizmo.h>
+#include <Gizmo.h>
+#include <EditorGizmoSettings.h>
+#include <SettingsStore.h>
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
 #include <objects/components/PlayerController.h>
@@ -97,6 +101,41 @@ namespace {
          : status == SceneStatus::paused  ? theme::scriptAmber
                                           : theme::t3;
   }
+
+  // The Move/Rotate/Scale mode buttons: the active mode is styled like the mockup's accent Start button.
+  // Named `viewportGizmo` rather than `gizmo` so it doesn't shadow the `gizmo::` namespace below.
+  void displayGizmoModeButtons(ViewportGizmo& viewportGizmo)
+  {
+    constexpr int modeButtonWidth = 60;
+
+    const auto modeButton = [&](const char* label, const gizmo::Mode mode) {
+      const bool active = viewportGizmo.mode() == mode;
+
+      if (active)
+      {
+        ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
+      }
+
+      if (ImGui::Button(label, { modeButtonWidth, 0 }))
+      {
+        viewportGizmo.setMode(mode);
+      }
+
+      if (active)
+      {
+        ImGui::PopStyleColor(4);
+      }
+    };
+
+    modeButton("Move", gizmo::Mode::translate);
+    ImGui::SameLine();
+    modeButton("Rotate", gizmo::Mode::rotate);
+    ImGui::SameLine();
+    modeButton("Scale", gizmo::Mode::scale);
+  }
 }
 
 void EditorApp::displayMessageLog()
@@ -138,6 +177,8 @@ void EditorApp::displaySceneStatus()
   displayRayTracingToggle();
 
   displayCameraSelector();
+
+  displayGizmoControls();
 
   displaySceneReadout();
 
@@ -283,4 +324,44 @@ void EditorApp::displayCameraSelector()
 
     ImGui::EndCombo();
   }
+}
+
+void EditorApp::displayGizmoControls() const
+{
+  ImGui::SameLine(0.0f, 18.0f);
+  ImGui::BeginDisabled(!m_serverEditable);
+
+  displayGizmoModeButtons(*m_viewportGizmo);
+
+  ImGui::SameLine(0.0f, 14.0f);
+
+  // Scale is always local (it's applied in the object's own axes), so the toggle would have nothing to
+  // change there.
+  const bool scaleMode = m_viewportGizmo->mode() == gizmo::Mode::scale;
+  bool local = m_viewportGizmo->space() == gizmo::Space::local;
+
+  ImGui::BeginDisabled(scaleMode);
+  const bool spaceChanged = ImGui::Checkbox("Local", &local);
+  const bool spaceHovered = ImGui::IsItemHovered();
+  ImGui::EndDisabled();
+
+  if (spaceChanged)
+  {
+    m_viewportGizmo->setSpace(local ? gizmo::Space::local : gizmo::Space::world);
+  }
+
+  if (scaleMode && spaceHovered)
+  {
+    ImGui::SetTooltip("Scale always uses the object's own axes.");
+  }
+
+  ImGui::SameLine(0.0f, 14.0f);
+
+  bool snap = editorGizmoSettings::readSnapEnabled(*m_settings);
+  if (gc::accentCheckboxCompact("Snap", &snap))
+  {
+    editorGizmoSettings::writeSnapEnabled(*m_settings, snap);
+  }
+
+  ImGui::EndDisabled();
 }

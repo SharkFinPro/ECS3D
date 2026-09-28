@@ -9,6 +9,7 @@
 #include <Selection.h>
 #include <EditorTheme.h>
 #include <KeybindDispatcher.h>
+#include <ViewportGizmo.h>
 #include <NetClient.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
@@ -32,11 +33,20 @@ void EditorApp::handlePicking()
   const auto window = m_renderer->getWindow();
   const bool pressed = window->buttonIsPressed(GLFW_MOUSE_BUTTON_LEFT);
 
-  // Select on a fresh Left-click over the viewport. isSelected() is the renderer's pick result from
-  // last frame. Plain click replaces the selection; Ctrl-click adds/removes the picked object instead
-  // (a click on empty space still clears, unless Ctrl is held - then it's a no-op).
+  // A click on (or drag of) a gizmo handle neither re-picks nor clears the selection.
+  const auto& io = ImGui::GetIO();
+  if (m_viewportGizmo->capturesMouseAt({ io.MousePos.x, io.MousePos.y }))
+  {
+    m_mouseWasPressed = pressed;
+    return;
+  }
+
+  // Plain clicks are for focusing the viewport and dragging gizmo handles, not picking - Ctrl gates every
+  // viewport selection change so clicking around never loses the current selection. isSelected() is the
+  // renderer's pick result from last frame. io.KeyCtrl/KeyShift (not raw GLFW key reads) so either
+  // Ctrl/Shift key qualifies, matching the tree's own check and KeybindDispatcher's chord matching.
   const auto mousePicker = m_renderer->getRenderingManager()->getRenderer3D()->getMousePicker();
-  if (!m_mouseWasPressed && pressed && mousePicker->canMousePick())
+  if (!m_mouseWasPressed && pressed && mousePicker->canMousePick() && io.KeyCtrl)
   {
     std::optional<uuids::uuid> picked;
     for (const auto& object : scene->getObjectManager()->getAllObjects())
@@ -48,14 +58,10 @@ void EditorApp::handlePicking()
       }
     }
 
-    // io.KeyCtrl (not a raw GLFW key read) so either Ctrl key toggles, matching the tree's own check and
-    // KeybindDispatcher's chord matching.
-    const bool ctrl = ImGui::GetIO().KeyCtrl;
-
     // Written directly to the shared selection the object tree/inspector read.
     if (picked.has_value())
     {
-      if (ctrl)
+      if (io.KeyShift)
       {
         m_selection->toggleObject(picked.value());
       }
@@ -64,7 +70,7 @@ void EditorApp::handlePicking()
         m_selection->selectObject(picked.value());
       }
     }
-    else if (!ctrl)
+    else if (!io.KeyShift)
     {
       m_selection->clear();
     }
