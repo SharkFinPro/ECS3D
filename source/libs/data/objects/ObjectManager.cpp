@@ -3,6 +3,7 @@
 #include "WorldPlacement.h"
 #include "components/Component.h"
 #include <nlohmann/json.hpp>
+#include <Log.h>
 #include <Protocol.h>
 #include <algorithm>
 #include <array>
@@ -132,8 +133,8 @@ void ObjectManager::removeObjectFromRoot(const std::shared_ptr<Object>& object)
 
 namespace {
   // Copies source's live component values onto copy, which is already running and so takes unpack's
-  // writes into its live slots, leaving its authored values as the source's. Script instances are left
-  // out: their state lives in the script host, and Script::unpack would overwrite the authored fields.
+  // writes into its live slots, leaving its authored values as the source's. Scripts are not in
+  // getComponents(), so their instances are left alone: their state lives in the script host.
   void copyLiveValues(const Object& source, const Object& copy)
   {
     for (const auto& [key, component] : source.getComponents())
@@ -141,7 +142,7 @@ namespace {
       const auto& copyComponents = copy.getComponents();
       const auto copyIt = copyComponents.find(key);
 
-      if (copyIt == copyComponents.end() || component->getType() == ComponentType::script)
+      if (copyIt == copyComponents.end())
       {
         continue;
       }
@@ -149,9 +150,13 @@ namespace {
       net::Message message;
       component->pack(message);
 
-      // pack() writes the discriminator first; the copy already has the matching component.
+      // pack() writes the discriminator first; a shape mismatch (a different collider) has another layout.
       net::MessageReader reader(message);
-      static_cast<void>(reader.read<ComponentType>());
+      if (reader.read<ComponentType>() != copyIt->second->getPackedType())
+      {
+        continue;
+      }
+
       copyIt->second->unpack(reader);
     }
 
@@ -160,6 +165,8 @@ namespace {
 
     if (sourceChildren.size() != copyChildren.size())
     {
+      Log::warn(LogCategory::engine, "Duplicate of '" + source.getName()
+        + "' has a different child count than its source; children keep their authored values");
       return;
     }
 

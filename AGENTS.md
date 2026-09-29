@@ -198,7 +198,7 @@ absent. A uuid that does not parse is a `malformedEdit`; the nil uuid, or one al
 `rejected` with the scene untouched. It exists so the sender knows which object its own edit produced -
 the undo history records the reverse edit against that uuid.
 A `duplicateObject` made while the scene runs seeds the copy's live values from the source's live values
-(`ObjectManager.cpp`'s `copyLiveValues`, through each component's `pack`/`unpack`; scripts excluded) and leaves the
+(`ObjectManager.cpp`'s `copyLiveValues`, through each component's `pack`/`unpack`; scripts excluded; components with no live/authored split are simply copied) and leaves the
 copy's authored values equal to the source's, since stop discards runtime objects and authored values are what saves.
 `reparentObject` rewrites the moved object's local transform after reattaching so its world placement is
 unchanged, and `ObjectManager::deleteObjectsMarkedForDeletion` applies the same `objects/WorldPlacement.h`

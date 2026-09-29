@@ -527,3 +527,26 @@ TEST(ObjectManager, ARunningDuplicateFallsBackToAuthoredValuesOnceTheSceneStops)
   fixtures::expectNear(fixtures::positionOf(copy), glm::vec3(1.0f, 2.0f, 3.0f));
   EXPECT_EQ(sourceController->getPlayerSlot(), 1);
 }
+
+TEST(ObjectManager, DuplicateWhileRunningCarriesAColliderLivePosition)
+{
+  const auto scene = makeScene();
+  const auto source = addObject(scene, "Source");
+  const auto sourceCollider = fixtures::addBoxCollider(source);
+  sourceCollider->setPosition(glm::vec3(1.0f, 0.0f, 0.0f));
+
+  scene.objectManager->start();
+
+  sourceCollider->setPosition(glm::vec3(0.0f, 6.0f, 0.0f));
+
+  scene.objectManager->duplicateObject(source);
+
+  const auto copy = lastRoot(scene);
+  const auto copyCollider = copy->getComponent<BoxCollider>(ComponentType::collider);
+  ASSERT_NE(copyCollider, nullptr);
+  fixtures::expectNear(copyCollider->getLocalPosition(), glm::vec3(0.0f, 6.0f, 0.0f));
+
+  // Positive control: the authored position is still the pre-start one, on the source and the copy.
+  EXPECT_EQ(authoredComponent(copy, "Collider").at("position"), authoredComponent(source, "Collider").at("position"));
+  EXPECT_EQ(authoredComponent(copy, "Collider").at("position"), nlohmann::json::array({1.0f, 0.0f, 0.0f}));
+}
