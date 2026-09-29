@@ -529,6 +529,11 @@ clears it on empty space; Ctrl+Shift+click toggles the picked object in/out of t
 nothing on empty space; a plain click (focusing the viewport, dragging a gizmo handle) leaves the selection
 as it is. The editor sets `ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true` (in `setupImGuiStyle`)
 so a drag inside a detached scene window's body drives the gizmo instead of moving the OS window.
+A scene asset tile also drags onto the viewport to make that scene active: the same scene overlay callback
+opens an ImGui drop target over the scene image (`EditorApp::acceptSceneDrop`), accepting only
+`assetDragDrop::scene` payloads that `sceneFromPayload` resolves to a registered Scene record, and loads
+through `onLoadScene` exactly like a double-click, with the same editable-server gate and no unsaved-changes
+prompt (switching scenes discards nothing).
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
 headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a

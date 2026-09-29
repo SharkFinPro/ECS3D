@@ -10,6 +10,9 @@
 #include <objects/components/Component.h>
 #include <NetClient.h>
 #include <Log.h>
+#include <AssetDragDrop.h>
+#include <imgui.h>
+#include <imgui_internal.h>
 #include <objects/Object.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
@@ -247,6 +250,34 @@ void EditorApp::onLoadScene(const uuids::uuid& sceneUUID)
   message.write(net::SceneControlOp::loadScene);
   message.writeString(uuids::to_string(sceneUUID));
   m_netClient->send(message);
+}
+
+void EditorApp::acceptSceneDrop(const float x, const float y, const float width, const float height)
+{
+  // A read-only viewer follows the server's scene, the same gate as the asset browser's double-click.
+  if (!m_shouldDisplayGui || !m_serverEditable || !ImGui::GetDragDropPayload())
+  {
+    return;
+  }
+
+  if (!ImGui::BeginDragDropTargetCustom(ImRect(x, y, x + width, y + height), ImGui::GetID("sceneViewDrop")))
+  {
+    return;
+  }
+
+  if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(assetDragDrop::scene))
+  {
+    if (const auto sceneUUID = assetDragDrop::sceneFromPayload(payload->Data, payload->DataSize, *m_assetRegistry))
+    {
+      onLoadScene(*sceneUUID);
+    }
+    else
+    {
+      Log::debug(LogCategory::editor, "A scene drop onto the viewport did not name a registered scene.");
+    }
+  }
+
+  ImGui::EndDragDropTarget();
 }
 
 // A prefab body edit: re-register under the existing name, updating the body in place and keeping the

@@ -334,7 +334,7 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
     }
   }
 
-  // Drag source (model/texture/script), tagged by type so only the right drop target accepts it. Only
+  // Drag source (model/texture/script/prefab/scene), tagged by type so only the right drop target accepts it. Only
   // when editable: assigning an asset to a component is a mutation, and ImGui::BeginDisabled does not
   // block drag-drop targets, so suppressing the source here is what actually makes those slots read-only.
   if (const char* payloadId = m_editable ? assetDragDrop::payloadId(record.type) : nullptr)

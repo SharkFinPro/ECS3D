@@ -27,6 +27,7 @@ add_executable(${PROJECT_NAME}
   CameraRangeTest.cpp
   ComponentRegistryTest.cpp
   AssetRegistryTest.cpp
+  AssetDragDropTest.cpp
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp
