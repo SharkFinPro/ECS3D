@@ -4,6 +4,8 @@
 #include "Replication.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/PlayerController.h"
+#include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "ObjectManagerFixtures.h"
@@ -11,12 +13,35 @@
 #include <algorithm>
 #include <glm/vec3.hpp>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <uuid.h>
 #include <vector>
 
 namespace {
   using namespace objectManagerFixtures;
+
+  // The authored (serialized) body of one component, found by its "type" since the components array's
+  // order is unspecified.
+  nlohmann::json authoredComponent(const std::shared_ptr<Object>& object, const std::string& type)
+  {
+    const auto data = object->serialize();
+
+    for (const auto& component : data.at("components"))
+    {
+      if (component.at("type") == type)
+      {
+        return component;
+      }
+    }
+
+    return nlohmann::json();
+  }
+
+  std::shared_ptr<Object> lastRoot(const fixtures::Scene& scene)
+  {
+    return scene.objectManager->getObjects().back();
+  }
 }
 
 TEST(ObjectManager, DuplicateObjectGivesTheCopyAndItsSubtreeFreshUuids)
@@ -364,4 +389,141 @@ TEST(ObjectManager, RestoreSubtreePreservesUuidsUnlikeInstantiateUnder)
   EXPECT_NE(instantiated->getUUID(), rootUUID);
   ASSERT_EQ(instantiated->getChildren().size(), 1u);
   EXPECT_NE(instantiated->getChildren().front()->getUUID(), childUUID);
+}
+
+TEST(ObjectManager, DuplicateWhileRunningCopiesTheSourcesLiveComponentValues)
+{
+  const auto scene = makeScene();
+  const auto source = addObject(scene, "Source", glm::vec3(1.0f, 2.0f, 3.0f));
+  const auto sourceController = std::make_shared<PlayerController>();
+  sourceController->setPlayerSlot(1);
+  source->addComponent(sourceController);
+  const auto sourceBody = fixtures::addRigidBody(source);
+  sourceBody->setMass(2.0f);
+
+  scene.objectManager->start();
+
+  sourceController->setPlayerSlot(3);
+  fixtures::transformOf(source)->setPosition(glm::vec3(7.0f, 8.0f, 9.0f));
+  sourceBody->setVelocity(glm::vec3(0.0f, 5.0f, 0.0f));
+
+  scene.objectManager->duplicateObject(source);
+
+  const auto copy = lastRoot(scene);
+  ASSERT_NE(copy, source);
+
+  const auto copyController = copy->getComponent<PlayerController>(ComponentType::playerController);
+  ASSERT_NE(copyController, nullptr);
+  EXPECT_EQ(copyController->getPlayerSlot(), 3);
+  fixtures::expectNear(fixtures::positionOf(copy), glm::vec3(7.0f, 8.0f, 9.0f));
+
+  const auto copyBody = copy->getComponent<RigidBody>(ComponentType::rigidBody);
+  ASSERT_NE(copyBody, nullptr);
+  fixtures::expectNear(copyBody->getVelocity(), glm::vec3(0.0f, 5.0f, 0.0f));
+  EXPECT_FLOAT_EQ(copyBody->getMass(), 2.0f);
+
+  // The copy's authored values stay the source's authored values.
+  EXPECT_EQ(authoredComponent(copy, "PlayerController").at("playerSlot"),
+            authoredComponent(source, "PlayerController").at("playerSlot"));
+  EXPECT_EQ(authoredComponent(copy, "PlayerController").at("playerSlot"), 1);
+  EXPECT_EQ(authoredComponent(copy, "Transform"), authoredComponent(source, "Transform"));
+  EXPECT_EQ(authoredComponent(copy, "RigidBody"), authoredComponent(source, "RigidBody"));
+}
+
+TEST(ObjectManager, DuplicatingARunningDuplicateAfterEditingItCarriesTheLatestValue)
+{
+  const auto scene = makeScene();
+  const auto source = addObject(scene, "Source");
+  const auto sourceController = std::make_shared<PlayerController>();
+  sourceController->setPlayerSlot(1);
+  source->addComponent(sourceController);
+
+  scene.objectManager->start();
+
+  scene.objectManager->duplicateObject(source);
+  const auto copyA = lastRoot(scene);
+  const auto controllerA = copyA->getComponent<PlayerController>(ComponentType::playerController);
+  ASSERT_NE(controllerA, nullptr);
+  EXPECT_EQ(controllerA->getPlayerSlot(), 1);
+
+  controllerA->setPlayerSlot(0);
+
+  scene.objectManager->duplicateObject(copyA);
+  const auto copyB = lastRoot(scene);
+  ASSERT_NE(copyB, copyA);
+
+  const auto controllerB = copyB->getComponent<PlayerController>(ComponentType::playerController);
+  ASSERT_NE(controllerB, nullptr);
+  EXPECT_EQ(controllerB->getPlayerSlot(), 0);
+  EXPECT_EQ(authoredComponent(copyB, "PlayerController").at("playerSlot"), 1);
+}
+
+TEST(ObjectManager, DuplicateWhileRunningCarriesAChildsLiveValues)
+{
+  const auto scene = makeScene();
+  const auto source = addObject(scene, "Source");
+  const auto sourceChild = addChildObject(scene, "Child", source);
+  const auto childController = std::make_shared<PlayerController>();
+  childController->setPlayerSlot(1);
+  sourceChild->addComponent(childController);
+
+  scene.objectManager->start();
+
+  childController->setPlayerSlot(4);
+  fixtures::transformOf(sourceChild)->setPosition(glm::vec3(2.0f, 0.0f, 0.0f));
+
+  scene.objectManager->duplicateObject(source);
+
+  const auto copy = lastRoot(scene);
+  ASSERT_EQ(copy->getChildren().size(), 1u);
+  const auto copyChild = copy->getChildren().front();
+
+  const auto copyController = copyChild->getComponent<PlayerController>(ComponentType::playerController);
+  ASSERT_NE(copyController, nullptr);
+  EXPECT_EQ(copyController->getPlayerSlot(), 4);
+  fixtures::expectNear(fixtures::transformOf(copyChild)->getLocalPosition(), glm::vec3(2.0f, 0.0f, 0.0f));
+  EXPECT_EQ(authoredComponent(copyChild, "PlayerController").at("playerSlot"), 1);
+}
+
+TEST(ObjectManager, DuplicateWhileStoppedCopiesAuthoredValues)
+{
+  const auto scene = makeScene();
+  const auto source = addObject(scene, "Source", glm::vec3(1.0f, 2.0f, 3.0f));
+  const auto sourceController = std::make_shared<PlayerController>();
+  source->addComponent(sourceController);
+  sourceController->setPlayerSlot(2);
+
+  scene.objectManager->duplicateObject(source);
+
+  const auto copy = lastRoot(scene);
+  const auto copyController = copy->getComponent<PlayerController>(ComponentType::playerController);
+  ASSERT_NE(copyController, nullptr);
+  EXPECT_EQ(copyController->getPlayerSlot(), 2);
+  fixtures::expectNear(fixtures::positionOf(copy), glm::vec3(1.0f, 2.0f, 3.0f));
+}
+
+TEST(ObjectManager, ARunningDuplicateFallsBackToAuthoredValuesOnceTheSceneStops)
+{
+  const auto scene = makeScene();
+  const auto source = addObject(scene, "Source", glm::vec3(1.0f, 2.0f, 3.0f));
+  const auto sourceController = std::make_shared<PlayerController>();
+  sourceController->setPlayerSlot(1);
+  source->addComponent(sourceController);
+
+  scene.objectManager->start();
+
+  sourceController->setPlayerSlot(5);
+  fixtures::transformOf(source)->setPosition(glm::vec3(9.0f, 9.0f, 9.0f));
+
+  scene.objectManager->duplicateObject(source);
+  const auto copy = lastRoot(scene);
+  const auto copyController = copy->getComponent<PlayerController>(ComponentType::playerController);
+  ASSERT_NE(copyController, nullptr);
+  EXPECT_EQ(copyController->getPlayerSlot(), 5);
+
+  scene.objectManager->stop();
+
+  EXPECT_EQ(copyController->getPlayerSlot(), 1);
+  fixtures::expectNear(fixtures::positionOf(copy), glm::vec3(1.0f, 2.0f, 3.0f));
+  EXPECT_EQ(sourceController->getPlayerSlot(), 1);
 }
