@@ -269,7 +269,12 @@ void EditorApp::acceptSceneDrop(const float x, const float y, const float width,
   {
     if (const auto sceneUUID = assetDragDrop::sceneFromPayload(payload->Data, payload->DataSize, *m_assetRegistry))
     {
-      onLoadScene(*sceneUUID);
+      // Reloading the active scene restarts it on the server, which is too costly for a stray drop.
+      const auto current = m_sceneManager->getCurrentScene();
+      if (!current || current->getUUID() != *sceneUUID)
+      {
+        onLoadScene(*sceneUUID);
+      }
     }
     else
     {

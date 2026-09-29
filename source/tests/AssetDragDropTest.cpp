@@ -56,7 +56,18 @@ TEST_F(AssetDragDropTest, MalformedOrUnregisteredPayloadIsRejectedWhileSceneReso
   EXPECT_TRUE(resolve(uuids::to_string(sceneUUID)).has_value());
 }
 
-TEST(AssetDragDropPayloadIdTest, SceneIdIsDistinctFromEveryOtherType)
+TEST_F(AssetDragDropTest, PayloadIsReadOnlyToItsDeclaredSize)
+{
+  const std::string buffer = uuids::to_string(sceneUUID) + uuids::to_string(modelUUID);
+
+  const auto resolved = assetDragDrop::sceneFromPayload(buffer.data(), 36, m_registry);
+  ASSERT_TRUE(resolved.has_value());
+  EXPECT_EQ(*resolved, sceneUUID);
+
+  EXPECT_FALSE(assetDragDrop::sceneFromPayload(buffer.data(), 72, m_registry).has_value());
+}
+
+TEST(AssetDragDropPayloadIdTest,SceneIdIsDistinctFromEveryOtherType)
 {
   EXPECT_STREQ(assetDragDrop::payloadId(AssetType::Scene), assetDragDrop::scene);
 

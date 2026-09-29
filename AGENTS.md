@@ -533,7 +533,8 @@ A scene asset tile also drags onto the viewport to make that scene active: the s
 opens an ImGui drop target over the scene image (`EditorApp::acceptSceneDrop`), accepting only
 `assetDragDrop::scene` payloads that `sceneFromPayload` resolves to a registered Scene record, and loads
 through `onLoadScene` exactly like a double-click, with the same editable-server gate and no unsaved-changes
-prompt (switching scenes discards nothing).
+prompt (switching scenes discards no authored edits; runtime changes of a playing scene are still discarded
+when it stops). Dropping the already-active scene does nothing, since reloading it would restart it.
 
 **Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
 headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a
