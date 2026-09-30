@@ -29,6 +29,30 @@ objects removed and added mid-run.
 The one deliberate divergence: an edge whose bounding box is not finite is left out of the tree and collides
 with nothing that tick. The sweep would still test it.
 
+## Exact-preserving performance round
+
+Everything below is bit-exact with the sweep path, which stays the untouched baseline: all of it lives on the
+tree path, so `BroadPhaseEquivalenceTest` proves it. The one runtime knob is
+`CollisionSystem::setContactCacheEnabled` (default on).
+
+- Lean per-edge data. After the warm and sort, `buildEdgeInfos` copies plain data per edge (raw object and
+  parent pointers, collider, has-RigidBody, layer, mask, a bounding box copy, trigger flag, geometry key).
+  `updateBroadPhase` and `findCollisionsFromCandidates` read only that, applying the same filters in the same
+  order, so the parallel region copies no `shared_ptr` for a rejected candidate.
+- One GJK per contact. `collisions::collide` returns what `intersects` and `findContact` would, from a single
+  GJK run. The parallel pass calls it for every candidate that passes the filters (triggers only need
+  `intersects`) and stores the contact beside the hit. The response pass asks `contactFor`, which reuses it
+  while both colliders' geometry keys (sum of the Transform update ids of the owner and every ancestor whose
+  Transform is combined into its world placement) are unchanged, and otherwise calls `findContact` as before.
+  The mesh a box collider caches is refreshed only when its own Transform id changes, which also changes the
+  key, so a reused contact never skips a mesh rebuild the old code would have done.
+- EPA: `Polytope` counts edges linearly instead of building a `std::map`, reuses scratch edge vectors, and
+  reserves its vertex and face storage. Visit and append order is unchanged.
+- Bounds: `Collider::computeBounds` is a virtual with the old six support queries as its default. The box
+  override makes one pass over its vertices with `findFurthestPoint`'s exact selection rule; the sphere
+  override computes the scaled radius and positions once and repeats the same float operations per axis.
+- Server: `ServerApp` logs a `server` line every 250 ticks (see below).
+
 ## Toggle
 
 The server reads the `ECS3D_BROADPHASE` environment variable at startup. `sweep` selects the old sweep;
@@ -48,8 +72,26 @@ Every 250 ticks `CollisionSystem` logs one physics-category line, then resets it
   candidate lists (tree mode only).
 - `check_us/tick` - microseconds per tick for the whole of `checkCollisions`, responses included. This is the
   number to compare between modes.
+- `contacts_parallel/tick`, `contacts_reused/tick`, `contacts_recomputed/tick` - contacts computed in the
+  parallel pass (tree mode, cache on), reused by the response pass, and recomputed there (a moved body, a
+  trigger pair, or the cache off). Reused plus recomputed is what the response pass asked for.
+- `narrow/tick` now counts narrow-phase entries in both modes (the sweep counts calls to `intersects`, the
+  tree counts candidates that reached the narrow phase), so the modes are comparable.
+- Stage averages per tick, in microseconds: `gather_us` (edge collection), `warm_sort_us` (bounding box warm,
+  sort and, in tree mode, the edge data build), `broadphase_us`, `narrow_us` (the parallel region),
+  `response_us` (the serial response pass including its ordering) and `events_us`. They do not sum to
+  `check_us`: gather happens before it and is reported separately.
 - `pairs`, `static`, `dynamic`, `heights` - pair cache size, proxy counts per tree, and tree heights
   (static/dynamic), from the latest tick (tree mode only).
+
+## Server stats line
+
+Every 250 fixed ticks `ServerApp` logs one `server`-category line and resets: `objects` (average scene
+object count), `scripts_us/tick` (script `variableUpdate` plus `fixedUpdate`), `physics_us/tick`,
+`collision_us/tick` (the whole `CollisionSystem::fixedUpdate`), `events_us/tick` (collision event dispatch into
+scripts), `broadcast_us/tick` (`broadcastStructuralChanges` plus `broadcastStateDelta`, per tick) and
+`capped_iterations=N/M` - loop iterations that ran the maximum of 3 fixed steps, out of iterations that ran
+any, which is the server falling behind.
 
 ## Known issues / what the final implementation should do differently
 
@@ -79,3 +121,21 @@ Every 250 ticks `CollisionSystem` logs one physics-category line, then resets it
   merge of the small sorted batch of new pairs into the cache would be cheaper.
 - The equivalence test compares floats with exact equality. It assumes the physics pass is deterministic
   run to run on the same machine, which OpenMP reductions elsewhere could break.
+- The contact cache is a per-tick, per-side cache. The real version should store one contact per pair in the
+  pair cache and carry it across ticks, warm-starting GJK and EPA from last tick's separating axis and simplex.
+- Dynamic-dynamic pairs are still computed from both sides (A to B and B to A). Halving that changes the
+  response semantics and needs its own design.
+- The serial response pass is inherently sequential in the current solver: each response moves transforms that
+  later contacts read, which is also why a cached contact is revalidated by geometry key at use. A scalable
+  solver would batch contacts into independent islands or colors.
+- `Polytope::findContactManifold` and `boxContactPoints` still allocate (vectors per call).
+- `std::weak_ptr::lock` in every `findFurthestPoint` call is an atomic operation per support query.
+- `collide` now runs `findContact`'s EPA and manifold inside the OpenMP region, so an exception from it (a
+  collider whose Transform vanished) would terminate instead of surfacing from the serial pass. Edges are
+  gathered only for objects with a Transform, so it should not occur.
+- A cached contact is valid only while nothing but Transform update ids changes a collider's geometry. Collider
+  setters (offset, size, radius) do not bump a Transform id; they only run between ticks today. A collider
+  generation counter would make the key complete.
+- Reusing a contact does not skip any lazy mesh rebuild the old path would have made, but only because a stale
+  mesh (child collider whose parent alone moved) is stale identically on both paths. Fixing that known issue
+  needs the mesh key to include ancestors, and then the geometry key already accounts for it.
