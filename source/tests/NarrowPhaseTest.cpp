@@ -9,7 +9,10 @@
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
+#include <cstddef>
+#include <optional>
 #include <memory>
+#include <random>
 #include <utility>
 
 namespace {
@@ -303,4 +306,91 @@ TEST(NarrowPhase, TheCheapPredicateAgreesWithTheFullOneOnSpheres)
 
   moveTo(secondObject, { 2.0f, 0, 0 });
   EXPECT_FALSE(collisions::intersects(*first, *second));
+}
+
+namespace {
+  void expectSameContact(const std::optional<collisions::Contact>& expected,
+                         const std::optional<collisions::Contact>& actual)
+  {
+    ASSERT_EQ(expected.has_value(), actual.has_value());
+
+    if (!expected)
+    {
+      return;
+    }
+
+    EXPECT_EQ(expected->minimumTranslationVector, actual->minimumTranslationVector);
+    EXPECT_EQ(expected->point, actual->point);
+    EXPECT_EQ(expected->pointCount, actual->pointCount);
+
+    for (size_t i = 0; i < expected->points.size(); ++i)
+    {
+      EXPECT_EQ(expected->points[i], actual->points[i]) << "point " << i;
+    }
+  }
+
+  void expectCollideAgrees(Collider& first, Collider& second)
+  {
+    const auto result = collisions::collide(first, second);
+
+    EXPECT_EQ(collisions::intersects(first, second), result.intersects);
+    expectSameContact(collisions::findContact(first, second), result.contact);
+  }
+
+  template <typename A, typename B>
+  void checkRandomPairs(const unsigned seed)
+  {
+    std::mt19937 random(seed);
+    std::uniform_real_distribution<float> position(-2.5f, 2.5f);
+    std::uniform_real_distribution<float> scale(0.4f, 1.6f);
+    std::uniform_real_distribution<float> angle(0.0f, 90.0f);
+
+    int touching = 0;
+    for (int i = 0; i < 60; ++i)
+    {
+      const glm::vec3 firstPosition{ position(random), position(random), position(random) };
+      const glm::vec3 firstRotation{ angle(random), angle(random), angle(random) };
+      const float firstScale = scale(random);
+      const glm::vec3 secondPosition{ position(random), position(random), position(random) };
+      const glm::vec3 secondRotation{ angle(random), angle(random), angle(random) };
+      const float secondScale = scale(random);
+
+      const auto [firstObject, first] = makeCollider<A>(firstPosition, glm::vec3(firstScale));
+      const auto [secondObject, second] = makeCollider<B>(secondPosition, glm::vec3(secondScale));
+
+      firstObject->getComponent<Transform>(ComponentType::transform)->setRotation(firstRotation);
+      secondObject->getComponent<Transform>(ComponentType::transform)->setRotation(secondRotation);
+
+      if (collisions::intersects(*first, *second))
+      {
+        ++touching;
+      }
+
+      expectCollideAgrees(*first, *second);
+    }
+
+    // Both outcomes have to occur, or the comparison covers only one branch.
+    EXPECT_GT(touching, 5);
+    EXPECT_LT(touching, 60);
+  }
+}
+
+TEST(NarrowPhaseCollide, AgreesWithIntersectsAndFindContactOnBoxPairs)
+{
+  checkRandomPairs<BoxCollider, BoxCollider>(1);
+}
+
+TEST(NarrowPhaseCollide, AgreesWithIntersectsAndFindContactOnBoxAndSpherePairs)
+{
+  checkRandomPairs<BoxCollider, SphereCollider>(2);
+}
+
+TEST(NarrowPhaseCollide, AgreesWithIntersectsAndFindContactOnSphereAndBoxPairs)
+{
+  checkRandomPairs<SphereCollider, BoxCollider>(3);
+}
+
+TEST(NarrowPhaseCollide, AgreesWithIntersectsAndFindContactOnSpherePairs)
+{
+  checkRandomPairs<SphereCollider, SphereCollider>(4);
 }

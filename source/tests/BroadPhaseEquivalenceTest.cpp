@@ -68,10 +68,45 @@ namespace {
     world.track(object);
   }
 
-  std::unique_ptr<World> buildWorld(const BroadPhaseMode mode)
+  // Rigid bodies whose collider sits on a child (or on both), so the geometry key's walk up the parent
+  // chain and the direct parent/child filter are both exercised while the parent moves.
+  void addParentedBodies(World& world)
+  {
+    for (int i = 0; i < 6; ++i)
+    {
+      const auto parent = fixtures::addObject(world.scene, "Parent" + std::to_string(i),
+                                              { static_cast<float>(i) * 2.0f - 5.0f, 6.0f + static_cast<float>(i % 2), -3.0f },
+                                              { 0.6f, 0.6f, 0.6f });
+      fixtures::transformOf(parent)->setRotation({ 10.0f * static_cast<float>(i), 20.0f, 5.0f });
+      fixtures::addRigidBody(parent);
+
+      if (i % 2 == 0)
+      {
+        fixtures::addBoxCollider(parent);
+      }
+
+      const auto child = fixtures::addChildObject(world.scene, "Child" + std::to_string(i), parent);
+      fixtures::transformOf(child)->setPosition({ 0.7f, 0.3f, 0.0f });
+
+      if (i % 3 == 0)
+      {
+        fixtures::addSphereCollider(child, 1.0f);
+      }
+      else
+      {
+        fixtures::addBoxCollider(child);
+      }
+
+      world.track(parent);
+      world.track(child);
+    }
+  }
+
+  std::unique_ptr<World> buildWorld(const BroadPhaseMode mode, const bool contactCache, const bool parented)
   {
     auto world = std::make_unique<World>();
     world->collisions.setBroadPhaseMode(mode);
+    world->collisions.setContactCacheEnabled(contactCache);
 
     std::mt19937 random(2024);
 
@@ -94,6 +129,11 @@ namespace {
           addDynamicBody(*world, random, position, "Body" + std::to_string(counter++));
         }
       }
+    }
+
+    if (parented)
+    {
+      addParentedBodies(*world);
     }
 
     return world;
@@ -136,9 +176,10 @@ namespace {
     }
   }
 
-  Trace simulate(const BroadPhaseMode mode, const bool withChurn, const size_t ticks)
+  Trace simulate(const BroadPhaseMode mode, const bool withChurn, const size_t ticks,
+                 const bool contactCache = true, const bool parented = false)
   {
-    auto world = buildWorld(mode);
+    auto world = buildWorld(mode, contactCache, parented);
     Trace trace;
 
     for (size_t tick = 0; tick < ticks; ++tick)
@@ -206,6 +247,26 @@ TEST(BroadPhaseEquivalence, TheTreeReproducesTheSweepWhileObjectsAreRemovedAndAd
 {
   const auto sweep = simulate(BroadPhaseMode::sweep, true, 200);
   const auto tree = simulate(BroadPhaseMode::tree, true, 200);
+
+  ASSERT_GT(sweep.totalEnters, 50u);
+
+  expectSameTrace(sweep, tree);
+}
+
+TEST(BroadPhaseEquivalence, TheContactCacheDoesNotChangeTheTreeResult)
+{
+  const auto cached = simulate(BroadPhaseMode::tree, true, 200, true);
+  const auto uncached = simulate(BroadPhaseMode::tree, true, 200, false);
+
+  ASSERT_GT(cached.totalEnters, 50u);
+
+  expectSameTrace(uncached, cached);
+}
+
+TEST(BroadPhaseEquivalence, TheTreeReproducesTheSweepWithParentedColliders)
+{
+  const auto sweep = simulate(BroadPhaseMode::sweep, false, 200, false, true);
+  const auto tree = simulate(BroadPhaseMode::tree, false, 200, true, true);
 
   ASSERT_GT(sweep.totalEnters, 50u);
 
