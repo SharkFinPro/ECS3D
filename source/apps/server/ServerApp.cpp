@@ -186,7 +186,11 @@ void ServerApp::run()
     m_timeAccumulator = plan.remainingAccumulator;
 
     const bool ticked = plan.steps > 0;
-    ++m_tickStats.loopIterations;
+    if (ticked)
+    {
+      ++m_tickStats.loopIterations;
+    }
+
     if (plan.steps == maxFixedStepsPerFrame)
     {
       ++m_tickStats.cappedIterations;
