@@ -78,6 +78,30 @@ it on unless the environment variable `ECS3D_SLEEP` is `0`; the choice is logged
 - Stats line additions (tree mode, sleeping on): `asleep_bodies`, `asleep_islands` (at the last tick),
   `fell_asleep/tick`, `woke/tick`, `sleep_skipped_edges/tick` (edges whose narrow phase was skipped).
 
+## Contact refresh (spike)
+
+In the serial response pass, each response moves a body, which changes its geometry key, so most later
+contacts involving it were recomputed with full GJK+EPA. Most of those moves are pure translations. With
+refresh on, `contactFor` carries the cached contact along instead. Approximate, off by default
+(`CollisionSystem::setContactRefreshEnabled`); the server enables it when `ECS3D_CONTACT_REFRESH=1`, and logs
+the choice once. With it off, nothing changes and the equivalence tests still apply.
+
+- The parallel pass also stores both colliders' world position, rotation and scale beside each cached contact
+  (only with refresh on).
+- On a key mismatch (and not a sphere-sphere pair, which is cheap to recompute exactly), `refreshContact`
+  compares the current poses with the stored ones. Any change of rotation or scale falls back to the exact
+  recompute. Otherwise, with `delta` the change of relative position and `n` the contact normal, the new depth
+  is `depth - dot(delta, n)`; the point and manifold points shift by half the summed displacements; a depth of
+  zero or less reports no contact. A tangential drift over `refreshMaxTangentialDrift` (0.05) or a normal
+  motion over `refreshMaxNormalMotion` (0.25) falls back too. Both constants are untuned.
+- Counters: `contacts_refreshed/tick` (carried along; not included in `contacts_recomputed`, so reused +
+  refreshed + recomputed is what the response pass asked for) and
+  `refresh_fallback_rot/drift/normal/sphere` per tick, the reasons a contact that could have been refreshed
+  was recomputed exactly instead.
+- Doing it properly is a persistent manifold that stores per-body local contact points (as Bullet's
+  `btPersistentManifold` does) and refreshes them from both bodies' full transforms, rotation included, then
+  drops points that drifted apart.
+
 ## Toggle
 
 The server reads the `ECS3D_BROADPHASE` environment variable at startup. `sweep` selects the old sweep;
@@ -181,3 +205,15 @@ any, which is the server falling behind.
   noticed: the sleeper skips its narrow phase and only re-checks what it touched.
 - A sleeping body whose collider is removed has no edge left to wake it, and stays asleep until a `reset()`.
 - A moving trigger overlapping a sleeper wakes its island every tick its geometry key changes.
+
+## Recommendation for the real implementation
+
+- Broad phase: solved. The dynamic tree plus a persistent pair cache reproduces the sweep exactly and is cheap.
+- Narrow phase: parallel and cached. One GJK per contact in the parallel pass, reused while geometry is unchanged.
+- Event dispatch needs a uuid index in `ObjectManager`; the linear `getObjectByUUID` scan dominates otherwise.
+- The scaling wall is the serial move-and-remeasure solver: every response moves a body and invalidates the
+  contacts behind it. Refresh (round 4) only shaves the recomputes; it does not remove the serial dependency.
+- The real fix is a solver over cached contacts: sequential impulses on cached manifolds, position correction
+  that does not re-run GJK/EPA, and independent contact groups (islands or colors) solved in parallel. That is a
+  physics rewrite, and it has to re-home stack load hand-off, friction holding, `layFlush` and landing on a face.
+- Measured numbers with refresh on and off: TODO (developer to fill in).

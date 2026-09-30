@@ -26,6 +26,16 @@
 namespace {
   constexpr uint64_t reportInterval = 250;
 
+  // Untuned: how far a cached contact may drift sideways, or move along its normal, before it is measured
+  // again instead of carried along.
+  constexpr float refreshMaxTangentialDrift = 0.05f;
+  constexpr float refreshMaxNormalMotion = 0.25f;
+
+  ColliderPose poseOf(Collider& collider)
+  {
+    return { collider.getPosition(), collider.getRotation(), collider.getScale() };
+  }
+
   // One candidate's narrow-phase result, kept beside its squared penetration depth so
   // CollisionSystem::handleCollisions can sort by depth and then resolve without recomputing the contact.
   struct ScoredContact {
@@ -411,6 +421,12 @@ void CollisionSystem::reportCounters()
           << " contacts_parallel/tick=" << static_cast<double>(m_counters.contactsComputed) / ticks
           << " contacts_reused/tick=" << static_cast<double>(m_counters.contactsReused) / ticks
           << " contacts_recomputed/tick=" << static_cast<double>(m_counters.contactsRecomputed) / ticks
+          << " contacts_refreshed/tick=" << static_cast<double>(m_counters.contactsRefreshed) / ticks
+          << " refresh_fallback_rot/drift/normal/sphere="
+          << static_cast<double>(m_counters.refreshFellBackRotation) / ticks << "/"
+          << static_cast<double>(m_counters.refreshFellBackDrift) / ticks << "/"
+          << static_cast<double>(m_counters.refreshFellBackNormalMotion) / ticks << "/"
+          << static_cast<double>(m_counters.refreshFellBackSphere) / ticks
           << " reinserts/tick=" << static_cast<double>(m_counters.reinserts) / ticks
           << " gather_us/tick=" << static_cast<double>(m_counters.gatherMicros) / ticks
           << " warm_sort_us/tick=" << static_cast<double>(m_counters.warmSortMicros) / ticks
@@ -671,7 +687,16 @@ CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
     {
       collidedObjects.emplace_back(m_collisionEdges[static_cast<size_t>(index)].object);
       wakeIfAsleep(other);
-      cachedContacts.push_back({ true, std::move(result.contact), self.geometryKey, other.geometryKey });
+
+      CachedContact entry{ true, std::move(result.contact), self.geometryKey, other.geometryKey };
+      if (m_contactRefreshEnabled)
+      {
+        entry.hasPoses = true;
+        entry.selfPose = poseOf(*self.collider);
+        entry.otherPose = poseOf(*other.collider);
+      }
+
+      cachedContacts.push_back(std::move(entry));
     }
   }
 
@@ -765,10 +790,96 @@ std::optional<collisions::Contact> CollisionSystem::contactFor(const size_t edge
       return entry.contact;
     }
 
+    if (m_contactRefreshEnabled && entry.computed && entry.contact && entry.hasPoses)
+    {
+      const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
+
+      if (otherCollider)
+      {
+        if (edge.collider->getColliderType() == ColliderType::sphereCollider &&
+            otherCollider->getColliderType() == ColliderType::sphereCollider)
+        {
+          ++m_counters.refreshFellBackSphere;
+        }
+        else
+        {
+          auto refreshed = refreshContact(*entry.contact, entry.selfPose, entry.otherPose,
+                                          poseOf(*edge.collider), poseOf(*otherCollider));
+
+          switch (refreshed.outcome)
+          {
+            case RefreshOutcome::refreshed:
+              ++m_counters.contactsRefreshed;
+              ++m_contactsRefreshedTotal;
+              return refreshed.contact;
+            case RefreshOutcome::separated:
+              ++m_counters.contactsRefreshed;
+              ++m_contactsRefreshedTotal;
+              return std::nullopt;
+            case RefreshOutcome::rotationChanged:
+              ++m_counters.refreshFellBackRotation;
+              break;
+            case RefreshOutcome::driftTooLarge:
+              ++m_counters.refreshFellBackDrift;
+              break;
+            case RefreshOutcome::normalMotionTooLarge:
+              ++m_counters.refreshFellBackNormalMotion;
+              break;
+          }
+        }
+      }
+    }
+
     ++m_counters.contactsRecomputed;
   }
 
   return contactWith(edge.collider, other);
+}
+
+RefreshResult CollisionSystem::refreshContact(const collisions::Contact& contact, const ColliderPose& selfThen,
+                                              const ColliderPose& otherThen, const ColliderPose& selfNow,
+                                              const ColliderPose& otherNow)
+{
+  if (selfThen.rotation != selfNow.rotation || selfThen.scale != selfNow.scale ||
+      otherThen.rotation != otherNow.rotation || otherThen.scale != otherNow.scale)
+  {
+    return { RefreshOutcome::rotationChanged, std::nullopt };
+  }
+
+  const glm::vec3 dSelf = selfNow.position - selfThen.position;
+  const glm::vec3 dOther = otherNow.position - otherThen.position;
+  const glm::vec3 delta = dSelf - dOther;
+  const glm::vec3 normal = contact.normal();
+  const float along = glm::dot(delta, normal);
+
+  if (glm::length(delta - normal * along) > refreshMaxTangentialDrift)
+  {
+    return { RefreshOutcome::driftTooLarge, std::nullopt };
+  }
+
+  if (std::abs(along) > refreshMaxNormalMotion)
+  {
+    return { RefreshOutcome::normalMotionTooLarge, std::nullopt };
+  }
+
+  const float depth = contact.depth() - along;
+  if (!(depth > 0.0f))
+  {
+    return { RefreshOutcome::separated, std::nullopt };
+  }
+
+  const glm::vec3 shift = (dSelf + dOther) * 0.5f;
+
+  collisions::Contact moved = contact;
+  moved.minimumTranslationVector = normal * depth;
+  moved.point += shift;
+
+  for (size_t i = 0; i < moved.pointCount; ++i)
+  {
+    moved.points[i] += shift;
+  }
+
+  return { RefreshOutcome::refreshed, std::move(moved) };
 }
 
 std::optional<collisions::Contact> CollisionSystem::contactWith(const std::shared_ptr<Collider>& collider,

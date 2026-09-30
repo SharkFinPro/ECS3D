@@ -11,6 +11,7 @@
 #include <optional>
 #include <unordered_map>
 #include <vector>
+#include <glm/vec3.hpp>
 #include <uuid.h>
 
 class ObjectManager;
@@ -47,6 +48,26 @@ enum class BroadPhaseMode {
   tree
 };
 
+// A collider's world placement at one moment, as the contact refresh compares it.
+struct ColliderPose {
+  glm::vec3 position{0.0f};
+  glm::vec3 rotation{0.0f};
+  glm::vec3 scale{1.0f};
+};
+
+enum class RefreshOutcome {
+  refreshed,
+  separated,
+  rotationChanged,
+  driftTooLarge,
+  normalMotionTooLarge
+};
+
+struct RefreshResult {
+  RefreshOutcome outcome = RefreshOutcome::rotationChanged;
+  std::optional<collisions::Contact> contact;
+};
+
 class CollisionSystem {
 public:
   // dt is the tick length, which contact responses need to combine per-tick velocity with spin.
@@ -76,6 +97,22 @@ public:
   // disturbs it. Sweep mode never sleeps anything.
   void setSleepingEnabled(bool enabled);
   [[nodiscard]] bool isSleepingEnabled() const { return m_sleepingEnabled; }
+
+  // Off by default. On, the response pass moves a cached contact along with a translation of either body
+  // instead of running GJK/EPA again, while the drift stays small (see refreshContact). Approximate.
+  void setContactRefreshEnabled(bool enabled) { m_contactRefreshEnabled = enabled; }
+  [[nodiscard]] bool isContactRefreshEnabled() const { return m_contactRefreshEnabled; }
+
+  // Refreshed contacts since construction; unlike the periodic stats it is never reset.
+  [[nodiscard]] uint64_t getContactsRefreshedTotal() const { return m_contactsRefreshedTotal; }
+
+  // Carries a contact computed at the "then" poses to the "now" poses, assuming both colliders only
+  // translated. Falls back (contact empty, outcome says why) when a rotation or scale changed or the
+  // motion is large enough that the contact features may have changed; outcome separated with an empty
+  // contact means the push cleared the overlap. Public so a test can compare it with findContact.
+  [[nodiscard]] static RefreshResult refreshContact(const collisions::Contact& contact,
+                                                    const ColliderPose& selfThen, const ColliderPose& otherThen,
+                                                    const ColliderPose& selfNow, const ColliderPose& otherNow);
 
 private:
   std::vector<CollisionEdge> m_collisionEdges;
@@ -119,6 +156,9 @@ private:
     std::optional<collisions::Contact> contact;
     uint64_t selfKey = 0;
     uint64_t otherKey = 0;
+    bool hasPoses = false;
+    ColliderPose selfPose;
+    ColliderPose otherPose;
   };
 
   struct CandidateStats {
@@ -132,6 +172,8 @@ private:
   std::vector<std::vector<CachedContact>> m_cachedContacts;
 
   bool m_contactCacheEnabled = true;
+  bool m_contactRefreshEnabled = false;
+  uint64_t m_contactsRefreshedTotal = 0;
 
   BroadPhaseMode m_broadPhaseMode = BroadPhaseMode::tree;
   BroadPhase m_broadPhase;
@@ -146,6 +188,11 @@ private:
     uint64_t contactsComputed = 0;
     uint64_t contactsReused = 0;
     uint64_t contactsRecomputed = 0;
+    uint64_t contactsRefreshed = 0;
+    uint64_t refreshFellBackRotation = 0;
+    uint64_t refreshFellBackDrift = 0;
+    uint64_t refreshFellBackNormalMotion = 0;
+    uint64_t refreshFellBackSphere = 0;
     uint64_t reinserts = 0;
     uint64_t sleepSkippedEdges = 0;
     uint64_t fellAsleep = 0;

@@ -56,6 +56,7 @@ add_executable(${PROJECT_NAME}
   BroadPhaseEquivalenceTest.cpp
   ColliderBoundsTest.cpp
   SleepingTest.cpp
+  ContactRefreshTest.cpp
   SettingsStoreTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp

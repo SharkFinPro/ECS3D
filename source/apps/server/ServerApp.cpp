@@ -70,6 +70,11 @@ ServerApp::ServerApp(LaunchOptions options)
   const bool sleepEnabled = !(sleepSetting && std::string(sleepSetting) == "0");
   m_collisionSystem->setSleepingEnabled(sleepEnabled);
   Log::info(LogCategory::physics, std::string("Sleeping: ") + (sleepEnabled ? "on" : "off"));
+
+  const char* refreshSetting = std::getenv("ECS3D_CONTACT_REFRESH");
+  const bool refreshEnabled = refreshSetting && std::string(refreshSetting) == "1";
+  m_collisionSystem->setContactRefreshEnabled(refreshEnabled);
+  Log::info(LogCategory::physics, std::string("Contact refresh: ") + (refreshEnabled ? "on" : "off"));
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
