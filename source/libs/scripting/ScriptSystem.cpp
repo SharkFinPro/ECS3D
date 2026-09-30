@@ -212,6 +212,11 @@ void ScriptSystem::dispatchCollisionTo(ObjectManager& objectManager,
                                        const uuids::uuid& other,
                                        const CollisionEvent event) const
 {
+  if (!m_attachedCountByObject.contains(target))
+  {
+    return;
+  }
+
   const auto object = objectManager.getObjectByUUID(target);
   if (!object)
   {
@@ -342,6 +347,7 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
     m_engine->reloadScripts();
 
     m_attached.clear();
+    m_attachedCountByObject.clear();
     m_fieldCache.clear();
     m_started.clear();
 
@@ -371,6 +377,7 @@ void ScriptSystem::attach(const Object& object, const std::shared_ptr<Script>& s
 
   m_engine->attachScript(uuidStr.c_str(), className.c_str());
   m_attached.emplace(key, AttachedScript{ uuid, className, script });
+  ++m_attachedCountByObject[uuid];
 
   // Cache the instance's exposed fields (name/type) so we can read them back later for snapshots.
   auto& fields = m_fieldCache[key];
@@ -388,7 +395,14 @@ void ScriptSystem::detach(const uuids::uuid& uuid, const std::string& className)
   m_engine->detachScript(uuids::to_string(uuid).c_str(), className.c_str());
 
   const auto key = cacheKey(uuid, className);
-  m_attached.erase(key);
+  if (m_attached.erase(key) > 0)
+  {
+    const auto count = m_attachedCountByObject.find(uuid);
+    if (count != m_attachedCountByObject.end() && --count->second == 0)
+    {
+      m_attachedCountByObject.erase(count);
+    }
+  }
   m_fieldCache.erase(key);
   m_started.erase(key);
 }

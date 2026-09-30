@@ -2,6 +2,7 @@
 #define SCRIPTSYSTEM_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -93,6 +94,8 @@ private:
 
   // key = uuid + "_" + className (cacheKey)
   std::unordered_map<std::string, AttachedScript> m_attached;
+  // Attached instance count per object, so collision dispatch can skip objects with no script cheaply.
+  std::unordered_map<uuids::uuid, uint32_t> m_attachedCountByObject;
   std::unordered_map<std::string, std::vector<ExposedField>> m_fieldCache;
 
   // Instances that have had their C# start() called. attachAll() (run every broadcastSnapshot, whether
