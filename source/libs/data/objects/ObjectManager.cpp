@@ -1,7 +1,9 @@
 #include "ObjectManager.h"
 #include "Object.h"
 #include "WorldPlacement.h"
+#include "components/Component.h"
 #include <nlohmann/json.hpp>
+#include <Log.h>
 #include <Protocol.h>
 #include <algorithm>
 #include <array>
@@ -130,6 +132,50 @@ void ObjectManager::removeObjectFromRoot(const std::shared_ptr<Object>& object)
 }
 
 namespace {
+  // Copies source's live component values onto copy, which is already running and so takes unpack's
+  // writes into its live slots, leaving its authored values as the source's. Scripts are not in
+  // getComponents(), so their instances are left alone: their state lives in the script host.
+  void copyLiveValues(const Object& source, const Object& copy)
+  {
+    for (const auto& [key, component] : source.getComponents())
+    {
+      const auto& copyComponents = copy.getComponents();
+      const auto copyIt = copyComponents.find(key);
+
+      if (copyIt == copyComponents.end())
+      {
+        continue;
+      }
+
+      net::Message message;
+      component->pack(message);
+
+      // pack() writes the discriminator first; a shape mismatch (a different collider) has another layout.
+      net::MessageReader reader(message);
+      if (reader.read<ComponentType>() != copyIt->second->getPackedType())
+      {
+        continue;
+      }
+
+      copyIt->second->unpack(reader);
+    }
+
+    const auto& sourceChildren = source.getChildren();
+    const auto& copyChildren = copy.getChildren();
+
+    if (sourceChildren.size() != copyChildren.size())
+    {
+      Log::warn(LogCategory::engine, "Duplicate of '" + source.getName()
+        + "' has a different child count than its source; children keep their authored values");
+      return;
+    }
+
+    for (std::size_t i = 0; i < sourceChildren.size(); ++i)
+    {
+      copyLiveValues(*sourceChildren[i], *copyChildren[i]);
+    }
+  }
+
   // Number of ancestors above object (root = 0), by a plain walk up getParent() - never more than
   // maxObjectDepth steps for any object that arrived through a depth-checked path.
   std::size_t ancestorDepth(const std::shared_ptr<Object>& object)
@@ -244,7 +290,14 @@ void ObjectManager::duplicateObject(const std::shared_ptr<Object>& object, const
   objectData["name"] = std::string(objectData.at("name")) + " - Copy";
 
   // A duplicate sits beside its original; a prefab instance (instantiate) lands at the scene root.
-  instantiateUnder(objectData, object->getParent(), rootUUID);
+  const auto copy = instantiateUnder(objectData, object->getParent(), rootUUID);
+
+  // serialize() writes authored values, so a copy made mid-run would otherwise drop the source's runtime
+  // changes. Stop discards runtime objects, so only the copy's live values are seeded.
+  if (m_started)
+  {
+    copyLiveValues(*object, *copy);
+  }
 }
 
 void ObjectManager::start()
