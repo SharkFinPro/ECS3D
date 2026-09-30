@@ -162,6 +162,66 @@ void RigidBody::setHeldImpulse(const glm::vec3& heldImpulse)
   m_heldImpulse = heldImpulse;
 }
 
+bool RigidBody::isAsleep() const
+{
+  return m_asleep;
+}
+
+void RigidBody::setAsleep(const bool asleep)
+{
+  m_asleep = asleep;
+}
+
+uint32_t RigidBody::getRestTicks() const
+{
+  return m_restTicks;
+}
+
+void RigidBody::setRestTicks(const uint32_t restTicks)
+{
+  m_restTicks = restTicks;
+}
+
+uint32_t RigidBody::getIslandId() const
+{
+  return m_islandId;
+}
+
+void RigidBody::setIslandId(const uint32_t islandId)
+{
+  m_islandId = islandId;
+}
+
+uint64_t RigidBody::getSleepGeometryKey() const
+{
+  return m_sleepGeometryKey;
+}
+
+void RigidBody::setSleepGeometryKey(const uint64_t key)
+{
+  m_sleepGeometryKey = key;
+}
+
+void RigidBody::start()
+{
+  Component::start();
+  resetSleepState();
+}
+
+void RigidBody::stop()
+{
+  Component::stop();
+  resetSleepState();
+}
+
+void RigidBody::resetSleepState()
+{
+  m_asleep = false;
+  m_restTicks = 0;
+  m_islandId = 0;
+  m_sleepGeometryKey = 0;
+}
+
 nlohmann::json RigidBody::serialize()
 {
   const auto velocity = m_velocity.getInitialValue();

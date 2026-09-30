@@ -432,7 +432,8 @@ component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the s
 `getUpdateID` (a cache-invalidation counter for colliders, not scene data). `RigidBodyBindings` leaves
 out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writes to; PhysicsSystem
 drains it), `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
-falling state; `isFalling` is the read-only query scripts get) and `getStackedLoad`/`setStackedLoad`/`getHeldImpulse`/`setHeldImpulse`
+falling state; `isFalling` is the read-only query scripts get) and `getStackedLoad`/`setStackedLoad`/`getHeldImpulse`/`setHeldImpulse` and the sleeping bookkeeping
+(`isAsleep`/`getRestTicks`/`getIslandId`/`getSleepGeometryKey` and their setters)
 (PhysicsSystem's per-tick record of what rests on the body and what its support has held). `CameraBindings` covers every field on
 `Camera`; its setters clamp fov/near/far to the same valid range as the editor UI (`Camera::minFovDegrees`/
 `maxFovDegrees`/`minNearPlane`/`minFarPlaneFor`), so a script cannot produce a degenerate projection.

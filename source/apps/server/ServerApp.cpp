@@ -65,6 +65,11 @@ ServerApp::ServerApp(LaunchOptions options)
   const bool useSweep = broadPhase && std::string(broadPhase) == "sweep";
   m_collisionSystem->setBroadPhaseMode(useSweep ? BroadPhaseMode::sweep : BroadPhaseMode::tree);
   Log::info(LogCategory::physics, std::string("Broad phase: ") + (useSweep ? "sweep" : "tree"));
+
+  const char* sleepSetting = std::getenv("ECS3D_SLEEP");
+  const bool sleepEnabled = !(sleepSetting && std::string(sleepSetting) == "0");
+  m_collisionSystem->setSleepingEnabled(sleepEnabled);
+  Log::info(LogCategory::physics, std::string("Sleeping: ") + (sleepEnabled ? "on" : "off"));
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
 

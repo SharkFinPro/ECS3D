@@ -70,6 +70,25 @@ public:
   [[nodiscard]] glm::vec3 getHeldImpulse() const;
   void setHeldImpulse(const glm::vec3& heldImpulse);
 
+  // Sleeping bookkeeping, owned by the physics and collision systems. Runtime only: never serialized, packed
+  // or replicated, like the stacked load above.
+  [[nodiscard]] bool isAsleep() const;
+  void setAsleep(bool asleep);
+
+  [[nodiscard]] uint32_t getRestTicks() const;
+  void setRestTicks(uint32_t restTicks);
+
+  [[nodiscard]] uint32_t getIslandId() const;
+  void setIslandId(uint32_t islandId);
+
+  [[nodiscard]] uint64_t getSleepGeometryKey() const;
+  void setSleepGeometryKey(uint64_t key);
+
+  // A scene start or stop never leaves a body asleep.
+  void start() override;
+
+  void stop() override;
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -94,6 +113,13 @@ private:
   glm::vec3 m_heldImpulse{ 0 };
 
   std::vector<PendingForce> m_pendingForces;
+
+  bool m_asleep = false;
+  uint32_t m_restTicks = 0;
+  uint32_t m_islandId = 0;
+  uint64_t m_sleepGeometryKey = 0;
+
+  void resetSleepState();
 };
 
 

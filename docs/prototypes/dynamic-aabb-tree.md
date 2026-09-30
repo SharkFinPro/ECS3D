@@ -53,6 +53,31 @@ tree path, so `BroadPhaseEquivalenceTest` proves it. The one runtime knob is
   override computes the scaled radius and positions once and repeats the same float operations per axis.
 - Server: `ServerApp` logs a `server` line every 250 ticks (see below).
 
+## Sleeping
+
+A settled group of bodies (an island) stops costing anything until something disturbs it. It is off by default
+in the libraries (`CollisionSystem::setSleepingEnabled`, false) and only operates in tree mode. The server turns
+it on unless the environment variable `ECS3D_SLEEP` is `0`; the choice is logged once.
+
+- A body counts a rest tick per tick while something supports it (`!getNextFalling()`), its speed is under
+  `linearSleepSpeed` and `angularSleepSpeed` (`sim/Sleeping.h`), and nothing is queued. An island is the
+  union-find over awake dynamic bodies joined by non-trigger contacts with each other; static contacts do not
+  join. It sleeps when every member has `ticksToSleep` rest ticks.
+- Falling asleep zeroes velocity, records the body's geometry key (sum of the Transform update ids up the
+  ancestor chain), and caches each edge's hit list for the tick (objects, their geometry keys, dynamic and
+  trigger flags). Trigger hits are cached too, so a sleeper inside a trigger keeps its `stay` events.
+- While asleep: `PhysicsSystem::fixedUpdate` skips the body (no gravity, no move), and the collision system
+  skips its narrow phase and response, replaying the cached hit list so pairs keep producing `stay` events.
+- Waking is by island: pending forces, non-zero velocity, a changed own geometry key, a cached hit whose object
+  is gone or moved (or is now an awake dynamic body), or an awake body's narrow phase hitting a sleeper. Wakes
+  from collision are collected per edge in the parallel pass and applied serially after it; the response pass
+  still treats those bodies as asleep for that tick.
+- `RigidBody` holds the four runtime-only fields (`m_asleep`, `m_restTicks`, `m_islandId`,
+  `m_sleepGeometryKey`); `start()`/`stop()` reset them. Nothing is serialized, packed or replicated.
+- Disabling sleeping, `reset()` and `setBroadPhaseMode()` clear the caches and wake every body on the next tick.
+- Stats line additions (tree mode, sleeping on): `asleep_bodies`, `asleep_islands` (at the last tick),
+  `fell_asleep/tick`, `woke/tick`, `sleep_skipped_edges/tick` (edges whose narrow phase was skipped).
+
 ## Toggle
 
 The server reads the `ECS3D_BROADPHASE` environment variable at startup. `sweep` selects the old sweep;
@@ -142,3 +167,17 @@ any, which is the server falling behind.
 - Collision event dispatch was dominated by `ObjectManager::getObjectByUUID`'s linear scan. The prototype skips objects
   with no attached script, but the real fix is a uuid index in `ObjectManager` (maintained through add, remove,
   `reassignUUIDs`, unpack and restore), which also speeds up every `World.tryGet*` script binding.
+- Sleeping thresholds (`linearSleepSpeed`, `angularSleepSpeed`, `ticksToSleep`) are untuned constants; the real
+  version wants per-body overrides and tuning against the stacking scenes.
+- Islands are rebuilt from scratch each tick by union-find; a persistent contact graph (the pair cache carrying
+  contacts) would make this incremental.
+- The state delta still replicates every object every tick even when asleep; skipping unchanged transforms is a
+  replication follow-up.
+- Wake detection relies on the Transform update id; a child collider's world placement moving only because its
+  parent moved is caught by the ancestor-sum key, but anything that changes geometry without bumping an update
+  id (the known child-cache staleness) is not.
+- Sleeping only exists in tree mode.
+- A static collider moved into a sleeping body that it was not touching when the island fell asleep is not
+  noticed: the sleeper skips its narrow phase and only re-checks what it touched.
+- A sleeping body whose collider is removed has no edge left to wake it, and stays asleep until a `reset()`.
+- A moving trigger overlapping a sleeper wakes its island every tick its geometry key changes.

@@ -1,4 +1,5 @@
 #include "PhysicsSystem.h"
+#include "GeometryKey.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -13,7 +14,9 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <cstdint>
 #include <stdexcept>
+#include <vector>
 
 namespace {
   // A push closer to the center than this gives no spin: the lever arm is too short to divide by.
@@ -207,6 +210,15 @@ namespace {
 
 void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
 {
+  struct Entry {
+    RigidBody* body;
+    Transform* transform;
+    bool mustWake;
+  };
+
+  std::vector<Entry> entries;
+  std::vector<uint32_t> wakeIslands;
+
   for (const auto& object : objectManager.getAllObjects())
   {
     const auto rigidBody = object->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -218,16 +230,61 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
       continue;
     }
 
+    Entry entry{ rigidBody.get(), transform.get(), false };
+
+    if (rigidBody->isAsleep())
+    {
+      const auto velocity = rigidBody->getVelocity();
+      const auto angularVelocity = rigidBody->getAngularVelocity();
+
+      entry.mustWake = !rigidBody->getPendingForces().empty() ||
+                       velocity.x != 0.0f || velocity.y != 0.0f || velocity.z != 0.0f ||
+                       angularVelocity.x != 0.0f || angularVelocity.y != 0.0f || angularVelocity.z != 0.0f ||
+                       geometryKeyOf(*object) != rigidBody->getSleepGeometryKey();
+
+      // A whole island wakes together, or the layers above a disturbed one would float for a tick.
+      if (entry.mustWake && rigidBody->getIslandId() != 0)
+      {
+        wakeIslands.push_back(rigidBody->getIslandId());
+      }
+    }
+
+    entries.push_back(entry);
+  }
+
+  std::ranges::sort(wakeIslands);
+
+  for (const auto& entry : entries)
+  {
+    auto& body = *entry.body;
+
+    if (body.isAsleep())
+    {
+      if (entry.mustWake || std::ranges::binary_search(wakeIslands, body.getIslandId()))
+      {
+        body.setAsleep(false);
+        body.setRestTicks(0);
+      }
+      else
+      {
+        body.setFalling(false);
+        body.setNextFalling(false);
+        body.setStackedLoad(0.0f);
+        body.setHeldImpulse(glm::vec3(0));
+        continue;
+      }
+    }
+
     // Apply any forces a script queued this tick (e.g. PlayerScript's input-driven movement), then
     // clear them, before integrating.
-    for (const auto& pending : rigidBody->getPendingForces())
+    for (const auto& pending : body.getPendingForces())
     {
-      applyVelocityChange(*rigidBody, *transform, velocityChangeOf(pending, rigidBody->getMass(), dt),
+      applyVelocityChange(body, *entry.transform, velocityChangeOf(pending, body.getMass(), dt),
                           pending.position, dt);
     }
-    rigidBody->clearPendingForces();
+    body.clearPendingForces();
 
-    integrate(*rigidBody, *transform, dt);
+    integrate(body, *entry.transform, dt);
   }
 }
 

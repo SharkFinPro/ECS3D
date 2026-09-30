@@ -55,6 +55,7 @@ add_executable(${PROJECT_NAME}
   DynamicAabbTreeTest.cpp
   BroadPhaseEquivalenceTest.cpp
   ColliderBoundsTest.cpp
+  SleepingTest.cpp
   SettingsStoreTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp

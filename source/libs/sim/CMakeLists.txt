@@ -7,6 +7,9 @@ add_library(${PROJECT_NAME}
   FixedTimestep.h
   CollisionSystem.cpp
   CollisionSystem.h
+  GeometryKey.cpp
+  GeometryKey.h
+  Sleeping.h
   broadphase/BroadPhase.cpp
   broadphase/BroadPhase.h
   broadphase/DynamicAabbTree.cpp

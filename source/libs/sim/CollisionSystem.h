@@ -4,10 +4,12 @@
 #include "broadphase/BroadPhase.h"
 #include "collisions/NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
+#include <cstddef>
 #include <cstdint>
 #include <compare>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 #include <uuid.h>
 
@@ -70,6 +72,11 @@ public:
   void setContactCacheEnabled(bool enabled) { m_contactCacheEnabled = enabled; }
   [[nodiscard]] bool isContactCacheEnabled() const { return m_contactCacheEnabled; }
 
+  // Off by default. On, and in tree mode, a settled island of bodies stops costing anything until something
+  // disturbs it. Sweep mode never sleeps anything.
+  void setSleepingEnabled(bool enabled);
+  [[nodiscard]] bool isSleepingEnabled() const { return m_sleepingEnabled; }
+
 private:
   std::vector<CollisionEdge> m_collisionEdges;
 
@@ -85,6 +92,25 @@ private:
     BoundingBox box;
     bool trigger = false;
     uint64_t geometryKey = 0;
+    RigidBody* body = nullptr;
+    bool asleep = false;
+    uint32_t islandId = 0;
+    size_t bodyIndex = 0;
+  };
+
+  // What an island's edge reported when the island fell asleep, replayed while it sleeps.
+  struct SleepHit {
+    std::weak_ptr<Object> object;
+    uint64_t key = 0;
+    bool dynamic = false;
+    bool trigger = false;
+  };
+
+  struct SleepRecord {
+    std::weak_ptr<Collider> collider;
+    uint32_t islandId = 0;
+    uint64_t selfKey = 0;
+    std::vector<SleepHit> hits;
   };
 
   // A contact the parallel pass computed for one hit, valid while both geometry keys still match.
@@ -121,6 +147,11 @@ private:
     uint64_t contactsReused = 0;
     uint64_t contactsRecomputed = 0;
     uint64_t reinserts = 0;
+    uint64_t sleepSkippedEdges = 0;
+    uint64_t fellAsleep = 0;
+    uint64_t woke = 0;
+    uint64_t bodiesAsleep = 0;
+    uint64_t islandsAsleep = 0;
     uint64_t gatherMicros = 0;
     uint64_t warmSortMicros = 0;
     uint64_t broadPhaseMicros = 0;
@@ -137,6 +168,18 @@ private:
   std::vector<CollisionPair> m_enters;
   std::vector<CollisionPair> m_stays;
   std::vector<CollisionPair> m_exits;
+
+  bool m_sleepingEnabled = false;
+  bool m_wakeAll = false;
+  uint32_t m_nextIslandId = 1;
+  uint64_t m_asleepBodiesLastTick = 0;
+
+  // Keyed by an island member's collider; the weak_ptr inside guards against address reuse.
+  std::unordered_map<const Collider*, SleepRecord> m_sleepRecords;
+
+  // This tick's edges by object, and the distinct rigid bodies behind them (tree path, sleeping on).
+  std::unordered_map<const Object*, int32_t> m_edgeOfObject;
+  std::vector<RigidBody*> m_bodies;
 
   void checkCollisions(float dt);
 
@@ -158,7 +201,24 @@ private:
   [[nodiscard]] CandidateStats findCollisionsFromCandidates(size_t edgeIndex,
                                                             const std::vector<int32_t>& candidates,
                                                             std::vector<std::shared_ptr<Object>>& collidedObjects,
-                                                            std::vector<CachedContact>& cachedContacts) const;
+                                                            std::vector<CachedContact>& cachedContacts,
+                                                            std::vector<uint32_t>& wakeIslands) const;
+
+  // The still-live hits an asleep edge reported when it fell asleep. Asks for its island to wake when
+  // anything they were measured against has changed.
+  void collectSleepingHits(size_t edgeIndex, std::vector<std::shared_ptr<Object>>& collidedObjects,
+                           std::vector<uint32_t>& wakeIslands) const;
+
+  void applyWakeRequests(const std::vector<std::vector<uint32_t>>& requests);
+
+  void wakeEverything();
+
+  void updateSleeping(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions);
+
+  void pruneSleepRecords();
+
+  // Drops every record and island, and wakes every body on the next tick.
+  void clearSleepState();
 
   void sweepCollisions(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
                        std::vector<uint64_t>& narrowPhaseCalls);
@@ -168,7 +228,8 @@ private:
   void updateBroadPhase();
 
   void collideWithCandidates(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
-                             std::vector<uint64_t>& narrowPhaseCalls, std::vector<uint64_t>& contactsComputed);
+                             std::vector<uint64_t>& narrowPhaseCalls, std::vector<uint64_t>& contactsComputed,
+                             std::vector<std::vector<uint32_t>>& wakeRequests);
 
   void reportCounters();
 
