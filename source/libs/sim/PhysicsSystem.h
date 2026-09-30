@@ -14,10 +14,49 @@ class ObjectManager;
 class Object;
 class Transform;
 class RigidBody;
+class Collider;
 
 class PhysicsSystem {
 public:
   static void fixedUpdate(const ObjectManager& objectManager, float dt);
+
+  // Threads the integrate pass may use. One (the default) keeps it serial. More runs it in parallel unless a body
+  // has a rigid body among its ancestors, whose Transform the body's own integrate reads while the ancestor's
+  // integrate writes it; then the pass stays serial. Either way the result is bit-identical.
+  static void setThreadCount(int threads);
+  [[nodiscard]] static int getThreadCount();
+
+  enum class IntegratePath {
+    serial,
+    serialNested,
+    parallel
+  };
+
+  // Which way the most recent fixedUpdate integrated. serialNested means the nesting guard, not the thread count
+  // or the body count, kept it serial.
+  [[nodiscard]] static IntegratePath lastIntegratePath();
+
+  // The components a contact response reads through the objects of the pair. All raw and owned by the objects, so
+  // a caller that already has them (the collision system's per-edge data) skips the lookups; resolveParties
+  // finds the ones the overloads below would.
+  struct Parties {
+    // The Transform and Collider of the body's owner, which for a child collider are not the collider's own.
+    Transform* bodyTransform = nullptr;
+    Collider* bodyCollider = nullptr;
+
+    // The other object's rigid body (its own, or its nearest ancestor's), that body owner's Transform, and the
+    // other object's own Collider.
+    RigidBody* otherBody = nullptr;
+    Transform* otherBodyTransform = nullptr;
+    Collider* otherCollider = nullptr;
+  };
+
+  [[nodiscard]] static Parties resolveParties(RigidBody& body, const std::shared_ptr<Object>& other);
+
+  // Same as the span overload below, for a caller that resolved parties itself.
+  static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other, const Parties& parties,
+                              glm::vec3 minimumTranslationVector, std::span<const glm::vec3> collisionPoints,
+                              float dt);
 
   // A change of velocity at position, in units per tick like the velocity it is added to. Mass does not scale
   // it: off the center it turns the body as far as an impulse of mass times the change would. The spin is
@@ -79,8 +118,14 @@ private:
     glm::vec3 normal;
   };
 
-  [[nodiscard]] static Pair pairOf(RigidBody& body, Transform& transform, const std::shared_ptr<Object>& other,
+  [[nodiscard]] static Pair pairOf(RigidBody& body, Transform& transform, const Parties& parties,
                                    const glm::vec3& normal);
+
+  static void handleSinglePoint(RigidBody& body, const Parties& parties, glm::vec3 minimumTranslationVector,
+                                const glm::vec3& collisionPoint, float dt);
+
+  // Applies the forces a script queued, then integrates.
+  static void step(RigidBody& body, Transform& transform, float dt);
 
   static void integrate(RigidBody& body, Transform& transform, float dt);
 
@@ -147,10 +192,10 @@ private:
 
   static void push(const Side& side, const glm::vec3& impulse, const glm::vec3& point, bool turns, float dt);
 
-  static void stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
+  static void stopSpinIntoSupport(RigidBody& body, const Transform& transform, const Parties& parties,
                                   const glm::vec3& normal, std::span<const glm::vec3> contactPoints);
 
-  static void comeToRest(RigidBody& body, const std::shared_ptr<Object>& other, const glm::vec3& normal);
+  static void comeToRest(RigidBody& body, const Parties& parties, const glm::vec3& normal);
 
   // Whether the spin this tick carries the face the body rests toward flat against the support, or past it.
   [[nodiscard]] static bool turnsFlatThisTick(const RigidBody& body, const Transform& transform,

@@ -41,7 +41,7 @@ namespace {
   // CollisionSystem::handleCollisions can sort by depth and then resolve without recomputing the contact.
   struct ScoredContact {
     float distance;
-    std::shared_ptr<Object> object;
+    const std::shared_ptr<Object>* object;
     std::optional<collisions::Contact> contact;
     size_t index;
   };
@@ -52,17 +52,25 @@ namespace {
       std::chrono::steady_clock::now() - start).count());
   }
 
-  // Adds the time between its construction and destruction to a counter.
+  // Adds the time between its construction and destruction to a counter. Disabled, it never reads the clock.
   class ScopedMicros {
   public:
-    explicit ScopedMicros(uint64_t& sink)
+    explicit ScopedMicros(uint64_t& sink, const bool enabled = true)
       : m_sink(sink),
-        m_start(std::chrono::steady_clock::now())
-    {}
+        m_enabled(enabled)
+    {
+      if (m_enabled)
+      {
+        m_start = std::chrono::steady_clock::now();
+      }
+    }
 
     ~ScopedMicros()
     {
-      m_sink += microsSince(m_start);
+      if (m_enabled)
+      {
+        m_sink += microsSince(m_start);
+      }
     }
 
     ScopedMicros(const ScopedMicros&) = delete;
@@ -70,8 +78,107 @@ namespace {
 
   private:
     uint64_t& m_sink;
+    bool m_enabled;
     std::chrono::steady_clock::time_point m_start;
   };
+
+  // This tick's canonical, sorted, deduplicated colliding pairs, from the per-edge hit indices. Every pair is
+  // reduced to the ranks of its two uuids among the edges' uuids, so the sort is a bucket pass over small
+  // integers instead of a comparison sort over 32-byte pairs; the result is the list sorting the pairs would give.
+  std::vector<CollisionPair> pairsFromHitEdges(const std::vector<CollisionEdge>& edges,
+                                               const std::vector<std::vector<int32_t>>& hitEdges)
+  {
+    struct EdgeId {
+      uuids::uuid id;
+      size_t edge;
+    };
+
+    std::vector<uint8_t> involved(edges.size(), 0);
+    for (size_t i = 0; i < hitEdges.size(); ++i)
+    {
+      if (!hitEdges[i].empty())
+      {
+        involved[i] = 1;
+      }
+
+      for (const auto hit : hitEdges[i])
+      {
+        involved[static_cast<size_t>(hit)] = 1;
+      }
+    }
+
+    std::vector<EdgeId> byId;
+    for (size_t i = 0; i < edges.size(); ++i)
+    {
+      if (involved[i])
+      {
+        byId.push_back({ edges[i].object->getUUID(), i });
+      }
+    }
+
+    std::ranges::sort(byId, [](const EdgeId& a, const EdgeId& b)
+    {
+      return a.id < b.id;
+    });
+
+    std::vector<uint32_t> rankOfEdge(edges.size());
+    std::vector<uuids::uuid> idOfRank;
+    idOfRank.reserve(byId.size());
+    for (size_t j = 0; j < byId.size(); ++j)
+    {
+      if (j == 0 || !(byId[j].id == byId[j - 1].id))
+      {
+        idOfRank.push_back(byId[j].id);
+      }
+
+      rankOfEdge[byId[j].edge] = static_cast<uint32_t>(idOfRank.size() - 1);
+    }
+
+    std::vector<std::pair<uint32_t, uint32_t>> ranked;
+    for (size_t i = 0; i < hitEdges.size(); ++i)
+    {
+      const uint32_t self = rankOfEdge[i];
+
+      for (const auto hit : hitEdges[i])
+      {
+        const uint32_t other = rankOfEdge[static_cast<size_t>(hit)];
+        ranked.emplace_back(std::min(self, other), std::max(self, other));
+      }
+    }
+
+    std::vector<size_t> begin(idOfRank.size() + 1, 0);
+    for (const auto& pair : ranked)
+    {
+      ++begin[pair.first + 1];
+    }
+
+    std::partial_sum(begin.begin(), begin.end(), begin.begin());
+
+    std::vector<uint32_t> larger(ranked.size());
+    std::vector<size_t> cursor(begin.begin(), begin.end() - 1);
+    for (const auto& pair : ranked)
+    {
+      larger[cursor[pair.first]++] = pair.second;
+    }
+
+    std::vector<CollisionPair> pairs;
+    pairs.reserve(ranked.size());
+    for (size_t smaller = 0; smaller < idOfRank.size(); ++smaller)
+    {
+      const auto first = larger.begin() + static_cast<std::ptrdiff_t>(begin[smaller]);
+      auto last = larger.begin() + static_cast<std::ptrdiff_t>(begin[smaller + 1]);
+
+      std::sort(first, last);
+      last = std::unique(first, last);
+
+      for (auto it = first; it != last; ++it)
+      {
+        pairs.push_back({ idOfRank[smaller], idOfRank[*it] });
+      }
+    }
+
+    return pairs;
+  }
 
   // Union-find over rigid bodies, indexed in the order they are first seen.
   class BodyPartition {
@@ -207,6 +314,7 @@ void CollisionSystem::checkCollisions(const float dt)
   std::vector<uint64_t> contactsComputed(m_collisionEdges.size(), 0);
   std::vector<std::vector<uint32_t>> wakeRequests;
   m_cachedContacts.assign(m_collisionEdges.size(), {});
+  m_hitEdges.assign(m_collisionEdges.size(), {});
 
   if (m_wakeAll)
   {
@@ -245,7 +353,7 @@ void CollisionSystem::checkCollisions(const float dt)
   m_counters.narrowMicros += microsSince(stageStart);
 
   const bool parallelResponse = useTree && m_parallelResponseEnabled;
-  const bool diagnostics = useTree && m_diagnosticsEnabled;
+  const bool diagnostics = useTree && m_detailedTiming;
 
   HitBodies hitBodies;
   if (parallelResponse || diagnostics)
@@ -267,7 +375,9 @@ void CollisionSystem::checkCollisions(const float dt)
   // which would invalidate a collider cache another thread might still be reading if this ran inside the
   // loop above.
   ResponseCounters response;
+  const auto orderStart = std::chrono::steady_clock::now();
   const auto order = responseOrder(perEdgeCollisions);
+  m_counters.responseOrderMicros += microsSince(orderStart);
 
   if (parallelResponse)
   {
@@ -277,19 +387,31 @@ void CollisionSystem::checkCollisions(const float dt)
   {
     for (const auto i : order)
     {
-      // An island woken by this tick's contacts was still asleep when the contacts were found.
-      if (useTree && m_edgeInfos[i].asleep)
+      RigidBody* rigidBody = nullptr;
+      std::shared_ptr<RigidBody> looked;
+
+      if (useTree)
       {
-        continue;
+        // An island woken by this tick's contacts was still asleep when the contacts were found.
+        if (m_edgeInfos[i].asleep)
+        {
+          continue;
+        }
+
+        rigidBody = m_edgeInfos[i].body;
+      }
+      else
+      {
+        looked = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
+        rigidBody = looked.get();
       }
 
-      const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
       if (!rigidBody)
       {
         continue;
       }
 
-      handleCollisions(i, rigidBody, perEdgeCollisions[i], dt, response);
+      handleCollisions(i, *rigidBody, perEdgeCollisions[i], dt, response);
     }
   }
 
@@ -370,8 +492,44 @@ void CollisionSystem::buildEdgeInfos()
     info.mask = edge.collider->getMask();
     info.box = edge.collider->cachedBoundingBox();
     info.trigger = edge.collider->isTrigger();
-    info.geometryKey = geometryKeyOf(*edge.object);
     info.body = body.get();
+
+    if (body)
+    {
+      if (const Object* owner = body->getOwner())
+      {
+        info.bodyTransform = owner->getComponent<Transform>(ComponentType::transform).get();
+        info.bodyCollider = owner->getComponent<Collider>(ComponentType::collider).get();
+      }
+    }
+
+    if (const auto transform = edge.object->getComponent<Transform>(ComponentType::transform))
+    {
+      info.keyChain[0] = transform.get();
+      info.keyChainCount = 1;
+
+      // Transform::getPosition stops at the first ancestor without a Transform, so the walk does too.
+      auto current = edge.object->getParent();
+      while (current)
+      {
+        const auto parentTransform = current->getComponent<Transform>(ComponentType::transform);
+        if (!parentTransform)
+        {
+          break;
+        }
+
+        if (info.keyChainCount == EdgeInfo::keyChainCapacity)
+        {
+          info.keyChainOverflow = true;
+          break;
+        }
+
+        info.keyChain[info.keyChainCount++] = parentTransform.get();
+        current = current->getParent();
+      }
+    }
+
+    info.geometryKey = keyOf(info);
 
     if (m_sleepingEnabled && body)
     {
@@ -424,6 +582,22 @@ void CollisionSystem::buildEdgeInfos()
   {
     m_counters.woke += m_asleepBodiesLastTick - asleepNow;
   }
+}
+
+uint64_t CollisionSystem::keyOf(const EdgeInfo& info)
+{
+  if (info.keyChainOverflow)
+  {
+    return geometryKeyOf(*info.object);
+  }
+
+  uint64_t key = 0;
+  for (size_t i = 0; i < info.keyChainCount; ++i)
+  {
+    key += info.keyChain[i]->getUpdateID();
+  }
+
+  return key;
 }
 
 void CollisionSystem::updateBroadPhase()
@@ -518,11 +692,13 @@ void CollisionSystem::collideWithCandidates(std::vector<std::vector<std::shared_
     if (m_edgeInfos[i].asleep)
     {
       std::vector<std::shared_ptr<Object>> replayed;
-      collectSleepingHits(static_cast<size_t>(i), replayed, wakeRequests[i]);
+      std::vector<int32_t> replayedEdges;
+      collectSleepingHits(static_cast<size_t>(i), replayed, replayedEdges, wakeRequests[i]);
 
       if (!replayed.empty())
       {
         perEdgeCollisions[i] = std::move(replayed);
+        m_hitEdges[i] = std::move(replayedEdges);
       }
 
       continue;
@@ -534,15 +710,17 @@ void CollisionSystem::collideWithCandidates(std::vector<std::vector<std::shared_
     }
 
     std::vector<std::shared_ptr<Object>> collidedObjects;
+    std::vector<int32_t> hitEdges;
     std::vector<CachedContact> cachedContacts;
     const auto stats = findCollisionsFromCandidates(static_cast<size_t>(i), m_candidates[i], collidedObjects,
-                                                    cachedContacts, wakeRequests[i]);
+                                                    hitEdges, cachedContacts, wakeRequests[i]);
     narrowPhaseCalls[i] = stats.narrowPhaseCalls;
     contactsComputed[i] = stats.contactsComputed;
 
     if (!collidedObjects.empty())
     {
       perEdgeCollisions[i] = std::move(collidedObjects);
+      m_hitEdges[i] = std::move(hitEdges);
       m_cachedContacts[i] = std::move(cachedContacts);
     }
   }
@@ -577,17 +755,30 @@ void CollisionSystem::reportCounters()
           << " broadphase_us/tick=" << perTick(m_counters.broadPhaseMicros)
           << " narrow_us/tick=" << perTick(m_counters.narrowMicros)
           << " response_us/tick=" << perTick(m_counters.responseMicros)
-          << " resp_recompute_us/tick=" << perTick(resp.recomputeMicros)
-          << " resp_refresh_us/tick=" << perTick(resp.refreshMicros)
-          << " resp_physics_us/tick=" << perTick(resp.physicsMicros)
+          << " resp_order_us/tick=" << perTick(m_counters.responseOrderMicros)
           << " events_us/tick=" << perTick(m_counters.eventsMicros)
-          << " check_us/tick=" << perTick(m_counters.checkMicros);
+          << " check_us/tick=" << perTick(m_counters.checkMicros)
+          << " detailed_timing=" << (m_detailedTiming ? "on" : "off");
+
+  if (m_detailedTiming)
+  {
+    message << " resp_recompute_us/tick=" << perTick(resp.recomputeMicros)
+            << " resp_refresh_us/tick=" << perTick(resp.refreshMicros)
+            << " resp_physics_us/tick=" << perTick(resp.physicsMicros)
+            << " resp_keys_us/tick=" << perTick(resp.keysMicros)
+            << " resp_score_us/tick=" << perTick(resp.scoreMicros)
+            << " resp_lookup_us/tick=" << perTick(resp.lookupMicros);
+  }
 
   if (tree)
   {
     message << " parallel_response=" << (m_parallelResponseEnabled ? "on" : "off")
-            << " hit_graph_us/tick=" << perTick(m_counters.hitGraphMicros)
-            << " diag_us/tick=" << perTick(m_counters.diagMicros);
+            << " hit_graph_us/tick=" << perTick(m_counters.hitGraphMicros);
+
+    if (m_detailedTiming)
+    {
+      message << " diag_us/tick=" << perTick(m_counters.diagMicros);
+    }
 
     if (m_parallelResponseEnabled)
     {
@@ -600,7 +791,7 @@ void CollisionSystem::reportCounters()
             << " dynamic=" << stats.dynamicProxies << " heights=" << stats.staticHeight << "/"
             << stats.dynamicHeight;
 
-    if (m_diagnosticsEnabled)
+    if (m_detailedTiming)
     {
       message << " islands/tick=" << perTick(m_counters.hitIslands)
               << " largest_island/tick=" << perTick(m_counters.largestHitIsland)
@@ -616,7 +807,7 @@ void CollisionSystem::reportCounters()
             << " woke/tick=" << perTick(m_counters.woke)
             << " sleep_skipped_edges/tick=" << perTick(m_counters.sleepSkippedEdges);
 
-    if (m_diagnosticsEnabled)
+    if (m_detailedTiming)
     {
       message << " awake/tick=" << perTick(m_counters.awakeBodies)
               << " no_sleep_unsupported/fast/spinning/forces/island_blocked="
@@ -682,19 +873,32 @@ void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::s
 {
   // Flatten the per-edge results into this tick's canonical pair set. A dynamic-vs-dynamic contact is
   // detected from both sides, so canonicalize (a < b) and dedupe.
-  std::vector<CollisionPair> current;
-  for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
+  bool haveHitEdges = m_hitEdges.size() == perEdgeCollisions.size();
+  for (size_t i = 0; haveHitEdges && i < perEdgeCollisions.size(); ++i)
   {
-    const auto& selfUUID = m_collisionEdges[i].object->getUUID();
-
-    for (const auto& other : perEdgeCollisions[i])
-    {
-      current.push_back(CollisionPair::make(selfUUID, other->getUUID()));
-    }
+    haveHitEdges = m_hitEdges[i].size() == perEdgeCollisions[i].size();
   }
 
-  std::ranges::sort(current);
-  current.erase(std::unique(current.begin(), current.end()), current.end());
+  std::vector<CollisionPair> current;
+  if (haveHitEdges)
+  {
+    current = pairsFromHitEdges(m_collisionEdges, m_hitEdges);
+  }
+  else
+  {
+    for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
+    {
+      const auto& selfUUID = m_collisionEdges[i].object->getUUID();
+
+      for (const auto& other : perEdgeCollisions[i])
+      {
+        current.push_back(CollisionPair::make(selfUUID, other->getUUID()));
+      }
+    }
+
+    std::ranges::sort(current);
+    current.erase(std::unique(current.begin(), current.end()), current.end());
+  }
 
   // Diff against the previous tick. Both sets are sorted, so the enter/stay/exit split is three linear
   // set operations rather than an O(n^2) rescan.
@@ -730,7 +934,21 @@ CollisionSystem::HitBodies CollisionSystem::collectHitBodies(
   for (int i = 0; i < edgeCount; ++i)
   {
     const auto& hits = perEdgeCollisions[static_cast<size_t>(i)];
+    const auto& hitEdges = m_hitEdges[static_cast<size_t>(i)];
     HitBody* out = result.flat.data() + result.offsets[static_cast<size_t>(i)];
+
+    if (hitEdges.size() == hits.size())
+    {
+      for (size_t k = 0; k < hits.size(); ++k)
+      {
+        const auto& hit = m_edgeInfos[static_cast<size_t>(hitEdges[k])];
+
+        out[k].body = hit.body;
+        out[k].trigger = hit.collider->isTrigger();
+      }
+
+      continue;
+    }
 
     for (size_t k = 0; k < hits.size(); ++k)
     {
@@ -964,13 +1182,13 @@ void CollisionSystem::respondInParallel(const std::vector<size_t>& order,
     for (size_t e = begin[static_cast<size_t>(c)]; e < begin[static_cast<size_t>(c) + 1]; ++e)
     {
       const auto i = edges[e];
-      const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
+      RigidBody* const rigidBody = m_edgeInfos[i].body;
       if (!rigidBody)
       {
         continue;
       }
 
-      handleCollisions(i, rigidBody, perEdgeCollisions[i], dt, local);
+      handleCollisions(i, *rigidBody, perEdgeCollisions[i], dt, local);
     }
   }
 
@@ -1082,8 +1300,8 @@ uint64_t CollisionSystem::findCollisions(const CollisionEdge& edge,
 
 CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
   const size_t edgeIndex, const std::vector<int32_t>& candidates,
-  std::vector<std::shared_ptr<Object>>& collidedObjects, std::vector<CachedContact>& cachedContacts,
-  std::vector<uint32_t>& wakeIslands) const
+  std::vector<std::shared_ptr<Object>>& collidedObjects, std::vector<int32_t>& hitEdges,
+  std::vector<CachedContact>& cachedContacts, std::vector<uint32_t>& wakeIslands) const
 {
   const auto& self = m_edgeInfos[edgeIndex];
   const auto& bbox = self.box;
@@ -1134,6 +1352,7 @@ CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
       if (collisions::intersects(*self.collider, *other.collider))
       {
         collidedObjects.emplace_back(m_collisionEdges[static_cast<size_t>(index)].object);
+        hitEdges.push_back(index);
         wakeIfAsleep(other);
 
         if (m_contactCacheEnabled)
@@ -1151,6 +1370,7 @@ CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
     if (result.intersects)
     {
       collidedObjects.emplace_back(m_collisionEdges[static_cast<size_t>(index)].object);
+      hitEdges.push_back(index);
       wakeIfAsleep(other);
 
       CachedContact entry{ true, std::move(result.contact), self.geometryKey, other.geometryKey };
@@ -1168,24 +1388,41 @@ CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
   return stats;
 }
 
-void CollisionSystem::handleCollisions(const size_t edgeIndex, const std::shared_ptr<RigidBody>& rigidBody,
+void CollisionSystem::handleCollisions(const size_t edgeIndex, RigidBody& rigidBody,
                                        const std::vector<std::shared_ptr<Object>>& collidedObjects, const float dt,
                                        ResponseCounters& counters) const
 {
   const auto& collider = m_collisionEdges[edgeIndex].collider;
+  const auto& hitEdges = m_hitEdges[edgeIndex];
+  const bool haveHitEdges = hitEdges.size() == collidedObjects.size();
+  const EdgeInfo* const selfInfo = haveHitEdges ? &m_edgeInfos[edgeIndex] : nullptr;
 
   if (collidedObjects.size() == 1)
   {
+    const EdgeInfo* const otherInfo = haveHitEdges ? &m_edgeInfos[static_cast<size_t>(hitEdges[0])] : nullptr;
+
     // Triggers still recorded the pair (events fire), but get no MTV correction / impulse.
-    if (isTriggerPair(collider, collidedObjects[0]))
+    bool trigger = false;
+    {
+      const ScopedMicros lookupTimer(counters.lookupMicros, m_detailedTiming);
+      trigger = isTriggerPair(collider, otherInfo, collidedObjects[0]);
+    }
+
+    if (trigger)
     {
       return;
     }
 
-    if (const auto contact = contactFor(edgeIndex, 0, collidedObjects[0], counters))
+    if (const auto contact = contactFor(edgeIndex, 0, collidedObjects[0], otherInfo, counters))
     {
-      const ScopedMicros timer(counters.physicsMicros);
-      PhysicsSystem::handleCollision(*rigidBody, collidedObjects[0], contact->minimumTranslationVector,
+      PhysicsSystem::Parties parties;
+      {
+        const ScopedMicros lookupTimer(counters.lookupMicros, m_detailedTiming);
+        parties = partiesOf(selfInfo, otherInfo, rigidBody, collidedObjects[0]);
+      }
+
+      const ScopedMicros physicsTimer(counters.physicsMicros, m_detailedTiming);
+      PhysicsSystem::handleCollision(rigidBody, collidedObjects[0], parties, contact->minimumTranslationVector,
                                      contact->contactPoints(), dt);
     }
 
@@ -1197,20 +1434,36 @@ void CollisionSystem::handleCollisions(const size_t edgeIndex, const std::shared
   std::vector<ScoredContact> scoredContacts;
   scoredContacts.reserve(collidedObjects.size());
 
+  std::chrono::steady_clock::time_point scoreStart;
+  uint64_t measuredBefore = 0;
+  if (m_detailedTiming)
+  {
+    scoreStart = std::chrono::steady_clock::now();
+    measuredBefore = counters.keysMicros + counters.refreshMicros + counters.recomputeMicros;
+  }
+
   for (size_t k = 0; k < collidedObjects.size(); ++k)
   {
     const auto& collidedObject = collidedObjects[k];
-    auto contact = contactFor(edgeIndex, k, collidedObject, counters);
+    const EdgeInfo* const otherInfo = haveHitEdges ? &m_edgeInfos[static_cast<size_t>(hitEdges[k])] : nullptr;
+    auto contact = contactFor(edgeIndex, k, collidedObject, otherInfo, counters);
     const float distance = contact ? dot(contact->minimumTranslationVector, contact->minimumTranslationVector)
                                    : 0.0f;
 
-    scoredContacts.push_back({ distance, collidedObject, std::move(contact), k });
+    scoredContacts.push_back({ distance, &collidedObject, std::move(contact), k });
   }
 
   std::ranges::stable_sort(scoredContacts, [](const ScoredContact& a, const ScoredContact& b)
   {
     return a.distance > b.distance;
   });
+
+  if (m_detailedTiming)
+  {
+    const uint64_t elapsed = microsSince(scoreStart);
+    const uint64_t measured = counters.keysMicros + counters.refreshMicros + counters.recomputeMicros - measuredBefore;
+    counters.scoreMicros += elapsed > measured ? elapsed - measured : 0;
+  }
 
   bool bodyMoved = false;
   for (const auto& scoredContact : scoredContacts)
@@ -1220,43 +1473,85 @@ void CollisionSystem::handleCollisions(const size_t edgeIndex, const std::shared
       break;
     }
 
-    if (isTriggerPair(collider, scoredContact.object))
+    const auto& object = *scoredContact.object;
+    const EdgeInfo* const otherInfo = haveHitEdges ? &m_edgeInfos[static_cast<size_t>(hitEdges[scoredContact.index])]
+                                                   : nullptr;
+
+    bool trigger = false;
+    {
+      const ScopedMicros lookupTimer(counters.lookupMicros, m_detailedTiming);
+      trigger = isTriggerPair(collider, otherInfo, object);
+    }
+
+    if (trigger)
     {
       continue;
     }
 
     // Once a response has moved the body, the contacts scored before it no longer describe the overlap -
     // the earlier push may have cleared this one, or changed its depth - so it is measured again.
-    const auto contact = bodyMoved ? contactFor(edgeIndex, scoredContact.index, scoredContact.object, counters)
-                                   : scoredContact.contact;
-    if (!contact)
+    std::optional<collisions::Contact> remeasured;
+    const std::optional<collisions::Contact>* contact = &scoredContact.contact;
+    if (bodyMoved)
+    {
+      remeasured = contactFor(edgeIndex, scoredContact.index, object, otherInfo, counters);
+      contact = &remeasured;
+    }
+
+    if (!*contact)
     {
       continue;
     }
 
     {
-      const ScopedMicros timer(counters.physicsMicros);
-      PhysicsSystem::handleCollision(*rigidBody, scoredContact.object, contact->minimumTranslationVector,
-                                     contact->contactPoints(), dt);
+      PhysicsSystem::Parties parties;
+      {
+        const ScopedMicros lookupTimer(counters.lookupMicros, m_detailedTiming);
+        parties = partiesOf(selfInfo, otherInfo, rigidBody, object);
+      }
+
+      const ScopedMicros physicsTimer(counters.physicsMicros, m_detailedTiming);
+      PhysicsSystem::handleCollision(rigidBody, object, parties, (*contact)->minimumTranslationVector,
+                                     (*contact)->contactPoints(), dt);
     }
 
     bodyMoved = true;
   }
 }
 
+PhysicsSystem::Parties CollisionSystem::partiesOf(const EdgeInfo* const self, const EdgeInfo* const other,
+                                                  RigidBody& body, const std::shared_ptr<Object>& otherObject)
+{
+  if (!self || !other)
+  {
+    return PhysicsSystem::resolveParties(body, otherObject);
+  }
+
+  return { self->bodyTransform, self->bodyCollider, other->body, other->bodyTransform, other->collider };
+}
+
 std::optional<collisions::Contact> CollisionSystem::contactFor(const size_t edgeIndex, const size_t k,
                                                                const std::shared_ptr<Object>& other,
+                                                               const EdgeInfo* const otherInfo,
                                                                ResponseCounters& counters) const
 {
   const auto& edge = m_collisionEdges[edgeIndex];
   const auto& cached = m_cachedContacts[edgeIndex];
+  const EdgeInfo* const selfInfo = otherInfo ? &m_edgeInfos[edgeIndex] : nullptr;
 
   if (k < cached.size())
   {
     const auto& entry = cached[k];
 
-    if (entry.computed && entry.selfKey == geometryKeyOf(*edge.object) &&
-        entry.otherKey == geometryKeyOf(*other))
+    bool reusable = false;
+    if (entry.computed)
+    {
+      const ScopedMicros keysTimer(counters.keysMicros, m_detailedTiming);
+      reusable = entry.selfKey == (selfInfo ? keyOf(*selfInfo) : geometryKeyOf(*edge.object)) &&
+                 entry.otherKey == (otherInfo ? keyOf(*otherInfo) : geometryKeyOf(*other));
+    }
+
+    if (reusable)
     {
       ++counters.contactsReused;
       return entry.contact;
@@ -1264,8 +1559,19 @@ std::optional<collisions::Contact> CollisionSystem::contactFor(const size_t edge
 
     if (m_contactRefreshEnabled && entry.computed && entry.contact && entry.hasPoses)
     {
-      const ScopedMicros refreshTimer(counters.refreshMicros);
-      const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
+      const ScopedMicros refreshTimer(counters.refreshMicros, m_detailedTiming);
+      std::shared_ptr<Collider> looked;
+      Collider* otherCollider = nullptr;
+
+      if (otherInfo)
+      {
+        otherCollider = otherInfo->collider;
+      }
+      else
+      {
+        looked = other->getComponent<Collider>(ComponentType::collider);
+        otherCollider = looked.get();
+      }
 
       if (otherCollider)
       {
@@ -1304,7 +1610,12 @@ std::optional<collisions::Contact> CollisionSystem::contactFor(const size_t edge
     ++counters.contactsRecomputed;
   }
 
-  const ScopedMicros recomputeTimer(counters.recomputeMicros);
+  const ScopedMicros recomputeTimer(counters.recomputeMicros, m_detailedTiming);
+  if (otherInfo)
+  {
+    return collisions::findContact(*edge.collider, *otherInfo->collider);
+  }
+
   return contactWith(edge.collider, other);
 }
 
@@ -1366,11 +1677,17 @@ std::optional<collisions::Contact> CollisionSystem::contactWith(const std::share
   return collisions::findContact(*collider, *otherCollider);
 }
 
-bool CollisionSystem::isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other)
+bool CollisionSystem::isTriggerPair(const std::shared_ptr<Collider>& collider, const EdgeInfo* const otherInfo,
+                                    const std::shared_ptr<Object>& other)
 {
   if (collider->isTrigger())
   {
     return true;
+  }
+
+  if (otherInfo)
+  {
+    return otherInfo->collider->isTrigger();
   }
 
   const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
@@ -1388,6 +1705,7 @@ bool CollisionSystem::layersCollide(const std::shared_ptr<Collider>& a, const st
 
 void CollisionSystem::collectSleepingHits(const size_t edgeIndex,
                                           std::vector<std::shared_ptr<Object>>& collidedObjects,
+                                          std::vector<int32_t>& hitEdges,
                                           std::vector<uint32_t>& wakeIslands) const
 {
   const auto& self = m_edgeInfos[edgeIndex];
@@ -1426,6 +1744,7 @@ void CollisionSystem::collectSleepingHits(const size_t edgeIndex,
 
     // Reported either way, so the pair keeps producing stay events instead of a spurious exit.
     collidedObjects.push_back(std::move(object));
+    hitEdges.push_back(edge->second);
   }
 
   if (stale)
@@ -1600,7 +1919,7 @@ void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_p
     SleepRecord record;
     record.collider = m_collisionEdges[i].collider;
     record.islandId = islandOfRoot[root(self.bodyIndex)];
-    record.selfKey = geometryKeyOf(*self.object);
+    record.selfKey = keyOf(self);
 
     for (const auto& hit : perEdgeCollisions[i])
     {
@@ -1611,7 +1930,7 @@ void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_p
       }
 
       const auto& other = m_edgeInfos[static_cast<size_t>(edge->second)];
-      record.hits.push_back({ hit, geometryKeyOf(*hit), other.hasRigidBody, self.trigger || other.trigger });
+      record.hits.push_back({ hit, keyOf(other), other.hasRigidBody, self.trigger || other.trigger });
     }
 
     m_sleepRecords[self.collider] = std::move(record);
@@ -1635,7 +1954,7 @@ void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_p
   m_counters.islandsAsleep = asleepIslands.size();
   m_asleepBodiesLastTick = asleepBodies;
 
-  if (m_diagnosticsEnabled)
+  if (m_detailedTiming)
   {
     recordSleepBlockers();
   }

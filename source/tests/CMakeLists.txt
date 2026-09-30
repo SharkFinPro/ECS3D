@@ -58,6 +58,7 @@ add_executable(${PROJECT_NAME}
   SleepingTest.cpp
   ContactRefreshTest.cpp
   ParallelResponseTest.cpp
+  PhysicsOverheadTest.cpp
   SettingsStoreTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp

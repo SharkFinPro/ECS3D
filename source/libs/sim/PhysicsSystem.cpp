@@ -44,6 +44,12 @@ namespace {
   // the support, so the points are visited again until they settle.
   constexpr int maxSpinPasses = 16;
 
+  // Fewer bodies than this cost more to fan out than to integrate.
+  constexpr size_t minParallelBodies = 64;
+
+  int threadCount = 1;
+  PhysicsSystem::IntegratePath lastPath = PhysicsSystem::IntegratePath::serial;
+
   // glm's Euler constructor composes Rz * Ry * Rx, the same order the colliders and renderer apply.
   glm::quat orientationOf(const Transform& transform)
   {
@@ -140,7 +146,7 @@ namespace {
     return room < 0.0f ? 0.0f : std::max(std::sqrt(room) - along, 0.0f);
   }
 
-  bool isSphere(const std::shared_ptr<Collider>& collider)
+  bool isSphere(const Collider* collider)
   {
     return collider && collider->getColliderType() == ColliderType::sphereCollider;
   }
@@ -208,12 +214,28 @@ namespace {
   }
 }
 
+void PhysicsSystem::setThreadCount(const int threads)
+{
+  threadCount = std::max(threads, 1);
+}
+
+int PhysicsSystem::getThreadCount()
+{
+  return threadCount;
+}
+
+PhysicsSystem::IntegratePath PhysicsSystem::lastIntegratePath()
+{
+  return lastPath;
+}
+
 void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
 {
   struct Entry {
     RigidBody* body;
     Transform* transform;
     bool mustWake;
+    bool nested;
   };
 
   std::vector<Entry> entries;
@@ -230,7 +252,16 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
       continue;
     }
 
-    Entry entry{ rigidBody.get(), transform.get(), false };
+    Entry entry{ rigidBody.get(), transform.get(), false, false };
+
+    // The integrate of a body under another body reads the Transform that body's own integrate writes.
+    if (threadCount > 1)
+    {
+      for (auto ancestor = object->getParent(); ancestor && !entry.nested; ancestor = ancestor->getParent())
+      {
+        entry.nested = ancestor->getComponents().contains(ComponentType::rigidBody);
+      }
+    }
 
     if (rigidBody->isAsleep())
     {
@@ -254,6 +285,10 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
 
   std::ranges::sort(wakeIslands);
 
+  std::vector<const Entry*> active;
+  active.reserve(entries.size());
+  bool anyNested = false;
+
   for (const auto& entry : entries)
   {
     auto& body = *entry.body;
@@ -275,17 +310,47 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
       }
     }
 
-    // Apply any forces a script queued this tick (e.g. PlayerScript's input-driven movement), then
-    // clear them, before integrating.
-    for (const auto& pending : body.getPendingForces())
-    {
-      applyVelocityChange(body, *entry.transform, velocityChangeOf(pending, body.getMass(), dt),
-                          pending.position, dt);
-    }
-    body.clearPendingForces();
-
-    integrate(body, *entry.transform, dt);
+    active.push_back(&entry);
+    anyNested = anyNested || entry.nested;
   }
+
+  // Each body's step writes only its own RigidBody and Transform and reads Transforms up its own ancestor chain,
+  // none of which is written while no active body has an ancestor with a body.
+  const bool fanOut = threadCount > 1 && active.size() >= minParallelBodies;
+  lastPath = !fanOut ? IntegratePath::serial : anyNested ? IntegratePath::serialNested : IntegratePath::parallel;
+
+  if (lastPath == IntegratePath::parallel)
+  {
+    const int count = static_cast<int>(active.size());
+    const int threads = threadCount;
+
+#pragma omp parallel for num_threads(threads) schedule(static)
+    for (int i = 0; i < count; ++i)
+    {
+      const Entry& entry = *active[static_cast<size_t>(i)];
+      step(*entry.body, *entry.transform, dt);
+    }
+
+    return;
+  }
+
+  for (const auto* entry : active)
+  {
+    step(*entry->body, *entry->transform, dt);
+  }
+}
+
+void PhysicsSystem::step(RigidBody& body, Transform& transform, const float dt)
+{
+  // Apply any forces a script queued this tick (e.g. PlayerScript's input-driven movement), then
+  // clear them, before integrating.
+  for (const auto& pending : body.getPendingForces())
+  {
+    applyVelocityChange(body, transform, velocityChangeOf(pending, body.getMass(), dt), pending.position, dt);
+  }
+  body.clearPendingForces();
+
+  integrate(body, transform, dt);
 }
 
 void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float dt)
@@ -359,14 +424,36 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
     throw std::runtime_error("PhysicsSystem::handleCollision missing other object!");
   }
 
-  const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform);
-  if (!transform)
+  handleSinglePoint(body, resolveParties(body, other), minimumTranslationVector, collisionPoint, dt);
+}
+
+void PhysicsSystem::handleSinglePoint(RigidBody& body, const Parties& parties,
+                                      const glm::vec3 minimumTranslationVector, const glm::vec3& collisionPoint,
+                                      const float dt)
+{
+  if (!parties.bodyTransform)
   {
     return;
   }
 
-  resolve(pairOf(body, *transform, other, normalize(minimumTranslationVector)), minimumTranslationVector,
-          collisionPoint, 0.0f, dt);
+  resolve(pairOf(body, *parties.bodyTransform, parties, normalize(minimumTranslationVector)),
+          minimumTranslationVector, collisionPoint, 0.0f, dt);
+}
+
+PhysicsSystem::Parties PhysicsSystem::resolveParties(RigidBody& body, const std::shared_ptr<Object>& other)
+{
+  Parties parties;
+  parties.bodyTransform = body.getOwner()->getComponent<Transform>(ComponentType::transform).get();
+  parties.bodyCollider = body.getOwner()->getComponent<Collider>(ComponentType::collider).get();
+
+  // The other body turns about its rigid body's own center, which a child collider's owner may not be.
+  const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
+  parties.otherBody = otherBody.get();
+  parties.otherBodyTransform = otherBody ? otherBody->getOwner()->getComponent<Transform>(ComponentType::transform).get()
+                                         : nullptr;
+  parties.otherCollider = other->getComponent<Collider>(ComponentType::collider).get();
+
+  return parties;
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
@@ -384,7 +471,30 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
     throw std::runtime_error("PhysicsSystem::handleCollision missing other object!");
   }
 
-  const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform);
+  handleCollision(body, other, resolveParties(body, other), minimumTranslationVector, collisionPoints, dt);
+}
+
+void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other, const Parties& parties,
+                                    const glm::vec3 minimumTranslationVector,
+                                    const std::span<const glm::vec3> collisionPoints, const float dt)
+{
+  if (collisionPoints.empty())
+  {
+    if (!other)
+    {
+      throw std::runtime_error("PhysicsSystem::handleCollision missing other object!");
+    }
+
+    handleSinglePoint(body, parties, minimumTranslationVector, glm::vec3(0), dt);
+    return;
+  }
+
+  if (!other)
+  {
+    throw std::runtime_error("PhysicsSystem::handleCollision missing other object!");
+  }
+
+  Transform* const transform = parties.bodyTransform;
   if (!transform)
   {
     return;
@@ -393,11 +503,11 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   const auto normal = normalize(minimumTranslationVector);
   const auto support = collisionPoints.size() < 2 ? Support{ collisionPoints[0], false }
                                                   : findSupport(transform->getPosition(), normal, collisionPoints);
-  const auto pair = pairOf(body, *transform, other, normal);
+  const auto pair = pairOf(body, *transform, parties, normal);
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
-  stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
+  stopSpinIntoSupport(body, *transform, parties, normal, collisionPoints);
   const float faceRadius = support.underCenterOfMass ? grindingRadius(support.point, collisionPoints) : 0.0f;
   resolve(pair, minimumTranslationVector, support.point, faceRadius, dt);
 
@@ -419,30 +529,26 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
 
       if (const auto flatFace = restingFace(body, other, supportFace))
       {
-        stopSpinIntoSupport(body, *transform, other, normal, *flatFace);
+        stopSpinIntoSupport(body, *transform, parties, normal, *flatFace);
         const auto faceSupport = findSupport(transform->getPosition(), normal, *flatFace);
         applyContactImpulse(pair, faceSupport.point, grindingRadius(faceSupport.point, *flatFace), dt);
       }
     }
   }
 
-  comeToRest(body, other, normal);
+  comeToRest(body, parties, normal);
 }
 
-PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform, const std::shared_ptr<Object>& other,
+PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform, const Parties& parties,
                                           const glm::vec3& normal)
 {
-  Pair pair{ { &body, &transform, false, isSphere(body.getOwner()->getComponent<Collider>(ComponentType::collider)) },
-              {}, normal };
+  Pair pair{ { &body, &transform, false, isSphere(parties.bodyCollider) }, {}, normal };
 
   // The other body turns about its rigid body's own center, which a child collider's owner may not be.
-  const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
-  const auto otherTransform = otherBody ? otherBody->getOwner()->getComponent<Transform>(ComponentType::transform)
-                                        : nullptr;
-  if (otherBody && otherTransform)
+  if (parties.otherBody && parties.otherBodyTransform)
   {
-    pair.other = { otherBody.get(), otherTransform.get(), !otherBody->isFalling(),
-                   isSphere(other->getComponent<Collider>(ComponentType::collider)) };
+    pair.other = { parties.otherBody, parties.otherBodyTransform, !parties.otherBody->isFalling(),
+                   isSphere(parties.otherCollider) };
     pair.body.resting = !body.isFalling();
   }
 
@@ -890,7 +996,7 @@ void PhysicsSystem::layFlush(Transform& transform, const std::shared_ptr<Object>
   transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
 }
 
-void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
+void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transform, const Parties& parties,
                                         const glm::vec3& normal, const std::span<const glm::vec3> contactPoints)
 {
   const auto inverseInertia = worldInverseInertia(transform);
@@ -900,8 +1006,8 @@ void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transf
   }
 
   // The support turns about its rigid body's own center, which a child collider's owner may not be.
-  const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
-  const auto otherTransform = otherBody ? otherBody->getOwner()->getComponent<Transform>(ComponentType::transform) : nullptr;
+  const RigidBody* const otherBody = parties.otherBody;
+  const Transform* const otherTransform = parties.otherBodyTransform;
   const bool supportSpins = otherBody && otherTransform;
   const auto supportSpin = supportSpins ? otherBody->getAngularVelocity() : glm::vec3(0);
 
@@ -945,11 +1051,11 @@ void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transf
   body.setAngularVelocity(angularVelocity);
 }
 
-void PhysicsSystem::comeToRest(RigidBody& body, const std::shared_ptr<Object>& other, const glm::vec3& normal)
+void PhysicsSystem::comeToRest(RigidBody& body, const Parties& parties, const glm::vec3& normal)
 {
   // Spin about the contact normal is left to the damping, which only approaches zero. A body resting on
   // something below it is brought the rest of the way once it is too slow to see.
-  const auto supportSpin = spinOf(other);
+  const auto supportSpin = parties.otherBody ? parties.otherBody->getAngularVelocity() : glm::vec3(0);
   if (normal.y > 0.0f && glm::length(body.getAngularVelocity() - supportSpin) < restAngularSpeed)
   {
     body.setAngularVelocity(supportSpin);

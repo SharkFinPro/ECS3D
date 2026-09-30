@@ -188,9 +188,9 @@ the per-hit body lookup (`hit_graph_us`) is parallel.
   (mostly reuse checks, scoring and sorting).
 - `hit_graph_us` (per-hit body lookup, shared by the island diagnostics and the parallel response),
   `diag_us` (island and sleep-blocker analysis) and, with the parallel response on, `resp_setup_us`,
-  `resp_components/tick`, `resp_largest_component_edges/tick`. Diagnostics can be switched off with
-  `setDiagnosticsEnabled(false)`; their cost is in `hit_graph_us` and `diag_us`, and the sleep-blocker part is
-  inside `events_us`.
+  `resp_components/tick`, `resp_largest_component_edges/tick`. From round 6 the per-contact timers and the
+  island and sleep-blocker analysis are behind `setDetailedTimingEnabled` (see Round 6); their cost is in
+  `diag_us`, and the sleep-blocker part is inside `events_us`.
 - Island structure of this tick's hits: `islands/tick`, `largest_island/tick` (average), `largest_island_max`
   (over the reporting interval) and `bodies_in_islands_ge_64/tick`. Union-find over dynamic bodies joined by
   any non-trigger hit where both sides have a body; static contacts do not join, and asleep edges are left
@@ -206,11 +206,92 @@ the per-hit body lookup (`hit_graph_us`) is parallel.
   (say 0.004 to 0.02, or spin over 3), the stacked solver never quite settles at these values and either the
   thresholds or the solver's resting behavior has to change.
 
+## Round 6: trimming the serial response pass
+
+Measured before this round (about 2160 bodies, 20 threads, refresh on, parallel response off, per tick):
+`response_us` 12,800-17,700, of which `resp_recompute_us` 4,000-5,400, `resp_refresh_us` 9-17 and
+`resp_physics_us` 4,100-5,700. That left 4,700-6,600 us of the pass unattributed. Everything below is exact:
+the same floating-point work in the same order, so the existing equivalence tests are the guard.
+None of it has been built or measured yet.
+
+### Attribution and the detailed timing switch
+
+- New per-contact timers: `resp_keys_us` (the geometry key comparison in `contactFor`), `resp_score_us` (the
+  multi-hit scoring loop and stable sort, less the time `contactFor` itself accounted for) and `resp_lookup_us`
+  (resolving the components a response needs, and the trigger test). New always-on coarse timer
+  `resp_order_us`: `responseOrder` (a sort over every edge with hits) runs inside `response_us` and was part of
+  the unattributed time.
+- `CollisionSystem::setDetailedTimingEnabled(bool)`, library default off, gates every `resp_*` per-contact timer
+  (the existing three included) and the per-tick island and sleep-blocker analysis (`diag_us`, `islands/tick`,
+  the sleep-blocker counts and histograms). It replaces `setDiagnosticsEnabled`. Off, the response hot path reads
+  no clock per contact (`ScopedMicros` takes an enabled flag); the per-stage timers stay on. The stats line
+  reports `detailed_timing=on|off` and omits the entries that are off.
+- The server reads `ECS3D_COLLISION_DIAGNOSTICS`: `0` turns detailed timing off, anything else, or unset, leaves it
+  on (the prototype still wants the data by default). It is logged once at startup. For the cleanest
+  `response_us`, run with `ECS3D_COLLISION_DIAGNOSTICS=0`.
+
+### Fewer lookups per contact
+
+- `buildEdgeInfos` now records per edge the raw `Transform*` chain `geometryKeyOf` sums (the object's own, then
+  each ancestor up to the first without one; inline capacity four, a deeper chain falls back to
+  `geometryKeyOf`), the Transform and Collider of the rigid body's owner (a child collider's body belongs to
+  its parent), and reuses the edge's own body and collider pointers. `keyOf(EdgeInfo)` returns exactly what
+  `geometryKeyOf` returns, without a `getComponent` per level. `contactFor` and the sleeping records use it.
+- Each edge has a `m_hitEdges` list aligned with its hit list (the hit's own edge index), so a hit's collider,
+  trigger flag, body and key chain come from `m_edgeInfos`, not `getComponent` + `dynamic_pointer_cast`. The
+  `shared_ptr<Object>` hit list is unchanged. The sweep path leaves `m_hitEdges` empty and keeps the old lookups.
+- The response loops take the body from `EdgeInfo::body` instead of a lookup, `ScoredContact` holds a pointer to
+  the hit instead of a `shared_ptr` copy (an atomic increment per hit), and a re-measured contact is read through
+  a pointer instead of copying the optional `Contact`.
+- `PhysicsSystem::Parties` (raw pointers: the body owner's Transform and Collider, the other side's rigid body,
+  that body owner's Transform, and the other object's Collider) is threaded through `handleCollision`,
+  `pairOf`, `stopSpinIntoSupport` and `comeToRest`, which each looked these up again before. A new
+  `handleCollision` overload takes them pre-resolved; the existing overloads call `resolveParties`, which
+  resolves exactly what each call site did. The rare edge-landing helpers (`supportFaceToward`, `restingFace`,
+  `layFlush`, `turnsFlatThisTick`) still take the `shared_ptr<Object>` and look up what they need.
+
+### Parallel integrate
+
+`PhysicsSystem::fixedUpdate` integrates in parallel when `PhysicsSystem::setThreadCount` is above one (default
+one, so library and tests are unchanged; the server passes the same physics thread count), at least 64 bodies
+are active, and no active body has an ancestor that owns a rigid body. A nested body's integrate reads its
+ancestors' Transforms (`getPosition`, `setWorldRotation`), which a body ancestor's integrate writes; the walk
+is conservative (any ancestor with a rigid body, awake or not) and, if it fires, the pass stays serial that
+tick. The gather and wake passes stay serial; only "apply queued forces, then integrate" per body fans out.
+`PhysicsSystem::lastIntegratePath()` reports `serial`, `serialNested` (the guard blocked it) or `parallel`.
+
+Audit of shared writes on that path: `integrate`, `applyVelocityChange` and `worldInverseInertia` write only the
+body's own `RigidBody` and `Transform` (`ComponentVariable::set`, `++m_updateID`, plain fields) and read
+ancestors' Transforms; `PhysicsSystem.cpp` has no statics, no `Log` calls and no caches on it (the two file-level
+variables are the thread count and the last path, written outside the parallel loop); `getParent()` and
+`getComponent` are reads plus atomic reference count updates. Nothing else was found.
+
+### Collision events
+
+`recordCollisionEvents` no longer flattens every hit into 32-byte pairs and comparison-sorts them. From
+`m_hitEdges` it ranks the uuids of the edges that take part (a sort over at most the edge count, dense so equal
+uuids share a rank), reduces each hit to a `(rank, rank)` pair of small integers, buckets them by the smaller
+rank with a counting pass, sorts and dedupes each bucket, and emits the pairs in bucket order. Rank order equals
+uuid order, so the list is exactly what sorting and uniquing the pairs gives. The three set operations against
+last tick's list are unchanged. Without aligned hit lists (sweep) the old code runs.
+The collision hit-body lookup for the island diagnostics and parallel response (`collectHitBodies`) reads the same
+edge data.
+
+### Tests
+
+`PhysicsOverheadTest.cpp`: detailed timing on vs off is bit-exact over the clump scene (refresh and sleeping on);
+tree vs sweep is bit-exact through a hierarchy deeper than the inline key chain; 1 vs 8 integrate threads is
+bit-exact over 240 free bodies for 200 ticks (and over the clump scene with refresh and sleeping), with the
+last path asserted to be `serial` and `parallel`; a scene with nested bodies must report `serialNested` and stay
+bit-exact; a scene under the body threshold stays serial.
+
 ## Toggle
 
 The server reads the `ECS3D_BROADPHASE` environment variable at startup. `sweep` selects the old sweep;
 anything else, or unset, selects the tree. The chosen mode is logged once under the physics category.
 `CollisionSystem::setBroadPhaseMode` does the same from code and clears the tree on a change.
+`ECS3D_COLLISION_DIAGNOSTICS=0` turns the detailed timing and diagnostics off (see Round 6); anything else, or
+unset, leaves them on.
 
 ## Stats line
 
@@ -337,4 +418,10 @@ any, which is the server falling behind.
 - Read the round 5 diagnostics before tuning anything: `largest_island` says whether splitting can help at all,
   and the sleep-blocker counts and speed histograms say whether the few sleepers are a threshold problem or a
   solver that never settles a stack.
+- In the real implementation, systems should hold resolved component pointers or indices per body for the
+  duration of a tick instead of repeating `getComponent` + `dynamic_pointer_cast` lookups (an `unordered_map`
+  find, a cast and an atomic reference count update each). Round 6 gets some of this back by caching raw
+  pointers per collision edge, but the same lookups are repeated in every system (physics, scripts, render,
+  replication), so it is an ECS storage concern: dense per-type component arrays with a stable per-tick body
+  index, not a collision-only fix. A uuid index in `ObjectManager` belongs to the same change.
 - Measured numbers with refresh on and off: TODO (developer to fill in).

@@ -97,6 +97,7 @@ ServerApp::ServerApp(LaunchOptions options)
   }
 
   m_collisionSystem->setThreadCount(physicsThreads);
+  PhysicsSystem::setThreadCount(physicsThreads);
   Log::info(LogCategory::physics, "Physics threads: " + std::to_string(physicsThreads)
     + (threadsFromEnvironment ? " (ECS3D_PHYSICS_THREADS)" : " (half of hardware_concurrency)"));
 
@@ -104,6 +105,11 @@ ServerApp::ServerApp(LaunchOptions options)
   const bool parallelResponse = parallelResponseSetting && std::string(parallelResponseSetting) == "1";
   m_collisionSystem->setParallelResponseEnabled(parallelResponse);
   Log::info(LogCategory::physics, std::string("Parallel response: ") + (parallelResponse ? "on" : "off"));
+
+  const char* diagnosticsSetting = std::getenv("ECS3D_COLLISION_DIAGNOSTICS");
+  const bool detailedTiming = !(diagnosticsSetting && std::string(diagnosticsSetting) == "0");
+  m_collisionSystem->setDetailedTimingEnabled(detailedTiming);
+  Log::info(LogCategory::physics, std::string("Collision diagnostics: ") + (detailedTiming ? "on" : "off"));
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
