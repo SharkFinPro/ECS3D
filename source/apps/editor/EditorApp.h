@@ -223,6 +223,9 @@ private:
 
   void onLoadScene(const uuids::uuid& sceneUUID);
 
+  // Makes the scene image (a screen rect) a drop target for scene assets; called from the scene overlay.
+  void acceptSceneDrop(float x, float y, float width, float height);
+
   void onUpdatePrefabBody(const uuids::uuid& assetUUID, const std::string& name, const std::string& body);
 
   void onLoadProject();

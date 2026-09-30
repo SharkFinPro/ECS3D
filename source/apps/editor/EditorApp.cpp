@@ -135,6 +135,8 @@ EditorApp::EditorApp(LaunchOptions options)
 
       m_viewportGizmo->update(objectManager, m_selection->objectUUID(), view, drawList, m_serverEditable,
                               snap, sceneHovered);
+
+      acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
     });
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
