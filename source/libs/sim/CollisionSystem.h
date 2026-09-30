@@ -3,6 +3,7 @@
 
 #include "broadphase/BroadPhase.h"
 #include "collisions/NarrowPhase.h"
+#include <objects/components/collisions/Collider.h>
 #include <cstdint>
 #include <compare>
 #include <memory>
@@ -64,8 +65,47 @@ public:
   void setBroadPhaseMode(BroadPhaseMode mode);
   [[nodiscard]] BroadPhaseMode getBroadPhaseMode() const { return m_broadPhaseMode; }
 
+  // On (the default), the tree path computes each contact in the parallel pass and the response pass
+  // reuses it while both colliders' geometry is unchanged. Off, the response pass always recomputes.
+  void setContactCacheEnabled(bool enabled) { m_contactCacheEnabled = enabled; }
+  [[nodiscard]] bool isContactCacheEnabled() const { return m_contactCacheEnabled; }
+
 private:
   std::vector<CollisionEdge> m_collisionEdges;
+
+  // Plain per-edge data, parallel to m_collisionEdges (tree path only), so the parallel pass rejects
+  // candidates without touching a shared_ptr.
+  struct EdgeInfo {
+    Object* object = nullptr;
+    Object* parent = nullptr;
+    Collider* collider = nullptr;
+    bool hasRigidBody = false;
+    uint32_t layer = 0;
+    uint32_t mask = 0;
+    BoundingBox box;
+    bool trigger = false;
+    uint64_t geometryKey = 0;
+  };
+
+  // A contact the parallel pass computed for one hit, valid while both geometry keys still match.
+  struct CachedContact {
+    bool computed = false;
+    std::optional<collisions::Contact> contact;
+    uint64_t selfKey = 0;
+    uint64_t otherKey = 0;
+  };
+
+  struct CandidateStats {
+    uint64_t narrowPhaseCalls = 0;
+    uint64_t contactsComputed = 0;
+  };
+
+  std::vector<EdgeInfo> m_edgeInfos;
+
+  // Per edge, index-for-index with that edge's hit list; empty on the sweep path or with the cache off.
+  std::vector<std::vector<CachedContact>> m_cachedContacts;
+
+  bool m_contactCacheEnabled = true;
 
   BroadPhaseMode m_broadPhaseMode = BroadPhaseMode::tree;
   BroadPhase m_broadPhase;
@@ -77,8 +117,16 @@ private:
     uint64_t ticks = 0;
     uint64_t candidates = 0;
     uint64_t narrowPhaseCalls = 0;
+    uint64_t contactsComputed = 0;
+    uint64_t contactsReused = 0;
+    uint64_t contactsRecomputed = 0;
     uint64_t reinserts = 0;
+    uint64_t gatherMicros = 0;
+    uint64_t warmSortMicros = 0;
     uint64_t broadPhaseMicros = 0;
+    uint64_t narrowMicros = 0;
+    uint64_t responseMicros = 0;
+    uint64_t eventsMicros = 0;
     uint64_t checkMicros = 0;
   };
   Counters m_counters;
@@ -101,25 +149,36 @@ private:
   [[nodiscard]] std::vector<size_t> responseOrder(
     const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const;
 
-  void findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
-
-  // Same filters and order as findCollisions, over the broad phase's candidate list instead of a sweep.
   // Returns how many times it called the narrow phase.
-  [[nodiscard]] uint64_t findCollisionsFromCandidates(const CollisionEdge& edge,
-                                                      const std::vector<int32_t>& candidates,
-                                                      std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+  [[nodiscard]] uint64_t findCollisions(const CollisionEdge& edge,
+                                        std::vector<std::shared_ptr<Object>>& collidedObjects) const;
 
-  void sweepCollisions(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions);
+  // Same filters and order as findCollisions, over the broad phase's candidate list instead of a sweep,
+  // reading the lean per-edge data. With the contact cache on, cachedContacts gets one entry per hit.
+  [[nodiscard]] CandidateStats findCollisionsFromCandidates(size_t edgeIndex,
+                                                            const std::vector<int32_t>& candidates,
+                                                            std::vector<std::shared_ptr<Object>>& collidedObjects,
+                                                            std::vector<CachedContact>& cachedContacts) const;
+
+  void sweepCollisions(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                       std::vector<uint64_t>& narrowPhaseCalls);
+
+  void buildEdgeInfos();
 
   void updateBroadPhase();
 
   void collideWithCandidates(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
-                             std::vector<uint64_t>& narrowPhaseCalls);
+                             std::vector<uint64_t>& narrowPhaseCalls, std::vector<uint64_t>& contactsComputed);
 
   void reportCounters();
 
-  static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
-                               const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt);
+  void handleCollisions(size_t edgeIndex, const std::shared_ptr<RigidBody>& rigidBody,
+                        const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt);
+
+  // The contact of edge edgeIndex's collider with its k-th hit: the cached one while both colliders'
+  // geometry is unchanged since it was computed, otherwise contactWith.
+  [[nodiscard]] std::optional<collisions::Contact> contactFor(size_t edgeIndex, size_t k,
+                                                              const std::shared_ptr<Object>& other);
 
   // A contact is a trigger (events fire, but no physical response) if either collider is flagged as one.
   static bool isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other);
