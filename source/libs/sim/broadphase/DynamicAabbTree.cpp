@@ -91,9 +91,11 @@ bool DynamicAabbTree::moveProxy(const int32_t proxyId, const Aabb& tight, const 
   const Node& node = m_nodes[static_cast<size_t>(proxyId)];
   assert(node.isLeaf());
 
+  const Aabb fat = makeFat(tight, displacement);
+
   if (node.aabb.contains(tight))
   {
-    const Aabb huge{ tight.min - glm::vec3(4.0f * margin), tight.max + glm::vec3(4.0f * margin) };
+    const Aabb huge{ fat.min - glm::vec3(4.0f * margin), fat.max + glm::vec3(4.0f * margin) };
     if (huge.contains(node.aabb))
     {
       return false;
@@ -101,7 +103,7 @@ bool DynamicAabbTree::moveProxy(const int32_t proxyId, const Aabb& tight, const 
   }
 
   removeLeaf(proxyId);
-  m_nodes[static_cast<size_t>(proxyId)].aabb = makeFat(tight, displacement);
+  m_nodes[static_cast<size_t>(proxyId)].aabb = fat;
   insertLeaf(proxyId);
 
   return true;

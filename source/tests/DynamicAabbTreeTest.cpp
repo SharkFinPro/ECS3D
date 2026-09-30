@@ -169,6 +169,29 @@ TEST(DynamicAabbTree, AProxyMovingInsideItsMarginIsNotReinserted)
   EXPECT_EQ(tree.getUserData(proxy), 7);
 }
 
+TEST(DynamicAabbTree, AProxyMovingAtASteadyVelocityIsNotReinsertedEveryStep)
+{
+  DynamicAabbTree tree;
+  Aabb tight = boxAround({ 0.0f, 0.0f, 0.0f }, { 0.5f, 0.5f, 0.5f });
+  const glm::vec3 step(0.0f, -0.15f, 0.0f);
+  const auto proxy = tree.createProxy(tight, 0, step);
+
+  int reinserts = 0;
+  for (int i = 0; i < 20; ++i)
+  {
+    tight = { tight.min + step, tight.max + step };
+    if (tree.moveProxy(proxy, tight, step))
+    {
+      ++reinserts;
+    }
+
+    EXPECT_TRUE(tree.getFatAabb(proxy).contains(tight));
+  }
+
+  EXPECT_GT(reinserts, 0);
+  EXPECT_LE(reinserts, 8);
+}
+
 TEST(DynamicAabbTree, TheFatBoxLeadsInTheDirectionOfMotion)
 {
   DynamicAabbTree tree;
