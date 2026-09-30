@@ -57,6 +57,7 @@ add_executable(${PROJECT_NAME}
   ColliderBoundsTest.cpp
   SleepingTest.cpp
   ContactRefreshTest.cpp
+  ParallelResponseTest.cpp
   SettingsStoreTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp
