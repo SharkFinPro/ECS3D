@@ -26,10 +26,22 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
+
+namespace {
+  constexpr uint64_t tickStatsInterval = 250;
+
+  uint64_t microsSince(const std::chrono::steady_clock::time_point start)
+  {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - start).count());
+  }
+}
 
 ServerApp::ServerApp(LaunchOptions options)
   : m_options(std::move(options)),
@@ -174,6 +186,12 @@ void ServerApp::run()
     m_timeAccumulator = plan.remainingAccumulator;
 
     const bool ticked = plan.steps > 0;
+    ++m_tickStats.loopIterations;
+    if (plan.steps == maxFixedStepsPerFrame)
+    {
+      ++m_tickStats.cappedIterations;
+    }
+
     for (int step = 0; step < plan.steps; ++step)
     {
       fixedUpdate(m_fixedUpdateDt);
@@ -191,9 +209,13 @@ void ServerApp::run()
     {
       // Replicate any runtime spawn/destroy the tick's scripts requested before the delta, so a client
       // has the object (or has dropped it) by the time the delta for this tick references it.
+      const auto broadcastStart = std::chrono::steady_clock::now();
+
       broadcastStructuralChanges();
 
       broadcastStateDelta();
+
+      m_tickStats.broadcastMicros += microsSince(broadcastStart);
     }
 
     // Every loop iteration rather than gated on `ticked`: a log line (e.g. a startup error) can happen
@@ -221,20 +243,57 @@ void ServerApp::fixedUpdate(const float dt) const
   {
     auto& objectManager = *scene->getObjectManager();
 
+    auto stageStart = std::chrono::steady_clock::now();
+
     m_scriptSystem->variableUpdate(objectManager);
     m_scriptSystem->fixedUpdate(objectManager, dt);
+    m_tickStats.scriptMicros += microsSince(stageStart);
+
+    stageStart = std::chrono::steady_clock::now();
     PhysicsSystem::fixedUpdate(objectManager, dt);
+    m_tickStats.physicsMicros += microsSince(stageStart);
+
+    stageStart = std::chrono::steady_clock::now();
     m_collisionSystem->fixedUpdate(objectManager, dt);
+    m_tickStats.collisionMicros += microsSince(stageStart);
 
     // Contact events for this tick: hand CollisionSystem's diffed pair lists to the scripts. Done here
     // in the app (not as a library call) so sim stays independent of scripting - the collision system
     // produces plain uuid pairs and ScriptSystem consumes them.
+    stageStart = std::chrono::steady_clock::now();
     dispatchCollisionEvents(objectManager);
+    m_tickStats.eventMicros += microsSince(stageStart);
+
+    m_tickStats.objectCount += objectManager.getAllObjects().size();
+    if (++m_tickStats.ticks >= tickStatsInterval)
+    {
+      reportTickStats();
+    }
   }
   catch (const std::exception& e)
   {
     Log::error(LogCategory::server, e.what());
   }
+}
+
+void ServerApp::reportTickStats() const
+{
+  const auto ticks = static_cast<double>(m_tickStats.ticks);
+
+  std::ostringstream message;
+  message << std::fixed << std::setprecision(1)
+          << "ticks=" << m_tickStats.ticks
+          << " objects=" << static_cast<double>(m_tickStats.objectCount) / ticks
+          << " scripts_us/tick=" << static_cast<double>(m_tickStats.scriptMicros) / ticks
+          << " physics_us/tick=" << static_cast<double>(m_tickStats.physicsMicros) / ticks
+          << " collision_us/tick=" << static_cast<double>(m_tickStats.collisionMicros) / ticks
+          << " events_us/tick=" << static_cast<double>(m_tickStats.eventMicros) / ticks
+          << " broadcast_us/tick=" << static_cast<double>(m_tickStats.broadcastMicros) / ticks
+          << " capped_iterations=" << m_tickStats.cappedIterations << "/" << m_tickStats.loopIterations;
+
+  Log::info(LogCategory::server, message.str());
+
+  m_tickStats = {};
 }
 
 void ServerApp::dispatchCollisionEvents(ObjectManager& objectManager) const

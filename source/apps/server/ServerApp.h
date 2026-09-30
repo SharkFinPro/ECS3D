@@ -89,6 +89,22 @@ private:
 
   void fixedUpdate(float dt) const;
 
+  // Per-stage time spent since the last stats line; fixedUpdate is const, hence mutable.
+  struct TickStats {
+    uint64_t ticks = 0;
+    uint64_t scriptMicros = 0;
+    uint64_t physicsMicros = 0;
+    uint64_t collisionMicros = 0;
+    uint64_t eventMicros = 0;
+    uint64_t objectCount = 0;
+    uint64_t broadcastMicros = 0;
+    uint64_t loopIterations = 0;
+    uint64_t cappedIterations = 0;
+  };
+  mutable TickStats m_tickStats;
+
+  void reportTickStats() const;
+
   // Feed this tick's collision enter/stay/exit pairs (from CollisionSystem) into the scripts. Bridges
   // sim and scripting at the app level so neither library depends on the other.
   void dispatchCollisionEvents(ObjectManager& objectManager) const;
