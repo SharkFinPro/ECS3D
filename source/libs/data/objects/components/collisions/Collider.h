@@ -91,6 +91,10 @@ protected:
   bool m_renderCollider = false;
 
   void invalidateBoundingBox();
+
+  // Fills the six bounds from the shape; a subclass may override with something cheaper as long as it
+  // yields exactly what six findFurthestPoint queries along the axes would.
+  virtual void computeBounds(BoundingBox& box);
 };
 
 

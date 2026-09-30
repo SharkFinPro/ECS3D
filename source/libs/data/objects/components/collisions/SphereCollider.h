@@ -30,6 +30,9 @@ public:
 
   void unpack(net::MessageReader& messageReader) override;
 
+protected:
+  void computeBounds(BoundingBox& box) override;
+
 private:
   ComponentVariable<float> m_radius = ComponentVariable(1.0f);
 

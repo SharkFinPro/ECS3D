@@ -28,19 +28,24 @@ const BoundingBox& Collider::getBoundingBox()
     return m_boundingBox;
   }
 
-  m_boundingBox.minX = findFurthestPoint({-1, 0, 0}).x;
-  m_boundingBox.maxX = findFurthestPoint({1, 0, 0}).x;
-
-  m_boundingBox.minY = findFurthestPoint({0, -1, 0}).y;
-  m_boundingBox.maxY = findFurthestPoint({0, 1, 0}).y;
-
-  m_boundingBox.minZ = findFurthestPoint({0, 0, -1}).z;
-  m_boundingBox.maxZ = findFurthestPoint({0, 0, 1}).z;
+  computeBounds(m_boundingBox);
 
   m_boundingBox.lastUpdateID = transformUpdateID;
   m_boundingBoxDirty = false;
 
   return m_boundingBox;
+}
+
+void Collider::computeBounds(BoundingBox& box)
+{
+  box.minX = findFurthestPoint({-1, 0, 0}).x;
+  box.maxX = findFurthestPoint({1, 0, 0}).x;
+
+  box.minY = findFurthestPoint({0, -1, 0}).y;
+  box.maxY = findFurthestPoint({0, 1, 0}).y;
+
+  box.minZ = findFurthestPoint({0, 0, -1}).z;
+  box.maxZ = findFurthestPoint({0, 0, 1}).z;
 }
 
 const BoundingBox& Collider::cachedBoundingBox() const

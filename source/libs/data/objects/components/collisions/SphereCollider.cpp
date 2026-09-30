@@ -115,6 +115,30 @@ glm::vec3 SphereCollider::findFurthestPoint(const glm::vec3& direction)
   return { 0, 0, 0 };
 }
 
+void SphereCollider::computeBounds(BoundingBox& box)
+{
+  updateTransformPointer();
+
+  const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
+  if (!transform)
+  {
+    box.minX = box.maxX = box.minY = box.maxY = box.minZ = box.maxZ = 0.0f;
+    return;
+  }
+
+  // The same operations, in the same order, as findFurthestPoint's direction * radius + position + offset.
+  const float radius = getScaledRadius(transform);
+  const glm::vec3 transformPosition = transform->getPosition();
+  const glm::vec3 offset = m_position.get();
+
+  box.minX = -1.0f * radius + transformPosition.x + offset.x;
+  box.maxX = 1.0f * radius + transformPosition.x + offset.x;
+  box.minY = -1.0f * radius + transformPosition.y + offset.y;
+  box.maxY = 1.0f * radius + transformPosition.y + offset.y;
+  box.minZ = -1.0f * radius + transformPosition.z + offset.z;
+  box.maxZ = 1.0f * radius + transformPosition.z + offset.z;
+}
+
 void SphereCollider::pack(net::Message& message) const
 {
   message.write(ComponentType::SubComponentType_sphereCollider);

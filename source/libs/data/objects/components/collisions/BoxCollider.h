@@ -46,6 +46,9 @@ public:
 
   void unpack(net::MessageReader& messageReader) override;
 
+protected:
+  void computeBounds(BoundingBox& box) override;
+
 private:
   std::array<glm::vec3, boxVertices.size()> m_transformedBoxVertices{};
 

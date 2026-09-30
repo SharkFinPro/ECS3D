@@ -6,6 +6,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
+#include <array>
+#include <cstddef>
 #include <limits>
 #include <stdexcept>
 #include <Protocol.h>
@@ -165,6 +167,52 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
   }
 
   return furthestVertex;
+}
+
+void BoxCollider::computeBounds(BoundingBox& box)
+{
+  updateTransformPointer();
+
+  if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
+  {
+    if (m_meshDirty || m_currentTransformUpdateID != transform->getUpdateID())
+    {
+      generateTransformedMesh(transform);
+      m_meshDirty = false;
+    }
+  }
+
+  // Same selection rule as findFurthestPoint, once per axis direction: start from lowest() and a zero
+  // vertex, and take a vertex only on a strictly greater dot, so an all-NaN axis stays at zero.
+  constexpr std::array<glm::vec3, 6> directions = {{
+    {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+    {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f}
+  }};
+
+  std::array<float, 6> largestDots;
+  largestDots.fill(std::numeric_limits<float>::lowest());
+
+  std::array<glm::vec3, 6> furthest;
+  furthest.fill(glm::vec3{ 0, 0, 0 });
+
+  for (const auto& vertex : m_transformedBoxVertices)
+  {
+    for (size_t i = 0; i < directions.size(); ++i)
+    {
+      if (const float currentDot = dot(vertex, directions[i]); currentDot > largestDots[i])
+      {
+        largestDots[i] = currentDot;
+        furthest[i] = vertex;
+      }
+    }
+  }
+
+  box.minX = furthest[0].x;
+  box.maxX = furthest[1].x;
+  box.minY = furthest[2].y;
+  box.maxY = furthest[3].y;
+  box.minZ = furthest[4].z;
+  box.maxZ = furthest[5].z;
 }
 
 void BoxCollider::pack(net::Message& message) const
