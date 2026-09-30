@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <array>
 #include <limits>
-#include <map>
 #include <stdexcept>
 #include <utility>
 
@@ -143,6 +142,11 @@ glm::vec3 clampToFootprint(const glm::vec3& point, const BoxGeometry& box, const
 Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
   : m_collider(&collider), m_otherCollider(&otherCollider)
 {
+  m_vertices.reserve(32);
+  m_faces.reserve(64);
+  m_edgesScratch.reserve(32);
+  m_uniqueEdgesScratch.reserve(32);
+
   generatePolytope(simplex);
 
   EPA();
@@ -434,9 +438,9 @@ bool Polytope::closeEnough(const float minDistance, const std::optional<float>& 
   return deltaX + deltaY + deltaZ < minDist;
 }
 
-std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist)
+const std::vector<Edge>& Polytope::deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist)
 {
-  std::vector<Edge> edges;
+  m_edgesScratch.clear();
 
   for (int i = 0; i < m_faces.size();)
   {
@@ -446,9 +450,9 @@ std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& c
 
     if (auto vectorToSupportPoint = supportPoint - facePoint; sameDirection(normal, vectorToSupportPoint))
     {
-      edges.emplace_back( faceVertices[0], faceVertices[1] );
-      edges.emplace_back( faceVertices[1], faceVertices[2] );
-      edges.emplace_back( faceVertices[2], faceVertices[0] );
+      m_edgesScratch.emplace_back( faceVertices[0], faceVertices[1] );
+      m_edgesScratch.emplace_back( faceVertices[1], faceVertices[2] );
+      m_edgesScratch.emplace_back( faceVertices[2], faceVertices[0] );
 
       std::swap(m_faces[i], m_faces.back());
       m_faces.pop_back();
@@ -466,24 +470,32 @@ std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& c
     ++i;
   }
 
-  std::map<Edge, int> edgeCount;
-  for (const auto& edge : edges)
+  const auto sorted = [](const Edge& edge)
   {
-    auto sortedEdge = edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first);
+    return edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first);
+  };
 
-    ++edgeCount[sortedEdge];
-  }
-
-  std::vector<Edge> uniqueEdges;
-  for (const auto& edge : edges)
+  m_uniqueEdgesScratch.clear();
+  for (const auto& edge : m_edgesScratch)
   {
-    if (auto sortedEdge = edge.first < edge.second ? edge : std::make_pair(edge.second, edge.first); edgeCount[sortedEdge] == 1)
+    const auto sortedEdge = sorted(edge);
+
+    int count = 0;
+    for (const auto& candidate : m_edgesScratch)
     {
-      uniqueEdges.push_back(edge);
+      if (sorted(candidate) == sortedEdge)
+      {
+        ++count;
+      }
+    }
+
+    if (count == 1)
+    {
+      m_uniqueEdgesScratch.push_back(edge);
     }
   }
 
-  return uniqueEdges;
+  return m_uniqueEdgesScratch;
 }
 
 bool Polytope::isFacingInward(const FaceData& faceData) const

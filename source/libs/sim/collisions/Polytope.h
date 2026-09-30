@@ -63,6 +63,9 @@ private:
   std::vector<Face> m_faces;
   ClosestFaceData m_closestFaceData{};
 
+  std::vector<Edge> m_edgesScratch;
+  std::vector<Edge> m_uniqueEdgesScratch;
+
   void EPA();
 
   void generatePolytope(Simplex& simplex);
@@ -74,7 +77,7 @@ private:
   static bool closeEnough(float minDistance, const std::optional<float>& previousMinDistance,
                           glm::vec3 currentClosestPoint, const std::optional<glm::vec3>& previousClosestPoint);
 
-  std::vector<Edge> deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist);
+  const std::vector<Edge>& deconstructPolytope(glm::vec3 supportPoint, float& currentMinDist);
 
   [[nodiscard]] bool isFacingInward(const FaceData& faceData) const;
 
