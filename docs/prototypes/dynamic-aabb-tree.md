@@ -102,6 +102,110 @@ the choice once. With it off, nothing changes and the equivalence tests still ap
   `btPersistentManifold` does) and refreshes them from both bodies' full transforms, rotation included, then
   drops points that drifted apart.
 
+## Round 5: threads, more parallel stages, diagnostics, island-parallel response
+
+Everything in this round is bit-exact with the serial tree path (and so with the sweep baseline, whose
+`num_threads(6)` pragma is untouched). `ParallelResponseTest` checks it.
+
+### Thread count
+
+- `CollisionSystem::setThreadCount(int)` / `getThreadCount()`; library default 6, values under one clamp to one.
+  Every tree-path OpenMP region uses it (each copies it into a local `const int threads` for `num_threads`).
+- The server reads `ECS3D_PHYSICS_THREADS=<n>` (1 to 256); unset or invalid it uses
+  `max(1, hardware_concurrency() / 2)`, a guess at the physical core count. The choice is logged once with the
+  other startup lines, and every stats line carries `threads=<n>`.
+- The default is a guess. OpenMP with more threads than physical cores (hyperthreads) often does not help, since
+  the regions here are short and memory-bound; measure 6, 8, 12 and 24 on the target machine.
+
+### What runs in parallel now
+
+Tree mode only. In order of the tick:
+
+- Bounding box warm (`getBoundingBox` on every edge). Safe because each edge is a distinct collider (component
+  lookup walks to the parent only for `rigidBody`, never for a collider) and `getBoundingBox` writes only that
+  collider's own caches (`m_boundingBox`, `m_transform_ptr` when expired, a box's transformed mesh) while only
+  reading Transforms, parents included, through `getComponent` on an `unordered_map`. Nothing writes a Transform
+  during the warm. The `shared_ptr` copies it makes are atomic.
+- `buildEdgeInfos`: the vector is sized first and each iteration writes its own slot. `EdgeInfo::body` is now
+  always set (the sleeping-only fields `asleep`/`islandId` still are not).
+- Broad phase: proxy moves, creates and destroys stay serial. The queries for the moved proxies then run in
+  parallel into one vector per moved proxy (the trees are read-only by then) and merge serially before the
+  existing sort and unique, so the pair cache is identical.
+- Narrow phase (already parallel; now uses the setting).
+- Still serial: the edge sort, `responseOrder`, `recordCollisionEvents`, the sleeping pass, candidate list build.
+
+### Island-parallel response (`setParallelResponseEnabled`, default off)
+
+The server enables it with `ECS3D_PARALLEL_RESPONSE=1` and logs the choice once. Tree mode only; with it off
+nothing changes.
+
+Why it is exact: a response changes only the body it resolves and, when the other side is dynamic, that body,
+and only reads static geometry. So bodies that share no hit share no state. `respondInParallel` builds a
+union-find keyed by the resolved `RigidBody*` (a child collider's body is its parent's), joins the two bodies of
+every hit where the other side has a body, then lists each component's edges in the order the global
+`responseOrder` gave them and resolves the components on separate threads (largest first, dynamic schedule, each
+component serial). Two components never touch each other, and within a component the order and the arithmetic
+are the serial ones, so the result is bit-identical.
+
+Two deliberate widenings beyond "non-trigger hits between dynamic bodies", both for safety:
+
+- Trigger hits join too. `handleCollisions` measures the contact of every hit (to score them) before skipping
+  triggers, and a contact measurement can regenerate the other collider's mesh cache from that body's
+  Transform, which another thread may be moving.
+- A body joins the body of its nearest ancestor that has one. A nested body's world placement reads its
+  ancestors' Transforms, which the ancestor body's response writes.
+
+Audit of state touched during a response that is not the pair's own (all checked against the source):
+
+- `PhysicsSystem.cpp` has no static or function-local static state, no globals beyond `constexpr` constants,
+  no `Log` calls and no lazily initialized caches. It throws `runtime_error` only on a null `other`, which
+  cannot happen from here (an exception escaping an OpenMP region would terminate).
+- `m_counters` updates in `contactFor`/`handleCollisions` and `m_contactsRefreshedTotal`: made per-task. Both
+  functions are now `const` and take a `ResponseCounters&`; each component keeps its own and they are summed
+  after the loop.
+- Reads of `m_collisionEdges`, `m_edgeInfos`, `m_cachedContacts`, `perEdgeCollisions`: read-only during the pass.
+  Each edge belongs to exactly one component, so no `m_cachedContacts` slot is shared.
+- Sleeping bookkeeping runs after the response, not during it. An asleep edge is skipped as before, but a
+  sleeper that an awake body touches is mutated by that body's response, so it is joined to it.
+- Collider caches: a static collider's mesh is regenerated only when its own Transform update id changes, and
+  statics do not move mid-tick and were warmed at the start of the tick, so response reads of a static collider
+  never write. A dynamic collider's mesh may be regenerated by a response, but only by a thread holding its
+  component. `m_transform_ptr` is set during the warm for every edge.
+- Transform and `geometryKeyOf` reads walk ancestor chains: covered by the ancestor join above. A body with no
+  body anywhere up its chain has a chain nobody writes.
+- `shared_ptr` copies (`getComponent`, `other->getComponent`) are atomic reference count updates on shared
+  control blocks; nothing else is shared.
+
+Nothing had to be refused and nothing is inexact. The cost of building components is serial (`resp_setup_us`);
+the per-hit body lookup (`hit_graph_us`) is parallel.
+
+### Diagnostics on the stats line
+
+- `resp_recompute_us`, `resp_refresh_us`, `resp_physics_us` (per tick): time in exact recomputes inside
+  `contactFor`, in refreshes (the refresh attempt, whether or not it fell back), and in
+  `PhysicsSystem::handleCollision`. Under the parallel response they are sums over all threads, so they can
+  exceed `response_us`, which stays the wall time of the pass. The rest of a serial pass is the difference
+  (mostly reuse checks, scoring and sorting).
+- `hit_graph_us` (per-hit body lookup, shared by the island diagnostics and the parallel response),
+  `diag_us` (island and sleep-blocker analysis) and, with the parallel response on, `resp_setup_us`,
+  `resp_components/tick`, `resp_largest_component_edges/tick`. Diagnostics can be switched off with
+  `setDiagnosticsEnabled(false)`; their cost is in `hit_graph_us` and `diag_us`, and the sleep-blocker part is
+  inside `events_us`.
+- Island structure of this tick's hits: `islands/tick`, `largest_island/tick` (average), `largest_island_max`
+  (over the reporting interval) and `bodies_in_islands_ge_64/tick`. Union-find over dynamic bodies joined by
+  any non-trigger hit where both sides have a body; static contacts do not join, and asleep edges are left
+  out. If `largest_island` is close to the awake body count, an island-parallel response has nothing to split.
+- Why awake bodies do not sleep (sleeping on): `awake/tick` and, as per-tick counts of awake bodies at the end
+  of the tick, `no_sleep_unsupported/fast/spinning/forces/island_blocked`. The criteria are counted
+  independently, so one body can appear in several. `island_blocked` means the body itself rested for
+  `ticksToSleep` ticks but its island did not sleep. Then two histograms over supported awake bodies:
+  `supported_speed_hist(<.001/<.004/<.01/<.02/<.05/>=.05)` in per-tick displacement units and
+  `supported_spin_hist(<1/<3/<10/<30/>=30)` in degrees per second.
+  How to read them: if most supported bodies sit in the first bucket or two and `island_blocked` is high, the
+  thresholds are fine and one restless body keeps a big island awake. If they cluster above the thresholds
+  (say 0.004 to 0.02, or spin over 3), the stacked solver never quite settles at these values and either the
+  thresholds or the solver's resting behavior has to change.
+
 ## Toggle
 
 The server reads the `ECS3D_BROADPHASE` environment variable at startup. `sweep` selects the old sweep;
@@ -201,6 +305,15 @@ any, which is the server falling behind.
   parent moved is caught by the ancestor-sum key, but anything that changes geometry without bumping an update
   id (the known child-cache staleness) is not.
 - Sleeping only exists in tree mode.
+- The physics thread default (half of `hardware_concurrency`) is a guess at the physical core count, and the
+  library default of 6 exists only to keep tests and old behavior unchanged. With OpenMP, using hyperthreads as
+  well may not help, and each region pays fork/join cost, so short regions (the warm, edge data) may gain little.
+- The parallel response's component build is serial (`resp_setup_us`) and unions every hit, triggers included,
+  plus ancestor bodies; a scene that is one connected pile makes it a single component and a pure overhead.
+- A trigger's contact is still measured (and its result used only to score hits) in every response; skipping it
+  would cut work and remove the one reason triggers join components.
+- The exception-safety note for the narrow phase applies to the parallel response as well: an exception in a
+  response task terminates the process instead of surfacing from the serial pass. None is expected.
 - A static collider moved into a sleeping body that it was not touching when the island fell asleep is not
   noticed: the sleeper skips its narrow phase and only re-checks what it touched.
 - A sleeping body whose collider is removed has no edge left to wake it, and stays asleep until a `reset()`.
@@ -216,4 +329,12 @@ any, which is the server falling behind.
 - The real fix is a solver over cached contacts: sequential impulses on cached manifolds, position correction
   that does not re-run GJK/EPA, and independent contact groups (islands or colors) solved in parallel. That is a
   physics rewrite, and it has to re-home stack load hand-off, friction holding, `layFlush` and landing on a face.
+- The island-parallel response (round 5) cannot help a single connected pile: the pile is one component and
+  runs serially however many threads there are. It only pays when a scene is many separated groups. Splitting a
+  connected pile needs a solver that can run contacts of one island concurrently: graph coloring of the contact
+  graph, or a Jacobi / parallel Gauss-Seidel formulation with a fixed iteration count. Both change results, so
+  they belong to the solver rewrite above rather than to this prototype.
+- Read the round 5 diagnostics before tuning anything: `largest_island` says whether splitting can help at all,
+  and the sleep-blocker counts and speed histograms say whether the few sleepers are a threshold problem or a
+  solver that never settles a stack.
 - Measured numbers with refresh on and off: TODO (developer to fill in).
