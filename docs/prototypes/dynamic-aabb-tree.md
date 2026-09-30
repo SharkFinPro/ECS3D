@@ -285,6 +285,96 @@ bit-exact over 240 free bodies for 200 ticks (and over the clump scene with refr
 last path asserted to be `serial` and `parallel`; a scene with nested bodies must report `serialNested` and stay
 bit-exact; a scene under the body threshold stays serial.
 
+## Round 7: a reproducible benchmark and sleeping experiments
+
+Stress runs were not comparable: each loaded a different random Scene 3, and scaling it by duplicating objects in
+the editor starts every copy inside its original, so it measured an explosion rather than a pile. Round 7 makes
+the scene repeatable and scalable, adds a headless benchmark, and adds switches to test why a slowly settling pile
+sleeps so little.
+
+### Scene 3 options
+
+`buildDefaultProject` takes a `Scene3Options` (seed, grid size, layer count, overlap-free). The defaults are the
+built-in scene exactly: grid 6, 15 layers, spacing 5, seeded from `std::random_device`. A seed also makes every
+Scene 3 object uuid repeatable (drawn from the seed), because uuid order decides pair and event order, so two
+builds of one seed are identical JSON. Overlap-free widens the spacing to 6.8 so no two bounding boxes start
+overlapping (the largest body, turned to its worst angle, plus both jitters); grid 12 and 15 layers gives 2,160
+bodies clear of each other. The ground is 200 by 200, which covers grid 12.
+
+The server reads `ECS3D_SCENE3_SEED` (0 to 4294967295), `ECS3D_SCENE3_GRID` (1 to 64) and `ECS3D_SCENE3_LAYERS`
+(1 to 200). An invalid value is warned about and ignored. When any of the three is set the layout is overlap-free
+(the spacing changes from the built-in 5), and one line logs the result.
+
+### ECS3DPhysicsBench
+
+A headless console executable in `source/apps/bench/`. It links only `ECS3DData`, `ECS3DSim` and `ECS3DLog`, and
+compiles `../server/DefaultProject.cpp` in directly, as the test target does: no CLR, scripts or networking. It is
+`EXCLUDE_FROM_ALL` and not a CTest test, so build it on request:
+
+    cmake --build cmake-build-ecs3d-release --target ECS3DPhysicsBench
+
+It builds the default project with the Scene 3 options, loads it the way the server does, selects Scene 3, starts
+it, and steps `PhysicsSystem::fixedUpdate` then `CollisionSystem::fixedUpdate` at dt = 1/50 back to back. The
+usual 250-tick stats lines print through a `ConsoleSink`; the last line is a `SUMMARY` with the flags, body count,
+wall time, mean/median/p95/max per-tick microseconds (physics plus collision) and the final asleep count.
+
+    ECS3DPhysicsBench --grid 12 --layers 15 --ticks 3000 --seed 1
+
+Flags (each takes a value): `--ticks N` (1500), `--seed S` (1), `--grid G` (6), `--layers L` (15), `--threads T`
+(half of hardware_concurrency), `--broadphase sweep|tree` (tree), `--refresh 0|1` (1), `--sleep 0|1` (1),
+`--parallel-response 0|1` (0), `--diagnostics 0|1` (0), and the sleep flags `--sleep-linear F`, `--sleep-angular F`,
+`--sleep-ticks N`, `--sleep-support falling|contact`, `--sleep-mode island|grounded`. Every run is seeded, so
+overlap-free spacing is always on, and the same flags give the same scene.
+
+### Sleeping experiments
+
+All are switches with the old behavior as the default; the server takes them from the environment, the bench from
+flags, and the stats line prints `sleep_mode`, `sleep_support` and the thresholds.
+
+- Thresholds: `CollisionSystem::setSleepThresholds(linear, angularDegrees, ticks)`; `ECS3D_SLEEP_LINEAR`,
+  `ECS3D_SLEEP_ANGULAR`, `ECS3D_SLEEP_TICKS`. Defaults are the `Sleeping.h` constants.
+- Support test, `ECS3D_SLEEP_SUPPORT=falling|contact`. `falling` (default) is `!getNextFalling()`. `contact` counts
+  a body as supported when this tick at least one non-trigger contact, against static geometry or another body,
+  pushes it out with a normal of y >= 0.5 (it rests on something). It reads the contact the parallel narrow phase
+  cached for that hit (`verticalRole`), not the one the response pass measured, because the response pass does
+  not keep its contacts; that contact is from before this tick's responses, which does not change which way it
+  points in practice. With the contact cache off no hit has a contact, so nothing counts as supported.
+- Sleep mode, `ECS3D_SLEEP_MODE=island|grounded`. `island` (default) is the all-or-nothing union-find.
+  `grounded` puts a body to sleep when it is eligible (rest ticks reached, support test passed) and every body it
+  rests on this tick is static or already asleep, sweeping until a pass adds nobody, so a pile sleeps from the
+  bottom up. Deviations from the brief, on purpose:
+  - Every sleeping body gets its own island id, not its support group's. A shared id would wake the whole stack
+    whenever any member is disturbed, which is what island mode does. Locality comes from an explicit closure
+    instead: each sleep record remembers which hits its body rests on (`SleepHit::supportedBy`), and
+    `wakeUnsupportedSleepers` wakes every sleeper resting on something awake or gone, upward until none is left,
+    every tick after the wake requests. A body the physics pass wakes (force, velocity, moved) therefore also wakes
+    what rests on it, that same tick.
+  - The awake-neighbor wake rules are relaxed. An awake body touching a sleeper wakes it unless the toucher moves
+    slower than `gentleContactSpeed` (0.02 per tick) and the contact is a real one, and a sleeper only wakes for
+    an awake or moved dynamic hit when it rests on that hit. Anything else, a lateral neighbor included, has to
+    push the sleeper for real, which shows as its own geometry key changing. Without this a sleeper next to a
+    creeping awake neighbor would be woken the tick after it fell asleep. Static hits keep the old rules.
+
+To compare, run the same flags with one switch changed and read `asleep_bodies`, `fell_asleep/tick` and
+`woke/tick` (equal means churn) on the stats lines, and the summary's `final_asleep`, for example:
+
+    ECS3DPhysicsBench --grid 12 --layers 15 --ticks 3000 --seed 1 --diagnostics 1
+    ECS3DPhysicsBench --grid 12 --layers 15 --ticks 3000 --seed 1 --diagnostics 1 --sleep-support contact
+    ECS3DPhysicsBench --grid 12 --layers 15 --ticks 3000 --seed 1 --diagnostics 1 --sleep-support contact --sleep-mode grounded
+
+With diagnostics on, the blocker counts use the selected support test. Nothing here has been run: the numbers are
+for the developer to fill in.
+
+### Tests
+
+`DefaultProjectTest` gains a seeded Scene 3 case (same seed, same JSON; different seed, different JSON) and a
+grid 12 / 15 layer case (2,160 bodies, no two conservative bounding boxes overlapping). `SleepingTest` keeps its
+cases and gains: the contact support test sleeping a grounded box and not a box in flight; grounded mode sleeping a
+stack of five bottom-up (no body asleep while the one below is awake, all asleep within the bound), one island
+per body, the falling support test in grounded mode; a box dropped on a grounded stack waking its top (how far the
+wake spreads is recorded as test properties, not asserted, since it is what the experiment measures) and the stack
+settling again; and removing the ground waking a whole grounded stack in one tick.
+
 ## Toggle
 
 The server reads the `ECS3D_BROADPHASE` environment variable at startup. `sweep` selects the old sweep;
@@ -399,6 +489,16 @@ any, which is the server falling behind.
   noticed: the sleeper skips its narrow phase and only re-checks what it touched.
 - A sleeping body whose collider is removed has no edge left to wake it, and stays asleep until a `reset()`.
 - A moving trigger overlapping a sleeper wakes its island every tick its geometry key changes.
+- Grounded mode reads support from the parallel pass's cached contacts, so a contact that has rotated past the
+  0.5 normal threshold under this tick's responses still counts as it was measured, and a hit with no cached
+  contact (cache off, trigger) never counts as support.
+- Grounded mode gives every sleeper its own island id, so `asleep_islands` equals `asleep_bodies`, and each wake
+  re-scans every sleep record (`wakeUnsupportedSleepers`, linear in records and hits per tick while grounded).
+- In grounded mode a sleeper is woken only by a contact that pushes it (its own geometry key changes), by an awake
+  toucher faster than 0.02 per tick, or by losing what it rests on. A slow push that moves it less than the
+  geometry key notices would not wake it; that has not been measured.
+- Scene 3's `overlapFree` layout changes the spacing (5 to 6.8), so seeded runs are not the same pile as the
+  built-in scene, only a repeatable one.
 
 ## Recommendation for the real implementation
 

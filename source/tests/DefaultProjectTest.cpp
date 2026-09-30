@@ -15,6 +15,7 @@
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
@@ -23,6 +24,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
   // The server's tick.
@@ -185,4 +187,94 @@ TEST(DefaultProject, LoadsAndItsFirstSceneSettles)
   EXPECT_NEAR(fixtures::positionOf(block).y, -8.0f, 0.1f);
   EXPECT_LT(glm::length(blockBody->getVelocity()), 0.01f);
   EXPECT_LT(glm::length(blockBody->getAngularVelocity()), 0.05f);
+}
+
+namespace {
+  Scene3Options seededScene3(const uint32_t seed, const int grid, const int layers)
+  {
+    Scene3Options options;
+    options.seed = seed;
+    options.gridSize = grid;
+    options.layerCount = layers;
+    options.overlapFree = true;
+
+    return options;
+  }
+
+  std::vector<nlohmann::json> bodiesOf(const nlohmann::json& objects)
+  {
+    std::vector<nlohmann::json> bodies;
+    for (const auto& object : objects)
+    {
+      const auto name = object.at("name").get<std::string>();
+      if (name == "Block" || name == "Sphere")
+      {
+        bodies.push_back(object);
+      }
+    }
+
+    return bodies;
+  }
+
+  glm::vec3 positionOfJson(const nlohmann::json& object)
+  {
+    for (const auto& component : object.at("components"))
+    {
+      if (component.at("type") == "Transform")
+      {
+        return vec3Of(component.at("position"));
+      }
+    }
+
+    throw std::runtime_error(object.at("name").get<std::string>() + " has no Transform");
+  }
+}
+
+TEST(DefaultProject, ASeededScene3IsTheSameEveryTimeAndADifferentSeedIsNot)
+{
+  const auto first = buildDefaultProject(seededScene3(7, 6, 15));
+  const auto second = buildDefaultProject(seededScene3(7, 6, 15));
+  const auto other = buildDefaultProject(seededScene3(8, 6, 15));
+
+  EXPECT_EQ(sceneObjects(first, "Scene 3"), sceneObjects(second, "Scene 3"));
+  EXPECT_NE(sceneObjects(first, "Scene 3"), sceneObjects(other, "Scene 3"));
+}
+
+TEST(DefaultProject, ScalingScene3UpStartsEveryBodyClearOfEveryOther)
+{
+  const auto project = buildDefaultProject(seededScene3(1, 12, 15));
+  const auto bodies = bodiesOf(sceneObjects(project, "Scene 3"));
+
+  ASSERT_EQ(bodies.size(), 2160u);
+
+  const float sqrt3 = std::sqrt(3.0f);
+
+  struct Box {
+    glm::vec3 center;
+    float radius;
+  };
+
+  std::vector<Box> boxes;
+  for (const auto& body : bodies)
+  {
+    const auto scale = scaleOf(body);
+    boxes.push_back({ positionOfJson(body), std::max({ scale.x, scale.y, scale.z }) * sqrt3 });
+  }
+
+  int overlaps = 0;
+  for (size_t i = 0; i < boxes.size(); ++i)
+  {
+    for (size_t j = i + 1; j < boxes.size(); ++j)
+    {
+      const float reach = boxes[i].radius + boxes[j].radius;
+      const auto apart = glm::abs(boxes[i].center - boxes[j].center);
+
+      if (apart.x < reach && apart.y < reach && apart.z < reach)
+      {
+        ++overlaps;
+      }
+    }
+  }
+
+  EXPECT_EQ(overlaps, 0);
 }

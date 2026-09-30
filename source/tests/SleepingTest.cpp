@@ -265,3 +265,144 @@ TEST(Sleeping, NothingSleepsWhileSleepingIsDisabled)
 
   EXPECT_FALSE(anyAsleep(sim));
 }
+
+namespace {
+  struct GroundedSim : Sim {
+    explicit GroundedSim(const SleepSupport support)
+    {
+      collisions.setSleepMode(SleepMode::grounded);
+      collisions.setSleepSupport(support);
+    }
+  };
+
+  // No body sleeps while the one below it is awake.
+  bool sleepsFromTheBottomUp(const Sim& sim)
+  {
+    for (size_t i = 1; i < sim.boxes.size(); ++i)
+    {
+      if (asleep(sim.boxes[i]) && !asleep(sim.boxes[i - 1]))
+      {
+        return false;
+      }
+    }
+
+    return true;
+  }
+}
+
+TEST(Sleeping, TheContactSupportTestLetsABoxOnTheGroundFallAsleep)
+{
+  Sim sim;
+  sim.collisions.setSleepSupport(SleepSupport::contact);
+  const auto box = sim.addBox({ 0.0f, 0.75f, 0.0f });
+
+  EXPECT_TRUE(sim.stepUntil([&] { return asleep(box); }, 200));
+}
+
+TEST(Sleeping, TheContactSupportTestKeepsABoxInFlightAwake)
+{
+  Sim sim;
+  sim.collisions.setSleepSupport(SleepSupport::contact);
+  const auto box = sim.addBox({ 0.0f, 50.0f, 0.0f });
+
+  for (int tick = 0; tick < 30; ++tick)
+  {
+    sim.step();
+
+    ASSERT_FALSE(asleep(box)) << "tick " << tick;
+  }
+}
+
+TEST(Sleeping, GroundedModeSleepsAStackOfFiveFromTheBottomUp)
+{
+  GroundedSim sim(SleepSupport::contact);
+  buildStack(sim, 5);
+
+  bool settled = false;
+  for (int tick = 0; tick < settleTicks && !settled; ++tick)
+  {
+    sim.step();
+
+    ASSERT_TRUE(sleepsFromTheBottomUp(sim)) << "tick " << tick;
+    settled = allAsleep(sim);
+  }
+
+  EXPECT_TRUE(settled);
+}
+
+TEST(Sleeping, GroundedModeGivesEveryBodyItsOwnIsland)
+{
+  GroundedSim sim(SleepSupport::contact);
+  buildStack(sim, 3);
+
+  ASSERT_TRUE(sim.stepUntil([&] { return allAsleep(sim); }, settleTicks));
+
+  EXPECT_NE(bodyOf(sim.boxes[0])->getIslandId(), bodyOf(sim.boxes[1])->getIslandId());
+  EXPECT_NE(bodyOf(sim.boxes[1])->getIslandId(), bodyOf(sim.boxes[2])->getIslandId());
+}
+
+TEST(Sleeping, GroundedModeWithTheFallingSupportTestSleepsAStackToo)
+{
+  GroundedSim sim(SleepSupport::falling);
+  buildStack(sim, 3);
+
+  bool settled = false;
+  for (int tick = 0; tick < settleTicks && !settled; ++tick)
+  {
+    sim.step();
+
+    ASSERT_TRUE(sleepsFromTheBottomUp(sim)) << "tick " << tick;
+    settled = allAsleep(sim);
+  }
+
+  EXPECT_TRUE(settled);
+}
+
+TEST(Sleeping, ABoxDroppedOnAGroundedStackWakesItsTopAndTheStackSettlesAgain)
+{
+  GroundedSim sim(SleepSupport::contact);
+  buildStack(sim, 3);
+
+  ASSERT_TRUE(sim.stepUntil([&] { return allAsleep(sim); }, settleTicks));
+
+  const auto stackTop = fixtures::positionOf(sim.boxes[2]).y + 0.5f;
+  const auto dropped = sim.addBox({ 0.0f, stackTop + 1.5f, 0.0f });
+
+  bool topWoke = false;
+  for (int tick = 0; tick < 200 && !topWoke; ++tick)
+  {
+    sim.step();
+    topWoke = !asleep(sim.boxes[2]);
+  }
+
+  ASSERT_TRUE(topWoke);
+  EXPECT_FALSE(asleep(dropped));
+
+  // How far the wake spread is what the experiment measures; it is reported rather than required.
+  RecordProperty("bottom_asleep_when_top_woke", asleep(sim.boxes[0]) ? 1 : 0);
+  RecordProperty("middle_asleep_when_top_woke", asleep(sim.boxes[1]) ? 1 : 0);
+
+  EXPECT_TRUE(sim.stepUntil([&] { return allAsleep(sim); }, settleTicks));
+}
+
+TEST(Sleeping, RemovingTheGroundWakesAGroundedStackFromTheBottomUpInOneTick)
+{
+  GroundedSim sim(SleepSupport::contact);
+  buildStack(sim, 3);
+
+  ASSERT_TRUE(sim.stepUntil([&] { return allAsleep(sim); }, settleTicks));
+
+  const auto restingHeight = fixtures::positionOf(sim.boxes[0]).y;
+
+  sim.scene.objectManager->removeObject(sim.ground);
+  sim.scene.objectManager->deleteObjectsMarkedForDeletion();
+  sim.step();
+
+  EXPECT_FALSE(asleep(sim.boxes[0]));
+  EXPECT_FALSE(asleep(sim.boxes[1]));
+  EXPECT_FALSE(asleep(sim.boxes[2]));
+
+  sim.stepFor(100);
+
+  EXPECT_LT(fixtures::positionOf(sim.boxes[0]).y, restingHeight - 1.0f);
+}
