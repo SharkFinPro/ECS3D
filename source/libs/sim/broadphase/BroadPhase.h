@@ -38,6 +38,9 @@ public:
 
   void update(std::span<const BroadPhaseInput> inputs);
 
+  // Threads for the per-proxy tree queries. The result does not depend on it.
+  void setThreadCount(const int threads) { m_threadCount = threads < 1 ? 1 : threads; }
+
   // Canonical keys, (min proxy id << 32) | max proxy id, sorted ascending.
   [[nodiscard]] std::span<const uint64_t> getPairs() const { return m_pairs; }
 
@@ -73,6 +76,7 @@ private:
   std::vector<uint64_t> m_pairs;
   std::vector<int32_t> m_moved;
   uint32_t m_stamp = 0;
+  int m_threadCount = 6;
   Stats m_stats;
 
   [[nodiscard]] DynamicAabbTree& treeFor(const Proxy& proxy)
@@ -88,6 +92,9 @@ private:
   [[nodiscard]] static uint64_t makePair(int32_t a, int32_t b);
 
   [[nodiscard]] int32_t createProxy(const BroadPhaseInput& input);
+
+  // Read-only over the trees and proxies, so it can run for many proxies at once.
+  void collectPairsFor(int32_t id, std::vector<uint64_t>& hits) const;
 };
 
 #endif //BROADPHASE_H

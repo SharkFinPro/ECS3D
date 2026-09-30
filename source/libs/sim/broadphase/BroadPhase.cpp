@@ -56,6 +56,30 @@ int32_t BroadPhase::createProxy(const BroadPhaseInput& input)
   return id;
 }
 
+void BroadPhase::collectPairsFor(const int32_t id, std::vector<uint64_t>& hits) const
+{
+  const Proxy& proxy = m_proxies[static_cast<size_t>(id)];
+  const Aabb fat = treeFor(proxy).getFatAabb(proxy.treeProxyId);
+
+  const auto addHit = [&hits, id](const DynamicAabbTree& tree, const int32_t treeId)
+  {
+    const int32_t other = tree.getUserData(treeId);
+    if (other != id)
+    {
+      hits.push_back(makePair(id, other));
+    }
+
+    return true;
+  };
+
+  m_dynamicTree.query(fat, [&](const int32_t treeId) { return addHit(m_dynamicTree, treeId); });
+
+  if (proxy.dynamic)
+  {
+    m_staticTree.query(fat, [&](const int32_t treeId) { return addHit(m_staticTree, treeId); });
+  }
+}
+
 void BroadPhase::update(const std::span<const BroadPhaseInput> inputs)
 {
   m_stats.reinserts = 0;
@@ -140,28 +164,21 @@ void BroadPhase::update(const std::span<const BroadPhaseInput> inputs)
 
   const size_t existingPairs = m_pairs.size();
 
-  for (const auto id : m_moved)
+  // The trees and proxies are only read from here on, so each moved proxy queries into its own list. The pair
+  // vector is sorted and deduplicated below, which makes the merge order irrelevant.
+  const int movedCount = static_cast<int>(m_moved.size());
+  const int threads = m_threadCount;
+  std::vector<std::vector<uint64_t>> found(m_moved.size());
+
+#pragma omp parallel for num_threads(threads) schedule(dynamic, 16)
+  for (int i = 0; i < movedCount; ++i)
   {
-    const Proxy& proxy = m_proxies[static_cast<size_t>(id)];
-    const Aabb fat = treeFor(proxy).getFatAabb(proxy.treeProxyId);
+    collectPairsFor(m_moved[static_cast<size_t>(i)], found[static_cast<size_t>(i)]);
+  }
 
-    const auto addHit = [this, id](const DynamicAabbTree& tree, const int32_t treeId)
-    {
-      const int32_t other = tree.getUserData(treeId);
-      if (other != id)
-      {
-        m_pairs.push_back(makePair(id, other));
-      }
-
-      return true;
-    };
-
-    m_dynamicTree.query(fat, [&](const int32_t treeId) { return addHit(m_dynamicTree, treeId); });
-
-    if (proxy.dynamic)
-    {
-      m_staticTree.query(fat, [&](const int32_t treeId) { return addHit(m_staticTree, treeId); });
-    }
+  for (const auto& hits : found)
+  {
+    m_pairs.insert(m_pairs.end(), hits.begin(), hits.end());
   }
 
   if (m_pairs.size() != existingPairs)

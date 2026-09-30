@@ -4,6 +4,7 @@
 #include "broadphase/BroadPhase.h"
 #include "collisions/NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <compare>
@@ -106,6 +107,21 @@ public:
   // Refreshed contacts since construction; unlike the periodic stats it is never reset.
   [[nodiscard]] uint64_t getContactsRefreshedTotal() const { return m_contactsRefreshedTotal; }
 
+  // Threads for every tree-path parallel region (bounding box warm, edge data, broad phase queries, narrow
+  // phase, parallel response). The sweep path keeps its own fixed count. Values under one are clamped to one.
+  void setThreadCount(int threads);
+  [[nodiscard]] int getThreadCount() const { return m_threadCount; }
+
+  // Off by default. On, and in tree mode, the response pass resolves each connected component of dynamic
+  // bodies on its own thread, in the order the serial pass would visit its edges. Bit-exact with the serial pass.
+  void setParallelResponseEnabled(bool enabled) { m_parallelResponseEnabled = enabled; }
+  [[nodiscard]] bool isParallelResponseEnabled() const { return m_parallelResponseEnabled; }
+
+  // On by default. Gates the per-tick island and sleep-blocker analysis behind the stats line, which costs a
+  // little every tick (reported as diag_us).
+  void setDiagnosticsEnabled(bool enabled) { m_diagnosticsEnabled = enabled; }
+  [[nodiscard]] bool isDiagnosticsEnabled() const { return m_diagnosticsEnabled; }
+
   // Carries a contact computed at the "then" poses to the "now" poses, assuming both colliders only
   // translated. Falls back (contact empty, outcome says why) when a rotation or scale changed or the
   // motion is large enough that the contact features may have changed; outcome separated with an empty
@@ -116,6 +132,46 @@ public:
 
 private:
   std::vector<CollisionEdge> m_collisionEdges;
+
+  // What the response pass counts. One per thread (or per component) in the parallel pass, summed afterward.
+  struct ResponseCounters {
+    uint64_t contactsReused = 0;
+    uint64_t contactsRecomputed = 0;
+    uint64_t contactsRefreshed = 0;
+    uint64_t refreshFellBackRotation = 0;
+    uint64_t refreshFellBackDrift = 0;
+    uint64_t refreshFellBackNormalMotion = 0;
+    uint64_t refreshFellBackSphere = 0;
+    uint64_t recomputeMicros = 0;
+    uint64_t refreshMicros = 0;
+    uint64_t physicsMicros = 0;
+
+    void add(const ResponseCounters& other)
+    {
+      contactsReused += other.contactsReused;
+      contactsRecomputed += other.contactsRecomputed;
+      contactsRefreshed += other.contactsRefreshed;
+      refreshFellBackRotation += other.refreshFellBackRotation;
+      refreshFellBackDrift += other.refreshFellBackDrift;
+      refreshFellBackNormalMotion += other.refreshFellBackNormalMotion;
+      refreshFellBackSphere += other.refreshFellBackSphere;
+      recomputeMicros += other.recomputeMicros;
+      refreshMicros += other.refreshMicros;
+      physicsMicros += other.physicsMicros;
+    }
+  };
+
+  // One entry per hit of an edge, in hit order: the rigid body behind the other object (null for static
+  // geometry) and whether its collider is a trigger. offsets has one more entry than there are edges.
+  struct HitBody {
+    RigidBody* body = nullptr;
+    bool trigger = false;
+  };
+
+  struct HitBodies {
+    std::vector<size_t> offsets;
+    std::vector<HitBody> flat;
+  };
 
   // Plain per-edge data, parallel to m_collisionEdges (tree path only), so the parallel pass rejects
   // candidates without touching a shared_ptr.
@@ -186,13 +242,7 @@ private:
     uint64_t candidates = 0;
     uint64_t narrowPhaseCalls = 0;
     uint64_t contactsComputed = 0;
-    uint64_t contactsReused = 0;
-    uint64_t contactsRecomputed = 0;
-    uint64_t contactsRefreshed = 0;
-    uint64_t refreshFellBackRotation = 0;
-    uint64_t refreshFellBackDrift = 0;
-    uint64_t refreshFellBackNormalMotion = 0;
-    uint64_t refreshFellBackSphere = 0;
+    ResponseCounters response;
     uint64_t reinserts = 0;
     uint64_t sleepSkippedEdges = 0;
     uint64_t fellAsleep = 0;
@@ -206,8 +256,29 @@ private:
     uint64_t responseMicros = 0;
     uint64_t eventsMicros = 0;
     uint64_t checkMicros = 0;
+    uint64_t hitGraphMicros = 0;
+    uint64_t responseSetupMicros = 0;
+    uint64_t diagMicros = 0;
+    uint64_t responseComponents = 0;
+    uint64_t responseLargestComponent = 0;
+    uint64_t hitIslands = 0;
+    uint64_t largestHitIsland = 0;
+    uint64_t largestHitIslandMax = 0;
+    uint64_t bodiesInLargeIslands = 0;
+    uint64_t awakeBodies = 0;
+    uint64_t blockedUnsupported = 0;
+    uint64_t blockedFast = 0;
+    uint64_t blockedSpinning = 0;
+    uint64_t blockedForces = 0;
+    uint64_t blockedIsland = 0;
+    std::array<uint64_t, 6> supportedSpeedHistogram{};
+    std::array<uint64_t, 5> supportedSpinHistogram{};
   };
   Counters m_counters;
+
+  int m_threadCount = 6;
+  bool m_parallelResponseEnabled = false;
+  bool m_diagnosticsEnabled = true;
 
   // Sorted set of colliding pairs from the previous tick, diffed against the current tick to produce
   // the enter/stay/exit lists.
@@ -272,6 +343,21 @@ private:
 
   void buildEdgeInfos();
 
+  // Tree mode. Filled in parallel; read by the island diagnostics and the parallel response.
+  [[nodiscard]] HitBodies collectHitBodies(
+    const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const;
+
+  void recordHitIslands(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                        const HitBodies& hitBodies);
+
+  void recordSleepBlockers();
+
+  // Resolves the response pass in parallel, one connected component of bodies per task, and adds what the
+  // tasks counted to counters. Every edge of the order lands in exactly one component.
+  void respondInParallel(const std::vector<size_t>& order,
+                         const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                         const HitBodies& hitBodies, float dt, ResponseCounters& counters);
+
   void updateBroadPhase();
 
   void collideWithCandidates(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
@@ -281,12 +367,14 @@ private:
   void reportCounters();
 
   void handleCollisions(size_t edgeIndex, const std::shared_ptr<RigidBody>& rigidBody,
-                        const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt);
+                        const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt,
+                        ResponseCounters& counters) const;
 
   // The contact of edge edgeIndex's collider with its k-th hit: the cached one while both colliders'
   // geometry is unchanged since it was computed, otherwise contactWith.
   [[nodiscard]] std::optional<collisions::Contact> contactFor(size_t edgeIndex, size_t k,
-                                                              const std::shared_ptr<Object>& other);
+                                                              const std::shared_ptr<Object>& other,
+                                                              ResponseCounters& counters) const;
 
   // A contact is a trigger (events fire, but no physical response) if either collider is flagged as one.
   static bool isTriggerPair(const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other);

@@ -12,6 +12,7 @@
 #include <objects/components/collisions/Collider.h>
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -50,6 +51,91 @@ namespace {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - start).count());
   }
+
+  // Adds the time between its construction and destruction to a counter.
+  class ScopedMicros {
+  public:
+    explicit ScopedMicros(uint64_t& sink)
+      : m_sink(sink),
+        m_start(std::chrono::steady_clock::now())
+    {}
+
+    ~ScopedMicros()
+    {
+      m_sink += microsSince(m_start);
+    }
+
+    ScopedMicros(const ScopedMicros&) = delete;
+    ScopedMicros& operator=(const ScopedMicros&) = delete;
+
+  private:
+    uint64_t& m_sink;
+    std::chrono::steady_clock::time_point m_start;
+  };
+
+  // Union-find over rigid bodies, indexed in the order they are first seen.
+  class BodyPartition {
+  public:
+    explicit BodyPartition(const size_t expected)
+    {
+      m_index.reserve(expected);
+      m_bodies.reserve(expected);
+      m_parent.reserve(expected);
+    }
+
+    size_t indexOf(RigidBody* body)
+    {
+      const auto [it, inserted] = m_index.try_emplace(body, m_parent.size());
+      if (inserted)
+      {
+        m_bodies.push_back(body);
+        m_parent.push_back(it->second);
+      }
+
+      return it->second;
+    }
+
+    size_t find(size_t index)
+    {
+      while (m_parent[index] != index)
+      {
+        m_parent[index] = m_parent[m_parent[index]];
+        index = m_parent[index];
+      }
+
+      return index;
+    }
+
+    void join(const size_t a, const size_t b)
+    {
+      m_parent[find(a)] = find(b);
+    }
+
+    [[nodiscard]] size_t size() const { return m_parent.size(); }
+
+    [[nodiscard]] RigidBody* bodyAt(const size_t index) const { return m_bodies[index]; }
+
+  private:
+    std::unordered_map<RigidBody*, size_t> m_index;
+    std::vector<RigidBody*> m_bodies;
+    std::vector<size_t> m_parent;
+  };
+
+  // How many of the ascending thresholds the value has reached.
+  template <size_t N>
+  size_t bucketOf(const float value, const std::array<float, N>& thresholds)
+  {
+    size_t bucket = 0;
+    while (bucket < N && value >= thresholds[bucket])
+    {
+      ++bucket;
+    }
+
+    return bucket;
+  }
+
+  constexpr std::array<float, 5> speedBuckets = { 0.001f, 0.004f, 0.01f, 0.02f, 0.05f };
+  constexpr std::array<float, 4> spinBuckets = { 1.0f, 3.0f, 10.0f, 30.0f };
 }
 
 void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
@@ -83,9 +169,29 @@ void CollisionSystem::checkCollisions(const float dt)
   const auto checkStart = std::chrono::steady_clock::now();
   auto stageStart = checkStart;
 
-  for (auto& edge : m_collisionEdges)
+  const bool useTree = m_broadPhaseMode == BroadPhaseMode::tree;
+
+  if (useTree)
   {
-    edge.position = edge.collider->getBoundingBox().minX;
+    // Each edge is its own collider, and getBoundingBox writes only that collider's caches (its bounding box,
+    // its transform pointer, a box's transformed mesh) while reading Transforms, so iterations do not touch
+    // each other's state. Nothing writes a Transform during the loop.
+    const int edgeCount = static_cast<int>(m_collisionEdges.size());
+    const int threads = m_threadCount;
+
+#pragma omp parallel for num_threads(threads) schedule(dynamic, 32)
+    for (int i = 0; i < edgeCount; ++i)
+    {
+      auto& edge = m_collisionEdges[static_cast<size_t>(i)];
+      edge.position = edge.collider->getBoundingBox().minX;
+    }
+  }
+  else
+  {
+    for (auto& edge : m_collisionEdges)
+    {
+      edge.position = edge.collider->getBoundingBox().minX;
+    }
   }
 
   std::ranges::sort(m_collisionEdges, [](const CollisionEdge& a, const CollisionEdge& b)
@@ -101,7 +207,6 @@ void CollisionSystem::checkCollisions(const float dt)
   std::vector<uint64_t> contactsComputed(m_collisionEdges.size(), 0);
   std::vector<std::vector<uint32_t>> wakeRequests;
   m_cachedContacts.assign(m_collisionEdges.size(), {});
-  const bool useTree = m_broadPhaseMode == BroadPhaseMode::tree;
 
   if (m_wakeAll)
   {
@@ -138,28 +243,58 @@ void CollisionSystem::checkCollisions(const float dt)
   }
 
   m_counters.narrowMicros += microsSince(stageStart);
-  stageStart = std::chrono::steady_clock::now();
 
-  // Applied serially, now that the parallel region is done: a response moves the transform of either
-  // object in a pair, which would invalidate a collider cache another thread might still be reading if
-  // this ran inside the loop above.
-  for (const auto i : responseOrder(perEdgeCollisions))
+  const bool parallelResponse = useTree && m_parallelResponseEnabled;
+  const bool diagnostics = useTree && m_diagnosticsEnabled;
+
+  HitBodies hitBodies;
+  if (parallelResponse || diagnostics)
   {
-    // An island woken by this tick's contacts was still asleep when the contacts were found.
-    if (useTree && m_edgeInfos[i].asleep)
-    {
-      continue;
-    }
-
-    const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
-    if (!rigidBody)
-    {
-      continue;
-    }
-
-    handleCollisions(i, rigidBody, perEdgeCollisions[i], dt);
+    const auto hitGraphStart = std::chrono::steady_clock::now();
+    hitBodies = collectHitBodies(perEdgeCollisions);
+    m_counters.hitGraphMicros += microsSince(hitGraphStart);
   }
 
+  if (diagnostics)
+  {
+    const ScopedMicros timer(m_counters.diagMicros);
+    recordHitIslands(perEdgeCollisions, hitBodies);
+  }
+
+  stageStart = std::chrono::steady_clock::now();
+
+  // Applied after the parallel region is done: a response moves the transform of either object in a pair,
+  // which would invalidate a collider cache another thread might still be reading if this ran inside the
+  // loop above.
+  ResponseCounters response;
+  const auto order = responseOrder(perEdgeCollisions);
+
+  if (parallelResponse)
+  {
+    respondInParallel(order, perEdgeCollisions, hitBodies, dt, response);
+  }
+  else
+  {
+    for (const auto i : order)
+    {
+      // An island woken by this tick's contacts was still asleep when the contacts were found.
+      if (useTree && m_edgeInfos[i].asleep)
+      {
+        continue;
+      }
+
+      const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
+      if (!rigidBody)
+      {
+        continue;
+      }
+
+      handleCollisions(i, rigidBody, perEdgeCollisions[i], dt, response);
+    }
+  }
+
+  m_counters.response.add(response);
+  m_contactsRefreshedTotal += response.contactsRefreshed;
   m_counters.responseMicros += microsSince(stageStart);
   stageStart = std::chrono::steady_clock::now();
 
@@ -214,12 +349,18 @@ void CollisionSystem::sweepCollisions(std::vector<std::vector<std::shared_ptr<Ob
 
 void CollisionSystem::buildEdgeInfos()
 {
-  m_edgeInfos.clear();
-  m_edgeInfos.reserve(m_collisionEdges.size());
+  m_edgeInfos.assign(m_collisionEdges.size(), EdgeInfo{});
 
-  for (const auto& edge : m_collisionEdges)
+  // Every iteration reads its own edge (the warm above finished, and nothing writes a Transform here) and
+  // writes only its own slot.
+  const int edgeCount = static_cast<int>(m_collisionEdges.size());
+  const int threads = m_threadCount;
+
+#pragma omp parallel for num_threads(threads) schedule(dynamic, 32)
+  for (int i = 0; i < edgeCount; ++i)
   {
-    EdgeInfo info;
+    const auto& edge = m_collisionEdges[static_cast<size_t>(i)];
+    EdgeInfo& info = m_edgeInfos[static_cast<size_t>(i)];
     info.object = edge.object.get();
     info.parent = edge.object->getParent().get();
     info.collider = edge.collider.get();
@@ -230,15 +371,13 @@ void CollisionSystem::buildEdgeInfos()
     info.box = edge.collider->cachedBoundingBox();
     info.trigger = edge.collider->isTrigger();
     info.geometryKey = geometryKeyOf(*edge.object);
+    info.body = body.get();
 
     if (m_sleepingEnabled && body)
     {
-      info.body = body.get();
       info.asleep = body->isAsleep();
       info.islandId = body->getIslandId();
     }
-
-    m_edgeInfos.push_back(info);
   }
 
   if (!m_sleepingEnabled)
@@ -369,9 +508,11 @@ void CollisionSystem::collideWithCandidates(std::vector<std::vector<std::shared_
                                             std::vector<uint64_t>& contactsComputed,
                                             std::vector<std::vector<uint32_t>>& wakeRequests)
 {
-  // Read-only for the same reason as sweepCollisions: every box was warmed serially and responses wait. A wake
+  // Read-only for the same reason as sweepCollisions: every box was warmed before it and responses wait. A wake
   // request goes into the requesting edge's own list, so threads still write only their own slots.
-#pragma omp parallel for default(none) shared(perEdgeCollisions, narrowPhaseCalls, contactsComputed, wakeRequests) num_threads(6) schedule(dynamic, 16)
+  const int threads = m_threadCount;
+
+#pragma omp parallel for default(none) shared(perEdgeCollisions, narrowPhaseCalls, contactsComputed, wakeRequests) num_threads(threads) schedule(dynamic, 16)
   for (int i = 0; i < m_collisionEdges.size(); ++i)
   {
     if (m_edgeInfos[i].asleep)
@@ -410,45 +551,92 @@ void CollisionSystem::collideWithCandidates(std::vector<std::vector<std::shared_
 void CollisionSystem::reportCounters()
 {
   const auto ticks = static_cast<double>(m_counters.ticks);
+  const auto perTick = [ticks](const uint64_t value) { return static_cast<double>(value) / ticks; };
   const auto& stats = m_broadPhase.getStats();
+  const auto& resp = m_counters.response;
   const bool tree = m_broadPhaseMode == BroadPhaseMode::tree;
 
   std::ostringstream message;
   message << std::fixed << std::setprecision(1)
           << "broadphase=" << (tree ? "tree" : "sweep") << " ticks=" << m_counters.ticks
-          << " candidates/tick=" << static_cast<double>(m_counters.candidates) / ticks
-          << " narrow/tick=" << static_cast<double>(m_counters.narrowPhaseCalls) / ticks
-          << " contacts_parallel/tick=" << static_cast<double>(m_counters.contactsComputed) / ticks
-          << " contacts_reused/tick=" << static_cast<double>(m_counters.contactsReused) / ticks
-          << " contacts_recomputed/tick=" << static_cast<double>(m_counters.contactsRecomputed) / ticks
-          << " contacts_refreshed/tick=" << static_cast<double>(m_counters.contactsRefreshed) / ticks
+          << " threads=" << m_threadCount
+          << " candidates/tick=" << perTick(m_counters.candidates)
+          << " narrow/tick=" << perTick(m_counters.narrowPhaseCalls)
+          << " contacts_parallel/tick=" << perTick(m_counters.contactsComputed)
+          << " contacts_reused/tick=" << perTick(resp.contactsReused)
+          << " contacts_recomputed/tick=" << perTick(resp.contactsRecomputed)
+          << " contacts_refreshed/tick=" << perTick(resp.contactsRefreshed)
           << " refresh_fallback_rot/drift/normal/sphere="
-          << static_cast<double>(m_counters.refreshFellBackRotation) / ticks << "/"
-          << static_cast<double>(m_counters.refreshFellBackDrift) / ticks << "/"
-          << static_cast<double>(m_counters.refreshFellBackNormalMotion) / ticks << "/"
-          << static_cast<double>(m_counters.refreshFellBackSphere) / ticks
-          << " reinserts/tick=" << static_cast<double>(m_counters.reinserts) / ticks
-          << " gather_us/tick=" << static_cast<double>(m_counters.gatherMicros) / ticks
-          << " warm_sort_us/tick=" << static_cast<double>(m_counters.warmSortMicros) / ticks
-          << " broadphase_us/tick=" << static_cast<double>(m_counters.broadPhaseMicros) / ticks
-          << " narrow_us/tick=" << static_cast<double>(m_counters.narrowMicros) / ticks
-          << " response_us/tick=" << static_cast<double>(m_counters.responseMicros) / ticks
-          << " events_us/tick=" << static_cast<double>(m_counters.eventsMicros) / ticks
-          << " check_us/tick=" << static_cast<double>(m_counters.checkMicros) / ticks;
+          << perTick(resp.refreshFellBackRotation) << "/"
+          << perTick(resp.refreshFellBackDrift) << "/"
+          << perTick(resp.refreshFellBackNormalMotion) << "/"
+          << perTick(resp.refreshFellBackSphere)
+          << " reinserts/tick=" << perTick(m_counters.reinserts)
+          << " gather_us/tick=" << perTick(m_counters.gatherMicros)
+          << " warm_sort_us/tick=" << perTick(m_counters.warmSortMicros)
+          << " broadphase_us/tick=" << perTick(m_counters.broadPhaseMicros)
+          << " narrow_us/tick=" << perTick(m_counters.narrowMicros)
+          << " response_us/tick=" << perTick(m_counters.responseMicros)
+          << " resp_recompute_us/tick=" << perTick(resp.recomputeMicros)
+          << " resp_refresh_us/tick=" << perTick(resp.refreshMicros)
+          << " resp_physics_us/tick=" << perTick(resp.physicsMicros)
+          << " events_us/tick=" << perTick(m_counters.eventsMicros)
+          << " check_us/tick=" << perTick(m_counters.checkMicros);
 
   if (tree)
   {
+    message << " parallel_response=" << (m_parallelResponseEnabled ? "on" : "off")
+            << " hit_graph_us/tick=" << perTick(m_counters.hitGraphMicros)
+            << " diag_us/tick=" << perTick(m_counters.diagMicros);
+
+    if (m_parallelResponseEnabled)
+    {
+      message << " resp_setup_us/tick=" << perTick(m_counters.responseSetupMicros)
+              << " resp_components/tick=" << perTick(m_counters.responseComponents)
+              << " resp_largest_component_edges/tick=" << perTick(m_counters.responseLargestComponent);
+    }
+
     message << " pairs=" << stats.pairCount << " static=" << stats.staticProxies
             << " dynamic=" << stats.dynamicProxies << " heights=" << stats.staticHeight << "/"
             << stats.dynamicHeight;
+
+    if (m_diagnosticsEnabled)
+    {
+      message << " islands/tick=" << perTick(m_counters.hitIslands)
+              << " largest_island/tick=" << perTick(m_counters.largestHitIsland)
+              << " largest_island_max=" << m_counters.largestHitIslandMax
+              << " bodies_in_islands_ge_64/tick=" << perTick(m_counters.bodiesInLargeIslands);
+    }
   }
 
   if (tree && m_sleepingEnabled)
   {
     message << " asleep_bodies=" << m_counters.bodiesAsleep << " asleep_islands=" << m_counters.islandsAsleep
-            << " fell_asleep/tick=" << static_cast<double>(m_counters.fellAsleep) / ticks
-            << " woke/tick=" << static_cast<double>(m_counters.woke) / ticks
-            << " sleep_skipped_edges/tick=" << static_cast<double>(m_counters.sleepSkippedEdges) / ticks;
+            << " fell_asleep/tick=" << perTick(m_counters.fellAsleep)
+            << " woke/tick=" << perTick(m_counters.woke)
+            << " sleep_skipped_edges/tick=" << perTick(m_counters.sleepSkippedEdges);
+
+    if (m_diagnosticsEnabled)
+    {
+      message << " awake/tick=" << perTick(m_counters.awakeBodies)
+              << " no_sleep_unsupported/fast/spinning/forces/island_blocked="
+              << perTick(m_counters.blockedUnsupported) << "/" << perTick(m_counters.blockedFast) << "/"
+              << perTick(m_counters.blockedSpinning) << "/" << perTick(m_counters.blockedForces) << "/"
+              << perTick(m_counters.blockedIsland)
+              << " supported_speed_hist(<.001/<.004/<.01/<.02/<.05/>=.05)=";
+
+      for (size_t i = 0; i < m_counters.supportedSpeedHistogram.size(); ++i)
+      {
+        message << (i ? "/" : "") << perTick(m_counters.supportedSpeedHistogram[i]);
+      }
+
+      message << " supported_spin_hist(<1/<3/<10/<30/>=30)=";
+
+      for (size_t i = 0; i < m_counters.supportedSpinHistogram.size(); ++i)
+      {
+        message << (i ? "/" : "") << perTick(m_counters.supportedSpinHistogram[i]);
+      }
+    }
   }
 
   pruneSleepRecords();
@@ -519,6 +707,283 @@ void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::s
   std::ranges::set_difference(m_previousPairs, current, std::back_inserter(m_exits));
 
   m_previousPairs = std::move(current);
+}
+
+CollisionSystem::HitBodies CollisionSystem::collectHitBodies(
+  const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const
+{
+  HitBodies result;
+  result.offsets.assign(perEdgeCollisions.size() + 1, 0);
+
+  for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
+  {
+    result.offsets[i + 1] = result.offsets[i] + perEdgeCollisions[i].size();
+  }
+
+  result.flat.resize(result.offsets.back());
+
+  // Reads component maps only; every iteration writes its own span of the flat array.
+  const int edgeCount = static_cast<int>(perEdgeCollisions.size());
+  const int threads = m_threadCount;
+
+#pragma omp parallel for num_threads(threads) schedule(dynamic, 32)
+  for (int i = 0; i < edgeCount; ++i)
+  {
+    const auto& hits = perEdgeCollisions[static_cast<size_t>(i)];
+    HitBody* out = result.flat.data() + result.offsets[static_cast<size_t>(i)];
+
+    for (size_t k = 0; k < hits.size(); ++k)
+    {
+      const auto body = hits[k]->getComponent<RigidBody>(ComponentType::rigidBody);
+      const auto collider = hits[k]->getComponent<Collider>(ComponentType::collider);
+
+      out[k].body = body.get();
+      out[k].trigger = collider && collider->isTrigger();
+    }
+  }
+
+  return result;
+}
+
+void CollisionSystem::recordHitIslands(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                                       const HitBodies& hitBodies)
+{
+  BodyPartition partition(perEdgeCollisions.size());
+
+  for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
+  {
+    const auto& self = m_edgeInfos[i];
+    if (self.asleep || self.trigger || !self.body || perEdgeCollisions[i].empty())
+    {
+      continue;
+    }
+
+    bool registered = false;
+    size_t selfIndex = 0;
+
+    for (size_t k = 0; k < perEdgeCollisions[i].size(); ++k)
+    {
+      const auto& hit = hitBodies.flat[hitBodies.offsets[i] + k];
+      if (hit.trigger)
+      {
+        continue;
+      }
+
+      if (!registered)
+      {
+        selfIndex = partition.indexOf(self.body);
+        registered = true;
+      }
+
+      // Static contacts do not tie bodies together.
+      if (hit.body)
+      {
+        const auto otherIndex = partition.indexOf(hit.body);
+        partition.join(selfIndex, otherIndex);
+      }
+    }
+  }
+
+  std::vector<uint64_t> sizes(partition.size(), 0);
+  for (size_t b = 0; b < partition.size(); ++b)
+  {
+    ++sizes[partition.find(b)];
+  }
+
+  uint64_t islands = 0;
+  uint64_t largest = 0;
+  uint64_t inLarge = 0;
+
+  for (const auto size : sizes)
+  {
+    if (size == 0)
+    {
+      continue;
+    }
+
+    ++islands;
+    largest = std::max(largest, size);
+
+    if (size >= 64)
+    {
+      inLarge += size;
+    }
+  }
+
+  m_counters.hitIslands += islands;
+  m_counters.largestHitIsland += largest;
+  m_counters.largestHitIslandMax = std::max(m_counters.largestHitIslandMax, largest);
+  m_counters.bodiesInLargeIslands += inLarge;
+}
+
+void CollisionSystem::recordSleepBlockers()
+{
+  const ScopedMicros timer(m_counters.diagMicros);
+
+  for (const auto* body : m_bodies)
+  {
+    if (body->isAsleep())
+    {
+      continue;
+    }
+
+    ++m_counters.awakeBodies;
+
+    const bool unsupported = body->getNextFalling();
+    const float speed = glm::length(body->getVelocity());
+    const float spin = glm::length(body->getAngularVelocity());
+
+    m_counters.blockedUnsupported += unsupported ? 1 : 0;
+    m_counters.blockedFast += speed >= sleeping::linearSleepSpeed ? 1 : 0;
+    m_counters.blockedSpinning += spin >= sleeping::angularSleepSpeed ? 1 : 0;
+    m_counters.blockedForces += body->getPendingForces().empty() ? 0 : 1;
+    m_counters.blockedIsland += body->getRestTicks() >= sleeping::ticksToSleep ? 1 : 0;
+
+    if (!unsupported)
+    {
+      ++m_counters.supportedSpeedHistogram[bucketOf(speed, speedBuckets)];
+      ++m_counters.supportedSpinHistogram[bucketOf(spin, spinBuckets)];
+    }
+  }
+}
+
+void CollisionSystem::respondInParallel(const std::vector<size_t>& order,
+                                        const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                                        const HitBodies& hitBodies, const float dt, ResponseCounters& counters)
+{
+  const auto setupStart = std::chrono::steady_clock::now();
+  constexpr auto noBody = std::numeric_limits<size_t>::max();
+
+  // A response changes only the body it resolves and, when the other side is dynamic, that body's state, and
+  // reads the Transforms up both ancestor chains. So bodies joined by any hit (a trigger's contact is measured
+  // too, which reads the other collider), or by an ancestor that has its own body, share one component.
+  BodyPartition partition(order.size());
+  std::vector<size_t> bodyOfEdge(m_collisionEdges.size(), noBody);
+
+  for (const auto i : order)
+  {
+    const auto& info = m_edgeInfos[i];
+    if (info.asleep || !info.body)
+    {
+      continue;
+    }
+
+    const auto self = partition.indexOf(info.body);
+    bodyOfEdge[i] = self;
+
+    for (size_t k = 0; k < perEdgeCollisions[i].size(); ++k)
+    {
+      if (RigidBody* const otherBody = hitBodies.flat[hitBodies.offsets[i] + k].body)
+      {
+        const auto otherIndex = partition.indexOf(otherBody);
+        partition.join(self, otherIndex);
+      }
+    }
+  }
+
+  // The loop can add bodies as it goes, and each new one is visited in turn.
+  for (size_t b = 0; b < partition.size(); ++b)
+  {
+    const Object* owner = partition.bodyAt(b)->getOwner();
+    if (!owner)
+    {
+      continue;
+    }
+
+    const auto parent = owner->getParent();
+    if (!parent)
+    {
+      continue;
+    }
+
+    if (const auto ancestorBody = parent->getComponent<RigidBody>(ComponentType::rigidBody))
+    {
+      const auto ancestorIndex = partition.indexOf(ancestorBody.get());
+      partition.join(b, ancestorIndex);
+    }
+  }
+
+  std::vector<size_t> counts(partition.size(), 0);
+  for (const auto i : order)
+  {
+    if (bodyOfEdge[i] != noBody)
+    {
+      ++counts[partition.find(bodyOfEdge[i])];
+    }
+  }
+
+  std::vector<size_t> roots;
+  for (size_t r = 0; r < counts.size(); ++r)
+  {
+    if (counts[r] > 0)
+    {
+      roots.push_back(r);
+    }
+  }
+
+  std::ranges::sort(roots, [&counts](const size_t a, const size_t b)
+  {
+    return counts[a] > counts[b];
+  });
+
+  std::vector<size_t> slot(partition.size(), noBody);
+  std::vector<size_t> begin(roots.size() + 1, 0);
+  for (size_t c = 0; c < roots.size(); ++c)
+  {
+    slot[roots[c]] = c;
+    begin[c + 1] = begin[c] + counts[roots[c]];
+  }
+
+  // Each component's edges keep the relative order the global response order gave them.
+  std::vector<size_t> cursor(begin.begin(), begin.end() - 1);
+  std::vector<size_t> edges(begin.back());
+  for (const auto i : order)
+  {
+    if (bodyOfEdge[i] != noBody)
+    {
+      edges[cursor[slot[partition.find(bodyOfEdge[i])]]++] = i;
+    }
+  }
+
+  m_counters.responseSetupMicros += microsSince(setupStart);
+  m_counters.responseComponents += roots.size();
+  if (!roots.empty())
+  {
+    m_counters.responseLargestComponent += counts[roots.front()];
+  }
+
+  const int componentCount = static_cast<int>(roots.size());
+  const int threads = m_threadCount;
+  std::vector<ResponseCounters> perComponent(roots.size());
+
+#pragma omp parallel for num_threads(threads) schedule(dynamic, 1)
+  for (int c = 0; c < componentCount; ++c)
+  {
+    auto& local = perComponent[static_cast<size_t>(c)];
+
+    for (size_t e = begin[static_cast<size_t>(c)]; e < begin[static_cast<size_t>(c) + 1]; ++e)
+    {
+      const auto i = edges[e];
+      const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
+      if (!rigidBody)
+      {
+        continue;
+      }
+
+      handleCollisions(i, rigidBody, perEdgeCollisions[i], dt, local);
+    }
+  }
+
+  for (const auto& local : perComponent)
+  {
+    counters.add(local);
+  }
+}
+
+void CollisionSystem::setThreadCount(const int threads)
+{
+  m_threadCount = std::max(threads, 1);
+  m_broadPhase.setThreadCount(m_threadCount);
 }
 
 void CollisionSystem::setBroadPhaseMode(const BroadPhaseMode mode)
@@ -704,7 +1169,8 @@ CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
 }
 
 void CollisionSystem::handleCollisions(const size_t edgeIndex, const std::shared_ptr<RigidBody>& rigidBody,
-                                       const std::vector<std::shared_ptr<Object>>& collidedObjects, const float dt)
+                                       const std::vector<std::shared_ptr<Object>>& collidedObjects, const float dt,
+                                       ResponseCounters& counters) const
 {
   const auto& collider = m_collisionEdges[edgeIndex].collider;
 
@@ -716,8 +1182,9 @@ void CollisionSystem::handleCollisions(const size_t edgeIndex, const std::shared
       return;
     }
 
-    if (const auto contact = contactFor(edgeIndex, 0, collidedObjects[0]))
+    if (const auto contact = contactFor(edgeIndex, 0, collidedObjects[0], counters))
     {
+      const ScopedMicros timer(counters.physicsMicros);
       PhysicsSystem::handleCollision(*rigidBody, collidedObjects[0], contact->minimumTranslationVector,
                                      contact->contactPoints(), dt);
     }
@@ -733,7 +1200,7 @@ void CollisionSystem::handleCollisions(const size_t edgeIndex, const std::shared
   for (size_t k = 0; k < collidedObjects.size(); ++k)
   {
     const auto& collidedObject = collidedObjects[k];
-    auto contact = contactFor(edgeIndex, k, collidedObject);
+    auto contact = contactFor(edgeIndex, k, collidedObject, counters);
     const float distance = contact ? dot(contact->minimumTranslationVector, contact->minimumTranslationVector)
                                    : 0.0f;
 
@@ -760,21 +1227,26 @@ void CollisionSystem::handleCollisions(const size_t edgeIndex, const std::shared
 
     // Once a response has moved the body, the contacts scored before it no longer describe the overlap -
     // the earlier push may have cleared this one, or changed its depth - so it is measured again.
-    const auto contact = bodyMoved ? contactFor(edgeIndex, scoredContact.index, scoredContact.object)
+    const auto contact = bodyMoved ? contactFor(edgeIndex, scoredContact.index, scoredContact.object, counters)
                                    : scoredContact.contact;
     if (!contact)
     {
       continue;
     }
 
-    PhysicsSystem::handleCollision(*rigidBody, scoredContact.object, contact->minimumTranslationVector,
-                                   contact->contactPoints(), dt);
+    {
+      const ScopedMicros timer(counters.physicsMicros);
+      PhysicsSystem::handleCollision(*rigidBody, scoredContact.object, contact->minimumTranslationVector,
+                                     contact->contactPoints(), dt);
+    }
+
     bodyMoved = true;
   }
 }
 
 std::optional<collisions::Contact> CollisionSystem::contactFor(const size_t edgeIndex, const size_t k,
-                                                               const std::shared_ptr<Object>& other)
+                                                               const std::shared_ptr<Object>& other,
+                                                               ResponseCounters& counters) const
 {
   const auto& edge = m_collisionEdges[edgeIndex];
   const auto& cached = m_cachedContacts[edgeIndex];
@@ -786,12 +1258,13 @@ std::optional<collisions::Contact> CollisionSystem::contactFor(const size_t edge
     if (entry.computed && entry.selfKey == geometryKeyOf(*edge.object) &&
         entry.otherKey == geometryKeyOf(*other))
     {
-      ++m_counters.contactsReused;
+      ++counters.contactsReused;
       return entry.contact;
     }
 
     if (m_contactRefreshEnabled && entry.computed && entry.contact && entry.hasPoses)
     {
+      const ScopedMicros refreshTimer(counters.refreshMicros);
       const auto otherCollider = other->getComponent<Collider>(ComponentType::collider);
 
       if (otherCollider)
@@ -799,7 +1272,7 @@ std::optional<collisions::Contact> CollisionSystem::contactFor(const size_t edge
         if (edge.collider->getColliderType() == ColliderType::sphereCollider &&
             otherCollider->getColliderType() == ColliderType::sphereCollider)
         {
-          ++m_counters.refreshFellBackSphere;
+          ++counters.refreshFellBackSphere;
         }
         else
         {
@@ -809,30 +1282,29 @@ std::optional<collisions::Contact> CollisionSystem::contactFor(const size_t edge
           switch (refreshed.outcome)
           {
             case RefreshOutcome::refreshed:
-              ++m_counters.contactsRefreshed;
-              ++m_contactsRefreshedTotal;
+              ++counters.contactsRefreshed;
               return refreshed.contact;
             case RefreshOutcome::separated:
-              ++m_counters.contactsRefreshed;
-              ++m_contactsRefreshedTotal;
+              ++counters.contactsRefreshed;
               return std::nullopt;
             case RefreshOutcome::rotationChanged:
-              ++m_counters.refreshFellBackRotation;
+              ++counters.refreshFellBackRotation;
               break;
             case RefreshOutcome::driftTooLarge:
-              ++m_counters.refreshFellBackDrift;
+              ++counters.refreshFellBackDrift;
               break;
             case RefreshOutcome::normalMotionTooLarge:
-              ++m_counters.refreshFellBackNormalMotion;
+              ++counters.refreshFellBackNormalMotion;
               break;
           }
         }
       }
     }
 
-    ++m_counters.contactsRecomputed;
+    ++counters.contactsRecomputed;
   }
 
+  const ScopedMicros recomputeTimer(counters.recomputeMicros);
   return contactWith(edge.collider, other);
 }
 
@@ -1162,6 +1634,11 @@ void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_p
   m_counters.bodiesAsleep = asleepBodies;
   m_counters.islandsAsleep = asleepIslands.size();
   m_asleepBodiesLastTick = asleepBodies;
+
+  if (m_diagnosticsEnabled)
+  {
+    recordSleepBlockers();
+  }
 }
 
 void CollisionSystem::pruneSleepRecords()

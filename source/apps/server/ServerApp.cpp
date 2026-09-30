@@ -22,6 +22,7 @@
 #include <Log.h>
 #include <RemoteLogSink.h>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -75,6 +76,34 @@ ServerApp::ServerApp(LaunchOptions options)
   const bool refreshEnabled = refreshSetting && std::string(refreshSetting) == "1";
   m_collisionSystem->setContactRefreshEnabled(refreshEnabled);
   Log::info(LogCategory::physics, std::string("Contact refresh: ") + (refreshEnabled ? "on" : "off"));
+
+  // Half the logical processors approximates the physical cores; oversubscribing hyperthreads may not help.
+  int physicsThreads = static_cast<int>(std::max(1u, std::thread::hardware_concurrency() / 2));
+  const char* threadSetting = std::getenv("ECS3D_PHYSICS_THREADS");
+  bool threadsFromEnvironment = false;
+  if (threadSetting)
+  {
+    char* end = nullptr;
+    const long requested = std::strtol(threadSetting, &end, 10);
+    if (end != threadSetting && *end == '\0' && requested >= 1 && requested <= 256)
+    {
+      physicsThreads = static_cast<int>(requested);
+      threadsFromEnvironment = true;
+    }
+    else
+    {
+      Log::warn(LogCategory::physics, std::string("Ignoring invalid ECS3D_PHYSICS_THREADS='") + threadSetting + "'");
+    }
+  }
+
+  m_collisionSystem->setThreadCount(physicsThreads);
+  Log::info(LogCategory::physics, "Physics threads: " + std::to_string(physicsThreads)
+    + (threadsFromEnvironment ? " (ECS3D_PHYSICS_THREADS)" : " (half of hardware_concurrency)"));
+
+  const char* parallelResponseSetting = std::getenv("ECS3D_PARALLEL_RESPONSE");
+  const bool parallelResponse = parallelResponseSetting && std::string(parallelResponseSetting) == "1";
+  m_collisionSystem->setParallelResponseEnabled(parallelResponse);
+  Log::info(LogCategory::physics, std::string("Parallel response: ") + (parallelResponse ? "on" : "off"));
   m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
