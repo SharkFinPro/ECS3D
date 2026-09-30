@@ -139,3 +139,6 @@ any, which is the server falling behind.
 - Reusing a contact does not skip any lazy mesh rebuild the old path would have made, but only because a stale
   mesh (child collider whose parent alone moved) is stale identically on both paths. Fixing that known issue
   needs the mesh key to include ancestors, and then the geometry key already accounts for it.
+- Collision event dispatch was dominated by `ObjectManager::getObjectByUUID`'s linear scan. The prototype skips objects
+  with no attached script, but the real fix is a uuid index in `ObjectManager` (maintained through add, remove,
+  `reassignUUIDs`, unpack and restore), which also speeds up every `World.tryGet*` script binding.
