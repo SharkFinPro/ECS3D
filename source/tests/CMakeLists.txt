@@ -52,6 +52,8 @@ add_executable(${PROJECT_NAME}
   ScriptFieldEditTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
+  DynamicAabbTreeTest.cpp
+  BroadPhaseEquivalenceTest.cpp
   SettingsStoreTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp

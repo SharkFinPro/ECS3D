@@ -1,6 +1,7 @@
 #include "CollisionSystem.h"
 #include "PhysicsSystem.h"
 #include "collisions/NarrowPhase.h"
+#include <Log.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -9,13 +10,19 @@
 #include <objects/components/collisions/Collider.h>
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
+#include <iomanip>
 #include <iterator>
 #include <limits>
+#include <numeric>
+#include <sstream>
 #include <utility>
 
 namespace {
+  constexpr uint64_t reportInterval = 250;
+
   // One candidate's narrow-phase result, kept beside its squared penetration depth so
   // CollisionSystem::handleCollisions can sort by depth and then resolve without recomputing the contact.
   struct ScoredContact {
@@ -49,6 +56,8 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
 
 void CollisionSystem::checkCollisions(const float dt)
 {
+  const auto checkStart = std::chrono::steady_clock::now();
+
   for (auto& edge : m_collisionEdges)
   {
     edge.position = edge.collider->getBoundingBox().minX;
@@ -63,6 +72,48 @@ void CollisionSystem::checkCollisions(const float dt)
   // thread writes only its own slot). Drained serially into the pair set once the loop finishes.
   std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
 
+  std::vector<uint64_t> narrowPhaseCalls(m_collisionEdges.size(), 0);
+  const bool useTree = m_broadPhaseMode == BroadPhaseMode::tree;
+
+  if (useTree)
+  {
+    updateBroadPhase();
+    collideWithCandidates(perEdgeCollisions, narrowPhaseCalls);
+  }
+  else
+  {
+    sweepCollisions(perEdgeCollisions);
+  }
+
+  // Applied serially, now that the parallel region is done: a response moves the transform of either
+  // object in a pair, which would invalidate a collider cache another thread might still be reading if
+  // this ran inside the loop above.
+  for (const auto i : responseOrder(perEdgeCollisions))
+  {
+    const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
+    if (!rigidBody)
+    {
+      continue;
+    }
+
+    handleCollisions(rigidBody, m_collisionEdges[i].collider, perEdgeCollisions[i], dt);
+  }
+
+  recordCollisionEvents(perEdgeCollisions);
+
+  ++m_counters.ticks;
+  m_counters.narrowPhaseCalls += std::accumulate(narrowPhaseCalls.begin(), narrowPhaseCalls.end(), uint64_t{0});
+  m_counters.checkMicros += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+    std::chrono::steady_clock::now() - checkStart).count());
+
+  if (m_counters.ticks >= reportInterval)
+  {
+    reportCounters();
+  }
+}
+
+void CollisionSystem::sweepCollisions(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions)
+{
   // This loop has to stay read-only: findCollisions reads bounding boxes and (through the narrow phase)
   // transformed meshes that live on the same Collider another thread's iteration can also read. That is
   // only safe because every collider in m_collisionEdges was just warmed serially above, and nothing in
@@ -87,22 +138,130 @@ void CollisionSystem::checkCollisions(const float dt)
       perEdgeCollisions[i] = std::move(collidedObjects);
     }
   }
+}
 
-  // Applied serially, now that the parallel region is done: a response moves the transform of either
-  // object in a pair, which would invalidate a collider cache another thread might still be reading if
-  // this ran inside the loop above.
-  for (const auto i : responseOrder(perEdgeCollisions))
+void CollisionSystem::updateBroadPhase()
+{
+  const auto start = std::chrono::steady_clock::now();
+
+  const auto isFinite = [](const BoundingBox& box)
   {
-    const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
-    if (!rigidBody)
+    return std::isfinite(box.minX) && std::isfinite(box.maxX) && std::isfinite(box.minY) &&
+           std::isfinite(box.maxY) && std::isfinite(box.minZ) && std::isfinite(box.maxZ);
+  };
+
+  // An edge with a non-finite box is left out entirely and so collides with nothing this tick; the sweep
+  // would still test it, which is a deliberate divergence since a tree cannot hold a NaN box.
+  std::vector<BroadPhaseInput> inputs;
+  inputs.reserve(m_collisionEdges.size());
+
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    const auto& edge = m_collisionEdges[i];
+    const auto& box = edge.collider->cachedBoundingBox();
+    if (!isFinite(box))
     {
       continue;
     }
 
-    handleCollisions(rigidBody, m_collisionEdges[i].collider, perEdgeCollisions[i], dt);
+    BroadPhaseInput input;
+    input.key = edge.collider.get();
+    input.collider = edge.collider;
+    input.tight = { glm::vec3(box.minX, box.minY, box.minZ), glm::vec3(box.maxX, box.maxY, box.maxZ) };
+    input.edgeIndex = static_cast<int32_t>(i);
+
+    if (const auto body = edge.object->getComponent<RigidBody>(ComponentType::rigidBody))
+    {
+      input.dynamic = true;
+
+      // Velocity is displacement per tick.
+      const auto velocity = body->getVelocity();
+      if (std::isfinite(velocity.x) && std::isfinite(velocity.y) && std::isfinite(velocity.z))
+      {
+        input.displacement = velocity;
+      }
+    }
+
+    inputs.push_back(std::move(input));
   }
 
-  recordCollisionEvents(perEdgeCollisions);
+  m_broadPhase.update(inputs);
+
+  m_candidates.assign(m_collisionEdges.size(), {});
+  for (const auto pair : m_broadPhase.getPairs())
+  {
+    const auto a = m_broadPhase.edgeIndexOf(BroadPhase::firstOf(pair));
+    const auto b = m_broadPhase.edgeIndexOf(BroadPhase::secondOf(pair));
+
+    if (m_collisionEdges[static_cast<size_t>(a)].object->getComponent<RigidBody>(ComponentType::rigidBody))
+    {
+      m_candidates[static_cast<size_t>(a)].push_back(b);
+    }
+
+    if (m_collisionEdges[static_cast<size_t>(b)].object->getComponent<RigidBody>(ComponentType::rigidBody))
+    {
+      m_candidates[static_cast<size_t>(b)].push_back(a);
+    }
+  }
+
+  for (auto& list : m_candidates)
+  {
+    std::ranges::sort(list);
+    m_counters.candidates += list.size();
+  }
+
+  m_counters.reinserts += m_broadPhase.getStats().reinserts;
+  m_counters.broadPhaseMicros += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+    std::chrono::steady_clock::now() - start).count());
+}
+
+void CollisionSystem::collideWithCandidates(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                                            std::vector<uint64_t>& narrowPhaseCalls)
+{
+  // Read-only for the same reason as sweepCollisions: every box was warmed serially and responses wait.
+#pragma omp parallel for default(none) shared(perEdgeCollisions, narrowPhaseCalls) num_threads(6) schedule(dynamic, 16)
+  for (int i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    if (m_candidates[i].empty())
+    {
+      continue;
+    }
+
+    std::vector<std::shared_ptr<Object>> collidedObjects;
+    narrowPhaseCalls[i] = findCollisionsFromCandidates(m_collisionEdges[i], m_candidates[i], collidedObjects);
+
+    if (!collidedObjects.empty())
+    {
+      perEdgeCollisions[i] = std::move(collidedObjects);
+    }
+  }
+}
+
+void CollisionSystem::reportCounters()
+{
+  const auto ticks = static_cast<double>(m_counters.ticks);
+  const auto& stats = m_broadPhase.getStats();
+  const bool tree = m_broadPhaseMode == BroadPhaseMode::tree;
+
+  std::ostringstream message;
+  message << std::fixed << std::setprecision(1)
+          << "broadphase=" << (tree ? "tree" : "sweep") << " ticks=" << m_counters.ticks
+          << " candidates/tick=" << static_cast<double>(m_counters.candidates) / ticks
+          << " narrow/tick=" << static_cast<double>(m_counters.narrowPhaseCalls) / ticks
+          << " reinserts/tick=" << static_cast<double>(m_counters.reinserts) / ticks
+          << " broadphase_us/tick=" << static_cast<double>(m_counters.broadPhaseMicros) / ticks
+          << " check_us/tick=" << static_cast<double>(m_counters.checkMicros) / ticks;
+
+  if (tree)
+  {
+    message << " pairs=" << stats.pairCount << " static=" << stats.staticProxies
+            << " dynamic=" << stats.dynamicProxies << " heights=" << stats.staticHeight << "/"
+            << stats.dynamicHeight;
+  }
+
+  Log::info(LogCategory::physics, message.str());
+
+  m_counters = {};
 }
 
 std::vector<size_t> CollisionSystem::responseOrder(
@@ -168,8 +327,23 @@ void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::s
   m_previousPairs = std::move(current);
 }
 
+void CollisionSystem::setBroadPhaseMode(const BroadPhaseMode mode)
+{
+  if (mode == m_broadPhaseMode)
+  {
+    return;
+  }
+
+  m_broadPhaseMode = mode;
+  m_broadPhase.clear();
+  m_candidates.clear();
+  m_counters = {};
+}
+
 void CollisionSystem::reset()
 {
+  m_broadPhase.clear();
+  m_candidates.clear();
   m_previousPairs.clear();
   m_enters.clear();
   m_stays.clear();
@@ -220,6 +394,48 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
       collidedObjects.emplace_back(other.object);
     }
   }
+}
+
+uint64_t CollisionSystem::findCollisionsFromCandidates(const CollisionEdge& edge,
+                                                       const std::vector<int32_t>& candidates,
+                                                       std::vector<std::shared_ptr<Object>>& collidedObjects) const
+{
+  const auto& bbox = edge.collider->cachedBoundingBox();
+  uint64_t narrowPhaseCalls = 0;
+
+  for (const auto index : candidates)
+  {
+    const auto& other = m_collisionEdges[static_cast<size_t>(index)];
+
+    if (other.object == edge.object ||
+        other.object->getParent() == edge.object ||
+        other.object == edge.object->getParent())
+    {
+      continue;
+    }
+
+    if (!layersCollide(edge.collider, other.collider))
+    {
+      continue;
+    }
+
+    const auto& otherBbox = other.collider->cachedBoundingBox();
+
+    if (bbox.maxX < otherBbox.minX || bbox.minX > otherBbox.maxX ||
+        bbox.maxY < otherBbox.minY || bbox.minY > otherBbox.maxY ||
+        bbox.maxZ < otherBbox.minZ || bbox.minZ > otherBbox.maxZ)
+    {
+      continue;
+    }
+
+    ++narrowPhaseCalls;
+    if (collisions::intersects(*edge.collider, *other.collider))
+    {
+      collidedObjects.emplace_back(other.object);
+    }
+  }
+
+  return narrowPhaseCalls;
 }
 
 void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,

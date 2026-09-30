@@ -1,7 +1,9 @@
 #ifndef COLLISIONSYSTEM_H
 #define COLLISIONSYSTEM_H
 
+#include "broadphase/BroadPhase.h"
 #include "collisions/NarrowPhase.h"
+#include <cstdint>
 #include <compare>
 #include <memory>
 #include <optional>
@@ -37,6 +39,11 @@ struct CollisionPair {
   std::strong_ordering operator<=>(const CollisionPair& other) const = default;
 };
 
+enum class BroadPhaseMode {
+  sweep,
+  tree
+};
+
 class CollisionSystem {
 public:
   // dt is the tick length, which contact responses need to combine per-tick velocity with spin.
@@ -53,8 +60,28 @@ public:
   // previous run don't leak into the next run's first diff as spurious enter/exit events.
   void reset();
 
+  // Switching modes drops the tree's proxies and pair cache, so an A/B comparison starts clean.
+  void setBroadPhaseMode(BroadPhaseMode mode);
+  [[nodiscard]] BroadPhaseMode getBroadPhaseMode() const { return m_broadPhaseMode; }
+
 private:
   std::vector<CollisionEdge> m_collisionEdges;
+
+  BroadPhaseMode m_broadPhaseMode = BroadPhaseMode::tree;
+  BroadPhase m_broadPhase;
+
+  // Per edge: the edges whose tight AABB overlaps its own, ascending - the order the sweep visits them in.
+  std::vector<std::vector<int32_t>> m_candidates;
+
+  struct Counters {
+    uint64_t ticks = 0;
+    uint64_t candidates = 0;
+    uint64_t narrowPhaseCalls = 0;
+    uint64_t reinserts = 0;
+    uint64_t broadPhaseMicros = 0;
+    uint64_t checkMicros = 0;
+  };
+  Counters m_counters;
 
   // Sorted set of colliding pairs from the previous tick, diffed against the current tick to produce
   // the enter/stay/exit lists.
@@ -75,6 +102,21 @@ private:
     const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const;
 
   void findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+
+  // Same filters and order as findCollisions, over the broad phase's candidate list instead of a sweep.
+  // Returns how many times it called the narrow phase.
+  [[nodiscard]] uint64_t findCollisionsFromCandidates(const CollisionEdge& edge,
+                                                      const std::vector<int32_t>& candidates,
+                                                      std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+
+  void sweepCollisions(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions);
+
+  void updateBroadPhase();
+
+  void collideWithCandidates(std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                             std::vector<uint64_t>& narrowPhaseCalls);
+
+  void reportCounters();
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
                                const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt);
