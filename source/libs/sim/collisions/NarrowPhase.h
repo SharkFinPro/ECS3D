@@ -52,6 +52,15 @@ namespace collisions {
   // The two agree except in one case: on the general path this answers yes for a pair whose translation
   // out of the overlap EPA could not build, which findContact reports as no contact at all.
   [[nodiscard]] bool intersects(Collider& collider, Collider& other);
+
+  // Both answers from one GJK run: exactly what intersects and findContact return for the same pair, so
+  // a caller that wants the contact of every pair that touches does not run GJK twice.
+  struct NarrowPhaseResult {
+    bool intersects = false;
+    std::optional<Contact> contact;
+  };
+
+  [[nodiscard]] NarrowPhaseResult collide(Collider& collider, Collider& other);
 }
 
 #endif //NARROWPHASE_H

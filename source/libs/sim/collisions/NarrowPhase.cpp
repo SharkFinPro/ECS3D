@@ -266,6 +266,53 @@ namespace collisions {
     return contact;
   }
 
+  NarrowPhaseResult collide(Collider& collider, Collider& other)
+  {
+    NarrowPhaseResult result;
+
+    if (collider.getColliderType() == ColliderType::sphereCollider &&
+        other.getColliderType() == ColliderType::sphereCollider)
+    {
+      result.intersects = spheresOverlap(collider, other);
+      if (result.intersects)
+      {
+        result.contact = findSphereContact(collider, other);
+      }
+
+      return result;
+    }
+
+    Simplex simplex;
+    if (!runGjk(collider, other, simplex))
+    {
+      return result;
+    }
+
+    result.intersects = true;
+
+    const Polytope polytope(collider, other, simplex);
+
+    const auto minimumTranslationVector = polytope.getMinimumTranslationVector();
+
+    if (minimumTranslationVector.x == 0 && minimumTranslationVector.y == 0 && minimumTranslationVector.z == 0)
+    {
+      return result;
+    }
+
+    Contact contact{ -minimumTranslationVector, polytope.findCollisionPoint() };
+
+    const auto manifold = polytope.findContactManifold();
+    if (manifold.size() > 1)
+    {
+      contact.pointCount = static_cast<std::uint8_t>(std::min(manifold.size(), contact.points.size()));
+      std::copy_n(manifold.begin(), contact.pointCount, contact.points.begin());
+    }
+
+    result.contact = contact;
+
+    return result;
+  }
+
   bool intersects(Collider& collider, Collider& other)
   {
     if (collider.getColliderType() == ColliderType::sphereCollider &&
