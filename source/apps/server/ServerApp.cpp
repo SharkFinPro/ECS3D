@@ -42,6 +42,83 @@ namespace {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - start).count());
   }
+
+  // False when the variable is unset; a set but invalid one is reported and also leaves value alone.
+  bool readEnvInteger(const char* name, const long long minimum, const long long maximum, long long& value)
+  {
+    const char* setting = std::getenv(name);
+    if (!setting)
+    {
+      return false;
+    }
+
+    char* end = nullptr;
+    const long long parsed = std::strtoll(setting, &end, 10);
+    if (end != setting && *end == '\0' && parsed >= minimum && parsed <= maximum)
+    {
+      value = parsed;
+      return true;
+    }
+
+    Log::warn(LogCategory::physics, std::string("Ignoring invalid ") + name + "='" + setting + "'");
+    return false;
+  }
+
+  bool readEnvFloat(const char* name, const float minimum, const float maximum, float& value)
+  {
+    const char* setting = std::getenv(name);
+    if (!setting)
+    {
+      return false;
+    }
+
+    char* end = nullptr;
+    const float parsed = std::strtof(setting, &end);
+    if (end != setting && *end == '\0' && parsed >= minimum && parsed <= maximum)
+    {
+      value = parsed;
+      return true;
+    }
+
+    Log::warn(LogCategory::physics, std::string("Ignoring invalid ") + name + "='" + setting + "'");
+    return false;
+  }
+
+  Scene3Options scene3OptionsFromEnvironment()
+  {
+    Scene3Options options;
+    long long value = 0;
+    bool any = false;
+
+    if (readEnvInteger("ECS3D_SCENE3_SEED", 0, 4294967295LL, value))
+    {
+      options.seed = static_cast<uint32_t>(value);
+      any = true;
+    }
+
+    if (readEnvInteger("ECS3D_SCENE3_GRID", 1, 64, value))
+    {
+      options.gridSize = static_cast<int>(value);
+      any = true;
+    }
+
+    if (readEnvInteger("ECS3D_SCENE3_LAYERS", 1, 200, value))
+    {
+      options.layerCount = static_cast<int>(value);
+      any = true;
+    }
+
+    if (any)
+    {
+      options.overlapFree = true;
+      Log::info(LogCategory::server, "Scene 3: seed="
+        + (options.seed ? std::to_string(*options.seed) : std::string("random"))
+        + " grid=" + std::to_string(options.gridSize) + " layers=" + std::to_string(options.layerCount)
+        + " (overlap-free spacing)");
+    }
+
+    return options;
+  }
 }
 
 ServerApp::ServerApp(LaunchOptions options)
@@ -71,6 +148,43 @@ ServerApp::ServerApp(LaunchOptions options)
   const bool sleepEnabled = !(sleepSetting && std::string(sleepSetting) == "0");
   m_collisionSystem->setSleepingEnabled(sleepEnabled);
   Log::info(LogCategory::physics, std::string("Sleeping: ") + (sleepEnabled ? "on" : "off"));
+
+  float sleepLinear = sleeping::linearSleepSpeed;
+  float sleepAngular = sleeping::angularSleepSpeed;
+  long long sleepTicks = sleeping::ticksToSleep;
+  const bool thresholdsSet = readEnvFloat("ECS3D_SLEEP_LINEAR", 0.0f, 1.0f, sleepLinear) |
+                             readEnvFloat("ECS3D_SLEEP_ANGULAR", 0.0f, 360.0f, sleepAngular) |
+                             readEnvInteger("ECS3D_SLEEP_TICKS", 1, 100000, sleepTicks);
+  if (thresholdsSet)
+  {
+    m_collisionSystem->setSleepThresholds(sleepLinear, sleepAngular, static_cast<uint32_t>(sleepTicks));
+    Log::info(LogCategory::physics, "Sleep thresholds: linear=" + std::to_string(sleepLinear) + " angular="
+      + std::to_string(sleepAngular) + " ticks=" + std::to_string(sleepTicks));
+  }
+
+  const char* sleepSupportSetting = std::getenv("ECS3D_SLEEP_SUPPORT");
+  const std::string sleepSupport = sleepSupportSetting ? sleepSupportSetting : "falling";
+  if (sleepSupport != "falling" && sleepSupport != "contact")
+  {
+    Log::warn(LogCategory::physics, "Ignoring invalid ECS3D_SLEEP_SUPPORT='" + sleepSupport + "'");
+  }
+  else
+  {
+    m_collisionSystem->setSleepSupport(sleepSupport == "contact" ? SleepSupport::contact : SleepSupport::falling);
+    Log::info(LogCategory::physics, "Sleep support test: " + sleepSupport);
+  }
+
+  const char* sleepModeSetting = std::getenv("ECS3D_SLEEP_MODE");
+  const std::string sleepMode = sleepModeSetting ? sleepModeSetting : "island";
+  if (sleepMode != "island" && sleepMode != "grounded")
+  {
+    Log::warn(LogCategory::physics, "Ignoring invalid ECS3D_SLEEP_MODE='" + sleepMode + "'");
+  }
+  else
+  {
+    m_collisionSystem->setSleepMode(sleepMode == "grounded" ? SleepMode::grounded : SleepMode::island);
+    Log::info(LogCategory::physics, "Sleep mode: " + sleepMode);
+  }
 
   const char* refreshSetting = std::getenv("ECS3D_CONTACT_REFRESH");
   const bool refreshEnabled = refreshSetting && std::string(refreshSetting) == "1";
@@ -131,7 +245,7 @@ ServerApp::ServerApp(LaunchOptions options)
   {
     // No project file requested: run the built-in sample (scenes 1-3 + falling balls). It's generated in
     // code because the procedural scenes can't be a static file on disk.
-    m_projectSerializer->deserialize(buildDefaultProject());
+    m_projectSerializer->deserialize(buildDefaultProject(scene3OptionsFromEnvironment()));
   }
   else if (!m_projectSerializer->load(m_options.project) || !m_sceneManager->getCurrentScene())
   {

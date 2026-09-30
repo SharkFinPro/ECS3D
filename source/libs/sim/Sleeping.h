@@ -13,6 +13,12 @@ namespace sleeping {
 
   // Half a second at 50 Hz.
   constexpr uint32_t ticksToSleep = 25;
+
+  // A body pushed out of a contact whose unit normal has at least this much y is resting on it.
+  constexpr float supportNormalY = 0.5f;
+
+  // Grounded mode: a body touching a sleeper leaves it asleep unless it moves faster than this (per tick).
+  constexpr float gentleContactSpeed = 0.02f;
 }
 
 #endif //SLEEPING_H

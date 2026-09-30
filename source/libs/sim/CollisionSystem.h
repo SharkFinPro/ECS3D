@@ -4,6 +4,7 @@
 #include "PhysicsSystem.h"
 #include "broadphase/BroadPhase.h"
 #include "collisions/NarrowPhase.h"
+#include "Sleeping.h"
 #include <objects/components/collisions/Collider.h>
 #include <array>
 #include <cstddef>
@@ -49,6 +50,20 @@ struct CollisionPair {
 enum class BroadPhaseMode {
   sweep,
   tree
+};
+
+// island: a connected group of touching bodies sleeps only when every member is ready, all at once. grounded: a
+// body sleeps once it is ready and everything it rests on is static or asleep, so a pile sleeps from the bottom up.
+enum class SleepMode {
+  island,
+  grounded
+};
+
+// falling: a body is supported unless a response has not pushed it up this tick. contact: it is supported when a
+// non-trigger contact of this tick pushes it out mostly upward (see verticalRole).
+enum class SleepSupport {
+  falling,
+  contact
 };
 
 // A collider's world placement at one moment, as the contact refresh compares it.
@@ -100,6 +115,19 @@ public:
   // disturbs it. Sweep mode never sleeps anything.
   void setSleepingEnabled(bool enabled);
   [[nodiscard]] bool isSleepingEnabled() const { return m_sleepingEnabled; }
+
+  // A resting body has to stay under both speeds for that many ticks in a row. Defaults are Sleeping.h's.
+  void setSleepThresholds(float linear, float angularDegrees, uint32_t ticks);
+  [[nodiscard]] float getSleepLinearSpeed() const { return m_sleepLinearSpeed; }
+  [[nodiscard]] float getSleepAngularSpeed() const { return m_sleepAngularSpeed; }
+  [[nodiscard]] uint32_t getSleepTicks() const { return m_sleepTicks; }
+
+  // Switching either wakes every body on the next tick.
+  void setSleepMode(SleepMode mode);
+  [[nodiscard]] SleepMode getSleepMode() const { return m_sleepMode; }
+
+  void setSleepSupport(SleepSupport support);
+  [[nodiscard]] SleepSupport getSleepSupport() const { return m_sleepSupport; }
 
   // Off by default. On, the response pass moves a cached contact along with a translation of either body
   // instead of running GJK/EPA again, while the drift stays small (see refreshContact). Approximate.
@@ -218,6 +246,9 @@ private:
     uint64_t key = 0;
     bool dynamic = false;
     bool trigger = false;
+
+    // Grounded mode only: this body rests on the other.
+    bool supportedBy = false;
   };
 
   struct SleepRecord {
@@ -313,6 +344,16 @@ private:
   std::vector<CollisionPair> m_exits;
 
   bool m_sleepingEnabled = false;
+  float m_sleepLinearSpeed = sleeping::linearSleepSpeed;
+  float m_sleepAngularSpeed = sleeping::angularSleepSpeed;
+  uint32_t m_sleepTicks = sleeping::ticksToSleep;
+  SleepMode m_sleepMode = SleepMode::island;
+  SleepSupport m_sleepSupport = SleepSupport::falling;
+
+  // Per body of m_bodies: whether a contact of the tick just measured has it resting on something. Filled only
+  // with the contact support test or grounded mode.
+  std::vector<uint8_t> m_contactSupported;
+
   bool m_wakeAll = false;
   uint32_t m_nextIslandId = 1;
   uint64_t m_asleepBodiesLastTick = 0;
@@ -354,6 +395,24 @@ private:
                            std::vector<int32_t>& hitEdges, std::vector<uint32_t>& wakeIslands) const;
 
   void applyWakeRequests(const std::vector<std::vector<uint32_t>>& requests);
+
+  // Grounded mode: wakes every sleeper resting on something that is awake or gone, upward until none is left.
+  void wakeUnsupportedSleepers();
+
+  // +1 when the edge's collider rests on its k-th hit (that contact pushes it out mostly upward), -1 when the hit
+  // rests on it, 0 otherwise or when there is no cached contact for the hit (cache off, a trigger, a sleeper's replay).
+  [[nodiscard]] int verticalRole(size_t edgeIndex, size_t k) const;
+
+  [[nodiscard]] uint32_t newIslandId();
+
+  void putToSleep(size_t bodyIndex, uint32_t islandId, std::vector<uint32_t>& islandOfBody,
+                  std::vector<uint8_t>& slept);
+
+  void sleepIslands(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                    std::vector<uint32_t>& islandOfBody, std::vector<uint8_t>& slept);
+
+  void sleepGrounded(const std::vector<std::vector<int32_t>>& supportEdges, std::vector<uint32_t>& islandOfBody,
+                     std::vector<uint8_t>& slept);
 
   void wakeEverything();
 

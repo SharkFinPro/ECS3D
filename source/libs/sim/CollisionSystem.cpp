@@ -805,7 +805,11 @@ void CollisionSystem::reportCounters()
     message << " asleep_bodies=" << m_counters.bodiesAsleep << " asleep_islands=" << m_counters.islandsAsleep
             << " fell_asleep/tick=" << perTick(m_counters.fellAsleep)
             << " woke/tick=" << perTick(m_counters.woke)
-            << " sleep_skipped_edges/tick=" << perTick(m_counters.sleepSkippedEdges);
+            << " sleep_skipped_edges/tick=" << perTick(m_counters.sleepSkippedEdges)
+            << " sleep_mode=" << (m_sleepMode == SleepMode::grounded ? "grounded" : "island")
+            << " sleep_support=" << (m_sleepSupport == SleepSupport::contact ? "contact" : "falling")
+            << " sleep_thresholds(linear/angular/ticks)=" << std::setprecision(4) << m_sleepLinearSpeed << "/"
+            << m_sleepAngularSpeed << "/" << m_sleepTicks << std::setprecision(1);
 
     if (m_detailedTiming)
     {
@@ -1038,8 +1042,9 @@ void CollisionSystem::recordSleepBlockers()
 {
   const ScopedMicros timer(m_counters.diagMicros);
 
-  for (const auto* body : m_bodies)
+  for (size_t b = 0; b < m_bodies.size(); ++b)
   {
+    const auto* body = m_bodies[b];
     if (body->isAsleep())
     {
       continue;
@@ -1047,15 +1052,16 @@ void CollisionSystem::recordSleepBlockers()
 
     ++m_counters.awakeBodies;
 
-    const bool unsupported = body->getNextFalling();
+    const bool unsupported = m_sleepSupport == SleepSupport::contact ? m_contactSupported[b] == 0
+                                                                     : body->getNextFalling();
     const float speed = glm::length(body->getVelocity());
     const float spin = glm::length(body->getAngularVelocity());
 
     m_counters.blockedUnsupported += unsupported ? 1 : 0;
-    m_counters.blockedFast += speed >= sleeping::linearSleepSpeed ? 1 : 0;
-    m_counters.blockedSpinning += spin >= sleeping::angularSleepSpeed ? 1 : 0;
+    m_counters.blockedFast += speed >= m_sleepLinearSpeed ? 1 : 0;
+    m_counters.blockedSpinning += spin >= m_sleepAngularSpeed ? 1 : 0;
     m_counters.blockedForces += body->getPendingForces().empty() ? 0 : 1;
-    m_counters.blockedIsland += body->getRestTicks() >= sleeping::ticksToSleep ? 1 : 0;
+    m_counters.blockedIsland += body->getRestTicks() >= m_sleepTicks ? 1 : 0;
 
     if (!unsupported)
     {
@@ -1228,6 +1234,32 @@ void CollisionSystem::setSleepingEnabled(const bool enabled)
   m_sleepingEnabled = enabled;
 }
 
+void CollisionSystem::setSleepThresholds(const float linear, const float angularDegrees, const uint32_t ticks)
+{
+  m_sleepLinearSpeed = linear;
+  m_sleepAngularSpeed = angularDegrees;
+  m_sleepTicks = ticks;
+  clearSleepState();
+}
+
+void CollisionSystem::setSleepMode(const SleepMode mode)
+{
+  if (mode != m_sleepMode)
+  {
+    m_sleepMode = mode;
+    clearSleepState();
+  }
+}
+
+void CollisionSystem::setSleepSupport(const SleepSupport support)
+{
+  if (support != m_sleepSupport)
+  {
+    m_sleepSupport = support;
+    clearSleepState();
+  }
+}
+
 void CollisionSystem::clearSleepState()
 {
   m_sleepRecords.clear();
@@ -1308,12 +1340,23 @@ CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
   CandidateStats stats;
 
   // Touching a sleeper wakes its island, unless the touch is a trigger overlap, which has no response.
-  const auto wakeIfAsleep = [&self, &wakeIslands](const EdgeInfo& touched)
+  // In grounded mode a body touching a sleeper gently leaves it be; a real push shows as the sleeper's geometry
+  // changing, which wakes it through the sleep key check.
+  const auto wakeIfAsleep = [this, &self, &wakeIslands](const EdgeInfo& touched,
+                                                        const std::optional<collisions::Contact>& contact)
   {
-    if (touched.asleep && !self.trigger && !touched.trigger)
+    if (!touched.asleep || self.trigger || touched.trigger)
     {
-      wakeIslands.push_back(touched.islandId);
+      return;
     }
+
+    if (m_sleepMode == SleepMode::grounded && contact && self.body &&
+        glm::length(self.body->getVelocity()) < sleeping::gentleContactSpeed)
+    {
+      return;
+    }
+
+    wakeIslands.push_back(touched.islandId);
   };
 
   for (const auto index : candidates)
@@ -1353,7 +1396,7 @@ CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
       {
         collidedObjects.emplace_back(m_collisionEdges[static_cast<size_t>(index)].object);
         hitEdges.push_back(index);
-        wakeIfAsleep(other);
+        wakeIfAsleep(other, std::nullopt);
 
         if (m_contactCacheEnabled)
         {
@@ -1371,7 +1414,7 @@ CollisionSystem::CandidateStats CollisionSystem::findCollisionsFromCandidates(
     {
       collidedObjects.emplace_back(m_collisionEdges[static_cast<size_t>(index)].object);
       hitEdges.push_back(index);
-      wakeIfAsleep(other);
+      wakeIfAsleep(other, result.contact);
 
       CachedContact entry{ true, std::move(result.contact), self.geometryKey, other.geometryKey };
       if (m_contactRefreshEnabled)
@@ -1737,7 +1780,13 @@ void CollisionSystem::collectSleepingHits(const size_t edgeIndex,
     }
 
     const auto& other = m_edgeInfos[static_cast<size_t>(edge->second)];
-    if (other.geometryKey != hit.key || (hit.dynamic && !hit.trigger && other.body && !other.asleep))
+
+    // Grounded mode only wakes for what this body rests on; a neighbor's motion shows up as a push on its own key.
+    const bool disturbed = m_sleepMode == SleepMode::grounded && hit.dynamic
+      ? hit.supportedBy && (other.geometryKey != hit.key || (other.body && !other.asleep))
+      : other.geometryKey != hit.key || (hit.dynamic && !hit.trigger && other.body && !other.asleep);
+
+    if (disturbed)
     {
       stale = true;
     }
@@ -1771,6 +1820,11 @@ void CollisionSystem::applyWakeRequests(const std::vector<std::vector<uint32_t>>
 
   if (islands.empty())
   {
+    if (m_sleepMode == SleepMode::grounded)
+    {
+      wakeUnsupportedSleepers();
+    }
+
     return;
   }
 
@@ -1788,6 +1842,76 @@ void CollisionSystem::applyWakeRequests(const std::vector<std::vector<uint32_t>>
   {
     return std::ranges::binary_search(islands, entry.second.islandId);
   });
+
+  if (m_sleepMode == SleepMode::grounded)
+  {
+    wakeUnsupportedSleepers();
+  }
+}
+
+void CollisionSystem::wakeUnsupportedSleepers()
+{
+  for (;;)
+  {
+    std::vector<uint32_t> islands;
+
+    for (const auto& entry : m_sleepRecords)
+    {
+      const auto& record = entry.second;
+      bool unsupported = false;
+
+      for (const auto& hit : record.hits)
+      {
+        if (!hit.supportedBy)
+        {
+          continue;
+        }
+
+        const auto object = hit.object.lock();
+        const auto edge = object ? m_edgeOfObject.find(object.get()) : m_edgeOfObject.end();
+        if (edge == m_edgeOfObject.end())
+        {
+          unsupported = true;
+          break;
+        }
+
+        const auto* support = m_edgeInfos[static_cast<size_t>(edge->second)].body;
+        if (support && !support->isAsleep())
+        {
+          unsupported = true;
+          break;
+        }
+      }
+
+      if (unsupported)
+      {
+        islands.push_back(record.islandId);
+      }
+    }
+
+    if (islands.empty())
+    {
+      return;
+    }
+
+    std::ranges::sort(islands);
+    islands.erase(std::unique(islands.begin(), islands.end()), islands.end());
+
+    for (auto* body : m_bodies)
+    {
+      if (body->isAsleep() && std::ranges::binary_search(islands, body->getIslandId()))
+      {
+        body->setAsleep(false);
+        body->setRestTicks(0);
+        ++m_counters.woke;
+      }
+    }
+
+    std::erase_if(m_sleepRecords, [&islands](const auto& entry)
+    {
+      return std::ranges::binary_search(islands, entry.second.islandId);
+    });
+  }
 }
 
 void CollisionSystem::wakeEverything()
@@ -1805,24 +1929,58 @@ void CollisionSystem::wakeEverything()
   m_wakeAll = false;
 }
 
-void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions)
+int CollisionSystem::verticalRole(const size_t edgeIndex, const size_t k) const
+{
+  const auto& hits = m_hitEdges[edgeIndex];
+  const auto& cached = m_cachedContacts[edgeIndex];
+  if (k >= hits.size() || k >= cached.size() || !cached[k].computed || !cached[k].contact)
+  {
+    return 0;
+  }
+
+  if (m_edgeInfos[edgeIndex].trigger || m_edgeInfos[static_cast<size_t>(hits[k])].trigger)
+  {
+    return 0;
+  }
+
+  // The contact is from this collider's point of view, so its normal is the way this body would be pushed out.
+  const float up = cached[k].contact->normal().y;
+
+  return up >= sleeping::supportNormalY ? 1 : up <= -sleeping::supportNormalY ? -1 : 0;
+}
+
+uint32_t CollisionSystem::newIslandId()
+{
+  const uint32_t id = m_nextIslandId++;
+  if (m_nextIslandId == 0)
+  {
+    m_nextIslandId = 1;
+  }
+
+  return id;
+}
+
+void CollisionSystem::putToSleep(const size_t bodyIndex, const uint32_t islandId,
+                                 std::vector<uint32_t>& islandOfBody, std::vector<uint8_t>& slept)
+{
+  auto& body = *m_bodies[bodyIndex];
+
+  body.setAsleep(true);
+  body.setIslandId(islandId);
+  body.setVelocity(glm::vec3(0));
+  body.setAngularVelocity(glm::vec3(0));
+  body.setFalling(false);
+  body.setNextFalling(false);
+  body.setSleepGeometryKey(body.getOwner() ? geometryKeyOf(*body.getOwner()) : 0);
+  islandOfBody[bodyIndex] = islandId;
+  slept[bodyIndex] = 1;
+  ++m_counters.fellAsleep;
+}
+
+void CollisionSystem::sleepIslands(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions,
+                                   std::vector<uint32_t>& islandOfBody, std::vector<uint8_t>& slept)
 {
   const size_t bodyCount = m_bodies.size();
-
-  for (auto* body : m_bodies)
-  {
-    if (body->isAsleep())
-    {
-      continue;
-    }
-
-    const bool resting = !body->getNextFalling() &&
-                         glm::length(body->getVelocity()) < sleeping::linearSleepSpeed &&
-                         glm::length(body->getAngularVelocity()) < sleeping::angularSleepSpeed &&
-                         body->getPendingForces().empty();
-
-    body->setRestTicks(resting ? body->getRestTicks() + 1 : 0);
-  }
 
   std::vector<size_t> parent(bodyCount);
   std::iota(parent.begin(), parent.end(), size_t{0});
@@ -1868,43 +2026,141 @@ void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_p
   std::vector<uint8_t> rested(bodyCount, 1);
   for (size_t b = 0; b < bodyCount; ++b)
   {
-    if (!m_bodies[b]->isAsleep() && m_bodies[b]->getRestTicks() < sleeping::ticksToSleep)
+    if (!m_bodies[b]->isAsleep() && m_bodies[b]->getRestTicks() < m_sleepTicks)
     {
       rested[root(b)] = 0;
     }
   }
 
   std::vector<uint32_t> islandOfRoot(bodyCount, 0);
-  std::vector<uint8_t> slept(bodyCount, 0);
 
   for (size_t b = 0; b < bodyCount; ++b)
   {
-    auto& body = *m_bodies[b];
     const auto r = root(b);
 
-    if (body.isAsleep() || !rested[r])
+    if (m_bodies[b]->isAsleep() || !rested[r])
     {
       continue;
     }
 
     if (islandOfRoot[r] == 0)
     {
-      islandOfRoot[r] = m_nextIslandId++;
-      if (m_nextIslandId == 0)
+      islandOfRoot[r] = newIslandId();
+    }
+
+    putToSleep(b, islandOfRoot[r], islandOfBody, slept);
+  }
+}
+
+void CollisionSystem::sleepGrounded(const std::vector<std::vector<int32_t>>& supportEdges,
+                                    std::vector<uint32_t>& islandOfBody, std::vector<uint8_t>& slept)
+{
+  std::vector<size_t> waiting;
+  for (size_t b = 0; b < m_bodies.size(); ++b)
+  {
+    if (!m_bodies[b]->isAsleep() && m_bodies[b]->getRestTicks() >= m_sleepTicks)
+    {
+      waiting.push_back(b);
+    }
+  }
+
+  // A body that goes to sleep can be what the one above it was waiting for, so sweep until a pass adds nobody.
+  for (bool changed = true; changed;)
+  {
+    changed = false;
+    std::vector<size_t> stillWaiting;
+
+    for (const auto b : waiting)
+    {
+      const bool grounded = std::ranges::all_of(supportEdges[b], [this](const int32_t edge)
       {
-        m_nextIslandId = 1;
+        const auto* support = m_edgeInfos[static_cast<size_t>(edge)].body;
+        return !support || support->isAsleep();
+      });
+
+      if (grounded)
+      {
+        putToSleep(b, newIslandId(), islandOfBody, slept);
+        changed = true;
+      }
+      else
+      {
+        stillWaiting.push_back(b);
       }
     }
 
-    body.setAsleep(true);
-    body.setIslandId(islandOfRoot[r]);
-    body.setVelocity(glm::vec3(0));
-    body.setAngularVelocity(glm::vec3(0));
-    body.setFalling(false);
-    body.setNextFalling(false);
-    body.setSleepGeometryKey(body.getOwner() ? geometryKeyOf(*body.getOwner()) : 0);
-    slept[b] = 1;
-    ++m_counters.fellAsleep;
+    waiting = std::move(stillWaiting);
+  }
+}
+
+void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions)
+{
+  const size_t bodyCount = m_bodies.size();
+  const bool byContact = m_sleepSupport == SleepSupport::contact;
+  const bool grounded = m_sleepMode == SleepMode::grounded;
+
+  std::vector<std::vector<int32_t>> supportEdges;
+  m_contactSupported.clear();
+
+  if (byContact || grounded)
+  {
+    m_contactSupported.assign(bodyCount, 0);
+    supportEdges.resize(bodyCount);
+
+    for (size_t i = 0; i < m_edgeInfos.size(); ++i)
+    {
+      const auto& self = m_edgeInfos[i];
+      if (!self.body || self.body->isAsleep() || self.trigger)
+      {
+        continue;
+      }
+
+      for (size_t k = 0; k < perEdgeCollisions[i].size(); ++k)
+      {
+        if (verticalRole(i, k) <= 0)
+        {
+          continue;
+        }
+
+        const int32_t support = m_hitEdges[i][k];
+        if (m_edgeInfos[static_cast<size_t>(support)].body == self.body)
+        {
+          continue;
+        }
+
+        m_contactSupported[self.bodyIndex] = 1;
+        supportEdges[self.bodyIndex].push_back(support);
+      }
+    }
+  }
+
+  for (size_t b = 0; b < bodyCount; ++b)
+  {
+    auto* body = m_bodies[b];
+    if (body->isAsleep())
+    {
+      continue;
+    }
+
+    const bool supported = byContact ? m_contactSupported[b] != 0 : !body->getNextFalling();
+    const bool resting = supported &&
+                         glm::length(body->getVelocity()) < m_sleepLinearSpeed &&
+                         glm::length(body->getAngularVelocity()) < m_sleepAngularSpeed &&
+                         body->getPendingForces().empty();
+
+    body->setRestTicks(resting ? body->getRestTicks() + 1 : 0);
+  }
+
+  std::vector<uint32_t> islandOfBody(bodyCount, 0);
+  std::vector<uint8_t> slept(bodyCount, 0);
+
+  if (grounded)
+  {
+    sleepGrounded(supportEdges, islandOfBody, slept);
+  }
+  else
+  {
+    sleepIslands(perEdgeCollisions, islandOfBody, slept);
   }
 
   // Keys are read now, after every response has moved what it is going to move this tick.
@@ -1918,11 +2174,12 @@ void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_p
 
     SleepRecord record;
     record.collider = m_collisionEdges[i].collider;
-    record.islandId = islandOfRoot[root(self.bodyIndex)];
+    record.islandId = islandOfBody[self.bodyIndex];
     record.selfKey = keyOf(self);
 
-    for (const auto& hit : perEdgeCollisions[i])
+    for (size_t k = 0; k < perEdgeCollisions[i].size(); ++k)
     {
+      const auto& hit = perEdgeCollisions[i][k];
       const auto edge = m_edgeOfObject.find(hit.get());
       if (edge == m_edgeOfObject.end())
       {
@@ -1930,7 +2187,14 @@ void CollisionSystem::updateSleeping(const std::vector<std::vector<std::shared_p
       }
 
       const auto& other = m_edgeInfos[static_cast<size_t>(edge->second)];
-      record.hits.push_back({ hit, keyOf(other), other.hasRigidBody, self.trigger || other.trigger });
+      SleepHit sleepHit{ hit, keyOf(other), other.hasRigidBody, self.trigger || other.trigger };
+
+      if (grounded)
+      {
+        sleepHit.supportedBy = verticalRole(i, k) > 0;
+      }
+
+      record.hits.push_back(std::move(sleepHit));
     }
 
     m_sleepRecords[self.collider] = std::move(record);
