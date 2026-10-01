@@ -67,7 +67,7 @@ void CollisionSystem::checkCollisions(const float dt)
 
   // Each edge's forward-sweep hits (higher edge indices, ascending), indexed by edge so the parallel loop
   // can record them lock-free: every thread writes only its own slot.
-  std::vector<std::vector<size_t>> forwardHits(m_collisionEdges.size());
+  std::vector<std::vector<SweepHit>> forwardHits(m_collisionEdges.size());
 
   // This loop has to stay read-only: findCollisions reads bounding boxes and (through the narrow phase)
   // transformed meshes that live on the same Collider another thread's iteration can also read. That is
@@ -82,21 +82,21 @@ void CollisionSystem::checkCollisions(const float dt)
     findCollisions(i, isDynamic, forwardHits[i]);
   }
 
-  // Each hit goes to the dynamic side(s). Walking i upward keeps every list in ascending edge order: the
-  // entries from lower edges arrive first, then this edge's own forward hits.
+  // Each side's own narrow-phase answer goes to that side's list. Walking i upward keeps every list in
+  // ascending edge order: the entries from lower edges arrive first, then this edge's own forward hits.
   std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
   for (size_t i = 0; i < forwardHits.size(); ++i)
   {
-    for (const auto j : forwardHits[i])
+    for (const auto& hit : forwardHits[i])
     {
-      if (isDynamic[i])
+      if (hit.lowerSees)
       {
-        perEdgeCollisions[i].emplace_back(m_collisionEdges[j].object);
+        perEdgeCollisions[i].emplace_back(m_collisionEdges[hit.other].object);
       }
 
-      if (isDynamic[j])
+      if (hit.higherSees)
       {
-        perEdgeCollisions[j].emplace_back(m_collisionEdges[i].object);
+        perEdgeCollisions[hit.other].emplace_back(m_collisionEdges[i].object);
       }
     }
   }
@@ -153,7 +153,7 @@ std::vector<size_t> CollisionSystem::responseOrder(
 void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions)
 {
   // Flatten the per-edge results into this tick's canonical pair set. A dynamic-vs-dynamic contact is
-  // detected from both sides, so canonicalize (a < b) and dedupe.
+  // tested once from each side and the two answers can differ, so canonicalize (a < b) and dedupe.
   std::vector<CollisionPair> current;
   for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
   {
@@ -190,7 +190,7 @@ void CollisionSystem::reset()
 }
 
 void CollisionSystem::findCollisions(const size_t index, const std::vector<char>& isDynamic,
-                                     std::vector<size_t>& hits) const
+                                     std::vector<SweepHit>& hits) const
 {
   const auto& edge = m_collisionEdges[index];
 
@@ -238,11 +238,15 @@ void CollisionSystem::findCollisions(const size_t index, const std::vector<char>
       continue;
     }
 
-    const bool hit = isDynamic[index] ? collisions::intersects(*edge.collider, *other.collider)
-                                      : collisions::intersects(*other.collider, *edge.collider);
-    if (hit)
+    // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
+    // keeps its own answer.
+    SweepHit hit{ j, false, false };
+    hit.lowerSees = isDynamic[index] && collisions::intersects(*edge.collider, *other.collider);
+    hit.higherSees = isDynamic[j] && collisions::intersects(*other.collider, *edge.collider);
+
+    if (hit.lowerSees || hit.higherSees)
     {
-      hits.push_back(j);
+      hits.push_back(hit);
     }
   }
 }
