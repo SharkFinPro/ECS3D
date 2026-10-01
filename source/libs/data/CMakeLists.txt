@@ -36,6 +36,7 @@ add_library(${PROJECT_NAME}
   objects/components/Component.cpp
   objects/components/Component.h
   objects/components/FiniteCheck.h
+  objects/components/RotationConvention.h
   objects/components/Transform.cpp
   objects/components/Transform.h
   objects/components/RigidBody.cpp

@@ -244,7 +244,7 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
     applyVelocityChange(body, transform, gravity, transform.getPosition(), dt);
   }
 
-  transform.move(body.getVelocity());
+  transform.moveWorld(body.getVelocity());
 
   // Angular velocity is a world-space axis. Added to the Euler angles, it would turn a tilted body about
   // partly rotated axes, so a restoring torque could never right it and the body would keep spinning.
@@ -1009,7 +1009,7 @@ void PhysicsSystem::respondToCollision(RigidBody& body, Transform& transform, co
     body.setNextFalling(false);
   }
 
-  transform.move(displacement);
+  transform.moveWorld(displacement);
 }
 
 std::optional<glm::mat3> PhysicsSystem::worldInverseInertia(const Transform& transform)

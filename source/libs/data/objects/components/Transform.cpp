@@ -1,8 +1,10 @@
 #include "Transform.h"
 #include "FiniteCheck.h"
+#include "RotationConvention.h"
 #include "../Object.h"
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
+#include <cmath>
 #include <Protocol.h>
 #include <algorithm>
 #include <atomic>
@@ -15,6 +17,16 @@ namespace {
   uint64_t nextStamp()
   {
     return ++g_stampClock;
+  }
+
+  std::shared_ptr<Transform> parentTransformOf(const Object& owner)
+  {
+    if (const auto& parent = owner.getParent())
+    {
+      return parent->getComponent<Transform>(ComponentType::transform);
+    }
+
+    return nullptr;
   }
 
   // Drops a non-finite value, keeping the previous one.
@@ -43,40 +55,48 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
   loadVariable(m_rotation);
 }
 
+bool Transform::hasParentTransform() const
+{
+  return parentTransformOf(*m_owner) != nullptr;
+}
+
 glm::vec3 Transform::getPosition() const
 {
-  if (m_owner->getParent())
+  if (const auto parentTransform = parentTransformOf(*m_owner))
   {
-    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
-    {
-      return parentTransform->getPosition() + m_position.get();
-    }
+    return parentTransform->getPosition()
+      + parentTransform->getOrientation() * (parentTransform->getScale() * m_position.get());
   }
 
   return m_position.get();
 }
 
+// Component-wise: a non-uniform parent scale over a rotated child would shear, which a scale vector cannot hold.
 glm::vec3 Transform::getScale() const
 {
-  if (m_owner->getParent())
+  if (const auto parentTransform = parentTransformOf(*m_owner))
   {
-    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
-    {
-      return parentTransform->getScale() * m_scale.get();
-    }
+    return parentTransform->getScale() * m_scale.get();
   }
 
   return m_scale.get();
 }
 
+glm::quat Transform::getOrientation() const
+{
+  if (const auto parentTransform = parentTransformOf(*m_owner))
+  {
+    return parentTransform->getOrientation() * eulerDegreesToQuat(m_rotation.get());
+  }
+
+  return eulerDegreesToQuat(m_rotation.get());
+}
+
 glm::vec3 Transform::getRotation() const
 {
-  if (m_owner->getParent())
+  if (parentTransformOf(*m_owner))
   {
-    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
-    {
-      return parentTransform->getRotation() + m_rotation.get();
-    }
+    return quatToEulerDegrees(getOrientation());
   }
 
   return m_rotation.get();
@@ -132,16 +152,24 @@ void Transform::setRotation(const glm::vec3 rotation)
 
 void Transform::setWorldRotation(const glm::vec3 rotation)
 {
-  if (m_owner->getParent())
+  if (parentTransformOf(*m_owner))
   {
-    if (const auto& parentTransform = m_owner->getParent()->getComponent<Transform>(ComponentType::transform))
-    {
-      setRotation(rotation - parentTransform->getRotation());
-      return;
-    }
+    setWorldOrientation(eulerDegreesToQuat(rotation));
+    return;
   }
 
   setRotation(rotation);
+}
+
+void Transform::setWorldOrientation(const glm::quat& orientation)
+{
+  if (const auto parentTransform = parentTransformOf(*m_owner))
+  {
+    setRotation(quatToEulerDegrees(glm::inverse(parentTransform->getOrientation()) * orientation));
+    return;
+  }
+
+  setRotation(quatToEulerDegrees(orientation));
 }
 
 void Transform::start()
@@ -175,6 +203,30 @@ void Transform::move(const glm::vec3& direction)
 
   m_position.set(moved);
   touch();
+}
+
+void Transform::moveWorld(const glm::vec3& displacement)
+{
+  const auto parentTransform = parentTransformOf(*m_owner);
+  if (!parentTransform)
+  {
+    move(displacement);
+    return;
+  }
+
+  const auto inParentFrame = glm::inverse(parentTransform->getOrientation()) * displacement;
+  const auto parentScale = parentTransform->getScale();
+
+  glm::vec3 local = inParentFrame;
+  for (int axis = 0; axis < 3; ++axis)
+  {
+    if (const auto compensated = inParentFrame[axis] / parentScale[axis]; std::isfinite(compensated))
+    {
+      local[axis] = compensated;
+    }
+  }
+
+  move(local);
 }
 
 nlohmann::json Transform::serialize()

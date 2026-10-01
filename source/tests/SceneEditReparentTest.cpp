@@ -42,14 +42,15 @@ TEST(SceneEdit, ReparentingOntoANonIdentityParentPreservesWorldPlacement)
   // World placement is unchanged by the reparent. Before the fix, this came out as the parent's own
   // position/scale/rotation composed on top of the object's now-stale local values instead.
   expectNear("world position", transformOf(scene.object)->getPosition(), worldPositionBefore);
-  expectNear("world rotation", transformOf(scene.object)->getRotation(), worldRotationBefore);
+  expectNear("world rotation", transformOf(scene.object)->getRotation(), worldRotationBefore, 1e-3f);
   expectNear("world scale", transformOf(scene.object)->getScale(), worldScaleBefore);
 
   // The local values were rewritten to compensate for the new parent's own world transform.
-  expectNear("local position", transformOf(scene.object)->getLocalPosition(),
-             worldPositionBefore - transformOf(parent)->getPosition());
+  // The world offset (-90, 5, -3) taken into the parent's frame (turned 90 degrees about y) is (3, 5, -90),
+  // then divided by the parent's scale of 2.
+  expectNear("local position", transformOf(scene.object)->getLocalPosition(), glm::vec3(1.5f, 2.5f, -45.0f), 1e-4f);
   expectNear("local rotation", transformOf(scene.object)->getLocalRotation(),
-             worldRotationBefore - transformOf(parent)->getRotation());
+             worldRotationBefore - transformOf(parent)->getRotation(), 1e-3f);
   expectNear("local scale", transformOf(scene.object)->getLocalScale(),
              worldScaleBefore / transformOf(parent)->getScale());
 }
@@ -74,12 +75,12 @@ TEST(SceneEdit, ReparentingBackToSceneRootPreservesWorldPlacement)
   EXPECT_EQ(child->getParent(), nullptr);
 
   expectNear("world position", transformOf(child)->getPosition(), worldPositionBefore);
-  expectNear("world rotation", transformOf(child)->getRotation(), worldRotationBefore);
+  expectNear("world rotation", transformOf(child)->getRotation(), worldRotationBefore, 1e-3f);
   expectNear("world scale", transformOf(child)->getScale(), worldScaleBefore);
 
   // No parent transform to compose with at the scene root, so local now equals world.
   expectNear("local position", transformOf(child)->getLocalPosition(), worldPositionBefore);
-  expectNear("local rotation", transformOf(child)->getLocalRotation(), worldRotationBefore);
+  expectNear("local rotation", transformOf(child)->getLocalRotation(), worldRotationBefore, 1e-3f);
   expectNear("local scale", transformOf(child)->getLocalScale(), worldScaleBefore);
 }
 
@@ -104,13 +105,15 @@ TEST(SceneEdit, ReparentingBetweenTwoNonIdentityParentsPreservesWorldPlacement)
   EXPECT_EQ(child->getParent(), parentB);
 
   expectNear("world position", transformOf(child)->getPosition(), worldPositionBefore);
-  expectNear("world rotation", transformOf(child)->getRotation(), worldRotationBefore);
+  expectNear("world rotation", transformOf(child)->getRotation(), worldRotationBefore, 1e-3f);
   expectNear("world scale", transformOf(child)->getScale(), worldScaleBefore);
 
+  // The world offset (17, -18, -1) from parentB, taken into its frame (turned 45 degrees about z) is
+  // (-0.7071, -24.7487, -1), then divided by its scale of (3, 1, 1).
   expectNear("local position", transformOf(child)->getLocalPosition(),
-             worldPositionBefore - transformOf(parentB)->getPosition());
+             glm::vec3(-0.235702f, -24.748737f, -1.0f), 1e-4f);
   expectNear("local rotation", transformOf(child)->getLocalRotation(),
-             worldRotationBefore - transformOf(parentB)->getRotation());
+             worldRotationBefore - transformOf(parentB)->getRotation(), 1e-3f);
   expectNear("local scale", transformOf(child)->getLocalScale(),
              worldScaleBefore / transformOf(parentB)->getScale());
 }
@@ -139,9 +142,12 @@ TEST(SceneEdit, ReparentingOntoAParentWithAZeroWorldScaleAxisCompensatesTheOther
             SceneEditResult::applied);
   EXPECT_EQ(scene.object->getParent(), parent);
 
-  // Position and rotation do not involve a division, so both stay fully preserved.
-  expectNear("world position", transformOf(scene.object)->getPosition(), worldPositionBefore);
-  expectNear("world rotation", transformOf(scene.object)->getRotation(), worldRotationBefore);
+  // The parent's y scale is zero, so a parent turned about y collapses every y offset: x and z are
+  // preserved and y lands on the parent's own.
+  EXPECT_NEAR(transformOf(scene.object)->getPosition().x, worldPositionBefore.x, 1e-4f);
+  EXPECT_NEAR(transformOf(scene.object)->getPosition().y, -4.0f, 1e-4f);
+  EXPECT_NEAR(transformOf(scene.object)->getPosition().z, worldPositionBefore.z, 1e-4f);
+  expectNear("world rotation", transformOf(scene.object)->getRotation(), worldRotationBefore, 1e-3f);
 
   // x and z divide cleanly against the parent's non-zero scale on those axes, so world scale is
   // preserved there too.
@@ -183,8 +189,10 @@ TEST(SceneEdit, ReparentingOntoAParentWithADenormalWorldScaleAxisKeepsThatAxisAn
             SceneEditResult::applied);
   EXPECT_EQ(scene.object->getParent(), parent);
 
-  expectNear("world position", transformOf(scene.object)->getPosition(), worldPositionBefore);
-  expectNear("world rotation", transformOf(scene.object)->getRotation(), worldRotationBefore);
+  EXPECT_NEAR(transformOf(scene.object)->getPosition().x, worldPositionBefore.x, 1e-4f);
+  EXPECT_NEAR(transformOf(scene.object)->getPosition().y, -4.0f, 1e-4f);
+  EXPECT_NEAR(transformOf(scene.object)->getPosition().z, worldPositionBefore.z, 1e-4f);
+  expectNear("world rotation", transformOf(scene.object)->getRotation(), worldRotationBefore, 1e-3f);
 
   // x and z divide cleanly against the parent's ordinary scale on those axes.
   EXPECT_NEAR(transformOf(scene.object)->getScale().x, worldScaleBefore.x, 1e-4f);

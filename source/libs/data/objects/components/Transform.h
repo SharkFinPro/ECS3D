@@ -2,6 +2,7 @@
 #define TRANSFORM_H
 
 #include "Component.h"
+#include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 
 class Transform final : public Component {
@@ -10,9 +11,14 @@ public:
   explicit Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation);
   ~Transform() override = default;
 
+  [[nodiscard]] bool hasParentTransform() const;
+
   [[nodiscard]] glm::vec3 getPosition() const;
   [[nodiscard]] glm::vec3 getScale() const;
   [[nodiscard]] glm::vec3 getRotation() const;
+
+  // The same world rotation as getRotation, as an orientation, so composing through it avoids an Euler round trip.
+  [[nodiscard]] glm::quat getOrientation() const;
 
   // Parent-combined getPosition/Scale/Rotation are for the systems (world transforms); the editor
   // edits this object's OWN local values, so it reads/writes them through these.
@@ -36,7 +42,13 @@ public:
   // the parent's into it, so a system that turns a body in world space does not bake the parent's in again.
   void setWorldRotation(glm::vec3 rotation);
 
+  void setWorldOrientation(const glm::quat& orientation);
+
   void move(const glm::vec3& direction);
+
+  // move for a displacement in world axes and units: it is carried into the parent's frame first, so a child of
+  // a rotated or scaled parent travels the world distance asked rather than the same numbers in local terms.
+  void moveWorld(const glm::vec3& displacement);
 
   // The live values these reseed (start from initial, stop back to initial) bypass the setters, so the
   // world stamp needs its own bump here - otherwise a collider's cached mesh/bounding box from the end of

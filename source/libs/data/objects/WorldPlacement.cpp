@@ -1,6 +1,8 @@
 #include "WorldPlacement.h"
 #include "Object.h"
+#include "components/RotationConvention.h"
 #include "components/Transform.h"
+#include <glm/gtc/quaternion.hpp>
 #include <cmath>
 
 std::optional<WorldPlacement> captureWorldPlacement(const std::shared_ptr<Object>& object)
@@ -25,32 +27,48 @@ void restoreWorldPlacement(const std::shared_ptr<Object>& object,
   }
 
   glm::vec3 parentPosition(0.0f);
-  glm::vec3 parentRotation(0.0f);
+  glm::quat parentOrientation(1.0f, 0.0f, 0.0f, 0.0f);
   glm::vec3 parentScale(1.0f);
+  bool hasParentTransform = false;
 
   if (newParent)
   {
     if (const auto parentTransform = newParent->getComponent<Transform>(ComponentType::transform))
     {
+      hasParentTransform = true;
       parentPosition = parentTransform->getPosition();
-      parentRotation = parentTransform->getRotation();
+      parentOrientation = parentTransform->getOrientation();
       parentScale = parentTransform->getScale();
     }
   }
 
+  // An axis whose compensated value is not representable (the parent's world scale there is zero, denormal
+  // enough to overflow the division, or the division otherwise yields inf/nan) keeps the value it already
+  // had rather than writing one that would break every reader of this transform.
   auto localScale = transform->getLocalScale();
   for (int axis = 0; axis < 3; ++axis)
   {
-    // An axis whose compensated scale is not representable (the parent's world scale there is zero,
-    // denormal enough to overflow the division, or the division otherwise yields inf/nan) keeps the
-    // scale it already had rather than writing a value that would break every reader of this transform.
     if (const auto compensated = placement.scale[axis] / parentScale[axis]; std::isfinite(compensated))
     {
       localScale[axis] = compensated;
     }
   }
 
-  transform->setPosition(placement.position - parentPosition);
-  transform->setRotation(placement.rotation - parentRotation);
+  auto localPosition = transform->getLocalPosition();
+  const auto offset = glm::inverse(parentOrientation) * (placement.position - parentPosition);
+  for (int axis = 0; axis < 3; ++axis)
+  {
+    if (const auto compensated = offset[axis] / parentScale[axis]; std::isfinite(compensated))
+    {
+      localPosition[axis] = compensated;
+    }
+  }
+
+  const auto localRotation = hasParentTransform
+    ? quatToEulerDegrees(glm::inverse(parentOrientation) * eulerDegreesToQuat(placement.rotation))
+    : placement.rotation;
+
+  transform->setPosition(localPosition);
+  transform->setRotation(localRotation);
   transform->setScale(localScale);
 }
