@@ -517,7 +517,8 @@ scene overlay hook (`RenderingManager::setSceneOverlay`, one callback per frame 
 `ImDrawList`) rather than a separate render pass; `RenderSystem::viewParams` gives the overlay the view
 matrix and projection whichever camera (free-fly or a component `Camera`) is currently live. `ViewportGizmo`
 builds a `gizmo::Input` from the target's `Transform` each frame, runs the headless `gizmo::` core (hit-
-testing and drag math, `source/libs/editor/Gizmo.{h,cpp}`), and draws the result through `GizmoRenderer` -
+testing and drag math, `source/libs/editor/Gizmo.{h,cpp}`; a world-space drag is mapped back to local through the
+parent's world frame, which `Input` carries), and draws the result through `GizmoRenderer` -
 an interface so a native backend could replace `ImGuiGizmoRenderer` later without `ViewportGizmo` changing.
 A drag sends a per-frame `editComponent` while it moves (matching the Inspector's own slider drags, so
 other connected views see it move smoothly) and one committed edit - one undo entry - on release.

@@ -56,6 +56,13 @@ namespace gizmo {
     glm::vec3 scale{ 1.0f };
   };
 
+  // The target's parent world frame; the identity default is a root object.
+  struct ParentFrame {
+    glm::vec3 position{ 0.0f };
+    glm::quat orientation{ 1.0f, 0.0f, 0.0f, 0.0f };
+    glm::vec3 scale{ 1.0f };
+  };
+
   struct Snap {
     bool enabled = false;
     float translateStep = 0.0f;
@@ -72,6 +79,7 @@ namespace gizmo {
     Snap snap;
     Pose local; // the target's Transform local values
     Pose world; // the target's world values (getPosition/getRotation/getScale)
+    ParentFrame parent; // a drag in world space is mapped back to local through this
   };
 
   enum class Highlight {
