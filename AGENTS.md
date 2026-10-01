@@ -155,8 +155,8 @@ input, linking `ECS3DRender` but never sim/scripting. `EditorApp` is a client pl
 *commands sent back*, not local mutations. Client/editor spawn a child `ECS3DServer` via `ServerProcess`
 for singleplayer (it has no console window by default; `--server-console` gives it one).
 **A loaded scene starts stopped:** a scene switch, a project load, and an `--edit` server's first load all
-leave it stopped regardless of what the sim was doing before, until the editor presses play (a play server still starts
-running, since its clients cannot).
+leave it stopped regardless of what the sim was doing before, until the editor presses play (a play server still auto-starts,
+since it has no editor to press play).
 **Stopping a scene discards every runtime change**, not just component values:
 `SceneAsset::start()` snapshots the current object tree before the run, and `stop()` rebuilds it from
 that snapshot with uuids preserved, undoing any script spawn/destroy/reparent (and any editor edit made
