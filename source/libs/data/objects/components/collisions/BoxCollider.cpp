@@ -202,12 +202,25 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
 
 void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)
 {
-  const auto orientation = transform->getOrientation() * eulerDegreesToQuat(m_rotation.get());
   const auto scale = transform->getScale() * m_scale.get();
   const auto position = transform->getPosition() + m_position.get();
 
+  glm::mat4 rotationMatrix;
+  if (!transform->hasParentTransform())
+  {
+    // Built exactly as getRotation's additive sum describes it, which the narrow phase and queries rebuild.
+    const auto rotation = transform->getRotation() + m_rotation.get();
+    rotationMatrix = rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1})
+      * rotate(glm::mat4(1.0f), glm::radians(rotation.y), {0, 1, 0})
+      * rotate(glm::mat4(1.0f), glm::radians(rotation.x), {1, 0, 0});
+  }
+  else
+  {
+    rotationMatrix = glm::mat4_cast(transform->getOrientation() * eulerDegreesToQuat(m_rotation.get()));
+  }
+
   const auto transformationMatrix = translate(glm::mat4(1.0f), position)
-    * glm::mat4_cast(orientation)
+    * rotationMatrix
     * glm::scale(glm::mat4(1.0f), scale);
 
   for (size_t i = 0; i < boxVertices.size(); ++i)

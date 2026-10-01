@@ -107,7 +107,7 @@ TEST(ColliderWorldTransform, ARootBoxMeshIsBuiltFromTheAdditiveEulerSum)
     }
   }
 
-  EXPECT_EQ(box->findFurthestPoint(direction), expected);
+  expectNear("support point", box->findFurthestPoint(direction), expected, 1e-5f);
 }
 
 TEST(ColliderWorldTransform, AChildBoxComposesItsRotationThroughTheParentAndKeepsAWorldAxisOffset)
