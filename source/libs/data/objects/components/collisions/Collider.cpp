@@ -21,7 +21,7 @@ const BoundingBox& Collider::getBoundingBox()
   }
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
-  const uint64_t transformUpdateID = transform->getUpdateID();
+  const uint64_t transformUpdateID = transform->getWorldUpdateID();
 
   if (m_boundingBox.lastUpdateID == transformUpdateID && !m_boundingBoxDirty)
   {

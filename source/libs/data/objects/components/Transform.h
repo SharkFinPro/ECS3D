@@ -11,8 +11,6 @@ public:
   explicit Transform(const glm::vec3& position, const glm::vec3& scale, const glm::vec3& rotation);
   ~Transform() override = default;
 
-  [[nodiscard]] uint64_t getUpdateID() const;
-
   [[nodiscard]] bool hasParentTransform() const;
 
   [[nodiscard]] glm::vec3 getPosition() const;
@@ -27,6 +25,14 @@ public:
   [[nodiscard]] glm::vec3 getLocalPosition() const;
   [[nodiscard]] glm::vec3 getLocalScale() const;
   [[nodiscard]] glm::vec3 getLocalRotation() const;
+
+  // Changes whenever this transform or any ancestor changes, and when this object is reparented. Keys
+  // caches of world-space geometry.
+  [[nodiscard]] uint64_t getWorldUpdateID() const;
+
+  // A new parent, or an ancestor gaining or losing its Transform, changes the world transform without
+  // touching any local value.
+  void markReparented();
 
   void setPosition(glm::vec3 position);
   void setScale(glm::vec3 scale);
@@ -45,7 +51,7 @@ public:
   void moveWorld(const glm::vec3& displacement);
 
   // The live values these reseed (start from initial, stop back to initial) bypass the setters, so the
-  // update id needs its own bump here - otherwise a collider's cached mesh/bounding box from the end of
+  // world stamp needs its own bump here - otherwise a collider's cached mesh/bounding box from the end of
   // the previous run survives into the next.
   void start() override;
 
@@ -60,13 +66,13 @@ public:
   void unpack(net::MessageReader& messageReader) override;
 
 private:
-  // A 64-bit counter cannot realistically wrap, so a collider cache keyed on it never mistakes a stale
-  // shape for a current one the way an 8-bit counter could after 256 updates.
-  uint64_t m_updateID = 1;
+  void touch();
 
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
   ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(0));
   ComponentVariable<glm::vec3> m_rotation = ComponentVariable(glm::vec3(0));
+
+  uint64_t m_worldStamp = 0;
 };
 
 

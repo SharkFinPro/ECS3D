@@ -151,7 +151,7 @@ glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
 
   if (const std::shared_ptr<Transform> transform = m_transform_ptr.lock())
   {
-    if (m_meshDirty || m_currentTransformUpdateID != transform->getUpdateID())
+    if (m_meshDirty || m_currentTransformUpdateID != transform->getWorldUpdateID())
     {
       generateTransformedMesh(transform);
       m_meshDirty = false;
@@ -230,7 +230,7 @@ void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& tran
     m_transformedBoxVertices[i] = glm::vec3(transformedVertex);
   }
 
-  m_currentTransformUpdateID = transform->getUpdateID();
+  m_currentTransformUpdateID = transform->getWorldUpdateID();
 }
 
 void BoxCollider::updateTransformPointer()

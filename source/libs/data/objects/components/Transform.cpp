@@ -6,9 +6,19 @@
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <Protocol.h>
+#include <algorithm>
+#include <atomic>
 
 namespace {
-  // Drops a non-finite value, keeping the previous one.
+  // Process-wide so a stamp is never reused by another transform: a world cache keyed on the largest stamp
+  // in a chain then still moves when an object is reparented under a chain with smaller stamps.
+  std::atomic<uint64_t> g_stampClock{0};
+
+  uint64_t nextStamp()
+  {
+    return ++g_stampClock;
+  }
+
   std::shared_ptr<Transform> parentTransformOf(const Object& owner)
   {
     if (const auto& parent = owner.getParent())
@@ -37,16 +47,12 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
   : Component(ComponentType::transform),
     m_position(position),
     m_scale(scale),
-    m_rotation(rotation)
+    m_rotation(rotation),
+    m_worldStamp(nextStamp())
 {
   loadVariable(m_position);
   loadVariable(m_scale);
   loadVariable(m_rotation);
-}
-
-uint64_t Transform::getUpdateID() const
-{
-  return m_updateID;
 }
 
 bool Transform::hasParentTransform() const
@@ -119,7 +125,7 @@ void Transform::setPosition(const glm::vec3 position)
   }
 
   m_position.set(position);
-  ++m_updateID;
+  touch();
 }
 
 void Transform::setScale(const glm::vec3 scale)
@@ -130,7 +136,7 @@ void Transform::setScale(const glm::vec3 scale)
   }
 
   m_scale.set(scale);
-  ++m_updateID;
+  touch();
 }
 
 void Transform::setRotation(const glm::vec3 rotation)
@@ -141,7 +147,7 @@ void Transform::setRotation(const glm::vec3 rotation)
   }
 
   m_rotation.set(rotation);
-  ++m_updateID;
+  touch();
 }
 
 void Transform::setWorldRotation(const glm::vec3 rotation)
@@ -171,8 +177,8 @@ void Transform::start()
   Component::start();
 
   // Reseeds the live values from initial without going through a setter - bump here so a cached mesh or
-  // bounding box keyed on the update id rebuilds against the reseeded transform on the first tick.
-  ++m_updateID;
+  // bounding box keyed on the world stamp rebuilds against the reseeded transform on the first tick.
+  touch();
 }
 
 void Transform::stop()
@@ -180,7 +186,7 @@ void Transform::stop()
   Component::stop();
 
   // Same reseed, the other direction: live reverts to initial on stop.
-  ++m_updateID;
+  touch();
 }
 
 void Transform::move(const glm::vec3& direction)
@@ -196,7 +202,7 @@ void Transform::move(const glm::vec3& direction)
   }
 
   m_position.set(moved);
-  ++m_updateID;
+  touch();
 }
 
 void Transform::moveWorld(const glm::vec3& displacement)
@@ -249,9 +255,9 @@ void Transform::loadFromJSON(const nlohmann::json& componentData)
   setFiniteLocal(m_rotation, finiteCheck::readVec3OrNaN(rotation));
   setFiniteLocal(m_scale, finiteCheck::readVec3OrNaN(scale));
 
-  // Bypasses the setters, so bump directly - a collider cache keyed on the update id has to know this
+  // Bypasses the setters, so bump directly - a collider cache keyed on the world stamp has to know this
   // geometry changed.
-  ++m_updateID;
+  touch();
 }
 
 void Transform::pack(net::Message& message) const
@@ -270,5 +276,40 @@ void Transform::unpack(net::MessageReader& messageReader)
   setFiniteLocal(m_scale, messageReader.read<glm::vec3>());
 
   // Bypasses the setters, so bump directly - see loadFromJSON.
-  ++m_updateID;
+  touch();
+}
+
+uint64_t Transform::getWorldUpdateID() const
+{
+  uint64_t worldID = m_worldStamp;
+
+  // Stops where getPosition/getScale/getRotation stop. Reads the component map directly to skip a refcount
+  // round trip per level, since this runs inside the collision support function.
+  auto ancestor = m_owner->getParent();
+
+  while (ancestor)
+  {
+    const auto& components = ancestor->getComponents();
+    const auto transformIt = components.find(ComponentType::transform);
+
+    if (transformIt == components.end())
+    {
+      break;
+    }
+
+    worldID = std::max(worldID, static_cast<const Transform*>(transformIt->second.get())->m_worldStamp);
+    ancestor = ancestor->getParent();
+  }
+
+  return worldID;
+}
+
+void Transform::markReparented()
+{
+  m_worldStamp = nextStamp();
+}
+
+void Transform::touch()
+{
+  m_worldStamp = nextStamp();
 }
