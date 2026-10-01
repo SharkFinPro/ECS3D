@@ -590,7 +590,9 @@ skipped rather than refused. The `replaceAsset` kind exists for that recording: 
 prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
 "Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
 and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
-(New/Open), scene switch, and (re)connect (any stashed authored history goes too), plus any snapshot whose active scene differs from the one the history was recorded against - another editor's load or scene switch, tracked by `edits/HistoryScope.h`. Play does not clear them:
+(New/Open), scene switch, and (re)connect (any stashed authored history goes too). A snapshot clears them too when its active scene
+differs from the one the history was recorded against, as after another editor's load or scene switch.
+`edits/HistoryScope.h` tracks that scene. Play does not clear them:
 a play start stashes the authored history (`EditorApp::m_authoredEditHistory`) and runs the session on a fresh
 one, keeping authored commands apart from play-time ones (only structural and name edits made while playing
 yield usable entries, since `Transform::serialize` reads authored values, so a live component edit records
