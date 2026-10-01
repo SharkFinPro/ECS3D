@@ -91,6 +91,13 @@ void EditorApp::clearUndoRedoPending()
   m_undoRedoPending = false;
 }
 
+void EditorApp::clearEditHistory()
+{
+  m_editHistory.clear();
+  m_authoredEditHistory.reset();
+  clearUndoRedoPending();
+}
+
 bool EditorApp::canActOnHistoryItem(const std::optional<std::string>& label, const bool requestInFlight) const
 {
   return label.has_value() && m_serverEditable && !requestInFlight;

@@ -143,9 +143,13 @@ private:
   // Every mutation this editor sends, recorded as it goes; undo()/redo() read it back and send the
   // reverse edit through the normal send path (see those methods). Ctrl+Z/Ctrl+Shift+Z and the Edit menu
   // call them through requestUndo()/requestRedo() (see EditorAppUndoMenu.cpp). Cleared wherever the
-  // authored scene the recorded commands refer to is replaced: load project, scene switch, (re)connect,
-  // play start/stop.
+  // authored scene the recorded commands refer to is replaced: load project, scene switch, (re)connect.
+  // Starting play moves it into m_authoredEditHistory and runs the session on a fresh one.
   edits::EditHistory m_editHistory;
+
+  // The authored history set aside while the scene plays. Stopping rebuilds the authored tree under the
+  // same uuids, so it is valid again then; held only between a play start and the matching stop.
+  std::optional<edits::EditHistory> m_authoredEditHistory;
 
   // See requestUndo()/requestRedo() in EditorAppUndoMenu.cpp: while true, a further undo/redo request is
   // ignored (and the Edit menu's items disabled) until the server's rebroadcast of the one already sent
@@ -286,9 +290,12 @@ private:
   void beginUndoRedoPending();
 
   // Called from handleSnapshot/handleEditComponent (the rebroadcast this gate is waiting on) and
-  // wherever m_editHistory.clear() already is (load project, scene switch, reconnect, play start/stop) -
-  // there is nothing left in flight to wait on once the history itself is gone.
+  // wherever the history is dropped or swapped (clearEditHistory, play start/stop) - there is nothing left
+  // in flight to wait on once the history it was waiting on is gone.
   void clearUndoRedoPending();
+
+  // Drops the history and any stashed authored one, for the sites that replace the authored scene.
+  void clearEditHistory();
 
   void updateGui();
 
