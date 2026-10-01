@@ -137,6 +137,11 @@ glm::vec3 BoxCollider::getRotation()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
+  if (!transform->hasParentTransform())
+  {
+    return m_rotation.get() + transform->getRotation();
+  }
+
   return quatToEulerDegrees(transform->getOrientation() * eulerDegreesToQuat(m_rotation.get()));
 }
 

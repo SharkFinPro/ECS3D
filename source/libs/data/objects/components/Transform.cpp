@@ -19,6 +19,7 @@ namespace {
     return nullptr;
   }
 
+  // Drops a non-finite value, keeping the previous one.
   void setFiniteLocal(ComponentVariable<glm::vec3>& variable, const glm::vec3& value)
   {
     if (finiteCheck::isFinite(value))
@@ -46,6 +47,11 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
 uint64_t Transform::getUpdateID() const
 {
   return m_updateID;
+}
+
+bool Transform::hasParentTransform() const
+{
+  return parentTransformOf(*m_owner) != nullptr;
 }
 
 glm::vec3 Transform::getPosition() const

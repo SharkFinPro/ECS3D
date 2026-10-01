@@ -13,6 +13,8 @@ public:
 
   [[nodiscard]] uint64_t getUpdateID() const;
 
+  [[nodiscard]] bool hasParentTransform() const;
+
   [[nodiscard]] glm::vec3 getPosition() const;
   [[nodiscard]] glm::vec3 getScale() const;
   [[nodiscard]] glm::vec3 getRotation() const;

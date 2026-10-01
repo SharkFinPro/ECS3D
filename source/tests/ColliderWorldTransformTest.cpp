@@ -9,9 +9,13 @@
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <Protocol.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/geometric.hpp>
+#include <glm/mat4x4.hpp>
 #include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -73,9 +77,63 @@ TEST(ColliderWorldTransform, PositionAndRotationStillOffsetRatherThanMultiply)
   box->setRotation(glm::vec3(0, 45, 0));
 
   EXPECT_EQ(box->getPosition(), glm::vec3(11, 2, 3));
-  // 135 degrees about y has no Euler form with a pitch inside +/-90, so compare the orientation it denotes.
-  const auto orientation = glm::quat(glm::radians(box->getRotation()));
-  expectNear(orientation * glm::vec3(1, 0, 0), glm::quat(glm::radians(glm::vec3(0, 135, 0))) * glm::vec3(1, 0, 0));
+  EXPECT_EQ(box->getRotation(), glm::vec3(0, 135, 0));
+}
+
+TEST(ColliderWorldTransform, ARootBoxMeshIsBuiltFromTheAdditiveEulerSum)
+{
+  const auto [object, box] = makeBox(glm::vec3(1));
+  const auto transform = object->getComponent<Transform>(ComponentType::transform);
+  transform->setRotation(glm::vec3(10, 20, 30));
+  box->setRotation(glm::vec3(5, 15, 25));
+
+  const auto sum = glm::vec3(15, 35, 55);
+  const auto matrix = glm::rotate(glm::mat4(1.0f), glm::radians(sum.z), glm::vec3(0, 0, 1))
+    * glm::rotate(glm::mat4(1.0f), glm::radians(sum.y), glm::vec3(0, 1, 0))
+    * glm::rotate(glm::mat4(1.0f), glm::radians(sum.x), glm::vec3(1, 0, 0));
+
+  EXPECT_EQ(box->getRotation(), sum);
+
+  const glm::vec3 direction(0.3f, 0.5f, 0.7f);
+  glm::vec3 expected(0.0f);
+  float best = std::numeric_limits<float>::lowest();
+  for (const auto& vertex : boxVertices)
+  {
+    const auto world = glm::vec3(matrix * glm::vec4(vertex, 1.0f));
+    if (glm::dot(world, direction) > best)
+    {
+      best = glm::dot(world, direction);
+      expected = world;
+    }
+  }
+
+  EXPECT_EQ(box->findFurthestPoint(direction), expected);
+}
+
+TEST(ColliderWorldTransform, AChildBoxComposesItsRotationThroughTheParentAndKeepsAWorldAxisOffset)
+{
+  auto parent = std::make_shared<Object>("Parent");
+  parent->getComponent<Transform>(ComponentType::transform)->setPosition(glm::vec3(10, 0, 0));
+  parent->getComponent<Transform>(ComponentType::transform)->setRotation(glm::vec3(0, 90, 0));
+
+  auto child = std::make_shared<Object>("Child");
+  child->setParent(parent);
+  parent->addChild(child);
+  auto box = std::make_shared<BoxCollider>();
+  child->addComponent(box);
+  child->getComponent<Transform>(ComponentType::transform)->setRotation(glm::vec3(90, 0, 0));
+
+  box->setPosition(glm::vec3(1, 2, 3));
+  box->setRotation(glm::vec3(0, 0, 90));
+
+  const auto expected = glm::quat(glm::radians(glm::vec3(0, 90, 0))) * glm::quat(glm::radians(glm::vec3(90, 0, 0)))
+    * glm::quat(glm::radians(glm::vec3(0, 0, 90)));
+  const glm::quat actual(glm::radians(box->getRotation()));
+
+  expectNear("x axis", actual * glm::vec3(1, 0, 0), expected * glm::vec3(1, 0, 0), 1e-4f);
+  expectNear("y axis", actual * glm::vec3(0, 1, 0), expected * glm::vec3(0, 1, 0), 1e-4f);
+  expectNear("z axis", actual * glm::vec3(0, 0, 1), expected * glm::vec3(0, 0, 1), 1e-4f);
+  expectNear(box->getPosition(), glm::vec3(11, 2, 3), 1e-4f);
 }
 
 TEST(ColliderWorldTransform, TheReportedScaleIsTheOneTheCollisionMeshUses)
