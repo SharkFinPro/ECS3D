@@ -132,6 +132,7 @@ namespace gizmo {
 
     Pose dragStartLocal;
     Pose dragStartWorld;
+    ParentFrame dragParent; // the parent frame at beginDrag, so a parent moving mid-drag does not skew the result
     Pose lastResultLocal;
 
     glm::vec3 dragAxis{ 0.0f }; // world-space axis (translate/scale) or plane normal (rotate)

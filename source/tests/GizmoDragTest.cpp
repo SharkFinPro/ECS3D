@@ -617,3 +617,80 @@ TEST(GizmoDragTest, TranslateOfARootObjectAddsTheWorldDeltaToLocalExactly)
   EXPECT_NE(f.state.dragLastAmount, 0.0f);
   EXPECT_EQ(frame.local->position, local.position + f.state.dragAxis * f.state.dragLastAmount);
 }
+
+TEST(GizmoDragTest, PressingARotateHandleUnderARotatedParentLeavesLocalRotationUntouched)
+{
+  gizmo::ParentFrame parent;
+  parent.orientation = glm::quat(glm::radians(glm::vec3(20.0f, 50.0f, 30.0f)));
+
+  GizmoFixture f;
+  f.state.mode = gizmo::Mode::rotate;
+  gizmo::Pose local;
+  local.rotation = glm::vec3(10.0f, 25.0f, -40.0f);
+  placeChild(f, parent, local);
+
+  const glm::vec2 centerScreen = *gizmo::project(f.view, f.input.world.position);
+  const auto pressFrame = beginDragOnHandle(f, ringPointScreen(centerScreen, 0.0f));
+  ASSERT_TRUE(pressFrame.dragStarted);
+  ASSERT_TRUE(pressFrame.local.has_value());
+  EXPECT_EQ(pressFrame.local->rotation, local.rotation);
+
+  // Positive control: a real sweep does change the rotation.
+  f.input.mouse = ringPointScreen(centerScreen, glm::radians(60.0f));
+  const auto moved = gizmo::update(f.state, f.input);
+  ASSERT_TRUE(moved.local.has_value());
+  EXPECT_NE(moved.local->rotation, local.rotation);
+}
+
+TEST(GizmoDragTest, ADragKeepsTheParentFrameCapturedAtItsStart)
+{
+  gizmo::ParentFrame parent;
+  parent.scale = glm::vec3(2.0f);
+
+  GizmoFixture f;
+  f.state.mode = gizmo::Mode::translate;
+  gizmo::Pose local;
+  local.position = glm::vec3(0.5f, 0.0f, 0.0f);
+  placeChild(f, parent, local);
+
+  const glm::vec3 startWorld = f.input.world.position;
+  const auto initial = gizmo::update(f.state, f.input);
+  const glm::vec2 xTipScreen = *gizmo::project(f.view, findLine(initial, gizmo::Handle::x)->b);
+
+  ASSERT_TRUE(beginDragOnHandle(f, xTipScreen).dragStarted);
+
+  f.input.parent.scale = glm::vec3(10.0f);
+  f.input.parent.position = glm::vec3(5.0f, 0.0f, 0.0f);
+  f.input.mouse = xTipScreen + glm::vec2(50.0f, 0.0f);
+  const auto frame = gizmo::update(f.state, f.input);
+
+  ASSERT_TRUE(frame.local.has_value());
+  const float worldDelta = composeWorldPosition(parent, frame.local->position).x - startWorld.x;
+  EXPECT_GT(worldDelta, 0.01f);
+  EXPECT_NEAR(frame.local->position.x - 0.5f, worldDelta / 2.0f, 1e-4f);
+}
+
+TEST(GizmoDragTest, TranslateUnderATranslatedAndRotatedParentMovesTheChildAlongWorldX)
+{
+  gizmo::ParentFrame parent;
+  parent.position = glm::vec3(3.0f, -1.0f, 2.0f);
+  parent.orientation = glm::quat(glm::radians(glm::vec3(0.0f, 90.0f, 0.0f)));
+
+  GizmoFixture f;
+  f.state.mode = gizmo::Mode::translate;
+  gizmo::Pose local;
+  local.position = glm::vec3(1.0f, 0.5f, 0.0f);
+  placeChild(f, parent, local);
+
+  const glm::vec3 startWorld = f.input.world.position;
+  const auto initial = gizmo::update(f.state, f.input);
+  const glm::vec2 xTipScreen = *gizmo::project(f.view, findLine(initial, gizmo::Handle::x)->b);
+
+  const auto frame = dragWorldXArrow(f, xTipScreen);
+  ASSERT_TRUE(frame.local.has_value());
+
+  const glm::vec3 endWorld = composeWorldPosition(parent, frame.local->position);
+  EXPECT_GT(endWorld.x, startWorld.x + 0.01f);
+  EXPECT_NEAR(endWorld.y, startWorld.y, 1e-4f);
+  EXPECT_NEAR(endWorld.z, startWorld.z, 1e-4f);
+}

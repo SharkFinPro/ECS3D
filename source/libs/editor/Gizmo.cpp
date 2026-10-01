@@ -535,6 +535,7 @@ namespace {
     state.dragSpace = state.space;
     state.dragStartLocal = input.local;
     state.dragStartWorld = input.world;
+    state.dragParent = input.parent;
     state.lastResultLocal = input.local;
     state.dragAxis = axisForHandle(state.dragMode, state.dragSpace, handle, input.world.rotation);
 
@@ -611,13 +612,13 @@ namespace {
       amount = snapValue(amount, input.snap.translateStep);
     }
 
-    if (isIdentity(input.parent))
+    if (isIdentity(state.dragParent))
     {
       local.position = state.dragStartLocal.position + state.dragAxis * amount;
     }
     else
     {
-      local.position = worldToLocalPosition(input.parent, state.dragStartWorld.position + state.dragAxis * amount,
+      local.position = worldToLocalPosition(state.dragParent, state.dragStartWorld.position + state.dragAxis * amount,
                                             state.dragStartLocal.position);
     }
 
@@ -677,13 +678,18 @@ namespace {
     glm::vec3 newWorldEuler = glm::degrees(glm::eulerAngles(newWorldQuat));
     newWorldEuler = gizmo::nearestEquivalentEuler(newWorldEuler, state.dragStartWorld.rotation);
 
-    if (isIdentity(input.parent))
+    if (isIdentity(state.dragParent))
     {
       local.rotation = state.dragStartLocal.rotation + (newWorldEuler - state.dragStartWorld.rotation);
       return local;
     }
 
-    const glm::quat newLocalQuat = glm::inverse(input.parent.orientation) * newWorldQuat;
+    if (total == 0.0f)
+    {
+      return local;
+    }
+
+    const glm::quat newLocalQuat = glm::inverse(state.dragParent.orientation) * newWorldQuat;
     const glm::vec3 newLocalEuler = glm::degrees(glm::eulerAngles(newLocalQuat));
     local.rotation = gizmo::nearestEquivalentEuler(newLocalEuler, state.dragStartLocal.rotation);
     return local;
