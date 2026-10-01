@@ -9,6 +9,8 @@
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <Protocol.h>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <utility>
@@ -71,7 +73,9 @@ TEST(ColliderWorldTransform, PositionAndRotationStillOffsetRatherThanMultiply)
   box->setRotation(glm::vec3(0, 45, 0));
 
   EXPECT_EQ(box->getPosition(), glm::vec3(11, 2, 3));
-  EXPECT_EQ(box->getRotation(), glm::vec3(0, 135, 0));
+  // 135 degrees about y has no Euler form with a pitch inside +/-90, so compare the orientation it denotes.
+  const auto orientation = glm::quat(glm::radians(box->getRotation()));
+  expectNear(orientation * glm::vec3(1, 0, 0), glm::quat(glm::radians(glm::vec3(0, 135, 0))) * glm::vec3(1, 0, 0));
 }
 
 TEST(ColliderWorldTransform, TheReportedScaleIsTheOneTheCollisionMeshUses)

@@ -42,6 +42,7 @@ add_executable(${PROJECT_NAME}
   NarrowPhaseTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
+  TransformHierarchyTest.cpp
   ColliderBindingsTest.cpp
   LightRendererTest.cpp
   LightRendererBindingsTest.cpp

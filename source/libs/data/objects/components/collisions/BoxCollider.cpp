@@ -1,5 +1,6 @@
 #include "BoxCollider.h"
 #include "../FiniteCheck.h"
+#include "../RotationConvention.h"
 #include "../Transform.h"
 #include "../../Object.h"
 #include "WireTypes.h"
@@ -136,7 +137,7 @@ glm::vec3 BoxCollider::getRotation()
 
   const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
 
-  return m_rotation.get() + transform->getRotation();
+  return quatToEulerDegrees(transform->getOrientation() * eulerDegreesToQuat(m_rotation.get()));
 }
 
 glm::vec3 BoxCollider::findFurthestPoint(const glm::vec3& direction)
@@ -196,14 +197,12 @@ void BoxCollider::unpack(net::MessageReader& messageReader)
 
 void BoxCollider::generateTransformedMesh(const std::shared_ptr<Transform>& transform)
 {
-  const auto rotation = transform->getRotation() + m_rotation.get();
+  const auto orientation = transform->getOrientation() * eulerDegreesToQuat(m_rotation.get());
   const auto scale = transform->getScale() * m_scale.get();
   const auto position = transform->getPosition() + m_position.get();
 
   const auto transformationMatrix = translate(glm::mat4(1.0f), position)
-    * rotate(glm::mat4(1.0f), glm::radians(rotation.z), {0, 0, 1})
-    * rotate(glm::mat4(1.0f), glm::radians(rotation.y), {0, 1, 0})
-    * rotate(glm::mat4(1.0f), glm::radians(rotation.x), {1, 0, 0})
+    * glm::mat4_cast(orientation)
     * glm::scale(glm::mat4(1.0f), scale);
 
   for (size_t i = 0; i < boxVertices.size(); ++i)
