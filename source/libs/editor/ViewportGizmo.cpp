@@ -31,6 +31,22 @@ namespace {
     return { transform->getPosition(), transform->getRotation(), transform->getScale() };
   }
 
+  [[nodiscard]] gizmo::ParentFrame parentFrameOf(const Object& object)
+  {
+    gizmo::ParentFrame frame;
+    const auto parent = object.getParent();
+    const auto parentTransform = parent ? parent->getComponent<Transform>(ComponentType::transform) : nullptr;
+
+    if (parentTransform)
+    {
+      frame.position = parentTransform->getPosition();
+      frame.orientation = glm::quat(glm::radians(parentTransform->getRotation()));
+      frame.scale = parentTransform->getScale();
+    }
+
+    return frame;
+  }
+
   [[nodiscard]] bool insideViewport(const gizmo::Rect& viewport, const glm::vec2 mouse)
   {
     return mouse.x >= viewport.x && mouse.x <= viewport.x + viewport.width
@@ -159,6 +175,7 @@ void ViewportGizmo::update(ObjectManager* objectManager, const std::optional<uui
   input.snap = snap;
   input.local = localPoseOf(transform);
   input.world = worldPoseOf(transform);
+  input.parent = parentFrameOf(*transform->getOwner());
 
   const gizmo::Frame frame = gizmo::update(m_state, input);
 

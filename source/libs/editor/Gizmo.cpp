@@ -40,6 +40,37 @@ namespace {
     return isFinite(pose.position) && isFinite(pose.rotation) && isFinite(pose.scale);
   }
 
+  [[nodiscard]] bool isIdentity(const gizmo::ParentFrame& parent)
+  {
+    return parent.position == glm::vec3(0.0f) && parent.orientation == glm::quat(1.0f, 0.0f, 0.0f, 0.0f)
+      && parent.scale == glm::vec3(1.0f);
+  }
+
+  // Inverse of world = parentPos + parentQ * (parentScale * local). An axis whose parent scale is zero or
+  // whose result is not finite keeps its previous local value.
+  [[nodiscard]] glm::vec3 worldToLocalPosition(const gizmo::ParentFrame& parent, const glm::vec3& worldPosition,
+                                               const glm::vec3& previousLocal)
+  {
+    const glm::vec3 unrotated = glm::inverse(parent.orientation) * (worldPosition - parent.position);
+    glm::vec3 local = previousLocal;
+
+    for (int i = 0; i < 3; ++i)
+    {
+      if (parent.scale[i] == 0.0f)
+      {
+        continue;
+      }
+
+      const float value = unrotated[i] / parent.scale[i];
+      if (std::isfinite(value))
+      {
+        local[i] = value;
+      }
+    }
+
+    return local;
+  }
+
   [[nodiscard]] bool viewportIsUsable(const gizmo::Rect& viewport)
   {
     return viewport.width >= 1.0f && viewport.height >= 1.0f;
@@ -504,6 +535,7 @@ namespace {
     state.dragSpace = state.space;
     state.dragStartLocal = input.local;
     state.dragStartWorld = input.world;
+    state.dragParent = input.parent;
     state.lastResultLocal = input.local;
     state.dragAxis = axisForHandle(state.dragMode, state.dragSpace, handle, input.world.rotation);
 
@@ -580,7 +612,16 @@ namespace {
       amount = snapValue(amount, input.snap.translateStep);
     }
 
-    local.position = state.dragStartLocal.position + state.dragAxis * amount;
+    if (isIdentity(state.dragParent))
+    {
+      local.position = state.dragStartLocal.position + state.dragAxis * amount;
+    }
+    else
+    {
+      local.position = worldToLocalPosition(state.dragParent, state.dragStartWorld.position + state.dragAxis * amount,
+                                            state.dragStartLocal.position);
+    }
+
     return local;
   }
 
@@ -637,7 +678,22 @@ namespace {
     glm::vec3 newWorldEuler = glm::degrees(glm::eulerAngles(newWorldQuat));
     newWorldEuler = gizmo::nearestEquivalentEuler(newWorldEuler, state.dragStartWorld.rotation);
 
-    local.rotation = state.dragStartLocal.rotation + (newWorldEuler - state.dragStartWorld.rotation);
+    if (isIdentity(state.dragParent))
+    {
+      local.rotation = state.dragStartLocal.rotation + (newWorldEuler - state.dragStartWorld.rotation);
+      return local;
+    }
+
+    // The press frame's own ring hit can leave a residue of a few ulps (FMA contraction on some targets),
+    // which would re-derive the whole local Euler and nudge it on a plain click.
+    if (std::abs(total) < 1e-4f)
+    {
+      return local;
+    }
+
+    const glm::quat newLocalQuat = glm::inverse(state.dragParent.orientation) * newWorldQuat;
+    const glm::vec3 newLocalEuler = glm::degrees(glm::eulerAngles(newLocalQuat));
+    local.rotation = gizmo::nearestEquivalentEuler(newLocalEuler, state.dragStartLocal.rotation);
     return local;
   }
 
