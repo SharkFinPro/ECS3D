@@ -17,6 +17,7 @@ struct CollisionEdge {
   std::shared_ptr<Object> object;
   std::shared_ptr<Collider> collider;
   float position;
+  std::shared_ptr<RigidBody> body;
 };
 
 // An unordered colliding pair, stored canonically (a < b) so the same contact recorded from either
