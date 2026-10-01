@@ -23,6 +23,23 @@ namespace {
     std::shared_ptr<Object> object;
     std::optional<collisions::Contact> contact;
   };
+
+  // Colliders that belong to one body never touch each other: they move together, and a response between
+  // them would push the body against itself. Static colliders (no body) are not one assembly.
+  bool partOfSameAssembly(const CollisionEdge& a, const CollisionEdge& b)
+  {
+    if (a.object == b.object)
+    {
+      return true;
+    }
+
+    if (a.body && a.body == b.body)
+    {
+      return true;
+    }
+
+    return a.object->isAncestorOf(b.object) || b.object->isAncestorOf(a.object);
+  }
 }
 
 void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
@@ -40,7 +57,7 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
         continue;
       }
 
-      m_collisionEdges.push_back({ object, collider, 0.0f });
+      m_collisionEdges.push_back({ object, collider, 0.0f, object->getComponent<RigidBody>(ComponentType::rigidBody) });
     }
   }
 
@@ -74,7 +91,7 @@ void CollisionSystem::checkCollisions(const float dt)
   {
     const auto& edge = m_collisionEdges[i];
 
-    if (!edge.object->getComponent<RigidBody>(ComponentType::rigidBody))
+    if (!edge.body)
     {
       continue;
     }
@@ -186,9 +203,7 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
 
   for (const auto& other : m_collisionEdges)
   {
-    if (other.object == edge.object ||
-        other.object->getParent() == edge.object ||
-        other.object == edge.object->getParent())
+    if (partOfSameAssembly(edge, other))
     {
       continue;
     }
