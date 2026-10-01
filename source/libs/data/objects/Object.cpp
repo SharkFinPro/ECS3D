@@ -126,6 +126,11 @@ void Object::addComponent(const std::shared_ptr<Component>& component)
 
   component->setOwner(this);
 
+  if (component->getType() == ComponentType::transform)
+  {
+    refreshChildWorldStamps();
+  }
+
   // Added to an object that is already running: without this its ComponentVariables stay backed by the
   // authored value, so a runtime write would be saved into the scene as if it had been authored.
   if (m_started)
@@ -158,6 +163,11 @@ void Object::removeComponent(const std::shared_ptr<Component>& component)
     }
 
     m_components.erase(componentIt);
+
+    if (component->getType() == ComponentType::transform)
+    {
+      refreshChildWorldStamps();
+    }
   }
 
   // Mirrors addComponent: a component removed from a running object stays live (its ComponentVariables
@@ -166,6 +176,17 @@ void Object::removeComponent(const std::shared_ptr<Component>& component)
   if (m_started)
   {
     component->stop();
+  }
+}
+
+void Object::refreshChildWorldStamps() const
+{
+  for (const auto& child : m_children)
+  {
+    if (const auto childTransform = child->getComponent<Transform>(ComponentType::transform))
+    {
+      childTransform->markReparented();
+    }
   }
 }
 

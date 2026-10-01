@@ -182,3 +182,43 @@ TEST(ColliderCache, NothingChangingKeepsTheCache)
 
   EXPECT_NE(chain.box->getBoundingBox().lastUpdateID, first.lastUpdateID);
 }
+
+TEST(ColliderCache, RemovingTheParentTransformRefreshesAChildBoxBounds)
+{
+  Chain chain;
+  transformOf(chain.parent)->setPosition(glm::vec3(5, 0, 0));
+  transformOf(chain.parent)->setPosition(glm::vec3(6, 0, 0));
+  transformOf(chain.child)->setPosition(glm::vec3(1, 0, 0));
+
+  const float offset = centerX(chain.box->getBoundingBox());
+  const float supportOffset = chain.box->findFurthestPoint({1, 0, 0}).x;
+
+  chain.parent->removeComponent(transformOf(chain.parent));
+
+  EXPECT_NEAR(centerX(chain.box->getBoundingBox()), offset - 6.0f, 1e-4f);
+  EXPECT_NEAR(chain.box->findFurthestPoint({1, 0, 0}).x, supportOffset - 6.0f, 1e-4f);
+
+  chain.parent->addComponent(std::make_shared<Transform>(glm::vec3(2, 0, 0), glm::vec3(1), glm::vec3(0)));
+
+  EXPECT_NEAR(centerX(chain.box->getBoundingBox()), offset - 4.0f, 1e-4f);
+}
+
+TEST(ColliderCache, TheWorldUpdateIDIgnoresAncestorsAboveATransformlessOne)
+{
+  fixtures::Scene scene;
+  const auto grandparent = fixtures::addObject(scene, "Grandparent");
+  const auto parent = fixtures::addChildObject(scene, "Parent", grandparent);
+  const auto child = fixtures::addChildObject(scene, "Child", parent);
+
+  parent->removeComponent(transformOf(parent));
+  const auto before = transformOf(child)->getWorldUpdateID();
+
+  transformOf(grandparent)->setPosition(glm::vec3(9, 0, 0));
+
+  EXPECT_EQ(transformOf(child)->getWorldUpdateID(), before);
+  EXPECT_NEAR(transformOf(child)->getPosition().x, 0.0f, 1e-5f);
+
+  transformOf(child)->setPosition(glm::vec3(1, 0, 0));
+
+  EXPECT_NE(transformOf(child)->getWorldUpdateID(), before);
+}

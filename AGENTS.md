@@ -429,7 +429,7 @@ already use for other script-driven structural changes.
 for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight. Every
 component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the same way across all five
 (project/wire plumbing, not gameplay state), not just Transform's. `TransformBindings` also leaves out
-`getUpdateID`/`getWorldUpdateID`/`markReparented` (cache-invalidation bookkeeping for colliders, not scene data). `RigidBodyBindings` leaves
+`getWorldUpdateID`/`markReparented` (cache-invalidation bookkeeping for colliders, not scene data). `RigidBodyBindings` leaves
 out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writes to; PhysicsSystem
 drains it), `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
 falling state; `isFalling` is the read-only query scripts get) and `getStackedLoad`/`setStackedLoad`/`getHeldImpulse`/`setHeldImpulse`

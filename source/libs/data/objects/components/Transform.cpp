@@ -43,11 +43,6 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
   loadVariable(m_rotation);
 }
 
-uint64_t Transform::getUpdateID() const
-{
-  return m_updateID;
-}
-
 glm::vec3 Transform::getPosition() const
 {
   if (m_owner->getParent())
@@ -154,7 +149,7 @@ void Transform::start()
   Component::start();
 
   // Reseeds the live values from initial without going through a setter - bump here so a cached mesh or
-  // bounding box keyed on the update id rebuilds against the reseeded transform on the first tick.
+  // bounding box keyed on the world stamp rebuilds against the reseeded transform on the first tick.
   touch();
 }
 
@@ -208,7 +203,7 @@ void Transform::loadFromJSON(const nlohmann::json& componentData)
   setFiniteLocal(m_rotation, finiteCheck::readVec3OrNaN(rotation));
   setFiniteLocal(m_scale, finiteCheck::readVec3OrNaN(scale));
 
-  // Bypasses the setters, so bump directly - a collider cache keyed on the update id has to know this
+  // Bypasses the setters, so bump directly - a collider cache keyed on the world stamp has to know this
   // geometry changed.
   touch();
 }
@@ -236,12 +231,22 @@ uint64_t Transform::getWorldUpdateID() const
 {
   uint64_t worldID = m_worldStamp;
 
-  for (auto ancestor = m_owner->getParent(); ancestor; ancestor = ancestor->getParent())
+  // Stops where getPosition/getScale/getRotation stop. Reads the component map directly to skip a refcount
+  // round trip per level, since this runs inside the collision support function.
+  auto ancestor = m_owner->getParent();
+
+  while (ancestor)
   {
-    if (const auto& ancestorTransform = ancestor->getComponent<Transform>(ComponentType::transform))
+    const auto& components = ancestor->getComponents();
+    const auto transformIt = components.find(ComponentType::transform);
+
+    if (transformIt == components.end())
     {
-      worldID = std::max(worldID, ancestorTransform->m_worldStamp);
+      break;
     }
+
+    worldID = std::max(worldID, static_cast<const Transform*>(transformIt->second.get())->m_worldStamp);
+    ancestor = ancestor->getParent();
   }
 
   return worldID;
@@ -254,6 +259,5 @@ void Transform::markReparented()
 
 void Transform::touch()
 {
-  ++m_updateID;
   m_worldStamp = nextStamp();
 }
