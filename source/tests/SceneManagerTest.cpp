@@ -163,6 +163,45 @@ TEST(SceneManager, SwitchingScenesStopsTheOutgoingOne)
   EXPECT_EQ(collider->getLocalScale(), glm::vec3(1));
 }
 
+TEST(SceneManager, LoadingASceneWhileRunningLeavesTheNewOneStopped)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  const auto first = makeScene(firstUUID, "First", componentRegistry);
+  const auto second = makeScene(secondUUID, "Second", componentRegistry);
+  sceneManager.addScene(first);
+  sceneManager.addScene(second);
+
+  sceneManager.loadScene(first);
+  sceneManager.startScene();
+  ASSERT_EQ(sceneManager.getSceneStatus(), SceneStatus::running);
+
+  sceneManager.loadScene(second);
+
+  EXPECT_EQ(sceneManager.getSceneStatus(), SceneStatus::stopped);
+}
+
+TEST(SceneManager, LoadingASceneWhilePausedLeavesTheNewOneStopped)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  const auto first = makeScene(firstUUID, "First", componentRegistry);
+  const auto second = makeScene(secondUUID, "Second", componentRegistry);
+  sceneManager.addScene(first);
+  sceneManager.addScene(second);
+
+  sceneManager.loadScene(first);
+  sceneManager.startScene();
+  sceneManager.pauseScene();
+  ASSERT_EQ(sceneManager.getSceneStatus(), SceneStatus::paused);
+
+  sceneManager.loadScene(second);
+
+  EXPECT_EQ(sceneManager.getSceneStatus(), SceneStatus::stopped);
+}
+
 TEST(SceneManager, DoesNothingWithNoSceneLoaded)
 {
   const auto componentRegistry = makeRegistry();
