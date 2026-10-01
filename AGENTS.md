@@ -591,7 +591,7 @@ prefab name - the registry already holds replaces a record rather than adding on
 and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
 (New/Open), scene switch, and (re)connect (any stashed authored history goes too). Play does not clear them:
 a play start stashes the authored history (`EditorApp::m_authoredEditHistory`) and runs the session on a fresh
-one, so authored commands never mix with play-time ones (only structural and name edits made while playing
+one, keeping authored commands apart from play-time ones (only structural and name edits made while playing
 yield usable entries, since `Transform::serialize` reads authored values, so a live component edit records
 before == after and is dropped); a stop discards the play-session history and restores the stash, which is valid because `SceneAsset::stop()` rebuilds the authored
 tree with uuids preserved. A pause/resume leaves the scene, and so the history, as it is.
