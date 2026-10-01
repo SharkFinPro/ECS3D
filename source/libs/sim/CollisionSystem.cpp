@@ -76,9 +76,15 @@ void CollisionSystem::checkCollisions(const float dt)
     return a.position < b.position;
   });
 
-  // Each edge's collided objects, indexed by edge so the parallel loop can record them lock-free (every
-  // thread writes only its own slot). Drained serially into the pair set once the loop finishes.
-  std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
+  std::vector<char> isDynamic(m_collisionEdges.size());
+  for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+  {
+    isDynamic[i] = m_collisionEdges[i].body != nullptr;
+  }
+
+  // Each edge's forward-sweep hits (higher edge indices, ascending), indexed by edge so the parallel loop
+  // can record them lock-free: every thread writes only its own slot.
+  std::vector<std::vector<SweepHit>> forwardHits(m_collisionEdges.size());
 
   // This loop has to stay read-only: findCollisions reads bounding boxes and (through the narrow phase)
   // transformed meshes that live on the same Collider another thread's iteration can also read. That is
@@ -86,22 +92,29 @@ void CollisionSystem::checkCollisions(const float dt)
   // this loop moves a transform - collision responses, which do, are deferred to the serial pass below.
   // Losing either half of that (a collider left cold, or a response sneaking back into this loop) turns
   // it into two threads racing a write on m_boundingBox / m_transformedBoxVertices.
-#pragma omp parallel for default(none) shared(perEdgeCollisions) num_threads(6)
+  // Dynamic scheduling because the work per edge depends on how many colliders overlap it in x.
+#pragma omp parallel for default(none) shared(forwardHits, isDynamic) schedule(dynamic, 8) num_threads(6)
   for (int i = 0; i < m_collisionEdges.size(); ++i)
   {
-    const auto& edge = m_collisionEdges[i];
+    findCollisions(i, isDynamic, forwardHits[i]);
+  }
 
-    if (!edge.body)
+  // Each side's own narrow-phase answer goes to that side's list. Walking i upward keeps every list in
+  // ascending edge order: the entries from lower edges arrive first, then this edge's own forward hits.
+  std::vector<std::vector<std::shared_ptr<Object>>> perEdgeCollisions(m_collisionEdges.size());
+  for (size_t i = 0; i < forwardHits.size(); ++i)
+  {
+    for (const auto& hit : forwardHits[i])
     {
-      continue;
-    }
+      if (hit.lowerSees)
+      {
+        perEdgeCollisions[i].emplace_back(m_collisionEdges[hit.other].object);
+      }
 
-    std::vector<std::shared_ptr<Object>> collidedObjects;
-    findCollisions(edge, collidedObjects);
-
-    if (!collidedObjects.empty())
-    {
-      perEdgeCollisions[i] = std::move(collidedObjects);
+      if (hit.higherSees)
+      {
+        perEdgeCollisions[hit.other].emplace_back(m_collisionEdges[i].object);
+      }
     }
   }
 
@@ -157,7 +170,7 @@ std::vector<size_t> CollisionSystem::responseOrder(
 void CollisionSystem::recordCollisionEvents(const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions)
 {
   // Flatten the per-edge results into this tick's canonical pair set. A dynamic-vs-dynamic contact is
-  // detected from both sides, so canonicalize (a < b) and dedupe.
+  // tested once from each side and the two answers can differ, so canonicalize (a < b) and dedupe.
   std::vector<CollisionPair> current;
   for (size_t i = 0; i < perEdgeCollisions.size(); ++i)
   {
@@ -193,25 +206,28 @@ void CollisionSystem::reset()
   m_exits.clear();
 }
 
-void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const
+void CollisionSystem::findCollisions(const size_t index, const std::vector<char>& isDynamic,
+                                     std::vector<SweepHit>& hits) const
 {
+  const auto& edge = m_collisionEdges[index];
+
   // cachedBoundingBox(), not getBoundingBox(): this runs inside checkCollisions' parallel loop, where
   // every collider's bounding box was already warmed serially and nothing moves a transform until the
   // serial response pass after the loop. getBoundingBox() would recompute (and write) on a cache miss;
   // cachedBoundingBox() only ever reads, which is what makes concurrent calls on a shared collider safe.
   const auto& bbox = edge.collider->cachedBoundingBox();
 
-  for (const auto& other : m_collisionEdges)
+  for (size_t j = index + 1; j < m_collisionEdges.size(); ++j)
   {
+    const auto& other = m_collisionEdges[j];
+
     if (other.position > bbox.maxX)
     {
       break;
     }
 
-    // Layer/mask filter: skip pairs that don't share a collision layer before any narrow-phase or event
-    // work, so filtered layers produce neither a physical response nor a collision event. Kept after the
-    // sweep-and-prune break so the early-out still fires for beyond-range colliders on any layer.
-    if (!layersCollide(edge.collider, other.collider))
+    // A pair of static colliders never needs testing.
+    if (!isDynamic[index] && !isDynamic[j])
     {
       continue;
     }
@@ -225,14 +241,27 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
       continue;
     }
 
+    // Layer/mask filter: skip pairs that don't share a collision layer before any narrow-phase or event
+    // work, so filtered layers produce neither a physical response nor a collision event.
+    if (!layersCollide(edge.collider, other.collider))
+    {
+      continue;
+    }
+
     if (partOfSameAssembly(edge, other))
     {
       continue;
     }
 
-    if (collisions::intersects(*edge.collider, *other.collider))
+    // The narrow phase is not symmetric in its arguments, so each dynamic side asks with itself first and
+    // keeps its own answer.
+    SweepHit hit{ j, false, false };
+    hit.lowerSees = isDynamic[index] && collisions::intersects(*edge.collider, *other.collider);
+    hit.higherSees = isDynamic[j] && collisions::intersects(*other.collider, *edge.collider);
+
+    if (hit.lowerSees || hit.higherSees)
     {
-      collidedObjects.emplace_back(other.object);
+      hits.push_back(hit);
     }
   }
 }
