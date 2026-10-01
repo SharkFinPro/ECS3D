@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryLabelTest.cpp
   EditHistoryRefusalTest.cpp
   EditHistoryBatchTest.cpp
+  EditHistoryPlayStopTest.cpp
   RecordEditsTest.cpp
   CollisionMathTest.cpp
   SweepEquivalenceTest.cpp

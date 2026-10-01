@@ -240,8 +240,7 @@ void EditorApp::onLoadScene(const uuids::uuid& sceneUUID)
   if (const auto scene = m_sceneManager->getScene(sceneUUID))
   {
     // Every recorded command names objects in the scene being left behind.
-    m_editHistory.clear();
-    clearUndoRedoPending();
+    clearEditHistory();
 
     m_sceneManager->loadScene(scene);
   }
@@ -301,8 +300,7 @@ void EditorApp::onLoadProject()
 {
   // Open/New: the server owns the running sim, so send it the packed project (SaveUI already applied it
   // to our managers); it reloads and re-snapshots.
-  m_editHistory.clear();
-  clearUndoRedoPending();
+  clearEditHistory();
 
   net::Message message(net::MessageType::loadProject);
   m_projectPacker->pack(message);

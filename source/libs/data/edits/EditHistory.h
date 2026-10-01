@@ -118,9 +118,9 @@ public:
   void reportUndoRejected();
   void reportRedoRejected();
 
-  // Loading a project, switching scenes, reconnecting, or starting/stopping play all invalidate both
-  // directions at once (see EditCommand.h's module comment) - stopping play restores the authored scene,
-  // which neither stack's recorded state has any relation to any more.
+  // Loading a project, switching scenes, or reconnecting invalidate both directions at once (see
+  // EditCommand.h's module comment). Play does not: stopping rebuilds the authored scene with its uuids, so
+  // a history recorded before the run stays valid for it.
   void clear();
 
   // Human-readable description of the command undo()/redo() would act on next ("Rename Cube"), for an
