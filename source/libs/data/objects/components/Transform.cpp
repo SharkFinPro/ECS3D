@@ -4,8 +4,19 @@
 #include "WireTypes.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
+#include <algorithm>
+#include <atomic>
 
 namespace {
+  // Process-wide so a stamp is never reused by another transform: a world cache keyed on the largest stamp
+  // in a chain then still moves when an object is reparented under a chain with smaller stamps.
+  std::atomic<uint64_t> g_stampClock{0};
+
+  uint64_t nextStamp()
+  {
+    return ++g_stampClock;
+  }
+
   // Drops a non-finite value, keeping the previous one.
   void setFiniteLocal(ComponentVariable<glm::vec3>& variable, const glm::vec3& value)
   {
@@ -24,7 +35,8 @@ Transform::Transform(const glm::vec3& position, const glm::vec3& scale, const gl
   : Component(ComponentType::transform),
     m_position(position),
     m_scale(scale),
-    m_rotation(rotation)
+    m_rotation(rotation),
+    m_worldStamp(nextStamp())
 {
   loadVariable(m_position);
   loadVariable(m_scale);
@@ -98,7 +110,7 @@ void Transform::setPosition(const glm::vec3 position)
   }
 
   m_position.set(position);
-  ++m_updateID;
+  touch();
 }
 
 void Transform::setScale(const glm::vec3 scale)
@@ -109,7 +121,7 @@ void Transform::setScale(const glm::vec3 scale)
   }
 
   m_scale.set(scale);
-  ++m_updateID;
+  touch();
 }
 
 void Transform::setRotation(const glm::vec3 rotation)
@@ -120,7 +132,7 @@ void Transform::setRotation(const glm::vec3 rotation)
   }
 
   m_rotation.set(rotation);
-  ++m_updateID;
+  touch();
 }
 
 void Transform::setWorldRotation(const glm::vec3 rotation)
@@ -143,7 +155,7 @@ void Transform::start()
 
   // Reseeds the live values from initial without going through a setter - bump here so a cached mesh or
   // bounding box keyed on the update id rebuilds against the reseeded transform on the first tick.
-  ++m_updateID;
+  touch();
 }
 
 void Transform::stop()
@@ -151,7 +163,7 @@ void Transform::stop()
   Component::stop();
 
   // Same reseed, the other direction: live reverts to initial on stop.
-  ++m_updateID;
+  touch();
 }
 
 void Transform::move(const glm::vec3& direction)
@@ -167,7 +179,7 @@ void Transform::move(const glm::vec3& direction)
   }
 
   m_position.set(moved);
-  ++m_updateID;
+  touch();
 }
 
 nlohmann::json Transform::serialize()
@@ -198,7 +210,7 @@ void Transform::loadFromJSON(const nlohmann::json& componentData)
 
   // Bypasses the setters, so bump directly - a collider cache keyed on the update id has to know this
   // geometry changed.
-  ++m_updateID;
+  touch();
 }
 
 void Transform::pack(net::Message& message) const
@@ -217,5 +229,31 @@ void Transform::unpack(net::MessageReader& messageReader)
   setFiniteLocal(m_scale, messageReader.read<glm::vec3>());
 
   // Bypasses the setters, so bump directly - see loadFromJSON.
+  touch();
+}
+
+uint64_t Transform::getWorldUpdateID() const
+{
+  uint64_t worldID = m_worldStamp;
+
+  for (auto ancestor = m_owner->getParent(); ancestor; ancestor = ancestor->getParent())
+  {
+    if (const auto& ancestorTransform = ancestor->getComponent<Transform>(ComponentType::transform))
+    {
+      worldID = std::max(worldID, ancestorTransform->m_worldStamp);
+    }
+  }
+
+  return worldID;
+}
+
+void Transform::markReparented()
+{
+  m_worldStamp = nextStamp();
+}
+
+void Transform::touch()
+{
   ++m_updateID;
+  m_worldStamp = nextStamp();
 }

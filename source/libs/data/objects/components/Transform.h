@@ -22,6 +22,13 @@ public:
   [[nodiscard]] glm::vec3 getLocalScale() const;
   [[nodiscard]] glm::vec3 getLocalRotation() const;
 
+  // Changes whenever this transform or any ancestor changes, and when this object is reparented. Keys
+  // caches of world-space geometry, which getUpdateID (this transform alone) cannot.
+  [[nodiscard]] uint64_t getWorldUpdateID() const;
+
+  // A new parent changes the world transform without touching any local value.
+  void markReparented();
+
   void setPosition(glm::vec3 position);
   void setScale(glm::vec3 scale);
   void setRotation(glm::vec3 rotation);
@@ -48,6 +55,8 @@ public:
   void unpack(net::MessageReader& messageReader) override;
 
 private:
+  void touch();
+
   // A 64-bit counter cannot realistically wrap, so a collider cache keyed on it never mistakes a stale
   // shape for a current one the way an 8-bit counter could after 256 updates.
   uint64_t m_updateID = 1;
@@ -55,6 +64,8 @@ private:
   ComponentVariable<glm::vec3> m_position = ComponentVariable(glm::vec3(0));
   ComponentVariable<glm::vec3> m_scale = ComponentVariable(glm::vec3(0));
   ComponentVariable<glm::vec3> m_rotation = ComponentVariable(glm::vec3(0));
+
+  uint64_t m_worldStamp = 0;
 };
 
 

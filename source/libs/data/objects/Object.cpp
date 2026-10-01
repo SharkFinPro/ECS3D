@@ -67,6 +67,11 @@ void Object::loadChildren(const nlohmann::json& childrenData, const std::size_t 
 void Object::setParent(const std::shared_ptr<Object>& parent)
 {
   m_parent = parent;
+
+  if (const auto transform = getComponent<Transform>(ComponentType::transform))
+  {
+    transform->markReparented();
+  }
 }
 
 std::shared_ptr<Object> Object::getParent() const
