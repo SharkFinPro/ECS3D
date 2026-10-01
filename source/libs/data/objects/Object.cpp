@@ -67,6 +67,11 @@ void Object::loadChildren(const nlohmann::json& childrenData, const std::size_t 
 void Object::setParent(const std::shared_ptr<Object>& parent)
 {
   m_parent = parent;
+
+  if (const auto transform = getComponent<Transform>(ComponentType::transform))
+  {
+    transform->markReparented();
+  }
 }
 
 std::shared_ptr<Object> Object::getParent() const
@@ -121,6 +126,11 @@ void Object::addComponent(const std::shared_ptr<Component>& component)
 
   component->setOwner(this);
 
+  if (component->getType() == ComponentType::transform)
+  {
+    refreshChildWorldStamps();
+  }
+
   // Added to an object that is already running: without this its ComponentVariables stay backed by the
   // authored value, so a runtime write would be saved into the scene as if it had been authored.
   if (m_started)
@@ -129,8 +139,11 @@ void Object::addComponent(const std::shared_ptr<Component>& component)
   }
 }
 
-void Object::removeComponent(const std::shared_ptr<Component>& component)
+void Object::removeComponent(const std::shared_ptr<Component>& componentToRemove)
 {
+  // A caller may pass a reference into m_components itself, which the erase below destroys - hold our own.
+  const std::shared_ptr<Component> component = componentToRemove;
+
   // Erase by identity, not just by type/slot: a component instance that is not actually the one this
   // object holds (a stale pointer, or the wrong instance of the same type) must not be stopped, and
   // must not evict whatever this object actually has in that slot.
@@ -153,6 +166,11 @@ void Object::removeComponent(const std::shared_ptr<Component>& component)
     }
 
     m_components.erase(componentIt);
+
+    if (component->getType() == ComponentType::transform)
+    {
+      refreshChildWorldStamps();
+    }
   }
 
   // Mirrors addComponent: a component removed from a running object stays live (its ComponentVariables
@@ -161,6 +179,17 @@ void Object::removeComponent(const std::shared_ptr<Component>& component)
   if (m_started)
   {
     component->stop();
+  }
+}
+
+void Object::refreshChildWorldStamps() const
+{
+  for (const auto& child : m_children)
+  {
+    if (const auto childTransform = child->getComponent<Transform>(ComponentType::transform))
+    {
+      childTransform->markReparented();
+    }
   }
 }
 
