@@ -241,6 +241,7 @@ void EditorApp::onLoadScene(const uuids::uuid& sceneUUID)
   {
     // Every recorded command names objects in the scene being left behind.
     clearEditHistory();
+    m_historyScope.reset(sceneUUID);
 
     m_sceneManager->loadScene(scene);
   }
@@ -301,6 +302,8 @@ void EditorApp::onLoadProject()
   // Open/New: the server owns the running sim, so send it the packed project (SaveUI already applied it
   // to our managers); it reloads and re-snapshots.
   clearEditHistory();
+  const auto loadedScene = m_sceneManager->getCurrentScene();
+  m_historyScope.reset(loadedScene ? std::optional(loadedScene->getUUID()) : std::nullopt);
 
   net::Message message(net::MessageType::loadProject);
   m_projectPacker->pack(message);

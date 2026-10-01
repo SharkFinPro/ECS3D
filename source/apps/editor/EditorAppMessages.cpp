@@ -73,6 +73,16 @@ void EditorApp::handleSnapshot(const net::Message& message)
   // mutation, so this is the rebroadcast a structural or asset undo/redo request is waiting on - see the
   // in-flight gate on requestUndo()/requestRedo().
   clearUndoRedoPending();
+
+  if (m_historyScope.observe(scene ? std::optional(scene->getUUID()) : std::nullopt))
+  {
+    if (m_editHistory.canUndo() || m_editHistory.canRedo() || m_authoredEditHistory.has_value())
+    {
+      Log::info(LogCategory::editor, "The active scene changed underneath the editor; undo history cleared.");
+    }
+
+    clearEditHistory();
+  }
 }
 
 void EditorApp::handleStateDelta(const net::Message& message) const
