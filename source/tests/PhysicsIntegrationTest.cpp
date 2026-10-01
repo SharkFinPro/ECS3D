@@ -1259,8 +1259,8 @@ TEST(PhysicsIntegration, ASpinningChildOfATurnedParentTurnsOnlyByItsOwnSpin)
   PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
 
   // The turned world rotation written back as the local one adds the parent's 30 degrees again every tick.
-  expectNear("local rotation", transformOf(child)->getLocalRotation(), { 0, 10.0f * dt, 0 }, 1e-3f);
-  expectNear("rotation", transformOf(child)->getRotation(), { 0, 30.0f + 10.0f * dt, 0 }, 1e-3f);
+  fixtures::expectNear("local rotation", transformOf(child)->getLocalRotation(), { 0, 10.0f * dt, 0 }, 1e-3f);
+  fixtures::expectNear("rotation", transformOf(child)->getRotation(), { 0, 30.0f + 10.0f * dt, 0 }, 1e-3f);
 
   // The world-space move is carried into the parent's frame, turned 30 degrees about y.
   expectNear("local position", transformOf(child)->getLocalPosition(),
