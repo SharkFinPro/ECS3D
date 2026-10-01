@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   ScriptSystem.h
   ScriptEngine.cpp
   ScriptEngine.h
+  AttachedScripts.cpp
+  AttachedScripts.h
   ScriptFieldEdit.cpp
   ScriptFieldEdit.h
   bindings/BindingContext.cpp
