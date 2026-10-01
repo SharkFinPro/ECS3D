@@ -139,8 +139,11 @@ void Object::addComponent(const std::shared_ptr<Component>& component)
   }
 }
 
-void Object::removeComponent(const std::shared_ptr<Component>& component)
+void Object::removeComponent(const std::shared_ptr<Component>& componentToRemove)
 {
+  // A caller may pass a reference into m_components itself, which the erase below destroys - hold our own.
+  const std::shared_ptr<Component> component = componentToRemove;
+
   // Erase by identity, not just by type/slot: a component instance that is not actually the one this
   // object holds (a stale pointer, or the wrong instance of the same type) must not be stopped, and
   // must not evict whatever this object actually has in that slot.

@@ -203,6 +203,20 @@ TEST(ColliderCache, RemovingTheParentTransformRefreshesAChildBoxBounds)
   EXPECT_NEAR(centerX(chain.box->getBoundingBox()), offset - 4.0f, 1e-4f);
 }
 
+TEST(ColliderCache, RemovingATransformThroughAReferenceIntoTheComponentMapRefreshesTheChild)
+{
+  Chain chain;
+  transformOf(chain.parent)->setPosition(glm::vec3(6, 0, 0));
+  const float offset = centerX(chain.box->getBoundingBox());
+
+  // The reference names the map entry removeComponent erases, the way Replication's removeComponent op passes it.
+  const auto& held = chain.parent->getComponents().at(ComponentType::transform);
+  chain.parent->removeComponent(held);
+
+  EXPECT_FALSE(chain.parent->getComponents().contains(ComponentType::transform));
+  EXPECT_NEAR(centerX(chain.box->getBoundingBox()), offset - 6.0f, 1e-4f);
+}
+
 TEST(ColliderCache, TheWorldUpdateIDIgnoresAncestorsAboveATransformlessOne)
 {
   fixtures::Scene scene;
