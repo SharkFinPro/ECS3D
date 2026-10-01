@@ -79,6 +79,7 @@ TEST(EditHistoryPlayStop, ComponentEditRecordedBeforePlayUndoesAndRedoesAfterSto
   authored.record(edits::EditCommand::componentEdit(play.objectUUID, before, after));
 
   play.scene->start();
+  transform->setPosition({ 9, 9, 9 });
   mutateAtRuntime(play);
   play.scene->stop();
 
@@ -129,6 +130,8 @@ TEST(EditHistoryPlayStop, RenameRecordedBeforePlayUndoesAndRedoesAfterStop)
   EXPECT_EQ(play.object()->getName(), "Renamed");
 }
 
+// The two refusal tests never stop the scene: they show validation is sensitive to the live scene, which
+// is why the tests above pass only because stop() restored it.
 TEST(EditHistoryPlayStop, UndoIsRefusedWhileTheRunHasChangedWhatTheCommandNames)
 {
   const auto play = makePlayScene();

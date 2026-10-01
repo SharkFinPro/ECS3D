@@ -11,7 +11,9 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <chrono>
+#include <optional>
 #include <string>
+#include <utility>
 
 void EditorApp::applyMessage(const net::Message& message)
 {
@@ -147,8 +149,8 @@ void EditorApp::handleSceneStatus(const net::Message& message)
 
   // Stopping rebuilds the authored tree from the snapshot taken at start, uuids preserved, so the authored
   // history is valid again then. While playing, it is set aside: undoing an authored edit against the
-  // runtime scene would be discarded at stop anyway. Edits made while playing get their own history, which
-  // stop discards with the runtime changes it describes. A pause/resume leaves the scene as it is. Read
+  // runtime scene would be discarded at stop anyway. Edits made while playing go on a fresh history that
+  // stop discards (live component edits record nothing, since serialize() reads authored values). A pause/resume leaves the scene as it is. Read
   // against the last REPORTED status rather than m_sceneStatus, whose optimistic default would make the
   // server's first report (an edit server starts stopped) look like a stop.
   if (m_reportedSceneStatus.has_value() && m_reportedSceneStatus.value() != status)
