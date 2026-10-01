@@ -78,23 +78,31 @@ ServerApp::ServerApp(LaunchOptions options)
 
   m_netServer->start(m_options.port, m_options.editMode, m_options.authToken);
 
-  m_sceneManager->startScene();
+  // An edit server waits for the editor's play; a play server has no one to press it.
+  const bool autoStart = !m_options.editMode;
+  if (autoStart)
+  {
+    m_sceneManager->startScene();
+  }
 
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    try
+    if (autoStart)
     {
-      m_scriptSystem->start(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      Log::error(LogCategory::server, e.what());
+      try
+      {
+        m_scriptSystem->start(*scene->getObjectManager());
+      }
+      catch (const std::exception& e)
+      {
+        Log::error(LogCategory::server, e.what());
+      }
     }
 
     // The server is headless (no window), so announce that it's up - otherwise a running server looks
     // like it never started.
-    Log::info(LogCategory::server, "Running scene '" + scene->getName() + "' ("
-      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects) on port "
+    Log::info(LogCategory::server, std::string(autoStart ? "Running" : "Loaded") + " scene '" + scene->getName()
+      + "' (" + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects) on port "
       + std::to_string(m_options.port) + ".");
   }
 }
