@@ -10,6 +10,7 @@
 #include "queries/SceneQueries.h"
 
 #include <glm/vec3.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -47,6 +48,25 @@ namespace {
     fixtures::addSphereCollider(object, radius);
 
     return object;
+  }
+
+  std::shared_ptr<Object> addChildBox(const Scene& scene, const std::shared_ptr<Object>& parent,
+                                      const glm::vec3& position)
+  {
+    auto child = addChildObject(scene, "ChildBox", parent);
+    fixtures::transformOf(child)->setPosition(position);
+    fixtures::addBoxCollider(child);
+
+    return child;
+  }
+
+  // A compound body at the origin: a rigid body parent with no collider of its own.
+  std::shared_ptr<Object> addCompoundBody(const Scene& scene)
+  {
+    auto body = addObject(scene, "Body");
+    fixtures::addRigidBody(body);
+
+    return body;
   }
 
   void setColliderLayer(const std::shared_ptr<Object>& object, const uint32_t layer)
@@ -386,4 +406,141 @@ TEST(SceneQuery, ASphereColliderWithoutATransformIsNotReachable)
     EXPECT_FALSE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit));
     EXPECT_TRUE(sphereOverlaps(scene, { 0, 0, 10 }, 5.0f).empty());
   });
+}
+
+TEST(SceneQuery, RaycastSkipsAChildColliderOfTheIgnoredBody)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  addChildBox(scene, body, { 0, 0, 10 });
+  const auto separate = addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit, allLayers, body->getUUID()));
+
+  EXPECT_EQ(hit.object, separate->getUUID());
+  EXPECT_NEAR(hit.distance, 19.0f, 1e-4f);
+}
+
+TEST(SceneQuery, RaycastHitsAChildColliderWhenNothingIsIgnored)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto child = addChildBox(scene, body, { 0, 0, 10 });
+  addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit));
+
+  EXPECT_EQ(hit.object, child->getUUID());
+  EXPECT_NEAR(hit.distance, 9.0f, 1e-4f);
+}
+
+TEST(SceneQuery, RaycastSkipsAGrandchildColliderOfTheIgnoredBody)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto middle = addChildObject(scene, "Middle", body);
+  addChildBox(scene, middle, { 0, 0, 10 });
+  const auto separate = addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit, allLayers, body->getUUID()));
+
+  EXPECT_EQ(hit.object, separate->getUUID());
+}
+
+TEST(SceneQuery, RaycastSkipsASiblingColliderOnTheSameBodyAsTheIgnoredChild)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto own = addChildBox(scene, body, { 0, 0, -10 });
+  addChildBox(scene, body, { 0, 0, 10 });
+  const auto separate = addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit, allLayers, own->getUUID()));
+
+  EXPECT_EQ(hit.object, separate->getUUID());
+}
+
+TEST(SceneQuery, RaycastStillHitsASiblingWhenTheIgnoredObjectHasNoBody)
+{
+  const auto scene = makeScene();
+  const auto parent = addObject(scene, "Parent");
+  const auto own = addChildBox(scene, parent, { 0, 0, -10 });
+  const auto sibling = addChildBox(scene, parent, { 0, 0, 10 });
+
+  // Two null bodies are not the same body.
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit, allLayers, own->getUUID()));
+
+  EXPECT_EQ(hit.object, sibling->getUUID());
+}
+
+TEST(SceneQuery, RaycastWithAnIgnoredUuidThatResolvesToNothingSkipsNothing)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto child = addChildBox(scene, body, { 0, 0, 10 });
+
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit, allLayers,
+                      uuids::uuid::from_string("11111111-2222-3333-4444-555555555555").value()));
+
+  EXPECT_EQ(hit.object, child->getUUID());
+}
+
+TEST(SceneQuery, OverlapSphereSkipsAChildColliderOfTheIgnoredBody)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto child = addChildBox(scene, body, { 0, 0, 10 });
+  const auto separate = addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  const auto all = sphereOverlaps(scene, { 0, 0, 15 }, 6.0f);
+  ASSERT_EQ(all.size(), 2u);
+  EXPECT_NE(std::ranges::find(all, child->getUUID()), all.end());
+
+  const auto results = sphereOverlaps(scene, { 0, 0, 15 }, 6.0f, allLayers, body->getUUID());
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), separate->getUUID());
+}
+
+TEST(SceneQuery, OverlapSphereSkipsAGrandchildColliderOfTheIgnoredBody)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto middle = addChildObject(scene, "Middle", body);
+  addChildBox(scene, middle, { 0, 0, 10 });
+  const auto separate = addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  const auto results = sphereOverlaps(scene, { 0, 0, 15 }, 6.0f, allLayers, body->getUUID());
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), separate->getUUID());
+}
+
+TEST(SceneQuery, OverlapSphereSkipsASiblingColliderOnTheSameBodyAsTheIgnoredChild)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto own = addChildBox(scene, body, { 0, 0, -10 });
+  addChildBox(scene, body, { 0, 0, 10 });
+  const auto separate = addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  const auto results = sphereOverlaps(scene, { 0, 0, 15 }, 6.0f, allLayers, own->getUUID());
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), separate->getUUID());
+}
+
+TEST(SceneQuery, OverlapSphereStillFindsASiblingWhenTheIgnoredObjectHasNoBody)
+{
+  const auto scene = makeScene();
+  const auto parent = addObject(scene, "Parent");
+  const auto own = addChildBox(scene, parent, { 0, 0, -10 });
+  const auto sibling = addChildBox(scene, parent, { 0, 0, 10 });
+
+  const auto results = sphereOverlaps(scene, { 0, 0, 10 }, 1.0f, allLayers, own->getUUID());
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), sibling->getUUID());
 }

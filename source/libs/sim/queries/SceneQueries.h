@@ -17,7 +17,8 @@ class SceneQueries {
 public:
   // Cast a ray (origin + normalized direction is computed internally) against every collider whose layer
   // is in layerMask. Returns true on the nearest hit within maxDistance, writing the outputs only then.
-  // ignoreObject (nil = none) is skipped, so a caster can exclude its own collider. A ray that starts
+  // ignoreObject (nil = none) is skipped along with its descendants and any collider on the same rigid
+  // body, so a caster can exclude its own compound body. A ray that starts
   // inside a collider reports it at contact (distance 0).
   static bool raycast(ObjectManager& objectManager,
                       const glm::vec3& origin, const glm::vec3& direction, float maxDistance,

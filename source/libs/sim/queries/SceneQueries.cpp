@@ -2,6 +2,7 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
+#include <objects/components/RigidBody.h>
 #include <objects/components/Transform.h>
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/BoxCollider.h>
@@ -175,6 +176,46 @@ namespace {
 
     return dot(center - closest, center - closest) <= radius * radius;
   }
+
+  // What a caster's ignoreObject excludes: the object itself, its descendants, and anything riding the
+  // same non-null rigid body (a compound body's other child colliders). Static objects share no body.
+  class IgnoredBody {
+  public:
+    IgnoredBody(const ObjectManager& objectManager, const uuids::uuid& ignoreObject)
+      : m_uuid(ignoreObject),
+        m_object(objectManager.getObjectByUUID(ignoreObject))
+    {
+      if (m_object)
+      {
+        m_body = m_object->getComponent<RigidBody>(ComponentType::rigidBody);
+      }
+    }
+
+    [[nodiscard]] bool skips(const std::shared_ptr<Object>& candidate) const
+    {
+      if (candidate->getUUID() == m_uuid)
+      {
+        return true;
+      }
+
+      if (!m_object)
+      {
+        return false;
+      }
+
+      if (m_object->isAncestorOf(candidate))
+      {
+        return true;
+      }
+
+      return m_body && candidate->getComponent<RigidBody>(ComponentType::rigidBody) == m_body;
+    }
+
+  private:
+    uuids::uuid m_uuid;
+    std::shared_ptr<Object> m_object;
+    std::shared_ptr<RigidBody> m_body;
+  };
 }
 
 bool SceneQueries::raycast(ObjectManager& objectManager,
@@ -189,14 +230,16 @@ bool SceneQueries::raycast(ObjectManager& objectManager,
   }
   const glm::vec3 dir = direction / dirLength;
 
+  const IgnoredBody ignored(objectManager, ignoreObject);
+
   bool hitAnything = false;
   float nearest = maxDistance;
 
   for (const auto& object : objectManager.getAllObjects())
   {
-    if (object->getUUID() == ignoreObject)
+    if (ignored.skips(object))
     {
-      continue; // skip the caster's own object (nil ignoreObject matches nothing)
+      continue;
     }
 
     const auto collider = object->getComponent<Collider>(ComponentType::collider);
@@ -250,11 +293,13 @@ void SceneQueries::overlapSphere(ObjectManager& objectManager,
                                  const uuids::uuid& ignoreObject,
                                  std::vector<uuids::uuid>& results)
 {
+  const IgnoredBody ignored(objectManager, ignoreObject);
+
   for (const auto& object : objectManager.getAllObjects())
   {
-    if (object->getUUID() == ignoreObject)
+    if (ignored.skips(object))
     {
-      continue; // skip the caster's own object (nil ignoreObject matches nothing)
+      continue;
     }
 
     const auto collider = object->getComponent<Collider>(ComponentType::collider);
