@@ -21,8 +21,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   // and snapshot so every view rebuilds. The blob is sent (not a path) so it works off-machine too.
   Log::info(LogCategory::server, "Received loadProject (" + std::to_string(message.bytes().size()) + " bytes).");
 
-  // Opening/creating a project must not start the sim. Read the status before unpack(), which clears
-  // the SceneManager and resets status to stopped as a side effect.
+  // Only a failed load needs this: the scene that survives it was running, so its scripts are restarted.
   const bool wasRunning = m_sceneManager->getSceneStatus() == SceneStatus::running;
 
   // Stop the current scripts before the scene is swapped out from under them.
@@ -54,31 +53,19 @@ void ServerApp::handleLoadProject(const net::Message& message) const
     return;
   }
 
-  finishProjectLoad(wasRunning);
+  finishProjectLoad();
 }
 
-void ServerApp::finishProjectLoad(const bool wasRunning) const
+void ServerApp::finishProjectLoad() const
 {
   // New project/scene: any contact history belongs to the project we just swapped out.
   m_collisionSystem->reset();
 
-  // Opening/creating a project starts stopped, matching the scene-switch path: only resume the sim if
-  // it was actually running before the swap.
-  if (wasRunning)
-  {
-    m_sceneManager->startScene();
-  }
-
+  // unpack() leaves the scene stopped, and a loaded project stays that way until the editor presses play.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    if (wasRunning)
-    {
-      startScriptsLogged(*scene->getObjectManager());
-    }
-
     Log::info(LogCategory::server, "Loaded project from editor: scene '" + scene->getName() + "' ("
-      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, "
-      + (wasRunning ? "running" : "stopped") + ").");
+      + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, stopped).");
   }
 
   broadcastSnapshot();
@@ -122,10 +109,6 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
     return;
   }
 
-  // A switch keeps a stopped sim stopped. Read the status before loadScene() resets it to stopped; paused
-  // also lands stopped, since the new scene was never started and there is nothing live to resume.
-  const bool wasRunning = m_sceneManager->getSceneStatus() == SceneStatus::running;
-
   // Stop the outgoing scene's scripts before switching the active scene.
   if (const auto current = m_sceneManager->getCurrentScene())
   {
@@ -144,23 +127,8 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
   // New scene: contact history from the previous scene is meaningless here.
   m_collisionSystem->reset();
 
-  if (wasRunning)
-  {
-    m_sceneManager->startScene();
-
-    try
-    {
-      m_scriptSystem->start(*scene->getObjectManager());
-    }
-    catch (const std::exception& e)
-    {
-      Log::error(LogCategory::server, e.what());
-    }
-  }
-
   Log::info(LogCategory::server, "Switched to scene '" + scene->getName() + "' ("
-    + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, "
-    + (wasRunning ? "running" : "stopped") + ").");
+    + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects, stopped).");
 
   broadcastSnapshot();
 }

@@ -111,7 +111,7 @@ private:
 
   void handleLoadProject(const net::Message& message) const;
 
-  void finishProjectLoad(bool wasRunning) const;
+  void finishProjectLoad() const;
 
   void startScriptsLogged(ObjectManager& objectManager) const;
 
