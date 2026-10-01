@@ -17,8 +17,9 @@ class SceneQueries {
 public:
   // Cast a ray (origin + normalized direction is computed internally) against every collider whose layer
   // is in layerMask. Returns true on the nearest hit within maxDistance, writing the outputs only then.
-  // ignoreObject (nil = none) is skipped along with its descendants and any collider on the same rigid
-  // body, so a caster can exclude its own compound body. A ray that starts
+  // ignoreObject (nil = none) is skipped along with every collider on the same rigid body (or, for an
+  // object with no body, its bodiless descendants), so a caster can exclude its own compound body. A
+  // descendant with a rigid body of its own is a separate body and stays hittable. A ray that starts
   // inside a collider reports it at contact (distance 0).
   static bool raycast(ObjectManager& objectManager,
                       const glm::vec3& origin, const glm::vec3& direction, float maxDistance,
@@ -26,7 +27,7 @@ public:
                       uuids::uuid& hitObject, glm::vec3& hitPoint, glm::vec3& hitNormal, float& hitDistance);
 
   // Collect the uuid of every object whose collider overlaps the sphere and whose layer is in layerMask.
-  // ignoreObject (nil = none) is skipped.
+  // ignoreObject (nil = none) is skipped along with its own body's colliders, as in raycast.
   static void overlapSphere(ObjectManager& objectManager,
                             const glm::vec3& center, float radius, uint32_t layerMask,
                             const uuids::uuid& ignoreObject,

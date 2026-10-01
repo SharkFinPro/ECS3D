@@ -544,3 +544,59 @@ TEST(SceneQuery, OverlapSphereStillFindsASiblingWhenTheIgnoredObjectHasNoBody)
   ASSERT_EQ(results.size(), 1u);
   EXPECT_EQ(results.front(), sibling->getUUID());
 }
+
+TEST(SceneQuery, RaycastStillHitsADescendantWithItsOwnBody)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto projectile = addChildBox(scene, body, { 0, 0, 10 });
+  fixtures::addRigidBody(projectile);
+  addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit, allLayers, body->getUUID()));
+
+  EXPECT_EQ(hit.object, projectile->getUUID());
+  EXPECT_NEAR(hit.distance, 9.0f, 1e-4f);
+}
+
+TEST(SceneQuery, OverlapSphereStillFindsADescendantWithItsOwnBody)
+{
+  const auto scene = makeScene();
+  const auto body = addCompoundBody(scene);
+  const auto projectile = addChildBox(scene, body, { 0, 0, 10 });
+  fixtures::addRigidBody(projectile);
+
+  const auto results = sphereOverlaps(scene, { 0, 0, 10 }, 1.0f, allLayers, body->getUUID());
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), projectile->getUUID());
+}
+
+TEST(SceneQuery, IgnoringABodyThatOwnsACollider)
+{
+  const auto scene = makeScene();
+  const auto body = addBox(scene, { 0, 0, 5 }, glm::vec3(1));
+  fixtures::addRigidBody(body);
+  const auto child = addChildBox(scene, body, { 0, 0, 10 });
+  const auto separate = addBox(scene, { 0, 0, 20 }, glm::vec3(1));
+
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit));
+  EXPECT_EQ(hit.object, body->getUUID());
+
+  // Ignoring the parent skips its own collider and its bodiless child.
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit, allLayers, body->getUUID()));
+  EXPECT_EQ(hit.object, separate->getUUID());
+
+  // Ignoring the child skips the parent's collider too: same body through an ancestor.
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit, allLayers, child->getUUID()));
+  EXPECT_EQ(hit.object, separate->getUUID());
+
+  const auto byParent = sphereOverlaps(scene, { 0, 0, 12 }, 9.0f, allLayers, body->getUUID());
+  ASSERT_EQ(byParent.size(), 1u);
+  EXPECT_EQ(byParent.front(), separate->getUUID());
+
+  const auto byChild = sphereOverlaps(scene, { 0, 0, 12 }, 9.0f, allLayers, child->getUUID());
+  ASSERT_EQ(byChild.size(), 1u);
+  EXPECT_EQ(byChild.front(), separate->getUUID());
+}

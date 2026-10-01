@@ -382,8 +382,8 @@ pairs and diffs them into enter/stay/exit uuid-pair lists; `ServerApp` hands tho
 `ScriptSystem::dispatchCollisionEvent` (→ `onCollisionEnter/Stay/Exit` script virtuals) after the collision
 pass — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` never links
 `scripting`; (4) **sim→script *queries* cross by function-pointer injection.** Query behavior stays in a
-`sim` system (`SceneQueries`: raycast/overlapSphere; the ignored object's descendants and same-body colliders are skipped
-too), and `ServerApp` injects its statics into
+`sim` system (`SceneQueries`: raycast/overlapSphere; the ignored object's same-body colliders are skipped too, but a
+descendant with a rigid body of its own is not), and `ServerApp` injects its statics into
 `BindingContext` (`setRaycast`/`setOverlapSphere`) at startup; the `World` bindings call through them. The
 injected signatures use only shared types (`ObjectManager`/`glm`/`uuid`), so no library learns the other —
 the pattern to reuse for any future sim query exposed to scripts; (5) **a read-only script binding for

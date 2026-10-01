@@ -177,8 +177,9 @@ namespace {
     return dot(center - closest, center - closest) <= radius * radius;
   }
 
-  // What a caster's ignoreObject excludes: the object itself, its descendants, and anything riding the
-  // same non-null rigid body (a compound body's other child colliders). Static objects share no body.
+  // What a caster's ignoreObject excludes: the object itself and whatever shares its body - the same
+  // non-null rigid body, or, when it has none, its own bodiless descendants. A descendant with a rigid
+  // body of its own is a different body and stays hittable.
   class IgnoredBody {
   public:
     IgnoredBody(const ObjectManager& objectManager, const uuids::uuid& ignoreObject)
@@ -203,12 +204,13 @@ namespace {
         return false;
       }
 
-      if (m_object->isAncestorOf(candidate))
+      const auto candidateBody = candidate->getComponent<RigidBody>(ComponentType::rigidBody);
+      if (m_body)
       {
-        return true;
+        return candidateBody == m_body;
       }
 
-      return m_body && candidate->getComponent<RigidBody>(ComponentType::rigidBody) == m_body;
+      return !candidateBody && m_object->isAncestorOf(candidate);
     }
 
   private:

@@ -252,7 +252,7 @@ public static unsafe class World
         {
             // Native returns "uuid,dist,px,py,pz,nx,ny,nz" into its thread-local buffer, or "" on a miss;
             // marshal it out immediately (return ownership is native's) and parse. ignoreUuid (our arg,
-            // our ownership) lets the caller exclude an object - used to skip self.
+            // our ownership) lets the caller exclude an object and its own body's colliders - used to skip self.
             raw = Marshal.PtrToStringUTF8(NativeBindings.World.raycast(
                 origin.X, origin.Y, origin.Z, direction.X, direction.Y, direction.Z,
                 maxDistance, layerMask, ignorePtr)) ?? "";
@@ -290,8 +290,8 @@ public static unsafe class World
         return true;
     }
 
-    // Every object whose collider overlaps the given sphere and whose layer is in layerMask. Hand a
-    // returned uuid to tryGetTransform/tryGetRigidBody to act on it.
+    // Every object whose collider overlaps the given sphere and whose layer is in layerMask, except
+    // ignoreUuid and the colliders of its own body. Hand a returned uuid to tryGetTransform/tryGetRigidBody to act on it.
     public static string[] overlapSphere(Vector3 center, float radius, uint layerMask = 0xFFFFFFFFu,
                                          string ignoreUuid = "")
     {
