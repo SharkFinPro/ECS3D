@@ -53,6 +53,7 @@ add_executable(${PROJECT_NAME}
   AttachedScriptsTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
+  CompoundBodyCollisionTest.cpp
   SettingsStoreTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp
