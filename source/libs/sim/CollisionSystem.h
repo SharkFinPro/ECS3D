@@ -74,7 +74,9 @@ private:
   [[nodiscard]] std::vector<size_t> responseOrder(
     const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const;
 
-  void findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+  // Forward sweep from one edge: appends the index of every higher-indexed edge it hits, ascending. A pair
+  // is tested once, from its lower-indexed edge, and only if at least one side is dynamic.
+  void findCollisions(size_t index, const std::vector<char>& isDynamic, std::vector<size_t>& hits) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
                                const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt);
