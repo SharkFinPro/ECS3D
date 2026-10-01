@@ -97,6 +97,10 @@ public:
   void unpack(net::MessageReader& messageReader, std::size_t depth = 0);
 
 private:
+  // Descendants resolve their world transform through this object only while it has a Transform, so one
+  // arriving or leaving must move their world stamps.
+  void refreshChildWorldStamps() const;
+
   std::unordered_map<ComponentType, std::shared_ptr<Component>> m_components;
   std::vector<std::shared_ptr<Component>> m_scripts;
 
