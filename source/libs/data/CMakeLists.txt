@@ -19,6 +19,8 @@ add_library(${PROJECT_NAME}
   edits/EditCommand.h
   edits/EditHistory.cpp
   edits/EditHistory.h
+  edits/HistoryScope.cpp
+  edits/HistoryScope.h
   edits/RecordEdits.cpp
   edits/RecordEdits.h
   scenes/SceneManager.cpp
