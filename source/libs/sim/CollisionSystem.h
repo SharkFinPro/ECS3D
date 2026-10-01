@@ -75,7 +75,16 @@ private:
   [[nodiscard]] std::vector<size_t> responseOrder(
     const std::vector<std::vector<std::shared_ptr<Object>>>& perEdgeCollisions) const;
 
-  void findCollisions(const CollisionEdge& edge, std::vector<std::shared_ptr<Object>>& collidedObjects) const;
+  // A pair the forward sweep found: the higher edge's index and which dynamic side(s) saw the other.
+  struct SweepHit {
+    size_t other;
+    bool lowerSees;
+    bool higherSees;
+  };
+
+  // Forward sweep from one edge: appends a hit for every higher-indexed edge it meets, ascending. A pair is
+  // visited once, from its lower-indexed edge, and only if at least one side is dynamic.
+  void findCollisions(size_t index, const std::vector<char>& isDynamic, std::vector<SweepHit>& hits) const;
 
   static void handleCollisions(const std::shared_ptr<RigidBody>& rigidBody, const std::shared_ptr<Collider>& collider,
                                const std::vector<std::shared_ptr<Object>>& collidedObjects, float dt);

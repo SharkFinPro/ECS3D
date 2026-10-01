@@ -40,6 +40,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryBatchTest.cpp
   RecordEditsTest.cpp
   CollisionMathTest.cpp
+  SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
