@@ -1,6 +1,7 @@
 #ifndef SCRIPTSYSTEM_H
 #define SCRIPTSYSTEM_H
 
+#include "AttachedScripts.h"
 #include <nlohmann/json_fwd.hpp>
 #include <filesystem>
 #include <memory>
@@ -93,6 +94,8 @@ private:
 
   // key = uuid + "_" + className (cacheKey)
   std::unordered_map<std::string, AttachedScript> m_attached;
+  // Mirrors m_attached by (uuid, class); updated at every insert, erase and clear of it.
+  AttachedScripts m_attachedIndex;
   std::unordered_map<std::string, std::vector<ExposedField>> m_fieldCache;
 
   // Instances that have had their C# start() called. attachAll() (run every broadcastSnapshot, whether
