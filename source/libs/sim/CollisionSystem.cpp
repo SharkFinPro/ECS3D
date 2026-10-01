@@ -23,6 +23,23 @@ namespace {
     std::shared_ptr<Object> object;
     std::optional<collisions::Contact> contact;
   };
+
+  // Colliders that belong to one body never touch each other: they move together, and a response between
+  // them would push the body against itself. Static colliders (no body) are not one assembly.
+  bool partOfSameAssembly(const CollisionEdge& a, const CollisionEdge& b)
+  {
+    if (a.object == b.object)
+    {
+      return true;
+    }
+
+    if (a.body && a.body == b.body)
+    {
+      return true;
+    }
+
+    return a.object->isAncestorOf(b.object) || b.object->isAncestorOf(a.object);
+  }
 }
 
 void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
@@ -40,7 +57,7 @@ void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const floa
         continue;
       }
 
-      m_collisionEdges.push_back({ object, collider, 0.0f });
+      m_collisionEdges.push_back({ object, collider, 0.0f, object->getComponent<RigidBody>(ComponentType::rigidBody) });
     }
   }
 
@@ -62,7 +79,7 @@ void CollisionSystem::checkCollisions(const float dt)
   std::vector<char> isDynamic(m_collisionEdges.size());
   for (size_t i = 0; i < m_collisionEdges.size(); ++i)
   {
-    isDynamic[i] = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody) != nullptr;
+    isDynamic[i] = m_collisionEdges[i].body != nullptr;
   }
 
   // Each edge's forward-sweep hits (higher edge indices, ascending), indexed by edge so the parallel loop
@@ -106,7 +123,7 @@ void CollisionSystem::checkCollisions(const float dt)
   // this ran inside the loop above.
   for (const auto i : responseOrder(perEdgeCollisions))
   {
-    const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
+    const auto& rigidBody = m_collisionEdges[i].body;
     if (!rigidBody)
     {
       continue;
@@ -231,9 +248,7 @@ void CollisionSystem::findCollisions(const size_t index, const std::vector<char>
       continue;
     }
 
-    if (other.object == edge.object ||
-        other.object->getParent() == edge.object ||
-        other.object == edge.object->getParent())
+    if (partOfSameAssembly(edge, other))
     {
       continue;
     }

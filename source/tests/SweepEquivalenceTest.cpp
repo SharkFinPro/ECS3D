@@ -121,9 +121,12 @@ namespace {
            a.maxZ >= b.minZ && a.minZ <= b.maxZ;
   }
 
-  bool skippedAsParentOrChild(const std::shared_ptr<Object>& body, const std::shared_ptr<Object>& other)
+  bool inSameAssembly(const std::shared_ptr<Object>& body, const std::shared_ptr<Object>& other)
   {
-    return other->getParent() == body || other == body->getParent();
+    const auto bodyRigid = rigidBodyOf(body);
+
+    return body == other || (bodyRigid && bodyRigid == rigidBodyOf(other)) ||
+           body->isAncestorOf(other) || other->isAncestorOf(body);
   }
 
   // Whether the body, asking with its own collider first, finds the other: the full-scan answer one
@@ -133,7 +136,7 @@ namespace {
     const auto collider = colliderOf(body);
     const auto otherCollider = colliderOf(other);
 
-    return !skippedAsParentOrChild(body, other) &&
+    return !inSameAssembly(body, other) &&
            layersMatch(*collider, *otherCollider) &&
            boxesOverlap(collider->getBoundingBox(), otherCollider->getBoundingBox()) &&
            collisions::intersects(*collider, *otherCollider);
