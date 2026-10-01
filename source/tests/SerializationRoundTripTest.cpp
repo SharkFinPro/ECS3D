@@ -285,6 +285,24 @@ TEST(SerializationRoundTrip, TheBinaryPathRebuildsAnIdenticalProject)
   EXPECT_EQ(canonical(rebuilt.serializer->serialize()), canonical(original.serializer->serialize()));
 }
 
+TEST(SerializationRoundTrip, UnpackingOverARunningProjectLeavesItStopped)
+{
+  const auto original = makeProject();
+  buildProject(original);
+
+  net::Message message(net::MessageType::snapshot);
+  original.packer->pack(message);
+
+  const auto running = makeProject();
+  buildProject(running);
+  running.sceneManager->startScene();
+  ASSERT_EQ(running.sceneManager->getSceneStatus(), SceneStatus::running);
+
+  running.packer->unpack(message);
+
+  EXPECT_EQ(running.sceneManager->getSceneStatus(), SceneStatus::stopped);
+}
+
 TEST(SerializationRoundTrip, TheCurrentSceneSurvivesBothPaths)
 {
   const auto original = makeProject();
