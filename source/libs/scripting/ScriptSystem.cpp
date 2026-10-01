@@ -582,7 +582,7 @@ nlohmann::json ScriptSystem::readFieldsFromInstance(const uuids::uuid& uuid,
 
 bool ScriptSystem::isAttached(const uuids::uuid& uuid, const std::string& className) const
 {
-  return m_attached.contains(cacheKey(uuid, className));
+  return m_attachedIndex.isAttached(uuid, className);
 }
 
 std::string ScriptSystem::cacheKey(const uuids::uuid& uuid, const std::string& className)

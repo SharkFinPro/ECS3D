@@ -67,7 +67,7 @@ TEST(AttachedScriptsTest, ClearResetsEverything)
   EXPECT_FALSE(attached.isAttached(objectA, "Mover"));
 }
 
-TEST(AttachedScriptsTest, DetachingAKeyNeverAttachedDoesNotUnderflow)
+TEST(AttachedScriptsTest, DetachingAKeyNeverAttachedChangesNothing)
 {
   AttachedScripts attached;
   attached.attach(objectA, "Mover");
@@ -81,7 +81,7 @@ TEST(AttachedScriptsTest, DetachingAKeyNeverAttachedDoesNotUnderflow)
   EXPECT_FALSE(attached.hasAnyAttached(objectA));
 }
 
-TEST(AttachedScriptsTest, ReattachingAnAttachedKeyDoesNotDoubleCount)
+TEST(AttachedScriptsTest, ReattachingAnAttachedKeyNeedsOnlyOneDetach)
 {
   AttachedScripts attached;
   EXPECT_TRUE(attached.attach(objectA, "Mover"));

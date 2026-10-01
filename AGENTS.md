@@ -377,8 +377,9 @@ script-spawned object joins the scene the same way a script-destroyed one leaves
 mid-iteration; (3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
 pairs and diffs them into enter/stay/exit uuid-pair lists; `ServerApp` hands those to
 `ScriptSystem::dispatchCollisionEvent` (→ `onCollisionEnter/Stay/Exit` script virtuals) after the collision
-pass (dispatch skips an object with no attached script before any lookup) — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` never links
-`scripting`; (4) **sim→script *queries* cross by function-pointer injection.** Query behavior stays in a
+pass — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` never links
+`scripting`. Dispatch returns before any object lookup for an object with no attached script, so contacts
+between unscripted bodies cost nothing; (4) **sim→script *queries* cross by function-pointer injection.** Query behavior stays in a
 `sim` system (`SceneQueries`: raycast/overlapSphere), and `ServerApp` injects its statics into
 `BindingContext` (`setRaycast`/`setOverlapSphere`) at startup; the `World` bindings call through them. The
 injected signatures use only shared types (`ObjectManager`/`glm`/`uuid`), so no library learns the other —
