@@ -110,7 +110,7 @@ void CollisionSystem::checkCollisions(const float dt)
   // this ran inside the loop above.
   for (const auto i : responseOrder(perEdgeCollisions))
   {
-    const auto rigidBody = m_collisionEdges[i].object->getComponent<RigidBody>(ComponentType::rigidBody);
+    const auto& rigidBody = m_collisionEdges[i].body;
     if (!rigidBody)
     {
       continue;
@@ -203,11 +203,6 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
 
   for (const auto& other : m_collisionEdges)
   {
-    if (partOfSameAssembly(edge, other))
-    {
-      continue;
-    }
-
     if (other.position > bbox.maxX)
     {
       break;
@@ -226,6 +221,11 @@ void CollisionSystem::findCollisions(const CollisionEdge& edge, std::vector<std:
     if (bbox.maxX < otherBbox.minX || bbox.minX > otherBbox.maxX ||
         bbox.maxY < otherBbox.minY || bbox.minY > otherBbox.maxY ||
         bbox.maxZ < otherBbox.minZ || bbox.minZ > otherBbox.maxZ)
+    {
+      continue;
+    }
+
+    if (partOfSameAssembly(edge, other))
     {
       continue;
     }
