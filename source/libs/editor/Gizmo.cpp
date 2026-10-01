@@ -684,7 +684,9 @@ namespace {
       return local;
     }
 
-    if (total == 0.0f)
+    // The press frame's own ring hit can leave a residue of a few ulps (FMA contraction on some targets),
+    // which would re-derive the whole local Euler and nudge it on a plain click.
+    if (std::abs(total) < 1e-4f)
     {
       return local;
     }
