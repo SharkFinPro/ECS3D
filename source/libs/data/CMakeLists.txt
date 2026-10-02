@@ -21,6 +21,8 @@ add_library(${PROJECT_NAME}
   edits/EditHistory.h
   edits/HistoryScope.cpp
   edits/HistoryScope.h
+  edits/PlaySessionHistory.cpp
+  edits/PlaySessionHistory.h
   edits/RecordEdits.cpp
   edits/RecordEdits.h
   scenes/SceneManager.cpp

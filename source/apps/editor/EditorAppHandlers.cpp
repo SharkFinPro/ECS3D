@@ -94,7 +94,7 @@ void EditorApp::onAddAsset(const nlohmann::json& asset)
 
   if (command)
   {
-    m_editHistory.record(std::move(*command));
+    m_playHistory.current().record(std::move(*command));
   }
   else
   {
@@ -115,7 +115,7 @@ void EditorApp::onRenameAsset(const uuids::uuid& assetUUID, const std::string& d
 
   if (command)
   {
-    m_editHistory.record(std::move(*command));
+    m_playHistory.current().record(std::move(*command));
   }
   else
   {
@@ -137,7 +137,7 @@ void EditorApp::onRemoveAsset(const uuids::uuid& assetUUID)
 
   if (command)
   {
-    m_editHistory.record(std::move(*command));
+    m_playHistory.current().record(std::move(*command));
   }
   else
   {
@@ -213,7 +213,7 @@ void EditorApp::onSceneEdit(const nlohmann::json& edit)
 
   if (commands)
   {
-    m_editHistory.recordBatch(std::move(*commands));
+    m_playHistory.current().recordBatch(std::move(*commands));
   }
   else if (scene)
   {
@@ -230,7 +230,7 @@ void EditorApp::onEditCommitted(const uuids::uuid& objectUUID, const nlohmann::j
     return;
   }
 
-  m_editHistory.record(edits::EditCommand::componentEdit(objectUUID, before, after));
+  m_playHistory.current().record(edits::EditCommand::componentEdit(objectUUID, before, after));
 }
 
 // Switch the active scene: apply locally for instant feedback, then tell the server (which re-snapshots).

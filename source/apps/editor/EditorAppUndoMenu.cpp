@@ -39,10 +39,10 @@ void EditorApp::requestUndo()
     return;
   }
 
-  const auto redoDepthBefore = m_editHistory.redoDepth();
+  const auto redoDepthBefore = m_playHistory.current().redoDepth();
   undo();
 
-  if (gainedOneEntry(redoDepthBefore, m_editHistory.redoDepth()))
+  if (gainedOneEntry(redoDepthBefore, m_playHistory.current().redoDepth()))
   {
     beginUndoRedoPending();
   }
@@ -55,10 +55,10 @@ void EditorApp::requestRedo()
     return;
   }
 
-  const auto undoDepthBefore = m_editHistory.undoDepth();
+  const auto undoDepthBefore = m_playHistory.current().undoDepth();
   redo();
 
-  if (gainedOneEntry(undoDepthBefore, m_editHistory.undoDepth()))
+  if (gainedOneEntry(undoDepthBefore, m_playHistory.current().undoDepth()))
   {
     beginUndoRedoPending();
   }
@@ -93,8 +93,7 @@ void EditorApp::clearUndoRedoPending()
 
 void EditorApp::clearEditHistory()
 {
-  m_editHistory.clear();
-  m_authoredEditHistory.reset();
+  m_playHistory.clear();
   clearUndoRedoPending();
 }
 
@@ -140,10 +139,10 @@ void EditorApp::displayEditMenu()
   const auto* objectManager = scene ? scene->getObjectManager().get() : nullptr;
 
   const auto undoLabel = objectManager
-    ? m_editHistory.nextUndoLabel(*objectManager, m_assetRegistry.get())
+    ? m_playHistory.current().nextUndoLabel(*objectManager, m_assetRegistry.get())
     : std::nullopt;
   const auto redoLabel = objectManager
-    ? m_editHistory.nextRedoLabel(*objectManager, m_assetRegistry.get())
+    ? m_playHistory.current().nextRedoLabel(*objectManager, m_assetRegistry.get())
     : std::nullopt;
 
   // Not blocking on undoRedoRequestBlocked() here would leave a stale-looking enabled item during the
