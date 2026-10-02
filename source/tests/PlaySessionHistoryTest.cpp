@@ -168,3 +168,43 @@ TEST(PlaySessionHistoryTest, ClearDropsBothHistoriesAndTheExpectation)
   EXPECT_TRUE(history.hasStash());
   EXPECT_EQ(depth(history), 0u);
 }
+
+TEST(PlaySessionHistoryTest, StaleStatusCannotConfirmALaterRequest)
+{
+  auto history = stoppedWithOneEdit();
+  ASSERT_TRUE(history.requestStart());
+  ASSERT_FALSE(history.observeStatus(SceneStatus::running));
+  ASSERT_FALSE(history.observeStatus(SceneStatus::paused));
+  recordEdit(history);
+
+  ASSERT_TRUE(history.requestStop());
+  ASSERT_TRUE(history.requestStart());
+  recordEdit(history);
+
+  EXPECT_FALSE(history.observeStatus(SceneStatus::paused));
+  EXPECT_FALSE(history.observeStatus(SceneStatus::stopped));
+  EXPECT_FALSE(history.observeStatus(SceneStatus::running));
+
+  EXPECT_TRUE(history.hasStash());
+  EXPECT_EQ(depth(history), 1u);
+  EXPECT_TRUE(history.requestStop());
+  EXPECT_EQ(depth(history), 1u);
+}
+
+TEST(PlaySessionHistoryTest, ResetMakesTheNextReportAFirstReport)
+{
+  auto history = stoppedWithOneEdit();
+  history.reset();
+  recordEdit(history);
+
+  EXPECT_FALSE(history.observeStatus(SceneStatus::running));
+  EXPECT_FALSE(history.hasStash());
+  EXPECT_EQ(depth(history), 1u);
+
+  auto control = stoppedWithOneEdit();
+  control.clear();
+  recordEdit(control);
+
+  EXPECT_TRUE(control.observeStatus(SceneStatus::running));
+  EXPECT_TRUE(control.hasStash());
+}

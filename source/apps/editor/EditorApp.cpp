@@ -219,6 +219,7 @@ void EditorApp::connectToServer()
   // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
   // every object it named.
   clearEditHistory();
+  m_playHistory.reset();
   m_historyScope.reset(std::nullopt);
 
   // The editor edits a local project, so (in singleplayer) it spawns its own edit-mode server gated by a

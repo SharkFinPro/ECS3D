@@ -599,7 +599,8 @@ yield usable entries, since `Transform::serialize` reads authored values, so a l
 before == after and is dropped); pressing Stop discards the play-session history and restores the stash, which is valid because `SceneAsset::stop()` rebuilds the authored
 tree with uuids preserved. The swap happens when the request is sent, not when the status returns, since the
 server applies edits in the order sent and an edit sent just after Start belongs to the runtime scene; a
-`sceneStatus` the server reports before it has seen the request is stale and ignored. The reported status is
+`sceneStatus` the server reports before it has seen the request is stale and ignored: outstanding requests are
+matched to statuses in order, so a stale one cannot confirm a later request. The reported status is
 followed only for a start/stop made elsewhere. A pause/resume leaves the scene, and so the history, as it is.
 
 A history entry can also group several commands (`EditHistory::recordBatch`), sent and undone/redone as

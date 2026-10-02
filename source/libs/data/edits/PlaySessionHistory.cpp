@@ -15,7 +15,9 @@ const EditHistory& PlaySessionHistory::current() const
 
 bool PlaySessionHistory::requestStart()
 {
-  const bool stopped = m_reported == SceneStatus::stopped || m_expected == SceneStatus::stopped;
+  const bool stopped = m_expected.empty()
+    ? m_reported == SceneStatus::stopped
+    : m_expected.back() == SceneStatus::stopped;
 
   if (m_authored.has_value() || !stopped)
   {
@@ -24,7 +26,7 @@ bool PlaySessionHistory::requestStart()
 
   m_authored = std::move(m_current);
   m_current = EditHistory();
-  m_expected = SceneStatus::running;
+  m_expected.push_back(SceneStatus::running);
   return true;
 }
 
@@ -37,7 +39,7 @@ bool PlaySessionHistory::requestStop()
 
   m_current = std::move(*m_authored);
   m_authored.reset();
-  m_expected = SceneStatus::stopped;
+  m_expected.push_back(SceneStatus::stopped);
   return true;
 }
 
@@ -45,13 +47,11 @@ bool PlaySessionHistory::observeStatus(const SceneStatus status)
 {
   const bool reportedStopped = status == SceneStatus::stopped;
 
-  if (m_expected.has_value())
+  if (!m_expected.empty())
   {
-    const bool expectingStopped = *m_expected == SceneStatus::stopped;
-
-    if (reportedStopped == expectingStopped)
+    if ((m_expected.front() == SceneStatus::stopped) == reportedStopped)
     {
-      m_expected.reset();
+      m_expected.pop_front();
     }
 
     m_reported = status;
@@ -84,7 +84,13 @@ void PlaySessionHistory::clear()
 {
   m_current.clear();
   m_authored.reset();
-  m_expected.reset();
+  m_expected.clear();
+}
+
+void PlaySessionHistory::reset()
+{
+  clear();
+  m_reported.reset();
 }
 
 bool PlaySessionHistory::hasStash() const
