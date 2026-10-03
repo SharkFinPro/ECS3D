@@ -9,6 +9,10 @@
 #include "objects/components/Transform.h"
 #include "EditHistoryFixtures.h"
 
+#include <nlohmann/json.hpp>
+#include <optional>
+#include <uuid.h>
+
 namespace {
   using namespace editHistoryFixtures;
 }

@@ -6,6 +6,9 @@
 
 #include <glm/gtc/quaternion.hpp>
 #include <cmath>
+#include <limits>
+#include <utility>
+#include <vector>
 
 namespace {
   using namespace gizmoFixtures;

@@ -9,11 +9,11 @@
 #include "objects/components/Transform.h"
 #include "EditHistoryFixtures.h"
 
-#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
-#include <string>
 #include <uuid.h>
+#include <memory>
+#include <string>
 
 namespace {
   using namespace editHistoryFixtures;

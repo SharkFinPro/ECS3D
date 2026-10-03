@@ -4,13 +4,15 @@
 #include "Replication.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/collisions/BoxCollider.h"
 #include "SceneEditFixtures.h"
 
+#include <glm/vec3.hpp>
+#include <nlohmann/json.hpp>
+#include <uuid.h>
 #include <cstddef>
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <string>
-#include <uuid.h>
 
 namespace {
   using namespace sceneEditFixtures;

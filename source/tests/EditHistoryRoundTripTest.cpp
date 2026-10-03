@@ -5,14 +5,17 @@
 #include "edits/EditCommand.h"
 #include "edits/EditHistory.h"
 #include "edits/RecordEdits.h"
+#include "scenes/SceneManager.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Script.h"
 #include "objects/components/Transform.h"
+#include "assets/AssetRegistry.h"
 #include "EditHistoryFixtures.h"
 
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <vector>
 
