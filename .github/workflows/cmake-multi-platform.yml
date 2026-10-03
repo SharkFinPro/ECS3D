@@ -24,12 +24,14 @@ jobs:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
 
-      # Four toolchains - MSVC on Windows, gcc and clang on Linux, clang on macOS - each in both build
-      # types. Debug is not redundant: it is where assert() and the standard library's debug checks are
+      # Four toolchains - MSVC on Windows, gcc and clang on Linux, clang on macOS - each in Release and
+      # Debug. Debug is not redundant: it is where assert() and the standard library's debug checks are
       # live, so a Release-only matrix never runs the invariant checks the code is written against.
+      # Sanitize (the ecs3d-sanitize preset: ASan, plus UBSan on gcc/clang) runs on Linux gcc and clang
+      # only: MSVC's ASan needs its runtime DLL on PATH and macOS is not worth the flake risk.
       matrix:
         os: [ 'ubuntu-22.04', windows-latest, macos-latest ]
-        build_type: [ Release, Debug ]
+        build_type: [ Release, Debug, Sanitize ]
         c_compiler: [ gcc, clang, cl ]
         include:
           - os: windows-latest
@@ -55,6 +57,10 @@ jobs:
             c_compiler: gcc
           - os: macos-latest
             c_compiler: cl
+          - os: windows-latest
+            build_type: Sanitize
+          - os: macos-latest
+            build_type: Sanitize
 
     steps:
       - uses: actions/checkout@v6
@@ -142,6 +148,8 @@ jobs:
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
 
       - name: Build
+        # Sanitize skips the apps: the check target below builds the headless suite it runs.
+        if: ${{ matrix.build_type != 'Sanitize' }}
         run: cmake --build ${{ steps.strings.outputs.build_dir }}
 
       - name: Test
