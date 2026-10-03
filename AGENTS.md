@@ -109,7 +109,7 @@
   `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry point (can't be called
   from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
   reachable the same way, as pure code over plain objects. Private product logic is exposed to this
-  project through `internal` + `InternalsVisibleTo` (see `source/libs/net/Transport/AssemblyInfo.cs` and
+  project through `internal` + `InternalsVisibleTo` (declared in `source/libs/net/Transport/AssemblyInfo.cs` and
   `source/libs/scripting/ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`
   under `$(BuildRoot)obj/tests/` and `$(BuildRoot)bin/tests/` — one level deeper than `Transport`'s own
   `$(BuildRoot)obj/` — so referencing `ECS3DNetTransport` by `ProjectReference` (which inherits the
@@ -129,12 +129,12 @@
   `.cs` file under `source/tests/managed/` (globbed automatically, unlike the native suite's explicit
   source list) and running it through `check`, the same way as every other test here. On a machine with
   a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio`, the
-  test-SDK package, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (see
+  test-SDK package, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (the first three are listed in
   `ECS3DManagedTests.csproj`), which needs network access.
 - **Dependency direction (must hold unless a deliberate change updates this section):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd + log. `net`/`scripting` →
-  data + clrHost + log. `clrHost` → log. Apps compose these. **`data` must not gain a Vulkan or ImGui include** (put such code in `render` or `editor` instead; lifting this takes a deliberate architecture decision recorded here) — that
+  data + clrHost + log. `clrHost` → log. Apps compose these. **Do not add a Vulkan or ImGui include to `data`** (put such code in `render` or `editor` instead; lifting this takes a deliberate architecture decision recorded here) — that
   invariant is what keeps the headless server headless.
 
 ## Architecture Overview
@@ -227,7 +227,7 @@ applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the 
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —
 a `renameAsset` sets an optional `AssetRecord::displayName` override (threaded through
 `serialize`/`loadFromJSON`/`pack`/`unpack` like every other field); the file on disk and `path` (the
-registry key, and the name-key for prefabs/scenes) are untouched by a rename. **Delete always succeeds and references
+registry key, and the name-key for prefabs/scenes) are untouched by a rename. **Delete succeeds and references
 dangle** — `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` lookups already null-tolerate a
 missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
 replicated scenes + prefab bodies for the uuid ("referenced by N objects"); no server-side refusal or
@@ -636,7 +636,7 @@ uuid) or an empty stack. `EditHistory::
 reportUndoRejected()`/`reportRedoRejected()` exist for a server rejection of the edit undo()/redo() just
 sent, but nothing calls them yet: today's `editComponent`/`sceneEdit` handling has no wire-level
 acknowledgement back to the sender for a rejected edit to hook into (a failed edit is only logged
-server-side, and sometimes answered with a resync snapshot) - see `ServerApp::handleSceneEdit`/
+server-side, and sometimes answered with a resync snapshot) - the handlers are `ServerApp::handleSceneEdit`/
 `handleEditComponent`.
 
 ## Development Principles
