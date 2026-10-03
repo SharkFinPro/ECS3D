@@ -35,8 +35,10 @@ add_executable(${PROJECT_NAME}
   NonFiniteValuesTest.cpp
   FiniteRendererValuesTest.cpp
   EditHistoryRoundTripTest.cpp
+  EditHistoryRoundTripSubtreeTest.cpp
   EditHistoryLabelTest.cpp
   EditHistoryRefusalTest.cpp
+  EditHistoryStructuralRefusalTest.cpp
   EditHistoryBatchTest.cpp
   EditHistoryPlayStopTest.cpp
   HistoryScopeTest.cpp
@@ -67,6 +69,7 @@ add_executable(${PROJECT_NAME}
   KeybindsTest.cpp
   GizmoTest.cpp
   GizmoDragTest.cpp
+  GizmoDragParentedTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
   ProjectSerializerLogTest.cpp
@@ -74,6 +77,10 @@ add_executable(${PROJECT_NAME}
   SceneManagerTest.cpp
   PrefabTest.cpp
   PhysicsIntegrationTest.cpp
+  PhysicsLandingTest.cpp
+  PhysicsStackingTest.cpp
+  PhysicsTwoBodyTest.cpp
+  PhysicsContactResponseTest.cpp
   DefaultProjectTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp
@@ -87,6 +94,7 @@ add_executable(${PROJECT_NAME}
   SceneEditValidationTest.cpp
   SceneEditReparentTest.cpp
   SceneEditRestoreTest.cpp
+  SceneEditRestoreAdoptTest.cpp
   SceneEditCreateAndReorderTest.cpp
   SceneEditBatchTest.cpp
   ProtocolFramingTest.cpp
@@ -102,6 +110,7 @@ add_executable(${PROJECT_NAME}
   ObjectManagerFixtures.h
   SceneEditFixtures.h
   GizmoFixtures.h
+  PhysicsTestHelpers.h
 
   # net's MessageQueue is compiled in rather than linked: it is the one piece of ECS3DNet with no CLR
   # dependency, and linking the library would pull ManagedHost and the C# transport assembly into a
