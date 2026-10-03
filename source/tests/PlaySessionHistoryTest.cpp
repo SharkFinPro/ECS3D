@@ -12,8 +12,8 @@ namespace {
   void recordEdit(edits::PlaySessionHistory& history)
   {
     const auto object = uuids::uuid::from_string("11111111-1111-4111-8111-111111111111").value();
-    history.current().record(edits::EditCommand::componentEdit(object, nlohmann::json{{"x", 1}},
-                                                                nlohmann::json{{"x", 2}}));
+    history.current().record(edits::EditCommand::componentEdit(object, nlohmann::json{{"type", "Transform"}, {"x", 1}},
+                                                                nlohmann::json{{"type", "Transform"}, {"x", 2}}));
   }
 
   std::size_t depth(const edits::PlaySessionHistory& history)
