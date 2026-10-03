@@ -1,8 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 
 namespace ECS3DLauncher.Tabs.Settings;
 
-public partial class SettingsView : UserControl
+public class SettingsView : UserControl
 {
-    public SettingsView() => InitializeComponent();
+    public SettingsView() => AvaloniaXamlLoader.Load(this);
 }

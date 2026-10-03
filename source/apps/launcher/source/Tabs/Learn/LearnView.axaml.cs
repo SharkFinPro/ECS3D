@@ -1,8 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 
 namespace ECS3DLauncher.Tabs.Learn;
 
-public partial class LearnView : UserControl
+public class LearnView : UserControl
 {
-    public LearnView() => InitializeComponent();
+    public LearnView() => AvaloniaXamlLoader.Load(this);
 }

@@ -69,6 +69,10 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 - **Frameless window quirks:** `MainWindow` is `WindowDecorations="None"`, so edge-resize, move, and
   maximize/restore are reimplemented in `MainWindow.axaml.cs`. Keep window-chrome logic there; keep app
   logic in view models.
+- **Code-behind loads XAML itself.** Views call `AvaloniaXamlLoader.Load(this)` and are not `partial`; only
+  `MainWindow` is, because Avalonia's name generator (filtered to the `ECS3DLauncher.Shell` namespace in the
+  `.csproj`) emits its `InitializeComponent` and typed `x:Name` fields. A new view that needs `x:Name` fields
+  must be added to that filter.
 - **Code-loaded brushes:** where a bound brush won't inherit the item `DataContext` (e.g. gradient stops),
   build the brush in the model instead of XAML — see `Project.GlowBrush` for the pattern and the why.
 

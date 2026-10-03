@@ -11,6 +11,10 @@
          also the avares:// resource authority (see Theme.axaml / ProjectsViewModel). -->
     <AssemblyName>ECS3DLauncher</AssemblyName>
     <RootNamespace>ECS3DLauncher</RootNamespace>
+
+    <!-- The name generator emits a partial InitializeComponent half for every x:Class view it sees.
+         Only MainWindow uses x:Name fields; the rest load through AvaloniaXamlLoader. -->
+    <AvaloniaNameGeneratorFilterByNamespace>ECS3DLauncher.Shell</AvaloniaNameGeneratorFilterByNamespace>
   </PropertyGroup>
 
   <!-- Build-output locations (obj/bin redirection) live in Directory.Build.props — they must be set

@@ -1,8 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 
 namespace ECS3DLauncher.Tabs.Samples;
 
-public partial class SamplesView : UserControl
+public class SamplesView : UserControl
 {
-    public SamplesView() => InitializeComponent();
+    public SamplesView() => AvaloniaXamlLoader.Load(this);
 }
