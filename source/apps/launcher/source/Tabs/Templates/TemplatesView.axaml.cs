@@ -1,8 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 
 namespace ECS3DLauncher.Tabs.Templates;
 
-public partial class TemplatesView : UserControl
+public class TemplatesView : UserControl
 {
-    public TemplatesView() => InitializeComponent();
+    public TemplatesView() => AvaloniaXamlLoader.Load(this);
 }

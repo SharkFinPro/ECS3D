@@ -21,6 +21,7 @@ public partial class ProjectsViewModel : ObservableObject
     public ObservableCollection<Project> ProjectTiles { get; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsListView))]
     private bool _isGridView = true;
 
     public bool IsListView => !IsGridView;
@@ -46,8 +47,6 @@ public partial class ProjectsViewModel : ObservableObject
             ProjectTiles.Add(p);
         }
     }
-
-    partial void OnIsGridViewChanged(bool value) => OnPropertyChanged(nameof(IsListView));
 
     [RelayCommand]
     private void SetGrid() => IsGridView = true;

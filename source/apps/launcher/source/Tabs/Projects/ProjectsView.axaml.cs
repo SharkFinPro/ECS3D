@@ -1,8 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 
 namespace ECS3DLauncher.Tabs.Projects;
 
-public partial class ProjectsView : UserControl
+public class ProjectsView : UserControl
 {
-    public ProjectsView() => InitializeComponent();
+    public ProjectsView() => AvaloniaXamlLoader.Load(this);
 }
