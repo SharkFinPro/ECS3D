@@ -129,12 +129,12 @@
   `.cs` file under `source/tests/managed/` (globbed automatically, unlike the native suite's explicit
   source list) and running it through `check`, the same way as every other test here. On a machine with
   a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio`, the
-  test-SDK package, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (listed in
+  test-SDK package, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (the first three are listed in
   `ECS3DManagedTests.csproj`), which needs network access.
 - **Dependency direction (must hold unless a deliberate change updates this section):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd + log. `net`/`scripting` →
-  data + clrHost + log. `clrHost` → log. Apps compose these. **`data` gains no Vulkan or ImGui include** (put such code in `render` or `editor` instead; lifting this takes a deliberate architecture decision recorded here) — that
+  data + clrHost + log. `clrHost` → log. Apps compose these. **Do not add a Vulkan or ImGui include to `data`** (put such code in `render` or `editor` instead; lifting this takes a deliberate architecture decision recorded here) — that
   invariant is what keeps the headless server headless.
 
 ## Architecture Overview
