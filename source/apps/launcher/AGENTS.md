@@ -14,7 +14,7 @@
   for browsing recent projects, templates, samples, and learning material — the "hub" you'd open before
   launching the editor.
 - Built with **Avalonia 12** (cross-platform XAML UI) on **.NET 10**, using the **MVVM** pattern via
-  **CommunityToolkit.Mvvm** (`[ObservableProperty]`, `[RelayCommand]`, `ObservableObject`).
+  **CommunityToolkit.Mvvm** (`ObservableObject`, `SetProperty`, `RelayCommand`).
 - **Status: UI shell only.** Everything is presentation right now — the project/template/sample lists are
   hardcoded sample data (see `ProjectsViewModel`, `DesignData`) and commands only drive navigation. There
   is **no engine backend wired in yet**: no real project loading, no process launching, no persistence.
@@ -55,7 +55,7 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 ## Conventions
 
 - **MVVM, strictly.** Views are XAML; state and commands live in view models (`ObservableObject` +
-  source-generated `[ObservableProperty]`/`[RelayCommand]`). `AvaloniaUseCompiledBindingsByDefault` is on —
+  hand-written `SetProperty` properties and `RelayCommand` fields built in the constructor - no source generators, so no `partial` classes). `AvaloniaUseCompiledBindingsByDefault` is on —
   give bindings an `x:DataType` so they compile. `Nullable` is enabled.
 - **Navigation is centralized.** `MainWindowViewModel.ActiveNav` (a string key) selects `CurrentTab`; the
   window's `ContentControl` maps the active view model to its view by type. Tabs never navigate directly —
@@ -69,10 +69,10 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 - **Frameless window quirks:** `MainWindow` is `WindowDecorations="None"`, so edge-resize, move, and
   maximize/restore are reimplemented in `MainWindow.axaml.cs`. Keep window-chrome logic there; keep app
   logic in view models.
-- **Code-behind loads XAML itself.** Views call `AvaloniaXamlLoader.Load(this)` and are not `partial`; only
-  `MainWindow` is, because Avalonia's name generator (filtered to the `ECS3DLauncher.Shell` namespace in the
-  `.csproj`) emits its `InitializeComponent` and typed `x:Name` fields. A new view that needs `x:Name` fields
-  must be added to that filter.
+- **Code-behind loads XAML itself.** Views call `AvaloniaXamlLoader.Load(this)` and nothing in the
+  launcher is `partial` (Sonar S2333). Avalonia's name generator is filtered to an empty namespace in the
+  `.csproj`, so a view that needs a named control looks it up with `FindControl<T>` right after the load, as
+  `MainWindow` does. View models use `SetProperty` and `RelayCommand` by hand for the same reason.
 - **Code-loaded brushes:** where a bound brush won't inherit the item `DataContext` (e.g. gradient stops),
   build the brush in the model instead of XAML — see `Project.GlowBrush` for the pattern and the why.
 
