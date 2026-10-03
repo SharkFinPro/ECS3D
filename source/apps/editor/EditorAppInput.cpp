@@ -22,6 +22,39 @@
 #include <cstdint>
 #include <optional>
 
+std::optional<uuids::uuid> EditorApp::findPickedObject(const std::shared_ptr<SceneAsset>& scene) const
+{
+  for (const auto& object : scene->getObjectManager()->getAllObjects())
+  {
+    if (m_renderSystem->isSelected(object->getUUID()))
+    {
+      return object->getUUID();
+    }
+  }
+
+  return std::nullopt;
+}
+
+void EditorApp::applyPick(const std::optional<uuids::uuid>& picked, const bool toggle) const
+{
+  // Written directly to the shared selection the object tree/inspector read.
+  if (picked.has_value())
+  {
+    if (toggle)
+    {
+      m_selection->toggleObject(picked.value());
+    }
+    else
+    {
+      m_selection->selectObject(picked.value());
+    }
+  }
+  else if (!toggle)
+  {
+    m_selection->clear();
+  }
+}
+
 void EditorApp::handlePicking()
 {
   const auto scene = m_sceneManager->getCurrentScene();
@@ -48,32 +81,7 @@ void EditorApp::handlePicking()
   const auto mousePicker = m_renderer->getRenderingManager()->getRenderer3D()->getMousePicker();
   if (!m_mouseWasPressed && pressed && mousePicker->canMousePick() && io.KeyCtrl)
   {
-    std::optional<uuids::uuid> picked;
-    for (const auto& object : scene->getObjectManager()->getAllObjects())
-    {
-      if (m_renderSystem->isSelected(object->getUUID()))
-      {
-        picked = object->getUUID();
-        break;
-      }
-    }
-
-    // Written directly to the shared selection the object tree/inspector read.
-    if (picked.has_value())
-    {
-      if (io.KeyShift)
-      {
-        m_selection->toggleObject(picked.value());
-      }
-      else
-      {
-        m_selection->selectObject(picked.value());
-      }
-    }
-    else if (!io.KeyShift)
-    {
-      m_selection->clear();
-    }
+    applyPick(findPickedObject(scene), io.KeyShift);
   }
 
   m_mouseWasPressed = pressed;

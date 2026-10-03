@@ -107,6 +107,10 @@ private:
 
   void handleEditComponent(const net::Message& message) const;
 
+  void loadStartupProject();
+
+  void startLoadedScene();
+
   void handleSceneEdit(const net::Message& message) const;
 
   void handleLoadProject(const net::Message& message) const;

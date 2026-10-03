@@ -109,6 +109,19 @@ EditorApp::EditorApp(LaunchOptions options)
   m_keybindDispatcher->on(EditorAction::saveProject, [this] { static_cast<void>(m_saveUI->save()); });
   m_keybindDispatcher->on(EditorAction::saveProjectAs, [this] { m_saveUI->saveAs(); });
 
+  setupSceneOverlay();
+
+  m_netClient = std::make_shared<net::NetClient>(m_host);
+
+  connectToServer();
+
+  // Ask the server for the initial Snapshot.
+  const net::Message message(net::MessageType::join);
+  m_netClient->send(message);
+}
+
+void EditorApp::setupSceneOverlay()
+{
   // Runs once per frame inside m_renderer->render(), right after the scene image is drawn - safe before
   // the first snapshot, since getCurrentScene()/objectUUID() are both null-tolerant.
   m_renderer->getRenderingManager()->setSceneOverlay(
@@ -136,16 +149,7 @@ EditorApp::EditorApp(LaunchOptions options)
       m_viewportGizmo->update(objectManager, m_selection->objectUUID(), view, drawList, m_serverEditable,
                               snap, sceneHovered);
 
-      acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
-    });
-
-  m_netClient = std::make_shared<net::NetClient>(m_host);
-
-  connectToServer();
-
-  // Ask the server for the initial Snapshot.
-  const net::Message message(net::MessageType::join);
-  m_netClient->send(message);
+      acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
 }
 
 void EditorApp::setupViewportGizmo()
