@@ -93,6 +93,10 @@ private:
   // sim and scripting at the app level so neither library depends on the other.
   void dispatchCollisionEvents(ObjectManager& objectManager) const;
 
+  void loadStartupProject();
+
+  void startLoadedScene();
+
   // senderId is the stable connection id of the message's origin (from NetServer::poll), so per-client
   // messages like inputState land in the right slot.
   void handleClientMessage(const net::Message& message, int32_t senderId);
@@ -106,10 +110,6 @@ private:
   void handleJoin(const net::Message& message, int32_t senderId);
 
   void handleEditComponent(const net::Message& message) const;
-
-  void loadStartupProject();
-
-  void startLoadedScene();
 
   void handleSceneEdit(const net::Message& message) const;
 

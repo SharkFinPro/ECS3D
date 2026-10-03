@@ -149,7 +149,8 @@ void EditorApp::setupSceneOverlay()
       m_viewportGizmo->update(objectManager, m_selection->objectUUID(), view, drawList, m_serverEditable,
                               snap, sceneHovered);
 
-      acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
+      acceptSceneDrop(rect.x, rect.y, rect.width, rect.height);
+    });
 }
 
 void EditorApp::setupViewportGizmo()
