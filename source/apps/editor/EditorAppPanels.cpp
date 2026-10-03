@@ -185,7 +185,7 @@ void EditorApp::displaySceneStatus()
   ImGui::End();
 }
 
-void EditorApp::displayPlayControls() const
+void EditorApp::displayPlayControls()
 {
   constexpr int sceneStatusButtonWidth = 125;
 
@@ -199,6 +199,11 @@ void EditorApp::displayPlayControls() const
     ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
     if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
     {
+      if (m_playHistory.requestStart())
+      {
+        clearUndoRedoPending();
+      }
+
       sendSceneControl(net::SceneControlOp::start);
     }
     ImGui::PopStyleColor(4);
@@ -220,6 +225,11 @@ void EditorApp::displayPlayControls() const
     ImGui::BeginDisabled(!m_serverEditable);
     if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
     {
+      if (m_playHistory.requestStop())
+      {
+        clearUndoRedoPending();
+      }
+
       sendSceneControl(net::SceneControlOp::stop);
     }
     ImGui::EndDisabled();

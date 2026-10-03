@@ -5,6 +5,7 @@
 #include <Protocol.h>
 #include <edits/EditHistory.h>
 #include <edits/HistoryScope.h>
+#include <edits/PlaySessionHistory.h>
 #include <scenes/SceneManager.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
@@ -146,13 +147,10 @@ private:
   // call them through requestUndo()/requestRedo() (see EditorAppUndoMenu.cpp). Cleared wherever the
   // authored scene the recorded commands refer to is replaced: load project, scene switch, (re)connect,
   // and a snapshot whose active scene differs from m_historyScope (another editor replaced it).
-  // Starting play moves it into m_authoredEditHistory and runs the session on a fresh one.
-  edits::EditHistory m_editHistory;
+  // Pressing Start sets the authored history aside and runs the play session on a fresh one; pressing
+  // Stop restores it (see PlaySessionHistory).
+  edits::PlaySessionHistory m_playHistory;
   edits::HistoryScope m_historyScope;
-
-  // The authored history set aside while the scene plays. Stopping rebuilds the authored tree under the
-  // same uuids, so it is valid again then; held only between a play start and the matching stop.
-  std::optional<edits::EditHistory> m_authoredEditHistory;
 
   // See requestUndo()/requestRedo() in EditorAppUndoMenu.cpp: while true, a further undo/redo request is
   // ignored (and the Edit menu's items disabled) until the server's rebroadcast of the one already sent
@@ -173,10 +171,6 @@ private:
   bool m_serverEditable = true;
 
   SceneStatus m_sceneStatus = SceneStatus::running;
-
-  // What the server has actually reported, as opposed to m_sceneStatus's optimistic default: nullopt
-  // until the first sceneStatus arrives, so that first message is not read as a start/stop transition.
-  std::optional<SceneStatus> m_reportedSceneStatus;
 
   // The object whose Camera component the viewport looks through ("View" combo in Scene Status), letting
   // the editor see what a client sees. nullopt = the editor's own free-fly camera. Purely local: it's a
@@ -324,7 +318,7 @@ private:
 
   void displaySceneStatus();
 
-  void displayPlayControls() const;
+  void displayPlayControls();
 
   void displayRayTracingToggle() const;
 

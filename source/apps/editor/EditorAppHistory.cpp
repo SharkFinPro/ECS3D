@@ -59,13 +59,13 @@ void EditorApp::undo()
   // A non-reversible command (see AGENTS.md's Editor Undo/Redo section) stays on top of the stack,
   // refused, rather than being handed to EditHistory::undo(), which would treat "a kind with no reverse"
   // as a validation conflict and drop it along with everything older beneath it.
-  if (!m_editHistory.canUndo())
+  if (!m_playHistory.current().canUndo())
   {
     logMessage("Info", "Nothing to undo.");
     return;
   }
 
-  if (!m_editHistory.nextUndoIsReversible())
+  if (!m_playHistory.current().nextUndoIsReversible())
   {
     logMessage("Info", "Can't undo: that command has no reverse yet.");
     return;
@@ -81,7 +81,7 @@ void EditorApp::undo()
   edits::HistoryOutcome outcome;
   try
   {
-    outcome = m_editHistory.undo(*scene->getObjectManager(), m_assetRegistry.get());
+    outcome = m_playHistory.current().undo(*scene->getObjectManager(), m_assetRegistry.get());
   }
   catch (const std::exception& e)
   {
@@ -89,7 +89,7 @@ void EditorApp::undo()
     // EditHistory.h's exception contract). The entry it came from is unrecoverable either way, so drop
     // the whole history rather than risk retrying into the same throw.
     logMessage("Error", std::string("Undo failed unexpectedly (") + e.what() + "); clearing the edit history.");
-    m_editHistory.clear();
+    m_playHistory.current().clear();
     return;
   }
 
@@ -104,13 +104,13 @@ void EditorApp::redo()
     return;
   }
 
-  if (!m_editHistory.canRedo())
+  if (!m_playHistory.current().canRedo())
   {
     logMessage("Info", "Nothing to redo.");
     return;
   }
 
-  if (!m_editHistory.nextRedoIsReversible())
+  if (!m_playHistory.current().nextRedoIsReversible())
   {
     logMessage("Info", "Can't redo: that command has no reverse yet.");
     return;
@@ -126,12 +126,12 @@ void EditorApp::redo()
   edits::HistoryOutcome outcome;
   try
   {
-    outcome = m_editHistory.redo(*scene->getObjectManager(), m_assetRegistry.get());
+    outcome = m_playHistory.current().redo(*scene->getObjectManager(), m_assetRegistry.get());
   }
   catch (const std::exception& e)
   {
     logMessage("Error", std::string("Redo failed unexpectedly (") + e.what() + "); clearing the edit history.");
-    m_editHistory.clear();
+    m_playHistory.current().clear();
     return;
   }
 

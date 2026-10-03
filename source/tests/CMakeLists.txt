@@ -40,6 +40,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryBatchTest.cpp
   EditHistoryPlayStopTest.cpp
   HistoryScopeTest.cpp
+  PlaySessionHistoryTest.cpp
   RecordEditsTest.cpp
   CollisionMathTest.cpp
   SweepEquivalenceTest.cpp

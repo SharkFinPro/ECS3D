@@ -16,7 +16,7 @@
 #include <uuid.h>
 
 // The editor stashes the authored history when play starts and restores it when play stops (see
-// EditorApp::handleSceneStatus). That lives in EditorApp, which this suite cannot link, so these pin the
+// edits::PlaySessionHistory). That swap is headless and tested on its own; these pin the
 // contract the restore relies on: SceneAsset::stop() rebuilds the authored tree under the same uuids, so a
 // command recorded before start still validates, undoes and redoes afterwards.
 
