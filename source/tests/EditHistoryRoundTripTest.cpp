@@ -419,3 +419,4 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveComponent)
   EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *redoOutcome.jsonPayload),
             replication::SceneEditResult::applied);
   EXPECT_FALSE(scene.object->getComponents().contains(ComponentType::rigidBody));
+}
