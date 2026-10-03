@@ -12,9 +12,9 @@
     <AssemblyName>ECS3DLauncher</AssemblyName>
     <RootNamespace>ECS3DLauncher</RootNamespace>
 
-    <!-- The name generator emits a partial InitializeComponent half for every x:Class view it sees.
-         Only MainWindow uses x:Name fields; the rest load through AvaloniaXamlLoader. -->
-    <AvaloniaNameGeneratorFilterByNamespace>ECS3DLauncher.Shell</AvaloniaNameGeneratorFilterByNamespace>
+    <!-- Views load through AvaloniaXamlLoader and look up named controls themselves, so the name
+         generator (which needs a partial class) is pointed at a namespace nothing lives in. -->
+    <AvaloniaNameGeneratorFilterByNamespace>ECS3DLauncher.NoGeneratedViews</AvaloniaNameGeneratorFilterByNamespace>
   </PropertyGroup>
 
   <!-- Build-output locations (obj/bin redirection) live in Directory.Build.props — they must be set

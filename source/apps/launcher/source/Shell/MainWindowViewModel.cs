@@ -11,7 +11,7 @@ namespace ECS3DLauncher.Shell;
 
 // Shell state: window chrome info, sidebar navigation, and which tab is showing.
 // Each tab owns its content via its own view model under source/Tabs/*.
-public partial class MainWindowViewModel : ObservableObject
+public class MainWindowViewModel : ObservableObject
 {
     public string Version => "v0.0.1";
 
@@ -25,14 +25,49 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Which library section is showing. CurrentTab is the active tab's view
     // model; the window's ContentControl maps it to a view by type.
-    [ObservableProperty]
     private string _activeNav = "projects";
-
-    [ObservableProperty]
     private object? _currentTab;
+
+    public string ActiveNav
+    {
+        get => _activeNav;
+        set
+        {
+            if (!SetProperty(ref _activeNav, value))
+            {
+                return;
+            }
+
+            CurrentTab = value switch
+            {
+                "templates" => Templates,
+                "samples"   => Samples,
+                "learn"     => Learn,
+                "settings"  => Settings,
+                _           => (object)Projects,
+            };
+
+            UpdateActiveFlags();
+            OnPropertyChanged(nameof(ViewTitle));
+            OnPropertyChanged(nameof(ViewSubtitle));
+        }
+    }
+
+    public object? CurrentTab
+    {
+        get => _currentTab;
+        set => SetProperty(ref _currentTab, value);
+    }
+
+    // UI-only; no engine backend yet.
+    public IRelayCommand<string?> SelectNavCommand { get; }
+    public IRelayCommand NewProjectCommand { get; }
 
     public MainWindowViewModel()
     {
+        SelectNavCommand = new RelayCommand<string?>(key => ActiveNav = key!);
+        NewProjectCommand = new RelayCommand(() => ActiveNav = "templates");
+
         Projects = new ProjectsViewModel(openTemplates: () => ActiveNav = "templates");
 
         NavItems =
@@ -66,22 +101,6 @@ public partial class MainWindowViewModel : ObservableObject
         _           => "Pick up where you left off, or start something new.",
     };
 
-    partial void OnActiveNavChanged(string value)
-    {
-        CurrentTab = value switch
-        {
-            "templates" => Templates,
-            "samples"   => Samples,
-            "learn"     => Learn,
-            "settings"  => Settings,
-            _           => (object)Projects,
-        };
-
-        UpdateActiveFlags();
-        OnPropertyChanged(nameof(ViewTitle));
-        OnPropertyChanged(nameof(ViewSubtitle));
-    }
-
     private void UpdateActiveFlags()
     {
         foreach (var item in NavItems)
@@ -89,11 +108,4 @@ public partial class MainWindowViewModel : ObservableObject
             item.IsActive = item.Key == ActiveNav;
         }
     }
-
-    // ----- Commands (UI-only; no engine backend yet) -----
-    [RelayCommand]
-    private void SelectNav(string key) => ActiveNav = key;
-
-    [RelayCommand]
-    private void NewProject() => ActiveNav = "templates";
 }

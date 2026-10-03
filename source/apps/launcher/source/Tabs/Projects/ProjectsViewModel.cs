@@ -10,7 +10,7 @@ using ECS3DLauncher.Shared.Models;
 namespace ECS3DLauncher.Tabs.Projects;
 
 // State for the Projects tab: the project list and the grid-vs-list toggle.
-public partial class ProjectsViewModel : ObservableObject
+public class ProjectsViewModel : ObservableObject
 {
     // The shell owns navigation; the tab only asks it to open Templates.
     private readonly Action _openTemplates;
@@ -20,15 +20,32 @@ public partial class ProjectsViewModel : ObservableObject
     // Projects preceded by the "New Project" sentinel, for the item panels.
     public ObservableCollection<Project> ProjectTiles { get; }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsListView))]
     private bool _isGridView = true;
 
+    public bool IsGridView
+    {
+        get => _isGridView;
+        set
+        {
+            if (SetProperty(ref _isGridView, value))
+            {
+                OnPropertyChanged(nameof(IsListView));
+            }
+        }
+    }
+
     public bool IsListView => !IsGridView;
+
+    public IRelayCommand SetGridCommand { get; }
+    public IRelayCommand SetListCommand { get; }
+    public IRelayCommand NewProjectCommand { get; }
 
     public ProjectsViewModel(Action openTemplates)
     {
         _openTemplates = openTemplates;
+        SetGridCommand = new RelayCommand(() => IsGridView = true);
+        SetListCommand = new RelayCommand(() => IsGridView = false);
+        NewProjectCommand = new RelayCommand(() => _openTemplates());
 
         Projects =
         [
@@ -47,15 +64,6 @@ public partial class ProjectsViewModel : ObservableObject
             ProjectTiles.Add(p);
         }
     }
-
-    [RelayCommand]
-    private void SetGrid() => IsGridView = true;
-
-    [RelayCommand]
-    private void SetList() => IsGridView = false;
-
-    [RelayCommand]
-    private void NewProject() => _openTemplates();
 
     private static Bitmap? Load(string file)
     {

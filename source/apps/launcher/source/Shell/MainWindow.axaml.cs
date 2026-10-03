@@ -1,7 +1,9 @@
+using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
 
 namespace ECS3DLauncher.Shell;
@@ -9,8 +11,13 @@ namespace ECS3DLauncher.Shell;
 // Code-behind only handles window-chrome concerns. The window is fully frameless
 // (WindowDecorations="None") to match the mockup, so edge resizing is restored
 // manually via BeginResizeDrag.
-public partial class MainWindow : Window
+public class MainWindow : Window
 {
+    private readonly Grid _root;
+    private readonly Button _maxButton;
+    private readonly Border _glyphMax;
+    private readonly Panel _glyphRestore;
+
     private const double ResizeBorder = 6;
 
     private static readonly Cursor s_ns = new(StandardCursorType.SizeNorthSouth);
@@ -20,7 +27,11 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
-        InitializeComponent();
+        AvaloniaXamlLoader.Load(this);
+        _root = this.FindControl<Grid>("Root") ?? throw new InvalidOperationException("Root not found");
+        _maxButton = this.FindControl<Button>("MaxButton") ?? throw new InvalidOperationException("MaxButton not found");
+        _glyphMax = this.FindControl<Border>("GlyphMax") ?? throw new InvalidOperationException("GlyphMax not found");
+        _glyphRestore = this.FindControl<Panel>("GlyphRestore") ?? throw new InvalidOperationException("GlyphRestore not found");
         AddHandler(PointerPressedEvent, OnEdgePressed, RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, OnEdgeMoved, RoutingStrategies.Tunnel);
         // A press on a non-focusable element (title text, empty panels, ...) does not
@@ -40,7 +51,7 @@ public partial class MainWindow : Window
 
         if (FocusManager?.GetFocusedElement() is TextBox)
         {
-            Root.Focus();
+            _root.Focus();
         }
     }
 
@@ -156,9 +167,9 @@ public partial class MainWindow : Window
         if (change.Property == WindowStateProperty)
         {
             var isMax = WindowState == WindowState.Maximized;
-            GlyphMax.IsVisible = !isMax;
-            GlyphRestore.IsVisible = isMax;
-            ToolTip.SetTip(MaxButton, isMax ? "Restore" : "Maximize");
+            _glyphMax.IsVisible = !isMax;
+            _glyphRestore.IsVisible = isMax;
+            ToolTip.SetTip(_maxButton, isMax ? "Restore" : "Maximize");
         }
     }
 
