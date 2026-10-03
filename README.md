@@ -84,6 +84,8 @@ under ASan is a different problem: they host CoreCLR, which does its own memory 
 sanitizer options set before it starts. Treat an app crash under this preset as a question about the
 setup, not as a finding, until the suite itself is clean.
 
+CI runs this preset's `check` target on Linux with both gcc and clang.
+
 Two things to know before the first run:
 
 - **On Windows**, the tests link the dynamic CRT, so ASan is a DLL. `clang_rt.asan_dynamic-x86_64.dll`
