@@ -17,8 +17,8 @@
   purposes: gameplay scripting (`ScriptBridge`) and the network transport (`ECS3DNetTransport`). C++
   owns the data and protocol; C# owns the sockets and user script execution.
 - Four executables ship (see Applications): **ECS3DServer**, **ECS3DClient**, **ECS3DEditor** (all C++),
-  and **ECS3DLauncher** (a standalone C# Avalonia app — see `source/apps/launcher/AGENTS.md`).
-- Scope today: a working editor + play/edit servers with physics (GJK and EPA, Gilbert-Johnson-Keerthi and Expanding Polytope Algorithm, collision; rigid bodies),
+  and **ECS3DLauncher** (a standalone C# Avalonia app — see [its own AGENTS.md](source/apps/launcher/AGENTS.md)).
+- Scope today: a working editor + play/edit servers with physics (Gilbert-Johnson-Keerthi (GJK) and Expanding Polytope Algorithm (EPA) collision; rigid bodies),
   C# scripting, asset import, scene management, and full snapshot/delta replication over TCP (Transmission Control Protocol).
 
 ## Role and Tools
@@ -59,8 +59,8 @@
 - **Dependencies** (`FetchContent` in `source/libs/CMakeLists.txt`): nlohmann/json 3.12.0, glm 1.0.1,
   stduuid 1.2.3, nativefiledialog-extended (nfd) 1.3.0, and VulkanEngine (`main`). They are declared at
   the libs scope so every library links them directly. **glm is declared first, on purpose:**
-  FetchContent is first-wins, and VulkanEngine also fetches glm — our pinned 1.0.1 must be the single
-  copy both sides resolve to. **If VulkanEngine bumps glm, bump the tag here to match.**
+  FetchContent is first-wins, and VulkanEngine also fetches glm — our pinned 1.0.1 should be the single
+  copy both sides resolve to, so keep that declaration first. **If VulkanEngine bumps glm, bump the tag here to match.**
 - **dotnet 10** (the C# runtime and SDK) is required for the managed assemblies. `ecs3d_add_managed_assembly()` (in
   `clrHost/cmake/ECS3DManaged.cmake`) `dotnet publish`es a C# class lib next to the executables and
   writes its `runtimeconfig.json`; `ecs3d_deploy_clr_runtime()` copies `nethost.dll` beside each exe.
@@ -85,7 +85,7 @@
   everything else takes arguments that do not name `fixtures` (or, for `makeScene`, none at all), so it
   needs `fixtures::` or a using-declaration. **Build a scene through these rather than re-deriving the scaffolding in a new suite.**
 - **Tests** (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, `ECS3DSettings` and
-  `ECS3DNetProtocol` — never the renderer, the editor or `ECS3DNet` — so the suite stays runnable without a
+  `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the one source compiled in directly, below) — so the suite stays runnable without a
   window, GPU or server. `net/MessageQueue.cpp` is compiled straight into the target rather than linked,
   because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
   `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` is compiled in the same way, as is
@@ -131,10 +131,10 @@
   a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio`, the
   test-SDK package, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (see
   `ECS3DManagedTests.csproj`), which needs network access.
-- **Dependency direction (must hold):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
+- **Dependency direction (must hold unless a deliberate change updates this section):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
   `sim` → data. `render` → data + VulkanEngine. `editor` → data + render + settings + nfd + log. `net`/`scripting` →
-  data + clrHost + log. `clrHost` → log. Apps compose these. **`data` must never gain a Vulkan or ImGui include** — that
+  data + clrHost + log. `clrHost` → log. Apps compose these. **`data` must not gain a Vulkan or ImGui include** (put such code in `render` or `editor` instead) — that
   invariant is what keeps the headless server headless.
 
 ## Architecture Overview
@@ -142,7 +142,7 @@
 **The data/systems split.** `ECS3DData` holds only *state* — component fields plus `serialize`/
 `loadFromJSON`. Behavior lives in *systems* that operate on that data from the outside: `PhysicsSystem`/
 `CollisionSystem` (sim), `RenderSystem` (render), `ScriptSystem` (scripting), the `*Editor` handlers
-(editor). A component never reaches back into a manager or renderer; systems iterate
+(editor). A component does not reach back into a manager or renderer; systems iterate
 `ObjectManager::getAllObjects()` and pull the components they care about. `ComponentRegistry`
 (populated by `registerDataComponents()`) is the type-name → factory table that deserialization uses,
 so no layer needs to name concrete component types across the boundary.
@@ -150,7 +150,7 @@ so no layer needs to name concrete component types across the boundary.
 **Client / server.** `ServerApp` is authoritative and headless — it is the **only** application that links
 `ECS3DSim` + `ECS3DScripting` (the test suite also links `ECS3DSim`, to reach the collision math). It runs a fixed-timestep loop (`scriptSystem.variableUpdate` →
 `fixedUpdate` → `physicsSystem` → `collisionSystem`) and streams state out. `ClientApp` renders + sends
-input, linking `ECS3DRender` but never sim/scripting. `EditorApp` is a client plus the ImGui tooling
+input, linking `ECS3DRender` but not sim/scripting. `EditorApp` is a client plus the ImGui tooling
 (`ECS3DEditorLib`); the authoritative scene lives on a spawned `--edit` server, so edits become
 *commands sent back*, not local mutations. Client/editor spawn a child `ECS3DServer` via `ServerProcess`
 for singleplayer (it has no console window by default; `--server-console` gives it one).
@@ -227,7 +227,7 @@ applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the 
 registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —
 a `renameAsset` sets an optional `AssetRecord::displayName` override (threaded through
 `serialize`/`loadFromJSON`/`pack`/`unpack` like every other field); the file on disk and `path` (the
-registry key, and the name-key for prefabs/scenes) never change. **Delete always succeeds and references
+registry key, and the name-key for prefabs/scenes) stay as they are. **Delete always succeeds and references
 dangle** — `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` lookups already null-tolerate a
 missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
 replicated scenes + prefab bodies for the uuid ("referenced by N objects"); no server-side refusal or
@@ -243,8 +243,8 @@ live in `data/Replication.{h,cpp}`; a late joiner still gets the objects via the
 **Prefabs.** A prefab is an `AssetRegistry` record whose **body travels inline** — one `Object::serialize()`
 blob, stored dumped in `AssetRecord::body` and threaded through the same `serialize`/`loadFromJSON`/`pack`/
 `unpack` contract as everything else (the shape `Script::m_fields` already uses). It is deliberately **not a
-file on disk**: a model path names a *client-side GPU resource the server never touches*, but a prefab body
-is *server-side gameplay data the server must have to instantiate*, and the editor and server may share no
+file on disk**: a model path names a *client-side GPU resource the server does not use*, but a prefab body
+is *server-side gameplay data the server needs to instantiate*, and the editor and server may share no
 filesystem. Prefabs (like scenes) key off a display name in `path`; `registerAsset` is first-wins for every
 other type, but **re-registering an existing prefab name updates its body in place, keeping the uuid**, so
 "Save as Prefab" over an existing name means *update it*. Instantiation is
@@ -260,7 +260,7 @@ from, so overrides and prefab→instance propagation don't exist (deliberately d
 `DefaultProject` defines its `Block`/`Rigid Block`/`Sphere`/`Player` bodies once, registers them as prefabs
 with stable uuids, and builds its scenes by instancing them. **Editing a prefab's contents** happens in the
 Inspector: `AssetInspector` deserializes the body into a `TransientObject` (editor lib) — a detached `Object`
-living in a private scratch `ObjectManager` never wired to a scene/`SceneManager`/replication, uuids
+living in a private scratch `ObjectManager` that is not wired to a scene/`SceneManager`/replication, uuids
 preserved so the body is stable across edits — and draws it with a reused `ObjectInspector`. Its edits apply
 locally (value edits in place; structural edits deferred past `display()` then `applySceneEdit`'d, so the
 component map isn't mutated mid-iteration), and each change re-serializes the body and re-registers it under
@@ -366,7 +366,7 @@ mirrored by ScriptBridge's `ForceMode`) that says its units: a force or an impul
 a force or an acceleration acts for the tick's `dt` the way gravity does, and a velocity change is added
 as it is. `PlayerScript` steers with velocity changes, so its movement does not depend on its mass. Five conventions worth inheriting: (1) reaching
 another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t)` → false when
-absent/destroyed; never throws in the tick loop) — future component wrappers follow this; (2) a binding
+absent/destroyed; it does not throw in the tick loop) — future component wrappers follow this; (2) a binding
 that mutates scene structure can't touch the net layer, so it **buffers the change on `BindingContext`**
 and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above).
 Spawning is also deferred a level lower, in `ObjectManager` itself: `ScriptSystem::fixedUpdate`/
@@ -380,7 +380,7 @@ script-spawned object joins the scene the same way a script-destroyed one leaves
 mid-iteration; (3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
 pairs and diffs them into enter/stay/exit uuid-pair lists; `ServerApp` hands those to
 `ScriptSystem::dispatchCollisionEvent` (→ `onCollisionEnter/Stay/Exit` script virtuals) after the collision
-pass — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` never links
+pass — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` does not link
 `scripting`. Dispatch returns before any object lookup for an object with no attached script, so contacts
 between unscripted bodies cost nothing; (4) **sim→script *queries* cross by function-pointer injection.** Query behavior stays in a
 `sim` system (`SceneQueries`: raycast/overlapSphere; the ignored object's same-body colliders are skipped too, but a
@@ -392,7 +392,7 @@ data the object doesn't own outright** follows the same `Transform`/`RigidBody` 
 mutates it: `CameraBindings` (`getDirection`/`has`) lets `PlayerScript` read its own `Camera` component so
 movement can be relative to wherever the camera actually faces, degrading to the forward default
 `(0,0,-1)` when the object has none — the same "safe missing-component" convention as `tryGet`, just
-without the `tryGet` ceremony since `ScriptBase` always constructs one for the script's own object (like
+without the `tryGet` ceremony since `ScriptBase` constructs one for the script's own object (like
 `transform`/`rigidBody`/`input`). `bindings/BindingCoverage.h` holds a table of every `ComponentType`
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
 without deciding its scripting story can't go unnoticed. Script field edits are validated
@@ -506,7 +506,7 @@ which would have meant touching both backends for one bit of routing. `PlayerScr
 object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
 gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
 movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded
-forward axis. **The editor must not gate forwarded mouse input on `io.WantCaptureMouse`**: its 3D viewport
+forward axis. **The editor should not gate forwarded mouse input on `io.WantCaptureMouse`**: its 3D viewport
 *is* an ImGui window under the dockspace, so that flag is set whenever the cursor is over the scene, and
 gating on it silently swallows the right-drag mouse-look. `EditorApp::captureGatedInput` (called from `sendInput`) instead forwards the mouse
 only while the viewport looks through a scene camera (in free-fly the right-drag belongs to the editor's own
@@ -551,9 +551,9 @@ local rewind** - undoing sends an ordinary reverse edit back through the normal 
 for the rebroadcast like any other change, so the server stays the single source of truth and every
 connected view converges the same way. A command records its target uuid(s) and a before/after state in
 replicated form (a component's `serialize()` blob, an object's name/parent, a whole removed subtree, a
-whole asset record); the payload to send is built on demand from `Replication.h`'s own builders, never
+whole asset record); the payload to send is built on demand from `Replication.h`'s own builders, rather than
 stored as a built `net::Message` (a `Command` stays a plain, copyable, comparable value that way).
-**Validation happens once, at the moment of undo/redo - never on every snapshot**, which would invalidate
+**Validation happens once, at the moment of undo/redo - not on every snapshot**, which would invalidate
 the whole stack on every structural edit even in single-user editing. It compares the command's
 after-state (undo) or before-state (redo) against the live scene/registry; a mismatch refuses the whole
 edit and drops that entry and everything older still on the stack being popped (undo is sequential -
@@ -650,14 +650,14 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
 - **Naming:** `PascalCase` types/files, `camelCase` methods/locals, `m_` member prefix. `[[nodiscard]]`
   on getters/queries; prefer `const` accessors.
 - **Ownership:** subsystems are shared via `std::shared_ptr`, passed as `const std::shared_ptr<T>&`.
-  `vke::raii` owns Vulkan handles — never manually destroy.
+  `vke::raii` owns Vulkan handles — do not destroy them manually.
 - **The serialize/loadFromJSON boundary is the contract.** Replication, save/load, and the registry all
   ride on it. When you add a component field, thread it through both — and only both; no layer should
   learn the concrete type.
 - **A user preference is not project data.** Project state is authoritative and replicated to every client
   as a `ProjectPacker` snapshot, so anything stored there travels on the wire and is shared between users.
   Preferences are per-person and per-machine: they live in `ECS3DSettings` (`SettingsStore`, a JSON file
-  under the per-user application data directory) and are never serialized into a scene, a prefab, or a
+  under the per-user application data directory) and are kept out of a scene, a prefab, and a
   snapshot.
 - **Respect the layer boundaries.** Put data in `data`, behavior in the matching system, UI in `editor`.
   Splitting a new component means: fields → `data`, physics → `sim`, rendering → `render`, bindings →
@@ -666,7 +666,7 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
 - **Comments:** write them sparingly. Prefer self-documenting code (clear names, small functions) over a
   comment; if code needs a comment to be understood, first ask whether it can be made clearer instead.
   Comment only what the code cannot say for itself -- the *why* behind a non-obvious algorithm, design
-  decision, workaround, or caveat -- never a restatement of *what* the line does. Keep them short (1-2
+  decision, workaround, or caveat -- not a restatement of *what* the line does. Keep them short (1-2
   lines). Do not narrate implementation history ("was X", "moved from Y", "Phase N", "temporary") or
   point at external plans/roadmaps -- describe the code as it is now. **Comments are ASCII (plain 7-bit text) only:** no
   em dashes, arrows, or other Unicode -- use `-`, `->`, `<->`.
@@ -693,7 +693,7 @@ server-side, and sometimes answered with a resync snapshot) - see `ServerApp::ha
 - Each app's `main` registers a `ConsoleSink` with `Log` before anything else runs, then a `FileSink`
   writing to `<user data dir>/logs/<app>.log` (`editor`, `client` or `server`); `--log-file <path>`
   writes elsewhere and `--no-log-file` registers none. A server the editor or client spawns is told to
-  log to `editor-server.log` / `client-server.log` instead, so two local servers never share one file;
+  log to `editor-server.log` / `client-server.log` instead, so two local servers do not share one file;
   the parent's `--log-file`/`--no-log-file` are not forwarded to it. All app, server and net
   (`ECS3DNet`) output goes through `Log`.
 - `net::ServerProcess::launch` takes the child's flags as one string; a token holding spaces may be
