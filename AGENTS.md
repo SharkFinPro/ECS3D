@@ -59,8 +59,8 @@
 - **Dependencies** (`FetchContent` in `source/libs/CMakeLists.txt`): nlohmann/json 3.12.0, glm 1.0.1,
   stduuid 1.2.3, nativefiledialog-extended (nfd) 1.3.0, and VulkanEngine (`main`). They are declared at
   the libs scope so every library links them directly. **glm is declared first, on purpose:**
-  FetchContent is first-wins, and VulkanEngine also fetches glm — our pinned 1.0.1 should be the single
-  copy both sides resolve to, so keep that declaration first. **If VulkanEngine bumps glm, bump the tag here to match.**
+  FetchContent is first-wins, and VulkanEngine also fetches glm — our pinned 1.0.1 must be the single
+  copy both sides resolve to, unless VulkanEngine bumps glm and the tag here follows. **If VulkanEngine bumps glm, bump the tag here to match.**
 - **dotnet 10** (the C# runtime and SDK) is required for the managed assemblies. `ecs3d_add_managed_assembly()` (in
   `clrHost/cmake/ECS3DManaged.cmake`) `dotnet publish`es a C# class lib next to the executables and
   writes its `runtimeconfig.json`; `ecs3d_deploy_clr_runtime()` copies `nethost.dll` beside each exe.
@@ -85,7 +85,7 @@
   everything else takes arguments that do not name `fixtures` (or, for `makeScene`, none at all), so it
   needs `fixtures::` or a using-declaration. **Build a scene through these rather than re-deriving the scaffolding in a new suite.**
 - **Tests** (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, `ECS3DSettings` and
-  `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the one source compiled in directly, below) — so the suite stays runnable without a
+  `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the few sources compiled in directly, below) — so the suite stays runnable without a
   window, GPU or server. `net/MessageQueue.cpp` is compiled straight into the target rather than linked,
   because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
   `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` is compiled in the same way, as is
@@ -506,7 +506,7 @@ which would have meant touching both backends for one bit of routing. `PlayerScr
 object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
 gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
 movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded
-forward axis. **The editor should not gate forwarded mouse input on `io.WantCaptureMouse`**: its 3D viewport
+forward axis. **The editor must not gate forwarded mouse input on `io.WantCaptureMouse`** (unless its viewport stops being an ImGui window): its 3D viewport
 *is* an ImGui window under the dockspace, so that flag is set whenever the cursor is over the scene, and
 gating on it silently swallows the right-drag mouse-look. `EditorApp::captureGatedInput` (called from `sendInput`) instead forwards the mouse
 only while the viewport looks through a scene camera (in free-fly the right-drag belongs to the editor's own
