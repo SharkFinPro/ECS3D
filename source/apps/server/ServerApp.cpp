@@ -64,6 +64,15 @@ ServerApp::ServerApp(LaunchOptions options)
   // loadProject reassigns the registry's contents, never the object.
   BindingContext::setAssetRegistry(m_assetRegistry.get());
 
+  loadStartupProject();
+
+  m_netServer->start(m_options.port, m_options.editMode, m_options.authToken);
+
+  startLoadedScene();
+}
+
+void ServerApp::loadStartupProject()
+{
   if (m_options.project.empty())
   {
     // No project file requested: run the built-in sample (scenes 1-3 + falling balls). It's generated in
@@ -75,9 +84,10 @@ ServerApp::ServerApp(LaunchOptions options)
     Log::error(LogCategory::server, "No scene loaded from project '" + m_options.project
       + "' - the server will run but simulate nothing. Check the project path and working directory.");
   }
+}
 
-  m_netServer->start(m_options.port, m_options.editMode, m_options.authToken);
-
+void ServerApp::startLoadedScene()
+{
   // An edit server waits for the editor's play; a play server has no one to press it.
   const bool autoStart = !m_options.editMode;
   if (autoStart)

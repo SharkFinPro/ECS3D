@@ -25,6 +25,7 @@ class Component;
 class ComponentRegistry;
 class AssetRegistry;
 class SceneManager;
+class SceneAsset;
 class ProjectSerializer;
 class ProjectPacker;
 class RenderSystem;
@@ -207,6 +208,8 @@ private:
 
   void setupViewportGizmo();
 
+  void setupSceneOverlay();
+
   void onAddAsset(const nlohmann::json& asset);
 
   void onRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName);
@@ -257,6 +260,10 @@ private:
   void handleServerLog(const net::Message& message) const;
 
   void handlePicking();
+
+  [[nodiscard]] std::optional<uuids::uuid> findPickedObject(const std::shared_ptr<SceneAsset>& scene) const;
+
+  void applyPick(const std::optional<uuids::uuid>& picked, bool toggle) const;
 
   // The input this view would report, with the keyboard and mouse gated as the editor UI requires.
   [[nodiscard]] input::InputSnapshot captureGatedInput() const;
