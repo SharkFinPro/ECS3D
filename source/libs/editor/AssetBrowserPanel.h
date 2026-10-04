@@ -1,6 +1,7 @@
 #ifndef ASSETBROWSERPANEL_H
 #define ASSETBROWSERPANEL_H
 
+#include "AssetFilter.h"
 #include <assets/AssetRegistry.h>
 #include <nlohmann/json_fwd.hpp>
 #include <functional>
@@ -63,7 +64,7 @@ private:
   LoadSceneCallback m_onLoadScene;
   AddAssetCallback m_onAddAsset;
 
-  AssetType m_filter = AssetType::Unknown;
+  AssetTypeFilter m_filter;
 
   char m_search[128] = {};
 

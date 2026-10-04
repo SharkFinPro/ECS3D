@@ -106,7 +106,7 @@ void AssetBrowserPanel::recomputeCache()
 
   for (const auto& [uuid, record] : m_assetRegistry->getAssets())
   {
-    if (m_filter != AssetType::Unknown && record.type != m_filter)
+    if (!m_filter.matches(record.type))
     {
       continue;
     }
@@ -177,13 +177,21 @@ void AssetBrowserPanel::displayGui()
     // Filter chips on one row (label sits inline with its chips).
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(theme::t2, "Filter");
+    bool allSelected = m_filter.empty();
+    ImGui::SameLine(0.0f, 16.0f);
+    if (gc::accentCheckboxCompact("All", &allSelected))
+    {
+      m_filter.clear();
+      m_dirty = true;
+    }
+
     for (const auto& [type, label] : kAssetTypeLabels)
     {
-      bool selected = m_filter == type;
+      bool selected = m_filter.isActive(type);
       ImGui::SameLine(0.0f, 16.0f);
       if (gc::accentCheckboxCompact(label, &selected))
       {
-        m_filter = selected ? type : AssetType::Unknown;
+        m_filter.set(type, selected);
         m_dirty = true;
       }
     }
