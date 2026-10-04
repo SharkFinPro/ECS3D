@@ -43,6 +43,8 @@ public sealed class ScriptHandle
         return false;
     }
 
+    // Arguments must match parameter types exactly: no numeric widening (an int does not match a float
+    // parameter), no optional parameters and no params expansion.
     public bool tryInvoke(string methodName, params object?[] args) =>
         Bridge.TryInvokeScript(EntityId, ClassName, _instance, methodName, args ?? new object?[] { null }, out _);
 
