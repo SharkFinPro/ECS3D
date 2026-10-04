@@ -159,6 +159,7 @@ public class ScriptLookupTests : IDisposable
     var handle = Handle();
 
     Assert.True(handle.tryGetField("speed", out float _));
+    Assert.False(handle.tryGetField("unsupported", out double _));
     Assert.False(handle.tryGetField("notExposed", out float notExposed));
     Assert.Equal(0f, notExposed);
 

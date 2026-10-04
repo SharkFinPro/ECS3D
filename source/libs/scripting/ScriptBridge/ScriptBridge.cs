@@ -431,6 +431,14 @@ public static class Bridge
             .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null);
 
+    // ReadExposedField limited to the supported types, so a read agrees with SupportedExposedFields.
+    internal static bool TryReadSupportedExposedField(object instance, string fieldName, out object? value)
+    {
+        var field = SupportedExposedFields(instance).FirstOrDefault(f => f.Name == fieldName);
+        value = field?.GetValue(instance);
+        return field != null;
+    }
+
     [UnmanagedCallersOnly]
     public static void freeString(IntPtr ptr) => Marshal.FreeCoTaskMem(ptr);
 

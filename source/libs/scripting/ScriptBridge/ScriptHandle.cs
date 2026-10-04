@@ -30,10 +30,10 @@ public sealed class ScriptHandle
             ? Bridge.SupportedExposedFields(_instance).Select(f => f.Name).ToList()
             : new List<string>();
 
-    // Strict: the field's current value must already be a T, with no numeric conversion.
+    // Strict: only fields exposedFieldNames lists, and the value must already be a T (no conversion).
     public bool tryGetField<T>(string fieldName, out T value)
     {
-        if (isAlive && Bridge.ReadExposedField(_instance, fieldName) is T found)
+        if (isAlive && Bridge.TryReadSupportedExposedField(_instance, fieldName, out var read) && read is T found)
         {
             value = found;
             return true;
