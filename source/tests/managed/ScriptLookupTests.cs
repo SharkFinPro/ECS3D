@@ -21,29 +21,38 @@ public class ScriptLookupTests : IDisposable
   public class Target : ScriptBase
   {
     [ExposeToEditor("Speed")]
-    public float speed = 2.5f;
+    private float speed = 2.5f;
 
     [ExposeToEditor]
-    public int count = 4;
+    private int count = 4;
 
     [ExposeToEditor("Offset")]
-    public Vector3 offset = new(1f, 2f, 3f);
+    private Vector3 offset = new(1f, 2f, 3f);
 
     [ExposeToEditor("Label")]
-    public string label = "hi";
+    private string label = "hi";
 
     [ExposeToEditor("Unsupported")]
-    public double unsupported = 1.0;
+    private double unsupported = 1.0;
 
-    public float notExposed = 99f;
+    private float notExposed = 99f;
 
     public int Prop { get; set; } = 1;
 
-    public int calls;
-    public int startCalls;
-    public int fixedCalls;
+    public int Calls { get; private set; }
+    public int StartCalls { get; private set; }
+    public int FixedCalls { get; private set; }
 
-    public void Ping() => calls++;
+    public Target()
+    {
+    }
+
+    public Target(float speed)
+    {
+      this.speed = speed;
+    }
+
+    public void Ping() => Calls++;
 
     public int Add(int a, int b) => a + b;
 
@@ -63,18 +72,18 @@ public class ScriptLookupTests : IDisposable
 
     public void Explode() => throw new InvalidOperationException("boom");
 
-    public override void start() => startCalls++;
+    public override void start() => StartCalls++;
 
-    public override void fixedUpdate(float dt) => fixedCalls++;
+    public override void fixedUpdate(float dt) => FixedCalls++;
 
     public override string ToString() => "Target";
   }
 
   public class Other : ScriptBase
   {
-    public int calls;
+    public int Calls { get; private set; }
 
-    public void Ping() => calls++;
+    public void Ping() => Calls++;
   }
 
   private readonly string _uuid = Guid.NewGuid().ToString();
@@ -188,7 +197,7 @@ public class ScriptLookupTests : IDisposable
     var target = Add(new Target());
 
     Assert.True(Handle().tryInvoke("Ping"));
-    Assert.Equal(1, target.calls);
+    Assert.Equal(1, target.Calls);
   }
 
   [Fact]
@@ -231,7 +240,7 @@ public class ScriptLookupTests : IDisposable
     Assert.False(handle.tryInvoke("Add", 1));
     Assert.False(handle.tryInvoke("Add", 1, "two"));
     Assert.False(handle.tryInvoke("Ping", 1));
-    Assert.Equal(0, target.calls);
+    Assert.Equal(0, target.Calls);
   }
 
   [Fact]
@@ -303,8 +312,8 @@ public class ScriptLookupTests : IDisposable
     Assert.False(handle.tryInvoke("start"));
     Assert.False(handle.tryInvoke("fixedUpdate", 0.1f));
     Assert.False(handle.tryInvoke("ToString"));
-    Assert.Equal(0, target.startCalls);
-    Assert.Equal(0, target.fixedCalls);
+    Assert.Equal(0, target.StartCalls);
+    Assert.Equal(0, target.FixedCalls);
   }
 
   [Fact]
@@ -321,11 +330,11 @@ public class ScriptLookupTests : IDisposable
     Assert.False(handle.isAlive);
     Assert.False(Bridge.TryFindScript(_uuid, nameof(Target), out _));
     Assert.False(handle.tryInvoke("Ping"));
-    Assert.Equal(0, target.calls);
+    Assert.Equal(0, target.Calls);
 
     Assert.True(otherHandle.isAlive);
     Assert.True(otherHandle.tryInvoke("Ping"));
-    Assert.Equal(1, other.calls);
+    Assert.Equal(1, other.Calls);
   }
 
   [Fact]
@@ -341,7 +350,7 @@ public class ScriptLookupTests : IDisposable
     Assert.False(handle.tryGetField("speed", out float _));
     Assert.False(handle.tryInvoke("Ping"));
     Assert.Empty(handle.exposedFieldNames);
-    Assert.Equal(0, target.calls);
+    Assert.Equal(0, target.Calls);
   }
 
   [Fact]
@@ -350,17 +359,17 @@ public class ScriptLookupTests : IDisposable
     var first = Add(new Target());
     var stale = Handle();
 
-    var second = Add(new Target { speed = 8f });
+    var second = Add(new Target(8f));
     var fresh = Handle();
 
     Assert.False(stale.isAlive);
     Assert.False(stale.tryInvoke("Ping"));
     Assert.False(stale.tryGetField("speed", out float _));
-    Assert.Equal(0, first.calls);
+    Assert.Equal(0, first.Calls);
 
     Assert.True(fresh.isAlive);
     Assert.True(fresh.tryInvoke("Ping"));
-    Assert.Equal(1, second.calls);
+    Assert.Equal(1, second.Calls);
     Assert.True(fresh.tryGetField("speed", out float speed));
     Assert.Equal(8f, speed);
   }
