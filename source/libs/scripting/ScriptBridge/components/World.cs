@@ -171,6 +171,15 @@ public static unsafe class World
         return false;
     }
 
+    // A call into the returned instance is not fault-gated the way ScriptHandle.tryInvoke is: a throw
+    // faults the caller. Prefer the by-name overload for a target that may not be trusted.
+    public static bool tryGetScript<T>(string uuid, out T script) where T : ScriptBase
+        => Bridge.TryFindScript(uuid, out script);
+
+    // Reaches a script by class name, with no compile-time reference to its type.
+    public static bool tryGetScript(string uuid, string className, out ScriptHandle script)
+        => Bridge.TryFindScript(uuid, className, out script);
+
     private static bool has(delegate* unmanaged<IntPtr, bool> nativeHas, string uuid)
     {
         var uuidPtr = Marshal.StringToCoTaskMemUTF8(uuid);

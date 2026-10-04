@@ -130,16 +130,138 @@ public static class Bridge
     }
 
     // Script-to-script access. An object can carry several scripts (one per class), so a script is
-    // addressed by type (FindScript<T>) or enumerated for the untyped case (FindScripts). Purely a view
-    // over the live instances - ScriptBase exposes these as getScript<T>/getScripts to user scripts.
+    // addressed by type (FindScript<T>), by class name (TryFindScript, which hands back a ScriptHandle),
+    // or enumerated for the untyped case (FindScripts). Purely a view over the live instances - exposed
+    // to user scripts through ScriptBase.getScript<T>/getScripts and World.tryGetScript.
     // Faulted instances are excluded: handing one out would let a sibling script call into it directly,
     // bypassing the fault gate, and a throw from that call would fault the wrong script (the caller).
+    // A typed instance is still called without the gate; ScriptHandle.tryInvoke is the gated route.
     internal static T? FindScript<T>(string uuid) where T : ScriptBase =>
         _instances
             .Where(kvp => !_faulted.Contains(kvp.Key) && kvp.Value.EntityId == uuid)
             .Select(kvp => kvp.Value)
             .OfType<T>()
             .FirstOrDefault();
+
+    internal static bool TryFindScript<T>(string uuid, out T script) where T : ScriptBase
+    {
+        var found = FindScript<T>(uuid);
+        script = found!;
+        return found != null;
+    }
+
+    internal static bool TryFindScript(string uuid, string className, out ScriptHandle handle)
+    {
+        var key = Key(uuid, className);
+        if (_faulted.Contains(key) || !_instances.TryGetValue(key, out var instance))
+        {
+            handle = null!;
+            return false;
+        }
+
+        handle = new ScriptHandle(uuid, className, instance);
+        return true;
+    }
+
+    // True only while this exact instance is still the one registered under its key and has not faulted,
+    // so a handle kept across a detach, a re-attach or a reload reads as dead.
+    internal static bool IsLive(string uuid, string className, ScriptBase instance)
+    {
+        var key = Key(uuid, className);
+        return !_faulted.Contains(key) &&
+               _instances.TryGetValue(key, out var current) &&
+               ReferenceEquals(current, instance);
+    }
+
+    internal static void AddInstance(string uuid, string className, ScriptBase instance)
+    {
+        instance.EntityId = uuid;
+        _instances[Key(uuid, className)] = instance;
+    }
+
+    internal static void RemoveInstance(string uuid, string className)
+    {
+        var key = Key(uuid, className);
+        _instances.Remove(key);
+
+        // A removed script is gone regardless of fault state; clear it so a later re-add of the same
+        // uuid/class gets a clean slate instead of being skipped forever.
+        _faulted.Remove(key);
+    }
+
+    // Methods a script may drive from another script by name: public instance methods the target's own
+    // type adds. ScriptBase's lifecycle and event virtuals (and object's members) stay with ScriptSystem,
+    // even when the target overrides them - GetBaseDefinition finds where the slot was first declared.
+    private static bool IsInvokableFromScript(MethodInfo method)
+    {
+        if (method.IsGenericMethodDefinition || method.IsSpecialName)
+        {
+            return false;
+        }
+
+        var root = method.GetBaseDefinition().DeclaringType;
+        return root != typeof(ScriptBase) && root != typeof(object);
+    }
+
+    private static bool AcceptsArgument(Type parameterType, object? argument)
+    {
+        if (parameterType.IsByRef)
+        {
+            return false;
+        }
+
+        if (argument == null)
+        {
+            return !parameterType.IsValueType || Nullable.GetUnderlyingType(parameterType) != null;
+        }
+
+        return parameterType.IsInstanceOfType(argument);
+    }
+
+    // Invokes a public method on another script's instance by name, under the target's fault gate: a
+    // throw faults the target (not the caller) and returns false. A name that matches no method, or
+    // more than one for these arguments, is a caller mistake - warned about, not a fault.
+    internal static bool TryInvokeScript(string uuid, string className, ScriptBase instance, string methodName,
+                                         object?[] args, out object? result)
+    {
+        result = null;
+        if (!IsLive(uuid, className, instance))
+        {
+            return false;
+        }
+
+        var candidates = instance.GetType()
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+            .Where(m => m.Name == methodName && IsInvokableFromScript(m))
+            .Where(m =>
+            {
+                var parameters = m.GetParameters();
+                return parameters.Length == args.Length &&
+                       parameters.Select((p, i) => AcceptsArgument(p.ParameterType, args[i])).All(ok => ok);
+            })
+            .ToArray();
+
+        if (candidates.Length != 1)
+        {
+            Log.warn($"Script '{className}' on object {uuid}: {(candidates.Length == 0 ? "no" : "more than one")} " +
+                     $"invokable method '{methodName}' takes {args.Length} argument(s) of those types.");
+            return false;
+        }
+
+        try
+        {
+            result = candidates[0].Invoke(instance, args);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _faulted.Add(Key(uuid, className));
+            ReportFault(uuid, className, methodName,
+                        ex is TargetInvocationException { InnerException: { } inner } ? inner : ex);
+            result = null;
+            return false;
+        }
+    }
 
     internal static IReadOnlyList<ScriptBase> FindScripts(string uuid) =>
         _instances
@@ -291,9 +413,7 @@ public static class Bridge
     // point so it is reachable without an IntPtr uuid/className pair or a live _instances entry.
     internal static string BuildExposedFieldsJson(object instance)
     {
-        var fields = instance.GetType()
-            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null)
+        var fields = SupportedExposedFields(instance)
             .Select(f => new {
                 name        = f.Name,
                 displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
@@ -302,6 +422,21 @@ public static class Bridge
             .ToArray();
 
         return JsonSerializer.Serialize(fields);
+    }
+
+    // The [ExposeToEditor] fields of a supported type: what BuildExposedFieldsJson reports and what
+    // ScriptHandle.exposedFieldNames lists.
+    internal static IEnumerable<FieldInfo> SupportedExposedFields(object instance) =>
+        instance.GetType()
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(f => f.GetCustomAttribute<ExposeToEditorAttribute>() != null && MapTypeName(f.FieldType) != null);
+
+    // ReadExposedField limited to the supported types, so a read agrees with SupportedExposedFields.
+    internal static bool TryReadSupportedExposedField(object instance, string fieldName, out object? value)
+    {
+        var field = SupportedExposedFields(instance).FirstOrDefault(f => f.Name == fieldName);
+        value = field?.GetValue(instance);
+        return field != null;
     }
 
     [UnmanagedCallersOnly]
@@ -572,19 +707,14 @@ public static class Bridge
             var instance = (ScriptBase)Activator.CreateInstance(type)!;
             instance.EntityId = uuid;
             instance.initComponents();
-            _instances[Key(uuid, className)] = instance;
+            AddInstance(uuid, className, instance);
         });
     }
 
     [UnmanagedCallersOnly]
     public static void detachScript(IntPtr uuidPtr, IntPtr classNamePtr)
     {
-        var key = Key(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
-        _instances.Remove(key);
-
-        // A detached script is gone regardless of fault state; clear it so a later reattach of the same
-        // uuid/class gets a clean slate instead of being skipped forever.
-        _faulted.Remove(key);
+        RemoveInstance(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!);
     }
 
     [UnmanagedCallersOnly]
