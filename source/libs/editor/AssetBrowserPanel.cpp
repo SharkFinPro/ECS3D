@@ -1,6 +1,7 @@
 #include "AssetBrowserPanel.h"
 #include "AssetDisplay.h"
 #include "AssetDragDrop.h"
+#include "AssetNaming.h"
 #include "GuiComponents.h"
 #include "Selection.h"
 #include <GpuAssetCache.h>
@@ -59,6 +60,13 @@ namespace {
     std::mt19937 rng{ std::random_device{}() };
     uuids::uuid_random_generator generator{ rng };
     return generator();
+  }
+
+  [[nodiscard]] bool scriptFileExists(const std::string& name)
+  {
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(std::filesystem::path("scripts/UserScripts") / (name + ".cs"), ec);
+    return !ec && exists;
   }
 
   [[nodiscard]] bool nameIsValid(const std::string& name)
@@ -199,8 +207,24 @@ void AssetBrowserPanel::displayGui()
     // Search + Sort share a row (mockup): the search box fills the row, the sort combo sits on the right.
     constexpr float sortWidth = 200.0f;
     constexpr float gap = 10.0f;
-    const float searchWidth = std::max(120.0f, ImGui::GetContentRegionAvail().x - sortWidth - gap);
+    const float createButtonWidth = ImGui::GetFrameHeight();
+    const float searchWidth =
+      std::max(120.0f, ImGui::GetContentRegionAvail().x - sortWidth - createButtonWidth - 2.0f * gap);
 
+    ImGui::BeginDisabled(!m_editable);
+    if (ImGui::Button("+", ImVec2(createButtonWidth, 0.0f)))
+    {
+      ImGui::OpenPopup("##CreateAssetMenu");
+    }
+    ImGui::EndDisabled();
+
+    if (ImGui::BeginPopup("##CreateAssetMenu"))
+    {
+      displayCreateItems();
+      ImGui::EndPopup();
+    }
+
+    ImGui::SameLine(0.0f, gap);
     if (gc::searchField("##Search", m_search, sizeof(m_search), "Search assets", searchWidth))
     {
       m_dirty = true;
@@ -287,6 +311,13 @@ void AssetBrowserPanel::displayGui()
     ImGui::Dummy(ImVec2(available, static_cast<float>(rows) * cellHeight + static_cast<float>(rows - 1) * gap));
   }
 
+  if (ImGui::BeginPopupContextWindow("##AssetGridMenu",
+                                     ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
+  {
+    displayCreateItems();
+    ImGui::EndPopup();
+  }
+
   ImGui::End();
 
   // Open + draw the create-asset modal at the top level (the menu only flags it). Opening it from
@@ -361,11 +392,25 @@ void AssetBrowserPanel::displayAsset(const uuids::uuid& uuid, const AssetRecord&
 
 void AssetBrowserPanel::displayMenuWidget()
 {
-  const auto beginCreate = [&](const PendingAsset::Type type, const std::string& source, const char* defaultName) {
+  if (ImGui::BeginMenu("Assets"))
+  {
+    displayCreateItems();
+
+    ImGui::EndMenu();
+  }
+
+  // The popup itself is opened/drawn from displayGui at the top level (not here, inside the menu bar),
+  // where ImGui popups behave reliably - the items only record the request.
+}
+
+void AssetBrowserPanel::displayCreateItems()
+{
+  const auto beginCreate = [&](const PendingAsset::Type type, const std::string& source,
+                               const std::string& defaultName) {
     m_pending = {};
     m_pending.type = type;
     m_pending.sourcePath = source;
-    std::strncpy(m_pending.name, defaultName, sizeof(m_pending.name) - 1);
+    std::strncpy(m_pending.name, defaultName.c_str(), sizeof(m_pending.name) - 1);
     m_createError.clear();
     m_openCreatePopup = true;
   };
@@ -378,48 +423,41 @@ void AssetBrowserPanel::displayMenuWidget()
     ImGui::Spacing();
   };
 
-  if (ImGui::BeginMenu("Assets"))
+  labeledSeparator("Import");
+
+  // Creating assets adds them to the authoritative project, so it's disabled on a read-only server.
+  ImGui::BeginDisabled(!m_editable);
+
+  if (ImGui::MenuItem("Import Model"))
   {
-    labeledSeparator("Import");
-
-    // Creating assets adds them to the authoritative project, so it's disabled on a read-only server.
-    ImGui::BeginDisabled(!m_editable);
-
-    if (ImGui::MenuItem("Import Model"))
+    if (const auto picked = pickFile({ { "3D Models", "glb,gltf,obj,fbx" } }))
     {
-      if (const auto picked = pickFile({ { "3D Models", "glb,gltf,obj,fbx" } }))
-      {
-        beginCreate(PendingAsset::Type::Model, *picked, std::filesystem::path(*picked).stem().string().c_str());
-      }
+      beginCreate(PendingAsset::Type::Model, *picked, std::filesystem::path(*picked).stem().string());
     }
-
-    if (ImGui::MenuItem("Import Texture"))
-    {
-      if (const auto picked = pickFile({ { "Images", "png,jpg,jpeg,tga,bmp" } }))
-      {
-        beginCreate(PendingAsset::Type::Texture, *picked, std::filesystem::path(*picked).stem().string().c_str());
-      }
-    }
-
-    labeledSeparator("Create");
-
-    if (ImGui::MenuItem("New Scene"))
-    {
-      beginCreate(PendingAsset::Type::Scene, "", "New Scene");
-    }
-
-    if (ImGui::MenuItem("New Script"))
-    {
-      beginCreate(PendingAsset::Type::Script, "", "NewScript");
-    }
-
-    ImGui::EndDisabled();
-
-    ImGui::EndMenu();
   }
 
-  // The popup itself is opened/drawn from displayGui at the top level (not here, inside the menu bar),
-  // where ImGui popups behave reliably - displayMenuWidget only records the request.
+  if (ImGui::MenuItem("Import Texture"))
+  {
+    if (const auto picked = pickFile({ { "Images", "png,jpg,jpeg,tga,bmp" } }))
+    {
+      beginCreate(PendingAsset::Type::Texture, *picked, std::filesystem::path(*picked).stem().string());
+    }
+  }
+
+  labeledSeparator("Create");
+
+  if (ImGui::MenuItem("New Scene"))
+  {
+    beginCreate(PendingAsset::Type::Scene, "", assetNaming::uniqueSceneName(*m_assetRegistry, "New Scene"));
+  }
+
+  if (ImGui::MenuItem("New Script"))
+  {
+    beginCreate(PendingAsset::Type::Script, "",
+                assetNaming::uniqueScriptName(*m_assetRegistry, "NewScript", scriptFileExists));
+  }
+
+  ImGui::EndDisabled();
 }
 
 void AssetBrowserPanel::displayCreateAssetPopup()
@@ -440,7 +478,11 @@ void AssetBrowserPanel::displayCreateAssetPopup()
 
   gc::rowLabel("Name");
   ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-  ImGui::InputText("##name", m_pending.name, sizeof(m_pending.name));
+  if (ImGui::IsWindowAppearing())
+  {
+    ImGui::SetKeyboardFocusHere();
+  }
+  ImGui::InputText("##name", m_pending.name, sizeof(m_pending.name), ImGuiInputTextFlags_AutoSelectAll);
 
   if (!m_createError.empty())
   {
@@ -456,11 +498,17 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
   ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
   ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
-  if (ImGui::Button("Create", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter))
+  if (ImGui::Button("Create", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter, false))
   {
     if (!nameIsValid(m_pending.name))
     {
       m_createError = "Enter a valid name (no path characters).";
+    }
+    else if (m_pending.type == PendingAsset::Type::Script &&
+             (assetNaming::isNameTaken(*m_assetRegistry, AssetType::Script, m_pending.name) ||
+              scriptFileExists(m_pending.name)))
+    {
+      m_createError = std::string("A script named ") + m_pending.name + " already exists.";
     }
     else
     {

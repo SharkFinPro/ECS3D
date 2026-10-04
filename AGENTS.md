@@ -235,6 +235,8 @@ cascade exists (a known gap, not yet scheduled). Rename/delete are offered only 
 (Model/Texture/Script/Prefab) that `AssetRegistry` owns — a Scene record is regenerated from the
 `SceneManager` on every snapshot, so an override on it wouldn't survive. Undoing a delete re-adds the whole
 record, rename override included — the `addAsset` payload carries an optional `displayName`.
+The Assets panel also creates scenes and scripts from a "+" button and an empty-space context menu, not only the
+menu bar, prefilling a unique default name (`AssetNaming.h`) and refusing a script name that is already taken.
 Runtime structural changes from a *script* (spawn/destroy) take a third path: lightweight
 `objectSpawned` (one packed `Object`) / `objectDestroyed` (a uuid) messages the client splices into/out of
 its scene incrementally — kept off the full-snapshot path so frequent spawning stays cheap. Build/apply
