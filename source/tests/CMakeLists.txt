@@ -75,6 +75,7 @@ add_executable(${PROJECT_NAME}
   ProjectSerializerLogTest.cpp
   StateDeltaTest.cpp
   SceneManagerTest.cpp
+  AssetNamingTest.cpp
   PrefabTest.cpp
   PhysicsIntegrationTest.cpp
   PhysicsLandingTest.cpp

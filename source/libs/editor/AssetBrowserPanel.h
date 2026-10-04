@@ -69,6 +69,7 @@ private:
 
   PendingAsset m_pending;
   bool m_openCreatePopup = false;
+  bool m_focusCreateName = false;
   std::string m_createError;
 
   // Set by commitAsset when the thing it created was a scene, and consumed once the create popup has
@@ -93,6 +94,10 @@ private:
   [[nodiscard]] static std::string displayName(const AssetRecord& record);
 
   void displayAsset(const uuids::uuid& uuid, const AssetRecord& record, float cellSize, const std::string& name) const;
+
+  // The import/create items shared by the menu bar, the Options row's "+" popup and the grid's
+  // empty-space context menu. They only record the request; displayGui opens the modal.
+  void displayCreateItems();
 
   void displayCreateAssetPopup();
 

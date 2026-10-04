@@ -27,6 +27,7 @@ add_library(${PROJECT_NAME}
   SettingsPanel.h
   ConsolePanel.cpp
   ConsolePanel.h
+  AssetNaming.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h
   Gizmo.cpp
