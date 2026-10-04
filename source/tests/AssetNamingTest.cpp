@@ -108,22 +108,46 @@ TEST_F(AssetNamingTest, ScriptNameSkipsRegisteredClassNamesWithoutASpace)
   EXPECT_EQ(name.find('('), std::string::npos);
 }
 
-TEST_F(AssetNamingTest, ScriptNameSkipsAnExistingFile)
+TEST_F(AssetNamingTest, ScriptNameSkipsAFileTheLambdaReports)
 {
-  std::mt19937 rng{ std::random_device{}() };
-  const auto dir = std::filesystem::temp_directory_path() / ("ecs3d_asset_naming_" + std::to_string(rng()));
-  std::filesystem::create_directories(dir);
+  const auto fileExists = [](const std::string& name) { return name == "NewScript" || name == "NewScript2"; };
 
-  const auto fileExists = [&dir](const std::string& name) {
-    return std::filesystem::exists(dir / (name + ".cs"));
+  EXPECT_EQ(assetNaming::uniqueScriptName(m_registry, "NewScript", noFiles), "NewScript");
+  EXPECT_EQ(assetNaming::uniqueScriptName(m_registry, "NewScript", fileExists), "NewScript3");
+}
+
+class AssetNamingFileTest : public AssetNamingTest
+{
+protected:
+  void SetUp() override
+  {
+    std::mt19937 rng{ std::random_device{}() };
+    m_dir = std::filesystem::temp_directory_path() / ("ecs3d_asset_naming_" + std::to_string(rng()));
+
+    std::error_code ec;
+    std::filesystem::remove_all(m_dir, ec);
+    std::filesystem::create_directories(m_dir);
+  }
+
+  void TearDown() override
+  {
+    std::error_code ec;
+    std::filesystem::remove_all(m_dir, ec);
+  }
+
+  std::filesystem::path m_dir;
+};
+
+TEST_F(AssetNamingFileTest, ScriptNameSkipsAnExistingFile)
+{
+  const auto fileExists = [this](const std::string& name) {
+    return std::filesystem::exists(m_dir / (name + ".cs"));
   };
 
   EXPECT_EQ(assetNaming::uniqueScriptName(m_registry, "NewScript", fileExists), "NewScript");
 
-  std::ofstream(dir / "NewScript.cs") << "// existing\n";
-  std::ofstream(dir / "NewScript2.cs") << "// existing\n";
+  std::ofstream(m_dir / "NewScript.cs") << "// existing\n";
+  std::ofstream(m_dir / "NewScript2.cs") << "// existing\n";
 
   EXPECT_EQ(assetNaming::uniqueScriptName(m_registry, "NewScript", fileExists), "NewScript3");
-
-  std::filesystem::remove_all(dir);
 }

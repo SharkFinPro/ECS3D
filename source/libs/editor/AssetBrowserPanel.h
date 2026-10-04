@@ -69,7 +69,6 @@ private:
 
   PendingAsset m_pending;
   bool m_openCreatePopup = false;
-  bool m_focusCreateName = false;
   std::string m_createError;
 
   // Set by commitAsset when the thing it created was a scene, and consumed once the create popup has

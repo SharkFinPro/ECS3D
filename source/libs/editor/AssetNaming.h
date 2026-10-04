@@ -26,7 +26,7 @@ namespace assetNaming {
     return false;
   }
 
-  // Mirrors SceneManager::uniqueSceneName, so the name offered is the one the server registers.
+  // Uses the same " (N)" suffix rule as SceneManager::uniqueSceneName, so the offered name matches the server.
   [[nodiscard]] inline std::string uniqueSceneName(const AssetRegistry& registry, const std::string& base)
   {
     if (!isNameTaken(registry, AssetType::Scene, base))

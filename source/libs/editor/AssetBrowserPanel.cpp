@@ -64,7 +64,9 @@ namespace {
 
   [[nodiscard]] bool scriptFileExists(const std::string& name)
   {
-    return std::filesystem::exists(std::filesystem::path("scripts/UserScripts") / (name + ".cs"));
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(std::filesystem::path("scripts/UserScripts") / (name + ".cs"), ec);
+    return !ec && exists;
   }
 
   [[nodiscard]] bool nameIsValid(const std::string& name)
@@ -316,7 +318,6 @@ void AssetBrowserPanel::displayGui()
   {
     ImGui::OpenPopup("Create Asset");
     m_openCreatePopup = false;
-    m_focusCreateName = true;
   }
 
   displayCreateAssetPopup();
@@ -396,7 +397,8 @@ void AssetBrowserPanel::displayMenuWidget()
 
 void AssetBrowserPanel::displayCreateItems()
 {
-  const auto beginCreate = [&](const PendingAsset::Type type, const std::string& source, const std::string& defaultName) {
+  const auto beginCreate = [&](const PendingAsset::Type type, const std::string& source,
+                               const std::string& defaultName) {
     m_pending = {};
     m_pending.type = type;
     m_pending.sourcePath = source;
@@ -468,10 +470,9 @@ void AssetBrowserPanel::displayCreateAssetPopup()
 
   gc::rowLabel("Name");
   ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-  if (m_focusCreateName)
+  if (ImGui::IsWindowAppearing())
   {
     ImGui::SetKeyboardFocusHere();
-    m_focusCreateName = false;
   }
   ImGui::InputText("##name", m_pending.name, sizeof(m_pending.name), ImGuiInputTextFlags_AutoSelectAll);
 
@@ -489,7 +490,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
   ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
   ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
-  if (ImGui::Button("Create", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter))
+  if (ImGui::Button("Create", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter, false))
   {
     if (!nameIsValid(m_pending.name))
     {
