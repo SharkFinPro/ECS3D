@@ -194,7 +194,7 @@ public static class Bridge
     // even when the target overrides them - GetBaseDefinition finds where the slot was first declared.
     private static bool IsInvokableFromScript(MethodInfo method)
     {
-        if (method.IsGenericMethodDefinition)
+        if (method.IsGenericMethodDefinition || method.IsSpecialName)
         {
             return false;
         }

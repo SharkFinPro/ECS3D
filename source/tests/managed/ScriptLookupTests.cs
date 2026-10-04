@@ -37,6 +37,8 @@ public class ScriptLookupTests : IDisposable
 
     public float notExposed = 99f;
 
+    public int Prop { get; set; } = 1;
+
     public int calls;
     public int startCalls;
     public int fixedCalls;
@@ -44,6 +46,8 @@ public class ScriptLookupTests : IDisposable
     public void Ping() => calls++;
 
     public int Add(int a, int b) => a + b;
+
+    public float Scale(float value) => value * 2f;
 
     public string Describe(int value) => $"int:{value}";
 
@@ -263,6 +267,30 @@ public class ScriptLookupTests : IDisposable
 
     Assert.True(Handle().tryInvoke("Ping"));
     Assert.False(Handle().tryInvoke("NoSuchMethod"));
+  }
+
+  [Fact]
+  public void TryInvoke_RefusesPropertyAccessors()
+  {
+    var target = Add(new Target());
+    var handle = Handle();
+
+    Assert.True(handle.tryInvoke("Ping"));
+    Assert.False(handle.tryInvoke("get_Prop"));
+    Assert.False(handle.tryInvoke("set_Prop", 5));
+    Assert.Equal(1, target.Prop);
+  }
+
+  [Fact]
+  public void TryInvoke_RequiresExactParameterTypes()
+  {
+    Add(new Target());
+    var handle = Handle();
+
+    Assert.True(handle.tryInvoke("Scale", out var scaled, 1.5f));
+    Assert.Equal(3f, scaled);
+    Assert.False(handle.tryInvoke("Scale", out var widened, 2));
+    Assert.Null(widened);
   }
 
   [Fact]
