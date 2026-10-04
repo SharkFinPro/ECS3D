@@ -104,6 +104,7 @@
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
+  `TryFindScript`/`ScriptHandle` (by-name lookup, field reads, gated invoke)/
   `TryConvertFieldValue`/`MapTypeName`/`Key`). What stays uncovered here is whatever actually calls a
   native function pointer (the `Transform`/`RigidBody`/`Camera`/... wrapper methods, once
   `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry point (can't be called
@@ -451,7 +452,11 @@ focus, a position has no sensible "any player" combination; only the per-object 
 plus `has` - reached via `World.tryGetPlayerController` (including a script's own object, by passing
 `ScriptBase.EntityId`). `PlayerController::setPlayerSlot` does not constrain the value it is given, so
 neither does the setter: a negative or unassigned slot matches no connected player, so the object reads
-no input.
+no input. Script components are reachable managed-side only (instances live in `Bridge._instances`, so no
+native binding exists): typed through `World.tryGetScript<T>`/`ScriptBase.getScript<T>`, or by class name
+through `World.tryGetScript(uuid, className, out ScriptHandle)`, whose `tryGetField` reads only
+`[ExposeToEditor]` fields and whose `tryInvoke` runs under the target's fault gate and refuses `ScriptBase`'s
+lifecycle methods.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers
