@@ -1,7 +1,6 @@
 #include "AssetBrowserPanel.h"
 #include "AssetDisplay.h"
 #include "AssetDragDrop.h"
-#include "AssetFilter.h"
 #include "GuiComponents.h"
 #include "Selection.h"
 #include <GpuAssetCache.h>
