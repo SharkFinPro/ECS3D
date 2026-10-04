@@ -35,7 +35,7 @@ public class ScriptLookupTests : IDisposable
     [ExposeToEditor("Unsupported")]
     private double unsupported = 1.0;
 
-    private float notExposed = 99f;
+    private readonly float notExposed = 99f;
 
     public int Prop { get; set; } = 1;
 
