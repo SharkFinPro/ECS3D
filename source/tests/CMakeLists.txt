@@ -60,7 +60,8 @@ add_executable(${PROJECT_NAME}
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
   AttachedScriptsTest.cpp
-  ScriptSystemTest.cpp
+  ScriptSystemLifecycleTest.cpp
+  ScriptSystemFieldsAndReloadTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
   CompoundBodyCollisionTest.cpp
