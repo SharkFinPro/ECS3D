@@ -300,3 +300,111 @@ TEST(FiniteRendererValues, TransformLoadFromJSONAppliesFiniteInput)
   EXPECT_EQ(transform->getLocalPosition(), glm::vec3(1.0f, 2.0f, 3.0f));
   EXPECT_EQ(transform->getLocalRotation(), glm::vec3(4.0f, 5.0f, 6.0f));
 }
+
+namespace {
+  uuids::uuid modelAssetId(const char* text)
+  {
+    return uuids::uuid::from_string(text).value();
+  }
+
+  const uuids::uuid modelId = modelAssetId("11111111-1111-1111-1111-111111111111");
+  const uuids::uuid textureId = modelAssetId("22222222-2222-2222-2222-222222222222");
+  const uuids::uuid specularId = modelAssetId("33333333-3333-3333-3333-333333333333");
+
+  void fillModel(ModelRenderer& model)
+  {
+    model.setShouldRender(true);
+    model.setUseStandardPipeline(false);
+    model.setReflectivity(0.4f);
+    model.setModelUUID(modelId);
+    model.setTextureUUID(textureId);
+    model.setSpecularMapUUID(specularId);
+  }
+
+  void expectModelFilled(const ModelRenderer& model)
+  {
+    EXPECT_TRUE(model.getShouldRender());
+    EXPECT_FALSE(model.getUseStandardPipeline());
+    EXPECT_FLOAT_EQ(model.getReflectivity(), 0.4f);
+    EXPECT_EQ(model.getModelUUID(), modelId);
+    EXPECT_EQ(model.getTextureUUID(), textureId);
+    EXPECT_EQ(model.getSpecularMapUUID(), specularId);
+  }
+}
+
+TEST(ModelRendererAccessors, GettersReturnWhatTheirSettersStored)
+{
+  ModelRenderer model;
+
+  // Positive control: the defaults differ from what is stored below.
+  EXPECT_TRUE(model.getUseStandardPipeline());
+  EXPECT_TRUE(model.getModelUUID().is_nil());
+  EXPECT_TRUE(model.getTextureUUID().is_nil());
+  EXPECT_TRUE(model.getSpecularMapUUID().is_nil());
+
+  fillModel(model);
+
+  expectModelFilled(model);
+}
+
+TEST(ModelRendererAccessors, SurvivesSerializeAndLoadFromJSON)
+{
+  ModelRenderer source;
+  fillModel(source);
+
+  ModelRenderer loaded;
+  loaded.loadFromJSON(source.serialize());
+
+  expectModelFilled(loaded);
+}
+
+TEST(ModelRendererAccessors, SurvivesPackAndUnpack)
+{
+  ModelRenderer source;
+  fillModel(source);
+
+  net::Message message(net::MessageType::undefined);
+  source.pack(message);
+
+  ModelRenderer unpacked;
+  auto reader = readerPastTag(message);
+  unpacked.unpack(reader);
+
+  expectModelFilled(unpacked);
+}
+
+TEST(ModelRendererAccessors, CanRenderNeedsModelTextureAndSpecularMap)
+{
+  ModelRenderer model;
+  EXPECT_FALSE(model.canRender());
+
+  fillModel(model);
+  EXPECT_TRUE(model.canRender());
+}
+
+TEST(ModelRendererAccessors, CannotRenderWithoutAModel)
+{
+  ModelRenderer model;
+  fillModel(model);
+  model.setModelUUID(uuids::uuid());
+
+  EXPECT_FALSE(model.canRender());
+}
+
+TEST(ModelRendererAccessors, CannotRenderWithoutATexture)
+{
+  ModelRenderer model;
+  fillModel(model);
+  model.setTextureUUID(uuids::uuid());
+
+  EXPECT_FALSE(model.canRender());
+}
+
+TEST(ModelRendererAccessors, CannotRenderWithoutASpecularMap)
+{
+  ModelRenderer model;
+  fillModel(model);
+  model.setSpecularMapUUID(uuids::uuid());
+
+  EXPECT_FALSE(model.canRender());
+}

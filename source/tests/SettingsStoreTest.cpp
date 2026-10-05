@@ -528,3 +528,117 @@ TEST_F(SettingsStoreTest, GizmoStepsRejectANonFiniteValue)
   EXPECT_FLOAT_EQ(editorGizmoSettings::readRotateStepDegrees(store), editorGizmoSettings::defaultRotateStepDegrees);
   EXPECT_FLOAT_EQ(editorGizmoSettings::readScaleStep(store), editorGizmoSettings::defaultScaleStep);
 }
+
+namespace {
+  [[nodiscard]] bool hasLogged(const std::shared_ptr<RingBufferSink>& sink, const LogLevel level)
+  {
+    const auto entries = sink->snapshot();
+    return std::any_of(entries.begin(), entries.end(), [level](const LogEntry& logged)
+    {
+      return logged.level == level && logged.category == LogCategory::editor;
+    });
+  }
+}
+
+TEST_F(SettingsStoreTest, FileReturnsThePathItWasConstructedWith)
+{
+  const SettingsStore store(m_file);
+
+  EXPECT_EQ(store.file(), m_file);
+}
+
+TEST_F(SettingsStoreTest, UpdateWithNothingPendingWritesNothing)
+{
+  SettingsStore store(m_file, std::chrono::milliseconds(0));
+
+  store.update();
+
+  EXPECT_FALSE(store.hasPendingWrite());
+  EXPECT_FALSE(std::filesystem::exists(m_file));
+
+  // Positive control: with a change pending and a zero delay, the same call does write.
+  store.set("count", 1);
+  store.update();
+
+  EXPECT_TRUE(std::filesystem::exists(m_file));
+}
+
+TEST_F(SettingsStoreTest, ReplacesAnEarlierSpoiledFileWhenSettingAsideAgain)
+{
+  writeFile("{ this is not json");
+
+  auto spoiled = m_file;
+  spoiled += ".bad";
+  {
+    std::ofstream out(spoiled, std::ios::trunc);
+    out << "older spoiled contents";
+  }
+
+  const SettingsStore store(m_file);
+
+  EXPECT_FALSE(std::filesystem::exists(m_file));
+  ASSERT_TRUE(std::filesystem::exists(spoiled));
+
+  std::ifstream in(spoiled);
+  std::string contents;
+  std::getline(in, contents);
+  EXPECT_EQ(contents, "{ this is not json");
+}
+
+TEST_F(SettingsStoreTest, ASpoiledFileThatCannotBeSetAsideStaysPutAndLogsAnError)
+{
+  writeFile("{ this is not json");
+
+  // A non-empty directory where the .bad file would go: neither the rename nor the clear-and-retry
+  // behind it can replace it.
+  auto spoiled = m_file;
+  spoiled += ".bad";
+  std::filesystem::create_directories(spoiled);
+  {
+    std::ofstream out(spoiled / "keep");
+    out << "x";
+  }
+
+  const auto sink = addRingBuffer();
+
+  const SettingsStore store(m_file);
+
+  EXPECT_TRUE(std::filesystem::is_regular_file(m_file));
+  EXPECT_TRUE(std::filesystem::is_directory(spoiled));
+  EXPECT_TRUE(hasLogged(sink, LogLevel::error));
+  EXPECT_EQ(store.get<int>("anything", 5), 5);
+}
+
+TEST_F(SettingsStoreTest, AWriteThatCannotMoveIntoPlaceLogsAnErrorAndStaysPending)
+{
+  // A non-empty directory at the settings path: the finished temporary file cannot replace it.
+  std::filesystem::create_directories(m_file);
+  {
+    std::ofstream out(m_file / "keep");
+    out << "x";
+  }
+
+  const auto sink = addRingBuffer();
+
+  SettingsStore store(m_file);
+  store.set("count", 1);
+  store.flush();
+
+  EXPECT_TRUE(hasLogged(sink, LogLevel::error));
+  EXPECT_TRUE(store.hasPendingWrite());
+  EXPECT_TRUE(std::filesystem::is_directory(m_file));
+
+  auto temporary = m_file;
+  temporary += ".tmp";
+  EXPECT_FALSE(std::filesystem::exists(temporary));
+}
+
+TEST_F(SettingsStoreTest, ASettingsPathThatIsADirectoryLoadsAsDefaults)
+{
+  std::filesystem::create_directories(m_file);
+
+  const SettingsStore store(m_file);
+
+  EXPECT_EQ(store.get<int>("anything", 5), 5);
+  EXPECT_FALSE(store.hasPendingWrite());
+}

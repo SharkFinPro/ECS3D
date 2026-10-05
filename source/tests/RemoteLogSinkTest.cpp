@@ -253,3 +253,154 @@ TEST(RemoteLogSink, ANonLimitingByteBudgetTakesEverythingMaxCountAllows)
 
   EXPECT_EQ(drained.entries.size(), 3u);
 }
+
+namespace {
+  const std::string truncationMarkerText = " ... [truncated]";
+
+  // True when every byte belongs to a complete, well-formed UTF-8 sequence of the given lengths.
+  [[nodiscard]] bool isWholeUtf8(const std::string& text)
+  {
+    std::size_t i = 0;
+    while (i < text.size())
+    {
+      const auto lead = static_cast<unsigned char>(text[i]);
+      std::size_t length = 0;
+      if ((lead & 0x80) == 0x00)
+      {
+        length = 1;
+      }
+      else if ((lead & 0xE0) == 0xC0)
+      {
+        length = 2;
+      }
+      else if ((lead & 0xF0) == 0xE0)
+      {
+        length = 3;
+      }
+      else if ((lead & 0xF8) == 0xF0)
+      {
+        length = 4;
+      }
+      else
+      {
+        return false;
+      }
+
+      if (i + length > text.size())
+      {
+        return false;
+      }
+
+      for (std::size_t j = 1; j < length; ++j)
+      {
+        if ((static_cast<unsigned char>(text[i + j]) & 0xC0) != 0x80)
+        {
+          return false;
+        }
+      }
+
+      i += length;
+    }
+
+    return true;
+  }
+
+  // Writes a message of `prefix` filler bytes then `character` repeated past the cap, and returns what the
+  // sink queued for it.
+  [[nodiscard]] std::string truncatedMessage(const std::size_t prefix, const std::string& character)
+  {
+    std::string message(prefix, 'x');
+    while (message.size() <= RemoteLogSink::maxMessageBytes + 8)
+    {
+      message += character;
+    }
+
+    RemoteLogSink sink(10);
+    sink.write(entry(message));
+    const auto drained = sink.drain(10);
+    return drained.entries.at(0).message;
+  }
+
+  void expectCutsAtEveryOffsetStayWholeUtf8(const std::string& character)
+  {
+    // Shifting the prefix by one byte at a time moves the cap across every offset inside a character.
+    const auto width = character.size();
+    for (std::size_t shift = 0; shift < width; ++shift)
+    {
+      const auto prefix = RemoteLogSink::maxMessageBytes - width * 3 + shift;
+      const auto stored = truncatedMessage(prefix, character);
+
+      ASSERT_GE(stored.size(), truncationMarkerText.size()) << "width " << width << " shift " << shift;
+      const auto markerStart = stored.size() - truncationMarkerText.size();
+      EXPECT_EQ(stored.substr(markerStart), truncationMarkerText) << "width " << width << " shift " << shift;
+
+      const auto kept = stored.substr(0, markerStart);
+      EXPECT_TRUE(isWholeUtf8(kept)) << "width " << width << " shift " << shift;
+      EXPECT_LE(kept.size(), RemoteLogSink::maxMessageBytes) << "width " << width << " shift " << shift;
+      // Positive control: only the partial character is lost, never a whole extra character.
+      EXPECT_GT(kept.size() + width, RemoteLogSink::maxMessageBytes) << "width " << width << " shift " << shift;
+    }
+  }
+}
+
+TEST(RemoteLogSink, ValidatorRejectsASplitSequence)
+{
+  // Positive control for the truncation tests below: the validator they lean on must fail a cut character.
+  EXPECT_TRUE(isWholeUtf8("ab\xC3\xA9"));
+  EXPECT_FALSE(isWholeUtf8("ab\xC3"));
+  EXPECT_FALSE(isWholeUtf8("ab\xE2\x82"));
+  EXPECT_FALSE(isWholeUtf8("ab\xF0\x9F\x98"));
+}
+
+TEST(RemoteLogSink, TwoByteCharactersCutAtTheCapStayWholeAtEveryOffset)
+{
+  expectCutsAtEveryOffsetStayWholeUtf8("\xC3\xA9");
+}
+
+TEST(RemoteLogSink, ThreeByteCharactersCutAtTheCapStayWholeAtEveryOffset)
+{
+  expectCutsAtEveryOffsetStayWholeUtf8("\xE2\x82\xAC");
+}
+
+TEST(RemoteLogSink, FourByteCharactersCutAtTheCapStayWholeAtEveryOffset)
+{
+  expectCutsAtEveryOffsetStayWholeUtf8("\xF0\x9F\x98\x80");
+}
+
+TEST(RemoteLogSink, AMessageOfThreeByteCharactersExactlyAtTheCapIsNotTruncated)
+{
+  RemoteLogSink sink(10);
+
+  std::string message;
+  while (message.size() + 3 <= RemoteLogSink::maxMessageBytes)
+  {
+    message += "\xE2\x82\xAC";
+  }
+  message += std::string(RemoteLogSink::maxMessageBytes - message.size(), 'x');
+  ASSERT_EQ(message.size(), RemoteLogSink::maxMessageBytes);
+
+  sink.write(entry(message));
+
+  const auto drained = sink.drain(10);
+  ASSERT_EQ(drained.entries.size(), 1u);
+  EXPECT_EQ(drained.entries[0].message, message);
+}
+
+TEST(RemoteLogSink, ACutThatLandsOnAStrayContinuationByteDropsIt)
+{
+  RemoteLogSink sink(10);
+
+  // 0xFF starts no UTF-8 sequence; the cut backs up to it and drops it instead of keeping invalid bytes.
+  std::string message(RemoteLogSink::maxMessageBytes - 1, 'x');
+  message += "\xFF";
+  message += std::string(1000, 'y');
+
+  sink.write(entry(message));
+
+  const auto drained = sink.drain(10);
+  ASSERT_EQ(drained.entries.size(), 1u);
+  const auto& stored = drained.entries[0].message;
+  const auto markerStart = stored.find(truncationMarkerText);
+  ASSERT_NE(markerStart, std::string::npos);
+  EXPECT_EQ(markerStart, RemoteLogSink::maxMessageBytes - 1);
+}
