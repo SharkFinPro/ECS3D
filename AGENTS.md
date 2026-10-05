@@ -403,8 +403,8 @@ refused with a warning and does not fault the script.
 A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about
 once and left unattached until the next hot reload or until its Script component is replaced (a stop
 rebuild or scene switch), which retries it and warns again if it still fails. Field read-back skips a
-missing or faulted instance, and discards a read that faulted it, so saved values are never overwritten
-by defaults. `LogBindings` gives scripts `Log.trace/debug/
+missing or faulted instance, and discards a read that faulted it, so the saved values are kept in place
+of defaults. `LogBindings` gives scripts `Log.trace/debug/
 info/warn/error` through `ECS3DLog` under `LogCategory::script`, registered first in `registerBindings` so
 everything the bridge itself logs afterwards - init, hot-reload, compilation - already has a binding to
 write through. Instance lifetime tracks the live component set in both directions: a Script added to a
