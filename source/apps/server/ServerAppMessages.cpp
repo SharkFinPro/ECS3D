@@ -139,12 +139,13 @@ void ServerApp::broadcastPlayerSlot(const int32_t connId)
 
 void ServerApp::handlePossessSlot(const net::Message& message, const int32_t senderId)
 {
-  // A view/input choice rather than a scene edit, so it is not a mutation message; it is still limited to
-  // editor connections, since a player must not be able to move itself into someone else's character.
-  if (!m_netServer->isEditor(senderId))
+  // Not a mutation message (it changes no scene data), but held to the same bar: a non-edit server admits
+  // any connection that claims Role::editor, and a player must not be able to move itself into someone
+  // else's character.
+  if (!m_options.editMode || !m_netServer->isEditor(senderId))
   {
     Log::warn(LogCategory::server, "Discarded a possessSlot from connection " + std::to_string(senderId)
-      + ": not an editor.");
+      + ": not the authorized editor of an edit-mode server.");
     return;
   }
 

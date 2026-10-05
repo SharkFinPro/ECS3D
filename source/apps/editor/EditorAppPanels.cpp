@@ -25,6 +25,8 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <Log.h>
 
 namespace {
   // How a camera reads in the editor's "View" combo: the owning object's name, the player slot when it's a
@@ -114,6 +116,20 @@ namespace {
     }
 
     return owners == 1 ? label + " (" + owner + ")" : label;
+  }
+
+  // The slots the "Player" combo offers: the scene's bindable ones, plus the slot already held if no object
+  // names it.
+  std::vector<int32_t> playerSelectorSlots(ObjectManager* objectManager, const int32_t currentSlot)
+  {
+    std::vector<int32_t> slots = objectManager ? playerSlotsInScene(*objectManager) : std::vector<int32_t>{};
+
+    if (currentSlot >= 0 && std::ranges::find(slots, currentSlot) == slots.end())
+    {
+      slots.insert(std::ranges::upper_bound(slots, currentSlot), currentSlot);
+    }
+
+    return slots;
   }
 
   const char* sceneStatusLabel(const SceneStatus status)
@@ -368,19 +384,11 @@ void EditorApp::displayCameraSelector()
 
 void EditorApp::displayPlayerSelector()
 {
+  expirePlayerSlotRequest();
+
   const auto scene = m_sceneManager->getCurrentScene();
   const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
-
-  std::vector<int32_t> slots;
-  if (objectManager)
-  {
-    slots = playerSlotsInScene(*objectManager);
-  }
-
-  if (m_playerSlot >= 0 && std::ranges::find(slots, m_playerSlot) == slots.end())
-  {
-    slots.insert(std::ranges::upper_bound(slots, m_playerSlot), m_playerSlot);
-  }
+  const auto slots = playerSelectorSlots(objectManager, m_playerSlot);
 
   const std::string preview = m_playerSlot >= 0 ? "Player " + std::to_string(m_playerSlot) : std::string("-");
 
@@ -389,9 +397,11 @@ void EditorApp::displayPlayerSelector()
   ImGui::TextColored(theme::t2, "%s", "Player");
   ImGui::SameLine();
 
-  // A view/input choice, not a scene edit, so this stays enabled on a read-only server. It waits for the
-  // server to answer the previous request before offering another.
-  ImGui::BeginDisabled(!m_netClient->isConnected() || m_playerSlot < 0 || m_requestedPlayerSlot.has_value());
+  // The server honors a possession request only on an edit-mode server, and answers one at a time.
+  const bool canRequest = m_serverEditable && m_netClient->isConnected() && m_playerSlot >= 0
+                       && !m_requestedPlayerSlot.has_value();
+
+  ImGui::BeginDisabled(!canRequest);
   ImGui::SetNextItemWidth(160.0f);
   if (ImGui::BeginCombo("##PlayerSlot", preview.c_str()))
   {
@@ -408,6 +418,20 @@ void EditorApp::displayPlayerSelector()
     ImGui::EndCombo();
   }
   ImGui::EndDisabled();
+}
+
+void EditorApp::expirePlayerSlotRequest()
+{
+  if (!m_requestedPlayerSlot
+      || std::chrono::steady_clock::now() - m_requestedPlayerSlotSince < playerSlotRequestTimeout)
+  {
+    return;
+  }
+
+  // The reply is a broadcast, so a send that ran out of budget can drop it for this connection.
+  Log::warn(LogCategory::editor, "No answer to the request for player slot " + std::to_string(*m_requestedPlayerSlot)
+    + "; giving up on it.");
+  m_requestedPlayerSlot.reset();
 }
 
 void EditorApp::displayGizmoControls() const

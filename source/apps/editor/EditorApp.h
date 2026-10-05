@@ -198,6 +198,11 @@ private:
   // The slot a possessSlot request asked for, until the server's playerSlot answers it. While set, the
   // reply is a switch to follow (camera included) rather than the join reply.
   std::optional<int32_t> m_requestedPlayerSlot;
+  std::chrono::steady_clock::time_point m_requestedPlayerSlotSince;
+
+  // The playerSlot reply is a broadcast the transport may drop for a slow peer, so a request that goes
+  // unanswered this long is abandoned instead of leaving the Player combo disabled.
+  static constexpr std::chrono::seconds playerSlotRequestTimeout{3};
 
   // Edge-detect the mouse so viewport picking only fires on a fresh click.
   bool m_mouseWasPressed = false;
@@ -276,6 +281,8 @@ private:
   void sendJoin();
 
   void requestPlayerSlot(int32_t slot);
+
+  void expirePlayerSlotRequest();
 
   void handlePicking();
 

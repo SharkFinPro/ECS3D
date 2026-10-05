@@ -58,7 +58,8 @@ enum class MessageType : uint8_t {
                  // it. Appended last, like every enumerator here: this is the wire discriminator, so
                  // existing values must keep their number.
   possessSlot    // editor -> server: (slot int32) - bind this connection's input to that player slot;
-                 // answered with playerSlot. Changes no project data, so it is not a mutation message.
+                 // answered with playerSlot. Changes no project data, so it is not a mutation message, but the
+                 // server honors it only on an edit-mode server, from the authorized editor connection.
   // editComponent/sceneEdit/sceneControl/loadProject/addAsset/renameAsset/removeAsset are the editor's mutation path; the server
   // only honors them from a connection it authorized as Role::editor at the transport handshake (which
   // carries role + token out of band, ahead of any message here), and only on an edit-mode server. An

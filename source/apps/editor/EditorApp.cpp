@@ -134,6 +134,7 @@ void EditorApp::sendJoin()
 void EditorApp::requestPlayerSlot(const int32_t slot)
 {
   m_requestedPlayerSlot = slot;
+  m_requestedPlayerSlotSince = std::chrono::steady_clock::now();
   m_netClient->send(replication::buildPossessSlot(slot));
 }
 
