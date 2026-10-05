@@ -26,6 +26,7 @@ add_executable(${PROJECT_NAME}
   ColliderCacheTest.cpp
   ComponentLookupTest.cpp
   CameraRangeTest.cpp
+  CameraSelectionTest.cpp
   ComponentRegistryTest.cpp
   AssetRegistryTest.cpp
   AssetDragDropTest.cpp

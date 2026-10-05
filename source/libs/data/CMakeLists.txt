@@ -33,6 +33,8 @@ add_library(${PROJECT_NAME}
   objects/Object.h
   objects/ObjectManager.cpp
   objects/ObjectManager.h
+  objects/CameraSelection.cpp
+  objects/CameraSelection.h
   objects/ComponentFieldDelta.cpp
   objects/ComponentFieldDelta.h
   objects/WorldPlacement.cpp
