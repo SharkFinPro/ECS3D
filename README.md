@@ -99,14 +99,19 @@ Two things to know before the first run:
 
 ### Measuring Coverage
 
-The `ecs3d-coverage` preset is `ecs3d-debug` instrumented for line and branch coverage. On Linux and macOS:
+The `ecs3d-coverage` preset is `ecs3d-debug` instrumented for line and branch coverage. Install gcovr
+(`pipx install gcovr`), then on Linux with gcc:
 
 ```bash
 cmake --preset ecs3d-coverage
 cmake --build cmake-build-ecs3d-coverage --target check
 gcovr --root . cmake-build-ecs3d-coverage --filter 'source/libs/' --filter 'source/apps/' \
-  --exclude 'source/tests/' --exclude '.*/_deps/.*' --html-details coverage.html
+  --exclude 'source/tests/' --exclude '.*/_deps/.*' --exclude-throw-branches \
+  --exclude-unreachable-branches --html-details coverage.html
 ```
+
+With Clang, including Apple Clang on macOS, add `--gcov-executable "llvm-cov gcov"` to the gcovr command
+(`--gcov-executable "xcrun llvm-cov gcov"` on macOS).
 
 The managed suite writes its cobertura report to `cmake-build-ecs3d-coverage/coverage/managed`. On Windows,
 run the test executable under `Microsoft.CodeCoverage.Console collect "<exe>" --output-format cobertura`.

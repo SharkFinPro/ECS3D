@@ -170,12 +170,13 @@ jobs:
 
       - name: Install gcovr
         if: ${{ matrix.build_type == 'Coverage' }}
-        run: pipx install gcovr
+        run: pipx install gcovr==8.6
 
       - name: Native coverage report
         if: ${{ matrix.build_type == 'Coverage' }}
         # Branch numbers leave out exception and unreachable edges, which the compiler generates in bulk
-        # and which no test can sensibly target.
+        # and which no test can sensibly target. bash, so a gcovr failure is not hidden by the tee.
+        shell: bash
         run: |
           mkdir -p coverage/native
           gcovr --root . ${{ steps.strings.outputs.build_dir }} \
@@ -197,6 +198,7 @@ jobs:
         if: ${{ matrix.build_type == 'Coverage' }}
         # gcovr only knows files that were compiled with coverage, so a source no test target builds
         # would otherwise be missing from the report rather than shown at zero.
+        shell: bash
         run: |
           find source/libs source/apps -name '*.cpp' -not -path 'source/apps/launcher/*' | sort > coverage/all-sources.txt
           python3 -c "import json; print('\n'.join(sorted(f['filename'] for f in json.load(open('coverage/native/summary.json'))['files'])))" > coverage/covered-sources.txt

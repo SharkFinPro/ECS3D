@@ -51,18 +51,21 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   endif()
 
   # The coverage preset. Like sanitizing, instrumenting is a whole-build decision, so the flags are set
-  # here before anything is added. The suite is what gets measured; the apps are instrumented too so the
-  # report can name what no test reaches.
+  # here before anything is added. Every target the build produces is instrumented, though the check
+  # target only builds, and so only measures, the test suite.
   option(ECS3D_COVERAGE "Build instrumented for line and branch coverage" OFF)
 
   if (ECS3D_COVERAGE)
     if (MSVC)
       # /PROFILE is what lets Microsoft.CodeCoverage.Console instrument the binaries; it needs no
-      # compile flags.
-      add_link_options(/PROFILE)
+      # compile flags. It implies /INCREMENTAL:NO, which the Debug link flags would otherwise contradict
+      # (LNK4075).
+      add_link_options(/PROFILE /INCREMENTAL:NO)
     elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-      # .gcno/.gcda output, which gcovr reads (through llvm-cov gcov under Clang).
-      add_compile_options(--coverage)
+      # .gcno/.gcda output, which gcovr reads (Clang needs gcovr's --gcov-executable "llvm-cov gcov").
+      # Atomic counter updates, since the suite runs OpenMP and test threads and the default
+      # single-threaded updates leave inconsistent .gcda data that gcovr can abort on.
+      add_compile_options(--coverage -fprofile-update=atomic)
       add_link_options(--coverage)
     else()
       message(WARNING "ECS3D_COVERAGE is on but ${CMAKE_CXX_COMPILER_ID} has no coverage flags here; building without them.")

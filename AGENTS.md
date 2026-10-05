@@ -97,7 +97,9 @@
   GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
   suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
   defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
-  empty test set and would otherwise report green for a suite that registered nothing. Under the `ecs3d-coverage` preset (`ECS3D_COVERAGE`) the same target also leaves the managed suite's cobertura output in `<build-dir>/coverage/managed`; the native side is read with gcovr.
+  empty test set and would otherwise report green for a suite that registered nothing. Under the
+  `ecs3d-coverage` preset (`ECS3D_COVERAGE`) the same target also leaves the managed suite's cobertura
+  output in `<build-dir>/coverage/managed`; the native side is read with gcovr.
 - **Managed tests** (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered
   as a single CTest test through `add_test` in `tests/CMakeLists.txt` (guarded on `DOTNET_EXE`) rather
   than a native executable. It covers pure, testable logic via `ProjectReference`s to
