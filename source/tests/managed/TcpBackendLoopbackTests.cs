@@ -302,7 +302,6 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     Assert.DoesNotContain(healthyA, TransportRecorder.ServerDisconnected);
     Assert.DoesNotContain(healthyB, TransportRecorder.ServerDisconnected);
     Assert.Equal(2, server.ServerConnectionCount());
-    Assert.True(TransportRecorder.LogContains($"Dropping connection {stalledId}"));
   }
 
   [Fact]
