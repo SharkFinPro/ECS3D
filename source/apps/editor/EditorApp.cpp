@@ -439,6 +439,12 @@ void EditorApp::variableUpdate()
     m_renderSystem->useFreeFlyCamera(*m_assetCache);
   }
 
+  // Running and paused are both play mode, where the sprites would be clutter in the game's own view.
+  if (objectManager && m_sceneStatus == SceneStatus::stopped)
+  {
+    m_renderSystem->drawLightGizmos(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
+  }
+
   m_renderer->render();
 }
 

@@ -1,5 +1,6 @@
 #include "RenderSystem.h"
 #include "GpuAssetCache.h"
+#include "Billboard.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -187,6 +188,52 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   std::erase_if(m_selected, [this](const auto& entry) { return !m_liveUUIDs.contains(entry.first); });
 
   assetCache.pruneStale(m_liveUUIDs);
+}
+
+void RenderSystem::drawLightGizmos(const ObjectManager& objectManager, GpuAssetCache& assetCache,
+                                   std::span<const uuids::uuid> highlightUUIDs)
+{
+  const auto renderer = assetCache.getRenderer();
+  const auto renderer3D = renderer->getRenderingManager()->getRenderer3D();
+  const auto [view, fovDegrees, nearPlane, farPlane] = viewParams(assetCache);
+  const glm::quat orientation = billboardOrientation(view);
+
+  for (const auto& object : objectManager.getAllObjects())
+  {
+    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+
+    if (!transform || !object->getComponent<LightRenderer>(ComponentType::lightRenderer))
+    {
+      continue;
+    }
+
+    const glm::vec3 position = transform->getPosition();
+    const auto size = billboardWorldSize(view, position, fovDegrees, nearPlane, lightGizmoScreenFraction);
+
+    if (!size)
+    {
+      continue;
+    }
+
+    const auto uuid = object->getUUID();
+    const auto gizmo = assetCache.getLightGizmo(uuid);
+
+    if (!gizmo)
+    {
+      continue;
+    }
+
+    gizmo->setPosition(position);
+    gizmo->setOrientationQuat(orientation);
+    gizmo->setScale(*size);
+
+    renderer3D->renderObject(gizmo, vke::PipelineType::texturedPlane);
+
+    if (std::ranges::find(highlightUUIDs, uuid) != highlightUUIDs.end())
+    {
+      renderer3D->renderObject(gizmo, vke::PipelineType::objectHighlight);
+    }
+  }
 }
 
 void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCache& assetCache,

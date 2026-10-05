@@ -107,8 +107,31 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::
   return renderObject;
 }
 
+std::shared_ptr<vke::RenderObject> GpuAssetCache::getLightGizmo(const uuids::uuid& ownerUUID)
+{
+  if (const auto it = m_lightGizmos.find(ownerUUID); it != m_lightGizmos.end())
+  {
+    return it->second;
+  }
+
+  const auto model = m_renderer->getAssetManager()->loadModel("assets/models/billboard_quad.glb");
+  const auto icon = m_renderer->getAssetManager()->loadTexture("assets/textures/light_gizmo.png");
+
+  if (!model || !icon)
+  {
+    return nullptr;
+  }
+
+  auto renderObject = m_renderer->getAssetManager()->loadRenderObject(icon, icon, model);
+
+  m_lightGizmos[ownerUUID] = renderObject;
+
+  return renderObject;
+}
+
 void GpuAssetCache::pruneStale(const std::unordered_set<uuids::uuid>& liveUUIDs)
 {
   std::erase_if(m_renderObjects, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
   std::erase_if(m_colliderGizmos, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
+  std::erase_if(m_lightGizmos, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
 }

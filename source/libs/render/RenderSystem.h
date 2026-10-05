@@ -25,6 +25,13 @@ public:
   void variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                       std::span<const uuids::uuid> highlightUUIDs = {});
 
+  // Editor-only: draws a camera-facing, constant-screen-size sprite at every light. Call it each frame after
+  // the camera update (updateCamera/useFreeFlyCamera) so the sprites face this frame's view. The client never
+  // calls it, so it never shows them. Every light in highlightUUIDs is re-drawn with the objectHighlight
+  // pipeline, as a selected model is.
+  void drawLightGizmos(const ObjectManager& objectManager, GpuAssetCache& assetCache,
+                       std::span<const uuids::uuid> highlightUUIDs = {});
+
   // Drives the vke camera from a component Camera. Finds the active Camera object, builds a
   // view matrix from its Transform pose, disables the built-in free-fly camera, and pushes the pose into
   // the renderer. Falls back to (re-enabling) the free-fly camera when no active camera exists. The
