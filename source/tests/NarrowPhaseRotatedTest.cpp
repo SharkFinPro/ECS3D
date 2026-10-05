@@ -289,7 +289,12 @@ TEST(NarrowPhaseRotated, InventsNoPushForFacesThatOnlyTouch)
   // Exactly touching has no depth to resolve, so the full query either reports nothing or a contact
   // with none; what it must not do is invent a push.
   const auto touching = collisions::findContact(*lower.collider, *upper.collider);
-  EXPECT_EQ(collisions::intersects(*lower.collider, *upper.collider), touching.has_value());
+  // NarrowPhase.h: intersects may say yes where EPA builds no translation, but a contact implies it.
+  if (touching.has_value())
+  {
+    EXPECT_TRUE(collisions::intersects(*lower.collider, *upper.collider));
+  }
+
   if (touching.has_value())
   {
     EXPECT_TRUE(isFinite(touching->minimumTranslationVector));
