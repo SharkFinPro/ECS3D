@@ -8,7 +8,9 @@
 
 #include <Protocol.h>
 #include <algorithm>
+#include <glm/vec3.hpp>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <utility>
 #include <uuid.h>
