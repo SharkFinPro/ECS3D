@@ -46,7 +46,8 @@ public:
   // it's safe to call every frame.
   void useFreeFlyCamera(GpuAssetCache& assetCache);
 
-  // True for the object under the cursor; the editor reads it to drive Ctrl-click selection.
+  // True for the object under the cursor; the editor reads it to drive Ctrl-click selection. Only an object
+  // drawn last frame can report true.
   [[nodiscard]] bool isSelected(const uuids::uuid& uuid) const;
 
   // What the viewport is currently looking through: the last view matrix updateCamera pushed for a
