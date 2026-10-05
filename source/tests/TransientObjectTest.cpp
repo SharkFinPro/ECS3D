@@ -58,7 +58,7 @@ TEST(TransientObject, SyncBuildsTheObjectAndPreservesUuids)
             parsed.at("children").at(0).at("uuid").get<std::string>());
 }
 
-TEST(TransientObject, ManagerIsPrivateAndOwnsTheObject)
+TEST(TransientObject, ManagerOwnsTheObjectAndItsChildren)
 {
   const fixtures::Scene scene;
   TransientObject transient(scene.componentRegistry);
@@ -66,9 +66,70 @@ TEST(TransientObject, ManagerIsPrivateAndOwnsTheObject)
   ASSERT_TRUE(transient.syncFromBody(makeBody("Block")));
 
   ASSERT_NE(transient.manager(), nullptr);
-  EXPECT_NE(transient.manager(), scene.objectManager.get());
   EXPECT_EQ(transient.object()->getManager(), transient.manager());
-  EXPECT_TRUE(scene.objectManager->getObjects().empty());
+  const auto child = transient.object()->getChildren().front();
+  EXPECT_EQ(transient.manager()->getObjectByUUID(transient.object()->getUUID()), transient.object());
+  EXPECT_EQ(transient.manager()->getObjectByUUID(child->getUUID()), child);
+}
+
+TEST(TransientObject, RigidBodyComponentRoundTripsThroughSyncAndSerialize)
+{
+  const fixtures::Scene scene;
+  TransientObject transient(scene.componentRegistry);
+  fixtures::Scene authoring;
+  const auto root = fixtures::addObject(authoring, "Body", glm::vec3(0));
+  fixtures::addRigidBody(root);
+  const auto body = root->serialize();
+
+  ASSERT_TRUE(transient.syncFromBody(body.dump()));
+
+  const auto findRigidBody = [](const nlohmann::json& object)
+  {
+    for (const auto& component : object.at("components"))
+    {
+      if (component.at("type").get<std::string>() == "RigidBody")
+      {
+        return component;
+      }
+    }
+    return nlohmann::json();
+  };
+
+  const auto expected = findRigidBody(body);
+  ASSERT_FALSE(expected.is_null());
+  EXPECT_EQ(findRigidBody(nlohmann::json::parse(transient.serialize())), expected);
+}
+
+TEST(TransientObject, UnknownComponentTypeLeavesNoObjectAndRecovers)
+{
+  const fixtures::Scene scene;
+  TransientObject transient(scene.componentRegistry);
+  auto body = nlohmann::json::parse(makeBody("Block"));
+  body["components"].push_back({ { "type", "NoSuchComponent" } });
+
+  EXPECT_TRUE(transient.syncFromBody(body.dump()));
+
+  EXPECT_EQ(transient.object(), nullptr);
+  EXPECT_EQ(transient.manager(), nullptr);
+
+  EXPECT_TRUE(transient.syncFromBody(makeBody("Block")));
+  EXPECT_NE(transient.object(), nullptr);
+}
+
+TEST(TransientObject, MalformedUuidLeavesNoObjectAndRecovers)
+{
+  const fixtures::Scene scene;
+  TransientObject transient(scene.componentRegistry);
+  auto body = nlohmann::json::parse(makeBody("Block"));
+  body["uuid"] = "not-a-uuid";
+
+  EXPECT_TRUE(transient.syncFromBody(body.dump()));
+
+  EXPECT_EQ(transient.object(), nullptr);
+  EXPECT_EQ(transient.manager(), nullptr);
+
+  EXPECT_TRUE(transient.syncFromBody(makeBody("Block")));
+  EXPECT_NE(transient.object(), nullptr);
 }
 
 TEST(TransientObject, SameBodyAgainDoesNotRebuild)
