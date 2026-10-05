@@ -24,12 +24,9 @@ void ScriptSystem::ensureEngine()
     return;
   }
 
-  // Compiling the user scripts (the bridge's init) is heavy, so the runtime is built once on first
-  // use rather than in the constructor. Build into a local first so a failure leaves m_engine null and
-  // the next call retries instead of holding a half-initialized runtime.
-  auto engine = m_makeRuntime();
-
-  m_engine = std::move(engine);
+  // Built once on first use (compiling the user scripts is heavy); a throw leaves m_engine null so the
+  // next call retries.
+  m_engine = m_makeRuntime();
 
   m_scriptsSnapshot = takeSnapshot();
 }

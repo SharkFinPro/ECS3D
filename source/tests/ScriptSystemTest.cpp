@@ -169,7 +169,7 @@ namespace {
       };
     }
 
-    ScriptSystem system{ factory() };
+    ScriptSystem scriptSystem{ factory() };
 
     void TearDown() override
     {
@@ -245,7 +245,7 @@ namespace {
     const auto a = addScriptedObject("A", { "Mover", "Spinner" });
     const auto b = addScriptedObject("B", { "Mover" });
 
-    system.start(manager());
+    scriptSystem.start(manager());
 
     for (const auto& [object, className] : { std::pair{ a, "Mover" }, std::pair{ a, "Spinner" },
                                              std::pair{ b, "Mover" } })
@@ -255,7 +255,7 @@ namespace {
       EXPECT_LT(indexOf(call("attach", object, className)), indexOf(call("start", object, className)));
     }
 
-    system.start(manager());
+    scriptSystem.start(manager());
 
     EXPECT_EQ(count(call("attach", a, "Mover")), 1);
     EXPECT_EQ(count(call("start", a, "Mover")), 1);
@@ -291,12 +291,12 @@ namespace {
   {
     const auto a = addScriptedObject("A", { "Mover" });
     const auto b = addScriptedObject("B", {});
-    system.start(manager());
+    scriptSystem.start(manager());
     ASSERT_EQ(count(call("attach", b, "Spinner")), 0);
 
     addScript(b, "Spinner");
-    system.fixedUpdate(manager(), 0.02f);
-    system.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
 
     EXPECT_EQ(count(call("attach", b, "Spinner")), 1);
     EXPECT_EQ(count(call("start", b, "Spinner")), 1);
@@ -310,16 +310,16 @@ namespace {
   TEST_F(ScriptSystemTest, VariableUpdateSkipsAScriptThatIsNotAttachedYet)
   {
     const auto a = addScriptedObject("A", { "Mover" });
-    system.start(manager());
+    scriptSystem.start(manager());
     addScript(a, "Spinner");
 
-    system.variableUpdate(manager());
+    scriptSystem.variableUpdate(manager());
 
     EXPECT_EQ(count(call("variable", a, "Mover")), 1);
     EXPECT_EQ(count(call("variable", a, "Spinner")), 0);
 
-    system.fixedUpdate(manager(), 0.02f);
-    system.variableUpdate(manager());
+    scriptSystem.fixedUpdate(manager(), 0.02f);
+    scriptSystem.variableUpdate(manager());
 
     EXPECT_EQ(count(call("variable", a, "Spinner")), 1);
   }
@@ -327,12 +327,12 @@ namespace {
   TEST_F(ScriptSystemTest, AScriptAttachedBeforeTheSceneRunsIsStartedByTheFirstUpdate)
   {
     const auto a = addScriptedObject("A", { "Mover" });
-    system.attachAll(manager());
+    scriptSystem.attachAll(manager());
     ASSERT_EQ(count(call("attach", a, "Mover")), 1);
     ASSERT_EQ(count(call("start", a, "Mover")), 0);
 
-    system.fixedUpdate(manager(), 0.02f);
-    system.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
 
     EXPECT_EQ(count(call("attach", a, "Mover")), 1);
     EXPECT_EQ(count(call("start", a, "Mover")), 1);
@@ -342,10 +342,10 @@ namespace {
   {
     const auto a = addScriptedObject("A", { "Mover" });
     const auto script = addScript(a, "Spinner");
-    system.start(manager());
+    scriptSystem.start(manager());
 
     a->removeComponent(script);
-    system.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
 
     EXPECT_EQ(count(call("stop", a, "Spinner")), 1);
     EXPECT_EQ(count(call("detach", a, "Spinner")), 1);
@@ -354,7 +354,7 @@ namespace {
     EXPECT_EQ(count(call("fixed", a, "Mover")), 1);
     EXPECT_EQ(count(call("detach", a, "Mover")), 0);
 
-    system.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
 
     EXPECT_EQ(count(call("detach", a, "Spinner")), 1);
   }
@@ -363,11 +363,11 @@ namespace {
   {
     const auto a = addScriptedObject("A", { "Mover" });
     const auto b = addScriptedObject("B", { "Mover" });
-    system.start(manager());
+    scriptSystem.start(manager());
 
     manager().removeObject(a);
     manager().deleteObjectsMarkedForDeletion();
-    system.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
 
     EXPECT_EQ(count(call("stop", a, "Mover")), 1);
     EXPECT_EQ(count(call("detach", a, "Mover")), 1);
@@ -379,11 +379,11 @@ namespace {
   {
     const auto a = addScriptedObject("A", {});
     const auto script = addScript(a, "Mover");
-    system.attachAll(manager());
+    scriptSystem.attachAll(manager());
     ASSERT_EQ(count(call("attach", a, "Mover")), 1);
 
     a->removeComponent(script);
-    system.attachAll(manager());
+    scriptSystem.attachAll(manager());
 
     EXPECT_EQ(count(call("detach", a, "Mover")), 1);
     EXPECT_EQ(count(call("stop", a, "Mover")), 0);
@@ -393,12 +393,12 @@ namespace {
   {
     const auto a = addScriptedObject("A", {});
     const auto oldScript = addScript(a, "Mover");
-    system.start(manager());
+    scriptSystem.start(manager());
     ASSERT_EQ(count(call("attach", a, "Mover")), 1);
 
     a->removeComponent(oldScript);
     addScript(a, "Mover");
-    system.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
 
     EXPECT_EQ(count(call("stop", a, "Mover")), 1);
     EXPECT_EQ(count(call("detach", a, "Mover")), 1);
@@ -406,11 +406,29 @@ namespace {
     EXPECT_EQ(count(call("start", a, "Mover")), 2);
     EXPECT_EQ(count(call("fixed", a, "Mover")), 1);
 
-    system.fixedUpdate(manager(), 0.02f);
+    scriptSystem.fixedUpdate(manager(), 0.02f);
 
     EXPECT_EQ(count(call("detach", a, "Mover")), 1);
     EXPECT_EQ(count(call("attach", a, "Mover")), 2);
     EXPECT_EQ(count(call("fixed", a, "Mover")), 2);
+  }
+
+  TEST_F(ScriptSystemTest, AReplacementIsStillDetectedWhenTheOldScriptComponentIsDestroyed)
+  {
+    const auto a = addScriptedObject("A", {});
+    auto oldScript = addScript(a, "Mover");
+    scriptSystem.start(manager());
+    ASSERT_EQ(count(call("attach", a, "Mover")), 1);
+
+    a->removeComponent(oldScript);
+    oldScript.reset();
+    addScript(a, "Mover");
+    scriptSystem.fixedUpdate(manager(), 0.02f);
+
+    EXPECT_EQ(count(call("stop", a, "Mover")), 1);
+    EXPECT_EQ(count(call("detach", a, "Mover")), 1);
+    EXPECT_EQ(count(call("attach", a, "Mover")), 2);
+    EXPECT_EQ(count(call("start", a, "Mover")), 2);
   }
 
   TEST_F(ScriptSystemTest, AttachWritesTheStoredFieldsOfEveryExposedType)
@@ -424,7 +442,7 @@ namespace {
       { { "name", "offset" }, { "type", "vector3" }, { "value", nlohmann::json::array({ 1.0, 2.0, 3.0 }) } }
     });
 
-    system.start(manager());
+    scriptSystem.start(manager());
 
     EXPECT_FLOAT_EQ(state.floats["speed"], 1.5f);
     EXPECT_EQ(state.ints["count"], 7);
@@ -440,13 +458,13 @@ namespace {
     state.exposedByClass["Mover"] = exposedFieldsJson;
     const auto a = fixtures::addObject(scene, "A");
     const auto script = addScript(a, "Mover");
-    system.start(manager());
+    scriptSystem.start(manager());
     state.floats["speed"] = 9.5f;
     state.ints["count"] = -4;
     state.bools["enabled"] = true;
     state.vectors["offset"] = glm::vec3(4.0f, 5.0f, 6.0f);
 
-    system.syncFieldsToData(manager());
+    scriptSystem.syncFieldsToData(manager());
 
     ASSERT_EQ(script->getFields().size(), 4u);
     EXPECT_EQ(findField(script, "speed").at("type"), "float");
@@ -470,7 +488,7 @@ namespace {
       { { "name", "speed" }, { "type", "float" }, { "value", 3.0 } }
     });
 
-    system.start(manager());
+    scriptSystem.start(manager());
 
     EXPECT_EQ(count("setFloat|speed"), 1);
     EXPECT_FLOAT_EQ(state.floats["speed"], 3.0f);
@@ -484,16 +502,16 @@ namespace {
     state.exposedByClass["Mover"] = exposedFieldsJson;
     const auto attached = addScriptedObject("A", { "Mover" });
     const auto detached = addScriptedObject("B", {});
-    system.start(manager());
+    scriptSystem.start(manager());
     const nlohmann::json edit = nlohmann::json::array({
       { { "name", "count" }, { "type", "int" }, { "value", 12 } }
     });
 
-    system.applyScriptFieldEdit(detached->getUUID(), "Mover", edit);
+    scriptSystem.applyScriptFieldEdit(detached->getUUID(), "Mover", edit);
 
     EXPECT_EQ(count("setInt|count"), 0);
 
-    system.applyScriptFieldEdit(attached->getUUID(), "Mover", edit);
+    scriptSystem.applyScriptFieldEdit(attached->getUUID(), "Mover", edit);
 
     EXPECT_EQ(count("setInt|count"), 1);
     EXPECT_EQ(state.ints["count"], 12);
@@ -504,25 +522,25 @@ namespace {
     const auto unknownA = uuids::uuid::from_string("00000000-0000-0000-0000-0000000000a1").value();
     const auto unknownB = uuids::uuid::from_string("00000000-0000-0000-0000-0000000000b1").value();
 
-    system.dispatchCollisionEvent(manager(), unknownA, unknownB, CollisionEvent::enter);
+    scriptSystem.dispatchCollisionEvent(manager(), unknownA, unknownB, CollisionEvent::enter);
 
     EXPECT_EQ(state.created, 0);
     EXPECT_TRUE(state.calls.empty());
 
     const auto scripted = addScriptedObject("A", { "Mover" });
     const auto plain = addScriptedObject("B", {});
-    system.start(manager());
+    scriptSystem.start(manager());
     state.calls.clear();
 
-    system.dispatchCollisionEvent(manager(), unknownA, unknownB, CollisionEvent::enter);
+    scriptSystem.dispatchCollisionEvent(manager(), unknownA, unknownB, CollisionEvent::enter);
 
     EXPECT_TRUE(state.calls.empty());
 
-    system.dispatchCollisionEvent(manager(), plain->getUUID(), unknownA, CollisionEvent::enter);
+    scriptSystem.dispatchCollisionEvent(manager(), plain->getUUID(), unknownA, CollisionEvent::enter);
 
     EXPECT_TRUE(state.calls.empty());
 
-    system.dispatchCollisionEvent(manager(), scripted->getUUID(), unknownB, CollisionEvent::enter);
+    scriptSystem.dispatchCollisionEvent(manager(), scripted->getUUID(), unknownB, CollisionEvent::enter);
 
     EXPECT_EQ(state.calls.size(), 1u);
     EXPECT_EQ(count(call("collision", scripted, "Mover") + "|" + uuids::to_string(unknownB) + "|0"), 1);
@@ -532,10 +550,10 @@ namespace {
   {
     const auto a = addScriptedObject("A", { "Mover", "Spinner" });
     const auto b = addScriptedObject("B", { "Mover" });
-    system.start(manager());
+    scriptSystem.start(manager());
     state.calls.clear();
 
-    system.dispatchCollisionEvent(manager(), a->getUUID(), b->getUUID(), CollisionEvent::stay);
+    scriptSystem.dispatchCollisionEvent(manager(), a->getUUID(), b->getUUID(), CollisionEvent::stay);
 
     EXPECT_EQ(state.calls.size(), 3u);
     EXPECT_EQ(count(call("collision", a, "Mover") + "|" + id(b) + "|1"), 1);
@@ -543,7 +561,7 @@ namespace {
     EXPECT_EQ(count(call("collision", b, "Mover") + "|" + id(a) + "|1"), 1);
 
     state.calls.clear();
-    system.dispatchCollisionEvent(manager(), a->getUUID(), b->getUUID(), CollisionEvent::exit);
+    scriptSystem.dispatchCollisionEvent(manager(), a->getUUID(), b->getUUID(), CollisionEvent::exit);
 
     EXPECT_EQ(count(call("collision", a, "Mover") + "|" + id(b) + "|2"), 1);
     EXPECT_EQ(count(call("collision", b, "Mover") + "|" + id(a) + "|2"), 1);
@@ -553,14 +571,14 @@ namespace {
   {
     const auto a = addScriptedObject("A", { "Mover" });
     const auto b = addScriptedObject("B", { "Mover" });
-    system.start(manager());
+    scriptSystem.start(manager());
     state.calls.clear();
     const auto bUUID = b->getUUID();
     const auto bId = id(b);
     manager().removeObject(b);
     manager().deleteObjectsMarkedForDeletion();
 
-    system.dispatchCollisionEvent(manager(), a->getUUID(), bUUID, CollisionEvent::exit);
+    scriptSystem.dispatchCollisionEvent(manager(), a->getUUID(), bUUID, CollisionEvent::exit);
 
     EXPECT_EQ(state.calls.size(), 1u);
     EXPECT_EQ(count(call("collision", a, "Mover") + "|" + bId + "|2"), 1);
@@ -570,10 +588,10 @@ namespace {
   {
     const auto a = addScriptedObject("A", { "Mover", "Spinner" });
     const auto b = addScriptedObject("B", { "Mover" });
-    system.start(manager());
-    system.fixedUpdate(manager(), 0.02f);
+    scriptSystem.start(manager());
+    scriptSystem.fixedUpdate(manager(), 0.02f);
 
-    system.stop(manager());
+    scriptSystem.stop(manager());
 
     for (const auto& [object, className] : { std::pair{ a, "Mover" }, std::pair{ a, "Spinner" },
                                              std::pair{ b, "Mover" } })
@@ -584,9 +602,9 @@ namespace {
     }
 
     state.calls.clear();
-    system.dispatchCollisionEvent(manager(), a->getUUID(), b->getUUID(), CollisionEvent::enter);
-    system.variableUpdate(manager());
-    system.stop(manager());
+    scriptSystem.dispatchCollisionEvent(manager(), a->getUUID(), b->getUUID(), CollisionEvent::enter);
+    scriptSystem.variableUpdate(manager());
+    scriptSystem.stop(manager());
 
     EXPECT_TRUE(state.calls.empty());
   }
@@ -595,10 +613,10 @@ namespace {
   {
     const auto a = addScriptedObject("A", { "Mover" });
     const auto script = addScript(a, "Spinner");
-    system.start(manager());
+    scriptSystem.start(manager());
     a->removeComponent(script);
 
-    system.stop(manager());
+    scriptSystem.stop(manager());
 
     EXPECT_EQ(count(call("stop", a, "Spinner")), 1);
     EXPECT_EQ(count(call("detach", a, "Spinner")), 1);
@@ -609,12 +627,12 @@ namespace {
   {
     const auto a = addScriptedObject("A", { "Mover" });
 
-    system.stop(manager());
+    scriptSystem.stop(manager());
 
     EXPECT_EQ(state.created, 0);
     EXPECT_TRUE(state.calls.empty());
 
-    system.start(manager());
+    scriptSystem.start(manager());
 
     EXPECT_EQ(state.created, 1);
     EXPECT_EQ(count(call("attach", a, "Mover")), 1);
