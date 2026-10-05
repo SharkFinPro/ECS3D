@@ -14,8 +14,7 @@
   return !net::isMutationMessage(type) || (editMode && connectionIsEditor);
 }
 
-// What a scene-control op does, in the order ServerApp executes it: startScene/pauseScene/resetScene on the
-// scene manager, then scripts, then the collision reset.
+// What a scene-control op does. The order the steps run in lives in ServerApp::applySceneControl.
 struct SceneControlPlan
 {
   bool startScene = false;

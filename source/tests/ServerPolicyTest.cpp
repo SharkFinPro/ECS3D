@@ -4,12 +4,41 @@
 #include <ServerPolicy.h>
 
 #include <cstdint>
+#include <limits>
 #include <string>
 
 namespace {
-  // MessageType has no count sentinel; the last enumerator bounds the sweep, so a type appended after it
-  // must be added here to be covered.
-  constexpr auto lastMessageType = static_cast<uint8_t>(net::MessageType::objectComponentsChanged);
+  // No default, so a new enumerator draws a -Wswitch warning until its expectation is stated here.
+  [[nodiscard]] constexpr bool expectedMutation(const net::MessageType type)
+  {
+    switch (type)
+    {
+      case net::MessageType::editComponent:
+      case net::MessageType::sceneEdit:
+      case net::MessageType::sceneControl:
+      case net::MessageType::loadProject:
+      case net::MessageType::addAsset:
+      case net::MessageType::renameAsset:
+      case net::MessageType::removeAsset:
+        return true;
+
+      case net::MessageType::undefined:
+      case net::MessageType::join:
+      case net::MessageType::snapshot:
+      case net::MessageType::stateDelta:
+      case net::MessageType::inputState:
+      case net::MessageType::editStatus:
+      case net::MessageType::sceneStatus:
+      case net::MessageType::objectSpawned:
+      case net::MessageType::objectDestroyed:
+      case net::MessageType::playerSlot:
+      case net::MessageType::serverLog:
+      case net::MessageType::objectComponentsChanged:
+        return false;
+    }
+
+    return false;
+  }
 
   [[nodiscard]] std::string describe(const net::MessageType type, const bool editMode, const bool isEditor)
   {
@@ -25,29 +54,40 @@ namespace {
   }
 }
 
-TEST(ServerPolicyTest, MutationsPassOnlyOnEditServerFromEditorConnection)
+TEST(ServerPolicyTest, MutationSetMatchesIndependentlyStatedExpectation)
 {
   int mutations = 0;
-  int others = 0;
 
-  for (int value = 0; value <= lastMessageType; ++value)
+  for (int value = 0; value <= std::numeric_limits<uint8_t>::max(); ++value)
   {
     const auto type = static_cast<net::MessageType>(value);
-    const bool isMutation = net::isMutationMessage(type);
-    isMutation ? ++mutations : ++others;
+    EXPECT_EQ(net::isMutationMessage(type), expectedMutation(type)) << value;
+
+    if (expectedMutation(type))
+    {
+      ++mutations;
+    }
+  }
+
+  EXPECT_EQ(mutations, 7);
+}
+
+TEST(ServerPolicyTest, MutationsPassOnlyOnEditServerFromEditorConnection)
+{
+  for (int value = 0; value <= std::numeric_limits<uint8_t>::max(); ++value)
+  {
+    const auto type = static_cast<net::MessageType>(value);
+    const bool isMutation = expectedMutation(type);
 
     for (const bool editMode : {false, true})
     {
       for (const bool isEditor : {false, true})
       {
-        const bool expected = !isMutation || (editMode && isEditor);
+        const bool expected = isMutation ? (editMode && isEditor) : true;
         EXPECT_EQ(isMutationAuthorized(type, editMode, isEditor), expected) << describe(type, editMode, isEditor);
       }
     }
   }
-
-  EXPECT_EQ(mutations, 7);
-  EXPECT_GT(others, 0);
 }
 
 TEST(ServerPolicyTest, NamedMutationTypes)
