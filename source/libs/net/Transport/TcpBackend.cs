@@ -58,7 +58,8 @@ internal sealed class TcpBackend : TransportBackend
   // dropped; peers the broadcast never reached are skipped for that message and kept. Two seconds because
   // a stall then costs at most one tick's worth before the peer responsible is dropped, while still being
   // far longer than any plausible snapshot send takes on a healthy link.
-  private const int SendTimeoutMs = 2000;
+  // Internal and mutable so ECS3DManagedTests can shorten it; the default is the production value.
+  internal int SendTimeoutMs = 2000;
 
   // -- Client --
   private TcpClient? _client;
@@ -68,7 +69,7 @@ internal sealed class TcpBackend : TransportBackend
   // Comfortably under the callers' 15 s retry budget so several attempts fit, and long enough for a real
   // WAN handshake. Unbounded, one attempt against a host that routes but never answers runs to the OS
   // connect timeout (~21 s on Windows) and outlives the whole budget on its own.
-  private const int ConnectTimeoutMs = 3000;
+  internal int ConnectTimeoutMs = 3000;
 
   public override void ServerStart(int port, bool editMode, string expectedToken)
   {
@@ -343,7 +344,8 @@ internal sealed class TcpBackend : TransportBackend
       // timing out (ReadExact loops per partial read, so a per-read timeout alone doesn't bound the total).
       client.ReceiveTimeout = HandshakeTimeoutMs;
       var handshakeDeadline = Environment.TickCount64 + HandshakeTimeoutMs;
-      if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes, handshakeDeadline) &&
+      if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes, handshakeDeadline,
+            BodyReadTimeoutMs) &&
           handshakeType == HandshakeType && Authorize(handshakePayload))
       {
         // Authorize succeeded: tell the native side which role this connection was actually granted, so
@@ -362,7 +364,7 @@ internal sealed class TcpBackend : TransportBackend
 
         while (_serverRunning)
         {
-          if (!ReadFrame(stream, out var type, out var payload))
+          if (!ReadFrame(stream, out var type, out var payload, bodyReadTimeoutMs: BodyReadTimeoutMs))
           {
             break;
           }
@@ -502,7 +504,7 @@ internal sealed class TcpBackend : TransportBackend
       var stream = client.GetStream();
       while (_clientRunning)
       {
-        if (!ReadFrame(stream, out var type, out var payload))
+        if (!ReadFrame(stream, out var type, out var payload, bodyReadTimeoutMs: BodyReadTimeoutMs))
         {
           break;
         }
@@ -578,7 +580,7 @@ internal sealed class TcpBackend : TransportBackend
   // Internal (rather than private) so ECS3DManagedTests can decode a frame straight off a MemoryStream
   // via InternalsVisibleTo (see Transport/AssemblyInfo.cs), the counterpart to FrameBytes above.
   internal static bool ReadFrame(Stream stream, out byte type, out byte[] payload, int maxBytes = MaxMessageBytes,
-    long? deadline = null)
+    long? deadline = null, int bodyReadTimeoutMs = DefaultBodyReadTimeoutMs)
   {
     type = 0;
     payload = Array.Empty<byte>();
@@ -608,7 +610,7 @@ internal sealed class TcpBackend : TransportBackend
       return false;
     }
 
-    var body = ReadBody(stream, bodyLen, deadline);
+    var body = ReadBody(stream, bodyLen, deadline, bodyReadTimeoutMs);
     if (body is null)
     {
       return false;
@@ -631,7 +633,10 @@ internal sealed class TcpBackend : TransportBackend
   // progress and never trips it; only a peer that stops sending outright does. Comfortably above how long
   // even a very slow link takes to deliver one chunk (64 KiB at 7 KB/s, a 56k-modem-class rate, is under
   // 10 s), so this only fires on an actual stall.
-  private const int BodyReadTimeoutMs = 20000;
+  private const int DefaultBodyReadTimeoutMs = 20000;
+
+  // Instance copy of the default above, internal so ECS3DManagedTests can shorten it.
+  internal int BodyReadTimeoutMs = DefaultBodyReadTimeoutMs;
 
   // Reads a bodyLen-byte body into a buffer sized to what has actually arrived rather than to bodyLen up
   // front: it starts at min(BodyReadChunkBytes, bodyLen) and only grows (doubling, capped at bodyLen) once
@@ -639,7 +644,7 @@ internal sealed class TcpBackend : TransportBackend
   // time never costs more than roughly twice what it has actually sent, not the whole declared length.
   // A body that fits the starting size - the common case - fills it exactly with no grow and no extra
   // copy at all; a larger one costs at most O(log(bodyLen / BodyReadChunkBytes)) resize copies on top.
-  private static byte[]? ReadBody(Stream stream, int bodyLen, long? deadline)
+  private static byte[]? ReadBody(Stream stream, int bodyLen, long? deadline, int bodyReadTimeoutMs)
   {
     var buffer = new byte[Math.Min(BodyReadChunkBytes, bodyLen)];
     var filled = 0;
@@ -652,7 +657,7 @@ internal sealed class TcpBackend : TransportBackend
     if (applyTimeout)
     {
       savedTimeout = stream.ReadTimeout;
-      stream.ReadTimeout = BodyReadTimeoutMs;
+      stream.ReadTimeout = bodyReadTimeoutMs;
     }
 
     try
@@ -684,7 +689,7 @@ internal sealed class TcpBackend : TransportBackend
           // oversized-frame refusal above, since both are the same suspicious pattern: worth seeing, not
           // worth panicking over. The caller tears down only this connection, same as any other read
           // failure.
-          Transport.Log(TransportLogLevel.Warn, $"Dropped a connection: no body progress for {BodyReadTimeoutMs} ms.");
+          Transport.Log(TransportLogLevel.Warn, $"Dropped a connection: no body progress for {bodyReadTimeoutMs} ms.");
 
           return null;
         }
