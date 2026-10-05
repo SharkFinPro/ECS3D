@@ -2,242 +2,48 @@
 // turns a read past the end of a short payload into a failure rather than a lucky pass.
 #include <gtest/gtest.h>
 
-#include "TestScene.h"
 #include "TestPrinters.h"
 #include "WireTruncation.h"
-#include "ComponentRegistration.h"
-#include "ComponentRegistry.h"
-#include "ProjectPacker.h"
-#include "ProjectSerializer.h"
-#include "Replication.h"
+#include "WireTruncationFixtures.h"
 #include "ServerLog.h"
-#include "assets/AssetRegistry.h"
-#include "objects/Object.h"
-#include "objects/ObjectManager.h"
-#include "objects/components/LightRenderer.h"
-#include "objects/components/ModelRenderer.h"
-#include "objects/components/RigidBody.h"
-#include "objects/components/Script.h"
-#include "objects/components/Transform.h"
-#include "objects/components/collisions/BoxCollider.h"
-#include "objects/components/collisions/SphereCollider.h"
-#include "scenes/SceneAsset.h"
-#include "scenes/SceneManager.h"
 
 #include <LogEntry.h>
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
-#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <glm/vec3.hpp>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
 namespace {
   using fixtures::Scene;
   using fixtures::makeScene;
+  using wiretest::buildResidentProject;
+  using wiretest::buildSnapshotProject;
+  using wiretest::buildTree;
+  using wiretest::canonical;
+  using wiretest::copyOf;
   using wiretest::forEachProperPrefix;
+  using wiretest::makeProject;
+  using wiretest::makeResidentScene;
+  using wiretest::packInput;
+  using wiretest::stateOf;
+  using wiretest::uuidFrom;
 
-  bool comesFromAnUnorderedContainer(const std::string& key, const nlohmann::json& array)
+  // The positions the delta test's objects held before the delta moved them: 1, 2, 3 on x, in order.
+  void resetToOriginalPositions(const Scene& scene, const std::vector<std::shared_ptr<Object>>& order)
   {
-    if (key == "models" || key == "textures" || key == "prefabs" || key == "scenes" || key == "components")
+    for (std::size_t i = 0; i < order.size(); ++i)
     {
-      return true;
+      const auto object = scene.objectManager->getObjectByUUID(order[i]->getUUID());
+      fixtures::transformOf(object)->setPosition({ 1.0f + static_cast<float>(i), 0.0f, 0.0f });
     }
-
-    return key == "scripts" && !array.empty() && array.front().is_object() && array.front().contains("uuid");
-  }
-
-  // Components, assets and scenes serialize out of unordered containers, so equal states can dump in
-  // different orders; sort those arrays and leave the vector-backed ones as they are.
-  nlohmann::json canonical(const nlohmann::json& value, const std::string& key = "")
-  {
-    if (value.is_object())
-    {
-      nlohmann::json result = nlohmann::json::object();
-
-      for (const auto& [childKey, item] : value.items())
-      {
-        result[childKey] = canonical(item, childKey);
-      }
-
-      return result;
-    }
-
-    if (!value.is_array())
-    {
-      return value;
-    }
-
-    std::vector<nlohmann::json> items;
-    items.reserve(value.size());
-
-    for (const auto& item : value)
-    {
-      items.push_back(canonical(item, key));
-    }
-
-    if (comesFromAnUnorderedContainer(key, value))
-    {
-      std::ranges::sort(items, [](const nlohmann::json& first, const nlohmann::json& second) {
-        return first.dump() < second.dump();
-      });
-    }
-
-    return items;
-  }
-
-  nlohmann::json stateOf(const Scene& scene)
-  {
-    return canonical(scene.objectManager->serialize());
-  }
-
-  // A parent with a box collider, model renderer and script, a child with a sphere collider, and a
-  // grandchild: several strings, nested objects and component kinds in one payload.
-  std::shared_ptr<Object> buildTree(const Scene& scene)
-  {
-    const auto parent = addObject(scene, "Spawned Parent", { 1.0f, 2.0f, 3.0f });
-    fixtures::addBoxCollider(parent);
-
-    const auto model = std::make_shared<ModelRenderer>();
-    model->setModelUUID(uuids::uuid::from_string("11111111-1111-1111-1111-111111111111").value());
-    parent->addComponent(model);
-
-    const auto script = std::make_shared<Script>();
-    script->setClassName("SweepScript");
-    script->setFields(nlohmann::json{ { "speed", 4.5 }, { "label", "hello" } });
-    parent->addComponent(script);
-
-    const auto child = addChildObject(scene, "Child A", parent);
-    fixtures::addSphereCollider(child, 2.5f);
-    addChildObject(scene, "Grandchild", child);
-
-    return parent;
-  }
-
-  // The receiving scene already holds something, so "unchanged" is a comparison against real content.
-  Scene makeResidentScene()
-  {
-    auto scene = makeScene();
-    addObject(scene, "Resident", { 9.0f, 8.0f, 7.0f });
-
-    return scene;
-  }
-
-  // A scene holding the same objects, uuids included, as the one packed.
-  Scene copyOf(const Scene& source)
-  {
-    auto copy = makeScene();
-
-    net::Message snapshot(net::MessageType::snapshot);
-    source.objectManager->pack(snapshot);
-    net::MessageReader reader(snapshot);
-    copy.objectManager->unpack(reader);
-
-    return copy;
-  }
-
-  struct Project {
-    std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
-    std::unique_ptr<AssetRegistry> assetRegistry = std::make_unique<AssetRegistry>();
-    std::unique_ptr<SceneManager> sceneManager = std::make_unique<SceneManager>();
-    std::unique_ptr<ProjectSerializer> serializer;
-    std::unique_ptr<ProjectPacker> packer;
-  };
-
-  Project makeProject()
-  {
-    Project project;
-    registerDataComponents(*project.componentRegistry);
-
-    project.serializer = std::make_unique<ProjectSerializer>(project.assetRegistry.get(),
-                                                             project.sceneManager.get(),
-                                                             project.componentRegistry);
-    project.packer = std::make_unique<ProjectPacker>(project.assetRegistry.get(),
-                                                     project.sceneManager.get(),
-                                                     project.componentRegistry);
-
-    return project;
-  }
-
-  uuids::uuid uuidFrom(const std::string& text)
-  {
-    return uuids::uuid::from_string(text).value();
-  }
-
-  std::shared_ptr<SceneAsset> addScene(const Project& project, const std::string& uuid, const std::string& name)
-  {
-    const auto scene = std::make_shared<SceneAsset>(uuidFrom(uuid), name, project.componentRegistry);
-    project.sceneManager->addScene(scene);
-
-    return scene;
-  }
-
-  void buildSnapshotProject(const Project& project)
-  {
-    project.assetRegistry->registerAsset({ .uuid = uuidFrom("11111111-1111-1111-1111-111111111111"),
-                                           .type = AssetType::Model, .path = "assets/models/cube.glb" });
-    project.assetRegistry->registerAsset({ .uuid = uuidFrom("22222222-2222-2222-2222-222222222222"),
-                                           .type = AssetType::Script, .path = "scripts/UserScripts/Player.cs",
-                                           .className = "PlayerScript" });
-
-    const nlohmann::json prefabBody = {
-      { "name", "Block" },
-      { "uuid", "55555555-5555-5555-5555-555555555555" },
-      { "children", nlohmann::json::array() },
-      { "components", nlohmann::json::array() },
-      { "scripts", nlohmann::json::array() }
-    };
-    project.assetRegistry->registerAsset({ .uuid = uuidFrom("44444444-4444-4444-4444-444444444444"),
-                                           .type = AssetType::Prefab, .path = "Block",
-                                           .body = prefabBody.dump(), .displayName = "Fancy Block" });
-
-    const auto main = addScene(project, "66666666-6666-6666-6666-666666666666", "Main");
-    const auto body = std::make_shared<Object>("Body");
-    main->getObjectManager()->addObject(body);
-    body->getComponent<Transform>(ComponentType::transform)->setPosition({ 1.5f, -2.0f, 3.25f });
-    body->addComponent(std::make_shared<RigidBody>());
-    body->addComponent(std::make_shared<BoxCollider>());
-
-    const auto script = std::make_shared<Script>();
-    script->setClassName("PlayerScript");
-    script->setFields(nlohmann::json{ { "speed", 4.5 } });
-    body->addComponent(script);
-
-    const auto child = std::make_shared<Object>("Child");
-    child->setParent(body);
-    main->getObjectManager()->addObject(child);
-    const auto sphere = std::make_shared<SphereCollider>();
-    child->addComponent(sphere);
-    sphere->setRadius(2.5f);
-
-    const auto lamp = std::make_shared<Object>("Lamp");
-    main->getObjectManager()->addObject(lamp);
-    lamp->addComponent(std::make_shared<LightRenderer>());
-
-    addScene(project, "77777777-7777-7777-7777-777777777777", "Empty");
-    project.sceneManager->loadScene(main);
-  }
-
-  void buildResidentProject(const Project& project)
-  {
-    project.assetRegistry->registerAsset({ .uuid = uuidFrom("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                                           .type = AssetType::Texture, .path = "assets/textures/old.png" });
-
-    const auto scene = addScene(project, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "Resident Scene");
-    scene->getObjectManager()->addObject(std::make_shared<Object>("Resident"));
-    project.sceneManager->loadScene(scene);
-  }
-
-  net::Message packInput(const std::vector<int>& keys)
-  {
-    return replication::buildInputState(true, keys, 10.0f, 20.0f, 1.0f, -1.0f, 0.5f, 5);
   }
 }
+
 
 TEST(WireTruncationSweep, EveryPrefixOfASnapshotIsRefusedAndLeavesTheProjectIntact)
 {
@@ -287,9 +93,7 @@ TEST(WireTruncationSweep, EveryPrefixOfAStateDeltaIsRefusedAndAppliesOnlyWholeEn
 
   forEachProperPrefix(delta, [&](const net::Message& prefix, const std::size_t length) {
     const auto fresh = copyOf(source);
-    fixtures::transformOf(fresh.objectManager->getObjectByUUID(first->getUUID()))->setPosition({ 1.0f, 0.0f, 0.0f });
-    fixtures::transformOf(fresh.objectManager->getObjectByUUID(second->getUUID()))->setPosition({ 2.0f, 0.0f, 0.0f });
-    fixtures::transformOf(fresh.objectManager->getObjectByUUID(third->getUUID()))->setPosition({ 3.0f, 0.0f, 0.0f });
+    resetToOriginalPositions(fresh, sourceOrder);
 
     EXPECT_ANY_THROW(replication::unpackStateDelta(*fresh.objectManager, prefix));
 
@@ -328,6 +132,31 @@ TEST(WireTruncationSweep, EveryPrefixOfAnObjectSpawnedIsRefusedAndLeavesTheScene
   replication::applyObjectSpawned(*target.objectManager, message);
   EXPECT_EQ(target.objectManager->getAllObjects().size(), objectCount + 3);
   EXPECT_NE(stateOf(target), before);
+}
+
+TEST(WireTruncationSweep, ARefusedObjectSpawnedLeavesNoUuidBehindInTheScene)
+{
+  const auto source = makeScene();
+  const auto message = replication::buildObjectSpawned(*buildTree(source));
+  const auto spawned = source.objectManager->getAllObjects();
+
+  const auto target = makeResidentScene();
+
+  forEachProperPrefix(message, [&](const net::Message& prefix, std::size_t) {
+    EXPECT_ANY_THROW(replication::applyObjectSpawned(*target.objectManager, prefix));
+  });
+
+  ASSERT_EQ(spawned.size(), 3u);
+  for (const auto& object : spawned)
+  {
+    EXPECT_EQ(target.objectManager->getObjectByUUID(object->getUUID()), nullptr);
+  }
+
+  replication::applyObjectSpawned(*target.objectManager, message);
+  for (const auto& object : spawned)
+  {
+    EXPECT_NE(target.objectManager->getObjectByUUID(object->getUUID()), nullptr);
+  }
 }
 
 TEST(WireTruncationSweep, EveryPrefixOfAnObjectDestroyedIsRefusedAndLeavesTheSceneIntact)
@@ -384,8 +213,9 @@ TEST(WireTruncationSweep, EveryPrefixOfAnObjectComponentsChangedIsRefused)
 namespace {
   // Every prefix of a component edit is refused. One that ends before the component body has started is a
   // malformed payload and changes nothing; one inside the body is partiallyApplied, which a component
-  // that unpacks field by field cannot avoid.
-  void expectEveryPrefixRefused(const Scene& scene, const net::Message& edit, const std::size_t bodyStart)
+  // that unpacks field by field cannot avoid, unless it parses before it assigns (unchangedInBody).
+  void expectEveryPrefixRefused(const Scene& scene, const net::Message& edit, const std::size_t bodyStart,
+                                const bool unchangedInBody)
   {
     const auto before = stateOf(scene);
 
@@ -400,6 +230,11 @@ namespace {
       else
       {
         EXPECT_EQ(result, replication::ComponentEditResult::partiallyApplied);
+
+        if (unchangedInBody)
+        {
+          EXPECT_EQ(stateOf(scene), before);
+        }
       }
     });
   }
@@ -466,8 +301,9 @@ TEST(WireTruncationSweep, EveryPrefixOfAScriptEditIsRefusedAndChangesNothing)
   script->setFields(original);
   const auto before = stateOf(scene);
 
-  const std::size_t bodyStart = sizeof(uint32_t) + 36 + sizeof(ComponentType) + sizeof(uint32_t) + 11;
-  expectEveryPrefixRefused(scene, edit, bodyStart);
+  const std::size_t bodyStart = sizeof(uint32_t) + 36 + sizeof(ComponentType) + sizeof(uint32_t) +
+                               std::string("SweepScript").size();
+  expectEveryPrefixRefused(scene, edit, bodyStart, true);
   EXPECT_EQ(stateOf(scene), before);
 
   EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, edit),
@@ -475,7 +311,7 @@ TEST(WireTruncationSweep, EveryPrefixOfAScriptEditIsRefusedAndChangesNothing)
   EXPECT_EQ(stateOf(scene), edited);
 }
 
-TEST(WireTruncationSweep, EveryPrefixOfASceneEditIsDiscardedBeforeItReachesTheScene)
+TEST(WireTruncationSweep, EveryPrefixOfASceneEditIsNotParsedAndLeavesTheSceneIntact)
 {
   const auto scene = makeResidentScene();
   const auto before = stateOf(scene);
@@ -490,27 +326,21 @@ TEST(WireTruncationSweep, EveryPrefixOfASceneEditIsDiscardedBeforeItReachesTheSc
     message.write(static_cast<uint8_t>(character));
   }
 
-  // The server parses the message bytes as JSON without exceptions and drops what is discarded.
-  const auto parse = [](const net::Message& source) {
-    const std::string text(source.bytes().begin(), source.bytes().end());
-    return nlohmann::json::parse(text, nullptr, false);
-  };
-
   forEachProperPrefix(message, [&](const net::Message& prefix, std::size_t) {
-    const auto parsed = parse(prefix);
-    EXPECT_TRUE(parsed.is_discarded());
+    const auto parsed = replication::parseSceneEditMessage(prefix);
+    EXPECT_FALSE(parsed.has_value());
 
-    if (!parsed.is_discarded())
+    if (parsed)
     {
-      replication::applySceneEdit(*scene.objectManager, parsed);
+      replication::applySceneEdit(*scene.objectManager, *parsed);
     }
 
     EXPECT_EQ(stateOf(scene), before);
   });
 
-  const auto parsed = parse(message);
-  ASSERT_FALSE(parsed.is_discarded());
-  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, parsed), replication::SceneEditResult::applied);
+  const auto parsed = replication::parseSceneEditMessage(message);
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_EQ(replication::applySceneEdit(*scene.objectManager, *parsed), replication::SceneEditResult::applied);
   EXPECT_NE(stateOf(scene), before);
 }
 
@@ -531,7 +361,7 @@ TEST(WireTruncationSweep, EveryPrefixOfAnInputStateIsRefusedOrDegradesToNoMouse)
   forEachProperPrefix(message, [&](const net::Message& prefix, const std::size_t length) {
     if (length < countEnd)
     {
-      EXPECT_ANY_THROW(const auto ignored = replication::parseInputState(prefix));
+      EXPECT_ANY_THROW(static_cast<void>(replication::parseInputState(prefix)));
       return;
     }
 
@@ -561,7 +391,7 @@ TEST(WireTruncationSweep, EveryPrefixOfAServerLogIsRefused)
   const auto message = net::packServerLog(entries, 7);
 
   forEachProperPrefix(message, [&](const net::Message& prefix, std::size_t) {
-    EXPECT_ANY_THROW(const auto ignored = net::unpackServerLog(prefix));
+    EXPECT_ANY_THROW(static_cast<void>(net::unpackServerLog(prefix)));
   });
 
   const auto batch = net::unpackServerLog(message);
@@ -597,7 +427,7 @@ TEST(WireTruncationSweep, EveryPrefixOfAnAddAssetIsRefusedExceptTheOneWithoutADi
       return;
     }
 
-    EXPECT_ANY_THROW(const auto ignored = replication::unpackAddAsset(prefix));
+    EXPECT_ANY_THROW(static_cast<void>(replication::unpackAddAsset(prefix)));
   });
 
   const auto parsed = replication::unpackAddAsset(message);
@@ -611,7 +441,7 @@ TEST(WireTruncationSweep, EveryPrefixOfARenameAssetIsRefused)
     replication::buildRenameAsset(uuidFrom("22222222-2222-2222-2222-222222222222"), "Nicer Wood"));
 
   forEachProperPrefix(message, [&](const net::Message& prefix, std::size_t) {
-    EXPECT_ANY_THROW(const auto ignored = replication::unpackRenameAsset(prefix));
+    EXPECT_ANY_THROW(static_cast<void>(replication::unpackRenameAsset(prefix)));
   });
 
   const auto parsed = replication::unpackRenameAsset(message);
@@ -624,7 +454,7 @@ TEST(WireTruncationSweep, EveryPrefixOfARemoveAssetIsRefused)
     replication::buildRemoveAsset(uuidFrom("22222222-2222-2222-2222-222222222222")));
 
   forEachProperPrefix(message, [&](const net::Message& prefix, std::size_t) {
-    EXPECT_ANY_THROW(const auto ignored = replication::unpackRemoveAsset(prefix));
+    EXPECT_ANY_THROW(static_cast<void>(replication::unpackRemoveAsset(prefix)));
   });
 
   const auto parsed = replication::unpackRemoveAsset(message);

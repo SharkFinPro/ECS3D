@@ -1480,6 +1480,19 @@ SceneEditResult applySceneEdit(ObjectManager& objectManager, const nlohmann::jso
   }
 }
 
+std::optional<nlohmann::json> parseSceneEditMessage(const net::Message& message)
+{
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (json.is_discarded())
+  {
+    return std::nullopt;
+  }
+
+  return json;
+}
+
 net::Message buildObjectSpawned(const Object& object)
 {
   net::Message message(net::MessageType::objectSpawned);
