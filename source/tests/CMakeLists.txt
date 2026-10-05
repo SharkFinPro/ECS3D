@@ -30,6 +30,7 @@ add_executable(${PROJECT_NAME}
   AssetRegistryTest.cpp
   AssetDragDropTest.cpp
   AssetFilterTest.cpp
+  ObjectTreeOrderTest.cpp
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp

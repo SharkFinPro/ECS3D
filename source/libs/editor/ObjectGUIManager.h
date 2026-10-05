@@ -1,6 +1,7 @@
 #ifndef OBJECTGUIMANAGER_H
 #define OBJECTGUIMANAGER_H
 
+#include "ObjectTreeOrder.h"
 #include <nlohmann/json_fwd.hpp>
 #include <functional>
 #include <memory>
@@ -28,7 +29,7 @@ public:
   // How the tree orders siblings for display. This never touches the scene: authored is the order
   // ObjectManager/Object already hand out (today, load order - there is no persisted sibling order yet),
   // and alphabetical is a display-only sorted copy built fresh each frame.
-  enum class SortMode { authored, alphabetical };
+  using SortMode = objectTreeOrder::SortMode;
 
   // The store this panel's sort preference is read from and written to. Optional: with none set (or
   // passed null) the panel just keeps authored order and never persists a choice. Reads the stored mode
