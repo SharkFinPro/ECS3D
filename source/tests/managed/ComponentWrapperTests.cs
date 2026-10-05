@@ -599,16 +599,10 @@ public class ComponentWrapperTests : IDisposable
   [Fact]
   public void NativeBindings_AreRestoredWhenTheScopeIsDisposed()
   {
-    unsafe
-    {
-      Assert.True(NativeBindings.Transform.has != null);
-    }
+    Assert.True(FakeNatives.IsInstalled);
 
     _natives.Dispose();
 
-    unsafe
-    {
-      Assert.True(NativeBindings.Transform.has == null);
-    }
+    Assert.False(FakeNatives.IsInstalled);
   }
 }
