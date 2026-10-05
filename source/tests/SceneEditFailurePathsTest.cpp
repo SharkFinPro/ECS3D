@@ -51,7 +51,8 @@ namespace {
 
   nlohmann::json transformBlobOf(const std::shared_ptr<Object>& object)
   {
-    for (const auto& component : object->serialize().at("components"))
+    const auto serialized = object->serialize();
+    for (const auto& component : serialized.at("components"))
     {
       if (component.value("type", std::string{}) == "Transform")
       {
