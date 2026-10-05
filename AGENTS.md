@@ -315,7 +315,7 @@ loop's exit is not reported as a loss.
 The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
 reported to C++ separately from the messages it sends: once `Authorize` succeeds, both backends call
 `Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered
-in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` against
+in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` (via the tested `isMutationAuthorized` in `apps/server/ServerPolicy.h`, which also holds `planSceneControl`) against
 that authorized role (in addition to edit-mode), never against a role a message merely claims - a
 connection cannot mutate an edit-mode server's scene by sending a mutation type unless the transport
 actually granted it `Role::editor`. `ManagedHost`

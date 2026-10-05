@@ -1,4 +1,5 @@
 #include "ServerApp.h"
+#include "ServerPolicy.h"
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
@@ -84,7 +85,7 @@ void ServerApp::handleEditorMessage(const net::Message& message) const
 
 bool ServerApp::isMessageAuthorized(const net::Message& message, const int32_t senderId) const
 {
-  return !net::isMutationMessage(message.getType()) || (m_options.editMode && m_netServer->isEditor(senderId));
+  return isMutationAuthorized(message.getType(), m_options.editMode, m_netServer->isEditor(senderId));
 }
 
 void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
@@ -236,32 +237,37 @@ void ServerApp::handleSceneControl(const net::Message& message) const
 
 void ServerApp::applySceneControl(const net::SceneControlOp op, ObjectManager& objectManager, const bool wasStopped) const
 {
-  if (op == net::SceneControlOp::start)
+  const auto plan = planSceneControl(op, wasStopped);
+
+  if (plan.startScene)
   {
     m_sceneManager->startScene();
-
-    // Only attach + start the scripts on a real stopped -> running transition (resume from pause
-    // keeps the live instances).
-    if (wasStopped)
-    {
-      m_scriptSystem->start(objectManager);
-
-      // Fresh run: drop any contact history from the previous run so its first tick doesn't fire
-      // spurious enter/exit events against stale pairs.
-      m_collisionSystem->reset();
-    }
   }
-  else if (op == net::SceneControlOp::pause)
+
+  if (plan.pauseScene)
   {
     m_sceneManager->pauseScene();
   }
-  else if (op == net::SceneControlOp::stop)
+
+  if (plan.startScripts)
   {
-    if (!wasStopped)
-    {
-      m_scriptSystem->stop(objectManager);
-      m_sceneManager->resetScene();
-      m_collisionSystem->reset();
-    }
+    m_scriptSystem->start(objectManager);
+  }
+
+  if (plan.stopScripts)
+  {
+    m_scriptSystem->stop(objectManager);
+  }
+
+  if (plan.resetScene)
+  {
+    m_sceneManager->resetScene();
+  }
+
+  // A fresh run or a stop drops contact history so the next tick doesn't fire spurious enter/exit events
+  // against stale pairs.
+  if (plan.resetCollisions)
+  {
+    m_collisionSystem->reset();
   }
 }
