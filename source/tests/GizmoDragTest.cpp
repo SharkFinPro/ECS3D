@@ -444,15 +444,27 @@ TEST(GizmoDragTest, ChangingModeMidDragKeepsRunningTheDragItStartedWith)
 }
 
 namespace {
-  // Presses on `handle`'s edge-on ring at `pressOffset` pixels from the center, moves onto the 100 px circle
-  // around the center, then sweeps `sweepDegrees` of screen angle around it. Returns the drag's final
-  // frame and the total angle accumulated over the sweep alone (the move onto the circle is excluded).
+  // Radius of the mouse's circle around the center. The edge-on fallback only runs while the ray stays
+  // within about 10 degrees of the ring's plane (|ray . normal| < 0.17); at this fixture's focal length
+  // (~520 px) a mouse within 60 px of the center keeps |ray . normal| near 0.12, so the whole sweep stays
+  // in the fallback instead of switching to the ray-plane branch.
+  constexpr float edgeOnSweepRadius = 60.0f;
+  constexpr float handleLengthPixelsForTest = 100.0f;
+
+  [[nodiscard]] glm::vec2 edgeOnSweepPoint(const glm::vec2& centerScreen, const float angleRadians)
+  {
+    return centerScreen + edgeOnSweepRadius * glm::vec2(std::cos(angleRadians), std::sin(angleRadians));
+  }
+
   struct EdgeOnSweep {
     gizmo::Frame frame;
     float sweptDegrees = 0.0f;
+    float totalDegrees = 0.0f;
     bool pressedOnExpectedHandle = false;
   };
 
+  // Presses on `handle`'s edge-on ring at `pressOffset` pixels from the center, moves onto the circle, then
+  // sweeps `sweepDegrees` of screen angle around it in equal steps.
   [[nodiscard]] EdgeOnSweep sweepEdgeOnRing(const gizmo::Handle handle, const glm::vec2& pressOffset,
                                             const float sweepDegrees)
   {
@@ -464,20 +476,33 @@ namespace {
     const auto pressFrame = beginDragOnHandle(f, centerScreen + pressOffset);
     result.pressedOnExpectedHandle = pressFrame.active == handle;
 
-    f.input.mouse = ringPointScreen(centerScreen, 0.0f);
+    constexpr float startAngle = 0.25f * glm::pi<float>();
+    f.input.mouse = edgeOnSweepPoint(centerScreen, startAngle);
     result.frame = gizmo::update(f.state, f.input);
     const float before = f.state.dragTotalAngleDegrees;
 
     constexpr int steps = 12;
     for (int i = 1; i <= steps; ++i)
     {
-      const float angle = glm::radians(sweepDegrees) * static_cast<float>(i) / static_cast<float>(steps);
-      f.input.mouse = ringPointScreen(centerScreen, angle);
+      const float angle = startAngle + glm::radians(sweepDegrees) * static_cast<float>(i) / static_cast<float>(steps);
+      f.input.mouse = edgeOnSweepPoint(centerScreen, angle);
       result.frame = gizmo::update(f.state, f.input);
     }
 
-    result.sweptDegrees = f.state.dragTotalAngleDegrees - before;
+    result.totalDegrees = f.state.dragTotalAngleDegrees;
+    result.sweptDegrees = result.totalDegrees - before;
     return result;
+  }
+
+  // Each step moves the mouse along a chord of length 2R sin(d/2); its component along the tangent at the
+  // new point is that times cos(d/2). The fallback divides the summed tangential travel by the handle
+  // length (arc length over handle length, not the screen angle).
+  [[nodiscard]] float expectedSweptDegrees(const float sweepDegrees)
+  {
+    constexpr int steps = 12;
+    const float stepRadians = glm::radians(sweepDegrees) / static_cast<float>(steps);
+    const float perStep = edgeOnSweepRadius * std::sin(stepRadians);
+    return glm::degrees(static_cast<float>(steps) * perStep / handleLengthPixelsForTest);
   }
 }
 
@@ -490,21 +515,22 @@ TEST(GizmoDragTest, RotateOnAnEdgeOnXRingFollowsTheMouseAroundTheProjectedCenter
   ASSERT_TRUE(forward.frame.local.has_value());
 
   EXPECT_TRUE(std::isfinite(forward.sweptDegrees));
-  EXPECT_NEAR(forward.sweptDegrees, 90.0f, 2.0f);
+  EXPECT_NEAR(forward.sweptDegrees, expectedSweptDegrees(90.0f), 1.0f);
+  EXPECT_GT(forward.sweptDegrees, 0.0f);
 
-  const glm::quat quarter(glm::radians(forward.frame.local->rotation));
-  const glm::vec3 turnedY = quarter * glm::vec3(0.0f, 1.0f, 0.0f);
-  EXPECT_NEAR(rotationAngleDegrees(quarter), 90.0f, 3.0f);
-  EXPECT_GT(turnedY.z, 0.5f);
+  // A positive turn about +X carries +Y toward +Z: z = sin(total).
+  const glm::vec3 turnedY = glm::quat(glm::radians(forward.frame.local->rotation)) * glm::vec3(0.0f, 1.0f, 0.0f);
+  EXPECT_NEAR(turnedY.z, std::sin(glm::radians(forward.totalDegrees)), 0.02f);
 
   // The mirror sweep turns the other way.
   const auto backward = sweepEdgeOnRing(gizmo::Handle::x, glm::vec2(0.0f, -50.0f), -90.0f);
   ASSERT_TRUE(backward.pressedOnExpectedHandle);
   ASSERT_TRUE(backward.frame.local.has_value());
 
-  EXPECT_NEAR(backward.sweptDegrees, -90.0f, 2.0f);
+  EXPECT_NEAR(backward.sweptDegrees, expectedSweptDegrees(-90.0f), 1.0f);
+  EXPECT_LT(backward.sweptDegrees, 0.0f);
   const glm::vec3 reversedY = glm::quat(glm::radians(backward.frame.local->rotation)) * glm::vec3(0.0f, 1.0f, 0.0f);
-  EXPECT_LT(reversedY.z, -0.5f);
+  EXPECT_NEAR(reversedY.z, std::sin(glm::radians(backward.totalDegrees)), 0.02f);
 }
 
 TEST(GizmoDragTest, RotateOnAnEdgeOnYRingFollowsTheMouseAroundTheProjectedCenter)
@@ -515,18 +541,21 @@ TEST(GizmoDragTest, RotateOnAnEdgeOnYRingFollowsTheMouseAroundTheProjectedCenter
   ASSERT_TRUE(forward.frame.local.has_value());
 
   EXPECT_TRUE(std::isfinite(forward.sweptDegrees));
-  EXPECT_NEAR(forward.sweptDegrees, 90.0f, 2.0f);
+  EXPECT_NEAR(forward.sweptDegrees, expectedSweptDegrees(90.0f), 1.0f);
+  EXPECT_GT(forward.sweptDegrees, 0.0f);
 
+  // A positive turn about +Y carries +Z toward +X: x = sin(total).
   const glm::vec3 turnedZ = glm::quat(glm::radians(forward.frame.local->rotation)) * glm::vec3(0.0f, 0.0f, 1.0f);
-  EXPECT_GT(turnedZ.x, 0.5f);
+  EXPECT_NEAR(turnedZ.x, std::sin(glm::radians(forward.totalDegrees)), 0.02f);
 
   const auto backward = sweepEdgeOnRing(gizmo::Handle::y, glm::vec2(50.0f, 0.0f), -90.0f);
   ASSERT_TRUE(backward.pressedOnExpectedHandle);
   ASSERT_TRUE(backward.frame.local.has_value());
 
-  EXPECT_NEAR(backward.sweptDegrees, -90.0f, 2.0f);
+  EXPECT_NEAR(backward.sweptDegrees, expectedSweptDegrees(-90.0f), 1.0f);
+  EXPECT_LT(backward.sweptDegrees, 0.0f);
   const glm::vec3 reversedZ = glm::quat(glm::radians(backward.frame.local->rotation)) * glm::vec3(0.0f, 0.0f, 1.0f);
-  EXPECT_LT(reversedZ.x, -0.5f);
+  EXPECT_NEAR(reversedZ.x, std::sin(glm::radians(backward.totalDegrees)), 0.02f);
 }
 
 TEST(GizmoDragTest, ScaleSnapLandsOnAMultipleOfTheStep)
