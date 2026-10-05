@@ -255,24 +255,32 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   public void StalledPeer_IsDroppedWhileTheOtherPeersKeepReceiving()
   {
     // 1500 ms is generous for two healthy peers to drain a 12 MiB frame; the stalled peer, last in the
-    // list, then spends the rest of the budget and is the only one dropped.
-    var server = new TcpBackend { SendTimeoutMs = 1500 };
+    // list, then spends the rest of the budget and is the only one dropped. A small server-side send
+    // buffer stops platforms that auto-tune it large from absorbing the frame, and the loop is the
+    // backstop: a peer that never reads can only be sent so many bytes before a send blocks.
+    var server = new TcpBackend { SendTimeoutMs = 1500, AcceptedSendBufferBytes = 64 * 1024 };
     var port = Start(server);
 
     var healthyA = ConnectAndAwait(server, port, 1);
     var healthyB = ConnectAndAwait(server, port, 2);
 
-    // A tiny receive buffer and no reads, so the frame below cannot fit in the kernel's buffers.
+    // A tiny receive buffer and no reads, so the frames below cannot fit in the kernel's buffers.
     ConnectRaw(port, receiveBufferBytes: 1024);
     WaitFor(() => server.ServerConnectionCount() == 3, "the stalled peer to join");
     var stalledId = Authorized()[2].ConnId;
 
     const int bigBytes = 12 * 1024 * 1024;
-    TransportRecorder.ServerBroadcast(server, 7, new byte[bigBytes]);
+    const int maxBigFrames = 8;
+    var bigFrames = 0;
+    while (bigFrames < maxBigFrames && !TransportRecorder.ServerDisconnected.Contains(stalledId))
+    {
+      TransportRecorder.ServerBroadcast(server, 7, new byte[bigBytes]);
+      ++bigFrames;
+    }
 
     WaitFor(() => TransportRecorder.ServerDisconnected.Contains(stalledId), "the stalled peer to be dropped");
-    WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Length == bigBytes) == 2,
-      "both healthy peers to receive the large frame");
+    WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Length == bigBytes) == 2 * bigFrames,
+      "both healthy peers to receive every large frame");
 
     TransportRecorder.ServerBroadcast(server, 8, new byte[] { 1, 2, 3 });
     WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 8) == 2,

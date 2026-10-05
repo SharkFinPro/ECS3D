@@ -61,6 +61,10 @@ internal sealed class TcpBackend : TransportBackend
   // Internal and mutable so ECS3DManagedTests can shorten it; the default is the production value.
   internal int SendTimeoutMs = 2000;
 
+  // When set, accepted sockets get this send buffer size instead of the OS default, which some platforms
+  // auto-tune large enough that a stalled peer never blocks a send. Left unset in production.
+  internal int? AcceptedSendBufferBytes;
+
   // -- Client --
   private TcpClient? _client;
   private Thread? _clientThread;
@@ -283,6 +287,11 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       client.NoDelay = true;
+
+      if (AcceptedSendBufferBytes.HasValue)
+      {
+        client.SendBufferSize = AcceptedSendBufferBytes.Value;
+      }
 
       // A starting value only; each broadcast narrows this to whatever is left of its own budget. It
       // matters because a socket defaults to no send timeout at all, and this one is set before any
