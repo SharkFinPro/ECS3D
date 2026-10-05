@@ -7,6 +7,7 @@ add_library(${PROJECT_NAME}
   GpuAssetCache.h
   Billboard.cpp
   Billboard.h
+  LightGizmoVisibility.h
   InputCapture.cpp
   InputCapture.h
 )

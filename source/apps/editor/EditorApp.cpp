@@ -10,6 +10,7 @@
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <GpuAssetCache.h>
+#include <LightGizmoVisibility.h>
 #include <RenderSystem.h>
 #include <ComponentEditor.h>
 #include <ObjectGUIManager.h>
@@ -439,8 +440,7 @@ void EditorApp::variableUpdate()
     m_renderSystem->useFreeFlyCamera(*m_assetCache);
   }
 
-  // Running and paused are both play mode, where the sprites would be clutter in the game's own view.
-  if (objectManager && m_sceneStatus == SceneStatus::stopped)
+  if (objectManager && shouldDrawLightGizmos(m_sceneStatus, m_renderer->getRenderingManager()->isRayTracingEnabled()))
   {
     m_renderSystem->drawLightGizmos(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
   }

@@ -69,6 +69,7 @@ add_executable(${PROJECT_NAME}
   RemoteLogSinkTest.cpp
   KeybindsTest.cpp
   BillboardTest.cpp
+  LightGizmoVisibilityTest.cpp
   GizmoTest.cpp
   GizmoDragTest.cpp
   GizmoDragParentedTest.cpp
