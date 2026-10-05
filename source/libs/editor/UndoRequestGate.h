@@ -26,6 +26,9 @@
   return label.has_value() && serverEditable && !requestInFlight;
 }
 
+// How long a request stays in flight before the gate gives up waiting for the rebroadcast.
+inline constexpr std::chrono::milliseconds defaultUndoRedoPendingTimeout{500};
+
 // While pending, a further undo/redo request is ignored until clear() or the timeout passes. Undo
 // validates against the editor's replicated view, which only updates on the server's rebroadcast, so a
 // second press inside one round trip would validate against a still-stale value. The clock is injectable

@@ -154,12 +154,10 @@ private:
   edits::PlaySessionHistory m_playHistory;
   edits::HistoryScope m_historyScope;
 
-  // See requestUndo()/requestRedo() in EditorAppUndoMenu.cpp: while true, a further undo/redo request is
-  // ignored (and the Edit menu's items disabled) until the server's rebroadcast of the one already sent
-  // lands (cleared in handleSnapshot/handleEditComponent) or this much time passes, whichever comes
-  // first - undo validates against the editor's replicated view, which only updates on that rebroadcast,
-  // so a second press inside one round trip would validate against a still-stale value.
-  UndoRequestGate m_undoRedoGate{std::chrono::milliseconds(500)};
+  // See requestUndo()/requestRedo() in EditorAppUndoMenu.cpp: while the gate is blocked, a further
+  // undo/redo request is ignored (and the Edit menu's items disabled) until the server's rebroadcast of
+  // the one already sent lands (cleared in handleSnapshot/handleEditComponent) or its timeout passes.
+  UndoRequestGate m_undoRedoGate{defaultUndoRedoPendingTimeout};
 
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
@@ -232,7 +230,7 @@ private:
 
   void applyMessage(const net::Message& message);
 
-  // Not const: clears the undo/redo in-flight gate (see m_undoRedoPending) as the rebroadcast a request
+  // Not const: clears the undo/redo in-flight gate (see UndoRequestGate.h) as the rebroadcast a request
   // was waiting on.
   void handleSnapshot(const net::Message& message);
 

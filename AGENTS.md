@@ -90,7 +90,7 @@
   because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
   `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` is compiled in the same way, as is
   `editor/Gizmo.cpp` (depends only on glm, so the suite gets it without pulling in the rest of
-  `ECS3DEditorLib` and the ImGui/Vulkan it carries). It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
+  `ECS3DEditorLib` and the ImGui/Vulkan it carries), and `editor/AssetReferences.cpp` (depends only on ECS3DData and json). It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
   `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
   `PROJECT_IS_TOP_LEVEL` and `BUILD_TESTING` together — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching

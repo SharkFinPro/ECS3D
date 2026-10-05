@@ -43,7 +43,7 @@ TEST_F(UndoRequestGateTest, IsBlockedAfterBeginUntilTheTimeoutElapses)
   EXPECT_FALSE(m_gate.blocked());
 }
 
-TEST_F(UndoRequestGateTest, ExpiryClearsTheGateSoALaterBeginStartsAFreshWindow)
+TEST_F(UndoRequestGateTest, ALaterBeginAfterExpiryStartsAFreshWindow)
 {
   m_gate.begin();
   advance(timeout * 3);
@@ -86,6 +86,11 @@ TEST(UndoRequestGate, DefaultsToTheRealClock)
   gate.begin();
 
   EXPECT_TRUE(gate.blocked());
+}
+
+TEST(UndoRequestGate, DefaultTimeoutIsHalfASecond)
+{
+  EXPECT_EQ(defaultUndoRedoPendingTimeout, std::chrono::milliseconds(500));
 }
 
 TEST(GainedOneEntry, IsTrueOnlyForExactlyOneMore)
