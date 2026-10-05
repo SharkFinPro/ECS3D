@@ -49,6 +49,25 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
       message(WARNING "ECS3D_SANITIZE is on but ${CMAKE_CXX_COMPILER_ID} has no sanitizer flags here; building without them.")
     endif()
   endif()
+
+  # The coverage preset. Like sanitizing, instrumenting is a whole-build decision, so the flags are set
+  # here before anything is added. The suite is what gets measured; the apps are instrumented too so the
+  # report can name what no test reaches.
+  option(ECS3D_COVERAGE "Build instrumented for line and branch coverage" OFF)
+
+  if (ECS3D_COVERAGE)
+    if (MSVC)
+      # /PROFILE is what lets Microsoft.CodeCoverage.Console instrument the binaries; it needs no
+      # compile flags.
+      add_link_options(/PROFILE)
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+      # .gcno/.gcda output, which gcovr reads (through llvm-cov gcov under Clang).
+      add_compile_options(--coverage)
+      add_link_options(--coverage)
+    else()
+      message(WARNING "ECS3D_COVERAGE is on but ${CMAKE_CXX_COMPILER_ID} has no coverage flags here; building without them.")
+    endif()
+  endif()
 endif()
 
 if (NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY)

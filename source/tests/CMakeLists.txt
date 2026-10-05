@@ -212,12 +212,23 @@ if(DOTNET_EXE)
   # build in the tree, the same way
   # ecs3d_add_managed_assembly() isolates ScriptBridge/ECS3DNetTransport from each other and from a
   # developer's own `dotnet` invocations - the isolation CS0579 depends on.
+  set(ECS3D_MANAGED_TESTS_ARGS
+    -c Release
+    -p:BuildRoot=${ECS3D_MANAGED_TESTS_ROOT}/
+    --nologo
+  )
+
+  # The collector ships with Microsoft.NET.Test.Sdk, which the test project already references.
+  if(ECS3D_COVERAGE)
+    list(APPEND ECS3D_MANAGED_TESTS_ARGS
+      --collect "Code Coverage;Format=cobertura"
+      --results-directory ${CMAKE_BINARY_DIR}/coverage/managed
+    )
+  endif()
+
   add_test(
     NAME ECS3DManagedTests
-    COMMAND ${DOTNET_EXE} test "${ECS3D_MANAGED_TESTS_CSPROJ}"
-      -c Release
-      -p:BuildRoot=${ECS3D_MANAGED_TESTS_ROOT}/
-      --nologo
+    COMMAND ${DOTNET_EXE} test "${ECS3D_MANAGED_TESTS_CSPROJ}" ${ECS3D_MANAGED_TESTS_ARGS}
   )
 
   set_tests_properties(ECS3DManagedTests PROPERTIES
