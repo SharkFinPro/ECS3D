@@ -24,6 +24,10 @@ add_library(${PROJECT_NAME}
   AssetFilter.h
   SaveUI.cpp
   SaveUI.h
+  UnsavedChanges.h
+  UndoRequestGate.h
+  AssetReferences.cpp
+  AssetReferences.h
   SettingsPanel.cpp
   SettingsPanel.h
   ConsolePanel.cpp

@@ -6,6 +6,7 @@
 #include <edits/EditHistory.h>
 #include <edits/HistoryScope.h>
 #include <edits/PlaySessionHistory.h>
+#include <UndoRequestGate.h>
 #include <scenes/SceneManager.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
@@ -158,9 +159,7 @@ private:
   // lands (cleared in handleSnapshot/handleEditComponent) or this much time passes, whichever comes
   // first - undo validates against the editor's replicated view, which only updates on that rebroadcast,
   // so a second press inside one round trip would validate against a still-stale value.
-  static constexpr std::chrono::milliseconds undoRedoPendingTimeout{500};
-  bool m_undoRedoPending = false;
-  std::chrono::steady_clock::time_point m_undoRedoPendingSince;
+  UndoRequestGate m_undoRedoGate{std::chrono::milliseconds(500)};
 
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
@@ -215,9 +214,6 @@ private:
   void onRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName);
 
   void onRemoveAsset(const uuids::uuid& assetUUID);
-
-  // How many objects reference the asset by uuid, for the delete-confirmation warning.
-  [[nodiscard]] int countAssetReferences(const uuids::uuid& assetUUID) const;
 
   void onEditComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) const;
 
@@ -281,7 +277,7 @@ private:
 
   // What the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit menu actually call (EditorAppUndoMenu.cpp): a
   // no-op while undoRedoRequestBlocked(), otherwise calls undo()/redo() and starts the in-flight gate if
-  // it actually sent something - see undoRedoPendingTimeout and EditorAppUndoMenu.cpp's gainedOneEntry().
+  // it actually sent something - see UndoRequestGate.h.
   void requestUndo();
 
   void requestRedo();
@@ -316,10 +312,6 @@ private:
   // branching down: isUndo picks the verb, the EditorAction the shortcut comes from, and which of
   // requestUndo()/requestRedo() a click invokes.
   void displayUndoRedoMenuItem(bool isUndo, const std::optional<std::string>& label, bool enabled);
-
-  // The condition shared by the undo and redo items: something to act on, an editable server, and no
-  // request already in flight.
-  [[nodiscard]] bool canActOnHistoryItem(const std::optional<std::string>& label, bool requestInFlight) const;
 
   void displayWindowMenu() const;
 

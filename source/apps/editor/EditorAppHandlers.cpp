@@ -24,53 +24,6 @@
 #include <vector>
 
 namespace {
-  // Whether any of the object's components mention the asset uuid in their serialized form. Searching the
-  // serialized form keeps this generic (no component type named here); only model/texture references -
-  // the ones that would dangle - ever match.
-  bool objectReferencesAsset(const std::shared_ptr<Object>& object, const std::string& uuidString)
-  {
-    for (const auto& [type, component] : object->getComponents())
-    {
-      if (component->serialize().dump().find(uuidString) != std::string::npos)
-      {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  // Count the object nodes within a serialized prefab body (one Object tree) that reference the uuid.
-  int countReferencesInPrefabNode(const nlohmann::json& node, const std::string& uuidString)
-  {
-    int count = 0;
-
-    if (const auto components = node.find("components"); components != node.end() && components->is_array())
-    {
-      for (const auto& component : *components)
-      {
-        if (component.dump().find(uuidString) != std::string::npos)
-        {
-          ++count;
-          break;
-        }
-      }
-    }
-
-    if (const auto children = node.find("children"); children != node.end() && children->is_array())
-    {
-      for (const auto& child : *children)
-      {
-        if (child.is_object())
-        {
-          count += countReferencesInPrefabNode(child, uuidString);
-        }
-      }
-    }
-
-    return count;
-  }
-
   // Nothing faithful could be derived for an edit (see RecordEdits.h): the edit still goes out, only the
   // history entry is skipped.
   void logUnrecordedEdit(const std::string& what)
@@ -143,46 +96,6 @@ void EditorApp::onRemoveAsset(const uuids::uuid& assetUUID)
   {
     logUnrecordedEdit("a removeAsset");
   }
-}
-
-// How many objects reference an asset by uuid, for the delete-confirmation modal's warning. Scans the
-// replicated scenes' objects and every prefab body - the two places an object tree lives editor-side.
-int EditorApp::countAssetReferences(const uuids::uuid& assetUUID) const
-{
-  const auto uuidString = uuids::to_string(assetUUID);
-  int count = 0;
-
-  for (const auto& [sceneUUID, scene] : m_sceneManager->getScenes())
-  {
-    const auto objectManager = scene->getObjectManager();
-    if (!objectManager)
-    {
-      continue;
-    }
-
-    for (const auto& object : objectManager->getAllObjects())
-    {
-      if (objectReferencesAsset(object, uuidString))
-      {
-        ++count;
-      }
-    }
-  }
-
-  for (const auto& [recordUUID, record] : m_assetRegistry->getAssets())
-  {
-    if (record.type != AssetType::Prefab)
-    {
-      continue;
-    }
-
-    if (auto body = nlohmann::json::parse(record.body, nullptr, false); !body.is_discarded() && body.is_object())
-    {
-      count += countReferencesInPrefabNode(body, uuidString);
-    }
-  }
-
-  return count;
 }
 
 // A component value edit: send the component's new state to the server. Only the Inspector fires this.

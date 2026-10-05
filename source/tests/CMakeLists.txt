@@ -29,6 +29,9 @@ add_executable(${PROJECT_NAME}
   ComponentRegistryTest.cpp
   AssetRegistryTest.cpp
   AssetDragDropTest.cpp
+  UndoRequestGateTest.cpp
+  AssetReferencesTest.cpp
+  UnsavedChangesTest.cpp
   AssetFilterTest.cpp
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
@@ -131,6 +134,7 @@ add_executable(${PROJECT_NAME}
   ../libs/net/ServerLog.cpp
   ../libs/scripting/bindings/ComponentOpsBindings.cpp
   ../libs/net/TransportLog.cpp
+  ../libs/editor/AssetReferences.cpp
   ../libs/scripting/bindings/ColliderBindings.cpp
 
   # LogBindings depends only on ECS3DLog (no data/CLR includes), so it is compiled in directly rather
