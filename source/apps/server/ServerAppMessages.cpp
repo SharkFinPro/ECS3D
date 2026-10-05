@@ -114,8 +114,11 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 
 int32_t ServerApp::assignPlayerSlot(const int32_t connId)
 {
-  const int32_t slot = m_playerSlots.assign(connId);
-  Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
+  const auto [slot, created] = m_playerSlots.assign(connId);
+  if (created)
+  {
+    Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
+  }
   return slot;
 }
 

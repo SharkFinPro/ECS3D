@@ -1,10 +1,10 @@
 #include "PlayerSlots.h"
 
-int32_t PlayerSlots::assign(const int32_t connectionId)
+SlotAssignment PlayerSlots::assign(const int32_t connectionId)
 {
   if (const auto it = m_connectionSlots.find(connectionId); it != m_connectionSlots.end())
   {
-    return it->second;
+    return {it->second, false};
   }
 
   int32_t slot = 0;
@@ -24,7 +24,7 @@ int32_t PlayerSlots::assign(const int32_t connectionId)
   }
 
   m_connectionSlots.emplace(connectionId, slot);
-  return slot;
+  return {slot, true};
 }
 
 std::optional<int32_t> PlayerSlots::release(const int32_t connectionId)
