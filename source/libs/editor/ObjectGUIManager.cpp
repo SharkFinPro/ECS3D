@@ -12,7 +12,6 @@
 #include <imgui.h>
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <functional>
 #include <random>
 #include <string>

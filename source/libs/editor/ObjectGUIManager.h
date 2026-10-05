@@ -1,7 +1,7 @@
 #ifndef OBJECTGUIMANAGER_H
 #define OBJECTGUIMANAGER_H
 
-#include "ObjectTreeOrder.h"
+#include "ObjectTreeSortMode.h"
 #include <nlohmann/json_fwd.hpp>
 #include <functional>
 #include <memory>

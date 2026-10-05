@@ -9,6 +9,7 @@ add_library(${PROJECT_NAME}
   ObjectGUIManager.cpp
   ObjectGUIManager.h
   ObjectTreeOrder.h
+  ObjectTreeSortMode.h
   InspectorPanel.cpp
   InspectorPanel.h
   ObjectInspector.cpp

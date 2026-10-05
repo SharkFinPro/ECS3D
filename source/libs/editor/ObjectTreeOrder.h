@@ -1,6 +1,7 @@
 #ifndef OBJECTTREEORDER_H
 #define OBJECTTREEORDER_H
 
+#include "ObjectTreeSortMode.h"
 #include "Selection.h"
 #include <objects/Object.h>
 #include <algorithm>
@@ -11,11 +12,6 @@
 #include <uuid.h>
 
 namespace objectTreeOrder {
-  // How the tree orders siblings for display. This never touches the scene: authored is the order
-  // ObjectManager/Object already hand out (today, load order - there is no persisted sibling order yet),
-  // and alphabetical is a display-only sorted copy built fresh each frame.
-  enum class SortMode { authored, alphabetical };
-
   [[nodiscard]] inline SortMode parseSortMode(const std::string& value)
   {
     return value == "alphabetical" ? SortMode::alphabetical : SortMode::authored;

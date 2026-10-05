@@ -4,6 +4,7 @@
 #include <ObjectTreeOrder.h>
 #include <Selection.h>
 
+#include <array>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -134,19 +135,35 @@ TEST(ObjectTreeSort, AlphabeticalIsCaseInsensitive)
 
 TEST(ObjectTreeSort, AlphabeticalKeepsAuthoredOrderForEqualNames)
 {
+  // Enough elements that an unstable sort would not fall back to insertion sort and happen to stay stable.
   const auto scene = fixtures::makeScene();
-  const auto firstCube = addObject(scene, "Cube");
-  const auto apple = addObject(scene, "apple");
-  const auto secondCube = addObject(scene, "Cube");
-  const std::vector<std::shared_ptr<Object>> objects { firstCube, apple, secondCube };
+  const std::array<const char*, 4> names { "b", "B", "a", "A" };
+  std::vector<std::shared_ptr<Object>> objects;
+  for (int i = 0; i < 24; ++i)
+  {
+    objects.push_back(addObject(scene, names[i % names.size()]));
+  }
   std::vector<std::shared_ptr<Object>> scratch;
 
   const auto& result = sortedForDisplay(objects, SortMode::alphabetical, scratch);
 
-  ASSERT_EQ(result.size(), 3u);
-  EXPECT_EQ(result[0]->getUUID(), apple->getUUID());
-  EXPECT_EQ(result[1]->getUUID(), firstCube->getUUID());
-  EXPECT_EQ(result[2]->getUUID(), secondCube->getUUID());
+  std::vector<uuids::uuid> expected;
+  for (const bool aClass : { true, false })
+  {
+    for (int i = 0; i < 24; ++i)
+    {
+      if ((i % 4 >= 2) == aClass)
+      {
+        expected.push_back(objects[i]->getUUID());
+      }
+    }
+  }
+  std::vector<uuids::uuid> actual;
+  for (const auto& object : result)
+  {
+    actual.push_back(object->getUUID());
+  }
+  EXPECT_EQ(actual, expected);
 }
 
 TEST(ObjectTreeSort, NonAsciiBytesCompareByUnsignedValue)
@@ -165,6 +182,9 @@ TEST(ObjectTreeSort, SortModeStringRoundTrips)
     EXPECT_EQ(parseSortMode(sortModeToString(mode)), mode);
   }
   EXPECT_STREQ(sortModeToString(SortMode::alphabetical), "alphabetical");
+  EXPECT_STREQ(sortModeToString(SortMode::authored), "authored");
+  EXPECT_EQ(parseSortMode("alphabetical"), SortMode::alphabetical);
+  EXPECT_EQ(parseSortMode("authored"), SortMode::authored);
 }
 
 TEST(ObjectTreeSort, UnknownStringParsesToAuthored)
