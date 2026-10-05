@@ -60,6 +60,7 @@ add_executable(${PROJECT_NAME}
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
   AttachedScriptsTest.cpp
+  ScriptSystemTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
   CompoundBodyCollisionTest.cpp
@@ -144,6 +145,7 @@ add_executable(${PROJECT_NAME}
   # ScriptFieldEdit depends only on json, so it is compiled in the same way.
   ../libs/scripting/ScriptFieldEdit.cpp
   ../libs/scripting/AttachedScripts.cpp
+  ../libs/scripting/ScriptSystem.cpp
   ../libs/scripting/bindings/LightRendererBindings.cpp
   ../libs/scripting/bindings/PlayerControllerBindings.cpp
 
