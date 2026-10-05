@@ -48,6 +48,7 @@ add_executable(${PROJECT_NAME}
   CollisionMathTest.cpp
   SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp
+  NarrowPhaseRotatedTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   TransformHierarchyTest.cpp
