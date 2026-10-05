@@ -1,10 +1,13 @@
 #include "GpuAssetCache.h"
 #include <assets/AssetRegistry.h>
+#include <Log.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
 #include <VulkanEngine/components/assets/objects/Model.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
+#include <exception>
+#include <string>
 
 GpuAssetCache::GpuAssetCache(std::shared_ptr<vke::VulkanEngine> renderer, const AssetRegistry* assetRegistry)
   : m_renderer(std::move(renderer)), m_assetRegistry(assetRegistry)
@@ -107,6 +110,30 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::
   return renderObject;
 }
 
+void GpuAssetCache::loadLightGizmoAssets()
+{
+  if (m_lightGizmoAssetsTried)
+  {
+    return;
+  }
+
+  m_lightGizmoAssetsTried = true;
+
+  try
+  {
+    m_lightGizmoModel = m_renderer->getAssetManager()->loadModel("assets/models/billboard_quad.glb");
+    m_lightGizmoIcon = m_renderer->getAssetManager()->loadTexture("assets/textures/light_gizmo.png", false);
+  }
+  catch (const std::exception& e)
+  {
+    m_lightGizmoModel.reset();
+    m_lightGizmoIcon.reset();
+
+    Log::error(LogCategory::engine, std::string("Could not load the light sprite assets ") +
+      "(assets/models/billboard_quad.glb, assets/textures/light_gizmo.png); lights will have no sprite: " + e.what());
+  }
+}
+
 std::shared_ptr<vke::RenderObject> GpuAssetCache::getLightGizmo(const uuids::uuid& ownerUUID)
 {
   if (const auto it = m_lightGizmos.find(ownerUUID); it != m_lightGizmos.end())
@@ -114,15 +141,15 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getLightGizmo(const uuids::uui
     return it->second;
   }
 
-  const auto model = m_renderer->getAssetManager()->loadModel("assets/models/billboard_quad.glb");
-  const auto icon = m_renderer->getAssetManager()->loadTexture("assets/textures/light_gizmo.png");
+  loadLightGizmoAssets();
 
-  if (!model || !icon)
+  if (!m_lightGizmoModel || !m_lightGizmoIcon)
   {
     return nullptr;
   }
 
-  auto renderObject = m_renderer->getAssetManager()->loadRenderObject(icon, icon, model);
+  auto renderObject = m_renderer->getAssetManager()->loadRenderObject(m_lightGizmoIcon, m_lightGizmoIcon,
+                                                                      m_lightGizmoModel);
 
   m_lightGizmos[ownerUUID] = renderObject;
 

@@ -89,8 +89,8 @@
   window, GPU or server. `net/MessageQueue.cpp` is compiled straight into the target rather than linked,
   because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
   `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` is compiled in the same way, as is
-  `render/Billboard.cpp` and `editor/Gizmo.cpp` (each depends only on glm, so the suite gets them without pulling in the rest of
-  `ECS3DEditorLib` and the ImGui/Vulkan it carries). It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
+  `render/Billboard.cpp` and `editor/Gizmo.cpp` (each depends only on glm, so the suite gets them without
+  pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it carries). It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
   `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
   `PROJECT_IS_TOP_LEVEL` and `BUILD_TESTING` together — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
@@ -544,10 +544,13 @@ clears it on empty space; Ctrl+Shift+click toggles the picked object in/out of t
 nothing on empty space; a plain click (focusing the viewport, dragging a gizmo handle) leaves the selection
 as it is. The editor sets `ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true` (in `setupImGuiStyle`)
 so a drag inside a detached scene window's body drives the gizmo instead of moving the OS window.
-Each light also gets a sprite at its position, drawn through `RenderSystem::drawLightGizmos`, which
-only the editor calls, and only while the scene is stopped. It reports through the same pick flag as the
-light object's model, so Ctrl+click selects the light. It is opaque, since the unlit textured pipeline it
-uses has no alpha, hence the badge-style icon.
+Each light also gets a sprite at its position, drawn through `RenderSystem::drawLightGizmos`, which only the
+editor calls, and only while the scene is stopped. It reports through the same pick flag as the light
+object's model, so Ctrl+click selects the light; `RenderSystem::variableUpdate` clears every pick flag
+before submitting, since the picker only rewrites the flags of objects drawn that frame. The sprite is
+opaque, since the unlit textured pipeline it uses has no alpha, hence the badge-style icon. The shared
+quad model and icon load once through `GpuAssetCache`; a failed load is logged once and leaves lights
+without sprites.
 A scene asset tile also drags onto the viewport to make that scene active: the same scene overlay callback
 opens an ImGui drop target over the scene image (`EditorApp::acceptSceneDrop`), accepting only
 `assetDragDrop::scene` payloads that `sceneFromPayload` resolves to a registered Scene record, and loads

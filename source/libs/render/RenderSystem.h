@@ -28,7 +28,9 @@ public:
   // Editor-only: draws a camera-facing, constant-screen-size sprite at every light. Call it each frame after
   // the camera update (updateCamera/useFreeFlyCamera) so the sprites face this frame's view. The client never
   // calls it, so it never shows them. Every light in highlightUUIDs is re-drawn with the objectHighlight
-  // pipeline, as a selected model is. A click on a sprite reports through isSelected(light uuid).
+  // pipeline, as a selected model is. A click on a sprite reports through isSelected(light uuid). In free-fly
+  // the view is the camera's pose before this frame's render() moves it, so sprites trail a moving camera by
+  // one frame (the viewport transform gizmo behaves the same).
   void drawLightGizmos(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                        std::span<const uuids::uuid> highlightUUIDs = {});
 

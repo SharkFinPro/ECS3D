@@ -1,7 +1,7 @@
 #include "Billboard.h"
 #include <cmath>
-#include <glm/common.hpp>
 #include <glm/mat3x3.hpp>
+#include <glm/matrix.hpp>
 #include <glm/trigonometric.hpp>
 #include <glm/vec4.hpp>
 
