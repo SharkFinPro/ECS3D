@@ -15,7 +15,9 @@ namespace ECS3DManagedTests;
 //
 // ScriptBridge disables runtime marshalling, so its bool is the native 1-byte bool; this assembly does not,
 // and an [UnmanagedCallersOnly] method cannot take or return a non-blittable bool. The fakes use byte and the
-// tables are filled through a cast to the bool signature, which has the same one-byte shape.
+// tables are filled through a cast to the bool signature, which has the same one-byte shape. The bool tests
+// therefore prove routing, not the DisableRuntimeMarshalling ABI: a 1-byte fake cannot put garbage in the
+// upper bits of the return register.
 internal static unsafe class FakeNatives
 {
   internal static readonly List<string> Calls = new();
