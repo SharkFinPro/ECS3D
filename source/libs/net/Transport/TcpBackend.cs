@@ -73,7 +73,7 @@ internal sealed class TcpBackend : TransportBackend
   // Comfortably under the callers' 15 s retry budget so several attempts fit, and long enough for a real
   // WAN handshake. Unbounded, one attempt against a host that routes but never answers runs to the OS
   // connect timeout (~21 s on Windows) and outlives the whole budget on its own.
-  internal int ConnectTimeoutMs = 3000;
+  private const int ConnectTimeoutMs = 3000;
 
   public override void ServerStart(int port, bool editMode, string expectedToken)
   {

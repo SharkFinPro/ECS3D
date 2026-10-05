@@ -43,6 +43,23 @@ internal static unsafe class TransportRecorder
     setLog((IntPtr)(delegate* unmanaged<int, IntPtr, void>)&OnLog);
   }
 
+  public static void Unregister()
+  {
+    delegate* unmanaged<IntPtr, void> setServerReceive = &Transport.serverSetReceiveCallback;
+    delegate* unmanaged<IntPtr, void> setServerDisconnect = &Transport.serverSetDisconnectCallback;
+    delegate* unmanaged<IntPtr, void> setServerAuthorized = &Transport.serverSetAuthorizedCallback;
+    delegate* unmanaged<IntPtr, void> setClientReceive = &Transport.clientSetReceiveCallback;
+    delegate* unmanaged<IntPtr, void> setClientDisconnect = &Transport.clientSetDisconnectCallback;
+    delegate* unmanaged<IntPtr, void> setLog = &Transport.setLogCallback;
+
+    setServerReceive(IntPtr.Zero);
+    setServerDisconnect(IntPtr.Zero);
+    setServerAuthorized(IntPtr.Zero);
+    setClientReceive(IntPtr.Zero);
+    setClientDisconnect(IntPtr.Zero);
+    setLog(IntPtr.Zero);
+  }
+
   public static void Reset()
   {
     ServerReceived.Clear();

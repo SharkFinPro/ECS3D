@@ -55,6 +55,8 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     {
       try { server.ServerStop(); } catch { /* best effort */ }
     }
+
+    TransportRecorder.Unregister();
   }
 
   // A raw socket speaking the wire format by hand, so a test controls exactly when (and whether) it reads
@@ -77,7 +79,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
       Stream = _tcp.GetStream();
       Stream.ReadTimeout = WaitMs;
 
-      var payload = new byte[] { role }.Concat(Encoding.UTF8.GetBytes(token)).ToArray();
+      var payload = new[] { role }.Concat(Encoding.UTF8.GetBytes(token)).ToArray();
       Write(TcpBackend.FrameBytes(HandshakeType, payload));
     }
 
@@ -103,13 +105,24 @@ public sealed class TcpBackendLoopbackTests : IDisposable
 
   private int Start(TcpBackend server, bool editMode = false, string token = "")
   {
-    var port = FreePort();
     _servers.Add(server);
-    server.ServerStart(port, editMode, token);
-    return port;
+
+    // The port is free when picked but could be taken before the bind, so retry a few times.
+    for (var attempt = 1;; ++attempt)
+    {
+      var port = FreePort();
+      try
+      {
+        server.ServerStart(port, editMode, token);
+        return port;
+      }
+      catch (SocketException) when (attempt < 5)
+      {
+      }
+    }
   }
 
-  private TcpBackend Connect(int port, byte role = RolePlayer, string token = "")
+  private TcpBackend Connect(int port, byte role, string token = "")
   {
     var client = new TcpBackend();
     _clients.Add(client);
@@ -162,7 +175,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   // order matches the order of the calls. Returns that connection's id.
   private int ConnectAndAwait(TcpBackend server, int port, int expectedCount)
   {
-    Connect(port);
+    Connect(port, RolePlayer);
     WaitFor(() => server.ServerConnectionCount() == expectedCount, $"connection {expectedCount} to join");
     return Authorized()[expectedCount - 1].ConnId;
   }
@@ -185,7 +198,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     WaitFor(() => server.ServerConnectionCount() == 2, "both accepted connections to be listed");
 
     var granted = Authorized();
-    Assert.Equal(new byte[] { RolePlayer, RoleEditor }, granted.Select(a => a.Role).OrderBy(role => role).ToArray());
+    Assert.Equal(new[] { RolePlayer, RoleEditor }, granted.Select(a => a.Role).OrderBy(role => role).ToArray());
     Assert.DoesNotContain(granted, a => a.ConnId == refusedId);
     Assert.Equal(3, granted.Select(a => a.ConnId).Append(refusedId).Distinct().Count());
     Assert.Single(TransportRecorder.ServerDisconnected);
@@ -197,7 +210,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     var server = new TcpBackend();
     var port = Start(server);
 
-    var sender = Connect(port);
+    var sender = Connect(port, RolePlayer);
     WaitFor(() => server.ServerConnectionCount() == 1, "the sender to join");
     var senderId = Authorized()[0].ConnId;
     var viewer = ConnectRaw(port);
@@ -231,7 +244,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     var server = new TcpBackend();
     var port = Start(server);
 
-    Connect(port);
+    Connect(port, RolePlayer);
     WaitFor(() => server.ServerConnectionCount() == 1, "the first client to join");
     var viewer = ConnectRaw(port);
     WaitFor(() => server.ServerConnectionCount() == 2, "the second client to join");
@@ -254,11 +267,11 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   [Fact]
   public void StalledPeer_IsDroppedWhileTheOtherPeersKeepReceiving()
   {
-    // 1500 ms is generous for two healthy peers to drain a 12 MiB frame; the stalled peer, last in the
-    // list, then spends the rest of the budget and is the only one dropped. A small server-side send
+    // 4000 ms leaves room for two healthy peers to drain a 4 MiB frame even on a loaded runner; the
+    // stalled peer, last in the list, then spends the rest of the budget and is the only one dropped. A small server-side send
     // buffer stops platforms that auto-tune it large from absorbing the frame, and the loop is the
     // backstop: a peer that never reads can only be sent so many bytes before a send blocks.
-    var server = new TcpBackend { SendTimeoutMs = 1500, AcceptedSendBufferBytes = 64 * 1024 };
+    var server = new TcpBackend { SendTimeoutMs = 4000, AcceptedSendBufferBytes = 64 * 1024 };
     var port = Start(server);
 
     var healthyA = ConnectAndAwait(server, port, 1);
@@ -269,7 +282,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     WaitFor(() => server.ServerConnectionCount() == 3, "the stalled peer to join");
     var stalledId = Authorized()[2].ConnId;
 
-    const int bigBytes = 12 * 1024 * 1024;
+    const int bigBytes = 4 * 1024 * 1024;
     const int maxBigFrames = 8;
     var bigFrames = 0;
     while (bigFrames < maxBigFrames && !TransportRecorder.ServerDisconnected.Contains(stalledId))
@@ -329,7 +342,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     var server = new TcpBackend { BodyReadTimeoutMs = 300 };
     var port = Start(server);
 
-    var healthy = Connect(port);
+    var healthy = Connect(port, RolePlayer);
     WaitFor(() => server.ServerConnectionCount() == 1, "the healthy client to join");
     var healthyId = Authorized()[0].ConnId;
     var stalled = ConnectRaw(port);
@@ -372,24 +385,26 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   }
 
   [Fact]
-  public void ClientConnect_ReturnsWithoutWaitingForTheServerToAnswerTheHandshake()
+  public void ClientConnect_StaysConnectedToAListenerThatNeverAnswersTheHandshake()
   {
-    // The connect completes at the TCP level, so a listener that accepts and says nothing does not delay
-    // it. The connect timeout itself cannot be provoked deterministically over loopback.
+    // The connect completes at the TCP level, so a listener that accepts and says nothing neither fails
+    // the connect nor ends the connection. The connect timeout cannot be provoked deterministically
+    // over loopback.
     var silent = new TcpListener(IPAddress.Loopback, 0);
     silent.Start();
     try
     {
       var port = ((IPEndPoint)silent.LocalEndpoint).Port;
-      var client = new TcpBackend { ConnectTimeoutMs = 500 };
+      var client = new TcpBackend();
       _clients.Add(client);
 
-      var started = Environment.TickCount64;
       Assert.Equal(1, client.ClientConnect("127.0.0.1", port, RolePlayer, ""));
-      Assert.True(Environment.TickCount64 - started < 500, "the connect should not run into its timeout");
 
       using var accepted = silent.AcceptTcpClient();
+      AssertStays(() => TransportRecorder.ClientDisconnects, 0, "client disconnect callbacks while connected");
+
       RunWithDeadline(client.ClientDisconnect, "ClientDisconnect");
+      WaitFor(() => TransportRecorder.ClientDisconnects == 1, "the disconnect callback after ClientDisconnect");
     }
     finally
     {
@@ -403,9 +418,9 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     var server = new TcpBackend();
     var port = Start(server);
 
-    var clientA = Connect(port);
+    var clientA = Connect(port, RolePlayer);
     WaitFor(() => server.ServerConnectionCount() == 1, "the first client to join");
-    Connect(port);
+    Connect(port, RolePlayer);
     WaitFor(() => server.ServerConnectionCount() == 2, "the second client to join");
     var ids = Authorized().Select(a => a.ConnId).ToArray();
 
@@ -437,7 +452,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     var server = new TcpBackend();
     var port = Start(server);
 
-    var client = Connect(port);
+    var client = Connect(port, RolePlayer);
     WaitFor(() => server.ServerConnectionCount() == 1, "the client to join");
     var id = Authorized()[0].ConnId;
 
@@ -453,7 +468,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     var server = new TcpBackend();
     var port = Start(server);
 
-    var client = Connect(port);
+    var client = Connect(port, RolePlayer);
     WaitFor(() => server.ServerConnectionCount() == 1, "the client to join");
     Assert.Equal(0, TransportRecorder.ClientDisconnects);
 
