@@ -141,10 +141,14 @@ void EditorApp::handleObjectComponentsChanged(const net::Message& message) const
 
 void EditorApp::handleEditStatus(const net::Message& message)
 {
-  net::MessageReader reader(message);
+  const auto editable = replication::parseEditStatus(message);
+  if (!editable)
+  {
+    return;
+  }
 
   // The server told us whether it's editable; a non-edit server makes the editor a read-only viewer.
-  m_serverEditable = reader.read<bool>();
+  m_serverEditable = *editable;
 
   if (!m_serverEditable)
   {
@@ -154,15 +158,18 @@ void EditorApp::handleEditStatus(const net::Message& message)
 
 void EditorApp::handleSceneStatus(const net::Message& message)
 {
-  net::MessageReader reader(message);
-  const auto status = reader.read<SceneStatus>();
+  const auto status = replication::parseSceneStatus(message);
+  if (!status)
+  {
+    return;
+  }
 
-  if (m_playHistory.observeStatus(status))
+  if (m_playHistory.observeStatus(*status))
   {
     clearUndoRedoPending();
   }
 
-  m_sceneStatus = status;
+  m_sceneStatus = *status;
 }
 
 void EditorApp::handleServerLog(const net::Message& message) const

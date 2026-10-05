@@ -17,6 +17,7 @@ class SceneManager;
 class ComponentRegistry;
 
 enum class LogCategory;
+enum class SceneStatus : uint8_t;
 
 namespace net {
   class Message;
@@ -280,6 +281,36 @@ struct InputStatePayload {
 // may predate it): fewer bytes than the block needs leaves hasMouse false rather than throwing, so those
 // bytes (if any) are simply left unread.
 [[nodiscard]] std::optional<InputStatePayload> parseInputState(const net::Message& message);
+
+// The join carries an optional per-session nonce (players send one, the editor sends none); the server
+// echoes it back in the playerSlot reply so only the sender keeps the slot.
+[[nodiscard]] net::Message buildJoin(std::optional<uint64_t> nonce);
+
+// nullopt when the payload holds no complete nonce.
+[[nodiscard]] std::optional<uint64_t> parseJoinNonce(const net::Message& message);
+
+struct PlayerSlotReply {
+  uint64_t nonce = 0;
+  int32_t slot = 0;
+};
+
+[[nodiscard]] net::Message buildPlayerSlot(uint64_t nonce, int32_t slot);
+
+// nullopt for a truncated payload; never throws.
+[[nodiscard]] std::optional<PlayerSlotReply> parsePlayerSlot(const net::Message& message);
+
+// The slot a broadcast reply assigns to the client holding myNonce; nullopt when it is for someone else.
+[[nodiscard]] std::optional<int32_t> slotForNonce(const PlayerSlotReply& reply, uint64_t myNonce);
+
+[[nodiscard]] net::Message buildSceneStatus(SceneStatus status);
+
+// nullopt for a truncated payload or a value that is not a SceneStatus; never throws.
+[[nodiscard]] std::optional<SceneStatus> parseSceneStatus(const net::Message& message);
+
+[[nodiscard]] net::Message buildEditStatus(bool editable);
+
+// nullopt for a truncated payload; never throws.
+[[nodiscard]] std::optional<bool> parseEditStatus(const net::Message& message);
 
 }
 

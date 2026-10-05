@@ -54,9 +54,7 @@ ClientApp::ClientApp(ConnectOptions options)
   m_joinNonce = (static_cast<uint64_t>(rd()) << 32) ^ rd();
 
   // Ask the server for the initial Snapshot, tagged with our nonce so the reply's slot is identifiable.
-  net::Message message(net::MessageType::join);
-  message.write(m_joinNonce);
-  m_netClient->send(message);
+  m_netClient->send(replication::buildJoin(m_joinNonce));
 }
 
 ClientApp::~ClientApp()
@@ -345,13 +343,15 @@ void ClientApp::handleObjectComponentsChanged(const net::Message& message) const
 void ClientApp::handlePlayerSlot(const net::Message& message) const
 {
   // The server broadcasts every client's slot assignment; keep only the one tagged with our own nonce.
-  net::MessageReader reader(message);
-  const auto nonce = reader.read<uint64_t>();
-  const auto slot = reader.read<int32_t>();
-
-  if (nonce == m_joinNonce)
+  const auto reply = replication::parsePlayerSlot(message);
+  if (!reply)
   {
-    m_playerSlot = slot;
+    return;
+  }
+
+  if (const auto slot = replication::slotForNonce(*reply, m_joinNonce))
+  {
+    m_playerSlot = *slot;
   }
 }
 

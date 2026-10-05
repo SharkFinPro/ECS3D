@@ -1798,4 +1798,109 @@ std::optional<InputStatePayload> parseInputState(const net::Message& message)
   return payload;
 }
 
+net::Message buildJoin(const std::optional<uint64_t> nonce)
+{
+  net::Message message(net::MessageType::join);
+
+  if (nonce)
+  {
+    message.write(*nonce);
+  }
+
+  return message;
+}
+
+std::optional<uint64_t> parseJoinNonce(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  if (reader.remaining() < sizeof(uint64_t))
+  {
+    return std::nullopt;
+  }
+
+  return reader.read<uint64_t>();
+}
+
+net::Message buildPlayerSlot(const uint64_t nonce, const int32_t slot)
+{
+  net::Message message(net::MessageType::playerSlot);
+  message.write(nonce);
+  message.write(slot);
+
+  return message;
+}
+
+std::optional<PlayerSlotReply> parsePlayerSlot(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  if (reader.remaining() < sizeof(uint64_t) + sizeof(int32_t))
+  {
+    return std::nullopt;
+  }
+
+  PlayerSlotReply reply;
+  reply.nonce = reader.read<uint64_t>();
+  reply.slot = reader.read<int32_t>();
+
+  return reply;
+}
+
+std::optional<int32_t> slotForNonce(const PlayerSlotReply& reply, const uint64_t myNonce)
+{
+  if (reply.nonce != myNonce)
+  {
+    return std::nullopt;
+  }
+
+  return reply.slot;
+}
+
+net::Message buildSceneStatus(const SceneStatus status)
+{
+  net::Message message(net::MessageType::sceneStatus);
+  message.write(status);
+
+  return message;
+}
+
+std::optional<SceneStatus> parseSceneStatus(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  if (reader.remaining() < sizeof(SceneStatus))
+  {
+    return std::nullopt;
+  }
+
+  const auto status = reader.read<SceneStatus>();
+  if (status != SceneStatus::running && status != SceneStatus::stopped && status != SceneStatus::paused)
+  {
+    return std::nullopt;
+  }
+
+  return status;
+}
+
+net::Message buildEditStatus(const bool editable)
+{
+  net::Message message(net::MessageType::editStatus);
+  message.write(editable);
+
+  return message;
+}
+
+std::optional<bool> parseEditStatus(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  if (reader.remaining() < sizeof(uint8_t))
+  {
+    return std::nullopt;
+  }
+
+  return reader.read<bool>();
+}
+
 }

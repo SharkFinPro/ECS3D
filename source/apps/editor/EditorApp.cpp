@@ -4,6 +4,7 @@
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
+#include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
@@ -116,8 +117,7 @@ EditorApp::EditorApp(LaunchOptions options)
   connectToServer();
 
   // Ask the server for the initial Snapshot.
-  const net::Message message(net::MessageType::join);
-  m_netClient->send(message);
+  m_netClient->send(replication::buildJoin(std::nullopt));
 }
 
 void EditorApp::setupSceneOverlay()

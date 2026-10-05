@@ -98,14 +98,9 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
   // If the client tagged its join with a nonce (players do; the editor sends none), tell it which slot it
   // got so it can render through that player's camera. Broadcasting with nonce correlation avoids a
   // per-connection send path - every client hears it, only the matching one keeps it.
-  net::MessageReader reader(message);
-  if (reader.remaining() >= sizeof(uint64_t))
+  if (const auto nonce = replication::parseJoinNonce(message))
   {
-    const auto nonce = reader.read<uint64_t>();
-    net::Message reply(net::MessageType::playerSlot);
-    reply.write(nonce);
-    reply.write(slot);
-    m_netServer->broadcast(reply);
+    m_netServer->broadcast(replication::buildPlayerSlot(*nonce, slot));
   }
 
   broadcastEditStatus();
