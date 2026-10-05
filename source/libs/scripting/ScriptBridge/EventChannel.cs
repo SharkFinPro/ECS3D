@@ -46,11 +46,23 @@ internal sealed class EventChannel
         _onFault = onFault;
     }
 
+    // A throwing log fallback must not fault a subscriber or the caller.
+    private static void SafeWarn(string message)
+    {
+        try
+        {
+            Log.warn(message);
+        }
+        catch
+        {
+        }
+    }
+
     internal Subscription subscribe(string ownerKey, string eventName, Action<object?> handler)
     {
         if (string.IsNullOrEmpty(eventName) || handler == null)
         {
-            Log.warn("Event subscription refused: the event name must not be empty and the handler must not be null.");
+            SafeWarn("Event subscription refused: the event name must not be empty and the handler must not be null.");
             return new Subscription(null, ownerKey, eventName ?? "", null);
         }
 
@@ -80,7 +92,7 @@ internal sealed class EventChannel
             else if (!warned)
             {
                 warned = true;
-                Log.warn($"Event '{eventName}' was published with a payload of type " +
+                SafeWarn($"Event '{eventName}' was published with a payload of type " +
                          $"{payload?.GetType().Name ?? "null"}; a subscriber expecting {typeof(T).Name} skipped it.");
             }
         });
@@ -91,13 +103,13 @@ internal sealed class EventChannel
     {
         if (string.IsNullOrEmpty(eventName))
         {
-            Log.warn("Event publish refused: the event name must not be empty.");
+            SafeWarn("Event publish refused: the event name must not be empty.");
             return 0;
         }
 
         if (_depth >= MaxNestingDepth)
         {
-            Log.warn($"Event '{eventName}' was not published: handlers published events {MaxNestingDepth} " +
+            SafeWarn($"Event '{eventName}' was not published: handlers published events {MaxNestingDepth} " +
                      "levels deep, which looks like a loop between scripts.");
             return 0;
         }

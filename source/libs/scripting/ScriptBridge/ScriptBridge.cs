@@ -187,8 +187,14 @@ public static class Bridge
 
     internal static void AddInstance(string uuid, string className, ScriptBase instance)
     {
+        var key = Key(uuid, className);
+        if (_instances.TryGetValue(key, out var previous) && !ReferenceEquals(previous, instance))
+        {
+            _events.removeOwner(key);
+        }
+
         instance.EntityId = uuid;
-        _instances[Key(uuid, className)] = instance;
+        _instances[key] = instance;
     }
 
     internal static void RemoveInstance(string uuid, string className)

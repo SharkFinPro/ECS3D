@@ -10,10 +10,11 @@ public class EventChannelTests
   private readonly HashSet<string> _faulted = new();
   private readonly List<(string Owner, string Event, Exception Ex)> _faults = new();
   private readonly EventChannel _channel;
+  private bool _faultCheckThrows;
 
   public EventChannelTests()
   {
-    _channel = new EventChannel(owner => _faulted.Contains(owner), (owner, name, ex) =>
+    _channel = new EventChannel(owner => _faultCheckThrows ? throw new InvalidOperationException("gate") : _faulted.Contains(owner), (owner, name, ex) =>
     {
       _faulted.Add(owner);
       _faults.Add((owner, name, ex));
@@ -221,15 +222,43 @@ public class EventChannelTests
   }
 
   [Fact]
-  public void DepthResetsAfterAThrowingNestedPublish()
+  public void DepthResetsWhenAnExceptionEscapesPublish()
   {
-    _channel.subscribe("a", "inner", _ => throw new InvalidOperationException());
-    _channel.subscribe("b", "outer", _ => _channel.publish("inner", null));
+    _channel.subscribe("a", "inner", _ => { });
 
+    _faultCheckThrows = true;
     for (var i = 0; i < EventChannel.MaxNestingDepth + 2; i++)
     {
-      Assert.Equal(1, _channel.publish("outer", null));
+      Assert.Throws<InvalidOperationException>(() => _channel.publish("inner", null));
     }
+
+    _faultCheckThrows = false;
+    var depthReached = 0;
+    _channel.subscribe("b", "loop", _ =>
+    {
+      depthReached++;
+      _channel.publish("loop", null);
+    });
+    _channel.publish("loop", null);
+
+    Assert.Equal(EventChannel.MaxNestingDepth, depthReached);
+  }
+
+  [Fact]
+  public void SecondHandlerOfAFaultedOwnerIsSkippedForTheRestOfThePublish()
+  {
+    var secondCalls = 0;
+    var otherCalls = 0;
+    _channel.subscribe("owner", "go", _ => throw new InvalidOperationException("boom"));
+    _channel.subscribe("owner", "go", _ => secondCalls++);
+    _channel.subscribe("other", "go", _ => otherCalls++);
+
+    var ran = _channel.publish("go", null);
+
+    Assert.Equal(2, ran);
+    Assert.Equal(0, secondCalls);
+    Assert.Equal(1, otherCalls);
+    Assert.Single(_faults);
   }
 
   [Fact]
@@ -298,6 +327,10 @@ public class EventChannelBridgeTests : IDisposable
     public List<object?> Received { get; } = new();
 
     public void Listen(string eventName) => subscribe(eventName, p => Received.Add(p));
+
+    public Subscription ListenTo(string eventName) => subscribe(eventName, p => Received.Add(p));
+
+    public Subscription ListenTyped(string eventName) => subscribe<string>(eventName, p => Received.Add(p));
 
     public void ListenAndThrow(string eventName) => subscribe(eventName, _ => throw new InvalidOperationException("boom"));
   }
@@ -374,5 +407,56 @@ public class EventChannelBridgeTests : IDisposable
 
     Assert.Equal(1, announcer.Announce("go", null));
     Assert.Equal(2, good.Received.Count);
+  }
+
+  [Fact]
+  public void SubscribeFromAnInstanceThatWasNeverAddedIsRefused()
+  {
+    var announcer = Add<Announcer>("evt-announcer");
+    var live = Add<Listener>("evt-live");
+    var stray = new Listener();
+
+    var strayHandle = stray.ListenTo("go");
+    var liveHandle = live.ListenTo("go");
+
+    Assert.False(strayHandle.isActive);
+    Assert.True(liveHandle.isActive);
+    Assert.Equal(1, announcer.Announce("go", 1));
+    Assert.Empty(stray.Received);
+    Assert.Single(live.Received);
+  }
+
+  [Fact]
+  public void SubscribeAfterRemoveInstanceIsRefused()
+  {
+    var announcer = Add<Announcer>("evt-announcer");
+    var listener = Add<Listener>("evt-listener");
+    Assert.True(listener.ListenTyped("go").isActive);
+
+    Bridge.RemoveInstance("evt-listener", nameof(Listener));
+    var late = listener.ListenTo("go");
+
+    Assert.False(late.isActive);
+    Assert.Equal(0, announcer.Announce("go", "x"));
+    Assert.Empty(listener.Received);
+  }
+
+  [Fact]
+  public void ReplacingAnInstanceDropsTheOldOnesHandlers()
+  {
+    var announcer = Add<Announcer>("evt-announcer");
+    var old = Add<Listener>("evt-listener");
+    var oldHandle = old.ListenTo("go");
+    Assert.Equal(1, announcer.Announce("go", 1));
+
+    var replacement = new Listener();
+    Bridge.AddInstance("evt-listener", nameof(Listener), replacement);
+    var newHandle = replacement.ListenTo("go");
+
+    Assert.False(oldHandle.isActive);
+    Assert.True(newHandle.isActive);
+    Assert.Equal(1, announcer.Announce("go", 2));
+    Assert.Single(old.Received);
+    Assert.Equal(new object?[] { 2 }, replacement.Received);
   }
 }
