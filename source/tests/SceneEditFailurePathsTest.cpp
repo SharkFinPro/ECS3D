@@ -122,6 +122,7 @@ TEST(SceneEditFailurePaths, InstantiatePrefabWithAMalformedPrefabUuidIsMalformed
   const auto scene = makeScene();
   AssetRegistry registry;
   const auto before = shapeOf(*scene.objectManager);
+  const auto objectCount = scene.objectManager->getAllObjects().size();
 
   const nlohmann::json edit = { { "op", "instantiatePrefab" }, { "prefab", "not-a-uuid" } };
   EXPECT_EQ(applyEdit(scene, edit, &registry), SceneEditResult::malformedEdit);
@@ -133,7 +134,7 @@ TEST(SceneEditFailurePaths, InstantiatePrefabWithAMalformedPrefabUuidIsMalformed
                            .body = trivialBody().dump() });
   EXPECT_EQ(applyEdit(scene, replication::buildInstantiatePrefab(prefabUUID), &registry),
             SceneEditResult::applied);
-  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before.size() + 1);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), objectCount + 1);
 }
 
 TEST(SceneEditFailurePaths, AddObjectWithAMalformedParentUuidIsMalformed)
@@ -154,6 +155,7 @@ TEST(SceneEditFailurePaths, RestoreObjectWhoseBodyIsNotAnObjectIsMalformed)
 {
   const auto scene = makeScene();
   const auto before = shapeOf(*scene.objectManager);
+  const auto objectCount = scene.objectManager->getAllObjects().size();
 
   const nlohmann::json edit = { { "op", "restoreObject" }, { "body", "not an object" }, { "index", 0 } };
   EXPECT_EQ(applyEdit(scene, edit), SceneEditResult::malformedEdit);
@@ -161,7 +163,7 @@ TEST(SceneEditFailurePaths, RestoreObjectWhoseBodyIsNotAnObjectIsMalformed)
 
   EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(trivialBody(), nullptr, 0)),
             SceneEditResult::applied);
-  EXPECT_EQ(scene.objectManager->getAllObjects().size(), before.size() + 1);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), objectCount + 1);
 }
 
 TEST(SceneEditFailurePaths, DuplicateObjectReportsAnObjectItCannotRebuildAsFailed)
