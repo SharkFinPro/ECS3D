@@ -310,7 +310,15 @@ void ScriptSystem::syncFieldsToData(const ObjectManager& objectManager) const
         continue;
       }
 
-      script->setFields(readFieldsFromInstance(uuid, className));
+      auto fields = readFieldsFromInstance(uuid, className);
+
+      // A getter that throws mid-read faults the instance and the rest read back as defaults.
+      if (!m_engine->isHealthy(uuids::to_string(uuid).c_str(), className.c_str()))
+      {
+        continue;
+      }
+
+      script->setFields(fields);
     }
   }
 }

@@ -125,11 +125,10 @@ private:
 
   void detach(const uuids::uuid& uuid, const std::string& className);
 
-  // Also forgets unresolved scripts whose component has left the scene or been replaced.
   // Stop and detach every instance whose Script component is no longer in the scene, since every other
   // loop here only visits scripts the objects still return. Matching is by component identity, not by
   // key, so a replacement Script of the same class on the same object orphans the old instance rather
-  // than silently inheriting it.
+  // than silently inheriting it. Unresolved scripts whose component left or was replaced are forgotten too.
   void detachOrphans(const ObjectManager& objectManager);
 
   // Call the instance's C# start() exactly once - a no-op on every call after the first for the same
