@@ -102,6 +102,8 @@ add_executable(${PROJECT_NAME}
   ProtocolFramingTest.cpp
   InputStatePayloadTest.cpp
   WireTypesTest.cpp
+  WireTruncationSweepTest.cpp
+  WireTruncation.h
   MessageQueueTest.cpp
   TransportLogTest.cpp
   SmokeTest.cpp
