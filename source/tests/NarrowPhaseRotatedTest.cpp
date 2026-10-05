@@ -3,20 +3,17 @@
 #include "TestPrinters.h"
 #include "collisions/NarrowPhase.h"
 #include "objects/Object.h"
+#include "objects/components/RotationConvention.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 
 #include <glm/geometric.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
-#include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <array>
 #include <cmath>
-#include <cstdint>
 #include <memory>
-#include <optional>
-#include <utility>
 
 namespace {
   constexpr float tolerance = 1e-3f;
@@ -27,9 +24,6 @@ namespace {
   {
     std::shared_ptr<Object> object;
     std::shared_ptr<BoxCollider> collider;
-    glm::vec3 position;
-    glm::vec3 scale;
-    glm::vec3 rotation;
   };
 
   Box makeBox(const glm::vec3& position, const glm::vec3& rotation = glm::vec3(0),
@@ -44,26 +38,20 @@ namespace {
     auto collider = std::make_shared<BoxCollider>();
     object->addComponent(collider);
 
-    return { object, collider, position, scale, rotation };
+    return { object, collider };
   }
 
-  glm::mat3 orientationOf(const glm::vec3& rotationDegrees)
+  // Read from the collider itself, so the oriented extents come from the same position, scale and
+  // rotation the narrow phase sees.
+  bool insideBox(BoxCollider& box, const glm::vec3& point, const float slack = tolerance)
   {
-    const auto radians = glm::radians(rotationDegrees);
-
-    return glm::mat3(glm::rotate(glm::mat4(1.0f), radians.z, { 0, 0, 1 }) *
-                     glm::rotate(glm::mat4(1.0f), radians.y, { 0, 1, 0 }) *
-                     glm::rotate(glm::mat4(1.0f), radians.x, { 1, 0, 0 }));
-  }
-
-  bool insideBox(const Box& box, const glm::vec3& point, const float slack = tolerance)
-  {
-    const auto orientation = orientationOf(box.rotation);
-    const auto relative = point - box.position;
+    const auto orientation = glm::mat3_cast(eulerDegreesToQuat(box.getRotation()));
+    const auto relative = point - box.getPosition();
+    const auto halfExtents = box.getScale();
 
     for (int i = 0; i < 3; ++i)
     {
-      if (std::fabs(glm::dot(relative, orientation[i])) > box.scale[i] + slack)
+      if (std::fabs(glm::dot(relative, orientation[i])) > halfExtents[i] + slack)
       {
         return false;
       }
@@ -109,14 +97,14 @@ namespace {
     return false;
   }
 
-  void expectEveryPointInsideBoth(const collisions::Contact& contact, const Box& first, const Box& second)
+  void expectEveryPointInsideBoth(const collisions::Contact& contact, Box& first, Box& second)
   {
     for (const auto& point : contact.contactPoints())
     {
       SCOPED_TRACE(::testing::Message() << "point (" << point.x << ", " << point.y << ", " << point.z << ")");
 
-      EXPECT_TRUE(insideBox(first, point));
-      EXPECT_TRUE(insideBox(second, point));
+      EXPECT_TRUE(insideBox(*first.collider, point));
+      EXPECT_TRUE(insideBox(*second.collider, point));
     }
   }
 
@@ -155,7 +143,6 @@ TEST(NarrowPhaseRotated, ReportsABoxTurnedAboutYRestingOnAFlatBoxAlongY)
 
   // The control: lifted clear, the same pair no longer touches.
   turned.object->getComponent<Transform>(ComponentType::transform)->setPosition({ 0, 2.2f, 0 });
-  turned.position = { 0, 2.2f, 0 };
 
   expectAgreement(flat, turned, false);
 }
@@ -179,7 +166,6 @@ TEST(NarrowPhaseRotated, MeasuresASidewaysPushOfATurnedBoxFromItsCorner)
 
   // The mirrored push, so the sign is pinned on both sides.
   turned.object->getComponent<Transform>(ComponentType::transform)->setPosition({ -2, 0, 0 });
-  turned.position = { -2, 0, 0 };
 
   const auto mirrored = collisions::findContact(*flat.collider, *turned.collider);
   ASSERT_TRUE(mirrored.has_value());
@@ -219,7 +205,9 @@ TEST(NarrowPhaseRotated, ReportsFourManifoldPointsForFaceOnFace)
   auto flat = makeBox({ 0, 0, 0 });
 
   // The upper box's bottom face (y = 0.8) overlaps the flat box's top over x in [-0.5, 1] and z in
-  // [-0.5, 1]; its four corners are clamped onto that footprint.
+  // [-0.5, 1]; its four corners are clamped onto that footprint. Identical axes tie on the reference
+  // choice and the flat box wins it (the >= in the manifold code), so the points keep the upper box's
+  // y = 0.8 rather than the flat box's y = 1.
   auto upper = makeBox({ 0.5f, 1.8f, 0.5f });
 
   const auto contact = collisions::findContact(*flat.collider, *upper.collider);
@@ -301,6 +289,7 @@ TEST(NarrowPhaseRotated, InventsNoPushForFacesThatOnlyTouch)
   // Exactly touching has no depth to resolve, so the full query either reports nothing or a contact
   // with none; what it must not do is invent a push.
   const auto touching = collisions::findContact(*lower.collider, *upper.collider);
+  EXPECT_EQ(collisions::intersects(*lower.collider, *upper.collider), touching.has_value());
   if (touching.has_value())
   {
     EXPECT_TRUE(isFinite(touching->minimumTranslationVector));
@@ -345,7 +334,6 @@ TEST(NarrowPhaseRotated, StaysFiniteWhereTwoEdgesCross)
 
   // The control: lifted out of reach, nothing touches.
   second.object->getComponent<Transform>(ComponentType::transform)->setPosition({ 0, 2.0f * edgeHeight + 0.1f, 0 });
-  second.position = { 0, 2.0f * edgeHeight + 0.1f, 0 };
 
   expectAgreement(first, second, false);
 }
@@ -374,7 +362,6 @@ TEST(NarrowPhaseRotated, KeepsTheNormalPointingTheRightWayAtAHundredToOneScale)
   expectAgreement(slab, small, true);
 
   small.object->getComponent<Transform>(ComponentType::transform)->setPosition({ 3, 1.2f, -2 });
-  small.position = { 3, 1.2f, -2 };
 
   expectAgreement(slab, small, false);
 }
