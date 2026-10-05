@@ -82,12 +82,16 @@ std::vector<int32_t> playerSlotsInScene(const ObjectManager& objectManager)
   {
     if (const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController))
     {
-      slots.push_back(playerController->getPlayerSlot());
+      const int32_t slot = playerController->getPlayerSlot();
+      if (slot >= 0 && slot <= maxPlayerSlot)
+      {
+        slots.push_back(slot);
+      }
     }
   }
 
   std::ranges::sort(slots);
-  slots.erase(std::ranges::unique(slots).begin(), slots.end());
+  slots.erase(std::unique(slots.begin(), slots.end()), slots.end());
   return slots;
 }
 

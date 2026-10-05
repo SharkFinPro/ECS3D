@@ -354,12 +354,12 @@ like every other wire payload), the server writes it into `InputState`, and `Inp
 back for scripts. Input is
 **per-player**: the transport tags each inbound message with a stable connection id (`NetServer::poll`'s
 `senderId`, from a monotonic id the C# backends assign); `ServerApp` binds each connection to a **player
-slot** on join (freed on disconnect via a transport disconnect callback + `NetServer::takeDisconnected`; the bookkeeping is `PlayerSlotTable` in `data/PlayerSlots`, and an editor connection may move to another free slot with `possessSlot`, never onto one another live connection holds - see Camera below),
+slot** on join (freed on disconnect via a transport disconnect callback + `NetServer::takeDisconnected`),
 and `InputState` is keyed by that slot. A script reads *its own* player through `ScriptBase.input`
 (`PlayerInput`), which resolves `object → PlayerController.playerSlot → InputState[slot]`; the global
 `InputUtils` stays a player-agnostic aggregate. `PlayerController` is an ordinary replicated data
 component (slot is editable + serialized), so possession is visible to the editor and to clients — the
-hook the camera uses to pick "whose view" (see Camera below). Mouse delta/scroll and key edges
+hook the camera uses to pick "whose view" (see Camera below). The slot bookkeeping is `PlayerSlotTable` (`data/PlayerSlots`). An authorized editor on an edit-mode server can move its connection to another slot with `possessSlot`. The server refuses a slot another live connection holds. Mouse delta/scroll and key edges
 (`wasPressedThisTick`) accumulate between fixed ticks and are reset per tick by
 `InputState::clearMouseDeltas()`/`commitInputEdges()`. Forces
 requested from a script are buffered on the `RigidBody` data (pending-force queue) and drained by
@@ -508,7 +508,7 @@ since the projection maps depth to -1..1 while Vulkan clips at 0. A client picks
 object) using a **nonce-over-broadcast** handshake: the client tags its `join` with a random nonce, the
 server echoes `(nonce, slot)` back over the existing broadcast (`NetServer` has no targeted-send path), and
 only the client whose nonce matches keeps it — chosen over adding a targeted-send ABI to the C# transport,
-which would have meant touching both backends for one bit of routing. The editor uses the same handshake: its `join` carries a nonce too, and the Scene Status "Player" combo (`EditorApp::displayPlayerSelector`) sends `possessSlot` (editor connections only, not a mutation message) to move its input to another slot. `ServerApp::handlePossessSlot` answers every request, granted or refused, with a `playerSlot` for that connection's nonce, so the editor only follows the authoritative outcome: on a confirmed switch it resends its input for the new slot and points its View at that player's `Camera` (`findPlayerCamera`, shared with `ClientApp`; a player with no `Camera` leaves the view alone), while the join reply just records the slot. `PlayerScript` mouse-look rotates the
+which would have meant touching both backends for one bit of routing. The editor uses the same handshake. Its `join` carries a nonce too. The Scene Status "Player" combo (`EditorApp::displayPlayerSelector`) sends `possessSlot` to move its input to another slot. That message is not a mutation message, but the server honors it only on an edit-mode server, from the authorized editor connection. `ServerApp::handlePossessSlot` answers every request, granted or refused, with a `playerSlot` for that connection's nonce. The editor follows only that answer. On a confirmed switch it resends its input for the new slot and points its View at that player's `Camera` (`findPlayerCamera`, shared with `ClientApp`). A player with no `Camera` leaves the view alone. The join reply just records the slot. An unanswered request times out so the combo is not stuck disabled. `PlayerScript` mouse-look rotates the
 object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
 gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
 movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded

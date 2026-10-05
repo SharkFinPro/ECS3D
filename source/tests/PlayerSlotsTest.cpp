@@ -222,3 +222,14 @@ TEST(PlayerSlotPayloads, TruncatedPayloadsParseToNothing)
   EXPECT_FALSE(replication::parsePlayerSlot(nonceOnly).has_value());
   EXPECT_FALSE(replication::parsePlayerSlot(net::Message(net::MessageType::playerSlot)).has_value());
 }
+
+TEST(PlayerSlotsInScene, OmitsSlotsNoConnectionCouldBeBoundTo)
+{
+  const auto scene = fixtures::makeScene();
+  addController(fixtures::addObject(scene, "Negative"), -1);
+  addController(fixtures::addObject(scene, "Low"), 2);
+  addController(fixtures::addObject(scene, "TooHigh"), maxPlayerSlot + 1);
+  addController(fixtures::addObject(scene, "Highest"), maxPlayerSlot);
+
+  EXPECT_EQ(playerSlotsInScene(*scene.objectManager), (std::vector<int32_t>{ 2, maxPlayerSlot }));
+}

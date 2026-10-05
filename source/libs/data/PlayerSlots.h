@@ -47,7 +47,8 @@ private:
   [[nodiscard]] bool isHeld(int32_t slot) const;
 };
 
-// Every PlayerController slot in the scene, children included, ascending and without duplicates.
+// Every PlayerController slot in the scene that a connection could be bound to (0..maxPlayerSlot), children
+// included, ascending and without duplicates.
 [[nodiscard]] std::vector<int32_t> playerSlotsInScene(const ObjectManager& objectManager);
 
 // The first object whose PlayerController holds the slot and that also carries a Camera.
