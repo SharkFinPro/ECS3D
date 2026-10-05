@@ -241,6 +241,10 @@ Runtime structural changes from a *script* (spawn/destroy) take a third path: li
 `objectSpawned` (one packed `Object`) / `objectDestroyed` (a uuid) messages the client splices into/out of
 its scene incrementally — kept off the full-snapshot path so frequent spawning stays cheap. Build/apply
 live in `data/Replication.{h,cpp}`; a late joiner still gets the objects via the normal join snapshot.
+The join, playerSlot, sceneStatus and editStatus payloads are built and parsed there too
+(`replication::buildJoin`/`parseJoinNonce`, `buildPlayerSlot`/`parsePlayerSlot`/`slotForNonce`,
+`buildSceneStatus`/`parseSceneStatus`, `buildEditStatus`/`parseEditStatus`); each parser returns nullopt on a
+truncated payload, and `parseSceneStatus` also on a status byte that is not a `SceneStatus`.
 
 **Prefabs.** A prefab is an `AssetRegistry` record whose **body travels inline** — one `Object::serialize()`
 blob, stored dumped in `AssetRecord::body` and threaded through the same `serialize`/`loadFromJSON`/`pack`/
@@ -508,10 +512,8 @@ since the projection maps depth to -1..1 while Vulkan clips at 0. A client picks
 object) using a **nonce-over-broadcast** handshake: the client tags its `join` with a random nonce, the
 server echoes `(nonce, slot)` back over the existing broadcast (`NetServer` has no targeted-send path), and
 only the client whose nonce matches keeps it — chosen over adding a targeted-send ABI to the C# transport,
-which would have meant touching both backends for one bit of routing. The join, playerSlot, sceneStatus and
-editStatus payloads are built and parsed by `replication::buildJoin`/`parseJoinNonce`, `buildPlayerSlot`/
-`parsePlayerSlot`/`slotForNonce`, `buildSceneStatus`/`parseSceneStatus` and `buildEditStatus`/`parseEditStatus`
-in `data/Replication.{h,cpp}` (parsers return nullopt on a truncated payload). `PlayerScript` mouse-look rotates the
+which would have meant touching both backends for one bit of routing. The handshake's build and parse live in
+`data/Replication.{h,cpp}` (see Replication above). `PlayerScript` mouse-look rotates the
 object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
 gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
 movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded
