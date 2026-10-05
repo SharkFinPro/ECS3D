@@ -12,6 +12,8 @@
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
 #include <objects/components/PlayerController.h>
+#include <PlayerSlots.h>
+#include <NetClient.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
@@ -22,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace {
   // How a camera reads in the editor's "View" combo: the owning object's name, the player slot when it's a
@@ -86,6 +89,31 @@ namespace {
         viewCameraObject = uuid;
       }
     }
+  }
+
+  // How a player slot reads in the "Player" combo: its number, plus the owning object's name when exactly
+  // one object holds that slot.
+  std::string playerLabel(ObjectManager* objectManager, const int32_t slot)
+  {
+    std::string label = "Player " + std::to_string(slot);
+    if (!objectManager)
+    {
+      return label;
+    }
+
+    std::string owner;
+    int owners = 0;
+    for (const auto& object : objectManager->getAllObjects())
+    {
+      const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController);
+      if (playerController && playerController->getPlayerSlot() == slot)
+      {
+        owner = object->getName();
+        ++owners;
+      }
+    }
+
+    return owners == 1 ? label + " (" + owner + ")" : label;
   }
 
   const char* sceneStatusLabel(const SceneStatus status)
@@ -177,6 +205,8 @@ void EditorApp::displaySceneStatus()
   displayRayTracingToggle();
 
   displayCameraSelector();
+
+  displayPlayerSelector();
 
   displayGizmoControls();
 
@@ -334,6 +364,50 @@ void EditorApp::displayCameraSelector()
 
     ImGui::EndCombo();
   }
+}
+
+void EditorApp::displayPlayerSelector()
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+  const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
+
+  std::vector<int32_t> slots;
+  if (objectManager)
+  {
+    slots = playerSlotsInScene(*objectManager);
+  }
+
+  if (m_playerSlot >= 0 && std::ranges::find(slots, m_playerSlot) == slots.end())
+  {
+    slots.insert(std::ranges::upper_bound(slots, m_playerSlot), m_playerSlot);
+  }
+
+  const std::string preview = m_playerSlot >= 0 ? "Player " + std::to_string(m_playerSlot) : std::string("-");
+
+  ImGui::SameLine(0.0f, 18.0f);
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextColored(theme::t2, "%s", "Player");
+  ImGui::SameLine();
+
+  // A view/input choice, not a scene edit, so this stays enabled on a read-only server. It waits for the
+  // server to answer the previous request before offering another.
+  ImGui::BeginDisabled(!m_netClient->isConnected() || m_playerSlot < 0 || m_requestedPlayerSlot.has_value());
+  ImGui::SetNextItemWidth(160.0f);
+  if (ImGui::BeginCombo("##PlayerSlot", preview.c_str()))
+  {
+    for (const int32_t slot : slots)
+    {
+      const std::string label = playerLabel(objectManager, slot) + "##slot" + std::to_string(slot);
+
+      if (ImGui::Selectable(label.c_str(), slot == m_playerSlot) && slot != m_playerSlot)
+      {
+        requestPlayerSlot(slot);
+      }
+    }
+
+    ImGui::EndCombo();
+  }
+  ImGui::EndDisabled();
 }
 
 void EditorApp::displayGizmoControls() const
