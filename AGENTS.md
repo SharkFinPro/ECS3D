@@ -104,11 +104,14 @@
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
-  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`). What stays uncovered here is whatever actually calls a
-  native function pointer (the `Transform`/`RigidBody`/`Camera`/... wrapper methods, once
-  `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry point (can't be called
-  from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
-  reachable the same way, as pure code over plain objects. Private product logic is exposed to this
+  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`). The component wrappers (`World`, `Transform`, `RigidBody`, `Camera`, `Collider`, `ModelRenderer`,
+  `LightRenderer`, `PlayerController`, `InputUtils`/`PlayerInput`, `ScriptBase`) are covered too:
+  `FakeNatives.Install()` points every `NativeBindings.*` table at `[UnmanagedCallersOnly]` fakes that record
+  each call and answer from canned values (a native `bool` is a `byte` there, since this assembly keeps runtime
+  marshalling on), and restores the tables when disposed; those suites share the serial `BridgeInstances`
+  collection. What stays uncovered is whatever is itself an `[UnmanagedCallersOnly]` entry point (can't be
+  called from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
+  reachable the same way, as pure code over plain objects or through a fake binding table. Private product logic is exposed to this
   project through `internal` + `InternalsVisibleTo` (declared in `source/libs/net/Transport/AssemblyInfo.cs` and
   `source/libs/scripting/ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`
   under `$(BuildRoot)obj/tests/` and `$(BuildRoot)bin/tests/` — one level deeper than `Transport`'s own
