@@ -28,6 +28,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   private const byte RoleEditor = 1;
   private const byte HandshakeType = 0xFF;
   private const int WaitMs = 5000;
+  private const int MaxStartAttempts = 5;
 
   private readonly List<TcpBackend> _servers = new();
   private readonly List<TcpBackend> _clients = new();
@@ -108,7 +109,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     _servers.Add(server);
 
     // The port is free when picked but could be taken before the bind, so retry a few times.
-    for (var attempt = 1;; ++attempt)
+    for (var attempt = 1; attempt < MaxStartAttempts; ++attempt)
     {
       var port = FreePort();
       try
@@ -116,10 +117,15 @@ public sealed class TcpBackendLoopbackTests : IDisposable
         server.ServerStart(port, editMode, token);
         return port;
       }
-      catch (SocketException) when (attempt < 5)
+      catch (SocketException)
       {
+        // Another process took the probed port; pick a new one.
       }
     }
+
+    var lastPort = FreePort();
+    server.ServerStart(lastPort, editMode, token);
+    return lastPort;
   }
 
   private TcpBackend Connect(int port, byte role, string token = "")
