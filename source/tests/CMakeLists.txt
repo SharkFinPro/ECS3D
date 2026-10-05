@@ -218,10 +218,11 @@ if(DOTNET_EXE)
     --nologo
   )
 
-  # The collector ships with Microsoft.NET.Test.Sdk, which the test project already references.
+  # The collector ships with Microsoft.NET.Test.Sdk, which the test project already references. The
+  # semicolon is escaped because this is a CMake list: unescaped, it splits the collector argument in two.
   if(ECS3D_COVERAGE)
     list(APPEND ECS3D_MANAGED_TESTS_ARGS
-      --collect "Code Coverage;Format=cobertura"
+      --collect "Code Coverage\;Format=cobertura"
       --results-directory ${CMAKE_BINARY_DIR}/coverage/managed
     )
   endif()
