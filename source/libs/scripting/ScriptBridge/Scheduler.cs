@@ -7,7 +7,7 @@ public sealed class TimerHandle
 {
     private readonly Scheduler? _owner;
 
-    internal TimerHandle(Scheduler? owner, double due, double interval, bool repeating, Action? action)
+    internal TimerHandle(Scheduler? owner, double due, double interval, bool repeating, Action action)
     {
         _owner = owner;
         Due = due;
@@ -36,7 +36,7 @@ public sealed class TimerHandle
 
     internal bool Repeating { get; }
 
-    internal Action? Action { get; }
+    internal Action Action { get; }
 
     internal void Deactivate() => isActive = false;
 }
@@ -50,9 +50,14 @@ internal sealed class Scheduler
 
     public TimerHandle after(float seconds, Action action)
     {
+        if (action == null)
+        {
+            return Refuse(nameof(after), "null action");
+        }
+
         if (!float.IsFinite(seconds) || seconds < 0f)
         {
-            return Refuse(nameof(after), seconds);
+            return Refuse(nameof(after), $"invalid duration {seconds}");
         }
 
         return Add(new TimerHandle(this, _now + seconds, 0.0, false, action));
@@ -60,9 +65,14 @@ internal sealed class Scheduler
 
     public TimerHandle every(float seconds, Action action)
     {
+        if (action == null)
+        {
+            return Refuse(nameof(every), "null action");
+        }
+
         if (!float.IsFinite(seconds) || seconds <= 0f)
         {
-            return Refuse(nameof(every), seconds);
+            return Refuse(nameof(every), $"invalid duration {seconds}");
         }
 
         return Add(new TimerHandle(this, _now + seconds, seconds, true, action));
@@ -70,6 +80,11 @@ internal sealed class Scheduler
 
     public void tick(float dt)
     {
+        if (!float.IsFinite(dt) || dt <= 0f)
+        {
+            return;
+        }
+
         _now += dt;
 
         // A snapshot, so a callback may schedule or cancel timers; one scheduled mid-tick is not in it.
@@ -91,7 +106,7 @@ internal sealed class Scheduler
                 timer.cancel();
             }
 
-            timer.Action!();
+            timer.Action();
         }
     }
 
@@ -103,9 +118,9 @@ internal sealed class Scheduler
         return timer;
     }
 
-    private static TimerHandle Refuse(string method, float seconds)
+    private static TimerHandle Refuse(string method, string reason)
     {
-        Log.warn($"{method}: invalid duration {seconds}; no timer scheduled");
-        return new TimerHandle(null, 0.0, 0.0, false, null);
+        Log.warn($"{method}: {reason}; no timer scheduled");
+        return new TimerHandle(null, 0.0, 0.0, false, static () => { });
     }
 }

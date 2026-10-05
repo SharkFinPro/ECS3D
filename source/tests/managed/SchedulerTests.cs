@@ -67,6 +67,39 @@ public class SchedulerTests
     _scheduler.tick(1f);
     Assert.Equal(2, calls);
   }
+
+  [Fact]
+  public void NullActionsAreRefusedLikeInvalidDurations()
+  {
+    var calls = 0;
+    var afterHandle = _scheduler.after(0f, null!);
+    var everyHandle = _scheduler.every(1f, null!);
+    var control = _scheduler.after(0f, () => calls++);
+
+    Assert.False(afterHandle.isActive);
+    Assert.False(everyHandle.isActive);
+    Assert.True(control.isActive);
+
+    _scheduler.tick(1f);
+    Assert.Equal(1, calls);
+  }
+
+  [Fact]
+  public void NonFiniteOrNonPositiveDtDoesNotAdvanceTime()
+  {
+    var calls = 0;
+    _scheduler.after(1f, () => calls++);
+
+    _scheduler.tick(float.NaN);
+    _scheduler.tick(-5f);
+    _scheduler.tick(0f);
+    _scheduler.tick(float.PositiveInfinity);
+    Assert.Equal(0, calls);
+
+    _scheduler.tick(1f);
+    Assert.Equal(1, calls);
+  }
+
   [Fact]
   public void CancelBeforeDueStopsTheTimer()
   {
@@ -197,6 +230,7 @@ public class SchedulerBridgeTests : IDisposable
 {
   private sealed class Timed : ScriptBase
   {
+    public List<string> Events { get; } = new();
     public int TimerCalls { get; private set; }
     public int FixedCalls { get; private set; }
     public bool Throw { get; set; }
@@ -204,15 +238,24 @@ public class SchedulerBridgeTests : IDisposable
     public void ScheduleAfter(float seconds) => after(seconds, () =>
     {
       TimerCalls++;
+      Events.Add("timer");
       if (Throw)
       {
         throw new InvalidOperationException("boom");
       }
     });
 
-    public void ScheduleEvery(float seconds) => every(seconds, () => TimerCalls++);
+    public void ScheduleEvery(float seconds) => every(seconds, () =>
+    {
+      TimerCalls++;
+      Events.Add("timer");
+    });
 
-    public override void fixedUpdate(float dt) => FixedCalls++;
+    public override void fixedUpdate(float dt)
+    {
+      FixedCalls++;
+      Events.Add("fixed");
+    }
   }
 
   private readonly string _uuid = Guid.NewGuid().ToString();
@@ -235,6 +278,7 @@ public class SchedulerBridgeTests : IDisposable
     Bridge.RunFixedUpdate(_uuid, nameof(Timed), 0.5f);
     Assert.Equal(1, script.TimerCalls);
     Assert.Equal(2, script.FixedCalls);
+    Assert.Equal(new[] { "fixed", "timer", "fixed" }, script.Events);
   }
 
   [Fact]

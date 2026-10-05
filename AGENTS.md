@@ -402,7 +402,11 @@ without deciding its scripting story can't go unnoticed. Script field edits are 
 refused with a warning and does not fault the script. `LogBindings` gives scripts `Log.trace/debug/
 info/warn/error` through `ECS3DLog` under `LogCategory::script`, registered first in `registerBindings` so
 everything the bridge itself logs afterwards - init, hot-reload, compilation - already has a binding to
-write through. Scripts get `after`/`every` timers on `ScriptBase` (`Scheduler.cs`), ticked by the bridge's fixed update inside the script's fault gate, so a throwing callback faults the script and time advances only on fixed ticks (a paused or stopped scene freezes them). Instance lifetime tracks the live component set in both directions: a Script added to a
+write through. Scripts get `after`/`every` timers on `ScriptBase` (`Scheduler.cs`), ticked by the bridge's fixed update
+inside the script's fault gate, so a throwing callback faults the script and time advances only on fixed
+ticks (a paused or stopped scene freezes them). Timers belong to the script instance, so a detach or hot
+reload drops them, and `every` skips missed intervals instead of catching up.
+Instance lifetime tracks the live component set in both directions: a Script added to a
 running scene is attached and started by the next tick, and the mirror image holds too - a script removed
 mid-run (or whose object is destroyed) is stopped and detached by an orphan sweep that runs on every tick
 and on every scene edit's snapshot. The sweep matches by component identity, not by (uuid, class) key, so
