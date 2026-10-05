@@ -8,7 +8,8 @@
 #include <string>
 
 namespace {
-  // No default, so a new enumerator draws a -Wswitch warning until its expectation is stated here.
+  // Exhaustive switch with no default so -Wswitch flags a new MessageType until it is stated here.
+  // #lizard forgives
   [[nodiscard]] constexpr bool expectedMutation(const net::MessageType type)
   {
     switch (type)
