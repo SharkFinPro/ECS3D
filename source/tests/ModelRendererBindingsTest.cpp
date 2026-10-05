@@ -74,30 +74,36 @@ namespace {
 
     renderer->setModelUUID(modelUUID);
     renderer->setTextureUUID(textureUUID);
-    renderer->setShouldRender(false);
+    renderer->setShouldRender(true);
 
     EXPECT_EQ(std::string(bindings.getModelUUID(uuid.c_str())), uuids::to_string(modelUUID));
     EXPECT_EQ(std::string(bindings.getTextureUUID(uuid.c_str())), uuids::to_string(textureUUID));
-    EXPECT_FALSE(bindings.getShouldRender(uuid.c_str()));
-
-    renderer->setShouldRender(true);
     EXPECT_TRUE(bindings.getShouldRender(uuid.c_str()));
+
+    renderer->setShouldRender(false);
+    EXPECT_FALSE(bindings.getShouldRender(uuid.c_str()));
 
     EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
   }
 
-  TEST_F(ModelRendererBindingsTest, SetModelAndTextureAssignRegisteredAssetsAndRecordOneEdit)
+  TEST_F(ModelRendererBindingsTest, SetModelAndTextureAssignRegisteredAssetsAndRecordAnEditEach)
   {
     EXPECT_TRUE(bindings.setModelUUID(uuid.c_str(), uuids::to_string(modelUUID).c_str()));
-    EXPECT_TRUE(bindings.setTextureUUID(uuid.c_str(), uuids::to_string(textureUUID).c_str()));
-
     EXPECT_EQ(renderer->getModelUUID(), modelUUID);
+
+    const auto modelEdits = BindingContext::takeComponentEdits();
+    ASSERT_EQ(modelEdits.size(), 1u);
+    EXPECT_EQ(modelEdits[0].first, object->getUUID());
+    EXPECT_EQ(modelEdits[0].second, renderer);
+
+    // The drain emptied the buffer, so the texture setter has to record on its own.
+    EXPECT_TRUE(bindings.setTextureUUID(uuid.c_str(), uuids::to_string(textureUUID).c_str()));
     EXPECT_EQ(renderer->getTextureUUID(), textureUUID);
 
-    const auto edits = BindingContext::takeComponentEdits();
-    ASSERT_EQ(edits.size(), 1u);
-    EXPECT_EQ(edits[0].first, object->getUUID());
-    EXPECT_EQ(edits[0].second, renderer);
+    const auto textureEdits = BindingContext::takeComponentEdits();
+    ASSERT_EQ(textureEdits.size(), 1u);
+    EXPECT_EQ(textureEdits[0].first, object->getUUID());
+    EXPECT_EQ(textureEdits[0].second, renderer);
   }
 
   TEST_F(ModelRendererBindingsTest, SetModelAndTextureRefuseWrongTypedUnknownAndMalformedAssets)

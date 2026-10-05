@@ -269,6 +269,10 @@ namespace {
   {
     EXPECT_EQ(BindingContext::getObjectManager(), scene.objectManager.get());
 
+    BindingContext::setAssetRegistry(nullptr);
+    BindingContext::setRaycast(nullptr);
+    BindingContext::setOverlapSphere(nullptr);
+
     AssetRegistry registry;
     EXPECT_EQ(BindingContext::getAssetRegistry(), nullptr);
     BindingContext::setAssetRegistry(&registry);
