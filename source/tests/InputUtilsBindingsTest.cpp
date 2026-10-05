@@ -46,6 +46,7 @@ namespace {
       BindingContext::setObjectManager(nullptr);
       InputState::removeSlot(slotA);
       InputState::removeSlot(slotB);
+      InputState::removeSlot(0);
     }
 
     std::shared_ptr<Object> addPlayer(const std::string& name, const int32_t slot)
@@ -122,21 +123,28 @@ namespace {
     EXPECT_FALSE(bindings.mouseButtonForObject(uuidB.c_str(), 0));
   }
 
-  TEST_F(InputUtilsBindingsTest, ObjectsWithoutAPlayerSlotReadNeutralNotTheOtherPlayersState)
+  TEST_F(InputUtilsBindingsTest, ObjectsWithoutAPlayerSlotReadNeutralNotSlotZero)
   {
-    InputState::setKeysPressed(slotA, { keyW });
-    InputState::setFocused(slotA, true);
-    InputState::setMouse(slotA, 10.0f, 20.0f, 1.5f, -2.0f, 0.5f, 0b001u);
+    // A PlayerController's slot defaults to 0, so a lookup that fell back to slot 0 would read this.
+    InputState::setKeysPressed(0, { keyW });
+    InputState::setFocused(0, true);
+    InputState::setMouse(0, 10.0f, 20.0f, 1.5f, -2.0f, 0.5f, 0b001u);
 
+    const auto zeroPlayer = addPlayer("zeroPlayer", 0);
+    const auto zeroUuid = uuidOf(zeroPlayer);
     const auto bare = fixtures::addObject(scene, "bare");
     const auto bareUuid = uuidOf(bare);
     const auto unknownUuid = uuids::to_string(objectManagerFixtures::unknownUUID());
     const std::string malformed = "not-a-uuid";
 
-    // Positive control: a player object reads the state set above.
-    ASSERT_TRUE(bindings.keyIsPressedForObject(uuidA.c_str(), keyW));
+    // Positive control: an object on slot 0 does read that state.
+    EXPECT_TRUE(bindings.keyIsPressedForObject(zeroUuid.c_str(), keyW));
+    EXPECT_TRUE(bindings.windowIsFocusedForObject(zeroUuid.c_str()));
+    EXPECT_TRUE(bindings.mouseButtonForObject(zeroUuid.c_str(), 0));
+    EXPECT_FLOAT_EQ(bindings.scrollForObject(zeroUuid.c_str()), 0.5f);
 
-    for (const auto* uuid : { bareUuid.c_str(), unknownUuid.c_str(), malformed.c_str(), static_cast<const char*>(nullptr) })
+    const char* const badUuids[] = { bareUuid.c_str(), unknownUuid.c_str(), malformed.c_str(), nullptr };
+    for (const auto* uuid : badUuids)
     {
       EXPECT_FALSE(bindings.keyIsPressedForObject(uuid, keyW));
       EXPECT_FALSE(bindings.windowIsFocusedForObject(uuid));
@@ -171,14 +179,28 @@ namespace {
 
   TEST_F(InputUtilsBindingsTest, AggregateBindingsReadEverySlot)
   {
+    // Both slots exist, so an aggregate that looked at only one of them would miss the other's state.
+    InputState::setKeysPressed(slotA, {});
+    InputState::setFocused(slotA, false);
+    InputState::setKeysPressed(slotB, {});
+    InputState::setFocused(slotB, false);
     EXPECT_FALSE(bindings.keyIsPressed(keyW));
     EXPECT_FALSE(bindings.windowIsFocused());
 
-    InputState::setKeysPressed(slotB, { keyW });
-    InputState::setFocused(slotB, true);
+    for (const auto slot : { slotA, slotB })
+    {
+      InputState::setKeysPressed(slot, { keyW });
+      InputState::setFocused(slot, true);
 
-    EXPECT_TRUE(bindings.keyIsPressed(keyW));
-    EXPECT_FALSE(bindings.keyIsPressed(keyS));
-    EXPECT_TRUE(bindings.windowIsFocused());
+      EXPECT_TRUE(bindings.keyIsPressed(keyW));
+      EXPECT_FALSE(bindings.keyIsPressed(keyS));
+      EXPECT_TRUE(bindings.windowIsFocused());
+
+      InputState::setKeysPressed(slot, {});
+      InputState::setFocused(slot, false);
+
+      EXPECT_FALSE(bindings.keyIsPressed(keyW));
+      EXPECT_FALSE(bindings.windowIsFocused());
+    }
   }
 }

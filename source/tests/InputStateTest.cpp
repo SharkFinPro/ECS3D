@@ -3,6 +3,7 @@
 #include "InputState.h"
 
 #include <cstdint>
+#include <initializer_list>
 
 namespace {
   constexpr int32_t slotA = 41;
@@ -40,7 +41,12 @@ namespace {
     EXPECT_FALSE(InputState::wasKeyReleasedThisTick(slotA, keyW));
     EXPECT_FALSE(InputState::wasKeyPressedThisTick(slotA, keyS));
 
+    InputState::setKeysPressed(slotB, { keyS });
+    EXPECT_TRUE(InputState::wasKeyPressedThisTick(slotB, keyS));
+
     InputState::commitInputEdges();
+    EXPECT_FALSE(InputState::wasKeyPressedThisTick(slotB, keyS));
+    EXPECT_TRUE(InputState::isKeyPressed(slotB, keyS));
     EXPECT_TRUE(InputState::isKeyPressed(slotA, keyW));
     EXPECT_FALSE(InputState::wasKeyPressedThisTick(slotA, keyW));
     EXPECT_FALSE(InputState::wasKeyReleasedThisTick(slotA, keyW));
@@ -127,11 +133,15 @@ namespace {
     InputState::setMouse(slotA, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0xFFu);
     EXPECT_TRUE(InputState::isMouseButtonPressed(slotA, 7));
     EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, -1));
-    EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 8));
+    EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 8));  // bit 8 does not exist in a uint8_t either way
   }
 
-  TEST_F(InputStateTest, AnUnknownSlotReadsNeutralAndIsNotCreatedByTheReads)
+  TEST_F(InputStateTest, AnUnknownSlotReadsNeutralNotAnotherSlotsState)
   {
+    InputState::setKeysPressed(slotA, { keyW });
+    InputState::setFocused(slotA, true);
+    InputState::setMouse(slotA, 10.0f, 20.0f, 1.5f, -2.0f, 0.5f, 0b001u);
+
     float x = 9.0f;
     float y = 9.0f;
 
@@ -150,11 +160,11 @@ namespace {
     EXPECT_FLOAT_EQ(x, 0.0f);
     EXPECT_FLOAT_EQ(y, 0.0f);
 
-    EXPECT_FALSE(InputState::isAnyKeyPressed(keyW));
-    EXPECT_FALSE(InputState::isAnyFocused());
-
-    // Positive control: a slot that was written does read back.
-    InputState::setKeysPressed(slotA, { keyW });
+    // Positive control: the written slot does read its state back.
+    EXPECT_TRUE(InputState::isKeyPressed(slotA, keyW));
+    EXPECT_TRUE(InputState::isFocused(slotA));
+    EXPECT_TRUE(InputState::isMouseButtonPressed(slotA, 0));
+    EXPECT_FLOAT_EQ(InputState::getScroll(slotA), 0.5f);
     EXPECT_TRUE(InputState::isKeyPressed(slotA, keyW));
   }
 
@@ -172,6 +182,11 @@ namespace {
     EXPECT_FALSE(InputState::isFocused(slotA));
     EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 0));
     EXPECT_FLOAT_EQ(InputState::getScroll(slotA), 0.0f);
+    float x = 9.0f;
+    float y = 9.0f;
+    InputState::getMousePosition(slotA, x, y);
+    EXPECT_FLOAT_EQ(x, 0.0f);
+    EXPECT_FLOAT_EQ(y, 0.0f);
     EXPECT_TRUE(InputState::isKeyPressed(slotB, keyW));
     EXPECT_TRUE(InputState::isFocused(slotB));
   }
