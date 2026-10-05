@@ -71,6 +71,8 @@ add_executable(${PROJECT_NAME}
   GizmoTest.cpp
   GizmoDragTest.cpp
   GizmoDragParentedTest.cpp
+  EditorSelectionTest.cpp
+  TransientObjectTest.cpp
   ObjectSpawnTest.cpp
   SerializationRoundTripTest.cpp
   ProjectSerializerLogTest.cpp
@@ -154,6 +156,9 @@ add_executable(${PROJECT_NAME}
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
   # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).
   ../libs/editor/Gizmo.cpp
+
+  # TransientObject depends only on ECS3DData and json.
+  ../libs/editor/TransientObject.cpp
 )
 
 
