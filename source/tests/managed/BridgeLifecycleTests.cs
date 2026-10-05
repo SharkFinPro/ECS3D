@@ -22,7 +22,7 @@ public class BridgeLifecycleTests : IDisposable
     public override void stop() => throw new InvalidOperationException("stop failed");
   }
 
-  private class HostileException : Exception
+  public sealed class HostileException : Exception
   {
     public override string Message => throw new InvalidOperationException("message is hostile");
   }
@@ -39,10 +39,16 @@ public class BridgeLifecycleTests : IDisposable
 
   public void Dispose()
   {
-    Bridge.ResetForTests();
-    if (Directory.Exists(_dir))
+    try
     {
-      Directory.Delete(_dir, recursive: true);
+      Bridge.ResetForTests();
+    }
+    finally
+    {
+      if (Directory.Exists(_dir))
+      {
+        Directory.Delete(_dir, recursive: true);
+      }
     }
   }
 
@@ -179,23 +185,35 @@ public class BridgeLifecycleTests : IDisposable
   }
 
   [Fact]
-  public void Initialize_MissingDirectoryLoadsNothing()
+  public void Initialize_MissingDirectoryLeavesLoadedTypesAsTheyWere()
   {
-    var thrown = Record.Exception(() => Bridge.Initialize(_dir));
+    var loadedDir = Path.Combine(_dir, "loaded");
+    Directory.CreateDirectory(loadedDir);
+    File.WriteAllText(Path.Combine(loadedDir, "script.cs"), ScriptSource(ClassName));
+    Bridge.Initialize(loadedDir);
+    Assert.Equal(new[] { ClassName }, Bridge.LoadedScriptTypeNames);
+
+    var thrown = Record.Exception(() => Bridge.Initialize(Path.Combine(_dir, "missing")));
 
     Assert.Null(thrown);
-    Assert.Empty(Bridge.LoadedScriptTypeNames);
+    Assert.Equal(new[] { ClassName }, Bridge.LoadedScriptTypeNames);
   }
 
   [Fact]
-  public void Initialize_EmptyDirectoryLoadsNothing()
+  public void Initialize_EmptyDirectoryLeavesLoadedTypesAsTheyWere()
   {
-    Directory.CreateDirectory(_dir);
+    var loadedDir = Path.Combine(_dir, "loaded");
+    var emptyDir = Path.Combine(_dir, "empty");
+    Directory.CreateDirectory(loadedDir);
+    Directory.CreateDirectory(emptyDir);
+    File.WriteAllText(Path.Combine(loadedDir, "script.cs"), ScriptSource(ClassName));
+    Bridge.Initialize(loadedDir);
+    Assert.Equal(new[] { ClassName }, Bridge.LoadedScriptTypeNames);
 
-    var thrown = Record.Exception(() => Bridge.Initialize(_dir));
+    var thrown = Record.Exception(() => Bridge.Initialize(emptyDir));
 
     Assert.Null(thrown);
-    Assert.Empty(Bridge.LoadedScriptTypeNames);
+    Assert.Equal(new[] { ClassName }, Bridge.LoadedScriptTypeNames);
   }
 
   [Fact]
