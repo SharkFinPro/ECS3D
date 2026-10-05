@@ -7,8 +7,6 @@
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
 
-#include <Protocol.h>
-
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>
