@@ -104,7 +104,7 @@
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
-  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`). What stays uncovered here is whatever actually calls a
+  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). What stays uncovered here is whatever actually calls a
   native function pointer (the `Transform`/`RigidBody`/`Camera`/... wrapper methods, once
   `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry point (can't be called
   from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
