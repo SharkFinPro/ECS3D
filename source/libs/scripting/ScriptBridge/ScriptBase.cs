@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -49,6 +50,20 @@ public abstract class ScriptBase
 
     protected string[] overlapSphere(Vector3 center, float radius, uint layerMask = 0xFFFFFFFF)
         => World.overlapSphere(center, radius, layerMask, EntityId);
+
+    // Named events between scripts. Delivery is synchronous, each handler runs under its own script's fault
+    // gate, and subscriptions end with this instance. Subscribe from start(), not the constructor: EntityId
+    // (part of the subscription owner) is assigned after construction.
+    protected Subscription subscribe(string eventName, Action<object?> handler)
+        => Bridge.Events.subscribe(Bridge.Key(EntityId, GetType().Name), eventName, handler);
+
+    // Delivers only payloads that are a T; a mismatched payload is skipped with one warning.
+    protected Subscription subscribe<T>(string eventName, Action<T> handler)
+        => Bridge.Events.subscribe(Bridge.Key(EntityId, GetType().Name), eventName, handler);
+
+    // Returns how many handlers ran.
+    protected int publish(string eventName, object? payload = null)
+        => Bridge.Events.publish(eventName, payload);
 
     public virtual void start() {}
     public virtual void fixedUpdate(float dt) {}

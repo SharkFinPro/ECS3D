@@ -26,6 +26,18 @@ public static class Bridge
     // faulted script's code can change or go away.
     private static readonly HashSet<string> _faulted = new();
 
+    private static readonly EventChannel _events = new(
+        ownerKey => _faulted.Contains(ownerKey),
+        (ownerKey, eventName, ex) =>
+        {
+            _faulted.Add(ownerKey);
+            var split = ownerKey.IndexOf('_');
+            ReportFault(split < 0 ? ownerKey : ownerKey[..split], split < 0 ? "" : ownerKey[(split + 1)..],
+                        $"a handler for event '{eventName}'", ex);
+        });
+
+    internal static EventChannel Events => _events;
+
     // Log.error can itself throw (its fallback writes to Console.Error, which can be a closed/redirected
     // handle in a service context), and that must not escape any further than the fault it was reporting
     // would have. Best effort only - if this fails too there is nothing left to do without risking the
@@ -183,6 +195,7 @@ public static class Bridge
     {
         var key = Key(uuid, className);
         _instances.Remove(key);
+        _events.removeOwner(key);
 
         // A removed script is gone regardless of fault state; clear it so a later re-add of the same
         // uuid/class gets a clean slate instead of being skipped forever.
@@ -309,6 +322,7 @@ public static class Bridge
 
         _instances.Clear();
         _faulted.Clear();
+        _events.clear();
 
         _ctx?.Unload();
         _ctx = null;
