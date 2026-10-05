@@ -114,43 +114,20 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 
 int32_t ServerApp::assignPlayerSlot(const int32_t connId)
 {
-  if (const auto it = m_connectionSlots.find(connId); it != m_connectionSlots.end())
-  {
-    return it->second;
-  }
-
-  // Lowest free slot: scan upward until a slot no connection currently holds is found.
-  int32_t slot = 0;
-  const auto slotTaken = [this](const int32_t candidate) {
-    for (const auto& [conn, taken] : m_connectionSlots)
-    {
-      if (taken == candidate)
-      {
-        return true;
-      }
-    }
-    return false;
-  };
-  while (slotTaken(slot))
-  {
-    ++slot;
-  }
-
-  m_connectionSlots.emplace(connId, slot);
+  const int32_t slot = m_playerSlots.assign(connId);
   Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
   return slot;
 }
 
 void ServerApp::handleDisconnect(const int32_t connId)
 {
-  const auto it = m_connectionSlots.find(connId);
-  if (it == m_connectionSlots.end())
+  const auto freed = m_playerSlots.release(connId);
+  if (!freed)
   {
     return;
   }
 
-  const int32_t slot = it->second;
-  m_connectionSlots.erase(it);
+  const int32_t slot = *freed;
   InputState::removeSlot(slot);
 
   Log::info(LogCategory::server, "Connection " + std::to_string(connId) + " dropped; freed player slot "

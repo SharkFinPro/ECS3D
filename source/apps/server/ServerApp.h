@@ -1,13 +1,13 @@
 #ifndef SERVERAPP_H
 #define SERVERAPP_H
 
+#include "PlayerSlots.h"
 #include <Protocol.h>
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <unordered_map>
 
 class ManagedHost;
 class ComponentRegistry;
@@ -79,7 +79,7 @@ private:
   // and released on disconnect. inputState from a connection is written into its slot; a script reads its
   // own player's input by resolving its object's PlayerController.playerSlot to that slot. Touched only on
   // the tick thread (join / inputState / disconnect all run there), so no locking is needed.
-  std::unordered_map<int32_t, int32_t> m_connectionSlots;
+  PlayerSlots m_playerSlots;
 
   // Bind connId to the lowest free player slot (idempotent - returns the existing slot if already bound).
   int32_t assignPlayerSlot(int32_t connId);

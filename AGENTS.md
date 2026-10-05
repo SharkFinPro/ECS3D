@@ -88,7 +88,7 @@
   `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the few sources compiled in directly, below) — so the suite stays runnable without a
   window, GPU or server. `net/MessageQueue.cpp` is compiled straight into the target rather than linked,
   because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
-  `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` is compiled in the same way, as is
+  `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` and `PlayerSlots.cpp` are compiled in the same way, as is
   `editor/Gizmo.cpp` (depends only on glm, so the suite gets it without pulling in the rest of
   `ECS3DEditorLib` and the ImGui/Vulkan it carries). It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
   `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
