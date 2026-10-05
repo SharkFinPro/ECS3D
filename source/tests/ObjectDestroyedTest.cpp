@@ -113,6 +113,7 @@ TEST(ObjectDestroyed, ADestroyedParentLeavesItsChildrenWhereTheServerLeavesThem)
   server.objectManager->deleteObjectsMarkedForDeletion();
   replication::applyObjectDestroyed(*client.objectManager, message);
 
+  // Agreement only; the explicit order and position checks below say what the shared result is.
   EXPECT_EQ(parentage(*client.objectManager), parentage(*server.objectManager));
   EXPECT_EQ(client.objectManager->getObjectByUUID(parentUUID), nullptr);
 

@@ -8,6 +8,7 @@
 #include "objects/components/Component.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Script.h"
+#include "objects/components/Transform.h"
 
 #include <Protocol.h>
 #include <cstddef>
@@ -236,6 +237,10 @@ TEST(ObjectComponentsChanged, AScriptSectionWhoseTagIsNotAScriptIsRefused)
   EXPECT_EQ(scriptNamed(clientObject, "Intruder"), nullptr);
   EXPECT_NE(scriptNamed(clientObject, "Spinner"), nullptr);
   EXPECT_EQ(client.objectManager->getObjectByUUID(targetUUID()), clientObject);
+
+  // Partially applied, not unchanged: the stale-component drop runs before the script section is read, so
+  // the refused payload (which names no components) has already stripped the object's Transform.
+  EXPECT_EQ(clientObject->getComponent<Transform>(ComponentType::transform), nullptr);
 
   // Positive control: the identical payload with the right tag is applied.
   EXPECT_NO_THROW(replication::applyObjectComponentsChanged(

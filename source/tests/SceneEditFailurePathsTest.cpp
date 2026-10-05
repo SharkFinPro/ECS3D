@@ -20,8 +20,23 @@
 namespace {
   using namespace sceneEditFixtures;
 
-  // Each object's uuid, name, parent and ordered child uuids, sorted so the comparison does not depend on
-  // the order objects were registered in.
+  // The Transform blob of an object, picked by type.
+  std::string transformDumpOf(const std::shared_ptr<Object>& object)
+  {
+    const auto serialized = object->serialize();
+    for (const auto& component : serialized.at("components"))
+    {
+      if (component.value("type", std::string{}) == "Transform")
+      {
+        return component.dump();
+      }
+    }
+
+    return {};
+  }
+
+  // Each object's uuid, name, parent, ordered child uuids and Transform, sorted so the comparison does not
+  // depend on the order objects were registered in, followed by the root list in its own order.
   std::vector<std::string> shapeOf(const ObjectManager& manager)
   {
     std::vector<std::string> shape;
@@ -36,10 +51,19 @@ namespace {
         line += uuids::to_string(child->getUUID()) + ",";
       }
 
+      line += "|" + transformDumpOf(object);
       shape.push_back(line);
     }
 
     std::ranges::sort(shape);
+
+    std::string roots = "roots:";
+    for (const auto& root : manager.getObjects())
+    {
+      roots += uuids::to_string(root->getUUID()) + ",";
+    }
+
+    shape.push_back(roots);
     return shape;
   }
 
@@ -74,6 +98,21 @@ namespace {
   {
     body["children"] = nlohmann::json::array();
     body["components"].push_back({ { "type", "Nonexistent" } });
+    return body;
+  }
+
+  // The root builds, then a child naming an unknown component fails after the root is already attached.
+  nlohmann::json unbuildableChild(nlohmann::json body)
+  {
+    const nlohmann::json child = {
+      { "name", "Broken Child" },
+      { "uuid", uuids::to_string(anotherUUID()) },
+      { "components", nlohmann::json::array({ { { "type", "Nonexistent" } } }) },
+      { "scripts", nlohmann::json::array() },
+      { "children", nlohmann::json::array() }
+    };
+
+    body["children"] = nlohmann::json::array({ child });
     return body;
   }
 }
@@ -320,4 +359,63 @@ TEST(SceneEditFailurePaths, RestoreObjectThatFailsToBuildAtTheSceneRootPutsAdopt
   EXPECT_EQ(scene.objectManager->getObjects(), rootsBefore);
   EXPECT_EQ(c1->getParent(), nullptr);
   expectNear(transformOf(c1)->getLocalPosition(), { 1, 2, 3 });
+}
+
+TEST(SceneEditFailurePaths, RestoreObjectWhoseChildFailsToBuildAfterTheRootIsAttachedPutsAdoptedChildrenBack)
+{
+  const auto scene = makeScene();
+
+  const auto parent = addObject(scene, "Parent");
+  const auto a = addChildObject(scene, "A", parent);
+  const auto x = addChildObject(scene, "X", parent);
+  const auto b = addChildObject(scene, "B", parent);
+  const auto c1 = addChildObject(scene, "C1", x);
+  const auto c2 = addChildObject(scene, "C2", x);
+
+  transformOf(x)->setPosition({ 10, 0, 0 });
+  transformOf(c1)->setPosition({ 1, 2, 3 });
+  transformOf(c2)->setPosition({ 4, 5, 6 });
+
+  const auto body = x->serialize();
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(x->getUUID())), SceneEditResult::applied);
+  ASSERT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, c2, b }));
+
+  const auto before = shapeOf(*scene.objectManager);
+
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntryFor(c1, 0), adoptEntryFor(c2, 1) });
+  const auto parentUUID = parent->getUUID();
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(unbuildableChild(body), &parentUUID, 1, &adopt)),
+            SceneEditResult::failed);
+
+  EXPECT_EQ(parent->getChildren(), (std::vector<std::shared_ptr<Object>>{ a, c1, c2, b }));
+  EXPECT_EQ(c1->getParent(), parent);
+  EXPECT_EQ(c2->getParent(), parent);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(x->getUUID()), nullptr);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(anotherUUID()), nullptr);
+  EXPECT_EQ(shapeOf(*scene.objectManager), before);
+}
+
+TEST(SceneEditFailurePaths, RestoreObjectWhoseChildFailsToBuildAtTheSceneRootPutsAdoptedChildrenBack)
+{
+  const auto scene = makeScene();
+
+  const auto x = addObject(scene, "X");
+  const auto b = addObject(scene, "B");
+  const auto c1 = addChildObject(scene, "C1", x);
+  transformOf(c1)->setPosition({ 1, 2, 3 });
+
+  const auto body = x->serialize();
+  ASSERT_EQ(applyEdit(scene, replication::buildRemoveObject(x->getUUID())), SceneEditResult::applied);
+  ASSERT_EQ(scene.objectManager->getObjects(), (std::vector<std::shared_ptr<Object>>{ scene.object, c1, b }));
+
+  const auto before = shapeOf(*scene.objectManager);
+
+  const nlohmann::json adopt = nlohmann::json::array({ adoptEntryFor(c1, 0) });
+  EXPECT_EQ(applyEdit(scene, replication::buildRestoreObject(unbuildableChild(body), nullptr, 1, &adopt)),
+            SceneEditResult::failed);
+
+  EXPECT_EQ(scene.objectManager->getObjects(), (std::vector<std::shared_ptr<Object>>{ scene.object, c1, b }));
+  EXPECT_EQ(c1->getParent(), nullptr);
+  EXPECT_EQ(scene.objectManager->getObjectByUUID(x->getUUID()), nullptr);
+  EXPECT_EQ(shapeOf(*scene.objectManager), before);
 }
