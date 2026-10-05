@@ -51,9 +51,11 @@ namespace {
   uuids::uuid g_hitObject;
   std::vector<uuids::uuid> g_overlapResults;
 
-  bool fakeRaycast(ObjectManager&, const glm::vec3& origin, const glm::vec3& direction, const float maxDistance,
-                   const uint32_t layerMask, const uuids::uuid& ignore, uuids::uuid& hitObject,
-                   glm::vec3& hitPoint, glm::vec3& hitNormal, float& hitDistance)
+  const BindingContext::RaycastFn fakeRaycast = [](ObjectManager&, const glm::vec3& origin,
+                                                   const glm::vec3& direction, const float maxDistance,
+                                                   const uint32_t layerMask, const uuids::uuid& ignore,
+                                                   uuids::uuid& hitObject, glm::vec3& hitPoint,
+                                                   glm::vec3& hitNormal, float& hitDistance) -> bool
   {
     ++g_raycast.calls;
     g_raycast.origin = origin;
@@ -72,7 +74,7 @@ namespace {
     hitNormal = glm::vec3(0.0f, 1.0f, 0.0f);
     hitDistance = 4.25f;
     return true;
-  }
+  };
 
   void fakeOverlapSphere(ObjectManager&, const glm::vec3& center, const float radius, const uint32_t layerMask,
                          const uuids::uuid& ignore, std::vector<uuids::uuid>& results)
@@ -354,7 +356,7 @@ namespace {
     const auto target = fixtures::addObject(scene, "Target");
     const auto ignored = fixtures::addObject(scene, "Ignored");
     g_hitObject = target->getUUID();
-    BindingContext::setRaycast(&fakeRaycast);
+    BindingContext::setRaycast(fakeRaycast);
 
     const auto result = copyOut(bindings.raycast(1.0f, 2.0f, 3.0f, 0.0f, -1.0f, 0.0f, 50.0f, 0x5u,
                                                  uuidOf(ignored).c_str()));
@@ -378,7 +380,7 @@ namespace {
 
   TEST_F(WorldBindingsTest, RaycastMissAndBadIgnoreArgument)
   {
-    BindingContext::setRaycast(&fakeRaycast);
+    BindingContext::setRaycast(fakeRaycast);
 
     g_raycastHits = false;
     EXPECT_EQ(copyOut(bindings.raycast(0, 0, 0, 0, 0, 1, 10.0f, 1u, nullptr)), "");
@@ -405,7 +407,7 @@ namespace {
     EXPECT_EQ(g_overlap.calls, 0);
 
     // Positive control: once injected, the same calls reach the functions and report results.
-    BindingContext::setRaycast(&fakeRaycast);
+    BindingContext::setRaycast(fakeRaycast);
     BindingContext::setOverlapSphere(&fakeOverlapSphere);
     EXPECT_NE(copyOut(bindings.raycast(0, 0, 0, 0, 0, 1, 10.0f, 1u, nullptr)), "");
     EXPECT_NE(copyOut(bindings.overlapSphere(0, 0, 0, 1.0f, 1u, nullptr)), "");

@@ -57,7 +57,7 @@ namespace {
     return uuids::to_string(object->getUUID());
   }
 
-  glm::vec3 read(void (*getter)(const char*, float*, float*, float*), const std::string& uuid)
+  glm::vec3 readVec3(void (*getter)(const char*, float*, float*, float*), const std::string& uuid)
   {
     float x = 0, y = 0, z = 0;
     getter(uuid.c_str(), &x, &y, &z);
@@ -74,11 +74,11 @@ namespace {
     fixtures::transformOf(child)->setRotation(glm::vec3(0, 30, 0));
     const auto uuid = uuidOf(child);
 
-    fixtures::expectNear("world scale", read(transform.getScale, uuid), glm::vec3(6, 6, 6), 1e-4f);
-    fixtures::expectNear("world rotation", read(transform.getRotation, uuid), glm::vec3(0, 30, 0), 1e-3f);
+    fixtures::expectNear("world scale", readVec3(transform.getScale, uuid), glm::vec3(6, 6, 6), 1e-4f);
+    fixtures::expectNear("world rotation", readVec3(transform.getRotation, uuid), glm::vec3(0, 30, 0), 1e-3f);
 
     // The local getter of the same object differs, so the world one really did combine.
-    fixtures::expectNear("local scale", read(transform.getLocalScale, uuid), glm::vec3(3, 3, 3));
+    fixtures::expectNear("local scale", readVec3(transform.getLocalScale, uuid), glm::vec3(3, 3, 3));
   }
 
   TEST_F(TransformRigidBodyBindingsTest, TransformSetScaleAndRotationWriteTheLocalValues)
@@ -88,13 +88,13 @@ namespace {
 
     transform.setScale(uuid.c_str(), 2.0f, 3.0f, 4.0f);
     transform.setRotation(uuid.c_str(), 10.0f, 20.0f, 30.0f);
-    fixtures::expectNear("scale", read(transform.getLocalScale, uuid), glm::vec3(2, 3, 4));
-    fixtures::expectNear("rotation", read(transform.getLocalRotation, uuid), glm::vec3(10, 20, 30));
+    fixtures::expectNear("scale", readVec3(transform.getLocalScale, uuid), glm::vec3(2, 3, 4));
+    fixtures::expectNear("rotation", readVec3(transform.getLocalRotation, uuid), glm::vec3(10, 20, 30));
 
     transform.setScale(uuid.c_str(), inf, 1.0f, 1.0f);
     transform.setRotation(uuid.c_str(), 0.0f, std::numeric_limits<float>::quiet_NaN(), 0.0f);
-    fixtures::expectNear("scale kept", read(transform.getLocalScale, uuid), glm::vec3(2, 3, 4));
-    fixtures::expectNear("rotation kept", read(transform.getLocalRotation, uuid), glm::vec3(10, 20, 30));
+    fixtures::expectNear("scale kept", readVec3(transform.getLocalScale, uuid), glm::vec3(2, 3, 4));
+    fixtures::expectNear("rotation kept", readVec3(transform.getLocalRotation, uuid), glm::vec3(10, 20, 30));
 
     // Transform rides the state delta, so none of these buffer a component edit.
     EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
@@ -143,7 +143,7 @@ namespace {
     transform.stop(unknown.c_str());
     transform.setScale(nullptr, 9, 9, 9);
     fixtures::expectNear(fixtures::positionOf(object), glm::vec3(1, 2, 3));
-    fixtures::expectNear("scale", read(transform.getLocalScale, uuid), glm::vec3(1, 1, 1));
+    fixtures::expectNear("scale", readVec3(transform.getLocalScale, uuid), glm::vec3(1, 1, 1));
 
     float x = 5, y = 6, z = 7;
     transform.getScale(unknown.c_str(), &x, &y, &z);
@@ -153,7 +153,7 @@ namespace {
 
     // Positive control: the live uuid is acted on.
     transform.setScale(uuid.c_str(), 9, 9, 9);
-    fixtures::expectNear("scale", read(transform.getLocalScale, uuid), glm::vec3(9, 9, 9));
+    fixtures::expectNear("scale", readVec3(transform.getLocalScale, uuid), glm::vec3(9, 9, 9));
   }
 
   // --- RigidBody -------------------------------------------------------------------------------------
