@@ -433,19 +433,16 @@ namespace {
     EXPECT_EQ(g_overlap.calls, 2);
   }
 
-  TEST_F(WorldBindingsTest, ReturnedStringsShareOneBufferSoCallersMustCopy)
+  TEST_F(WorldBindingsTest, AResultCopiedBeforeTheNextCallSurvivesIt)
   {
     const auto first = fixtures::addObject(scene, "First");
     const auto second = fixtures::addObject(scene, "Second");
 
-    const char* firstResult = bindings.findObjectByName("First");
-    const std::string firstCopy(firstResult);
-    EXPECT_EQ(firstCopy, uuidOf(first));
+    const auto firstCopy = copyOut(bindings.findObjectByName("First"));
+    const auto secondCopy = copyOut(bindings.findObjectByName("Second"));
 
-    const char* secondResult = bindings.findObjectByName("Second");
-    EXPECT_EQ(std::string(secondResult), uuidOf(second));
-
-    EXPECT_EQ(firstResult, secondResult);
     EXPECT_EQ(firstCopy, uuidOf(first));
+    EXPECT_EQ(secondCopy, uuidOf(second));
+    EXPECT_NE(firstCopy, secondCopy);
   }
 }

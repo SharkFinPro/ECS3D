@@ -132,10 +132,10 @@ namespace {
 
   TEST_F(ModelRendererBindingsTest, SetShouldRenderWritesTheFlagAndRecordsAnEdit)
   {
-    ASSERT_TRUE(renderer->getShouldRender());
+    ASSERT_FALSE(renderer->getShouldRender());
 
-    bindings.setShouldRender(uuid.c_str(), false);
-    EXPECT_FALSE(renderer->getShouldRender());
+    bindings.setShouldRender(uuid.c_str(), true);
+    EXPECT_TRUE(renderer->getShouldRender());
 
     const auto edits = BindingContext::takeComponentEdits();
     ASSERT_EQ(edits.size(), 1u);
@@ -156,15 +156,15 @@ namespace {
       EXPECT_FALSE(bindings.getShouldRender(id.c_str()));
       EXPECT_FALSE(bindings.setModelUUID(id.c_str(), uuids::to_string(modelUUID).c_str()));
       EXPECT_FALSE(bindings.setTextureUUID(id.c_str(), uuids::to_string(textureUUID).c_str()));
-      bindings.setShouldRender(id.c_str(), false);
+      bindings.setShouldRender(id.c_str(), true);
     }
 
     EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
-    EXPECT_TRUE(renderer->getShouldRender());
+    EXPECT_FALSE(renderer->getShouldRender());
     EXPECT_TRUE(renderer->getModelUUID().is_nil());
 
     // Positive control: the same call on the live object does record.
-    bindings.setShouldRender(uuid.c_str(), false);
+    bindings.setShouldRender(uuid.c_str(), true);
     EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
   }
 }

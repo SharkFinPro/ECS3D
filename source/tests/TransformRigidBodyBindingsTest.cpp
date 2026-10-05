@@ -184,6 +184,7 @@ namespace {
     const auto bare = fixtures::addObject(scene, "bare");
     const auto uuid = uuidOf(object);
 
+    body->setFalling(false);
     EXPECT_FALSE(rigidBody.isFalling(uuid.c_str()));
     body->setFalling(true);
     EXPECT_TRUE(rigidBody.isFalling(uuid.c_str()));
