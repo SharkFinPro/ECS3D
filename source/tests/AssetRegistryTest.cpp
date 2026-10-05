@@ -1,6 +1,10 @@
 #include <gtest/gtest.h>
 
 #include "assets/AssetRegistry.h"
+#include "Replication.h"
+#include "TestScene.h"
+#include "scenes/SceneAsset.h"
+#include "scenes/SceneManager.h"
 
 #include <Protocol.h>
 #include <nlohmann/json.hpp>
@@ -337,4 +341,101 @@ TEST(AssetRegistry, AProjectWithAValidPrefabRoundTripsThroughBothPaths)
     ASSERT_NE(registry->getByUUID(prefabUUID), nullptr);
     EXPECT_EQ(registry->getPrefabBody(prefabUUID).at("name"), "Block");
   }
+}
+
+TEST(AssetRegistry, ApplyAddAssetRegistersATextureWithItsPathAndDisplayName)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  const nlohmann::json asset = { { "assetType", "texture" }, { "uuid", uuids::to_string(otherUUID) },
+                                 { "path", "assets/textures/brick.png" }, { "displayName", "Brick" } };
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry, asset);
+
+  const auto* record = registry.getByUUID(otherUUID);
+  ASSERT_NE(record, nullptr);
+  EXPECT_EQ(record->type, AssetType::Texture);
+  EXPECT_EQ(record->path, "assets/textures/brick.png");
+  EXPECT_EQ(record->displayName, "Brick");
+  EXPECT_EQ(registry.getByUUIDOfType(otherUUID, AssetType::Model), nullptr);
+}
+
+TEST(AssetRegistry, ApplyAddAssetRegistersAScriptWithItsClassName)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  const nlohmann::json asset = { { "assetType", "script" }, { "uuid", uuids::to_string(otherUUID) },
+                                 { "path", "scripts/Spinner.cs" }, { "className", "Spinner" } };
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry, asset);
+
+  const auto* record = registry.getByUUID(otherUUID);
+  ASSERT_NE(record, nullptr);
+  EXPECT_EQ(record->type, AssetType::Script);
+  EXPECT_EQ(record->path, "scripts/Spinner.cs");
+  EXPECT_EQ(record->className, "Spinner");
+  EXPECT_TRUE(record->displayName.empty());
+}
+
+TEST(AssetRegistry, ApplyAddAssetCreatesASceneAndRegistersItUnderItsName)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  const nlohmann::json asset = { { "assetType", "scene" }, { "uuid", uuids::to_string(otherUUID) },
+                                 { "name", "Level One" } };
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry, asset);
+
+  const auto created = sceneManager.getScene(otherUUID);
+  ASSERT_NE(created, nullptr);
+  EXPECT_EQ(created->getName(), "Level One");
+
+  const auto* record = registry.getByUUID(otherUUID);
+  ASSERT_NE(record, nullptr);
+  EXPECT_EQ(record->type, AssetType::Scene);
+  EXPECT_EQ(record->path, "Level One");
+}
+
+TEST(AssetRegistry, ApplyAddAssetGivesASecondSceneOfTheSameNameADistinctOne)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  const nlohmann::json first = { { "assetType", "scene" }, { "uuid", uuids::to_string(otherUUID) } };
+  const nlohmann::json second = { { "assetType", "scene" }, { "uuid", uuids::to_string(modelUUID) } };
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry, first);
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry, second);
+
+  const auto firstScene = sceneManager.getScene(otherUUID);
+  const auto secondScene = sceneManager.getScene(modelUUID);
+  ASSERT_NE(firstScene, nullptr);
+  ASSERT_NE(secondScene, nullptr);
+  EXPECT_EQ(firstScene->getName(), "New Scene");
+  EXPECT_EQ(secondScene->getName(), "New Scene (2)");
+
+  ASSERT_NE(registry.getByUUID(modelUUID), nullptr);
+  EXPECT_EQ(registry.getByUUID(modelUUID)->path, "New Scene (2)");
+}
+
+TEST(AssetRegistry, ApplyAddAssetIgnoresAMalformedUuidAndAnUnknownType)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                             { { "assetType", "texture" }, { "uuid", "not-a-uuid" }, { "path", "a.png" } });
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                             { { "assetType", "hologram" }, { "uuid", uuids::to_string(otherUUID) } });
+  EXPECT_TRUE(registry.getAssets().empty());
+
+  // Positive control: the same shape with a known type registers.
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                             { { "assetType", "texture" }, { "uuid", uuids::to_string(otherUUID) },
+                               { "path", "a.png" } });
+  EXPECT_EQ(registry.getAssets().size(), 1u);
 }
