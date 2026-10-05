@@ -245,3 +245,42 @@ TEST(CameraSelection, PreviewFallsBackToFreeFly)
   scene.objectManager->removeSubtree(object);
   EXPECT_EQ(cameraPreviewLabel(scene.objectManager.get(), uuid, "Free-fly"), "Free-fly");
 }
+
+TEST(CameraSelection, UpThresholdSitsJustBelowStraightUp)
+{
+  const auto tilted = [](const float y) { return glm::vec3(std::sqrt(1.0f - y * y), y, 0.0f); };
+
+  fixtures::expectNear(cameraUp(tilted(0.99995f)), { 0.0f, 0.0f, 1.0f });
+  fixtures::expectNear(cameraUp(tilted(-0.99995f)), { 0.0f, 0.0f, 1.0f });
+  fixtures::expectNear(cameraUp(tilted(0.9998f)), { 0.0f, 1.0f, 0.0f });
+  fixtures::expectNear(cameraUp(tilted(-0.9998f)), { 0.0f, 1.0f, 0.0f });
+}
+
+TEST(CameraSelection, PitchTurnsForwardAboutX)
+{
+  fixtures::expectNear(cameraForward({ 90.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }), { 0.0f, 1.0f, 0.0f }, 1e-4f);
+}
+
+TEST(CameraSelection, EulerAnglesApplyPitchBeforeYaw)
+{
+  // Pitch 45 lifts (0,0,-1) to (0,s,-s); yaw 90 then swings -z onto -x. The other order would give (-1,0,0).
+  const float s = std::sqrt(0.5f);
+  fixtures::expectNear(cameraForward({ 45.0f, 90.0f, 0.0f }, { 0.0f, 0.0f, -1.0f }), { -s, s, 0.0f }, 1e-4f);
+}
+
+TEST(CameraSelection, ViewMapsPointsAheadOfTheCameraToNegativeZ)
+{
+  const auto scene = fixtures::makeScene();
+  const auto object = addObject(scene, "Cam");
+  addCamera(scene, object, true);
+
+  const auto view = cameraViewOf(*object);
+  ASSERT_TRUE(view.has_value());
+
+  const glm::vec4 ahead = view->view * glm::vec4(0.0f, 0.0f, -5.0f, 1.0f);
+  const glm::vec4 behind = view->view * glm::vec4(0.0f, 0.0f, 5.0f, 1.0f);
+  EXPECT_NEAR(ahead.x, 0.0f, 1e-4f);
+  EXPECT_NEAR(ahead.y, 0.0f, 1e-4f);
+  EXPECT_NEAR(ahead.z, -5.0f, 1e-4f);
+  EXPECT_NEAR(behind.z, 5.0f, 1e-4f);
+}

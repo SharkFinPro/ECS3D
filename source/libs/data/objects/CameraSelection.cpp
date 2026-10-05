@@ -10,6 +10,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
 
 std::shared_ptr<Object> findActiveCamera(const ObjectManager& objectManager, const std::optional<uuids::uuid>& only)
 {
