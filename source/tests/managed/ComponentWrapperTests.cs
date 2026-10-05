@@ -15,7 +15,12 @@ public class ComponentWrapperTests : IDisposable
 
   private readonly IDisposable _natives = FakeNatives.Install();
 
-  public void Dispose() => _natives.Dispose();
+  public void Dispose()
+  {
+    var error = FakeNatives.LastError;
+    _natives.Dispose();
+    Assert.Null(error);
+  }
 
   private static string Last => FakeNatives.Calls[^1];
 

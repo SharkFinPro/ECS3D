@@ -20,6 +20,9 @@ internal static unsafe class FakeNatives
 {
   internal static readonly List<string> Calls = new();
 
+  // A mistyped Set is recorded here, since throwing inside an UnmanagedCallersOnly fake would abort the host.
+  internal static string? LastError;
+
   private static readonly Dictionary<string, object> Canned = new();
 
   private static readonly List<IntPtr> Allocated = new();
@@ -58,6 +61,7 @@ internal static unsafe class FakeNatives
     internal Scope()
     {
       Calls.Clear();
+      LastError = null;
       Canned.Clear();
 
       NativeBindings.InputUtils = MakeInputUtils();
@@ -96,7 +100,21 @@ internal static unsafe class FakeNatives
     }
   }
 
-  private static T Get<T>(string key) => Canned.TryGetValue(key, out var value) ? (T)value : default!;
+  private static T Get<T>(string key)
+  {
+    if (!Canned.TryGetValue(key, out var value))
+    {
+      return default!;
+    }
+
+    if (value is T typed)
+    {
+      return typed;
+    }
+
+    LastError ??= $"{key}: canned {value.GetType().Name}, expected {typeof(T).Name}";
+    return default!;
+  }
 
   private static byte Flag(string key) => Get<bool>(key) ? (byte)1 : (byte)0;
 
@@ -520,7 +538,8 @@ internal static unsafe class FakeNatives
     setIsTrigger =
       (delegate* unmanaged<IntPtr, bool, bool>)(void*)(delegate* unmanaged<IntPtr, byte, byte>)&ColliderSetIsTrigger,
     getLayer = &ColliderGetLayer,
-    setLayer = (delegate* unmanaged<IntPtr, uint, bool>)(void*)(delegate* unmanaged<IntPtr, uint, byte>)&ColliderSetLayer,
+    setLayer = (delegate* unmanaged<IntPtr, uint, bool>)(void*)
+      (delegate* unmanaged<IntPtr, uint, byte>)&ColliderSetLayer,
     getMask = &ColliderGetMask,
     setMask = (delegate* unmanaged<IntPtr, uint, bool>)(void*)(delegate* unmanaged<IntPtr, uint, byte>)&ColliderSetMask,
     getBoxOffset = (delegate* unmanaged<IntPtr, float*, float*, float*, bool>)(void*)
@@ -864,6 +883,8 @@ internal static unsafe class FakeNatives
   private static void WorldDestroyObject(IntPtr u) => Rec("World.destroyObject", u);
 
   [UnmanagedCallersOnly]
+  [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107",
+    Justification = "Mirrors the native raycast signature.")]
   private static IntPtr WorldRaycast(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance,
                                      uint layerMask, IntPtr ignore)
   {

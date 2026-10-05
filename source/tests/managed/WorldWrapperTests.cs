@@ -14,7 +14,12 @@ public class WorldWrapperTests : IDisposable
 {
   private readonly IDisposable _natives = FakeNatives.Install();
 
-  public void Dispose() => _natives.Dispose();
+  public void Dispose()
+  {
+    var error = FakeNatives.LastError;
+    _natives.Dispose();
+    Assert.Null(error);
+  }
 
   [Fact]
   public void FindObjectByName_PassesNameAndReturnsNativeString()

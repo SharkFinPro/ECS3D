@@ -107,7 +107,7 @@
   `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`). The component wrappers (`World`, `Transform`, `RigidBody`, `Camera`, `Collider`, `ModelRenderer`,
   `LightRenderer`, `PlayerController`, `InputUtils`/`PlayerInput`, `ScriptBase`) are covered too:
   `FakeNatives.Install()` points every `NativeBindings.*` table at `[UnmanagedCallersOnly]` fakes that record
-  each call and answer from canned values (a native `bool` is a `byte` there, since this assembly keeps runtime
+  each call and answer from canned values (a native `bool` is a `byte` there, since the test assembly keeps runtime
   marshalling on), and restores the tables when disposed; those suites share the serial `BridgeInstances`
   collection. What stays uncovered is whatever is itself an `[UnmanagedCallersOnly]` entry point (can't be
   called from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
