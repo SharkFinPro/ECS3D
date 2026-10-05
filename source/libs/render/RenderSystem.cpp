@@ -227,7 +227,9 @@ void RenderSystem::drawLightGizmos(const ObjectManager& objectManager, GpuAssetC
     gizmo->setOrientationQuat(orientation);
     gizmo->setScale(*size);
 
-    renderer3D->renderObject(gizmo, vke::PipelineType::texturedPlane);
+    // Reports through the light object's own pick flag, so the editor selects the light the same way it
+    // selects a model. The pointer is stable: unordered_map keeps element references valid across rehash.
+    renderer3D->renderObject(gizmo, vke::PipelineType::texturedPlane, &m_selected[uuid]);
 
     if (std::ranges::find(highlightUUIDs, uuid) != highlightUUIDs.end())
     {
