@@ -450,6 +450,9 @@ namespace {
   // in the fallback instead of switching to the ray-plane branch.
   constexpr float edgeOnSweepRadius = 60.0f;
   constexpr float handleLengthPixelsForTest = 100.0f;
+  constexpr int edgeOnSweepSteps = 12;
+  // Mirrors the fallback threshold in Gizmo.cpp (about 10 degrees off the ring plane).
+  constexpr float edgeOnDotThreshold = 0.17f;
 
   [[nodiscard]] glm::vec2 edgeOnSweepPoint(const glm::vec2& centerScreen, const float angleRadians)
   {
@@ -472,20 +475,27 @@ namespace {
     f.state.mode = gizmo::Mode::rotate;
     const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
 
+    const glm::vec3 normal = handle == gizmo::Handle::x ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+    const auto expectEdgeOn = [&](const glm::vec2& mouse) {
+      EXPECT_LT(std::abs(glm::dot(gizmo::mouseRay(f.view, mouse).direction, normal)), edgeOnDotThreshold);
+    };
+
     EdgeOnSweep result;
     const auto pressFrame = beginDragOnHandle(f, centerScreen + pressOffset);
     result.pressedOnExpectedHandle = pressFrame.active == handle;
 
     constexpr float startAngle = 0.25f * glm::pi<float>();
     f.input.mouse = edgeOnSweepPoint(centerScreen, startAngle);
+    expectEdgeOn(f.input.mouse);
     result.frame = gizmo::update(f.state, f.input);
     const float before = f.state.dragTotalAngleDegrees;
 
-    constexpr int steps = 12;
+    constexpr int steps = edgeOnSweepSteps;
     for (int i = 1; i <= steps; ++i)
     {
       const float angle = startAngle + glm::radians(sweepDegrees) * static_cast<float>(i) / static_cast<float>(steps);
       f.input.mouse = edgeOnSweepPoint(centerScreen, angle);
+      expectEdgeOn(f.input.mouse);
       result.frame = gizmo::update(f.state, f.input);
     }
 
@@ -499,7 +509,7 @@ namespace {
   // length (arc length over handle length, not the screen angle).
   [[nodiscard]] float expectedSweptDegrees(const float sweepDegrees)
   {
-    constexpr int steps = 12;
+    constexpr int steps = edgeOnSweepSteps;
     const float stepRadians = glm::radians(sweepDegrees) / static_cast<float>(steps);
     const float perStep = edgeOnSweepRadius * std::sin(stepRadians);
     return glm::degrees(static_cast<float>(steps) * perStep / handleLengthPixelsForTest);
@@ -611,20 +621,35 @@ TEST(GizmoDragTest, SnapWithAZeroStepLeavesTheValueUnchanged)
   EXPECT_NEAR(dragXHandleBy(0.1f), 1.4f, 1e-3f);
 }
 
-TEST(GizmoDragTest, ADegenerateProjectedHandleStillHovers)
+TEST(GizmoDragTest, AZAxisPointingAtTheCameraProducesOnlyFinitePrimitives)
 {
-  // The Z axis points straight at the camera, so in translate mode its shaft projects to a single point
-  // and the hover distance must handle a zero-length segment.
+  // The Z axis points straight at the camera, so the Z shaft projects to a single point and its
+  // camera-facing quad has no side vector; the frame must still be built from finite geometry.
   GizmoFixture f;
-  const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
-  f.input.mouse = centerScreen;
-
   const auto frame = gizmo::update(f.state, f.input);
 
-  EXPECT_NE(frame.hovered, gizmo::Handle::none);
-  EXPECT_TRUE(frame.capturesMouse);
+  const auto* zLine = findLine(frame, gizmo::Handle::z);
+  ASSERT_NE(zLine, nullptr);
+  const glm::vec2 zStart = *gizmo::project(f.view, zLine->a);
+  const glm::vec2 zEnd = *gizmo::project(f.view, zLine->b);
+  EXPECT_NEAR(glm::length(zEnd - zStart), 0.0f, 1e-2f);
 
-  // Positive control: far from every handle nothing hovers.
-  f.input.mouse = centerScreen + glm::vec2(300.0f, 250.0f);
-  EXPECT_EQ(gizmo::update(f.state, f.input).hovered, gizmo::Handle::none);
+  const auto finite = [](const glm::vec3& v) {
+    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+  };
+
+  for (const auto& line : frame.lines)
+  {
+    EXPECT_TRUE(finite(line.a) && finite(line.b));
+  }
+
+  bool xHasTriangles = false;
+  for (const auto& triangle : frame.triangles)
+  {
+    EXPECT_TRUE(finite(triangle.a) && finite(triangle.b) && finite(triangle.c));
+    xHasTriangles = xHasTriangles || triangle.handle == gizmo::Handle::x;
+  }
+
+  // Positive control: the other axes still draw, so finiteness is not an empty frame.
+  EXPECT_TRUE(xHasTriangles);
 }

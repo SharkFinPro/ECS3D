@@ -386,11 +386,11 @@ TEST(RemoteLogSink, AMessageOfThreeByteCharactersExactlyAtTheCapIsNotTruncated)
   EXPECT_EQ(drained.entries[0].message, message);
 }
 
-TEST(RemoteLogSink, ACutThatLandsOnAStrayContinuationByteDropsIt)
+TEST(RemoteLogSink, ACutThatLandsOnAnInvalidLeadByteDropsIt)
 {
   RemoteLogSink sink(10);
 
-  // 0xFF starts no UTF-8 sequence; the cut backs up to it and drops it instead of keeping invalid bytes.
+  // 0xFF starts no UTF-8 sequence; the cut keeps it out instead of storing an invalid byte.
   std::string message(RemoteLogSink::maxMessageBytes - 1, 'x');
   message += "\xFF";
   message += std::string(1000, 'y');
@@ -403,4 +403,19 @@ TEST(RemoteLogSink, ACutThatLandsOnAStrayContinuationByteDropsIt)
   const auto markerStart = stored.find(truncationMarkerText);
   ASSERT_NE(markerStart, std::string::npos);
   EXPECT_EQ(markerStart, RemoteLogSink::maxMessageBytes - 1);
+}
+
+TEST(RemoteLogSink, ACutThroughAMessageOfStrayContinuationBytesKeepsNoneOfThem)
+{
+  RemoteLogSink sink(10);
+
+  // Nothing but continuation bytes (10xxxxxx): walking back from the cut reaches the start of the text
+  // without finding a lead byte, so the cut is pulled back to zero rather than keeping invalid bytes.
+  const std::string message(RemoteLogSink::maxMessageBytes + 100, '\x80');
+
+  sink.write(entry(message));
+
+  const auto drained = sink.drain(10);
+  ASSERT_EQ(drained.entries.size(), 1u);
+  EXPECT_EQ(drained.entries[0].message, truncationMarkerText);
 }

@@ -563,8 +563,9 @@ TEST_F(SettingsStoreTest, UpdateWithNothingPendingWritesNothing)
   EXPECT_TRUE(std::filesystem::exists(m_file));
 }
 
-TEST_F(SettingsStoreTest, ReplacesAnEarlierSpoiledFileWhenSettingAsideAgain)
+TEST_F(SettingsStoreTest, SettingAsideOverwritesAnEarlierSpoiledFile)
 {
+  // rename replaces an existing file, so this takes the plain path, not the clear-and-retry fallback.
   writeFile("{ this is not json");
 
   auto spoiled = m_file;
