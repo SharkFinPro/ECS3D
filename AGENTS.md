@@ -399,7 +399,7 @@ without the `tryGet` ceremony since `ScriptBase` constructs one for the script's
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
 without deciding its scripting story can't go unnoticed. Script field edits are validated
 (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
-refused with a warning and does not fault the script. `LogBindings` gives scripts `Log.trace/debug/
+refused with a warning and does not fault the script. A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about once and left unattached until the next reload, and field read-back skips a missing or faulted instance, so saved values are never overwritten by defaults. `LogBindings` gives scripts `Log.trace/debug/
 info/warn/error` through `ECS3DLog` under `LogCategory::script`, registered first in `registerBindings` so
 everything the bridge itself logs afterwards - init, hot-reload, compilation - already has a binding to
 write through. Instance lifetime tracks the live component set in both directions: a Script added to a
