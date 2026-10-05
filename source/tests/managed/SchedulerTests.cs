@@ -234,6 +234,7 @@ public class SchedulerBridgeTests : IDisposable
     public int TimerCalls { get; private set; }
     public int FixedCalls { get; private set; }
     public bool Throw { get; set; }
+    public float LastDt { get; private set; }
 
     public void ScheduleAfter(float seconds) => after(seconds, () =>
     {
@@ -254,6 +255,7 @@ public class SchedulerBridgeTests : IDisposable
     public override void fixedUpdate(float dt)
     {
       FixedCalls++;
+      LastDt = dt;
       Events.Add("fixed");
     }
   }
@@ -273,6 +275,7 @@ public class SchedulerBridgeTests : IDisposable
 
     Bridge.RunFixedUpdate(_uuid, nameof(Timed), 0.5f);
     Assert.Equal(0, script.TimerCalls);
+    Assert.Equal(0.5f, script.LastDt);
     Assert.Equal(1, script.FixedCalls);
 
     Bridge.RunFixedUpdate(_uuid, nameof(Timed), 0.5f);
