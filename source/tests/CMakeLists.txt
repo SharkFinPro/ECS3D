@@ -102,6 +102,7 @@ add_executable(${PROJECT_NAME}
   SceneEditBatchTest.cpp
   ProtocolFramingTest.cpp
   InputStatePayloadTest.cpp
+  PlayerSlotsTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
   TransportLogTest.cpp
