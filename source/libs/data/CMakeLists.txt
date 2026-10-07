@@ -9,6 +9,8 @@ add_library(${PROJECT_NAME}
   ProjectSerializer.h
   ProjectPacker.cpp
   ProjectPacker.h
+  PlayerSlots.cpp
+  PlayerSlots.h
   Replication.cpp
   Replication.h
   WireTypes.h
