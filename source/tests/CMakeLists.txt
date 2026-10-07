@@ -103,6 +103,7 @@ add_executable(${PROJECT_NAME}
   SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
   InputStatePayloadTest.cpp
+  PlayerSlotsTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
   TransportLogTest.cpp
