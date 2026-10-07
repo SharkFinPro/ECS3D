@@ -187,6 +187,23 @@ private:
   float m_lastMouseY = 0.0f;
   bool m_inputSent = false;
 
+  // A per-connection random tag sent in join; the server echoes it in a playerSlot message so this editor
+  // can pick out its own slot from the broadcast.
+  uint64_t m_joinNonce = 0;
+
+  // The player slot the server bound this connection's input to (-1 until it says). Changes only when the
+  // server confirms - a possessSlot request does not move it by itself.
+  int32_t m_playerSlot = -1;
+
+  // The slot a possessSlot request asked for, until the server's playerSlot answers it. While set, the
+  // reply is a switch to follow (camera included) rather than the join reply.
+  std::optional<int32_t> m_requestedPlayerSlot;
+  std::chrono::steady_clock::time_point m_requestedPlayerSlotSince;
+
+  // The playerSlot reply is a broadcast the transport may drop for a slow peer, so a request that goes
+  // unanswered this long is abandoned instead of leaving the Player combo disabled.
+  static constexpr std::chrono::seconds playerSlotRequestTimeout{3};
+
   // Edge-detect the mouse so viewport picking only fires on a fresh click.
   bool m_mouseWasPressed = false;
 
@@ -258,6 +275,14 @@ private:
   // server's Log). Writes them straight into m_consoleSink (rather than through Log::write) so each entry
   // keeps the timestamp it carried on the wire instead of being stamped with its arrival time.
   void handleServerLog(const net::Message& message) const;
+
+  void handlePlayerSlot(const net::Message& message);
+
+  void sendJoin();
+
+  void requestPlayerSlot(int32_t slot);
+
+  void expirePlayerSlotRequest();
 
   void handlePicking();
 
@@ -334,6 +359,10 @@ private:
   // The "View" combo: the editor's free-fly camera, or any Camera in the scene (a client's player camera
   // is labelled with its slot).
   void displayCameraSelector();
+
+  // The "Player" combo: picks which player slot this editor's input drives. A request, not a change - the
+  // slot (and the camera) only move once the server's reply confirms it.
+  void displayPlayerSelector();
 
   // Move/Rotate/Scale mode buttons, the World/Local toggle, and the Snap checkbox - the viewport gizmo's
   // controls, disabled on a read-only server.
