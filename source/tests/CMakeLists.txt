@@ -102,6 +102,7 @@ add_executable(${PROJECT_NAME}
   ProtocolFramingTest.cpp
   ServerPolicyTest.cpp
   InputStatePayloadTest.cpp
+  PlayerSlotsTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
   TransportLogTest.cpp
