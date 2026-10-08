@@ -197,7 +197,7 @@ bool NetServer::poll(Message& message, int32_t& senderId)
 
 void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t* data, const int32_t len)
 {
-  // An empty payload is legal (the editor's join carries none, and ServerApp::handleJoin keys on that),
+  // An empty payload is legal (a join may carry no nonce, and ServerApp::handleJoin keys on that),
   // so a zero or negative length, or a null buffer, is an empty message rather than a range to walk.
   const auto payload = len > 0 && data != nullptr
     ? std::span<const uint8_t>(data, static_cast<std::size_t>(len))

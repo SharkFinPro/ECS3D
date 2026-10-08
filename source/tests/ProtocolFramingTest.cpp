@@ -398,7 +398,7 @@ TEST(ProtocolFraming, AppendedBytesSitBetweenTheValuesWrittenAroundThem)
 
 TEST(ProtocolFraming, AnEmptyBufferConstructsAnEmptyMessage)
 {
-  // The editor's join carries no payload and the server keys on that, so an empty span has to make an
+  // A join may carry no nonce and the server keys on that, so an empty span has to make an
   // ordinary empty message rather than anything the reader trips over.
   const net::Message message(net::MessageType::join, std::span<const uint8_t>());
 
