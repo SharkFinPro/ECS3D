@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeRigidBodyNatives
 {
   [UnmanagedCallersOnly]
   private static void RigidBodyApplyForce(IntPtr u, float x, float y, float z, float px, float py, float pz,
@@ -88,7 +89,7 @@ internal static unsafe partial class FakeNatives
   [UnmanagedCallersOnly]
   private static void RigidBodySetDoGravity(IntPtr u, byte value) => Rec("RigidBody.setDoGravity", u, value);
 
-  private static RigidBodyBindings MakeRigidBody() => new()
+  internal static RigidBodyBindings Make() => new()
   {
     applyForce = &RigidBodyApplyForce,
     setVelocity = &RigidBodySetVelocity,

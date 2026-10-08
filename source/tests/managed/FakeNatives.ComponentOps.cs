@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeComponentOpsNatives
 {
   [UnmanagedCallersOnly]
   private static byte OpsHasComponent(IntPtr u, IntPtr type)
@@ -35,7 +36,7 @@ internal static unsafe partial class FakeNatives
     return Get<IntPtr>("ComponentOps.getComponentTypes");
   }
 
-  private static ComponentOpsBindings MakeComponentOps() => new()
+  internal static ComponentOpsBindings Make() => new()
   {
     hasComponent = (delegate* unmanaged<IntPtr, IntPtr, bool>)(void*)
       (delegate* unmanaged<IntPtr, IntPtr, byte>)&OpsHasComponent,

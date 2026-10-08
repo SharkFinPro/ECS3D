@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeWorldNatives
 {
   [UnmanagedCallersOnly]
   private static IntPtr WorldFindObjectByName(IntPtr name)
@@ -70,7 +71,7 @@ internal static unsafe partial class FakeNatives
     return Get<IntPtr>("World.spawnPrefab");
   }
 
-  private static WorldBindings MakeWorld() => new()
+  internal static WorldBindings Make() => new()
   {
     findObjectByName = &WorldFindObjectByName,
     getObjectName = &WorldGetObjectName,

@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeTransformNatives
 {
   [UnmanagedCallersOnly]
   private static void TransformGetPosition(IntPtr u, float* x, float* y, float* z)
@@ -77,7 +78,7 @@ internal static unsafe partial class FakeNatives
   private static void TransformSetPosition(IntPtr u, float x, float y, float z) =>
     Rec("Transform.setPosition", u, x, y, z);
 
-  private static TransformBindings MakeTransform() => new()
+  internal static TransformBindings Make() => new()
   {
     getPosition = &TransformGetPosition,
     getScale = &TransformGetScale,

@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeColliderNatives
 {
   [UnmanagedCallersOnly]
   private static int ColliderGetShape(IntPtr u)
@@ -123,7 +124,7 @@ internal static unsafe partial class FakeNatives
     return Flag("Collider.has");
   }
 
-  private static ColliderBindings MakeCollider() => new()
+  internal static ColliderBindings Make() => new()
   {
     getShape = &ColliderGetShape,
     getIsTrigger =

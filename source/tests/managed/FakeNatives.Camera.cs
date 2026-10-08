@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeCameraNatives
 {
   [UnmanagedCallersOnly]
   private static void CameraGetDirection(IntPtr u, float* x, float* y, float* z)
@@ -65,7 +66,7 @@ internal static unsafe partial class FakeNatives
   [UnmanagedCallersOnly]
   private static void CameraSetActive(IntPtr u, byte value) => Rec("Camera.setActive", u, value);
 
-  private static CameraBindings MakeCamera() => new()
+  internal static CameraBindings Make() => new()
   {
     getDirection = &CameraGetDirection,
     has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&CameraHas,

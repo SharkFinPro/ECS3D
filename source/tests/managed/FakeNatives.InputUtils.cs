@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeInputUtilsNatives
 {
   [UnmanagedCallersOnly]
   private static byte InputKeyIsPressed(int key)
@@ -77,7 +78,7 @@ internal static unsafe partial class FakeNatives
     return Flag("InputUtils.wasKeyReleasedThisTickForObject");
   }
 
-  private static InputUtilsBindings MakeInputUtils() => new()
+  internal static InputUtilsBindings Make() => new()
   {
     keyIsPressed = (delegate* unmanaged<int, bool>)(void*)(delegate* unmanaged<int, byte>)&InputKeyIsPressed,
     windowIsFocused = (delegate* unmanaged<bool>)(void*)(delegate* unmanaged<byte>)&InputWindowIsFocused,

@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeLightRendererNatives
 {
   [UnmanagedCallersOnly]
   private static byte LightGetIsSpotLight(IntPtr u)
@@ -86,7 +87,7 @@ internal static unsafe partial class FakeNatives
     return Flag("LightRenderer.has");
   }
 
-  private static LightRendererBindings MakeLightRenderer() => new()
+  internal static LightRendererBindings Make() => new()
   {
     getIsSpotLight =
       (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&LightGetIsSpotLight,

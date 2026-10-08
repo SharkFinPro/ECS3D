@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeModelRendererNatives
 {
   [UnmanagedCallersOnly]
   private static IntPtr ModelGetModelUuid(IntPtr u)
@@ -52,7 +53,7 @@ internal static unsafe partial class FakeNatives
     return Flag("ModelRenderer.has");
   }
 
-  private static ModelRendererBindings MakeModelRenderer() => new()
+  internal static ModelRendererBindings Make() => new()
   {
     getModelUUID = &ModelGetModelUuid,
     getTextureUUID = &ModelGetTextureUuid,

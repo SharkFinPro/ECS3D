@@ -18,12 +18,18 @@ namespace ECS3DManagedTests;
 // tables are filled through a cast to the bool signature, which has the same one-byte shape. The bool tests
 // therefore prove routing, not the DisableRuntimeMarshalling ABI: a 1-byte fake cannot put garbage in the
 // upper bits of the return register.
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakeNatives
 {
   internal static readonly List<string> Calls = new();
 
   // A mistyped Set is recorded here, since throwing inside an UnmanagedCallersOnly fake would abort the host.
-  internal static string? LastError;
+  private static string? s_lastError;
+
+  internal static string? LastError => s_lastError;
+
+  internal static void ResetError() => s_lastError = null;
+
+  private static void RecordError(string message) => s_lastError ??= message;
 
   private static readonly Dictionary<string, object> Canned = new();
 
@@ -65,19 +71,19 @@ internal static unsafe partial class FakeNatives
     internal Scope()
     {
       Calls.Clear();
-      LastError = null;
+      ResetError();
       Canned.Clear();
 
-      NativeBindings.InputUtils = MakeInputUtils();
-      NativeBindings.RigidBody = MakeRigidBody();
-      NativeBindings.Transform = MakeTransform();
-      NativeBindings.World = MakeWorld();
-      NativeBindings.ComponentOps = MakeComponentOps();
-      NativeBindings.Camera = MakeCamera();
-      NativeBindings.Collider = MakeCollider();
-      NativeBindings.ModelRenderer = MakeModelRenderer();
-      NativeBindings.LightRenderer = MakeLightRenderer();
-      NativeBindings.PlayerController = MakePlayerController();
+      NativeBindings.InputUtils = FakeInputUtilsNatives.Make();
+      NativeBindings.RigidBody = FakeRigidBodyNatives.Make();
+      NativeBindings.Transform = FakeTransformNatives.Make();
+      NativeBindings.World = FakeWorldNatives.Make();
+      NativeBindings.ComponentOps = FakeComponentOpsNatives.Make();
+      NativeBindings.Camera = FakeCameraNatives.Make();
+      NativeBindings.Collider = FakeColliderNatives.Make();
+      NativeBindings.ModelRenderer = FakeModelRendererNatives.Make();
+      NativeBindings.LightRenderer = FakeLightRendererNatives.Make();
+      NativeBindings.PlayerController = FakePlayerControllerNatives.Make();
     }
 
     public void Dispose()
@@ -104,7 +110,7 @@ internal static unsafe partial class FakeNatives
     }
   }
 
-  private static T Get<T>(string key)
+  internal static T Get<T>(string key)
   {
     if (!Canned.TryGetValue(key, out var value))
     {
@@ -116,11 +122,11 @@ internal static unsafe partial class FakeNatives
       return typed;
     }
 
-    LastError ??= $"{key}: canned {value.GetType().Name}, expected {typeof(T).Name}";
+    RecordError($"{key}: canned {value.GetType().Name}, expected {typeof(T).Name}");
     return default!;
   }
 
-  private static byte Flag(string key) => Get<bool>(key) ? (byte)1 : (byte)0;
+  internal static byte Flag(string key) => Get<bool>(key) ? (byte)1 : (byte)0;
 
   private static string Text(object arg) => arg switch
   {
@@ -129,10 +135,10 @@ internal static unsafe partial class FakeNatives
     _ => arg.ToString() ?? ""
   };
 
-  private static void Rec(string name, params object[] args) =>
+  internal static void Rec(string name, params object[] args) =>
     Calls.Add($"{name}({string.Join(",", Array.ConvertAll(args, Text))})");
 
-  private static void OutVec3(string key, float* x, float* y, float* z)
+  internal static void OutVec3(string key, float* x, float* y, float* z)
   {
     var v = Get<Vector3>(key);
     *x = v.X;
@@ -140,7 +146,7 @@ internal static unsafe partial class FakeNatives
     *z = v.Z;
   }
 
-  private static void OutVec2(string key, float* x, float* y)
+  internal static void OutVec2(string key, float* x, float* y)
   {
     var v = Get<Vector2>(key);
     *x = v.X;

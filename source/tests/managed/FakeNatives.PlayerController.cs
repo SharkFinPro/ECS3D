@@ -2,10 +2,11 @@ using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ScriptBridge;
+using static ECS3DManagedTests.FakeNatives;
 
 namespace ECS3DManagedTests;
 
-internal static unsafe partial class FakeNatives
+internal static unsafe class FakePlayerControllerNatives
 {
   [UnmanagedCallersOnly]
   private static byte PlayerHas(IntPtr u)
@@ -24,7 +25,7 @@ internal static unsafe partial class FakeNatives
   [UnmanagedCallersOnly]
   private static void PlayerSetSlot(IntPtr u, int slot) => Rec("PlayerController.setPlayerSlot", u, slot);
 
-  private static PlayerControllerBindings MakePlayerController() => new()
+  internal static PlayerControllerBindings Make() => new()
   {
     has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&PlayerHas,
     getPlayerSlot = &PlayerGetSlot,
