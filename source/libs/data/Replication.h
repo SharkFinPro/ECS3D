@@ -281,6 +281,23 @@ struct InputStatePayload {
 // bytes (if any) are simply left unread.
 [[nodiscard]] std::optional<InputStatePayload> parseInputState(const net::Message& message);
 
+// editor -> server: bind this connection's input to a player slot (MessageType::possessSlot).
+[[nodiscard]] net::Message buildPossessSlot(int32_t slot);
+
+// nullopt for a payload too short to hold the slot.
+[[nodiscard]] std::optional<int32_t> parsePossessSlot(const net::Message& message);
+
+// The answer to a join or possessSlot: the slot bound to the connection whose join carried the nonce.
+struct PlayerSlotPayload {
+  uint64_t nonce = 0;
+  int32_t slot = -1;
+};
+
+[[nodiscard]] net::Message buildPlayerSlot(uint64_t nonce, int32_t slot);
+
+// nullopt for a payload too short to hold the nonce and slot.
+[[nodiscard]] std::optional<PlayerSlotPayload> parsePlayerSlot(const net::Message& message);
+
 }
 
 

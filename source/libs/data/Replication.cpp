@@ -1798,4 +1798,44 @@ std::optional<InputStatePayload> parseInputState(const net::Message& message)
   return payload;
 }
 
+net::Message buildPossessSlot(const int32_t slot)
+{
+  net::Message message(net::MessageType::possessSlot);
+  message.write(slot);
+  return message;
+}
+
+std::optional<int32_t> parsePossessSlot(const net::Message& message)
+{
+  net::MessageReader reader(message);
+  if (reader.remaining() < sizeof(int32_t))
+  {
+    return std::nullopt;
+  }
+
+  return reader.read<int32_t>();
+}
+
+net::Message buildPlayerSlot(const uint64_t nonce, const int32_t slot)
+{
+  net::Message message(net::MessageType::playerSlot);
+  message.write(nonce);
+  message.write(slot);
+  return message;
+}
+
+std::optional<PlayerSlotPayload> parsePlayerSlot(const net::Message& message)
+{
+  net::MessageReader reader(message);
+  if (reader.remaining() < sizeof(uint64_t) + sizeof(int32_t))
+  {
+    return std::nullopt;
+  }
+
+  PlayerSlotPayload payload;
+  payload.nonce = reader.read<uint64_t>();
+  payload.slot = reader.read<int32_t>();
+  return payload;
+}
+
 }

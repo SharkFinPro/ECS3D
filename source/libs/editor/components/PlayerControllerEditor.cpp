@@ -2,6 +2,7 @@
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
 #include "../MixedFields.h"
+#include <PlayerSlots.h>
 #include <objects/components/PlayerController.h>
 #include <imgui.h>
 #include <algorithm>
@@ -42,7 +43,7 @@ void registerPlayerControllerEditor(ComponentEditor& componentEditor)
       ImGui::SameLine();
       ImGui::SetNextItemWidth(dragWidth);
       ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, mixed.contains("playerSlot"));
-      if (ImGui::DragInt("##playerSlot", &slot, 0.1f, 0, 255))
+      if (ImGui::DragInt("##playerSlot", &slot, 0.1f, 0, maxPlayerSlot))
       {
         slotEdited = true;
       }
