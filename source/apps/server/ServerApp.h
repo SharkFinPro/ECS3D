@@ -1,13 +1,14 @@
 #ifndef SERVERAPP_H
 #define SERVERAPP_H
 
-#include "PlayerSlots.h"
 #include <Protocol.h>
+#include <PlayerSlots.h>
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 class ManagedHost;
 class ComponentRegistry;
@@ -75,14 +76,22 @@ private:
   // doesn't exit during the launch -> connect window when the count is still 0).
   bool m_hasConnected = false;
 
-  // Player<->connection binding: each connection is bound to a player slot (0, 1, ...) on join
-  // and released on disconnect. inputState from a connection is written into its slot; a script reads its
-  // own player's input by resolving its object's PlayerController.playerSlot to that slot. Touched only on
-  // the tick thread (join / inputState / disconnect all run there), so no locking is needed.
-  PlayerSlots m_playerSlots;
+  // Player<->connection binding: each connection is bound to a player slot (0, 1, ...) on join, may move
+  // to another free one with possessSlot, and releases it on disconnect. inputState from a connection is
+  // written into its slot; a script reads its own player's input by resolving its object's
+  // PlayerController.playerSlot to that slot. Touched only on the tick thread (join / possessSlot /
+  // inputState / disconnect all run there), so no locking is needed.
+  PlayerSlotTable m_playerSlots;
+
+  // The nonce each connection's join carried, so a slot change can be answered with a playerSlot.
+  std::unordered_map<int32_t, uint64_t> m_joinNonces;
 
   // Bind connId to the lowest free player slot (idempotent - returns the existing slot if already bound).
   int32_t assignPlayerSlot(int32_t connId);
+
+  void handlePossessSlot(const net::Message& message, int32_t senderId);
+
+  void broadcastPlayerSlot(int32_t connId);
 
   // Release a dropped connection's slot and clear its input.
   void handleDisconnect(int32_t connId);

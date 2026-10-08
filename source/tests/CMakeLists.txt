@@ -84,7 +84,6 @@ add_executable(${PROJECT_NAME}
   PhysicsTwoBodyTest.cpp
   PhysicsContactResponseTest.cpp
   DefaultProjectTest.cpp
-  PlayerSlotsTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp
   ObjectComponentsChangedTest.cpp
@@ -102,6 +101,7 @@ add_executable(${PROJECT_NAME}
   SceneEditBatchTest.cpp
   ProtocolFramingTest.cpp
   InputStatePayloadTest.cpp
+  PlayerSlotsTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
   TransportLogTest.cpp
@@ -148,10 +148,9 @@ add_executable(${PROJECT_NAME}
   ../libs/scripting/bindings/LightRendererBindings.cpp
   ../libs/scripting/bindings/PlayerControllerBindings.cpp
 
-  # The server's built-in project is plain JSON over json, glm and uuid, and its player-slot allocator is plain
-  # standard library, so both are compiled in the same way rather than linking the server app.
+  # The server's built-in project is plain JSON over json, glm and uuid, so it is compiled in the same way
+  # rather than linking the server app.
   ../apps/server/DefaultProject.cpp
-  ../apps/server/PlayerSlots.cpp
 
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
   # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).

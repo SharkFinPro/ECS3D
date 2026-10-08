@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -15,6 +16,8 @@ public abstract class ScriptBase
     // default (0,0,-1) if the object has no Camera.
     protected Camera camera { get; private set; } = null!;
 
+    private readonly Scheduler _timers = new();
+
     // This script's own player's input, resolved through its object's PlayerController. Reads as "nothing
     // pressed" if the object has no PlayerController. Prefer this over the global InputUtils, which reads
     // every player's input aggregated together.
@@ -27,6 +30,15 @@ public abstract class ScriptBase
         camera = new Camera(EntityId);
         input = new PlayerInput(EntityId);
     }
+
+    // Run an action once after the given seconds, or repeatedly every that many seconds. Time advances
+    // only on fixed ticks, so timers freeze while the scene is paused or stopped. The returned handle can
+    // cancel the timer; an invalid duration schedules nothing and returns an inactive handle.
+    protected TimerHandle after(float seconds, Action action) => _timers.after(seconds, action);
+
+    protected TimerHandle every(float seconds, Action action) => _timers.every(seconds, action);
+
+    internal void tickTimers(float dt) => _timers.tick(dt);
 
     // Reach another script by type. Returns null if the object has no script of type T (or no such
     // object). The no-argument overloads target this script's own object, for sibling-script access.

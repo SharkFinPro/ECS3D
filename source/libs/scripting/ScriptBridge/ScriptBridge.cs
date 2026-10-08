@@ -750,9 +750,18 @@ public static class Bridge
     {
         var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
         var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        RunFixedUpdate(uuid, className, dt);
+    }
+
+    internal static void RunFixedUpdate(string uuid, string className, float dt)
+    {
         if (_instances.TryGetValue(Key(uuid, className), out var instance))
         {
-            RunGuarded(uuid, className, nameof(fixedUpdate), () => instance.fixedUpdate(dt));
+            RunGuarded(uuid, className, nameof(fixedUpdate), () =>
+            {
+                instance.tickTimers(dt);
+                instance.fixedUpdate(dt);
+            });
         }
     }
 
