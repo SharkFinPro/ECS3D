@@ -344,7 +344,9 @@ clears that pointer, no socket thread remains that could still call back into it
 `std::atomic` because they are written on the app thread and read on the socket threads with no other
 synchronization between them.
 
-**Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through the `ScriptRuntime` seam (`ScriptEngine` implements it over `ManagedHost`; `ScriptSystem` is handed a factory for the runtime and does not include the CLR host, which is how the suite compiles it and tests it against a fake). Native
+**Scripting.** `ScriptSystem` drives `ScriptBridge` (C# gameplay scripts) through the `ScriptRuntime` seam.
+`ScriptEngine` implements it over `ManagedHost`. `ScriptSystem` is handed a factory for the runtime and does
+not include the CLR host, so the suite compiles it and tests it against a fake. Native
 `bindings/` expose Transform/RigidBody/InputUtils/World/Collider to C# via fn-ptr structs; each fn-ptr struct is
 mirrored by a C# `[StructLayout(Sequential)]` struct and registered through `Bridge` (add new fields at
 the **end** of both to keep the layout matched). `BindingContext` is the bridge from the static, C-ABI (application binary interface)
