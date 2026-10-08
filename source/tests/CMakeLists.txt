@@ -103,6 +103,7 @@ add_executable(${PROJECT_NAME}
   InputStatePayloadTest.cpp
   InputStateTest.cpp
   InputUtilsBindingsTest.cpp
+  PlayerSlotsTest.cpp
   WireTypesTest.cpp
   MessageQueueTest.cpp
   TransportLogTest.cpp
