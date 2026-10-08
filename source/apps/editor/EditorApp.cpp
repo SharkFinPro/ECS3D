@@ -4,6 +4,7 @@
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
+#include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
@@ -115,9 +116,26 @@ EditorApp::EditorApp(LaunchOptions options)
 
   connectToServer();
 
-  // Ask the server for the initial Snapshot.
-  const net::Message message(net::MessageType::join);
+  sendJoin();
+}
+
+void EditorApp::sendJoin()
+{
+  // A fresh tag per join so the server's reply can be told apart from other connections' slots.
+  std::random_device rd;
+  m_joinNonce = (static_cast<uint64_t>(rd()) << 32) ^ rd();
+
+  // Ask the server for the initial Snapshot, tagged with our nonce so the reply's slot is identifiable.
+  net::Message message(net::MessageType::join);
+  message.write(m_joinNonce);
   m_netClient->send(message);
+}
+
+void EditorApp::requestPlayerSlot(const int32_t slot)
+{
+  m_requestedPlayerSlot = slot;
+  m_requestedPlayerSlotSince = std::chrono::steady_clock::now();
+  m_netClient->send(replication::buildPossessSlot(slot));
 }
 
 void EditorApp::setupSceneOverlay()
@@ -220,6 +238,10 @@ void EditorApp::setupSaveUI()
 void EditorApp::connectToServer()
 {
   using namespace std::chrono_literals;
+
+  // A slot belongs to one connection, so nothing from the session being left carries over.
+  m_playerSlot = -1;
+  m_requestedPlayerSlot.reset();
 
   // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
   // every object it named.
