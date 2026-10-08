@@ -1798,6 +1798,47 @@ std::optional<InputStatePayload> parseInputState(const net::Message& message)
   return payload;
 }
 
+net::Message buildPossessSlot(const int32_t slot)
+{
+  net::Message message(net::MessageType::possessSlot);
+  message.write(slot);
+  return message;
+}
+
+std::optional<int32_t> parsePossessSlot(const net::Message& message)
+{
+  net::MessageReader reader(message);
+  if (reader.remaining() < sizeof(int32_t))
+  {
+    return std::nullopt;
+  }
+
+  return reader.read<int32_t>();
+}
+
+net::Message buildPlayerSlot(const uint64_t nonce, const int32_t slot)
+{
+  net::Message message(net::MessageType::playerSlot);
+  message.write(nonce);
+  message.write(slot);
+  return message;
+}
+
+std::optional<PlayerSlotPayload> parsePlayerSlot(const net::Message& message)
+{
+  net::MessageReader reader(message);
+  if (reader.remaining() < sizeof(uint64_t) + sizeof(int32_t))
+  {
+    return std::nullopt;
+  }
+
+  PlayerSlotPayload payload;
+  payload.nonce = reader.read<uint64_t>();
+  payload.slot = reader.read<int32_t>();
+  return payload;
+}
+
+
 net::Message buildJoin(const std::optional<uint64_t> nonce)
 {
   net::Message message(net::MessageType::join);
@@ -1820,41 +1861,6 @@ std::optional<uint64_t> parseJoinNonce(const net::Message& message)
   }
 
   return reader.read<uint64_t>();
-}
-
-net::Message buildPlayerSlot(const uint64_t nonce, const int32_t slot)
-{
-  net::Message message(net::MessageType::playerSlot);
-  message.write(nonce);
-  message.write(slot);
-
-  return message;
-}
-
-std::optional<PlayerSlotReply> parsePlayerSlot(const net::Message& message)
-{
-  net::MessageReader reader(message);
-
-  if (reader.remaining() < sizeof(uint64_t) + sizeof(int32_t))
-  {
-    return std::nullopt;
-  }
-
-  PlayerSlotReply reply;
-  reply.nonce = reader.read<uint64_t>();
-  reply.slot = reader.read<int32_t>();
-
-  return reply;
-}
-
-std::optional<int32_t> slotForNonce(const PlayerSlotReply& reply, const uint64_t myNonce)
-{
-  if (reply.nonce != myNonce)
-  {
-    return std::nullopt;
-  }
-
-  return reply.slot;
 }
 
 net::Message buildSceneStatus(const SceneStatus status)
@@ -1902,5 +1908,4 @@ std::optional<bool> parseEditStatus(const net::Message& message)
 
   return reader.read<bool>();
 }
-
 }

@@ -3,13 +3,12 @@
 #include <ComponentRegistration.h>
 #include <ProjectPacker.h>
 #include <Replication.h>
+#include <PlayerSlots.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
-#include <objects/components/PlayerController.h>
-#include <objects/components/Camera.h>
 #include <GpuAssetCache.h>
 #include <RenderSystem.h>
 #include <InputCapture.h>
@@ -54,7 +53,9 @@ ClientApp::ClientApp(ConnectOptions options)
   m_joinNonce = (static_cast<uint64_t>(rd()) << 32) ^ rd();
 
   // Ask the server for the initial Snapshot, tagged with our nonce so the reply's slot is identifiable.
-  m_netClient->send(replication::buildJoin(m_joinNonce));
+  net::Message message(net::MessageType::join);
+  message.write(m_joinNonce);
+  m_netClient->send(message);
 }
 
 ClientApp::~ClientApp()
@@ -343,15 +344,11 @@ void ClientApp::handleObjectComponentsChanged(const net::Message& message) const
 void ClientApp::handlePlayerSlot(const net::Message& message) const
 {
   // The server broadcasts every client's slot assignment; keep only the one tagged with our own nonce.
-  const auto reply = replication::parsePlayerSlot(message);
-  if (!reply)
-  {
-    return;
-  }
+  const auto payload = replication::parsePlayerSlot(message);
 
-  if (const auto slot = replication::slotForNonce(*reply, m_joinNonce))
+  if (payload && payload->nonce == m_joinNonce)
   {
-    m_playerSlot = *slot;
+    m_playerSlot = payload->slot;
   }
 }
 
@@ -369,19 +366,5 @@ std::optional<uuids::uuid> ClientApp::resolvePlayerCamera() const
   }
 
   // Our player object is the one whose PlayerController holds our slot; render through its Camera.
-  for (const auto& object : scene->getObjectManager()->getAllObjects())
-  {
-    const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController);
-    if (!playerController || playerController->getPlayerSlot() != m_playerSlot)
-    {
-      continue;
-    }
-
-    if (object->getComponent<Camera>(ComponentType::camera))
-    {
-      return object->getUUID();
-    }
-  }
-
-  return std::nullopt;
+  return findPlayerCamera(*scene->getObjectManager(), m_playerSlot);
 }

@@ -40,6 +40,10 @@ void ServerApp::handleClientMessage(const net::Message& message, const int32_t s
       handleInputState(message, senderId);
       break;
 
+    case net::MessageType::possessSlot:
+      handlePossessSlot(message, senderId);
+      break;
+
     default:
       handleEditorMessage(message);
       break;
@@ -93,14 +97,16 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
   // server is editable, then send the full project/scene as a Snapshot. Record that a connection has been
   // seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
   m_hasConnected = true;
-  const int32_t slot = assignPlayerSlot(senderId);
+  assignPlayerSlot(senderId);
 
-  // If the client tagged its join with a nonce (players do; the editor sends none), tell it which slot it
-  // got so it can render through that player's camera. Broadcasting with nonce correlation avoids a
+  // If the client tagged its join with a nonce (players and the editor do), tell it which slot it got so
+  // it can render through that player's camera. Broadcasting with nonce correlation avoids a
   // per-connection send path - every client hears it, only the matching one keeps it.
-  if (const auto nonce = replication::parseJoinNonce(message))
+  net::MessageReader reader(message);
+  if (reader.remaining() >= sizeof(uint64_t))
   {
-    m_netServer->broadcast(replication::buildPlayerSlot(*nonce, slot));
+    m_joinNonces[senderId] = reader.read<uint64_t>();
+    broadcastPlayerSlot(senderId);
   }
 
   broadcastEditStatus();
@@ -109,47 +115,86 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 
 int32_t ServerApp::assignPlayerSlot(const int32_t connId)
 {
-  if (const auto it = m_connectionSlots.find(connId); it != m_connectionSlots.end())
+  if (const auto existing = m_playerSlots.slotOf(connId))
   {
-    return it->second;
+    return *existing;
   }
 
-  // Lowest free slot: scan upward until a slot no connection currently holds is found.
-  int32_t slot = 0;
-  const auto slotTaken = [this](const int32_t candidate) {
-    for (const auto& [conn, taken] : m_connectionSlots)
-    {
-      if (taken == candidate)
-      {
-        return true;
-      }
-    }
-    return false;
-  };
-  while (slotTaken(slot))
-  {
-    ++slot;
-  }
-
-  m_connectionSlots.emplace(connId, slot);
+  const int32_t slot = m_playerSlots.assign(connId);
   Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
   return slot;
 }
 
-void ServerApp::handleDisconnect(const int32_t connId)
+void ServerApp::broadcastPlayerSlot(const int32_t connId)
 {
-  const auto it = m_connectionSlots.find(connId);
-  if (it == m_connectionSlots.end())
+  const auto nonce = m_joinNonces.find(connId);
+  const auto slot = m_playerSlots.slotOf(connId);
+  if (nonce == m_joinNonces.end() || !slot)
   {
     return;
   }
 
-  const int32_t slot = it->second;
-  m_connectionSlots.erase(it);
-  InputState::removeSlot(slot);
+  m_netServer->broadcast(replication::buildPlayerSlot(nonce->second, *slot));
+}
+
+void ServerApp::handlePossessSlot(const net::Message& message, const int32_t senderId)
+{
+  // Not a mutation message (it changes no scene data), but held to the same bar: a non-edit server admits
+  // any connection that claims Role::editor, and a player must not be able to move itself into someone
+  // else's character.
+  if (!m_options.editMode || !m_netServer->isEditor(senderId))
+  {
+    Log::warn(LogCategory::server, "Discarded a possessSlot from connection " + std::to_string(senderId)
+      + ": not the authorized editor of an edit-mode server.");
+    return;
+  }
+
+  const auto requested = replication::parsePossessSlot(message);
+  if (!requested)
+  {
+    return;
+  }
+
+  const auto outcome = m_playerSlots.request(senderId, *requested);
+  const std::string connection = "connection " + std::to_string(senderId);
+
+  if (outcome.result == PossessResult::granted)
+  {
+    if (outcome.previousSlot)
+    {
+      InputState::removeSlot(*outcome.previousSlot);
+    }
+
+    Log::info(LogCategory::server, "Bound " + connection + " to player slot " + std::to_string(*requested) + ".");
+  }
+  else if (outcome.result == PossessResult::held)
+  {
+    Log::warn(LogCategory::server, "Refused " + connection + " player slot " + std::to_string(*requested)
+      + ": another connection holds it.");
+  }
+  else if (outcome.result == PossessResult::outOfRange)
+  {
+    Log::warn(LogCategory::server, "Refused " + connection + " player slot " + std::to_string(*requested)
+      + ": outside 0.." + std::to_string(maxPlayerSlot) + ".");
+  }
+
+  broadcastPlayerSlot(senderId);
+}
+
+void ServerApp::handleDisconnect(const int32_t connId)
+{
+  m_joinNonces.erase(connId);
+
+  const auto slot = m_playerSlots.release(connId);
+  if (!slot)
+  {
+    return;
+  }
+
+  InputState::removeSlot(*slot);
 
   Log::info(LogCategory::server, "Connection " + std::to_string(connId) + " dropped; freed player slot "
-    + std::to_string(slot) + ".");
+    + std::to_string(*slot) + ".");
 }
 
 void ServerApp::handleInputState(const net::Message& message, const int32_t senderId)

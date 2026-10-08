@@ -17,7 +17,6 @@ class SceneManager;
 class ComponentRegistry;
 
 enum class LogCategory;
-enum class SceneStatus : uint8_t;
 
 namespace net {
   class Message;
@@ -28,6 +27,8 @@ namespace net {
 // straight into the message (count-prefixed entries) rather than JSON. The server packs it from its
 // authoritative scene, the client unpacks it into its replicated view. This lives in ECS3DData (it
 // reads/writes the scene data); the net layer only carries the resulting bytes.
+enum class SceneStatus : uint8_t;
+
 namespace replication {
 
 void packStateDelta(net::Message& message, const ObjectManager& objectManager);
@@ -282,25 +283,29 @@ struct InputStatePayload {
 // bytes (if any) are simply left unread.
 [[nodiscard]] std::optional<InputStatePayload> parseInputState(const net::Message& message);
 
-// The join carries an optional per-session nonce (players send one, the editor sends none); the server
-// echoes it back in the playerSlot reply so only the sender keeps the slot.
-[[nodiscard]] net::Message buildJoin(std::optional<uint64_t> nonce);
+// editor -> server: bind this connection's input to a player slot (MessageType::possessSlot).
+[[nodiscard]] net::Message buildPossessSlot(int32_t slot);
 
-// nullopt when the payload holds no complete nonce.
-[[nodiscard]] std::optional<uint64_t> parseJoinNonce(const net::Message& message);
+// nullopt for a payload too short to hold the slot.
+[[nodiscard]] std::optional<int32_t> parsePossessSlot(const net::Message& message);
 
-struct PlayerSlotReply {
+// The answer to a join or possessSlot: the slot bound to the connection whose join carried the nonce.
+struct PlayerSlotPayload {
   uint64_t nonce = 0;
-  int32_t slot = 0;
+  int32_t slot = -1;
 };
 
 [[nodiscard]] net::Message buildPlayerSlot(uint64_t nonce, int32_t slot);
 
-// nullopt for a truncated payload; never throws.
-[[nodiscard]] std::optional<PlayerSlotReply> parsePlayerSlot(const net::Message& message);
+// nullopt for a payload too short to hold the nonce and slot.
+[[nodiscard]] std::optional<PlayerSlotPayload> parsePlayerSlot(const net::Message& message);
 
-// The slot a broadcast reply assigns to the client holding myNonce; nullopt when it is for someone else.
-[[nodiscard]] std::optional<int32_t> slotForNonce(const PlayerSlotReply& reply, uint64_t myNonce);
+// The join carries an optional per-session nonce; the server echoes it back in the playerSlot reply so only
+// the sender keeps the slot.
+[[nodiscard]] net::Message buildJoin(std::optional<uint64_t> nonce);
+
+// nullopt when the payload holds no complete nonce.
+[[nodiscard]] std::optional<uint64_t> parseJoinNonce(const net::Message& message);
 
 [[nodiscard]] net::Message buildSceneStatus(SceneStatus status);
 
