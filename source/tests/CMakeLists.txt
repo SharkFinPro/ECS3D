@@ -52,6 +52,9 @@ add_executable(${PROJECT_NAME}
   ColliderWorldTransformTest.cpp
   TransformHierarchyTest.cpp
   ColliderBindingsTest.cpp
+  WorldBindingsTest.cpp
+  ModelRendererBindingsTest.cpp
+  TransformRigidBodyBindingsTest.cpp
   LightRendererTest.cpp
   LightRendererBindingsTest.cpp
   PlayerControllerBindingsTest.cpp
@@ -137,6 +140,8 @@ add_executable(${PROJECT_NAME}
   ../libs/scripting/bindings/ComponentOpsBindings.cpp
   ../libs/net/TransportLog.cpp
   ../libs/scripting/bindings/ColliderBindings.cpp
+  ../libs/scripting/bindings/WorldBindings.cpp
+  ../libs/scripting/bindings/ModelRendererBindings.cpp
 
   # LogBindings depends only on ECS3DLog (no data/CLR includes), so it is compiled in directly rather
   # than pulling all of ECS3DScripting - and its ManagedHost/CLR dependency - into a headless suite.
