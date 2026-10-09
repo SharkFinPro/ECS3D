@@ -40,4 +40,4 @@ template <class Generator>
   return generateEditToken(generator);
 }
 
-#endif
+#endif //EDITTOKEN_H
