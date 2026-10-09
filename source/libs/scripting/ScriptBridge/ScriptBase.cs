@@ -62,6 +62,38 @@ public abstract class ScriptBase
     protected string[] overlapSphere(Vector3 center, float radius, uint layerMask = 0xFFFFFFFF)
         => World.overlapSphere(center, radius, layerMask, EntityId);
 
+    // Named events between scripts. Delivery is synchronous, each handler runs under its own script's fault
+    // gate, and subscriptions end with this instance. Only a live instance can subscribe, so a constructor
+    // call (EntityId is assigned after construction) or one from a detached instance is refused with an
+    // inert handle; subscribe from start() on.
+    protected Subscription subscribe(string eventName, Action<object?> handler)
+        => OwnerKeyIfLive(eventName) is { } owner
+            ? Bridge.Events.subscribe(owner, eventName, handler)
+            : new Subscription(null, "", eventName ?? "", null);
+
+    // Delivers only payloads that are a T; a mismatched payload is skipped with one warning.
+    protected Subscription subscribe<T>(string eventName, Action<T> handler)
+        => OwnerKeyIfLive(eventName) is { } owner
+            ? Bridge.Events.subscribe<T>(owner, eventName, handler)
+            : new Subscription(null, "", eventName ?? "", null);
+
+    // Returns how many handlers ran.
+    protected int publish(string eventName, object? payload = null)
+        => Bridge.Events.publish(eventName, payload);
+
+    private string? OwnerKeyIfLive(string eventName)
+    {
+        var className = GetType().Name;
+        if (Bridge.IsLive(EntityId, className, this))
+        {
+            return Bridge.Key(EntityId, className);
+        }
+
+        Log.warn($"Script '{className}' tried to subscribe to event '{eventName}' while not attached to an " +
+                 "object; subscribe from start().");
+        return null;
+    }
+
     public virtual void start() {}
     public virtual void fixedUpdate(float dt) {}
     public virtual void variableUpdate() {}

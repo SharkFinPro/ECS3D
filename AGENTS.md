@@ -434,7 +434,10 @@ client/editor finds the root by uuid and unpacks it in place, which reconciles t
 children at every level against what was packed. Still far narrower than the whole-project snapshot the
 editor's own `sceneEdit` `addComponent`/`removeComponent` ops need for the same kind of change: a resync
 only touches the changed object's own subtree, the same granularity `objectSpawned`/`objectDestroyed`
-already use for other script-driven structural changes.
+already use for other script-driven structural changes. Scripts can `publish`/`subscribe` named events through a
+bridge-owned channel (`EventChannel`): delivery is synchronous, each handler runs under its own script's fault
+gate, publishes nested deeper than 16 are refused, and only a live instance can subscribe (from `start()` on),
+its subscriptions ending with it.
 
 **Script binding coverage.** Each *Bindings provider exposes its component's full public surface except
 for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight. Every
