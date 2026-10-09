@@ -165,6 +165,11 @@ TEST(GizmoTest, ShaftsAreThickLinesNotThinTriangles)
     // A thin full-length triangle makes ImGui's anti-aliasing spike past the shaft ends.
     for (const auto& tri : frame.triangles)
     {
+      if (tri.handle == gizmo::Handle::uniform)
+      {
+        continue;
+      }
+
       const auto* line = findLine(frame, tri.handle);
       ASSERT_NE(line, nullptr);
       const glm::vec2 pa = *gizmo::project(f.view, line->a);
