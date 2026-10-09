@@ -54,18 +54,12 @@ void ServerApp::broadcastSnapshot() const
 
 void ServerApp::broadcastSceneStatus() const
 {
-  net::Message message(net::MessageType::sceneStatus);
-  message.write(m_sceneManager->getSceneStatus());
-
-  m_netServer->broadcast(message);
+  m_netServer->broadcast(replication::buildSceneStatus(m_sceneManager->getSceneStatus()));
 }
 
 void ServerApp::broadcastEditStatus() const
 {
-  net::Message message(net::MessageType::editStatus);
-  message.write(m_options.editMode);
-
-  m_netServer->broadcast(message);
+  m_netServer->broadcast(replication::buildEditStatus(m_options.editMode));
 }
 
 void ServerApp::broadcastStateDelta() const

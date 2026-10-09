@@ -70,6 +70,11 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
       try
       {
         scene->loadObjects(sceneData.at("objects"));
+
+        if (sceneData.contains("scripts"))
+        {
+          scene->loadScripts(sceneData.at("scripts"));
+        }
       }
       catch (const std::exception& e)
       {

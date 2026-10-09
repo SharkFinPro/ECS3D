@@ -7,10 +7,16 @@
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
 #include "objects/components/RigidBody.h"
+#include "objects/components/Script.h"
+#include "objects/components/Transform.h"
 
 #include <Protocol.h>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <nlohmann/json.hpp>
+#include <stdexcept>
+#include <string>
 #include <uuid.h>
 
 namespace {
@@ -49,6 +55,46 @@ namespace {
     child->addComponent(std::make_shared<RigidBody>());
 
     return parent;
+  }
+
+  std::shared_ptr<Script> addScript(const std::shared_ptr<Object>& object, const std::string& className,
+                                    const nlohmann::json& fields)
+  {
+    auto script = std::make_shared<Script>(className);
+    script->setFields(fields);
+    object->addComponent(script);
+    return script;
+  }
+
+  std::shared_ptr<Script> scriptNamed(const std::shared_ptr<Object>& object, const std::string& className)
+  {
+    for (const auto& component : object->getScripts())
+    {
+      if (const auto script = std::dynamic_pointer_cast<Script>(component);
+          script && script->getClassName() == className)
+      {
+        return script;
+      }
+    }
+
+    return nullptr;
+  }
+
+  // An object payload with no components, one script section carrying `tag`, and no children - what the
+  // script section of Object::pack looks like when the tag is right.
+  net::Message oneScriptSection(const ComponentType tag, const std::string& className)
+  {
+    net::Message message(net::MessageType::objectComponentsChanged);
+    message.writeString(uuids::to_string(targetUUID()));
+    message.writeString("Target");
+    message.write<uint32_t>(0);
+    message.write<uint32_t>(1);
+    message.write(tag);
+    message.writeString(className);
+    message.writeString("[]");
+    message.write<uint32_t>(0);
+
+    return message;
   }
 
   bool hasRigidBody(const std::shared_ptr<Object>& object)
@@ -156,4 +202,133 @@ TEST(ObjectComponentsChanged, ATruncatedMessageIsRefused)
   addTargetObject(client);
 
   EXPECT_ANY_THROW(replication::applyObjectComponentsChanged(*client.objectManager, truncated));
+}
+
+TEST(ObjectComponentsChanged, ASameClassScriptIsReconciledInPlaceAndADifferentClassIsAdded)
+{
+  const auto server = makeScene();
+  const auto serverObject = addTargetObject(server);
+  addScript(serverObject, "Spinner", { { "speed", 5 } });
+  addScript(serverObject, "Bouncer", nlohmann::json::object());
+  const auto message = replication::buildObjectComponentsChanged(*serverObject);
+
+  const auto client = makeScene();
+  const auto clientObject = addTargetObject(client);
+  const auto existing = addScript(clientObject, "Spinner", { { "speed", 1 } });
+
+  replication::applyObjectComponentsChanged(*client.objectManager, message);
+
+  // The Spinner the client already had is the one that was updated, not a replacement; Bouncer is new.
+  ASSERT_EQ(clientObject->getScripts().size(), 2u);
+  EXPECT_EQ(scriptNamed(clientObject, "Spinner"), existing);
+  EXPECT_EQ(existing->getFields().at("speed"), 5);
+  EXPECT_NE(scriptNamed(clientObject, "Bouncer"), nullptr);
+}
+
+TEST(ObjectComponentsChanged, AScriptSectionWhoseTagIsNotAScriptIsRefused)
+{
+  const auto client = makeScene();
+  const auto clientObject = addTargetObject(client);
+  addScript(clientObject, "Spinner", nlohmann::json::object());
+
+  EXPECT_THROW(replication::applyObjectComponentsChanged(
+                 *client.objectManager, oneScriptSection(ComponentType::transform, "Intruder")),
+               std::runtime_error);
+  EXPECT_EQ(scriptNamed(clientObject, "Intruder"), nullptr);
+  EXPECT_NE(scriptNamed(clientObject, "Spinner"), nullptr);
+  EXPECT_EQ(client.objectManager->getObjectByUUID(targetUUID()), clientObject);
+
+  // Partially applied, not unchanged: the stale-component drop runs before the script section is read, so
+  // the refused payload (which names no components) has already stripped the object's Transform.
+  EXPECT_EQ(clientObject->getComponent<Transform>(ComponentType::transform), nullptr);
+
+  // Positive control: the identical payload with the right tag is applied.
+  EXPECT_NO_THROW(replication::applyObjectComponentsChanged(
+    *client.objectManager, oneScriptSection(ComponentType::script, "Intruder")));
+  EXPECT_NE(scriptNamed(clientObject, "Intruder"), nullptr);
+}
+
+TEST(ObjectComponentsChanged, AScriptTypeThisBuildDoesNotRegisterIsRefused)
+{
+  Scene bare(fixtures::Components::none);
+  const auto bareObject = addTargetObject(bare);
+
+  ASSERT_EQ(bare.componentRegistry->create("Script"), nullptr);
+  EXPECT_THROW(replication::applyObjectComponentsChanged(
+                 *bare.objectManager, oneScriptSection(ComponentType::script, "Spinner")),
+               std::runtime_error);
+  EXPECT_TRUE(bareObject->getScripts().empty());
+
+  // Positive control: with the component registered the same payload attaches the script.
+  const auto client = makeScene();
+  const auto clientObject = addTargetObject(client);
+  replication::applyObjectComponentsChanged(*client.objectManager,
+                                            oneScriptSection(ComponentType::script, "Spinner"));
+  EXPECT_NE(scriptNamed(clientObject, "Spinner"), nullptr);
+}
+
+TEST(ObjectComponentsChanged, LoadingAScriptWhenTheScriptTypeIsNotRegisteredThrows)
+{
+  const nlohmann::json body = {
+    { "name", "Scripted" },
+    { "uuid", "123e4567-e89b-12d3-a456-426614174000" },
+    { "components", nlohmann::json::array() },
+    { "scripts", nlohmann::json::array({ { { "type", "Script" }, { "className", "Spinner" } } }) },
+    { "children", nlohmann::json::array() }
+  };
+
+  Scene bare(fixtures::Components::none);
+  EXPECT_THROW(Object(body, bare.objectManager.get()), std::runtime_error);
+
+  const auto registered = makeScene();
+  const Object loaded(body, registered.objectManager.get());
+  ASSERT_EQ(loaded.getScripts().size(), 1u);
+  EXPECT_EQ(std::dynamic_pointer_cast<Script>(loaded.getScripts().front())->getClassName(), "Spinner");
+}
+
+TEST(ObjectComponentsChanged, ALoadFailureNamesTheObjectAndTheComponentThatBrokeIt)
+{
+  const auto scene = makeScene();
+  const std::string uuid = "123e4567-e89b-12d3-a456-426614174000";
+
+  const nlohmann::json brokenComponent = {
+    { "name", "Lamp" },
+    { "uuid", uuid },
+    { "components", nlohmann::json::array({ { { "type", "Transform" } } }) },
+    { "scripts", nlohmann::json::array() },
+    { "children", nlohmann::json::array() }
+  };
+
+  try
+  {
+    const Object loaded(brokenComponent, scene.objectManager.get());
+    FAIL() << "a Transform with no fields should not load";
+  }
+  catch (const std::runtime_error& error)
+  {
+    const std::string message = error.what();
+    EXPECT_NE(message.find("Lamp"), std::string::npos) << message;
+    EXPECT_NE(message.find(uuid), std::string::npos) << message;
+    EXPECT_NE(message.find("Transform"), std::string::npos) << message;
+  }
+
+  const nlohmann::json brokenScript = {
+    { "name", "Lamp" },
+    { "uuid", uuid },
+    { "components", nlohmann::json::array() },
+    { "scripts", nlohmann::json::array({ { { "type", "Script" }, { "className", 5 } } }) },
+    { "children", nlohmann::json::array() }
+  };
+
+  try
+  {
+    const Object loaded(brokenScript, scene.objectManager.get());
+    FAIL() << "a Script whose class name is not a string should not load";
+  }
+  catch (const std::runtime_error& error)
+  {
+    const std::string message = error.what();
+    EXPECT_NE(message.find("Lamp"), std::string::npos) << message;
+    EXPECT_NE(message.find("Script"), std::string::npos) << message;
+  }
 }

@@ -57,7 +57,10 @@ void ScriptSystem::start(ObjectManager& objectManager)
       }
 
       attach(*object, script);
-      startIfNeeded(object->getUUID(), script->getClassName());
+      if (isAttached(object->getUUID(), script->getClassName()))
+      {
+        startIfNeeded(object->getUUID(), script->getClassName());
+      }
     }
   }
 }
@@ -136,6 +139,11 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
       if (!isAttached(object->getUUID(), script->getClassName()))
       {
         attach(*object, script);
+      }
+
+      if (!isAttached(object->getUUID(), script->getClassName()))
+      {
+        continue;
       }
 
       // The scene is running here (fixedUpdate is only called while it is), so any instance that isn't
@@ -295,12 +303,22 @@ void ScriptSystem::syncFieldsToData(const ObjectManager& objectManager) const
       const auto uuid = object->getUUID();
       const auto className = script->getClassName();
 
-      if (!isAttached(uuid, className))
+      // A missing or faulted instance reads back defaults, which would overwrite the saved values.
+      if (!isAttached(uuid, className) ||
+          !m_engine->isHealthy(uuids::to_string(uuid).c_str(), className.c_str()))
       {
         continue;
       }
 
-      script->setFields(readFieldsFromInstance(uuid, className));
+      auto fields = readFieldsFromInstance(uuid, className);
+
+      // A getter that throws mid-read faults the instance and the rest read back as defaults.
+      if (!m_engine->isHealthy(uuids::to_string(uuid).c_str(), className.c_str()))
+      {
+        continue;
+      }
+
+      script->setFields(fields);
     }
   }
 }
@@ -350,6 +368,7 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
     m_attachedIndex.clear();
     m_fieldCache.clear();
     m_started.clear();
+    m_unresolved.clear();
 
     m_scriptsSnapshot = std::move(now);
 
@@ -368,14 +387,26 @@ void ScriptSystem::attach(const Object& object, const std::shared_ptr<Script>& s
   const auto className = script->getClassName();
   const auto key = cacheKey(uuid, className);
 
-  if (m_attached.contains(key))
+  if (m_attached.contains(key) || m_unresolved.isUnresolved(uuid, className, script.get()))
   {
     return;
   }
 
   const auto uuidStr = uuids::to_string(uuid);
 
-  m_engine->attachScript(uuidStr.c_str(), className.c_str());
+  if (!m_engine->attachScript(uuidStr.c_str(), className.c_str()))
+  {
+    if (m_unresolved.add(uuid, className, script))
+    {
+      Log::warn(LogCategory::script,
+                "Script '" + className + "' on object " + uuidStr +
+                " could not be instantiated (missing class, failed compile, or throwing constructor); "
+                "its saved field values are kept.");
+    }
+
+    return;
+  }
+
   m_attached.emplace(key, AttachedScript{ uuid, className, script });
   m_attachedIndex.attach(uuid, className);
 
@@ -403,7 +434,7 @@ void ScriptSystem::detach(const uuids::uuid& uuid, const std::string& className)
 
 void ScriptSystem::detachOrphans(const ObjectManager& objectManager)
 {
-  if (m_attached.empty())
+  if (m_attached.empty() && m_unresolved.empty())
   {
     return;
   }
@@ -424,6 +455,12 @@ void ScriptSystem::detachOrphans(const ObjectManager& objectManager)
       liveScripts.emplace(cacheKey(object->getUUID(), script->getClassName()), script.get());
     }
   }
+
+  m_unresolved.prune([&liveScripts](const uuids::uuid& uuid, const std::string& className) -> const Component*
+  {
+    const auto live = liveScripts.find(cacheKey(uuid, className));
+    return live == liveScripts.end() ? nullptr : live->second;
+  });
 
   // Collected first because detach() erases from m_attached.
   std::vector<std::pair<std::string, AttachedScript>> orphans;

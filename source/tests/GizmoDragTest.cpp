@@ -442,3 +442,214 @@ TEST(GizmoDragTest, ChangingModeMidDragKeepsRunningTheDragItStartedWith)
   EXPECT_NEAR(releaseFrame.local->rotation.y, 0.0f, 1e-4f);
   EXPECT_NEAR(releaseFrame.local->rotation.z, 0.0f, 1e-4f);
 }
+
+namespace {
+  // Radius of the mouse's circle around the center. The edge-on fallback only runs while the ray stays
+  // within about 10 degrees of the ring's plane (|ray . normal| < 0.17); at this fixture's focal length
+  // (~520 px) a mouse within 60 px of the center keeps |ray . normal| near 0.12, so the whole sweep stays
+  // in the fallback instead of switching to the ray-plane branch.
+  constexpr float edgeOnSweepRadius = 60.0f;
+  constexpr float handleLengthPixelsForTest = 100.0f;
+  constexpr int edgeOnSweepSteps = 12;
+  // Mirrors the fallback threshold in Gizmo.cpp (about 10 degrees off the ring plane).
+  constexpr float edgeOnDotThreshold = 0.17f;
+
+  [[nodiscard]] glm::vec2 edgeOnSweepPoint(const glm::vec2& centerScreen, const float angleRadians)
+  {
+    return centerScreen + edgeOnSweepRadius * glm::vec2(std::cos(angleRadians), std::sin(angleRadians));
+  }
+
+  struct EdgeOnSweep {
+    gizmo::Frame frame;
+    float sweptDegrees = 0.0f;
+    float totalDegrees = 0.0f;
+    bool pressedOnExpectedHandle = false;
+  };
+
+  // Presses on `handle`'s edge-on ring at `pressOffset` pixels from the center, moves onto the circle, then
+  // sweeps `sweepDegrees` of screen angle around it in equal steps.
+  [[nodiscard]] EdgeOnSweep sweepEdgeOnRing(const gizmo::Handle handle, const glm::vec2& pressOffset,
+                                            const float sweepDegrees)
+  {
+    GizmoFixture f;
+    f.state.mode = gizmo::Mode::rotate;
+    const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
+
+    const glm::vec3 normal = handle == gizmo::Handle::x ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+    const auto expectEdgeOn = [&](const glm::vec2& mouse) {
+      EXPECT_LT(std::abs(glm::dot(gizmo::mouseRay(f.view, mouse).direction, normal)), edgeOnDotThreshold);
+    };
+
+    EdgeOnSweep result;
+    const auto pressFrame = beginDragOnHandle(f, centerScreen + pressOffset);
+    result.pressedOnExpectedHandle = pressFrame.active == handle;
+
+    constexpr float startAngle = 0.25f * glm::pi<float>();
+    f.input.mouse = edgeOnSweepPoint(centerScreen, startAngle);
+    expectEdgeOn(f.input.mouse);
+    result.frame = gizmo::update(f.state, f.input);
+    const float before = f.state.dragTotalAngleDegrees;
+
+    constexpr int steps = edgeOnSweepSteps;
+    for (int i = 1; i <= steps; ++i)
+    {
+      const float angle = startAngle + glm::radians(sweepDegrees) * static_cast<float>(i) / static_cast<float>(steps);
+      f.input.mouse = edgeOnSweepPoint(centerScreen, angle);
+      expectEdgeOn(f.input.mouse);
+      result.frame = gizmo::update(f.state, f.input);
+    }
+
+    result.totalDegrees = f.state.dragTotalAngleDegrees;
+    result.sweptDegrees = result.totalDegrees - before;
+    return result;
+  }
+
+  // Each step moves the mouse along a chord of length 2R sin(d/2); its component along the tangent at the
+  // new point is that times cos(d/2). The fallback divides the summed tangential travel by the handle
+  // length (arc length over handle length, not the screen angle).
+  [[nodiscard]] float expectedSweptDegrees(const float sweepDegrees)
+  {
+    constexpr int steps = edgeOnSweepSteps;
+    const float stepRadians = glm::radians(sweepDegrees) / static_cast<float>(steps);
+    const float perStep = edgeOnSweepRadius * std::sin(stepRadians);
+    return glm::degrees(static_cast<float>(steps) * perStep / handleLengthPixelsForTest);
+  }
+}
+
+TEST(GizmoDragTest, RotateOnAnEdgeOnXRingFollowsTheMouseAroundTheProjectedCenter)
+{
+  // The camera looks down -Z, so the X ring's plane contains it and the ring projects to a vertical line
+  // through the center: the ray never meets the plane and the screen-space fallback drives the angle.
+  const auto forward = sweepEdgeOnRing(gizmo::Handle::x, glm::vec2(0.0f, -50.0f), 90.0f);
+  ASSERT_TRUE(forward.pressedOnExpectedHandle);
+  ASSERT_TRUE(forward.frame.local.has_value());
+
+  EXPECT_TRUE(std::isfinite(forward.sweptDegrees));
+  EXPECT_NEAR(forward.sweptDegrees, expectedSweptDegrees(90.0f), 1.0f);
+  EXPECT_GT(forward.sweptDegrees, 0.0f);
+
+  // A positive turn about +X carries +Y toward +Z: z = sin(total).
+  const glm::vec3 turnedY = glm::quat(glm::radians(forward.frame.local->rotation)) * glm::vec3(0.0f, 1.0f, 0.0f);
+  EXPECT_NEAR(turnedY.z, std::sin(glm::radians(forward.totalDegrees)), 0.02f);
+
+  // The mirror sweep turns the other way.
+  const auto backward = sweepEdgeOnRing(gizmo::Handle::x, glm::vec2(0.0f, -50.0f), -90.0f);
+  ASSERT_TRUE(backward.pressedOnExpectedHandle);
+  ASSERT_TRUE(backward.frame.local.has_value());
+
+  EXPECT_NEAR(backward.sweptDegrees, expectedSweptDegrees(-90.0f), 1.0f);
+  EXPECT_LT(backward.sweptDegrees, 0.0f);
+  const glm::vec3 reversedY = glm::quat(glm::radians(backward.frame.local->rotation)) * glm::vec3(0.0f, 1.0f, 0.0f);
+  EXPECT_NEAR(reversedY.z, std::sin(glm::radians(backward.totalDegrees)), 0.02f);
+}
+
+TEST(GizmoDragTest, RotateOnAnEdgeOnYRingFollowsTheMouseAroundTheProjectedCenter)
+{
+  // The Y ring projects to a horizontal line through the center.
+  const auto forward = sweepEdgeOnRing(gizmo::Handle::y, glm::vec2(50.0f, 0.0f), 90.0f);
+  ASSERT_TRUE(forward.pressedOnExpectedHandle);
+  ASSERT_TRUE(forward.frame.local.has_value());
+
+  EXPECT_TRUE(std::isfinite(forward.sweptDegrees));
+  EXPECT_NEAR(forward.sweptDegrees, expectedSweptDegrees(90.0f), 1.0f);
+  EXPECT_GT(forward.sweptDegrees, 0.0f);
+
+  // A positive turn about +Y carries +Z toward +X: x = sin(total).
+  const glm::vec3 turnedZ = glm::quat(glm::radians(forward.frame.local->rotation)) * glm::vec3(0.0f, 0.0f, 1.0f);
+  EXPECT_NEAR(turnedZ.x, std::sin(glm::radians(forward.totalDegrees)), 0.02f);
+
+  const auto backward = sweepEdgeOnRing(gizmo::Handle::y, glm::vec2(50.0f, 0.0f), -90.0f);
+  ASSERT_TRUE(backward.pressedOnExpectedHandle);
+  ASSERT_TRUE(backward.frame.local.has_value());
+
+  EXPECT_NEAR(backward.sweptDegrees, expectedSweptDegrees(-90.0f), 1.0f);
+  EXPECT_LT(backward.sweptDegrees, 0.0f);
+  const glm::vec3 reversedZ = glm::quat(glm::radians(backward.frame.local->rotation)) * glm::vec3(0.0f, 0.0f, 1.0f);
+  EXPECT_NEAR(reversedZ.x, std::sin(glm::radians(backward.totalDegrees)), 0.02f);
+}
+
+TEST(GizmoDragTest, ScaleSnapLandsOnAMultipleOfTheStep)
+{
+  const auto dragXHandleBy = [](const bool snap, const float fraction) {
+    GizmoFixture f;
+    f.state.mode = gizmo::Mode::scale;
+    f.input.snap.enabled = snap;
+
+    const auto initial = gizmo::update(f.state, f.input);
+    const glm::vec2 xTipScreen = *gizmo::project(f.view, findLine(initial, gizmo::Handle::x)->b);
+    const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
+
+    beginDragOnHandle(f, xTipScreen);
+    f.input.mouse = xTipScreen + (xTipScreen - centerScreen) * fraction;
+    const auto frame = gizmo::update(f.state, f.input);
+
+    return frame.local.value().scale.x;
+  };
+
+  const float snapped = dragXHandleBy(true, 0.37f);
+  EXPECT_NEAR(snapped, 1.4f, 1e-3f);
+
+  // Positive control: without snap the same drag lands between steps.
+  const float unsnapped = dragXHandleBy(false, 0.37f);
+  EXPECT_NEAR(unsnapped, 1.37f, 0.01f);
+  EXPECT_GT(std::abs(unsnapped - snapped), 0.02f);
+}
+
+TEST(GizmoDragTest, SnapWithAZeroStepLeavesTheValueUnchanged)
+{
+  const auto dragXHandleBy = [](const float step) {
+    GizmoFixture f;
+    f.state.mode = gizmo::Mode::scale;
+    f.input.snap.enabled = true;
+    f.input.snap.scaleStep = step;
+
+    const auto initial = gizmo::update(f.state, f.input);
+    const glm::vec2 xTipScreen = *gizmo::project(f.view, findLine(initial, gizmo::Handle::x)->b);
+    const glm::vec2 centerScreen = *gizmo::project(f.view, glm::vec3(0.0f));
+
+    beginDragOnHandle(f, xTipScreen);
+    f.input.mouse = xTipScreen + (xTipScreen - centerScreen) * 0.37f;
+    const auto frame = gizmo::update(f.state, f.input);
+
+    return frame.local.value().scale.x;
+  };
+
+  EXPECT_NEAR(dragXHandleBy(0.0f), 1.37f, 0.01f);
+
+  // Positive control: a real step does move the same drag, so the zero-step result above is snap
+  // being skipped rather than snap never applying here.
+  EXPECT_NEAR(dragXHandleBy(0.1f), 1.4f, 1e-3f);
+}
+
+TEST(GizmoDragTest, AZAxisPointingAtTheCameraProducesOnlyFinitePrimitives)
+{
+  // The Z axis points straight at the camera, so the Z shaft projects to a single point and its
+  // camera-facing quad has no side vector; the frame must still be built from finite geometry.
+  GizmoFixture f;
+  const auto frame = gizmo::update(f.state, f.input);
+
+  const auto* zLine = findLine(frame, gizmo::Handle::z);
+  ASSERT_NE(zLine, nullptr);
+  const glm::vec2 zStart = *gizmo::project(f.view, zLine->a);
+  const glm::vec2 zEnd = *gizmo::project(f.view, zLine->b);
+  EXPECT_NEAR(glm::length(zEnd - zStart), 0.0f, 1e-2f);
+
+  const auto finite = [](const glm::vec3& v) {
+    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+  };
+
+  for (const auto& line : frame.lines)
+  {
+    EXPECT_TRUE(finite(line.a) && finite(line.b));
+  }
+
+  bool xHasTriangles = false;
+  for (const auto& triangle : frame.triangles)
+  {
+    EXPECT_TRUE(finite(triangle.a) && finite(triangle.b) && finite(triangle.c));
+    xHasTriangles = xHasTriangles || triangle.handle == gizmo::Handle::x;
+  }
+
+  // Positive control: the other axes still draw, so finiteness is not an empty frame.
+  EXPECT_TRUE(xHasTriangles);
+}

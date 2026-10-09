@@ -26,6 +26,7 @@ add_executable(${PROJECT_NAME}
   ColliderCacheTest.cpp
   ComponentLookupTest.cpp
   CameraRangeTest.cpp
+  CameraSelectionTest.cpp
   ComponentRegistryTest.cpp
   AssetRegistryTest.cpp
   AssetDragDropTest.cpp
@@ -41,6 +42,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryRefusalTest.cpp
   EditHistoryStructuralRefusalTest.cpp
   EditHistoryBatchTest.cpp
+  EditCommandTest.cpp
   EditHistoryPlayStopTest.cpp
   HistoryScopeTest.cpp
   PlaySessionHistoryTest.cpp
@@ -48,10 +50,14 @@ add_executable(${PROJECT_NAME}
   CollisionMathTest.cpp
   SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp
+  NarrowPhaseRotatedTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   TransformHierarchyTest.cpp
   ColliderBindingsTest.cpp
+  WorldBindingsTest.cpp
+  ModelRendererBindingsTest.cpp
+  TransformRigidBodyBindingsTest.cpp
   LightRendererTest.cpp
   LightRendererBindingsTest.cpp
   PlayerControllerBindingsTest.cpp
@@ -60,6 +66,7 @@ add_executable(${PROJECT_NAME}
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
   AttachedScriptsTest.cpp
+  UnresolvedScriptsTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
   CompoundBodyCollisionTest.cpp
@@ -71,11 +78,16 @@ add_executable(${PROJECT_NAME}
   GizmoTest.cpp
   GizmoDragTest.cpp
   GizmoDragParentedTest.cpp
+  EditorSelectionTest.cpp
+  TransientObjectTest.cpp
   ObjectSpawnTest.cpp
+  ObjectDestroyedTest.cpp
   SerializationRoundTripTest.cpp
   ProjectSerializerLogTest.cpp
   StateDeltaTest.cpp
+  StatusPayloadTest.cpp
   SceneManagerTest.cpp
+  SceneScriptListTest.cpp
   AssetNamingTest.cpp
   PrefabTest.cpp
   PhysicsIntegrationTest.cpp
@@ -99,11 +111,17 @@ add_executable(${PROJECT_NAME}
   SceneEditRestoreAdoptTest.cpp
   SceneEditCreateAndReorderTest.cpp
   SceneEditBatchTest.cpp
+  SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
   ServerPolicyTest.cpp
   InputStatePayloadTest.cpp
+  InputStateTest.cpp
+  InputUtilsBindingsTest.cpp
   PlayerSlotsTest.cpp
   WireTypesTest.cpp
+  WireTruncationSweepTest.cpp
+  WireTruncation.h
+  WireTruncationFixtures.h
   MessageQueueTest.cpp
   TransportLogTest.cpp
   SmokeTest.cpp
@@ -134,6 +152,8 @@ add_executable(${PROJECT_NAME}
   ../libs/scripting/bindings/ComponentOpsBindings.cpp
   ../libs/net/TransportLog.cpp
   ../libs/scripting/bindings/ColliderBindings.cpp
+  ../libs/scripting/bindings/WorldBindings.cpp
+  ../libs/scripting/bindings/ModelRendererBindings.cpp
 
   # LogBindings depends only on ECS3DLog (no data/CLR includes), so it is compiled in directly rather
   # than pulling all of ECS3DScripting - and its ManagedHost/CLR dependency - into a headless suite.
@@ -146,6 +166,7 @@ add_executable(${PROJECT_NAME}
   # ScriptFieldEdit depends only on json, so it is compiled in the same way.
   ../libs/scripting/ScriptFieldEdit.cpp
   ../libs/scripting/AttachedScripts.cpp
+  ../libs/scripting/UnresolvedScripts.cpp
   ../libs/scripting/bindings/LightRendererBindings.cpp
   ../libs/scripting/bindings/PlayerControllerBindings.cpp
 
@@ -156,6 +177,9 @@ add_executable(${PROJECT_NAME}
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
   # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).
   ../libs/editor/Gizmo.cpp
+
+  # TransientObject depends only on ECS3DData and json.
+  ../libs/editor/TransientObject.cpp
 )
 
 
@@ -214,12 +238,24 @@ if(DOTNET_EXE)
   # build in the tree, the same way
   # ecs3d_add_managed_assembly() isolates ScriptBridge/ECS3DNetTransport from each other and from a
   # developer's own `dotnet` invocations - the isolation CS0579 depends on.
+  set(ECS3D_MANAGED_TESTS_ARGS
+    -c Release
+    -p:BuildRoot=${ECS3D_MANAGED_TESTS_ROOT}/
+    --nologo
+  )
+
+  # The collector ships with Microsoft.NET.Test.Sdk, which the test project already references. The
+  # semicolon is escaped because this is a CMake list: unescaped, it splits the collector argument in two.
+  if(ECS3D_COVERAGE)
+    list(APPEND ECS3D_MANAGED_TESTS_ARGS
+      --collect "Code Coverage\;Format=cobertura"
+      --results-directory ${CMAKE_BINARY_DIR}/coverage/managed
+    )
+  endif()
+
   add_test(
     NAME ECS3DManagedTests
-    COMMAND ${DOTNET_EXE} test "${ECS3D_MANAGED_TESTS_CSPROJ}"
-      -c Release
-      -p:BuildRoot=${ECS3D_MANAGED_TESTS_ROOT}/
-      --nologo
+    COMMAND ${DOTNET_EXE} test "${ECS3D_MANAGED_TESTS_CSPROJ}" ${ECS3D_MANAGED_TESTS_ARGS}
   )
 
   set_tests_properties(ECS3DManagedTests PROPERTIES

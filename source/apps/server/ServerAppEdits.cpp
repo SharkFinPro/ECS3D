@@ -93,15 +93,15 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
     return;
   }
 
-  const std::string payload(message.bytes().begin(), message.bytes().end());
-
-  const auto json = nlohmann::json::parse(payload, nullptr, false);
-  if (json.is_discarded())
+  const auto parsed = replication::parseSceneEditMessage(message);
+  if (!parsed)
   {
     Log::error(LogCategory::server, "Discarded a scene edit of " + std::to_string(message.size()) +
                         " bytes: it is not JSON.");
     return;
   }
+
+  const auto& json = *parsed;
 
   const auto result = replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
 
