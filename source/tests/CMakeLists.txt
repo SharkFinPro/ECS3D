@@ -41,6 +41,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryRefusalTest.cpp
   EditHistoryStructuralRefusalTest.cpp
   EditHistoryBatchTest.cpp
+  EditCommandTest.cpp
   EditHistoryPlayStopTest.cpp
   HistoryScopeTest.cpp
   PlaySessionHistoryTest.cpp
