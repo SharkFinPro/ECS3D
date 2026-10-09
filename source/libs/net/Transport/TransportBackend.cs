@@ -1,4 +1,5 @@
 using System;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 
@@ -61,8 +62,8 @@ internal abstract class TransportBackend
   }
 
   // editMode is the launch-capability gate: only an edit-mode server may grant Role.editor at the
-  // handshake, and only when the presented token matches expectedToken (see Authorize). Set at ServerStart.
-  // Internal (rather than protected) so ECS3DManagedTests can drive Authorize directly against a concrete
+  // handshake, and only when the presented token matches expectedToken (see TryAuthorizeHandshake). Set at ServerStart.
+  // Internal (rather than protected) so ECS3DManagedTests can drive TryAuthorizeHandshake directly against a concrete
   // backend instance via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
   internal bool EditMode;
   internal string ExpectedToken = "";
@@ -84,27 +85,46 @@ internal abstract class TransportBackend
   public abstract void ClientDisconnect();
   public abstract void ClientSend(byte type, nint data, int len);
 
-  // Decides whether a connection presenting this handshake payload ([role byte][token UTF-8]) is
-  // allowed onto the server at all. Players connect freely. An editor is admitted too - even against a
-  // non-edit server, where it gets a read-only view (the server simply honors no edits from it). The one
-  // hard rejection is a real auth failure: an editor offering the wrong token to an edit server that
-  // configured one. Whether an admitted editor may actually edit is conveyed separately via editStatus.
+  // Decides whether a connection whose first frame is (type, payload) is allowed onto the server at all.
+  // The frame must be the handshake: [role byte][token UTF-8]. Players connect freely. An editor is
+  // admitted too - even against a non-edit server, where it gets a read-only view (the server simply
+  // honors no edits from it). Hard rejections: a wrong frame type, a role that is neither player nor
+  // editor, and an editor offering the wrong token to an edit server that configured one. The token is
+  // compared in constant time. grantedRole is always one of our own constants, never the byte the peer
+  // sent, and is only meaningful when this returns true. Whether an admitted editor may actually edit is
+  // conveyed separately via editStatus.
   // Internal (rather than protected) so ECS3DManagedTests can call it directly against a concrete backend
   // instance via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
-  internal bool Authorize(byte[] payload)
+  internal bool TryAuthorizeHandshake(byte type, byte[] payload, out byte grantedRole)
   {
-    if (payload.Length < 1)
+    grantedRole = RolePlayer;
+
+    if (type != HandshakeType || payload.Length < 1)
     {
       return false;
     }
 
-    var role = payload[0];
-    var token = payload.Length > 1 ? Encoding.UTF8.GetString(payload, 1, payload.Length - 1) : "";
+    if (payload[0] == RolePlayer)
+    {
+      return true;
+    }
 
-    if (role == RoleEditor && EditMode && ExpectedToken.Length != 0 && token != ExpectedToken)
+    if (payload[0] != RoleEditor)
     {
       return false;
     }
+
+    if (EditMode && ExpectedToken.Length != 0)
+    {
+      var presented = new ReadOnlySpan<byte>(payload, 1, payload.Length - 1);
+
+      if (!CryptographicOperations.FixedTimeEquals(presented, Encoding.UTF8.GetBytes(ExpectedToken)))
+      {
+        return false;
+      }
+    }
+
+    grantedRole = RoleEditor;
 
     return true;
   }

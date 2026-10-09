@@ -354,8 +354,7 @@ internal sealed class WebSocketBackend : TransportBackend
       // against a play-only server, or one with a bad token) before delivering any protocol message.
       // The handshake gets the tighter ceiling: it is the one message read before the peer is authorized.
       var first = ReceiveMessage(ws, cts.Token, MaxHandshakeBytes);
-      var handshakePayload = first is null ? null : Payload(first);
-      if (first is null || first.Length < 1 || first[0] != HandshakeType || !Authorize(handshakePayload!))
+      if (first is null || first.Length < 1 || !TryAuthorizeHandshake(first[0], Payload(first), out var grantedRole))
       {
         Transport.Log(TransportLogLevel.Warn, "Rejected a connection that failed the handshake.");
         return;
@@ -363,9 +362,9 @@ internal sealed class WebSocketBackend : TransportBackend
 
       connId = Interlocked.Increment(ref _nextConnId);
 
-      // Authorize succeeded: tell the native side which role this connection was actually granted, so it
+      // The handshake was authorized: tell the native side which role this connection was actually granted, so it
       // can enforce that role on every later message rather than trusting one the sender claims.
-      Transport.DeliverServerAuthorized(connId, handshakePayload![0]);
+      Transport.DeliverServerAuthorized(connId, grantedRole);
 
       conn = new Connection(ws, cts, connId);
       lock (_clientsLock)
