@@ -15,6 +15,7 @@
 #include <CollisionSystem.h>
 #include <queries/SceneQueries.h>
 #include <ScriptSystem.h>
+#include <ScriptEngineFactory.h>
 #include <bindings/InputState.h>
 #include <bindings/BindingContext.h>
 #include <NetServer.h>
@@ -47,7 +48,7 @@ ServerApp::ServerApp(LaunchOptions options)
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_collisionSystem = std::make_shared<CollisionSystem>();
-  m_scriptSystem = std::make_shared<ScriptSystem>(m_host);
+  m_scriptSystem = std::make_shared<ScriptSystem>(makeScriptEngineFactory(m_host));
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
   // Feeds forwardLogToEditors: the server is headless, so this is the only way a connected editor - local
