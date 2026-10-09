@@ -355,12 +355,12 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
 
     const bool replaced = m_engine->reloadScripts();
 
-    // Waits for the next edit rather than recompiling the same broken sources every interval.
+    // Recorded even on a failed compile so the same broken sources wait for the next edit; the catch below
+    // keeps the old snapshot, since a thrown reload says nothing about the sources and is worth retrying.
     m_scriptsSnapshot = std::move(now);
 
     if (!replaced)
     {
-      Log::error(LogCategory::script, "Script hot-reload failed to compile - continuing with previous scripts.");
       return;
     }
 

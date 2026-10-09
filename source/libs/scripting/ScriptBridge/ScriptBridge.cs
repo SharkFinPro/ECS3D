@@ -313,7 +313,10 @@ public static class Bridge
         _scriptDir = scriptDir;
 
         Log.info($"Script directory: {_scriptDir}");
-        _ctx = CompileAndLoad() ?? _ctx;
+        if (TryCompile(out var compiled) && compiled is not null)
+        {
+            _ctx = compiled;
+        }
     }
 
     // Returns 1 when the new scripts replaced the old ones, 0 when the previous scripts were kept.
@@ -321,13 +324,26 @@ public static class Bridge
     public static byte reloadScripts() => Reload() ? (byte)1 : (byte)0;
 
     // Compiles first and swaps only on success: a failed compile leaves the running instances, faults,
-    // event subscriptions and loaded types untouched, so the previous scripts keep running.
+    // event subscriptions and loaded types untouched, so the previous scripts keep running. A missing or
+    // empty script directory is not a failure; it swaps to no scripts.
     internal static bool Reload()
     {
-        var next = CompileAndLoad();
-        if (next is null)
+        ScriptContext? next;
+        bool compiled;
+        try
         {
-            Log.error("Reload failed; the previous scripts keep running.");
+            compiled = TryCompile(out next);
+        }
+        catch (Exception ex)
+        {
+            Log.error($"Reload failed: {ex.Message}");
+            compiled = false;
+            next = null;
+        }
+
+        if (!compiled)
+        {
+            Log.error("The previous scripts keep running.");
             return false;
         }
 
@@ -370,19 +386,22 @@ public static class Bridge
         _scriptDir = "";
     }
 
-    private static ScriptContext? CompileAndLoad()
+    // False when the sources failed to compile; true with a null context when there is nothing to compile.
+    private static bool TryCompile(out ScriptContext? ctx)
     {
+        ctx = null;
+
         if (!Directory.Exists(_scriptDir))
         {
             Log.error($"Script directory not found: {_scriptDir}");
-            return null;
+            return true;
         }
 
         var sourceFiles = Directory.GetFiles(_scriptDir, "*.cs", SearchOption.AllDirectories);
         if (sourceFiles.Length == 0)
         {
             Log.warn("No .cs files found in script directory.");
-            return null;
+            return true;
         }
 
         Log.info($"Compiling {sourceFiles.Length} script file(s)...");
@@ -422,13 +441,13 @@ public static class Bridge
             {
                 Log.error($"    {e}");
             }
-            return null;
+            return false;
         }
 
         Log.info("Compilation succeeded.");
 
         ms.Seek(0, SeekOrigin.Begin);
-        var ctx = new ScriptContext(ms);
+        ctx = new ScriptContext(ms);
 
         Log.info($"{ctx.ScriptTypes.Length} script type(s) available.");
         foreach (var t in ctx.ScriptTypes)
@@ -436,7 +455,7 @@ public static class Bridge
             Log.info($"    + {t.Name}");
         }
 
-        return ctx;
+        return true;
     }
 
     [UnmanagedCallersOnly]

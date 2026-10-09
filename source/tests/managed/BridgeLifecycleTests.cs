@@ -312,6 +312,36 @@ public class Broken : ScriptBase { int x = ; }
   }
 
   [Fact]
+  public void Reload_AfterDeletingAllSourcesUnloadsTheOldScripts()
+  {
+    WriteScript("script.cs", ScriptSource(ClassName));
+    Bridge.Initialize(_dir);
+    var instance = new StopCounter();
+    Bridge.AddInstance(Uuid, ClassName, instance);
+
+    File.Delete(Path.Combine(_dir, "script.cs"));
+
+    Assert.True(Bridge.Reload());
+    Assert.Equal(1, instance.StopCalls);
+    Assert.Empty(Bridge.LoadedScriptTypeNames);
+    Assert.False(Bridge.TryFindScript(Uuid, ClassName, out _));
+  }
+
+  [Fact]
+  public void Reload_AfterDeletingTheDirectoryUnloadsTheOldScripts()
+  {
+    WriteScript("script.cs", ScriptSource(ClassName));
+    Bridge.Initialize(_dir);
+    Bridge.AddInstance(Uuid, ClassName, new StopCounter());
+
+    Directory.Delete(_dir, recursive: true);
+
+    Assert.True(Bridge.Reload());
+    Assert.Empty(Bridge.LoadedScriptTypeNames);
+    Assert.False(Bridge.TryFindScript(Uuid, ClassName, out _));
+  }
+
+  [Fact]
   public void Reload_SuccessReportsTheReplacement()
   {
     WriteScript("script.cs", ScriptSource("FirstScript"));

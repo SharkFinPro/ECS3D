@@ -154,7 +154,11 @@ bool ScriptEngine::reloadScripts() const
 
   Log::info(LogCategory::script, "Hot-reloading scripts...");
   const bool replaced = m_reload();
-  Log::info(LogCategory::script, replaced ? "Reload complete." : "Reload failed; keeping the previous scripts.");
+
+  if (replaced)
+  {
+    Log::info(LogCategory::script, "Reload complete.");
+  }
 
   return replaced;
 }
