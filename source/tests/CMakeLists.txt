@@ -85,6 +85,7 @@ add_executable(${PROJECT_NAME}
   SerializationRoundTripTest.cpp
   ProjectSerializerLogTest.cpp
   StateDeltaTest.cpp
+  StatusPayloadTest.cpp
   SceneManagerTest.cpp
   SceneScriptListTest.cpp
   AssetNamingTest.cpp

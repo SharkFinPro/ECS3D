@@ -27,6 +27,8 @@ namespace net {
 // straight into the message (count-prefixed entries) rather than JSON. The server packs it from its
 // authoritative scene, the client unpacks it into its replicated view. This lives in ECS3DData (it
 // reads/writes the scene data); the net layer only carries the resulting bytes.
+enum class SceneStatus : uint8_t;
+
 namespace replication {
 
 void packStateDelta(net::Message& message, const ObjectManager& objectManager);
@@ -297,6 +299,23 @@ struct PlayerSlotPayload {
 
 // nullopt for a payload too short to hold the nonce and slot.
 [[nodiscard]] std::optional<PlayerSlotPayload> parsePlayerSlot(const net::Message& message);
+
+// The join carries an optional per-session nonce; the server echoes it back in the playerSlot reply so only
+// the sender keeps the slot.
+[[nodiscard]] net::Message buildJoin(std::optional<uint64_t> nonce);
+
+// nullopt when the payload holds no complete nonce.
+[[nodiscard]] std::optional<uint64_t> parseJoinNonce(const net::Message& message);
+
+[[nodiscard]] net::Message buildSceneStatus(SceneStatus status);
+
+// nullopt for a truncated payload or a value that is not a SceneStatus; never throws.
+[[nodiscard]] std::optional<SceneStatus> parseSceneStatus(const net::Message& message);
+
+[[nodiscard]] net::Message buildEditStatus(bool editable);
+
+// nullopt for a truncated payload; never throws.
+[[nodiscard]] std::optional<bool> parseEditStatus(const net::Message& message);
 
 }
 
