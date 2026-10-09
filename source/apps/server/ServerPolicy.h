@@ -15,7 +15,7 @@
 }
 
 // A play server admits an editor connection without a token, so forwarding its log there would hand the log
-// to anyone who claims the role. Only an edit-mode server, which demands the token, forwards it.
+// to anyone who claims the role. Only an edit-mode server, where the token check applies, forwards it.
 [[nodiscard]] constexpr bool forwardsLogToEditors(const bool editMode) noexcept
 {
   return editMode;
