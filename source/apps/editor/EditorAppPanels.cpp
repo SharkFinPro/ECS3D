@@ -2,6 +2,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/CameraSelection.h>
 #include <RenderSystem.h>
 #include <EditorTheme.h>
 #include <GuiComponents.h>
@@ -29,43 +30,6 @@
 #include <Log.h>
 
 namespace {
-  // How a camera reads in the editor's "View" combo: the owning object's name, the player slot when it's a
-  // client's player camera, and a cue when the Camera is inactive (RenderSystem only renders through active
-  // cameras, so selecting one shows the free-fly view instead).
-  std::string cameraLabel(const std::shared_ptr<Object>& object)
-  {
-    std::string label = object->getName();
-
-    if (const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController))
-    {
-      label += " (Player " + std::to_string(playerController->getPlayerSlot()) + ")";
-    }
-
-    if (const auto camera = object->getComponent<Camera>(ComponentType::camera); camera && !camera->isActive())
-    {
-      label += " - inactive";
-    }
-
-    return label;
-  }
-
-  // What the "View" combo shows while closed: the chosen camera's label, or the free-fly label when
-  // nothing is chosen or the choice is gone.
-  std::string cameraPreviewLabel(ObjectManager* objectManager, const std::optional<uuids::uuid>& viewCameraObject,
-                                 const char* freeFlyLabel)
-  {
-    std::string preview = freeFlyLabel;
-    if (objectManager && viewCameraObject)
-    {
-      if (const auto object = objectManager->getObjectByUUID(*viewCameraObject))
-      {
-        preview = cameraLabel(object);
-      }
-    }
-
-    return preview;
-  }
-
   // The scene's Camera objects as combo entries; picking one makes it the viewport's camera.
   void selectSceneCamera(ObjectManager* objectManager, std::optional<uuids::uuid>& viewCameraObject)
   {
@@ -84,7 +48,7 @@ namespace {
       const auto uuid = object->getUUID();
 
       // Objects can share a name, so the uuid disambiguates the ImGui id.
-      const std::string label = cameraLabel(object) + "##" + uuids::to_string(uuid);
+      const std::string label = cameraLabel(*object) + "##" + uuids::to_string(uuid);
 
       if (ImGui::Selectable(label.c_str(), viewCameraObject == uuid))
       {

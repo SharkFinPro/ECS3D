@@ -54,6 +54,7 @@
 #include <chrono>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <random>
 #include <string>
 #include <thread>
@@ -126,9 +127,7 @@ void EditorApp::sendJoin()
   m_joinNonce = (static_cast<uint64_t>(rd()) << 32) ^ rd();
 
   // Ask the server for the initial Snapshot, tagged with our nonce so the reply's slot is identifiable.
-  net::Message message(net::MessageType::join);
-  message.write(m_joinNonce);
-  m_netClient->send(message);
+  m_netClient->send(replication::buildJoin(m_joinNonce));
 }
 
 void EditorApp::requestPlayerSlot(const int32_t slot)

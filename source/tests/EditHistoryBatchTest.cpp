@@ -267,3 +267,64 @@ TEST(EditHistoryBatch, UndoOfABatchRefusesWhenOneTargetIsGoneAndSendsNothing)
   // Untouched by the refused undo: the surviving duplicate is still there.
   EXPECT_NE(scene.objectManager->getObjectByUUID(duplicateB), nullptr);
 }
+
+// An empty group is not an edit, so unlike a real record() it must not discard the redo path either.
+TEST(EditHistoryBatch, AnEmptyGroupLeavesTheRedoStackAlone)
+{
+  auto scene = makeScene();
+
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildRenameObject(scene.object->getUUID(), "Renamed")),
+            replication::SceneEditResult::applied);
+
+  edits::EditHistory history;
+  history.record(edits::EditCommand::renameObject(scene.object->getUUID(), "Object", "Renamed"));
+
+  const auto undoOutcome = history.undo(*scene.objectManager);
+  ASSERT_TRUE(undoOutcome.ok());
+  ASSERT_EQ(history.redoDepth(), 1u);
+
+  history.recordBatch({});
+  EXPECT_EQ(history.redoDepth(), 1u);
+  EXPECT_EQ(history.undoDepth(), 0u);
+
+  // Positive control: a one-command group is a real record and does clear the redo stack.
+  history.recordBatch({ edits::EditCommand::renameObject(scene.object->getUUID(), "Object", "Other") });
+  EXPECT_EQ(history.redoDepth(), 0u);
+  EXPECT_EQ(history.undoDepth(), 1u);
+}
+
+TEST(EditHistoryBatch, ClearDropsGroupedEntriesAndLabelsFromBothStacks)
+{
+  auto scene = makeScene();
+  const auto a = addObject(scene, "A");
+  const auto b = addObject(scene, "B");
+
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildBatch({ replication::buildRenameObject(a->getUUID(), "A2"),
+                                        replication::buildRenameObject(b->getUUID(), "B2") })),
+            replication::SceneEditResult::applied);
+
+  edits::EditHistory history;
+  history.recordBatch({ edits::EditCommand::renameObject(a->getUUID(), "A", "A2"),
+                        edits::EditCommand::renameObject(b->getUUID(), "B", "B2") });
+
+  ASSERT_EQ(replication::applySceneEdit(*scene.objectManager,
+              replication::buildRenameObject(scene.object->getUUID(), "Renamed")),
+            replication::SceneEditResult::applied);
+  history.record(edits::EditCommand::renameObject(scene.object->getUUID(), "Object", "Renamed"));
+
+  ASSERT_TRUE(history.undo(*scene.objectManager).ok());
+  ASSERT_EQ(history.undoDepth(), 1u);
+  ASSERT_EQ(history.redoDepth(), 1u);
+  ASSERT_EQ(*history.nextUndoLabel(*scene.objectManager), "2 Edits");
+
+  history.clear();
+
+  EXPECT_EQ(history.undoDepth(), 0u);
+  EXPECT_EQ(history.redoDepth(), 0u);
+  EXPECT_FALSE(history.nextUndoLabel(*scene.objectManager).has_value());
+  EXPECT_FALSE(history.nextRedoLabel(*scene.objectManager).has_value());
+  EXPECT_FALSE(history.nextUndoKind().has_value());
+  EXPECT_FALSE(history.nextRedoKind().has_value());
+}

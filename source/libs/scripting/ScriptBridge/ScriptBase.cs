@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -15,6 +16,8 @@ public abstract class ScriptBase
     // default (0,0,-1) if the object has no Camera.
     protected Camera camera { get; private set; } = null!;
 
+    private readonly Scheduler _timers = new();
+
     // This script's own player's input, resolved through its object's PlayerController. Reads as "nothing
     // pressed" if the object has no PlayerController. Prefer this over the global InputUtils, which reads
     // every player's input aggregated together.
@@ -27,6 +30,15 @@ public abstract class ScriptBase
         camera = new Camera(EntityId);
         input = new PlayerInput(EntityId);
     }
+
+    // Run an action once after the given seconds, or repeatedly every that many seconds. Time advances
+    // only on fixed ticks, so timers freeze while the scene is paused or stopped. The returned handle can
+    // cancel the timer; an invalid duration schedules nothing and returns an inactive handle.
+    protected TimerHandle after(float seconds, Action action) => _timers.after(seconds, action);
+
+    protected TimerHandle every(float seconds, Action action) => _timers.every(seconds, action);
+
+    internal void tickTimers(float dt) => _timers.tick(dt);
 
     // Reach another script by type. Returns null if the object has no script of type T (or no such
     // object). The no-argument overloads target this script's own object, for sibling-script access.
@@ -49,6 +61,38 @@ public abstract class ScriptBase
 
     protected string[] overlapSphere(Vector3 center, float radius, uint layerMask = 0xFFFFFFFF)
         => World.overlapSphere(center, radius, layerMask, EntityId);
+
+    // Named events between scripts. Delivery is synchronous, each handler runs under its own script's fault
+    // gate, and subscriptions end with this instance. Only a live instance can subscribe, so a constructor
+    // call (EntityId is assigned after construction) or one from a detached instance is refused with an
+    // inert handle; subscribe from start() on.
+    protected Subscription subscribe(string eventName, Action<object?> handler)
+        => OwnerKeyIfLive(eventName) is { } owner
+            ? Bridge.Events.subscribe(owner, eventName, handler)
+            : new Subscription(null, "", eventName ?? "", null);
+
+    // Delivers only payloads that are a T; a mismatched payload is skipped with one warning.
+    protected Subscription subscribe<T>(string eventName, Action<T> handler)
+        => OwnerKeyIfLive(eventName) is { } owner
+            ? Bridge.Events.subscribe<T>(owner, eventName, handler)
+            : new Subscription(null, "", eventName ?? "", null);
+
+    // Returns how many handlers ran.
+    protected int publish(string eventName, object? payload = null)
+        => Bridge.Events.publish(eventName, payload);
+
+    private string? OwnerKeyIfLive(string eventName)
+    {
+        var className = GetType().Name;
+        if (Bridge.IsLive(EntityId, className, this))
+        {
+            return Bridge.Key(EntityId, className);
+        }
+
+        Log.warn($"Script '{className}' tried to subscribe to event '{eventName}' while not attached to an " +
+                 "object; subscribe from start().");
+        return null;
+    }
 
     public virtual void start() {}
     public virtual void fixedUpdate(float dt) {}
