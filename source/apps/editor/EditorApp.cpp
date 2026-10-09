@@ -19,6 +19,7 @@
 #include <EditorTheme.h>
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
+#include <AssetReferences.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
 #include <RingBufferSink.h>
@@ -212,7 +213,7 @@ void EditorApp::setupInspectorPanel()
   });
   m_inspectorPanel->setRemoveAssetCallback([this](const uuids::uuid& assetUUID) { onRemoveAsset(assetUUID); });
   m_inspectorPanel->setAssetReferenceCountCallback([this](const uuids::uuid& assetUUID) {
-    return countAssetReferences(assetUUID);
+    return countAssetReferences(*m_sceneManager, *m_assetRegistry, assetUUID);
   });
   m_inspectorPanel->setUpdatePrefabBodyCallback([this](const uuids::uuid& assetUUID, const std::string& name,
                                                        const std::string& body) {

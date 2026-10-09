@@ -16,20 +16,6 @@ namespace {
     const auto chord = table.binding(action);
     return chord ? formatChord(*chord) : std::string();
   }
-
-  // Whether a request actually sent something, read from the OPPOSITE stack's depth (redo's for undo(),
-  // undo's for redo()) rather than the one undo()/redo() popped from. A refusal (notUndoable/
-  // targetMissing/targetChanged) clears the popped-from stack down to 0 exactly the same way a legitimate
-  // pop shrinks it by one, so comparing that stack alone cannot tell a refusal from a send - and either
-  // would otherwise sit the gate for 500ms over nothing, swallowing a legitimate follow-up undo. The
-  // opposite stack is untouched by a refusal (see EditHistory::undo()/redo() to the closing brace) and only
-  // ever gains exactly one entry on success: both push straight onto it, bypassing record() - the only
-  // place maxDepth trimming happens - so there is no trim to make a +1 read as unchanged. That keeps this a
-  // depth comparison rather than needing a dedicated counter on EditHistory.
-  bool gainedOneEntry(const std::size_t before, const std::size_t after)
-  {
-    return after == before + 1;
-  }
 }
 
 void EditorApp::requestUndo()
@@ -66,40 +52,23 @@ void EditorApp::requestRedo()
 
 bool EditorApp::undoRedoRequestBlocked()
 {
-  if (!m_undoRedoPending)
-  {
-    return false;
-  }
-
-  if (std::chrono::steady_clock::now() - m_undoRedoPendingSince >= undoRedoPendingTimeout)
-  {
-    m_undoRedoPending = false;
-    return false;
-  }
-
-  return true;
+  return m_undoRedoGate.blocked();
 }
 
 void EditorApp::beginUndoRedoPending()
 {
-  m_undoRedoPending = true;
-  m_undoRedoPendingSince = std::chrono::steady_clock::now();
+  m_undoRedoGate.begin();
 }
 
 void EditorApp::clearUndoRedoPending()
 {
-  m_undoRedoPending = false;
+  m_undoRedoGate.clear();
 }
 
 void EditorApp::clearEditHistory()
 {
   m_playHistory.clear();
   clearUndoRedoPending();
-}
-
-bool EditorApp::canActOnHistoryItem(const std::optional<std::string>& label, const bool requestInFlight) const
-{
-  return label.has_value() && m_serverEditable && !requestInFlight;
 }
 
 void EditorApp::displayUndoRedoMenuItem(const bool isUndo, const std::optional<std::string>& label,
@@ -150,8 +119,8 @@ void EditorApp::displayEditMenu()
   // neither handler below got a chance to.
   const bool requestInFlight = undoRedoRequestBlocked();
 
-  displayUndoRedoMenuItem(true, undoLabel, canActOnHistoryItem(undoLabel, requestInFlight));
-  displayUndoRedoMenuItem(false, redoLabel, canActOnHistoryItem(redoLabel, requestInFlight));
+  displayUndoRedoMenuItem(true, undoLabel, canActOnHistoryItem(undoLabel, m_serverEditable, requestInFlight));
+  displayUndoRedoMenuItem(false, redoLabel, canActOnHistoryItem(redoLabel, m_serverEditable, requestInFlight));
 
   ImGui::EndMenu();
 }
