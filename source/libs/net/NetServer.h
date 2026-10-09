@@ -54,7 +54,7 @@ public:
   [[nodiscard]] std::vector<int32_t> takeDisconnected();
 
   // Called from the C# socket thread (via the registered native callback), once, right after the
-  // transport's Authorize() grants a connection its role at the handshake. Records connId as an editor
+  // transport's TryAuthorizeHandshake() grants a connection its role at the handshake. Records connId as an editor
   // when role is Role::editor; any other role is a no-op (a connection is never anything else first).
   void authorize(int32_t connId, uint8_t role);
 

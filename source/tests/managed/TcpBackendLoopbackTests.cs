@@ -136,9 +136,9 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     return client;
   }
 
-  private RawPeer ConnectRaw(int port, int? receiveBufferBytes = null)
+  private RawPeer ConnectRaw(int port, int? receiveBufferBytes = null, byte role = RolePlayer)
   {
-    var peer = new RawPeer(port, RolePlayer, "", receiveBufferBytes);
+    var peer = new RawPeer(port, role, "", receiveBufferBytes);
     _peers.Add(peer);
     return peer;
   }
@@ -208,6 +208,24 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     Assert.DoesNotContain(granted, a => a.ConnId == refusedId);
     Assert.Equal(3, granted.Select(a => a.ConnId).Append(refusedId).Distinct().Count());
     Assert.Single(TransportRecorder.ServerDisconnected);
+  }
+
+  [Fact]
+  public void Handshake_NeverReportsARoleThePeerMadeUp()
+  {
+    const byte unknownRole = 2;
+    var server = new TcpBackend();
+    var port = Start(server, editMode: true, token: "secret");
+
+    ConnectRaw(port, role: unknownRole);
+    WaitFor(() => TransportRecorder.ServerDisconnected.Count == 1, "the unknown-role peer to be dropped");
+
+    Connect(port, RolePlayer);
+    WaitFor(() => Authorized().Length == 1, "the player to be authorized");
+    WaitFor(() => server.ServerConnectionCount() == 1, "the player to be listed");
+
+    Assert.Equal(RolePlayer, Authorized().Single().Role);
+    Assert.Equal(1, server.ServerConnectionCount());
   }
 
   [Fact]

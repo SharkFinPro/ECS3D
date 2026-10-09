@@ -355,11 +355,11 @@ internal sealed class TcpBackend : TransportBackend
       var handshakeDeadline = Environment.TickCount64 + HandshakeTimeoutMs;
       if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes, handshakeDeadline,
             BodyReadTimeoutMs) &&
-          handshakeType == HandshakeType && Authorize(handshakePayload))
+          TryAuthorizeHandshake(handshakeType, handshakePayload, out var grantedRole))
       {
-        // Authorize succeeded: tell the native side which role this connection was actually granted, so
+        // The handshake was authorized: tell the native side which role this connection was actually granted, so
         // it can enforce that role on every later message rather than trusting one the sender claims.
-        Transport.DeliverServerAuthorized(connId, handshakePayload[0]);
+        Transport.DeliverServerAuthorized(connId, grantedRole);
 
         client.ReceiveTimeout = 0;
 
@@ -601,7 +601,7 @@ internal sealed class TcpBackend : TransportBackend
     }
 
     // The length is the peer's word, and the handshake is itself a frame - so this runs for anything that
-    // can open a socket, before Authorize has seen a byte. Unbounded, a length just under int.MaxValue
+    // can open a socket, before TryAuthorizeHandshake has seen a byte. Unbounded, a length just under int.MaxValue
     // asks for a two gigabyte allocation, and the copy below holds it twice over at once. The handshake
     // read passes a far smaller ceiling than the rest, since it carries a role byte and a token.
     var bodyLen = BinaryPrimitives.ReadInt32BigEndian(header);
