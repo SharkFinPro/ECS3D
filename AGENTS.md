@@ -333,7 +333,9 @@ held against its own connection before delivering the notice, and skips delivery
 a different, live connection a concurrent `ClientConnect` already installed, so a reconnect racing the old
 loop's exit is not reported as a loss.
 The role a connection is actually granted at the handshake (`TransportBackend.TryAuthorizeHandshake`) is
-reported to C++ separately from the messages it sends. That method checks the frame type, rejects an unknown role, compares the token in constant time, and reports a role it chose rather than the byte the peer sent. Once it succeeds, both backends call
+reported to C++ separately from the messages it sends. That method checks the frame type, rejects an
+unknown role, and compares the token in constant time. It reports a role it chose, never the byte the peer
+sent. Once it succeeds, both backends call
 `Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered
 in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` (via the tested `isMutationAuthorized` in `apps/server/ServerPolicy.h`, which also holds `planSceneControl`) against
 that authorized role (in addition to edit-mode), never against a role a message merely claims - a
