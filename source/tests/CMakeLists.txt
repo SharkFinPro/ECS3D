@@ -31,6 +31,7 @@ add_executable(${PROJECT_NAME}
   AssetRegistryTest.cpp
   AssetDragDropTest.cpp
   AssetFilterTest.cpp
+  ObjectTreeOrderTest.cpp
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp
@@ -66,6 +67,8 @@ add_executable(${PROJECT_NAME}
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
   AttachedScriptsTest.cpp
+  ScriptSystemLifecycleTest.cpp
+  ScriptSystemFieldsAndReloadTest.cpp
   UnresolvedScriptsTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
@@ -113,6 +116,7 @@ add_executable(${PROJECT_NAME}
   SceneEditBatchTest.cpp
   SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
+  ServerPolicyTest.cpp
   InputStatePayloadTest.cpp
   InputStateTest.cpp
   InputUtilsBindingsTest.cpp
@@ -165,6 +169,7 @@ add_executable(${PROJECT_NAME}
   # ScriptFieldEdit depends only on json, so it is compiled in the same way.
   ../libs/scripting/ScriptFieldEdit.cpp
   ../libs/scripting/AttachedScripts.cpp
+  ../libs/scripting/ScriptSystem.cpp
   ../libs/scripting/UnresolvedScripts.cpp
   ../libs/scripting/bindings/LightRendererBindings.cpp
   ../libs/scripting/bindings/PlayerControllerBindings.cpp

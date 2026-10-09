@@ -1,6 +1,7 @@
 #ifndef SCRIPTENGINE_H
 #define SCRIPTENGINE_H
 
+#include "ScriptRuntime.h"
 #include <memory>
 #include <string>
 
@@ -9,7 +10,7 @@ class ManagedHost;
 // ScriptBridge ABI: resolves the bridge's [UnmanagedCallersOnly] entrypoints into native function
 // pointers via ManagedHost, registers component bindings with the managed side, and forwards
 // attach/start/stop/fixedUpdate + the exposed-field getters/setters. Server only.
-class ScriptEngine {
+class ScriptEngine final : public ScriptRuntime {
 public:
   explicit ScriptEngine(std::shared_ptr<ManagedHost> host);
 
@@ -18,32 +19,32 @@ public:
   void init(const std::string& bridgeDir,
             const std::string& scriptDir);
 
-  void reloadScripts() const;
+  void reloadScripts() const override;
 
   // True when a managed instance now exists under the pair; false when the class is missing (renamed,
   // deleted, or the user scripts failed to compile) or its constructor threw.
   [[nodiscard]] bool attachScript(const char* uuid,
-                                  const char* className) const;
+                                  const char* className) const override;
 
   // True when an instance exists under the pair and has not faulted.
   [[nodiscard]] bool isHealthy(const char* uuid,
-                               const char* className) const;
+                               const char* className) const override;
 
   void detachScript(const char* uuid,
-                    const char* className) const;
+                    const char* className) const override;
 
   void start(const char* uuid,
-             const char* className) const;
+             const char* className) const override;
 
   void stop(const char* uuid,
-            const char* className) const;
+            const char* className) const override;
 
   void fixedUpdate(const char* uuid,
                    const char* className,
-                   float dt) const;
+                   float dt) const override;
 
   void variableUpdate(const char* uuid,
-                      const char* className) const;
+                      const char* className) const override;
 
   // Forward a collision event to one script instance. event matches CollisionEvent in ScriptSystem.h
   // (0 = enter, 1 = stay, 2 = exit); kept as a raw int here so the ABI layer stays free of scripting's
@@ -51,47 +52,47 @@ public:
   void onCollision(const char* uuid,
                    const char* className,
                    const char* otherUuid,
-                   int event) const;
+                   int event) const override;
 
   [[nodiscard]] std::string getExposedFields(const char* uuid,
-                                             const char* className) const;
+                                             const char* className) const override;
 
   [[nodiscard]] float getFieldFloat(const char* uuid,
                                     const char* className,
-                                    const char* fieldName) const;
+                                    const char* fieldName) const override;
 
   [[nodiscard]] int getFieldInt(const char* uuid,
                                 const char* className,
-                                const char* fieldName) const;
+                                const char* fieldName) const override;
 
   [[nodiscard]] bool getFieldBool(const char* uuid,
                                   const char* className,
-                                  const char* fieldName) const;
+                                  const char* fieldName) const override;
 
   void getFieldVector3(const char* uuid,
                        const char* className,
                        const char* fieldName,
-                       float& x, float& y, float& z) const;
+                       float& x, float& y, float& z) const override;
 
   void setFieldFloat(const char* uuid,
                      const char* className,
                      const char* fieldName,
-                     float value) const;
+                     float value) const override;
 
   void setFieldInt(const char* uuid,
                    const char* className,
                    const char* fieldName,
-                   int value) const;
+                   int value) const override;
 
   void setFieldBool(const char* uuid,
                     const char* className,
                     const char* fieldName,
-                    bool value) const;
+                    bool value) const override;
 
   void setFieldVector3(const char* uuid,
                        const char* className,
                        const char* fieldName,
-                       float x, float y, float z) const;
+                       float x, float y, float z) const override;
 
   [[nodiscard]] bool isInitialized() const { return m_initialized; }
 
