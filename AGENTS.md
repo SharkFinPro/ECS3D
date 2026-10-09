@@ -502,7 +502,8 @@ keeps behaving exactly as before.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.
-`RenderSystem::updateCamera` finds the active `Camera` (optionally restricted to one object), builds
+`RenderSystem::updateCamera` finds the active `Camera` (optionally restricted to one object; that rule, the view
+math and the View combo's labels live in the headless `data/objects/CameraSelection`), builds
 `lookAt(pos, pos + q·direction, worldUp)` — `q` is the object's orientation, so the camera turns as the
 object turns, but `worldUp` (not an orientation-derived up) keeps the horizon level — then disables
 `vke::Camera`'s free-fly and calls `Renderer3D::setCameraParameters`; no active camera re-enables free-fly
