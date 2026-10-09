@@ -11,7 +11,6 @@ add_executable(${PROJECT_NAME}
   DefaultProject.cpp
   DefaultProject.h
   ServerPolicy.h
-  EditToken.h
 )
 
 # The server does all the number crunching. It is headless: it must NOT link ECS3DRender or

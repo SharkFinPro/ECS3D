@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <EditToken.h>
+#include <ServerPolicy.h>
 
 #include <algorithm>
 #include <random>
@@ -17,7 +18,7 @@ namespace {
   [[nodiscard]] std::string seededToken(const unsigned int seed)
   {
     std::mt19937 engine(seed);
-    return generateEditToken(engine);
+    return net::generateEditToken(engine);
   }
 }
 
@@ -31,7 +32,7 @@ TEST(EditToken, OnlyAnEditServerWithoutATokenNeedsOne)
 
 TEST(EditToken, GeneratedTokenIs32LowercaseHexCharacters)
 {
-  const std::string token = generateEditToken();
+  const std::string token = net::generateEditToken();
 
   EXPECT_EQ(token.length(), 32u);
   EXPECT_TRUE(isLowerHex(token));
@@ -39,7 +40,7 @@ TEST(EditToken, GeneratedTokenIs32LowercaseHexCharacters)
 
 TEST(EditToken, TwoGeneratedTokensDiffer)
 {
-  EXPECT_NE(generateEditToken(), generateEditToken());
+  EXPECT_NE(net::generateEditToken(), net::generateEditToken());
 }
 
 TEST(EditToken, SameSeedGivesSameTokenAndDifferentSeedDoesNot)

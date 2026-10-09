@@ -5,12 +5,9 @@
 #include <random>
 #include <string>
 
-// An edit server with no token would authorize any connection that claims the editor role, so one without a
-// token gets a generated one.
-[[nodiscard]] inline bool needsGeneratedEditToken(const bool editMode, const std::string& token)
-{
-  return editMode && token.empty();
-}
+// The token an editor presents to an edit server. The server generates one when --edit has no --token, and
+// the editor generates one for the server it spawns.
+namespace net {
 
 template <class Generator>
 [[nodiscard]] std::string generateEditToken(Generator& generator)
@@ -39,5 +36,7 @@ template <class Generator>
   std::random_device generator;
   return generateEditToken(generator);
 }
+
+} // namespace net
 
 #endif //EDITTOKEN_H

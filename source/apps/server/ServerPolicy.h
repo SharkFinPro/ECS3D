@@ -2,6 +2,7 @@
 #define SERVERPOLICY_H
 
 #include <Protocol.h>
+#include <string>
 
 // ServerApp cannot be built into the headless test suite (its constructor boots the CLR), so the pure
 // decisions it makes live here.
@@ -56,6 +57,13 @@ struct SceneControlPlan
   }
 
   return plan;
+}
+
+// An edit server with no token would authorize any connection that claims the editor role, so one without a
+// token gets a generated one.
+[[nodiscard]] inline bool needsGeneratedEditToken(const bool editMode, const std::string& token)
+{
+  return editMode && token.empty();
 }
 
 #endif //SERVERPOLICY_H

@@ -1,5 +1,6 @@
 #include "ServerApp.h"
-#include "EditToken.h"
+#include "ServerPolicy.h"
+#include <EditToken.h>
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <LogSetup.h>
@@ -65,7 +66,7 @@ int main(const int argc, char** argv)
 
     if (needsGeneratedEditToken(options.editMode, options.authToken))
     {
-      options.authToken = generateEditToken();
+      options.authToken = net::generateEditToken();
       Log::info(LogCategory::server, "No --token given; generated edit token " + options.authToken +
                                        ". Attach an editor with --host <host> --port " +
                                        std::to_string(options.port) + " --token " + options.authToken + ".");
