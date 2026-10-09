@@ -142,9 +142,38 @@ TEST(GizmoTest, TranslatePrimitiveCountsMatchThreeShaftsAndTips)
 
   const auto frame = gizmo::update(f.state, f.input);
 
-  // 3 shafts (2 triangles each) + 3 tips (1 triangle each), 3 detail lines.
-  EXPECT_EQ(frame.triangles.size(), 9u);
+  // 3 tips (1 triangle each); the shafts are 3 thick lines, not triangles.
+  EXPECT_EQ(frame.triangles.size(), 3u);
   EXPECT_EQ(frame.lines.size(), 3u);
+}
+
+TEST(GizmoTest, ShaftsAreThickLinesNotThinTriangles)
+{
+  auto f = makeOffAxisFixture();
+
+  for (const auto mode : { gizmo::Mode::translate, gizmo::Mode::scale })
+  {
+    f.state.mode = mode;
+    const auto frame = gizmo::update(f.state, f.input);
+
+    ASSERT_EQ(frame.lines.size(), 3u);
+    for (const auto& line : frame.lines)
+    {
+      EXPECT_GT(line.thicknessPixels, 1.0f);
+    }
+
+    // A thin full-length triangle makes ImGui's anti-aliasing spike past the shaft ends.
+    for (const auto& tri : frame.triangles)
+    {
+      const auto* line = findLine(frame, tri.handle);
+      ASSERT_NE(line, nullptr);
+      const glm::vec2 pa = *gizmo::project(f.view, line->a);
+      const glm::vec2 pb = *gizmo::project(f.view, line->b);
+      const glm::vec2 centroid = (*gizmo::project(f.view, tri.a) + *gizmo::project(f.view, tri.b) +
+                                  *gizmo::project(f.view, tri.c)) / 3.0f;
+      EXPECT_LT(glm::length(centroid - pb), glm::length(pb - pa) * 0.5f);
+    }
+  }
 }
 
 TEST(GizmoTest, HoveredHandlePrimitivesCarryTheHoveredHighlight)
