@@ -5,6 +5,9 @@ add_library(${PROJECT_NAME}
   RenderSystem.h
   GpuAssetCache.cpp
   GpuAssetCache.h
+  Billboard.cpp
+  Billboard.h
+  LightGizmoVisibility.h
   InputCapture.cpp
   InputCapture.h
 )
@@ -24,4 +27,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 
 # RenderSystem is complete: ModelRenderer drawing (via GpuAssetCache), LightRenderer point/spot light
 # submission (cached per object), the pick-feedback bool + selected-object highlight, and the collider
-# debug gizmo (the shape drawn with the objectHighlight pipeline when "Render Collider" is on).
+# debug gizmo (the shape drawn with the objectHighlight pipeline when "Render Collider" is on), and the
+# editor-only light gizmo (a camera-facing, constant-screen-size billboard per light, via drawLightGizmos).

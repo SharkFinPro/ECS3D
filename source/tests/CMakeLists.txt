@@ -75,6 +75,8 @@ add_executable(${PROJECT_NAME}
   LogFilePathTest.cpp
   RemoteLogSinkTest.cpp
   KeybindsTest.cpp
+  BillboardTest.cpp
+  LightGizmoVisibilityTest.cpp
   GizmoTest.cpp
   GizmoDragTest.cpp
   GizmoDragParentedTest.cpp
@@ -179,6 +181,10 @@ add_executable(${PROJECT_NAME}
 
   # TransientObject depends only on ECS3DData and json.
   ../libs/editor/TransientObject.cpp
+
+  # The billboard math depends only on glm, compiled in rather than linking ECS3DRender, which pulls in
+  # Vulkan.
+  ../libs/render/Billboard.cpp
 )
 
 
@@ -188,6 +194,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/editor
+  ${CMAKE_CURRENT_SOURCE_DIR}/../libs/render
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

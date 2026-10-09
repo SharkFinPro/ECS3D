@@ -40,7 +40,11 @@ public:
   // objectHighlight pipeline when the collider's render flag is on.
   std::shared_ptr<vke::RenderObject> getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath);
 
-  // Drops the per-owner render object / collider gizmo for any uuid not in liveUUIDs. Called once per
+  // The editor's light sprite (a double-sided unit quad textured with the light icon), keyed per light
+  // OWNER since each render object carries its own transform. The RenderSystem draws it as a billboard.
+  std::shared_ptr<vke::RenderObject> getLightGizmo(const uuids::uuid& ownerUUID);
+
+  // Drops the per-owner render object / collider gizmo / light gizmo for any uuid not in liveUUIDs. Called once per
   // frame from RenderSystem::variableUpdate with the set of objects it just walked, so a deleted
   // object's GPU resources are released instead of accumulating for the life of the process. Shared
   // assets (m_models/m_textures, keyed by asset uuid rather than owner) are left alone.
@@ -53,6 +57,10 @@ private:
     uuids::uuid textureUUID;
     uuids::uuid specularMapUUID;
   };
+
+  // Loads the shared quad model and icon once. A missing or invalid file is logged once and remembered, so
+  // it is not retried every frame.
+  void loadLightGizmoAssets();
 
   struct CachedGizmo {
     std::shared_ptr<vke::RenderObject> renderObject;
@@ -67,6 +75,10 @@ private:
   std::unordered_map<uuids::uuid, std::shared_ptr<vke::Texture2D>> m_textures;
   std::unordered_map<uuids::uuid, CachedRenderObject> m_renderObjects;
   std::unordered_map<uuids::uuid, CachedGizmo> m_colliderGizmos;
+  std::unordered_map<uuids::uuid, std::shared_ptr<vke::RenderObject>> m_lightGizmos;
+  std::shared_ptr<vke::Model> m_lightGizmoModel;
+  std::shared_ptr<vke::Texture2D> m_lightGizmoIcon;
+  bool m_lightGizmoAssetsTried = false;
 };
 
 
