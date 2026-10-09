@@ -93,6 +93,7 @@ namespace gizmo {
     glm::vec3 b{ 0.0f };
     Handle handle = Handle::none;
     Highlight highlight = Highlight::none;
+    float thicknessPixels = 1.0f;
   };
 
   struct Triangle {

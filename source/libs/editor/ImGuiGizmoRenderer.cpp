@@ -83,7 +83,8 @@ void ImGuiGizmoRenderer::draw(const gizmo::Frame& frame, const gizmo::View& view
       return;
     }
 
-    m_drawList->AddLine(ImVec2(a->x, a->y), ImVec2(b->x, b->y), colorFor(line.handle, line.highlight), 1.0f);
+    m_drawList->AddLine(ImVec2(a->x, a->y), ImVec2(b->x, b->y), colorFor(line.handle, line.highlight),
+                        line.thicknessPixels);
   };
 
   const ImVec2 clipMin(view.viewport.x, view.viewport.y);
