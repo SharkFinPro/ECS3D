@@ -751,8 +751,9 @@ server-side, and sometimes answered with a resync snapshot) - the handlers are `
   log to `editor-server.log` / `client-server.log` instead, so two local servers do not share one file;
   the parent's `--log-file`/`--no-log-file` are not forwarded to it. All app, server and net
   (`ECS3DNet`) output goes through `Log`.
-- An `--edit` server started without `--token` generates a random 128-bit token (`apps/server/EditToken.h`) and
-  logs it once, so an editor can still attach with `--host`/`--token`; no edit server runs without a token.
+- An `--edit` server started without `--token` generates a random 128-bit token (`net::generateEditToken`, in
+  `libs/net/EditToken.h`) and logs it once, so an editor can still attach with `--host`/`--token`. The editor
+  uses the same generator for the server it spawns.
 - `net::ServerProcess::launch` takes the child's flags as one string; a token holding spaces may be
   double quoted (there is no escape for a quote inside one). POSIX (Linux and macOS) splits the string itself, honoring
   those quotes; Windows hands it to the child's CRT (C runtime), which parses them the same way.
