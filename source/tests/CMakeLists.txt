@@ -120,6 +120,7 @@ add_executable(${PROJECT_NAME}
   SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
   ServerPolicyTest.cpp
+  EditTokenTest.cpp
   InputStatePayloadTest.cpp
   InputStateTest.cpp
   InputUtilsBindingsTest.cpp

@@ -1,9 +1,12 @@
 #include "ServerApp.h"
+#include "ServerPolicy.h"
+#include <EditToken.h>
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <LogSetup.h>
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -13,7 +16,8 @@ namespace
   }
 
   // --edit is the launch-capability gate that allows editor connections; absent it the server is a
-  // pure play server. --token, when set, is the secret an editor must present to be authorized.
+  // pure play server. --token, when set, is the secret an editor must present to be authorized;
+  // main generates one for an --edit server given none.
   // An empty project runs the built-in sample (scenes 1-3 + falling balls); --project loads a file.
   ServerApp::LaunchOptions parseOptions(const int argc, char** argv)
   {
@@ -58,7 +62,17 @@ int main(const int argc, char** argv)
 
     addFileSinkFromArguments(argc, argv, "server", LogCategory::server);
 
-    ServerApp app(parseOptions(argc, argv));
+    auto options = parseOptions(argc, argv);
+
+    if (needsGeneratedEditToken(options.editMode, options.authToken))
+    {
+      options.authToken = net::generateEditToken();
+      Log::info(LogCategory::server, "No --token given; generated edit token " + options.authToken +
+                                       ". Attach an editor with --host <host> --port " +
+                                       std::to_string(options.port) + " --token " + options.authToken + ".");
+    }
+
+    ServerApp app(std::move(options));
 
     app.run();
   }
