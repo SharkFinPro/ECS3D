@@ -14,7 +14,9 @@ class ScriptRuntime {
 public:
   virtual ~ScriptRuntime() = default;
 
-  virtual void reloadScripts() const = 0;
+  // True when freshly compiled scripts replaced the loaded ones, so every instance is gone; false when
+  // the compile failed and the previous instances keep running.
+  [[nodiscard]] virtual bool reloadScripts() const = 0;
 
   // True when a managed instance now exists under the pair; false when the class is missing or its
   // constructor threw.

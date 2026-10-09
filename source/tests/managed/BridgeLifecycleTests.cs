@@ -254,7 +254,7 @@ public class BridgeLifecycleTests : IDisposable
     Bridge.AddInstance(Uuid, "Thrower", new StopThrower());
     Bridge.AddInstance(Uuid, "Second", second);
 
-    var thrown = Record.Exception(Bridge.Reload);
+    var thrown = Record.Exception(() => Bridge.Reload());
 
     Assert.Null(thrown);
     Assert.Equal(1, first.StopCalls);
@@ -272,29 +272,59 @@ public class BridgeLifecycleTests : IDisposable
     Bridge.AddInstance(Uuid, "Hostile", new HostileStop());
     Bridge.AddInstance(Uuid, "After", after);
 
-    var thrown = Record.Exception(Bridge.Reload);
+    var thrown = Record.Exception(() => Bridge.Reload());
 
     Assert.Null(thrown);
     Assert.Equal(1, after.StopCalls);
     Assert.Equal(new[] { ClassName }, Bridge.LoadedScriptTypeNames);
   }
 
+  private class UpdateCounter : ScriptBase
+  {
+    public int Updates { get; private set; }
+
+    public override void fixedUpdate(float dt) => Updates++;
+  }
+
   [Fact]
-  public void Reload_CompileErrorLeavesNoScriptTypesAndNoInstances()
+  public void Reload_CompileErrorKeepsPreviousTypesInstancesAndFaults()
   {
     WriteScript("script.cs", ScriptSource(ClassName));
     Bridge.Initialize(_dir);
-    var instance = new StopCounter();
+    var instance = new UpdateCounter();
     Bridge.AddInstance(Uuid, ClassName, instance);
+    Bridge.AddInstance(Uuid, "Faulted", new StopCounter());
+    Fault(Uuid, "Faulted");
+    Assert.True(Bridge.IsHealthy(Uuid, ClassName));
+
+    WriteScript("script.cs", "using ScriptBridge;
+public class Broken : ScriptBase { int x = ; }
+");
+    var replaced = Bridge.Reload();
+
+    Assert.False(replaced);
     Assert.Equal(new[] { ClassName }, Bridge.LoadedScriptTypeNames);
     Assert.True(Bridge.TryFindScript(Uuid, ClassName, out _));
+    Assert.True(Bridge.IsHealthy(Uuid, ClassName));
+    Assert.False(Bridge.IsHealthy(Uuid, "Faulted"));
+    Assert.True(Bridge.RunGuarded(Uuid, ClassName, "test", () => instance.fixedUpdate(0.1f)));
+    Assert.Equal(1, instance.Updates);
+  }
 
-    WriteScript("script.cs", "using ScriptBridge;\npublic class Broken : ScriptBase { int x = ; }\n");
-    Bridge.Reload();
+  [Fact]
+  public void Reload_SuccessReportsTheReplacement()
+  {
+    WriteScript("script.cs", ScriptSource("FirstScript"));
+    Bridge.Initialize(_dir);
+    var instance = new StopCounter();
+    Bridge.AddInstance(Uuid, "First", instance);
 
+    WriteScript("script.cs", ScriptSource("SecondScript"));
+
+    Assert.True(Bridge.Reload());
     Assert.Equal(1, instance.StopCalls);
-    Assert.Empty(Bridge.LoadedScriptTypeNames);
-    Assert.False(Bridge.TryFindScript(Uuid, ClassName, out _));
+    Assert.False(Bridge.TryFindScript(Uuid, "First", out _));
+    Assert.Equal(new[] { "SecondScript" }, Bridge.LoadedScriptTypeNames);
   }
 
   [Fact]

@@ -45,7 +45,7 @@ void ScriptEngine::init(const std::string& bridgeDir,
   };
 
   const auto initBridge = reinterpret_cast<InitBridgeFn>(resolve("init"));
-  m_reload = reinterpret_cast<VoidFn>(resolve("reloadScripts"));
+  m_reload = reinterpret_cast<ReloadFn>(resolve("reloadScripts"));
   m_attachScript = reinterpret_cast<AttachScriptFn>(resolve("attachScript"));
   m_isHealthy = reinterpret_cast<IsHealthyFn>(resolve("isScriptHealthy"));
   m_detachScript = reinterpret_cast<DetachScriptFn>(resolve("detachScript"));
@@ -145,14 +145,18 @@ void ScriptEngine::registerBindings(const std::string& assemblyPath,
   registerPlayerController(PlayerControllerBindingsProvider::getBindings());
 }
 
-void ScriptEngine::reloadScripts() const
+bool ScriptEngine::reloadScripts() const
 {
-  if (m_reload)
+  if (!m_reload)
   {
-    Log::info(LogCategory::script, "Hot-reloading scripts...");
-    m_reload();
-    Log::info(LogCategory::script, "Reload complete.");
+    return false;
   }
+
+  Log::info(LogCategory::script, "Hot-reloading scripts...");
+  const bool replaced = m_reload();
+  Log::info(LogCategory::script, replaced ? "Reload complete." : "Reload failed; keeping the previous scripts.");
+
+  return replaced;
 }
 
 bool ScriptEngine::attachScript(const char* uuid,

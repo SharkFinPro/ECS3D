@@ -353,15 +353,22 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
     // refreshed blob back in.
     syncFieldsToData(objectManager);
 
-    m_engine->reloadScripts();
+    const bool replaced = m_engine->reloadScripts();
+
+    // Waits for the next edit rather than recompiling the same broken sources every interval.
+    m_scriptsSnapshot = std::move(now);
+
+    if (!replaced)
+    {
+      Log::error(LogCategory::script, "Script hot-reload failed to compile - continuing with previous scripts.");
+      return;
+    }
 
     m_attached.clear();
     m_attachedIndex.clear();
     m_fieldCache.clear();
     m_started.clear();
     m_unresolved.clear();
-
-    m_scriptsSnapshot = std::move(now);
 
     Log::info(LogCategory::script, "Reload successful.");
   }
