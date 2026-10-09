@@ -1,5 +1,4 @@
 #include "ScriptSystem.h"
-#include "ScriptEngine.h"
 #include "ScriptFieldEdit.h"
 #include "bindings/BindingContext.h"
 #include <Log.h>
@@ -8,16 +7,12 @@
 #include <objects/components/Component.h>
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
+#include <system_error>
+#include <utility>
 
-namespace {
-  // Published next to the executable by ecs3d_add_managed_assembly / copied by CMake. Relative paths
-  // assume CWD = exe dir, matching the rest of the engine's asset loading.
-  const std::string kScriptBridgeDir = "scripts/ScriptBridge";
-  const std::string kUserScriptsDir = "scripts/UserScripts";
-}
-
-ScriptSystem::ScriptSystem(std::shared_ptr<ManagedHost> host)
-  : m_host(std::move(host))
+ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::filesystem::path userScriptsDir)
+  : m_makeRuntime(std::move(makeRuntime)),
+    m_userScriptsDir(std::move(userScriptsDir))
 {}
 
 ScriptSystem::~ScriptSystem() = default;
@@ -29,13 +24,9 @@ void ScriptSystem::ensureEngine()
     return;
   }
 
-  // Compiling the user scripts (the bridge's init) is heavy, so the engine is built once on first
-  // use rather than in the constructor. Init into a local first so a failure leaves m_engine null and
-  // the next call retries instead of holding a half-initialized engine.
-  auto engine = std::make_unique<ScriptEngine>(m_host);
-  engine->init(kScriptBridgeDir, kUserScriptsDir);
-
-  m_engine = std::move(engine);
+  // Built once on first use (compiling the user scripts is heavy); a throw leaves m_engine null so the
+  // next call retries.
+  m_engine = m_makeRuntime();
 
   m_scriptsSnapshot = takeSnapshot();
 }
@@ -627,11 +618,11 @@ std::string ScriptSystem::cacheKey(const uuids::uuid& uuid, const std::string& c
   return uuids::to_string(uuid) + "_" + className;
 }
 
-ScriptSystem::ScriptsSnapshot ScriptSystem::takeSnapshot()
+ScriptSystem::ScriptsSnapshot ScriptSystem::takeSnapshot() const
 {
   ScriptsSnapshot times;
   std::error_code ec;
-  for (auto& entry : std::filesystem::recursive_directory_iterator(kUserScriptsDir, ec))
+  for (auto& entry : std::filesystem::recursive_directory_iterator(m_userScriptsDir, ec))
   {
     if (entry.is_regular_file(ec))
     {
