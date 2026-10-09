@@ -1,6 +1,7 @@
 #ifndef GPUASSETCACHE_H
 #define GPUASSETCACHE_H
 
+#include "SharedAssetLoads.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -36,7 +37,8 @@ public:
                                                      const uuids::uuid& specularMapUUID);
 
   // A debug render object for a collider's shape (a path-loaded cube/sphere, white, no specular), keyed
-  // per collider OWNER and rebuilt if the model path changes. The RenderSystem draws it with the
+  // per collider OWNER and rebuilt if the model path changes. The mesh and texture are loaded once and
+  // shared; returns nullptr (logged once) if either fails to load. The RenderSystem draws it with the
   // objectHighlight pipeline when the collider's render flag is on.
   std::shared_ptr<vke::RenderObject> getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath);
 
@@ -67,6 +69,9 @@ private:
   std::unordered_map<uuids::uuid, std::shared_ptr<vke::Texture2D>> m_textures;
   std::unordered_map<uuids::uuid, CachedRenderObject> m_renderObjects;
   std::unordered_map<uuids::uuid, CachedGizmo> m_colliderGizmos;
+
+  SharedAssetLoads<vke::Model> m_gizmoModels;
+  SharedAssetLoads<vke::Texture2D> m_gizmoTextures;
 };
 
 
