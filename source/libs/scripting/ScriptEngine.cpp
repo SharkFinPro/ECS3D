@@ -47,6 +47,7 @@ void ScriptEngine::init(const std::string& bridgeDir,
   const auto initBridge = reinterpret_cast<InitBridgeFn>(resolve("init"));
   m_reload = reinterpret_cast<VoidFn>(resolve("reloadScripts"));
   m_attachScript = reinterpret_cast<AttachScriptFn>(resolve("attachScript"));
+  m_isHealthy = reinterpret_cast<IsHealthyFn>(resolve("isScriptHealthy"));
   m_detachScript = reinterpret_cast<DetachScriptFn>(resolve("detachScript"));
 
   m_start = reinterpret_cast<StartFn>(resolve("start"));
@@ -154,13 +155,16 @@ void ScriptEngine::reloadScripts() const
   }
 }
 
-void ScriptEngine::attachScript(const char* uuid,
+bool ScriptEngine::attachScript(const char* uuid,
                                 const char* className) const
 {
-  if (m_attachScript)
-  {
-    m_attachScript(uuid, className);
-  }
+  return m_attachScript && m_attachScript(uuid, className);
+}
+
+bool ScriptEngine::isHealthy(const char* uuid,
+                             const char* className) const
+{
+  return m_isHealthy && m_isHealthy(uuid, className);
 }
 
 void ScriptEngine::detachScript(const char* uuid,

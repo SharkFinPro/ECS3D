@@ -10,6 +10,8 @@ add_library(${PROJECT_NAME}
   ScriptEngine.h
   AttachedScripts.cpp
   AttachedScripts.h
+  UnresolvedScripts.cpp
+  UnresolvedScripts.h
   ScriptFieldEdit.cpp
   ScriptFieldEdit.h
   bindings/BindingContext.cpp

@@ -96,3 +96,23 @@ Two things to know before the first run:
 - **On Linux and macOS**, ASan turns on LeakSanitizer at exit, so a one-time allocation that is never
   freed fails the whole suite rather than one test. `ASAN_OPTIONS=detect_leaks=0` separates "this leaks"
   from "this is broken" while you work through them.
+
+### Measuring Coverage
+
+The `ecs3d-coverage` preset is `ecs3d-debug` instrumented for line and branch coverage. Install gcovr
+(`pipx install gcovr`), then on Linux with gcc:
+
+```bash
+cmake --preset ecs3d-coverage
+cmake --build cmake-build-ecs3d-coverage --target check
+gcovr --root . cmake-build-ecs3d-coverage --filter 'source/libs/' --filter 'source/apps/' \
+  --exclude 'source/tests/' --exclude '.*/_deps/.*' --exclude-throw-branches \
+  --exclude-unreachable-branches --html-details coverage.html
+```
+
+With Clang, including Apple Clang on macOS, add `--gcov-executable "llvm-cov gcov"` to the gcovr command
+(`--gcov-executable "xcrun llvm-cov gcov"` on macOS).
+
+The managed suite writes its cobertura report to `cmake-build-ecs3d-coverage/coverage/managed`. On Windows,
+run the test executable under `Microsoft.CodeCoverage.Console collect "<exe>" --output-format cobertura`.
+CI runs this preset on Linux gcc and uploads the reports as the `coverage-report` artifact.

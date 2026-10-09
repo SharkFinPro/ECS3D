@@ -2,6 +2,7 @@
 
 #include "Log.h"
 #include "LogSetup.h"
+#include "RingBufferSink.h"
 #include "SettingsStore.h"
 #include "UserDataDirectory.h"
 
@@ -160,4 +161,51 @@ TEST_F(LogFilePathTest, NoLogFileArgumentRegistersNothing)
   const auto sink = addSink({ "--log-file", m_file.string() });
   ASSERT_NE(sink, nullptr);
   EXPECT_TRUE(std::filesystem::exists(m_file));
+}
+
+TEST_F(LogFilePathTest, ALogFileThatCannotBeOpenedWarnsAndRegistersNothing)
+{
+  // A directory where the file should go, so opening it for writing fails.
+  const auto directoryPath = m_directory / "taken";
+  std::filesystem::create_directories(directoryPath);
+
+  const auto ring = std::make_shared<RingBufferSink>();
+  Log::addSink(ring);
+
+  const auto sink = addSink({ "--log-file", directoryPath.string() });
+
+  Log::removeSink(ring);
+
+  EXPECT_EQ(sink, nullptr);
+
+  bool warned = false;
+  for (const auto& entry : ring->snapshot())
+  {
+    if (entry.level == LogLevel::warn && entry.category == LogCategory::engine &&
+        entry.message.find(directoryPath.string()) != std::string::npos)
+    {
+      warned = true;
+    }
+  }
+  EXPECT_TRUE(warned);
+
+  // Positive control: a usable path through the same call registers a sink.
+  EXPECT_NE(addSink({ "--log-file", m_file.string() }), nullptr);
+}
+
+TEST_F(LogFilePathTest, ALogFileArgumentNamesEveryAppsDefaultFile)
+{
+  for (const char* appName : { "editor", "client", "server", "editor-server", "client-server" })
+  {
+    const auto file = std::filesystem::absolute(defaultLogFile(appName));
+    const auto argument = logFileArgument(appName);
+
+    if (file.string().find('"') != std::string::npos)
+    {
+      GTEST_SKIP() << "A quote in the path yields no flag; nothing to compare for " << appName;
+    }
+
+    EXPECT_EQ(argument, "--log-file \"" + file.string() + "\"") << appName;
+    EXPECT_NE(argument.find(std::string(appName) + ".log"), std::string::npos) << appName;
+  }
 }
