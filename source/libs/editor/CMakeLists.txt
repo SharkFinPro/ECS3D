@@ -8,6 +8,8 @@ add_library(${PROJECT_NAME}
   MixedFields.h
   ObjectGUIManager.cpp
   ObjectGUIManager.h
+  ObjectTreeOrder.h
+  ObjectTreeSortMode.h
   InspectorPanel.cpp
   InspectorPanel.h
   ObjectInspector.cpp
