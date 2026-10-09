@@ -11,12 +11,14 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/Collider.h"
+#include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <utility>
 #include <ostream>
 #include <vector>
 #include <uuid.h>
@@ -148,17 +150,17 @@ namespace {
     return nullptr;
   }
 
-  // A compound body tilted five degrees about z, resting on an edge of its +x side over a wide static box and
+  // A compound body of half-unit boxes (the contact points are on the box's real +x edge) tilted five degrees about z, resting on an edge of its +x side over a wide static box and
   // turning toward flat, with the given shapes on its owner and on its child. The contact is the child's, or the
   // owner's when the child has none.
   glm::vec3 rotationAfterEdgeContact(const Shape ownerShape, const Shape partShape)
   {
     const auto scene = makeScene();
 
-    const auto ground = addObject(scene, "Ground", { 0, -2, 0 }, { 5, 1, 5 });
+    const auto ground = addObject(scene, "Ground", { 0, -1.5f, 0 }, { 5, 1, 5 });
     fixtures::addBoxCollider(ground);
 
-    const auto owner = addObject(scene, "Owner", { 0, 0, 0 });
+    const auto owner = addObject(scene, "Owner", { 0, 0, 0 }, { 0.5f, 0.5f, 0.5f });
     const auto body = physicsFixtures::addBody(owner, false);
     const auto ownerCollider = addShape(owner, ownerShape);
     transformOf(owner)->setRotation({ 0, 0, -5 });
@@ -174,8 +176,8 @@ namespace {
   }
 
   // A unit ball sliding along a wide static ground, as its own body or as the child collider of a body whose
-  // owner has the given shape. Returns where it is ten seconds later.
-  glm::vec3 compoundBallAfterRolling(const Shape ownerShape, const float friction)
+  // owner has the given shape. Returns where it is and how fast it moves ten seconds later.
+  std::pair<glm::vec3, glm::vec3> compoundBallAfterRolling(const Shape ownerShape, const float friction)
   {
     const auto scene = makeScene();
 
@@ -198,7 +200,7 @@ namespace {
       collisionSystem.fixedUpdate(*scene.objectManager, physicsFixtures::dt);
     }
 
-    return positionOf(owner);
+    return { positionOf(owner), body->getVelocity() };
   }
 }
 
@@ -230,9 +232,14 @@ TEST(CompoundBodyContact, ASphereChildIsNotLaidFlushJustBecauseItsOwnerHoldsABox
 TEST(CompoundBodyContact, ASphereChildOfAnOwnerWithoutOneRollsToRest)
 {
   // Rolling resistance belongs to the sphere making the contact, not to whatever the owner carries.
-  const auto stopped = compoundBallAfterRolling(Shape::none, 0.5f);
-  EXPECT_LT(stopped.x, 8.0f);
+  // Stopping takes it about 5 to 6 units; without rolling resistance it coasts about 15. The bound sits
+  // between the two.
+  const auto [stoppedPosition, stoppedVelocity] = compoundBallAfterRolling(Shape::none, 0.5f);
+  EXPECT_LT(stoppedPosition.x, 10.0f);
+  EXPECT_LT(glm::length(stoppedVelocity), 1e-3f);
 
-  // Positive control: frictionless, the same ball slides the whole way.
-  EXPECT_GT(compoundBallAfterRolling(Shape::none, 0.0f).x, 25.0f);
+  // Positive control: frictionless, the same ball slides the whole way at the speed it started with.
+  const auto [slidPosition, slidVelocity] = compoundBallAfterRolling(Shape::none, 0.0f);
+  EXPECT_GT(slidPosition.x, 25.0f);
+  EXPECT_GT(slidVelocity.x, 0.9f * 3.0f * physicsFixtures::dt);
 }

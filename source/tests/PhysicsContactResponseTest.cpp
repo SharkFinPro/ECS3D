@@ -159,7 +159,8 @@ TEST(PhysicsIntegration, AHeavyBodySlidingOverALightRestingOneDoesNotSpinItOrDra
 
   // Off the lower body's center, where a drag sized for the heavy body used to turn the light one thousands of
   // degrees a second.
-  PhysicsSystem::handleCollision(*upperBody, ownColliderOf(*upperBody), lower, { 0, 0.01f, 0 }, glm::vec3{ 0.5f, 1, 0 }, dt);
+  PhysicsSystem::handleCollision(*upperBody, ownColliderOf(*upperBody), lower, { 0, 0.01f, 0 },
+                                 glm::vec3{ 0.5f, 1, 0 }, dt);
 
   // The support holds it against the drag, up to what friction there can take - here the whole of it, since the
   // heavy body's weight presses it down.
@@ -232,7 +233,8 @@ TEST(PhysicsIntegration, TwoBodiesMeetingSlowlyDoNotBounce)
     const auto rightBody = addBody(right, false);
 
     leftBody->setVelocity({ unitsPerSecond * dt, 0, 0 });
-    PhysicsSystem::handleCollision(*leftBody, ownColliderOf(*leftBody), right, { -0.01f, 0, 0 }, glm::vec3{ 1, 0, 0 }, dt);
+    PhysicsSystem::handleCollision(*leftBody, ownColliderOf(*leftBody), right, { -0.01f, 0, 0 },
+                                   glm::vec3{ 1, 0, 0 }, dt);
 
     return std::pair{ leftBody->getVelocity() / dt, rightBody->getVelocity() / dt };
   };
