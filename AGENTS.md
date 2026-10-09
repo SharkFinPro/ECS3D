@@ -91,7 +91,8 @@
   `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` is compiled in the same way, as is
   `editor/Gizmo.cpp` (depends only on glm) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
   json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
-  carries), and `editor/AssetReferences.cpp` (depends only on ECS3DData and json). It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
+  carries), and `editor/AssetReferences.cpp` (depends only on ECS3DData and json). The header-only `apps/server/ServerPolicy.h`
+  (mutation authorization, scene-control plans) is covered the same way, by including it. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
   `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
   `PROJECT_IS_TOP_LEVEL` and `BUILD_TESTING` together — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
@@ -107,10 +108,15 @@
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
-  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). What stays uncovered here is whatever actually calls a
-  native function pointer (the `Transform`/`RigidBody`/`Camera`/... wrapper methods, once
-  `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry point (can't be called
-  from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
+  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). `TcpBackendLoopbackTests` also drives a live `TcpBackend` over loopback sockets: `TransportRecorder`
+  takes the addresses of `Transport`'s `[UnmanagedCallersOnly]` `set*Callback` exports as function pointers to
+  register its own callbacks (and unregisters them afterward), and records what the backends deliver, so
+  those tests share one non-parallel xUnit collection (`Transport`) and shorten `TcpBackend`'s internal
+  `SendTimeoutMs`/`BodyReadTimeoutMs` fields and set `AcceptedSendBufferBytes` rather than waiting out
+  production values. That is still not calling the bridge's entry points directly: what stays uncovered
+  here is whatever actually calls a native function pointer (the `Transform`/`RigidBody`/`Camera`/...
+  wrapper methods, once `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry
+  point with no exported address to take (can't be called from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
   reachable the same way, as pure code over plain objects. Private product logic is exposed to this
   project through `internal` + `InternalsVisibleTo` (declared in `source/libs/net/Transport/AssemblyInfo.cs` and
   `source/libs/scripting/ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`
@@ -322,7 +328,7 @@ loop's exit is not reported as a loss.
 The role a connection is actually granted at the handshake (`TransportBackend.Authorize`) is
 reported to C++ separately from the messages it sends: once `Authorize` succeeds, both backends call
 `Transport.DeliverServerAuthorized(connId, role)`, which reaches `NetServer::authorize` and is remembered
-in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` against
+in `NetServer::isEditor`. `ServerApp::handleClientMessage` enforces `net::isMutationMessage(type)` (via the tested `isMutationAuthorized` in `apps/server/ServerPolicy.h`, which also holds `planSceneControl`) against
 that authorized role (in addition to edit-mode), never against a role a message merely claims - a
 connection cannot mutate an edit-mode server's scene by sending a mutation type unless the transport
 actually granted it `Role::editor`. `ManagedHost`
