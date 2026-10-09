@@ -96,6 +96,7 @@ add_executable(${PROJECT_NAME}
   SceneScriptListTest.cpp
   AssetNamingTest.cpp
   PrefabTest.cpp
+  FixedTimestepTest.cpp
   PhysicsIntegrationTest.cpp
   PhysicsLandingTest.cpp
   PhysicsStackingTest.cpp
