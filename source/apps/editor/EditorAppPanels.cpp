@@ -2,6 +2,7 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
+#include <objects/CameraSelection.h>
 #include <RenderSystem.h>
 #include <EditorTheme.h>
 #include <GuiComponents.h>
@@ -12,6 +13,8 @@
 #include <objects/components/Component.h>
 #include <objects/components/Camera.h>
 #include <objects/components/PlayerController.h>
+#include <PlayerSlots.h>
+#include <NetClient.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
@@ -22,45 +25,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
+#include <chrono>
+#include <Log.h>
 
 namespace {
-  // How a camera reads in the editor's "View" combo: the owning object's name, the player slot when it's a
-  // client's player camera, and a cue when the Camera is inactive (RenderSystem only renders through active
-  // cameras, so selecting one shows the free-fly view instead).
-  std::string cameraLabel(const std::shared_ptr<Object>& object)
-  {
-    std::string label = object->getName();
-
-    if (const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController))
-    {
-      label += " (Player " + std::to_string(playerController->getPlayerSlot()) + ")";
-    }
-
-    if (const auto camera = object->getComponent<Camera>(ComponentType::camera); camera && !camera->isActive())
-    {
-      label += " - inactive";
-    }
-
-    return label;
-  }
-
-  // What the "View" combo shows while closed: the chosen camera's label, or the free-fly label when
-  // nothing is chosen or the choice is gone.
-  std::string cameraPreviewLabel(ObjectManager* objectManager, const std::optional<uuids::uuid>& viewCameraObject,
-                                 const char* freeFlyLabel)
-  {
-    std::string preview = freeFlyLabel;
-    if (objectManager && viewCameraObject)
-    {
-      if (const auto object = objectManager->getObjectByUUID(*viewCameraObject))
-      {
-        preview = cameraLabel(object);
-      }
-    }
-
-    return preview;
-  }
-
   // The scene's Camera objects as combo entries; picking one makes it the viewport's camera.
   void selectSceneCamera(ObjectManager* objectManager, std::optional<uuids::uuid>& viewCameraObject)
   {
@@ -79,13 +48,52 @@ namespace {
       const auto uuid = object->getUUID();
 
       // Objects can share a name, so the uuid disambiguates the ImGui id.
-      const std::string label = cameraLabel(object) + "##" + uuids::to_string(uuid);
+      const std::string label = cameraLabel(*object) + "##" + uuids::to_string(uuid);
 
       if (ImGui::Selectable(label.c_str(), viewCameraObject == uuid))
       {
         viewCameraObject = uuid;
       }
     }
+  }
+
+  // How a player slot reads in the "Player" combo: its number, plus the owning object's name when exactly
+  // one object holds that slot.
+  std::string playerLabel(ObjectManager* objectManager, const int32_t slot)
+  {
+    std::string label = "Player " + std::to_string(slot);
+    if (!objectManager)
+    {
+      return label;
+    }
+
+    std::string owner;
+    int owners = 0;
+    for (const auto& object : objectManager->getAllObjects())
+    {
+      const auto playerController = object->getComponent<PlayerController>(ComponentType::playerController);
+      if (playerController && playerController->getPlayerSlot() == slot)
+      {
+        owner = object->getName();
+        ++owners;
+      }
+    }
+
+    return owners == 1 ? label + " (" + owner + ")" : label;
+  }
+
+  // The slots the "Player" combo offers: the scene's bindable ones, plus the slot already held if no object
+  // names it.
+  std::vector<int32_t> playerSelectorSlots(ObjectManager* objectManager, const int32_t currentSlot)
+  {
+    std::vector<int32_t> slots = objectManager ? playerSlotsInScene(*objectManager) : std::vector<int32_t>{};
+
+    if (currentSlot >= 0 && std::ranges::find(slots, currentSlot) == slots.end())
+    {
+      slots.insert(std::ranges::upper_bound(slots, currentSlot), currentSlot);
+    }
+
+    return slots;
   }
 
   const char* sceneStatusLabel(const SceneStatus status)
@@ -177,6 +185,8 @@ void EditorApp::displaySceneStatus()
   displayRayTracingToggle();
 
   displayCameraSelector();
+
+  displayPlayerSelector();
 
   displayGizmoControls();
 
@@ -334,6 +344,58 @@ void EditorApp::displayCameraSelector()
 
     ImGui::EndCombo();
   }
+}
+
+void EditorApp::displayPlayerSelector()
+{
+  expirePlayerSlotRequest();
+
+  const auto scene = m_sceneManager->getCurrentScene();
+  const auto objectManager = scene ? scene->getObjectManager().get() : nullptr;
+  const auto slots = playerSelectorSlots(objectManager, m_playerSlot);
+
+  const std::string preview = m_playerSlot >= 0 ? "Player " + std::to_string(m_playerSlot) : std::string("-");
+
+  ImGui::SameLine(0.0f, 18.0f);
+  ImGui::AlignTextToFramePadding();
+  ImGui::TextColored(theme::t2, "%s", "Player");
+  ImGui::SameLine();
+
+  // The server honors a possession request only on an edit-mode server, and answers one at a time.
+  const bool canRequest = m_serverEditable && m_netClient->isConnected() && m_playerSlot >= 0
+                       && !m_requestedPlayerSlot.has_value();
+
+  ImGui::BeginDisabled(!canRequest);
+  ImGui::SetNextItemWidth(160.0f);
+  if (ImGui::BeginCombo("##PlayerSlot", preview.c_str()))
+  {
+    for (const int32_t slot : slots)
+    {
+      const std::string label = playerLabel(objectManager, slot) + "##slot" + std::to_string(slot);
+
+      if (ImGui::Selectable(label.c_str(), slot == m_playerSlot) && slot != m_playerSlot)
+      {
+        requestPlayerSlot(slot);
+      }
+    }
+
+    ImGui::EndCombo();
+  }
+  ImGui::EndDisabled();
+}
+
+void EditorApp::expirePlayerSlotRequest()
+{
+  if (!m_requestedPlayerSlot
+      || std::chrono::steady_clock::now() - m_requestedPlayerSlotSince < playerSlotRequestTimeout)
+  {
+    return;
+  }
+
+  // The reply is a broadcast, so a send that ran out of budget can drop it for this connection.
+  Log::warn(LogCategory::editor, "No answer to the request for player slot " + std::to_string(*m_requestedPlayerSlot)
+    + "; giving up on it.");
+  m_requestedPlayerSlot.reset();
 }
 
 void EditorApp::displayGizmoControls() const

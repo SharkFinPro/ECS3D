@@ -9,6 +9,8 @@ add_library(${PROJECT_NAME}
   ProjectSerializer.h
   ProjectPacker.cpp
   ProjectPacker.h
+  PlayerSlots.cpp
+  PlayerSlots.h
   Replication.cpp
   Replication.h
   WireTypes.h
@@ -33,6 +35,8 @@ add_library(${PROJECT_NAME}
   objects/Object.h
   objects/ObjectManager.cpp
   objects/ObjectManager.h
+  objects/CameraSelection.cpp
+  objects/CameraSelection.h
   objects/ComponentFieldDelta.cpp
   objects/ComponentFieldDelta.h
   objects/WorldPlacement.cpp

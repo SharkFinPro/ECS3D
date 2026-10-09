@@ -1,6 +1,7 @@
 #include "EditorApp.h"
 #include <ProjectPacker.h>
 #include <Replication.h>
+#include <PlayerSlots.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
 #include <objects/ObjectManager.h>
@@ -53,6 +54,10 @@ void EditorApp::applyMessage(const net::Message& message)
 
     case net::MessageType::serverLog:
       handleServerLog(message);
+      break;
+
+    case net::MessageType::playerSlot:
+      handlePlayerSlot(message);
       break;
 
     default: break;
@@ -141,10 +146,14 @@ void EditorApp::handleObjectComponentsChanged(const net::Message& message) const
 
 void EditorApp::handleEditStatus(const net::Message& message)
 {
-  net::MessageReader reader(message);
+  const auto editable = replication::parseEditStatus(message);
+  if (!editable)
+  {
+    return;
+  }
 
   // The server told us whether it's editable; a non-edit server makes the editor a read-only viewer.
-  m_serverEditable = reader.read<bool>();
+  m_serverEditable = *editable;
 
   if (!m_serverEditable)
   {
@@ -154,15 +163,18 @@ void EditorApp::handleEditStatus(const net::Message& message)
 
 void EditorApp::handleSceneStatus(const net::Message& message)
 {
-  net::MessageReader reader(message);
-  const auto status = reader.read<SceneStatus>();
+  const auto status = replication::parseSceneStatus(message);
+  if (!status)
+  {
+    return;
+  }
 
-  if (m_playHistory.observeStatus(status))
+  if (m_playHistory.observeStatus(*status))
   {
     clearUndoRedoPending();
   }
 
-  m_sceneStatus = status;
+  m_sceneStatus = *status;
 }
 
 void EditorApp::handleServerLog(const net::Message& message) const
@@ -183,5 +195,47 @@ void EditorApp::handleServerLog(const net::Message& message) const
       "[server] " + std::to_string(batch.dropped) + " log entr"
       + (batch.dropped == 1 ? std::string("y") : std::string("ies"))
       + " were dropped before this batch (the server's outbound log queue overflowed)." });
+  }
+}
+
+void EditorApp::handlePlayerSlot(const net::Message& message)
+{
+  // The server broadcasts every connection's slot; keep only the one tagged with our own nonce.
+  const auto payload = replication::parsePlayerSlot(message);
+  if (!payload || payload->nonce != m_joinNonce)
+  {
+    return;
+  }
+
+  const auto requested = m_requestedPlayerSlot;
+  m_requestedPlayerSlot.reset();
+  m_playerSlot = payload->slot;
+
+  // No request pending: this is the join reply, which only records the slot.
+  if (!requested)
+  {
+    return;
+  }
+
+  if (payload->slot != *requested)
+  {
+    Log::warn(LogCategory::editor, "The server did not grant player slot " + std::to_string(*requested)
+      + "; still controlling player " + std::to_string(payload->slot) + ".");
+    return;
+  }
+
+  // The new slot has no input yet, so send the current state on the next frame instead of waiting for a change.
+  m_inputSent = false;
+
+  const auto scene = m_sceneManager->getCurrentScene();
+  const auto camera = scene ? findPlayerCamera(*scene->getObjectManager(), payload->slot) : std::nullopt;
+  if (camera)
+  {
+    m_viewCameraObject = camera;
+  }
+  else
+  {
+    Log::info(LogCategory::editor, "Controlling player " + std::to_string(payload->slot)
+      + ", which has no Camera; the view is unchanged.");
   }
 }
