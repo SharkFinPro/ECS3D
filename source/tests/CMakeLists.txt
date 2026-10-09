@@ -114,6 +114,7 @@ add_executable(${PROJECT_NAME}
   SceneEditBatchTest.cpp
   SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
+  ServerPolicyTest.cpp
   InputStatePayloadTest.cpp
   InputStateTest.cpp
   InputUtilsBindingsTest.cpp
