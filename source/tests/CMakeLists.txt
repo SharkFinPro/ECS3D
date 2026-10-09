@@ -78,6 +78,7 @@ add_executable(${PROJECT_NAME}
   EditorSelectionTest.cpp
   TransientObjectTest.cpp
   ObjectSpawnTest.cpp
+  ObjectDestroyedTest.cpp
   SerializationRoundTripTest.cpp
   ProjectSerializerLogTest.cpp
   StateDeltaTest.cpp
@@ -106,6 +107,7 @@ add_executable(${PROJECT_NAME}
   SceneEditRestoreAdoptTest.cpp
   SceneEditCreateAndReorderTest.cpp
   SceneEditBatchTest.cpp
+  SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
   InputStatePayloadTest.cpp
   InputStateTest.cpp
