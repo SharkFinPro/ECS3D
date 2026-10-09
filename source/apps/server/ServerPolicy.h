@@ -14,6 +14,13 @@
   return !net::isMutationMessage(type) || (editMode && connectionIsEditor);
 }
 
+// A play server admits an editor connection without a token, so forwarding its log there would hand the log
+// to anyone who claims the role. Only an edit-mode server, where the token check applies, forwards it.
+[[nodiscard]] constexpr bool forwardsLogToEditors(const bool editMode) noexcept
+{
+  return editMode;
+}
+
 // What a scene-control op does. The order the steps run in lives in ServerApp::applySceneControl.
 struct SceneControlPlan
 {

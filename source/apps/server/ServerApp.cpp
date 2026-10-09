@@ -1,5 +1,6 @@
 #include "ServerApp.h"
 #include "DefaultProject.h"
+#include "ServerPolicy.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
 #include <ProjectSerializer.h>
@@ -52,9 +53,13 @@ ServerApp::ServerApp(LaunchOptions options)
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
   // Feeds forwardLogToEditors: the server is headless, so this is the only way a connected editor - local
-  // or remote - sees anything the server (or a script running on it, via LogBindings) logs.
-  m_remoteLogSink = std::make_shared<RemoteLogSink>();
-  Log::addSink(m_remoteLogSink);
+  // or remote - sees anything the server (or a script running on it, via LogBindings) logs. Edit-mode
+  // servers only; see forwardsLogToEditors.
+  if (forwardsLogToEditors(m_options.editMode))
+  {
+    m_remoteLogSink = std::make_shared<RemoteLogSink>();
+    Log::addSink(m_remoteLogSink);
+  }
 
   // Scene queries live in sim, which scripting can't link; inject them into BindingContext so the World
   // raycast/overlapSphere bindings can call them.

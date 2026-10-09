@@ -497,7 +497,8 @@ lifecycle methods.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers
-a `RemoteLogSink` with `Log` alongside its file/console sinks; each `run()` iteration (not gated on a fixed
+a `RemoteLogSink` with `Log` alongside its file/console sinks, but only in edit mode: a play server admits an
+editor without a token, so forwarding there would leak its log. Each `run()` iteration (not gated on a fixed
 tick, so a line still gets out while the scene is stopped/paused) drains it - capped by both entry count and
 an estimated byte size (`RemoteLogSink::drain`'s two limits; a single oversized message is truncated with a
 marker at `write()` time, so one huge entry can neither dominate the sink's memory nor stall the queue for
@@ -516,7 +517,7 @@ draining fast enough); the editor surfaces that count as a warning instead of si
 `Log::write`, which would otherwise stamp it with arrival time instead of the time it carried on the wire),
 message-prefixed `"[server] "` so it reads apart from the editor's own logging in the same `LogCategory`
 (both sides log under `net`, for instance) without collapsing every entry into one category and losing the
-Console panel's level/category filters. This works for a server the
+Console panel's level/category filters. This works for an edit-mode server the
 editor spawned *and* one it only connected to (`--host`) — it rides the same connection, not a pipe to a
 child process. The separate `--console`/`showServerConsole` window some launches show is unrelated and
 keeps behaving exactly as before.
@@ -731,8 +732,8 @@ server-side, and sometimes answered with a resync snapshot) - the handlers are `
   `--edit` (allow editor connections), `--ephemeral` (exit when the last connection drops — a spawned
   local server), `--token`, `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
   Ships `defaultAssets/` and generates a built-in `DefaultProject` when no `--project` is given. Also
-  registers a `RemoteLogSink` with `Log` and forwards it to editor connections every `run()` iteration —
-  see Logging above.
+  registers a `RemoteLogSink` with `Log` and forwards it to editor connections every `run()` iteration,
+  only when `--edit` is set — see Logging above.
 - **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project`/`--console`/`--server-console`
   (opens a console window; Windows builds are GUI-subsystem and have none by
   default)/`--log-file`/`--no-log-file`. Links
