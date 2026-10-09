@@ -94,7 +94,7 @@
   json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
   carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json); header-only editor headers such as `ObjectTreeOrder.h` are reached
   through the `libs/editor` include path alone. The header-only `apps/server/ServerPolicy.h`
-  (mutation authorization, scene-control plans) is covered the same way, by including it. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
+  (mutation authorization, scene-control plans) and `apps/server/EditToken.h` are covered the same way, by including them. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
   `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
   `PROJECT_IS_TOP_LEVEL` and `BUILD_TESTING` together — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
@@ -748,6 +748,8 @@ server-side, and sometimes answered with a resync snapshot) - the handlers are `
   log to `editor-server.log` / `client-server.log` instead, so two local servers do not share one file;
   the parent's `--log-file`/`--no-log-file` are not forwarded to it. All app, server and net
   (`ECS3DNet`) output goes through `Log`.
+- An `--edit` server started without `--token` generates a random 128-bit token (`apps/server/EditToken.h`) and
+  logs it once, so an editor can still attach with `--host`/`--token`; no edit server runs without a token.
 - `net::ServerProcess::launch` takes the child's flags as one string; a token holding spaces may be
   double quoted (there is no escape for a quote inside one). POSIX (Linux and macOS) splits the string itself, honoring
   those quotes; Windows hands it to the child's CRT (C runtime), which parses them the same way.
