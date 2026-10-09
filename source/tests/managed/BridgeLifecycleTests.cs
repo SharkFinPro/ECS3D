@@ -282,8 +282,13 @@ public class BridgeLifecycleTests : IDisposable
   private class UpdateCounter : ScriptBase
   {
     public int Updates { get; private set; }
+    public float LastDt { get; private set; }
 
-    public override void fixedUpdate(float dt) => Updates++;
+    public override void fixedUpdate(float dt)
+    {
+      LastDt = dt;
+      Updates++;
+    }
   }
 
   [Fact]
@@ -297,9 +302,7 @@ public class BridgeLifecycleTests : IDisposable
     Fault(Uuid, "Faulted");
     Assert.True(Bridge.IsHealthy(Uuid, ClassName));
 
-    WriteScript("script.cs", "using ScriptBridge;
-public class Broken : ScriptBase { int x = ; }
-");
+    WriteScript("script.cs", "using ScriptBridge;\npublic class Broken : ScriptBase { int x = ; }\n");
     var replaced = Bridge.Reload();
 
     Assert.False(replaced);
@@ -309,6 +312,7 @@ public class Broken : ScriptBase { int x = ; }
     Assert.False(Bridge.IsHealthy(Uuid, "Faulted"));
     Assert.True(Bridge.RunGuarded(Uuid, ClassName, "test", () => instance.fixedUpdate(0.1f)));
     Assert.Equal(1, instance.Updates);
+    Assert.Equal(0.1f, instance.LastDt);
   }
 
   [Fact]
