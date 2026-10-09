@@ -42,6 +42,16 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "ECS3D_SANITIZE": "ON"
       }
+    },
+    {
+      "name": "ecs3d-coverage",
+      "inherits": "ecs3d-base",
+      "displayName": "ECS3D Coverage",
+      "description": "Debug instrumented for line and branch coverage (--coverage on Clang and GCC, /PROFILE on MSVC). Aimed at the test suites; CI runs it on Linux gcc and publishes a report. Writes to cmake-build-ecs3d-coverage.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ECS3D_COVERAGE": "ON"
+      }
     }
   ]
 }

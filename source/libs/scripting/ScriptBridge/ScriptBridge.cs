@@ -26,6 +26,18 @@ public static class Bridge
     // faulted script's code can change or go away.
     private static readonly HashSet<string> _faulted = new();
 
+    private static readonly EventChannel _events = new(
+        ownerKey => _faulted.Contains(ownerKey),
+        (ownerKey, eventName, ex) =>
+        {
+            _faulted.Add(ownerKey);
+            var split = ownerKey.IndexOf('_');
+            ReportFault(split < 0 ? ownerKey : ownerKey[..split], split < 0 ? "" : ownerKey[(split + 1)..],
+                        $"a handler for event '{eventName}'", ex);
+        });
+
+    internal static EventChannel Events => _events;
+
     // Log.error can itself throw (its fallback writes to Console.Error, which can be a closed/redirected
     // handle in a service context), and that must not escape any further than the fault it was reporting
     // would have. Best effort only - if this fails too there is nothing left to do without risking the
@@ -85,8 +97,8 @@ public static class Bridge
     // caught exception the instance is marked faulted (so later calls skip too) and the failure is
     // reported once. Returns whether the action actually ran. bypassFaultGate lets a caller run its own
     // cleanup even on an already-faulted instance (stop() needs this - see its call site).
-    private static bool RunGuarded(string uuid, string className, string methodName, Action action,
-                                   bool bypassFaultGate = false)
+    internal static bool RunGuarded(string uuid, string className, string methodName, Action action,
+                                    bool bypassFaultGate = false)
     {
         var key = Key(uuid, className);
         if (!bypassFaultGate && _faulted.Contains(key))
@@ -109,7 +121,7 @@ public static class Bridge
 
     // Same as RunGuarded, for entry points that must hand back a value. fallback is whatever the caller
     // already treats as "no result" - reused rather than inventing a new sentinel.
-    private static T RunGuarded<T>(string uuid, string className, string methodName, Func<T> func, T fallback)
+    internal static T RunGuarded<T>(string uuid, string className, string methodName, Func<T> func, T fallback)
     {
         var key = Key(uuid, className);
         if (_faulted.Contains(key))
@@ -175,14 +187,21 @@ public static class Bridge
 
     internal static void AddInstance(string uuid, string className, ScriptBase instance)
     {
+        var key = Key(uuid, className);
+        if (_instances.TryGetValue(key, out var previous) && !ReferenceEquals(previous, instance))
+        {
+            _events.removeOwner(key);
+        }
+
         instance.EntityId = uuid;
-        _instances[Key(uuid, className)] = instance;
+        _instances[key] = instance;
     }
 
     internal static void RemoveInstance(string uuid, string className)
     {
         var key = Key(uuid, className);
         _instances.Remove(key);
+        _events.removeOwner(key);
 
         // A removed script is gone regardless of fault state; clear it so a later re-add of the same
         // uuid/class gets a clean slate instead of being skipped forever.
@@ -285,15 +304,24 @@ public static class Bridge
     [UnmanagedCallersOnly]
     public static void init(IntPtr scriptDirPtr)
     {
-        _scriptDir = Marshal.PtrToStringUTF8(scriptDirPtr)
-                     ?? throw new ArgumentNullException(nameof(scriptDirPtr));
+        Initialize(Marshal.PtrToStringUTF8(scriptDirPtr)
+                   ?? throw new ArgumentNullException(nameof(scriptDirPtr)));
+    }
+
+    internal static void Initialize(string scriptDir)
+    {
+        _scriptDir = scriptDir;
 
         Log.info($"Script directory: {_scriptDir}");
         CompileAndLoad();
     }
 
     [UnmanagedCallersOnly]
-    public static void reloadScripts()
+    public static void reloadScripts() => Reload();
+
+    // Instances stop and the old context unloads before compiling, so a compile error leaves no scripts
+    // loaded until the next successful reload.
+    internal static void Reload()
     {
         foreach (var instance in _instances.Values)
         {
@@ -309,6 +337,7 @@ public static class Bridge
 
         _instances.Clear();
         _faulted.Clear();
+        _events.clear();
 
         _ctx?.Unload();
         _ctx = null;
@@ -317,6 +346,19 @@ public static class Bridge
         GC.WaitForPendingFinalizers();
 
         CompileAndLoad();
+    }
+
+    internal static IReadOnlyList<string> LoadedScriptTypeNames =>
+        _ctx?.ScriptTypes.Select(t => t.Name).ToList() ?? new List<string>();
+
+    // Returns the static state to what a fresh process has, so tests do not leak into each other.
+    internal static void ResetForTests()
+    {
+        _instances.Clear();
+        _faulted.Clear();
+        _ctx?.Unload();
+        _ctx = null;
+        _scriptDir = "";
     }
 
     private static void CompileAndLoad()
@@ -689,26 +731,44 @@ public static class Bridge
         NativeBindings.PlayerController = bindings;
     }
 
+    // Returns 1 when an instance now exists under the key, 0 when the class is missing or its
+    // constructor threw.
     [UnmanagedCallersOnly]
-    public static void attachScript(IntPtr uuidPtr, IntPtr classNamePtr)
+    public static byte attachScript(IntPtr uuidPtr, IntPtr classNamePtr)
     {
         var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
         var className = Marshal.PtrToStringUTF8(classNamePtr)!;
-        var type = _ctx?.FindType(className);
+        return TryCreateInstance(_ctx?.FindType(className), uuid, className) ? (byte)1 : (byte)0;
+    }
+
+    internal static bool TryCreateInstance(Type? type, string uuid, string className)
+    {
         if (type is null)
         {
-            return;
+            return false;
         }
 
         // A throwing constructor (Activator.CreateInstance) is the same hazard as a throwing script
         // method, so it goes through the same fault gate even though no instance exists yet.
-        RunGuarded(uuid, className, nameof(attachScript), () =>
+        return RunGuarded(uuid, className, nameof(attachScript), () =>
         {
             var instance = (ScriptBase)Activator.CreateInstance(type)!;
             instance.EntityId = uuid;
             instance.initComponents();
             AddInstance(uuid, className, instance);
         });
+    }
+
+    [UnmanagedCallersOnly]
+    public static byte isScriptHealthy(IntPtr uuidPtr, IntPtr classNamePtr)
+    {
+        return IsHealthy(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!) ? (byte)1 : (byte)0;
+    }
+
+    internal static bool IsHealthy(string uuid, string className)
+    {
+        var key = Key(uuid, className);
+        return !_faulted.Contains(key) && _instances.ContainsKey(key);
     }
 
     [UnmanagedCallersOnly]
@@ -750,9 +810,18 @@ public static class Bridge
     {
         var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
         var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        RunFixedUpdate(uuid, className, dt);
+    }
+
+    internal static void RunFixedUpdate(string uuid, string className, float dt)
+    {
         if (_instances.TryGetValue(Key(uuid, className), out var instance))
         {
-            RunGuarded(uuid, className, nameof(fixedUpdate), () => instance.fixedUpdate(dt));
+            RunGuarded(uuid, className, nameof(fixedUpdate), () =>
+            {
+                instance.tickTimers(dt);
+                instance.fixedUpdate(dt);
+            });
         }
     }
 

@@ -1480,6 +1480,19 @@ SceneEditResult applySceneEdit(ObjectManager& objectManager, const nlohmann::jso
   }
 }
 
+std::optional<nlohmann::json> parseSceneEditMessage(const net::Message& message)
+{
+  const std::string payload(message.bytes().begin(), message.bytes().end());
+
+  auto json = nlohmann::json::parse(payload, nullptr, false);
+  if (json.is_discarded())
+  {
+    return std::nullopt;
+  }
+
+  return json;
+}
+
 net::Message buildObjectSpawned(const Object& object)
 {
   net::Message message(net::MessageType::objectSpawned);
@@ -1838,4 +1851,74 @@ std::optional<PlayerSlotPayload> parsePlayerSlot(const net::Message& message)
   return payload;
 }
 
+
+net::Message buildJoin(const std::optional<uint64_t> nonce)
+{
+  net::Message message(net::MessageType::join);
+
+  if (nonce)
+  {
+    message.write(*nonce);
+  }
+
+  return message;
+}
+
+std::optional<uint64_t> parseJoinNonce(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  if (reader.remaining() < sizeof(uint64_t))
+  {
+    return std::nullopt;
+  }
+
+  return reader.read<uint64_t>();
+}
+
+net::Message buildSceneStatus(const SceneStatus status)
+{
+  net::Message message(net::MessageType::sceneStatus);
+  message.write(status);
+
+  return message;
+}
+
+std::optional<SceneStatus> parseSceneStatus(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  if (reader.remaining() < sizeof(SceneStatus))
+  {
+    return std::nullopt;
+  }
+
+  const auto status = reader.read<SceneStatus>();
+  if (status != SceneStatus::running && status != SceneStatus::stopped && status != SceneStatus::paused)
+  {
+    return std::nullopt;
+  }
+
+  return status;
+}
+
+net::Message buildEditStatus(const bool editable)
+{
+  net::Message message(net::MessageType::editStatus);
+  message.write(editable);
+
+  return message;
+}
+
+std::optional<bool> parseEditStatus(const net::Message& message)
+{
+  net::MessageReader reader(message);
+
+  if (reader.remaining() < sizeof(uint8_t))
+  {
+    return std::nullopt;
+  }
+
+  return reader.read<bool>();
+}
 }
