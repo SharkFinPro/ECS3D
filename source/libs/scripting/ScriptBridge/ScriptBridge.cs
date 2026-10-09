@@ -97,8 +97,8 @@ public static class Bridge
     // caught exception the instance is marked faulted (so later calls skip too) and the failure is
     // reported once. Returns whether the action actually ran. bypassFaultGate lets a caller run its own
     // cleanup even on an already-faulted instance (stop() needs this - see its call site).
-    private static bool RunGuarded(string uuid, string className, string methodName, Action action,
-                                   bool bypassFaultGate = false)
+    internal static bool RunGuarded(string uuid, string className, string methodName, Action action,
+                                    bool bypassFaultGate = false)
     {
         var key = Key(uuid, className);
         if (!bypassFaultGate && _faulted.Contains(key))
@@ -121,7 +121,7 @@ public static class Bridge
 
     // Same as RunGuarded, for entry points that must hand back a value. fallback is whatever the caller
     // already treats as "no result" - reused rather than inventing a new sentinel.
-    private static T RunGuarded<T>(string uuid, string className, string methodName, Func<T> func, T fallback)
+    internal static T RunGuarded<T>(string uuid, string className, string methodName, Func<T> func, T fallback)
     {
         var key = Key(uuid, className);
         if (_faulted.Contains(key))
@@ -304,15 +304,24 @@ public static class Bridge
     [UnmanagedCallersOnly]
     public static void init(IntPtr scriptDirPtr)
     {
-        _scriptDir = Marshal.PtrToStringUTF8(scriptDirPtr)
-                     ?? throw new ArgumentNullException(nameof(scriptDirPtr));
+        Initialize(Marshal.PtrToStringUTF8(scriptDirPtr)
+                   ?? throw new ArgumentNullException(nameof(scriptDirPtr)));
+    }
+
+    internal static void Initialize(string scriptDir)
+    {
+        _scriptDir = scriptDir;
 
         Log.info($"Script directory: {_scriptDir}");
         CompileAndLoad();
     }
 
     [UnmanagedCallersOnly]
-    public static void reloadScripts()
+    public static void reloadScripts() => Reload();
+
+    // Instances stop and the old context unloads before compiling, so a compile error leaves no scripts
+    // loaded until the next successful reload.
+    internal static void Reload()
     {
         foreach (var instance in _instances.Values)
         {
@@ -337,6 +346,19 @@ public static class Bridge
         GC.WaitForPendingFinalizers();
 
         CompileAndLoad();
+    }
+
+    internal static IReadOnlyList<string> LoadedScriptTypeNames =>
+        _ctx?.ScriptTypes.Select(t => t.Name).ToList() ?? new List<string>();
+
+    // Returns the static state to what a fresh process has, so tests do not leak into each other.
+    internal static void ResetForTests()
+    {
+        _instances.Clear();
+        _faulted.Clear();
+        _ctx?.Unload();
+        _ctx = null;
+        _scriptDir = "";
     }
 
     private static void CompileAndLoad()
