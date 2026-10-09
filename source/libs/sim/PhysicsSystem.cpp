@@ -41,6 +41,9 @@ namespace {
   // the support, so the points are visited again until they settle.
   constexpr int maxSpinPasses = 16;
 
+  // A translation vector this short has no direction to normalize, so it is no contact at all.
+  constexpr float minTranslationLengthSquared = 1e-12f;
+
   // glm's Euler constructor composes Rz * Ry * Rx, the same order the colliders and renderer apply.
   glm::quat orientationOf(const Transform& transform)
   {
@@ -302,6 +305,11 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
     throw std::runtime_error("PhysicsSystem::handleCollision missing other object!");
   }
 
+  if (glm::dot(minimumTranslationVector, minimumTranslationVector) < minTranslationLengthSquared)
+  {
+    return;
+  }
+
   const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform);
   if (!transform)
   {
@@ -325,6 +333,11 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   if (!other)
   {
     throw std::runtime_error("PhysicsSystem::handleCollision missing other object!");
+  }
+
+  if (glm::dot(minimumTranslationVector, minimumTranslationVector) < minTranslationLengthSquared)
+  {
+    return;
   }
 
   const auto transform = body.getOwner()->getComponent<Transform>(ComponentType::transform);
