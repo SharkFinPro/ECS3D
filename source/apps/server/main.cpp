@@ -16,7 +16,7 @@ namespace
 
   // --edit is the launch-capability gate that allows editor connections; absent it the server is a
   // pure play server. --token, when set, is the secret an editor must present to be authorized;
-  // an --edit server given none generates one.
+  // main generates one for an --edit server given none.
   // An empty project runs the built-in sample (scenes 1-3 + falling balls); --project loads a file.
   ServerApp::LaunchOptions parseOptions(const int argc, char** argv)
   {
