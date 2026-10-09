@@ -107,10 +107,15 @@
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
-  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). What stays uncovered here is whatever actually calls a
-  native function pointer (the `Transform`/`RigidBody`/`Camera`/... wrapper methods, once
-  `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry point (can't be called
-  from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
+  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). `TcpBackendLoopbackTests` also drives a live `TcpBackend` over loopback sockets: `TransportRecorder`
+  takes the addresses of `Transport`'s `[UnmanagedCallersOnly]` `set*Callback` exports as function pointers to
+  register its own callbacks (and unregisters them afterward), and records what the backends deliver, so
+  those tests share one non-parallel xUnit collection (`Transport`) and shorten `TcpBackend`'s internal
+  `SendTimeoutMs`/`BodyReadTimeoutMs` fields and set `AcceptedSendBufferBytes` rather than waiting out
+  production values. That is still not calling the bridge's entry points directly: what stays uncovered
+  here is whatever actually calls a native function pointer (the `Transform`/`RigidBody`/`Camera`/...
+  wrapper methods, once `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry
+  point with no exported address to take (can't be called from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
   reachable the same way, as pure code over plain objects. Private product logic is exposed to this
   project through `internal` + `InternalsVisibleTo` (declared in `source/libs/net/Transport/AssemblyInfo.cs` and
   `source/libs/scripting/ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`
