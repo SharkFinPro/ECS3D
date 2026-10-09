@@ -29,9 +29,10 @@ jobs:
       # live, so a Release-only matrix never runs the invariant checks the code is written against.
       # Sanitize (the ecs3d-sanitize preset: ASan, plus UBSan on gcc/clang) runs on Linux gcc and clang
       # only: MSVC's ASan needs its runtime DLL on PATH and macOS is not worth the flake risk.
+      # Coverage (the ecs3d-coverage preset) runs on Linux gcc only and publishes a report artifact.
       matrix:
         os: [ 'ubuntu-22.04', windows-latest, macos-latest ]
-        build_type: [ Release, Debug, Sanitize ]
+        build_type: [ Release, Debug, Sanitize, Coverage ]
         c_compiler: [ gcc, clang, cl ]
         include:
           - os: windows-latest
@@ -61,6 +62,13 @@ jobs:
             build_type: Sanitize
           - os: macos-latest
             build_type: Sanitize
+          - os: windows-latest
+            build_type: Coverage
+          - os: macos-latest
+            build_type: Coverage
+          - os: 'ubuntu-22.04'
+            c_compiler: clang
+            build_type: Coverage
 
     steps:
       - uses: actions/checkout@v6
@@ -148,8 +156,8 @@ jobs:
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
 
       - name: Build
-        # Sanitize skips the apps: the check target below builds the headless suite it runs.
-        if: ${{ matrix.build_type != 'Sanitize' }}
+        # Sanitize and Coverage skip the apps: the check target below builds the headless suite it runs.
+        if: ${{ matrix.build_type != 'Sanitize' && matrix.build_type != 'Coverage' }}
         run: cmake --build ${{ steps.strings.outputs.build_dir }}
 
       - name: Test
@@ -159,3 +167,71 @@ jobs:
         # check carries --output-on-failure and --no-tests=error, the latter being what makes a suite
         # that registers nothing fail instead of pass.
         run: cmake --build ${{ steps.strings.outputs.build_dir }} --target check
+
+      - name: Install gcovr
+        if: ${{ matrix.build_type == 'Coverage' }}
+        run: pipx install gcovr==8.6
+
+      - name: Native coverage report
+        if: ${{ matrix.build_type == 'Coverage' }}
+        # Branch numbers leave out exception and unreachable edges, which the compiler generates in bulk
+        # and which no test can sensibly target. bash, so a gcovr failure is not hidden by the tee.
+        shell: bash
+        run: |
+          mkdir -p coverage/native
+          gcovr --root . ${{ steps.strings.outputs.build_dir }} \
+            --filter 'source/libs/' --filter 'source/apps/' \
+            --exclude 'source/tests/' --exclude '.*/_deps/.*' \
+            --exclude-throw-branches --exclude-unreachable-branches \
+            --html-details coverage/native/index.html \
+            --cobertura coverage/native/cobertura.xml \
+            --json-summary coverage/native/summary.json \
+            --txt-summary | tee coverage/native/summary.txt
+          {
+            echo '## Native coverage'
+            echo '```'
+            cat coverage/native/summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Sources not compiled into any test
+        if: ${{ matrix.build_type == 'Coverage' }}
+        # gcovr only knows files that were compiled with coverage, so a source no test target builds
+        # would otherwise be missing from the report rather than shown at zero.
+        shell: bash
+        run: |
+          find source/libs source/apps -name '*.cpp' -not -path 'source/apps/launcher/*' | sort > coverage/all-sources.txt
+          python3 -c "import json; print('\n'.join(sorted(f['filename'] for f in json.load(open('coverage/native/summary.json'))['files'])))" > coverage/covered-sources.txt
+          grep -vxFf coverage/covered-sources.txt coverage/all-sources.txt > coverage/missing-sources.txt || true
+          {
+            echo '## Not compiled into any test'
+            echo "$(wc -l < coverage/missing-sources.txt) of $(wc -l < coverage/all-sources.txt) source files"
+            echo '```'
+            cat coverage/missing-sources.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Managed coverage summary
+        if: ${{ matrix.build_type == 'Coverage' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, xml.etree.ElementTree as ET
+          files = glob.glob('${{ steps.strings.outputs.build_dir }}/coverage/managed/**/*.cobertura.xml', recursive=True)
+          print('## Managed coverage')
+          if not files:
+              print('No cobertura file was produced.')
+          else:
+              root = ET.parse(files[0]).getroot()
+              print(f"Lines: {float(root.get('line-rate')) * 100:.1f}%")
+              print()
+              print(f"Branches: {float(root.get('branch-rate')) * 100:.1f}%")
+          PY
+
+      - name: Upload coverage report
+        if: ${{ matrix.build_type == 'Coverage' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: |
+            coverage/native
+            ${{ steps.strings.outputs.build_dir }}/coverage/managed
