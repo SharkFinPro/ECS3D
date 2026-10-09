@@ -112,6 +112,14 @@ TEST(ServerPolicyTest, NonMutationTypesAlwaysPass)
   EXPECT_TRUE(isMutationAuthorized(net::MessageType::inputState, true, false));
 }
 
+TEST(ServerPolicyTest, OnlyEditServerForwardsLogToEditors)
+{
+  static_assert(forwardsLogToEditors(true));
+  static_assert(!forwardsLogToEditors(false));
+  EXPECT_TRUE(forwardsLogToEditors(true));
+  EXPECT_FALSE(forwardsLogToEditors(false));
+}
+
 TEST(ServerPolicyTest, StartFromStoppedStartsScriptsAndResetsCollisions)
 {
   EXPECT_EQ(planSceneControl(net::SceneControlOp::start, true), plan(true, false, false, true, false, true));
