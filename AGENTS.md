@@ -110,16 +110,21 @@
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
-  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). `TcpBackendLoopbackTests` also drives a live `TcpBackend` over loopback sockets: `TransportRecorder`
+  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). The component wrappers (`World`, `Transform`, `RigidBody`, `Camera`, `Collider`, `ModelRenderer`,
+  `LightRenderer`, `PlayerController`, `InputUtils`/`PlayerInput`, `ScriptBase`) are covered too:
+  `FakeNatives.Install()` points every `NativeBindings.*` table at `[UnmanagedCallersOnly]` fakes that record
+  each call and answer from canned values (a native `bool` is a `byte` there, since the test assembly keeps runtime
+  marshalling on), and restores the tables when disposed; those suites share the serial `BridgeInstances`
+  collection.
+  `TcpBackendLoopbackTests` also drives a live `TcpBackend` over loopback sockets: `TransportRecorder`
   takes the addresses of `Transport`'s `[UnmanagedCallersOnly]` `set*Callback` exports as function pointers to
   register its own callbacks (and unregisters them afterward), and records what the backends deliver, so
   those tests share one non-parallel xUnit collection (`Transport`) and shorten `TcpBackend`'s internal
   `SendTimeoutMs`/`BodyReadTimeoutMs` fields and set `AcceptedSendBufferBytes` rather than waiting out
-  production values. That is still not calling the bridge's entry points directly: what stays uncovered
-  here is whatever actually calls a native function pointer (the `Transform`/`RigidBody`/`Camera`/...
-  wrapper methods, once `NativeBindings` is populated) or is itself an `[UnmanagedCallersOnly]` entry
-  point with no exported address to take (can't be called from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
-  reachable the same way, as pure code over plain objects. Private product logic is exposed to this
+  production values.
+  What stays uncovered is whatever is itself an `[UnmanagedCallersOnly]` entry point (can't be
+  called from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
+  reachable the same way, as pure code over plain objects or through a fake binding table. Private product logic is exposed to this
   project through `internal` + `InternalsVisibleTo` (declared in `source/libs/net/Transport/AssemblyInfo.cs` and
   `source/libs/scripting/ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`
   under `$(BuildRoot)obj/tests/` and `$(BuildRoot)bin/tests/` — one level deeper than `Transport`'s own
