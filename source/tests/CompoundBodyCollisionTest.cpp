@@ -150,9 +150,9 @@ namespace {
     return nullptr;
   }
 
-  // A compound body of half-unit boxes (the contact points are on the box's real +x edge) tilted five degrees about z, resting on an edge of its +x side over a wide static box and
-  // turning toward flat, with the given shapes on its owner and on its child. The contact is the child's, or the
-  // owner's when the child has none.
+  // A compound body of half-unit boxes, so the contact points sit on the real +x edge, tilted five degrees about
+  // z over a wide static box and turning toward flat, with the given shapes on its owner and on its child. The
+  // contact is the child's, or the owner's when the child has none.
   glm::vec3 rotationAfterEdgeContact(const Shape ownerShape, const Shape partShape)
   {
     const auto scene = makeScene();
