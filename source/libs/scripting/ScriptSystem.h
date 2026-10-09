@@ -2,6 +2,7 @@
 #define SCRIPTSYSTEM_H
 
 #include "AttachedScripts.h"
+#include "UnresolvedScripts.h"
 #include <nlohmann/json_fwd.hpp>
 #include <filesystem>
 #include <memory>
@@ -96,6 +97,9 @@ private:
   std::unordered_map<std::string, AttachedScript> m_attached;
   // Mirrors m_attached by (uuid, class); updated at every insert, erase and clear of it.
   AttachedScripts m_attachedIndex;
+  // Scripts whose class could not be instantiated. Left out of m_attached so nothing ticks or reads them,
+  // and remembered so the attempt (and its warning) is not repeated every tick; cleared on hot reload.
+  UnresolvedScripts m_unresolved;
   std::unordered_map<std::string, std::vector<ExposedField>> m_fieldCache;
 
   // Instances that have had their C# start() called. attachAll() (run every broadcastSnapshot, whether
@@ -115,6 +119,7 @@ private:
   void checkForScriptChanges(const ObjectManager& objectManager, float dt);
 
   // Create the managed instance, cache its exposed fields, and push the Script's saved field blob in.
+  // When the class cannot be instantiated the script stays unattached and its saved blob is untouched.
   // Takes the component by shared_ptr so the cache entry can remember which Script it belongs to.
   void attach(const Object& object, const std::shared_ptr<Script>& script);
 
@@ -123,7 +128,7 @@ private:
   // Stop and detach every instance whose Script component is no longer in the scene, since every other
   // loop here only visits scripts the objects still return. Matching is by component identity, not by
   // key, so a replacement Script of the same class on the same object orphans the old instance rather
-  // than silently inheriting it.
+  // than silently inheriting it. Unresolved scripts whose component left or was replaced are forgotten too.
   void detachOrphans(const ObjectManager& objectManager);
 
   // Call the instance's C# start() exactly once - a no-op on every call after the first for the same

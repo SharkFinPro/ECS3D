@@ -2,6 +2,7 @@
 #include "GpuAssetCache.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
+#include <objects/CameraSelection.h>
 #include <objects/components/Component.h>
 #include <objects/components/Transform.h>
 #include <objects/components/ModelRenderer.h>
@@ -194,54 +195,20 @@ void RenderSystem::updateCamera(const ObjectManager& objectManager, GpuAssetCach
 {
   const auto renderer = assetCache.getRenderer();
 
-  for (const auto& object : objectManager.getAllObjects())
+  // When a specific camera object is requested (a client's own player camera), only it is considered.
+  if (const auto object = findActiveCamera(objectManager, cameraObject))
   {
-    // When a specific camera object is requested (a client's own player camera), skip the rest.
-    if (cameraObject && object->getUUID() != *cameraObject)
+    if (const auto cameraView = cameraViewOf(*object))
     {
-      continue;
+      // Take over from the built-in free-fly camera (render() skips it while disabled, so this pose sticks).
+      renderer->getCamera()->disable();
+      renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(cameraView->position, cameraView->view);
+      applyProjection(renderer, { cameraView->fov, cameraView->nearPlane, cameraView->farPlane });
+
+      m_freeFlyActive = false;
+      m_componentCameraView = cameraView->view;
+      return;
     }
-
-    const auto camera = object->getComponent<Camera>(ComponentType::camera);
-
-    if (!camera || !camera->isActive())
-    {
-      continue;
-    }
-
-    const auto transform = object->getComponent<Transform>(ComponentType::transform);
-
-    if (!transform)
-    {
-      continue;
-    }
-
-    // Position comes from the Transform; facing is the Camera's own direction, rotated by the object's
-    // orientation so the camera turns as the object turns. World-up (not an orientation-derived up) keeps
-    // the horizon level and avoids the roll/inversion the euler-quaternion up produced.
-    const glm::vec3 position = transform->getPosition();
-    const glm::quat orientation(glm::radians(transform->getRotation()));
-
-    const glm::vec3 forward = guardDirection(orientation * camera->getDirection(), glm::vec3(0.0f, 0.0f, -1.0f));
-
-    // lookAt degenerates when the view direction is parallel to up (looking straight up/down); fall back to
-    // a different reference axis so the matrix stays finite.
-    glm::vec3 up(0.0f, 1.0f, 0.0f);
-    if (glm::abs(glm::dot(forward, up)) > 0.9999f)
-    {
-      up = glm::vec3(0.0f, 0.0f, 1.0f);
-    }
-
-    const glm::mat4 viewMatrix = lookAt(position, position + forward, up);
-
-    // Take over from the built-in free-fly camera (render() skips it while disabled, so this pose sticks).
-    renderer->getCamera()->disable();
-    renderer->getRenderingManager()->getRenderer3D()->setCameraParameters(position, viewMatrix);
-    applyProjection(renderer, { camera->getFov(), camera->getNearPlane(), camera->getFarPlane() });
-
-    m_freeFlyActive = false;
-    m_componentCameraView = viewMatrix;
-    return;
   }
 
   // No active component camera in the scene - hand control back to the built-in free-fly camera.
