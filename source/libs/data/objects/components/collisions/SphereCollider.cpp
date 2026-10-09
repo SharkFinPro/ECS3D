@@ -3,6 +3,7 @@
 #include "../Transform.h"
 #include "../../Object.h"
 #include "WireTypes.h"
+#include <glm/common.hpp>
 #include <glm/gtx/component_wise.inl>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -154,7 +155,7 @@ void SphereCollider::updateTransformPointer()
 
 float SphereCollider::getScaledRadius(const std::shared_ptr<Transform>& transform)
 {
-  const auto maxScale = compMax(transform->getScale());
+  const auto maxScale = compMax(glm::abs(transform->getScale()));
 
   return maxScale * m_radius.get();
 }
