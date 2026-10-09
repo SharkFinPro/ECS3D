@@ -16,8 +16,14 @@ public:
 
   virtual void reloadScripts() const = 0;
 
-  virtual void attachScript(const char* uuid,
-                            const char* className) const = 0;
+  // True when a managed instance now exists under the pair; false when the class is missing or its
+  // constructor threw.
+  [[nodiscard]] virtual bool attachScript(const char* uuid,
+                                          const char* className) const = 0;
+
+  // True when an instance exists under the pair and has not faulted.
+  [[nodiscard]] virtual bool isHealthy(const char* uuid,
+                                       const char* className) const = 0;
 
   virtual void detachScript(const char* uuid,
                             const char* className) const = 0;

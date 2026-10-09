@@ -60,9 +60,16 @@ namespace scriptSystemFixtures {
       }
     }
 
-    void attachScript(const char* uuid, const char* className) const override
+    [[nodiscard]] bool attachScript(const char* uuid, const char* className) const override
     {
       m_state.calls.push_back(describe("attach", uuid, className));
+
+      return true;
+    }
+
+    [[nodiscard]] bool isHealthy(const char*, const char*) const override
+    {
+      return true;
     }
 
     void detachScript(const char* uuid, const char* className) const override

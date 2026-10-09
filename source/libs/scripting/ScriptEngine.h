@@ -28,7 +28,7 @@ public:
 
   // True when an instance exists under the pair and has not faulted.
   [[nodiscard]] bool isHealthy(const char* uuid,
-                               const char* className) const;
+                               const char* className) const override;
 
   void detachScript(const char* uuid,
                     const char* className) const override;
