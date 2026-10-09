@@ -399,7 +399,12 @@ without the `tryGet` ceremony since `ScriptBase` constructs one for the script's
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
 without deciding its scripting story can't go unnoticed. Script field edits are validated
 (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
-refused with a warning and does not fault the script. `LogBindings` gives scripts `Log.trace/debug/
+refused with a warning and does not fault the script.
+A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about
+once and left unattached until the next hot reload or until its Script component is replaced (a stop
+rebuild or scene switch), which retries it and warns again if it still fails. Field read-back skips a
+missing or faulted instance, and discards a read that faulted it, so the saved values are kept in place
+of defaults. `LogBindings` gives scripts `Log.trace/debug/
 info/warn/error` through `ECS3DLog` under `LogCategory::script`, registered first in `registerBindings` so
 everything the bridge itself logs afterwards - init, hot-reload, compilation - already has a binding to
 write through. Scripts get `after`/`every` timers on `ScriptBase` (`Scheduler.cs`), ticked by the bridge's fixed update

@@ -20,8 +20,14 @@ public:
 
   void reloadScripts() const;
 
-  void attachScript(const char* uuid,
-                    const char* className) const;
+  // True when a managed instance now exists under the pair; false when the class is missing (renamed,
+  // deleted, or the user scripts failed to compile) or its constructor threw.
+  [[nodiscard]] bool attachScript(const char* uuid,
+                                  const char* className) const;
+
+  // True when an instance exists under the pair and has not faulted.
+  [[nodiscard]] bool isHealthy(const char* uuid,
+                               const char* className) const;
 
   void detachScript(const char* uuid,
                     const char* className) const;
@@ -90,7 +96,8 @@ public:
   [[nodiscard]] bool isInitialized() const { return m_initialized; }
 
 private:
-  using AttachScriptFn = void(*)(const char*, const char*);
+  using AttachScriptFn = bool(*)(const char*, const char*);
+  using IsHealthyFn = bool(*)(const char*, const char*);
   using DetachScriptFn = void(*)(const char*, const char*);
   using StartFn = void(*)(const char*, const char*);
   using StopFn = void(*)(const char*, const char*);
@@ -117,6 +124,7 @@ private:
   bool m_initialized = false;
 
   AttachScriptFn m_attachScript = nullptr;
+  IsHealthyFn m_isHealthy = nullptr;
   DetachScriptFn m_detachScript = nullptr;
   StartFn m_start = nullptr;
   StopFn m_stop = nullptr;

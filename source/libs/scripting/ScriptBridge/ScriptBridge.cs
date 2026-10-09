@@ -709,26 +709,44 @@ public static class Bridge
         NativeBindings.PlayerController = bindings;
     }
 
+    // Returns 1 when an instance now exists under the key, 0 when the class is missing or its
+    // constructor threw.
     [UnmanagedCallersOnly]
-    public static void attachScript(IntPtr uuidPtr, IntPtr classNamePtr)
+    public static byte attachScript(IntPtr uuidPtr, IntPtr classNamePtr)
     {
         var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
         var className = Marshal.PtrToStringUTF8(classNamePtr)!;
-        var type = _ctx?.FindType(className);
+        return TryCreateInstance(_ctx?.FindType(className), uuid, className) ? (byte)1 : (byte)0;
+    }
+
+    internal static bool TryCreateInstance(Type? type, string uuid, string className)
+    {
         if (type is null)
         {
-            return;
+            return false;
         }
 
         // A throwing constructor (Activator.CreateInstance) is the same hazard as a throwing script
         // method, so it goes through the same fault gate even though no instance exists yet.
-        RunGuarded(uuid, className, nameof(attachScript), () =>
+        return RunGuarded(uuid, className, nameof(attachScript), () =>
         {
             var instance = (ScriptBase)Activator.CreateInstance(type)!;
             instance.EntityId = uuid;
             instance.initComponents();
             AddInstance(uuid, className, instance);
         });
+    }
+
+    [UnmanagedCallersOnly]
+    public static byte isScriptHealthy(IntPtr uuidPtr, IntPtr classNamePtr)
+    {
+        return IsHealthy(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!) ? (byte)1 : (byte)0;
+    }
+
+    internal static bool IsHealthy(string uuid, string className)
+    {
+        var key = Key(uuid, className);
+        return !_faulted.Contains(key) && _instances.ContainsKey(key);
     }
 
     [UnmanagedCallersOnly]
