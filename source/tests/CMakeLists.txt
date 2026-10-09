@@ -118,6 +118,9 @@ add_executable(${PROJECT_NAME}
   InputUtilsBindingsTest.cpp
   PlayerSlotsTest.cpp
   WireTypesTest.cpp
+  WireTruncationSweepTest.cpp
+  WireTruncation.h
+  WireTruncationFixtures.h
   MessageQueueTest.cpp
   TransportLogTest.cpp
   SmokeTest.cpp

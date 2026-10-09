@@ -33,6 +33,7 @@ namespace replication {
 
 void packStateDelta(net::Message& message, const ObjectManager& objectManager);
 
+// Not transactional: entries read whole before a truncation point are applied, then the read throws.
 void unpackStateDelta(const ObjectManager& objectManager, const net::Message& message);
 
 // The editor's return path: a single component edit, carried as { object, type, [className], data },
@@ -189,6 +190,10 @@ enum class SceneEditResult {
 
 SceneEditResult applySceneEdit(ObjectManager& objectManager, const nlohmann::json& edit,
                                const AssetRegistry* assetRegistry = nullptr);
+
+// The sceneEdit message body is the edit as JSON text. nullopt when it does not parse (a truncated payload
+// never does); a valid document of any shape is returned for applySceneEdit to judge.
+[[nodiscard]] std::optional<nlohmann::json> parseSceneEditMessage(const net::Message& message);
 
 // Runtime spawn/destroy replication. Unlike the editor's structural edits (which re-snapshot), a script
 // spawning or destroying an object at runtime replicates incrementally: the server broadcasts one packed
