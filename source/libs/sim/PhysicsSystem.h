@@ -14,6 +14,7 @@ class ObjectManager;
 class Object;
 class Transform;
 class RigidBody;
+class Collider;
 
 class PhysicsSystem {
 public:
@@ -29,13 +30,17 @@ public:
   static void applyImpulse(RigidBody& body, const Transform& transform, const glm::vec3& impulse,
                            const glm::vec3& position, float dt);
 
-  static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
-                              glm::vec3 minimumTranslationVector, glm::vec3 collisionPoint, float dt);
+  // collider is the one of body's that produced the contact: on a compound body it belongs to a child, not to
+  // the body's owner.
+  static void handleCollision(RigidBody& body, const std::shared_ptr<Collider>& collider,
+                              const std::shared_ptr<Object>& other, glm::vec3 minimumTranslationVector,
+                              glm::vec3 collisionPoint, float dt);
 
   // Resolves the pair through a single impulse at supportPoint, so a body whose center of mass sits over
   // its manifold is pushed without being torqued. A single point resolves exactly like the overload above.
-  static void handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
-                              glm::vec3 minimumTranslationVector, std::span<const glm::vec3> collisionPoints, float dt);
+  static void handleCollision(RigidBody& body, const std::shared_ptr<Collider>& collider,
+                              const std::shared_ptr<Object>& other, glm::vec3 minimumTranslationVector,
+                              std::span<const glm::vec3> collisionPoints, float dt);
 
   // The center of mass projected onto the contact plane, clamped into the hull of the first
   // maxSupportPoints points.
@@ -79,7 +84,8 @@ private:
     glm::vec3 normal;
   };
 
-  [[nodiscard]] static Pair pairOf(RigidBody& body, Transform& transform, const std::shared_ptr<Object>& other,
+  [[nodiscard]] static Pair pairOf(RigidBody& body, Transform& transform,
+                                   const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
                                    const glm::vec3& normal);
 
   static void integrate(RigidBody& body, Transform& transform, float dt);
@@ -159,7 +165,7 @@ private:
 
   // The corners of the body's box face turned toward the support box, clamped onto its footprint the way the
   // narrow phase clamps a manifold. Empty unless both colliders are boxes.
-  [[nodiscard]] static std::optional<std::array<glm::vec3, 4>> restingFace(const RigidBody& body,
+  [[nodiscard]] static std::optional<std::array<glm::vec3, 4>> restingFace(const std::shared_ptr<Collider>& collider,
                                                                            const std::shared_ptr<Object>& other,
                                                                            const glm::vec3& supportFace);
 

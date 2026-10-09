@@ -310,7 +310,8 @@ namespace {
     const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
 
     transformOf(box)->setRotation(rotation);
-    PhysicsSystem::handleCollision(*box->getComponent<RigidBody>(ComponentType::rigidBody), ground,
+    PhysicsSystem::handleCollision(*box->getComponent<RigidBody>(ComponentType::rigidBody),
+                                   box->getComponent<Collider>(ComponentType::collider), ground,
                                    minimumTranslationVector, contactPoints, dt);
 
     return transformOf(box)->getRotation();
@@ -357,7 +358,7 @@ TEST(PhysicsIntegration, AChildOfATurnedParentIsLaidFlushWithoutTakingOnTheParen
   transformOf(box)->setRotation({ 0, 0, 0.016f });
   const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
 
-  PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, flatUnderside, dt);
+  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, flatUnderside, dt);
 
   fixtures::expectNear("up", localUpOf(transformOf(box)->getRotation()), { 0, 1, 0 }, 1e-5f);
   EXPECT_NEAR(transformOf(box)->getRotation().y, 30.0f, 1e-3f);

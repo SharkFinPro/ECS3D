@@ -62,7 +62,7 @@ namespace {
     lowerBody->setVelocity({ 0, gravityPerTick, 0 });
     upperBody->setVelocity({ 0, -1, 0 });
 
-    PhysicsSystem::handleCollision(*upperBody, lower, { 0, 0.1f, 0 }, { 0, 1, 0 }, dt);
+    PhysicsSystem::handleCollision(*upperBody, ownColliderOf(*upperBody), lower, { 0, 0.1f, 0 }, { 0, 1, 0 }, dt);
 
     return { upperBody->getVelocity(), lowerBody->getVelocity(), transformOf(upper)->getPosition(),
              transformOf(lower)->getPosition() };
@@ -112,7 +112,7 @@ namespace {
     upperBody->setFriction(friction);
     upperBody->setVelocity({ 0, -1, 0 });
 
-    PhysicsSystem::handleCollision(*upperBody, lower, 0.01f * normal, normal, dt);
+    PhysicsSystem::handleCollision(*upperBody, ownColliderOf(*upperBody), lower, 0.01f * normal, normal, dt);
 
     return { lowerBody->getVelocity(), lowerBody->getAngularVelocity(),
              -glm::dot(upperBody->getVelocity() - lowerBody->getVelocity(), normal) };
@@ -159,7 +159,7 @@ TEST(PhysicsIntegration, AHeavyBodySlidingOverALightRestingOneDoesNotSpinItOrDra
 
   // Off the lower body's center, where a drag sized for the heavy body used to turn the light one thousands of
   // degrees a second.
-  PhysicsSystem::handleCollision(*upperBody, lower, { 0, 0.01f, 0 }, glm::vec3{ 0.5f, 1, 0 }, dt);
+  PhysicsSystem::handleCollision(*upperBody, ownColliderOf(*upperBody), lower, { 0, 0.01f, 0 }, glm::vec3{ 0.5f, 1, 0 }, dt);
 
   // The support holds it against the drag, up to what friction there can take - here the whole of it, since the
   // heavy body's weight presses it down.
@@ -232,7 +232,7 @@ TEST(PhysicsIntegration, TwoBodiesMeetingSlowlyDoNotBounce)
     const auto rightBody = addBody(right, false);
 
     leftBody->setVelocity({ unitsPerSecond * dt, 0, 0 });
-    PhysicsSystem::handleCollision(*leftBody, right, { -0.01f, 0, 0 }, glm::vec3{ 1, 0, 0 }, dt);
+    PhysicsSystem::handleCollision(*leftBody, ownColliderOf(*leftBody), right, { -0.01f, 0, 0 }, glm::vec3{ 1, 0, 0 }, dt);
 
     return std::pair{ leftBody->getVelocity() / dt, rightBody->getVelocity() / dt };
   };
@@ -264,7 +264,7 @@ TEST(PhysicsIntegration, ARestingBodyPushedFromTheSideMovesByItsMass)
   hitterBody->setVelocity({ 1, 0, 0 });
 
   // Its support takes nothing of a push along it, so a resting body answers a sideways hit as a free one does.
-  PhysicsSystem::handleCollision(*hitterBody, resting, { -0.1f, 0, 0 }, { 1, 0, 0 }, dt);
+  PhysicsSystem::handleCollision(*hitterBody, ownColliderOf(*hitterBody), resting, { -0.1f, 0, 0 }, { 1, 0, 0 }, dt);
 
   expectNear("hitter velocity", hitterBody->getVelocity(), { -0.8f, 0, 0 });
   expectNear("resting velocity", restingBody->getVelocity(), { 0.2f, 0, 0 });
@@ -288,7 +288,7 @@ TEST(PhysicsIntegration, ASpinningBoxResolvedAcrossAManifoldIsNotFlungByItsOwnSp
     glm::vec3{ 0.5f, -0.5f, 0.5f }, glm::vec3{ -0.5f, -0.5f, 0.5f }
   };
 
-  PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, underside, dt);
+  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, underside, dt);
 
   // The ground stops the spin driving those corners into it, and none of it becomes linear velocity.
   expectNear("velocity", body->getVelocity(), { 0, 0, 0 });
@@ -305,7 +305,7 @@ namespace {
     const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
 
     body->setAngularVelocity(angularVelocity);
-    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, flatUnderside, dt);
+    PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, flatUnderside, dt);
 
     return body->getAngularVelocity();
   }
@@ -322,7 +322,7 @@ TEST(PhysicsIntegration, FrictionAtAContactIsBoundedByFrictionTimesTheImpulsePre
 
     body->setFriction(0.5f);
     body->setVelocity(velocity);
-    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, flatUnderside, dt);
+    PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, flatUnderside, dt);
 
     return std::pair{ body->getVelocity(), body->getAngularVelocity() };
   };
@@ -359,7 +359,7 @@ TEST(PhysicsIntegration, ASpinLiftingAContactOffItsSupportIsLeftAlone)
     const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
 
     body->setAngularVelocity(angularVelocity);
-    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, edge, dt);
+    PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, edge, dt);
 
     return body->getAngularVelocity();
   };
@@ -392,7 +392,7 @@ TEST(PhysicsIntegration, ARestingBodysLeftoverSpinIsBroughtExactlyToRest)
   };
 
   body->setAngularVelocity({ 0, 0.005f, 0 });
-  PhysicsSystem::handleCollision(*body, ceiling, { 0, -0.01f, 0 }, topside, dt);
+  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ceiling, { 0, -0.01f, 0 }, topside, dt);
 
   expectNear("under a ceiling", body->getAngularVelocity(), { 0, 0.005f, 0 });
 }
@@ -411,7 +411,7 @@ TEST(PhysicsIntegration, ABodyTurningWithItsSupportKeepsTheSpinTheyShare)
 
   body->setAngularVelocity({ 0, 0, 2 });
   supportBody->setAngularVelocity({ 0, 0, 2 });
-  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, flatUnderside, dt);
+  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), support, { 0, 0.01f, 0 }, flatUnderside, dt);
 
   expectNear("on a turning support", body->getAngularVelocity(), { 0, 0, 2 });
 }
@@ -431,7 +431,7 @@ TEST(PhysicsIntegration, AContactUnderTheCenterIsNotSpunUpToChaseATurningSupport
   supportBody->setAngularVelocity({ 0, 0, -2 });
   const std::array<glm::vec3, 1> underneath{ glm::vec3{ 1e-6f, -0.5f, 0 } };
 
-  PhysicsSystem::handleCollision(*body, support, { 0, 0.01f, 0 }, underneath, dt);
+  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), support, { 0, 0.01f, 0 }, underneath, dt);
 
   EXPECT_LT(glm::length(body->getAngularVelocity()), 1e-3f);
 }

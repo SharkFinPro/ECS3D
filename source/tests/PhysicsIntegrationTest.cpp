@@ -327,7 +327,7 @@ TEST(PhysicsIntegration, ACollisionAlongTheTranslationVectorCancelsTheVelocityIn
   body->setVelocity({ 0, -1, 0 });
 
   // Pushed a quarter unit back up out of the ground, with the contact directly under the body.
-  PhysicsSystem::handleCollision(*body, ground, { 0, 0.25f, 0 }, { 0, -1, 0 }, dt);
+  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.25f, 0 }, { 0, -1, 0 }, dt);
 
   // The correction moves the body clear, and the impulse removes exactly the velocity that was driving
   // it into the surface - so it rests rather than accumulating downward speed against something solid.
@@ -351,7 +351,7 @@ TEST(PhysicsIntegration, AStaticContactDoesNotHoldBackABodyAlreadyLeavingIt)
 
   body->setVelocity({ 0, 1, 0 });
 
-  PhysicsSystem::handleCollision(*body, ground, { 0, 0.25f, 0 }, { 0, -1, 0 }, dt);
+  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.25f, 0 }, { 0, -1, 0 }, dt);
 
   // Still moved clear of the overlap, but its velocity is kept: it is already leaving, and stopping it would
   // pull a body tipping up off an edge back down onto it.
@@ -373,7 +373,7 @@ TEST(PhysicsIntegration, AContactOffTheCenterStopsThePointItTouchesRatherThanThe
 
   // Under an edge, one unit to the side of the centre: r = (1, -1.01, 0) once the correction lifts the body.
   const glm::vec3 edge{ 1, -1, 0 };
-  PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, edge, dt);
+  PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, edge, dt);
 
   // |r x n| is 1 and the inverse inertia 1.5, so the push that stops the point is 1 / (1 + 1.5) = 0.4 of the
   // fall, and it spins the body at 1.5 * 0.4 radians per tick. Stopping the whole fall and adding that spin
@@ -399,7 +399,7 @@ TEST(PhysicsIntegration, AStaticContactStopsABodyAlikeWhateverItsMass)
     body->setMass(mass);
     body->setFriction(0.0f);
     body->setVelocity({ 0, -1, 0 });
-    PhysicsSystem::handleCollision(*body, ground, { 0, 0.01f, 0 }, { 1, -1, 0 }, dt);
+    PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, { 0, 0.01f, 0 }, { 1, -1, 0 }, dt);
 
     return std::pair{ body->getVelocity(), spinPerTickOf(*body) };
   };

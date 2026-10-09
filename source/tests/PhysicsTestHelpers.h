@@ -4,6 +4,7 @@
 #include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/components/RigidBody.h"
+#include "objects/components/collisions/Collider.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
@@ -28,6 +29,12 @@ namespace physicsFixtures {
   // changing one produces a failure that names the default rather than a page of unexplained arithmetic.
   inline constexpr float defaultGravity = -9.81f;
   inline constexpr float defaultMass = 10.0f;
+
+  // The collider on the body's own object: the one that makes the contact when the body is not compound.
+  inline std::shared_ptr<Collider> ownColliderOf(const RigidBody& body)
+  {
+    return body.getOwner()->getComponent<Collider>(ComponentType::collider);
+  }
 
   inline std::shared_ptr<RigidBody> addBody(const std::shared_ptr<Object>& object, const bool gravity)
   {

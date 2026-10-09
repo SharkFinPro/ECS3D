@@ -293,9 +293,9 @@ void PhysicsSystem::applyImpulse(RigidBody& body, const Transform& transform, co
   applyVelocityChange(body, transform, impulse / body.getMass(), position, dt);
 }
 
-void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
-                                    const glm::vec3 minimumTranslationVector, const glm::vec3 collisionPoint,
-                                    const float dt)
+void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Collider>& collider,
+                                    const std::shared_ptr<Object>& other, const glm::vec3 minimumTranslationVector,
+                                    const glm::vec3 collisionPoint, const float dt)
 {
   if (!other)
   {
@@ -308,17 +308,17 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
     return;
   }
 
-  resolve(pairOf(body, *transform, other, normalize(minimumTranslationVector)), minimumTranslationVector,
+  resolve(pairOf(body, *transform, collider, other, normalize(minimumTranslationVector)), minimumTranslationVector,
           collisionPoint, 0.0f, dt);
 }
 
-void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Object>& other,
-                                    const glm::vec3 minimumTranslationVector,
+void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Collider>& collider,
+                                    const std::shared_ptr<Object>& other, const glm::vec3 minimumTranslationVector,
                                     const std::span<const glm::vec3> collisionPoints, const float dt)
 {
   if (collisionPoints.empty())
   {
-    handleCollision(body, other, minimumTranslationVector, glm::vec3(0), dt);
+    handleCollision(body, collider, other, minimumTranslationVector, glm::vec3(0), dt);
     return;
   }
 
@@ -336,7 +336,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   const auto normal = normalize(minimumTranslationVector);
   const auto support = collisionPoints.size() < 2 ? Support{ collisionPoints[0], false }
                                                   : findSupport(transform->getPosition(), normal, collisionPoints);
-  const auto pair = pairOf(body, *transform, other, normal);
+  const auto pair = pairOf(body, *transform, collider, other, normal);
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
@@ -353,14 +353,14 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
     // One tick of support at an edge turns a box a degree or more, so it would go past flat onto its other
     // edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
     const auto supportFace = supportFaceToward(other, normal);
-    const auto face = restingFace(body, other, supportFace);
+    const auto face = restingFace(collider, other, supportFace);
 
     if (face && findSupport(transform->getPosition(), normal, *face).underCenterOfMass &&
         turnsFlatThisTick(body, *transform, other, supportFace, dt))
     {
       layFlush(*transform, other, normal, 1.0f);
 
-      if (const auto flatFace = restingFace(body, other, supportFace))
+      if (const auto flatFace = restingFace(collider, other, supportFace))
       {
         stopSpinIntoSupport(body, *transform, other, normal, *flatFace);
         const auto faceSupport = findSupport(transform->getPosition(), normal, *flatFace);
@@ -372,11 +372,11 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Objec
   comeToRest(body, other, normal);
 }
 
-PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform, const std::shared_ptr<Object>& other,
-                                          const glm::vec3& normal)
+PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
+                                          const std::shared_ptr<Collider>& collider,
+                                          const std::shared_ptr<Object>& other, const glm::vec3& normal)
 {
-  Pair pair{ { &body, &transform, false, isSphere(body.getOwner()->getComponent<Collider>(ComponentType::collider)) },
-              {}, normal };
+  Pair pair{ { &body, &transform, false, isSphere(collider) }, {}, normal };
 
   // The other body turns about its rigid body's own center, which a child collider's owner may not be.
   const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -790,11 +790,11 @@ bool PhysicsSystem::turnsFlatThisTick(const RigidBody& body, const Transform& tr
   return turn >= tilt;
 }
 
-std::optional<std::array<glm::vec3, 4>> PhysicsSystem::restingFace(const RigidBody& body,
+std::optional<std::array<glm::vec3, 4>> PhysicsSystem::restingFace(const std::shared_ptr<Collider>& collider,
                                                                    const std::shared_ptr<Object>& other,
                                                                    const glm::vec3& supportFace)
 {
-  const auto ownBox = boxOf(body.getOwner()->getComponent<Collider>(ComponentType::collider));
+  const auto ownBox = boxOf(collider);
   const auto supportBox = boxOf(other->getComponent<Collider>(ComponentType::collider));
   if (!ownBox || !supportBox)
   {
