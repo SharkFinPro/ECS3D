@@ -58,6 +58,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   const auto lightingManager = renderer->getLightingManager();
 
   m_liveUUIDs.clear();
+  m_selectionOutlines.clear();
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -94,10 +95,11 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
           &m_selected[uuid]
         );
 
-        // The editor's selected objects get a screen-space outline in the selection color.
+        // The editor's selected objects get a screen-space outline in the selection color, submitted
+        // after the loop (see below).
         if (std::ranges::find(highlightUUIDs, uuid) != highlightUUIDs.end())
         {
-          renderer->getRenderingManager()->getRenderer3D()->renderOutline(renderObject, selectionOutlineColor);
+          m_selectionOutlines.push_back(renderObject);
         }
       }
     }
@@ -178,6 +180,14 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
       }
     }
   }
+
+  // The later submission owns an overlap in the outline mask, so selection outlines go last to win over
+  // any collider gizmo outline.
+  for (const auto& selected : m_selectionOutlines)
+  {
+    renderer->getRenderingManager()->getRenderer3D()->renderOutline(selected, selectionOutlineColor);
+  }
+  m_selectionOutlines.clear();
 
   // Release every render resource keyed by a uuid no longer in the scene (object deleted, scene
   // switched, project reloaded) - otherwise these caches grow for the life of the process, and a
