@@ -33,7 +33,7 @@
 | Path | Responsibility |
 |------|----------------|
 | `.clang-format`, `.editorconfig` | The tree's style, written down: 2-space indent, 120 columns, braces on their own line for functions and control flow. **Nothing has been reformatted to match them yet** - that is a separate one-off commit, so read them as intent, not as a description of every file. |
-| `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` and `ECS3D_COVERAGE` options, MSVC (the Microsoft Visual C++ compiler) export-all-symbols. Then `add_subdirectory(source)`. |
+| `CMakeLists.txt` (root) | Top-level config: C++23, `bin/` output when top-level, `compile_commands.json`, `include(CTest)`, the `ECS3D_SANITIZE` and `ECS3D_COVERAGE` options, `CMAKE_CXX_SCAN_FOR_MODULES` off by default, MSVC (the Microsoft Visual C++ compiler) export-all-symbols. Then `add_subdirectory(source)`. |
 | `CMakePresets.json` | Configure presets only: `ecs3d-debug`, `ecs3d-release`, `ecs3d-sanitize`, `ecs3d-coverage`, writing to `cmake-build-ecs3d-debug` / `-release` / `-sanitize` / `-coverage`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | All reusable engine libraries. `libs/CMakeLists.txt` fetches shared deps (json, glm, uuid, nfd, VulkanEngine) and the managed-assembly helpers, then adds each lib. |
 | `source/libs/log/` | `ECS3DLog` — a central log sink: `LogLevel`/`LogCategory` (+ `toString`), `LogEntry`, the `LogSink` interface, `ConsoleSink` (stdout/stderr, today's behavior), `RingBufferSink` (recent entries for the editor's console panel), `RemoteLogSink` (a bounded queue a server drains to forward its log to editor connections over the wire — see Logging below), `FileSink` (UTC-timestamped lines to a file, truncated per run), `LogFilter` (level/category toggles + a case-insensitive text search over a `LogEntry`, headless so it is testable without ImGui) and `formatEntry` (the shared `[level][category] message` rendering, prefixed with the time of day, used by the panel and its copy button), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow` allocates and attaches a console for GUI (graphical user interface) subsystem apps; `UserDataDirectory`'s `userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there); `LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink` at startup. |
@@ -74,6 +74,16 @@
 - **Runtime CWD (current working directory) = the executable's directory.** Asset paths (`assets/models/...`), managed assembly
   paths (`net/Transport/...`, `scripts/...`), and `nethost.dll` are all resolved relative to it. The
   server's `defaultAssets/` are copied into `bin/assets/` at configure time.
+- **Precompiled headers (PCH)** are set up in one block at the end of `source/CMakeLists.txt`: each
+  multi-file ECS3D target gets its own PCH of the most-included standard and third-party headers.
+  Targets differ in compile definitions (VulkanEngine adds the `GLM_FORCE_*`/`VULKAN_HPP_*` set), so
+  they do not share one. `windows.h` and GLFW stay out, since four files define macros before including
+  them. A new multi-file target adds itself to that block. Turning the `ECS3D_PRECOMPILED_HEADERS`
+  option off disables it. The `ecs3d-sanitize` preset does, so CI still catches a missing include in the
+  libraries the test suite builds, though not in render, editor, net, scripting or the apps. **Still
+  include what you use** - the PCH is not a substitute.
+- **Module scanning is off** (`CMAKE_CXX_SCAN_FOR_MODULES`, root `CMakeLists.txt`). Nothing uses C++20
+  modules, and on MSVC the scan cost about an eighth of a clean build.
 - **Source lists are explicit** in each lib's `CMakeLists.txt` (not globs). **Add new engine files to
   the owning library's list.**
 - **Test fixtures** live in `source/tests/TestScene.h` (namespace `fixtures`). `fixtures::Scene`
