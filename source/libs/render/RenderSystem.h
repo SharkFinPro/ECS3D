@@ -7,10 +7,12 @@
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 #include <uuid.h>
 
 namespace vke {
   class PointLight;
+  class RenderObject;
   class SpotLight;
   class VulkanEngine;
 }
@@ -20,8 +22,7 @@ class GpuAssetCache;
 
 class RenderSystem {
 public:
-  // Every object in highlightUUIDs (the editor's selected objects) is re-drawn with the objectHighlight
-  // pipeline. The client passes none.
+  // Every object in highlightUUIDs (the editor's selected objects) is outlined. The client passes none.
   void variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                       std::span<const uuids::uuid> highlightUUIDs = {});
 
@@ -103,6 +104,8 @@ private:
   // seen this frame, then prunes m_lights/m_selected/GpuAssetCache's per-object caches of any uuid
   // that is no longer present (object deleted, scene switched, project reloaded).
   std::unordered_set<uuids::uuid> m_liveUUIDs;
+
+  std::vector<std::shared_ptr<vke::RenderObject>> m_selectionOutlines;
 };
 
 

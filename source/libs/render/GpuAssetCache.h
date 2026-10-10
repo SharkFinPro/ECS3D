@@ -38,8 +38,8 @@ public:
 
   // A debug render object for a collider's shape (a path-loaded cube/sphere, white, no specular), keyed
   // per collider OWNER and rebuilt if the model path changes. The mesh and texture are loaded once and
-  // shared; returns nullptr (logged once) if either fails to load. The RenderSystem draws it with the
-  // objectHighlight pipeline when the collider's render flag is on.
+  // shared; returns nullptr (logged once) if either fails to load. The RenderSystem outlines it
+  // when the collider's render flag is on.
   std::shared_ptr<vke::RenderObject> getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath);
 
   // Drops the per-owner render object / collider gizmo for any uuid not in liveUUIDs. Called once per

@@ -7,6 +7,7 @@ add_library(${PROJECT_NAME}
   GpuAssetCache.h
   InputCapture.cpp
   InputCapture.h
+  OutlineColors.h
   SharedAssetLoads.h
 )
 
@@ -24,5 +25,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 )
 
 # RenderSystem is complete: ModelRenderer drawing (via GpuAssetCache), LightRenderer point/spot light
-# submission (cached per object), the pick-feedback bool + selected-object highlight, and the collider
-# debug gizmo (the shape drawn with the objectHighlight pipeline when "Render Collider" is on).
+# submission (cached per object), the pick-feedback bool + selected-object outline, and the collider
+# debug gizmo (the shape outlined when "Render Collider" is on).
