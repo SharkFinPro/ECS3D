@@ -78,7 +78,7 @@
   multi-file ECS3D target gets its own PCH of the most-included standard and third-party headers.
   Targets differ in compile definitions (VulkanEngine adds the `GLM_FORCE_*`/`VULKAN_HPP_*` set), so
   they do not share one. `windows.h` and GLFW stay out, since four files define macros before including
-  them. `ECS3D_PRECOMPILED_HEADERS=OFF` disables it; the `ecs3d-sanitize` preset does, so CI still
+  them. Turning the `ECS3D_PRECOMPILED_HEADERS` option off disables it; the `ecs3d-sanitize` preset does, so CI still
   catches a file missing an include of its own. **Still include what you use** - the PCH is not a
   substitute.
 - **Source lists are explicit** in each lib's `CMakeLists.txt` (not globs). **Add new engine files to
