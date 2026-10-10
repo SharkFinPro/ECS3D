@@ -35,6 +35,7 @@ add_executable(${PROJECT_NAME}
   UnsavedChangesTest.cpp
   AssetFilterTest.cpp
   ObjectTreeOrderTest.cpp
+  OutlineColorsTest.cpp
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp

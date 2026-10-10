@@ -20,8 +20,7 @@ class GpuAssetCache;
 
 class RenderSystem {
 public:
-  // Every object in highlightUUIDs (the editor's selected objects) is re-drawn with the objectHighlight
-  // pipeline. The client passes none.
+  // Every object in highlightUUIDs (the editor's selected objects) is outlined. The client passes none.
   void variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
                       std::span<const uuids::uuid> highlightUUIDs = {});
 

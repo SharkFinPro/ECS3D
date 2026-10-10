@@ -269,6 +269,6 @@ void registerColliderEditors(ComponentEditor& componentEditor)
     return edited;
   });
 
-  // The collider debug gizmo (the shape drawn with the objectHighlight pipeline when "Render Collider"
+  // The collider debug gizmo (the shape drawn as an outline when "Render Collider"
   // is on) is handled by ECS3DRender's RenderSystem via GpuAssetCache::getColliderGizmo.
 }
