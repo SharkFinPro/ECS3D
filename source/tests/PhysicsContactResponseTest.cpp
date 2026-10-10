@@ -459,11 +459,11 @@ namespace {
 
     if (manifold)
     {
-      PhysicsSystem::handleCollision(*body, ground, minimumTranslationVector, flatUnderside, dt);
+      PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, minimumTranslationVector, flatUnderside, dt);
     }
     else
     {
-      PhysicsSystem::handleCollision(*body, ground, minimumTranslationVector, glm::vec3{ 0, -0.5f, 0 }, dt);
+      PhysicsSystem::handleCollision(*body, ownColliderOf(*body), ground, minimumTranslationVector, glm::vec3{ 0, -0.5f, 0 }, dt);
     }
 
     return { transformOf(box)->getPosition(), body->getVelocity(), body->getAngularVelocity() };
