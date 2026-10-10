@@ -239,7 +239,7 @@ TEST(PhysicsIntegration, TwoBodiesClosingOnEachOtherAreSeparatedAndSlowed)
   // Both bodies are corrected, in opposite directions - unlike the static case, where only the one with
   // a body moves. Equal masses split the overlap evenly. The contact is placed along the normal so the
   // impulse produces no torque of its own.
-  PhysicsSystem::handleCollision(*leftBody, right, { 1, 0, 0 }, { 2, 0, 0 }, dt);
+  PhysicsSystem::handleCollision(*leftBody, ownColliderOf(*leftBody), right, { 1, 0, 0 }, { 2, 0, 0 }, dt);
 
   expectNear("left position", transformOf(left)->getPosition(), { 0.5f, 0, 0 });
   expectNear("right position", transformOf(right)->getPosition(), { -0.5f, 0, 0 });
@@ -267,7 +267,7 @@ TEST(PhysicsIntegration, TwoBodiesAlreadyMovingApartAreSeparatedButNotSlowed)
   leftBody->setVelocity({ 1, 0, 0 });
   right->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity({ -1, 0, 0 });
 
-  PhysicsSystem::handleCollision(*leftBody, right, { 1, 0, 0 }, { 2, 0, 0 }, dt);
+  PhysicsSystem::handleCollision(*leftBody, ownColliderOf(*leftBody), right, { 1, 0, 0 }, { 2, 0, 0 }, dt);
 
   // Still pushed apart - an overlap is an overlap - but no impulse to either body, because they are
   // already separating and adding one would fling apart two bodies that were resolving themselves.
@@ -291,7 +291,7 @@ TEST(PhysicsIntegration, ALightBodyHittingAHeavyOneReboundsWhileTheHeavyOneBarel
   lightBody->setVelocity({ 1, 0, 0 });
 
   // Overlapping by a tenth, touching on the line between the centers.
-  PhysicsSystem::handleCollision(*lightBody, heavy, { -0.1f, 0, 0 }, { 1, 0, 0 }, dt);
+  PhysicsSystem::handleCollision(*lightBody, ownColliderOf(*lightBody), heavy, { -0.1f, 0, 0 }, { 1, 0, 0 }, dt);
 
   // An elastic collision: (1 - 9) / 10 of the light body's speed comes back, and 2 / 10 of it goes on in the
   // heavy one. Momentum is kept.

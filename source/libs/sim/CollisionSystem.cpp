@@ -279,7 +279,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
 
     if (const auto contact = contactWith(collider, collidedObjects[0]))
     {
-      PhysicsSystem::handleCollision(*rigidBody, collidedObjects[0], contact->minimumTranslationVector,
+      PhysicsSystem::handleCollision(*rigidBody, collider, collidedObjects[0], contact->minimumTranslationVector,
                                      contact->contactPoints(), dt);
     }
 
@@ -326,7 +326,7 @@ void CollisionSystem::handleCollisions(const std::shared_ptr<RigidBody>& rigidBo
       continue;
     }
 
-    PhysicsSystem::handleCollision(*rigidBody, scoredContact.object, contact->minimumTranslationVector,
+    PhysicsSystem::handleCollision(*rigidBody, collider, scoredContact.object, contact->minimumTranslationVector,
                                    contact->contactPoints(), dt);
     bodyMoved = true;
   }
