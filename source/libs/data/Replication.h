@@ -2,6 +2,7 @@
 #define REPLICATION_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -194,6 +195,10 @@ SceneEditResult applySceneEdit(ObjectManager& objectManager, const nlohmann::jso
 // The sceneEdit message body is the edit as JSON text. nullopt when it does not parse (a truncated payload
 // never does); a valid document of any shape is returned for applySceneEdit to judge.
 [[nodiscard]] std::optional<nlohmann::json> parseSceneEditMessage(const net::Message& message);
+
+// An "index" field of a sceneEdit: any non-negative integer json number that fits std::size_t, however it
+// was built (unsigned or signed). nullopt for a missing, non-integer, negative or out-of-range value.
+[[nodiscard]] std::optional<std::size_t> parseIndexField(const nlohmann::json& indexField);
 
 // Runtime spawn/destroy replication. Unlike the editor's structural edits (which re-snapshot), a script
 // spawning or destroying an object at runtime replicates incrementally: the server broadcasts one packed

@@ -14,6 +14,7 @@
 #include <Protocol.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -923,6 +924,69 @@ TEST(RecordEdits, ASingleNonBatchOpYieldsAOneElementVectorEqualToItsOwnCommand)
   // A non-batch op with nothing to record gives nothing, not an empty vector.
   EXPECT_FALSE(edits::commandsForSceneEdit(replication::buildRenameObject(someOtherUUID(), "Renamed"),
                                            *scene.objectManager).has_value());
+}
+
+namespace
+{
+  nlohmann::json signedReorder(const std::shared_ptr<Object>& object, const int index)
+  {
+    return {
+      { "op", "reorderObject" },
+      { "object", uuids::to_string(object->getUUID()) },
+      { "index", index }
+    };
+  }
+}
+
+TEST(RecordEdits, AReorderWithASignedIndexIsRecordedLikeAnUnsignedOne)
+{
+  const auto scene = makeScene();
+  const auto a = addChildObject(scene, "A", scene.object);
+  addChildObject(scene, "B", scene.object);
+  const auto parentUUID = scene.object->getUUID();
+
+  const auto edit = signedReorder(a, 1);
+  ASSERT_TRUE(edit.at("index").is_number_integer());
+  ASSERT_FALSE(edit.at("index").is_number_unsigned());
+
+  const auto command = edits::commandForSceneEdit(edit, *scene.objectManager);
+  ASSERT_TRUE(command.has_value());
+  EXPECT_EQ(*command, edits::EditCommand::reorderObject(a->getUUID(), parentUUID, 0, std::nullopt, 1));
+}
+
+TEST(RecordEdits, ANegativeSignedReorderIndexIsRefusedByTheRecorderAndTheApplier)
+{
+  const auto scene = makeScene();
+  const auto a = addChildObject(scene, "A", scene.object);
+
+  EXPECT_TRUE(edits::commandForSceneEdit(signedReorder(a, 0), *scene.objectManager).has_value());
+
+  const auto negative = signedReorder(a, -1);
+  EXPECT_FALSE(edits::commandForSceneEdit(negative, *scene.objectManager).has_value());
+  EXPECT_NE(replication::applySceneEdit(*scene.objectManager, negative), replication::SceneEditResult::applied);
+}
+
+TEST(RecordEdits, ABatchWithASignedIndexReorderIsRecorded)
+{
+  const auto scene = makeScene();
+  const auto a = addChildObject(scene, "A", scene.object);
+  addChildObject(scene, "B", scene.object);
+
+  const auto batch = replication::buildBatch({ signedReorder(a, 1) });
+  const auto recorded = edits::commandsForSceneEdit(batch, *scene.objectManager);
+  ASSERT_TRUE(recorded.has_value());
+  EXPECT_EQ(recorded->size(), 1u);
+}
+
+TEST(RecordEdits, ParseIndexFieldAcceptsNonNegativeIntegersOnly)
+{
+  EXPECT_EQ(replication::parseIndexField(nlohmann::json(std::uint64_t{ 3 })), std::optional<std::size_t>(3));
+  EXPECT_EQ(replication::parseIndexField(nlohmann::json(3)), std::optional<std::size_t>(3));
+  EXPECT_EQ(replication::parseIndexField(nlohmann::json(0)), std::optional<std::size_t>(0));
+  EXPECT_FALSE(replication::parseIndexField(nlohmann::json(-1)).has_value());
+  EXPECT_FALSE(replication::parseIndexField(nlohmann::json(1.5)).has_value());
+  EXPECT_FALSE(replication::parseIndexField(nlohmann::json("1")).has_value());
+  EXPECT_FALSE(replication::parseIndexField(nlohmann::json()).has_value());
 }
 
 TEST(RecordEdits, ABatchThatCannotBeFullyRecordedIsNotRecorded)
