@@ -425,6 +425,7 @@ against bound/notYetBound/nativeOnly; a new enumerator with no row fails the bui
 without deciding its scripting story can't go unnoticed. Script field edits are validated
 (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
 refused with a warning and does not fault the script.
+A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
 A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about
 once and left unattached until the next hot reload or until its Script component is replaced (a stop
 rebuild or scene switch), which retries it and warns again if it still fails. Field read-back skips a

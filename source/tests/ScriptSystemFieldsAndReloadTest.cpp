@@ -235,6 +235,35 @@ namespace {
     EXPECT_EQ(count("reload"), 1);
   }
 
+  TEST_F(ScriptSystemHotReloadTest, ACompileErrorKeepsTheAttachedInstancesAndWaitsForTheNextEdit)
+  {
+    const auto a = addScriptedObject("A", { "Mover" });
+    reloading.start(manager());
+    ASSERT_EQ(count(call("start", a, "Mover")), 1);
+    state.reloadReplaces = false;
+    writeScript("Broken.cs");
+
+    reloading.fixedUpdate(manager(), 0.6f);
+
+    EXPECT_EQ(count("reload"), 1);
+    EXPECT_EQ(count(call("attach", a, "Mover")), 1);
+    EXPECT_EQ(count(call("start", a, "Mover")), 1);
+    EXPECT_EQ(count(call("detach", a, "Mover")), 0);
+    EXPECT_EQ(count(call("fixed", a, "Mover")), 1);
+
+    reloading.fixedUpdate(manager(), 0.6f);
+
+    EXPECT_EQ(count("reload"), 1);
+
+    state.reloadReplaces = true;
+    writeScript("Fixed.cs");
+    reloading.fixedUpdate(manager(), 0.6f);
+
+    EXPECT_EQ(count("reload"), 2);
+    EXPECT_EQ(count(call("attach", a, "Mover")), 2);
+    EXPECT_EQ(count(call("start", a, "Mover")), 2);
+  }
+
   TEST_F(ScriptSystemHotReloadTest, AFailedReloadKeepsTheInstancesAndTriesAgainOnTheNextInterval)
   {
     const auto a = addScriptedObject("A", { "Mover" });

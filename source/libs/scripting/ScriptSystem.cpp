@@ -353,15 +353,22 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
     // refreshed blob back in.
     syncFieldsToData(objectManager);
 
-    m_engine->reloadScripts();
+    const bool replaced = m_engine->reloadScripts();
+
+    // Recorded even on a failed compile so the same broken sources wait for the next edit; the catch below
+    // keeps the old snapshot, since a thrown reload says nothing about the sources and is worth retrying.
+    m_scriptsSnapshot = std::move(now);
+
+    if (!replaced)
+    {
+      return;
+    }
 
     m_attached.clear();
     m_attachedIndex.clear();
     m_fieldCache.clear();
     m_started.clear();
     m_unresolved.clear();
-
-    m_scriptsSnapshot = std::move(now);
 
     Log::info(LogCategory::script, "Reload successful.");
   }
