@@ -37,7 +37,7 @@
       "name": "ecs3d-sanitize",
       "inherits": "ecs3d-base",
       "displayName": "ECS3D Sanitized",
-      "description": "Debug plus AddressSanitizer, and UndefinedBehaviorSanitizer where the toolchain has it (Clang and GCC; MSVC ships ASan only). Aimed at the headless test suite; see the README for why the apps are a different matter. Precompiled headers are off, so the CI rows on this preset also catch a file that leans on the PCH for an include it does not make itself. Writes to cmake-build-ecs3d-sanitize.",
+      "description": "Debug plus AddressSanitizer, and UndefinedBehaviorSanitizer where the toolchain has it (Clang and GCC; MSVC ships ASan only). Aimed at the headless test suite; see the README for why the apps are a different matter. Precompiled headers are off, so the CI rows on this preset also catch a suite library file that leans on the PCH for an include it does not make itself. Writes to cmake-build-ecs3d-sanitize.",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ECS3D_SANITIZE": "ON",
