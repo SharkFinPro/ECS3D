@@ -7,6 +7,7 @@ add_library(${PROJECT_NAME}
   GpuAssetCache.h
   InputCapture.cpp
   InputCapture.h
+  SharedAssetLoads.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

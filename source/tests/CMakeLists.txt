@@ -132,6 +132,7 @@ add_executable(${PROJECT_NAME}
   WireTruncationFixtures.h
   MessageQueueTest.cpp
   TransportLogTest.cpp
+  SharedAssetLoadsTest.cpp
   SmokeTest.cpp
   TestScene.cpp
   TestPrinters.h
@@ -200,6 +201,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/editor
+  ${CMAKE_CURRENT_SOURCE_DIR}/../libs/render
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
