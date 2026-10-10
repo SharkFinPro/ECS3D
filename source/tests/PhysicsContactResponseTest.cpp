@@ -437,3 +437,59 @@ TEST(PhysicsIntegration, AContactUnderTheCenterIsNotSpunUpToChaseATurningSupport
 
   EXPECT_LT(glm::length(body->getAngularVelocity()), 1e-3f);
 }
+
+namespace {
+  struct ZeroMtvResult
+  {
+    glm::vec3 position;
+    glm::vec3 velocity;
+    glm::vec3 angularVelocity;
+  };
+
+  // A falling, spinning body touching a ground, answered through either overload.
+  ZeroMtvResult respondTo(const glm::vec3& minimumTranslationVector, const bool manifold)
+  {
+    const auto scene = makeScene();
+    const auto box = addObject(scene, "Box", { 0, 0, 0 });
+    const auto body = addBody(box, false);
+    const auto ground = addObject(scene, "Ground", { 0, -1, 0 });
+
+    body->setVelocity({ 0, -1, 0 });
+    body->setAngularVelocity({ 10, 0, 0 });
+
+    if (manifold)
+    {
+      PhysicsSystem::handleCollision(*body, ground, minimumTranslationVector, flatUnderside, dt);
+    }
+    else
+    {
+      PhysicsSystem::handleCollision(*body, ground, minimumTranslationVector, glm::vec3{ 0, -0.5f, 0 }, dt);
+    }
+
+    return { transformOf(box)->getPosition(), body->getVelocity(), body->getAngularVelocity() };
+  }
+
+  void expectUnchangedAndFinite(const ZeroMtvResult& result)
+  {
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      EXPECT_TRUE(std::isfinite(result.position[axis]));
+      EXPECT_TRUE(std::isfinite(result.velocity[axis]));
+      EXPECT_TRUE(std::isfinite(result.angularVelocity[axis]));
+    }
+
+    expectNear("position", result.position, { 0, 0, 0 });
+    expectNear("velocity", result.velocity, { 0, -1, 0 });
+    expectNear("angular velocity", result.angularVelocity, { 10, 0, 0 });
+  }
+}
+
+TEST(PhysicsIntegration, AZeroTranslationVectorLeavesTheBodyUntouchedInBothOverloads)
+{
+  expectUnchangedAndFinite(respondTo({ 0, 0, 0 }, false));
+  expectUnchangedAndFinite(respondTo({ 0, 0, 0 }, true));
+
+  // A real translation vector does answer the contact.
+  EXPECT_GT(respondTo({ 0, 0.01f, 0 }, false).velocity.y, -1.0f);
+  EXPECT_GT(respondTo({ 0, 0.01f, 0 }, true).velocity.y, -1.0f);
+}

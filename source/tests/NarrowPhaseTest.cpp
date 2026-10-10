@@ -304,3 +304,42 @@ TEST(NarrowPhase, TheCheapPredicateAgreesWithTheFullOneOnSpheres)
   moveTo(secondObject, { 2.0f, 0, 0 });
   EXPECT_FALSE(collisions::intersects(*first, *second));
 }
+
+TEST(NarrowPhase, ASphereOnANegativelyScaledObjectKeepsAPositiveRadius)
+{
+  const auto [uniformObject, uniform] = makeCollider<SphereCollider>({ 0, 0, 0 }, { -2, -2, -2 });
+  const auto [mixedObject, mixed] = makeCollider<SphereCollider>({ 0, 0, 0 }, { -3, 1, 1 });
+  const auto [positiveObject, positive] = makeCollider<SphereCollider>({ 0, 0, 0 }, { 2, 2, 2 });
+
+  EXPECT_NEAR(uniform->getRadius(), positive->getRadius(), tolerance);
+  EXPECT_NEAR(uniform->getRadius(), 2.0f * uniform->getLocalRadius(), tolerance);
+  EXPECT_NEAR(mixed->getRadius(), 3.0f * mixed->getLocalRadius(), tolerance);
+}
+
+TEST(NarrowPhase, AMirroredSphereHasAnOrderedBoundingBox)
+{
+  const auto [object, sphere] = makeCollider<SphereCollider>({ 0, 0, 0 }, { -2, -2, -2 });
+
+  const auto& box = sphere->getBoundingBox();
+
+  EXPECT_LT(box.minX, box.maxX);
+  EXPECT_LT(box.minY, box.maxY);
+  EXPECT_LT(box.minZ, box.maxZ);
+  EXPECT_NEAR(box.maxX - box.minX, 4.0f * sphere->getLocalRadius(), tolerance);
+}
+
+TEST(NarrowPhase, MirroredSpheresCollideOnlyWhenTheyOverlap)
+{
+  const auto [firstObject, first] = makeCollider<SphereCollider>({ 0, 0, 0 }, { -1, -1, -1 });
+  const auto [secondObject, second] = makeCollider<SphereCollider>({ 10, 0, 0 }, { -1, -1, -1 });
+
+  EXPECT_FALSE(collisions::intersects(*first, *second));
+  EXPECT_FALSE(collisions::findContact(*first, *second).has_value());
+
+  moveTo(secondObject, { 1.5f, 0, 0 });
+  EXPECT_TRUE(collisions::intersects(*first, *second));
+
+  const auto contact = collisions::findContact(*first, *second);
+  ASSERT_TRUE(contact.has_value());
+  EXPECT_NEAR(contact->depth(), 0.5f, tolerance);
+}

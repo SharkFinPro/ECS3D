@@ -36,6 +36,7 @@ namespace scriptSystemFixtures {
     std::map<std::string, bool> bools;
     std::map<std::string, glm::vec3> vectors;
     bool reloadThrows = false;
+    bool reloadReplaces = true;
     int created = 0;
   };
 
@@ -50,7 +51,7 @@ namespace scriptSystemFixtures {
       : m_state(state)
     {}
 
-    void reloadScripts() const override
+    [[nodiscard]] bool reloadScripts() const override
     {
       m_state.calls.emplace_back("reload");
 
@@ -58,6 +59,8 @@ namespace scriptSystemFixtures {
       {
         throw std::runtime_error("compile failed");
       }
+
+      return m_state.reloadReplaces;
     }
 
     [[nodiscard]] bool attachScript(const char* uuid, const char* className) const override

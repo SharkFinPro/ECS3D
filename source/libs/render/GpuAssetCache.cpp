@@ -92,8 +92,12 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::
     return it->second.renderObject;
   }
 
-  const auto model = m_renderer->getAssetManager()->loadModel(modelPath.c_str());
-  const auto white = m_renderer->getAssetManager()->loadTexture("assets/textures/white.png");
+  const auto model = m_gizmoModels.get(modelPath, [this, &modelPath] {
+    return m_renderer->getAssetManager()->loadModel(modelPath.c_str());
+  });
+  const auto white = m_gizmoTextures.get("assets/textures/white.png", [this] {
+    return m_renderer->getAssetManager()->loadTexture("assets/textures/white.png");
+  });
 
   if (!model || !white)
   {

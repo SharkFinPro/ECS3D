@@ -19,7 +19,7 @@ public:
   void init(const std::string& bridgeDir,
             const std::string& scriptDir);
 
-  void reloadScripts() const override;
+  [[nodiscard]] bool reloadScripts() const override;
 
   // True when a managed instance now exists under the pair; false when the class is missing (renamed,
   // deleted, or the user scripts failed to compile) or its constructor threw.
@@ -105,7 +105,7 @@ private:
   using FixedUpdateFn = void(*)(const char*, const char*, float);
   using VariableUpdateFn = void(*)(const char*, const char*);
   using OnCollisionFn = void(*)(const char*, const char*, const char*, int);
-  using VoidFn = void(*)();
+  using ReloadFn = bool(*)();
   using InitBridgeFn = void(*)(const char*);
 
   using GetExposedFieldsFn = char*(*)(const char*, const char*);
@@ -132,7 +132,7 @@ private:
   FixedUpdateFn m_fixedUpdate = nullptr;
   VariableUpdateFn m_variableUpdate = nullptr;
   OnCollisionFn m_onCollision = nullptr;
-  VoidFn m_reload = nullptr;
+  ReloadFn m_reload = nullptr;
 
   GetExposedFieldsFn m_getExposedFields = nullptr;
   FreeStringFn m_freeString = nullptr;

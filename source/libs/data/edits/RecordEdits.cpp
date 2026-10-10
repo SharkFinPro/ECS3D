@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -254,14 +255,15 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
     }
 
     const auto indexField = edit.find("index");
-    if (indexField == edit.end() || !indexField->is_number_unsigned())
+    const auto afterIndex = indexField == edit.end() ? std::nullopt : replication::parseIndexField(*indexField);
+    if (!afterIndex.has_value())
     {
       return std::nullopt;
     }
 
     return EditCommand::reorderObject(objectUUID.value(), uuidOf(object->getParent()),
                                       indexOfSibling(view, object), afterParentUUID,
-                                      indexField->get<std::size_t>());
+                                      afterIndex.value());
   }
 
   if (op == "addComponent")
