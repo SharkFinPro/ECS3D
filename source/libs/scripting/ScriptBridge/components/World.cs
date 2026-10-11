@@ -180,6 +180,14 @@ public static unsafe class World
     public static bool tryGetScript(string uuid, string className, out ScriptHandle script)
         => Bridge.TryFindScript(uuid, className, out script);
 
+    // The current scene's scene script of type T. Like tryGetScript, a call into it is not fault-gated.
+    public static bool tryGetSceneScript<T>(out T script) where T : SceneScript
+    {
+        var found = Bridge.FindSceneScript<T>();
+        script = found!;
+        return found != null;
+    }
+
     private static bool has(delegate* unmanaged<IntPtr, bool> nativeHas, string uuid)
     {
         var uuidPtr = Marshal.StringToCoTaskMemUTF8(uuid);
