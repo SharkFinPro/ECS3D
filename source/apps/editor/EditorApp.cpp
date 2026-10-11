@@ -25,6 +25,7 @@
 #include <AssetReferences.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
+#include <SceneScriptsPanel.h>
 #include <RingBufferSink.h>
 #include <SettingsStore.h>
 #include <Keybinds.h>
@@ -109,6 +110,7 @@ EditorApp::EditorApp(LaunchOptions options)
   setupObjectGUIManager();
   setupInspectorPanel();
   setupAssetBrowser();
+  setupSceneScriptsPanel();
   setupSaveUI();
   setupViewportGizmo();
 
@@ -223,6 +225,14 @@ void EditorApp::setupInspectorPanel()
                                                        const std::string& body) {
     onUpdatePrefabBody(assetUUID, name, body);
   });
+}
+
+void EditorApp::setupSceneScriptsPanel()
+{
+  m_sceneScriptsPanel = std::make_unique<SceneScriptsPanel>();
+  m_sceneScriptsPanel->setAssetRegistry(m_assetRegistry.get());
+  m_sceneScriptsPanel->setSceneManager(m_sceneManager.get());
+  m_sceneScriptsPanel->setSceneEditCallback([this](const nlohmann::json& edit) { onSceneEdit(edit); });
 }
 
 void EditorApp::setupAssetBrowser()

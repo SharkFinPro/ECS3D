@@ -35,6 +35,9 @@ add_library(${PROJECT_NAME}
   SettingsPanel.h
   ConsolePanel.cpp
   ConsolePanel.h
+  SceneScriptsPanel.cpp
+  SceneScriptsPanel.h
+  SceneScriptsPanelLogic.h
   AssetNaming.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h

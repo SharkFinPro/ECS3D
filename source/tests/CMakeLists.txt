@@ -103,6 +103,7 @@ add_executable(${PROJECT_NAME}
   SceneScriptListTest.cpp
   SceneScriptEditTest.cpp
   SceneScriptUndoTest.cpp
+  SceneScriptsPanelTest.cpp
   AssetNamingTest.cpp
   PrefabTest.cpp
   FixedTimestepTest.cpp

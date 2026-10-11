@@ -10,6 +10,7 @@
 #include <SaveUI.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
+#include <SceneScriptsPanel.h>
 #include <SettingsStore.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/imGui/ImGuiInstance.h>
@@ -34,6 +35,7 @@ void EditorApp::updateGui()
   m_objectGUIManager->setEditable(m_serverEditable);
   m_inspectorPanel->setEditable(m_serverEditable);
   m_assetBrowser->setEditable(m_serverEditable);
+  m_sceneScriptsPanel->setEditable(m_serverEditable);
   m_saveUI->setEditable(m_serverEditable);
 
   displayMenuBar();
@@ -56,6 +58,8 @@ void EditorApp::updateGui()
 
   // Draws nothing while closed. Preferences are local, so it needs no scene and no server.
   m_settingsPanel->displayGui();
+
+  m_sceneScriptsPanel->displayGui();
 
   m_consolePanel->displayGui();
 
@@ -137,6 +141,18 @@ void EditorApp::displayWindowMenu() const
       }
     }
 
+    if (ImGui::MenuItem("Scene Scripts", nullptr, m_sceneScriptsPanel->isOpen()))
+    {
+      if (m_sceneScriptsPanel->isOpen())
+      {
+        m_sceneScriptsPanel->setOpen(false);
+      }
+      else
+      {
+        m_sceneScriptsPanel->open();
+      }
+    }
+
     if (ImGui::MenuItem("Console", nullptr, m_consolePanel->isOpen()))
     {
       if (m_consolePanel->isOpen())
@@ -180,6 +196,7 @@ void EditorApp::applyDockLocations() const
   gui->dockLeft("Objects");
 
   gui->dockRight("Inspector");
+  gui->dockRight("Scene Scripts");
 
   gui->dockTop("Scene Status");
 
@@ -192,6 +209,7 @@ void EditorApp::applyDockLocations() const
   // enough that the default sizes fall below these, the floors win over the default layout.
   const ImVec2 objectsMinimumSize{260.0f, 0.0f};
   const ImVec2 inspectorMinimumSize{310.0f, 0.0f};
+  const ImVec2 sceneScriptsMinimumSize{310.0f, 0.0f};
   const ImVec2 sceneStatusMinimumSize{0.0f, 88.0f};
   const ImVec2 assetsMinimumSize{0.0f, 200.0f};
   const ImVec2 projectErrorsMinimumSize{0.0f, 90.0f};
@@ -199,6 +217,7 @@ void EditorApp::applyDockLocations() const
 
   gui->setDockedWindowMinimumSize("Objects", objectsMinimumSize);
   gui->setDockedWindowMinimumSize("Inspector", inspectorMinimumSize);
+  gui->setDockedWindowMinimumSize("Scene Scripts", sceneScriptsMinimumSize);
   gui->setDockedWindowMinimumSize("Scene Status", sceneStatusMinimumSize);
   gui->setDockedWindowMinimumSize("Assets", assetsMinimumSize);
   gui->setDockedWindowMinimumSize("Project Errors", projectErrorsMinimumSize);
