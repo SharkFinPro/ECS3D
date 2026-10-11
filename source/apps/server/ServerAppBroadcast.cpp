@@ -28,8 +28,8 @@ void ServerApp::broadcastSnapshot() const
   {
     try
     {
-      m_scriptSystem->attachAll(*scene->getObjectManager());
-      m_scriptSystem->syncFieldsToData(*scene->getObjectManager());
+      m_scriptSystem->attachAll(*scene);
+      m_scriptSystem->syncFieldsToData(*scene);
     }
     catch (const std::exception& e)
     {
