@@ -5,6 +5,7 @@
 #include <objects/components/collisions/SphereCollider.h>
 #include <objects/components/Transform.h>
 #include <objects/Object.h>
+#include <glm/common.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <array>
@@ -34,7 +35,7 @@ struct BoxGeometry
 BoxGeometry boxGeometryOf(Collider& collider)
 {
   const auto rotation = glm::radians(collider.getRotation());
-  const auto scale = collider.getScale();
+  const auto scale = glm::abs(collider.getScale());
 
   const auto rotationMatrix = glm::mat3(
     glm::rotate(glm::mat4(1.0f), rotation.z, { 0, 0, 1 }) *

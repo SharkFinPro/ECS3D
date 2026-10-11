@@ -2,6 +2,7 @@
 #define SAVEUI_H
 
 #include <VulkanEngine/components/window/Window.h>
+#include "UnsavedChanges.h"
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -100,11 +101,7 @@ private:
 
   vke::EventListener<vke::DropEvent> m_dropEventListener;
 
-  // Bumped by markEdited(), snapshotted into m_savedEditCount on a successful save/load/new. Dirty
-  // whenever the two disagree - the simplest signal available since the project has no version counter
-  // of its own (AssetRegistry's tracks asset content only, not scene edits).
-  size_t m_editCount = 0;
-  size_t m_savedEditCount = 0;
+  UnsavedChanges m_unsavedChanges;
 
   PendingDiscard m_pendingDiscard = PendingDiscard::none;
   std::string m_pendingLoadPath;

@@ -10,6 +10,8 @@ add_library(${PROJECT_NAME}
   LightGizmoVisibility.h
   InputCapture.cpp
   InputCapture.h
+  OutlineColors.h
+  SharedAssetLoads.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -26,6 +28,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 )
 
 # RenderSystem is complete: ModelRenderer drawing (via GpuAssetCache), LightRenderer point/spot light
-# submission (cached per object), the pick-feedback bool + selected-object highlight, and the collider
-# debug gizmo (the shape drawn with the objectHighlight pipeline when "Render Collider" is on), and the
-# editor-only light gizmo (a camera-facing, constant-screen-size billboard per light, via drawLightGizmos).
+# submission (cached per object), the pick-feedback bool + selected-object outline, the collider
+# debug gizmo (the shape outlined when "Render Collider" is on), and the editor-only light gizmo (a
+# camera-facing, constant-screen-size billboard per light, via drawLightGizmos).

@@ -1,6 +1,7 @@
 #include "RenderSystem.h"
 #include "GpuAssetCache.h"
 #include "Billboard.h"
+#include "OutlineColors.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/CameraSelection.h>
@@ -12,6 +13,7 @@
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -64,6 +66,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   }
 
   m_liveUUIDs.clear();
+  m_selectionOutlines.clear();
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -100,10 +103,11 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
           &m_selected[uuid]
         );
 
-        // The editor's selected objects get a second pass with the highlight pipeline (an outline).
+        // The editor's selected objects get a screen-space outline in the selection color, submitted
+        // after the loop (see below).
         if (std::ranges::find(highlightUUIDs, uuid) != highlightUUIDs.end())
         {
-          renderer->getRenderingManager()->getRenderer3D()->renderObject(renderObject, vke::PipelineType::objectHighlight);
+          m_selectionOutlines.push_back(renderObject);
         }
       }
     }
@@ -160,8 +164,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
       }
     }
 
-    // Collider debug gizmo: draw the collider's shape (offset by its local transform) with the
-    // highlight pipeline when its render flag is on.
+    // Collider debug gizmo: draw the collider's shape (offset by its local transform) as an
+    // outline only, so the object inside stays visible, when its render flag is on.
     if (const auto box = object->getComponent<BoxCollider>(ComponentType::collider); box && box->getRenderCollider())
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/cube_1x1x1.glb"))
@@ -170,7 +174,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         gizmo->setScale(box->getScale());
         gizmo->setOrientationEuler(box->getRotation());
 
-        renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
+        renderer->getRenderingManager()->getRenderer3D()->renderOutline(gizmo, colliderOutlineColor);
       }
     }
     else if (const auto sphere = object->getComponent<SphereCollider>(ComponentType::collider); sphere && sphere->getRenderCollider())
@@ -180,10 +184,18 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
         gizmo->setPosition(sphere->getPosition());
         gizmo->setScale(glm::vec3(sphere->getRadius()));
 
-        renderer->getRenderingManager()->getRenderer3D()->renderObject(gizmo, vke::PipelineType::objectHighlight);
+        renderer->getRenderingManager()->getRenderer3D()->renderOutline(gizmo, colliderOutlineColor);
       }
     }
   }
+
+  // The later submission owns an overlap in the outline mask, so selection outlines go last to win over
+  // any collider gizmo outline.
+  for (const auto& selected : m_selectionOutlines)
+  {
+    renderer->getRenderingManager()->getRenderer3D()->renderOutline(selected, selectionOutlineColor);
+  }
+  m_selectionOutlines.clear();
 
   // Release every render resource keyed by a uuid no longer in the scene (object deleted, scene
   // switched, project reloaded) - otherwise these caches grow for the life of the process, and a
@@ -241,7 +253,7 @@ void RenderSystem::drawLightGizmos(const ObjectManager& objectManager, GpuAssetC
 
     if (std::ranges::find(highlightUUIDs, uuid) != highlightUUIDs.end())
     {
-      renderer3D->renderObject(gizmo, vke::PipelineType::objectHighlight);
+      renderer3D->renderOutline(gizmo, selectionOutlineColor);
     }
   }
 }

@@ -30,7 +30,12 @@ add_executable(${PROJECT_NAME}
   ComponentRegistryTest.cpp
   AssetRegistryTest.cpp
   AssetDragDropTest.cpp
+  UndoRequestGateTest.cpp
+  AssetReferencesTest.cpp
+  UnsavedChangesTest.cpp
   AssetFilterTest.cpp
+  ObjectTreeOrderTest.cpp
+  OutlineColorsTest.cpp
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp
@@ -66,6 +71,8 @@ add_executable(${PROJECT_NAME}
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
   AttachedScriptsTest.cpp
+  ScriptSystemLifecycleTest.cpp
+  ScriptSystemFieldsAndReloadTest.cpp
   UnresolvedScriptsTest.cpp
   ScriptBindingGapsTest.cpp
   CollisionEventTest.cpp
@@ -92,6 +99,7 @@ add_executable(${PROJECT_NAME}
   SceneScriptListTest.cpp
   AssetNamingTest.cpp
   PrefabTest.cpp
+  FixedTimestepTest.cpp
   PhysicsIntegrationTest.cpp
   PhysicsLandingTest.cpp
   PhysicsStackingTest.cpp
@@ -115,6 +123,8 @@ add_executable(${PROJECT_NAME}
   SceneEditBatchTest.cpp
   SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
+  ServerPolicyTest.cpp
+  EditTokenTest.cpp
   InputStatePayloadTest.cpp
   InputStateTest.cpp
   InputUtilsBindingsTest.cpp
@@ -125,6 +135,7 @@ add_executable(${PROJECT_NAME}
   WireTruncationFixtures.h
   MessageQueueTest.cpp
   TransportLogTest.cpp
+  SharedAssetLoadsTest.cpp
   SmokeTest.cpp
   TestScene.cpp
   TestPrinters.h
@@ -152,6 +163,8 @@ add_executable(${PROJECT_NAME}
   ../libs/net/ServerLog.cpp
   ../libs/scripting/bindings/ComponentOpsBindings.cpp
   ../libs/net/TransportLog.cpp
+  # The asset reference count depends only on ECS3DData and json, so it is compiled in the same way.
+  ../libs/editor/AssetReferences.cpp
   ../libs/scripting/bindings/ColliderBindings.cpp
   ../libs/scripting/bindings/WorldBindings.cpp
   ../libs/scripting/bindings/ModelRendererBindings.cpp
@@ -167,6 +180,7 @@ add_executable(${PROJECT_NAME}
   # ScriptFieldEdit depends only on json, so it is compiled in the same way.
   ../libs/scripting/ScriptFieldEdit.cpp
   ../libs/scripting/AttachedScripts.cpp
+  ../libs/scripting/ScriptSystem.cpp
   ../libs/scripting/UnresolvedScripts.cpp
   ../libs/scripting/bindings/LightRendererBindings.cpp
   ../libs/scripting/bindings/PlayerControllerBindings.cpp

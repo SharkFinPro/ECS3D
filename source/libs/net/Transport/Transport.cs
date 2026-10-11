@@ -40,7 +40,7 @@ public static unsafe class Transport
   // scene as live. Optional, like _serverDisconnect.
   private static delegate* unmanaged<void> _clientDisconnect;
 
-  // Fired once per connection, right after a backend's Authorize() grants it a role at the handshake, so
+  // Fired once per connection, right after a backend's TryAuthorizeHandshake() grants it a role at the handshake, so
   // the C++ side can enforce that role on every later message (a connection cannot mutate an edit-mode
   // server's scene unless it was actually authorized as Role.editor there). Optional, like the others.
   private static delegate* unmanaged<int, byte, void> _serverAuthorized;

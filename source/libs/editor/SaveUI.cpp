@@ -65,7 +65,7 @@ bool SaveUI::save()
     return false;
   }
 
-  m_savedEditCount = m_editCount;
+  m_unsavedChanges.markSaved();
 
   Log::info(LogCategory::editor, "Saved project to " + m_saveFile);
   return true;
@@ -101,12 +101,12 @@ void SaveUI::requestOpen()
 
 void SaveUI::markEdited()
 {
-  ++m_editCount;
+  m_unsavedChanges.markEdited();
 }
 
 bool SaveUI::isDirty() const
 {
-  return m_editCount != m_savedEditCount;
+  return m_unsavedChanges.isDirty();
 }
 
 void SaveUI::loadFromFile(const std::string& path)
@@ -151,7 +151,7 @@ void SaveUI::loadProjectBlob(const std::string& projectJson)
   }
 
   // A freshly loaded project has nothing unsaved yet.
-  m_savedEditCount = m_editCount;
+  m_unsavedChanges.markSaved();
 
   if (m_onLoadProject)
   {
@@ -269,19 +269,20 @@ void SaveUI::registerWindowEvents()
 
 void SaveUI::guardDiscard(const PendingDiscard action, std::string path)
 {
-  if (!isDirty())
+  // A drag-and-drop drop fires straight from GLFW and isn't blocked by the modal the way menu items are.
+  switch (decideDiscard(isDirty(), m_showUnsavedChangesModal))
   {
-    performDiscard(action, path);
-    return;
-  }
+    case DiscardDecision::performNow:
+      performDiscard(action, path);
+      return;
 
-  // A discard is already pending an answer (e.g. a drag-and-drop drop fires straight from GLFW and isn't
-  // blocked by the modal the way menu items are) - don't let a second request steal the first one's answer.
-  if (m_showUnsavedChangesModal)
-  {
-    Log::info(LogCategory::editor,
-      "Already waiting on an unsaved-changes prompt; ignoring another discard request.");
-    return;
+    case DiscardDecision::ignore:
+      Log::info(LogCategory::editor,
+        "Already waiting on an unsaved-changes prompt; ignoring another discard request.");
+      return;
+
+    case DiscardDecision::prompt:
+      break;
   }
 
   m_pendingDiscard = action;

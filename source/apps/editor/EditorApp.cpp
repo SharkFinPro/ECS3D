@@ -20,6 +20,7 @@
 #include <EditorTheme.h>
 #include <AssetBrowserPanel.h>
 #include <SaveUI.h>
+#include <AssetReferences.h>
 #include <SettingsPanel.h>
 #include <ConsolePanel.h>
 #include <RingBufferSink.h>
@@ -43,6 +44,7 @@
 #include <components/CameraEditor.h>
 #include <NetClient.h>
 #include <ServerProcess.h>
+#include <EditToken.h>
 #include <ManagedHost.h>
 #include <Log.h>
 #include <LogSetup.h>
@@ -213,7 +215,7 @@ void EditorApp::setupInspectorPanel()
   });
   m_inspectorPanel->setRemoveAssetCallback([this](const uuids::uuid& assetUUID) { onRemoveAsset(assetUUID); });
   m_inspectorPanel->setAssetReferenceCountCallback([this](const uuids::uuid& assetUUID) {
-    return countAssetReferences(assetUUID);
+    return countAssetReferences(*m_sceneManager, *m_assetRegistry, assetUUID);
   });
   m_inspectorPanel->setUpdatePrefabBodyCallback([this](const uuids::uuid& assetUUID, const std::string& name,
                                                        const std::string& body) {
@@ -256,8 +258,7 @@ void EditorApp::connectToServer()
   {
     // A fresh per-launch token so only this editor can edit the server it just spawned. The --edit flag
     // is the capability gate; the token additionally fends off another local process on loopback.
-    std::mt19937 rng{ std::random_device{}() };
-    m_authToken = uuids::to_string(uuids::uuid_random_generator{ rng }());
+    m_authToken = net::generateEditToken();
 
     m_serverProcess = std::make_unique<net::ServerProcess>();
     // --ephemeral makes the server exit when its last connection drops, so it can't outlive the editor.

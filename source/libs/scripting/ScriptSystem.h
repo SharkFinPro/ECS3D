@@ -2,9 +2,11 @@
 #define SCRIPTSYSTEM_H
 
 #include "AttachedScripts.h"
+#include "ScriptRuntime.h"
 #include "UnresolvedScripts.h"
 #include <nlohmann/json_fwd.hpp>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -12,8 +14,6 @@
 #include <vector>
 #include <uuid.h>
 
-class ManagedHost;
-class ScriptEngine;
 class ObjectManager;
 class Object;
 class Component;
@@ -27,13 +27,18 @@ enum class CollisionEvent {
   exit = 2
 };
 
-// Drives the live C# script instances on the server. Owns the ScriptEngine (the ScriptBridge ABI)
+// Drives the live C# script instances on the server. Owns the ScriptRuntime (the ScriptBridge ABI)
 // and tracks which (uuid, class) pairs are attached, the exposed-field cache, and the hot-reload
 // file snapshot. Each Script data component carries only a field blob; ScriptSystem syncs that blob
 // <-> the live instance (writes it on attach/start, reads it back before a snapshot). Server only.
 class ScriptSystem {
 public:
-  explicit ScriptSystem(std::shared_ptr<ManagedHost> host);
+  using RuntimeFactory = std::function<std::unique_ptr<ScriptRuntime>()>;
+
+  // The factory runs once, on first use, and returns an initialized runtime; a throw leaves the system
+  // without one so the next call retries. userScriptsDir is the directory polled for hot reload.
+  explicit ScriptSystem(RuntimeFactory makeRuntime,
+                        std::filesystem::path userScriptsDir = scripting::defaultUserScriptsDir);
 
   ~ScriptSystem();
 
@@ -75,8 +80,9 @@ public:
                             const nlohmann::json& fields) const;
 
 private:
-  std::shared_ptr<ManagedHost> m_host;
-  std::unique_ptr<ScriptEngine> m_engine;
+  RuntimeFactory m_makeRuntime;
+  std::filesystem::path m_userScriptsDir;
+  std::unique_ptr<ScriptRuntime> m_engine;
 
   struct ExposedField {
     std::string name;
@@ -154,7 +160,7 @@ private:
 
   [[nodiscard]] static std::string cacheKey(const uuids::uuid& uuid, const std::string& className);
 
-  [[nodiscard]] static ScriptsSnapshot takeSnapshot();
+  [[nodiscard]] ScriptsSnapshot takeSnapshot() const;
 };
 
 

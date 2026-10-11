@@ -64,7 +64,7 @@ private:
 
   // Registered with Log so the server's own log (including script output, which already reaches Log via
   // LogBindings) can be forwarded to editor connections - the local console window some launches show is
-  // separate from this and keeps working either way. See forwardLogToEditors.
+  // separate from this and keeps working either way. Null on a non-edit server. See forwardLogToEditors.
   std::shared_ptr<RemoteLogSink> m_remoteLogSink;
 
   std::chrono::steady_clock::time_point m_previousTime;
@@ -146,7 +146,8 @@ private:
 
   // Drains m_remoteLogSink (capped, so one storm-sized batch cannot dominate a send) and forwards what
   // comes out to editor connections as a serverLog message. Called once per run() loop iteration rather
-  // than once per fixed tick, so a log line still gets out while the scene is stopped/paused.
+  // than once per fixed tick, so a log line still gets out while the scene is stopped/paused. Does nothing
+  // on a non-edit server, which has no m_remoteLogSink.
   void forwardLogToEditors() const;
 
   void broadcastSnapshot() const;

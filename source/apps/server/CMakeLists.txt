@@ -10,6 +10,7 @@ add_executable(${PROJECT_NAME}
   ServerApp.h
   DefaultProject.cpp
   DefaultProject.h
+  ServerPolicy.h
 )
 
 # The server does all the number crunching. It is headless: it must NOT link ECS3DRender or

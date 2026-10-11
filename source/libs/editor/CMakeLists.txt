@@ -8,6 +8,8 @@ add_library(${PROJECT_NAME}
   MixedFields.h
   ObjectGUIManager.cpp
   ObjectGUIManager.h
+  ObjectTreeOrder.h
+  ObjectTreeSortMode.h
   InspectorPanel.cpp
   InspectorPanel.h
   ObjectInspector.cpp
@@ -24,6 +26,10 @@ add_library(${PROJECT_NAME}
   AssetFilter.h
   SaveUI.cpp
   SaveUI.h
+  UnsavedChanges.h
+  UndoRequestGate.h
+  AssetReferences.cpp
+  AssetReferences.h
   SettingsPanel.cpp
   SettingsPanel.h
   ConsolePanel.cpp

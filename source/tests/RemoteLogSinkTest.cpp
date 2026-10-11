@@ -419,3 +419,77 @@ TEST(RemoteLogSink, ACutThroughAMessageOfStrayContinuationBytesKeepsNoneOfThem)
   ASSERT_EQ(drained.entries.size(), 1u);
   EXPECT_EQ(drained.entries[0].message, truncationMarkerText);
 }
+
+namespace {
+  // Writes `message` (longer than the cap) and returns the text kept before the truncation marker.
+  [[nodiscard]] std::string keptBeforeMarker(const std::string& message)
+  {
+    RemoteLogSink sink(10);
+    sink.write(entry(message));
+    const auto drained = sink.drain(10);
+    const auto& stored = drained.entries.at(0).message;
+    const auto markerStart = stored.find(truncationMarkerText);
+    EXPECT_NE(markerStart, std::string::npos);
+    return stored.substr(0, markerStart);
+  }
+}
+
+TEST(RemoteLogSink, StrayContinuationBytesAfterAsciiStraddlingTheCapAreNotKept)
+{
+  // Invalid input: 'x' then 0x80 bytes, the cap falling after the first 0x80. The ASCII byte is a complete
+  // sequence on its own, so the cut lands right after it.
+  std::string message(RemoteLogSink::maxMessageBytes - 1, 'x');
+  message += std::string(10, '\x80');
+  message += std::string(1000, 'y');
+
+  EXPECT_EQ(keptBeforeMarker(message), std::string(RemoteLogSink::maxMessageBytes - 1, 'x'));
+
+  // Positive control: the same shape with a valid character at the cap keeps what fits.
+  std::string control(RemoteLogSink::maxMessageBytes - 2, 'x');
+  control += "\xC3\xA9";
+  control += std::string(1000, 'y');
+  EXPECT_EQ(keptBeforeMarker(control), std::string(RemoteLogSink::maxMessageBytes - 2, 'x') + "\xC3\xA9");
+}
+
+TEST(RemoteLogSink, StrayContinuationBytesAfterACompleteSequenceAreCut)
+{
+  std::string message(RemoteLogSink::maxMessageBytes - 3, 'x');
+  message += "\xC3\xA9";
+  message += std::string(10, '\x80');
+  message += std::string(1000, 'y');
+
+  EXPECT_EQ(keptBeforeMarker(message), std::string(RemoteLogSink::maxMessageBytes - 3, 'x') + "\xC3\xA9");
+}
+
+TEST(RemoteLogSink, ALeadByteWithTooFewContinuationBytesBeforeTheCapIsDropped)
+{
+  // A three-byte lead with only one continuation byte before the cap (the rest of the text is 'y').
+  std::string message(RemoteLogSink::maxMessageBytes - 2, 'x');
+  message += "\xE2\x82";
+  message += std::string(1000, 'y');
+
+  EXPECT_EQ(keptBeforeMarker(message), std::string(RemoteLogSink::maxMessageBytes - 2, 'x'));
+}
+
+TEST(RemoteLogSink, AValidCharacterStraddlingTheCapIsDroppedWholeAndOneEndingAtItIsKept)
+{
+  const std::string characters[] = { "\xC3\xA9", "\xE2\x82\xAC", "\xF0\x9F\x98\x80" };
+  for (const auto& character : characters)
+  {
+    const auto width = character.size();
+    for (std::size_t inside = 1; inside < width; ++inside)
+    {
+      std::string message(RemoteLogSink::maxMessageBytes - inside, 'x');
+      message += character;
+      message += std::string(1000, 'y');
+      EXPECT_EQ(keptBeforeMarker(message), std::string(RemoteLogSink::maxMessageBytes - inside, 'x'))
+        << "width " << width << " inside " << inside;
+    }
+
+    std::string exact(RemoteLogSink::maxMessageBytes - width, 'x');
+    exact += character;
+    exact += std::string(1000, 'y');
+    EXPECT_EQ(keptBeforeMarker(exact), std::string(RemoteLogSink::maxMessageBytes - width, 'x') + character)
+      << "width " << width;
+  }
+}

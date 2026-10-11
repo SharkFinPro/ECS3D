@@ -512,8 +512,7 @@ namespace {
         continue;
       }
 
-      appendShaftQuad(frame.triangles, g.center, g.tip, halfShaftWidth, cameraPos, g.handle, hl);
-      frame.lines.push_back(gizmo::Line{ g.center, g.tip, g.handle, hl });
+      frame.lines.push_back(gizmo::Line{ g.center, g.tip, g.handle, hl, shaftPixels });
 
       if (state.mode == gizmo::Mode::translate)
       {

@@ -633,37 +633,40 @@ namespace {
     return subTypeField->get<std::string>();
   }
 
-  // Shared by restoreObject and reorderObject: an explicit range check against std::size_t's own limits
-  // rather than casting into a signed type and looking for wraparound - a value near UINT64_MAX read into
-  // a signed type is implementation-defined at best, so it should never be the thing a refusal relies on.
-  // nullopt means the field was missing, not a number, or out of range - the caller reports malformedEdit.
-  std::optional<std::size_t> parseIndexField(const nlohmann::json& indexField)
+}
+
+// Shared by restoreObject and reorderObject: an explicit range check against std::size_t's own limits
+// rather than casting into a signed type and looking for wraparound - a value near UINT64_MAX read into
+// a signed type is implementation-defined at best, so it should never be the thing a refusal relies on.
+// nullopt means the field was missing, not a number, or out of range - the caller reports malformedEdit.
+std::optional<std::size_t> parseIndexField(const nlohmann::json& indexField)
+{
+  if (indexField.is_number_unsigned())
   {
-    if (indexField.is_number_unsigned())
+    const auto rawIndex = indexField.get<std::uint64_t>();
+    if (rawIndex > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
     {
-      const auto rawIndex = indexField.get<std::uint64_t>();
-      if (rawIndex > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
-      {
-        return std::nullopt;
-      }
-
-      return static_cast<std::size_t>(rawIndex);
+      return std::nullopt;
     }
 
-    if (indexField.is_number_integer())
-    {
-      const auto rawIndex = indexField.get<std::int64_t>();
-      if (rawIndex < 0)
-      {
-        return std::nullopt;
-      }
-
-      return static_cast<std::size_t>(rawIndex);
-    }
-
-    return std::nullopt;
+    return static_cast<std::size_t>(rawIndex);
   }
 
+  if (indexField.is_number_integer())
+  {
+    const auto rawIndex = indexField.get<std::int64_t>();
+    if (rawIndex < 0)
+    {
+      return std::nullopt;
+    }
+
+    return static_cast<std::size_t>(rawIndex);
+  }
+
+  return std::nullopt;
+}
+
+namespace {
   // A restoreObject's own recorded local Transform for one reclaimed child - checked structurally (the
   // same fields Transform::loadFromJSON reads) so a malformed entry is refused before anything mutates,
   // rather than throwing loadFromJSON's own way into the generic "failed" result after the child has

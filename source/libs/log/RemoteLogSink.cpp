@@ -17,7 +17,8 @@ namespace {
   // whichever sequence the boundary at `length` falls inside (walking back over continuation bytes,
   // 10xxxxxx, which cannot start a sequence) and keeps that sequence only if it ends at or before
   // `length` - otherwise the whole thing is dropped, so a sequence is either kept whole or cut whole,
-  // never left half-written.
+  // never left half-written. Stray continuation bytes after a complete sequence (invalid input) are
+  // cut as well, so the kept text never ends in a byte that is not part of a complete sequence.
   [[nodiscard]] std::size_t utf8SafeTruncationLength(const std::string& text, const std::size_t length)
   {
     if (length >= text.size())
@@ -61,7 +62,8 @@ namespace {
       return leadIndex;
     }
 
-    return leadIndex + sequenceLength <= length ? length : leadIndex;
+    const std::size_t sequenceEnd = leadIndex + sequenceLength;
+    return sequenceEnd > length ? leadIndex : sequenceEnd;
   }
 }
 

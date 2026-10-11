@@ -9,6 +9,12 @@ endif()
 
 set(CMAKE_CXX_STANDARD 23)
 
+# C++23 with a 3.28+ minimum makes CMake scan every source for module imports before compiling it.
+# Nothing here uses modules, and the scan cost about an eighth of a clean build's CPU time.
+if (NOT DEFINED CMAKE_CXX_SCAN_FOR_MODULES)
+  set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+endif()
+
 if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)

@@ -370,3 +370,25 @@ TEST(NarrowPhaseRotated, KeepsTheNormalPointingTheRightWayAtAHundredToOneScale)
 
   expectAgreement(slab, small, false);
 }
+
+TEST(NarrowPhaseRotated, AMirroredBoxYieldsTheSameManifoldAsItsPositivelyScaledTwin)
+{
+  auto flat = makeBox({ 0, 0, 0 });
+  auto upper = makeBox({ 0.5f, 1.8f, 0.5f }, glm::vec3(0), { 2, 1, 1 });
+  auto mirrored = makeBox({ 0.5f, 1.8f, 0.5f }, glm::vec3(0), { -2, 1, 1 });
+
+  const auto expected = collisions::findContact(*flat.collider, *upper.collider);
+  const auto actual = collisions::findContact(*flat.collider, *mirrored.collider);
+  ASSERT_TRUE(expected.has_value());
+  ASSERT_TRUE(actual.has_value());
+
+  EXPECT_NEAR(actual->depth(), expected->depth(), tolerance);
+  expectNear("normal", actual->normal(), expected->normal());
+  EXPECT_EQ(actual->pointCount, expected->pointCount);
+  EXPECT_EQ(expected->pointCount, 4);
+
+  for (const auto& point : expected->contactPoints())
+  {
+    EXPECT_TRUE(hasPointNear(*actual, point)) << "missing (" << point.x << ", " << point.y << ", " << point.z << ")";
+  }
+}

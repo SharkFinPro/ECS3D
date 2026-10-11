@@ -6,6 +6,7 @@
 #include <edits/EditHistory.h>
 #include <edits/HistoryScope.h>
 #include <edits/PlaySessionHistory.h>
+#include <UndoRequestGate.h>
 #include <scenes/SceneManager.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
@@ -153,14 +154,10 @@ private:
   edits::PlaySessionHistory m_playHistory;
   edits::HistoryScope m_historyScope;
 
-  // See requestUndo()/requestRedo() in EditorAppUndoMenu.cpp: while true, a further undo/redo request is
-  // ignored (and the Edit menu's items disabled) until the server's rebroadcast of the one already sent
-  // lands (cleared in handleSnapshot/handleEditComponent) or this much time passes, whichever comes
-  // first - undo validates against the editor's replicated view, which only updates on that rebroadcast,
-  // so a second press inside one round trip would validate against a still-stale value.
-  static constexpr std::chrono::milliseconds undoRedoPendingTimeout{500};
-  bool m_undoRedoPending = false;
-  std::chrono::steady_clock::time_point m_undoRedoPendingSince;
+  // See requestUndo()/requestRedo() in EditorAppUndoMenu.cpp: while the gate is blocked, a further
+  // undo/redo request is ignored (and the Edit menu's items disabled) until the server's rebroadcast of
+  // the one already sent lands (cleared in handleSnapshot/handleEditComponent) or its timeout passes.
+  UndoRequestGate m_undoRedoGate{defaultUndoRedoPendingTimeout};
 
   std::vector<std::string> m_errorMessages;
   std::string m_sceneViewName;
@@ -233,9 +230,6 @@ private:
 
   void onRemoveAsset(const uuids::uuid& assetUUID);
 
-  // How many objects reference the asset by uuid, for the delete-confirmation warning.
-  [[nodiscard]] int countAssetReferences(const uuids::uuid& assetUUID) const;
-
   void onEditComponent(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component) const;
 
   void onSceneEdit(const nlohmann::json& edit);
@@ -253,7 +247,7 @@ private:
 
   void applyMessage(const net::Message& message);
 
-  // Not const: clears the undo/redo in-flight gate (see m_undoRedoPending) as the rebroadcast a request
+  // Not const: clears the undo/redo in-flight gate (see UndoRequestGate.h) as the rebroadcast a request
   // was waiting on.
   void handleSnapshot(const net::Message& message);
 
@@ -306,7 +300,7 @@ private:
 
   // What the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit menu actually call (EditorAppUndoMenu.cpp): a
   // no-op while undoRedoRequestBlocked(), otherwise calls undo()/redo() and starts the in-flight gate if
-  // it actually sent something - see undoRedoPendingTimeout and EditorAppUndoMenu.cpp's gainedOneEntry().
+  // it actually sent something - see UndoRequestGate.h.
   void requestUndo();
 
   void requestRedo();
@@ -341,10 +335,6 @@ private:
   // branching down: isUndo picks the verb, the EditorAction the shortcut comes from, and which of
   // requestUndo()/requestRedo() a click invokes.
   void displayUndoRedoMenuItem(bool isUndo, const std::optional<std::string>& label, bool enabled);
-
-  // The condition shared by the undo and redo items: something to act on, an editable server, and no
-  // request already in flight.
-  [[nodiscard]] bool canActOnHistoryItem(const std::optional<std::string>& label, bool requestInFlight) const;
 
   void displayWindowMenu() const;
 

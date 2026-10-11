@@ -11,7 +11,7 @@ FixedTimestep::Plan FixedTimestep::advance(const float accumulator, const float 
     ++steps;
   }
 
-  if (steps == maxSteps)
+  if (remaining >= fixedDt)
   {
     remaining = 0.0f;
   }

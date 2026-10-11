@@ -138,6 +138,11 @@ void ServerApp::broadcastStructuralChanges() const
 
 void ServerApp::forwardLogToEditors() const
 {
+  if (!m_remoteLogSink)
+  {
+    return;
+  }
+
   // Caps what one call can hand to the network, so a log storm costs bounded work per loop iteration
   // instead of one send sized by however much piled up; anything past either cap is picked up on the
   // next iteration (or evicted by RemoteLogSink's own capacity first, and counted in `dropped` below).
