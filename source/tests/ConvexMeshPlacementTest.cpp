@@ -13,6 +13,7 @@
 
 #include <Protocol.h>
 #include <glm/vec3.hpp>
+#include <nlohmann/json.hpp>
 #include <array>
 #include <memory>
 #include <utility>

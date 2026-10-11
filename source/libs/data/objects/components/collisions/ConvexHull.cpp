@@ -58,8 +58,7 @@ namespace {
     }
 
     std::ranges::sort(chosen);
-    const auto duplicates = std::ranges::unique(chosen);
-    chosen.erase(duplicates.begin(), duplicates.end());
+    chosen.erase(std::unique(chosen.begin(), chosen.end()), chosen.end());
 
     std::vector<glm::vec3> subset;
     subset.reserve(chosen.size());
