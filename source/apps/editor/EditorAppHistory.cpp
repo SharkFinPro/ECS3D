@@ -81,7 +81,7 @@ void EditorApp::undo()
   edits::HistoryOutcome outcome;
   try
   {
-    outcome = m_playHistory.current().undo(*scene->getObjectManager(), m_assetRegistry.get());
+    outcome = m_playHistory.current().undo(*scene->getObjectManager(), m_assetRegistry.get(), scene.get());
   }
   catch (const std::exception& e)
   {
@@ -126,7 +126,7 @@ void EditorApp::redo()
   edits::HistoryOutcome outcome;
   try
   {
-    outcome = m_playHistory.current().redo(*scene->getObjectManager(), m_assetRegistry.get());
+    outcome = m_playHistory.current().redo(*scene->getObjectManager(), m_assetRegistry.get(), scene.get());
   }
   catch (const std::exception& e)
   {

@@ -10,6 +10,7 @@
 #include <variant>
 
 class ObjectManager;
+class SceneAsset;
 
 namespace net {
   class Message;
@@ -36,7 +37,11 @@ enum class CommandKind {
   addAsset,
   replaceAsset,
   renameAsset,
-  removeAsset
+  removeAsset,
+  addSceneScript,
+  removeSceneScript,
+  reorderSceneScript,
+  setSceneScriptFields
 };
 
 // Whether a command's undo/redo payload is a structural sceneEdit op (nlohmann::json, built by
@@ -168,7 +173,30 @@ public:
                                                std::string path, std::string className, std::string body,
                                                std::string displayName);
 
+  // The four scene script kinds name a scene's script by class, and the scene by uuid: that uuid is what
+  // a refusal reports as its conflict (also when no scene is passed to validate against). index is where
+  // the entry sits in the list, as SceneAsset::moveScript reads one.
+  //
+  // fields is the blob loaded into the new entry; null means none given.
+  [[nodiscard]] static EditCommand addSceneScript(const uuids::uuid& sceneUUID, std::string className,
+                                                  std::size_t index, const nlohmann::json& fields);
+
+  // removedScript is the entry's own serialize() blob (className + fields), so undo restores its values.
+  [[nodiscard]] static EditCommand removeSceneScript(const uuids::uuid& sceneUUID, std::size_t index,
+                                                     const nlohmann::json& removedScript);
+
+  [[nodiscard]] static EditCommand reorderSceneScript(const uuids::uuid& sceneUUID, std::string className,
+                                                      std::size_t beforeIndex, std::size_t afterIndex);
+
+  [[nodiscard]] static EditCommand setSceneScriptFields(const uuids::uuid& sceneUUID, std::string className,
+                                                        const nlohmann::json& before,
+                                                        const nlohmann::json& after);
+
   [[nodiscard]] CommandKind kind() const;
+
+  // True for the kinds that act on a scene's script list rather than on the object tree. They are never
+  // grouped (a batch sceneEdit refuses them), and validating one needs the scene.
+  [[nodiscard]] bool targetsSceneScripts() const;
 
   [[nodiscard]] PayloadForm payloadForm() const;
 
@@ -191,14 +219,18 @@ public:
 
   // Compares this command's "after" state against the live scene/registry - what undo is about to
   // revert away from. AssetRegistry may be null when the command cannot be an asset op (only
-  // addAsset/renameAsset/removeAsset read it).
+  // addAsset/renameAsset/removeAsset read it). scene is read only by the scene script kinds; one validated
+  // with a null scene (or a scene whose uuid differs from the recorded one) is targetMissing, naming the
+  // scene's uuid.
   [[nodiscard]] Validation validateForUndo(const ObjectManager& objectManager,
-                                           const AssetRegistry* assetRegistry) const;
+                                           const AssetRegistry* assetRegistry,
+                                           const SceneAsset* scene = nullptr) const;
 
   // Compares this command's "before" state against the live scene/registry - what redo is about to
   // move forward from.
   [[nodiscard]] Validation validateForRedo(const ObjectManager& objectManager,
-                                           const AssetRegistry* assetRegistry) const;
+                                           const AssetRegistry* assetRegistry,
+                                           const SceneAsset* scene = nullptr) const;
 
   // Preconditions: payloadForm() == sceneEdit, and isReversible() for the Undo direction (redo is only
   // ever attempted on a command that already passed isReversible() once, when it was undone).
@@ -358,10 +390,48 @@ private:
     friend bool operator==(const RemoveAssetData&, const RemoveAssetData&) = default;
   };
 
+  struct AddSceneScriptData {
+    uuids::uuid sceneUUID;
+    std::string className;
+    std::size_t index = 0;
+    std::string fieldsJSON; // dumped fields array; "null" when the add named none
+
+    friend bool operator==(const AddSceneScriptData&, const AddSceneScriptData&) = default;
+  };
+
+  struct RemoveSceneScriptData {
+    uuids::uuid sceneUUID;
+    std::string className;
+    std::size_t index = 0;
+    std::string removedScriptJSON;
+
+    friend bool operator==(const RemoveSceneScriptData&, const RemoveSceneScriptData&) = default;
+  };
+
+  struct ReorderSceneScriptData {
+    uuids::uuid sceneUUID;
+    std::string className;
+    std::size_t beforeIndex = 0;
+    std::size_t afterIndex = 0;
+
+    friend bool operator==(const ReorderSceneScriptData&, const ReorderSceneScriptData&) = default;
+  };
+
+  struct SetSceneScriptFieldsData {
+    uuids::uuid sceneUUID;
+    std::string className;
+    std::string beforeFieldsJSON;
+    std::string afterFieldsJSON;
+
+    friend bool operator==(const SetSceneScriptFieldsData&, const SetSceneScriptFieldsData&) = default;
+  };
+
   using CommandData = std::variant<ComponentEditData, AddObjectData, RemoveObjectData, ReparentObjectData,
                                    ReorderObjectData, RenameObjectData, AddComponentData,
                                    RemoveComponentData, DuplicateObjectData, InstantiatePrefabData,
-                                   AddAssetData, ReplaceAssetData, RenameAssetData, RemoveAssetData>;
+                                   AddAssetData, ReplaceAssetData, RenameAssetData, RemoveAssetData,
+                                   AddSceneScriptData, RemoveSceneScriptData, ReorderSceneScriptData,
+                                   SetSceneScriptFieldsData>;
 
   CommandKind m_kind = CommandKind::componentEdit;
   CommandData m_data;

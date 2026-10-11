@@ -31,13 +31,13 @@ void EditHistory::recordBatch(std::vector<EditCommand> commands)
     return;
   }
 
-  const bool allSceneEdits = std::ranges::all_of(commands, [](const EditCommand& command) {
-    return command.payloadForm() == PayloadForm::sceneEdit;
+  const bool allObjectSceneEdits = std::ranges::all_of(commands, [](const EditCommand& command) {
+    return command.payloadForm() == PayloadForm::sceneEdit && !command.targetsSceneScripts();
   });
 
-  if (!allSceneEdits)
+  if (!allObjectSceneEdits)
   {
-    throw std::invalid_argument("EditHistory::recordBatch: every command must be a sceneEdit");
+    throw std::invalid_argument("EditHistory::recordBatch: every command must be an object sceneEdit");
   }
 
   m_redoStack.clear();
@@ -109,7 +109,8 @@ namespace {
   }
 }
 
-HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const AssetRegistry* assetRegistry)
+HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const AssetRegistry* assetRegistry,
+                                 const SceneAsset* scene)
 {
   if (m_undoStack.empty())
   {
@@ -131,7 +132,7 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
       return { HistoryResult::notUndoable, conflict };
     }
 
-    const auto validation = command.validateForUndo(objectManager, assetRegistry);
+    const auto validation = command.validateForUndo(objectManager, assetRegistry, scene);
     if (!validation.ok())
     {
       m_undoStack.clear();
@@ -165,7 +166,8 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
   {
     const EditCommand& command = *it;
 
-    if (!command.isReversible())
+    // Recording refuses a group holding one, and the scratch copy has no script list to validate against.
+    if (!command.isReversible() || command.targetsSceneScripts())
     {
       const auto conflict = command.primaryUUID();
       m_undoStack.clear();
@@ -198,7 +200,8 @@ HistoryOutcome EditHistory::undo(const ObjectManager& objectManager, const Asset
   return outcome;
 }
 
-HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const AssetRegistry* assetRegistry)
+HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const AssetRegistry* assetRegistry,
+                                 const SceneAsset* scene)
 {
   if (m_redoStack.empty())
   {
@@ -213,7 +216,7 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
 
     // Every entry that reached the redo stack already passed isReversible() when it was undone, so redo
     // only needs to check whether the "before" state it expects still holds.
-    const auto validation = command.validateForRedo(objectManager, assetRegistry);
+    const auto validation = command.validateForRedo(objectManager, assetRegistry, scene);
     if (!validation.ok())
     {
       m_redoStack.clear();
@@ -242,6 +245,12 @@ HistoryOutcome EditHistory::redo(const ObjectManager& objectManager, const Asset
 
   for (const auto& command : entry)
   {
+    if (command.targetsSceneScripts())
+    {
+      m_redoStack.clear();
+      return { HistoryResult::notUndoable, command.primaryUUID() };
+    }
+
     const auto validation = command.validateForRedo(*scratch, assetRegistry);
     if (!validation.ok())
     {

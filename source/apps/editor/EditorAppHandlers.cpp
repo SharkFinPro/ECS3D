@@ -111,7 +111,8 @@ void EditorApp::onEditComponent(const uuids::uuid& objectUUID, const std::shared
 void EditorApp::onSceneEdit(const nlohmann::json& edit)
 {
   const auto scene = m_sceneManager->getCurrentScene();
-  auto commands = scene ? edits::commandsForSceneEdit(edit, *scene->getObjectManager(), m_assetRegistry.get())
+  auto commands = scene ? edits::commandsForSceneEdit(edit, *scene->getObjectManager(), m_assetRegistry.get(),
+                                                    scene.get())
                        : std::optional<std::vector<edits::EditCommand>>{};
 
   const auto payload = edit.dump();

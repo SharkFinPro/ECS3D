@@ -99,6 +99,8 @@ add_executable(${PROJECT_NAME}
   StatusPayloadTest.cpp
   SceneManagerTest.cpp
   SceneScriptListTest.cpp
+  SceneScriptEditTest.cpp
+  SceneScriptUndoTest.cpp
   AssetNamingTest.cpp
   PrefabTest.cpp
   FixedTimestepTest.cpp

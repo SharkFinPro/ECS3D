@@ -7,6 +7,7 @@
 #include <vector>
 
 class ObjectManager;
+class SceneAsset;
 
 // Derives the EditCommand for an edit the editor is ABOUT to send, reading the before state from the
 // editor's replicated view as it stands before that edit is applied or sent. Headless and side-effect
@@ -19,10 +20,13 @@ namespace edits {
 
 // assetRegistry is only read for instantiatePrefab, to capture the prefab's current body alongside the
 // command (see EditCommand::instantiatePrefab) - nullopt when omitted, the same as every other kind's
-// derivation reading only the ObjectManager view.
+// derivation reading only the ObjectManager view. The four scene script ops are the exception: they read
+// the scene's script list instead, and yield nullopt without a scene, for a class that is absent (or, for an
+// add, already present), or for a malformed or no-op edit.
 [[nodiscard]] std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit,
                                                              const ObjectManager& view,
-                                                             const AssetRegistry* assetRegistry = nullptr);
+                                                             const AssetRegistry* assetRegistry = nullptr,
+                                                             const SceneAsset* scene = nullptr);
 
 // A "batch" sceneEdit's commands, one per op in order. Since the editor never applies a structural edit
 // to its own view (see the module comment), the view stays pre-batch for every op - so this simulates the
@@ -31,10 +35,12 @@ namespace edits {
 // derivation sees what it would actually see once the ops before it had landed. nullopt if any op's
 // command cannot be derived, or if a dry-run apply of an op (needed to keep the scratch in sync for the
 // ops after it) does not return applied - the same "nothing faithful can be recorded" contract as a single
-// op. A non-batch edit is passed straight through to commandForSceneEdit.
+// op. A non-batch edit is passed straight through to commandForSceneEdit (scene included); a scene script
+// op inside a batch has no command, since the authority refuses it there.
 [[nodiscard]] std::optional<std::vector<EditCommand>> commandsForSceneEdit(const nlohmann::json& edit,
                                                                           const ObjectManager& view,
-                                                                          const AssetRegistry* assetRegistry = nullptr);
+                                                                          const AssetRegistry* assetRegistry = nullptr,
+                                                                          const SceneAsset* scene = nullptr);
 
 // An addAsset over a uuid the registry already holds is a record replacement (a prefab body edit, or
 // "Save as Prefab" over an existing name), so it derives a replaceAsset carrying the current record as

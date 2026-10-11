@@ -5,7 +5,11 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
+#include "scenes/SceneAsset.h"
+#include "scenes/SceneScriptEdits.h"
+#include "objects/components/Script.h"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -139,10 +143,90 @@ namespace {
 
     return std::nullopt;
   }
+
+  // The scene script ops, derived from the scene as it stands before the edit. A command is only made for an
+  // edit the authority would apply, so a recorded entry never describes a change that did not happen.
+  std::optional<EditCommand> commandForSceneScriptEdit(const nlohmann::json& edit, const std::string& op,
+                                                       const SceneAsset* scene)
+  {
+    const auto className = stringField(edit, "className");
+    if (!scene || className.empty())
+    {
+      return std::nullopt;
+    }
+
+    const auto sceneUUID = scene->getUUID();
+    const auto current = scene->findScript(className);
+    const auto currentIndex = replication::sceneScriptIndex(*scene, className);
+
+    if (op == "addSceneScript")
+    {
+      std::size_t landedAt = scene->getScripts().size();
+      if (const auto indexField = edit.find("index"); indexField != edit.end())
+      {
+        const auto index = replication::parseIndexField(*indexField);
+        if (!index.has_value())
+        {
+          return std::nullopt;
+        }
+
+        landedAt = std::min(index.value(), landedAt);
+      }
+
+      nlohmann::json fields = nullptr;
+      if (const auto fieldsField = edit.find("fields"); fieldsField != edit.end())
+      {
+        if (!replication::isValidSceneScriptFields(*fieldsField))
+        {
+          return std::nullopt;
+        }
+
+        fields = *fieldsField;
+      }
+
+      if (current)
+      {
+        return std::nullopt;
+      }
+
+      return EditCommand::addSceneScript(sceneUUID, className, landedAt, fields);
+    }
+
+    if (!current)
+    {
+      return std::nullopt;
+    }
+
+    if (op == "removeSceneScript")
+    {
+      return EditCommand::removeSceneScript(sceneUUID, currentIndex.value(), current->serialize());
+    }
+
+    if (op == "reorderSceneScript")
+    {
+      const auto indexField = edit.find("index");
+      const auto afterIndex = indexField == edit.end() ? std::nullopt : replication::parseIndexField(*indexField);
+      if (!afterIndex.has_value() || afterIndex.value() >= scene->getScripts().size()
+          || afterIndex.value() == currentIndex.value())
+      {
+        return std::nullopt;
+      }
+
+      return EditCommand::reorderSceneScript(sceneUUID, className, currentIndex.value(), afterIndex.value());
+    }
+
+    const auto fieldsField = edit.find("fields");
+    if (fieldsField == edit.end() || !replication::isValidSceneScriptFields(*fieldsField))
+    {
+      return std::nullopt;
+    }
+
+    return EditCommand::setSceneScriptFields(sceneUUID, className, current->getFields(), *fieldsField);
+  }
 }
 
 std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const ObjectManager& view,
-                                               const AssetRegistry* assetRegistry)
+                                               const AssetRegistry* assetRegistry, const SceneAsset* scene)
 {
   if (!edit.is_object())
   {
@@ -150,6 +234,11 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
   }
 
   const std::string op = stringField(edit, "op");
+
+  if (replication::isSceneScriptEdit(edit))
+  {
+    return commandForSceneScriptEdit(edit, op, scene);
+  }
 
   if (op == "addObject")
   {
@@ -296,7 +385,8 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
 }
 
 std::optional<std::vector<EditCommand>> commandsForSceneEdit(const nlohmann::json& edit, const ObjectManager& view,
-                                                              const AssetRegistry* assetRegistry)
+                                                              const AssetRegistry* assetRegistry,
+                                                              const SceneAsset* scene)
 {
   if (!edit.is_object())
   {
@@ -305,7 +395,7 @@ std::optional<std::vector<EditCommand>> commandsForSceneEdit(const nlohmann::jso
 
   if (stringField(edit, "op") != "batch")
   {
-    auto command = commandForSceneEdit(edit, view, assetRegistry);
+    auto command = commandForSceneEdit(edit, view, assetRegistry, scene);
     if (!command.has_value())
     {
       return std::nullopt;
