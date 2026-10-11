@@ -2,7 +2,6 @@
 
 #include "PlayControls.h"
 #include <scenes/SceneManager.h>
-#include <cstring>
 
 TEST(PlayControlsTest, StoppedAllowsOnlyPlay)
 {
