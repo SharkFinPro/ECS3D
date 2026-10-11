@@ -12,6 +12,7 @@
 
 class ObjectManager;
 class AssetRegistry;
+class SceneAsset;
 
 // The editor's undo/redo stacks. Deliberately headless: no ImGui, no networking, no EditorApp. A caller
 // (the editor, wiring this up in a later change) hands undo()/redo() the live ObjectManager/AssetRegistry
@@ -68,9 +69,9 @@ public:
 
   // Groups several commands into one undo/redo entry (a multi-object delete or duplicate): one Ctrl+Z
   // reverses the whole group. Empty is ignored; one command behaves exactly like record(); otherwise every
-  // command must have payloadForm() == PayloadForm::sceneEdit (a group is sent as one batch sceneEdit) or
-  // this throws std::invalid_argument. Same maxDepth/redo-clearing semantics as record(), counting entries
-  // rather than commands.
+  // command must have payloadForm() == PayloadForm::sceneEdit (a group is sent as one batch sceneEdit) and
+  // none may target scene scripts (a batch refuses those ops), or this throws std::invalid_argument. Same
+  // maxDepth/redo-clearing semantics as record(), counting entries rather than commands.
   void recordBatch(std::vector<EditCommand> commands);
 
   [[nodiscard]] bool canUndo() const;
@@ -102,14 +103,19 @@ public:
   // undone), and the payload sent is one replication::buildBatch of the collected per-command undo ops -
   // so one Ctrl+Z reverses the whole group in one sceneEdit. A single-command entry skips the scratch copy
   // and batch wrapping entirely, so its payload is unchanged from before grouping existed.
+  //
+  // scene is read only to validate the scene script kinds (EditCommand::validateForUndo); one on top of the
+  // stack with no scene passed is refused as targetMissing, dropping the stack like any other refusal.
   [[nodiscard]] HistoryOutcome undo(const ObjectManager& objectManager,
-                                    const AssetRegistry* assetRegistry = nullptr);
+                                    const AssetRegistry* assetRegistry = nullptr,
+                                    const SceneAsset* scene = nullptr);
 
   // Symmetric with undo(): validates the top of the redo stack, moves it back to the undo stack on
   // success, or drops it and everything older still on the redo stack on refusal. A grouped entry replays
   // its commands forward (validateForRedo/buildRedoJSON) the same way undo() replays them in reverse.
   [[nodiscard]] HistoryOutcome redo(const ObjectManager& objectManager,
-                                    const AssetRegistry* assetRegistry = nullptr);
+                                    const AssetRegistry* assetRegistry = nullptr,
+                                    const SceneAsset* scene = nullptr);
 
   // The server rejected the edit that undo()/redo() just produced, rather than the pre-flight validation
   // catching a divergence before anything was sent. Surfaced the same way as a validation failure: drop

@@ -6,6 +6,8 @@
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
 #include "objects/components/Script.h"
+#include "scenes/SceneAsset.h"
+#include "scenes/SceneScriptEdits.h"
 #include <nlohmann/json.hpp>
 #include <Protocol.h>
 #include <filesystem>
@@ -216,6 +218,23 @@ namespace {
     }
 
     return nlohmann::json::object();
+  }
+
+  // nullopt when the scene is the one the command was made against, else the refusal. A different scene
+  // cannot hold the script list the command recorded.
+  std::optional<Validation> checkSceneTarget(const uuids::uuid& sceneUUID, const SceneAsset* scene)
+  {
+    if (!scene || scene->getUUID() != sceneUUID)
+    {
+      return Validation{ ValidationFailure::targetMissing, sceneUUID };
+    }
+
+    return std::nullopt;
+  }
+
+  std::string sceneScriptLabel(const std::string& className)
+  {
+    return className.empty() ? std::string("Scene Script") : "Scene Script " + className;
   }
 
   // A removeObject's undo needs to reclaim its still-live promoted children back under the object it is
@@ -458,9 +477,79 @@ EditCommand EditCommand::removeAsset(const uuids::uuid& assetUUID, const AssetTy
   return command;
 }
 
+EditCommand EditCommand::addSceneScript(const uuids::uuid& sceneUUID, std::string className,
+                                        const std::size_t index, const nlohmann::json& fields)
+{
+  EditCommand command;
+  command.m_kind = CommandKind::addSceneScript;
+  command.m_data = AddSceneScriptData{
+    .sceneUUID = sceneUUID,
+    .className = std::move(className),
+    .index = index,
+    .fieldsJSON = fields.dump()
+  };
+  return command;
+}
+
+EditCommand EditCommand::removeSceneScript(const uuids::uuid& sceneUUID, const std::size_t index,
+                                           const nlohmann::json& removedScript)
+{
+  EditCommand command;
+  command.m_kind = CommandKind::removeSceneScript;
+  command.m_data = RemoveSceneScriptData{
+    .sceneUUID = sceneUUID,
+    .className = removedScript.value("className", std::string{}),
+    .index = index,
+    .removedScriptJSON = removedScript.dump()
+  };
+  return command;
+}
+
+EditCommand EditCommand::reorderSceneScript(const uuids::uuid& sceneUUID, std::string className,
+                                            const std::size_t beforeIndex, const std::size_t afterIndex)
+{
+  EditCommand command;
+  command.m_kind = CommandKind::reorderSceneScript;
+  command.m_data = ReorderSceneScriptData{
+    .sceneUUID = sceneUUID,
+    .className = std::move(className),
+    .beforeIndex = beforeIndex,
+    .afterIndex = afterIndex
+  };
+  return command;
+}
+
+EditCommand EditCommand::setSceneScriptFields(const uuids::uuid& sceneUUID, std::string className,
+                                              const nlohmann::json& before, const nlohmann::json& after)
+{
+  EditCommand command;
+  command.m_kind = CommandKind::setSceneScriptFields;
+  command.m_data = SetSceneScriptFieldsData{
+    .sceneUUID = sceneUUID,
+    .className = std::move(className),
+    .beforeFieldsJSON = before.dump(),
+    .afterFieldsJSON = after.dump()
+  };
+  return command;
+}
+
 CommandKind EditCommand::kind() const
 {
   return m_kind;
+}
+
+bool EditCommand::targetsSceneScripts() const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    case CommandKind::removeSceneScript:
+    case CommandKind::reorderSceneScript:
+    case CommandKind::setSceneScriptFields:
+      return true;
+    default:
+      return false;
+  }
 }
 
 PayloadForm EditCommand::payloadForm() const
@@ -502,6 +591,10 @@ uuids::uuid EditCommand::primaryUUID() const
     case CommandKind::replaceAsset: return std::get<ReplaceAssetData>(m_data).assetUUID;
     case CommandKind::renameAsset: return std::get<RenameAssetData>(m_data).assetUUID;
     case CommandKind::removeAsset: return std::get<RemoveAssetData>(m_data).assetUUID;
+    case CommandKind::addSceneScript: return std::get<AddSceneScriptData>(m_data).sceneUUID;
+    case CommandKind::removeSceneScript: return std::get<RemoveSceneScriptData>(m_data).sceneUUID;
+    case CommandKind::reorderSceneScript: return std::get<ReorderSceneScriptData>(m_data).sceneUUID;
+    case CommandKind::setSceneScriptFields: return std::get<SetSceneScriptFieldsData>(m_data).sceneUUID;
   }
 
   throw std::logic_error("EditCommand: unhandled kind");
@@ -584,13 +677,244 @@ std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
       const auto& data = std::get<RemoveAssetData>(m_data);
       return "Delete Asset " + assetFieldName(data.type, data.path, data.className);
     }
+    case CommandKind::addSceneScript:
+      return "Add " + sceneScriptLabel(std::get<AddSceneScriptData>(m_data).className);
+    case CommandKind::removeSceneScript:
+      return "Remove " + sceneScriptLabel(std::get<RemoveSceneScriptData>(m_data).className);
+    case CommandKind::reorderSceneScript:
+      return "Reorder " + sceneScriptLabel(std::get<ReorderSceneScriptData>(m_data).className);
+    case CommandKind::setSceneScriptFields:
+      return "Edit " + sceneScriptLabel(std::get<SetSceneScriptFieldsData>(m_data).className);
   }
 
   throw std::logic_error("EditCommand::describeForMenu: unhandled kind");
 }
 
+Validation EditCommand::validateSceneScriptUndo(const SceneAsset* scene) const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    {
+      const auto& data = std::get<AddSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      if (!scene->findScript(data.className))
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::removeSceneScript:
+    {
+      const auto& data = std::get<RemoveSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      if (scene->findScript(data.className))
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::reorderSceneScript:
+    {
+      const auto& data = std::get<ReorderSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      const auto index = replication::sceneScriptIndex(*scene, data.className);
+      if (!index.has_value())
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      if (index.value() != data.afterIndex)
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::setSceneScriptFields:
+    {
+      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      const auto script = scene->findScript(data.className);
+      if (!script)
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      if (script->getFields() != nlohmann::json::parse(data.afterFieldsJSON))
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    default:
+      return { ValidationFailure::notUndoable, primaryUUID() };
+  }
+}
+
+Validation EditCommand::validateSceneScriptRedo(const SceneAsset* scene) const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    {
+      const auto& data = std::get<AddSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      if (scene->findScript(data.className))
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::removeSceneScript:
+    {
+      const auto& data = std::get<RemoveSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      if (!scene->findScript(data.className))
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::reorderSceneScript:
+    {
+      const auto& data = std::get<ReorderSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      const auto index = replication::sceneScriptIndex(*scene, data.className);
+      if (!index.has_value())
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      if (index.value() != data.beforeIndex)
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::setSceneScriptFields:
+    {
+      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      const auto script = scene->findScript(data.className);
+      if (!script)
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      if (script->getFields() != nlohmann::json::parse(data.beforeFieldsJSON))
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    default:
+      return { ValidationFailure::notUndoable, primaryUUID() };
+  }
+}
+
+nlohmann::json EditCommand::buildSceneScriptUndoJSON() const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    {
+      const auto& data = std::get<AddSceneScriptData>(m_data);
+      return replication::buildRemoveSceneScript(data.className);
+    }
+    case CommandKind::removeSceneScript:
+    {
+      const auto& data = std::get<RemoveSceneScriptData>(m_data);
+      const auto fields = nlohmann::json::parse(data.removedScriptJSON).value("fields", nlohmann::json::array());
+      return replication::buildAddSceneScript(data.className, data.index, &fields);
+    }
+    case CommandKind::reorderSceneScript:
+    {
+      const auto& data = std::get<ReorderSceneScriptData>(m_data);
+      return replication::buildReorderSceneScript(data.className, data.beforeIndex);
+    }
+    case CommandKind::setSceneScriptFields:
+    {
+      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
+      return replication::buildSetSceneScriptFields(data.className, nlohmann::json::parse(data.beforeFieldsJSON));
+    }
+    default:
+      throw std::logic_error("EditCommand::buildSceneScriptUndoJSON: not a scene script command");
+  }
+}
+
+nlohmann::json EditCommand::buildSceneScriptRedoJSON() const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    {
+      const auto& data = std::get<AddSceneScriptData>(m_data);
+      const auto fields = nlohmann::json::parse(data.fieldsJSON);
+      return replication::buildAddSceneScript(data.className, data.index, fields.is_array() ? &fields : nullptr);
+    }
+    case CommandKind::removeSceneScript:
+    {
+      const auto& data = std::get<RemoveSceneScriptData>(m_data);
+      return replication::buildRemoveSceneScript(data.className);
+    }
+    case CommandKind::reorderSceneScript:
+    {
+      const auto& data = std::get<ReorderSceneScriptData>(m_data);
+      return replication::buildReorderSceneScript(data.className, data.afterIndex);
+    }
+    case CommandKind::setSceneScriptFields:
+    {
+      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
+      return replication::buildSetSceneScriptFields(data.className, nlohmann::json::parse(data.afterFieldsJSON));
+    }
+    default:
+      throw std::logic_error("EditCommand::buildSceneScriptRedoJSON: not a scene script command");
+  }
+}
+
 Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
-                                        const AssetRegistry* assetRegistry) const
+                                        const AssetRegistry* assetRegistry,
+                                        const SceneAsset* scene) const
 {
   if (!isReversible())
   {
@@ -846,13 +1170,19 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::addSceneScript:
+    case CommandKind::removeSceneScript:
+    case CommandKind::reorderSceneScript:
+    case CommandKind::setSceneScriptFields:
+      return validateSceneScriptUndo(scene);
     default:
       return { ValidationFailure::notUndoable, primaryUUID() };
   }
 }
 
 Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
-                                        const AssetRegistry* assetRegistry) const
+                                        const AssetRegistry* assetRegistry,
+                                        const SceneAsset* scene) const
 {
   if (!isReversible())
   {
@@ -1122,6 +1452,11 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
 
       return {};
     }
+    case CommandKind::addSceneScript:
+    case CommandKind::removeSceneScript:
+    case CommandKind::reorderSceneScript:
+    case CommandKind::setSceneScriptFields:
+      return validateSceneScriptRedo(scene);
     default:
       return { ValidationFailure::notUndoable, primaryUUID() };
   }
@@ -1192,6 +1527,11 @@ nlohmann::json EditCommand::buildUndoJSON(const ObjectManager& objectManager) co
       const auto& data = std::get<InstantiatePrefabData>(m_data);
       return replication::buildRemoveSubtree(data.instanceUUID);
     }
+    case CommandKind::addSceneScript:
+    case CommandKind::removeSceneScript:
+    case CommandKind::reorderSceneScript:
+    case CommandKind::setSceneScriptFields:
+      return buildSceneScriptUndoJSON();
     default:
       throw std::logic_error("EditCommand::buildUndoJSON: not a sceneEdit-form command");
   }
@@ -1265,6 +1605,11 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
         ? replication::buildInstantiatePrefab(data.prefabUUID, &*data.parentUUID, &data.instanceUUID)
         : replication::buildInstantiatePrefab(data.prefabUUID, nullptr, &data.instanceUUID);
     }
+    case CommandKind::addSceneScript:
+    case CommandKind::removeSceneScript:
+    case CommandKind::reorderSceneScript:
+    case CommandKind::setSceneScriptFields:
+      return buildSceneScriptRedoJSON();
     default:
       throw std::logic_error("EditCommand::buildRedoJSON: not a sceneEdit-form command");
   }

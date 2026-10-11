@@ -3,6 +3,7 @@
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneAsset.h>
+#include <scenes/SceneScriptEdits.h>
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
@@ -103,7 +104,9 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
 
   const auto& json = *parsed;
 
-  const auto result = replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
+  const auto result = replication::isSceneScriptEdit(json)
+    ? replication::applySceneScriptEdit(*scene, json)
+    : replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
 
   if (result != replication::SceneEditResult::applied)
   {
