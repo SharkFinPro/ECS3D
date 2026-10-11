@@ -18,6 +18,7 @@ class ObjectManager;
 class Object;
 class Component;
 class Script;
+class SceneAsset;
 
 // Which contact-lifecycle callback a dispatched collision event maps to. The integer values are the
 // wire contract with ScriptBridge.Bridge.onCollision (0 = enter, 1 = stay, 2 = exit) - keep them in sync.
@@ -54,6 +55,28 @@ public:
   // so it runs this once per tick from the networked InputState; it must run before fixedUpdate so any
   // force the script queues from input is applied the same tick.
   void variableUpdate(ObjectManager& objectManager);
+
+  // The scene-aware entry points below drive the scene's own scripts (SceneAsset::getScripts) as well as
+  // its objects' scripts, in a fixed order: scene scripts start before object scripts, run variableUpdate
+  // and fixedUpdate before them each tick, in list order, and stop after them. Scene scripts have their
+  // own bookkeeping, so the ObjectManager overloads above never see or stop one.
+  void start(SceneAsset& scene);
+
+  void stop(SceneAsset& scene);
+
+  void fixedUpdate(SceneAsset& scene, float dt);
+
+  void variableUpdate(SceneAsset& scene);
+
+  void attachAll(SceneAsset& scene);
+
+  // Also refreshes each scene script's blob, skipping a missing or faulted instance so saved values stay.
+  void syncFieldsToData(const SceneAsset& scene) const;
+
+  // The scene-script counterpart of applyScriptFieldEdit; does nothing when that class is not attached.
+  void applySceneScriptFieldEdit(const uuids::uuid& sceneUUID,
+                                 const std::string& className,
+                                 const nlohmann::json& fields) const;
 
   // Deliver one collision event to both objects' scripts: objectA's scripts learn of objectB and vice
   // versa. Fed plain uuid pairs by the app (from CollisionSystem's enter/stay/exit lists) so scripting
@@ -99,6 +122,14 @@ private:
     std::weak_ptr<const Component> component;
   };
 
+  // A scene script attached under its scene's uuid; `component` is the scene's Script entry it was created
+  // for, so a replacement entry (SceneAsset::stop rebuilds them) orphans the old instance.
+  struct AttachedSceneScript {
+    uuids::uuid sceneUUID;
+    std::string className;
+    std::weak_ptr<const Component> component;
+  };
+
   // key = uuid + "_" + className (cacheKey)
   std::unordered_map<std::string, AttachedScript> m_attached;
   // Mirrors m_attached by (uuid, class); updated at every insert, erase and clear of it.
@@ -106,7 +137,14 @@ private:
   // Scripts whose class could not be instantiated. Left out of m_attached so nothing ticks or reads them,
   // and remembered so the attempt (and its warning) is not repeated every tick; cleared on hot reload.
   UnresolvedScripts m_unresolved;
+  // Shared by object and scene scripts: a key leads with a scene or object uuid, which never collide.
   std::unordered_map<std::string, std::vector<ExposedField>> m_fieldCache;
+
+  // Scene scripts are tracked apart from object scripts (same shape as m_attached/m_started/m_unresolved),
+  // so neither orphan sweep can stop the other's instances. m_attachedIndex is object-only.
+  std::unordered_map<std::string, AttachedSceneScript> m_attachedSceneScripts;
+  std::unordered_set<std::string> m_startedSceneScripts;
+  UnresolvedScripts m_unresolvedSceneScripts;
 
   // Instances that have had their C# start() called. attachAll() (run every broadcastSnapshot, whether
   // or not the scene is running) can attach a managed instance well before the scene's tick loop ever
@@ -122,7 +160,36 @@ private:
 
   void ensureEngine();
 
-  void checkForScriptChanges(const ObjectManager& objectManager, float dt);
+  // syncFields refreshes the data blobs of whatever the caller drives, right before a reload discards the
+  // live instances.
+  void checkForScriptChanges(const std::function<void()>& syncFields, float dt);
+
+  // The per-object passes shared by the ObjectManager and SceneAsset entry points.
+  void startObjects(ObjectManager& objectManager);
+
+  void stopObjects(ObjectManager& objectManager);
+
+  void fixedUpdateObjects(ObjectManager& objectManager, float dt);
+
+  void variableUpdateObjects(ObjectManager& objectManager);
+
+  void attachAllObjects(ObjectManager& objectManager);
+
+  // Read a healthy instance's fields back into the script's blob; a missing or faulted one keeps it.
+  void syncScriptBlob(const uuids::uuid& ownerUUID, const std::shared_ptr<Script>& script) const;
+
+  // The scene-script twins of attach/detach/detachOrphans/startIfNeeded/isAttached. The orphan sweep
+  // stops and detaches any scene script that left `scene`'s list, was replaced by a new Script entry, or
+  // belongs to another scene.
+  void attachSceneScript(const SceneAsset& scene, const std::shared_ptr<Script>& script);
+
+  void detachSceneScript(const uuids::uuid& sceneUUID, const std::string& className);
+
+  void detachSceneScriptOrphans(const SceneAsset& scene);
+
+  void startSceneScriptIfNeeded(const uuids::uuid& sceneUUID, const std::string& className);
+
+  [[nodiscard]] bool isSceneScriptAttached(const uuids::uuid& sceneUUID, const std::string& className) const;
 
   // Create the managed instance, cache its exposed fields, and push the Script's saved field blob in.
   // When the class cannot be instantiated the script stays unattached and its saved blob is untouched.

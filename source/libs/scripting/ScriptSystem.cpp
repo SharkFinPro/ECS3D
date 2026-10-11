@@ -6,6 +6,7 @@
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/components/Script.h>
+#include <scenes/SceneAsset.h>
 #include <nlohmann/json.hpp>
 #include <system_error>
 #include <utility>
@@ -37,6 +38,32 @@ void ScriptSystem::start(ObjectManager& objectManager)
 
   BindingContext::setObjectManager(&objectManager);
 
+  startObjects(objectManager);
+}
+
+void ScriptSystem::start(SceneAsset& scene)
+{
+  ensureEngine();
+
+  const auto objectManager = scene.getObjectManager();
+  BindingContext::setObjectManager(objectManager.get());
+
+  // Scene scripts start before every object script. Iterates a copy of the list, since a script's start()
+  // could reach code that edits it.
+  for (const auto& script : std::vector(scene.getScripts()))
+  {
+    attachSceneScript(scene, script);
+    if (isSceneScriptAttached(scene.getUUID(), script->getClassName()))
+    {
+      startSceneScriptIfNeeded(scene.getUUID(), script->getClassName());
+    }
+  }
+
+  startObjects(*objectManager);
+}
+
+void ScriptSystem::startObjects(ObjectManager& objectManager)
+{
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -65,6 +92,43 @@ void ScriptSystem::stop(ObjectManager& objectManager)
 
   BindingContext::setObjectManager(&objectManager);
 
+  stopObjects(objectManager);
+}
+
+void ScriptSystem::stop(SceneAsset& scene)
+{
+  if (!m_engine)
+  {
+    return;
+  }
+
+  const auto objectManager = scene.getObjectManager();
+  BindingContext::setObjectManager(objectManager.get());
+
+  // Object scripts first, then the scene's, so a scene script outlives everything it coordinates.
+  stopObjects(*objectManager);
+
+  for (const auto& script : std::vector(scene.getScripts()))
+  {
+    const auto& className = script->getClassName();
+    if (!isSceneScriptAttached(scene.getUUID(), className))
+    {
+      continue;
+    }
+
+    if (m_startedSceneScripts.contains(cacheKey(scene.getUUID(), className)))
+    {
+      m_engine->stop(uuids::to_string(scene.getUUID()).c_str(), className.c_str());
+    }
+
+    detachSceneScript(scene.getUUID(), className);
+  }
+
+  detachSceneScriptOrphans(scene);
+}
+
+void ScriptSystem::stopObjects(ObjectManager& objectManager)
+{
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -101,7 +165,7 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
   // uuid to its object while they run.
   BindingContext::setObjectManager(&objectManager);
 
-  checkForScriptChanges(objectManager, dt);
+  checkForScriptChanges([&] { syncFieldsToData(objectManager); }, dt);
 
   // Before the attach loop, so an instance orphaned since the last sweep is gone by the time attach
   // looks at the component that replaced it.
@@ -114,6 +178,47 @@ void ScriptSystem::fixedUpdate(ObjectManager& objectManager, const float dt)
   // it just doesn't join getAllObjects() until flushPendingAdditions runs after the tick.
   const ObjectManager::ScriptPassGuard scriptPassGuard(objectManager);
 
+  fixedUpdateObjects(objectManager, dt);
+}
+
+void ScriptSystem::fixedUpdate(SceneAsset& scene, const float dt)
+{
+  ensureEngine();
+
+  const auto objectManager = scene.getObjectManager();
+  BindingContext::setObjectManager(objectManager.get());
+
+  checkForScriptChanges([&] { syncFieldsToData(scene); }, dt);
+
+  detachOrphans(*objectManager);
+  detachSceneScriptOrphans(scene);
+
+  // Held across the scene scripts too: one of them can spawn objects through the World bindings.
+  const ObjectManager::ScriptPassGuard scriptPassGuard(*objectManager);
+
+  for (const auto& script : std::vector(scene.getScripts()))
+  {
+    const auto& className = script->getClassName();
+    if (!isSceneScriptAttached(scene.getUUID(), className))
+    {
+      attachSceneScript(scene, script);
+    }
+
+    if (!isSceneScriptAttached(scene.getUUID(), className))
+    {
+      continue;
+    }
+
+    startSceneScriptIfNeeded(scene.getUUID(), className);
+
+    m_engine->fixedUpdate(uuids::to_string(scene.getUUID()).c_str(), className.c_str(), dt);
+  }
+
+  fixedUpdateObjects(*objectManager, dt);
+}
+
+void ScriptSystem::fixedUpdateObjects(ObjectManager& objectManager, const float dt)
+{
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -161,6 +266,41 @@ void ScriptSystem::variableUpdate(ObjectManager& objectManager)
   // ends.
   const ObjectManager::ScriptPassGuard scriptPassGuard(objectManager);
 
+  variableUpdateObjects(objectManager);
+}
+
+void ScriptSystem::variableUpdate(SceneAsset& scene)
+{
+  if (!m_engine)
+  {
+    return;
+  }
+
+  const auto objectManager = scene.getObjectManager();
+  BindingContext::setObjectManager(objectManager.get());
+
+  const ObjectManager::ScriptPassGuard scriptPassGuard(*objectManager);
+
+  for (const auto& script : std::vector(scene.getScripts()))
+  {
+    const auto& className = script->getClassName();
+
+    // Like object scripts, only an instance fixedUpdate or start already attached runs here.
+    if (!isSceneScriptAttached(scene.getUUID(), className))
+    {
+      continue;
+    }
+
+    startSceneScriptIfNeeded(scene.getUUID(), className);
+
+    m_engine->variableUpdate(uuids::to_string(scene.getUUID()).c_str(), className.c_str());
+  }
+
+  variableUpdateObjects(*objectManager);
+}
+
+void ScriptSystem::variableUpdateObjects(ObjectManager& objectManager)
+{
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -256,6 +396,32 @@ void ScriptSystem::attachAll(ObjectManager& objectManager)
   // scene edit's snapshot, so an orphan is usually already gone before the next tick sees it.
   detachOrphans(objectManager);
 
+  attachAllObjects(objectManager);
+}
+
+void ScriptSystem::attachAll(SceneAsset& scene)
+{
+  ensureEngine();
+
+  const auto objectManager = scene.getObjectManager();
+  BindingContext::setObjectManager(objectManager.get());
+
+  detachOrphans(*objectManager);
+  detachSceneScriptOrphans(scene);
+
+  for (const auto& script : scene.getScripts())
+  {
+    if (!isSceneScriptAttached(scene.getUUID(), script->getClassName()))
+    {
+      attachSceneScript(scene, script);
+    }
+  }
+
+  attachAllObjects(*objectManager);
+}
+
+void ScriptSystem::attachAllObjects(ObjectManager& objectManager)
+{
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -291,27 +457,52 @@ void ScriptSystem::syncFieldsToData(const ObjectManager& objectManager) const
         continue;
       }
 
-      const auto uuid = object->getUUID();
-      const auto className = script->getClassName();
-
-      // A missing or faulted instance reads back defaults, which would overwrite the saved values.
-      if (!isAttached(uuid, className) ||
-          !m_engine->isHealthy(uuids::to_string(uuid).c_str(), className.c_str()))
+      if (isAttached(object->getUUID(), script->getClassName()))
       {
-        continue;
+        syncScriptBlob(object->getUUID(), script);
       }
-
-      auto fields = readFieldsFromInstance(uuid, className);
-
-      // A getter that throws mid-read faults the instance and the rest read back as defaults.
-      if (!m_engine->isHealthy(uuids::to_string(uuid).c_str(), className.c_str()))
-      {
-        continue;
-      }
-
-      script->setFields(fields);
     }
   }
+}
+
+void ScriptSystem::syncFieldsToData(const SceneAsset& scene) const
+{
+  if (!m_engine)
+  {
+    return;
+  }
+
+  for (const auto& script : scene.getScripts())
+  {
+    if (isSceneScriptAttached(scene.getUUID(), script->getClassName()))
+    {
+      syncScriptBlob(scene.getUUID(), script);
+    }
+  }
+
+  syncFieldsToData(*scene.getObjectManager());
+}
+
+void ScriptSystem::syncScriptBlob(const uuids::uuid& ownerUUID, const std::shared_ptr<Script>& script) const
+{
+  const auto className = script->getClassName();
+  const auto ownerStr = uuids::to_string(ownerUUID);
+
+  // A missing or faulted instance reads back defaults, which would overwrite the saved values.
+  if (!m_engine->isHealthy(ownerStr.c_str(), className.c_str()))
+  {
+    return;
+  }
+
+  auto fields = readFieldsFromInstance(ownerUUID, className);
+
+  // A getter that throws mid-read faults the instance and the rest read back as defaults.
+  if (!m_engine->isHealthy(ownerStr.c_str(), className.c_str()))
+  {
+    return;
+  }
+
+  script->setFields(fields);
 }
 
 void ScriptSystem::applyScriptFieldEdit(const uuids::uuid& objectUUID,
@@ -326,7 +517,19 @@ void ScriptSystem::applyScriptFieldEdit(const uuids::uuid& objectUUID,
   writeFieldsToInstance(objectUUID, className, fields);
 }
 
-void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, const float dt)
+void ScriptSystem::applySceneScriptFieldEdit(const uuids::uuid& sceneUUID,
+                                             const std::string& className,
+                                             const nlohmann::json& fields) const
+{
+  if (!m_engine || !isSceneScriptAttached(sceneUUID, className))
+  {
+    return;
+  }
+
+  writeFieldsToInstance(sceneUUID, className, fields);
+}
+
+void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields, const float dt)
 {
   constexpr float minimumSnapshotInterval = 1.0f / 2.0f; // 2 checks every second
 
@@ -351,7 +554,7 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
     // Preserve live field values across the reload: read them back into each Script's data blob, then
     // recompile. The new instances are recreated lazily on the next fixedUpdate, which pushes the
     // refreshed blob back in.
-    syncFieldsToData(objectManager);
+    syncFields();
 
     const bool replaced = m_engine->reloadScripts();
 
@@ -369,6 +572,9 @@ void ScriptSystem::checkForScriptChanges(const ObjectManager& objectManager, con
     m_fieldCache.clear();
     m_started.clear();
     m_unresolved.clear();
+    m_attachedSceneScripts.clear();
+    m_startedSceneScripts.clear();
+    m_unresolvedSceneScripts.clear();
 
     Log::info(LogCategory::script, "Reload successful.");
   }
@@ -493,6 +699,112 @@ void ScriptSystem::startIfNeeded(const uuids::uuid& uuid, const std::string& cla
   }
 
   m_engine->start(uuids::to_string(uuid).c_str(), className.c_str());
+}
+
+void ScriptSystem::attachSceneScript(const SceneAsset& scene, const std::shared_ptr<Script>& script)
+{
+  const auto uuid = scene.getUUID();
+  const auto className = script->getClassName();
+  const auto key = cacheKey(uuid, className);
+
+  if (m_attachedSceneScripts.contains(key) || m_unresolvedSceneScripts.isUnresolved(uuid, className, script.get()))
+  {
+    return;
+  }
+
+  const auto uuidStr = uuids::to_string(uuid);
+
+  if (!m_engine->attachSceneScript(uuidStr.c_str(), className.c_str()))
+  {
+    if (m_unresolvedSceneScripts.add(uuid, className, script))
+    {
+      Log::warn(LogCategory::script,
+                "Scene script '" + className + "' in scene '" + scene.getName() +
+                "' could not be instantiated (missing class, not a SceneScript, failed compile, or throwing "
+                "constructor); its saved field values are kept.");
+    }
+
+    return;
+  }
+
+  m_attachedSceneScripts.emplace(key, AttachedSceneScript{ uuid, className, script });
+
+  auto& fields = m_fieldCache[key];
+  fields.clear();
+  for (const auto& f : nlohmann::json::parse(m_engine->getExposedFields(uuidStr.c_str(), className.c_str())))
+  {
+    fields.push_back({ f.at("name").get<std::string>(), f.at("type").get<std::string>() });
+  }
+
+  writeFieldsToInstance(uuid, className, script->getFields());
+}
+
+void ScriptSystem::detachSceneScript(const uuids::uuid& sceneUUID, const std::string& className)
+{
+  m_engine->detachScript(uuids::to_string(sceneUUID).c_str(), className.c_str());
+
+  const auto key = cacheKey(sceneUUID, className);
+  m_attachedSceneScripts.erase(key);
+  m_fieldCache.erase(key);
+  m_startedSceneScripts.erase(key);
+}
+
+void ScriptSystem::detachSceneScriptOrphans(const SceneAsset& scene)
+{
+  if (m_attachedSceneScripts.empty() && m_unresolvedSceneScripts.empty())
+  {
+    return;
+  }
+
+  std::unordered_map<std::string, const Component*> liveScripts;
+  for (const auto& script : scene.getScripts())
+  {
+    liveScripts.emplace(cacheKey(scene.getUUID(), script->getClassName()), script.get());
+  }
+
+  // A key under another scene's uuid is never live here, so a scene switch orphans the old scene's scripts.
+  m_unresolvedSceneScripts.prune([&liveScripts](const uuids::uuid& uuid, const std::string& className)
+    -> const Component*
+  {
+    const auto live = liveScripts.find(cacheKey(uuid, className));
+    return live == liveScripts.end() ? nullptr : live->second;
+  });
+
+  // Collected first because detachSceneScript() erases from m_attachedSceneScripts.
+  std::vector<std::pair<std::string, AttachedSceneScript>> orphans;
+  for (const auto& [key, attached] : m_attachedSceneScripts)
+  {
+    const auto live = liveScripts.find(key);
+    if (live == liveScripts.end() || live->second != attached.component.lock().get())
+    {
+      orphans.emplace_back(key, attached);
+    }
+  }
+
+  for (const auto& [key, orphan] : orphans)
+  {
+    if (m_startedSceneScripts.contains(key))
+    {
+      m_engine->stop(uuids::to_string(orphan.sceneUUID).c_str(), orphan.className.c_str());
+    }
+
+    detachSceneScript(orphan.sceneUUID, orphan.className);
+  }
+}
+
+void ScriptSystem::startSceneScriptIfNeeded(const uuids::uuid& sceneUUID, const std::string& className)
+{
+  if (!m_startedSceneScripts.insert(cacheKey(sceneUUID, className)).second)
+  {
+    return;
+  }
+
+  m_engine->start(uuids::to_string(sceneUUID).c_str(), className.c_str());
+}
+
+bool ScriptSystem::isSceneScriptAttached(const uuids::uuid& sceneUUID, const std::string& className) const
+{
+  return m_attachedSceneScripts.contains(cacheKey(sceneUUID, className));
 }
 
 void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,
