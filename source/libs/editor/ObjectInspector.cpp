@@ -23,12 +23,13 @@ namespace {
   // checkType is the ComponentType whose presence on the object hides this entry.
   // Transform is omitted (every object already has one); scripts attach via drag & drop only.
   struct AddableComponent { const char* label; const char* key; ComponentType checkType; gc::SecIcon icon; };
-  constexpr std::array<AddableComponent, 7> addableComponents {{
+  constexpr std::array<AddableComponent, 8> addableComponents {{
     { "Rigid Body",        "RigidBody",        ComponentType::rigidBody,        gc::SecIcon::rigid    },
     { "Model Renderer",    "ModelRenderer",    ComponentType::modelRenderer,    gc::SecIcon::image    },
     { "Light Renderer",    "LightRenderer",    ComponentType::lightRenderer,    gc::SecIcon::light    },
     { "Box Collider",      "Box",              ComponentType::collider,         gc::SecIcon::collider },
     { "Sphere Collider",   "Sphere",           ComponentType::collider,         gc::SecIcon::sphere   },
+    { "Capsule Collider",  "Capsule",          ComponentType::collider,         gc::SecIcon::collider },
     { "Player Controller", "PlayerController", ComponentType::playerController, gc::SecIcon::none     },
     { "Camera",            "Camera",           ComponentType::camera,           gc::SecIcon::none     }
   }};
@@ -49,6 +50,10 @@ namespace {
       if (collider->second->getSubType() == ComponentType::SubComponentType_sphereCollider)
       {
         return gc::SecIcon::sphere;
+      }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_capsuleCollider)
+      {
+        return gc::SecIcon::collider;
       }
       return components.contains(ComponentType::rigidBody) ? gc::SecIcon::rigidblock : gc::SecIcon::block;
     }
@@ -77,6 +82,10 @@ namespace {
       if (collider->second->getSubType() == ComponentType::SubComponentType_sphereCollider)
       {
         return "Sphere";
+      }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_capsuleCollider)
+      {
+        return "Capsule";
       }
       return components.contains(ComponentType::rigidBody) ? "Rigid Block" : "Block";
     }

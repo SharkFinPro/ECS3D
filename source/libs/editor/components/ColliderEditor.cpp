@@ -4,6 +4,7 @@
 #include "../MixedFields.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
 #include <imgui.h>
@@ -52,7 +53,7 @@ namespace {
     return summary;
   }
 
-  // Layer index (0-31) + collision mask rows, shared by both collider shapes since the fields live on the
+  // Layer index (0-31) + collision mask rows, shared by every collider shape since the fields live on the
   // Collider base. The mask is edited as per-layer checkboxes in a popup rather than a raw bitmask.
   // Returns true if either was edited this frame.
   bool colliderLayerMaskEditor(const std::shared_ptr<Collider>& collider, const MixedFields& mixed)
@@ -156,7 +157,7 @@ namespace {
     return edited;
   }
 
-  // "Render Collider" checkbox, shared by both collider shapes since the flag lives on the Collider base.
+  // "Render Collider" checkbox, shared by every collider shape since the flag lives on the Collider base.
   // Returns true if it was edited this frame.
   bool colliderRenderGizmoEditor(const std::shared_ptr<Collider>& collider, const MixedFields& mixed)
   {
@@ -168,6 +169,73 @@ namespace {
     }
 
     return false;
+  }
+
+  // The capsule's own fields; radius and height clamp to zero in their setters, so a drag below it holds there.
+  bool capsuleShapeEditor(const std::shared_ptr<CapsuleCollider>& capsule, const MixedFields& mixed)
+  {
+    bool edited = false;
+
+    glm::vec3 position = capsule->getLocalPosition();
+    glm::vec3 rotation = capsule->getLocalRotation();
+
+    ImGui::PushID("CapsuleCollider");
+    if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z, 0.1f, mixed.contains("position")))
+    {
+      capsule->setPosition(position);
+      edited = true;
+    }
+
+    if (gc::xyzGuiBoxed("Rotation", &rotation.x, &rotation.y, &rotation.z, 0.1f, mixed.contains("rotation")))
+    {
+      capsule->setRotation(rotation);
+      edited = true;
+    }
+    ImGui::PopID();
+
+    float radius = capsule->getLocalRadius();
+    if (gc::labeledDrag("Radius", &radius, 0.1f, mixed.contains("radius")))
+    {
+      capsule->setRadius(radius);
+      edited = true;
+    }
+
+    float height = capsule->getLocalHeight();
+    if (gc::labeledDrag("Height", &height, 0.1f, mixed.contains("height")))
+    {
+      capsule->setHeight(height);
+      edited = true;
+    }
+
+    return edited;
+  }
+
+  bool capsuleColliderEditor(const std::shared_ptr<Component>& component, const MixedFields& mixed)
+  {
+    const auto capsule = std::dynamic_pointer_cast<CapsuleCollider>(component);
+    if (!capsule)
+    {
+      return false;
+    }
+
+    bool edited = false;
+
+    if (ComponentEditor::displayHeader(component))
+    {
+      edited |= colliderRenderGizmoEditor(capsule, mixed);
+
+      bool isTrigger = capsule->isTrigger();
+      if (gc::accentCheckbox("Is Trigger", &isTrigger, mixed.contains("isTrigger")))
+      {
+        capsule->setIsTrigger(isTrigger);
+        edited = true;
+      }
+
+      edited |= colliderLayerMaskEditor(capsule, mixed);
+      edited |= capsuleShapeEditor(capsule, mixed);
+    }
+
+    return edited;
   }
 }
 
@@ -268,6 +336,8 @@ void registerColliderEditors(ComponentEditor& componentEditor)
 
     return edited;
   });
+
+  componentEditor.registerHandler("Capsule Collider", capsuleColliderEditor);
 
   // The collider debug gizmo (the shape drawn as an outline when "Render Collider"
   // is on) is handled by ECS3DRender's RenderSystem via GpuAssetCache::getColliderGizmo.
