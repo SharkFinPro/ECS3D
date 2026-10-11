@@ -72,6 +72,17 @@ ServerApp::ServerApp(LaunchOptions options)
 
   loadStartupProject();
 
+  // Compiling the user scripts is the slowest part of boot; doing it before listening keeps it off the
+  // first editor's join, whose snapshot would otherwise wait on it.
+  try
+  {
+    m_scriptSystem->warmUp();
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::server, std::string("Script runtime failed to initialize at startup: ") + e.what());
+  }
+
   m_netServer->start(m_options.port, m_options.editMode, m_options.authToken);
 
   startLoadedScene();

@@ -50,6 +50,32 @@ namespace {
     EXPECT_FALSE(state.calls.empty());
   }
 
+  TEST_F(ScriptSystemTest, WarmUpBuildsTheRuntimeOnceAndRetriesAfterAFailedBuild)
+  {
+    addScriptedObject("A", { "Mover" });
+    int attempts = 0;
+    ScriptSystem flaky([&attempts, this]() -> std::unique_ptr<ScriptRuntime>
+    {
+      if (++attempts == 1)
+      {
+        throw std::runtime_error("bridge missing");
+      }
+
+      return std::make_unique<RecordingRuntime>(state);
+    });
+
+    EXPECT_THROW(flaky.warmUp(), std::runtime_error);
+    EXPECT_EQ(attempts, 1);
+
+    flaky.warmUp();
+    EXPECT_EQ(attempts, 2);
+
+    flaky.warmUp();
+    flaky.start(manager());
+    EXPECT_EQ(attempts, 2);
+    EXPECT_FALSE(state.calls.empty());
+  }
+
   TEST_F(ScriptSystemTest, FixedUpdateAttachesAndStartsAScriptAddedToARunningScene)
   {
     const auto a = addScriptedObject("A", { "Mover" });
