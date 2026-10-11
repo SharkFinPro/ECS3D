@@ -12,6 +12,8 @@
 #include <objects/Object.h>
 #include <GpuAssetCache.h>
 #include <LightGizmoVisibility.h>
+#include <GridVisibility.h>
+#include <EditorViewportSettings.h>
 #include <RenderSystem.h>
 #include <ComponentEditor.h>
 #include <ObjectGUIManager.h>
@@ -461,6 +463,9 @@ void EditorApp::variableUpdate()
   {
     m_renderSystem->useFreeFlyCamera(*m_assetCache);
   }
+
+  RenderSystem::setGridVisible(*m_assetCache, shouldShowGrid(editorViewportSettings::readShowGrid(*m_settings),
+                                                             objectManager && m_viewCameraObject));
 
   if (objectManager && shouldDrawLightGizmos(m_sceneStatus, m_renderer->getRenderingManager()->isRayTracingEnabled()))
   {

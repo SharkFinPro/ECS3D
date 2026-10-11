@@ -84,6 +84,8 @@ add_executable(${PROJECT_NAME}
   KeybindsTest.cpp
   BillboardTest.cpp
   LightGizmoVisibilityTest.cpp
+  GridVisibilityTest.cpp
+  EditorViewportSettingsTest.cpp
   GizmoTest.cpp
   GizmoDragTest.cpp
   GizmoDragParentedTest.cpp
