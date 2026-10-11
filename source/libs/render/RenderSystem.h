@@ -49,6 +49,9 @@ public:
   // it's safe to call every frame.
   void useFreeFlyCamera(GpuAssetCache& assetCache);
 
+  // Shows or hides the renderer's ground grid. Cheap enough to call every frame.
+  static void setGridVisible(GpuAssetCache& assetCache, bool visible);
+
   // True for the object under the cursor; the editor reads it to drive Ctrl-click selection. Only an object
   // drawn last frame can report true.
   [[nodiscard]] bool isSelected(const uuids::uuid& uuid) const;

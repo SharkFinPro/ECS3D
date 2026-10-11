@@ -9,6 +9,8 @@ add_library(${PROJECT_NAME}
   EditorCameraSettings.h
   EditorGizmoSettings.cpp
   EditorGizmoSettings.h
+  EditorViewportSettings.cpp
+  EditorViewportSettings.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

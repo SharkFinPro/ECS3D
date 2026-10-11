@@ -4,6 +4,7 @@
 #include "KeybindDispatcher.h"
 #include <EditorCameraSettings.h>
 #include <EditorGizmoSettings.h>
+#include <EditorViewportSettings.h>
 #include <Keybinds.h>
 #include <SettingsStore.h>
 #include <VulkanEngine/VulkanEngine.h>
@@ -236,6 +237,14 @@ void SettingsPanel::displayViewport()
   {
     editorCameraSettings::writeSpeed(*m_settings, editorCameraSettings::defaultSpeed);
     m_renderer->getCamera()->setSpeed(editorCameraSettings::defaultSpeed);
+  }
+
+  ImGui::Spacing();
+
+  bool showGrid = editorViewportSettings::readShowGrid(*m_settings);
+  if (gc::accentCheckbox("Show Grid", &showGrid))
+  {
+    editorViewportSettings::writeShowGrid(*m_settings, showGrid);
   }
 
   ImGui::Spacing();

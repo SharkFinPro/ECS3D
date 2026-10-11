@@ -8,6 +8,7 @@ add_library(${PROJECT_NAME}
   Billboard.cpp
   Billboard.h
   LightGizmoVisibility.h
+  GridVisibility.h
   InputCapture.cpp
   InputCapture.h
   OutlineColors.h

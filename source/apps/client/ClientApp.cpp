@@ -233,6 +233,8 @@ void ClientApp::createRenderer()
 
 void ClientApp::variableUpdate() const
 {
+  RenderSystem::setGridVisible(*m_assetCache, false);
+
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     m_renderSystem->variableUpdate(*scene->getObjectManager(), *m_assetCache);

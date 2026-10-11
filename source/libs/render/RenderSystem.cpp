@@ -329,6 +329,20 @@ void RenderSystem::useFreeFlyCamera(GpuAssetCache& assetCache)
   enableFreeFlyCamera(assetCache.getRenderer());
 }
 
+void RenderSystem::setGridVisible(GpuAssetCache& assetCache, const bool visible)
+{
+  const auto renderer3D = assetCache.getRenderer()->getRenderingManager()->getRenderer3D();
+
+  if (visible)
+  {
+    renderer3D->enableGrid();
+  }
+  else
+  {
+    renderer3D->disableGrid();
+  }
+}
+
 bool RenderSystem::isSelected(const uuids::uuid& uuid) const
 {
   const auto it = m_selected.find(uuid);
