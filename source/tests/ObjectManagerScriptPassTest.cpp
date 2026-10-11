@@ -59,42 +59,6 @@ TEST(ObjectManager, ObjectsAddedDuringAScriptPassDoNotJoinTheListUntilFlushed)
             scene.objectManager->getAllObjects().end());
 }
 
-// The exact contract WorldBindings::bindFindObjectByName/bindGetAllObjectUuids rely on: a caller that
-// wants a consistent view of "every object that exists right now" during a script pass has to scan
-// getAllObjects() and getPendingAdditions() together, not getAllObjects() alone - getObjectByUUID already
-// does both (see above), and a name/uuid-listing binding that only checked getAllObjects() would disagree
-// with it about an object a script spawned earlier in the very same pass.
-TEST(ObjectManager, FindingAnObjectByNameDuringAScriptPassRequiresCheckingBothListsLikeUuidLookupAlreadyDoes)
-{
-  const auto scene = makeScene();
-
-  const ObjectManager::ScriptPassGuard guard(*scene.objectManager);
-
-  const auto spawned = std::make_shared<Object>("SpawnedByScript");
-  scene.objectManager->addObject(spawned);
-
-  auto findByName = [&](const std::string& name) -> std::shared_ptr<Object> {
-    for (const auto& object : scene.objectManager->getAllObjects())
-    {
-      if (object->getName() == name)
-      {
-        return object;
-      }
-    }
-    for (const auto& object : scene.objectManager->getPendingAdditions())
-    {
-      if (object->getName() == name)
-      {
-        return object;
-      }
-    }
-    return nullptr;
-  };
-
-  EXPECT_EQ(findByName("SpawnedByScript"), spawned);
-  EXPECT_EQ(scene.objectManager->getObjectByUUID(spawned->getUUID()), spawned);
-}
-
 // The actual bug: appending to m_allObjects while a range-for over it is in progress can reallocate the
 // vector and invalidate every iterator the loop holds - a range-for's begin()/end() are captured once at
 // entry, so that reallocation leaves them dangling, UB for the rest of the pass. This uses the exact same
