@@ -18,11 +18,11 @@ namespace {
   }
 }
 
-void EditorApp::requestUndo()
+bool EditorApp::requestUndo()
 {
   if (undoRedoRequestBlocked())
   {
-    return;
+    return true;
   }
 
   const auto redoDepthBefore = m_playHistory.current().redoDepth();
@@ -31,14 +31,17 @@ void EditorApp::requestUndo()
   if (gainedOneEntry(redoDepthBefore, m_playHistory.current().redoDepth()))
   {
     beginUndoRedoPending();
+    return true;
   }
+
+  return false;
 }
 
-void EditorApp::requestRedo()
+bool EditorApp::requestRedo()
 {
   if (undoRedoRequestBlocked())
   {
-    return;
+    return true;
   }
 
   const auto undoDepthBefore = m_playHistory.current().undoDepth();
@@ -47,7 +50,10 @@ void EditorApp::requestRedo()
   if (gainedOneEntry(undoDepthBefore, m_playHistory.current().undoDepth()))
   {
     beginUndoRedoPending();
+    return true;
   }
+
+  return false;
 }
 
 bool EditorApp::undoRedoRequestBlocked()
@@ -87,11 +93,11 @@ void EditorApp::displayUndoRedoMenuItem(const bool isUndo, const std::optional<s
   {
     if (isUndo)
     {
-      requestUndo();
+      static_cast<void>(requestUndo());
     }
     else
     {
-      requestRedo();
+      static_cast<void>(requestRedo());
     }
   }
   ImGui::EndDisabled();

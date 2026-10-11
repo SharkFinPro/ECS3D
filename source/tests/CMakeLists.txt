@@ -31,6 +31,7 @@ add_executable(${PROJECT_NAME}
   AssetRegistryTest.cpp
   AssetDragDropTest.cpp
   UndoRequestGateTest.cpp
+  KeyHoldRepeatTest.cpp
   AssetReferencesTest.cpp
   UnsavedChangesTest.cpp
   AssetFilterTest.cpp

@@ -303,10 +303,11 @@ private:
 
   // What the Ctrl+Z/Ctrl+Shift+Z keybinds and the Edit menu actually call (EditorAppUndoMenu.cpp): a
   // no-op while undoRedoRequestBlocked(), otherwise calls undo()/redo() and starts the in-flight gate if
-  // it actually sent something - see UndoRequestGate.h.
-  void requestUndo();
+  // it actually sent something - see UndoRequestGate.h. Returns false only when undo()/redo() ran and
+  // sent nothing; true when it sent or was skipped for the gate, so a held chord keeps repeating.
+  [[nodiscard]] bool requestUndo();
 
-  void requestRedo();
+  [[nodiscard]] bool requestRedo();
 
   // True while a previously sent undo/redo request is still awaiting its rebroadcast and the gate's
   // timeout has not yet elapsed; clears the gate itself as a side effect once the timeout has elapsed, so
