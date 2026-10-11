@@ -75,7 +75,7 @@ internal static unsafe class TransportRecorder
     return Logs.ToArray().Any(line => line.Contains(text, StringComparison.Ordinal));
   }
 
-  public static void ClientSend(TcpBackend client, byte type, byte[] payload)
+  public static void ClientSend(TransportBackend client, byte type, byte[] payload)
   {
     fixed (byte* data = payload)
     {
@@ -83,7 +83,7 @@ internal static unsafe class TransportRecorder
     }
   }
 
-  public static void ServerBroadcast(TcpBackend server, byte type, byte[] payload)
+  public static void ServerBroadcast(TransportBackend server, byte type, byte[] payload)
   {
     fixed (byte* data = payload)
     {
@@ -91,7 +91,7 @@ internal static unsafe class TransportRecorder
     }
   }
 
-  public static void ServerSendToMany(TcpBackend server, int[] connIds, byte type, byte[] payload)
+  public static void ServerSendToMany(TransportBackend server, int[] connIds, byte type, byte[] payload)
   {
     fixed (int* ids = connIds)
     fixed (byte* data = payload)
