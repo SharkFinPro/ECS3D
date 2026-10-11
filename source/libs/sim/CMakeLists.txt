@@ -13,10 +13,14 @@ add_library(${PROJECT_NAME}
   collisions/Simplex.h
   collisions/Polytope.cpp
   collisions/Polytope.h
+  collisions/ContactManifold.cpp
+  collisions/ContactManifold.h
   collisions/Support.cpp
   collisions/Support.h
   queries/SceneQueries.cpp
   queries/SceneQueries.h
+  queries/HullQueries.cpp
+  queries/HullQueries.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

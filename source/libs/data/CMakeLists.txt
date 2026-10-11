@@ -67,6 +67,10 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/BoxCollider.h
   objects/components/collisions/SphereCollider.cpp
   objects/components/collisions/SphereCollider.h
+  objects/components/collisions/ConvexHull.cpp
+  objects/components/collisions/ConvexHull.h
+  objects/components/collisions/ConvexMeshCollider.cpp
+  objects/components/collisions/ConvexMeshCollider.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

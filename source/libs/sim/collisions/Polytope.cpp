@@ -1,7 +1,9 @@
 #include "Polytope.h"
 #include "Simplex.h"
 #include "Support.h"
+#include "ContactManifold.h"
 #include <objects/components/collisions/Collider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <objects/components/Transform.h>
 #include <objects/Object.h>
@@ -141,6 +143,22 @@ glm::vec3 clampToFootprint(const glm::vec3& point, const BoxGeometry& box, const
   return clamped;
 }
 
+// A hull carries its own world vertices; any other shape that reaches a manifold is a box.
+std::vector<glm::vec3> worldVerticesOf(Collider& collider)
+{
+  if (collider.getColliderType() == ColliderType::convexMeshCollider)
+  {
+    return dynamic_cast<ConvexMeshCollider&>(collider).getWorldVertices();
+  }
+
+  const auto vertices = boxVerticesOf(boxGeometryOf(collider));
+
+  return std::vector<glm::vec3>(vertices.begin(), vertices.end());
+}
+
+// Contact::points holds this many.
+constexpr size_t maxManifoldPoints = 4;
+
 Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
   : m_collider(&collider), m_otherCollider(&otherCollider)
 {
@@ -190,7 +208,7 @@ glm::vec3 Polytope::findCollisionPoint() const
   }
 
   glm::vec3 centroid{ 0 };
-  const auto points = boxContactPoints();
+  const auto points = shapeContactPoints();
   for (const auto& point : points)
   {
     centroid += point;
@@ -209,7 +227,7 @@ std::vector<glm::vec3> Polytope::findContactManifold() const
   }
 
   std::vector<glm::vec3> manifold;
-  for (const auto& point : boxContactPoints())
+  for (const auto& point : shapeContactPoints())
   {
     const bool duplicate = std::ranges::any_of(manifold, [&point](const glm::vec3& existing)
     {
@@ -223,6 +241,25 @@ std::vector<glm::vec3> Polytope::findContactManifold() const
   }
 
   return manifold;
+}
+
+std::vector<glm::vec3> Polytope::shapeContactPoints() const
+{
+  const bool hullInvolved = m_collider->getColliderType() == ColliderType::convexMeshCollider ||
+                            m_otherCollider->getColliderType() == ColliderType::convexMeshCollider;
+
+  return hullInvolved ? hullContactPoints() : boxContactPoints();
+}
+
+std::vector<glm::vec3> Polytope::hullContactPoints() const
+{
+  const auto normal = glm::normalize(m_closestFaceData.closestPoint);
+
+  const auto verticesA = worldVerticesOf(*m_collider);
+  const auto verticesB = worldVerticesOf(*m_otherCollider);
+
+  return collisions::clipManifold(collisions::touchingFeature(verticesA, normal),
+                                  collisions::touchingFeature(verticesB, -normal), normal, maxManifoldPoints);
 }
 
 std::vector<glm::vec3> Polytope::boxContactPoints() const

@@ -50,11 +50,17 @@ public:
   [[nodiscard]] glm::vec3 findCollisionPoint() const;
 
   // Up to four distinct world-space points spanning the contact: the incident face's vertices clipped to
-  // the reference face on a box pair, or the single findCollisionPoint otherwise.
+  // the reference face on a box or hull pair, or the single findCollisionPoint otherwise.
   [[nodiscard]] std::vector<glm::vec3> findContactManifold() const;
 
 private:
   [[nodiscard]] std::vector<glm::vec3> boxContactPoints() const;
+
+  [[nodiscard]] std::vector<glm::vec3> hullContactPoints() const;
+
+  // The manifold of whichever shapes the pair holds: clipped when a convex hull is in the pair, the box
+  // pair's own rule otherwise.
+  [[nodiscard]] std::vector<glm::vec3> shapeContactPoints() const;
 
   Collider* m_collider;
   Collider* m_otherCollider;

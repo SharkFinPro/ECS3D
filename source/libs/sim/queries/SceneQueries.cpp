@@ -1,4 +1,5 @@
 #include "SceneQueries.h"
+#include "HullQueries.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -6,6 +7,7 @@
 #include <objects/components/Transform.h>
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -177,6 +179,67 @@ namespace {
     return dot(center - closest, center - closest) <= radius * radius;
   }
 
+  // Dispatch on the collider's shape. A shape with no analytic query here is never hit. The caller has
+  // checked the owning object has a Transform.
+  bool rayCollider(const std::shared_ptr<Collider>& collider, const glm::vec3& origin, const glm::vec3& dir,
+                   const float maxDistance, float& t, glm::vec3& normal)
+  {
+    switch (collider->getColliderType())
+    {
+      case ColliderType::sphereCollider:
+      {
+        const auto sphere = std::dynamic_pointer_cast<SphereCollider>(collider);
+        return sphere && raySphere(origin, dir, sphere->getPosition(), sphere->getRadius(), maxDistance, t, normal);
+      }
+      case ColliderType::boxCollider:
+      {
+        const auto box = std::dynamic_pointer_cast<BoxCollider>(collider);
+        return box && rayBox(origin, dir, boxWorldMatrix(box), maxDistance, t, normal);
+      }
+      case ColliderType::convexMeshCollider:
+      {
+        const auto hull = std::dynamic_pointer_cast<ConvexMeshCollider>(collider);
+        return hull && hullQueries::rayHull(origin, dir, hull->getWorldVertices(), hull->getHull().indices,
+                                            maxDistance, t, normal);
+      }
+    }
+
+    return false;
+  }
+
+  bool sphereOverlapsCollider(const std::shared_ptr<Collider>& collider, const glm::vec3& center, const float radius)
+  {
+    switch (collider->getColliderType())
+    {
+      case ColliderType::sphereCollider:
+      {
+        const auto sphere = std::dynamic_pointer_cast<SphereCollider>(collider);
+        if (!sphere)
+        {
+          return false;
+        }
+
+        const glm::vec3 delta = sphere->getPosition() - center;
+        const float combined = sphere->getRadius() + radius;
+
+        return dot(delta, delta) <= combined * combined;
+      }
+      case ColliderType::boxCollider:
+      {
+        const auto box = std::dynamic_pointer_cast<BoxCollider>(collider);
+        return box && sphereOverlapsBox(center, radius, boxWorldMatrix(box));
+      }
+      case ColliderType::convexMeshCollider:
+      {
+        const auto hull = std::dynamic_pointer_cast<ConvexMeshCollider>(collider);
+        return hull && hullQueries::sphereOverlapsHull(center, radius, hull->getWorldVertices(),
+                                                       hull->getHull().indices);
+      }
+    }
+
+    return false;
+  }
+
   // What a caster's ignoreObject excludes: the object itself and whatever shares its body - the same
   // non-null rigid body, or, when it has none, its own bodiless descendants. A descendant with a rigid
   // body of its own is a different body and stays hittable.
@@ -252,29 +315,12 @@ bool SceneQueries::raycast(ObjectManager& objectManager,
 
     float t = 0.0f;
     glm::vec3 normal(0.0f);
-    bool hit = false;
 
-    // Both shapes resolve their world placement through accessors that throw when the object has no
-    // Transform, so both are guarded the same way. This runs from a script binding on the tick loop,
+    // Every shape resolves its world placement through accessors that throw when the object has no
+    // Transform, so all are guarded the same way. This runs from a script binding on the tick loop,
     // where a native exception would unwind through managed frames.
-    const auto transform = object->getComponent<Transform>(ComponentType::transform);
-
-    if (collider->getColliderType() == ColliderType::sphereCollider)
-    {
-      const auto sphere = std::dynamic_pointer_cast<SphereCollider>(collider);
-      if (sphere && transform)
-      {
-        hit = raySphere(origin, dir, sphere->getPosition(), sphere->getRadius(), nearest, t, normal);
-      }
-    }
-    else
-    {
-      const auto box = std::dynamic_pointer_cast<BoxCollider>(collider);
-      if (box && transform)
-      {
-        hit = rayBox(origin, dir, boxWorldMatrix(box), nearest, t, normal);
-      }
-    }
+    const bool hasTransform = object->getComponent<Transform>(ComponentType::transform) != nullptr;
+    const bool hit = hasTransform && rayCollider(collider, origin, dir, nearest, t, normal);
 
     if (hit && t <= nearest)
     {
@@ -310,31 +356,10 @@ void SceneQueries::overlapSphere(ObjectManager& objectManager,
       continue;
     }
 
-    bool overlaps = false;
-
     // Guarded the same way as raycast, and for the same reason.
-    const auto transform = object->getComponent<Transform>(ComponentType::transform);
+    const bool hasTransform = object->getComponent<Transform>(ComponentType::transform) != nullptr;
 
-    if (collider->getColliderType() == ColliderType::sphereCollider)
-    {
-      const auto sphere = std::dynamic_pointer_cast<SphereCollider>(collider);
-      if (sphere && transform)
-      {
-        const glm::vec3 delta = sphere->getPosition() - center;
-        const float combined = sphere->getRadius() + radius;
-        overlaps = dot(delta, delta) <= combined * combined;
-      }
-    }
-    else
-    {
-      const auto box = std::dynamic_pointer_cast<BoxCollider>(collider);
-      if (box && transform)
-      {
-        overlaps = sphereOverlapsBox(center, radius, boxWorldMatrix(box));
-      }
-    }
-
-    if (overlaps)
+    if (hasTransform && sphereOverlapsCollider(collider, center, radius))
     {
       results.push_back(object->getUUID());
     }
