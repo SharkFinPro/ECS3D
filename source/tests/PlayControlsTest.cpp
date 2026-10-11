@@ -53,10 +53,3 @@ TEST(PlayControlsTest, ReadOnlyServerDisablesEverythingWhilePaused)
   EXPECT_FALSE(a.pause);
   EXPECT_FALSE(a.stop);
 }
-
-TEST(PlayControlsTest, PlayLabelReadsResumeOnlyWhilePaused)
-{
-  EXPECT_STREQ(playControlLabel(SceneStatus::paused), "Resume");
-  EXPECT_STREQ(playControlLabel(SceneStatus::stopped), "Play");
-  EXPECT_STREQ(playControlLabel(SceneStatus::running), "Play");
-}

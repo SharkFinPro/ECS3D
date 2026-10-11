@@ -32,9 +32,4 @@ struct PlayControlsAvailability
   return {};
 }
 
-[[nodiscard]] constexpr const char* playControlLabel(const SceneStatus status) noexcept
-{
-  return status == SceneStatus::paused ? "Resume" : "Play";
-}
-
 #endif

@@ -525,28 +525,38 @@ namespace gc {
     return clicked;
   }
 
-  // A fixed-size (frame height square) icon button for the Scene Status toolbar. `accent` gives the
-  // accent fill and on-accent icon; the icon uses GetColorU32 so BeginDisabled's alpha grays it out.
-  inline bool iconButton(const char* id, const SecIcon icon, const bool accent)
+  // A fixed-size (frame height square) icon button for the Scene Status toolbar. A disabled button gets
+  // a recessed well and a muted icon, since ImGui's disabled alpha alone is too subtle to read at a glance.
+  inline bool iconButton(const char* id, const SecIcon icon, const bool enabled, const bool accent)
   {
     const float s = ImGui::GetFrameHeight();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
 
-    if (accent)
+    ImGui::BeginDisabled(!enabled);
+
+    int pushedColors = 0;
+    if (!enabled)
+    {
+      ImGui::PushStyleColor(ImGuiCol_Button, theme::inset);
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::inset);
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::inset);
+      pushedColors = 3;
+    }
+    else if (accent)
     {
       ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
       ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
       ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
+      pushedColors = 3;
     }
     const bool clicked = ImGui::Button(id, ImVec2(s, s));
-    if (accent)
-    {
-      ImGui::PopStyleColor(3);
-    }
+    ImGui::PopStyleColor(pushedColors);
 
-    const ImVec4& iconCol = accent ? theme::onAcc : theme::t1;
+    const ImVec4& iconCol = !enabled ? theme::t3 : accent ? theme::onAcc : theme::t1;
     drawSecIcon(ImGui::GetWindowDrawList(), ImVec2(pos.x + s * 0.5f, pos.y + s * 0.5f), s * 0.55f, icon,
                 ImGui::GetColorU32(iconCol));
+
+    ImGui::EndDisabled();
 
     return clicked;
   }

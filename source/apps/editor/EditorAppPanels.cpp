@@ -111,15 +111,6 @@ namespace {
                                           : theme::t3;
   }
 
-  // Shown even while the button is disabled, so a grayed-out control still says what it is.
-  void playControlTooltip(const char* text)
-  {
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_ForTooltip))
-    {
-      ImGui::SetTooltip("%s", text);
-    }
-  }
-
   // The Move/Rotate/Scale mode buttons: the active mode is styled like the mockup's accent play button.
   // Named `viewportGizmo` rather than `gizmo` so it doesn't shadow the `gizmo::` namespace below.
   void displayGizmoModeButtons(ViewportGizmo& viewportGizmo)
@@ -209,8 +200,7 @@ void EditorApp::displayPlayControls()
 {
   const auto available = playControlsAvailability(m_sceneStatus, m_serverEditable);
 
-  ImGui::BeginDisabled(!available.play);
-  if (gc::iconButton("##play", gc::SecIcon::play, available.play))
+  if (gc::iconButton("##play", gc::SecIcon::play, available.play, true))
   {
     if (m_playHistory.requestStart())
     {
@@ -219,21 +209,15 @@ void EditorApp::displayPlayControls()
 
     sendSceneControl(net::SceneControlOp::start);
   }
-  playControlTooltip(playControlLabel(m_sceneStatus));
-  ImGui::EndDisabled();
 
   ImGui::SameLine();
-  ImGui::BeginDisabled(!available.pause);
-  if (gc::iconButton("##pause", gc::SecIcon::pause, false))
+  if (gc::iconButton("##pause", gc::SecIcon::pause, available.pause, false))
   {
     sendSceneControl(net::SceneControlOp::pause);
   }
-  playControlTooltip("Pause");
-  ImGui::EndDisabled();
 
   ImGui::SameLine();
-  ImGui::BeginDisabled(!available.stop);
-  if (gc::iconButton("##stop", gc::SecIcon::stop, false))
+  if (gc::iconButton("##stop", gc::SecIcon::stop, available.stop, false))
   {
     if (m_playHistory.requestStop())
     {
@@ -242,8 +226,6 @@ void EditorApp::displayPlayControls()
 
     sendSceneControl(net::SceneControlOp::stop);
   }
-  playControlTooltip("Stop");
-  ImGui::EndDisabled();
 }
 
 void EditorApp::displayRayTracingToggle() const
