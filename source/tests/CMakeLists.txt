@@ -72,6 +72,7 @@ add_executable(${PROJECT_NAME}
   ScriptFieldEditTest.cpp
   AttachedScriptsTest.cpp
   ScriptSystemLifecycleTest.cpp
+  ScriptSystemSceneScriptTest.cpp
   ScriptSystemFieldsAndReloadTest.cpp
   UnresolvedScriptsTest.cpp
   ScriptBindingGapsTest.cpp
