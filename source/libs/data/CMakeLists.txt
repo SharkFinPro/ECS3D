@@ -69,6 +69,8 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/SphereCollider.h
   objects/components/collisions/ConvexHull.cpp
   objects/components/collisions/ConvexHull.h
+  objects/components/collisions/QuickHull.cpp
+  objects/components/collisions/QuickHull.h
   objects/components/collisions/ConvexMeshCollider.cpp
   objects/components/collisions/ConvexMeshCollider.h
 )

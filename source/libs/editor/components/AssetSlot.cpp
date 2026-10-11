@@ -2,6 +2,7 @@
 #include <assets/AssetRegistry.h>
 #include <GpuAssetCache.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
+#include <exception>
 #include <filesystem>
 #include <string>
 
