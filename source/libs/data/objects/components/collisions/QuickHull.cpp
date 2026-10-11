@@ -1,4 +1,6 @@
 #include "QuickHull.h"
+#include "HullFace.h"
+#include "HullVerification.h"
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
@@ -13,6 +15,8 @@ namespace {
 
   constexpr double tinyNormalLength = 1e-12;
 
+  constexpr int maxRepairRounds = 4;
+
   // The build is refused once the hull-in-progress has this many faces: it can only shrink back when a later
   // point swallows vertices, and the caller refuses a hull this large anyway.
   constexpr size_t maxAliveFaces = 4 * (2 * maxConvexHullVertices - 4);
@@ -22,19 +26,6 @@ namespace {
   // How far below a face plane still counts as seeing it. Exactly collinear lattice input otherwise sees one
   // neighbor and misses the other on rounding noise, and the cone built on that horizon has a zero-area face.
   constexpr double visibilityNoiseFactor = 1e-6;
-
-  struct HullFace {
-    std::array<uint32_t, 3> v{};
-    glm::dvec3 normal{ 0.0 };
-    double offset = 0.0;
-    std::vector<uint32_t> outside;
-    bool alive = true;
-  };
-
-  [[nodiscard]] uint64_t edgeKey(const uint32_t from, const uint32_t to)
-  {
-    return (static_cast<uint64_t>(from) << 32) | to;
-  }
 
   class QuickHullBuilder {
   public:
@@ -64,7 +55,14 @@ namespace {
 
       createInitialFaces(simplex);
 
-      if (!processPending())
+      bool settled = processPending();
+
+      for (int round = 0; settled && round < maxRepairRounds && repairMissedPoints(); ++round)
+      {
+        settled = processPending();
+      }
+
+      if (!settled || !isVerifiedHull(m_faces, m_aliveFaces, m_points, m_eps))
       {
         return std::nullopt;
       }
@@ -105,6 +103,15 @@ namespace {
       }
 
       return true;
+    }
+
+    // True when any point was handed back to a face.
+    [[nodiscard]] bool repairMissedPoints()
+    {
+      const auto touched = assignMissedPoints(m_faces, m_points, m_eps);
+      queueFaces(touched);
+
+      return !touched.empty();
     }
 
     [[nodiscard]] bool computeEpsilon()
@@ -219,12 +226,8 @@ namespace {
       return bestDistance > m_eps;
     }
 
-    [[nodiscard]] static double distanceTo(const HullFace& face, const glm::dvec3& point)
-    {
-      return glm::dot(face.normal, point) - face.offset;
-    }
-
-    // A face too thin to have a normal keeps a zero normal, so no point is ever above it.
+    // A face too thin to have a normal keeps a zero normal: no point is ever above it, and a build that
+    // ends with one is refused.
     [[nodiscard]] HullFace makeFace(const uint32_t a, const uint32_t b, const uint32_t c) const
     {
       HullFace face;
