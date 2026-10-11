@@ -10,6 +10,7 @@
 #include "Replication.h"
 
 #include <nlohmann/json.hpp>
+#include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <memory>
@@ -148,4 +149,173 @@ TEST(SceneScriptsPanelTest, ChosenReorderIndexMovesTheScriptExactlyOnePlace)
       EXPECT_EQ(namesOf(*scene), expected) << "index " << i << (up ? " up" : " down");
     }
   }
+}
+
+namespace {
+  using namespace std::chrono_literals;
+  using sceneScriptPanel::Clock;
+
+  struct FakeClock {
+    Clock::time_point now{};
+
+    [[nodiscard]] sceneScriptPanel::NowFunction function()
+    {
+      return [this] { return now; };
+    }
+  };
+
+  const auto fieldsV0 = nlohmann::json::parse(R"([{"name":"speed","type":"float","value":3}])");
+  const auto fieldsV1 = nlohmann::json::parse(R"([{"name":"speed","type":"float","value":4},)"
+                                              R"({"name":"on","type":"bool","value":false}])");
+  const auto fieldsV2 = nlohmann::json::parse(R"([{"name":"speed","type":"float","value":4},)"
+                                              R"({"name":"on","type":"bool","value":true}])");
+
+  sceneScriptPanel::FieldEditTracker::ReplicatedLookup lookupOf(const nlohmann::json& replicated)
+  {
+    return [&replicated](const std::string& className) -> const nlohmann::json* {
+      return className == "Alpha" ? &replicated : nullptr;
+    };
+  }
+}
+
+TEST(SceneScriptsPanelTest, FieldEditIsHeldWhileAWidgetIsActiveAndSentOnceOnRelease)
+{
+  FakeClock clock;
+  sceneScriptPanel::FieldEditTracker tracker(500ms, clock.function());
+  tracker.edit("Alpha", fieldsV1);
+
+  EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), true).empty());
+  EXPECT_EQ(*tracker.shown("Alpha"), fieldsV1);
+
+  const auto sent = tracker.poll(lookupOf(fieldsV0), false);
+  ASSERT_EQ(sent.size(), 1u);
+  EXPECT_EQ(sent[0].first, "Alpha");
+  EXPECT_EQ(sent[0].second, fieldsV1);
+
+  // Still shown after the send, so the widget does not snap back to the stale replicated value.
+  ASSERT_NE(tracker.shown("Alpha"), nullptr);
+  EXPECT_EQ(*tracker.shown("Alpha"), fieldsV1);
+}
+
+TEST(SceneScriptsPanelTest, SentCopyIsNotResentWhilePending)
+{
+  FakeClock clock;
+  sceneScriptPanel::FieldEditTracker tracker(500ms, clock.function());
+  tracker.edit("Alpha", fieldsV1);
+  ASSERT_EQ(tracker.poll(lookupOf(fieldsV0), false).size(), 1u);
+
+  clock.now += 100ms;
+  EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), false).empty());
+  EXPECT_NE(tracker.shown("Alpha"), nullptr);
+}
+
+TEST(SceneScriptsPanelTest, CopyIsDroppedWhenTheReplicatedBlobEqualsIt)
+{
+  FakeClock clock;
+  sceneScriptPanel::FieldEditTracker tracker(500ms, clock.function());
+  tracker.edit("Alpha", fieldsV1);
+  ASSERT_EQ(tracker.poll(lookupOf(fieldsV0), false).size(), 1u);
+  ASSERT_NE(tracker.shown("Alpha"), nullptr);
+
+  EXPECT_TRUE(tracker.poll(lookupOf(fieldsV1), false).empty());
+  EXPECT_EQ(tracker.shown("Alpha"), nullptr);
+}
+
+TEST(SceneScriptsPanelTest, CopyIsDroppedWhenTheTimeoutPasses)
+{
+  FakeClock clock;
+  sceneScriptPanel::FieldEditTracker tracker(500ms, clock.function());
+  tracker.edit("Alpha", fieldsV1);
+  ASSERT_EQ(tracker.poll(lookupOf(fieldsV0), false).size(), 1u);
+
+  clock.now += 499ms;
+  EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), false).empty());
+  EXPECT_NE(tracker.shown("Alpha"), nullptr);
+
+  clock.now += 1ms;
+  EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), false).empty());
+  EXPECT_EQ(tracker.shown("Alpha"), nullptr);
+}
+
+TEST(SceneScriptsPanelTest, CopyIsDroppedWhenTheClassDisappears)
+{
+  FakeClock clock;
+  sceneScriptPanel::FieldEditTracker tracker(500ms, clock.function());
+  tracker.edit("Beta", fieldsV1);
+  tracker.edit("Alpha", fieldsV1);
+
+  // The lookup only knows Alpha, so Beta has left the scene.
+  const auto sent = tracker.poll(lookupOf(fieldsV0), false);
+
+  ASSERT_EQ(sent.size(), 1u);
+  EXPECT_EQ(sent[0].first, "Alpha");
+  EXPECT_EQ(tracker.shown("Beta"), nullptr);
+}
+
+TEST(SceneScriptsPanelTest, ReEditWhilePendingSendsAgainWithBothChanges)
+{
+  FakeClock clock;
+  sceneScriptPanel::FieldEditTracker tracker(500ms, clock.function());
+  tracker.edit("Alpha", fieldsV1);
+  ASSERT_EQ(tracker.poll(lookupOf(fieldsV0), false).size(), 1u);
+
+  // The widgets draw from the shown copy, so the second edit builds on the first.
+  nlohmann::json second = *tracker.shown("Alpha");
+  second[1]["value"] = true;
+  ASSERT_EQ(second, fieldsV2);
+  tracker.edit("Alpha", second);
+
+  EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), true).empty());
+
+  const auto sent = tracker.poll(lookupOf(fieldsV0), false);
+  ASSERT_EQ(sent.size(), 1u);
+  EXPECT_EQ(sent[0].second, fieldsV2);
+}
+
+TEST(SceneScriptsPanelTest, UnsentCopyEqualToReplicatedIsDroppedOnlyOnceNoWidgetIsActive)
+{
+  FakeClock clock;
+  sceneScriptPanel::FieldEditTracker tracker(500ms, clock.function());
+  tracker.edit("Alpha", fieldsV0);
+
+  EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), true).empty());
+  EXPECT_NE(tracker.shown("Alpha"), nullptr);
+
+  EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), false).empty());
+  EXPECT_EQ(tracker.shown("Alpha"), nullptr);
+}
+
+TEST(SceneScriptsPanelTest, StructuralGateBlocksUntilTheOrderChanges)
+{
+  FakeClock clock;
+  sceneScriptPanel::StructuralEditGate gate(500ms, clock.function());
+  const Names before = { "Alpha", "Beta" };
+  const Names after = { "Beta", "Alpha" };
+
+  EXPECT_FALSE(gate.blocked(before));
+
+  gate.begin(before);
+  EXPECT_TRUE(gate.blocked(before));
+  EXPECT_TRUE(gate.blocked(before));
+
+  EXPECT_FALSE(gate.blocked(after));
+  EXPECT_FALSE(gate.blocked(before));
+}
+
+TEST(SceneScriptsPanelTest, StructuralGateReleasesOnTimeoutAndOnClear)
+{
+  FakeClock clock;
+  sceneScriptPanel::StructuralEditGate gate(500ms, clock.function());
+  const Names order = { "Alpha" };
+
+  gate.begin(order);
+  clock.now += 499ms;
+  EXPECT_TRUE(gate.blocked(order));
+  clock.now += 1ms;
+  EXPECT_FALSE(gate.blocked(order));
+
+  gate.begin(order);
+  ASSERT_TRUE(gate.blocked(order));
+  gate.clear();
+  EXPECT_FALSE(gate.blocked(order));
 }

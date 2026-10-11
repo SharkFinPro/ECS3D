@@ -8,11 +8,13 @@
 #include <scenes/SceneManager.h>
 #include <scenes/SceneScriptEdits.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <algorithm>
-#include <iterator>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
   constexpr const char* windowName = "Scene Scripts";
@@ -63,159 +65,200 @@ void SceneScriptsPanel::send(const nlohmann::json& edit) const
   }
 }
 
-void SceneScriptsPanel::displayGui()
+void SceneScriptsPanel::sendStructural(const nlohmann::json& edit, const SceneAsset& scene)
 {
-  if (!m_open)
+  if (m_structuralPending)
   {
-    m_editCopies.clear();
     return;
   }
 
-  if (m_focusRequested)
+  m_structuralGate.begin(classOrder(&scene));
+  m_structuralPending = true;
+  send(edit);
+}
+
+std::vector<std::string> SceneScriptsPanel::classOrder(const SceneAsset* scene)
+{
+  std::vector<std::string> order;
+
+  if (scene)
   {
-    ImGui::SetNextWindowFocus();
-    m_focusRequested = false;
-  }
-
-  bool stayOpen = true;
-  if (ImGui::Begin(windowName, &stayOpen))
-  {
-    const auto scene = m_sceneManager ? m_sceneManager->getCurrentScene() : nullptr;
-
-    // A copy belongs to the scene it was started in; keep it from landing on another scene's script.
-    const auto sceneUUID = scene ? std::optional(scene->getUUID()) : std::nullopt;
-    if (sceneUUID != m_sceneUUID)
+    for (const auto& script : scene->getScripts())
     {
-      m_editCopies.clear();
-      m_sceneUUID = sceneUUID;
-    }
-
-    if (!scene)
-    {
-      ImGui::TextDisabled("No scene loaded.");
-    }
-    else
-    {
-      ImGui::BeginDisabled(!m_editable);
-      displayAddButton(*scene);
-      ImGui::EndDisabled();
-
-      const auto& scripts = scene->getScripts();
-
-      if (scripts.empty())
-      {
-        ImGui::TextDisabled("This scene has no scene scripts.");
-      }
-
-      // The scene edits below change the list on the next snapshot, not this frame, so the loop is safe.
-      for (std::size_t i = 0; i < scripts.size(); ++i)
-      {
-        const auto& script = scripts[i];
-        const std::string className = script->getClassName();
-
-        ImGui::PushID(className.c_str());
-        ImGui::Separator();
-
-        ImGui::BeginDisabled(!m_editable);
-
-        ImGui::BeginDisabled(!sceneScriptPanel::reorderTarget(i, scripts.size(), true));
-        if (ImGui::ArrowButton("##up", ImGuiDir_Up))
-        {
-          if (const auto target = sceneScriptPanel::reorderTarget(i, scripts.size(), true))
-          {
-            send(replication::buildReorderSceneScript(className, *target));
-          }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!sceneScriptPanel::reorderTarget(i, scripts.size(), false));
-        if (ImGui::ArrowButton("##down", ImGuiDir_Down))
-        {
-          if (const auto target = sceneScriptPanel::reorderTarget(i, scripts.size(), false))
-          {
-            send(replication::buildReorderSceneScript(className, *target));
-          }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::TextUnformatted(className.c_str());
-
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Remove"))
-        {
-          m_editCopies.erase(className);
-          send(replication::buildRemoveSceneScript(className));
-        }
-
-        const auto copy = m_editCopies.find(className);
-        nlohmann::json fields = copy != m_editCopies.end() ? copy->second : script->getFields();
-        if (drawScriptFieldWidgets(fields, MixedFields{}))
-        {
-          m_editCopies[className] = std::move(fields);
-        }
-
-        ImGui::EndDisabled();
-        ImGui::PopID();
-      }
-
-      flushEditCopies(*scene);
-
-      if (m_editable)
-      {
-        displayDropTarget(*scene);
-      }
+      order.push_back(script->getClassName());
     }
   }
 
-  ImGui::End();
+  return order;
+}
 
-  if (!stayOpen)
+void SceneScriptsPanel::syncSceneTracking(const std::shared_ptr<SceneAsset>& scene)
+{
+  // A copy belongs to the scene it was started in; keep it from landing on another scene's script.
+  const auto sceneUUID = scene ? std::optional(scene->getUUID()) : std::nullopt;
+  if (sceneUUID != m_sceneUUID)
   {
-    setOpen(false);
+    m_fieldEdits.clear();
+    m_structuralGate.clear();
+    m_sceneUUID = sceneUUID;
+  }
+
+  m_structuralPending = m_structuralGate.blocked(classOrder(scene.get()));
+}
+
+void SceneScriptsPanel::displayGui()
+{
+  const auto scene = m_sceneManager ? m_sceneManager->getCurrentScene() : nullptr;
+  syncSceneTracking(scene);
+
+  if (m_open)
+  {
+    if (m_focusRequested)
+    {
+      ImGui::SetNextWindowFocus();
+      m_focusRequested = false;
+    }
+
+    bool stayOpen = true;
+    if (ImGui::Begin(windowName, &stayOpen))
+    {
+      displayContents(scene.get());
+    }
+
+    ImGui::End();
+
+    if (!stayOpen)
+    {
+      setOpen(false);
+    }
+  }
+
+  // Runs while the window is collapsed, hidden behind another tab or closed, so a finished edit is
+  // still sent. A copy a widget still holds cannot be finished, so a closed panel drops it.
+  flushFieldEdits(scene.get());
+
+  if (!m_open)
+  {
+    m_fieldEdits.clear();
   }
 }
 
-void SceneScriptsPanel::displayAddButton(const SceneAsset& scene)
+void SceneScriptsPanel::displayContents(const SceneAsset* scene)
 {
+  if (!scene)
+  {
+    ImGui::TextDisabled("No scene loaded.");
+    return;
+  }
+
+  displayAddControls(*scene);
+
+  if (scene->getScripts().empty())
+  {
+    ImGui::TextDisabled("This scene has no scene scripts.");
+  }
+
+  // Edits change the list on the next snapshot, not this frame, so indexing the list here is safe.
+  for (std::size_t i = 0; i < scene->getScripts().size(); ++i)
+  {
+    displayRow(*scene, i);
+  }
+
+  if (m_editable)
+  {
+    displayDropTarget(*scene);
+  }
+}
+
+void SceneScriptsPanel::displayArrowButton(const SceneAsset& scene, const std::size_t index, const bool up)
+{
+  const auto target = sceneScriptPanel::reorderTarget(index, scene.getScripts().size(), up);
+
+  ImGui::BeginDisabled(!target);
+  if (ImGui::ArrowButton(up ? "##up" : "##down", up ? ImGuiDir_Up : ImGuiDir_Down) && target)
+  {
+    sendStructural(replication::buildReorderSceneScript(scene.getScripts()[index]->getClassName(), *target), scene);
+  }
+  ImGui::EndDisabled();
+}
+
+void SceneScriptsPanel::displayRow(const SceneAsset& scene, const std::size_t index)
+{
+  const auto& script = scene.getScripts()[index];
+  const std::string className = script->getClassName();
+
+  ImGui::PushID(className.c_str());
+  ImGui::Separator();
+
+  ImGui::BeginDisabled(!m_editable || m_structuralPending);
+
+  displayArrowButton(scene, index, true);
+  ImGui::SameLine();
+  displayArrowButton(scene, index, false);
+
+  ImGui::SameLine();
+  ImGui::TextUnformatted(className.c_str());
+
+  ImGui::SameLine();
+  if (ImGui::SmallButton("Remove"))
+  {
+    m_fieldEdits.erase(className);
+    sendStructural(replication::buildRemoveSceneScript(className), scene);
+  }
+
+  ImGui::EndDisabled();
+
+  ImGui::BeginDisabled(!m_editable);
+
+  const nlohmann::json* shown = m_fieldEdits.shown(className);
+  nlohmann::json fields = shown ? *shown : script->getFields();
+  if (drawScriptFieldWidgets(fields, MixedFields{}))
+  {
+    m_fieldEdits.edit(className, std::move(fields));
+  }
+
+  ImGui::EndDisabled();
+  ImGui::PopID();
+}
+
+void SceneScriptsPanel::displayAddControls(const SceneAsset& scene)
+{
+  ImGui::BeginDisabled(!m_editable || m_structuralPending);
+
   if (ImGui::Button("Add Scene Script"))
   {
     ImGui::OpenPopup(addPopupName);
   }
 
-  if (!ImGui::BeginPopup(addPopupName))
+  if (ImGui::BeginPopup(addPopupName))
   {
-    return;
-  }
+    const auto classes = m_assetRegistry
+      ? sceneScriptPanel::availableClasses(*m_assetRegistry, scene.getScripts())
+      : std::vector<std::string>{};
 
-  const auto classes = m_assetRegistry
-    ? sceneScriptPanel::availableClasses(*m_assetRegistry, scene.getScripts())
-    : std::vector<std::string>{};
-
-  if (classes.empty())
-  {
-    ImGui::TextDisabled("No script assets left to add.");
-  }
-
-  for (const auto& className : classes)
-  {
-    if (ImGui::Selectable(className.c_str()))
+    if (classes.empty())
     {
-      send(replication::buildAddSceneScript(className));
+      ImGui::TextDisabled("No script assets left to add.");
     }
+
+    for (const auto& className : classes)
+    {
+      if (ImGui::Selectable(className.c_str()))
+      {
+        sendStructural(replication::buildAddSceneScript(className), scene);
+      }
+    }
+
+    ImGui::EndPopup();
   }
 
-  ImGui::EndPopup();
+  ImGui::EndDisabled();
 }
 
-void SceneScriptsPanel::displayDropTarget(const SceneAsset& scene) const
+void SceneScriptsPanel::displayDropTarget(const SceneAsset& scene)
 {
-  ImVec2 size = ImGui::GetContentRegionAvail();
-  size.y = std::max(size.y, 24.0f);
-  ImGui::InvisibleButton("##sceneScriptDropZone", size);
-
-  if (!ImGui::BeginDragDropTarget())
+  const ImRect windowRect = ImGui::GetCurrentWindow()->Rect();
+  if (!ImGui::BeginDragDropTargetCustom(windowRect, ImGui::GetID("##sceneScriptsDrop")))
   {
     return;
   }
@@ -229,32 +272,22 @@ void SceneScriptsPanel::displayDropTarget(const SceneAsset& scene) const
 
     if (record && !record->className.empty() && !replication::sceneScriptIndex(scene, record->className))
     {
-      send(replication::buildAddSceneScript(record->className));
+      sendStructural(replication::buildAddSceneScript(record->className), scene);
     }
   }
 
   ImGui::EndDragDropTarget();
 }
 
-void SceneScriptsPanel::flushEditCopies(const SceneAsset& scene)
+void SceneScriptsPanel::flushFieldEdits(const SceneAsset* scene)
 {
-  const bool anyActive = ImGui::IsAnyItemActive();
+  const auto replicatedFor = [scene](const std::string& className) -> const nlohmann::json* {
+    const auto index = scene ? replication::sceneScriptIndex(*scene, className) : std::nullopt;
+    return index ? &scene->getScripts()[*index]->getFields() : nullptr;
+  };
 
-  for (auto it = m_editCopies.begin(); it != m_editCopies.end();)
+  for (const auto& [className, fields] : m_fieldEdits.poll(replicatedFor, ImGui::IsAnyItemActive()))
   {
-    const auto index = replication::sceneScriptIndex(scene, it->first);
-
-    if (!index)
-    {
-      it = m_editCopies.erase(it);
-      continue;
-    }
-
-    if (sceneScriptPanel::shouldSendFieldEdit(&it->second, scene.getScripts()[*index]->getFields(), anyActive))
-    {
-      send(replication::buildSetSceneScriptFields(it->first, it->second));
-    }
-
-    it = anyActive ? std::next(it) : m_editCopies.erase(it);
+    send(replication::buildSetSceneScriptFields(className, fields));
   }
 }

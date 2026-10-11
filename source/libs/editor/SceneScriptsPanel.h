@@ -1,11 +1,14 @@
 #ifndef SCENESCRIPTSPANEL_H
 #define SCENESCRIPTSPANEL_H
 
+#include "SceneScriptsPanelLogic.h"
 #include <nlohmann/json.hpp>
+#include <cstddef>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
+#include <vector>
 #include <uuid.h>
 
 class AssetRegistry;
@@ -47,17 +50,31 @@ private:
 
   std::optional<uuids::uuid> m_sceneUUID;
 
-  // Field blobs being edited, by class name. The replicated Script stays untouched while a widget is held
-  // so the undo entry's "before" is still derived from the replicated value.
-  std::unordered_map<std::string, nlohmann::json> m_editCopies;
+  // See FieldEditTracker: the replicated Script stays untouched while a widget is held so the undo
+  // entry's "before" is still derived from the replicated value.
+  sceneScriptPanel::FieldEditTracker m_fieldEdits;
+  sceneScriptPanel::StructuralEditGate m_structuralGate;
+  bool m_structuralPending = false;
+
+  void sendStructural(const nlohmann::json& edit, const SceneAsset& scene);
 
   void send(const nlohmann::json& edit) const;
 
-  void displayAddButton(const SceneAsset& scene);
+  void syncSceneTracking(const std::shared_ptr<SceneAsset>& scene);
 
-  void displayDropTarget(const SceneAsset& scene) const;
+  void displayContents(const SceneAsset* scene);
 
-  void flushEditCopies(const SceneAsset& scene);
+  void displayRow(const SceneAsset& scene, std::size_t index);
+
+  void displayArrowButton(const SceneAsset& scene, std::size_t index, bool up);
+
+  void displayAddControls(const SceneAsset& scene);
+
+  void displayDropTarget(const SceneAsset& scene);
+
+  void flushFieldEdits(const SceneAsset* scene);
+
+  [[nodiscard]] static std::vector<std::string> classOrder(const SceneAsset* scene);
 };
 
 #endif //SCENESCRIPTSPANEL_H
