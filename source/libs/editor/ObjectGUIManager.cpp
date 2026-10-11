@@ -79,6 +79,10 @@ namespace {
       {
         return gc::SecIcon::sphere;
       }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_capsuleCollider)
+      {
+        return gc::SecIcon::collider;
+      }
       return components.contains(ComponentType::rigidBody) ? gc::SecIcon::rigidblock : gc::SecIcon::block;
     }
 
