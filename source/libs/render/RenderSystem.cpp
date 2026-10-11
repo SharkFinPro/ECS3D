@@ -11,6 +11,7 @@
 #include <objects/components/LightRenderer.h>
 #include <objects/components/Camera.h>
 #include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -50,6 +51,22 @@ namespace {
   constexpr float defaultFreeFlyFovDegrees = 45.0f;
   constexpr float defaultFreeFlyNearPlane = 0.1f;
   constexpr float defaultFreeFlyFarPlane = 1000.0f;
+
+  // Pixels; reads like the 2D outline the box and sphere gizmos get.
+  constexpr float hullGizmoLineWidth = 2.0f;
+
+  // The engine builds a model only from a file, so a hull computed in memory is drawn as its edges. X-ray
+  // shows them through the object, as an outline does.
+  void drawHullEdges(vke::Renderer3D& renderer3D, ConvexMeshCollider& hull)
+  {
+    const auto& vertices = hull.getWorldVertices();
+
+    for (const auto& [from, to] : hull.getEdges())
+    {
+      renderer3D.renderLine(vertices[from], vertices[to], colliderOutlineColor, hullGizmoLineWidth, 0.0f,
+                            vke::DebugDepth::xray);
+    }
+  }
 }
 
 void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
@@ -186,6 +203,11 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
         renderer->getRenderingManager()->getRenderer3D()->renderOutline(gizmo, colliderOutlineColor);
       }
+    }
+    else if (const auto hull = object->getComponent<ConvexMeshCollider>(ComponentType::collider);
+             hull && hull->getRenderCollider())
+    {
+      drawHullEdges(*renderer->getRenderingManager()->getRenderer3D(), *hull);
     }
   }
 

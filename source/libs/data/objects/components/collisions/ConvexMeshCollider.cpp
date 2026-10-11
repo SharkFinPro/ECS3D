@@ -163,6 +163,17 @@ const std::vector<glm::vec3>& ConvexMeshCollider::getWorldVertices()
   return m_worldVertices;
 }
 
+const std::vector<HullEdge>& ConvexMeshCollider::getEdges()
+{
+  if (m_edgesDirty)
+  {
+    m_edges = hullEdges(m_hull);
+    m_edgesDirty = false;
+  }
+
+  return m_edges;
+}
+
 nlohmann::json ConvexMeshCollider::serialize()
 {
   const auto position = m_position.getInitialValue();
@@ -406,5 +417,6 @@ void ConvexMeshCollider::updateTransformPointer()
 void ConvexMeshCollider::invalidateGeometry()
 {
   m_meshDirty = true;
+  m_edgesDirty = true;
   invalidateBoundingBox();
 }

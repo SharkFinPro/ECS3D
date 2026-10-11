@@ -36,6 +36,9 @@ public:
   // The hull's vertices under the collider's current world placement, refreshed when the transform moved.
   [[nodiscard]] const std::vector<glm::vec3>& getWorldVertices();
 
+  // The hull's drawable edges (see hullEdges), cached until the hull changes.
+  [[nodiscard]] const std::vector<HullEdge>& getEdges();
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -55,6 +58,9 @@ private:
   uuids::uuid m_sourceModel;
 
   std::vector<glm::vec3> m_worldVertices;
+
+  std::vector<HullEdge> m_edges;
+  bool m_edgesDirty = true;
 
   uint64_t m_currentTransformUpdateID = 255;
 

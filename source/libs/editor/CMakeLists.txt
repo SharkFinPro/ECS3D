@@ -55,6 +55,10 @@ add_library(${PROJECT_NAME}
   components/RigidBodyEditor.h
   components/ModelRendererEditor.cpp
   components/ModelRendererEditor.h
+  components/AssetSlot.cpp
+  components/AssetSlot.h
+  components/ConvexHullFromModel.cpp
+  components/ConvexHullFromModel.h
   components/LightRendererEditor.cpp
   components/LightRendererEditor.h
   components/ColliderEditor.cpp

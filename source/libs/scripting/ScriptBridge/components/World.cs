@@ -327,7 +327,7 @@ public static unsafe class World
     }
 
     // Generic component operations, keyed by the same type-name strings the editor's component list and
-    // ComponentRegistry use ("RigidBody", "Box", "Sphere", "ModelRenderer", "LightRenderer",
+    // ComponentRegistry use ("RigidBody", "Box", "Sphere", "ConvexMesh", "ModelRenderer", "LightRenderer",
     // "PlayerController", "Camera", "Transform"). Transform is queryable but not addable/removable (it is
     // structural); Script is not addressable through this API at all (adding one needs a class name).
     //

@@ -408,7 +408,7 @@ void EditorApp::registerEditors() const
   registerRigidBodyEditor(*m_componentEditor);
   registerModelRendererEditor(*m_componentEditor, m_assetCache, m_assetRegistry.get());
   registerLightRendererEditor(*m_componentEditor);
-  registerColliderEditors(*m_componentEditor);
+  registerColliderEditors(*m_componentEditor, m_assetCache, m_assetRegistry.get());
   registerScriptEditor(*m_componentEditor);
   registerPlayerControllerEditor(*m_componentEditor);
   registerCameraEditor(*m_componentEditor);

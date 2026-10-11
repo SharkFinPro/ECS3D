@@ -1,9 +1,13 @@
 #include "ColliderEditor.h"
+#include "AssetSlot.h"
+#include "ConvexHullFromModel.h"
+#include "../AssetDragDrop.h"
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
 #include "../MixedFields.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
 #include <imgui.h>
@@ -12,6 +16,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace {
   // A one-line summary of which layers a mask includes, for the "Collides With" button face.
@@ -169,10 +174,112 @@ namespace {
 
     return false;
   }
+
+  // The source model slot, the hull vertex count and the Rebuild button. Picking a model builds its hull at
+  // once; Rebuild redoes it for the model already set. True when the hull changed.
+  bool convexMeshHullEditor(ConvexMeshCollider& collider, const std::shared_ptr<GpuAssetCache>& cache,
+                            const AssetRegistry* registry)
+  {
+    bool edited = false;
+
+    uuids::uuid dropped;
+    const AssetSlotStyle slot{ "convexModelSlot", "Source Model", assetDragDrop::model, false,
+                               gc::SecIcon::model, theme::modelPurple };
+    if (drawAssetSlot(cache, registry, slot, collider.getSourceModel(), dropped))
+    {
+      edited |= rebuildHullFromModel(collider, cache.get(), dropped);
+    }
+
+    ImGui::TextDisabled("Hull vertices: %zu", collider.getHull().vertices.size());
+
+    ImGui::BeginDisabled(collider.getSourceModel().is_nil() || !cache);
+    if (ImGui::Button("Rebuild hull"))
+    {
+      edited |= rebuildHullFromModel(collider, cache.get(), collider.getSourceModel());
+    }
+    ImGui::EndDisabled();
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+      ImGui::SetTooltip("Rebuild the hull from the source model. Only the model's first mesh is used.");
+    }
+
+    return edited;
+  }
+
+  bool convexMeshOffsetEditor(ConvexMeshCollider& collider, const MixedFields& mixed)
+  {
+    bool edited = false;
+
+    glm::vec3 position = collider.getLocalPosition();
+    glm::vec3 rotation = collider.getLocalRotation();
+    glm::vec3 scale = collider.getLocalScale();
+
+    ImGui::PushID("ConvexMeshCollider");
+    if (gc::xyzGuiBoxed("Position", &position.x, &position.y, &position.z, 0.1f, mixed.contains("position")))
+    {
+      collider.setPosition(position);
+      edited = true;
+    }
+
+    if (gc::xyzGuiBoxed("Rotation", &rotation.x, &rotation.y, &rotation.z, 0.1f, mixed.contains("rotation")))
+    {
+      collider.setRotation(rotation);
+      edited = true;
+    }
+
+    if (gc::xyzGuiBoxed("Scale", &scale.x, &scale.y, &scale.z, 0.1f, mixed.contains("scale")))
+    {
+      collider.setScale(scale);
+      edited = true;
+    }
+    ImGui::PopID();
+
+    return edited;
+  }
+
+  void registerConvexMeshEditor(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
+                                const AssetRegistry* assetRegistry)
+  {
+    componentEditor.registerHandler("Convex Mesh Collider",
+      [cache = std::move(assetCache), registry = assetRegistry](const std::shared_ptr<Component>& component,
+                                                                 const MixedFields& mixed) -> bool {
+      const auto hull = std::dynamic_pointer_cast<ConvexMeshCollider>(component);
+      if (!hull)
+      {
+        return false;
+      }
+
+      bool edited = false;
+
+      if (ComponentEditor::displayHeader(component))
+      {
+        edited |= colliderRenderGizmoEditor(hull, mixed);
+
+        bool isTrigger = hull->isTrigger();
+        if (gc::accentCheckbox("Is Trigger", &isTrigger, mixed.contains("isTrigger")))
+        {
+          hull->setIsTrigger(isTrigger);
+          edited = true;
+        }
+
+        edited |= colliderLayerMaskEditor(hull, mixed);
+        edited |= convexMeshOffsetEditor(*hull, mixed);
+
+        ImGui::Spacing();
+        edited |= convexMeshHullEditor(*hull, cache, registry);
+      }
+
+      return edited;
+    });
+  }
 }
 
-void registerColliderEditors(ComponentEditor& componentEditor)
+void registerColliderEditors(ComponentEditor& componentEditor, std::shared_ptr<GpuAssetCache> assetCache,
+                             const AssetRegistry* assetRegistry)
 {
+  registerConvexMeshEditor(componentEditor, std::move(assetCache), assetRegistry);
+
   // Keyed by display name (componentTypeToString), since both colliders share a component type and
   // differ only by subType.
   componentEditor.registerHandler("Box Collider",
