@@ -15,6 +15,7 @@
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
@@ -322,4 +323,21 @@ TEST(NonFiniteValues, AFailedLoadNamesTheSceneTheObjectAndTheComponent)
 
   // Still atomic: the failed load must leave the live scenes and assets exactly as they were.
   EXPECT_EQ(target.serializer->serialize(), before);
+}
+
+TEST(NonFiniteValues, ConvexMeshColliderSettersIgnoreThem)
+{
+  ConvexMeshCollider collider;
+
+  expectVec3SetterIgnoresNonFinite("ConvexMeshCollider position",
+    [&](const glm::vec3& value) { collider.setPosition(value); },
+    [&] { return collider.getLocalPosition(); });
+
+  expectVec3SetterIgnoresNonFinite("ConvexMeshCollider rotation",
+    [&](const glm::vec3& value) { collider.setRotation(value); },
+    [&] { return collider.getLocalRotation(); });
+
+  expectVec3SetterIgnoresNonFinite("ConvexMeshCollider scale",
+    [&](const glm::vec3& value) { collider.setScale(value); },
+    [&] { return collider.getLocalScale(); });
 }

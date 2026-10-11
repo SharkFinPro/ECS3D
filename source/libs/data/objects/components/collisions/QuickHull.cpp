@@ -13,6 +13,10 @@ namespace {
 
   constexpr double tinyNormalLength = 1e-12;
 
+  constexpr int maxRepairRounds = 4;
+
+  constexpr double verifyEpsilonFactor = 10.0;
+
   struct HullFace {
     std::array<uint32_t, 3> v{};
     glm::dvec3 normal{ 0.0 };
@@ -53,15 +57,16 @@ namespace {
 
       createInitialFaces(simplex);
 
-      while (!m_pending.empty())
-      {
-        const size_t faceIndex = m_pending.back();
-        m_pending.pop_back();
+      processPending();
 
-        if (m_faces[faceIndex].alive && !m_faces[faceIndex].outside.empty())
-        {
-          expand(faceIndex);
-        }
+      for (int round = 0; round < maxRepairRounds && repairMissedPoints(); ++round)
+      {
+        processPending();
+      }
+
+      if (!isVerified())
+      {
+        return std::nullopt;
       }
 
       return extract();
@@ -73,6 +78,101 @@ namespace {
     std::vector<HullFace> m_faces;
     std::unordered_map<uint64_t, size_t> m_edgeToFace;
     std::vector<size_t> m_pending;
+
+    void processPending()
+    {
+      while (!m_pending.empty())
+      {
+        const size_t faceIndex = m_pending.back();
+        m_pending.pop_back();
+
+        if (m_faces[faceIndex].alive && !m_faces[faceIndex].outside.empty())
+        {
+          expand(faceIndex);
+        }
+      }
+    }
+
+    [[nodiscard]] std::vector<size_t> liveFaces() const
+    {
+      std::vector<size_t> live;
+
+      for (size_t i = 0; i < m_faces.size(); ++i)
+      {
+        if (m_faces[i].alive && glm::dot(m_faces[i].normal, m_faces[i].normal) > 0.0)
+        {
+          live.push_back(i);
+        }
+      }
+
+      return live;
+    }
+
+    // Reassigning orphans only to the new faces can lose a point that lies outside an older face as
+    // well; this finds such points again. True when any point was handed back to a face.
+    [[nodiscard]] bool repairMissedPoints()
+    {
+      const auto live = liveFaces();
+
+      std::vector<char> isVertex(m_points.size(), 0);
+      for (const size_t faceIndex : live)
+      {
+        for (const uint32_t vertex : m_faces[faceIndex].v)
+        {
+          isVertex[vertex] = 1;
+        }
+      }
+
+      bool assigned = false;
+      for (uint32_t point = 0; point < m_points.size(); ++point)
+      {
+        if (!isVertex[point])
+        {
+          assigned |= assignToFirstOutside(point, live);
+        }
+      }
+
+      if (assigned)
+      {
+        queueFaces(live);
+      }
+
+      return assigned;
+    }
+
+    [[nodiscard]] bool assignToFirstOutside(const uint32_t point, const std::vector<size_t>& candidates)
+    {
+      for (const size_t faceIndex : candidates)
+      {
+        if (distanceTo(m_faces[faceIndex], m_points[point]) > m_eps)
+        {
+          m_faces[faceIndex].outside.push_back(point);
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    // Every input point, vertices included, lies inside every face plane to within a few epsilons: the hull
+    // contains the input and is convex. Input too noisy for that is refused rather than returned malformed.
+    [[nodiscard]] bool isVerified() const
+    {
+      const auto live = liveFaces();
+
+      for (const auto& point : m_points)
+      {
+        for (const size_t faceIndex : live)
+        {
+          if (distanceTo(m_faces[faceIndex], point) > verifyEpsilonFactor * m_eps)
+          {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    }
 
     [[nodiscard]] bool computeEpsilon()
     {
@@ -319,7 +419,9 @@ namespace {
             continue;
           }
 
-          if (distanceTo(m_faces[neighbor->second], apex) > m_eps)
+          // Strictly above: a face the apex is merely within epsilon of must be replaced too, or the cone
+          // built on the horizon folds back over it and the hull stops being convex.
+          if (distanceTo(m_faces[neighbor->second], apex) > 0.0)
           {
             visibleMark[neighbor->second] = 1;
             visible.push_back(neighbor->second);

@@ -2,6 +2,7 @@
 #include "Simplex.h"
 #include "Support.h"
 #include "ContactManifold.h"
+#include "NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
@@ -13,6 +14,7 @@
 #include <array>
 #include <limits>
 #include <map>
+#include <tuple>
 #include <stdexcept>
 #include <utility>
 
@@ -157,7 +159,7 @@ std::vector<glm::vec3> worldVerticesOf(Collider& collider)
 }
 
 // Contact::points holds this many.
-constexpr size_t maxManifoldPoints = 4;
+constexpr size_t maxManifoldPoints = std::tuple_size_v<decltype(collisions::Contact::points)>;
 
 Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
   : m_collider(&collider), m_otherCollider(&otherCollider)

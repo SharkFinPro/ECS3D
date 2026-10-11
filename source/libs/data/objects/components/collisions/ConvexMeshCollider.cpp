@@ -58,7 +58,7 @@ namespace {
 
     if (count > limit)
     {
-      throw std::runtime_error(std::string("ConvexMesh: ") + what + " count over the limit");
+      throw RefusedPayload(std::string("ConvexMesh: ") + what + " count over the limit");
     }
 
     std::vector<T> values;
@@ -231,9 +231,15 @@ nlohmann::json ConvexMeshCollider::serialize()
 
 void ConvexMeshCollider::loadFromJSON(const nlohmann::json& componentData)
 {
+  // Everything is read and checked before anything is assigned, so a malformed field leaves the collider as
+  // it was.
   const auto& position = componentData.at("position");
   const auto& rotation = componentData.at("rotation");
   const auto& scale = componentData.at("scale");
+
+  const glm::vec3 positionValue(position.at(0).get<float>(), position.at(1).get<float>(), position.at(2).get<float>());
+  const glm::vec3 rotationValue(rotation.at(0).get<float>(), rotation.at(1).get<float>(), rotation.at(2).get<float>());
+  const glm::vec3 scaleValue(scale.at(0).get<float>(), scale.at(1).get<float>(), scale.at(2).get<float>());
 
   ConvexHull hull{ readVertices(componentData.at("vertices")), readIndices(componentData.at("indices")) };
 
@@ -242,18 +248,22 @@ void ConvexMeshCollider::loadFromJSON(const nlohmann::json& componentData)
     throw std::runtime_error("ConvexMesh: invalid hull");
   }
 
-  m_hull = std::move(hull);
-  m_sourceModel = readSourceModel(componentData);
-
-  m_position.set(glm::vec3(position.at(0), position.at(1), position.at(2)));
-  m_rotation.set(glm::vec3(rotation.at(0), rotation.at(1), rotation.at(2)));
-  m_scale.set(glm::vec3(scale.at(0), scale.at(1), scale.at(2)));
-
   // value() (not at()): the same optional flags every collider reads this way.
-  m_renderCollider = componentData.value("renderCollider", false);
-  m_isTrigger = componentData.value("isTrigger", false);
-  setLayer(componentData.value("layer", 0u));
-  m_mask = componentData.value("mask", 0xFFFFFFFFu);
+  const bool renderCollider = componentData.value("renderCollider", false);
+  const bool isTrigger = componentData.value("isTrigger", false);
+  const uint32_t layer = componentData.value("layer", 0u);
+  const uint32_t mask = componentData.value("mask", 0xFFFFFFFFu);
+  const uuids::uuid sourceModel = readSourceModel(componentData);
+
+  m_hull = std::move(hull);
+  m_sourceModel = sourceModel;
+  m_position.set(positionValue);
+  m_rotation.set(rotationValue);
+  m_scale.set(scaleValue);
+  m_renderCollider = renderCollider;
+  m_isTrigger = isTrigger;
+  setLayer(layer);
+  m_mask = mask;
 
   invalidateGeometry();
 }
@@ -355,7 +365,7 @@ void ConvexMeshCollider::unpack(net::MessageReader& messageReader)
 
   if (!isValidConvexHull(hull))
   {
-    throw std::runtime_error("ConvexMesh: invalid hull");
+    throw RefusedPayload("ConvexMesh: invalid hull");
   }
 
   m_renderCollider = renderCollider;

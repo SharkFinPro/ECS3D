@@ -247,3 +247,46 @@ TEST(ConvexMeshCollider, ArrivesAsAComponentEditOnlyOnAHullAndNotOnAnotherShape)
             replication::ComponentEditResult::unknownComponent);
   EXPECT_EQ(box->getLocalScale(), glm::vec3(4, 5, 6));
 }
+
+TEST(ConvexMeshCollider, ARefusedHullEditIsReportedAsMalformedNotAsPartiallyApplied)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Holder");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  object->addComponent(hull);
+
+  auto build = [&object](const uint32_t vertexCount) {
+    net::Message edit(net::MessageType::editComponent);
+    edit.writeString(uuids::to_string(object->getUUID()));
+    edit.write(ComponentType::SubComponentType_convexMeshCollider);
+    edit.write(false);
+    edit.write(glm::vec3(0.0f));
+    edit.write(glm::vec3(1.0f));
+    edit.write(glm::vec3(0.0f));
+    edit.write(uuids::uuid{});
+    edit.write(vertexCount);
+
+    return edit;
+  };
+
+  // A count over the limit is refused before anything is read or written.
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, build(0xFFFFFFFFu)),
+            replication::ComponentEditResult::malformedPayload);
+
+  // So is a hull that does not validate (no vertices, no triangles).
+  auto empty = build(0);
+  empty.write(uint32_t{ 0 });
+  empty.write(false);
+  empty.write(uint32_t{ 0 });
+  empty.write(uint32_t{ 0xFFFFFFFFu });
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, empty),
+            replication::ComponentEditResult::malformedPayload);
+
+  EXPECT_EQ(hull->getHull().vertices.size(), 8u);
+
+  // The control: a payload that is cut short mid-component is still the partial case.
+  const auto whole = replication::buildComponentEdit(object->getUUID(), customCollider());
+  const net::Message cut(whole.getType(), whole.bytes().first(whole.size() - 1));
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, cut),
+            replication::ComponentEditResult::partiallyApplied);
+}

@@ -366,3 +366,20 @@ TEST(ConvexMeshCollider, IgnoresNonFiniteOffsets)
   EXPECT_EQ(collider.getLocalRotation(), glm::vec3(4.0f, 5.0f, 6.0f));
   EXPECT_EQ(collider.getLocalScale(), glm::vec3(7.0f, 8.0f, 9.0f));
 }
+
+TEST(ConvexMeshCollider, JsonWithAMalformedOffsetLeavesTheWholeColliderAlone)
+{
+  auto data = customCollider()->serialize();
+  data["position"] = nlohmann::json::array({ 1.0f, "x", 3.0f });
+
+  ConvexMeshCollider target;
+  target.setPosition({ 4.0f, 5.0f, 6.0f });
+
+  // The hull and source model in the blob are valid; only the offset is not, and none of it may land.
+  EXPECT_ANY_THROW(target.loadFromJSON(data));
+  EXPECT_EQ(target.getLocalPosition(), glm::vec3(4.0f, 5.0f, 6.0f));
+  EXPECT_EQ(target.getHull().vertices.size(), 8u);
+  EXPECT_TRUE(target.getSourceModel().is_nil());
+  EXPECT_FALSE(target.isTrigger());
+  EXPECT_EQ(target.getLayer(), 0u);
+}

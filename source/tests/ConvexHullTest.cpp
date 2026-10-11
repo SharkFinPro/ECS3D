@@ -99,6 +99,31 @@ namespace {
     return edges.size();
   }
 
+  // Whatever comes back is a closed, convex hull around every point, or nothing at all: a malformed hull
+  // is the one outcome that is not acceptable.
+  void expectSoundOrRefused(const std::vector<glm::vec3>& points, const float tolerance)
+  {
+    const auto hull = buildConvexHull(points);
+
+    if (!hull)
+    {
+      return;
+    }
+
+    expectOutwardWinding(*hull);
+    EXPECT_EQ(uniqueTriangleEdges(*hull) * 2, hull->indices.size());
+
+    for (const auto& point : points)
+    {
+      EXPECT_LE(outsideDistance(*hull, point), tolerance);
+    }
+
+    for (const auto& vertex : hull->vertices)
+    {
+      EXPECT_LE(outsideDistance(*hull, vertex), tolerance);
+    }
+  }
+
   // A deterministic stand-in for random: a small linear congruential generator in [-1, 1).
   struct Lcg
   {
@@ -390,4 +415,64 @@ TEST(ConvexHull, ValidationRejectsWhatTheColliderCouldNotUse)
   auto tooManyVertices = makeUnitCubeHull();
   tooManyVertices.vertices.assign(maxConvexHullVertices + 1, glm::vec3(1.0f));
   EXPECT_FALSE(isValidConvexHull(tooManyVertices));
+}
+
+TEST(ConvexHull, AThinSlabOfPointsNeverGivesAFoldedHull)
+{
+  // 1 x 1 x 0.001: the thickness is only a hundred times the build tolerance, which used to leave a closed
+  // but non-convex hull behind.
+  Lcg random;
+  std::vector<glm::vec3> points;
+  for (int i = 0; i < 600; ++i)
+  {
+    const float x = random.next();
+    const float y = random.next();
+    const float z = random.next() * 0.001f;
+    points.emplace_back(x, y, z);
+  }
+
+  expectSoundOrRefused(points, 1e-4f);
+}
+
+TEST(ConvexHull, ANoisySubdividedCubeSurfaceNeverGivesAFoldedHull)
+{
+  // The grid points of a cube's surface, each jittered by about a build tolerance, so most of a face's
+  // points sit within epsilon of its plane without lying on it.
+  Lcg random;
+  std::vector<glm::vec3> points;
+  for (int x = 0; x < 6; ++x)
+  {
+    for (int y = 0; y < 6; ++y)
+    {
+      for (int z = 0; z < 6; ++z)
+      {
+        if (x != 0 && x != 5 && y != 0 && y != 5 && z != 0 && z != 5)
+        {
+          continue;
+        }
+
+        const float nx = random.next();
+        const float ny = random.next();
+        const float nz = random.next();
+        points.emplace_back(static_cast<float>(x) / 5.0f + nx * 1e-5f, static_cast<float>(y) / 5.0f + ny * 1e-5f,
+                            static_cast<float>(z) / 5.0f + nz * 1e-5f);
+      }
+    }
+  }
+
+  expectSoundOrRefused(points, 1e-4f);
+}
+
+TEST(ConvexHull, TheReducedHullUsesOnlyInputVertices)
+{
+  const auto points = fibonacciSphere(2000);
+  const auto hull = buildConvexHull(points);
+
+  ASSERT_TRUE(hull.has_value());
+  ASSERT_LE(hull->vertices.size(), maxConvexHullVertices);
+
+  for (const auto& vertex : hull->vertices)
+  {
+    EXPECT_NE(std::find(points.begin(), points.end(), vertex), points.end());
+  }
 }

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 #include "WireTypes.h"
 
@@ -153,4 +154,56 @@ TEST(ColliderPersistence, AnOutOfRangeLayerIsClampedOffTheWire)
   collider->unpack(reader);
 
   EXPECT_EQ(collider->getLayer(), 31u);
+}
+
+TEST(ColliderPersistence, AConvexMeshKeepsItsGizmoFlagThroughBothPaths)
+{
+  const auto collider = std::make_shared<ConvexMeshCollider>();
+  collider->setRenderCollider(true);
+
+  EXPECT_TRUE(throughJson(collider)->getRenderCollider());
+  EXPECT_TRUE(throughTheWire(collider)->getRenderCollider());
+
+  collider->setRenderCollider(false);
+
+  EXPECT_FALSE(throughJson(collider)->getRenderCollider());
+  EXPECT_FALSE(throughTheWire(collider)->getRenderCollider());
+}
+
+TEST(ColliderPersistence, AConvexMeshWithNoGizmoFlagKeyDefaultsToOff)
+{
+  auto saved = std::make_shared<ConvexMeshCollider>()->serialize();
+  saved.erase("renderCollider");
+
+  const auto loaded = std::make_shared<ConvexMeshCollider>();
+  loaded->setRenderCollider(true);
+  loaded->loadFromJSON(saved);
+
+  EXPECT_FALSE(loaded->getRenderCollider());
+}
+
+TEST(ColliderPersistence, AConvexMeshRoundTripsItsLayerAndMask)
+{
+  const auto collider = std::make_shared<ConvexMeshCollider>();
+  collider->setLayer(7);
+  collider->setMask(0xF0u);
+  collider->setIsTrigger(true);
+
+  for (const auto& loaded : { throughJson(collider), throughTheWire(collider) })
+  {
+    EXPECT_EQ(loaded->getLayer(), 7u);
+    EXPECT_EQ(loaded->getMask(), 0xF0u);
+    EXPECT_TRUE(loaded->isTrigger());
+  }
+}
+
+TEST(ColliderPersistence, AnOutOfRangeConvexMeshLayerIsClampedOnLoad)
+{
+  auto saved = std::make_shared<ConvexMeshCollider>()->serialize();
+  saved["layer"] = 99u;
+
+  const auto loaded = std::make_shared<ConvexMeshCollider>();
+  loaded->loadFromJSON(saved);
+
+  EXPECT_EQ(loaded->getLayer(), 31u);
 }

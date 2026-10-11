@@ -198,3 +198,25 @@ TEST(HullQueries, TheClosestPointOnATriangleIsTheNearestVertexEdgeOrFacePoint)
   expectNear("hypotenuse", hullQueries::closestPointOnTriangle({ 2, 2, 0 }, a, b, c), { 1, 1, 0 });
   expectNear("vertex c", hullQueries::closestPointOnTriangle({ 0, 5, 0 }, a, b, c), c);
 }
+
+TEST(ConvexMeshQuery, AMirroredHullIsQueriedLikeTheUnmirroredOne)
+{
+  // One negative scale axis flips the winding of every triangle in world space; the queries must still treat
+  // the faces as facing outward.
+  for (const float mirror : { 1.0f, -1.0f })
+  {
+    SCOPED_TRACE(mirror > 0.0f ? "unmirrored" : "mirrored");
+
+    const auto scene = makeScene();
+    const auto hull = addHull(scene, { 0, 0, 0 }, { mirror, 1, 1 });
+
+    QueryHit hit;
+    ASSERT_TRUE(castRay(scene, { 5, 0, 0 }, { -1, 0, 0 }, 100.0f, hit));
+    EXPECT_NEAR(hit.distance, 4.0f, 1e-4f);
+    expectNear("normal", hit.normal, { 1, 0, 0 });
+
+    EXPECT_TRUE(overlapsObject(scene, hull, { 0.5f, 0.5f, 0.5f }, 0.1f));
+    EXPECT_TRUE(overlapsObject(scene, hull, { 1.5f, 0, 0 }, 0.6f));
+    EXPECT_FALSE(overlapsObject(scene, hull, { 1.5f, 0, 0 }, 0.4f));
+  }
+}

@@ -21,9 +21,24 @@ namespace hullQueries {
       std::optional<glm::vec3> enteredNormal;
     };
 
+    [[nodiscard]] glm::vec3 centroidOf(const std::span<const glm::vec3> vertices)
+    {
+      glm::vec3 sum{ 0.0f };
+
+      for (const auto& vertex : vertices)
+      {
+        sum += vertex;
+      }
+
+      return sum / static_cast<float>(vertices.size());
+    }
+
+    // Facing away from inside, whatever the winding: a mirrored transform (an odd number of negative scale
+    // axes) flips every triangle, so the normal is turned to point away from the hull's center.
     // nullopt for a triangle too thin to have a normal.
     [[nodiscard]] std::optional<FacePlane> planeOf(const std::span<const glm::vec3> vertices,
-                                                   const std::span<const uint32_t> indices, const size_t triangle)
+                                                   const std::span<const uint32_t> indices, const size_t triangle,
+                                                   const glm::vec3& center)
     {
       const glm::vec3& a = vertices[indices[triangle * 3]];
       const glm::vec3& b = vertices[indices[triangle * 3 + 1]];
@@ -37,7 +52,11 @@ namespace hullQueries {
         return std::nullopt;
       }
 
-      const glm::vec3 normal = cross / length;
+      glm::vec3 normal = cross / length;
+      if (glm::dot(normal, center - a) > 0.0f)
+      {
+        normal = -normal;
+      }
 
       return FacePlane{ normal, glm::dot(normal, a) };
     }
@@ -45,9 +64,11 @@ namespace hullQueries {
     [[nodiscard]] bool insideAllPlanes(const glm::vec3& point, const std::span<const glm::vec3> vertices,
                                        const std::span<const uint32_t> indices)
     {
+      const glm::vec3 hullCenter = centroidOf(vertices);
+
       for (size_t triangle = 0; triangle < indices.size() / 3; ++triangle)
       {
-        const auto plane = planeOf(vertices, indices, triangle);
+        const auto plane = planeOf(vertices, indices, triangle, hullCenter);
 
         if (plane && glm::dot(plane->normal, point) - plane->offset > 0.0f)
         {
@@ -112,10 +133,11 @@ namespace hullQueries {
                const std::span<const uint32_t> indices, const float maxDistance, float& tHit, glm::vec3& normal)
   {
     RaySpan span;
+    const glm::vec3 hullCenter = centroidOf(vertices);
 
     for (size_t triangle = 0; triangle < indices.size() / 3; ++triangle)
     {
-      const auto plane = planeOf(vertices, indices, triangle);
+      const auto plane = planeOf(vertices, indices, triangle, hullCenter);
 
       if (plane && !clipRay(*plane, origin, dir, span))
       {

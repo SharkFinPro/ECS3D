@@ -245,6 +245,10 @@ ComponentEditResult applyComponentEdit(const ObjectManager& objectManager, const
     // for a wire bug.
     throw;
   }
+  catch (const RefusedPayload&)
+  {
+    return ComponentEditResult::malformedPayload;
+  }
   catch (const std::exception&)
   {
     return unpacking ? ComponentEditResult::partiallyApplied : ComponentEditResult::malformedPayload;
