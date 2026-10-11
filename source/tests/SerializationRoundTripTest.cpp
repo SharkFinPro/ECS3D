@@ -15,6 +15,7 @@
 #include "objects/components/Script.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
@@ -221,6 +222,18 @@ namespace {
     child->addComponent(camera);
   }
 
+  void addPill(const std::shared_ptr<SceneAsset>& scene)
+  {
+    const auto pill = addObject(scene, "Pill");
+
+    const auto capsuleCollider = std::make_shared<CapsuleCollider>();
+    capsuleCollider->setRadius(0.75f);
+    capsuleCollider->setHeight(3.5f);
+    capsuleCollider->setRotation({ 0.0f, 0.0f, 90.0f });
+    capsuleCollider->setRenderCollider(true);
+    pill->addComponent(capsuleCollider);
+  }
+
   void addLamp(const std::shared_ptr<SceneAsset>& scene)
   {
     const auto lamp = addObject(scene, "Lamp");
@@ -246,6 +259,7 @@ namespace {
     const auto body = addBody(scene);
     addChild(scene, body);
     addLamp(scene);
+    addPill(scene);
 
     const auto empty = std::make_shared<SceneAsset>(uuidFrom("77777777-7777-7777-7777-777777777777"),
                                                     "Empty", project.componentRegistry);

@@ -15,6 +15,7 @@
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
@@ -149,6 +150,27 @@ TEST(NonFiniteValues, SphereColliderSettersIgnoreThem)
   expectVec3SetterIgnoresNonFinite("SphereCollider position",
     [&](const glm::vec3& value) { collider.setPosition(value); },
     [&] { return collider.getLocalPosition(); });
+}
+
+TEST(NonFiniteValues, CapsuleColliderSettersIgnoreThem)
+{
+  CapsuleCollider collider;
+
+  expectFloatSetterIgnoresNonFinite("CapsuleCollider radius", 2.5f,
+    [&](const float value) { collider.setRadius(value); },
+    [&] { return collider.getLocalRadius(); });
+
+  expectFloatSetterIgnoresNonFinite("CapsuleCollider height", 4.5f,
+    [&](const float value) { collider.setHeight(value); },
+    [&] { return collider.getLocalHeight(); });
+
+  expectVec3SetterIgnoresNonFinite("CapsuleCollider position",
+    [&](const glm::vec3& value) { collider.setPosition(value); },
+    [&] { return collider.getLocalPosition(); });
+
+  expectVec3SetterIgnoresNonFinite("CapsuleCollider rotation",
+    [&](const glm::vec3& value) { collider.setRotation(value); },
+    [&] { return collider.getLocalRotation(); });
 }
 
 TEST(NonFiniteValues, RigidBodySettersIgnoreThem)

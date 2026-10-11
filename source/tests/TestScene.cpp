@@ -9,6 +9,7 @@
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <stdexcept>
@@ -86,6 +87,17 @@ namespace fixtures {
     auto collider = std::make_shared<SphereCollider>();
     object->addComponent(collider);
     collider->setRadius(radius);
+
+    return collider;
+  }
+
+  std::shared_ptr<CapsuleCollider> addCapsuleCollider(const std::shared_ptr<Object>& object, const float radius,
+                                                      const float height)
+  {
+    auto collider = std::make_shared<CapsuleCollider>();
+    object->addComponent(collider);
+    collider->setRadius(radius);
+    collider->setHeight(height);
 
     return collider;
   }

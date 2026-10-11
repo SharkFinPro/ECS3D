@@ -16,6 +16,7 @@
 #include "objects/components/Script.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
@@ -88,7 +89,7 @@ namespace wiretest {
   }
 
   // A parent with a box collider, model renderer and script, a child with a sphere collider, and a
-  // grandchild: several strings, nested objects and component kinds in one payload.
+  // grandchild with a capsule collider: several strings, nested objects and component kinds in one payload.
   inline std::shared_ptr<Object> buildTree(const Scene& scene)
   {
     const auto parent = addObject(scene, "Spawned Parent", { 1.0f, 2.0f, 3.0f });
@@ -105,7 +106,7 @@ namespace wiretest {
 
     const auto child = addChildObject(scene, "Child A", parent);
     fixtures::addSphereCollider(child, 2.5f);
-    addChildObject(scene, "Grandchild", child);
+    fixtures::addCapsuleCollider(addChildObject(scene, "Grandchild", child), 0.75f, 3.0f);
 
     return parent;
   }

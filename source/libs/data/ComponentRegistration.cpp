@@ -5,6 +5,7 @@
 #include "objects/components/ModelRenderer.h"
 #include "objects/components/LightRenderer.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 #include "objects/components/Script.h"
 #include "objects/components/PlayerController.h"
@@ -22,9 +23,10 @@ void registerDataComponents(ComponentRegistry& componentRegistry)
   componentRegistry.registerComponent("LightRenderer", [] { return std::make_shared<LightRenderer>(); });
 
   // Colliders serialize as type "Collider" + a subType; they are keyed here by that subType
-  // ("Box"/"Sphere"), which Object::loadFromJSON looks up.
+  // ("Box"/"Sphere"/"Capsule"), which Object::loadFromJSON looks up.
   componentRegistry.registerComponent("Box", [] { return std::make_shared<BoxCollider>(); });
   componentRegistry.registerComponent("Sphere", [] { return std::make_shared<SphereCollider>(); });
+  componentRegistry.registerComponent("Capsule", [] { return std::make_shared<CapsuleCollider>(); });
 
   // Script data is just className + a field blob; the live C# instance is attached by ECS3DScripting
   // (server only). loadFromJSON sets the className, so the factory is argless like the rest.
