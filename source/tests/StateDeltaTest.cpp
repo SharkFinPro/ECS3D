@@ -219,8 +219,8 @@ TEST(StateDelta, CarriesLocalTransformsUnderARotatedAndScaledParent)
   // Local (1, 5, 2) scales by the parent to (2, 15, 8). A +90 degree turn about Y takes +X to -Z and +Z to
   // +X, so that becomes (8, 15, -2), and the parent's position adds (10, 0, 0). Had the wire carried the
   // world position, the local check above would see (18, 15, -2) instead of (1, 5, 2).
-  fixtures::expectNear(replicatedChild->getPosition(), glm::vec3(18, 15, -2));
-  fixtures::expectNear(replicatedChild->getPosition(), transformOf(child)->getPosition());
+  fixtures::expectNear(replicatedChild->getPosition(), glm::vec3(18, 15, -2), 1e-4f);
+  fixtures::expectNear(replicatedChild->getPosition(), transformOf(child)->getPosition(), 1e-4f);
 }
 
 TEST(StateDelta, AnEmptySceneStillPacksACount)
