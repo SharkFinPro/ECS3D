@@ -365,7 +365,9 @@ namespace collisions {
       return { midwayPoint(featureA, featureB) };
     }
 
-    auto clipped = clipToPolygon(std::vector<glm::vec3>(incident.begin(), incident.end()), polygon, normal);
+    // Sutherland-Hodgman walks the subject as a loop, so it needs the incident feature in order around its
+    // face too; a box's touching vertices come out crossed.
+    auto clipped = clipToPolygon(orderedPolygon(incident, normal), polygon, normal);
     if (clipped.empty())
     {
       clipped.assign(incident.begin(), incident.end());
