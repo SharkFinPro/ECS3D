@@ -6,6 +6,7 @@
 #include <string>
 
 class BoxCollider;
+class CapsuleCollider;
 class ComponentRegistry;
 class Object;
 class ObjectManager;
@@ -57,6 +58,10 @@ namespace fixtures {
   std::shared_ptr<BoxCollider> addBoxCollider(const std::shared_ptr<Object>& object);
 
   std::shared_ptr<SphereCollider> addSphereCollider(const std::shared_ptr<Object>& object, float radius);
+
+  // height is the total height including both caps.
+  std::shared_ptr<CapsuleCollider> addCapsuleCollider(const std::shared_ptr<Object>& object, float radius,
+                                                      float height);
 
   // Whether an object has one of these decides whether the collision sweep looks at it at all: an edge
   // with no rigid body on either end is never tested.
