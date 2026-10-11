@@ -527,6 +527,8 @@ native binding exists): typed through `World.tryGetScript<T>`/`ScriptBase.getScr
 through `World.tryGetScript(uuid, className, out ScriptHandle)`, whose `tryGetField` reads only
 `[ExposeToEditor]` fields and whose `tryInvoke` runs under the target's fault gate and refuses `ScriptBase`'s
 lifecycle methods.
+The current scene's scene scripts are reached through `World.tryGetSceneScript<T>` or, from any script, `getSceneScript<T>`
+and `requireSceneScript<T>`, which logs one error per caller instance and type when none is attached. A faulted scene script is skipped, as an object script is.
 
 **Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
 forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers

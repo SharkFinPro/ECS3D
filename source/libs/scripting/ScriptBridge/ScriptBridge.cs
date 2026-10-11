@@ -280,6 +280,20 @@ public static class Bridge
         }
     }
 
+    // The live scene script assignable to T. A subclass and its base can both be attached, so an exact T
+    // wins and otherwise the first match by key order keeps the answer deterministic. Faulted ones are
+    // excluded for the same reason as in FindScript.
+    internal static T? FindSceneScript<T>() where T : SceneScript
+    {
+        var matches = _instances
+            .Where(kvp => !_faulted.Contains(kvp.Key))
+            .OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
+            .Select(kvp => kvp.Value)
+            .OfType<T>()
+            .ToList();
+        return matches.FirstOrDefault(script => script.GetType() == typeof(T)) ?? matches.FirstOrDefault();
+    }
+
     internal static IReadOnlyList<ScriptBase> FindScripts(string uuid) => FindObjectScripts(uuid).ToList();
 
     // Scene scripts live in the same table under the scene's uuid, so an object lookup must never see one.

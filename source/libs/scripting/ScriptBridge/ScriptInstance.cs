@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ScriptBridge;
 
@@ -7,6 +8,7 @@ namespace ScriptBridge;
 public abstract class ScriptInstance
 {
     private readonly Scheduler _timers = new();
+    private readonly HashSet<Type> _reportedMissingSceneScripts = new();
 
     internal ScriptInstance()
     {
@@ -43,6 +45,22 @@ public abstract class ScriptInstance
     // Returns how many handlers ran.
     protected int publish(string eventName, object? payload = null)
         => Bridge.Events.publish(eventName, payload);
+
+    // The current scene's scene script of type T, or null when there is none or it has faulted.
+    protected T? getSceneScript<T>() where T : SceneScript => Bridge.FindSceneScript<T>();
+
+    // Like getSceneScript, but logs one error per caller instance and type when it is missing.
+    protected T? requireSceneScript<T>() where T : SceneScript
+    {
+        var found = Bridge.FindSceneScript<T>();
+        if (found == null && _reportedMissingSceneScripts.Add(typeof(T)))
+        {
+            Log.error($"Script '{GetType().Name}' requires scene script '{typeof(T).Name}', " +
+                      "but the current scene has none (or it has faulted).");
+        }
+
+        return found;
+    }
 
     private string? OwnerKeyIfLive(string eventName)
     {
