@@ -477,7 +477,9 @@ A `SceneScript` also gets scene-wide virtuals (`onSceneLoaded`, `onSceneUnloadin
 `onPlayerJoined`, `onPlayerLeft`) through `ScriptSystem::dispatchSceneEvent`, which reaches only started scene scripts. `start(scene)` delivers loaded
 and `stop(scene)` delivers unloading, before any `stop()`; `ServerApp` adds one `onPlayerJoined` per bound slot after loaded.
 `ServerApp` reports spawns and destroys from the script buffers and from a before/after uuid diff (`SceneObjectDiff.h`) around each editor `sceneEdit`
-while the scene is not stopped, and player joins, leaves and possession switches as they happen. A `setSceneScriptFields` edit is pushed to the live
+while the scene is not stopped, and player joins, leaves and possession switches as they happen. A scene script started mid-run misses `onSceneLoaded` and the start-time joins, and a failed project load that restarts the scene delivers unloading then loaded again.
+Handler spawns stay pending until `ServerApp` flushes them right after each out-of-tick dispatch, and a stop discards what unloading handlers buffered.
+A `setSceneScriptFields` edit is pushed to the live
 instance before the snapshot, since the snapshot reads instance values back.
 `ComponentOpsBindings` (`World.hasComponent`/`addComponent`/`removeComponent`/`getComponentTypes`) gives
 scripts generic access to an object's component set, keyed by the same `ComponentRegistry` type-name

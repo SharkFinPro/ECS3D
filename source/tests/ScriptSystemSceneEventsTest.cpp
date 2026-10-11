@@ -221,6 +221,42 @@ namespace {
     EXPECT_EQ(state.sceneEvents, (Events{ event("Alpha", codeLoaded) }));
   }
 
+  TEST_F(SceneEventsTest, AHandlerThatSpawnsLeavesTheObjectPendingUntilTheNextFlush)
+  {
+    addSceneScript("Alpha");
+    scriptSystem.start(*mainScene);
+    const auto objects = mainScene->getObjectManager();
+    const auto spawned = std::make_shared<Object>("Spawned");
+    state.sceneEventHook = [&](const SceneEventCall&) { objects->addObject(spawned); };
+
+    scriptSystem.dispatchSceneEvent(*mainScene, SceneEvent::playerJoined, nullptr, 1);
+
+    ASSERT_EQ(state.sceneEvents.back().event, codeJoined);
+    EXPECT_EQ(std::ranges::count(objects->getAllObjects(), spawned), 0);
+    EXPECT_EQ(objects->getObjectByUUID(spawned->getUUID()), spawned);
+
+    objects->flushPendingAdditions();
+    EXPECT_EQ(std::ranges::count(objects->getAllObjects(), spawned), 1);
+
+    state.sceneEventHook = nullptr;
+    const auto later = std::make_shared<Object>("Later");
+    objects->addObject(later);
+    EXPECT_EQ(std::ranges::count(objects->getAllObjects(), later), 1);
+  }
+
+  TEST_F(SceneEventsTest, DispatchPointsTheBindingsAtTheScenesObjectManager)
+  {
+    addSceneScript("Alpha");
+    scriptSystem.start(*mainScene);
+    BindingContext::setObjectManager(nullptr);
+
+    ObjectManager* seen = nullptr;
+    state.sceneEventHook = [&](const SceneEventCall&) { seen = BindingContext::getObjectManager(); };
+    scriptSystem.dispatchSceneEvent(*mainScene, SceneEvent::playerJoined, nullptr, 1);
+
+    EXPECT_EQ(seen, mainScene->getObjectManager().get());
+  }
+
   class SceneObjectDiffTest : public ::testing::Test {
   protected:
     fixtures::Scene scene = fixtures::makeScene();

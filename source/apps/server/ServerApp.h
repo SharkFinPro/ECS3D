@@ -138,11 +138,15 @@ private:
   // Starts the scene's scripts, then tells its scene scripts about every player already bound.
   void startSceneScripts(SceneAsset& scene) const;
 
+  // Drops what script code buffered for replication, for a stop where the objects it names are replaced.
+  static void discardScriptBuffers();
+
   void notifyPlayerJoined(int32_t slot) const;
 
   void notifyPlayerLeft(int32_t slot) const;
 
-  // One event per uuid to the current scene's scene scripts, spawned before destroyed.
+  // One event per uuid to the current scene's scene scripts, spawned before destroyed. The caller flushes
+  // what a handler spawned or destroyed.
   void notifyObjectEvents(const std::vector<uuids::uuid>& spawned, const std::vector<uuids::uuid>& destroyed) const;
 
   void startScriptsLogged(SceneAsset& scene) const;

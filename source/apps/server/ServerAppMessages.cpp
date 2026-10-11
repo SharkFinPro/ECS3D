@@ -307,6 +307,7 @@ void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scen
   if (plan.stopScripts)
   {
     m_scriptSystem->stop(scene);
+    discardScriptBuffers();
   }
 
   if (plan.resetScene)

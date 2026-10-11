@@ -7,6 +7,7 @@
 #include <objects/ObjectManager.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
+#include <objects/components/Script.h>
 #include <ScriptSystem.h>
 #include <SceneObjectDiff.h>
 #include <NetServer.h>
@@ -32,6 +33,59 @@ namespace {
     }
 
     return "it was applied";
+  }
+
+  struct TrackedEdit {
+    replication::SceneEditResult result = replication::SceneEditResult::failed;
+    bool tracked = false;
+    sceneObjectDiff::Diff changes;
+  };
+
+  // Applies the edit; when `track` is set and it applied, also reports which objects it added and removed.
+  TrackedEdit applyTracked(SceneAsset& scene, const nlohmann::json& json, const AssetRegistry* assets, const bool track)
+  {
+    auto& objects = *scene.getObjectManager();
+    const auto before = track ? sceneObjectDiff::collectUUIDs(objects) : std::vector<uuids::uuid>{};
+
+    TrackedEdit edit;
+    edit.result = replication::isSceneScriptEdit(json)
+      ? replication::applySceneScriptEdit(scene, json)
+      : replication::applySceneEdit(objects, json, assets);
+
+    if (track && edit.result == replication::SceneEditResult::applied)
+    {
+      edit.tracked = true;
+      edit.changes = sceneObjectDiff::diff(before, sceneObjectDiff::collectUUIDs(objects));
+    }
+
+    return edit;
+  }
+
+  // Logs a refused edit; true when the sender's view needs a snapshot to repair it.
+  bool describeRefusal(const replication::SceneEditResult result, const nlohmann::json& json)
+  {
+    // Read defensively. A payload of [] or {"op": 5} is valid JSON, so it reaches here - and value()
+    // throws on a json that is not an object, or on a key that will not convert. Throwing out of the
+    // log line would put this back in the run loop's generic catch, which is the outcome this handler
+    // exists to replace.
+    const auto op = json.is_object() && json.contains("op") && json.at("op").is_string()
+      ? json.at("op").get<std::string>()
+      : std::string("no op");
+
+    Log::error(LogCategory::server, "Discarded a scene edit (" + op + "): " + describe(result) + ".");
+
+    // A refusal the sender could have predicted needs no snapshot: rejected means the authority and the
+    // sender agree about the scene and the op simply changes nothing, and a malformed edit is a payload
+    // problem that resending the scene would not fix - and is the one a client can send on demand. The
+    // exception is a creating op refused for the uuid it chose: the sender gets neither the object nor
+    // an error, so it has to notice the missing object itself rather than being resynced here.
+    //
+    // Everything else means the sender's view disagrees with the authority: an object or component it
+    // believes exists and does not, a prefab it cannot resolve, an edit that threw part way through.
+    // Those are exactly the cases a snapshot repairs, and there is no client-initiated resync to fall
+    // back on - a structural edit was the only thing that rebuilt a drifted view.
+    return result != replication::SceneEditResult::rejected &&
+           result != replication::SceneEditResult::malformedEdit;
   }
 }
 
@@ -109,39 +163,11 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
   const bool sceneScriptEdit = replication::isSceneScriptEdit(json);
 
   // Only an object edit can add or remove objects, and only a running scene has scripts to tell.
-  const bool trackObjects = !sceneScriptEdit && scriptsLive();
-  const auto objectsBefore = trackObjects
-    ? sceneObjectDiff::collectUUIDs(*scene->getObjectManager())
-    : std::vector<uuids::uuid>{};
+  const auto applied = applyTracked(*scene, json, m_assetRegistry.get(), !sceneScriptEdit && scriptsLive());
 
-  const auto result = sceneScriptEdit
-    ? replication::applySceneScriptEdit(*scene, json)
-    : replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
-
-  if (result != replication::SceneEditResult::applied)
+  if (applied.result != replication::SceneEditResult::applied)
   {
-    // Read defensively. A payload of [] or {"op": 5} is valid JSON, so it reaches here - and value()
-    // throws on a json that is not an object, or on a key that will not convert. Throwing out of the
-    // log line would put this back in the run loop's generic catch, which is the outcome this handler
-    // exists to replace.
-    const auto op = json.is_object() && json.contains("op") && json.at("op").is_string()
-      ? json.at("op").get<std::string>()
-      : std::string("no op");
-
-    Log::error(LogCategory::server, "Discarded a scene edit (" + op + "): " + describe(result) + ".");
-
-    // A refusal the sender could have predicted needs no snapshot: rejected means the authority and the
-    // sender agree about the scene and the op simply changes nothing, and a malformed edit is a payload
-    // problem that resending the scene would not fix - and is the one a client can send on demand. The
-    // exception is a creating op refused for the uuid it chose: the sender gets neither the object nor
-    // an error, so it has to notice the missing object itself rather than being resynced here.
-    //
-    // Everything else means the sender's view disagrees with the authority: an object or component it
-    // believes exists and does not, a prefab it cannot resolve, an edit that threw part way through.
-    // Those are exactly the cases a snapshot repairs, and there is no client-initiated resync to fall
-    // back on - a structural edit was the only thing that rebuilt a drifted view.
-    if (result != replication::SceneEditResult::rejected &&
-        result != replication::SceneEditResult::malformedEdit)
+    if (describeRefusal(applied.result, json))
     {
       broadcastSnapshot();
     }
@@ -158,10 +184,10 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
 
   broadcastSnapshot();
 
-  if (trackObjects)
+  if (applied.tracked)
   {
-    const auto changes = sceneObjectDiff::diff(objectsBefore, sceneObjectDiff::collectUUIDs(*scene->getObjectManager()));
-    notifyObjectEvents(changes.added, changes.removed);
+    notifyObjectEvents(applied.changes.added, applied.changes.removed);
+    broadcastStructuralChanges();
   }
 }
 

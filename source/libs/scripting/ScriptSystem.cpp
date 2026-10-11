@@ -405,6 +405,11 @@ void ScriptSystem::dispatchSceneEvent(SceneAsset& scene,
   const auto sceneStr = uuids::to_string(sceneUUID);
   const auto objectStr = object ? uuids::to_string(*object) : std::string();
 
+  // Held for every event kind: a handler that spawns lands in the pending list rather than the live one, so
+  // the app's next structural flush replicates it once instead of a snapshot and an objectSpawned both
+  // carrying it.
+  const ObjectManager::ScriptPassGuard scriptPassGuard(*scene.getObjectManager());
+
   bool pointedBindings = false;
 
   // Iterates a copy of the list, since a handler could reach code that edits it.

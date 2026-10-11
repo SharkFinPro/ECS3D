@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -49,6 +50,8 @@ namespace scriptSystemFixtures {
   struct RuntimeState {
     std::vector<std::string> calls;
     std::vector<SceneEventCall> sceneEvents;
+    // Runs inside onSceneEvent, standing in for a handler's side effects.
+    std::function<void(const SceneEventCall&)> sceneEventHook;
     std::map<std::string, std::string> exposedByClass;
     std::map<std::string, float> floats;
     std::map<std::string, int> ints;
@@ -138,6 +141,11 @@ namespace scriptSystemFixtures {
                       int slot) const override
     {
       m_state.sceneEvents.push_back({ sceneUuid, className, event, objectUuid, slot, m_state.calls.size() });
+
+      if (m_state.sceneEventHook)
+      {
+        m_state.sceneEventHook(m_state.sceneEvents.back());
+      }
     }
 
     [[nodiscard]] std::string getExposedFields(const char*, const char* className) const override
