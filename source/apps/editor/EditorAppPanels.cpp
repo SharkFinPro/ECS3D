@@ -6,6 +6,7 @@
 #include <RenderSystem.h>
 #include <EditorTheme.h>
 #include <GuiComponents.h>
+#include <PlayControls.h>
 #include <ViewportGizmo.h>
 #include <Gizmo.h>
 #include <EditorGizmoSettings.h>
@@ -110,7 +111,7 @@ namespace {
                                           : theme::t3;
   }
 
-  // The Move/Rotate/Scale mode buttons: the active mode is styled like the mockup's accent Start button.
+  // The Move/Rotate/Scale mode buttons: the active mode is drawn with the accent fill.
   // Named `viewportGizmo` rather than `gizmo` so it doesn't shadow the `gizmo::` namespace below.
   void displayGizmoModeButtons(ViewportGizmo& viewportGizmo)
   {
@@ -197,52 +198,33 @@ void EditorApp::displaySceneStatus()
 
 void EditorApp::displayPlayControls()
 {
-  constexpr int sceneStatusButtonWidth = 125;
+  const auto available = playControlsAvailability(m_sceneStatus, m_serverEditable);
 
-  // Play controls first (mockup's leading accent Start button).
-  if (m_sceneStatus != SceneStatus::running)
+  if (gc::iconButton("##play", gc::SecIcon::play, available.play, theme::sceneGreen))
   {
-    ImGui::BeginDisabled(!m_serverEditable);
-    ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
-    ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
-    if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
+    if (m_playHistory.requestStart())
     {
-      if (m_playHistory.requestStart())
-      {
-        clearUndoRedoPending();
-      }
+      clearUndoRedoPending();
+    }
 
-      sendSceneControl(net::SceneControlOp::start);
-    }
-    ImGui::PopStyleColor(4);
-    ImGui::EndDisabled();
-  }
-  else
-  {
-    ImGui::BeginDisabled(!m_serverEditable);
-    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
-    {
-      sendSceneControl(net::SceneControlOp::pause);
-    }
-    ImGui::EndDisabled();
+    sendSceneControl(net::SceneControlOp::start);
   }
 
-  if (m_sceneStatus != SceneStatus::stopped)
+  ImGui::SameLine();
+  if (gc::iconButton("##pause", gc::SecIcon::pause, available.pause, theme::scriptAmber))
   {
-    ImGui::SameLine();
-    ImGui::BeginDisabled(!m_serverEditable);
-    if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
-    {
-      if (m_playHistory.requestStop())
-      {
-        clearUndoRedoPending();
-      }
+    sendSceneControl(net::SceneControlOp::pause);
+  }
 
-      sendSceneControl(net::SceneControlOp::stop);
+  ImGui::SameLine();
+  if (gc::iconButton("##stop", gc::SecIcon::stop, available.stop, theme::danger))
+  {
+    if (m_playHistory.requestStop())
+    {
+      clearUndoRedoPending();
     }
-    ImGui::EndDisabled();
+
+    sendSceneControl(net::SceneControlOp::stop);
   }
 }
 

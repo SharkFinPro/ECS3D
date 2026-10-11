@@ -256,7 +256,7 @@ namespace gc {
   // font is out of scope). Drawn centered in a `size`-wide box at `center`.
   enum class SecIcon { none, transform, model, rigid, collider, image, rotate, scale, pan,
                        script, scene, folder, plus, minus, light, block, rigidblock, sphere, player,
-                       search };
+                       search, play, pause, stop };
 
   inline void drawSecIcon(ImDrawList* dl, const ImVec2& center, const float size, const SecIcon icon,
                           const ImU32 col)
@@ -368,6 +368,20 @@ namespace gc {
         dl->AddCircle(ImVec2(center.x, center.y - r * 0.4f), r * 0.4f, col, 12, 1.5f);
         dl->PathArcTo(ImVec2(center.x, center.y + r), r * 0.75f, 3.34f, 6.08f, 12);
         dl->PathStroke(col, 0, 1.5f);
+        break;
+      case SecIcon::play: // filled triangle
+        dl->AddTriangleFilled(ImVec2(center.x - r * 0.7f, center.y - r), ImVec2(center.x - r * 0.7f, center.y + r),
+                              ImVec2(center.x + r, center.y), col);
+        break;
+      case SecIcon::pause: // two filled bars
+        dl->AddRectFilled(ImVec2(center.x - r * 0.8f, center.y - r), ImVec2(center.x - r * 0.15f, center.y + r),
+                          col, 1.5f);
+        dl->AddRectFilled(ImVec2(center.x + r * 0.15f, center.y - r), ImVec2(center.x + r * 0.8f, center.y + r),
+                          col, 1.5f);
+        break;
+      case SecIcon::stop: // filled rounded square
+        dl->AddRectFilled(ImVec2(center.x - r * 0.85f, center.y - r * 0.85f),
+                          ImVec2(center.x + r * 0.85f, center.y + r * 0.85f), col, 2.0f);
         break;
       case SecIcon::search: // magnifying glass
       {
@@ -507,6 +521,35 @@ namespace gc {
 
     const ImU32 col = active ? theme::u32(theme::onAcc) : theme::u32(theme::overlayIcon);
     drawSecIcon(dl, ImVec2(pos.x + s * 0.5f, pos.y + s * 0.5f), 16.0f, icon, col);
+
+    return clicked;
+  }
+
+  inline ImVec4 lightenToward(const ImVec4& c, const float amount)
+  {
+    return ImVec4(c.x + (1.0f - c.x) * amount, c.y + (1.0f - c.y) * amount, c.z + (1.0f - c.z) * amount, c.w);
+  }
+
+  // A fixed-size (frame height square) icon button for the Scene Status toolbar, filled with `fill` when
+  // enabled. A disabled button gets a recessed well and a muted icon, since ImGui's disabled alpha alone
+  // is too subtle to read at a glance.
+  inline bool iconButton(const char* id, const SecIcon icon, const bool enabled, const ImVec4& fill)
+  {
+    const float s = ImGui::GetFrameHeight();
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    ImGui::BeginDisabled(!enabled);
+
+    ImGui::PushStyleColor(ImGuiCol_Button, enabled ? fill : theme::inset);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, enabled ? lightenToward(fill, 0.2f) : theme::inset);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, enabled ? lightenToward(fill, 0.1f) : theme::inset);
+    const bool clicked = ImGui::Button(id, ImVec2(s, s));
+    ImGui::PopStyleColor(3);
+
+    drawSecIcon(ImGui::GetWindowDrawList(), ImVec2(pos.x + s * 0.5f, pos.y + s * 0.5f), s * 0.55f, icon,
+                ImGui::GetColorU32(enabled ? theme::inset : theme::t3));
+
+    ImGui::EndDisabled();
 
     return clicked;
   }
