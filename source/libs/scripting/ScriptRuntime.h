@@ -23,6 +23,11 @@ public:
   [[nodiscard]] virtual bool attachScript(const char* uuid,
                                           const char* className) const = 0;
 
+  // Same, for a scene: uuid is the scene's, and only a SceneScript class can be instantiated. A class of
+  // the wrong kind reports false, like a missing one.
+  [[nodiscard]] virtual bool attachSceneScript(const char* uuid,
+                                               const char* className) const = 0;
+
   // True when an instance exists under the pair and has not faulted.
   [[nodiscard]] virtual bool isHealthy(const char* uuid,
                                        const char* className) const = 0;

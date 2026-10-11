@@ -19,6 +19,7 @@ class ProjectPacker;
 class CollisionSystem;
 class ScriptSystem;
 class ObjectManager;
+class SceneAsset;
 class RemoteLogSink;
 
 namespace net {
@@ -126,9 +127,9 @@ private:
 
   void finishProjectLoad() const;
 
-  void startScriptsLogged(ObjectManager& objectManager) const;
+  void startScriptsLogged(SceneAsset& scene) const;
 
-  void stopScriptsLogged(ObjectManager& objectManager) const;
+  void stopScriptsLogged(SceneAsset& scene) const;
 
   void handleAddAsset(const net::Message& message) const;
 
@@ -140,7 +141,7 @@ private:
 
   void handleSceneControl(const net::Message& message) const;
 
-  void applySceneControl(net::SceneControlOp op, ObjectManager& objectManager, bool wasStopped) const;
+  void applySceneControl(net::SceneControlOp op, SceneAsset& scene, bool wasStopped) const;
 
   void loadScene(const std::string& sceneUUID) const;
 

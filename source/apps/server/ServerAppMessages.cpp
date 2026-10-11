@@ -263,7 +263,7 @@ void ServerApp::handleSceneControl(const net::Message& message) const
 
   try
   {
-    applySceneControl(op, *scene->getObjectManager(), wasStopped);
+    applySceneControl(op, *scene, wasStopped);
   }
   catch (const std::exception& e)
   {
@@ -275,7 +275,7 @@ void ServerApp::handleSceneControl(const net::Message& message) const
   broadcastSnapshot();
 }
 
-void ServerApp::applySceneControl(const net::SceneControlOp op, ObjectManager& objectManager, const bool wasStopped) const
+void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scene, const bool wasStopped) const
 {
   const auto plan = planSceneControl(op, wasStopped);
 
@@ -291,12 +291,12 @@ void ServerApp::applySceneControl(const net::SceneControlOp op, ObjectManager& o
 
   if (plan.startScripts)
   {
-    m_scriptSystem->start(objectManager);
+    m_scriptSystem->start(scene);
   }
 
   if (plan.stopScripts)
   {
-    m_scriptSystem->stop(objectManager);
+    m_scriptSystem->stop(scene);
   }
 
   if (plan.resetScene)

@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -37,6 +38,9 @@ namespace scriptSystemFixtures {
     std::map<std::string, glm::vec3> vectors;
     bool reloadThrows = false;
     bool reloadReplaces = true;
+    // Classes the fake cannot instantiate, and classes it reports as faulted.
+    std::set<std::string> unresolvedClasses;
+    std::set<std::string> unhealthyClasses;
     int created = 0;
   };
 
@@ -67,12 +71,19 @@ namespace scriptSystemFixtures {
     {
       m_state.calls.push_back(describe("attach", uuid, className));
 
-      return true;
+      return !m_state.unresolvedClasses.contains(className);
     }
 
-    [[nodiscard]] bool isHealthy(const char*, const char*) const override
+    [[nodiscard]] bool attachSceneScript(const char* uuid, const char* className) const override
     {
-      return true;
+      m_state.calls.push_back(describe("attachScene", uuid, className));
+
+      return !m_state.unresolvedClasses.contains(className);
+    }
+
+    [[nodiscard]] bool isHealthy(const char*, const char* className) const override
+    {
+      return !m_state.unhealthyClasses.contains(className);
     }
 
     void detachScript(const char* uuid, const char* className) const override

@@ -26,6 +26,9 @@ public:
   [[nodiscard]] bool attachScript(const char* uuid,
                                   const char* className) const override;
 
+  [[nodiscard]] bool attachSceneScript(const char* uuid,
+                                       const char* className) const override;
+
   // True when an instance exists under the pair and has not faulted.
   [[nodiscard]] bool isHealthy(const char* uuid,
                                const char* className) const override;
@@ -125,6 +128,7 @@ private:
   bool m_initialized = false;
 
   AttachScriptFn m_attachScript = nullptr;
+  AttachScriptFn m_attachSceneScript = nullptr;
   IsHealthyFn m_isHealthy = nullptr;
   DetachScriptFn m_detachScript = nullptr;
   StartFn m_start = nullptr;

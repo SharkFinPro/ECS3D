@@ -27,7 +27,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
   // Stop the current scripts before the scene is swapped out from under them.
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
-    stopScriptsLogged(*scene->getObjectManager());
+    stopScriptsLogged(*scene);
   }
 
   try
@@ -46,7 +46,7 @@ void ServerApp::handleLoadProject(const net::Message& message) const
     {
       if (const auto scene = m_sceneManager->getCurrentScene())
       {
-        startScriptsLogged(*scene->getObjectManager());
+        startScriptsLogged(*scene);
       }
     }
 
@@ -71,11 +71,11 @@ void ServerApp::finishProjectLoad() const
   broadcastSnapshot();
 }
 
-void ServerApp::startScriptsLogged(ObjectManager& objectManager) const
+void ServerApp::startScriptsLogged(SceneAsset& scene) const
 {
   try
   {
-    m_scriptSystem->start(objectManager);
+    m_scriptSystem->start(scene);
   }
   catch (const std::exception& e)
   {
@@ -83,11 +83,11 @@ void ServerApp::startScriptsLogged(ObjectManager& objectManager) const
   }
 }
 
-void ServerApp::stopScriptsLogged(ObjectManager& objectManager) const
+void ServerApp::stopScriptsLogged(SceneAsset& scene) const
 {
   try
   {
-    m_scriptSystem->stop(objectManager);
+    m_scriptSystem->stop(scene);
   }
   catch (const std::exception& e)
   {
@@ -114,7 +114,7 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
   {
     try
     {
-      m_scriptSystem->stop(*current->getObjectManager());
+      m_scriptSystem->stop(*current);
     }
     catch (const std::exception& e)
     {

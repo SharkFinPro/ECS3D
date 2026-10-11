@@ -107,7 +107,7 @@ void ServerApp::startLoadedScene()
     {
       try
       {
-        m_scriptSystem->start(*scene->getObjectManager());
+        m_scriptSystem->start(*scene);
       }
       catch (const std::exception& e)
       {
@@ -239,8 +239,8 @@ void ServerApp::fixedUpdate(const float dt) const
   {
     auto& objectManager = *scene->getObjectManager();
 
-    m_scriptSystem->variableUpdate(objectManager);
-    m_scriptSystem->fixedUpdate(objectManager, dt);
+    m_scriptSystem->variableUpdate(*scene);
+    m_scriptSystem->fixedUpdate(*scene, dt);
     PhysicsSystem::fixedUpdate(objectManager, dt);
     m_collisionSystem->fixedUpdate(objectManager, dt);
 
