@@ -84,6 +84,7 @@ add_executable(${PROJECT_NAME}
   KeybindsTest.cpp
   BillboardTest.cpp
   LightGizmoVisibilityTest.cpp
+  PlayControlsTest.cpp
   GridVisibilityTest.cpp
   EditorViewportSettingsTest.cpp
   GizmoTest.cpp

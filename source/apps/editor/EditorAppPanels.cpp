@@ -6,6 +6,7 @@
 #include <RenderSystem.h>
 #include <EditorTheme.h>
 #include <GuiComponents.h>
+#include <PlayControls.h>
 #include <ViewportGizmo.h>
 #include <Gizmo.h>
 #include <EditorGizmoSettings.h>
@@ -110,7 +111,16 @@ namespace {
                                           : theme::t3;
   }
 
-  // The Move/Rotate/Scale mode buttons: the active mode is styled like the mockup's accent Start button.
+  // Shown even while the button is disabled, so a grayed-out control still says what it is.
+  void playControlTooltip(const char* text)
+  {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_ForTooltip))
+    {
+      ImGui::SetTooltip("%s", text);
+    }
+  }
+
+  // The Move/Rotate/Scale mode buttons: the active mode is styled like the mockup's accent play button.
   // Named `viewportGizmo` rather than `gizmo` so it doesn't shadow the `gizmo::` namespace below.
   void displayGizmoModeButtons(ViewportGizmo& viewportGizmo)
   {
@@ -197,53 +207,53 @@ void EditorApp::displaySceneStatus()
 
 void EditorApp::displayPlayControls()
 {
-  constexpr int sceneStatusButtonWidth = 125;
+  const auto available = playControlsAvailability(m_sceneStatus, m_serverEditable);
 
-  // Play controls first (mockup's leading accent Start button).
-  if (m_sceneStatus != SceneStatus::running)
+  ImGui::BeginDisabled(!available.play);
+  if (available.play)
   {
-    ImGui::BeginDisabled(!m_serverEditable);
     ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
-    ImGui::PushStyleColor(ImGuiCol_Text, theme::onAcc);
-    if (ImGui::Button("Start", {sceneStatusButtonWidth, 0}))
-    {
-      if (m_playHistory.requestStart())
-      {
-        clearUndoRedoPending();
-      }
-
-      sendSceneControl(net::SceneControlOp::start);
-    }
-    ImGui::PopStyleColor(4);
-    ImGui::EndDisabled();
   }
-  else
+  if (gc::iconButton("##play", gc::SecIcon::play, available.play))
   {
-    ImGui::BeginDisabled(!m_serverEditable);
-    if (ImGui::Button("Pause", {sceneStatusButtonWidth, 0}))
+    if (m_playHistory.requestStart())
     {
-      sendSceneControl(net::SceneControlOp::pause);
+      clearUndoRedoPending();
     }
-    ImGui::EndDisabled();
-  }
 
-  if (m_sceneStatus != SceneStatus::stopped)
+    sendSceneControl(net::SceneControlOp::start);
+  }
+  if (available.play)
   {
-    ImGui::SameLine();
-    ImGui::BeginDisabled(!m_serverEditable);
-    if (ImGui::Button("Stop", {sceneStatusButtonWidth, 0}))
-    {
-      if (m_playHistory.requestStop())
-      {
-        clearUndoRedoPending();
-      }
-
-      sendSceneControl(net::SceneControlOp::stop);
-    }
-    ImGui::EndDisabled();
+    ImGui::PopStyleColor(3);
   }
+  playControlTooltip(playControlLabel(m_sceneStatus));
+  ImGui::EndDisabled();
+
+  ImGui::SameLine();
+  ImGui::BeginDisabled(!available.pause);
+  if (gc::iconButton("##pause", gc::SecIcon::pause, false))
+  {
+    sendSceneControl(net::SceneControlOp::pause);
+  }
+  playControlTooltip("Pause");
+  ImGui::EndDisabled();
+
+  ImGui::SameLine();
+  ImGui::BeginDisabled(!available.stop);
+  if (gc::iconButton("##stop", gc::SecIcon::stop, false))
+  {
+    if (m_playHistory.requestStop())
+    {
+      clearUndoRedoPending();
+    }
+
+    sendSceneControl(net::SceneControlOp::stop);
+  }
+  playControlTooltip("Stop");
+  ImGui::EndDisabled();
 }
 
 void EditorApp::displayRayTracingToggle() const
