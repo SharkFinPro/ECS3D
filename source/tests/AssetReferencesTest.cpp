@@ -7,6 +7,7 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/ModelRenderer.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <scenes/SceneAsset.h>
 #include <scenes/SceneManager.h>
 
@@ -161,4 +162,36 @@ TEST_F(AssetReferencesTest, IgnoresABodyOnARecordThatIsNotAPrefab)
   m_assetRegistry.registerAsset(record);
 
   EXPECT_EQ(count(modelUUID), 0);
+}
+
+TEST_F(AssetReferencesTest, CountsAConvexMeshColliderWhoseHullWasBuiltFromTheModel)
+{
+  const auto scene = addScene("11111111-1111-1111-1111-111111111111", "Scene");
+
+  auto object = std::make_shared<Object>("Hull");
+  auto hull = std::make_shared<ConvexMeshCollider>();
+  hull->setSourceModel(modelUUID);
+  object->addComponent(hull);
+  scene->getObjectManager()->addObject(object);
+
+  // The control: a hull with no source model, and a different model, reference nothing here.
+  auto unrelated = std::make_shared<Object>("Plain");
+  unrelated->addComponent(std::make_shared<ConvexMeshCollider>());
+  scene->getObjectManager()->addObject(unrelated);
+
+  EXPECT_EQ(count(modelUUID), 1);
+  EXPECT_EQ(count(unusedUUID), 0);
+}
+
+TEST_F(AssetReferencesTest, CountsAConvexMeshColliderInsideAPrefabBody)
+{
+  auto object = std::make_shared<Object>("Hull");
+  auto hull = std::make_shared<ConvexMeshCollider>();
+  hull->setSourceModel(modelUUID);
+  object->addComponent(hull);
+
+  m_assetRegistry.registerAsset(prefabRecord("Prefab", object->serialize().dump()));
+
+  EXPECT_EQ(count(modelUUID), 1);
+  EXPECT_EQ(count(unusedUUID), 0);
 }

@@ -174,9 +174,16 @@ namespace collisions {
       return subject;
     }
 
-    // The nearest points of segments (p1, q1) and (p2, q2); either may be a single point.
-    [[nodiscard]] std::pair<glm::vec3, glm::vec3> closestSegmentPoints(const glm::vec3& p1, const glm::vec3& q1,
-                                                                       const glm::vec3& p2, const glm::vec3& q2)
+    [[nodiscard]] glm::vec3 closestPointOnSegment(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b)
+    {
+      const glm::vec3 ab = b - a;
+
+      return a + ab * std::clamp(glm::dot(p - a, ab) / glm::dot(ab, ab), 0.0f, 1.0f);
+    }
+
+    // Both segments longer than a point.
+    [[nodiscard]] std::pair<glm::vec3, glm::vec3> closestOfProperSegments(const glm::vec3& p1, const glm::vec3& q1,
+                                                                          const glm::vec3& p2, const glm::vec3& q2)
     {
       const glm::vec3 d1 = q1 - p1;
       const glm::vec3 d2 = q2 - p2;
@@ -184,49 +191,50 @@ namespace collisions {
       const float a = glm::dot(d1, d1);
       const float e = glm::dot(d2, d2);
       const float f = glm::dot(d2, r);
+      const float c = glm::dot(d1, r);
+      const float b = glm::dot(d1, d2);
+      const float denominator = a * e - b * b;
 
-      float s = 0.0f;
-      float t = 0.0f;
+      float s = denominator > segmentEpsilon ? std::clamp((b * f - c * e) / denominator, 0.0f, 1.0f) : 0.0f;
+      float t = (b * s + f) / e;
 
-      if (a <= segmentEpsilon && e <= segmentEpsilon)
+      if (t < 0.0f)
+      {
+        t = 0.0f;
+        s = std::clamp(-c / a, 0.0f, 1.0f);
+      }
+      else if (t > 1.0f)
+      {
+        t = 1.0f;
+        s = std::clamp((b - c) / a, 0.0f, 1.0f);
+      }
+
+      return { p1 + d1 * s, p2 + d2 * t };
+    }
+
+    // The nearest points of segments (p1, q1) and (p2, q2); either may be a single point.
+    [[nodiscard]] std::pair<glm::vec3, glm::vec3> closestSegmentPoints(const glm::vec3& p1, const glm::vec3& q1,
+                                                                       const glm::vec3& p2, const glm::vec3& q2)
+    {
+      const bool firstIsPoint = glm::dot(q1 - p1, q1 - p1) <= segmentEpsilon;
+      const bool secondIsPoint = glm::dot(q2 - p2, q2 - p2) <= segmentEpsilon;
+
+      if (firstIsPoint && secondIsPoint)
       {
         return { p1, p2 };
       }
 
-      if (a <= segmentEpsilon)
+      if (firstIsPoint)
       {
-        t = std::clamp(f / e, 0.0f, 1.0f);
-      }
-      else
-      {
-        const float c = glm::dot(d1, r);
-
-        if (e <= segmentEpsilon)
-        {
-          s = std::clamp(-c / a, 0.0f, 1.0f);
-        }
-        else
-        {
-          const float b = glm::dot(d1, d2);
-          const float denominator = a * e - b * b;
-
-          s = denominator > segmentEpsilon ? std::clamp((b * f - c * e) / denominator, 0.0f, 1.0f) : 0.0f;
-          t = (b * s + f) / e;
-
-          if (t < 0.0f)
-          {
-            t = 0.0f;
-            s = std::clamp(-c / a, 0.0f, 1.0f);
-          }
-          else if (t > 1.0f)
-          {
-            t = 1.0f;
-            s = std::clamp((b - c) / a, 0.0f, 1.0f);
-          }
-        }
+        return { p1, closestPointOnSegment(p1, p2, q2) };
       }
 
-      return { p1 + d1 * s, p2 + d2 * t };
+      if (secondIsPoint)
+      {
+        return { closestPointOnSegment(p2, p1, q1), p2 };
+      }
+
+      return closestOfProperSegments(p1, q1, p2, q2);
     }
 
     // A feature with no area: its first point and the one furthest from it.

@@ -40,6 +40,11 @@ add_executable(${PROJECT_NAME}
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp
+  ConvexHullTest.cpp
+  ConvexMeshColliderTest.cpp
+  ConvexMeshNarrowPhaseTest.cpp
+  ConvexMeshPhysicsTest.cpp
+  ConvexMeshQueryTest.cpp
   NonFiniteValuesTest.cpp
   FiniteRendererValuesTest.cpp
   EditHistoryRoundTripTest.cpp

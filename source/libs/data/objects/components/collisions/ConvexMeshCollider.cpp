@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <Protocol.h>
 
 namespace {
@@ -47,6 +48,28 @@ namespace {
     }
 
     return indices;
+  }
+
+  // A count and then that many values, refused before anything is reserved when the count is over limit.
+  template <typename T>
+  [[nodiscard]] std::vector<T> readCounted(net::MessageReader& reader, const size_t limit, const char* what)
+  {
+    const auto count = reader.read<uint32_t>();
+
+    if (count > limit)
+    {
+      throw std::runtime_error(std::string("ConvexMesh: ") + what + " count over the limit");
+    }
+
+    std::vector<T> values;
+    values.reserve(count);
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+      values.push_back(reader.read<T>());
+    }
+
+    return values;
   }
 
   [[nodiscard]] uuids::uuid readSourceModel(const nlohmann::json& componentData)
@@ -322,30 +345,9 @@ void ConvexMeshCollider::unpack(net::MessageReader& messageReader)
   const auto sourceModel = messageReader.read<uuids::uuid>();
 
   // Each count is checked before anything is reserved or read, so a hostile count cannot allocate.
-  const auto vertexCount = messageReader.read<uint32_t>();
-  if (vertexCount > maxConvexHullVertices)
-  {
-    throw std::runtime_error("ConvexMesh: vertex count over the limit");
-  }
-
   ConvexHull hull;
-  hull.vertices.reserve(vertexCount);
-  for (uint32_t i = 0; i < vertexCount; ++i)
-  {
-    hull.vertices.push_back(messageReader.read<glm::vec3>());
-  }
-
-  const auto indexCount = messageReader.read<uint32_t>();
-  if (indexCount > maxConvexHullIndices)
-  {
-    throw std::runtime_error("ConvexMesh: index count over the limit");
-  }
-
-  hull.indices.reserve(indexCount);
-  for (uint32_t i = 0; i < indexCount; ++i)
-  {
-    hull.indices.push_back(messageReader.read<uint32_t>());
-  }
+  hull.vertices = readCounted<glm::vec3>(messageReader, maxConvexHullVertices, "vertex");
+  hull.indices = readCounted<uint32_t>(messageReader, maxConvexHullIndices, "index");
 
   const bool isTrigger = messageReader.read<bool>();
   const auto layer = messageReader.read<uint32_t>();

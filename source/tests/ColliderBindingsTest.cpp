@@ -7,11 +7,14 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/ConvexHull.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
 #include <limits>
 #include <memory>
+#include <vector>
 #include <string>
 #include <uuid.h>
 
@@ -313,4 +316,85 @@ TEST_F(ColliderBindingsTest, AGetOrARefusedSetRecordsNoComponentEdit)
   static_cast<void>(m_bindings.getSphereRadius(bareUUID.c_str(), &radius));
 
   EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(ColliderBindingsTest, GetShapeNamesAConvexMeshAndItsAccessorsReadAndWriteTheOffset)
+{
+  const auto hullObject = fixtures::addObject(m_scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  hullObject->addComponent(hull);
+  const auto hullUUID = uuidOf(hullObject);
+
+  EXPECT_EQ(m_bindings.getShape(hullUUID.c_str()), 3);
+  EXPECT_TRUE(m_bindings.has(hullUUID.c_str()));
+
+  float x = -1, y = -1, z = -1;
+  ASSERT_TRUE(m_bindings.getConvexMeshOffset(hullUUID.c_str(), &x, &y, &z));
+  EXPECT_FLOAT_EQ(x, 0.0f);
+  EXPECT_FLOAT_EQ(y, 0.0f);
+  EXPECT_FLOAT_EQ(z, 0.0f);
+
+  EXPECT_TRUE(m_bindings.setConvexMeshOffset(hullUUID.c_str(), 1.0f, 2.0f, 3.0f));
+  ASSERT_TRUE(m_bindings.getConvexMeshOffset(hullUUID.c_str(), &x, &y, &z));
+  EXPECT_FLOAT_EQ(x, 1.0f);
+  EXPECT_FLOAT_EQ(y, 2.0f);
+  EXPECT_FLOAT_EQ(z, 3.0f);
+  EXPECT_EQ(hull->getLocalPosition(), glm::vec3(1.0f, 2.0f, 3.0f));
+
+  const auto edits = BindingContext::takeComponentEdits();
+  ASSERT_EQ(edits.size(), 1u);
+  EXPECT_EQ(edits[0].first, hullObject->getUUID());
+  EXPECT_EQ(edits[0].second, hull);
+
+  // A non-finite offset is accepted but changes nothing, so it records nothing.
+  EXPECT_TRUE(m_bindings.setConvexMeshOffset(hullUUID.c_str(), std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f));
+  EXPECT_EQ(hull->getLocalPosition(), glm::vec3(1.0f, 2.0f, 3.0f));
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(ColliderBindingsTest, AConvexMeshReportsItsVertexCountAndTheHullChangesWithIt)
+{
+  const auto hullObject = fixtures::addObject(m_scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  hullObject->addComponent(hull);
+  const auto hullUUID = uuidOf(hullObject);
+
+  uint32_t count = 0;
+  ASSERT_TRUE(m_bindings.getConvexMeshVertexCount(hullUUID.c_str(), &count));
+  EXPECT_EQ(count, 8u);
+
+  const std::vector<glm::vec3> points{ { 0, 0, 0 }, { 2, 0, 0 }, { 0, 2, 0 }, { 0, 0, 2 } };
+  ASSERT_TRUE(hull->setHull(*buildConvexHull(points)));
+
+  ASSERT_TRUE(m_bindings.getConvexMeshVertexCount(hullUUID.c_str(), &count));
+  EXPECT_EQ(count, 4u);
+}
+
+TEST_F(ColliderBindingsTest, ConvexMeshAccessorsFailSafelyOnOtherShapesAndTheOtherWayRound)
+{
+  const auto hullObject = fixtures::addObject(m_scene, "Hull");
+  hullObject->addComponent(std::make_shared<ConvexMeshCollider>());
+  const auto hullUUID = uuidOf(hullObject);
+  const auto boxUUID = uuidOf(m_boxObject);
+
+  float x = -7, y = -7, z = -7;
+  uint32_t count = 99;
+  EXPECT_FALSE(m_bindings.getConvexMeshOffset(boxUUID.c_str(), &x, &y, &z));
+  EXPECT_FLOAT_EQ(x, -7.0f);
+  EXPECT_FALSE(m_bindings.setConvexMeshOffset(boxUUID.c_str(), 1.0f, 1.0f, 1.0f));
+  EXPECT_FALSE(m_bindings.getConvexMeshVertexCount(boxUUID.c_str(), &count));
+  EXPECT_EQ(count, 99u);
+  EXPECT_EQ(m_box->getLocalPosition(), glm::vec3(0));
+
+  EXPECT_FALSE(m_bindings.getConvexMeshOffset(uuidOf(m_bareObject).c_str(), &x, &y, &z));
+
+  // The box and sphere accessors refuse a convex mesh, with its state untouched.
+  EXPECT_FALSE(m_bindings.getBoxOffset(hullUUID.c_str(), &x, &y, &z));
+  EXPECT_FALSE(m_bindings.setBoxSize(hullUUID.c_str(), 5.0f, 5.0f, 5.0f));
+  EXPECT_FALSE(m_bindings.getSphereRadius(hullUUID.c_str(), &x));
+  EXPECT_FALSE(m_bindings.setSphereOffset(hullUUID.c_str(), 5.0f, 5.0f, 5.0f));
+
+  // Positive control: the convex accessors work on the hull.
+  EXPECT_TRUE(m_bindings.getConvexMeshOffset(hullUUID.c_str(), &x, &y, &z));
+  EXPECT_TRUE(m_bindings.getConvexMeshVertexCount(hullUUID.c_str(), &count));
 }
