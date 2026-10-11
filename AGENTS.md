@@ -699,8 +699,8 @@ wrapping, the same payload as before grouping existed.
 
 The four scene script ops each have an undo kind (`addSceneScript`, `removeSceneScript`, `reorderSceneScript`,
 `setSceneScriptFields`), recorded from the pre-edit `SceneAsset`. Undo and redo validate them against the
-scene passed to `EditHistory::undo`/`redo`; with no scene they are refused, naming the scene's uuid. They are
-never grouped.
+scene passed to `EditHistory::undo`/`redo`; with no scene they are refused, naming the scene's uuid. `recordBatch` refuses
+them, since group undo simulates on a scratch `ObjectManager` that has no script list.
 
 `EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with
 `EditHistory::nextUndoIsReversible()`/`nextRedoIsReversible()` before calling `undo()`/`redo()`, and sends
