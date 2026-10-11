@@ -28,7 +28,11 @@ public unsafe class SceneScriptLookupTests : IDisposable
     }
   }
 
-  public class SpecialMatchState : MatchState
+  public class AMatchState : MatchState
+  {
+  }
+
+  public class BMatchState : MatchState
   {
   }
 
@@ -40,17 +44,21 @@ public unsafe class SceneScriptLookupTests : IDisposable
   {
     public int LastSeenScore { get; private set; } = -1;
     public int RoundsEnded { get; private set; }
+    public int LastPayload { get; private set; } = -1;
 
     public MatchState? Lookup() => getSceneScript<MatchState>();
 
     public MatchState? Require() => requireSceneScript<MatchState>();
 
+    public OtherState? RequireOther() => requireSceneScript<OtherState>();
+
     public void ReadScore() => LastSeenScore = getSceneScript<MatchState>()?.Score ?? -1;
 
-    public override void start() => subscribe<int>("roundEnded", score =>
+    public override void start() => subscribe<int>("roundEnded", payload =>
     {
       RoundsEnded++;
-      LastSeenScore = score;
+      LastPayload = payload;
+      LastSeenScore = getSceneScript<MatchState>()?.Score ?? -1;
     });
   }
 
@@ -127,17 +135,29 @@ public unsafe class SceneScriptLookupTests : IDisposable
   }
 
   [Fact]
-  public void AnExactTypeWinsOverASubclassAndABaseTypeFindsTheSubclass()
+  public void AnExactTypeWinsOverASubclassThatSortsFirst()
   {
-    var special = new SpecialMatchState();
-    Bridge.AddInstance(SceneUuid, nameof(SpecialMatchState), special);
-    Assert.Same(special, Bridge.FindSceneScript<MatchState>());
+    var subclass = new AMatchState();
+    Bridge.AddInstance(SceneUuid, nameof(AMatchState), subclass);
+    Assert.Same(subclass, Bridge.FindSceneScript<MatchState>());
 
     var plain = new MatchState();
     Bridge.AddInstance(SceneUuid, nameof(MatchState), plain);
 
     Assert.Same(plain, Bridge.FindSceneScript<MatchState>());
-    Assert.Same(special, Bridge.FindSceneScript<SpecialMatchState>());
+    Assert.Same(subclass, Bridge.FindSceneScript<AMatchState>());
+  }
+
+  [Fact]
+  public void WithoutAnExactTypeTheFirstSubclassInKeyOrderWins()
+  {
+    var second = new BMatchState();
+    var first = new AMatchState();
+    Bridge.AddInstance(SceneUuid, nameof(BMatchState), second);
+    Bridge.AddInstance(SceneUuid, nameof(AMatchState), first);
+
+    Assert.Same(first, Bridge.FindSceneScript<MatchState>());
+    Assert.Same(second, Bridge.FindSceneScript<BMatchState>());
   }
 
   [Fact]
@@ -181,6 +201,10 @@ public unsafe class SceneScriptLookupTests : IDisposable
     Assert.Same(state, result);
     Assert.Empty(output);
     Assert.Same(state, enemy.Lookup());
+
+    Bridge.RemoveInstance(SceneUuid, nameof(MatchState));
+    var afterRemoval = CaptureErrors(() => Assert.Null(enemy.Require()));
+    Assert.Single(afterRemoval);
   }
 
   [Fact]
@@ -226,6 +250,43 @@ public unsafe class SceneScriptLookupTests : IDisposable
   }
 
   [Fact]
+  public void RequireSceneScriptDedupesPerType()
+  {
+    var enemy = new Enemy();
+
+    var output = CaptureErrors(() =>
+    {
+      enemy.Require();
+      enemy.RequireOther();
+      enemy.Require();
+      enemy.RequireOther();
+    });
+
+    Assert.Equal(2, output.Count);
+    Assert.Contains("'MatchState'", output[0]);
+    Assert.Contains("'OtherState'", output[1]);
+  }
+
+  [Fact]
+  public void RequireSceneScriptLogsAgainAfterTheScriptReturnsAndGoesMissingAgain()
+  {
+    var enemy = new Enemy();
+    var state = new MatchState();
+
+    var first = CaptureErrors(() => Assert.Null(enemy.Require()));
+    Bridge.AddInstance(SceneUuid, nameof(MatchState), state);
+    var whilePresent = CaptureErrors(() => Assert.Same(state, enemy.Require()));
+    Bridge.RemoveInstance(SceneUuid, nameof(MatchState));
+    var second = CaptureErrors(() => Assert.Null(enemy.Require()));
+    var repeated = CaptureErrors(() => Assert.Null(enemy.Require()));
+
+    Assert.Single(first);
+    Assert.Empty(whilePresent);
+    Assert.Single(second);
+    Assert.Empty(repeated);
+  }
+
+  [Fact]
   public void AnObjectScriptReadsSceneScriptStateAndReactsToItsEvents()
   {
     var state = new MatchState();
@@ -246,5 +307,6 @@ public unsafe class SceneScriptLookupTests : IDisposable
     Assert.Equal(1, delivered);
     Assert.Equal(1, enemy.RoundsEnded);
     Assert.Equal(3, enemy.LastSeenScore);
+    Assert.Equal(3, enemy.LastPayload);
   }
 }

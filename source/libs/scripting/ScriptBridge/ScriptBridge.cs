@@ -280,6 +280,8 @@ public static class Bridge
         }
     }
 
+    // Scans every live scene script; ScriptSystem detaches the outgoing scene's on switch/stop, so only the
+    // current scene's are found.
     // The live scene script assignable to T. A subclass and its base can both be attached, so an exact T
     // wins and otherwise the first match by key order keeps the answer deterministic. Faulted ones are
     // excluded for the same reason as in FindScript.
