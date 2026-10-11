@@ -2,6 +2,7 @@
 
 #include "TestPrinters.h"
 #include "TestScene.h"
+#include "objects/components/collisions/BoxCollider.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"

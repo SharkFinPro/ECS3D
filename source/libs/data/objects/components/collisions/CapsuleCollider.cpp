@@ -8,6 +8,7 @@
 #include <glm/geometric.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <Protocol.h>
 
