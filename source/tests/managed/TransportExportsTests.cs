@@ -74,28 +74,21 @@ public sealed unsafe class TransportExportsTests : IDisposable
     return serverConnectionCount();
   }
 
-  [Fact]
-  public void Exports_RouteAServerAndAClientThroughTheSelectedBackend()
+  // Probed on Any because the backend binds Any, and a bind failure inside the export is fatal to the
+  // test host (it cannot be retried), so the window is kept small by probing right before the call.
+  private static byte StartEditServerAndConnectPlayer(string serverTokenText)
   {
     delegate* unmanaged<int, byte, IntPtr, void> serverStart = &Transport.serverStart;
-    delegate* unmanaged<void> serverStop = &Transport.serverStop;
-    delegate* unmanaged<byte, IntPtr, int, void> serverBroadcast = &Transport.serverBroadcast;
-    delegate* unmanaged<IntPtr, int, byte, IntPtr, int, void> serverSendToMany = &Transport.serverSendToMany;
     delegate* unmanaged<IntPtr, int, byte, IntPtr, byte> clientConnect = &Transport.clientConnect;
-    delegate* unmanaged<void> clientDisconnect = &Transport.clientDisconnect;
-    delegate* unmanaged<byte, IntPtr, int, void> clientSend = &Transport.clientSend;
 
-    // Probed on Any because the backend binds Any, and a bind failure inside the export is fatal to the
-    // test host (it cannot be retried), so the window is kept small by probing right before the call.
     var port = FreePort();
-    var serverToken = Marshal.StringToCoTaskMemUTF8("secret");
+    var serverToken = Marshal.StringToCoTaskMemUTF8(serverTokenText);
     var clientToken = Marshal.StringToCoTaskMemUTF8("");
     var host = Marshal.StringToCoTaskMemUTF8("127.0.0.1");
-    byte connected;
     try
     {
       serverStart(port, 1, serverToken);
-      connected = clientConnect(host, port, 0, clientToken);
+      return clientConnect(host, port, 0, clientToken);
     }
     finally
     {
@@ -103,8 +96,44 @@ public sealed unsafe class TransportExportsTests : IDisposable
       Marshal.FreeCoTaskMem(clientToken);
       Marshal.FreeCoTaskMem(host);
     }
+  }
 
-    Assert.Equal(1, connected);
+  private static void ClientSendMessage(byte type, byte[] payload)
+  {
+    delegate* unmanaged<byte, IntPtr, int, void> clientSend = &Transport.clientSend;
+    fixed (byte* data = payload)
+    {
+      clientSend(type, (IntPtr)data, payload.Length);
+    }
+  }
+
+  private static void ServerBroadcastMessage(byte type, byte[] payload)
+  {
+    delegate* unmanaged<byte, IntPtr, int, void> serverBroadcast = &Transport.serverBroadcast;
+    fixed (byte* data = payload)
+    {
+      serverBroadcast(type, (IntPtr)data, payload.Length);
+    }
+  }
+
+  private static void ServerSendToConnection(int connId, byte type, byte[] payload)
+  {
+    delegate* unmanaged<IntPtr, int, byte, IntPtr, int, void> serverSendToMany = &Transport.serverSendToMany;
+    var ids = new[] { connId };
+    fixed (int* idData = ids)
+    fixed (byte* data = payload)
+    {
+      serverSendToMany((IntPtr)idData, ids.Length, type, (IntPtr)data, payload.Length);
+    }
+  }
+
+  [Fact]
+  public void Exports_RouteAServerAndAClientThroughTheSelectedBackend()
+  {
+    delegate* unmanaged<void> serverStop = &Transport.serverStop;
+    delegate* unmanaged<void> clientDisconnect = &Transport.clientDisconnect;
+
+    Assert.Equal(1, StartEditServerAndConnectPlayer("secret"));
 
     WaitFor(() => ConnectionCount() == 1, "the client to be listed");
     WaitFor(() => TransportRecorder.ServerAuthorized.Count == 1, "the client to be authorized");
@@ -112,10 +141,7 @@ public sealed unsafe class TransportExportsTests : IDisposable
     Assert.Equal(0, role);
 
     var message = new byte[] { 1, 2, 3 };
-    fixed (byte* data = message)
-    {
-      clientSend(5, (IntPtr)data, message.Length);
-    }
+    ClientSendMessage(5, message);
 
     WaitFor(() => TransportRecorder.ServerReceived.Count == 1, "the server to receive the client's message");
     var received = TransportRecorder.ServerReceived.Single();
@@ -124,22 +150,13 @@ public sealed unsafe class TransportExportsTests : IDisposable
     Assert.Equal(message, received.Payload);
 
     var broadcast = new byte[] { 9, 8 };
-    fixed (byte* data = broadcast)
-    {
-      serverBroadcast(6, (IntPtr)data, broadcast.Length);
-    }
+    ServerBroadcastMessage(6, broadcast);
 
     WaitFor(() => TransportRecorder.ClientReceived.Count == 1, "the client to receive the broadcast");
     Assert.Equal(6, TransportRecorder.ClientReceived.Single().Type);
     Assert.Equal(broadcast, TransportRecorder.ClientReceived.Single().Payload);
 
-    var named = new byte[] { 4 };
-    var ids = new[] { connId };
-    fixed (int* idData = ids)
-    fixed (byte* data = named)
-    {
-      serverSendToMany((IntPtr)idData, ids.Length, 7, (IntPtr)data, named.Length);
-    }
+    ServerSendToConnection(connId, 7, new byte[] { 4 });
 
     WaitFor(() => TransportRecorder.ClientReceived.Count == 2, "the client to receive the named send");
     Assert.Equal(7, TransportRecorder.ClientReceived.ToArray()[1].Type);
@@ -233,8 +250,10 @@ public sealed unsafe class TransportExportsTests : IDisposable
     TransportRecorder.Register();
     try
     {
-      Console.SetOut(capturedOut = new StringWriter());
-      Console.SetError(capturedError = new StringWriter());
+      capturedOut = new StringWriter();
+      capturedError = new StringWriter();
+      Console.SetOut(capturedOut);
+      Console.SetError(capturedError);
 
       Transport.Log(TransportLogLevel.Info, "c-registered-line");
     }
