@@ -350,6 +350,8 @@ void EditorApp::run()
 
     handlePicking();
 
+    m_keybindDispatcher->update();
+
     m_settings->update();
 
     updateGui();
@@ -413,8 +415,8 @@ void EditorApp::setupKeybinds()
 
   // requestUndo()/requestRedo() (EditorAppUndoMenu.cpp) add the in-flight gate on top of undo()/redo() -
   // the Edit menu calls the same two methods.
-  m_keybindDispatcher->on(EditorAction::undo, [this] { requestUndo(); });
-  m_keybindDispatcher->on(EditorAction::redo, [this] { requestRedo(); });
+  m_keybindDispatcher->on(EditorAction::undo, [this] { requestUndo(); }, KeyHold::repeatWhileHeld);
+  m_keybindDispatcher->on(EditorAction::redo, [this] { requestRedo(); }, KeyHold::repeatWhileHeld);
 
   m_keybindDispatcher->on(EditorAction::deleteSelection, [this] { m_objectGUIManager->requestDeleteSelection(); });
   m_keybindDispatcher->on(EditorAction::duplicateSelection, [this] {

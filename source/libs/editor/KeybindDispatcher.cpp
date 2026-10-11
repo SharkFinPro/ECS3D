@@ -50,13 +50,45 @@ KeybindDispatcher::~KeybindDispatcher()
   }
 }
 
-void KeybindDispatcher::on(const EditorAction action, ActionHandler handler)
+void KeybindDispatcher::on(const EditorAction action, ActionHandler handler, const KeyHold hold)
 {
   m_handlers[action] = std::move(handler);
+
+  if (hold == KeyHold::repeatWhileHeld)
+  {
+    m_repeatingActions.insert(action);
+  }
+  else
+  {
+    m_repeatingActions.erase(action);
+  }
+}
+
+void KeybindDispatcher::update()
+{
+  if (!m_hold.active())
+  {
+    return;
+  }
+
+  if (ImGui::GetIO().WantCaptureKeyboard)
+  {
+    m_hold.stop();
+    return;
+  }
+
+  if (const auto action = m_hold.poll())
+  {
+    if (const auto it = m_handlers.find(*action); it != m_handlers.end() && it->second)
+    {
+      it->second();
+    }
+  }
 }
 
 void KeybindDispatcher::beginCapture(CaptureCallback callback)
 {
+  m_hold.stop();
   m_captureCallback = std::move(callback);
 }
 
@@ -71,10 +103,26 @@ void KeybindDispatcher::registerWindowEvents()
   // the renderer would make a window -> listener -> lambda -> window cycle (see SaveUI).
   m_keyCallbackEventListener =
     m_renderer->getWindow()->on<vke::KeyCallbackEvent>([this](const vke::KeyCallbackEvent& e) {
+      if (e.action == GLFW_RELEASE)
+      {
+        if (isModifierKey(e.key))
+        {
+          m_hold.stop();
+        }
+        else
+        {
+          m_hold.release(e.key);
+        }
+
+        return;
+      }
+
       if (e.action != GLFW_PRESS)
       {
         return;
       }
+
+      m_hold.stop();
 
       if (m_captureCallback)
       {
@@ -105,6 +153,11 @@ void KeybindDispatcher::registerWindowEvents()
       if (const auto it = m_handlers.find(*action); it != m_handlers.end() && it->second)
       {
         it->second();
+
+        if (m_repeatingActions.contains(*action))
+        {
+          m_hold.start(e.key, *action);
+        }
       }
     });
 }

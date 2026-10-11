@@ -38,6 +38,7 @@ add_library(${PROJECT_NAME}
   AssetNaming.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h
+  KeyHoldRepeat.h
   Gizmo.cpp
   Gizmo.h
   GizmoRenderer.h
