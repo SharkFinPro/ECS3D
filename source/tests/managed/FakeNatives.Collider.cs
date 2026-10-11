@@ -124,6 +124,29 @@ internal static unsafe class FakeColliderNatives
     return Flag("Collider.has");
   }
 
+  [UnmanagedCallersOnly]
+  private static byte ColliderGetConvexMeshOffset(IntPtr u, float* x, float* y, float* z)
+  {
+    Rec("Collider.getConvexMeshOffset", u);
+    OutVec3("Collider.getConvexMeshOffset", x, y, z);
+    return Flag("Collider.getConvexMeshOffset.ok");
+  }
+
+  [UnmanagedCallersOnly]
+  private static byte ColliderSetConvexMeshOffset(IntPtr u, float x, float y, float z)
+  {
+    Rec("Collider.setConvexMeshOffset", u, x, y, z);
+    return Flag("Collider.setConvexMeshOffset");
+  }
+
+  [UnmanagedCallersOnly]
+  private static byte ColliderGetConvexMeshVertexCount(IntPtr u, uint* count)
+  {
+    Rec("Collider.getConvexMeshVertexCount", u);
+    *count = Get<uint>("Collider.getConvexMeshVertexCount");
+    return Flag("Collider.getConvexMeshVertexCount.ok");
+  }
+
   internal static ColliderBindings Make() => new()
   {
     getShape = &ColliderGetShape,
@@ -152,6 +175,12 @@ internal static unsafe class FakeColliderNatives
       (delegate* unmanaged<IntPtr, float*, byte>)&ColliderGetSphereRadius,
     setSphereRadius = (delegate* unmanaged<IntPtr, float, bool>)(void*)
       (delegate* unmanaged<IntPtr, float, byte>)&ColliderSetSphereRadius,
-    has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&ColliderHas
+    has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&ColliderHas,
+    getConvexMeshOffset = (delegate* unmanaged<IntPtr, float*, float*, float*, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float*, float*, float*, byte>)&ColliderGetConvexMeshOffset,
+    setConvexMeshOffset = (delegate* unmanaged<IntPtr, float, float, float, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float, float, float, byte>)&ColliderSetConvexMeshOffset,
+    getConvexMeshVertexCount = (delegate* unmanaged<IntPtr, uint*, bool>)(void*)
+      (delegate* unmanaged<IntPtr, uint*, byte>)&ColliderGetConvexMeshVertexCount
   };
 }

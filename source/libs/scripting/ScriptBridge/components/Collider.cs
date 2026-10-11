@@ -29,11 +29,15 @@ public unsafe struct ColliderBindings
     public delegate* unmanaged<IntPtr, float, bool> setSphereRadius;
 
     public delegate* unmanaged<IntPtr, bool> has;
+
+    public delegate* unmanaged<IntPtr, float*, float*, float*, bool> getConvexMeshOffset;
+    public delegate* unmanaged<IntPtr, float, float, float, bool> setConvexMeshOffset;
+    public delegate* unmanaged<IntPtr, uint*, bool> getConvexMeshVertexCount;
 }
 
 // A collider's shape (backed by ColliderBindings.getShape) so a script can branch without knowing the
 // concrete type up front, plus the shape-shared trigger/layer/mask fields and per-shape shape/offset
-// accessors. New shapes (capsule, convex mesh) add their own group of accessors the same way, without
+// accessors. New shapes (capsule, say) add their own group of accessors the same way, without
 // touching ColliderShape or the common members here.
 //
 // Values must be kept in step with the native switch in ColliderBindingsProvider::bindGetShape
@@ -42,11 +46,12 @@ public enum ColliderShape
 {
     None = 0,
     Box = 1,
-    Sphere = 2
+    Sphere = 2,
+    ConvexMesh = 3
 }
 
 // Reached via World.tryGetCollider like Transform/RigidBody. getShape() names the concrete shape; the
-// box-only and sphere-only accessors below fail safely (false / neutral default, nothing changed) when
+// shape-only accessors below fail safely (false / neutral default, nothing changed) when
 // called on the wrong shape - check getShape() first, or just take the false and move on.
 public unsafe class Collider
 {
@@ -121,4 +126,25 @@ public unsafe class Collider
     }
 
     public bool setSphereRadius(float radius) => NativeBindings.Collider.setSphereRadius(_uuid, radius);
+
+    public bool tryGetConvexMeshOffset(out Vector3 offset)
+    {
+        float x = 0, y = 0, z = 0;
+        var ok = NativeBindings.Collider.getConvexMeshOffset(_uuid, &x, &y, &z);
+        offset = ok ? new Vector3(x, y, z) : Vector3.Zero;
+        return ok;
+    }
+
+    public bool setConvexMeshOffset(float x, float y, float z) => NativeBindings.Collider.setConvexMeshOffset(_uuid, x, y, z);
+
+    public bool setConvexMeshOffset(Vector3 offset) => setConvexMeshOffset(offset.X, offset.Y, offset.Z);
+
+    // The hull is built from a model in the editor, so scripts can read how many vertices it has but not change it.
+    public bool tryGetConvexMeshVertexCount(out uint count)
+    {
+        uint n = 0;
+        var ok = NativeBindings.Collider.getConvexMeshVertexCount(_uuid, &n);
+        count = ok ? n : 0u;
+        return ok;
+    }
 }

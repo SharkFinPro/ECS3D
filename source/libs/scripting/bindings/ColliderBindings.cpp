@@ -5,6 +5,7 @@
 #include <objects/components/Component.h>
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/Collider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <memory>
 #include <string>
@@ -52,6 +53,11 @@ namespace {
   {
     return std::dynamic_pointer_cast<SphereCollider>(find(uuid, outObjectUUID));
   }
+
+  std::shared_ptr<ConvexMeshCollider> findConvexMesh(const char* uuid, uuids::uuid* outObjectUUID = nullptr)
+  {
+    return std::dynamic_pointer_cast<ConvexMeshCollider>(find(uuid, outObjectUUID));
+  }
 }
 
 ColliderBindings ColliderBindingsProvider::getBindings()
@@ -72,7 +78,10 @@ ColliderBindings ColliderBindingsProvider::getBindings()
     .setSphereOffset = &bindSetSphereOffset,
     .getSphereRadius = &bindGetSphereRadius,
     .setSphereRadius = &bindSetSphereRadius,
-    .has = &bindHas
+    .has = &bindHas,
+    .getConvexMeshOffset = &bindGetConvexMeshOffset,
+    .setConvexMeshOffset = &bindSetConvexMeshOffset,
+    .getConvexMeshVertexCount = &bindGetConvexMeshVertexCount
   };
 }
 
@@ -93,6 +102,8 @@ int ColliderBindingsProvider::bindGetShape(const char* uuid)
       return 1;
     case ColliderType::sphereCollider:
       return 2;
+    case ColliderType::convexMeshCollider:
+      return 3;
   }
 
   return 0; // unreachable for a valid ColliderType; keeps this a well-formed non-void function under gcc
@@ -327,4 +338,55 @@ bool ColliderBindingsProvider::bindSetSphereRadius(const char* uuid, const float
 bool ColliderBindingsProvider::bindHas(const char* uuid)
 {
   return find(uuid) != nullptr;
+}
+
+bool ColliderBindingsProvider::bindGetConvexMeshOffset(const char* uuid, float* x, float* y, float* z)
+{
+  const auto hull = findConvexMesh(uuid);
+  if (!hull)
+  {
+    return false;
+  }
+
+  const auto offset = hull->getLocalPosition();
+  *x = offset.x;
+  *y = offset.y;
+  *z = offset.z;
+
+  return true;
+}
+
+bool ColliderBindingsProvider::bindSetConvexMeshOffset(const char* uuid, const float x, const float y, const float z)
+{
+  uuids::uuid objectUUID;
+  const auto hull = findConvexMesh(uuid, &objectUUID);
+  if (!hull)
+  {
+    return false;
+  }
+
+  // Same non-finite-is-a-no-op rule as setBoxOffset.
+  const auto before = hull->getLocalPosition();
+  hull->setPosition({ x, y, z });
+  const auto after = hull->getLocalPosition();
+
+  if (after != before)
+  {
+    BindingContext::recordComponentEdit(objectUUID, hull);
+  }
+
+  return true;
+}
+
+bool ColliderBindingsProvider::bindGetConvexMeshVertexCount(const char* uuid, uint32_t* count)
+{
+  const auto hull = findConvexMesh(uuid);
+  if (!hull)
+  {
+    return false;
+  }
+
+  *count = static_cast<uint32_t>(hull->getHull().vertices.size());
+
+  return true;
 }
