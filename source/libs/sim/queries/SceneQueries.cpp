@@ -147,7 +147,12 @@ namespace {
     bool hit = false;
     float nearest = maxDistance;
 
-    const auto consider = [&](const bool found, const float t, const glm::vec3& hitNormal)
+    float t = 0.0f;
+    glm::vec3 hitNormal(0.0f);
+
+    // Reads t and hitNormal only after the query that wrote them has returned: passing them alongside the
+    // query's result in one call would leave the order of evaluation unspecified.
+    const auto consider = [&](const bool found)
     {
       if (found && t <= nearest)
       {
@@ -158,12 +163,9 @@ namespace {
       }
     };
 
-    float t = 0.0f;
-    glm::vec3 hitNormal(0.0f);
-
-    consider(rayCapsuleSide(origin, dir, segment, radius, nearest, t, hitNormal), t, hitNormal);
-    consider(raySphere(origin, dir, segment.start, radius, nearest, t, hitNormal), t, hitNormal);
-    consider(raySphere(origin, dir, segment.end, radius, nearest, t, hitNormal), t, hitNormal);
+    consider(rayCapsuleSide(origin, dir, segment, radius, nearest, t, hitNormal));
+    consider(raySphere(origin, dir, segment.start, radius, nearest, t, hitNormal));
+    consider(raySphere(origin, dir, segment.end, radius, nearest, t, hitNormal));
 
     return hit;
   }

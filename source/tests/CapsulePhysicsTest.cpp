@@ -22,10 +22,13 @@ namespace {
   using fixtures::makeScene;
   using fixtures::transformOf;
 
-  // The unit box [-1,1]^3 at the origin, with no rigid body: static geometry whose top face is y = 1.
+  // A wide static slab whose top face is y = 1, wide enough that a capsule toppling over lands on it rather
+  // than over its edge.
   void addGround(const fixtures::Scene& scene)
   {
-    fixtures::addBoxCollider(addObject(scene, "Ground", { 0, 0, 0 }));
+    const auto ground = addObject(scene, "Ground", { 0, 0, 0 });
+    transformOf(ground)->setScale({ 10, 1, 10 });
+    fixtures::addBoxCollider(ground);
   }
 
   void run(const fixtures::Scene& scene, const int ticks)
