@@ -133,8 +133,12 @@
   those tests share one non-parallel xUnit collection (`Transport`) and shorten `TcpBackend`'s internal
   `SendTimeoutMs`/`BodyReadTimeoutMs` fields and set `AcceptedSendBufferBytes` rather than waiting out
   production values.
-  What stays uncovered is whatever is itself an `[UnmanagedCallersOnly]` entry point (can't be
-  called from C# directly) — start with `ScriptBridge` for a new test only once the logic in question is
+  `WebSocketBackendLoopbackTests` drives the WebSocket backend the same way: its `SendTimeoutMs` is also an internal
+  field, and an internal `ClientReceiveLoopExiting` hook lets a test reconnect inside the window between the
+  client receive loop stopping and releasing its connection. `TransportExportsTests` calls `Transport`'s exports
+  through function pointers.
+  What stays uncovered is whatever is itself an `[UnmanagedCallersOnly]` entry point that is not
+  reachable through a function pointer taken with `&`, as `TransportRecorder` does — start with `ScriptBridge` for a new test only once the logic in question is
   reachable the same way, as pure code over plain objects or through a fake binding table. Private product logic is exposed to this
   project through `internal` + `InternalsVisibleTo` (declared in `source/libs/net/Transport/AssemblyInfo.cs` and
   `source/libs/scripting/ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`

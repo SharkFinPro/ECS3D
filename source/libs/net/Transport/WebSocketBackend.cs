@@ -45,8 +45,8 @@ internal sealed class WebSocketBackend : TransportBackend
   // to the network in a tick. Only the connection whose own send ran out of budget is dropped; peers the
   // broadcast never reached are skipped for that message and kept. Two seconds because a stall then costs
   // at most one tick's worth before the peer responsible is dropped, while still being far longer than any
-  // plausible snapshot send takes on a healthy link.
-  private const int SendTimeoutMs = 2000;
+  // plausible snapshot send takes on a healthy link. Internal and mutable so ECS3DManagedTests can shorten it.
+  internal int SendTimeoutMs = 2000;
 
   static WebSocketBackend()
   {
@@ -85,6 +85,9 @@ internal sealed class WebSocketBackend : TransportBackend
   private readonly SemaphoreSlim _clientSendLock = new(1, 1);
   private Thread? _clientThread;
   private volatile bool _clientRunning;
+
+  // Lets a test reconnect inside the window between the receive loop stopping and releasing its connection.
+  internal Action? ClientReceiveLoopExiting;
 
   // Comfortably under the callers' 15 s retry budget so several attempts fit, and long enough for a real
   // WAN handshake. Unbounded, one attempt against a host that routes but never answers runs to the OS
@@ -592,6 +595,7 @@ internal sealed class WebSocketBackend : TransportBackend
     }
 
     _clientRunning = false;
+    ClientReceiveLoopExiting?.Invoke();
 
     // Clear before closing so ClientSend never reaches a closed instance; the CAS leaves a newer
     // connection alone.
