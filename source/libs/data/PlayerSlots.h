@@ -39,6 +39,9 @@ public:
 
   [[nodiscard]] std::optional<int32_t> slotOf(int32_t connId) const;
 
+  // Every held slot, ascending.
+  [[nodiscard]] std::vector<int32_t> heldSlots() const;
+
   PossessOutcome request(int32_t connId, int32_t slot);
 
 private:

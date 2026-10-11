@@ -8,12 +8,14 @@
 #include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <ScriptSystem.h>
+#include <SceneObjectDiff.h>
 #include <NetServer.h>
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <exception>
 #include <string>
+#include <vector>
 
 namespace {
   const char* describe(const replication::SceneEditResult result)
@@ -104,7 +106,15 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
 
   const auto& json = *parsed;
 
-  const auto result = replication::isSceneScriptEdit(json)
+  const bool sceneScriptEdit = replication::isSceneScriptEdit(json);
+
+  // Only an object edit can add or remove objects, and only a running scene has scripts to tell.
+  const bool trackObjects = !sceneScriptEdit && scriptsLive();
+  const auto objectsBefore = trackObjects
+    ? sceneObjectDiff::collectUUIDs(*scene->getObjectManager())
+    : std::vector<uuids::uuid>{};
+
+  const auto result = sceneScriptEdit
     ? replication::applySceneScriptEdit(*scene, json)
     : replication::applySceneEdit(*scene->getObjectManager(), json, m_assetRegistry.get());
 
@@ -139,7 +149,34 @@ void ServerApp::handleSceneEdit(const net::Message& message) const
     return;
   }
 
+  // Pushed before the snapshot: its field sync reads the live instance back into the scene's blob, which
+  // would otherwise overwrite the edit with the values the instance still holds.
+  if (sceneScriptEdit)
+  {
+    pushSceneScriptFields(*scene, json);
+  }
+
   broadcastSnapshot();
+
+  if (trackObjects)
+  {
+    const auto changes = sceneObjectDiff::diff(objectsBefore, sceneObjectDiff::collectUUIDs(*scene->getObjectManager()));
+    notifyObjectEvents(changes.added, changes.removed);
+  }
+}
+
+void ServerApp::pushSceneScriptFields(const SceneAsset& scene, const nlohmann::json& edit) const
+{
+  if (edit.value("op", std::string{}) != "setSceneScriptFields")
+  {
+    return;
+  }
+
+  const auto script = scene.findScript(edit.value("className", std::string{}));
+  if (script)
+  {
+    m_scriptSystem->applySceneScriptFieldEdit(scene.getUUID(), script->getClassName(), script->getFields());
+  }
 }
 
 void ServerApp::handleAddAsset(const net::Message& message) const

@@ -57,6 +57,14 @@ public:
                    const char* otherUuid,
                    int event) const override;
 
+  // Forward a scene event to one scene script. event matches SceneEvent in ScriptSystem.h; kept as a raw
+  // int for the same reason as onCollision.
+  void onSceneEvent(const char* sceneUuid,
+                    const char* className,
+                    int event,
+                    const char* objectUuid,
+                    int slot) const override;
+
   [[nodiscard]] std::string getExposedFields(const char* uuid,
                                              const char* className) const override;
 
@@ -108,6 +116,7 @@ private:
   using FixedUpdateFn = void(*)(const char*, const char*, float);
   using VariableUpdateFn = void(*)(const char*, const char*);
   using OnCollisionFn = void(*)(const char*, const char*, const char*, int);
+  using OnSceneEventFn = void(*)(const char*, const char*, int, const char*, int);
   using ReloadFn = bool(*)();
   using InitBridgeFn = void(*)(const char*);
 
@@ -136,6 +145,7 @@ private:
   FixedUpdateFn m_fixedUpdate = nullptr;
   VariableUpdateFn m_variableUpdate = nullptr;
   OnCollisionFn m_onCollision = nullptr;
+  OnSceneEventFn m_onSceneEvent = nullptr;
   ReloadFn m_reload = nullptr;
 
   GetExposedFieldsFn m_getExposedFields = nullptr;

@@ -107,7 +107,7 @@ void ServerApp::startLoadedScene()
     {
       try
       {
-        m_scriptSystem->start(*scene);
+        startSceneScripts(*scene);
       }
       catch (const std::exception& e)
       {
@@ -221,6 +221,57 @@ void ServerApp::run()
 
     // Don't busy-spin a core between ticks.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+}
+
+bool ServerApp::scriptsLive() const
+{
+  return m_sceneManager->getCurrentScene() && m_sceneManager->getSceneStatus() != SceneStatus::stopped;
+}
+
+void ServerApp::startSceneScripts(SceneAsset& scene) const
+{
+  m_scriptSystem->start(scene);
+
+  for (const auto slot : m_playerSlots.heldSlots())
+  {
+    m_scriptSystem->dispatchSceneEvent(scene, SceneEvent::playerJoined, nullptr, slot);
+  }
+}
+
+void ServerApp::notifyPlayerJoined(const int32_t slot) const
+{
+  if (scriptsLive())
+  {
+    m_scriptSystem->dispatchSceneEvent(*m_sceneManager->getCurrentScene(), SceneEvent::playerJoined, nullptr, slot);
+  }
+}
+
+void ServerApp::notifyPlayerLeft(const int32_t slot) const
+{
+  if (scriptsLive())
+  {
+    m_scriptSystem->dispatchSceneEvent(*m_sceneManager->getCurrentScene(), SceneEvent::playerLeft, nullptr, slot);
+  }
+}
+
+void ServerApp::notifyObjectEvents(const std::vector<uuids::uuid>& spawned,
+                                   const std::vector<uuids::uuid>& destroyed) const
+{
+  if (!scriptsLive())
+  {
+    return;
+  }
+
+  const auto scene = m_sceneManager->getCurrentScene();
+  for (const auto& uuid : spawned)
+  {
+    m_scriptSystem->dispatchSceneEvent(*scene, SceneEvent::objectSpawned, &uuid);
+  }
+
+  for (const auto& uuid : destroyed)
+  {
+    m_scriptSystem->dispatchSceneEvent(*scene, SceneEvent::objectDestroyed, &uuid);
   }
 }
 

@@ -8,6 +8,7 @@
 #include <objects/components/Component.h>
 #include <objects/Object.h>
 #include <ScriptSystem.h>
+#include <SceneObjectDiff.h>
 #include <bindings/BindingContext.h>
 #include <NetServer.h>
 #include <Log.h>
@@ -113,6 +114,9 @@ void ServerApp::broadcastStructuralChanges() const
     objectManager->flushPendingAdditions();
     objectManager->deleteObjectsMarkedForDeletion();
   }
+
+  // After the flush, so every spawned uuid is a real scene member when the scene scripts hear of it.
+  notifyObjectEvents(sceneObjectDiff::flattenSubtrees(spawned), destroyed);
 
   // A script's addComponent/removeComponent (ComponentOpsBindings) already applied to each object listed
   // here - unlike spawn/destroy there is nothing further to apply locally - but the change isn't covered

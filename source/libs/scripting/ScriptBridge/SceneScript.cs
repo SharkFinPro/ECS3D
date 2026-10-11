@@ -6,4 +6,19 @@ namespace ScriptBridge;
 public abstract class SceneScript : ScriptInstance
 {
     public string SceneId => OwnerId;
+
+    // Scene-wide events, delivered only while the scene runs. onSceneLoaded fires once after every script has
+    // started, then onPlayerJoined for each player already connected. onSceneUnloading fires before any
+    // script stops. Spawn and destroy events name one object each, a spawned subtree's descendants included.
+    public virtual void onSceneLoaded() {}
+
+    public virtual void onSceneUnloading() {}
+
+    public virtual void onObjectSpawned(string uuid) {}
+
+    public virtual void onObjectDestroyed(string uuid) {}
+
+    public virtual void onPlayerJoined(int slot) {}
+
+    public virtual void onPlayerLeft(int slot) {}
 }

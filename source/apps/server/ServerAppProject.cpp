@@ -75,7 +75,7 @@ void ServerApp::startScriptsLogged(SceneAsset& scene) const
 {
   try
   {
-    m_scriptSystem->start(scene);
+    startSceneScripts(scene);
   }
   catch (const std::exception& e)
   {

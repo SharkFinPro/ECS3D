@@ -233,3 +233,20 @@ TEST(PlayerSlotsInScene, OmitsSlotsNoConnectionCouldBeBoundTo)
 
   EXPECT_EQ(playerSlotsInScene(*scene.objectManager), (std::vector<int32_t>{ 2, maxPlayerSlot }));
 }
+
+TEST(PlayerSlotTable, HeldSlotsListsEveryBoundSlotAscending)
+{
+  PlayerSlotTable table;
+  EXPECT_TRUE(table.heldSlots().empty());
+
+  table.assign(30);
+  table.assign(20);
+  table.assign(10);
+  EXPECT_EQ(table.heldSlots(), (std::vector<int32_t>{ 0, 1, 2 }));
+
+  table.release(20);
+  EXPECT_EQ(table.heldSlots(), (std::vector<int32_t>{ 0, 2 }));
+
+  table.request(30, 9);
+  EXPECT_EQ(table.heldSlots(), (std::vector<int32_t>{ 2, 9 }));
+}

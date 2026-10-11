@@ -60,6 +60,8 @@ void ScriptSystem::start(SceneAsset& scene)
   }
 
   startObjects(*objectManager);
+
+  dispatchSceneEvent(scene, SceneEvent::loaded);
 }
 
 void ScriptSystem::startObjects(ObjectManager& objectManager)
@@ -104,6 +106,9 @@ void ScriptSystem::stop(SceneAsset& scene)
 
   const auto objectManager = scene.getObjectManager();
   BindingContext::setObjectManager(objectManager.get());
+
+  // Before any stop(), so the handler still sees a fully running scene.
+  dispatchSceneEvent(scene, SceneEvent::unloading);
 
   // Object scripts first, then the scene's, so a scene script outlives everything it coordinates.
   stopObjects(*objectManager);
@@ -383,6 +388,42 @@ void ScriptSystem::dispatchCollisionTo(ObjectManager& objectManager,
     }
 
     m_engine->onCollision(targetStr.c_str(), script->getClassName().c_str(), otherStr.c_str(), eventCode);
+  }
+}
+
+void ScriptSystem::dispatchSceneEvent(SceneAsset& scene,
+                                      const SceneEvent event,
+                                      const uuids::uuid* object,
+                                      const int slot) const
+{
+  if (!m_engine || m_startedSceneScripts.empty())
+  {
+    return;
+  }
+
+  const auto sceneUUID = scene.getUUID();
+  const auto sceneStr = uuids::to_string(sceneUUID);
+  const auto objectStr = object ? uuids::to_string(*object) : std::string();
+
+  bool pointedBindings = false;
+
+  // Iterates a copy of the list, since a handler could reach code that edits it.
+  for (const auto& script : std::vector(scene.getScripts()))
+  {
+    const auto& className = script->getClassName();
+    if (!isSceneScriptAttached(sceneUUID, className) ||
+        !m_startedSceneScripts.contains(cacheKey(sceneUUID, className)))
+    {
+      continue;
+    }
+
+    if (!pointedBindings)
+    {
+      BindingContext::setObjectManager(scene.getObjectManager().get());
+      pointedBindings = true;
+    }
+
+    m_engine->onSceneEvent(sceneStr.c_str(), className.c_str(), static_cast<int>(event), objectStr.c_str(), slot);
   }
 }
 

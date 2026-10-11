@@ -473,6 +473,12 @@ fresh instance. `ServerApp` calls only the scene overloads. A scene script that 
 class that is not a `SceneScript`, is warned about once and keeps its saved field values.
 A scene script gets its managed `stop()` only if it was started, unlike an object script, which is stopped
 whenever it is attached.
+A `SceneScript` also gets scene-wide virtuals (`onSceneLoaded`, `onSceneUnloading`, `onObjectSpawned`, `onObjectDestroyed`,
+`onPlayerJoined`, `onPlayerLeft`) through `ScriptSystem::dispatchSceneEvent`, which reaches only started scene scripts. `start(scene)` delivers loaded
+and `stop(scene)` delivers unloading, before any `stop()`; `ServerApp` adds one `onPlayerJoined` per bound slot after loaded.
+`ServerApp` reports spawns and destroys from the script buffers and from a before/after uuid diff (`SceneObjectDiff.h`) around each editor `sceneEdit`
+while the scene is not stopped, and player joins, leaves and possession switches as they happen. A `setSceneScriptFields` edit is pushed to the live
+instance before the snapshot, since the snapshot reads instance values back.
 `ComponentOpsBindings` (`World.hasComponent`/`addComponent`/`removeComponent`/`getComponentTypes`) gives
 scripts generic access to an object's component set, keyed by the same `ComponentRegistry` type-name
 strings unpack/loadFromJSON use ("RigidBody", "Box", "Sphere", ...) rather than `ComponentType`'s packed
