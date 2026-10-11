@@ -82,6 +82,8 @@ add_executable(${PROJECT_NAME}
   LogFilePathTest.cpp
   RemoteLogSinkTest.cpp
   KeybindsTest.cpp
+  BillboardTest.cpp
+  LightGizmoVisibilityTest.cpp
   GizmoTest.cpp
   GizmoDragTest.cpp
   GizmoDragParentedTest.cpp
@@ -193,6 +195,10 @@ add_executable(${PROJECT_NAME}
 
   # TransientObject depends only on ECS3DData and json.
   ../libs/editor/TransientObject.cpp
+
+  # The billboard math depends only on glm, compiled in rather than linking ECS3DRender, which pulls in
+  # Vulkan.
+  ../libs/render/Billboard.cpp
 )
 
 
