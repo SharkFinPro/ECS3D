@@ -10,6 +10,7 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/CapsuleCollider.h"
 
+#include <algorithm>
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
@@ -65,28 +66,45 @@ TEST(CapsulePhysics, ACapsuleDroppedLyingFlatRestsOnTheBoxWithoutDriftingOrSpinn
   EXPECT_NEAR(glm::abs(axis.x), 1.0f, 0.1f);
 }
 
-TEST(CapsulePhysics, ACapsuleDroppedOnItsEndStaysUprightOnTheBox)
+TEST(CapsulePhysics, ACapsuleDroppedOnItsEndIsSupportedByTheBoxAndComesToRest)
 {
-  const auto scene = makeScene();
-  addGround(scene);
+  // Balanced on its end is not a stable pose, so it may stay up or tip over; what must hold is that the box
+  // carries it and it stops moving, standing or lying.
+  for (const glm::vec3 rotation : { glm::vec3(0, 0, 0), glm::vec3(0, 0, 10) })
+  {
+    SCOPED_TRACE(::testing::Message() << "rotation z " << rotation.z);
 
-  const auto falling = addObject(scene, "Falling", { 0, 3, 0 });
-  fixtures::addCapsuleCollider(falling, 0.5f, 2.0f);
-  const auto body = addBody(falling, true);
+    const auto scene = makeScene();
+    addGround(scene);
 
-  run(scene, 300);
+    const auto falling = addObject(scene, "Falling", { 0, 3, 0 });
+    transformOf(falling)->setRotation(rotation);
+    const auto capsule = fixtures::addCapsuleCollider(falling, 0.5f, 2.0f);
+    const auto body = addBody(falling, true);
 
-  const auto position = transformOf(falling)->getPosition();
+    run(scene, 300);
 
-  // Half its height above the top face, still over the middle of the box.
-  EXPECT_NEAR(position.y, 2.0f, 0.1f);
-  EXPECT_NEAR(position.x, 0.0f, 0.2f);
-  EXPECT_NEAR(position.z, 0.0f, 0.2f);
+    glm::vec3 previous = transformOf(falling)->getPosition();
+    float fastest = 0.0f;
+    CollisionSystem collisionSystem;
+    for (int tick = 0; tick < 50; ++tick)
+    {
+      PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+      collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
-  // Within ten degrees of vertical, and not still tumbling.
-  const auto axis = localUpOf(transformOf(falling)->getRotation());
-  EXPECT_GT(axis.y, 0.985f);
-  EXPECT_LT(glm::length(body->getAngularVelocity()), 20.0f);
+      const auto position = transformOf(falling)->getPosition();
+      fastest = std::max(fastest, glm::length(position - previous));
+      previous = position;
+    }
+
+    // Its lowest point is on the top face (y = 1): not sunk into the box and not hovering above it.
+    const float lowest = capsule->getBoundingBox().minY;
+    EXPECT_GT(lowest, 0.9f);
+    EXPECT_LT(lowest, 1.1f);
+
+    EXPECT_LT(fastest, 0.05f);
+    EXPECT_LT(glm::length(body->getAngularVelocity()), 30.0f);
+  }
 }
 
 TEST(CapsulePhysics, WithNoGroundTheSameCapsuleKeepsFalling)

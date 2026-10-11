@@ -29,11 +29,12 @@ namespace {
   };
 
   // A capsule of radius 0.5 and total height 2 at the origin: a core segment from y = -0.5 to 0.5.
-  std::shared_ptr<Object> addCapsule(const fixtures::Scene& scene, const glm::vec3& rotation = glm::vec3(0))
+  std::shared_ptr<Object> addCapsule(const fixtures::Scene& scene, const glm::vec3& rotation = glm::vec3(0),
+                                     const float height = 2.0f)
   {
     const auto object = addObject(scene, "Capsule", { 0, 0, 0 });
     fixtures::transformOf(object)->setRotation(rotation);
-    fixtures::addCapsuleCollider(object, 0.5f, 2.0f);
+    fixtures::addCapsuleCollider(object, 0.5f, height);
 
     return object;
   }
@@ -123,6 +124,26 @@ TEST(CapsuleSceneQuery, ARayStartedInsideReportsContactAtItsOrigin)
   ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 1, 0, 0 }, 100.0f, hit));
 
   EXPECT_NEAR(hit.distance, 0.0f, tolerance);
+}
+
+TEST(CapsuleSceneQuery, ARayAlongTheAxisFromInsideTheShaftReportsContactAtItsOrigin)
+{
+  const auto scene = fixtures::makeScene();
+  addCapsule(scene, glm::vec3(0), 6.0f);
+
+  // The segment runs from y = -2.5 to 2.5 and the cap's far pole is at 3, so the old cap hit was 3 away.
+  Hit hit;
+  ASSERT_TRUE(castRay(scene, { 0.2f, 0, 0 }, { 0, 1, 0 }, 100.0f, hit));
+  EXPECT_NEAR(hit.distance, 0.0f, tolerance);
+  expectNear("normal", hit.normal, { 0, -1, 0 });
+
+  // Positive control: the same parallel ray from beyond the end meets the cap at its pole, and one outside the
+  // radius misses the capsule altogether.
+  ASSERT_TRUE(castRay(scene, { 0, -5, 0 }, { 0, 1, 0 }, 100.0f, hit));
+  EXPECT_NEAR(hit.distance, 2.0f, tolerance);
+  expectNear("cap normal", hit.normal, { 0, -1, 0 });
+
+  EXPECT_FALSE(castRay(scene, { 0.8f, 0, 0 }, { 0, 1, 0 }, 100.0f, hit));
 }
 
 TEST(CapsuleSceneQuery, ATurnedCapsuleIsHitWhereItNowLies)

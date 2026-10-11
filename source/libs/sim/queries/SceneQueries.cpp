@@ -98,7 +98,17 @@ namespace {
     const float a = dot(dirPerp, dirPerp);
     if (a < kEpsilon)
     {
-      return false;
+      // Parallel to the axis: the side is never crossed, but a ray that starts inside the shaft is already in
+      // contact, like the other shapes. Anything else meets only the end spheres.
+      const float along = dot(oc, axis);
+      if (dot(originPerp, originPerp) > radius * radius || along < 0.0f || along > spanLength)
+      {
+        return false;
+      }
+
+      tHit = 0.0f;
+      normal = -dir;
+      return true;
     }
 
     const float b = dot(originPerp, dirPerp);

@@ -54,29 +54,18 @@ namespace {
   constexpr float defaultFreeFlyFarPlane = 1000.0f;
 
   // A capsule outline is a cylinder between the segment's ends plus a sphere on each end, all in one color so
-  // the outline mask merges them into a single silhouette.
-  void drawCapsuleGizmo(const std::shared_ptr<vke::VulkanEngine>& renderer, GpuAssetCache& assetCache,
+  // the outline mask merges them into a single silhouette. The end spheres are gizmo parts 0 and 1 and the
+  // cylinder is part 2, so a capsule with no core segment needs only the first two. Returns the part count.
+  std::size_t drawCapsuleGizmo(const std::shared_ptr<vke::VulkanEngine>& renderer, GpuAssetCache& assetCache,
                         const uuids::uuid& uuid, CapsuleCollider& capsule)
   {
     const auto [start, end] = capsule.getSegment();
     const auto layout = layoutCapsuleGizmo(start, end, capsule.getRadius());
     const auto& renderer3D = renderer->getRenderingManager()->getRenderer3D();
 
-    if (layout.hasCylinder)
-    {
-      if (const auto cylinder = assetCache.getColliderGizmo(uuid, "assets/models/cylinder.glb", 0))
-      {
-        cylinder->setPosition(layout.cylinderPosition);
-        cylinder->setScale(layout.cylinderScale);
-        cylinder->setOrientationEuler(capsule.getRotation());
-
-        renderer3D->renderOutline(cylinder, colliderOutlineColor);
-      }
-    }
-
     for (std::size_t i = 0; i < layout.capPositions.size(); ++i)
     {
-      if (const auto cap = assetCache.getColliderGizmo(uuid, "assets/models/sphere_3.glb", i + 1))
+      if (const auto cap = assetCache.getColliderGizmo(uuid, "assets/models/sphere_3.glb", i))
       {
         cap->setPosition(layout.capPositions[i]);
         cap->setScale(layout.capScale);
@@ -84,6 +73,22 @@ namespace {
         renderer3D->renderOutline(cap, colliderOutlineColor);
       }
     }
+
+    if (!layout.hasCylinder)
+    {
+      return layout.capPositions.size();
+    }
+
+    if (const auto cylinder = assetCache.getColliderGizmo(uuid, "assets/models/cylinder.glb", layout.capPositions.size()))
+    {
+      cylinder->setPosition(layout.cylinderPosition);
+      cylinder->setScale(layout.cylinderScale);
+      cylinder->setOrientationEuler(capsule.getRotation());
+
+      renderer3D->renderOutline(cylinder, colliderOutlineColor);
+    }
+
+    return layout.capPositions.size() + 1;
   }
 }
 
@@ -201,6 +206,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
     // Collider debug gizmo: draw the collider's shape (offset by its local transform) as an
     // outline only, so the object inside stays visible, when its render flag is on.
+    std::size_t gizmoParts = 0;
     if (const auto box = object->getComponent<BoxCollider>(ComponentType::collider); box && box->getRenderCollider())
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/cube_1x1x1.glb"))
@@ -211,6 +217,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
         renderer->getRenderingManager()->getRenderer3D()->renderOutline(gizmo, colliderOutlineColor);
       }
+
+      gizmoParts = 1;
     }
     else if (const auto sphere = object->getComponent<SphereCollider>(ComponentType::collider); sphere && sphere->getRenderCollider())
     {
@@ -221,12 +229,16 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
         renderer->getRenderingManager()->getRenderer3D()->renderOutline(gizmo, colliderOutlineColor);
       }
+
+      gizmoParts = 1;
     }
     else if (const auto capsule = object->getComponent<CapsuleCollider>(ComponentType::collider);
              capsule && capsule->getRenderCollider())
     {
-      drawCapsuleGizmo(renderer, assetCache, uuid, *capsule);
+      gizmoParts = drawCapsuleGizmo(renderer, assetCache, uuid, *capsule);
     }
+
+    assetCache.trimColliderGizmo(uuid, gizmoParts);
   }
 
   // The later submission owns an overlap in the outline mask, so selection outlines go last to win over

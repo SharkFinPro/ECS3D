@@ -7,10 +7,15 @@
 #include "WireTypes.h"
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
+#include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/CapsuleCollider.h"
 
 #include <Protocol.h>
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/mat4x4.hpp>
+#include <glm/trigonometric.hpp>
+#include <glm/vec4.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <cstddef>
@@ -442,4 +447,107 @@ TEST(CapsuleCollider, RadiusAndHeightClampAtZeroAndIgnoreNonFiniteInput)
   EXPECT_EQ(capsule.getLocalHeight(), 3.0f);
   EXPECT_EQ(capsule.getLocalPosition(), glm::vec3(0));
   EXPECT_EQ(capsule.getLocalRotation(), glm::vec3(0));
+}
+
+namespace {
+  // Where a box collider with this world rotation points its local +Y, built the way the box mesh is.
+  glm::vec3 boxUpAxis(BoxCollider& box)
+  {
+    const glm::vec3 rotation = box.getRotation();
+    const glm::mat4 matrix = glm::rotate(glm::mat4(1.0f), glm::radians(rotation.z), glm::vec3(0, 0, 1))
+      * glm::rotate(glm::mat4(1.0f), glm::radians(rotation.y), glm::vec3(0, 1, 0))
+      * glm::rotate(glm::mat4(1.0f), glm::radians(rotation.x), glm::vec3(1, 0, 0));
+
+    return glm::vec3(matrix * glm::vec4(0, 1, 0, 0));
+  }
+
+  glm::vec3 capsuleAxis(CapsuleCollider& capsule)
+  {
+    const auto [start, end] = capsule.getSegment();
+
+    return glm::normalize(end - start);
+  }
+
+  // A capsule and a box collider on identical objects, each with the same offset rotation.
+  void expectCapsuleTurnsLikeABox(const glm::vec3& parentRotation, const bool parented)
+  {
+    const glm::vec3 objectRotation(30, 40, 50);
+    const glm::vec3 offsetRotation(10, -20, 15);
+
+    std::shared_ptr<Object> parent;
+    if (parented)
+    {
+      parent = std::make_shared<Object>("Parent");
+      transformOf(parent)->setRotation(parentRotation);
+    }
+
+    const auto build = [&](auto collider) {
+      auto object = std::make_shared<Object>("Child");
+      if (parent)
+      {
+        object->setParent(parent);
+        parent->addChild(object);
+      }
+      transformOf(object)->setRotation(objectRotation);
+      collider->setRotation(offsetRotation);
+      object->addComponent(collider);
+
+      return object;
+    };
+
+    const auto capsule = std::make_shared<CapsuleCollider>();
+    const auto box = std::make_shared<BoxCollider>();
+    const auto capsuleObject = build(capsule);
+    const auto boxObject = build(box);
+
+    expectNear("axis", capsuleAxis(*capsule), boxUpAxis(*box), 1e-4f);
+  }
+}
+
+TEST(CapsuleCollider, ItsAxisFollowsABoxColliderUnderAMultiAxisRotation)
+{
+  expectCapsuleTurnsLikeABox({ 0, 0, 0 }, false);
+}
+
+TEST(CapsuleCollider, ItsAxisFollowsABoxColliderUnderAMultiAxisRotationWithARotatedParent)
+{
+  expectCapsuleTurnsLikeABox({ 20, -35, 60 }, true);
+}
+
+TEST(CapsuleCollider, TheCachedSegmentFollowsEverySetterAndTheTransform)
+{
+  const auto [object, capsule] = makeCapsule();
+  const auto before = capsule->getSegment();
+  expectNear("warm end", before.end, { 0, 0.5f, 0 }, tolerance);
+
+  capsule->setHeight(4.0f);
+  expectNear("taller end", capsule->getSegment().end, { 0, 1.5f, 0 }, tolerance);
+
+  capsule->setRadius(1.5f);
+  EXPECT_NEAR(capsule->getRadius(), 1.5f, tolerance);
+  expectNear("fat end", capsule->getSegment().end, { 0, 0.5f, 0 }, tolerance);
+
+  capsule->setPosition({ 2, 0, 0 });
+  expectNear("moved end", capsule->getSegment().end, { 2, 0.5f, 0 }, tolerance);
+
+  capsule->setRotation({ 0, 0, 90 });
+  expectNear("turned end", capsule->getSegment().end, { 1.5f, 0, 0 }, tolerance);
+
+  transformOf(object)->setPosition({ 0, 5, 0 });
+  expectNear("object moved end", capsule->getSegment().end, { 1.5f, 5, 0 }, tolerance);
+}
+
+TEST(CapsuleCollider, StartingAndStoppingRevertTheCachedSegmentToTheAuthoredValues)
+{
+  const auto [object, capsule] = makeCapsule();
+  object->start();
+
+  capsule->setHeight(6.0f);
+  expectNear("live end", capsule->getSegment().end, { 0, 2.5f, 0 }, tolerance);
+
+  object->stop();
+  expectNear("authored end", capsule->getSegment().end, { 0, 0.5f, 0 }, tolerance);
+
+  object->start();
+  expectNear("restarted end", capsule->getSegment().end, { 0, 0.5f, 0 }, tolerance);
 }

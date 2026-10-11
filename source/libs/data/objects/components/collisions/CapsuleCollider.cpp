@@ -49,7 +49,7 @@ void CapsuleCollider::setPosition(const glm::vec3& position)
   }
 
   m_position.set(position);
-  invalidateBoundingBox();
+  invalidateShape();
 }
 
 void CapsuleCollider::setRotation(const glm::vec3& rotation)
@@ -60,7 +60,7 @@ void CapsuleCollider::setRotation(const glm::vec3& rotation)
   }
 
   m_rotation.set(rotation);
-  invalidateBoundingBox();
+  invalidateShape();
 }
 
 void CapsuleCollider::setRadius(const float radius)
@@ -71,7 +71,7 @@ void CapsuleCollider::setRadius(const float radius)
   }
 
   m_radius.set(std::max(radius, 0.0f));
-  invalidateBoundingBox();
+  invalidateShape();
 }
 
 void CapsuleCollider::setHeight(const float height)
@@ -82,26 +82,17 @@ void CapsuleCollider::setHeight(const float height)
   }
 
   m_height.set(std::max(height, 0.0f));
-  invalidateBoundingBox();
+  invalidateShape();
 }
 
 float CapsuleCollider::getRadius()
 {
-  updateTransformPointer();
-
-  return getScaledRadius(m_transform_ptr.lock());
+  return worldShape().radius;
 }
 
 CapsuleSegment CapsuleCollider::getSegment()
 {
-  updateTransformPointer();
-
-  const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
-
-  const glm::vec3 center = transform->getPosition() + m_position.get();
-  const glm::vec3 offset = getWorldAxis(transform) * getSegmentHalfLength(transform);
-
-  return { center - offset, center + offset };
+  return worldShape().segment;
 }
 
 nlohmann::json CapsuleCollider::serialize()
@@ -141,7 +132,7 @@ void CapsuleCollider::loadFromJSON(const nlohmann::json& componentData)
   setLayer(componentData.value("layer", 0u));
   m_mask = componentData.value("mask", 0xFFFFFFFFu);
 
-  invalidateBoundingBox();
+  invalidateShape();
 }
 
 glm::vec3 CapsuleCollider::getPosition()
@@ -167,13 +158,14 @@ glm::vec3 CapsuleCollider::getRotation()
 
 glm::vec3 CapsuleCollider::findFurthestPoint(const glm::vec3& direction)
 {
-  const auto [start, end] = getSegment();
+  const auto& [segment, radius] = worldShape();
+  const auto& [start, end] = segment;
 
   if (const float length = glm::length(direction); length > 0.0f)
   {
     const glm::vec3& endpoint = glm::dot(end, direction) > glm::dot(start, direction) ? end : start;
 
-    return endpoint + direction / length * getRadius();
+    return endpoint + direction / length * radius;
   }
 
   return (start + end) * 0.5f;
@@ -204,7 +196,46 @@ void CapsuleCollider::unpack(net::MessageReader& messageReader)
   setLayer(messageReader.read<uint32_t>());
   m_mask = messageReader.read<uint32_t>();
 
+  invalidateShape();
+}
+
+void CapsuleCollider::start()
+{
+  Collider::start();
+
+  invalidateShape();
+}
+
+void CapsuleCollider::stop()
+{
+  Collider::stop();
+
+  invalidateShape();
+}
+
+void CapsuleCollider::invalidateShape()
+{
+  m_worldShapeDirty = true;
   invalidateBoundingBox();
+}
+
+const CapsuleCollider::WorldShape& CapsuleCollider::worldShape()
+{
+  updateTransformPointer();
+
+  const std::shared_ptr<Transform> transform = m_transform_ptr.lock();
+
+  if (m_worldShapeDirty || m_worldShapeUpdateID != transform->getWorldUpdateID())
+  {
+    const glm::vec3 center = transform->getPosition() + m_position.get();
+    const glm::vec3 offset = getWorldAxis(transform) * getSegmentHalfLength(transform);
+
+    m_worldShape = { { center - offset, center + offset }, getScaledRadius(transform) };
+    m_worldShapeUpdateID = transform->getWorldUpdateID();
+    m_worldShapeDirty = false;
+  }
+
+  return m_worldShape;
 }
 
 void CapsuleCollider::updateTransformPointer()

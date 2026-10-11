@@ -46,6 +46,11 @@ public:
   std::shared_ptr<vke::RenderObject> getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath,
                                                       std::size_t part = 0);
 
+  // Releases the owner's gizmo parts from partCount upward, and all of them for zero. Called each frame with the
+  // number of parts the owner's shape drew, so a gizmo that is switched off or changes shape does not keep
+  // its old render objects alive; dropping the last reference frees them, as pruneStale does.
+  void trimColliderGizmo(const uuids::uuid& ownerUUID, std::size_t partCount);
+
   // The editor's light sprite (a double-sided unit quad textured with the light icon), keyed per light
   // OWNER since each render object carries its own transform. The RenderSystem draws it as a billboard.
   std::shared_ptr<vke::RenderObject> getLightGizmo(const uuids::uuid& ownerUUID);
