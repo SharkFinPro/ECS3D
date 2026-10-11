@@ -152,7 +152,9 @@ std::vector<glm::vec3> capsuleContactPoints(CapsuleCollider& capsule, Collider& 
 
   const std::array<glm::vec3, 2> candidates = { start + towardOther * radius, end + towardOther * radius };
   const float extreme = std::max(glm::dot(candidates[0], towardOther), glm::dot(candidates[1], towardOther));
-  const float epsilon = 1e-3f * std::max({ radius, glm::distance(start, end) * 0.5f, 1.0f });
+  // Scaled by the segment so a capsule within about a degree of lying flat still counts as flush, the way
+  // touchingVertices treats a box face.
+  const float epsilon = 1e-3f * std::max(radius, 1.0f) + 0.02f * glm::distance(start, end);
 
   std::vector<glm::vec3> points;
   for (const auto& candidate : candidates)

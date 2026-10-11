@@ -24,6 +24,11 @@ FetchContent_MakeAvailable(googletest)
 add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ColliderCacheTest.cpp
+  CapsuleColliderTest.cpp
+  CapsuleGizmoTest.cpp
+  CapsuleNarrowPhaseTest.cpp
+  CapsulePhysicsTest.cpp
+  CapsuleSceneQueryTest.cpp
   ComponentLookupTest.cpp
   CameraRangeTest.cpp
   CameraSelectionTest.cpp
