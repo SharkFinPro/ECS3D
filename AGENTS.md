@@ -518,9 +518,10 @@ component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the s
 (project/wire plumbing, not gameplay state), not just Transform's. `TransformBindings` also leaves out
 `getWorldUpdateID`/`markReparented` (cache-invalidation bookkeeping for colliders, not scene data). `RigidBodyBindings` leaves
 out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writes to; PhysicsSystem
-drains it), `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
-falling state; `isFalling` is the read-only query scripts get) and `getStackedLoad`/`setStackedLoad`/`getHeldImpulse`/`setHeldImpulse`
-(PhysicsSystem's per-tick record of what rests on the body and what its support has held). `ColliderBindings` covers the shared trigger, layer and mask. It also covers each shape's offset and size: box size, sphere radius, capsule radius and height. A shape's accessors fail safely on a collider of another shape. `CameraBindings` covers every field on
+drains it). It also leaves out `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
+falling state; `isFalling` is the read-only query scripts get). The same goes for `getStackedLoad`/`setStackedLoad`/`getHeldImpulse`/`setHeldImpulse`
+(PhysicsSystem's per-tick record of what rests on the body and what its support has held).
+`ColliderBindings` covers the shared trigger, layer and mask. It also covers each shape's offset and size: box size, sphere radius, capsule radius and height. A shape's accessors fail safely on a collider of another shape. `CameraBindings` covers every field on
 `Camera`; its setters clamp fov/near/far to the same valid range as the editor UI (`Camera::minFovDegrees`/
 `maxFovDegrees`/`minNearPlane`/`minFarPlaneFor`), so a script cannot produce a degenerate projection.
 `InputUtilsBindings` already covers everything `InputState` queries;
