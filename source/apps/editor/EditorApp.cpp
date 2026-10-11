@@ -79,6 +79,9 @@ EditorApp::EditorApp(LaunchOptions options)
 
   registerDataComponents(*m_componentRegistry);
 
+  // Spawned before the window and GPU setup so the server's boot (CLR, script compile) overlaps them.
+  launchServer();
+
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
 
@@ -249,20 +252,8 @@ void EditorApp::setupSaveUI()
   m_saveUI->setLoadProjectCallback([this] { onLoadProject(); });
 }
 
-void EditorApp::connectToServer()
+void EditorApp::launchServer()
 {
-  using namespace std::chrono_literals;
-
-  // A slot belongs to one connection, so nothing from the session being left carries over.
-  m_playerSlot = -1;
-  m_requestedPlayerSlot.reset();
-
-  // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
-  // every object it named.
-  clearEditHistory();
-  m_playHistory.reset();
-  m_historyScope.reset(std::nullopt);
-
   // The editor edits a local project, so (in singleplayer) it spawns its own edit-mode server gated by a
   // one-off token they share, then connects as Role::editor with that token. Attaching to an existing
   // server (--host) instead uses the token from the launch options.
@@ -288,6 +279,21 @@ void EditorApp::connectToServer()
   {
     m_authToken = m_options.authToken;
   }
+}
+
+void EditorApp::connectToServer()
+{
+  using namespace std::chrono_literals;
+
+  // A slot belongs to one connection, so nothing from the session being left carries over.
+  m_playerSlot = -1;
+  m_requestedPlayerSlot.reset();
+
+  // Whatever is on the stacks was recorded against the session being left; the join snapshot replaces
+  // every object it named.
+  clearEditHistory();
+  m_playHistory.reset();
+  m_historyScope.reset(std::nullopt);
 
   // The (just-spawned) server needs a moment to boot the CLR and start listening, so retry.
   const auto deadline = std::chrono::steady_clock::now() + 15s;

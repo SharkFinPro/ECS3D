@@ -209,6 +209,7 @@ private:
 
   void createRenderer();
 
+  void launchServer();
   void connectToServer();
 
   void registerEditors() const;

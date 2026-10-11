@@ -184,7 +184,8 @@ so no layer needs to name concrete component types across the boundary.
 input, linking `ECS3DRender` but not sim/scripting. `EditorApp` is a client plus the ImGui tooling
 (`ECS3DEditorLib`); the authoritative scene lives on a spawned `--edit` server, so edits become
 *commands sent back*, not local mutations. Client/editor spawn a child `ECS3DServer` via `ServerProcess`
-for singleplayer (it has no console window by default; `--server-console` gives it one).
+for singleplayer (it has no console window by default; `--server-console` gives it one). The editor spawns it before creating its window and renderer, and the server builds its script runtime (the
+user-script compile) before it starts listening, so that cost overlaps the editor's own startup rather than delaying the first snapshot.
 **A loaded scene starts stopped:** a scene switch, a project load, and an `--edit` server's first load all
 leave it stopped regardless of what the sim was doing before, until the editor presses play (a play server still auto-starts,
 since it has no editor to press play).

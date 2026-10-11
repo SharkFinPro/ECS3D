@@ -57,6 +57,9 @@ public:
 
   ~ScriptSystem();
 
+  // Builds the runtime now rather than on first use, so the compile does not land on the first join's snapshot.
+  void warmUp();
+
   // Attach + start every Script's managed instance, pushing each Script's saved field blob into it.
   void start(ObjectManager& objectManager);
 

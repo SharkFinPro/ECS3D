@@ -18,6 +18,11 @@ ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::filesystem::path use
 
 ScriptSystem::~ScriptSystem() = default;
 
+void ScriptSystem::warmUp()
+{
+  ensureEngine();
+}
+
 void ScriptSystem::ensureEngine()
 {
   if (m_engine)
