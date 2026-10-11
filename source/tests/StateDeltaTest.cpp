@@ -193,7 +193,34 @@ TEST(StateDelta, CarriesLocalTransformsSoAHierarchyIsNotDoubleCounted)
   // combined value instead would land the child at 21 rather than 11 - and only under hierarchy, so a
   // flat scene would look perfectly fine.
   EXPECT_EQ(replicatedChild->getLocalPosition(), glm::vec3(1, 0, 0));
-  EXPECT_EQ(replicatedChild->getPosition(), glm::vec3(11, 0, 0));
+  fixtures::expectNear(replicatedChild->getPosition(), glm::vec3(11, 0, 0));
+}
+
+TEST(StateDelta, CarriesLocalTransformsUnderARotatedAndScaledParent)
+{
+  const auto source = makeScene();
+  const auto target = makeScene();
+
+  const auto parent = addObject(source, "Parent");
+  const auto child = addChildObject(source, "Child", parent);
+  snapshotInto(source, target);
+
+  transformOf(parent)->setPosition({ 10, 0, 0 });
+  transformOf(parent)->setRotation({ 0, 90, 0 });
+  transformOf(parent)->setScale({ 2, 3, 4 });
+  transformOf(child)->setPosition({ 1, 5, 2 });
+
+  replication::unpackStateDelta(*target.objectManager, deltaOf(source));
+
+  const auto replicatedChild = transformOf(findByName(target, "Child"));
+
+  fixtures::expectNear(replicatedChild->getLocalPosition(), transformOf(child)->getLocalPosition());
+
+  // Local (1, 5, 2) scales by the parent to (2, 15, 8). A +90 degree turn about Y takes +X to -Z and +Z to
+  // +X, so that becomes (8, 15, -2), and the parent's position adds (10, 0, 0). Had the wire carried the
+  // world position, the local check above would see (18, 15, -2) instead of (1, 5, 2).
+  fixtures::expectNear(replicatedChild->getPosition(), glm::vec3(18, 15, -2));
+  fixtures::expectNear(replicatedChild->getPosition(), transformOf(child)->getPosition());
 }
 
 TEST(StateDelta, AnEmptySceneStillPacksACount)
