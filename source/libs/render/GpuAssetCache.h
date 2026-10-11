@@ -2,10 +2,12 @@
 #define GPUASSETCACHE_H
 
 #include "SharedAssetLoads.h"
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 #include <uuid.h>
 
 namespace vke {
@@ -36,11 +38,18 @@ public:
                                                      const uuids::uuid& textureUUID,
                                                      const uuids::uuid& specularMapUUID);
 
-  // A debug render object for a collider's shape (a path-loaded cube/sphere, white, no specular), keyed
-  // per collider OWNER and rebuilt if the model path changes. The mesh and texture are loaded once and
-  // shared; returns nullptr (logged once) if either fails to load. The RenderSystem outlines it
-  // when the collider's render flag is on.
-  std::shared_ptr<vke::RenderObject> getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath);
+  // A debug render object for a collider's shape (a path-loaded cube/sphere/cylinder, white, no specular),
+  // keyed per collider OWNER and part, and rebuilt if the model path changes. A shape drawn from several
+  // meshes (a capsule's cylinder and two end spheres) asks for one part index per mesh; the rest use part 0.
+  // The mesh and texture are loaded once and shared; returns nullptr (logged once) if either fails to load.
+  // The RenderSystem outlines it when the collider's render flag is on.
+  std::shared_ptr<vke::RenderObject> getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath,
+                                                      std::size_t part = 0);
+
+  // Releases the owner's gizmo parts from partCount upward, and all of them for zero. Called each frame with the
+  // number of parts the owner's shape drew, so a gizmo that is switched off or changes shape does not keep
+  // its old render objects alive; dropping the last reference frees them, as pruneStale does.
+  void trimColliderGizmo(const uuids::uuid& ownerUUID, std::size_t partCount);
 
   // The editor's light sprite (a double-sided unit quad textured with the light icon), keyed per light
   // OWNER since each render object carries its own transform. The RenderSystem draws it as a billboard.
@@ -76,7 +85,7 @@ private:
   std::unordered_map<uuids::uuid, std::shared_ptr<vke::Model>> m_models;
   std::unordered_map<uuids::uuid, std::shared_ptr<vke::Texture2D>> m_textures;
   std::unordered_map<uuids::uuid, CachedRenderObject> m_renderObjects;
-  std::unordered_map<uuids::uuid, CachedGizmo> m_colliderGizmos;
+  std::unordered_map<uuids::uuid, std::vector<CachedGizmo>> m_colliderGizmos;
   std::unordered_map<uuids::uuid, std::shared_ptr<vke::RenderObject>> m_lightGizmos;
   std::shared_ptr<vke::Model> m_lightGizmoModel;
   std::shared_ptr<vke::Texture2D> m_lightGizmoIcon;
