@@ -356,6 +356,67 @@ public class ComponentWrapperTests : IDisposable
     }, FakeNatives.Calls);
   }
 
+  [Fact]
+  public void Collider_CapsuleAccessorsReturnValuesOnlyWhenNativeSucceeds()
+  {
+    var collider = new Collider(Id);
+    FakeNatives.Set("Collider.getCapsuleOffset", new Vector3(1f, 2f, 3f));
+    FakeNatives.Set("Collider.getCapsuleRadius", 0.75f);
+    FakeNatives.Set("Collider.getCapsuleHeight", 3.5f);
+
+    FakeNatives.Set("Collider.getCapsuleOffset.ok", true);
+    FakeNatives.Set("Collider.getCapsuleRadius.ok", true);
+    FakeNatives.Set("Collider.getCapsuleHeight.ok", true);
+    Assert.True(collider.tryGetCapsuleOffset(out var offset));
+    Assert.Equal(new Vector3(1f, 2f, 3f), offset);
+    Assert.True(collider.tryGetCapsuleRadius(out var radius));
+    Assert.Equal(0.75f, radius);
+    Assert.True(collider.tryGetCapsuleHeight(out var height));
+    Assert.Equal(3.5f, height);
+
+    FakeNatives.Set("Collider.getCapsuleOffset.ok", false);
+    FakeNatives.Set("Collider.getCapsuleRadius.ok", false);
+    FakeNatives.Set("Collider.getCapsuleHeight.ok", false);
+    Assert.False(collider.tryGetCapsuleOffset(out offset));
+    Assert.Equal(Vector3.Zero, offset);
+    Assert.False(collider.tryGetCapsuleRadius(out radius));
+    Assert.Equal(0f, radius);
+    Assert.False(collider.tryGetCapsuleHeight(out height));
+    Assert.Equal(0f, height);
+  }
+
+  [Fact]
+  public void Collider_CapsuleSettersSendValuesAndReturnNativeResult()
+  {
+    var collider = new Collider(Id);
+    FakeNatives.Set("Collider.setCapsuleOffset", true);
+    FakeNatives.Set("Collider.setCapsuleRadius", false);
+    FakeNatives.Set("Collider.setCapsuleHeight", true);
+
+    Assert.True(collider.setCapsuleOffset(1f, 2f, 3f));
+    Assert.True(collider.setCapsuleOffset(new Vector3(4f, 5f, 6f)));
+    Assert.False(collider.setCapsuleRadius(1.5f));
+    Assert.True(collider.setCapsuleHeight(4f));
+
+    Assert.Equal(new[]
+    {
+      "Collider.setCapsuleOffset(obj-1,1,2,3)",
+      "Collider.setCapsuleOffset(obj-1,4,5,6)",
+      "Collider.setCapsuleRadius(obj-1,1.5)",
+      "Collider.setCapsuleHeight(obj-1,4)"
+    }, FakeNatives.Calls);
+  }
+
+  [Fact]
+  public void Collider_ShapeReportsCapsule()
+  {
+    var collider = new Collider(Id);
+    FakeNatives.Set("Collider.getShape", (int)ColliderShape.Capsule);
+
+    Assert.Equal(ColliderShape.Capsule, collider.getShape());
+    Assert.Equal(3, (int)ColliderShape.Capsule);
+  }
+
   // ---- ModelRenderer ----
 
   [Fact]

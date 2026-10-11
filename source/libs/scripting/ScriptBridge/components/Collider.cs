@@ -29,11 +29,18 @@ public unsafe struct ColliderBindings
     public delegate* unmanaged<IntPtr, float, bool> setSphereRadius;
 
     public delegate* unmanaged<IntPtr, bool> has;
+
+    public delegate* unmanaged<IntPtr, float*, float*, float*, bool> getCapsuleOffset;
+    public delegate* unmanaged<IntPtr, float, float, float, bool> setCapsuleOffset;
+    public delegate* unmanaged<IntPtr, float*, bool> getCapsuleRadius;
+    public delegate* unmanaged<IntPtr, float, bool> setCapsuleRadius;
+    public delegate* unmanaged<IntPtr, float*, bool> getCapsuleHeight;
+    public delegate* unmanaged<IntPtr, float, bool> setCapsuleHeight;
 }
 
 // A collider's shape (backed by ColliderBindings.getShape) so a script can branch without knowing the
 // concrete type up front, plus the shape-shared trigger/layer/mask fields and per-shape shape/offset
-// accessors. New shapes (capsule, convex mesh) add their own group of accessors the same way, without
+// accessors. New shapes (convex mesh) add their own group of accessors the same way, without
 // touching ColliderShape or the common members here.
 //
 // Values must be kept in step with the native switch in ColliderBindingsProvider::bindGetShape
@@ -47,7 +54,7 @@ public enum ColliderShape
 }
 
 // Reached via World.tryGetCollider like Transform/RigidBody. getShape() names the concrete shape; the
-// box-only and sphere-only accessors below fail safely (false / neutral default, nothing changed) when
+// box-only, sphere-only and capsule-only accessors below fail safely (false / neutral default, nothing changed) when
 // called on the wrong shape - check getShape() first, or just take the false and move on.
 public unsafe class Collider
 {
@@ -122,4 +129,36 @@ public unsafe class Collider
     }
 
     public bool setSphereRadius(float radius) => NativeBindings.Collider.setSphereRadius(_uuid, radius);
+
+    public bool tryGetCapsuleOffset(out Vector3 offset)
+    {
+        float x = 0, y = 0, z = 0;
+        var ok = NativeBindings.Collider.getCapsuleOffset(_uuid, &x, &y, &z);
+        offset = ok ? new Vector3(x, y, z) : Vector3.Zero;
+        return ok;
+    }
+
+    public bool setCapsuleOffset(float x, float y, float z) => NativeBindings.Collider.setCapsuleOffset(_uuid, x, y, z);
+
+    public bool setCapsuleOffset(Vector3 offset) => setCapsuleOffset(offset.X, offset.Y, offset.Z);
+
+    public bool tryGetCapsuleRadius(out float radius)
+    {
+        float r = 0;
+        var ok = NativeBindings.Collider.getCapsuleRadius(_uuid, &r);
+        radius = ok ? r : 0f;
+        return ok;
+    }
+
+    public bool setCapsuleRadius(float radius) => NativeBindings.Collider.setCapsuleRadius(_uuid, radius);
+
+    public bool tryGetCapsuleHeight(out float height)
+    {
+        float h = 0;
+        var ok = NativeBindings.Collider.getCapsuleHeight(_uuid, &h);
+        height = ok ? h : 0f;
+        return ok;
+    }
+
+    public bool setCapsuleHeight(float height) => NativeBindings.Collider.setCapsuleHeight(_uuid, height);
 }
