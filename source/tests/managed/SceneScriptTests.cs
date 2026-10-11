@@ -51,6 +51,25 @@ public class SceneScriptTests : IDisposable
     }
   }
 
+  public class Contact : ScriptBase
+  {
+    public List<string> Seen { get; } = new();
+
+    public override void onCollisionEnter(string otherUuid) => Seen.Add("enter:" + otherUuid);
+
+    public override void onCollisionStay(string otherUuid) => Seen.Add("stay:" + otherUuid);
+
+    public override void onCollisionExit(string otherUuid) => Seen.Add("exit:" + otherUuid);
+  }
+
+  public class Tuned : SceneScript
+  {
+    [ExposeToEditor("Limit")]
+    private float limit = 2.5f;
+
+    public float Limit => limit;
+  }
+
   public class ThrowingSceneScript : SceneScript
   {
     public ThrowingSceneScript() => throw new InvalidOperationException("ctor");
@@ -262,5 +281,40 @@ public class SceneScriptTests : IDisposable
 
     Assert.Null(thrown);
     Assert.False(Bridge.IsHealthy(SceneUuid, nameof(ThrowingSceneScript)));
+  }
+
+  [Fact]
+  public void CollisionEventsReachAScriptBaseAndAreANoOpForASceneScript()
+  {
+    var contact = new Contact();
+    Bridge.AddInstance(ObjectUuid, nameof(Contact), contact);
+    Bridge.DeliverCollision(ObjectUuid, nameof(Contact), "other", 0);
+    Bridge.DeliverCollision(ObjectUuid, nameof(Contact), "other", 1);
+    Bridge.DeliverCollision(ObjectUuid, nameof(Contact), "other", 2);
+    Assert.Equal(new[] { "enter:other", "stay:other", "exit:other" }, contact.Seen);
+
+    var round = new Round();
+    Bridge.AddInstance(SceneUuid, nameof(Round), round);
+    var thrown = Record.Exception(() => Bridge.DeliverCollision(SceneUuid, nameof(Round), "other", 0));
+
+    Assert.Null(thrown);
+    Assert.True(Bridge.IsHealthy(SceneUuid, nameof(Round)));
+  }
+
+  [Fact]
+  public void ExposedFieldsOfASceneScriptCanBeListedReadAndWritten()
+  {
+    var tuned = new Tuned();
+    Bridge.AddInstance(SceneUuid, nameof(Tuned), tuned);
+
+    Assert.Contains("\"name\":\"limit\"", Bridge.BuildExposedFieldsJson(tuned));
+    Assert.Equal(2.5f, Bridge.ReadExposedField(tuned, "limit"));
+
+    var field = Bridge.FindExposedField(tuned, "limit");
+    Assert.NotNull(field);
+    Assert.True(Bridge.TryConvertFieldValue(field!.FieldType, 4f, out var converted));
+    field.SetValue(tuned, converted);
+
+    Assert.Equal(4f, tuned.Limit);
   }
 }

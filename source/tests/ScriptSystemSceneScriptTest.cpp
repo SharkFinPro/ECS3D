@@ -270,6 +270,23 @@ namespace {
     EXPECT_EQ(count(mainCall("start", "Alpha")), 0);
   }
 
+  TEST_F(SceneScriptSystemTest, StopCallsTheManagedStopOnlyOnASceneScriptThatWasStarted)
+  {
+    addSceneScript(*mainScene, "Alpha");
+    scriptSystem.start(*mainScene);
+    addSceneScript(*mainScene, "Beta");
+    scriptSystem.attachAll(*mainScene);
+    ASSERT_EQ(count(mainCall("attachScene", "Beta")), 1);
+    ASSERT_EQ(count(mainCall("start", "Beta")), 0);
+
+    scriptSystem.stop(*mainScene);
+
+    EXPECT_EQ(count(mainCall("stop", "Alpha")), 1);
+    EXPECT_EQ(count(mainCall("detach", "Alpha")), 1);
+    EXPECT_EQ(count(mainCall("stop", "Beta")), 0);
+    EXPECT_EQ(count(mainCall("detach", "Beta")), 1);
+  }
+
   TEST_F(SceneScriptSystemTest, RestartingAfterTheSceneRebuildsItsScriptEntriesAttachesAndStartsFresh)
   {
     addSceneScript(*mainScene, "Alpha");

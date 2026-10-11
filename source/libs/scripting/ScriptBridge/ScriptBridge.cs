@@ -889,14 +889,18 @@ public static class Bridge
     [UnmanagedCallersOnly]
     public static void onCollision(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr otherUuidPtr, int eventType)
     {
-        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
-        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
-        if (!_instances.TryGetValue(Key(uuid, className), out var instance))
+        DeliverCollision(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!,
+                         Marshal.PtrToStringUTF8(otherUuidPtr)!, eventType);
+    }
+
+    // Collision callbacks exist only on ScriptBase; a scene script under the key ignores the event.
+    internal static void DeliverCollision(string uuid, string className, string other, int eventType)
+    {
+        if (!_instances.TryGetValue(Key(uuid, className), out var found) || found is not ScriptBase instance)
         {
             return;
         }
 
-        var other = Marshal.PtrToStringUTF8(otherUuidPtr)!;
         RunGuarded(uuid, className, nameof(onCollision), () =>
         {
             switch (eventType)

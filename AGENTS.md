@@ -467,6 +467,8 @@ Scene scripts keep their own attached, started and unresolved bookkeeping and th
 component identity. The object sweep never stops one, and a rebuilt entry from `SceneAsset::stop()` gets a
 fresh instance. `ServerApp` calls only the scene overloads. A scene script that cannot be instantiated, including a
 class that is not a `SceneScript`, is warned about once and keeps its saved field values.
+A scene script gets its managed `stop()` only if it was started, unlike an object script, which is stopped
+whenever it is attached.
 `ComponentOpsBindings` (`World.hasComponent`/`addComponent`/`removeComponent`/`getComponentTypes`) gives
 scripts generic access to an object's component set, keyed by the same `ComponentRegistry` type-name
 strings unpack/loadFromJSON use ("RigidBody", "Box", "Sphere", ...) rather than `ComponentType`'s packed

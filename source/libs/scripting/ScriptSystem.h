@@ -32,6 +32,8 @@ enum class CollisionEvent {
 // and tracks which (uuid, class) pairs are attached, the exposed-field cache, and the hot-reload
 // file snapshot. Each Script data component carries only a field blob; ScriptSystem syncs that blob
 // <-> the live instance (writes it on attach/start, reads it back before a snapshot). Server only.
+// Drive one ScriptSystem through either the SceneAsset overloads or the ObjectManager ones, not both: a hot
+// reload from the object-only path clears scene-script state without first syncing scene blobs.
 class ScriptSystem {
 public:
   using RuntimeFactory = std::function<std::unique_ptr<ScriptRuntime>()>;
