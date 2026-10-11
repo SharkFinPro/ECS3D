@@ -177,6 +177,9 @@ public:
   // a refusal reports as its conflict (also when no scene is passed to validate against). index is where
   // the entry sits in the list, as SceneAsset::moveScript reads one.
   //
+  // add/remove indexes come from the editor's pre-edit view, so two adds sent before a snapshot lands can
+  // record the same index (the same limitation addObject has).
+  //
   // fields is the blob loaded into the new entry; null means none given.
   [[nodiscard]] static EditCommand addSceneScript(const uuids::uuid& sceneUUID, std::string className,
                                                   std::size_t index, const nlohmann::json& fields);
@@ -258,6 +261,11 @@ public:
   [[nodiscard]] friend bool operator==(const EditCommand&, const EditCommand&) = default;
 
 private:
+  [[nodiscard]] Validation validateSceneScriptUndo(const SceneAsset* scene) const;
+  [[nodiscard]] Validation validateSceneScriptRedo(const SceneAsset* scene) const;
+  [[nodiscard]] nlohmann::json buildSceneScriptUndoJSON() const;
+  [[nodiscard]] nlohmann::json buildSceneScriptRedoJSON() const;
+
   struct ComponentEditData {
     uuids::uuid objectUUID;
     std::string registryKey;

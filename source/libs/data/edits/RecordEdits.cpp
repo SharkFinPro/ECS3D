@@ -144,6 +144,81 @@ namespace {
     return std::nullopt;
   }
 
+  // A fields blob a hand-edited file left as a non-array would make the reverse op malformed, so a
+  // recorded blob is always an array.
+  nlohmann::json fieldsArrayOf(const nlohmann::json& fields)
+  {
+    return fields.is_array() ? fields : nlohmann::json::array();
+  }
+
+  std::optional<EditCommand> deriveAddSceneScript(const nlohmann::json& edit, const std::string& className,
+                                                  const SceneAsset& scene)
+  {
+    std::size_t landedAt = scene.getScripts().size();
+    if (const auto indexField = edit.find("index"); indexField != edit.end())
+    {
+      const auto index = replication::parseIndexField(*indexField);
+      if (!index.has_value())
+      {
+        return std::nullopt;
+      }
+
+      landedAt = std::min(index.value(), landedAt);
+    }
+
+    nlohmann::json fields = nullptr;
+    if (const auto fieldsField = edit.find("fields"); fieldsField != edit.end())
+    {
+      if (!replication::isValidSceneScriptFields(*fieldsField))
+      {
+        return std::nullopt;
+      }
+
+      fields = *fieldsField;
+    }
+
+    if (scene.findScript(className))
+    {
+      return std::nullopt;
+    }
+
+    return EditCommand::addSceneScript(scene.getUUID(), className, landedAt, fields);
+  }
+
+  std::optional<EditCommand> deriveReorderSceneScript(const nlohmann::json& edit, const std::string& className,
+                                                      const SceneAsset& scene)
+  {
+    const auto currentIndex = replication::sceneScriptIndex(scene, className);
+    const auto indexField = edit.find("index");
+    const auto afterIndex = indexField == edit.end() ? std::nullopt : replication::parseIndexField(*indexField);
+    if (!currentIndex.has_value() || !afterIndex.has_value() || afterIndex.value() >= scene.getScripts().size()
+        || afterIndex.value() == currentIndex.value())
+    {
+      return std::nullopt;
+    }
+
+    return EditCommand::reorderSceneScript(scene.getUUID(), className, currentIndex.value(), afterIndex.value());
+  }
+
+  std::optional<EditCommand> deriveSetSceneScriptFields(const nlohmann::json& edit, const std::string& className,
+                                                        const SceneAsset& scene)
+  {
+    const auto current = scene.findScript(className);
+    const auto fieldsField = edit.find("fields");
+    if (!current || fieldsField == edit.end() || !replication::isValidSceneScriptFields(*fieldsField))
+    {
+      return std::nullopt;
+    }
+
+    const auto before = fieldsArrayOf(current->getFields());
+    if (before == *fieldsField)
+    {
+      return std::nullopt;
+    }
+
+    return EditCommand::setSceneScriptFields(scene.getUUID(), className, before, *fieldsField);
+  }
+
   // The scene script ops, derived from the scene as it stands before the edit. A command is only made for an
   // edit the authority would apply, so a recorded entry never describes a change that did not happen.
   std::optional<EditCommand> commandForSceneScriptEdit(const nlohmann::json& edit, const std::string& op,
@@ -155,73 +230,32 @@ namespace {
       return std::nullopt;
     }
 
-    const auto sceneUUID = scene->getUUID();
-    const auto current = scene->findScript(className);
-    const auto currentIndex = replication::sceneScriptIndex(*scene, className);
-
     if (op == "addSceneScript")
     {
-      std::size_t landedAt = scene->getScripts().size();
-      if (const auto indexField = edit.find("index"); indexField != edit.end())
-      {
-        const auto index = replication::parseIndexField(*indexField);
-        if (!index.has_value())
-        {
-          return std::nullopt;
-        }
-
-        landedAt = std::min(index.value(), landedAt);
-      }
-
-      nlohmann::json fields = nullptr;
-      if (const auto fieldsField = edit.find("fields"); fieldsField != edit.end())
-      {
-        if (!replication::isValidSceneScriptFields(*fieldsField))
-        {
-          return std::nullopt;
-        }
-
-        fields = *fieldsField;
-      }
-
-      if (current)
-      {
-        return std::nullopt;
-      }
-
-      return EditCommand::addSceneScript(sceneUUID, className, landedAt, fields);
+      return deriveAddSceneScript(edit, className, *scene);
     }
 
+    if (op == "reorderSceneScript")
+    {
+      return deriveReorderSceneScript(edit, className, *scene);
+    }
+
+    if (op == "setSceneScriptFields")
+    {
+      return deriveSetSceneScriptFields(edit, className, *scene);
+    }
+
+    const auto current = scene->findScript(className);
     if (!current)
     {
       return std::nullopt;
     }
 
-    if (op == "removeSceneScript")
-    {
-      return EditCommand::removeSceneScript(sceneUUID, currentIndex.value(), current->serialize());
-    }
+    auto removed = current->serialize();
+    removed["fields"] = fieldsArrayOf(current->getFields());
 
-    if (op == "reorderSceneScript")
-    {
-      const auto indexField = edit.find("index");
-      const auto afterIndex = indexField == edit.end() ? std::nullopt : replication::parseIndexField(*indexField);
-      if (!afterIndex.has_value() || afterIndex.value() >= scene->getScripts().size()
-          || afterIndex.value() == currentIndex.value())
-      {
-        return std::nullopt;
-      }
-
-      return EditCommand::reorderSceneScript(sceneUUID, className, currentIndex.value(), afterIndex.value());
-    }
-
-    const auto fieldsField = edit.find("fields");
-    if (fieldsField == edit.end() || !replication::isValidSceneScriptFields(*fieldsField))
-    {
-      return std::nullopt;
-    }
-
-    return EditCommand::setSceneScriptFields(sceneUUID, className, current->getFields(), *fieldsField);
+    return EditCommand::removeSceneScript(scene->getUUID(), replication::sceneScriptIndex(*scene, className).value(),
+                                          removed);
   }
 }
 

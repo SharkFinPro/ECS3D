@@ -690,6 +690,228 @@ std::string EditCommand::describeForMenu(const ObjectManager& objectManager,
   throw std::logic_error("EditCommand::describeForMenu: unhandled kind");
 }
 
+Validation EditCommand::validateSceneScriptUndo(const SceneAsset* scene) const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    {
+      const auto& data = std::get<AddSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      if (!scene->findScript(data.className))
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::removeSceneScript:
+    {
+      const auto& data = std::get<RemoveSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      if (scene->findScript(data.className))
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::reorderSceneScript:
+    {
+      const auto& data = std::get<ReorderSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      const auto index = replication::sceneScriptIndex(*scene, data.className);
+      if (!index.has_value())
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      if (index.value() != data.afterIndex)
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::setSceneScriptFields:
+    {
+      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      const auto script = scene->findScript(data.className);
+      if (!script)
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      if (script->getFields() != nlohmann::json::parse(data.afterFieldsJSON))
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    default:
+      return { ValidationFailure::notUndoable, primaryUUID() };
+  }
+}
+
+Validation EditCommand::validateSceneScriptRedo(const SceneAsset* scene) const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    {
+      const auto& data = std::get<AddSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      if (scene->findScript(data.className))
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::removeSceneScript:
+    {
+      const auto& data = std::get<RemoveSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      if (!scene->findScript(data.className))
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::reorderSceneScript:
+    {
+      const auto& data = std::get<ReorderSceneScriptData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      const auto index = replication::sceneScriptIndex(*scene, data.className);
+      if (!index.has_value())
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      if (index.value() != data.beforeIndex)
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    case CommandKind::setSceneScriptFields:
+    {
+      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
+      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
+      {
+        return *refusal;
+      }
+
+      const auto script = scene->findScript(data.className);
+      if (!script)
+      {
+        return { ValidationFailure::targetMissing, data.sceneUUID };
+      }
+
+      if (script->getFields() != nlohmann::json::parse(data.beforeFieldsJSON))
+      {
+        return { ValidationFailure::targetChanged, data.sceneUUID };
+      }
+
+      return {};
+    }
+    default:
+      return { ValidationFailure::notUndoable, primaryUUID() };
+  }
+}
+
+nlohmann::json EditCommand::buildSceneScriptUndoJSON() const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    {
+      const auto& data = std::get<AddSceneScriptData>(m_data);
+      return replication::buildRemoveSceneScript(data.className);
+    }
+    case CommandKind::removeSceneScript:
+    {
+      const auto& data = std::get<RemoveSceneScriptData>(m_data);
+      const auto fields = nlohmann::json::parse(data.removedScriptJSON).value("fields", nlohmann::json::array());
+      return replication::buildAddSceneScript(data.className, data.index, &fields);
+    }
+    case CommandKind::reorderSceneScript:
+    {
+      const auto& data = std::get<ReorderSceneScriptData>(m_data);
+      return replication::buildReorderSceneScript(data.className, data.beforeIndex);
+    }
+    case CommandKind::setSceneScriptFields:
+    {
+      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
+      return replication::buildSetSceneScriptFields(data.className, nlohmann::json::parse(data.beforeFieldsJSON));
+    }
+    default:
+      throw std::logic_error("EditCommand::buildSceneScriptUndoJSON: not a scene script command");
+  }
+}
+
+nlohmann::json EditCommand::buildSceneScriptRedoJSON() const
+{
+  switch (m_kind)
+  {
+    case CommandKind::addSceneScript:
+    {
+      const auto& data = std::get<AddSceneScriptData>(m_data);
+      const auto fields = nlohmann::json::parse(data.fieldsJSON);
+      return replication::buildAddSceneScript(data.className, data.index, fields.is_array() ? &fields : nullptr);
+    }
+    case CommandKind::removeSceneScript:
+    {
+      const auto& data = std::get<RemoveSceneScriptData>(m_data);
+      return replication::buildRemoveSceneScript(data.className);
+    }
+    case CommandKind::reorderSceneScript:
+    {
+      const auto& data = std::get<ReorderSceneScriptData>(m_data);
+      return replication::buildReorderSceneScript(data.className, data.afterIndex);
+    }
+    case CommandKind::setSceneScriptFields:
+    {
+      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
+      return replication::buildSetSceneScriptFields(data.className, nlohmann::json::parse(data.afterFieldsJSON));
+    }
+    default:
+      throw std::logic_error("EditCommand::buildSceneScriptRedoJSON: not a scene script command");
+  }
+}
+
 Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
                                         const AssetRegistry* assetRegistry,
                                         const SceneAsset* scene) const
@@ -949,77 +1171,10 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
       return {};
     }
     case CommandKind::addSceneScript:
-    {
-      const auto& data = std::get<AddSceneScriptData>(m_data);
-      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
-      {
-        return *refusal;
-      }
-
-      if (!scene->findScript(data.className))
-      {
-        return { ValidationFailure::targetMissing, data.sceneUUID };
-      }
-
-      return {};
-    }
     case CommandKind::removeSceneScript:
-    {
-      const auto& data = std::get<RemoveSceneScriptData>(m_data);
-      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
-      {
-        return *refusal;
-      }
-
-      if (scene->findScript(data.className))
-      {
-        return { ValidationFailure::targetChanged, data.sceneUUID };
-      }
-
-      return {};
-    }
     case CommandKind::reorderSceneScript:
-    {
-      const auto& data = std::get<ReorderSceneScriptData>(m_data);
-      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
-      {
-        return *refusal;
-      }
-
-      const auto index = replication::sceneScriptIndex(*scene, data.className);
-      if (!index.has_value())
-      {
-        return { ValidationFailure::targetMissing, data.sceneUUID };
-      }
-
-      if (index.value() != data.afterIndex)
-      {
-        return { ValidationFailure::targetChanged, data.sceneUUID };
-      }
-
-      return {};
-    }
     case CommandKind::setSceneScriptFields:
-    {
-      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
-      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
-      {
-        return *refusal;
-      }
-
-      const auto script = scene->findScript(data.className);
-      if (!script)
-      {
-        return { ValidationFailure::targetMissing, data.sceneUUID };
-      }
-
-      if (script->getFields() != nlohmann::json::parse(data.afterFieldsJSON))
-      {
-        return { ValidationFailure::targetChanged, data.sceneUUID };
-      }
-
-      return {};
-    }
+      return validateSceneScriptUndo(scene);
     default:
       return { ValidationFailure::notUndoable, primaryUUID() };
   }
@@ -1298,77 +1453,10 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
       return {};
     }
     case CommandKind::addSceneScript:
-    {
-      const auto& data = std::get<AddSceneScriptData>(m_data);
-      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
-      {
-        return *refusal;
-      }
-
-      if (scene->findScript(data.className))
-      {
-        return { ValidationFailure::targetChanged, data.sceneUUID };
-      }
-
-      return {};
-    }
     case CommandKind::removeSceneScript:
-    {
-      const auto& data = std::get<RemoveSceneScriptData>(m_data);
-      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
-      {
-        return *refusal;
-      }
-
-      if (!scene->findScript(data.className))
-      {
-        return { ValidationFailure::targetMissing, data.sceneUUID };
-      }
-
-      return {};
-    }
     case CommandKind::reorderSceneScript:
-    {
-      const auto& data = std::get<ReorderSceneScriptData>(m_data);
-      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
-      {
-        return *refusal;
-      }
-
-      const auto index = replication::sceneScriptIndex(*scene, data.className);
-      if (!index.has_value())
-      {
-        return { ValidationFailure::targetMissing, data.sceneUUID };
-      }
-
-      if (index.value() != data.beforeIndex)
-      {
-        return { ValidationFailure::targetChanged, data.sceneUUID };
-      }
-
-      return {};
-    }
     case CommandKind::setSceneScriptFields:
-    {
-      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
-      if (const auto refusal = checkSceneTarget(data.sceneUUID, scene))
-      {
-        return *refusal;
-      }
-
-      const auto script = scene->findScript(data.className);
-      if (!script)
-      {
-        return { ValidationFailure::targetMissing, data.sceneUUID };
-      }
-
-      if (script->getFields() != nlohmann::json::parse(data.beforeFieldsJSON))
-      {
-        return { ValidationFailure::targetChanged, data.sceneUUID };
-      }
-
-      return {};
-    }
+      return validateSceneScriptRedo(scene);
     default:
       return { ValidationFailure::notUndoable, primaryUUID() };
   }
@@ -1440,26 +1528,10 @@ nlohmann::json EditCommand::buildUndoJSON(const ObjectManager& objectManager) co
       return replication::buildRemoveSubtree(data.instanceUUID);
     }
     case CommandKind::addSceneScript:
-    {
-      const auto& data = std::get<AddSceneScriptData>(m_data);
-      return replication::buildRemoveSceneScript(data.className);
-    }
     case CommandKind::removeSceneScript:
-    {
-      const auto& data = std::get<RemoveSceneScriptData>(m_data);
-      const auto fields = nlohmann::json::parse(data.removedScriptJSON).value("fields", nlohmann::json::array());
-      return replication::buildAddSceneScript(data.className, data.index, &fields);
-    }
     case CommandKind::reorderSceneScript:
-    {
-      const auto& data = std::get<ReorderSceneScriptData>(m_data);
-      return replication::buildReorderSceneScript(data.className, data.beforeIndex);
-    }
     case CommandKind::setSceneScriptFields:
-    {
-      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
-      return replication::buildSetSceneScriptFields(data.className, nlohmann::json::parse(data.beforeFieldsJSON));
-    }
+      return buildSceneScriptUndoJSON();
     default:
       throw std::logic_error("EditCommand::buildUndoJSON: not a sceneEdit-form command");
   }
@@ -1534,26 +1606,10 @@ nlohmann::json EditCommand::buildRedoJSON(const ObjectManager& objectManager) co
         : replication::buildInstantiatePrefab(data.prefabUUID, nullptr, &data.instanceUUID);
     }
     case CommandKind::addSceneScript:
-    {
-      const auto& data = std::get<AddSceneScriptData>(m_data);
-      const auto fields = nlohmann::json::parse(data.fieldsJSON);
-      return replication::buildAddSceneScript(data.className, data.index, fields.is_array() ? &fields : nullptr);
-    }
     case CommandKind::removeSceneScript:
-    {
-      const auto& data = std::get<RemoveSceneScriptData>(m_data);
-      return replication::buildRemoveSceneScript(data.className);
-    }
     case CommandKind::reorderSceneScript:
-    {
-      const auto& data = std::get<ReorderSceneScriptData>(m_data);
-      return replication::buildReorderSceneScript(data.className, data.afterIndex);
-    }
     case CommandKind::setSceneScriptFields:
-    {
-      const auto& data = std::get<SetSceneScriptFieldsData>(m_data);
-      return replication::buildSetSceneScriptFields(data.className, nlohmann::json::parse(data.afterFieldsJSON));
-    }
+      return buildSceneScriptRedoJSON();
     default:
       throw std::logic_error("EditCommand::buildRedoJSON: not a sceneEdit-form command");
   }

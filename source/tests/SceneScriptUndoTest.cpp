@@ -149,10 +149,16 @@ TEST(SceneScriptUndoTest, AddWithoutIndexOrFieldsRoundTrips)
 TEST(SceneScriptUndoTest, AddPastTheEndRecordsWhereItLanded)
 {
   Session session;
-  session.edit(replication::buildAddSceneScript("Delta", 50));
+  const auto edit = replication::buildAddSceneScript("Delta", 50);
 
-  const auto undone = session.undo();
-  session.applyPayload(undone);
+  // addScript clamps on redo, so only the recorded command itself shows whether the raw index was kept.
+  const auto command = edits::commandForSceneEdit(edit, session.objects(), nullptr, session.scene.get());
+  ASSERT_TRUE(command.has_value());
+  EXPECT_EQ(*command, edits::EditCommand::addSceneScript(sceneUUID, "Delta", 3, nlohmann::json(nullptr)));
+  EXPECT_NE(*command, edits::EditCommand::addSceneScript(sceneUUID, "Delta", 50, nlohmann::json(nullptr)));
+
+  session.edit(edit);
+  session.applyPayload(session.undo());
   session.applyPayload(session.redo());
 
   EXPECT_EQ(session.scene->getScripts().back()->getClassName(), "Delta");
@@ -475,4 +481,36 @@ TEST(SceneScriptUndoTest, ASceneScriptOpInsideABatchHasNoCommandAndAGroupRefuses
                                                        nullptr, scene.get());
   EXPECT_THROW(history.recordBatch({ removeBeta, removeAlpha }), std::invalid_argument);
   EXPECT_FALSE(history.canUndo());
+}
+
+TEST(SceneScriptUndoTest, ANonArrayFieldsBlobIsRecordedAsAnEmptyArray)
+{
+  Session session;
+  session.scene->findScript("Beta")->setFields(nlohmann::json::object());
+
+  const auto setCommand = edits::commandForSceneEdit(replication::buildSetSceneScriptFields("Beta", gammaFields),
+                                                     session.objects(), nullptr, session.scene.get());
+  ASSERT_TRUE(setCommand.has_value());
+  EXPECT_EQ(*setCommand, edits::EditCommand::setSceneScriptFields(sceneUUID, "Beta", nlohmann::json::array(),
+                                                                  gammaFields));
+
+  // The undo of a removal must be an op the server accepts, so applying it restores the entry.
+  session.edit(replication::buildRemoveSceneScript("Beta"));
+  const auto undone = session.undo();
+  session.applyPayload(undone);
+  ASSERT_TRUE(session.scene->findScript("Beta"));
+  EXPECT_EQ(session.scene->findScript("Beta")->getFields(), nlohmann::json::array());
+}
+
+TEST(SceneScriptUndoTest, AFieldEditThatChangesNothingRecordsNothing)
+{
+  Session session;
+  const auto& objects = session.objects();
+
+  EXPECT_FALSE(edits::commandForSceneEdit(replication::buildSetSceneScriptFields("Alpha", alphaFields), objects,
+                                          nullptr, session.scene.get()).has_value());
+
+  // Positive control: a different blob does record.
+  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildSetSceneScriptFields("Alpha", otherFields), objects,
+                                         nullptr, session.scene.get()).has_value());
 }
