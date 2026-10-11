@@ -158,6 +158,11 @@ namespace {
   struct FakeClock {
     Clock::time_point now{};
 
+    void advance(const Clock::duration by)
+    {
+      now += by;
+    }
+
     [[nodiscard]] sceneScriptPanel::NowFunction function()
     {
       return [this] { return now; };
@@ -204,7 +209,7 @@ TEST(SceneScriptsPanelTest, SentCopyIsNotResentWhilePending)
   tracker.edit("Alpha", fieldsV1);
   ASSERT_EQ(tracker.poll(lookupOf(fieldsV0), false).size(), 1u);
 
-  clock.now += 100ms;
+  clock.advance(100ms);
   EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), false).empty());
   EXPECT_NE(tracker.shown("Alpha"), nullptr);
 }
@@ -228,11 +233,11 @@ TEST(SceneScriptsPanelTest, CopyIsDroppedWhenTheTimeoutPasses)
   tracker.edit("Alpha", fieldsV1);
   ASSERT_EQ(tracker.poll(lookupOf(fieldsV0), false).size(), 1u);
 
-  clock.now += 499ms;
+  clock.advance(499ms);
   EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), false).empty());
   EXPECT_NE(tracker.shown("Alpha"), nullptr);
 
-  clock.now += 1ms;
+  clock.advance(1ms);
   EXPECT_TRUE(tracker.poll(lookupOf(fieldsV0), false).empty());
   EXPECT_EQ(tracker.shown("Alpha"), nullptr);
 }
@@ -309,9 +314,9 @@ TEST(SceneScriptsPanelTest, StructuralGateReleasesOnTimeoutAndOnClear)
   const Names order = { "Alpha" };
 
   gate.begin(order);
-  clock.now += 499ms;
+  clock.advance(499ms);
   EXPECT_TRUE(gate.blocked(order));
-  clock.now += 1ms;
+  clock.advance(1ms);
   EXPECT_FALSE(gate.blocked(order));
 
   gate.begin(order);

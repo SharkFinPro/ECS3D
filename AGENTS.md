@@ -700,7 +700,10 @@ server applies edits in the order sent and an edit sent just after Start belongs
 matched to statuses in order, so a stale one cannot confirm a later request. The reported status is
 followed only for a start/stop made elsewhere. A pause/resume leaves the scene, and so the history, as it is.
 
-The `SceneScriptsPanel` is what sends the scene-script ops. It edits a panel-owned copy of a script's fields while a widget is held and sends one `setSceneScriptFields` afterward, keeping the copy until the echo, so the replicated view holds the "before" state that undo records. A pending gate ignores structural clicks until the list changes, since a duplicate would record a duplicate undo entry.
+The `SceneScriptsPanel` is what sends the scene-script ops. While a widget is held it edits a panel-owned
+copy of a script's fields, then sends one `setSceneScriptFields`. It keeps the copy until the echo arrives,
+so the replicated view still holds the "before" state that undo records. A pending gate ignores structural
+clicks until the list changes, since a duplicate would record a duplicate undo entry.
 
 A history entry can also group several commands (`EditHistory::recordBatch`), sent and undone/redone as
 one unit - the editor's multi-object delete/duplicate (see the `ECS3DEditorLib` row above) records one of

@@ -25,8 +25,11 @@ namespace sceneScriptPanel {
   {
     std::vector<std::string> classes;
 
-    for (const auto& [uuid, record] : registry.getAssets())
+    for (const auto& entry : registry.getAssets())
     {
+      // A named record rather than a structured binding: clang before 16 cannot capture a binding in a lambda.
+      const auto& record = entry.second;
+
       if (record.type != AssetType::Script || record.className.empty())
       {
         continue;
@@ -42,8 +45,8 @@ namespace sceneScriptPanel {
       }
     }
 
-    std::ranges::sort(classes);
-    classes.erase(std::ranges::unique(classes).begin(), classes.end());
+    std::sort(classes.begin(), classes.end());
+    classes.erase(std::unique(classes.begin(), classes.end()), classes.end());
 
     return classes;
   }
