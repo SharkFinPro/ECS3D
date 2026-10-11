@@ -48,6 +48,7 @@ public class SceneScriptTests : IDisposable
 
     public void Ping()
     {
+      // Intentionally empty: the test only checks that a non-lifecycle method is invokable.
     }
   }
 

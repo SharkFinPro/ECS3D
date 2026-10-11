@@ -460,11 +460,11 @@ A scene can carry scripts of its own (`SceneAsset::getScripts`), written as a `S
 `ScriptBase` under a shared `ScriptInstance` base that holds the lifecycle virtuals, the `after`/`every` timers and
 the `subscribe`/`publish` events. It has no object, so no per-object components and no collision callbacks.
 Its managed instance is keyed by the scene's uuid and class name and created through `attachSceneScript`, which
-refuses a `ScriptBase` type just as `attachScript` refuses a `SceneScript`. Object lookups never return a scene
-script. The `SceneAsset` overloads of `ScriptSystem` drive both kinds in a fixed order: scene scripts start before
+instantiates only a `SceneScript` type, the mirror of `attachScript`, which instantiates only a `ScriptBase`.
+Object lookups return object scripts only. The `SceneAsset` overloads of `ScriptSystem` drive both kinds in a fixed order: scene scripts start before
 object scripts, run `variableUpdate` and `fixedUpdate` before them each tick in list order, and stop after them.
 Scene scripts keep their own attached, started and unresolved bookkeeping and their own orphan sweep, matched by
-component identity. The object sweep never stops one, and a rebuilt entry from `SceneAsset::stop()` gets a
+component identity. The object sweep leaves scene scripts alone, and a rebuilt entry from `SceneAsset::stop()` gets a
 fresh instance. `ServerApp` calls only the scene overloads. A scene script that cannot be instantiated, including a
 class that is not a `SceneScript`, is warned about once and keeps its saved field values.
 A scene script gets its managed `stop()` only if it was started, unlike an object script, which is stopped
