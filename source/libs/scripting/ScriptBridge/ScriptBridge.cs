@@ -17,7 +17,7 @@ public static class Bridge
     private static string _scriptDir = "";
     private static ScriptContext? _ctx;
 
-    private static readonly Dictionary<string, ScriptBase> _instances = new();
+    private static readonly Dictionary<string, ScriptInstance> _instances = new();
     internal static string Key(string uuid, string className) => $"{uuid}_{className}";
 
     // A script that throws once must not take the process down, and must not spam the log every tick
@@ -149,11 +149,7 @@ public static class Bridge
     // bypassing the fault gate, and a throw from that call would fault the wrong script (the caller).
     // A typed instance is still called without the gate; ScriptHandle.tryInvoke is the gated route.
     internal static T? FindScript<T>(string uuid) where T : ScriptBase =>
-        _instances
-            .Where(kvp => !_faulted.Contains(kvp.Key) && kvp.Value.EntityId == uuid)
-            .Select(kvp => kvp.Value)
-            .OfType<T>()
-            .FirstOrDefault();
+        FindObjectScripts(uuid).OfType<T>().FirstOrDefault();
 
     internal static bool TryFindScript<T>(string uuid, out T script) where T : ScriptBase
     {
@@ -165,7 +161,8 @@ public static class Bridge
     internal static bool TryFindScript(string uuid, string className, out ScriptHandle handle)
     {
         var key = Key(uuid, className);
-        if (_faulted.Contains(key) || !_instances.TryGetValue(key, out var instance))
+        if (_faulted.Contains(key) || !_instances.TryGetValue(key, out var found) ||
+            found is not ScriptBase instance || instance.EntityId != uuid)
         {
             handle = null!;
             return false;
@@ -177,7 +174,7 @@ public static class Bridge
 
     // True only while this exact instance is still the one registered under its key and has not faulted,
     // so a handle kept across a detach, a re-attach or a reload reads as dead.
-    internal static bool IsLive(string uuid, string className, ScriptBase instance)
+    internal static bool IsLive(string uuid, string className, ScriptInstance instance)
     {
         var key = Key(uuid, className);
         return !_faulted.Contains(key) &&
@@ -185,7 +182,7 @@ public static class Bridge
                ReferenceEquals(current, instance);
     }
 
-    internal static void AddInstance(string uuid, string className, ScriptBase instance)
+    internal static void AddInstance(string uuid, string className, ScriptInstance instance)
     {
         var key = Key(uuid, className);
         if (_instances.TryGetValue(key, out var previous) && !ReferenceEquals(previous, instance))
@@ -193,7 +190,7 @@ public static class Bridge
             _events.removeOwner(key);
         }
 
-        instance.EntityId = uuid;
+        instance.OwnerId = uuid;
         _instances[key] = instance;
     }
 
@@ -209,7 +206,7 @@ public static class Bridge
     }
 
     // Methods a script may drive from another script by name: public instance methods the target's own
-    // type adds. ScriptBase's lifecycle and event virtuals (and object's members) stay with ScriptSystem,
+    // type adds. The lifecycle and event virtuals (and object's members) stay with ScriptSystem,
     // even when the target overrides them - GetBaseDefinition finds where the slot was first declared.
     private static bool IsInvokableFromScript(MethodInfo method)
     {
@@ -219,7 +216,8 @@ public static class Bridge
         }
 
         var root = method.GetBaseDefinition().DeclaringType;
-        return root != typeof(ScriptBase) && root != typeof(object);
+        return root != typeof(ScriptInstance) && root != typeof(ScriptBase) && root != typeof(SceneScript) &&
+               root != typeof(object);
     }
 
     private static bool AcceptsArgument(Type parameterType, object? argument)
@@ -240,7 +238,7 @@ public static class Bridge
     // Invokes a public method on another script's instance by name, under the target's fault gate: a
     // throw faults the target (not the caller) and returns false. A name that matches no method, or
     // more than one for these arguments, is a caller mistake - warned about, not a fault.
-    internal static bool TryInvokeScript(string uuid, string className, ScriptBase instance, string methodName,
+    internal static bool TryInvokeScript(string uuid, string className, ScriptInstance instance, string methodName,
                                          object?[] args, out object? result)
     {
         result = null;
@@ -282,11 +280,15 @@ public static class Bridge
         }
     }
 
-    internal static IReadOnlyList<ScriptBase> FindScripts(string uuid) =>
+    internal static IReadOnlyList<ScriptBase> FindScripts(string uuid) => FindObjectScripts(uuid).ToList();
+
+    // Scene scripts live in the same table under the scene's uuid, so an object lookup must never see one.
+    private static IEnumerable<ScriptBase> FindObjectScripts(string uuid) =>
         _instances
-            .Where(kvp => !_faulted.Contains(kvp.Key) && kvp.Value.EntityId == uuid)
+            .Where(kvp => !_faulted.Contains(kvp.Key))
             .Select(kvp => kvp.Value)
-            .ToList();
+            .OfType<ScriptBase>()
+            .Where(script => script.EntityId == uuid);
 
     private static string ReadFileSafe(string path)
     {
@@ -355,7 +357,7 @@ public static class Bridge
             }
             catch (Exception ex)
             {
-                ReportReloadCleanupFault(instance.EntityId, instance.GetType().Name, ex);
+                ReportReloadCleanupFault(instance.OwnerId, instance.GetType().Name, ex);
             }
         }
 
@@ -771,20 +773,37 @@ public static class Bridge
         return TryCreateInstance(_ctx?.FindType(className), uuid, className) ? (byte)1 : (byte)0;
     }
 
-    internal static bool TryCreateInstance(Type? type, string uuid, string className)
+    // Same contract as attachScript, for a scene: uuid is the scene's, and only a SceneScript is created.
+    [UnmanagedCallersOnly]
+    public static byte attachSceneScript(IntPtr uuidPtr, IntPtr classNamePtr)
     {
-        if (type is null)
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        return TryCreateSceneInstance(_ctx?.FindType(className), uuid, className) ? (byte)1 : (byte)0;
+    }
+
+    internal static bool TryCreateInstance(Type? type, string uuid, string className) =>
+        TryCreate<ScriptBase>(type, uuid, className, nameof(attachScript));
+
+    internal static bool TryCreateSceneInstance(Type? type, string uuid, string className) =>
+        TryCreate<SceneScript>(type, uuid, className, nameof(attachSceneScript));
+
+    // A type of the other kind is refused without a fault: it is a wrong attachment, not a failing script.
+    private static bool TryCreate<TKind>(Type? type, string uuid, string className, string entryPoint)
+        where TKind : ScriptInstance
+    {
+        if (type is null || !typeof(TKind).IsAssignableFrom(type))
         {
             return false;
         }
 
         // A throwing constructor (Activator.CreateInstance) is the same hazard as a throwing script
         // method, so it goes through the same fault gate even though no instance exists yet.
-        return RunGuarded(uuid, className, nameof(attachScript), () =>
+        return RunGuarded(uuid, className, entryPoint, () =>
         {
-            var instance = (ScriptBase)Activator.CreateInstance(type)!;
-            instance.EntityId = uuid;
-            instance.initComponents();
+            var instance = (TKind)Activator.CreateInstance(type)!;
+            instance.OwnerId = uuid;
+            (instance as ScriptBase)?.initComponents();
             AddInstance(uuid, className, instance);
         });
     }
@@ -911,7 +930,7 @@ internal sealed class ScriptContext : AssemblyLoadContext
         var asm = LoadFromStream(dll);
 
         ScriptTypes = asm.GetTypes()
-            .Where(t => t.IsSubclassOf(typeof(ScriptBase)) && !t.IsAbstract && t.IsPublic)
+            .Where(t => t.IsSubclassOf(typeof(ScriptInstance)) && !t.IsAbstract && t.IsPublic)
             .ToArray();
     }
 }
