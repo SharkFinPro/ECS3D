@@ -3,10 +3,14 @@
 #include "Simplex.h"
 #include "Support.h"
 #include <objects/components/collisions/Collider.h>
+#include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
+#include <utility>
 
 namespace collisions {
   namespace {
@@ -21,30 +25,114 @@ namespace collisions {
     void triangleCase(Simplex& simplex, glm::vec3& direction);
     bool tetrahedronCase(Simplex& simplex, glm::vec3& direction);
 
-    // Two spheres need no GJK at all: the overlap, its depth and its point all fall out of the centers
-    // and the radii. Separate from findSphereContact so the sweep, which only asks whether the pair
-    // touches, does not pay for a contact point it throws away.
-    bool spheresOverlap(Collider& collider, Collider& other)
+    // A sphere is a capsule whose core segment is a single point, so one description serves the
+    // sphere-sphere, sphere-capsule and capsule-capsule pairs, none of which need GJK.
+    struct RoundShape {
+      glm::vec3 start;
+      glm::vec3 end;
+      float radius;
+    };
+
+    bool isRound(const Collider& collider)
     {
-      auto& sphereA = dynamic_cast<SphereCollider&>(collider);
-      auto& sphereB = dynamic_cast<SphereCollider&>(other);
-
-      const auto combinedRadius = sphereA.getRadius() + sphereB.getRadius();
-
-      // Negated rather than written as "< combinedRadius", so it is the same comparison findSphereContact
-      // makes. The two differ on a NaN distance, which a blown-up transform does produce: NaN < r is
-      // false where !(NaN >= r) is true, and the pair would be apart to the sweep while still yielding a
-      // contact to the response.
-      return !(length(other.getPosition() - collider.getPosition()) >= combinedRadius);
+      return collider.getColliderType() == ColliderType::sphereCollider ||
+             collider.getColliderType() == ColliderType::capsuleCollider;
     }
 
-    std::optional<Contact> findSphereContact(Collider& collider, Collider& other)
+    RoundShape roundShapeOf(Collider& collider)
     {
-      auto& sphereA = dynamic_cast<SphereCollider&>(collider);
-      auto& sphereB = dynamic_cast<SphereCollider&>(other);
+      if (collider.getColliderType() == ColliderType::capsuleCollider)
+      {
+        auto& capsule = dynamic_cast<CapsuleCollider&>(collider);
+        const auto [start, end] = capsule.getSegment();
 
-      const auto combinedRadius = sphereA.getRadius() + sphereB.getRadius();
-      const auto delta = other.getPosition() - collider.getPosition();
+        return { start, end, capsule.getRadius() };
+      }
+
+      const auto center = collider.getPosition();
+
+      return { center, center, dynamic_cast<SphereCollider&>(collider).getRadius() };
+    }
+
+    glm::vec3 closestPointOnSegment(const glm::vec3& point, const glm::vec3& start, const glm::vec3& end)
+    {
+      const auto segment = end - start;
+      const float lengthSquared = glm::dot(segment, segment);
+
+      if (!(lengthSquared > 0.0f))
+      {
+        return start;
+      }
+
+      return start + segment * std::clamp(glm::dot(point - start, segment) / lengthSquared, 0.0f, 1.0f);
+    }
+
+    // Closest points between two segments (Ericson, Real-Time Collision Detection, 5.1.9), handling
+    // parallel and zero-length segments.
+    std::pair<glm::vec3, glm::vec3> closestPointsBetweenSegments(const RoundShape& first, const RoundShape& second)
+    {
+      const auto d1 = first.end - first.start;
+      const auto d2 = second.end - second.start;
+      const auto r = first.start - second.start;
+
+      const float a = glm::dot(d1, d1);
+      const float e = glm::dot(d2, d2);
+      const float f = glm::dot(d2, r);
+
+      constexpr float tiny = 1e-12f;
+      float s = 0.0f;
+      float t = 0.0f;
+
+      if (a <= tiny)
+      {
+        t = e > tiny ? std::clamp(f / e, 0.0f, 1.0f) : 0.0f;
+      }
+      else if (e <= tiny)
+      {
+        s = std::clamp(-glm::dot(d1, r) / a, 0.0f, 1.0f);
+      }
+      else
+      {
+        const float c = glm::dot(d1, r);
+        const float b = glm::dot(d1, d2);
+        const float denominator = a * e - b * b;
+
+        if (denominator > 1e-6f * a * e)
+        {
+          s = std::clamp((b * f - c * e) / denominator, 0.0f, 1.0f);
+        }
+
+        t = (b * s + f) / e;
+
+        if (t < 0.0f)
+        {
+          t = 0.0f;
+          s = std::clamp(-c / a, 0.0f, 1.0f);
+        }
+        else if (t > 1.0f)
+        {
+          t = 1.0f;
+          s = std::clamp((b - c) / a, 0.0f, 1.0f);
+        }
+      }
+
+      return { first.start + d1 * s, second.start + d2 * t };
+    }
+
+    // Negated rather than written as "< combinedRadius", so the sweep and the response make the same
+    // comparison. The two differ on a NaN distance, which a blown-up transform does produce: NaN < r is
+    // false where !(NaN >= r) is true, and the pair would be apart to the sweep while still yielding a
+    // contact to the response.
+    bool spheresTouch(const glm::vec3& centerA, const float radiusA, const glm::vec3& centerB, const float radiusB)
+    {
+      return !(length(centerB - centerA) >= radiusA + radiusB);
+    }
+
+    std::optional<Contact> findSphereContact(const glm::vec3& centerA, const float radiusA,
+                                             const glm::vec3& centerB, const float radiusB)
+    {
+      const auto combinedRadius = radiusA + radiusB;
+      const auto delta = centerB - centerA;
 
       const float dist = length(delta);
 
@@ -66,9 +154,98 @@ namespace collisions {
       // point sits inside both spheres regardless of how the radii compare, unlike either surface point
       // alone. dist is 0 for the concentric case above, where direction is the arbitrary y axis instead
       // of the (undefined) center line - the formula still produces a finite point on it.
-      const auto contactOffset = (sphereA.getRadius() + dist - sphereB.getRadius()) / 2.0f;
+      const auto contactOffset = (radiusA + dist - radiusB) / 2.0f;
 
-      return Contact{ minimumTranslationVector, collider.getPosition() + direction * contactOffset };
+      return Contact{ minimumTranslationVector, centerA + direction * contactOffset };
+    }
+
+    bool roundShapesOverlap(Collider& collider, Collider& other)
+    {
+      const auto first = roundShapeOf(collider);
+      const auto second = roundShapeOf(other);
+      const auto [pointA, pointB] = closestPointsBetweenSegments(first, second);
+
+      return spheresTouch(pointA, first.radius, pointB, second.radius);
+    }
+
+    // Two segments lying side by side touch along a stretch, not at a point. This is the stretch of the
+    // first segment the second covers, as distances along the first from its start.
+    std::optional<std::pair<float, float>> parallelOverlap(const RoundShape& first, const RoundShape& second)
+    {
+      const auto d1 = first.end - first.start;
+      const auto d2 = second.end - second.start;
+      const float a = glm::dot(d1, d1);
+      const float e = glm::dot(d2, d2);
+      const auto crossed = glm::cross(d1, d2);
+
+      constexpr float parallelSineSquared = 1e-4f;
+      if (!(a > 1e-12f && e > 1e-12f) || glm::dot(crossed, crossed) > parallelSineSquared * a * e)
+      {
+        return std::nullopt;
+      }
+
+      const float firstLength = std::sqrt(a);
+      const auto axis = d1 / firstLength;
+      const float tStart = glm::dot(second.start - first.start, axis);
+      const float tEnd = glm::dot(second.end - first.start, axis);
+
+      const float low = std::max(0.0f, std::min(tStart, tEnd));
+      const float high = std::min(firstLength, std::max(tStart, tEnd));
+
+      if (!(high - low > 1e-4f))
+      {
+        return std::nullopt;
+      }
+
+      return std::make_pair(low, high);
+    }
+
+    // Reports the two ends of the stretch where parallel capsules overlap, so one lying on another is
+    // supported at both and does not see-saw on a single point.
+    void addParallelManifold(Contact& contact, const RoundShape& first, const RoundShape& second)
+    {
+      const auto overlap = parallelOverlap(first, second);
+      if (!overlap)
+      {
+        return;
+      }
+
+      const auto axis = glm::normalize(first.end - first.start);
+
+      std::array<glm::vec3, 2> points{};
+      std::size_t count = 0;
+      for (const float along : { overlap->first, overlap->second })
+      {
+        const auto pointA = first.start + axis * along;
+        const auto pointB = closestPointOnSegment(pointA, second.start, second.end);
+
+        if (const auto endContact = findSphereContact(pointA, first.radius, pointB, second.radius))
+        {
+          points[count++] = endContact->point;
+        }
+      }
+
+      if (count == points.size())
+      {
+        contact.points[0] = points[0];
+        contact.points[1] = points[1];
+        contact.pointCount = 2;
+      }
+    }
+
+    std::optional<Contact> findRoundContact(Collider& collider, Collider& other)
+    {
+      const auto first = roundShapeOf(collider);
+      const auto second = roundShapeOf(other);
+      const auto [pointA, pointB] = closestPointsBetweenSegments(first, second);
+
+      auto contact = findSphereContact(pointA, first.radius, pointB, second.radius);
+      if (contact)
+      {
+        addParallelManifold(*contact, first, second);
+      }
+
+      return contact;
     }
 
     // Leaves the terminating simplex in simplex. False means the pair does not overlap, or that GJK ran
@@ -230,10 +407,9 @@ namespace collisions {
 
   std::optional<Contact> findContact(Collider& collider, Collider& other)
   {
-    if (collider.getColliderType() == ColliderType::sphereCollider &&
-        other.getColliderType() == ColliderType::sphereCollider)
+    if (isRound(collider) && isRound(other))
     {
-      return findSphereContact(collider, other);
+      return findRoundContact(collider, other);
     }
 
     Simplex simplex;
@@ -268,10 +444,9 @@ namespace collisions {
 
   bool intersects(Collider& collider, Collider& other)
   {
-    if (collider.getColliderType() == ColliderType::sphereCollider &&
-        other.getColliderType() == ColliderType::sphereCollider)
+    if (isRound(collider) && isRound(other))
     {
-      return spheresOverlap(collider, other);
+      return roundShapesOverlap(collider, other);
     }
 
     Simplex simplex;
