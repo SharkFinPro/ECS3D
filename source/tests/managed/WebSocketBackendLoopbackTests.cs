@@ -62,9 +62,22 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   private sealed class RawPeer : IDisposable
   {
     private readonly ClientWebSocket _socket = new();
-    private readonly HttpMessageInvoker _invoker;
+    private HttpMessageInvoker? _invoker;
 
     public RawPeer(int port, byte role, string token, int? receiveBufferBytes, bool sendHandshake)
+    {
+      try
+      {
+        Connect(port, role, token, receiveBufferBytes, sendHandshake);
+      }
+      catch
+      {
+        Dispose();
+        throw;
+      }
+    }
+
+    private void Connect(int port, byte role, string token, int? receiveBufferBytes, bool sendHandshake)
     {
       _invoker = new HttpMessageInvoker(new SocketsHttpHandler
       {
@@ -132,7 +145,7 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     {
       try { _socket.Abort(); } catch { /* ignore */ }
       try { _socket.Dispose(); } catch { /* ignore */ }
-      try { _invoker.Dispose(); } catch { /* ignore */ }
+      try { _invoker?.Dispose(); } catch { /* ignore */ }
     }
   }
 
@@ -516,6 +529,10 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     TransportRecorder.ServerBroadcast(serverB, 21, new byte[] { 3 });
     WaitFor(() => TransportRecorder.ClientReceived.Count == 1, "the replacement connection to receive");
     Assert.Equal(21, TransportRecorder.ClientReceived.Single().Type);
+
+    // The old loop's compare-and-swap must have left the replacement installed for sends too.
+    TransportRecorder.ClientSend(client, 22, new byte[] { 4 });
+    WaitFor(() => TransportRecorder.ServerReceived.Any(m => m.Type == 22), "the second server to receive the client's send");
 
     // The real loss still gets reported, once, for the replacement.
     client.ClientReceiveLoopExiting = null;

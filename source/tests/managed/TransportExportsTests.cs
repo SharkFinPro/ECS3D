@@ -51,7 +51,7 @@ public sealed unsafe class TransportExportsTests : IDisposable
 
   private static int FreePort()
   {
-    var listener = new TcpListener(IPAddress.Loopback, 0);
+    var listener = new TcpListener(IPAddress.Any, 0);
     listener.Start();
     var port = ((IPEndPoint)listener.LocalEndpoint).Port;
     listener.Stop();
@@ -85,8 +85,8 @@ public sealed unsafe class TransportExportsTests : IDisposable
     delegate* unmanaged<void> clientDisconnect = &Transport.clientDisconnect;
     delegate* unmanaged<byte, IntPtr, int, void> clientSend = &Transport.clientSend;
 
-    // The probed port could be taken before the bind, and an exception cannot cross an export, so the
-    // window is kept as small as the API allows by probing immediately before the call.
+    // Probed on Any because the backend binds Any, and a bind failure inside the export is fatal to the
+    // test host (it cannot be retried), so the window is kept small by probing right before the call.
     var port = FreePort();
     var serverToken = Marshal.StringToCoTaskMemUTF8("secret");
     var clientToken = Marshal.StringToCoTaskMemUTF8("");
