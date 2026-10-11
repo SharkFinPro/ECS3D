@@ -5,6 +5,9 @@
 #include <chrono>
 #include <optional>
 
+static_assert(keyHoldInitialDelay == std::chrono::milliseconds{400});
+static_assert(keyHoldRepeatInterval == std::chrono::milliseconds{125});
+
 namespace {
   using std::chrono::milliseconds;
 
@@ -35,7 +38,7 @@ TEST_F(KeyHoldRepeatTest, IsInactiveUntilStarted)
   EXPECT_TRUE(m_hold.active());
 }
 
-TEST_F(KeyHoldRepeatTest, DefaultConstructorUsesTheNamedTimings)
+TEST_F(KeyHoldRepeatTest, TimingsFromTheNamedConstantsApplyToTheHold)
 {
   KeyHoldRepeat hold{keyHoldInitialDelay, keyHoldRepeatInterval, [this] { return m_now; }};
   hold.start(keyZ, EditorAction::undo);
@@ -51,11 +54,6 @@ TEST_F(KeyHoldRepeatTest, DefaultConstructorUsesTheNamedTimings)
 
   advance(milliseconds(1));
   EXPECT_TRUE(hold.poll().has_value());
-
-  KeyHoldRepeat defaults;
-  EXPECT_FALSE(defaults.active());
-  defaults.start(keyZ, EditorAction::undo);
-  EXPECT_TRUE(defaults.active());
 }
 
 TEST_F(KeyHoldRepeatTest, FirstRepeatIsDueExactlyAtTheInitialDelay)

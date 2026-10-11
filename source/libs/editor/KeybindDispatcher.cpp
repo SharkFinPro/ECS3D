@@ -86,6 +86,11 @@ void KeybindDispatcher::update()
   }
 }
 
+void KeybindDispatcher::stopRepeat()
+{
+  m_hold.stop();
+}
+
 void KeybindDispatcher::beginCapture(CaptureCallback callback)
 {
   m_hold.stop();
@@ -152,12 +157,13 @@ void KeybindDispatcher::registerWindowEvents()
 
       if (const auto it = m_handlers.find(*action); it != m_handlers.end() && it->second)
       {
-        it->second();
-
+        // Started first so a handler's stopRepeat() or beginCapture() wins.
         if (m_repeatingActions.contains(*action))
         {
           m_hold.start(e.key, *action);
         }
+
+        it->second();
       }
     });
 }

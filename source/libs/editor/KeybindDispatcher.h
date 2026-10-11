@@ -47,6 +47,9 @@ public:
   // Call once per frame: fires the held action's repeats.
   void update();
 
+  // A handler calls this when its action has nothing left to do, so a held chord stops repeating.
+  void stopRepeat();
+
 private:
   std::shared_ptr<vke::VulkanEngine> m_renderer;
   std::shared_ptr<KeybindTable> m_table;
