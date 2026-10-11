@@ -210,12 +210,6 @@ void EditorApp::displayPlayControls()
   const auto available = playControlsAvailability(m_sceneStatus, m_serverEditable);
 
   ImGui::BeginDisabled(!available.play);
-  if (available.play)
-  {
-    ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
-  }
   if (gc::iconButton("##play", gc::SecIcon::play, available.play))
   {
     if (m_playHistory.requestStart())
@@ -224,10 +218,6 @@ void EditorApp::displayPlayControls()
     }
 
     sendSceneControl(net::SceneControlOp::start);
-  }
-  if (available.play)
-  {
-    ImGui::PopStyleColor(3);
   }
   playControlTooltip(playControlLabel(m_sceneStatus));
   ImGui::EndDisabled();

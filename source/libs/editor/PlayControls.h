@@ -19,11 +19,17 @@ struct PlayControlsAvailability
     return {};
   }
 
-  return {
-    .play = status != SceneStatus::running,
-    .pause = status == SceneStatus::running,
-    .stop = status != SceneStatus::stopped
-  };
+  switch (status)
+  {
+    case SceneStatus::stopped:
+      return {.play = true, .pause = false, .stop = false};
+    case SceneStatus::running:
+      return {.play = false, .pause = true, .stop = true};
+    case SceneStatus::paused:
+      return {.play = true, .pause = false, .stop = true};
+  }
+
+  return {};
 }
 
 [[nodiscard]] constexpr const char* playControlLabel(const SceneStatus status) noexcept
