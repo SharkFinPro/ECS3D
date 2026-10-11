@@ -111,7 +111,7 @@ namespace {
                                           : theme::t3;
   }
 
-  // The Move/Rotate/Scale mode buttons: the active mode is styled like the mockup's accent play button.
+  // The Move/Rotate/Scale mode buttons: the active mode is drawn with the accent fill.
   // Named `viewportGizmo` rather than `gizmo` so it doesn't shadow the `gizmo::` namespace below.
   void displayGizmoModeButtons(ViewportGizmo& viewportGizmo)
   {
@@ -200,7 +200,7 @@ void EditorApp::displayPlayControls()
 {
   const auto available = playControlsAvailability(m_sceneStatus, m_serverEditable);
 
-  if (gc::iconButton("##play", gc::SecIcon::play, available.play, true))
+  if (gc::iconButton("##play", gc::SecIcon::play, available.play, theme::sceneGreen))
   {
     if (m_playHistory.requestStart())
     {
@@ -211,13 +211,13 @@ void EditorApp::displayPlayControls()
   }
 
   ImGui::SameLine();
-  if (gc::iconButton("##pause", gc::SecIcon::pause, available.pause, false))
+  if (gc::iconButton("##pause", gc::SecIcon::pause, available.pause, theme::scriptAmber))
   {
     sendSceneControl(net::SceneControlOp::pause);
   }
 
   ImGui::SameLine();
-  if (gc::iconButton("##stop", gc::SecIcon::stop, available.stop, false))
+  if (gc::iconButton("##stop", gc::SecIcon::stop, available.stop, theme::danger))
   {
     if (m_playHistory.requestStop())
     {

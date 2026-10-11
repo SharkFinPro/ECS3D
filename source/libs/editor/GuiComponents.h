@@ -525,36 +525,29 @@ namespace gc {
     return clicked;
   }
 
-  // A fixed-size (frame height square) icon button for the Scene Status toolbar. A disabled button gets
-  // a recessed well and a muted icon, since ImGui's disabled alpha alone is too subtle to read at a glance.
-  inline bool iconButton(const char* id, const SecIcon icon, const bool enabled, const bool accent)
+  inline ImVec4 lightenToward(const ImVec4& c, const float amount)
+  {
+    return ImVec4(c.x + (1.0f - c.x) * amount, c.y + (1.0f - c.y) * amount, c.z + (1.0f - c.z) * amount, c.w);
+  }
+
+  // A fixed-size (frame height square) icon button for the Scene Status toolbar, filled with `fill` when
+  // enabled. A disabled button gets a recessed well and a muted icon, since ImGui's disabled alpha alone
+  // is too subtle to read at a glance.
+  inline bool iconButton(const char* id, const SecIcon icon, const bool enabled, const ImVec4& fill)
   {
     const float s = ImGui::GetFrameHeight();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
 
     ImGui::BeginDisabled(!enabled);
 
-    int pushedColors = 0;
-    if (!enabled)
-    {
-      ImGui::PushStyleColor(ImGuiCol_Button, theme::inset);
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::inset);
-      ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::inset);
-      pushedColors = 3;
-    }
-    else if (accent)
-    {
-      ImGui::PushStyleColor(ImGuiCol_Button, theme::accent);
-      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::v4(60, 200, 224));
-      ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::v4(60, 200, 224));
-      pushedColors = 3;
-    }
+    ImGui::PushStyleColor(ImGuiCol_Button, enabled ? fill : theme::inset);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, enabled ? lightenToward(fill, 0.2f) : theme::inset);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, enabled ? lightenToward(fill, 0.1f) : theme::inset);
     const bool clicked = ImGui::Button(id, ImVec2(s, s));
-    ImGui::PopStyleColor(pushedColors);
+    ImGui::PopStyleColor(3);
 
-    const ImVec4& iconCol = !enabled ? theme::t3 : accent ? theme::onAcc : theme::t1;
     drawSecIcon(ImGui::GetWindowDrawList(), ImVec2(pos.x + s * 0.5f, pos.y + s * 0.5f), s * 0.55f, icon,
-                ImGui::GetColorU32(iconCol));
+                ImGui::GetColorU32(enabled ? theme::inset : theme::t3));
 
     ImGui::EndDisabled();
 
