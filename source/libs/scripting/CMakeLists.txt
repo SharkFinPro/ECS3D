@@ -14,6 +14,7 @@ add_library(${PROJECT_NAME}
   UnresolvedScripts.h
   ScriptFieldEdit.cpp
   ScriptFieldEdit.h
+  SceneObjectDiff.h
   bindings/BindingContext.cpp
   bindings/BindingContext.h
   bindings/BindingCoverage.h

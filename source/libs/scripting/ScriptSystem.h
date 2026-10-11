@@ -28,6 +28,18 @@ enum class CollisionEvent {
   exit = 2
 };
 
+// Which SceneScript virtual a dispatched scene event maps to. The integer values are the wire contract with
+// ScriptBridge.Bridge.onSceneEvent (0 = onSceneLoaded, 1 = onSceneUnloading, 2 = onObjectSpawned,
+// 3 = onObjectDestroyed, 4 = onPlayerJoined, 5 = onPlayerLeft) - keep them in sync.
+enum class SceneEvent {
+  loaded = 0,
+  unloading = 1,
+  objectSpawned = 2,
+  objectDestroyed = 3,
+  playerJoined = 4,
+  playerLeft = 5
+};
+
 // Drives the live C# script instances on the server. Owns the ScriptRuntime (the ScriptBridge ABI)
 // and tracks which (uuid, class) pairs are attached, the exposed-field cache, and the hot-reload
 // file snapshot. Each Script data component carries only a field blob; ScriptSystem syncs that blob
@@ -88,6 +100,15 @@ public:
                               const uuids::uuid& objectA,
                               const uuids::uuid& objectB,
                               CollisionEvent event) const;
+
+  // Deliver one scene-wide event to every attached and started scene script of `scene`, in list order.
+  // `object` names the spawned or destroyed object and `slot` the player for the events that carry one;
+  // the other is passed to the script as empty / -1. Does nothing when no scene script has been started.
+  // start(scene) delivers `loaded` and stop(scene) delivers `unloading` itself.
+  void dispatchSceneEvent(SceneAsset& scene,
+                          SceneEvent event,
+                          const uuids::uuid* object = nullptr,
+                          int slot = -1) const;
 
   // Attach any scripts that haven't been attached yet, without running start()/fixedUpdate on them.
   // Instances whose component has left the scene are stopped and detached first, so this does run

@@ -8,6 +8,7 @@
 #include <objects/components/Component.h>
 #include <objects/Object.h>
 #include <ScriptSystem.h>
+#include <SceneObjectDiff.h>
 #include <bindings/BindingContext.h>
 #include <NetServer.h>
 #include <Log.h>
@@ -107,12 +108,26 @@ void ServerApp::broadcastStructuralChanges() const
   // frame still has to admit its pending objects into the scene, and flushing additions before deletions
   // means an object spawned then destroyed in the same frame's script passes is a real member of the list
   // by the time the delete pass looks for it.
+  std::vector<uuids::uuid> spawnedUUIDs;
   if (const auto scene = m_sceneManager->getCurrentScene())
   {
     const auto objectManager = scene->getObjectManager();
     objectManager->flushPendingAdditions();
     objectManager->deleteObjectsMarkedForDeletion();
+
+    // An object spawned and destroyed in the same pass is gone by now and is not reported as spawned.
+    for (const auto& uuid : sceneObjectDiff::flattenSubtrees(spawned))
+    {
+      if (objectManager->getObjectByUUID(uuid))
+      {
+        spawnedUUIDs.push_back(uuid);
+      }
+    }
   }
+
+  // Handlers run here can spawn or destroy too; those land in the buffers for the next call rather than
+  // recursing.
+  notifyObjectEvents(spawnedUUIDs, destroyed);
 
   // A script's addComponent/removeComponent (ComponentOpsBindings) already applied to each object listed
   // here - unlike spawn/destroy there is nothing further to apply locally - but the change isn't covered

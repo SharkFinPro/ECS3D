@@ -75,7 +75,7 @@ void ServerApp::startScriptsLogged(SceneAsset& scene) const
 {
   try
   {
-    m_scriptSystem->start(scene);
+    startSceneScripts(scene);
   }
   catch (const std::exception& e)
   {
@@ -93,6 +93,8 @@ void ServerApp::stopScriptsLogged(SceneAsset& scene) const
   {
     Log::error(LogCategory::server, e.what());
   }
+
+  discardScriptBuffers();
 }
 
 void ServerApp::loadScene(const std::string& sceneUUID) const
@@ -112,14 +114,7 @@ void ServerApp::loadScene(const std::string& sceneUUID) const
   // Stop the outgoing scene's scripts before switching the active scene.
   if (const auto current = m_sceneManager->getCurrentScene())
   {
-    try
-    {
-      m_scriptSystem->stop(*current);
-    }
-    catch (const std::exception& e)
-    {
-      Log::error(LogCategory::server, e.what());
-    }
+    stopScriptsLogged(*current);
   }
 
   m_sceneManager->loadScene(scene);

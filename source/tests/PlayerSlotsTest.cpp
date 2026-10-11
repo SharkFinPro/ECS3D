@@ -233,3 +233,21 @@ TEST(PlayerSlotsInScene, OmitsSlotsNoConnectionCouldBeBoundTo)
 
   EXPECT_EQ(playerSlotsInScene(*scene.objectManager), (std::vector<int32_t>{ 2, maxPlayerSlot }));
 }
+
+TEST(PlayerSlotTable, HeldSlotsListsEveryBoundSlotAscending)
+{
+  PlayerSlotTable table;
+  EXPECT_TRUE(table.heldSlots().empty());
+
+  // Connection ids descend while slots ascend, so hash-table order has no reason to come out sorted.
+  for (int32_t connId = 90; connId >= 10; connId -= 10)
+  {
+    table.assign(connId);
+  }
+
+  EXPECT_EQ(table.heldSlots(), (std::vector<int32_t>{ 0, 1, 2, 3, 4, 5, 6, 7, 8 }));
+
+  table.release(50);
+  table.request(10, 20);
+  EXPECT_EQ(table.heldSlots(), (std::vector<int32_t>{ 0, 1, 2, 3, 5, 6, 7, 20 }));
+}

@@ -927,6 +927,40 @@ public static class Bridge
             }
         });
     }
+
+    // eventType matches SceneEvent in ScriptSystem.h: 0 = loaded, 1 = unloading, 2 = objectSpawned,
+    // 3 = objectDestroyed, 4 = playerJoined, 5 = playerLeft.
+    [UnmanagedCallersOnly]
+    public static void onSceneEvent(IntPtr uuidPtr, IntPtr classNamePtr, int eventType, IntPtr objectUuidPtr,
+                                    int slot)
+    {
+        DeliverSceneEvent(Marshal.PtrToStringUTF8(uuidPtr)!, Marshal.PtrToStringUTF8(classNamePtr)!, eventType,
+                          Marshal.PtrToStringUTF8(objectUuidPtr)!, slot);
+    }
+
+    // Scene events exist only on SceneScript; an object script under the key ignores them, as does an
+    // unknown event code.
+    internal static void DeliverSceneEvent(string uuid, string className, int eventType, string objectUuid,
+                                           int slot)
+    {
+        if (!_instances.TryGetValue(Key(uuid, className), out var found) || found is not SceneScript instance)
+        {
+            return;
+        }
+
+        RunGuarded(uuid, className, "onSceneEvent", () =>
+        {
+            switch (eventType)
+            {
+                case 0: instance.onSceneLoaded(); break;
+                case 1: instance.onSceneUnloading(); break;
+                case 2: instance.onObjectSpawned(objectUuid); break;
+                case 3: instance.onObjectDestroyed(objectUuid); break;
+                case 4: instance.onPlayerJoined(slot); break;
+                case 5: instance.onPlayerLeft(slot); break;
+            }
+        });
+    }
 }
 
 internal sealed class ScriptContext : AssemblyLoadContext

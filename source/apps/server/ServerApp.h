@@ -9,6 +9,8 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
+#include <uuid.h>
 
 class ManagedHost;
 class ComponentRegistry;
@@ -123,9 +125,29 @@ private:
 
   void handleSceneEdit(const net::Message& message) const;
 
+  // Hands a just-applied setSceneScriptFields edit to the running instance; any other edit does nothing.
+  void pushSceneScriptFields(const SceneAsset& scene, const nlohmann::json& edit) const;
+
   void handleLoadProject(const net::Message& message) const;
 
   void finishProjectLoad() const;
+
+  // Scripts are live from the scene's start until its stop, paused included.
+  [[nodiscard]] bool scriptsLive() const;
+
+  // Starts the scene's scripts, then tells its scene scripts about every player already bound.
+  void startSceneScripts(SceneAsset& scene) const;
+
+  // Drops what script code buffered for replication, for a stop where the objects it names are replaced.
+  static void discardScriptBuffers();
+
+  void notifyPlayerJoined(int32_t slot) const;
+
+  void notifyPlayerLeft(int32_t slot) const;
+
+  // One event per uuid to the current scene's scene scripts, spawned before destroyed. The caller flushes
+  // what a handler spawned or destroyed.
+  void notifyObjectEvents(const std::vector<uuids::uuid>& spawned, const std::vector<uuids::uuid>& destroyed) const;
 
   void startScriptsLogged(SceneAsset& scene) const;
 

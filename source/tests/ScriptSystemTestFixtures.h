@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -27,10 +28,30 @@
 #include <uuid.h>
 
 namespace scriptSystemFixtures {
+  // One onSceneEvent call. Kept out of RuntimeState::calls so a suite that pins that list exactly is unaffected;
+  // callsBefore is calls.size() at the moment of the event, to order it against the lifecycle calls.
+  struct SceneEventCall {
+    std::string scene;
+    std::string className;
+    int event = 0;
+    std::string object;
+    int slot = 0;
+    std::size_t callsBefore = 0;
+
+    [[nodiscard]] bool operator==(const SceneEventCall& other) const
+    {
+      return scene == other.scene && className == other.className && event == other.event &&
+             object == other.object && slot == other.slot;
+    }
+  };
+
   // Everything the fake runtime was asked to do, in order, plus the values it hands back. Owned by the
   // test so it outlives the runtime ScriptSystem holds.
   struct RuntimeState {
     std::vector<std::string> calls;
+    std::vector<SceneEventCall> sceneEvents;
+    // Runs inside onSceneEvent, standing in for a handler's side effects.
+    std::function<void(const SceneEventCall&)> sceneEventHook;
     std::map<std::string, std::string> exposedByClass;
     std::map<std::string, float> floats;
     std::map<std::string, int> ints;
@@ -114,6 +135,17 @@ namespace scriptSystemFixtures {
     void onCollision(const char* uuid, const char* className, const char* otherUuid, int event) const override
     {
       m_state.calls.push_back(describe("collision", uuid, className) + "|" + otherUuid + "|" + std::to_string(event));
+    }
+
+    void onSceneEvent(const char* sceneUuid, const char* className, int event, const char* objectUuid,
+                      int slot) const override
+    {
+      m_state.sceneEvents.push_back({ sceneUuid, className, event, objectUuid, slot, m_state.calls.size() });
+
+      if (m_state.sceneEventHook)
+      {
+        m_state.sceneEventHook(m_state.sceneEvents.back());
+      }
     }
 
     [[nodiscard]] std::string getExposedFields(const char*, const char* className) const override

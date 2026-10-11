@@ -107,7 +107,7 @@ void ServerApp::startLoadedScene()
     {
       try
       {
-        m_scriptSystem->start(*scene);
+        startSceneScripts(*scene);
       }
       catch (const std::exception& e)
       {
@@ -173,7 +173,14 @@ void ServerApp::run()
     // and its slot is free for the next joiner.
     for (const auto connId : m_netServer->takeDisconnected())
     {
-      handleDisconnect(connId);
+      try
+      {
+        handleDisconnect(connId);
+      }
+      catch (const std::exception& e)
+      {
+        Log::error(LogCategory::server, std::string("Failed to handle disconnect: ") + e.what());
+      }
     }
 
     const auto now = std::chrono::steady_clock::now();
@@ -221,6 +228,73 @@ void ServerApp::run()
 
     // Don't busy-spin a core between ticks.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+}
+
+bool ServerApp::scriptsLive() const
+{
+  return m_sceneManager->getCurrentScene() && m_sceneManager->getSceneStatus() != SceneStatus::stopped;
+}
+
+void ServerApp::startSceneScripts(SceneAsset& scene) const
+{
+  m_scriptSystem->start(scene);
+
+  for (const auto slot : m_playerSlots.heldSlots())
+  {
+    m_scriptSystem->dispatchSceneEvent(scene, SceneEvent::playerJoined, nullptr, slot);
+  }
+
+  broadcastStructuralChanges();
+}
+
+void ServerApp::discardScriptBuffers()
+{
+  // Whatever an unloading handler (or a stopping script) buffered names objects the stop rebuild is about to
+  // replace, so replicating it next tick would describe objects that no longer exist.
+  [[maybe_unused]] const auto spawned = BindingContext::takeSpawned();
+  [[maybe_unused]] const auto destroyed = BindingContext::takeDestroyed();
+  [[maybe_unused]] const auto componentEdits = BindingContext::takeComponentEdits();
+  [[maybe_unused]] const auto componentChanges = BindingContext::takeStructuralComponentChanges();
+}
+
+void ServerApp::notifyPlayerJoined(const int32_t slot) const
+{
+  if (scriptsLive())
+  {
+    m_scriptSystem->dispatchSceneEvent(*m_sceneManager->getCurrentScene(), SceneEvent::playerJoined, nullptr, slot);
+    broadcastStructuralChanges();
+  }
+}
+
+void ServerApp::notifyPlayerLeft(const int32_t slot) const
+{
+  if (scriptsLive())
+  {
+    m_scriptSystem->dispatchSceneEvent(*m_sceneManager->getCurrentScene(), SceneEvent::playerLeft, nullptr, slot);
+    broadcastStructuralChanges();
+  }
+}
+
+// Does not flush: the caller is either broadcastStructuralChanges, where anything a handler buffers is
+// replicated by the next call, or an edit path that flushes itself afterwards.
+void ServerApp::notifyObjectEvents(const std::vector<uuids::uuid>& spawned,
+                                   const std::vector<uuids::uuid>& destroyed) const
+{
+  if (!scriptsLive())
+  {
+    return;
+  }
+
+  const auto scene = m_sceneManager->getCurrentScene();
+  for (const auto& uuid : spawned)
+  {
+    m_scriptSystem->dispatchSceneEvent(*scene, SceneEvent::objectSpawned, &uuid);
+  }
+
+  for (const auto& uuid : destroyed)
+  {
+    m_scriptSystem->dispatchSceneEvent(*scene, SceneEvent::objectDestroyed, &uuid);
   }
 }
 

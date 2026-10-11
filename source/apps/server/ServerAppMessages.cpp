@@ -123,6 +123,7 @@ int32_t ServerApp::assignPlayerSlot(const int32_t connId)
 
   const int32_t slot = m_playerSlots.assign(connId);
   Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
+  notifyPlayerJoined(slot);
   return slot;
 }
 
@@ -167,6 +168,13 @@ void ServerApp::handlePossessSlot(const net::Message& message, const int32_t sen
     }
 
     Log::info(LogCategory::server, "Bound " + connection + " to player slot " + std::to_string(*requested) + ".");
+
+    if (outcome.previousSlot)
+    {
+      notifyPlayerLeft(*outcome.previousSlot);
+    }
+
+    notifyPlayerJoined(*requested);
   }
   else if (outcome.result == PossessResult::held)
   {
@@ -196,6 +204,8 @@ void ServerApp::handleDisconnect(const int32_t connId)
 
   Log::info(LogCategory::server, "Connection " + std::to_string(connId) + " dropped; freed player slot "
     + std::to_string(*slot) + ".");
+
+  notifyPlayerLeft(*slot);
 }
 
 void ServerApp::handleInputState(const net::Message& message, const int32_t senderId)
@@ -291,12 +301,13 @@ void ServerApp::applySceneControl(const net::SceneControlOp op, SceneAsset& scen
 
   if (plan.startScripts)
   {
-    m_scriptSystem->start(scene);
+    startSceneScripts(scene);
   }
 
   if (plan.stopScripts)
   {
     m_scriptSystem->stop(scene);
+    discardScriptBuffers();
   }
 
   if (plan.resetScene)

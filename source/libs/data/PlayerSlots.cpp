@@ -47,6 +47,19 @@ std::optional<int32_t> PlayerSlotTable::slotOf(const int32_t connId) const
   return it->second;
 }
 
+std::vector<int32_t> PlayerSlotTable::heldSlots() const
+{
+  std::vector<int32_t> slots;
+  slots.reserve(m_connectionSlots.size());
+  for (const auto& entry : m_connectionSlots)
+  {
+    slots.push_back(entry.second);
+  }
+
+  std::ranges::sort(slots);
+  return slots;
+}
+
 PossessOutcome PlayerSlotTable::request(const int32_t connId, const int32_t slot)
 {
   if (slot < 0 || slot > maxPlayerSlot)

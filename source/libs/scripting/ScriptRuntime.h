@@ -54,6 +54,13 @@ public:
                            const char* otherUuid,
                            int event) const = 0;
 
+  // event matches SceneEvent in ScriptSystem.h. objectUuid is "" and slot is -1 when the event carries none.
+  virtual void onSceneEvent(const char* sceneUuid,
+                            const char* className,
+                            int event,
+                            const char* objectUuid,
+                            int slot) const = 0;
+
   [[nodiscard]] virtual std::string getExposedFields(const char* uuid,
                                                      const char* className) const = 0;
 
