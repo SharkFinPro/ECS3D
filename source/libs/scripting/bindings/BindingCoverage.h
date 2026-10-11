@@ -32,7 +32,8 @@ constexpr std::array<BindingCoverageEntry, static_cast<size_t>(ComponentType::co
   { ComponentType::SubComponentType_sphereCollider,BindingStatus::bound },        // ColliderBindings
   { ComponentType::script,                         BindingStatus::bound },        // managed-only: World.tryGetScript / ScriptHandle (instances live in ScriptBridge)
   { ComponentType::playerController,               BindingStatus::bound },        // PlayerControllerBindings
-  { ComponentType::camera,                         BindingStatus::bound }         // CameraBindings
+  { ComponentType::camera,                         BindingStatus::bound },        // CameraBindings
+  { ComponentType::SubComponentType_capsuleCollider,BindingStatus::bound }        // ColliderBindings
 }};
 
 // The table is filled positionally: row i must describe ComponentType i, not just appear somewhere in
