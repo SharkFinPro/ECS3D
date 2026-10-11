@@ -4,17 +4,17 @@
 #include <cstdint>
 
 // Collider script bindings: a shape-agnostic query (getShape) plus per-shape accessors, so a script can
-// branch on shape without knowing every concrete type up front, and a new shape (capsule, convex mesh)
-// can append its own group of fn ptrs at the end without reshaping what's here. Mirrors the
+// branch on shape without knowing every concrete type up front, and a new shape (convex mesh) can
+// append its own group of fn ptrs at the end without reshaping what's here. Mirrors the
 // ModelRendererBindings pattern: a C-ABI struct of function pointers, resolved against the server's
 // current ObjectManager via BindingContext.
 //
 // getShape returns a small integer shared with the managed ColliderShape enum: 0 = none (no collider, or
-// an unresolved uuid), 1 = box, 2 = sphere. The common get* accessors (isTrigger/layer/mask) return a
+// an unresolved uuid), 1 = box, 2 = sphere, 3 = capsule. The common get* accessors (isTrigger/layer/mask) return a
 // neutral default when the object has no collider - the same convention as
 // ModelRendererBindings::getShouldRender.
 //
-// The box-only and sphere-only accessors fail safely when the collider is the other shape (or missing):
+// The box-only, sphere-only and capsule-only accessors fail safely when the collider is the other shape (or missing):
 // a getter returns false and leaves its out params untouched, a setter returns false and changes nothing.
 // A setter that returns true but whose underlying component setter can silently ignore its input (a
 // non-finite offset/size/radius, a layer clamped to a value already in effect) only calls
@@ -45,6 +45,13 @@ struct ColliderBindings
   bool(*setSphereRadius)(const char* uuid, float radius);
 
   bool(*has)(const char* uuid);
+
+  bool(*getCapsuleOffset)(const char* uuid, float* x, float* y, float* z);
+  bool(*setCapsuleOffset)(const char* uuid, float x, float y, float z);
+  bool(*getCapsuleRadius)(const char* uuid, float* radius);
+  bool(*setCapsuleRadius)(const char* uuid, float radius);
+  bool(*getCapsuleHeight)(const char* uuid, float* height);
+  bool(*setCapsuleHeight)(const char* uuid, float height);
 };
 
 class ColliderBindingsProvider {
@@ -76,6 +83,14 @@ private:
   static bool bindSetSphereOffset(const char* uuid, float x, float y, float z);
   static bool bindGetSphereRadius(const char* uuid, float* radius);
   static bool bindSetSphereRadius(const char* uuid, float radius);
+
+  // Capsule-only: same fail-safe rule as the box accessors above. Radius and height are the local values.
+  static bool bindGetCapsuleOffset(const char* uuid, float* x, float* y, float* z);
+  static bool bindSetCapsuleOffset(const char* uuid, float x, float y, float z);
+  static bool bindGetCapsuleRadius(const char* uuid, float* radius);
+  static bool bindSetCapsuleRadius(const char* uuid, float radius);
+  static bool bindGetCapsuleHeight(const char* uuid, float* height);
+  static bool bindSetCapsuleHeight(const char* uuid, float height);
 
   // Whether the object identified by uuid currently has a Collider of any shape (backs World.tryGetCollider).
   static bool bindHas(const char* uuid);

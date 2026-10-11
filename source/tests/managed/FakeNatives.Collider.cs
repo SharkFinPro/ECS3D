@@ -118,6 +118,51 @@ internal static unsafe class FakeColliderNatives
   }
 
   [UnmanagedCallersOnly]
+  private static byte ColliderGetCapsuleOffset(IntPtr u, float* x, float* y, float* z)
+  {
+    Rec("Collider.getCapsuleOffset", u);
+    OutVec3("Collider.getCapsuleOffset", x, y, z);
+    return Flag("Collider.getCapsuleOffset.ok");
+  }
+
+  [UnmanagedCallersOnly]
+  private static byte ColliderSetCapsuleOffset(IntPtr u, float x, float y, float z)
+  {
+    Rec("Collider.setCapsuleOffset", u, x, y, z);
+    return Flag("Collider.setCapsuleOffset");
+  }
+
+  [UnmanagedCallersOnly]
+  private static byte ColliderGetCapsuleRadius(IntPtr u, float* r)
+  {
+    Rec("Collider.getCapsuleRadius", u);
+    *r = Get<float>("Collider.getCapsuleRadius");
+    return Flag("Collider.getCapsuleRadius.ok");
+  }
+
+  [UnmanagedCallersOnly]
+  private static byte ColliderSetCapsuleRadius(IntPtr u, float value)
+  {
+    Rec("Collider.setCapsuleRadius", u, value);
+    return Flag("Collider.setCapsuleRadius");
+  }
+
+  [UnmanagedCallersOnly]
+  private static byte ColliderGetCapsuleHeight(IntPtr u, float* h)
+  {
+    Rec("Collider.getCapsuleHeight", u);
+    *h = Get<float>("Collider.getCapsuleHeight");
+    return Flag("Collider.getCapsuleHeight.ok");
+  }
+
+  [UnmanagedCallersOnly]
+  private static byte ColliderSetCapsuleHeight(IntPtr u, float value)
+  {
+    Rec("Collider.setCapsuleHeight", u, value);
+    return Flag("Collider.setCapsuleHeight");
+  }
+
+  [UnmanagedCallersOnly]
   private static byte ColliderHas(IntPtr u)
   {
     Rec("Collider.has", u);
@@ -152,6 +197,18 @@ internal static unsafe class FakeColliderNatives
       (delegate* unmanaged<IntPtr, float*, byte>)&ColliderGetSphereRadius,
     setSphereRadius = (delegate* unmanaged<IntPtr, float, bool>)(void*)
       (delegate* unmanaged<IntPtr, float, byte>)&ColliderSetSphereRadius,
-    has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&ColliderHas
+    has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&ColliderHas,
+    getCapsuleOffset = (delegate* unmanaged<IntPtr, float*, float*, float*, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float*, float*, float*, byte>)&ColliderGetCapsuleOffset,
+    setCapsuleOffset = (delegate* unmanaged<IntPtr, float, float, float, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float, float, float, byte>)&ColliderSetCapsuleOffset,
+    getCapsuleRadius = (delegate* unmanaged<IntPtr, float*, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float*, byte>)&ColliderGetCapsuleRadius,
+    setCapsuleRadius = (delegate* unmanaged<IntPtr, float, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float, byte>)&ColliderSetCapsuleRadius,
+    getCapsuleHeight = (delegate* unmanaged<IntPtr, float*, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float*, byte>)&ColliderGetCapsuleHeight,
+    setCapsuleHeight = (delegate* unmanaged<IntPtr, float, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float, byte>)&ColliderSetCapsuleHeight
   };
 }
