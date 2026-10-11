@@ -3,6 +3,16 @@
 #include "PlayControls.h"
 #include <scenes/SceneManager.h>
 
+TEST(PlayControlsTest, EditorStartsStoppedBeforeTheServerReports)
+{
+  EXPECT_EQ(initialEditorSceneStatus, SceneStatus::stopped);
+
+  const auto a = playControlsAvailability(initialEditorSceneStatus, true);
+  EXPECT_TRUE(a.play);
+  EXPECT_FALSE(a.pause);
+  EXPECT_FALSE(a.stop);
+}
+
 TEST(PlayControlsTest, StoppedAllowsOnlyPlay)
 {
   const auto a = playControlsAvailability(SceneStatus::stopped, true);

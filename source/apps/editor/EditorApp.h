@@ -7,6 +7,7 @@
 #include <edits/HistoryScope.h>
 #include <edits/PlaySessionHistory.h>
 #include <UndoRequestGate.h>
+#include <PlayControls.h>
 #include <scenes/SceneManager.h>
 #include <uuid.h>
 #include <nlohmann/json_fwd.hpp>
@@ -170,7 +171,7 @@ private:
   // true so the common case (the editor's own spawned --edit server) is unaffected if the message lags.
   bool m_serverEditable = true;
 
-  SceneStatus m_sceneStatus = SceneStatus::running;
+  SceneStatus m_sceneStatus = initialEditorSceneStatus;
 
   // The object whose Camera component the viewport looks through ("View" combo in Scene Status), letting
   // the editor see what a client sees. nullopt = the editor's own free-fly camera. Purely local: it's a

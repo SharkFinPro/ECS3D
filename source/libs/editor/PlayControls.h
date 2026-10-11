@@ -3,6 +3,9 @@
 
 #include <scenes/SceneManager.h>
 
+// A loaded scene always starts stopped, so the editor assumes it until the server reports otherwise.
+inline constexpr SceneStatus initialEditorSceneStatus = SceneStatus::stopped;
+
 struct PlayControlsAvailability
 {
   bool play = false;
