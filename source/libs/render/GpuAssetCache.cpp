@@ -88,11 +88,14 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getRenderObject(const uuids::u
   return renderObject;
 }
 
-std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::uuid& ownerUUID, const std::string& modelPath)
+std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::uuid& ownerUUID,
+                                                                   const std::string& modelPath,
+                                                                   const std::size_t part)
 {
-  if (const auto it = m_colliderGizmos.find(ownerUUID); it != m_colliderGizmos.end() && it->second.path == modelPath)
+  if (const auto it = m_colliderGizmos.find(ownerUUID);
+      it != m_colliderGizmos.end() && part < it->second.size() && it->second[part].path == modelPath)
   {
-    return it->second.renderObject;
+    return it->second[part].renderObject;
   }
 
   const auto model = m_gizmoModels.get(modelPath, [this, &modelPath] {
@@ -109,7 +112,12 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::
 
   auto renderObject = m_renderer->getAssetManager()->loadRenderObject(white, white, model);
 
-  m_colliderGizmos[ownerUUID] = { renderObject, modelPath };
+  auto& parts = m_colliderGizmos[ownerUUID];
+  if (parts.size() <= part)
+  {
+    parts.resize(part + 1);
+  }
+  parts[part] = { renderObject, modelPath };
 
   return renderObject;
 }

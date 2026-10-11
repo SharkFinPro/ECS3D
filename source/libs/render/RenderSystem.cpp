@@ -1,6 +1,7 @@
 #include "RenderSystem.h"
 #include "GpuAssetCache.h"
 #include "Billboard.h"
+#include "CapsuleGizmo.h"
 #include "OutlineColors.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
@@ -11,6 +12,7 @@
 #include <objects/components/LightRenderer.h>
 #include <objects/components/Camera.h>
 #include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -50,6 +52,39 @@ namespace {
   constexpr float defaultFreeFlyFovDegrees = 45.0f;
   constexpr float defaultFreeFlyNearPlane = 0.1f;
   constexpr float defaultFreeFlyFarPlane = 1000.0f;
+
+  // A capsule outline is a cylinder between the segment's ends plus a sphere on each end, all in one color so
+  // the outline mask merges them into a single silhouette.
+  void drawCapsuleGizmo(const std::shared_ptr<vke::VulkanEngine>& renderer, GpuAssetCache& assetCache,
+                        const uuids::uuid& uuid, CapsuleCollider& capsule)
+  {
+    const auto [start, end] = capsule.getSegment();
+    const auto layout = layoutCapsuleGizmo(start, end, capsule.getRadius());
+    const auto& renderer3D = renderer->getRenderingManager()->getRenderer3D();
+
+    if (layout.hasCylinder)
+    {
+      if (const auto cylinder = assetCache.getColliderGizmo(uuid, "assets/models/cylinder.glb", 0))
+      {
+        cylinder->setPosition(layout.cylinderPosition);
+        cylinder->setScale(layout.cylinderScale);
+        cylinder->setOrientationEuler(capsule.getRotation());
+
+        renderer3D->renderOutline(cylinder, colliderOutlineColor);
+      }
+    }
+
+    for (std::size_t i = 0; i < layout.capPositions.size(); ++i)
+    {
+      if (const auto cap = assetCache.getColliderGizmo(uuid, "assets/models/sphere_3.glb", i + 1))
+      {
+        cap->setPosition(layout.capPositions[i]);
+        cap->setScale(layout.capScale);
+
+        renderer3D->renderOutline(cap, colliderOutlineColor);
+      }
+    }
+  }
 }
 
 void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCache& assetCache,
@@ -186,6 +221,11 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
 
         renderer->getRenderingManager()->getRenderer3D()->renderOutline(gizmo, colliderOutlineColor);
       }
+    }
+    else if (const auto capsule = object->getComponent<CapsuleCollider>(ComponentType::collider);
+             capsule && capsule->getRenderCollider())
+    {
+      drawCapsuleGizmo(renderer, assetCache, uuid, *capsule);
     }
   }
 
