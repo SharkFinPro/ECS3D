@@ -47,6 +47,7 @@ add_executable(${PROJECT_NAME}
   ConvexHullTest.cpp
   ConvexHullValidationTest.cpp
   ConvexMeshColliderTest.cpp
+  ConvexMeshQueryTest.cpp
   HullVerificationTest.cpp
   NonFiniteValuesTest.cpp
   FiniteRendererValuesTest.cpp
