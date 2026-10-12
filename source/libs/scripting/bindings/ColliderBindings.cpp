@@ -6,6 +6,7 @@
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/Collider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <memory>
 #include <string>
@@ -59,6 +60,11 @@ namespace {
     return std::dynamic_pointer_cast<CapsuleCollider>(find(uuid, outObjectUUID));
   }
 
+  std::shared_ptr<ConvexMeshCollider> findConvexMesh(const char* uuid, uuids::uuid* outObjectUUID = nullptr)
+  {
+    return std::dynamic_pointer_cast<ConvexMeshCollider>(find(uuid, outObjectUUID));
+  }
+
   // Applies a capsule setter and replicates the edit only when the stored value changed: the setters drop
   // non-finite input and clamp negatives, so the requested value says nothing about what was kept.
   template <typename Getter, typename Setter>
@@ -107,7 +113,10 @@ ColliderBindings ColliderBindingsProvider::getBindings()
     .getCapsuleRadius = &bindGetCapsuleRadius,
     .setCapsuleRadius = &bindSetCapsuleRadius,
     .getCapsuleHeight = &bindGetCapsuleHeight,
-    .setCapsuleHeight = &bindSetCapsuleHeight
+    .setCapsuleHeight = &bindSetCapsuleHeight,
+    .getConvexMeshOffset = &bindGetConvexMeshOffset,
+    .setConvexMeshOffset = &bindSetConvexMeshOffset,
+    .getConvexMeshVertexCount = &bindGetConvexMeshVertexCount
   };
 }
 
@@ -429,4 +438,55 @@ bool ColliderBindingsProvider::bindSetCapsuleHeight(const char* uuid, const floa
 bool ColliderBindingsProvider::bindHas(const char* uuid)
 {
   return find(uuid) != nullptr;
+}
+
+bool ColliderBindingsProvider::bindGetConvexMeshOffset(const char* uuid, float* x, float* y, float* z)
+{
+  const auto hull = findConvexMesh(uuid);
+  if (!hull)
+  {
+    return false;
+  }
+
+  const auto offset = hull->getLocalPosition();
+  *x = offset.x;
+  *y = offset.y;
+  *z = offset.z;
+
+  return true;
+}
+
+bool ColliderBindingsProvider::bindSetConvexMeshOffset(const char* uuid, const float x, const float y, const float z)
+{
+  uuids::uuid objectUUID;
+  const auto hull = findConvexMesh(uuid, &objectUUID);
+  if (!hull)
+  {
+    return false;
+  }
+
+  // Same non-finite-is-a-no-op rule as setBoxOffset.
+  const auto before = hull->getLocalPosition();
+  hull->setPosition({ x, y, z });
+  const auto after = hull->getLocalPosition();
+
+  if (after != before)
+  {
+    BindingContext::recordComponentEdit(objectUUID, hull);
+  }
+
+  return true;
+}
+
+bool ColliderBindingsProvider::bindGetConvexMeshVertexCount(const char* uuid, uint32_t* count)
+{
+  const auto hull = findConvexMesh(uuid);
+  if (!hull)
+  {
+    return false;
+  }
+
+  *count = static_cast<uint32_t>(hull->getHull().vertices.size());
+
+  return true;
 }
