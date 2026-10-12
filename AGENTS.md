@@ -618,9 +618,16 @@ On a confirmed switch it resends its input for the new slot and points its View 
 `findPlayerCamera` finds that camera and is shared with `ClientApp`; a player with no `Camera` leaves the view alone.
 The join reply just records the slot, and an unanswered request times out so the combo is not stuck disabled.
 
-**Hull validation.** `ConvexHullValidation.h` holds `isValidConvexHull`, which checks a hull's structure but not its convexity: vertex and index counts within the limits, finite vertices, every index naming a vertex. `makeUnitCubeHull` is the default hull for a collider.
+**Hull validation.** `ConvexHullValidation.h` holds `isValidConvexHull`, which checks a hull's structure but
+not its convexity: vertex and index counts within the limits, finite vertices, every index naming a vertex.
+`makeUnitCubeHull` is the default hull for a collider.
 
-**Convex mesh collider.** The `ConvexMeshCollider` component (`data/objects/components/collisions/`) holds its hull inline, as local-space vertices and triangle indices. The server therefore works without the model the hull came from. Its `sourceModel` field only records where the hull was built. A fresh one is the unit cube and places itself like a `BoxCollider` with the same offsets. Its `setHull`, `loadFromJSON` and `unpack` refuse an invalid hull and change nothing. Before it allocates, `unpack` bounds each count. Narrow phase, scene queries and scripting do not handle it yet.
+**Convex mesh collider.** The `ConvexMeshCollider` component (`data/objects/components/collisions/`) holds its
+hull inline, as local-space vertices and triangle indices. The server therefore works without the model the
+hull came from. Its `sourceModel` field only records where the hull was built. A fresh one is the unit cube
+and places itself like a `BoxCollider` with the same offsets. Its `setHull`, `loadFromJSON` and `unpack`
+refuse an invalid hull and change nothing. Before it allocates, `unpack` bounds each count. Narrow phase,
+scene queries and scripting do not handle it yet.
 
 **Viewport gizmos.** The selected object's translate/rotate/scale gizmo is drawn through the VulkanEngine
 scene overlay hook (`RenderingManager::setSceneOverlay`, one callback per frame into the scene window's own
