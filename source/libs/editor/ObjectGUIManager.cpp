@@ -83,6 +83,10 @@ namespace {
       {
         return gc::SecIcon::collider;
       }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_convexMeshCollider)
+      {
+        return gc::SecIcon::model;
+      }
       return components.contains(ComponentType::rigidBody) ? gc::SecIcon::rigidblock : gc::SecIcon::block;
     }
 

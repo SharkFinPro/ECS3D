@@ -98,6 +98,9 @@ private:
   std::optional<std::string> m_multiPendingSignature;
   std::vector<PendingEdit> m_multiPendingEdits;
 
+  // Set once a per-object apply has failed in the current gesture, so a drag warns once, not every frame.
+  bool m_multiApplyWarned = false;
+
   // A cheap fingerprint of the multi-selection's object uuids (order-preserving), so displayMulti can tell
   // the selection changed and flush whatever gesture was in flight before it attaches to the new one.
   std::optional<std::string> m_multiSelectionKey;

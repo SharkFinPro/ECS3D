@@ -3,6 +3,7 @@
 #include "ComponentEditor.h"
 #include "GuiComponents.h"
 #include "MixedFields.h"
+#include <Log.h>
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <objects/ComponentFieldDelta.h>
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <exception>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -23,13 +25,14 @@ namespace {
   // checkType is the ComponentType whose presence on the object hides this entry.
   // Transform is omitted (every object already has one); scripts attach via drag & drop only.
   struct AddableComponent { const char* label; const char* key; ComponentType checkType; gc::SecIcon icon; };
-  constexpr std::array<AddableComponent, 8> addableComponents {{
+  constexpr std::array<AddableComponent, 9> addableComponents {{
     { "Rigid Body",        "RigidBody",        ComponentType::rigidBody,        gc::SecIcon::rigid    },
     { "Model Renderer",    "ModelRenderer",    ComponentType::modelRenderer,    gc::SecIcon::image    },
     { "Light Renderer",    "LightRenderer",    ComponentType::lightRenderer,    gc::SecIcon::light    },
     { "Box Collider",      "Box",              ComponentType::collider,         gc::SecIcon::collider },
     { "Sphere Collider",   "Sphere",           ComponentType::collider,         gc::SecIcon::sphere   },
     { "Capsule Collider",  "Capsule",          ComponentType::collider,         gc::SecIcon::collider },
+    { "Convex Mesh Collider", "ConvexMesh",    ComponentType::collider,         gc::SecIcon::collider },
     { "Player Controller", "PlayerController", ComponentType::playerController, gc::SecIcon::none     },
     { "Camera",            "Camera",           ComponentType::camera,           gc::SecIcon::none     }
   }};
@@ -54,6 +57,10 @@ namespace {
       if (collider->second->getSubType() == ComponentType::SubComponentType_capsuleCollider)
       {
         return gc::SecIcon::collider;
+      }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_convexMeshCollider)
+      {
+        return gc::SecIcon::model;
       }
       return components.contains(ComponentType::rigidBody) ? gc::SecIcon::rigidblock : gc::SecIcon::block;
     }
@@ -87,6 +94,10 @@ namespace {
       {
         return "Capsule";
       }
+      if (collider->second->getSubType() == ComponentType::SubComponentType_convexMeshCollider)
+      {
+        return "Convex Mesh";
+      }
       return components.contains(ComponentType::rigidBody) ? "Rigid Block" : "Block";
     }
 
@@ -96,6 +107,18 @@ namespace {
     }
 
     return "Object";
+  }
+
+  void restoreAfterFailedApply(const std::shared_ptr<Component>& component, const nlohmann::json& snapshot)
+  {
+    try
+    {
+      component->loadFromJSON(snapshot);
+    }
+    catch (const std::exception& e)
+    {
+      Log::error(LogCategory::editor, std::string("Multi-select edit could not be rolled back: ") + e.what());
+    }
   }
 
   // Stable identity for the pending-removal guard (m_pendingRemovals): the owning object's uuid plus
@@ -443,6 +466,7 @@ void ObjectInspector::displayMultiComponent(const std::vector<std::shared_ptr<Ob
       // object's own pre-edit state as this gesture's "before".
       commitPendingMultiEdit();
       m_multiPendingSignature = signature;
+      m_multiApplyWarned = false;
       m_multiPendingEdits.clear();
       for (std::size_t i = 0; i < objects.size(); ++i)
       {
@@ -454,7 +478,13 @@ void ObjectInspector::displayMultiComponent(const std::vector<std::shared_ptr<Ob
     // a multi-frame drag still resolves to the one field the user is actually moving.
     const auto primaryBefore = nlohmann::json::parse(m_multiPendingEdits.front().before);
     const auto primaryAfter = primary->serialize();
-    const auto changedKeys = componentFieldDelta::changedTopLevelKeys(primaryBefore, primaryAfter);
+    auto primaryChanged = componentFieldDelta::changedTopLevelKeys(primaryBefore, primaryAfter);
+    if (primaryChanged.empty())
+    {
+      // A drop of the hull the primary already holds still means "set the selection to this".
+      primaryChanged = componentFieldDelta::linkedMixedKeys(mixedKeys);
+    }
+    const auto changedKeys = componentFieldDelta::withLinkedKeys(primaryChanged, primaryAfter);
 
     if (m_editCallback)
     {
@@ -467,9 +497,23 @@ void ObjectInspector::displayMultiComponent(const std::vector<std::shared_ptr<Ob
     // through the same path a single-selection edit uses.
     for (std::size_t i = 1; i < objects.size(); ++i)
     {
-      const auto merged = componentFieldDelta::applyKeyDelta(components[i]->serialize(), primaryBefore, primaryAfter,
-                                                             changedKeys);
-      components[i]->loadFromJSON(merged);
+      // Restored on failure because a loader may assign field by field and be left half-changed.
+      const auto snapshot = components[i]->serialize();
+      try
+      {
+        components[i]->loadFromJSON(componentFieldDelta::applyKeyDelta(snapshot, primaryBefore, primaryAfter,
+                                                                       changedKeys));
+      }
+      catch (const std::exception& e)
+      {
+        restoreAfterFailedApply(components[i], snapshot);
+        if (!m_multiApplyWarned)
+        {
+          m_multiApplyWarned = true;
+          Log::warn(LogCategory::editor, std::string("Multi-select edit skipped for an object: ") + e.what());
+        }
+        continue;
+      }
 
       if (m_editCallback)
       {
