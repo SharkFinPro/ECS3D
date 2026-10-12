@@ -19,7 +19,7 @@ namespace {
   constexpr int maxRepairRounds = 4;
 
   // The build is refused once the hull-in-progress has this many faces: it can only shrink back when a later
-  // point swallows vertices, and the caller refuses a hull this large anyway.
+  // point swallows vertices. buildConvexHull reduces from the raw points when this gives up.
   constexpr size_t maxAliveFaces = 4 * (2 * maxConvexHullVertices - 4);
 
   constexpr size_t expansionsPerPoint = 10;
