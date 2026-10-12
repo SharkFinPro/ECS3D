@@ -439,7 +439,8 @@ TEST(ConvexHull, AThinDiscMissedPointsAreRepairedIntoASoundHull)
   {
     const float angle = (random.next() + 1.0f) * std::numbers::pi_v<float>;
     const float side = random.next();
-    points.emplace_back(static_cast<float>(std::cos(angle)), static_cast<float>(std::sin(angle)),
+    const double angleD = static_cast<double>(angle);
+    points.emplace_back(static_cast<float>(std::cos(angleD)), static_cast<float>(std::sin(angleD)),
                         side >= 0.0f ? 1e-4f : -1e-4f);
   }
 
@@ -449,7 +450,7 @@ TEST(ConvexHull, AThinDiscMissedPointsAreRepairedIntoASoundHull)
   expectSound(*hull, points, 1e-4);
 }
 
-TEST(ConvexHull, ASlabBelowFloatResolutionIsRefusedWhereTheSameSlabAtTheOriginBuilds)
+TEST(ConvexHull, ASlabBelowFloatResolutionIsRefusedAsDegenerateWhereTheSameSlabAtTheOriginBuilds)
 {
   Lcg control;
   const auto atOrigin = thinSlab(control, 1e-4f, 0.0f);
@@ -457,7 +458,8 @@ TEST(ConvexHull, ASlabBelowFloatResolutionIsRefusedWhereTheSameSlabAtTheOriginBu
   ASSERT_TRUE(hull.has_value());
   expectSound(*hull, atOrigin, 1e-4);
 
-  // Floats near 10000 are about 1e-3 apart, so the thickness rounds away and the points are coplanar.
+  // Floats near 10000 are about 1e-3 apart, so the thickness rounds away and the points are coplanar: the
+  // initial simplex search refuses it as degenerate, before verification runs.
   Lcg distant;
   EXPECT_FALSE(buildConvexHull(thinSlab(distant, 1e-4f, 10000.0f)).has_value());
 }

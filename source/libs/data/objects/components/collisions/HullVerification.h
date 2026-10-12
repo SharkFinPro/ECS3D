@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <vector>
 
+namespace hull {
 // Reassigning orphans only to the new faces can lose a point that lies outside an older face as well. This hands
 // each such point to the first live face it lies outside of, and returns the live faces, or nothing when no
 // point was missed. Hull vertices are never handed back.
@@ -17,5 +18,6 @@
 // alive faces, normal or not.
 [[nodiscard]] bool isVerifiedHull(const std::vector<HullFace>& faces, size_t aliveFaces,
                                   const std::vector<glm::dvec3>& points, double eps);
+}
 
 #endif //HULLVERIFICATION_H

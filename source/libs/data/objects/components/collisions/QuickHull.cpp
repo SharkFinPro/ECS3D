@@ -1,6 +1,7 @@
 #include "QuickHull.h"
 #include "HullFace.h"
 #include "HullVerification.h"
+#include "InitialSimplex.h"
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
@@ -48,7 +49,7 @@ namespace {
       }
 
       std::array<uint32_t, 4> simplex{};
-      if (!findInitialSimplex(simplex))
+      if (!hull::findInitialSimplex(m_points, m_eps, simplex))
       {
         return std::nullopt;
       }
@@ -62,7 +63,7 @@ namespace {
         settled = processPending();
       }
 
-      if (!settled || !isVerifiedHull(m_faces, m_aliveFaces, m_points, m_eps))
+      if (!settled || !hull::isVerifiedHull(m_faces, m_aliveFaces, m_points, m_eps))
       {
         return std::nullopt;
       }
@@ -74,7 +75,7 @@ namespace {
     std::vector<glm::dvec3> m_points;
     double m_eps = 0.0;
     double m_visibilityNoise = 0.0;
-    std::vector<HullFace> m_faces;
+    std::vector<hull::HullFace> m_faces;
     std::unordered_map<uint64_t, size_t> m_edgeToFace;
     std::vector<size_t> m_pending;
     std::vector<uint32_t> m_visitStamp;
@@ -108,7 +109,7 @@ namespace {
     // True when any point was handed back to a face.
     [[nodiscard]] bool repairMissedPoints()
     {
-      const auto touched = assignMissedPoints(m_faces, m_points, m_eps);
+      const auto touched = hull::assignMissedPoints(m_faces, m_points, m_eps);
       queueFaces(touched);
 
       return !touched.empty();
@@ -134,103 +135,11 @@ namespace {
       return extent > 0.0;
     }
 
-    [[nodiscard]] std::array<uint32_t, 6> findExtremes() const
-    {
-      std::array<uint32_t, 6> extremes{};
-
-      for (uint32_t i = 1; i < m_points.size(); ++i)
-      {
-        for (int axis = 0; axis < 3; ++axis)
-        {
-          if (m_points[i][axis] < m_points[extremes[axis * 2]][axis])
-          {
-            extremes[axis * 2] = i;
-          }
-
-          if (m_points[i][axis] > m_points[extremes[axis * 2 + 1]][axis])
-          {
-            extremes[axis * 2 + 1] = i;
-          }
-        }
-      }
-
-      return extremes;
-    }
-
-    [[nodiscard]] bool findInitialSimplex(std::array<uint32_t, 4>& simplex) const
-    {
-      const auto extremes = findExtremes();
-
-      double bestDistance = -1.0;
-      for (size_t i = 0; i < extremes.size(); ++i)
-      {
-        for (size_t j = i + 1; j < extremes.size(); ++j)
-        {
-          const double distance = glm::distance(m_points[extremes[i]], m_points[extremes[j]]);
-
-          if (distance > bestDistance)
-          {
-            bestDistance = distance;
-            simplex[0] = extremes[i];
-            simplex[1] = extremes[j];
-          }
-        }
-      }
-
-      if (bestDistance <= m_eps)
-      {
-        return false;
-      }
-
-      return findThirdPoint(simplex) && findFourthPoint(simplex);
-    }
-
-    [[nodiscard]] bool findThirdPoint(std::array<uint32_t, 4>& simplex) const
-    {
-      const glm::dvec3 origin = m_points[simplex[0]];
-      const glm::dvec3 direction = glm::normalize(m_points[simplex[1]] - origin);
-
-      double bestDistance = -1.0;
-      for (uint32_t i = 0; i < m_points.size(); ++i)
-      {
-        const double distance = glm::length(glm::cross(m_points[i] - origin, direction));
-
-        if (distance > bestDistance)
-        {
-          bestDistance = distance;
-          simplex[2] = i;
-        }
-      }
-
-      return bestDistance > m_eps;
-    }
-
-    [[nodiscard]] bool findFourthPoint(std::array<uint32_t, 4>& simplex) const
-    {
-      const glm::dvec3 origin = m_points[simplex[0]];
-      const glm::dvec3 normal = glm::normalize(
-        glm::cross(m_points[simplex[1]] - origin, m_points[simplex[2]] - origin));
-
-      double bestDistance = -1.0;
-      for (uint32_t i = 0; i < m_points.size(); ++i)
-      {
-        const double distance = std::abs(glm::dot(normal, m_points[i] - origin));
-
-        if (distance > bestDistance)
-        {
-          bestDistance = distance;
-          simplex[3] = i;
-        }
-      }
-
-      return bestDistance > m_eps;
-    }
-
     // A face too thin to have a normal keeps a zero normal: no point is ever above it, and a build that
     // ends with one is refused.
-    [[nodiscard]] HullFace makeFace(const uint32_t a, const uint32_t b, const uint32_t c) const
+    [[nodiscard]] hull::HullFace makeFace(const uint32_t a, const uint32_t b, const uint32_t c) const
     {
-      HullFace face;
+      hull::HullFace face;
       face.v = { a, b, c };
 
       const glm::dvec3 cross = glm::cross(m_points[b] - m_points[a], m_points[c] - m_points[a]);
@@ -245,13 +154,13 @@ namespace {
       return face;
     }
 
-    [[nodiscard]] size_t pushFace(HullFace face)
+    [[nodiscard]] size_t pushFace(hull::HullFace face)
     {
       const size_t index = m_faces.size();
 
       for (int edge = 0; edge < 3; ++edge)
       {
-        m_edgeToFace[edgeKey(face.v[edge], face.v[(edge + 1) % 3])] = index;
+        m_edgeToFace[hull::edgeKey(face.v[edge], face.v[(edge + 1) % 3])] = index;
       }
 
       m_faces.push_back(std::move(face));
@@ -265,9 +174,9 @@ namespace {
     [[nodiscard]] size_t addInitialFace(const uint32_t a, const uint32_t b, const uint32_t c,
                                         const glm::dvec3& interior)
     {
-      HullFace face = makeFace(a, b, c);
+      hull::HullFace face = makeFace(a, b, c);
 
-      if (distanceTo(face, interior) > 0.0)
+      if (hull::distanceTo(face, interior) > 0.0)
       {
         face = makeFace(a, c, b);
       }
@@ -302,7 +211,7 @@ namespace {
     {
       for (const size_t faceIndex : candidates)
       {
-        if (distanceTo(m_faces[faceIndex], m_points[point]) > m_eps)
+        if (hull::distanceTo(m_faces[faceIndex], m_points[point]) > m_eps)
         {
           m_faces[faceIndex].outside.push_back(point);
           return true;
@@ -323,14 +232,14 @@ namespace {
       }
     }
 
-    [[nodiscard]] uint32_t furthestOutside(const HullFace& face) const
+    [[nodiscard]] uint32_t furthestOutside(const hull::HullFace& face) const
     {
       uint32_t furthest = face.outside.front();
-      double furthestDistance = distanceTo(face, m_points[furthest]);
+      double furthestDistance = hull::distanceTo(face, m_points[furthest]);
 
       for (const uint32_t point : face.outside)
       {
-        if (const double distance = distanceTo(face, m_points[point]); distance > furthestDistance)
+        if (const double distance = hull::distanceTo(face, m_points[point]); distance > furthestDistance)
         {
           furthestDistance = distance;
           furthest = point;
@@ -353,7 +262,7 @@ namespace {
 
         for (int edge = 0; edge < 3; ++edge)
         {
-          const auto neighbor = m_edgeToFace.find(edgeKey(face.v[(edge + 1) % 3], face.v[edge]));
+          const auto neighbor = m_edgeToFace.find(hull::edgeKey(face.v[(edge + 1) % 3], face.v[edge]));
 
           if (neighbor == m_edgeToFace.end() || isVisible(neighbor->second))
           {
@@ -362,7 +271,7 @@ namespace {
 
           // A face the apex is merely within epsilon of must be replaced too, or the cone built on the
           // horizon folds back over it and the hull stops being convex.
-          if (distanceTo(m_faces[neighbor->second], apex) > -m_visibilityNoise)
+          if (hull::distanceTo(m_faces[neighbor->second], apex) > -m_visibilityNoise)
           {
             m_visitStamp[neighbor->second] = m_stamp;
             visible.push_back(neighbor->second);
@@ -390,7 +299,7 @@ namespace {
         {
           const uint32_t from = face.v[edge];
           const uint32_t to = face.v[(edge + 1) % 3];
-          const auto neighbor = m_edgeToFace.find(edgeKey(to, from));
+          const auto neighbor = m_edgeToFace.find(hull::edgeKey(to, from));
 
           if (neighbor == m_edgeToFace.end() || !isVisible(neighbor->second))
           {
@@ -421,7 +330,7 @@ namespace {
 
         for (int edge = 0; edge < 3; ++edge)
         {
-          m_edgeToFace.erase(edgeKey(face.v[edge], face.v[(edge + 1) % 3]));
+          m_edgeToFace.erase(hull::edgeKey(face.v[edge], face.v[(edge + 1) % 3]));
         }
 
         face.alive = false;

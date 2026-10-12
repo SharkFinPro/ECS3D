@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <unordered_set>
 
+namespace hull {
 namespace {
   // Every input point must lie within this many build tolerances of every face plane.
   constexpr double verifyEpsilonFactor = 10.0;
@@ -114,4 +115,5 @@ bool isVerifiedHull(const std::vector<HullFace>& faces, const size_t aliveFaces,
   }
 
   return true;
+}
 }
