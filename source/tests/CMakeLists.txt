@@ -41,6 +41,7 @@ add_executable(${PROJECT_NAME}
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp
+  ConvexHullTest.cpp
   NonFiniteValuesTest.cpp
   FiniteRendererValuesTest.cpp
   EditHistoryRoundTripTest.cpp
