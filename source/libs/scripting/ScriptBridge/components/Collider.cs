@@ -50,7 +50,8 @@ public enum ColliderShape
     None = 0,
     Box = 1,
     Sphere = 2,
-    Capsule = 3
+    Capsule = 3,
+    ConvexMesh = 4
 }
 
 // Reached via World.tryGetCollider like Transform/RigidBody. getShape() names the concrete shape; the
