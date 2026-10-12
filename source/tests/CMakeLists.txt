@@ -62,6 +62,7 @@ add_executable(${PROJECT_NAME}
   PlaySessionHistoryTest.cpp
   RecordEditsTest.cpp
   CollisionMathTest.cpp
+  ContactManifoldTest.cpp
   SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp
   NarrowPhaseRotatedTest.cpp
