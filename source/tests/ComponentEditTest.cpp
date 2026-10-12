@@ -3,6 +3,7 @@
 #include "ConvexMeshFixtures.h"
 #include "TestScene.h"
 #include "Replication.h"
+#include "WireTypes.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
