@@ -73,6 +73,8 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/ConvexHull.h
   objects/components/collisions/ConvexHullValidation.cpp
   objects/components/collisions/ConvexHullValidation.h
+  objects/components/collisions/ConvexMeshCollider.cpp
+  objects/components/collisions/ConvexMeshCollider.h
   objects/components/collisions/HullFace.h
   objects/components/collisions/HullVerification.cpp
   objects/components/collisions/HullVerification.h

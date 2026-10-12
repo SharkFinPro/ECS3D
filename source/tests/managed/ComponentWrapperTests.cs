@@ -253,6 +253,15 @@ public class ComponentWrapperTests : IDisposable
   }
 
   [Fact]
+  public void Collider_ConvexMeshShapeIsNamed()
+  {
+    var collider = new Collider(Id);
+    FakeNatives.Set("Collider.getShape", 4);
+
+    Assert.Equal(ColliderShape.ConvexMesh, collider.getShape());
+  }
+
+  [Fact]
   public void Collider_SettersSendValueAndReturnNativeResult()
   {
     var collider = new Collider(Id);
