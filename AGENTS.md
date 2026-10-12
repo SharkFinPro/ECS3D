@@ -575,7 +575,11 @@ keeps behaving exactly as before.
 plain vertex spans. Each shape's touching feature is the vertices within a tolerance of the extreme one along
 the contact normal. The side with more points is the reference polygon; the other side is ordered into a
 polygon, clipped to the reference's edge planes (Sutherland-Hodgman) and projected onto its plane. Features
-with no area reduce to one point midway between their closest points. Nothing calls it yet.
+with no area reduce to one point midway between their closest points.
+A pair holding a convex mesh collider, other than with a sphere, takes its manifold from this clipping in
+`Polytope`, at most `Contact::points` wide. A capsule in such a pair contributes its cap points as its
+feature. `PhysicsSystem` skips the box-axis flush snap when a hull is in the pair, since a hull has no box
+faces to lie flush against.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.
