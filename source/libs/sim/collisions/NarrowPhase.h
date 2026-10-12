@@ -23,8 +23,9 @@ namespace collisions {
     // A point on the overlap, in world space.
     glm::vec3 point;
 
-    // Up to four points spanning the overlap on a box pair, so a resting body can be supported across its
-    // footprint. pointCount is zero when only point applies.
+    // Up to four points spanning the overlap on a box pair, or two on a capsule lying along its support or
+    // another capsule, so a resting body can be supported across its footprint. pointCount is zero when only
+    // point applies.
     std::array<glm::vec3, 4> points{};
     std::uint8_t pointCount = 0;
 
