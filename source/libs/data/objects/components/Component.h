@@ -3,6 +3,7 @@
 
 #include <nlohmann/json_fwd.hpp>
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -13,6 +14,14 @@ namespace net {
 }
 
 class Object;
+
+// Thrown by a component's unpack when it refuses a payload before changing anything (a count over its
+// limit, a shape that fails validation). applyComponentEdit reports it as malformed; any other exception
+// from unpack is taken to have left the component partly written.
+class RefusedPayload : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
 
 // uint8_t: this is the packed discriminator every component writes first on the wire (see
 // getPackedType() below) - pinning the width keeps it at one byte instead of inheriting int's four.
