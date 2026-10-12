@@ -17,6 +17,8 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/CapsuleCollider.h"
+#include "objects/components/collisions/ConvexHull.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
@@ -210,6 +212,14 @@ namespace wiretest {
     const auto lamp = std::make_shared<Object>("Lamp");
     main->getObjectManager()->addObject(lamp);
     lamp->addComponent(std::make_shared<LightRenderer>());
+
+    const auto rock = std::make_shared<Object>("Rock");
+    main->getObjectManager()->addObject(rock);
+    const auto hull = std::make_shared<ConvexMeshCollider>();
+    const std::vector<glm::vec3> hullPoints{ { -1, -1, -1 }, { 1, -1, -1 }, { 0, -1, 1 }, { 0, 1, 0 } };
+    static_cast<void>(hull->setHull(*buildConvexHull(hullPoints)));
+    hull->setSourceModel(uuidFrom("11111111-1111-1111-1111-111111111111"));
+    rock->addComponent(hull);
 
     addScene(project, "77777777-7777-7777-7777-777777777777", "Empty");
     project.sceneManager->loadScene(main);
