@@ -603,7 +603,7 @@ namespace {
 
   // The registry key a component blob's own "type"/"subType" identify - the same resolution
   // Object::loadFromJSON uses to turn a serialized blob back into a registry lookup (a Collider blob
-  // carries a "subType" of Box/Sphere; every other type's own "type" field is the key). nullopt for a
+  // carries a "subType" of Box/Sphere/Capsule; every other type's own "type" field is the key). nullopt for a
   // blob missing or misshaping either field - addComponent's "data" handling refuses rather than hands a
   // blob to loadFromJSON that was never this component's own serialize() output.
   std::optional<std::string> registryKeyFromComponentBlob(const nlohmann::json& data)

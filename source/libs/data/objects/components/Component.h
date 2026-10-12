@@ -28,6 +28,7 @@ enum class ComponentType : uint8_t {
   script,
   playerController,
   camera,
+  SubComponentType_capsuleCollider,
   // Sentinel: total enumerator count, for compile-time completeness checks (see scripting's
   // BindingCoverage.h). Never a real component - new types are appended just above it (the packed
   // value is the wire discriminator, so order among real types still matters).
@@ -40,6 +41,7 @@ const std::unordered_map<ComponentType, std::string> componentTypeToString {
   {ComponentType::rigidBody, "Rigid Body"},
   {ComponentType::SubComponentType_boxCollider, "Box Collider"},
   {ComponentType::SubComponentType_sphereCollider, "Sphere Collider"},
+  {ComponentType::SubComponentType_capsuleCollider, "Capsule Collider"},
   {ComponentType::lightRenderer, "Light Renderer"},
   {ComponentType::script, "Script"},
   {ComponentType::playerController, "Player Controller"},
@@ -48,12 +50,13 @@ const std::unordered_map<ComponentType, std::string> componentTypeToString {
 
 const std::unordered_map<ComponentType, ComponentType> subComponentTypeToParent {
   {ComponentType::SubComponentType_boxCollider, ComponentType::collider},
-  {ComponentType::SubComponentType_sphereCollider, ComponentType::collider}
+  {ComponentType::SubComponentType_sphereCollider, ComponentType::collider},
+  {ComponentType::SubComponentType_capsuleCollider, ComponentType::collider}
 };
 
 // Maps a packed ComponentType (the discriminator each component writes first in pack()) back to its
 // ComponentRegistry factory key, so unpack() can reconstruct components from scratch. Colliders pack
-// their subtype, which is keyed by "Box"/"Sphere" (matching Object::loadFromJSON's registry lookup).
+// their subtype, which is keyed by "Box"/"Sphere"/"Capsule" (matching Object::loadFromJSON's registry lookup).
 const std::unordered_map<ComponentType, std::string> componentTypeToRegistryKey {
   {ComponentType::transform, "Transform"},
   {ComponentType::modelRenderer, "ModelRenderer"},
@@ -61,6 +64,7 @@ const std::unordered_map<ComponentType, std::string> componentTypeToRegistryKey 
   {ComponentType::lightRenderer, "LightRenderer"},
   {ComponentType::SubComponentType_boxCollider, "Box"},
   {ComponentType::SubComponentType_sphereCollider, "Sphere"},
+  {ComponentType::SubComponentType_capsuleCollider, "Capsule"},
   {ComponentType::script, "Script"},
   {ComponentType::playerController, "PlayerController"},
   {ComponentType::camera, "Camera"}
