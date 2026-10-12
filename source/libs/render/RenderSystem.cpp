@@ -14,6 +14,7 @@
 #include <objects/components/collisions/BoxCollider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/common.hpp>
@@ -207,6 +208,7 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     // Collider debug gizmo: draw the collider's shape (offset by its local transform) as an
     // outline only, so the object inside stays visible, when its render flag is on.
     std::size_t gizmoParts = 0;
+    bool drawsHullGizmo = false;
     if (const auto box = object->getComponent<BoxCollider>(ComponentType::collider); box && box->getRenderCollider())
     {
       if (const auto gizmo = assetCache.getColliderGizmo(uuid, "assets/models/cube_1x1x1.glb"))
@@ -237,8 +239,27 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
     {
       gizmoParts = drawCapsuleGizmo(renderer, assetCache, uuid, *capsule);
     }
+    else if (const auto convex = object->getComponent<ConvexMeshCollider>(ComponentType::collider);
+             convex && convex->getRenderCollider())
+    {
+      drawsHullGizmo = true;
+
+      if (const auto gizmo = assetCache.getHullGizmo(uuid, convex->getHull()))
+      {
+        gizmo->setPosition(convex->getPosition());
+        gizmo->setScale(convex->getScale());
+        gizmo->setOrientationEuler(convex->getRotation());
+
+        renderer->getRenderingManager()->getRenderer3D()->renderOutline(gizmo, colliderOutlineColor);
+      }
+    }
 
     assetCache.trimColliderGizmo(uuid, gizmoParts);
+
+    if (!drawsHullGizmo)
+    {
+      assetCache.dropHullGizmo(uuid);
+    }
   }
 
   // The later submission owns an overlap in the outline mask, so selection outlines go last to win over

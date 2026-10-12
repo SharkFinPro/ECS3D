@@ -1,14 +1,18 @@
 #include "GpuAssetCache.h"
+#include "HullGizmoMesh.h"
 #include <assets/AssetRegistry.h>
 #include <Log.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
+#include <VulkanEngine/components/pipelines/implementations/vertexInputs/Vertex.h>
 #include <VulkanEngine/components/assets/objects/Model.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <cstddef>
 #include <exception>
 #include <string>
+#include <utility>
+#include <vector>
 
 GpuAssetCache::GpuAssetCache(std::shared_ptr<vke::VulkanEngine> renderer, const AssetRegistry* assetRegistry)
   : m_renderer(std::move(renderer)), m_assetRegistry(assetRegistry)
@@ -140,6 +144,87 @@ void GpuAssetCache::trimColliderGizmo(const uuids::uuid& ownerUUID, const std::s
   it->second.resize(partCount);
 }
 
+void GpuAssetCache::releaseHullGizmo(CachedHullGizmo& cached)
+{
+  const auto assetManager = m_renderer->getAssetManager();
+
+  if (cached.renderObject)
+  {
+    assetManager->release(std::move(cached.renderObject));
+  }
+
+  if (cached.model)
+  {
+    assetManager->release(std::move(cached.model));
+  }
+}
+
+std::shared_ptr<vke::RenderObject> GpuAssetCache::getHullGizmo(const uuids::uuid& ownerUUID, const ConvexHull& hull)
+{
+  const auto it = m_hullGizmos.find(ownerUUID);
+
+  if (it != m_hullGizmos.end())
+  {
+    if (it->second.hull.vertices == hull.vertices && it->second.hull.indices == hull.indices)
+    {
+      return it->second.renderObject;
+    }
+
+    releaseHullGizmo(it->second);
+    m_hullGizmos.erase(it);
+  }
+
+  CachedHullGizmo cached{ nullptr, nullptr, hull };
+
+  const auto white = m_gizmoTextures.get("assets/textures/white.png", [this] {
+    return m_renderer->getAssetManager()->loadTexture("assets/textures/white.png");
+  });
+
+  if (white)
+  {
+    const HullGizmoMesh mesh = buildHullGizmoMesh(hull);
+    std::vector<vke::Vertex> vertices(mesh.positions.size());
+
+    for (size_t i = 0; i < vertices.size(); ++i)
+    {
+      vertices[i].pos = mesh.positions[i];
+      vertices[i].normal = mesh.normals[i];
+      vertices[i].texCoord = glm::vec2(0.0f);
+    }
+
+    // An all-degenerate hull has nothing to draw, which is not an error.
+    if (!mesh.indices.empty())
+    {
+      try
+      {
+        cached.model = m_renderer->getAssetManager()->createModel(vertices, mesh.indices);
+        cached.renderObject = m_renderer->getAssetManager()->loadRenderObject(white, white, cached.model);
+      }
+      catch (const std::exception& e)
+      {
+        releaseHullGizmo(cached);
+
+        Log::warn(LogCategory::assets, std::string("Could not build the convex hull gizmo: ") + e.what());
+      }
+    }
+  }
+
+  // A failed or empty build is kept so it is not retried (or logged again) every frame until the hull changes.
+  const auto renderObject = cached.renderObject;
+  m_hullGizmos.insert_or_assign(ownerUUID, std::move(cached));
+
+  return renderObject;
+}
+
+void GpuAssetCache::dropHullGizmo(const uuids::uuid& ownerUUID)
+{
+  if (const auto it = m_hullGizmos.find(ownerUUID); it != m_hullGizmos.end())
+  {
+    releaseHullGizmo(it->second);
+    m_hullGizmos.erase(it);
+  }
+}
+
 void GpuAssetCache::loadLightGizmoAssets()
 {
   if (m_lightGizmoAssetsTried)
@@ -190,5 +275,17 @@ void GpuAssetCache::pruneStale(const std::unordered_set<uuids::uuid>& liveUUIDs)
 {
   std::erase_if(m_renderObjects, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
   std::erase_if(m_colliderGizmos, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
+  for (auto it = m_hullGizmos.begin(); it != m_hullGizmos.end();)
+  {
+    if (liveUUIDs.contains(it->first))
+    {
+      ++it;
+      continue;
+    }
+
+    releaseHullGizmo(it->second);
+    it = m_hullGizmos.erase(it);
+  }
+
   std::erase_if(m_lightGizmos, [&liveUUIDs](const auto& entry) { return !liveUUIDs.contains(entry.first); });
 }
