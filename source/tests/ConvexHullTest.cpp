@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <numbers>
 #include <set>
 #include <utility>
 #include <vector>
@@ -209,6 +210,21 @@ namespace {
     }
 
     return result;
+  }
+
+  std::vector<glm::vec3> thinSlab(Lcg& random, const float thickness, const float offset)
+  {
+    std::vector<glm::vec3> points;
+
+    for (int i = 0; i < 600; ++i)
+    {
+      const float x = random.next();
+      const float y = random.next();
+      const float z = random.next() * thickness;
+      points.emplace_back(x + offset, y + offset, z + offset);
+    }
+
+    return points;
   }
 }
 
@@ -412,4 +428,38 @@ TEST(ConvexHull, ShuffledIntegerBallsGiveAClosedHull)
     ASSERT_TRUE(hull.has_value()) << "attempt " << attempt;
     expectSound(*hull, points, 1e-4);
   }
+}
+
+TEST(ConvexHull, AThinDiscMissedPointsAreRepairedIntoASoundHull)
+{
+  // Two rings 2e-4 apart: points the first pass leaves outside an older face are handed back and re-expanded.
+  Lcg random;
+  std::vector<glm::vec3> points;
+  for (int i = 0; i < 120; ++i)
+  {
+    const float angle = (random.next() + 1.0f) * std::numbers::pi_v<float>;
+    const float side = random.next();
+    const double angleD = static_cast<double>(angle);
+    points.emplace_back(static_cast<float>(std::cos(angleD)), static_cast<float>(std::sin(angleD)),
+                        side >= 0.0f ? 1e-4f : -1e-4f);
+  }
+
+  const auto hull = buildConvexHull(points);
+
+  ASSERT_TRUE(hull.has_value());
+  expectSound(*hull, points, 1e-4);
+}
+
+TEST(ConvexHull, ASlabBelowFloatResolutionIsRefusedAsDegenerateWhereTheSameSlabAtTheOriginBuilds)
+{
+  Lcg control;
+  const auto atOrigin = thinSlab(control, 1e-4f, 0.0f);
+  const auto hull = buildConvexHull(atOrigin);
+  ASSERT_TRUE(hull.has_value());
+  expectSound(*hull, atOrigin, 1e-4);
+
+  // Floats near 10000 are about 1e-3 apart, so the thickness rounds away and the points are coplanar: the
+  // initial simplex search refuses it as degenerate, before verification runs.
+  Lcg distant;
+  EXPECT_FALSE(buildConvexHull(thinSlab(distant, 1e-4f, 10000.0f)).has_value());
 }

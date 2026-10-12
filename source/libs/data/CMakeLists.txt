@@ -71,6 +71,11 @@ add_library(${PROJECT_NAME}
   objects/components/collisions/SphereCollider.h
   objects/components/collisions/ConvexHull.cpp
   objects/components/collisions/ConvexHull.h
+  objects/components/collisions/HullFace.h
+  objects/components/collisions/HullVerification.cpp
+  objects/components/collisions/HullVerification.h
+  objects/components/collisions/InitialSimplex.cpp
+  objects/components/collisions/InitialSimplex.h
   objects/components/collisions/QuickHull.cpp
   objects/components/collisions/QuickHull.h
 )
