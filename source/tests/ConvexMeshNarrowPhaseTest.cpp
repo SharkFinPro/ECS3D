@@ -57,7 +57,7 @@ namespace {
 
   void moveTo(const Collider& collider, const glm::vec3& position)
   {
-    transformOf(collider.getOwner())->setPosition(position);
+    collider.getOwner()->getComponent<Transform>(ComponentType::transform)->setPosition(position);
   }
 
   bool hasPointNear(std::span<const glm::vec3> points, const glm::vec3& expected, const float within = tolerance)
