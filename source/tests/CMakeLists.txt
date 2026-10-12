@@ -25,6 +25,8 @@ add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ColliderCacheTest.cpp
   CapsuleColliderTest.cpp
+  CapsuleNarrowPhaseTest.cpp
+  CapsulePhysicsTest.cpp
   ComponentLookupTest.cpp
   CameraRangeTest.cpp
   CameraSelectionTest.cpp
