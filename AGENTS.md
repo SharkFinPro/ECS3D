@@ -571,6 +571,12 @@ editor spawned *and* one it only connected to (`--host`) — it rides the same c
 child process. The separate `--console`/`showServerConsole` window some launches show is unrelated and
 keeps behaving exactly as before.
 
+**Contact clipping.** `sim/collisions/ContactManifold.h` builds contact points for two convex shapes from
+plain vertex spans. Each shape's touching feature is the vertices within a tolerance of the extreme one along
+the contact normal. The side with more points is the reference polygon; the other side is ordered into a
+polygon, clipped to the reference's edge planes (Sutherland-Hodgman) and projected onto its plane. Features
+with no area reduce to one point midway between their closest points. Nothing calls it yet.
+
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.
 `RenderSystem::updateCamera` finds the active `Camera` (optionally restricted to one object; that rule, the view
