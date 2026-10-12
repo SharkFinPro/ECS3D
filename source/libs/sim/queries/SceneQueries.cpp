@@ -6,6 +6,7 @@
 #include <objects/components/Transform.h>
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -75,6 +76,109 @@ namespace {
     const float offsetLength = length(offset);
     normal = offsetLength > kEpsilon ? offset / offsetLength : -dir;
     return true;
+  }
+
+  // Ray vs the side of a capsule's core segment, clipped to the segment: the finite cylinder between the end
+  // spheres. Same inside-the-shape convention as raySphere. dir must be normalized.
+  bool rayCapsuleSide(const glm::vec3& origin, const glm::vec3& dir, const CapsuleSegment& segment, const float radius,
+                      const float maxDistance, float& tHit, glm::vec3& normal)
+  {
+    const glm::vec3 span = segment.end - segment.start;
+    const float spanLength = length(span);
+    if (spanLength < kEpsilon)
+    {
+      return false;
+    }
+
+    const glm::vec3 axis = span / spanLength;
+    const glm::vec3 oc = origin - segment.start;
+    const glm::vec3 originPerp = oc - axis * dot(oc, axis);
+    const glm::vec3 dirPerp = dir - axis * dot(dir, axis);
+
+    const float a = dot(dirPerp, dirPerp);
+    if (a < kEpsilon)
+    {
+      // Parallel to the axis: the side is never crossed, but a ray that starts inside the shaft is already in
+      // contact, like the other shapes. Anything else meets only the end spheres.
+      const float along = dot(oc, axis);
+      if (dot(originPerp, originPerp) > radius * radius || along < 0.0f || along > spanLength)
+      {
+        return false;
+      }
+
+      tHit = 0.0f;
+      normal = -dir;
+      return true;
+    }
+
+    const float b = dot(originPerp, dirPerp);
+    const float discriminant = b * b - a * (dot(originPerp, originPerp) - radius * radius);
+    if (discriminant < 0.0f)
+    {
+      return false;
+    }
+
+    const float tNear = (-b - std::sqrt(discriminant)) / a;
+    const float tFar = (-b + std::sqrt(discriminant)) / a;
+    const float t = std::max(tNear, 0.0f);
+    if (tFar < 0.0f || t > maxDistance)
+    {
+      return false;
+    }
+
+    const glm::vec3 point = origin + dir * t;
+    const float along = dot(point - segment.start, axis);
+    if (along < 0.0f || along > spanLength)
+    {
+      return false;
+    }
+
+    const glm::vec3 offset = point - (segment.start + axis * along);
+    const float offsetLength = length(offset);
+    tHit = t;
+    normal = offsetLength > kEpsilon ? offset / offsetLength : -dir;
+    return true;
+  }
+
+  // Ray vs capsule: the nearest hit among its side and its two end spheres. dir must be normalized.
+  bool rayCapsule(const glm::vec3& origin, const glm::vec3& dir, const CapsuleSegment& segment, const float radius,
+                  const float maxDistance, float& tHit, glm::vec3& normal)
+  {
+    bool hit = false;
+    float nearest = maxDistance;
+
+    float t = 0.0f;
+    glm::vec3 hitNormal(0.0f);
+
+    // Reads t and hitNormal only after the query that wrote them has returned: passing them alongside the
+    // query's result in one call would leave the order of evaluation unspecified.
+    const auto consider = [&](const bool found)
+    {
+      if (found && t <= nearest)
+      {
+        hit = true;
+        nearest = t;
+        tHit = t;
+        normal = hitNormal;
+      }
+    };
+
+    consider(rayCapsuleSide(origin, dir, segment, radius, nearest, t, hitNormal));
+    consider(raySphere(origin, dir, segment.start, radius, nearest, t, hitNormal));
+    consider(raySphere(origin, dir, segment.end, radius, nearest, t, hitNormal));
+
+    return hit;
+  }
+
+  float distanceSquaredToSegment(const glm::vec3& point, const CapsuleSegment& segment)
+  {
+    const glm::vec3 span = segment.end - segment.start;
+    const float spanSquared = dot(span, span);
+    const float along = spanSquared > kEpsilon ? std::clamp(dot(point - segment.start, span) / spanSquared, 0.0f, 1.0f)
+                                               : 0.0f;
+    const glm::vec3 delta = point - (segment.start + span * along);
+
+    return dot(delta, delta);
   }
 
   // Ray vs oriented box, via the box's world matrix: bring the ray into the box's local [-1,1]^3 space
@@ -267,7 +371,15 @@ bool SceneQueries::raycast(ObjectManager& objectManager,
         hit = raySphere(origin, dir, sphere->getPosition(), sphere->getRadius(), nearest, t, normal);
       }
     }
-    else
+    else if (collider->getColliderType() == ColliderType::capsuleCollider)
+    {
+      const auto capsule = std::dynamic_pointer_cast<CapsuleCollider>(collider);
+      if (capsule && transform)
+      {
+        hit = rayCapsule(origin, dir, capsule->getSegment(), capsule->getRadius(), nearest, t, normal);
+      }
+    }
+    else if (collider->getColliderType() == ColliderType::boxCollider)
     {
       const auto box = std::dynamic_pointer_cast<BoxCollider>(collider);
       if (box && transform)
@@ -325,7 +437,16 @@ void SceneQueries::overlapSphere(ObjectManager& objectManager,
         overlaps = dot(delta, delta) <= combined * combined;
       }
     }
-    else
+    else if (collider->getColliderType() == ColliderType::capsuleCollider)
+    {
+      const auto capsule = std::dynamic_pointer_cast<CapsuleCollider>(collider);
+      if (capsule && transform)
+      {
+        const float combined = capsule->getRadius() + radius;
+        overlaps = distanceSquaredToSegment(center, capsule->getSegment()) <= combined * combined;
+      }
+    }
+    else if (collider->getColliderType() == ColliderType::boxCollider)
     {
       const auto box = std::dynamic_pointer_cast<BoxCollider>(collider);
       if (box && transform)
