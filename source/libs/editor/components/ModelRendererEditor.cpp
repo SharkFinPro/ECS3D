@@ -1,73 +1,13 @@
 #include "ModelRendererEditor.h"
+#include "AssetSlot.h"
 #include "../ComponentEditor.h"
 #include "../AssetDragDrop.h"
 #include "../GuiComponents.h"
 #include "../MixedFields.h"
 #include <objects/components/ModelRenderer.h>
-#include <assets/AssetRegistry.h>
-#include <GpuAssetCache.h>
-#include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <imgui.h>
-#include <filesystem>
 #include <memory>
-#include <string>
 #include <utility>
-
-namespace {
-  // A model-renderer asset reference slot: shows the assigned asset's thumbnail/icon + filename (the
-  // mockup's Model/Texture/Specular rows) and accepts an asset of `payloadId` dropped onto it. Returns
-  // true (and fills outUUID) when something is dropped this frame. cache/registry may be null.
-  bool assetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegistry* registry,
-                 const char* id, const char* kind, const char* payloadId, const uuids::uuid& current,
-                 const bool isTexture, const gc::SecIcon icon, const ImVec4& iconCol, uuids::uuid& outUUID)
-  {
-    std::string name = "None";
-    ImTextureID thumb = 0;
-
-    if (registry)
-    {
-      if (const auto* record = registry->getByUUID(current))
-      {
-        name = std::filesystem::path(record->path).filename().string();
-
-        if (isTexture && cache)
-        {
-          try
-          {
-            if (const auto texture = cache->getTexture(current))
-            {
-              thumb = texture->getImGuiTexture();
-            }
-          }
-          catch (const std::exception&)
-          {
-            // fall back to the type icon
-          }
-        }
-      }
-    }
-
-    gc::assetRefRow(id, kind, name.c_str(), thumb, icon, iconCol);
-
-    bool dropped = false;
-    if (ImGui::BeginDragDropTarget())
-    {
-      if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(payloadId))
-      {
-        const std::string uuidStr(static_cast<const char*>(payload->Data), payload->DataSize);
-        if (const auto parsed = uuids::uuid::from_string(uuidStr))
-        {
-          outUUID = parsed.value();
-          dropped = true;
-        }
-      }
-
-      ImGui::EndDragDropTarget();
-    }
-
-    return dropped;
-  }
-}
 
 void registerModelRendererEditor(ComponentEditor& componentEditor,
                                  std::shared_ptr<GpuAssetCache> assetCache,
@@ -113,22 +53,25 @@ void registerModelRendererEditor(ComponentEditor& componentEditor,
       // Drag an asset out of the AssetBrowserPanel onto these slots to assign it.
       uuids::uuid dropped;
 
-      if (assetSlot(cache, registry, "modelSlot", "Model", assetDragDrop::model,
-                    modelRenderer->getModelUUID(), false, gc::SecIcon::model, theme::modelPurple, dropped))
+      const AssetSlotStyle modelSlot{ "modelSlot", "Model", assetDragDrop::model, false,
+                                      gc::SecIcon::model, theme::modelPurple };
+      if (drawAssetSlot(cache, registry, modelSlot, modelRenderer->getModelUUID(), dropped))
       {
         modelRenderer->setModelUUID(dropped);
         edited = true;
       }
 
-      if (assetSlot(cache, registry, "textureSlot", "Texture", assetDragDrop::texture,
-                    modelRenderer->getTextureUUID(), true, gc::SecIcon::image, theme::accent, dropped))
+      const AssetSlotStyle textureSlot{ "textureSlot", "Texture", assetDragDrop::texture, true,
+                                        gc::SecIcon::image, theme::accent };
+      if (drawAssetSlot(cache, registry, textureSlot, modelRenderer->getTextureUUID(), dropped))
       {
         modelRenderer->setTextureUUID(dropped);
         edited = true;
       }
 
-      if (assetSlot(cache, registry, "specularSlot", "Specular Map", assetDragDrop::texture,
-                    modelRenderer->getSpecularMapUUID(), true, gc::SecIcon::image, theme::accent, dropped))
+      const AssetSlotStyle specularSlot{ "specularSlot", "Specular Map", assetDragDrop::texture, true,
+                                         gc::SecIcon::image, theme::accent };
+      if (drawAssetSlot(cache, registry, specularSlot, modelRenderer->getSpecularMapUUID(), dropped))
       {
         modelRenderer->setSpecularMapUUID(dropped);
         edited = true;

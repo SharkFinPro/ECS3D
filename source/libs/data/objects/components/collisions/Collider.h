@@ -23,7 +23,8 @@ struct BoundingBox {
 // enum (source/libs/scripting/ScriptBridge/components/Collider.cs).
 enum class ColliderType {
   boxCollider,
-  sphereCollider
+  sphereCollider,
+  capsuleCollider
 };
 
 // Data-only: shape geometry (findFurthestPoint, bounding box). The GJK/EPA narrow phase that consumes it

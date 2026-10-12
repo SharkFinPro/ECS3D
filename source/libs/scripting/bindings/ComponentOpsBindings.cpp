@@ -37,7 +37,7 @@ namespace {
   }
 
   // Finds the component (if any) on object's own component map by registry key, matching against the
-  // packed type (so a collider resolves by its shape, "Box"/"Sphere", not the shared "Collider" slot).
+  // packed type (so a collider resolves by its shape, "Box"/"Sphere"/"Capsule", not the shared "Collider" slot).
   // Never the RigidBody-inherits-from-parent fallback Object::getComponent applies for read access -
   // add/remove/has all reason about what this object itself owns.
   std::shared_ptr<Component> findOwnComponent(const Object& object, const std::string& registryKey)

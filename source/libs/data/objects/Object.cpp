@@ -638,7 +638,7 @@ void Object::loadFromJSON(const nlohmann::json& objectData)
   {
     const auto componentType = componentData.at("type").get<std::string>();
 
-    // A Collider serializes as type "Collider" with a "subType" (Box/Sphere); colliders are
+    // A Collider serializes as type "Collider" with a "subType" (Box/Sphere/Capsule); colliders are
     // registered under that subType, so resolve the registry key accordingly.
     const auto registryKey = componentType == "Collider"
       ? componentData.at("subType").get<std::string>()
