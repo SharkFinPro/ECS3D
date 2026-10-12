@@ -7,6 +7,7 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
@@ -29,6 +30,9 @@ namespace {
 
       m_sphereObject = fixtures::addObject(m_scene, "Sphere");
       m_sphere = fixtures::addSphereCollider(m_sphereObject, 1.0f);
+
+      m_capsuleObject = fixtures::addObject(m_scene, "Capsule");
+      m_capsule = fixtures::addCapsuleCollider(m_capsuleObject, 0.5f, 2.0f);
 
       m_bareObject = fixtures::addObject(m_scene, "Bare");
 
@@ -54,6 +58,8 @@ namespace {
     std::shared_ptr<BoxCollider> m_box;
     std::shared_ptr<Object> m_sphereObject;
     std::shared_ptr<SphereCollider> m_sphere;
+    std::shared_ptr<Object> m_capsuleObject;
+    std::shared_ptr<CapsuleCollider> m_capsule;
     std::shared_ptr<Object> m_bareObject;
     ColliderBindings m_bindings{};
   };
@@ -63,6 +69,7 @@ TEST_F(ColliderBindingsTest, GetShapeNamesEachColliderAndNoneOtherwise)
 {
   EXPECT_EQ(m_bindings.getShape(uuidOf(m_boxObject).c_str()), 1);
   EXPECT_EQ(m_bindings.getShape(uuidOf(m_sphereObject).c_str()), 2);
+  EXPECT_EQ(m_bindings.getShape(uuidOf(m_capsuleObject).c_str()), 3);
 
   // Positive control alongside the negative cases below: a real box and a real sphere each report their
   // own shape, so "0" for the other cases reflects an absent collider rather than a broken query.
@@ -75,6 +82,7 @@ TEST_F(ColliderBindingsTest, HasIsTrueOnlyForARealCollider)
 {
   EXPECT_TRUE(m_bindings.has(uuidOf(m_boxObject).c_str()));
   EXPECT_TRUE(m_bindings.has(uuidOf(m_sphereObject).c_str()));
+  EXPECT_TRUE(m_bindings.has(uuidOf(m_capsuleObject).c_str()));
 
   EXPECT_FALSE(m_bindings.has(uuidOf(m_bareObject).c_str()));
   EXPECT_FALSE(m_bindings.has("not-a-uuid"));
@@ -313,4 +321,76 @@ TEST_F(ColliderBindingsTest, AGetOrARefusedSetRecordsNoComponentEdit)
   static_cast<void>(m_bindings.getSphereRadius(bareUUID.c_str(), &radius));
 
   EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(ColliderBindingsTest, CapsuleAccessorsRoundTripAndIgnoreNonFiniteInput)
+{
+  const auto capsuleUUID = uuidOf(m_capsuleObject);
+
+  float x = 0, y = 0, z = 0, radius = 0, height = 0;
+  ASSERT_TRUE(m_bindings.getCapsuleOffset(capsuleUUID.c_str(), &x, &y, &z));
+  EXPECT_EQ(glm::vec3(x, y, z), glm::vec3(0.0f));
+  ASSERT_TRUE(m_bindings.getCapsuleRadius(capsuleUUID.c_str(), &radius));
+  EXPECT_EQ(radius, 0.5f);
+  ASSERT_TRUE(m_bindings.getCapsuleHeight(capsuleUUID.c_str(), &height));
+  EXPECT_EQ(height, 2.0f);
+
+  EXPECT_TRUE(m_bindings.setCapsuleOffset(capsuleUUID.c_str(), 1.0f, 2.0f, 3.0f));
+  EXPECT_TRUE(m_bindings.setCapsuleRadius(capsuleUUID.c_str(), 0.75f));
+  EXPECT_TRUE(m_bindings.setCapsuleHeight(capsuleUUID.c_str(), 3.0f));
+  EXPECT_EQ(m_capsule->getLocalPosition(), glm::vec3(1.0f, 2.0f, 3.0f));
+  EXPECT_EQ(m_capsule->getLocalRadius(), 0.75f);
+  EXPECT_EQ(m_capsule->getLocalHeight(), 3.0f);
+
+  const auto nan = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_TRUE(m_bindings.setCapsuleOffset(capsuleUUID.c_str(), nan, 0.0f, 0.0f));
+  EXPECT_TRUE(m_bindings.setCapsuleRadius(capsuleUUID.c_str(), nan));
+  EXPECT_TRUE(m_bindings.setCapsuleHeight(capsuleUUID.c_str(), nan));
+  EXPECT_EQ(m_capsule->getLocalPosition(), glm::vec3(1.0f, 2.0f, 3.0f));
+  EXPECT_EQ(m_capsule->getLocalRadius(), 0.75f);
+  EXPECT_EQ(m_capsule->getLocalHeight(), 3.0f);
+}
+
+TEST_F(ColliderBindingsTest, CapsuleAccessorsFailSafelyOnOtherShapes)
+{
+  const auto boxUUID = uuidOf(m_boxObject);
+  const auto bareUUID = uuidOf(m_bareObject);
+
+  float x = 7, y = 7, z = 7, value = 7;
+  for (const auto& uuid : { boxUUID, bareUUID })
+  {
+    EXPECT_FALSE(m_bindings.getCapsuleOffset(uuid.c_str(), &x, &y, &z));
+    EXPECT_FALSE(m_bindings.setCapsuleOffset(uuid.c_str(), 1.0f, 1.0f, 1.0f));
+    EXPECT_FALSE(m_bindings.getCapsuleRadius(uuid.c_str(), &value));
+    EXPECT_FALSE(m_bindings.setCapsuleRadius(uuid.c_str(), 9.0f));
+    EXPECT_FALSE(m_bindings.getCapsuleHeight(uuid.c_str(), &value));
+    EXPECT_FALSE(m_bindings.setCapsuleHeight(uuid.c_str(), 9.0f));
+  }
+
+  EXPECT_EQ(glm::vec3(x, y, z), glm::vec3(7.0f));
+  EXPECT_EQ(value, 7.0f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  // Positive control: the same accessors succeed on the capsule, and the box-only ones fail on it.
+  const auto capsuleUUID = uuidOf(m_capsuleObject);
+  EXPECT_TRUE(m_bindings.getCapsuleRadius(capsuleUUID.c_str(), &value));
+  EXPECT_FALSE(m_bindings.getBoxSize(capsuleUUID.c_str(), &x, &y, &z));
+  EXPECT_FALSE(m_bindings.getSphereRadius(capsuleUUID.c_str(), &value));
+}
+
+TEST_F(ColliderBindingsTest, ACapsuleSetRecordsAnEditOnlyWhenTheValueChanged)
+{
+  const auto capsuleUUID = uuidOf(m_capsuleObject);
+  const auto nan = std::numeric_limits<float>::quiet_NaN();
+
+  EXPECT_TRUE(m_bindings.setCapsuleRadius(capsuleUUID.c_str(), nan));
+  EXPECT_TRUE(m_bindings.setCapsuleHeight(capsuleUUID.c_str(), 2.0f));
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  EXPECT_TRUE(m_bindings.setCapsuleHeight(capsuleUUID.c_str(), 4.0f));
+
+  const auto edits = BindingContext::takeComponentEdits();
+  ASSERT_EQ(edits.size(), 1u);
+  EXPECT_EQ(edits[0].first, m_capsuleObject->getUUID());
+  EXPECT_EQ(edits[0].second, m_capsule);
 }

@@ -4,6 +4,7 @@
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/components/collisions/BoxCollider.h>
+#include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <memory>
@@ -52,6 +53,34 @@ namespace {
   {
     return std::dynamic_pointer_cast<SphereCollider>(find(uuid, outObjectUUID));
   }
+
+  std::shared_ptr<CapsuleCollider> findCapsule(const char* uuid, uuids::uuid* outObjectUUID = nullptr)
+  {
+    return std::dynamic_pointer_cast<CapsuleCollider>(find(uuid, outObjectUUID));
+  }
+
+  // Applies a capsule setter and replicates the edit only when the stored value changed: the setters drop
+  // non-finite input and clamp negatives, so the requested value says nothing about what was kept.
+  template <typename Getter, typename Setter>
+  bool editCapsule(const char* uuid, Getter getter, Setter setter)
+  {
+    uuids::uuid objectUUID;
+    const auto capsule = findCapsule(uuid, &objectUUID);
+    if (!capsule)
+    {
+      return false;
+    }
+
+    const auto before = getter(*capsule);
+    setter(*capsule);
+
+    if (getter(*capsule) != before)
+    {
+      BindingContext::recordComponentEdit(objectUUID, capsule);
+    }
+
+    return true;
+  }
 }
 
 ColliderBindings ColliderBindingsProvider::getBindings()
@@ -72,7 +101,13 @@ ColliderBindings ColliderBindingsProvider::getBindings()
     .setSphereOffset = &bindSetSphereOffset,
     .getSphereRadius = &bindGetSphereRadius,
     .setSphereRadius = &bindSetSphereRadius,
-    .has = &bindHas
+    .has = &bindHas,
+    .getCapsuleOffset = &bindGetCapsuleOffset,
+    .setCapsuleOffset = &bindSetCapsuleOffset,
+    .getCapsuleRadius = &bindGetCapsuleRadius,
+    .setCapsuleRadius = &bindSetCapsuleRadius,
+    .getCapsuleHeight = &bindGetCapsuleHeight,
+    .setCapsuleHeight = &bindSetCapsuleHeight
   };
 }
 
@@ -324,6 +359,69 @@ bool ColliderBindingsProvider::bindSetSphereRadius(const char* uuid, const float
   }
 
   return true;
+}
+
+bool ColliderBindingsProvider::bindGetCapsuleOffset(const char* uuid, float* x, float* y, float* z)
+{
+  const auto capsule = findCapsule(uuid);
+  if (!capsule)
+  {
+    return false;
+  }
+
+  const auto offset = capsule->getLocalPosition();
+  *x = offset.x;
+  *y = offset.y;
+  *z = offset.z;
+
+  return true;
+}
+
+bool ColliderBindingsProvider::bindSetCapsuleOffset(const char* uuid, const float x, const float y, const float z)
+{
+  return editCapsule(uuid,
+                     [](const CapsuleCollider& capsule) { return capsule.getLocalPosition(); },
+                     [&](CapsuleCollider& capsule) { capsule.setPosition({ x, y, z }); });
+}
+
+bool ColliderBindingsProvider::bindGetCapsuleRadius(const char* uuid, float* radius)
+{
+  const auto capsule = findCapsule(uuid);
+  if (!capsule)
+  {
+    return false;
+  }
+
+  *radius = capsule->getLocalRadius();
+
+  return true;
+}
+
+bool ColliderBindingsProvider::bindSetCapsuleRadius(const char* uuid, const float radius)
+{
+  return editCapsule(uuid,
+                     [](const CapsuleCollider& capsule) { return capsule.getLocalRadius(); },
+                     [&](CapsuleCollider& capsule) { capsule.setRadius(radius); });
+}
+
+bool ColliderBindingsProvider::bindGetCapsuleHeight(const char* uuid, float* height)
+{
+  const auto capsule = findCapsule(uuid);
+  if (!capsule)
+  {
+    return false;
+  }
+
+  *height = capsule->getLocalHeight();
+
+  return true;
+}
+
+bool ColliderBindingsProvider::bindSetCapsuleHeight(const char* uuid, const float height)
+{
+  return editCapsule(uuid,
+                     [](const CapsuleCollider& capsule) { return capsule.getLocalHeight(); },
+                     [&](CapsuleCollider& capsule) { capsule.setHeight(height); });
 }
 
 bool ColliderBindingsProvider::bindHas(const char* uuid)
