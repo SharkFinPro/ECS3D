@@ -340,16 +340,55 @@ TEST(ConvexHull, ARandomCloudGivesAClosedConvexHullAroundEveryPoint)
   expectSound(*hull, points, 1e-4);
 }
 
-TEST(ConvexHull, AHullOverTheVertexLimitIsRefused)
+TEST(ConvexHull, ACloudWithMoreThanTheVertexLimitIsReducedToFit)
 {
-  // Every point of a sphere is a hull vertex, so 2000 of them cannot fit under the limit.
-  EXPECT_FALSE(buildConvexHull(fibonacciSphere(2000)).has_value());
+  const auto points = fibonacciSphere(2000);
 
-  // The positive control: a cloud whose hull fits is built.
+  // Every point of a sphere is a hull vertex, so only the reduction can bring this under the limit.
+  const auto hull = buildConvexHull(points);
+
+  ASSERT_TRUE(hull.has_value());
+  EXPECT_LE(hull->vertices.size(), maxConvexHullVertices);
+  EXPECT_GT(hull->vertices.size(), 100u);
+  expectSound(*hull, hull->vertices, 1e-4);
+
+  // The reduced hull stays close around every input point.
+  for (const auto& point : points)
+  {
+    EXPECT_LE(outsideDistance(*hull, point), 0.05);
+  }
+
+  // The positive control: a cloud that already fits is not reduced.
   const auto small = buildConvexHull(fibonacciSphere(200));
   ASSERT_TRUE(small.has_value());
-  EXPECT_LE(small->vertices.size(), maxConvexHullVertices);
   EXPECT_GT(small->vertices.size(), 150u);
+}
+
+TEST(ConvexHull, ReductionIsDeterministic)
+{
+  const auto points = fibonacciSphere(1000);
+
+  const auto first = buildConvexHull(points);
+  const auto second = buildConvexHull(points);
+
+  ASSERT_TRUE(first.has_value());
+  ASSERT_TRUE(second.has_value());
+  EXPECT_EQ(first->indices, second->indices);
+  EXPECT_EQ(first->vertices, second->vertices);
+}
+
+TEST(ConvexHull, TheReducedHullUsesOnlyInputVertices)
+{
+  const auto points = fibonacciSphere(2000);
+  const auto hull = buildConvexHull(points);
+
+  ASSERT_TRUE(hull.has_value());
+  ASSERT_LE(hull->vertices.size(), maxConvexHullVertices);
+
+  for (const auto& vertex : hull->vertices)
+  {
+    EXPECT_NE(std::find(points.begin(), points.end(), vertex), points.end());
+  }
 }
 
 TEST(ConvexHull, AThinSlabOfPointsNeverGivesAFoldedHull)
