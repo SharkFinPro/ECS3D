@@ -364,6 +364,32 @@ TEST(ConvexHull, ACloudWithMoreThanTheVertexLimitIsReducedToFit)
   EXPECT_GT(small->vertices.size(), 150u);
 }
 
+TEST(ConvexHull, AHullJustOverTheLimitIsReducedFromItsOwnVertices)
+{
+  // 600 sphere points build a full hull first (over the limit but under quickHull's give-up size).
+  const auto points = fibonacciSphere(600);
+  const auto hull = buildConvexHull(points);
+
+  ASSERT_TRUE(hull.has_value());
+  EXPECT_LE(hull->vertices.size(), maxConvexHullVertices);
+  EXPECT_GT(hull->vertices.size(), 100u);
+  expectSound(*hull, hull->vertices, 1e-4);
+
+  for (const auto& point : points)
+  {
+    EXPECT_LE(outsideDistance(*hull, point), 0.05);
+  }
+}
+
+TEST(ConvexHull, ManyDegeneratePointsAreStillRefused)
+{
+  // The control: the same count of points spread over a volume builds.
+  EXPECT_TRUE(buildConvexHull(randomCloud(2000, glm::vec3(1.0f))).has_value());
+
+  const std::vector<glm::vec3> flat(2000, glm::vec3(1.0f, 2.0f, 3.0f));
+  EXPECT_FALSE(buildConvexHull(flat).has_value());
+}
+
 TEST(ConvexHull, ReductionIsDeterministic)
 {
   const auto points = fibonacciSphere(1000);
