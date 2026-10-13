@@ -417,6 +417,47 @@ public class ComponentWrapperTests : IDisposable
   }
 
   [Fact]
+  public void Collider_ConvexMeshAccessorsReturnValuesOnlyWhenNativeSucceeds()
+  {
+    var collider = new Collider(Id);
+    FakeNatives.Set("Collider.getConvexMeshOffset", new Vector3(1f, 2f, 3f));
+    FakeNatives.Set("Collider.getConvexMeshVertexCount", 12u);
+
+    FakeNatives.Set("Collider.getConvexMeshOffset.ok", true);
+    FakeNatives.Set("Collider.getConvexMeshVertexCount.ok", true);
+    Assert.True(collider.tryGetConvexMeshOffset(out var offset));
+    Assert.Equal(new Vector3(1f, 2f, 3f), offset);
+    Assert.True(collider.tryGetConvexMeshVertexCount(out var count));
+    Assert.Equal(12u, count);
+
+    FakeNatives.Set("Collider.getConvexMeshOffset.ok", false);
+    FakeNatives.Set("Collider.getConvexMeshVertexCount.ok", false);
+    Assert.False(collider.tryGetConvexMeshOffset(out offset));
+    Assert.Equal(Vector3.Zero, offset);
+    Assert.False(collider.tryGetConvexMeshVertexCount(out count));
+    Assert.Equal(0u, count);
+  }
+
+  [Fact]
+  public void Collider_ConvexMeshSettersSendComponentsAndReturnNativeResult()
+  {
+    var collider = new Collider(Id);
+    FakeNatives.Set("Collider.setConvexMeshOffset", true);
+
+    Assert.True(collider.setConvexMeshOffset(1f, 2f, 3f));
+    Assert.True(collider.setConvexMeshOffset(new Vector3(4f, 5f, 6f)));
+
+    Assert.Equal(new[]
+    {
+      "Collider.setConvexMeshOffset(obj-1,1,2,3)",
+      "Collider.setConvexMeshOffset(obj-1,4,5,6)"
+    }, FakeNatives.Calls);
+
+    FakeNatives.Set("Collider.setConvexMeshOffset", false);
+    Assert.False(collider.setConvexMeshOffset(7f, 8f, 9f));
+  }
+
+  [Fact]
   public void Collider_ShapeReportsCapsule()
   {
     var collider = new Collider(Id);

@@ -25,6 +25,7 @@ add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ColliderCacheTest.cpp
   CapsuleColliderTest.cpp
+  CapsuleGizmoTest.cpp
   CapsuleNarrowPhaseTest.cpp
   CapsulePhysicsTest.cpp
   CapsuleSceneQueryTest.cpp
@@ -47,6 +48,8 @@ add_executable(${PROJECT_NAME}
   ConvexHullTest.cpp
   ConvexHullValidationTest.cpp
   ConvexMeshColliderTest.cpp
+  ConvexMeshNarrowPhaseTest.cpp
+  ConvexMeshPhysicsTest.cpp
   ConvexMeshPlacementTest.cpp
   HullVerificationTest.cpp
   NonFiniteValuesTest.cpp
