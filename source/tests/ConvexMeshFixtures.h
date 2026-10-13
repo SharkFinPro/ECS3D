@@ -21,6 +21,11 @@ namespace convexFixtures {
     fixtures::expectNear(actual, expected, 1e-4f);
   }
 
+  inline void expectNear(const char* what, const glm::vec3& actual, const glm::vec3& expected, const float tolerance = 1e-4f)
+  {
+    fixtures::expectNear(what, actual, expected, tolerance);
+  }
+
   inline const uuids::uuid sourceModel = uuids::uuid::from_string("11111111-2222-3333-4444-555555555555").value();
 
   // Apex above a base triangle: a hull that is not the default cube.
