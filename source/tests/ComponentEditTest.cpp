@@ -1,17 +1,23 @@
 #include <gtest/gtest.h>
 
+#include "ConvexMeshFixtures.h"
 #include "TestScene.h"
 #include "Replication.h"
+#include "WireTypes.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
 #include "objects/components/Script.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/ConvexHullValidation.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <Protocol.h>
 #include <glm/vec3.hpp>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
@@ -43,6 +49,50 @@ namespace {
     }
 
     return result;
+  }
+
+  // A convex mesh edit with the given offset and hull sizes, written in pack order. A count over the
+  // collider's limit stops after the count, since the collider refuses it before reading more.
+  net::Message convexEdit(const uuids::uuid& target, const glm::vec3& position, const std::uint32_t vertexCount,
+                          const std::uint32_t indexCount)
+  {
+    net::Message edit(net::MessageType::editComponent);
+    edit.writeString(uuids::to_string(target));
+    edit.write(ComponentType::SubComponentType_convexMeshCollider);
+    edit.write(false);
+    edit.write(position);
+    edit.write(glm::vec3(1.0f));
+    edit.write(glm::vec3(0.0f));
+    edit.write(uuids::uuid{});
+
+    const auto cube = makeUnitCubeHull();
+    edit.write(vertexCount);
+    if (vertexCount > maxConvexHullVertices)
+    {
+      return edit;
+    }
+
+    for (std::uint32_t i = 0; i < vertexCount && i < cube.vertices.size(); ++i)
+    {
+      edit.write(cube.vertices[i]);
+    }
+
+    edit.write(indexCount);
+    if (indexCount > maxConvexHullIndices)
+    {
+      return edit;
+    }
+
+    for (std::uint32_t i = 0; i < indexCount && i < cube.indices.size(); ++i)
+    {
+      edit.write(cube.indices[i]);
+    }
+
+    edit.write(false);
+    edit.write(std::uint32_t{ 0 });
+    edit.write(std::uint32_t{ 0xFFFFFFFFu });
+
+    return edit;
   }
 }
 
@@ -232,4 +282,49 @@ TEST(ComponentEdit, RefusesAnEditForTheOtherColliderShape)
   EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, edit),
             replication::ComponentEditResult::unknownComponent);
   EXPECT_FLOAT_EQ(sphere->getLocalRadius(), 5.0f);
+}
+
+TEST(ComponentEdit, ARefusedConvexMeshPayloadIsMalformedAndChangesNothing)
+{
+  const auto scene = makeScene();
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  scene.object->addComponent(hull);
+  const auto uuid = scene.object->getUUID();
+  const auto cubeVertices = static_cast<std::uint32_t>(makeUnitCubeHull().vertices.size());
+  const auto cubeIndices = static_cast<std::uint32_t>(makeUnitCubeHull().indices.size());
+  const auto malformed = replication::ComponentEditResult::malformedPayload;
+
+  // The control: the same builder with a finite offset and the whole cube lands.
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager,
+                                            convexEdit(uuid, { 1, 2, 3 }, cubeVertices, cubeIndices)),
+            replication::ComponentEditResult::applied);
+  EXPECT_EQ(hull->getLocalPosition(), glm::vec3(1, 2, 3));
+
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager,
+                                            convexEdit(uuid, { 9, 9, 9 }, 0xFFFFFFFFu, 0)), malformed);
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager,
+                                            convexEdit(uuid, { 9, 9, 9 }, cubeVertices, 0xFFFFFFFFu)), malformed);
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager,
+                                            convexEdit(uuid, { 9, 9, 9 }, cubeVertices, 0)), malformed);
+  EXPECT_EQ(replication::applyComponentEdit(
+              *scene.objectManager,
+              convexEdit(uuid, { std::numeric_limits<float>::infinity(), 0, 0 }, cubeVertices, cubeIndices)),
+            malformed);
+
+  EXPECT_EQ(hull->getLocalPosition(), glm::vec3(1, 2, 3));
+}
+
+TEST(ComponentEdit, ATruncatedConvexMeshPayloadIsStillPartiallyApplied)
+{
+  const auto scene = makeScene();
+  scene.object->addComponent(std::make_shared<ConvexMeshCollider>());
+  const auto cubeVertices = static_cast<std::uint32_t>(makeUnitCubeHull().vertices.size());
+  const auto cubeIndices = static_cast<std::uint32_t>(makeUnitCubeHull().indices.size());
+
+  const auto whole = convexEdit(scene.object->getUUID(), { 1, 2, 3 }, cubeVertices, cubeIndices);
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, whole),
+            replication::ComponentEditResult::applied);
+
+  EXPECT_EQ(replication::applyComponentEdit(*scene.objectManager, withoutTheLastBytes(whole, 1)),
+            replication::ComponentEditResult::partiallyApplied);
 }
