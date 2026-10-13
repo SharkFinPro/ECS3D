@@ -7,12 +7,12 @@
 #include <string>
 
 bool drawAssetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegistry* registry,
-                   const AssetSlotStyle& style, const uuids::uuid& current, uuids::uuid& outUUID)
+                   const AssetSlotStyle& style, const uuids::uuid& current, uuids::uuid& outUUID, const bool mixed)
 {
-  std::string name = "None";
+  std::string name = mixed ? "Mixed" : "None";
   ImTextureID thumb = 0;
 
-  if (registry)
+  if (registry && !mixed)
   {
     if (const auto* record = registry->getByUUID(current))
     {

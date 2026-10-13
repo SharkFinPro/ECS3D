@@ -4,6 +4,7 @@
 #include "components/Script.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <iterator>
 
 namespace componentFieldDelta {
   std::string componentSignature(const std::shared_ptr<Component>& component)
@@ -258,6 +259,45 @@ namespace componentFieldDelta {
     }
 
     return mixed;
+  }
+
+  namespace {
+    const std::vector<std::string> hullGroup{ "vertices", "indices", "sourceModel" };
+
+    bool inHullGroup(const std::string& key)
+    {
+      return std::ranges::find(hullGroup, key) != hullGroup.end();
+    }
+  }
+
+  std::vector<std::string> linkedMixedKeys(const std::vector<std::string>& mixedKeys)
+  {
+    std::vector<std::string> linked;
+    std::ranges::copy_if(mixedKeys, std::back_inserter(linked), inHullGroup);
+
+    return linked;
+  }
+
+  std::vector<std::string> withLinkedKeys(const std::vector<std::string>& keys, const nlohmann::json& after)
+  {
+    const auto inGroup = inHullGroup;
+
+    std::vector<std::string> linked = keys;
+
+    if (std::ranges::none_of(keys, inGroup))
+    {
+      return linked;
+    }
+
+    for (const auto& key : hullGroup)
+    {
+      if (after.contains(key) && std::ranges::find(linked, key) == linked.end())
+      {
+        linked.push_back(key);
+      }
+    }
+
+    return linked;
   }
 
   nlohmann::json applyKeyDelta(const nlohmann::json& target, const nlohmann::json& before,

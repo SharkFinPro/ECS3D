@@ -21,8 +21,10 @@ struct AssetSlotStyle {
 
 // An asset reference slot: shows the assigned asset's thumbnail or icon and filename, and accepts an asset
 // of style.payloadId dropped onto it. Returns true (and fills outUUID) when something is dropped this
-// frame. cache and registry may be null, in which case the slot shows the type icon.
+// frame. cache and registry may be null, in which case the slot shows the type icon. A mixed slot (the
+// selected objects disagree) shows "Mixed" instead of an asset.
 bool drawAssetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegistry* registry,
-                   const AssetSlotStyle& style, const uuids::uuid& current, uuids::uuid& outUUID);
+                   const AssetSlotStyle& style, const uuids::uuid& current, uuids::uuid& outUUID,
+                   bool mixed = false);
 
 #endif //ASSETSLOT_H
