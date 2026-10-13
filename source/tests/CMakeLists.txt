@@ -51,6 +51,7 @@ add_executable(${PROJECT_NAME}
   ConvexMeshNarrowPhaseTest.cpp
   ConvexMeshPhysicsTest.cpp
   ConvexMeshPlacementTest.cpp
+  ConvexMeshQueryTest.cpp
   HullVerificationTest.cpp
   NonFiniteValuesTest.cpp
   FiniteRendererValuesTest.cpp
