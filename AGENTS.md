@@ -205,7 +205,10 @@ Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `scene
 only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see Logging below. An `editComponent` a replicated view could not apply is reported through
 `replication::logMissedComponentEdit` — debug for an absent object/component (routine, since the server
 rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
-payload (a real divergence). (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
+payload (a real divergence). Some components refuse a payload before assigning anything, as the convex
+mesh collider does for an over-limit count, an invalid hull or a non-finite offset. That refusal throws a
+`RefusedPayload` from `Component.h`. The edit then reports `malformedPayload` instead of `partiallyApplied`.
+(`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
 `sceneEdit` also carries two ops for undoing a deletion: `removeSubtree` deletes an object and its whole
 subtree immediately, promoting nothing, unlike `removeObject` (which promotes the removed object's
 children to its own parent in the same call - `applyStructuralEdit`'s `removeObject` branch calls
@@ -522,7 +525,9 @@ out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writ
 drains it). It also leaves out `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
 falling state; `isFalling` is the read-only query scripts get). The same goes for `getStackedLoad`/`setStackedLoad`/`getHeldImpulse`/`setHeldImpulse`
 (PhysicsSystem's per-tick record of what rests on the body and what its support has held).
-`ColliderBindings` covers the shared trigger, layer and mask. It also covers each shape's offset and size: box size, sphere radius, capsule radius and height. A shape's accessors fail safely on a collider of another shape. `CameraBindings` covers every field on
+`ColliderBindings` covers the shared trigger, layer and mask. It also covers each shape's offset and size:
+box size, sphere radius, capsule radius and height, and the convex mesh's offset and read-only vertex count.
+A shape's accessors fail safely on a collider of another shape. `CameraBindings` covers every field on
 `Camera`; its setters clamp fov/near/far to the same valid range as the editor UI (`Camera::minFovDegrees`/
 `maxFovDegrees`/`minNearPlane`/`minFarPlaneFor`), so a script cannot produce a degenerate projection.
 `InputUtilsBindings` already covers everything `InputState` queries;
@@ -575,7 +580,11 @@ keeps behaving exactly as before.
 plain vertex spans. Each shape's touching feature is the vertices within a tolerance of the extreme one along
 the contact normal. The side with more points is the reference polygon; the other side is ordered into a
 polygon, clipped to the reference's edge planes (Sutherland-Hodgman) and projected onto its plane. Features
-with no area reduce to one point midway between their closest points. Nothing calls it yet.
+with no area reduce to one point midway between their closest points.
+A pair holding a convex mesh collider, other than with a sphere, takes its manifold from this clipping in
+`Polytope`, at most `Contact::points` wide. A capsule in such a pair contributes its cap points as its
+feature. `PhysicsSystem` skips the box-axis flush snap when a hull is in the pair, since a hull has no box
+faces to lie flush against.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.

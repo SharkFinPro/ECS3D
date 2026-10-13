@@ -1,8 +1,11 @@
 #include "Polytope.h"
 #include "Simplex.h"
 #include "Support.h"
+#include "ContactManifold.h"
+#include "NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
+#include <objects/components/collisions/ConvexMeshCollider.h>
 #include <objects/components/collisions/SphereCollider.h>
 #include <objects/components/Transform.h>
 #include <objects/Object.h>
@@ -13,6 +16,7 @@
 #include <limits>
 #include <map>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 
 glm::vec3 closestPointOnPlane(const glm::vec3& a, const glm::vec3& normal)
@@ -179,6 +183,33 @@ std::vector<glm::vec3> capsuleContactPoints(CapsuleCollider& capsule, Collider& 
   return points;
 }
 
+// The vertices of a hull or box, in world space.
+std::vector<glm::vec3> worldVerticesOf(Collider& collider)
+{
+  if (collider.getColliderType() == ColliderType::convexMeshCollider)
+  {
+    return dynamic_cast<ConvexMeshCollider&>(collider).getWorldVertices();
+  }
+
+  const auto vertices = boxVerticesOf(boxGeometryOf(collider));
+
+  return std::vector<glm::vec3>(vertices.begin(), vertices.end());
+}
+
+// The part of a shape that touches along towardOther: a capsule's cap points, otherwise the extreme vertices.
+std::vector<glm::vec3> touchingFeatureOf(Collider& collider, Collider& other, const glm::vec3& towardOther)
+{
+  if (collider.getColliderType() == ColliderType::capsuleCollider)
+  {
+    return capsuleContactPoints(dynamic_cast<CapsuleCollider&>(collider), other, towardOther);
+  }
+
+  return collisions::touchingFeature(worldVerticesOf(collider), towardOther);
+}
+
+// Contact::points holds this many.
+constexpr size_t maxManifoldPoints = std::tuple_size_v<decltype(collisions::Contact::points)>;
+
 Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
   : m_collider(&collider), m_otherCollider(&otherCollider)
 {
@@ -228,7 +259,7 @@ glm::vec3 Polytope::findCollisionPoint() const
   }
 
   glm::vec3 centroid{ 0 };
-  const auto points = isCapsulePair() ? distinctPoints(capsuleFeaturePoints()) : boxContactPoints();
+  const auto points = shapeContactPoints();
   for (const auto& point : points)
   {
     centroid += point;
@@ -246,7 +277,34 @@ std::vector<glm::vec3> Polytope::findContactManifold() const
     return { findCollisionPoint() };
   }
 
+  return shapeContactPoints();
+}
+
+std::vector<glm::vec3> Polytope::shapeContactPoints() const
+{
+  if (isHullPair())
+  {
+    return hullContactPoints();
+  }
+
   return distinctPoints(isCapsulePair() ? capsuleFeaturePoints() : boxContactPoints());
+}
+
+bool Polytope::isHullPair() const
+{
+  return m_collider->getColliderType() == ColliderType::convexMeshCollider ||
+         m_otherCollider->getColliderType() == ColliderType::convexMeshCollider;
+}
+
+std::vector<glm::vec3> Polytope::hullContactPoints() const
+{
+  // closestPoint runs from m_collider toward m_otherCollider, so the first shape touches along the normal
+  // and the second along its reverse.
+  const auto normal = glm::normalize(m_closestFaceData.closestPoint);
+
+  return collisions::clipManifold(touchingFeatureOf(*m_collider, *m_otherCollider, normal),
+                                  touchingFeatureOf(*m_otherCollider, *m_collider, -normal), normal,
+                                  maxManifoldPoints);
 }
 
 bool Polytope::isCapsulePair() const
