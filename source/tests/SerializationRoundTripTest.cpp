@@ -16,6 +16,8 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/CapsuleCollider.h"
+#include "objects/components/collisions/ConvexHull.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
@@ -246,6 +248,20 @@ namespace {
     lamp->addComponent(light);
   }
 
+  // A convex mesh collider with a hull that is not the default cube, built from a model.
+  void addRock(const std::shared_ptr<SceneAsset>& scene)
+  {
+    const auto rock = addObject(scene, "Rock");
+
+    const std::vector<glm::vec3> points{ { -1, -1, -1 }, { 1, -1, -1 }, { 0, -1, 1 }, { 0, 1, 0 } };
+    const auto hull = std::make_shared<ConvexMeshCollider>();
+    static_cast<void>(hull->setHull(*buildConvexHull(points)));
+    hull->setSourceModel(uuidFrom("11111111-1111-1111-1111-111111111111"));
+    hull->setPosition({ 0.0f, 0.25f, 0.0f });
+    hull->setLayer(4);
+    rock->addComponent(hull);
+  }
+
   // A project touching every component type, a nested object, a second scene, a prefab body and a
   // display-name override.
   void buildProject(const Project& project)
@@ -260,6 +276,7 @@ namespace {
     addChild(scene, body);
     addLamp(scene);
     addPill(scene);
+    addRock(scene);
 
     const auto empty = std::make_shared<SceneAsset>(uuidFrom("77777777-7777-7777-7777-777777777777"),
                                                     "Empty", project.componentRegistry);
