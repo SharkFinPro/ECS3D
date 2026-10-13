@@ -641,8 +641,8 @@ not its convexity: vertex and index counts within the limits, finite vertices, e
 hull inline, as local-space vertices and triangle indices. The server therefore works without the model the
 hull came from. Its `sourceModel` field only records where the hull was built. A fresh one is the unit cube
 and places itself like a `BoxCollider` with the same offsets. Its `setHull`, `loadFromJSON` and `unpack`
-refuse an invalid hull and change nothing. Before it allocates, `unpack` bounds each count. Narrow phase,
-scene queries and scripting do not handle it yet.
+refuse an invalid hull and change nothing. Before it allocates, `unpack` bounds each count. The narrow phase,
+scene queries, scripts and the inspector all handle it, as their own sections describe.
 
 **Viewport gizmos.** The selected object's translate/rotate/scale gizmo is drawn through the VulkanEngine
 scene overlay hook (`RenderingManager::setSceneOverlay`, one callback per frame into the scene window's own
