@@ -50,6 +50,7 @@ add_executable(${PROJECT_NAME}
   ConvexMeshColliderTest.cpp
   ConvexMeshNarrowPhaseTest.cpp
   ConvexMeshPhysicsTest.cpp
+  ConvexMeshPlacementTest.cpp
   HullGizmoMeshTest.cpp
   HullVerificationTest.cpp
   NonFiniteValuesTest.cpp
