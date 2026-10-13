@@ -145,6 +145,11 @@ namespace {
     return collider && collider->getColliderType() == ColliderType::sphereCollider;
   }
 
+  bool isHull(const std::shared_ptr<Collider>& collider)
+  {
+    return collider && collider->getColliderType() == ColliderType::convexMeshCollider;
+  }
+
   glm::vec3 spinOf(const std::shared_ptr<Object>& object)
   {
     const auto body = object->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -357,11 +362,14 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   const float faceRadius = support.underCenterOfMass ? grindingRadius(support.point, collisionPoints) : 0.0f;
   resolve(pair, minimumTranslationVector, support.point, faceRadius, dt);
 
-  if (normal.y > 0.0f && support.underCenterOfMass)
+  // Laying flush turns the body's owner to the nearest box axis, which is no face of a hull.
+  const bool boxFaces = !isHull(collider) && !isHull(other->getComponent<Collider>(ComponentType::collider));
+
+  if (boxFaces && normal.y > 0.0f && support.underCenterOfMass)
   {
     layFlush(*transform, other, normal, flushTiltSine);
   }
-  else if (normal.y > 0.0f)
+  else if (boxFaces && normal.y > 0.0f)
   {
     // One tick of support at an edge turns a box a degree or more, so it would go past flat onto its other
     // edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
