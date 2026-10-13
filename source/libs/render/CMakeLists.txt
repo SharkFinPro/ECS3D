@@ -10,6 +10,7 @@ add_library(${PROJECT_NAME}
   CapsuleGizmo.h
   LightGizmoVisibility.h
   GridVisibility.h
+  HullGizmoMesh.h
   InputCapture.cpp
   InputCapture.h
   OutlineColors.h
