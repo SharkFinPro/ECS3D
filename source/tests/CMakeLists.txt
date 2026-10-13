@@ -45,6 +45,7 @@ add_executable(${PROJECT_NAME}
   ComponentEditTest.cpp
   MissedComponentEditLogTest.cpp
   ComponentVariableTest.cpp
+  ConvexHullRebuildTest.cpp
   ConvexHullTest.cpp
   ConvexHullValidationTest.cpp
   ConvexMeshColliderTest.cpp
@@ -52,6 +53,7 @@ add_executable(${PROJECT_NAME}
   ConvexMeshPhysicsTest.cpp
   ConvexMeshPlacementTest.cpp
   ConvexMeshQueryTest.cpp
+  ConvexMultiSelectEditTest.cpp
   HullVerificationTest.cpp
   NonFiniteValuesTest.cpp
   FiniteRendererValuesTest.cpp
@@ -218,6 +220,9 @@ add_executable(${PROJECT_NAME}
 
   # TransientObject depends only on ECS3DData and json.
   ../libs/editor/TransientObject.cpp
+
+  # The convex hull rebuild step depends only on ECS3DData, glm and ECS3DLog.
+  ../libs/editor/components/ConvexHullRebuild.cpp
 
   # The billboard math depends only on glm, compiled in rather than linking ECS3DRender, which pulls in
   # Vulkan.

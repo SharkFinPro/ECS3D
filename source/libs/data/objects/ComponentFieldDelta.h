@@ -52,6 +52,16 @@ namespace componentFieldDelta {
   [[nodiscard]] std::vector<std::string> mixedTopLevelKeys(
     const std::vector<nlohmann::json>& serializedForms);
 
+  // `keys` plus, when any of them belongs to a group of fields that only make sense together, the rest of
+  // that group present in `after`. A convex mesh collider's hull is one such group: vertices and indices
+  // index into each other, and the source model describes them, so one must not cross without the others.
+  [[nodiscard]] std::vector<std::string> withLinkedKeys(const std::vector<std::string>& keys,
+                                                        const nlohmann::json& after);
+
+  // The members of `mixedKeys` that belong to such a linked group. An edit that leaves the primary object as
+  // it was (a drop of what it already holds) propagates these and nothing else.
+  [[nodiscard]] std::vector<std::string> linkedMixedKeys(const std::vector<std::string>& mixedKeys);
+
   // `target` with each of `keys` updated from `after`, using `before` to tell which part of a key actually
   // changed. For most keys this is a whole-value replacement (a nested vec3, stored as an array, is
   // swapped in whole rather than merged element-by-element). A key whose `before`/`after` value is a
