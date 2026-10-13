@@ -17,6 +17,8 @@ add_library(${PROJECT_NAME}
   collisions/ContactManifold.h
   collisions/Support.cpp
   collisions/Support.h
+  queries/HullQueries.cpp
+  queries/HullQueries.h
   queries/SceneQueries.cpp
   queries/SceneQueries.h
 )
