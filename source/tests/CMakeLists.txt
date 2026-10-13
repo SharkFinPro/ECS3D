@@ -25,6 +25,7 @@ add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ColliderCacheTest.cpp
   CapsuleColliderTest.cpp
+  CapsuleGizmoTest.cpp
   CapsuleNarrowPhaseTest.cpp
   CapsulePhysicsTest.cpp
   CapsuleSceneQueryTest.cpp
