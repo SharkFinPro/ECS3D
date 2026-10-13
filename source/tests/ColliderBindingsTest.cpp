@@ -8,6 +8,8 @@
 #include "objects/ObjectManager.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/CapsuleCollider.h"
+#include "objects/components/collisions/ConvexHull.h"
+#include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
@@ -15,6 +17,7 @@
 #include <memory>
 #include <string>
 #include <uuid.h>
+#include <vector>
 
 namespace {
   // Builds a scene with one box-collider object, one sphere-collider object, and one object with no
@@ -393,4 +396,90 @@ TEST_F(ColliderBindingsTest, ACapsuleSetRecordsAnEditOnlyWhenTheValueChanged)
   ASSERT_EQ(edits.size(), 1u);
   EXPECT_EQ(edits[0].first, m_capsuleObject->getUUID());
   EXPECT_EQ(edits[0].second, m_capsule);
+}
+
+TEST_F(ColliderBindingsTest, GetShapeNamesAConvexMeshAndItsAccessorsReadAndWriteTheOffset)
+{
+  const auto hullObject = fixtures::addObject(m_scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  hullObject->addComponent(hull);
+  const auto hullUUID = uuidOf(hullObject);
+
+  EXPECT_EQ(m_bindings.getShape(hullUUID.c_str()), 4);
+  EXPECT_TRUE(m_bindings.has(hullUUID.c_str()));
+
+  float x = -1, y = -1, z = -1;
+  ASSERT_TRUE(m_bindings.getConvexMeshOffset(hullUUID.c_str(), &x, &y, &z));
+  EXPECT_EQ(glm::vec3(x, y, z), glm::vec3(0.0f));
+
+  EXPECT_TRUE(m_bindings.setConvexMeshOffset(hullUUID.c_str(), 1.0f, 2.0f, 3.0f));
+  ASSERT_TRUE(m_bindings.getConvexMeshOffset(hullUUID.c_str(), &x, &y, &z));
+  EXPECT_EQ(glm::vec3(x, y, z), glm::vec3(1.0f, 2.0f, 3.0f));
+  EXPECT_EQ(hull->getLocalPosition(), glm::vec3(1.0f, 2.0f, 3.0f));
+
+  const auto edits = BindingContext::takeComponentEdits();
+  ASSERT_EQ(edits.size(), 1u);
+  EXPECT_EQ(edits[0].first, hullObject->getUUID());
+  EXPECT_EQ(edits[0].second, hull);
+
+  // A non-finite offset is accepted but changes nothing, so it records nothing.
+  const auto nan = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_TRUE(m_bindings.setConvexMeshOffset(hullUUID.c_str(), nan, 0.0f, 0.0f));
+  EXPECT_EQ(hull->getLocalPosition(), glm::vec3(1.0f, 2.0f, 3.0f));
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+}
+
+TEST_F(ColliderBindingsTest, AConvexMeshReportsItsVertexCountAndTheCountFollowsTheHull)
+{
+  const auto hullObject = fixtures::addObject(m_scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  hullObject->addComponent(hull);
+  const auto hullUUID = uuidOf(hullObject);
+
+  uint32_t count = 0;
+  ASSERT_TRUE(m_bindings.getConvexMeshVertexCount(hullUUID.c_str(), &count));
+  EXPECT_EQ(count, 8u);
+
+  const std::vector<glm::vec3> points{ { 0, 0, 0 }, { 2, 0, 0 }, { 0, 2, 0 }, { 0, 0, 2 } };
+  const auto tetrahedron = buildConvexHull(points);
+  ASSERT_TRUE(tetrahedron.has_value());
+  ASSERT_TRUE(hull->setHull(*tetrahedron));
+
+  ASSERT_TRUE(m_bindings.getConvexMeshVertexCount(hullUUID.c_str(), &count));
+  EXPECT_EQ(count, 4u);
+}
+
+TEST_F(ColliderBindingsTest, ConvexMeshAccessorsFailSafelyOnOtherShapesAndTheOtherWayRound)
+{
+  const auto hullObject = fixtures::addObject(m_scene, "Hull");
+  hullObject->addComponent(std::make_shared<ConvexMeshCollider>());
+  const auto hullUUID = uuidOf(hullObject);
+
+  float x = -7, y = -7, z = -7;
+  uint32_t count = 99;
+  for (const auto& uuid : { uuidOf(m_boxObject), uuidOf(m_capsuleObject), uuidOf(m_bareObject) })
+  {
+    EXPECT_FALSE(m_bindings.getConvexMeshOffset(uuid.c_str(), &x, &y, &z));
+    EXPECT_FALSE(m_bindings.setConvexMeshOffset(uuid.c_str(), 1.0f, 1.0f, 1.0f));
+    EXPECT_FALSE(m_bindings.getConvexMeshVertexCount(uuid.c_str(), &count));
+  }
+  EXPECT_EQ(glm::vec3(x, y, z), glm::vec3(-7.0f));
+  EXPECT_EQ(count, 99u);
+  EXPECT_EQ(m_box->getLocalPosition(), glm::vec3(0));
+  EXPECT_EQ(m_capsule->getLocalPosition(), glm::vec3(0));
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  // The other shapes' accessors refuse a convex mesh, with its state untouched.
+  float value = -7;
+  EXPECT_FALSE(m_bindings.getBoxOffset(hullUUID.c_str(), &x, &y, &z));
+  EXPECT_FALSE(m_bindings.setBoxSize(hullUUID.c_str(), 5.0f, 5.0f, 5.0f));
+  EXPECT_FALSE(m_bindings.getSphereRadius(hullUUID.c_str(), &value));
+  EXPECT_FALSE(m_bindings.getCapsuleRadius(hullUUID.c_str(), &value));
+  EXPECT_FALSE(m_bindings.setCapsuleOffset(hullUUID.c_str(), 5.0f, 5.0f, 5.0f));
+  EXPECT_EQ(value, -7.0f);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  // Positive control: the convex accessors work on the hull.
+  EXPECT_TRUE(m_bindings.getConvexMeshOffset(hullUUID.c_str(), &x, &y, &z));
+  EXPECT_TRUE(m_bindings.getConvexMeshVertexCount(hullUUID.c_str(), &count));
 }

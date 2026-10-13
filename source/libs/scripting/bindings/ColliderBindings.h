@@ -10,11 +10,11 @@
 // current ObjectManager via BindingContext.
 //
 // getShape returns a small integer shared with the managed ColliderShape enum: 0 = none (no collider, or
-// an unresolved uuid), 1 = box, 2 = sphere, 3 = capsule. The common get* accessors (isTrigger/layer/mask) return a
+// an unresolved uuid), 1 = box, 2 = sphere, 3 = capsule, 4 = convex mesh. The common get* accessors (isTrigger/layer/mask) return a
 // neutral default when the object has no collider - the same convention as
 // ModelRendererBindings::getShouldRender.
 //
-// The box-only, sphere-only and capsule-only accessors fail safely when the collider is the other shape (or missing):
+// The box-only, sphere-only, capsule-only and convex-mesh-only accessors fail safely when the collider is the other shape (or missing):
 // a getter returns false and leaves its out params untouched, a setter returns false and changes nothing.
 // A setter that returns true but whose underlying component setter can silently ignore its input (a
 // non-finite offset/size/radius, a layer clamped to a value already in effect) only calls
@@ -52,6 +52,10 @@ struct ColliderBindings
   bool(*setCapsuleRadius)(const char* uuid, float radius);
   bool(*getCapsuleHeight)(const char* uuid, float* height);
   bool(*setCapsuleHeight)(const char* uuid, float height);
+
+  bool(*getConvexMeshOffset)(const char* uuid, float* x, float* y, float* z);
+  bool(*setConvexMeshOffset)(const char* uuid, float x, float y, float z);
+  bool(*getConvexMeshVertexCount)(const char* uuid, uint32_t* count);
 };
 
 class ColliderBindingsProvider {
@@ -91,6 +95,12 @@ private:
   static bool bindSetCapsuleRadius(const char* uuid, float radius);
   static bool bindGetCapsuleHeight(const char* uuid, float* height);
   static bool bindSetCapsuleHeight(const char* uuid, float height);
+
+  // Convex-mesh-only: same fail-safe rule as the box accessors. The hull is built from a model in the
+  // editor, so scripts get its vertex count and the offset, nothing more.
+  static bool bindGetConvexMeshOffset(const char* uuid, float* x, float* y, float* z);
+  static bool bindSetConvexMeshOffset(const char* uuid, float x, float y, float z);
+  static bool bindGetConvexMeshVertexCount(const char* uuid, uint32_t* count);
 
   // Whether the object identified by uuid currently has a Collider of any shape (backs World.tryGetCollider).
   static bool bindHas(const char* uuid);
