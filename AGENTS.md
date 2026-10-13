@@ -205,7 +205,10 @@ Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `scene
 only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see Logging below. An `editComponent` a replicated view could not apply is reported through
 `replication::logMissedComponentEdit` — debug for an absent object/component (routine, since the server
 rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
-payload (a real divergence). (`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
+payload (a real divergence). Some components refuse a payload before assigning anything, as the convex
+mesh collider does for an over-limit count, an invalid hull or a non-finite offset. That refusal throws a
+`RefusedPayload` from `Component.h`. The edit then reports `malformedPayload` instead of `partiallyApplied`.
+(`sceneEdit` carries the prefab-instantiation op too — see Prefabs below.)
 `sceneEdit` also carries two ops for undoing a deletion: `removeSubtree` deletes an object and its whole
 subtree immediately, promoting nothing, unlike `removeObject` (which promotes the removed object's
 children to its own parent in the same call - `applyStructuralEdit`'s `removeObject` branch calls

@@ -56,7 +56,7 @@ namespace {
 
     if (count > limit)
     {
-      throw std::runtime_error("ConvexMesh: count over the limit");
+      throw RefusedPayload("ConvexMesh: count over the limit");
     }
 
     std::vector<T> values;
@@ -85,7 +85,7 @@ namespace {
   {
     if (!isValidConvexHull(hull))
     {
-      throw std::runtime_error("ConvexMesh: invalid hull");
+      throw RefusedPayload("ConvexMesh: invalid hull");
     }
   }
 
@@ -96,7 +96,7 @@ namespace {
     if (!finiteCheck::isFinite(data.position) || !finiteCheck::isFinite(data.rotation)
       || !finiteCheck::isFinite(data.scale))
     {
-      throw std::runtime_error("ConvexMesh: non-finite offset");
+      throw RefusedPayload("ConvexMesh: non-finite offset");
     }
 
     requireValidHull(data.hull);
