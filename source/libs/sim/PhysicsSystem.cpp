@@ -5,6 +5,7 @@
 #include <objects/components/FiniteCheck.h>
 #include <objects/components/RigidBody.h>
 #include <objects/components/Transform.h>
+#include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/Collider.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -125,6 +126,43 @@ namespace {
     return 2.0f / 3.0f * total / static_cast<float>(points.size());
   }
 
+  // The mean lever arm of friction against turning about the normal for a load spread evenly along the segment
+  // between two contact points: with the center of mass a and b from the ends, (a^2 + b^2) / (2 (a + b)). That is a
+  // quarter of the length when centered, as a disc's even pressure gives two thirds of its radius. Zero unless the
+  // center of mass is over the segment.
+  float lineGrindingRadius(const glm::vec3& centerOfMass, const glm::vec3& normal,
+                           const std::span<const glm::vec3> points)
+  {
+    const auto flat = [&normal](const glm::vec3& vector)
+    {
+      return vector - glm::dot(vector, normal) * normal;
+    };
+
+    const auto segment = flat(points[1] - points[0]);
+    const float length = glm::length(segment);
+    if (length <= 1e-6f)
+    {
+      return 0.0f;
+    }
+
+    const auto direction = segment / length;
+    const auto offset = flat(centerOfMass - points[0]);
+    const float along = glm::dot(offset, direction);
+    const float beside = glm::length(offset - along * direction);
+
+    // Float noise grows with the distance from the origin, not with the length of the segment.
+    const float tolerance = 1e-4f * std::max(1.0f, glm::length(centerOfMass));
+    if (along < -tolerance || along > length + tolerance || beside > tolerance)
+    {
+      return 0.0f;
+    }
+
+    const float toStart = std::clamp(along, 0.0f, length);
+    const float toEnd = length - toStart;
+
+    return (toStart * toStart + toEnd * toEnd) / (2.0f * length);
+  }
+
   glm::vec3 horizontalOf(const glm::vec3& vector)
   {
     return { vector.x, 0.0f, vector.z };
@@ -143,6 +181,11 @@ namespace {
   bool isSphere(const std::shared_ptr<Collider>& collider)
   {
     return collider && collider->getColliderType() == ColliderType::sphereCollider;
+  }
+
+  bool isCapsule(const std::shared_ptr<Collider>& collider)
+  {
+    return collider && collider->getColliderType() == ColliderType::capsuleCollider;
   }
 
   bool isHull(const std::shared_ptr<Collider>& collider)
@@ -354,12 +397,12 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   const auto normal = normalize(minimumTranslationVector);
   const auto support = collisionPoints.size() < 2 ? Support{ collisionPoints[0], false }
                                                   : findSupport(transform->getPosition(), normal, collisionPoints);
-  const auto pair = pairOf(body, *transform, collider, other, normal);
+  auto pair = pairOf(body, *transform, collider, other, normal);
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
   stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
-  const float faceRadius = support.underCenterOfMass ? grindingRadius(support.point, collisionPoints) : 0.0f;
+  const float faceRadius = twistRadius(pair, collider, support, transform->getPosition(), collisionPoints);
   resolve(pair, minimumTranslationVector, support.point, faceRadius, dt);
 
   // Laying flush turns the body's owner to the nearest box axis, which is no face of a hull.
@@ -393,11 +436,31 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   comeToRest(body, other, normal);
 }
 
+float PhysicsSystem::twistRadius(Pair& pair, const std::shared_ptr<Collider>& collider, const Support& support,
+                                 const glm::vec3& centerOfMass, const std::span<const glm::vec3> collisionPoints)
+{
+  if (support.underCenterOfMass)
+  {
+    return grindingRadius(support.point, collisionPoints);
+  }
+
+  if (collisionPoints.size() != 2 || !isCapsule(collider))
+  {
+    return 0.0f;
+  }
+
+  const float radius = lineGrindingRadius(centerOfMass, pair.normal, collisionPoints);
+  pair.lineContact = radius > 0.0f;
+
+  return radius;
+}
+
 PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
                                           const std::shared_ptr<Collider>& collider,
                                           const std::shared_ptr<Object>& other, const glm::vec3& normal)
 {
-  Pair pair{ { &body, &transform, false, isSphere(collider) }, {}, normal };
+  Pair pair{ { &body, &transform, false }, {}, normal };
+  markRolling(pair.body, collider);
 
   // The other body turns about its rigid body's own center, which a child collider's owner may not be.
   const auto otherBody = other->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -405,12 +468,39 @@ PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
                                         : nullptr;
   if (otherBody && otherTransform)
   {
-    pair.other = { otherBody.get(), otherTransform.get(), !otherBody->isFalling(),
-                   isSphere(other->getComponent<Collider>(ComponentType::collider)) };
+    pair.other = { otherBody.get(), otherTransform.get(), !otherBody->isFalling() };
+    markRolling(pair.other, other->getComponent<Collider>(ComponentType::collider));
     pair.body.resting = !body.isFalling();
   }
 
   return pair;
+}
+
+void PhysicsSystem::markRolling(Side& side, const std::shared_ptr<Collider>& collider)
+{
+  if (isSphere(collider))
+  {
+    side.rolls = true;
+    return;
+  }
+
+  if (!isCapsule(collider))
+  {
+    return;
+  }
+
+  const auto capsule = std::static_pointer_cast<CapsuleCollider>(collider);
+  const auto core = capsule->getSegment();
+  const auto along = core.end - core.start;
+  const float length = glm::length(along);
+
+  side.rolls = true;
+  side.rollRadius = capsule->getRadius();
+  // A capsule with no core is a sphere and rolls about any axis.
+  if (length > 1e-6f)
+  {
+    side.rollAxis = along / length;
+  }
 }
 
 void PhysicsSystem::resolve(const Pair& pair, const glm::vec3 minimumTranslationVector, const glm::vec3& point,
@@ -504,7 +594,7 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     pair.other.body->setStackedLoad(pair.other.body->getStackedLoad() + load * pair.normal.y);
   }
 
-  applyFriction(pair, point, load, faceRadius > 0.0f, dt);
+  applyFriction(pair, point, load, faceRadius > 0.0f && !pair.lineContact, dt);
   applySpinFriction(pair, load, faceRadius, dt);
   applyRollingResistance(pair, point, load, dt);
 }
@@ -535,14 +625,29 @@ void PhysicsSystem::applyRollingResistance(const Pair& pair, const glm::vec3& po
   }
 
   const auto spin = relativeSpin(pair, dt);
-  const auto rolling = spin - glm::dot(spin, pair.normal) * pair.normal;
+  auto rolling = spin - glm::dot(spin, pair.normal) * pair.normal;
+
+  // Lying along a line, a capsule rolls only about its own axis; on a cap or a crossing contact it rolls about
+  // any axis in the plane, as a sphere does.
+  if (pair.lineContact)
+  {
+    const auto along = pair.body.rollAxis - glm::dot(pair.body.rollAxis, pair.normal) * pair.normal;
+    const float alongLength = glm::length(along);
+    if (alongLength > 1e-6f)
+    {
+      const auto axis = along / alongLength;
+      rolling = glm::dot(rolling, axis) * axis;
+    }
+  }
+
   const float rate = glm::length(rolling);
   if (rate <= minSpinRate)
   {
     return;
   }
 
-  const float arm = glm::distance(point, pair.body.transform->getPosition());
+  const float rollRadius = pair.body.rolls ? pair.body.rollRadius : pair.other.rollRadius;
+  const float arm = rollRadius > 0.0f ? rollRadius : glm::distance(point, pair.body.transform->getPosition());
   resistSpin(pair, rolling / rate, rate, resistance * load * arm, dt);
 }
 
