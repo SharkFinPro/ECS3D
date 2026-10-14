@@ -581,10 +581,14 @@ plain vertex spans. Each shape's touching feature is the vertices within a toler
 the contact normal. The side with more points is the reference polygon; the other side is ordered into a
 polygon, clipped to the reference's edge planes (Sutherland-Hodgman) and projected onto its plane. Features
 with no area reduce to one point midway between their closest points.
-A pair holding a convex mesh collider, other than with a sphere, takes its manifold from this clipping in
-`Polytope`, at most `Contact::points` wide. A capsule in such a pair contributes its cap points as its
-feature. `PhysicsSystem` skips the box-axis flush snap when a hull is in the pair, since a hull has no box
-faces to lie flush against.
+A pair of boxes and convex mesh colliders, other than with a sphere or capsule, takes its manifold from
+`referenceFaceManifold` instead, built the way the box pair is. Each shape offers its face normals (`hullFaceNormals`
+for a hull). The side whose face is more nearly parallel to the contact normal is the reference, ties going to the
+first collider. The other side's touching vertices are clamped into the reference face's polygon along the face
+plane, keeping their depth along it. So a box-shaped hull makes the same `Contact` a box does.
+A pair holding a capsule and a hull takes its manifold from the clipping above in `Polytope`, at most
+`Contact::points` wide, with the capsule's cap points as its feature. `PhysicsSystem` skips the box-axis flush
+snap when a hull is in the pair, since a hull has no box faces to lie flush against.
 
 **Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
 `active`) — position comes from the object's `Transform`, so only the *look* needs its own field.

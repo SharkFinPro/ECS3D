@@ -50,7 +50,7 @@ public:
   [[nodiscard]] glm::vec3 findCollisionPoint() const;
 
   // Up to four distinct world-space points spanning the contact: the incident face's vertices clipped to
-  // the reference face on a box pair, a convex hull pair clipped the same way, a capsule's cap points
+  // the reference face on a box or hull pair, a capsule's cap points
   // facing the other shape, or the single findCollisionPoint otherwise.
   [[nodiscard]] std::vector<glm::vec3> findContactManifold() const;
 
