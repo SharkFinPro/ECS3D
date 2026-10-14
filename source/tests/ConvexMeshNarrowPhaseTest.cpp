@@ -127,11 +127,12 @@ TEST(ConvexMeshNarrowPhase, AHullRestingFlatOnABoxGetsAFourPointManifoldInsideBo
   {
     for (const float z : { -1.0f, 1.0f })
     {
-      EXPECT_TRUE(hasPointNear(contact->contactPoints(), { x, 1.0f, z })) << x << ", " << z;
+      EXPECT_TRUE(hasPointNear(contact->contactPoints(), { x, 0.9f, z })) << x << ", " << z;
     }
   }
 
-  expectNear("point", contact->point, { 0, 1.0f, 0 }, tolerance);
+  // Both faces are flat to the contact normal, so the hull is the reference and the box's face keeps its depth.
+  expectNear("point", contact->point, { 0, 0.9f, 0 }, tolerance);
 }
 
 TEST(ConvexMeshNarrowPhase, TheNormalPointsAwayFromTheOtherColliderWhicheverSideTheHullIsOn)
@@ -164,11 +165,11 @@ TEST(ConvexMeshNarrowPhase, AShiftedHullTouchesOnlyTheOverlappingPartOfTheFace)
   const auto contact = collisions::findContact(*hull, *box);
   ASSERT_TRUE(contact.has_value());
 
-  // The box's face spans x 0..2 and the hull's -1..1, so the clipped manifold spans x 0..1.
+  // The box's face spans x 0..2 and the hull's -1..1, so the manifold spans x 0..1, at the box face's depth.
   ASSERT_EQ(contact->pointCount, 4);
   expectPointsInsideSquare(contact->contactPoints(), 0.0f, 1.0f, -1.0f, 1.0f);
-  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0.0f, 1.0f, -1.0f }));
-  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 1.0f, 1.0f, 1.0f }));
+  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0.0f, 0.9f, -1.0f }));
+  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 1.0f, 0.9f, 1.0f }));
 }
 
 TEST(ConvexMeshNarrowPhase, TwoHullsRestingFaceToFaceGetAFourPointManifold)
@@ -208,8 +209,8 @@ TEST(ConvexMeshNarrowPhase, AHullOnItsEdgeOnABoxFaceGetsATwoPointManifold)
   expectNear("normal", contact->normal(), { 0, -1, 0 }, tolerance);
 
   ASSERT_EQ(contact->pointCount, 2);
-  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0, 1.0f, -0.5f }));
-  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0, 1.0f, 0.5f }));
+  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0, 0.95f, -0.5f }));
+  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0, 0.95f, 0.5f }));
 }
 
 TEST(ConvexMeshNarrowPhase, ATetrahedronOnItsBaseTouchesTheBoxAcrossTheBase)
@@ -224,11 +225,11 @@ TEST(ConvexMeshNarrowPhase, ATetrahedronOnItsBaseTouchesTheBoxAcrossTheBase)
   EXPECT_NEAR(contact->depth(), 0.05f, tolerance);
   expectNear("normal", contact->normal(), { 0, -1, 0 }, tolerance);
 
-  // The base triangle has three corners, fewer than the box's four, so the box is the reference.
+  // The box is first and both faces are flat to the normal, so it is the reference and the base keeps its depth.
   ASSERT_EQ(contact->pointCount, 3);
-  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { -1, 1.0f, -1 }));
-  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 1, 1.0f, -1 }));
-  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0, 1.0f, 1 }));
+  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { -1, 0.95f, -1 }));
+  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 1, 0.95f, -1 }));
+  EXPECT_TRUE(hasPointNear(contact->contactPoints(), { 0, 0.95f, 1 }));
 }
 
 TEST(ConvexMeshNarrowPhase, AHullAndASphereMeetAtASinglePointOnTheSphereSideOfTheOverlap)

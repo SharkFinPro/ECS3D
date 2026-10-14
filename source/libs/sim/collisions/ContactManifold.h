@@ -12,6 +12,10 @@ namespace collisions {
   [[nodiscard]] std::vector<glm::vec3> touchingFeature(std::span<const glm::vec3> vertices,
                                                        const glm::vec3& direction);
 
+  // Same, with the tolerance given: the vertices within epsilon of the extreme one along direction.
+  [[nodiscard]] std::vector<glm::vec3> touchingFeature(std::span<const glm::vec3> vertices,
+                                                       const glm::vec3& direction, float epsilon);
+
   // The contact points of two convex shapes by clipping, in world space and at most maxPoints of them.
   //
   // normal is the unit contact normal pointing from the first shape toward the second. featureA is the

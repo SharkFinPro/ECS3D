@@ -50,6 +50,7 @@ add_executable(${PROJECT_NAME}
   ConvexHullTest.cpp
   ConvexHullValidationTest.cpp
   ConvexMeshColliderTest.cpp
+  ConvexMeshManifoldParityTest.cpp
   ConvexMeshNarrowPhaseTest.cpp
   ConvexMeshPhysicsTest.cpp
   ConvexMeshPlacementTest.cpp
@@ -75,6 +76,7 @@ add_executable(${PROJECT_NAME}
   SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp
   NarrowPhaseRotatedTest.cpp
+  SupportFacesTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
   TransformHierarchyTest.cpp

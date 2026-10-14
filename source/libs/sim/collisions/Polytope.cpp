@@ -2,6 +2,7 @@
 #include "Simplex.h"
 #include "Support.h"
 #include "ContactManifold.h"
+#include "FaceManifold.h"
 #include "NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
@@ -207,6 +208,62 @@ std::vector<glm::vec3> touchingFeatureOf(Collider& collider, Collider& other, co
   return collisions::touchingFeature(worldVerticesOf(collider), towardOther);
 }
 
+// The geometry of a box or hull for collisions::referenceFaceManifold, which views it.
+struct OwnedFaces
+{
+  std::vector<glm::vec3> vertices;
+  std::vector<glm::vec3> normals;
+  float epsilon;
+
+  [[nodiscard]] collisions::FaceShape view() const
+  {
+    return { vertices, normals, epsilon };
+  }
+};
+
+// The touching tolerance scales with the shape's own size along its local axes, so a box-shaped hull selects
+// the same vertices a box does at any orientation.
+float touchingEpsilon(const glm::vec3& halfExtents)
+{
+  return 1e-3f * std::max({ halfExtents.x, halfExtents.y, halfExtents.z, 1.0f });
+}
+
+OwnedFaces facesOf(Collider& collider)
+{
+  if (collider.getColliderType() == ColliderType::convexMeshCollider)
+  {
+    auto& hullCollider = dynamic_cast<ConvexMeshCollider&>(collider);
+    const auto& hull = hullCollider.getHull();
+
+    glm::vec3 low = hull.vertices.front();
+    glm::vec3 high = low;
+    for (const auto& vertex : hull.vertices)
+    {
+      low = glm::min(low, vertex);
+      high = glm::max(high, vertex);
+    }
+
+    OwnedFaces faces{ hullCollider.getWorldVertices(), {},
+                      touchingEpsilon((high - low) * 0.5f * glm::abs(collider.getScale())) };
+    faces.normals = collisions::hullFaceNormals(faces.vertices, hull.indices);
+
+    return faces;
+  }
+
+  const auto box = boxGeometryOf(collider);
+  const auto vertices = boxVerticesOf(box);
+
+  OwnedFaces faces{ std::vector<glm::vec3>(vertices.begin(), vertices.end()), {},
+                    touchingEpsilon({ box.halfExtents[0], box.halfExtents[1], box.halfExtents[2] }) };
+  for (const auto& axis : box.axes)
+  {
+    faces.normals.push_back(axis);
+    faces.normals.push_back(-axis);
+  }
+
+  return faces;
+}
+
 // Contact::points holds this many.
 constexpr size_t maxManifoldPoints = std::tuple_size_v<decltype(collisions::Contact::points)>;
 
@@ -302,6 +359,18 @@ std::vector<glm::vec3> Polytope::hullContactPoints() const
   // and the second along its reverse.
   const auto normal = glm::normalize(m_closestFaceData.closestPoint);
 
+  if (!isCapsulePair())
+  {
+    const auto first = facesOf(*m_collider);
+    const auto second = facesOf(*m_otherCollider);
+
+    if (auto points = collisions::referenceFaceManifold(first.view(), second.view(), normal, maxManifoldPoints);
+        !points.empty())
+    {
+      return points;
+    }
+  }
+
   return collisions::clipManifold(touchingFeatureOf(*m_collider, *m_otherCollider, normal),
                                   touchingFeatureOf(*m_otherCollider, *m_collider, -normal), normal,
                                   maxManifoldPoints);
@@ -361,7 +430,8 @@ std::vector<glm::vec3> Polytope::boxContactPoints() const
   const auto axisIndexA = dominantAxisIndex(boxA, normal);
   const auto axisIndexB = dominantAxisIndex(boxB, normal);
 
-  const bool aIsReference = std::fabs(glm::dot(boxA.axes[axisIndexA], normal)) >= std::fabs(glm::dot(boxB.axes[axisIndexB], normal));
+  const bool aIsReference = std::fabs(glm::dot(boxA.axes[axisIndexA], normal)) >=
+    std::fabs(glm::dot(boxB.axes[axisIndexB], normal)) - collisions::faceAlignmentTie;
 
   const auto& referenceBox = aIsReference ? boxA : boxB;
   const auto& incidentBox = aIsReference ? boxB : boxA;

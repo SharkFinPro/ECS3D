@@ -15,8 +15,13 @@ add_library(${PROJECT_NAME}
   collisions/Polytope.h
   collisions/ContactManifold.cpp
   collisions/ContactManifold.h
+  collisions/FaceManifold.cpp
+  collisions/FaceManifold.h
+  collisions/ManifoldInternal.h
   collisions/Support.cpp
   collisions/Support.h
+  collisions/SupportFaces.cpp
+  collisions/SupportFaces.h
   queries/HullQueries.cpp
   queries/HullQueries.h
   queries/SceneQueries.cpp
