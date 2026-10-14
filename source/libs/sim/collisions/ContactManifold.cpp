@@ -1,4 +1,5 @@
 #include "ContactManifold.h"
+#include "ManifoldInternal.h"
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <algorithm>
@@ -7,35 +8,7 @@
 #include <utility>
 
 namespace collisions {
-  namespace {
-    constexpr float dedupeDistance = 1e-4f;
-
-    // A reference polygon thinner than this fraction of its squared radius has no usable edge planes.
-    constexpr float minPolygonAreaRatio = 1e-5f;
-
-    constexpr float segmentEpsilon = 1e-12f;
-
-    struct Candidate {
-      glm::vec3 point;
-      float depth;
-    };
-
-    [[nodiscard]] float featureEpsilon(const std::span<const glm::vec3> vertices)
-    {
-      glm::vec3 low = vertices.front();
-      glm::vec3 high = vertices.front();
-
-      for (const auto& vertex : vertices)
-      {
-        low = glm::min(low, vertex);
-        high = glm::max(high, vertex);
-      }
-
-      const glm::vec3 half = (high - low) * 0.5f;
-
-      return 1e-3f * std::max({ half.x, half.y, half.z, 1.0f });
-    }
-
+  namespace detail {
     [[nodiscard]] glm::vec3 centroidOf(const std::span<const glm::vec3> points)
     {
       glm::vec3 sum{ 0 };
@@ -53,6 +26,93 @@ namespace collisions {
       return std::ranges::any_of(points, [&point](const glm::vec3& existing) {
         return glm::distance(existing, point) < dedupeDistance;
       });
+    }
+
+    [[nodiscard]] glm::vec3 closestPointOnSegment(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b)
+    {
+      const glm::vec3 ab = b - a;
+
+      return a + ab * std::clamp(glm::dot(p - a, ab) / glm::dot(ab, ab), 0.0f, 1.0f);
+    }
+
+    // The deepest candidate, then repeatedly the one furthest from everything chosen so far.
+    [[nodiscard]] std::vector<glm::vec3> spreadOut(const std::vector<Candidate>& candidates, const size_t maxPoints)
+    {
+      std::vector<glm::vec3> chosen;
+      if (candidates.size() <= maxPoints)
+      {
+        for (const auto& candidate : candidates)
+        {
+          chosen.push_back(candidate.point);
+        }
+
+        return chosen;
+      }
+
+      size_t deepest = 0;
+      for (size_t i = 1; i < candidates.size(); ++i)
+      {
+        if (candidates[i].depth > candidates[deepest].depth)
+        {
+          deepest = i;
+        }
+      }
+
+      chosen.push_back(candidates[deepest].point);
+
+      while (chosen.size() < maxPoints)
+      {
+        size_t best = 0;
+        float bestSeparation = -1.0f;
+
+        for (size_t i = 0; i < candidates.size(); ++i)
+        {
+          float separation = std::numeric_limits<float>::max();
+          for (const auto& picked : chosen)
+          {
+            separation = std::min(separation, glm::distance(candidates[i].point, picked));
+          }
+
+          if (separation > bestSeparation)
+          {
+            bestSeparation = separation;
+            best = i;
+          }
+        }
+
+        chosen.push_back(candidates[best].point);
+      }
+
+      return chosen;
+    }
+  }
+
+  using detail::Candidate;
+  using detail::centroidOf;
+  using detail::closestPointOnSegment;
+  using detail::containsNear;
+  using detail::dedupeDistance;
+  using detail::segmentEpsilon;
+  using detail::spreadOut;
+
+  namespace {
+    // A reference polygon thinner than this fraction of its squared radius has no usable edge planes.
+    constexpr float minPolygonAreaRatio = 1e-5f;
+
+    [[nodiscard]] float featureEpsilon(const std::span<const glm::vec3> vertices)
+    {
+      glm::vec3 low = vertices.front();
+      glm::vec3 high = vertices.front();
+
+      for (const auto& vertex : vertices)
+      {
+        low = glm::min(low, vertex);
+        high = glm::max(high, vertex);
+      }
+
+      const glm::vec3 half = (high - low) * 0.5f;
+
+      return 1e-3f * std::max({ half.x, half.y, half.z, 1.0f });
     }
 
     // Counter-clockwise about normal, so an edge's inward side is cross(normal, edge).
@@ -174,13 +234,6 @@ namespace collisions {
       return subject;
     }
 
-    [[nodiscard]] glm::vec3 closestPointOnSegment(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b)
-    {
-      const glm::vec3 ab = b - a;
-
-      return a + ab * std::clamp(glm::dot(p - a, ab) / glm::dot(ab, ab), 0.0f, 1.0f);
-    }
-
     // Both segments longer than a point.
     [[nodiscard]] std::pair<glm::vec3, glm::vec3> closestOfProperSegments(const glm::vec3& p1, const glm::vec3& q1,
                                                                           const glm::vec3& p2, const glm::vec3& q2)
@@ -265,59 +318,20 @@ namespace collisions {
       return (closestA + closestB) * 0.5f;
     }
 
-    // The deepest candidate, then repeatedly the one furthest from everything chosen so far.
-    [[nodiscard]] std::vector<glm::vec3> spreadOut(const std::vector<Candidate>& candidates, const size_t maxPoints)
-    {
-      std::vector<glm::vec3> chosen;
-      if (candidates.size() <= maxPoints)
-      {
-        for (const auto& candidate : candidates)
-        {
-          chosen.push_back(candidate.point);
-        }
-
-        return chosen;
-      }
-
-      size_t deepest = 0;
-      for (size_t i = 1; i < candidates.size(); ++i)
-      {
-        if (candidates[i].depth > candidates[deepest].depth)
-        {
-          deepest = i;
-        }
-      }
-
-      chosen.push_back(candidates[deepest].point);
-
-      while (chosen.size() < maxPoints)
-      {
-        size_t best = 0;
-        float bestSeparation = -1.0f;
-
-        for (size_t i = 0; i < candidates.size(); ++i)
-        {
-          float separation = std::numeric_limits<float>::max();
-          for (const auto& picked : chosen)
-          {
-            separation = std::min(separation, glm::distance(candidates[i].point, picked));
-          }
-
-          if (separation > bestSeparation)
-          {
-            bestSeparation = separation;
-            best = i;
-          }
-        }
-
-        chosen.push_back(candidates[best].point);
-      }
-
-      return chosen;
-    }
   }
 
   std::vector<glm::vec3> touchingFeature(const std::span<const glm::vec3> vertices, const glm::vec3& direction)
+  {
+    if (vertices.empty())
+    {
+      return {};
+    }
+
+    return touchingFeature(vertices, direction, featureEpsilon(vertices));
+  }
+
+  std::vector<glm::vec3> touchingFeature(const std::span<const glm::vec3> vertices, const glm::vec3& direction,
+                                         const float epsilon)
   {
     if (vertices.empty())
     {
@@ -329,8 +343,6 @@ namespace collisions {
     {
       extreme = std::max(extreme, glm::dot(vertex, direction));
     }
-
-    const float epsilon = featureEpsilon(vertices);
 
     std::vector<glm::vec3> selected;
     for (const auto& vertex : vertices)

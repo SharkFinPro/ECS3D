@@ -15,6 +15,9 @@ add_library(${PROJECT_NAME}
   collisions/Polytope.h
   collisions/ContactManifold.cpp
   collisions/ContactManifold.h
+  collisions/FaceManifold.cpp
+  collisions/FaceManifold.h
+  collisions/ManifoldInternal.h
   collisions/Support.cpp
   collisions/Support.h
   collisions/SupportFaces.cpp
