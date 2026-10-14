@@ -13,9 +13,11 @@
 #include "objects/components/collisions/SphereCollider.h"
 #include "objects/components/collisions/CapsuleCollider.h"
 
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
+#include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <array>
@@ -32,7 +34,8 @@ namespace {
   using fixtures::makeScene;
   using fixtures::transformOf;
 
-  // The box helpers PhysicsSystem builds its resting logic from, as the reference these faces must match.
+  // Copies of the box helpers PhysicsSystem builds its resting logic from today, as the reference these faces
+  // must match.
   struct ReferenceBox {
     glm::vec3 center;
     glm::mat3 axes;
@@ -430,4 +433,154 @@ TEST(SupportFaces, SpheresAndCapsulesHaveNoFaces)
   EXPECT_TRUE(collisions::supportFacesOf(*sphere).empty());
   EXPECT_TRUE(collisions::supportFacesOf(*capsule).empty());
   EXPECT_EQ(collisions::faceToward(collisions::supportFacesOf(*sphere), { 0.0f, 1.0f, 0.0f }), nullptr);
+}
+
+namespace {
+  std::shared_ptr<ConvexMeshCollider> hullOn(const fixtures::Scene& scene, const ConvexHull& hull,
+                                             const glm::vec3& position = glm::vec3(0.0f),
+                                             const glm::vec3& scale = glm::vec3(1.0f))
+  {
+    const auto object = addObject(scene, "Hull", position, scale);
+    const auto collider = std::make_shared<ConvexMeshCollider>();
+    EXPECT_TRUE(collider->setHull(hull));
+    object->addComponent(collider);
+
+    return collider;
+  }
+
+  void expectSixQuads(ConvexMeshCollider& hull)
+  {
+    const auto faces = collisions::supportFacesOf(hull);
+    ASSERT_EQ(faces.size(), 6u);
+    for (const auto& face : faces)
+    {
+      EXPECT_EQ(face.corners.size(), 4u);
+    }
+  }
+
+  // Four vertices of the cube's y = 1 face are 2, 3, 6 and 7.
+  ConvexHull cubeWithTopTriangle(const glm::vec3& extraVertex, const std::array<uint32_t, 3>& triangle)
+  {
+    auto cube = makeUnitCubeHull();
+    cube.vertices.push_back(extraVertex);
+    cube.indices.insert(cube.indices.end(), triangle.begin(), triangle.end());
+
+    return cube;
+  }
+}
+
+TEST(SupportFaces, AZeroAreaSliverInsideAFaceKeepsTheFace)
+{
+  const auto scene = makeScene();
+  const auto hull = hullOn(scene, cubeWithTopTriangle({ 0.0f, 1.0f, 0.0f }, { 2, 8, 7 }));
+
+  expectSixQuads(*hull);
+}
+
+TEST(SupportFaces, ANeedleTriangleOnAFaceKeepsTheFace)
+{
+  const auto scene = makeScene();
+  const auto hull = hullOn(scene, cubeWithTopTriangle({ 1e-4f, 1.0f, -1e-4f }, { 2, 8, 7 }));
+
+  expectSixQuads(*hull);
+}
+
+TEST(SupportFaces, AHullFarFromTheOriginStillMerges)
+{
+  const auto scene = makeScene();
+  const auto hull = hullOn(scene, makeUnitCubeHull(), { 5000.0f, 0.0f, 0.0f }, glm::vec3(0.5f));
+
+  expectSixQuads(*hull);
+  const auto faces = collisions::supportFacesOf(*hull);
+  const auto* top = collisions::faceToward(faces, { 0.0f, 1.0f, 0.0f });
+  ASSERT_NE(top, nullptr);
+  expectNear("top normal", top->normal, { 0.0f, 1.0f, 0.0f }, 5e-3f);
+}
+
+TEST(SupportFaces, FacesFiveDegreesApartDoNotMerge)
+{
+  const float ridge = 1.0f + std::tan(glm::radians(5.0f));
+  const std::vector<glm::vec3> roof{
+    { -1, 0, -1 }, { 1, 0, -1 }, { 1, 0, 1 }, { -1, 0, 1 },
+    { -1, 1, -1 }, { 1, 1, -1 }, { 1, 1, 1 }, { -1, 1, 1 },
+    { 0, ridge, -1 }, { 0, ridge, 1 }
+  };
+  const auto built = buildConvexHull(roof);
+  ASSERT_TRUE(built.has_value());
+
+  const auto scene = makeScene();
+  const auto hull = hullOn(scene, *built);
+  const auto faces = collisions::supportFacesOf(*hull);
+  ASSERT_EQ(faces.size(), 7u);
+
+  const auto up = std::ranges::count_if(faces, [](const SupportFace& face) { return face.normal.y > 0.9f; });
+  EXPECT_EQ(up, 2);
+}
+
+TEST(SupportFaces, AFaceWithMoreThanFourCornersIsOnePolygon)
+{
+  std::vector<glm::vec3> prism;
+  for (int i = 0; i < 6; ++i)
+  {
+    const float angle = glm::radians(60.0f * static_cast<float>(i));
+    prism.emplace_back(std::cos(angle), -1.0f, std::sin(angle));
+    prism.emplace_back(std::cos(angle), 1.0f, std::sin(angle));
+  }
+  const auto built = buildConvexHull(prism);
+  ASSERT_TRUE(built.has_value());
+
+  const auto scene = makeScene();
+  const auto hull = hullOn(scene, *built);
+  const auto faces = collisions::supportFacesOf(*hull);
+  ASSERT_EQ(faces.size(), 8u);
+
+  const auto* top = collisions::faceToward(faces, { 0.0f, 1.0f, 0.0f });
+  ASSERT_NE(top, nullptr);
+  EXPECT_EQ(top->corners.size(), 6u);
+  expectWoundOutward(*top, { 0.0f, 0.0f, 0.0f });
+  expectNear("top center", top->center, { 0.0f, 1.0f, 0.0f });
+}
+
+TEST(SupportFaces, ClampToFaceNearAHullCornerLandsOnTheCorner)
+{
+  const auto scene = makeScene();
+  const auto hull = hullOn(scene, makeUnitCubeHull());
+  const auto faces = collisions::supportFacesOf(*hull);
+  const auto* top = collisions::faceToward(faces, { 0.0f, 1.0f, 0.0f });
+  ASSERT_NE(top, nullptr);
+
+  expectNear("corner", collisions::clampToFace(*top, { 3.0f, 2.0f, 3.0f }), { 1.0f, 2.0f, 1.0f });
+  expectNear("other corner", collisions::clampToFace(*top, { -3.0f, 0.0f, 3.0f }), { -1.0f, 0.0f, 1.0f });
+}
+
+TEST(SupportFaces, NegativeScaleOnEveryAxisKeepsOutwardFaces)
+{
+  const auto scene = makeScene();
+  const glm::vec3 position{ 1.0f, 2.0f, 3.0f };
+  const auto hull = hullOn(scene, makeUnitCubeHull(), position, { -1.0f, -2.0f, -0.5f });
+
+  const auto faces = collisions::supportFacesOf(*hull);
+  ASSERT_EQ(faces.size(), 6u);
+  for (const auto& face : faces)
+  {
+    expectWoundOutward(face, position);
+  }
+
+  const auto* top = collisions::faceToward(faces, { 0.0f, 1.0f, 0.0f });
+  ASSERT_NE(top, nullptr);
+  expectNear("top center", top->center, { 1.0f, 4.0f, 3.0f });
+}
+
+TEST(SupportFaces, AnExactTieGoesToTheFirstFaceLikeNearestAxis)
+{
+  Rig rig;
+  build(rig, 0);
+
+  const auto faces = collisions::supportFacesOf(*rig.box);
+  const auto* tied = collisions::faceToward(faces, { 1.0f, -1.0f, 0.0f });
+  ASSERT_NE(tied, nullptr);
+  expectNear("tie", tied->normal, { 1.0f, 0.0f, 0.0f });
+
+  const auto reference = referenceOf(rig.box);
+  expectNear("reference", faceNormalToward(reference.axes, { 1.0f, -1.0f, 0.0f }), tied->normal);
 }

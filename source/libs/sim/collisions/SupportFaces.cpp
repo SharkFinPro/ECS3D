@@ -1,28 +1,31 @@
 #include "SupportFaces.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
+#include <glm/trigonometric.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <map>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace {
   using collisions::SupportFace;
 
-  // Triangles whose normals agree to about a quarter of a degree and whose planes lie within this share of
-  // the hull's size are one face.
+  // Triangles whose normals agree to about a quarter of a degree and whose vertices lie within this share of
+  // the hull's size of a face's plane are one face.
   constexpr float coplanarCosine = 1.0f - 1e-5f;
   constexpr float coplanarDistanceShare = 1e-4f;
 
-  // A triangle whose doubled area is below this share of its longest edge squared has no direction.
-  constexpr float degenerateAreaShare = 1e-6f;
+  // A triangle whose doubled area is below this share of its longest edge squared is a sliver or needle:
+  // its normal is not stable, so it joins a face by its vertices' distance to the plane instead.
+  constexpr float reliableAreaShare = 1e-2f;
 
   // A corner whose edges' cross product is below this share of the product of their lengths lies on a
   // straight edge.
@@ -66,13 +69,17 @@ namespace {
     return faces;
   }
 
+  using Vertices = std::vector<glm::vec3>;
+
   struct Triangle {
     std::array<uint32_t, 3> v{};
     glm::vec3 cross{ 0.0f };
     glm::vec3 normal{ 0.0f };
+    float doubledArea = 0.0f;
+    bool reliable = false;
   };
 
-  glm::vec3 centroidOf(const std::vector<glm::vec3>& vertices)
+  glm::vec3 centroidOf(const Vertices& vertices)
   {
     glm::vec3 centroid{ 0.0f };
     for (const auto& vertex : vertices)
@@ -83,9 +90,9 @@ namespace {
     return centroid / static_cast<float>(vertices.size());
   }
 
-  // Triangles wound outward from the hull's centroid, whatever the transform did to the winding, and
-  // without those that have no area.
-  std::vector<Triangle> outwardTriangles(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices)
+  // Triangles of the hull in its own space. A reliable one is wound outward from the centroid, whatever the
+  // input winding.
+  std::vector<Triangle> trianglesOf(const Vertices& vertices, const std::vector<uint32_t>& indices)
   {
     const auto centroid = centroidOf(vertices);
 
@@ -98,27 +105,28 @@ namespace {
       const auto& c = vertices[triangle.v[2]];
 
       triangle.cross = glm::cross(b - a, c - a);
+      triangle.doubledArea = glm::length(triangle.cross);
       const float longest = std::max({ glm::dot(b - a, b - a), glm::dot(c - b, c - b), glm::dot(a - c, a - c) });
-      const float doubledArea = glm::length(triangle.cross);
-      if (!(doubledArea > degenerateAreaShare * longest))
+      triangle.reliable = triangle.doubledArea > reliableAreaShare * longest;
+
+      if (triangle.reliable)
       {
-        continue;
+        if (glm::dot(triangle.cross, (a + b + c) / 3.0f - centroid) < 0.0f)
+        {
+          std::swap(triangle.v[1], triangle.v[2]);
+          triangle.cross = -triangle.cross;
+        }
+
+        triangle.normal = triangle.cross / triangle.doubledArea;
       }
 
-      if (glm::dot(triangle.cross, (a + b + c) / 3.0f - centroid) < 0.0f)
-      {
-        std::swap(triangle.v[1], triangle.v[2]);
-        triangle.cross = -triangle.cross;
-      }
-
-      triangle.normal = triangle.cross / doubledArea;
       triangles.push_back(triangle);
     }
 
     return triangles;
   }
 
-  float extentOf(const std::vector<glm::vec3>& vertices)
+  float extentOf(const Vertices& vertices)
   {
     glm::vec3 low(std::numeric_limits<float>::max());
     glm::vec3 high(std::numeric_limits<float>::lowest());
@@ -131,97 +139,144 @@ namespace {
     return glm::length(high - low);
   }
 
-  // Each triangle joins the first group whose seed it is coplanar with.
-  std::vector<std::vector<Triangle>> groupCoplanar(const std::vector<Triangle>& triangles,
-                                                   const std::vector<glm::vec3>& vertices, const float tolerance)
+  struct Group {
+    glm::vec3 normal{ 0.0f };
+    glm::vec3 seedPoint{ 0.0f };
+    glm::vec3 summed{ 0.0f };
+    std::vector<uint32_t> vertexIds;
+  };
+
+  struct Tolerance {
+    const Vertices& vertices;
+    float distance;
+  };
+
+  bool onPlane(const Group& group, const Tolerance& tolerance, const uint32_t id)
   {
-    std::vector<std::vector<Triangle>> groups;
+    return std::fabs(glm::dot(group.normal, tolerance.vertices[id] - group.seedPoint)) <= tolerance.distance;
+  }
+
+  bool allOnPlane(const Group& group, const Tolerance& tolerance, const Triangle& triangle)
+  {
+    return std::ranges::all_of(triangle.v, [&](const uint32_t id) { return onPlane(group, tolerance, id); });
+  }
+
+  void addTo(Group& group, const Triangle& triangle)
+  {
+    group.vertexIds.insert(group.vertexIds.end(), triangle.v.begin(), triangle.v.end());
+  }
+
+  // Reliable triangles, largest first, seed the groups. The rest join the first group they lie in the
+  // plane of, or are dropped.
+  std::vector<Group> groupCoplanar(const std::vector<Triangle>& triangles, const Tolerance& tolerance)
+  {
+    std::vector<const Triangle*> order;
     for (const auto& triangle : triangles)
     {
-      const auto joins = [&](const std::vector<Triangle>& group)
+      if (triangle.reliable)
       {
-        const auto& seed = group.front();
+        order.push_back(&triangle);
+      }
+    }
+    std::ranges::stable_sort(order, [](const Triangle* a, const Triangle* b) { return a->doubledArea > b->doubledArea; });
 
-        return glm::dot(seed.normal, triangle.normal) >= coplanarCosine &&
-               std::fabs(glm::dot(seed.normal, vertices[triangle.v[0]] - vertices[seed.v[0]])) <= tolerance;
+    std::vector<Group> groups;
+    for (const auto* triangle : order)
+    {
+      const auto joins = [&](const Group& group)
+      {
+        return glm::dot(group.normal, triangle->normal) >= coplanarCosine && allOnPlane(group, tolerance, *triangle);
       };
 
-      if (const auto group = std::ranges::find_if(groups, joins); group != groups.end())
+      auto group = std::ranges::find_if(groups, joins);
+      if (group == groups.end())
       {
-        group->push_back(triangle);
+        groups.push_back({ triangle->normal, tolerance.vertices[triangle->v[0]], glm::vec3(0.0f), {} });
+        group = groups.end() - 1;
       }
-      else
+
+      group->summed += triangle->cross;
+      addTo(*group, *triangle);
+    }
+
+    for (const auto& triangle : triangles)
+    {
+      const auto group = std::ranges::find_if(groups, [&](const Group& candidate) {
+        return !triangle.reliable && allOnPlane(candidate, tolerance, triangle);
+      });
+
+      if (group != groups.end())
       {
-        groups.push_back({ triangle });
+        addTo(*group, triangle);
       }
     }
 
     return groups;
   }
 
-  // The directed edges of a group that no triangle in it traverses the other way, chained into one loop.
-  // Empty when the boundary is not a single simple loop.
-  std::vector<uint32_t> boundaryLoop(const std::vector<Triangle>& group)
+  // The convex outline of a group's vertices in its plane, counter-clockwise about its normal, as vertex ids.
+  std::vector<uint32_t> outlineOf(const Group& group, const Vertices& vertices)
   {
-    std::map<std::pair<uint32_t, uint32_t>, int> edges;
-    for (const auto& triangle : group)
+    const auto helper = std::fabs(group.normal.x) < 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+    const auto u = glm::normalize(glm::cross(helper, group.normal));
+    const auto v = glm::cross(group.normal, u);
+
+    struct Point {
+      float x;
+      float y;
+      uint32_t id;
+    };
+
+    auto ids = group.vertexIds;
+    std::ranges::sort(ids);
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+
+    std::vector<Point> points;
+    for (const auto id : ids)
     {
-      for (int i = 0; i < 3; ++i)
+      points.push_back({ glm::dot(vertices[id], u), glm::dot(vertices[id], v), id });
+    }
+    std::ranges::sort(points, [](const Point& a, const Point& b) { return a.x != b.x ? a.x < b.x : a.y < b.y; });
+
+    const auto keepsTurn = [](const Point& o, const Point& a, const Point& b)
+    {
+      const float turn = (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      const float lengths = std::hypot(a.x - o.x, a.y - o.y) * std::hypot(b.x - o.x, b.y - o.y);
+
+      return turn > collinearShare * lengths;
+    };
+
+    std::vector<Point> hull;
+    const auto extend = [&](const Point& point, const size_t floor)
+    {
+      while (hull.size() >= floor && !keepsTurn(hull[hull.size() - 2], hull.back(), point))
       {
-        ++edges[{ triangle.v[i], triangle.v[(i + 1) % 3] }];
+        hull.pop_back();
       }
+      hull.push_back(point);
+    };
+
+    for (const auto& point : points)
+    {
+      extend(point, 2);
+    }
+    const size_t lower = hull.size() + 1;
+    for (auto point = points.rbegin() + 1; point != points.rend(); ++point)
+    {
+      extend(*point, lower);
+    }
+    if (!hull.empty())
+    {
+      hull.pop_back();
     }
 
-    std::map<uint32_t, uint32_t> next;
-    for (const auto& [edge, count] : edges)
+    std::vector<uint32_t> outline;
+    for (const auto& point : hull)
     {
-      if (count != 1 || edges.contains({ edge.second, edge.first }))
-      {
-        continue;
-      }
-
-      if (!next.try_emplace(edge.first, edge.second).second)
-      {
-        return {};
-      }
+      outline.push_back(point.id);
     }
 
-    if (next.size() < 3)
-    {
-      return {};
-    }
-
-    const uint32_t start = next.begin()->first;
-    std::vector<uint32_t> loop{ start };
-    for (auto at = next.find(next.begin()->second); at != next.end() && at->first != start; at = next.find(at->second))
-    {
-      loop.push_back(at->first);
-      if (loop.size() > next.size())
-      {
-        return {};
-      }
-    }
-
-    return loop.size() == next.size() ? loop : std::vector<uint32_t>{};
-  }
-
-  std::vector<glm::vec3> withoutStraightCorners(const std::vector<glm::vec3>& corners)
-  {
-    std::vector<glm::vec3> kept;
-    for (size_t i = 0; i < corners.size(); ++i)
-    {
-      const auto& before = corners[(i + corners.size() - 1) % corners.size()];
-      const auto& after = corners[(i + 1) % corners.size()];
-      const auto in = corners[i] - before;
-      const auto out = after - corners[i];
-
-      if (glm::length(glm::cross(in, out)) > collinearShare * glm::length(in) * glm::length(out))
-      {
-        kept.push_back(corners[i]);
-      }
-    }
-
-    return kept;
+    return outline;
   }
 
   glm::vec3 areaCentroid(const std::vector<glm::vec3>& corners, const glm::vec3& normal)
@@ -238,25 +293,37 @@ namespace {
     return weighted / total;
   }
 
-  std::optional<SupportFace> faceOfGroup(const std::vector<Triangle>& group, const std::vector<glm::vec3>& vertices)
+  // A face from hull vertex ids, placed with the world vertices. The affine map keeps the face planar; it may
+  // reverse the winding, which the hull's centroid corrects.
+  std::optional<SupportFace> worldFace(const std::vector<uint32_t>& outline, const Vertices& world,
+                                       const glm::vec3& hullCentroid)
   {
-    glm::vec3 summed{ 0.0f };
-    for (const auto& triangle : group)
+    if (outline.size() < 3)
     {
-      summed += triangle.cross;
-    }
-
-    std::vector<glm::vec3> loop;
-    for (const auto index : boundaryLoop(group))
-    {
-      loop.push_back(vertices[index]);
+      return std::nullopt;
     }
 
     SupportFace face;
-    face.corners = withoutStraightCorners(loop);
-    if (face.corners.size() < 3 || !(glm::length(summed) > 0.0f))
+    for (const auto id : outline)
+    {
+      face.corners.push_back(world[id]);
+    }
+
+    glm::vec3 summed{ 0.0f };
+    for (size_t i = 1; i + 1 < face.corners.size(); ++i)
+    {
+      summed += glm::cross(face.corners[i] - face.corners[0], face.corners[i + 1] - face.corners[0]);
+    }
+
+    if (!(glm::length(summed) > 0.0f))
     {
       return std::nullopt;
+    }
+
+    if (glm::dot(summed, face.corners[0] - hullCentroid) < 0.0f)
+    {
+      std::ranges::reverse(face.corners);
+      summed = -summed;
     }
 
     face.normal = glm::normalize(summed);
@@ -267,14 +334,16 @@ namespace {
 
   std::vector<SupportFace> hullFacesOf(ConvexMeshCollider& collider)
   {
-    const auto& vertices = collider.getWorldVertices();
-    const auto triangles = outwardTriangles(vertices, collider.getHull().indices);
-    const float tolerance = coplanarDistanceShare * extentOf(vertices);
+    const auto& hull = collider.getHull();
+    const auto& world = collider.getWorldVertices();
+    const auto triangles = trianglesOf(hull.vertices, hull.indices);
+    const Tolerance tolerance{ hull.vertices, coplanarDistanceShare * extentOf(hull.vertices) };
+    const auto hullCentroid = centroidOf(world);
 
     std::vector<SupportFace> faces;
-    for (const auto& group : groupCoplanar(triangles, vertices, tolerance))
+    for (const auto& group : groupCoplanar(triangles, tolerance))
     {
-      if (auto face = faceOfGroup(group, vertices))
+      if (auto face = worldFace(outlineOf(group, hull.vertices), world, hullCentroid))
       {
         faces.push_back(std::move(*face));
       }
