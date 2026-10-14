@@ -1,4 +1,6 @@
 #include "PhysicsSystem.h"
+#include "collisions/PlanarHull.h"
+#include "collisions/SupportFaces.h"
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
@@ -9,11 +11,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace {
   // A push closer to the center than this gives no spin: the lever arm is too short to divide by.
@@ -50,38 +52,6 @@ namespace {
     return glm::quat(glm::radians(transform.getRotation()));
   }
 
-  int nearestAxis(const glm::mat3& axes, const glm::vec3& direction)
-  {
-    int nearest = 0;
-    for (int i = 1; i < 3; ++i)
-    {
-      if (std::fabs(glm::dot(axes[i], direction)) > std::fabs(glm::dot(axes[nearest], direction)))
-      {
-        nearest = i;
-      }
-    }
-
-    return nearest;
-  }
-
-  // The axis nearest to direction, signed to point along it: the normal of the face that way.
-  glm::vec3 faceNormalToward(const glm::mat3& axes, const glm::vec3& direction)
-  {
-    const auto nearest = axes[nearestAxis(axes, direction)];
-
-    return glm::dot(nearest, direction) < 0.0f ? -nearest : nearest;
-  }
-
-  // The support's own face, not the contact normal: across two nearly parallel faces the narrow phase may
-  // report either one, and the resting body's own face would leave it exactly as tilted as it is.
-  glm::vec3 supportFaceToward(const std::shared_ptr<Object>& support, const glm::vec3& normal)
-  {
-    const auto collider = support->getComponent<Collider>(ComponentType::collider);
-
-    return collider ? faceNormalToward(glm::mat3_cast(glm::quat(glm::radians(collider->getRotation()))), normal)
-                    : normal;
-  }
-
   // Spin is stored in degrees per second, while linear velocity is a displacement per tick. Contact math
   // combines the two in radians per tick.
   glm::vec3 spinPerTick(const glm::vec3& angularVelocity, const float dt)
@@ -110,19 +80,18 @@ namespace {
   // thirds of the radius. The manifold's corners stand in for the face's edge.
   float grindingRadius(const glm::vec3& support, const std::span<const glm::vec3> contactPoints)
   {
-    const auto points = contactPoints.first(std::min(contactPoints.size(), PhysicsSystem::maxSupportPoints));
-    if (points.empty())
+    if (contactPoints.empty())
     {
       return 0.0f;
     }
 
     float total = 0.0f;
-    for (const auto& point : points)
+    for (const auto& point : contactPoints)
     {
       total += glm::distance(point, support);
     }
 
-    return 2.0f / 3.0f * total / static_cast<float>(points.size());
+    return 2.0f / 3.0f * total / static_cast<float>(contactPoints.size());
   }
 
   glm::vec3 horizontalOf(const glm::vec3& vector)
@@ -145,11 +114,6 @@ namespace {
     return collider && collider->getColliderType() == ColliderType::sphereCollider;
   }
 
-  bool isHull(const std::shared_ptr<Collider>& collider)
-  {
-    return collider && collider->getColliderType() == ColliderType::convexMeshCollider;
-  }
-
   glm::vec3 spinOf(const std::shared_ptr<Object>& object)
   {
     const auto body = object->getComponent<RigidBody>(ComponentType::rigidBody);
@@ -157,59 +121,109 @@ namespace {
     return body ? body->getAngularVelocity() : glm::vec3(0);
   }
 
-  // World-space box geometry. BoxCollider's half-extents are its scale.
-  struct Box {
-    glm::vec3 center;
-    glm::mat3 axes;
-    glm::vec3 halfExtents;
+  // The face of the support the body rests on and the face of the body turned toward it. The support's own face
+  // is used, not the contact normal: across two nearly parallel faces the narrow phase may report either one, and
+  // the resting body's own face would leave it exactly as tilted as it is.
+  struct RestingFaces {
+    collisions::SupportFace support;
+    collisions::SupportFace own;
   };
 
-  std::optional<Box> boxOf(const std::shared_ptr<Collider>& collider)
+  // A body with no collider is taken as a box turned like its owner, and a support with no collider as a plane
+  // along the contact normal. Neither has a footprint to land on.
+  std::vector<collisions::SupportFace> facesOfOwner(const std::shared_ptr<Collider>& collider,
+                                                    const Transform& transform)
   {
-    if (!collider || collider->getColliderType() != ColliderType::boxCollider)
+    if (collider)
+    {
+      return collisions::supportFacesOf(*collider);
+    }
+
+    const auto axes = glm::mat3_cast(orientationOf(transform));
+    std::vector<collisions::SupportFace> faces;
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      faces.push_back({ axes[axis], glm::vec3(0), {} });
+      faces.push_back({ -axes[axis], glm::vec3(0), {} });
+    }
+
+    return faces;
+  }
+
+  std::optional<RestingFaces> restingFacesOf(const Transform& transform, const std::shared_ptr<Collider>& collider,
+                                             const std::shared_ptr<Object>& other, const glm::vec3& normal)
+  {
+    const auto ownFaces = facesOfOwner(collider, transform);
+    if (ownFaces.empty())
     {
       return std::nullopt;
     }
 
-    return Box{
-      collider->getPosition(),
-      glm::mat3_cast(glm::quat(glm::radians(collider->getRotation()))),
-      glm::abs(collider->getScale())
-    };
-  }
-
-  std::array<glm::vec3, 4> faceCorners(const Box& box, const glm::vec3& direction)
-  {
-    const int face = nearestAxis(box.axes, direction);
-    const int u = (face + 1) % 3;
-    const int v = (face + 2) % 3;
-
-    const auto faceCenter = box.center + faceNormalToward(box.axes, direction) * box.halfExtents[face];
-    const auto alongU = box.axes[u] * box.halfExtents[u];
-    const auto alongV = box.axes[v] * box.halfExtents[v];
-
-    return {
-      faceCenter - alongU - alongV,
-      faceCenter + alongU - alongV,
-      faceCenter + alongU + alongV,
-      faceCenter - alongU + alongV
-    };
-  }
-
-  // Pulls a point back over the box's face toward normal, leaving its height along that face alone.
-  glm::vec3 clampToFootprint(const Box& box, const glm::vec3& point, const glm::vec3& normal)
-  {
-    const int normalAxis = nearestAxis(box.axes, normal);
-
-    auto clamped = box.center;
-    for (int i = 0; i < 3; ++i)
+    const auto supportCollider = other->getComponent<Collider>(ComponentType::collider);
+    if (!supportCollider)
     {
-      const float coordinate = glm::dot(point - box.center, box.axes[i]);
-      const float kept = i == normalAxis ? coordinate : std::clamp(coordinate, -box.halfExtents[i], box.halfExtents[i]);
-      clamped += kept * box.axes[i];
+      const auto* own = collisions::faceToward(ownFaces, -normal);
+      return RestingFaces{ { normal, glm::vec3(0), {} }, *own };
     }
 
-    return clamped;
+    const auto supportFaces = collisions::supportFacesOf(*supportCollider);
+    const auto* support = collisions::faceToward(supportFaces, normal);
+    if (!support)
+    {
+      return std::nullopt;
+    }
+
+    return RestingFaces{ *support, *collisions::faceToward(ownFaces, -support->normal) };
+  }
+
+  // The corners of the body's face, clamped onto the support's footprint the way the narrow phase clamps a manifold.
+  std::vector<glm::vec3> clampedCorners(const RestingFaces& faces)
+  {
+    auto corners = faces.own.corners;
+    for (auto& corner : corners)
+    {
+      corner = collisions::clampToFace(faces.support, corner);
+    }
+
+    return corners;
+  }
+
+  // Whether the spin this tick carries the face the body rests toward flat against the support, or past it.
+  bool turnsFlatThisTick(const RigidBody& body, const std::shared_ptr<Object>& other, const RestingFaces& faces,
+                         const float dt)
+  {
+    const auto bodyFace = -faces.own.normal;
+    const auto axis = glm::cross(bodyFace, faces.support.normal);
+    const float sine = glm::length(axis);
+    if (sine <= flushTiltSine)
+    {
+      return true;
+    }
+
+    const float tilt = std::atan2(sine, glm::dot(bodyFace, faces.support.normal));
+    const float turn = glm::dot(spinPerTick(body.getAngularVelocity() - spinOf(other), dt), axis / sine);
+
+    return turn >= tilt;
+  }
+
+  void layFlush(Transform& transform, const RestingFaces& faces, const float maxTiltSine)
+  {
+    const auto orientation = orientationOf(transform);
+    const auto bodyFace = -faces.own.normal;
+
+    const float cosine = glm::dot(bodyFace, faces.support.normal);
+    const auto axis = glm::cross(bodyFace, faces.support.normal);
+    const float sine = glm::length(axis);
+
+    // Anything under float noise is already flush - rewriting it would change the rotation every tick.
+    constexpr float minTiltSine = 1e-5f;
+    if (sine < minTiltSine || sine > maxTiltSine)
+    {
+      return;
+    }
+
+    const auto turn = glm::angleAxis(std::atan2(sine, cosine), axis / sine);
+    transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
   }
 }
 
@@ -362,35 +376,48 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   const float faceRadius = support.underCenterOfMass ? grindingRadius(support.point, collisionPoints) : 0.0f;
   resolve(pair, minimumTranslationVector, support.point, faceRadius, dt);
 
-  // Laying flush turns the body's owner to the nearest box axis, which is no face of a hull.
-  const bool boxFaces = !isHull(collider) && !isHull(other->getComponent<Collider>(ComponentType::collider));
-
-  if (boxFaces && normal.y > 0.0f && support.underCenterOfMass)
+  if (normal.y > 0.0f)
   {
-    layFlush(*transform, other, normal, flushTiltSine);
-  }
-  else if (boxFaces && normal.y > 0.0f)
-  {
-    // One tick of support at an edge turns a box a degree or more, so it would go past flat onto its other
-    // edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
-    const auto supportFace = supportFaceToward(other, normal);
-    const auto face = restingFace(collider, other, supportFace);
-
-    if (face && findSupport(transform->getPosition(), normal, *face).underCenterOfMass &&
-        turnsFlatThisTick(body, *transform, other, supportFace, dt))
-    {
-      layFlush(*transform, other, normal, 1.0f);
-
-      if (const auto flatFace = restingFace(collider, other, supportFace))
-      {
-        stopSpinIntoSupport(body, *transform, other, normal, *flatFace);
-        const auto faceSupport = findSupport(transform->getPosition(), normal, *flatFace);
-        applyContactImpulse(pair, faceSupport.point, grindingRadius(faceSupport.point, *flatFace), dt);
-      }
-    }
+    settleOnFace(body, *transform, collider, other, pair, support, dt);
   }
 
   comeToRest(body, other, normal);
+}
+
+void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const std::shared_ptr<Collider>& collider,
+                                  const std::shared_ptr<Object>& other, const Pair& pair, const Support& support,
+                                  const float dt)
+{
+  const auto faces = restingFacesOf(transform, collider, other, pair.normal);
+  if (!faces)
+  {
+    return;
+  }
+
+  if (support.underCenterOfMass)
+  {
+    layFlush(transform, *faces, flushTiltSine);
+    return;
+  }
+
+  // One tick of support at an edge turns a body a degree or more, so it would go past flat onto its other
+  // edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
+  if (faces->support.corners.empty() || faces->own.corners.empty() ||
+      !findSupport(transform.getPosition(), pair.normal, clampedCorners(*faces)).underCenterOfMass ||
+      !turnsFlatThisTick(body, other, *faces, dt))
+  {
+    return;
+  }
+
+  layFlush(transform, *faces, 1.0f);
+
+  if (const auto flat = restingFacesOf(transform, collider, other, pair.normal))
+  {
+    const auto flatCorners = clampedCorners(*flat);
+    stopSpinIntoSupport(body, transform, other, pair.normal, flatCorners);
+    const auto faceSupport = findSupport(transform.getPosition(), pair.normal, flatCorners);
+    applyContactImpulse(pair, faceSupport.point, grindingRadius(faceSupport.point, flatCorners), dt);
+  }
 }
 
 PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
@@ -793,67 +820,6 @@ void PhysicsSystem::push(const Side& side, const glm::vec3& impulse, const glm::
   }
 }
 
-bool PhysicsSystem::turnsFlatThisTick(const RigidBody& body, const Transform& transform,
-                                      const std::shared_ptr<Object>& other, const glm::vec3& supportFace,
-                                      const float dt)
-{
-  const auto bodyFace = faceNormalToward(glm::mat3_cast(orientationOf(transform)), supportFace);
-  const auto axis = glm::cross(bodyFace, supportFace);
-  const float sine = glm::length(axis);
-  if (sine <= flushTiltSine)
-  {
-    return true;
-  }
-
-  const float tilt = std::atan2(sine, glm::dot(bodyFace, supportFace));
-  const float turn = glm::dot(spinPerTick(body.getAngularVelocity() - spinOf(other), dt), axis / sine);
-
-  return turn >= tilt;
-}
-
-std::optional<std::array<glm::vec3, 4>> PhysicsSystem::restingFace(const std::shared_ptr<Collider>& collider,
-                                                                   const std::shared_ptr<Object>& other,
-                                                                   const glm::vec3& supportFace)
-{
-  const auto ownBox = boxOf(collider);
-  const auto supportBox = boxOf(other->getComponent<Collider>(ComponentType::collider));
-  if (!ownBox || !supportBox)
-  {
-    return std::nullopt;
-  }
-
-  auto corners = faceCorners(*ownBox, -supportFace);
-  for (auto& corner : corners)
-  {
-    corner = clampToFootprint(*supportBox, corner, supportFace);
-  }
-
-  return corners;
-}
-
-void PhysicsSystem::layFlush(Transform& transform, const std::shared_ptr<Object>& other, const glm::vec3& normal,
-                             const float maxTiltSine)
-{
-  const auto supportFace = supportFaceToward(other, normal);
-
-  const auto orientation = orientationOf(transform);
-  const auto bodyFace = faceNormalToward(glm::mat3_cast(orientation), supportFace);
-
-  const float cosine = glm::dot(bodyFace, supportFace);
-  const auto axis = glm::cross(bodyFace, supportFace);
-  const float sine = glm::length(axis);
-
-  // Anything under float noise is already flush - rewriting it would change the rotation every tick.
-  constexpr float minTiltSine = 1e-5f;
-  if (sine < minTiltSine || sine > maxTiltSine)
-  {
-    return;
-  }
-
-  const auto turn = glm::angleAxis(std::atan2(sine, cosine), axis / sine);
-  transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
-}
-
 void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
                                         const glm::vec3& normal, const std::span<const glm::vec3> contactPoints)
 {
@@ -873,12 +839,11 @@ void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transf
   // survives it and a box rocking from edge to edge never settles. Each point sheds only the spin driving
   // it into the support, weighted by the inertia, so a body tipping away from a contact keeps its spin.
   auto angularVelocity = body.getAngularVelocity();
-  const auto points = contactPoints.first(std::min(contactPoints.size(), maxSupportPoints));
   for (int pass = 0; pass < maxSpinPasses; ++pass)
   {
     bool shed = false;
 
-    for (const auto& point : points)
+    for (const auto& point : contactPoints)
     {
       const auto arm = glm::cross(point - transform.getPosition(), normal);
       const float surfaceRate = supportSpins
@@ -934,30 +899,55 @@ PhysicsSystem::Support PhysicsSystem::findSupport(const glm::vec3& centerOfMass,
     return { centerOfMass, false };
   }
 
-  const auto count = std::min(collisionPoints.size(), maxSupportPoints);
-
   glm::vec3 centroid{ 0 };
-  for (size_t i = 0; i < count; ++i)
+  for (const auto& point : collisionPoints)
   {
-    centroid += collisionPoints[i];
+    centroid += point;
   }
-  centroid /= static_cast<float>(count);
+  centroid /= static_cast<float>(collisionPoints.size());
 
   const auto onPlane = [&centroid, &normal](const glm::vec3& point)
   {
     return point - glm::dot(point - centroid, normal) * normal;
   };
 
-  std::array<glm::vec3, maxSupportPoints> points{};
-  for (size_t i = 0; i < count; ++i)
+  std::vector<glm::vec3> points;
+  points.reserve(collisionPoints.size());
+  for (const auto& point : collisionPoints)
   {
-    points[i] = onPlane(collisionPoints[i]);
+    points.push_back(onPlane(point));
+  }
+
+  // The hull of the points is the support region, and only its corners can bound it.
+  if (points.size() > maxTriangulatedPoints)
+  {
+    points = collisions::convexOutline(points, normal);
   }
 
   const auto target = onPlane(centerOfMass);
 
-  // In the plane, the hull of at most four points is covered by the triangles among them, so the center
-  // of mass is over the support region exactly when one of those triangles contains it.
+  return isOverSupport(points, target) ? Support{ target, true } : Support{ nearestOnSupport(points, target), false };
+}
+
+bool PhysicsSystem::isOverSupport(const std::span<const glm::vec3> points, const glm::vec3& target)
+{
+  const size_t count = points.size();
+
+  // In the plane, the hull of at most four points is covered by the triangles among them. A larger hull is
+  // convex, so a fan from its first corner covers it.
+  if (count > maxTriangulatedPoints)
+  {
+    for (size_t b = 1; b + 1 < count; ++b)
+    {
+      if (triangleContains(points[0], points[b], points[b + 1], target))
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   for (size_t a = 0; a < count; ++a)
   {
     for (size_t b = a + 1; b < count; ++b)
@@ -966,18 +956,23 @@ PhysicsSystem::Support PhysicsSystem::findSupport(const glm::vec3& centerOfMass,
       {
         if (triangleContains(points[a], points[b], points[c], target))
         {
-          return { target, true };
+          return true;
         }
       }
     }
   }
 
+  return false;
+}
+
+glm::vec3 PhysicsSystem::nearestOnSupport(const std::span<const glm::vec3> points, const glm::vec3& target)
+{
   // Outside the hull, the nearest hull point lies on a segment between two of the points.
   glm::vec3 closest = points[0];
   float closestDistance = std::numeric_limits<float>::max();
-  for (size_t a = 0; a < count; ++a)
+  for (size_t a = 0; a < points.size(); ++a)
   {
-    for (size_t b = a + 1; b < count; ++b)
+    for (size_t b = a + 1; b < points.size(); ++b)
     {
       const auto segment = points[b] - points[a];
       const auto lengthSquared = glm::dot(segment, segment);
@@ -994,7 +989,7 @@ PhysicsSystem::Support PhysicsSystem::findSupport(const glm::vec3& centerOfMass,
     }
   }
 
-  return { closest, false };
+  return closest;
 }
 
 bool PhysicsSystem::triangleContains(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& point)
