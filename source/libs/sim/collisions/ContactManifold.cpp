@@ -1,4 +1,5 @@
 #include "ContactManifold.h"
+#include "ManifoldInternal.h"
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <algorithm>
@@ -7,35 +8,7 @@
 #include <utility>
 
 namespace collisions {
-  namespace {
-    constexpr float dedupeDistance = 1e-4f;
-
-    // A reference polygon thinner than this fraction of its squared radius has no usable edge planes.
-    constexpr float minPolygonAreaRatio = 1e-5f;
-
-    constexpr float segmentEpsilon = 1e-12f;
-
-    struct Candidate {
-      glm::vec3 point;
-      float depth;
-    };
-
-    [[nodiscard]] float featureEpsilon(const std::span<const glm::vec3> vertices)
-    {
-      glm::vec3 low = vertices.front();
-      glm::vec3 high = vertices.front();
-
-      for (const auto& vertex : vertices)
-      {
-        low = glm::min(low, vertex);
-        high = glm::max(high, vertex);
-      }
-
-      const glm::vec3 half = (high - low) * 0.5f;
-
-      return 1e-3f * std::max({ half.x, half.y, half.z, 1.0f });
-    }
-
+  namespace detail {
     [[nodiscard]] glm::vec3 centroidOf(const std::span<const glm::vec3> points)
     {
       glm::vec3 sum{ 0 };
@@ -53,6 +26,93 @@ namespace collisions {
       return std::ranges::any_of(points, [&point](const glm::vec3& existing) {
         return glm::distance(existing, point) < dedupeDistance;
       });
+    }
+
+    [[nodiscard]] glm::vec3 closestPointOnSegment(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b)
+    {
+      const glm::vec3 ab = b - a;
+
+      return a + ab * std::clamp(glm::dot(p - a, ab) / glm::dot(ab, ab), 0.0f, 1.0f);
+    }
+
+    // The deepest candidate, then repeatedly the one furthest from everything chosen so far.
+    [[nodiscard]] std::vector<glm::vec3> spreadOut(const std::vector<Candidate>& candidates, const size_t maxPoints)
+    {
+      std::vector<glm::vec3> chosen;
+      if (candidates.size() <= maxPoints)
+      {
+        for (const auto& candidate : candidates)
+        {
+          chosen.push_back(candidate.point);
+        }
+
+        return chosen;
+      }
+
+      size_t deepest = 0;
+      for (size_t i = 1; i < candidates.size(); ++i)
+      {
+        if (candidates[i].depth > candidates[deepest].depth)
+        {
+          deepest = i;
+        }
+      }
+
+      chosen.push_back(candidates[deepest].point);
+
+      while (chosen.size() < maxPoints)
+      {
+        size_t best = 0;
+        float bestSeparation = -1.0f;
+
+        for (size_t i = 0; i < candidates.size(); ++i)
+        {
+          float separation = std::numeric_limits<float>::max();
+          for (const auto& picked : chosen)
+          {
+            separation = std::min(separation, glm::distance(candidates[i].point, picked));
+          }
+
+          if (separation > bestSeparation)
+          {
+            bestSeparation = separation;
+            best = i;
+          }
+        }
+
+        chosen.push_back(candidates[best].point);
+      }
+
+      return chosen;
+    }
+  }
+
+  using detail::Candidate;
+  using detail::centroidOf;
+  using detail::closestPointOnSegment;
+  using detail::containsNear;
+  using detail::dedupeDistance;
+  using detail::segmentEpsilon;
+  using detail::spreadOut;
+
+  namespace {
+    // A reference polygon thinner than this fraction of its squared radius has no usable edge planes.
+    constexpr float minPolygonAreaRatio = 1e-5f;
+
+    [[nodiscard]] float featureEpsilon(const std::span<const glm::vec3> vertices)
+    {
+      glm::vec3 low = vertices.front();
+      glm::vec3 high = vertices.front();
+
+      for (const auto& vertex : vertices)
+      {
+        low = glm::min(low, vertex);
+        high = glm::max(high, vertex);
+      }
+
+      const glm::vec3 half = (high - low) * 0.5f;
+
+      return 1e-3f * std::max({ half.x, half.y, half.z, 1.0f });
     }
 
     // Counter-clockwise about normal, so an edge's inward side is cross(normal, edge).
@@ -174,13 +234,6 @@ namespace collisions {
       return subject;
     }
 
-    [[nodiscard]] glm::vec3 closestPointOnSegment(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b)
-    {
-      const glm::vec3 ab = b - a;
-
-      return a + ab * std::clamp(glm::dot(p - a, ab) / glm::dot(ab, ab), 0.0f, 1.0f);
-    }
-
     // Both segments longer than a point.
     [[nodiscard]] std::pair<glm::vec3, glm::vec3> closestOfProperSegments(const glm::vec3& p1, const glm::vec3& q1,
                                                                           const glm::vec3& p2, const glm::vec3& q2)
@@ -265,114 +318,6 @@ namespace collisions {
       return (closestA + closestB) * 0.5f;
     }
 
-    constexpr float degenerateFaceLength = 1e-12f;
-
-    // Faces this close in alignment count as equally flat, so float noise cannot swap the reference.
-    constexpr float alignmentTieTolerance = 2e-6f;
-
-    struct AlignedFace {
-      glm::vec3 normal;
-      float alignment;
-    };
-
-    [[nodiscard]] AlignedFace mostAlignedFace(const std::span<const glm::vec3> normals, const glm::vec3& direction)
-    {
-      AlignedFace best{ normals.front(), glm::dot(normals.front(), direction) };
-
-      for (const auto& candidate : normals.subspan(1))
-      {
-        if (const float alignment = glm::dot(candidate, direction); alignment > best.alignment)
-        {
-          best = { candidate, alignment };
-        }
-      }
-
-      return best;
-    }
-
-    // The point of the convex polygon (counter-clockwise about normal, in the plane of point) nearest to point.
-    // A polygon of fewer than three points is all boundary.
-    [[nodiscard]] glm::vec3 clampToPolygon(const glm::vec3& point, const std::vector<glm::vec3>& polygon,
-                                           const glm::vec3& normal)
-    {
-      bool inside = polygon.size() >= 3;
-      glm::vec3 nearest = polygon.front();
-      float nearestDistance = std::numeric_limits<float>::max();
-
-      for (size_t i = 0; i < polygon.size(); ++i)
-      {
-        const glm::vec3& start = polygon[i];
-        const glm::vec3& end = polygon[(i + 1) % polygon.size()];
-        const glm::vec3 edge = end - start;
-
-        if (glm::dot(glm::cross(normal, edge), point - start) < 0.0f)
-        {
-          inside = false;
-        }
-
-        const glm::vec3 closest = glm::dot(edge, edge) > segmentEpsilon ? closestPointOnSegment(point, start, end)
-                                                                         : start;
-
-        if (const float distance = glm::distance(point, closest); distance < nearestDistance)
-        {
-          nearestDistance = distance;
-          nearest = closest;
-        }
-      }
-
-      return inside ? point : nearest;
-    }
-
-    // The deepest candidate, then repeatedly the one furthest from everything chosen so far.
-    [[nodiscard]] std::vector<glm::vec3> spreadOut(const std::vector<Candidate>& candidates, const size_t maxPoints)
-    {
-      std::vector<glm::vec3> chosen;
-      if (candidates.size() <= maxPoints)
-      {
-        for (const auto& candidate : candidates)
-        {
-          chosen.push_back(candidate.point);
-        }
-
-        return chosen;
-      }
-
-      size_t deepest = 0;
-      for (size_t i = 1; i < candidates.size(); ++i)
-      {
-        if (candidates[i].depth > candidates[deepest].depth)
-        {
-          deepest = i;
-        }
-      }
-
-      chosen.push_back(candidates[deepest].point);
-
-      while (chosen.size() < maxPoints)
-      {
-        size_t best = 0;
-        float bestSeparation = -1.0f;
-
-        for (size_t i = 0; i < candidates.size(); ++i)
-        {
-          float separation = std::numeric_limits<float>::max();
-          for (const auto& picked : chosen)
-          {
-            separation = std::min(separation, glm::distance(candidates[i].point, picked));
-          }
-
-          if (separation > bestSeparation)
-          {
-            bestSeparation = separation;
-            best = i;
-          }
-        }
-
-        chosen.push_back(candidates[best].point);
-      }
-
-      return chosen;
-    }
   }
 
   std::vector<glm::vec3> touchingFeature(const std::span<const glm::vec3> vertices, const glm::vec3& direction)
@@ -453,71 +398,6 @@ namespace collisions {
       {
         projectedPoints.push_back(projected);
         candidates.push_back({ projected, -glm::dot(point - planePoint, outward) });
-      }
-    }
-
-    return spreadOut(candidates, std::max<size_t>(maxPoints, 1));
-  }
-
-  std::vector<glm::vec3> hullFaceNormals(const std::span<const glm::vec3> vertices,
-                                         const std::span<const uint32_t> indices)
-  {
-    if (vertices.empty())
-    {
-      return {};
-    }
-
-    // A mirrored transform reverses every triangle's winding, so each normal is turned away from the center.
-    const glm::vec3 center = centroidOf(vertices);
-
-    std::vector<glm::vec3> normals;
-    for (size_t i = 0; i + 2 < indices.size(); i += 3)
-    {
-      const glm::vec3& a = vertices[indices[i]];
-      const glm::vec3 normal = glm::cross(vertices[indices[i + 1]] - a, vertices[indices[i + 2]] - a);
-
-      if (const float length = glm::length(normal); length > degenerateFaceLength)
-      {
-        const glm::vec3 unit = normal / length;
-        normals.push_back(glm::dot(unit, center - a) > 0.0f ? -unit : unit);
-      }
-    }
-
-    return normals;
-  }
-
-  std::vector<glm::vec3> referenceFaceManifold(const FaceShape& first, const FaceShape& second,
-                                               const glm::vec3& normal, const size_t maxPoints)
-  {
-    if (first.faceNormals.empty() || second.faceNormals.empty())
-    {
-      return {};
-    }
-
-    const AlignedFace faceFirst = mostAlignedFace(first.faceNormals, normal);
-    const AlignedFace faceSecond = mostAlignedFace(second.faceNormals, -normal);
-
-    const bool firstIsReference = faceFirst.alignment >= faceSecond.alignment - alignmentTieTolerance;
-    const auto& reference = firstIsReference ? first : second;
-    const auto& incident = firstIsReference ? second : first;
-    const glm::vec3 faceNormal = firstIsReference ? faceFirst.normal : faceSecond.normal;
-
-    const auto polygon = orderedPolygon(touchingFeature(reference.vertices, faceNormal, reference.featureEpsilon),
-                                        faceNormal);
-    const glm::vec3 planePoint = centroidOf(polygon);
-    const glm::vec3 towardReference = firstIsReference ? -normal : normal;
-
-    std::vector<Candidate> candidates;
-    std::vector<glm::vec3> placed;
-    for (const auto& vertex : touchingFeature(incident.vertices, towardReference, incident.featureEpsilon))
-    {
-      const float offset = glm::dot(vertex - planePoint, faceNormal);
-      const glm::vec3 point = clampToPolygon(vertex - faceNormal * offset, polygon, faceNormal) + faceNormal * offset;
-
-      if (!containsNear(placed, point))
-      {
-        placed.push_back(point);
-        candidates.push_back({ point, -offset });
       }
     }
 

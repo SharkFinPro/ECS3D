@@ -2,6 +2,7 @@
 #include "Simplex.h"
 #include "Support.h"
 #include "ContactManifold.h"
+#include "FaceManifold.h"
 #include "NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
@@ -429,7 +430,8 @@ std::vector<glm::vec3> Polytope::boxContactPoints() const
   const auto axisIndexA = dominantAxisIndex(boxA, normal);
   const auto axisIndexB = dominantAxisIndex(boxB, normal);
 
-  const bool aIsReference = std::fabs(glm::dot(boxA.axes[axisIndexA], normal)) >= std::fabs(glm::dot(boxB.axes[axisIndexB], normal));
+  const bool aIsReference = std::fabs(glm::dot(boxA.axes[axisIndexA], normal)) >=
+    std::fabs(glm::dot(boxB.axes[axisIndexB], normal)) - collisions::faceAlignmentTie;
 
   const auto& referenceBox = aIsReference ? boxA : boxB;
   const auto& incidentBox = aIsReference ? boxB : boxA;

@@ -3,7 +3,7 @@
 #include "ConvexMeshFixtures.h"
 #include "TestPrinters.h"
 #include "TestScene.h"
-#include "collisions/ContactManifold.h"
+#include "collisions/FaceManifold.h"
 #include "collisions/NarrowPhase.h"
 #include "objects/Object.h"
 #include "objects/components/Transform.h"
@@ -42,6 +42,7 @@ namespace {
     { "flat", { 0, 1.9f, 0 }, { 0, 0, 0 }, 4 },
     { "shifted over the edge", { 0.7f, 1.9f, 0.3f }, { 0, 0, 0 }, 4 },
     { "tilted half a degree", { 0.2f, 1.9f, -0.1f }, { 0, 0, 0.5f }, 2 },
+    { "tilted a twentieth of a degree", { 0.2f, 1.9f, -0.1f }, { 0, 0, 0.05f }, 4 },
     { "tilted three degrees", { -0.3f, 1.9f, 0.1f }, { 3, 0, 0 }, 2 },
     { "on a 45 degree edge", { 0.1f, 2.36f, 0 }, { 0, 0, 45 }, 2 },
     { "on a corner", { 0.1f, 2.62f, 0.2f }, { 35, 0, 45 }, 1 },
@@ -284,4 +285,53 @@ TEST(ConvexMeshManifoldParity, HullFaceNormalsPointOutwardWhicheverWayTheTriangl
 
   const std::vector<uint32_t> degenerate{ 0, 0, 1, 0, 1, 2 };
   EXPECT_EQ(collisions::hullFaceNormals(vertices, degenerate).size(), 1u);
+}
+
+TEST(ConvexMeshManifoldParity, ANearlyCollinearTriangleHasNoFaceNormal)
+{
+  const std::vector<glm::vec3> vertices{ { 0, 0, 0 }, { 100, 0, 0 }, { 200, 1e-5f, 0 }, { 0, 100, 0 } };
+
+  EXPECT_TRUE(collisions::hullFaceNormals(vertices, std::vector<uint32_t>{ 0, 1, 2 }).empty());
+
+  // The control: the same first edge with a real third vertex has one.
+  EXPECT_EQ(collisions::hullFaceNormals(vertices, std::vector<uint32_t>{ 0, 1, 3 }).size(), 1u);
+}
+
+TEST(ConvexMeshManifoldParity, ADomedFaceClampsAgainstItsOuterOutlineNotItsInteriorVertex)
+{
+  // The hull's top is a four-triangle fan about a center vertex 0.0002 above the corners, so its touching
+  // set holds the center beside the four corners.
+  const std::vector<glm::vec3> hullVertices{ { -1, 1, -1 }, { 1, 1, -1 }, { 1, 1, 1 }, { -1, 1, 1 },
+                                             { 0, 1.0002f, 0 }, { -1, -1, -1 }, { 1, -1, -1 }, { 1, -1, 1 } };
+  const std::vector<glm::vec3> hullNormals{ glm::normalize(glm::vec3(2e-4f, 1, 0)),
+                                            glm::normalize(glm::vec3(-2e-4f, 1, 0)),
+                                            glm::normalize(glm::vec3(0, 1, 2e-4f)),
+                                            glm::normalize(glm::vec3(0, 1, -2e-4f)), { 0, -1, 0 } };
+
+  // A small cube resting on it, all four bottom corners inside the outline but off its diagonals.
+  std::vector<glm::vec3> boxVertices;
+  for (const float x : { 0.4f, 0.6f })
+  {
+    for (const float y : { 1.0f, 1.2f })
+    {
+      for (const float z : { 0.1f, 0.3f })
+      {
+        boxVertices.emplace_back(x, y, z);
+      }
+    }
+  }
+  const std::vector<glm::vec3> boxNormals{ { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 },
+                                           { 0, 0, -1 } };
+
+  const auto points = collisions::referenceFaceManifold({ hullVertices, hullNormals, 1e-3f },
+                                                        { boxVertices, boxNormals, 1e-3f }, { 0, 1, 0 }, 4);
+
+  ASSERT_EQ(points.size(), 4u);
+  for (const float x : { 0.4f, 0.6f })
+  {
+    for (const float z : { 0.1f, 0.3f })
+    {
+      EXPECT_TRUE(hasPointNear(points, { x, 1.0f, z }, 1e-4f)) << x << ", " << z;
+    }
+  }
 }
