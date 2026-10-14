@@ -75,7 +75,7 @@ private:
     bool resting = false;
     // A sphere or capsule, which can roll on its contact.
     bool rolls = false;
-    // The unit axis a capsule rolls about, or zero for a sphere, which rolls about any axis in the contact plane.
+    // A capsule's unit axis, which it rolls about when lying along a line contact. Zero for a sphere.
     glm::vec3 rollAxis{ 0 };
     // A capsule's world radius, the lever arm of its rolling resistance. Zero for a sphere, whose arm is its
     // center's distance from the contact point.
@@ -95,6 +95,12 @@ private:
   [[nodiscard]] static Pair pairOf(RigidBody& body, Transform& transform,
                                    const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
                                    const glm::vec3& normal);
+
+  // The lever arm of the friction against turning about the normal: a face under the center of mass, or a
+  // capsule's line contact under it, which also marks the pair as a line contact. Zero otherwise.
+  [[nodiscard]] static float twistRadius(Pair& pair, const std::shared_ptr<Collider>& collider,
+                                         const Support& support, const glm::vec3& centerOfMass,
+                                         std::span<const glm::vec3> collisionPoints);
 
   // Marks the side as rolling when the collider is a sphere or a capsule.
   static void markRolling(Side& side, const std::shared_ptr<Collider>& collider);

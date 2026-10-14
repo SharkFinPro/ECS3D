@@ -139,25 +139,25 @@ namespace {
     };
 
     const auto segment = flat(points[1] - points[0]);
-    const float lengthSquared = glm::dot(segment, segment);
-    if (lengthSquared <= 1e-12f)
+    const float length = glm::length(segment);
+    if (length <= 1e-6f)
     {
       return 0.0f;
     }
 
+    const auto direction = segment / length;
     const auto offset = flat(centerOfMass - points[0]);
-    const float along = glm::dot(offset, segment) / lengthSquared;
-    const auto beside = offset - along * segment;
+    const float along = glm::dot(offset, direction);
+    const float beside = glm::length(offset - along * direction);
 
-    constexpr float tolerance = 1e-4f;
-    const bool overSegment = along >= -tolerance && along <= 1.0f + tolerance;
-    if (!overSegment || glm::dot(beside, beside) > tolerance * tolerance * lengthSquared)
+    // Float noise grows with the distance from the origin, not with the length of the segment.
+    const float tolerance = 1e-4f * std::max(1.0f, glm::length(centerOfMass));
+    if (along < -tolerance || along > length + tolerance || beside > tolerance)
     {
       return 0.0f;
     }
 
-    const float length = std::sqrt(lengthSquared);
-    const float toStart = std::clamp(along, 0.0f, 1.0f) * length;
+    const float toStart = std::clamp(along, 0.0f, length);
     const float toEnd = length - toStart;
 
     return (toStart * toStart + toEnd * toEnd) / (2.0f * length);
@@ -402,17 +402,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
   stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
-  float faceRadius = 0.0f;
-  if (support.underCenterOfMass)
-  {
-    faceRadius = grindingRadius(support.point, collisionPoints);
-  }
-  else if (collisionPoints.size() == 2 && isCapsule(collider))
-  {
-    faceRadius = lineGrindingRadius(transform->getPosition(), normal, collisionPoints);
-    pair.lineContact = faceRadius > 0.0f;
-  }
-
+  const float faceRadius = twistRadius(pair, collider, support, transform->getPosition(), collisionPoints);
   resolve(pair, minimumTranslationVector, support.point, faceRadius, dt);
 
   // Laying flush turns the body's owner to the nearest box axis, which is no face of a hull.
@@ -444,6 +434,25 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   }
 
   comeToRest(body, other, normal);
+}
+
+float PhysicsSystem::twistRadius(Pair& pair, const std::shared_ptr<Collider>& collider, const Support& support,
+                                 const glm::vec3& centerOfMass, const std::span<const glm::vec3> collisionPoints)
+{
+  if (support.underCenterOfMass)
+  {
+    return grindingRadius(support.point, collisionPoints);
+  }
+
+  if (collisionPoints.size() != 2 || !isCapsule(collider))
+  {
+    return 0.0f;
+  }
+
+  const float radius = lineGrindingRadius(centerOfMass, pair.normal, collisionPoints);
+  pair.lineContact = radius > 0.0f;
+
+  return radius;
 }
 
 PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
@@ -618,14 +627,17 @@ void PhysicsSystem::applyRollingResistance(const Pair& pair, const glm::vec3& po
   const auto spin = relativeSpin(pair, dt);
   auto rolling = spin - glm::dot(spin, pair.normal) * pair.normal;
 
-  // A capsule rolls only about its own axis, and a sphere in the pair rolls about any, so it frees the axis.
-  const auto zero = glm::vec3(0);
-  const bool aboutAnyAxis = (pair.body.rolls && pair.body.rollAxis == zero) ||
-                            (pair.other.rolls && pair.other.rollAxis == zero);
-  if (!aboutAnyAxis)
+  // Lying along a line, a capsule rolls only about its own axis; on a cap or a crossing contact it rolls about
+  // any axis in the plane, as a sphere does.
+  if (pair.lineContact)
   {
-    const auto& axis = pair.body.rolls ? pair.body.rollAxis : pair.other.rollAxis;
-    rolling = glm::dot(rolling, axis) * axis;
+    const auto along = pair.body.rollAxis - glm::dot(pair.body.rollAxis, pair.normal) * pair.normal;
+    const float alongLength = glm::length(along);
+    if (alongLength > 1e-6f)
+    {
+      const auto axis = along / alongLength;
+      rolling = glm::dot(rolling, axis) * axis;
+    }
   }
 
   const float rate = glm::length(rolling);
