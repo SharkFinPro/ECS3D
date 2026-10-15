@@ -76,6 +76,7 @@ add_executable(${PROJECT_NAME}
   SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp
   NarrowPhaseRotatedTest.cpp
+  EpaFlushContactTest.cpp
   SupportFacesTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp

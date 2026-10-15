@@ -266,6 +266,9 @@ OwnedFaces facesOf(Collider& collider)
 }
 
 // Contact::points holds this many.
+// Float noise in a dot product grows with the magnitudes involved, so both EPA tests scale this by them.
+constexpr float visibilityTolerance = 1e-5f;
+
 constexpr size_t maxManifoldPoints = std::tuple_size_v<decltype(collisions::Contact::points)>;
 
 Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
@@ -481,8 +484,16 @@ void Polytope::EPA()
     previousMinDist = currentMinDist;
     previousClosestPoint = m_closestFaceData.closestPoint;
 
+    const auto facesBefore = m_faces;
+    const auto closestBefore = m_closestFaceData;
+
     currentMinDist = std::numeric_limits<float>::max();
-    reconstructPolytope(supportPoint, searchDirection, currentMinDist);
+    if (!reconstructPolytope(supportPoint, searchDirection, currentMinDist))
+    {
+      m_faces = facesBefore;
+      m_closestFaceData = closestBefore;
+      break;
+    }
 
     ++iteration;
   }
@@ -637,7 +648,8 @@ std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& c
 
     auto facePoint = m_vertices[faceVertices[0]].vertex;
 
-    if (auto vectorToSupportPoint = supportPoint - facePoint; sameDirection(normal, vectorToSupportPoint))
+    const float visibleBeyond = visibilityTolerance * glm::length(normal) * std::max(1.0f, glm::length(supportPoint));
+    if (glm::dot(normal, supportPoint - facePoint) > visibleBeyond)
     {
       edges.emplace_back( faceVertices[0], faceVertices[1] );
       edges.emplace_back( faceVertices[1], faceVertices[2] );
@@ -697,7 +709,7 @@ bool Polytope::isFacingInward(const FaceData& faceData) const
   return false;
 }
 
-void Polytope::constructFace(Edge edge, glm::vec3 supportPoint, float& currentMinDist)
+bool Polytope::constructFace(Edge edge, glm::vec3 supportPoint, float& currentMinDist)
 {
   FaceData faceData {
     .aIndex = edge.first,
@@ -718,7 +730,7 @@ void Polytope::constructFace(Edge edge, glm::vec3 supportPoint, float& currentMi
 
     if (isFacingInward(faceData))
     {
-      return;
+      return false;
     }
   }
 
@@ -744,23 +756,37 @@ void Polytope::constructFace(Edge edge, glm::vec3 supportPoint, float& currentMi
         .distance = distance
       }
   });
+
+  return true;
 }
 
-void Polytope::reconstructPolytope(const glm::vec3 supportPoint, const glm::vec3 direction, float& currentMinDist)
+bool Polytope::reconstructPolytope(const glm::vec3 supportPoint, const glm::vec3 direction, float& currentMinDist)
 {
-  for (const auto& edge : deconstructPolytope(supportPoint, currentMinDist))
+  const auto horizon = deconstructPolytope(supportPoint, currentMinDist);
+
+  size_t built = 0;
+  for (const auto& edge : horizon)
   {
-    constructFace(edge, supportPoint, currentMinDist);
+    if (constructFace(edge, supportPoint, currentMinDist))
+    {
+      ++built;
+    }
+  }
+
+  if (built != horizon.size() || m_faces.empty() || currentMinDist == std::numeric_limits<float>::max())
+  {
+    return false;
   }
 
   m_vertices.push_back({supportPoint, direction});
+  return true;
 }
 
 bool Polytope::reachesBoundary(const glm::vec3 supportPoint, const glm::vec3 direction, const float minDistSquared)
 {
   // A support point on the closest face's plane would, through rounding, delete that face and its coplanar
   // neighbors without a face to replace them, leaving a hole that EPA then reads a far wall through.
-  constexpr float boundaryTolerance = 1e-5f;
+  const float boundaryTolerance = visibilityTolerance * std::max(1.0f, glm::length(supportPoint));
 
   return glm::dot(supportPoint, direction) - std::sqrt(minDistSquared) < boundaryTolerance;
 }
