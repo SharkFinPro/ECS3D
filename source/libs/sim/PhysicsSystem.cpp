@@ -1,4 +1,5 @@
 #include "PhysicsSystem.h"
+#include "InertiaTensor.h"
 #include "collisions/PlanarHull.h"
 #include "collisions/SupportFaces.h"
 #include <objects/Object.h>
@@ -413,7 +414,7 @@ void PhysicsSystem::applyVelocityChange(RigidBody& body, const Transform& transf
     return;
   }
 
-  if (const auto inverseInertia = worldInverseInertia(transform))
+  if (const auto inverseInertia = worldInverseInertia(body, transform))
   {
     body.setAngularVelocity(body.getAngularVelocity() +
                             glm::degrees(*inverseInertia * glm::cross(r, velocityChange)) / dt);
@@ -784,13 +785,13 @@ glm::vec3 PhysicsSystem::relativeSpin(const Pair& pair, const float dt)
 void PhysicsSystem::resistSpin(const Pair& pair, const glm::vec3& axis, const float rate, const float limit,
                                const float dt)
 {
-  const auto bodyInertia = worldInverseInertia(*pair.body.transform);
+  const auto bodyInertia = worldInverseInertia(*pair.body.body, *pair.body.transform);
   if (!bodyInertia)
   {
     return;
   }
 
-  const auto otherInertia = pair.other.body ? worldInverseInertia(*pair.other.transform) : std::nullopt;
+  const auto otherInertia = pair.other.body ? worldInverseInertia(*pair.other.body, *pair.other.transform) : std::nullopt;
   const float bodyMass = pair.body.body->getMass();
   const float otherMass = pair.other.body ? pair.other.body->getMass() : 0.0f;
 
@@ -1071,7 +1072,7 @@ glm::vec3 PhysicsSystem::responseAt(const Side& side, const glm::vec3& point, co
   auto response = taken * inverseMass;
 
   const auto arm = point - side.transform->getPosition();
-  const auto inverseInertia = worldInverseInertia(*side.transform);
+  const auto inverseInertia = worldInverseInertia(*side.body, *side.transform);
   if (turns && glm::length(arm) > minLeverArm && inverseInertia)
   {
     response += glm::cross(*inverseInertia * glm::cross(arm, taken) * inverseMass, arm);
@@ -1099,7 +1100,7 @@ void PhysicsSystem::push(const Side& side, const glm::vec3& impulse, const glm::
 void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
                                         const glm::vec3& normal, const std::span<const glm::vec3> contactPoints)
 {
-  const auto inverseInertia = worldInverseInertia(transform);
+  const auto inverseInertia = worldInverseInertia(body, transform);
   if (!inverseInertia)
   {
     return;
@@ -1304,41 +1305,25 @@ void PhysicsSystem::respondToCollision(RigidBody& body, Transform& transform, co
   transform.moveWorld(displacement);
 }
 
-std::optional<glm::mat3> PhysicsSystem::worldInverseInertia(const Transform& transform)
+std::optional<glm::mat3> PhysicsSystem::worldInverseInertia(const RigidBody& body, const Transform& transform)
 {
-  const auto inertiaTensor = getInertiaTensor(transform);
+  const auto inertiaTensor = inertia::worldTensor(body.getOwner(), transform);
 
   // A zeroed scale axis puts a zero or non-finite entry on the diagonal. Inverting that gives inf/NaN angular
   // velocity that never recovers, so the body gets no angular response instead of spinning up to garbage.
   constexpr float minDiagonal = 1e-6f;
-  if (inertiaTensor[0][0] <= minDiagonal || inertiaTensor[1][1] <= minDiagonal || inertiaTensor[2][2] <= minDiagonal ||
-      !finiteCheck::isFinite(glm::vec3(inertiaTensor[0][0], inertiaTensor[1][1], inertiaTensor[2][2])))
+  const glm::vec3 diagonal(inertiaTensor[0][0], inertiaTensor[1][1], inertiaTensor[2][2]);
+  if (diagonal.x <= minDiagonal || diagonal.y <= minDiagonal || diagonal.z <= minDiagonal ||
+      !finiteCheck::isFinite(diagonal))
   {
     return std::nullopt;
   }
 
-  // The tensor is diagonal in the body's own axes; angular impulses are in world space.
-  const auto orientation = glm::mat3_cast(orientationOf(transform));
-  return orientation * glm::inverse(inertiaTensor) * glm::transpose(orientation);
-}
+  const auto inverse = glm::inverse(inertiaTensor);
+  if (!finiteCheck::isFinite(glm::vec3(inverse[0][0], inverse[1][1], inverse[2][2])))
+  {
+    return std::nullopt;
+  }
 
-glm::mat3x3 PhysicsSystem::getInertiaTensor(const Transform& transform)
-{
-  // A solid box per unit mass, with half-extents of its scale as BoxCollider builds it. responseAt divides by
-  // the mass, and a change of velocity turns a body whatever its mass.
-  const auto scale = transform.getScale();
-
-  const auto widthSquared = scale.x * scale.x;
-  const auto heightSquared = scale.y * scale.y;
-  const auto depthSquared = scale.z * scale.z;
-
-  const float Ixx = (heightSquared + depthSquared) / 3.0f;
-  const float Iyy = (widthSquared + depthSquared) / 3.0f;
-  const float Izz = (widthSquared + heightSquared) / 3.0f;
-
-  return {
-    Ixx, 0.0f, 0.0f,
-    0.0f, Iyy, 0.0f,
-    0.0f, 0.0f, Izz
-  };
+  return inverse;
 }
