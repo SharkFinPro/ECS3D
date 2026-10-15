@@ -92,11 +92,13 @@ private:
 
   [[nodiscard]] bool isFacingInward(const FaceData& faceData) const;
 
-  void constructFace(Edge edge, glm::vec3 supportPoint, float& currentMinDist);
+  [[nodiscard]] bool constructFace(Edge edge, glm::vec3 supportPoint, float& currentMinDist);
 
-  void reconstructPolytope(glm::vec3 supportPoint, glm::vec3 direction, float& currentMinDist);
+  [[nodiscard]] bool reconstructPolytope(glm::vec3 supportPoint, glm::vec3 direction, float& currentMinDist);
 
   bool isDuplicateVertex(glm::vec3 supportPoint);
+
+  [[nodiscard]] static bool reachesBoundary(glm::vec3 supportPoint, glm::vec3 direction, float minDistSquared);
 };
 
 
