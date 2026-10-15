@@ -131,6 +131,7 @@ add_executable(${PROJECT_NAME}
   FixedTimestepTest.cpp
   PhysicsIntegrationTest.cpp
   PhysicsLandingTest.cpp
+  PhysicsSlopeTest.cpp
   PhysicsStackingTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsContactResponseTest.cpp

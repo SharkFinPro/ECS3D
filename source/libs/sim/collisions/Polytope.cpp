@@ -14,6 +14,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 #include <map>
 #include <stdexcept>
@@ -472,7 +473,7 @@ void Polytope::EPA()
 
     const auto supportPoint = getSupport(*m_collider, *m_otherCollider, searchDirection);
 
-    if (isDuplicateVertex(supportPoint))
+    if (isDuplicateVertex(supportPoint) || reachesBoundary(supportPoint, searchDirection, currentMinDist))
     {
       break;
     }
@@ -753,6 +754,15 @@ void Polytope::reconstructPolytope(const glm::vec3 supportPoint, const glm::vec3
   }
 
   m_vertices.push_back({supportPoint, direction});
+}
+
+bool Polytope::reachesBoundary(const glm::vec3 supportPoint, const glm::vec3 direction, const float minDistSquared)
+{
+  // A support point on the closest face's plane would, through rounding, delete that face and its coplanar
+  // neighbors without a face to replace them, leaving a hole that EPA then reads a far wall through.
+  constexpr float boundaryTolerance = 1e-5f;
+
+  return glm::dot(supportPoint, direction) - std::sqrt(minDistSquared) < boundaryTolerance;
 }
 
 bool Polytope::isDuplicateVertex(const glm::vec3 supportPoint)

@@ -97,6 +97,8 @@ private:
   void reconstructPolytope(glm::vec3 supportPoint, glm::vec3 direction, float& currentMinDist);
 
   bool isDuplicateVertex(glm::vec3 supportPoint);
+
+  [[nodiscard]] static bool reachesBoundary(glm::vec3 supportPoint, glm::vec3 direction, float minDistSquared);
 };
 
 
