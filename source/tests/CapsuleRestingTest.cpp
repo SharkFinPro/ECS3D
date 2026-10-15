@@ -14,8 +14,8 @@
 #include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <cmath>
-#include <cstdio>
 #include <memory>
+#include <utility>
 
 namespace {
   using namespace physicsFixtures;
@@ -63,9 +63,7 @@ namespace {
       return glm::degrees(std::asin(std::fabs(axis.y)));
     }
   };
-}
 
-namespace {
   // Degrees. Far inside the half-degree the capsule rested off flush before it was laid flat.
   constexpr float flushToleranceDegrees = 1e-3f;
   constexpr float restSpeed = 1e-5f;
@@ -80,11 +78,13 @@ namespace {
 
 TEST(CapsuleResting, ACapsuleSlidingAlongItsAxisRestsFlush)
 {
-  for (const auto& rotation : { glm::vec3(0, 0, 90), glm::vec3(90, 0, 0) })
+  // Each rotation lays the capsule along the axis it slides on.
+  const std::pair<glm::vec3, glm::vec3> slides[] = { { { 0, 0, 90 }, { 0.3f, 0, 0 } },
+                                                      { { 90, 0, 0 }, { 0, 0, 0.3f } } };
+  for (const auto& [rotation, velocity] : slides)
   {
     SCOPED_TRACE(::testing::Message() << "rotation " << rotation.x << " " << rotation.z);
 
-    const auto velocity = rotation.z > 0.0f ? glm::vec3(0.3f, 0, 0) : glm::vec3(0, 0, 0.3f);
     Lying lying({ 0, 1.6f, 0 }, rotation, velocity);
 
     lying.run(400);
@@ -118,26 +118,34 @@ TEST(CapsuleResting, ACapsuleRollingSidewaysStaysFlushAndComesToRest)
   expectLyingFlushAtRest(lying);
 }
 
-TEST(CapsuleResting, ACapsuleTiltedWellPastTheFlushLimitIsNotSnappedOnContact)
+TEST(CapsuleResting, ACapsuleJustPastTheFlushLimitIsNotSnappedOnContact)
 {
-  Lying lying({ 0, 2.0f, 0 }, { 0, 0, 110 }, { 0, 0, 0 });
+  // Both start a hair above the slab, so they touch on the first tick. The start tilt is outside
+  // flushTiltSine (sin 1.5 degrees = 0.026) for the first capsule and inside it for the control.
+  Lying past({ 0, 1.505f, 0 }, { 0, 0, 91.5f }, { 0, 0, 0 });
+  Lying inside({ 0, 1.505f, 0 }, { 0, 0, 90.5f }, { 0, 0, 0 });
+  EXPECT_NEAR(past.tiltDegrees(), 1.5f, 1e-3f);
 
-  lying.run(3);
+  past.run(1);
+  inside.run(1);
 
-  // It has landed on a cap by now, and still stands at the tilt it was dropped with.
-  EXPECT_LT(transformOf(lying.object)->getPosition().y, 1.8f);
-  EXPECT_NEAR(lying.tiltDegrees(), 20.0f, 0.5f);
+  // Both touched the slab on that tick: free fall would have lowered them, and the push out raised them.
+  EXPECT_GT(transformOf(past.object)->getPosition().y, 1.505f);
+  EXPECT_GT(transformOf(inside.object)->getPosition().y, 1.5f);
+  // Positive control: the one inside the limit was laid flush on that tick, the one past it was left tilted.
+  EXPECT_LT(inside.tiltDegrees(), flushToleranceDegrees);
+  EXPECT_GT(past.tiltDegrees(), 1.4f);
 
-  // Positive control: gravity then lays it down by itself.
-  lying.run(400);
-  expectLyingFlushAtRest(lying);
+  // It then lays itself down by gravity.
+  past.run(400);
+  expectLyingFlushAtRest(past);
 }
 
 TEST(CapsuleResting, ACapsuleLyingByItsColliderRotationRestsFlush)
 {
   // The owner stands upright and the collider's own rotation lays the capsule down, so the owner's up is not its axis.
-  Lying lying({ 0, 2.0f, 0 }, { 0, 0, 1.0f }, { 0, 0, 0 }, { 0, 0, 90 });
-  EXPECT_GT(lying.tiltDegrees(), 0.5f);
+  Lying lying({ 0, 2.0f, 0 }, { 0, 0, 0.5f }, { 0, 0, 0 }, { 0, 0, 90 });
+  EXPECT_NEAR(lying.tiltDegrees(), 0.5f, 1e-3f);
 
   lying.run(400);
 
