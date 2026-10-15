@@ -469,6 +469,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   // the body lifting off once that spin is stopped.
   stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
   const float faceRadius = twistRadius(pair, collider, support, transform->getPosition(), collisionPoints);
+  markLineOnOther(pair, other, collisionPoints);
   resolve(pair, minimumTranslationVector, support.point, faceRadius, dt);
 
   if (normal.y > 0.0f)
@@ -532,6 +533,22 @@ float PhysicsSystem::twistRadius(Pair& pair, const std::shared_ptr<Collider>& co
   pair.lineContact = radius > 0.0f;
 
   return radius;
+}
+
+void PhysicsSystem::markLineOnOther(Pair& pair, const std::shared_ptr<Object>& other,
+                                   const std::span<const glm::vec3> collisionPoints)
+{
+  if (pair.lineContact || collisionPoints.size() != 2 || !pair.other.body ||
+      !isCapsule(other->getComponent<Collider>(ComponentType::collider)))
+  {
+    return;
+  }
+
+  if (lineGrindingRadius(pair.other.transform->getPosition(), pair.normal, collisionPoints) > 0.0f)
+  {
+    pair.lineContact = true;
+    pair.lineOnOther = true;
+  }
 }
 
 PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
@@ -710,7 +727,7 @@ void PhysicsSystem::applyRollingResistance(const Pair& pair, const glm::vec3& po
   // any axis in the plane, as a sphere does.
   if (pair.lineContact)
   {
-    const auto along = pair.body.rollAxis - glm::dot(pair.body.rollAxis, pair.normal) * pair.normal;
+    const auto along = lineAxisOf(pair) - glm::dot(lineAxisOf(pair), pair.normal) * pair.normal;
     const float alongLength = glm::length(along);
     if (alongLength > 1e-6f)
     {
@@ -793,8 +810,8 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   const bool turns = !faceContact;
   const bool otherHeld = pair.other.resting && pair.normal.y > 0.0f;
   const bool otherTurns = turns && !otherHeld;
-  const float bodyResistance = glm::dot(-direction, frictionResponse(pair, point, -direction, turns));
-  const float otherResistance = glm::dot(direction, responseAt(pair.other, point, direction, otherTurns));
+  const float bodyResistance = glm::dot(-direction, frictionResponse(pair, pair.body, point, -direction, turns));
+  const float otherResistance = glm::dot(direction, frictionResponse(pair, pair.other, point, direction, otherTurns));
   if (bodyResistance <= 0.0f)
   {
     return;
@@ -840,11 +857,16 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   // The support takes the part it can hold, and holds the resting body from turning, so only the rest moves it.
   // Turning it by the whole drag of something far heavier would spin a light body up to thousands of degrees a
   // second.
-  push(pair.other, std::max(impulse - held, 0.0f) * direction, point, otherTurns, dt);
+  pushFriction(pair, pair.other, std::max(impulse - held, 0.0f) * direction, point, otherTurns, dt);
   if (held > 0.0f)
   {
     pair.other.body->setHeldImpulse(pair.other.body->getHeldImpulse() + std::min(impulse, held) * sideways);
   }
+}
+
+glm::vec3 PhysicsSystem::lineAxisOf(const Pair& pair)
+{
+  return pair.lineOnOther ? pair.other.rollAxis : pair.body.rollAxis;
 }
 
 std::pair<glm::vec3, glm::vec3> PhysicsSystem::splitAlongLine(const Pair& pair, const glm::vec3& direction,
@@ -855,7 +877,7 @@ std::pair<glm::vec3, glm::vec3> PhysicsSystem::splitAlongLine(const Pair& pair, 
     return { glm::vec3(0), direction };
   }
 
-  const auto inPlane = pair.body.rollAxis - glm::dot(pair.body.rollAxis, pair.normal) * pair.normal;
+  const auto inPlane = lineAxisOf(pair) - glm::dot(lineAxisOf(pair), pair.normal) * pair.normal;
   const float length = glm::length(inPlane);
   if (length <= 1e-6f)
   {
@@ -867,20 +889,29 @@ std::pair<glm::vec3, glm::vec3> PhysicsSystem::splitAlongLine(const Pair& pair, 
   return { along, direction - along };
 }
 
-glm::vec3 PhysicsSystem::frictionResponse(const Pair& pair, const glm::vec3& point, const glm::vec3& direction,
-                                          const bool turns)
+glm::vec3 PhysicsSystem::frictionResponse(const Pair& pair, const Side& side, const glm::vec3& point,
+                                          const glm::vec3& direction, const bool turns)
 {
   const auto [along, across] = splitAlongLine(pair, direction, turns);
 
-  return responseAt(pair.body, point, along, false) + responseAt(pair.body, point, across, turns);
+  return responseAt(side, point, along, false) + responseAt(side, point, across, turns);
+}
+
+void PhysicsSystem::pushFriction(const Pair& pair, const Side& side, const glm::vec3& impulse,
+                                 const glm::vec3& point, const bool turns, const float dt)
+{
+  const auto [along, across] = splitAlongLine(pair, impulse, turns);
+  if (along != glm::vec3(0))
+  {
+    push(side, along, point, false, dt);
+  }
+  push(side, across, point, turns, dt);
 }
 
 void PhysicsSystem::stopBody(const Pair& pair, const glm::vec3& point, const glm::vec3& direction,
                              const float impulse, const float heldSpeed, const bool turns, const float dt)
 {
-  const auto [along, across] = splitAlongLine(pair, direction, turns);
-  push(pair.body, -impulse * along, point, false, dt);
-  push(pair.body, -impulse * across, point, turns, dt);
+  pushFriction(pair, pair.body, -impulse * direction, point, turns, dt);
   if (heldSpeed > 0.0f)
   {
     holdAgainstDrive(pair, direction, heldSpeed);
