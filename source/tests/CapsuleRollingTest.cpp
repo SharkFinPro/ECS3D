@@ -10,6 +10,7 @@
 #include "objects/components/Transform.h"
 
 #include <glm/geometric.hpp>
+#include <algorithm>
 #include <cmath>
 #include <glm/vec3.hpp>
 #include <memory>
@@ -214,7 +215,7 @@ TEST(CapsuleRolling, ACapsuleSlidingAlongItsAxisStopsWithoutRolling)
   capsule.run(60);
   const float stopped = capsule.x();
 
-  EXPECT_NEAR(stopped, 1.19f, 0.05f);
+  EXPECT_NEAR(stopped, 1.119f, 0.01f);
   EXPECT_LT(capsule.speed(), restSpeed);
   EXPECT_EQ(capsule.spinSpeed(), 0.0f);
 
@@ -223,6 +224,38 @@ TEST(CapsuleRolling, ACapsuleSlidingAlongItsAxisStopsWithoutRolling)
   early.run(3);
   EXPECT_LT(early.x(), stopped);
   EXPECT_GT(early.body->getVelocity().x, 0.0f);
+}
+
+TEST(CapsuleRolling, FrictionAlongALineContactDoesNotPitchTheCapsule)
+{
+  Config along;
+  along.rotation = { 0, 0, 90 };
+  along.velocity = { 0.3f, 0, 0 };
+  Roller sliding(along);
+
+  // The capsule lies along x. Pitching it would spin it about z, which the line's far end holds against.
+  float pitch = 0.0f;
+  for (int tick = 0; tick < 10; ++tick)
+  {
+    sliding.run(1);
+    pitch = std::max(pitch, std::fabs(sliding.body->getAngularVelocity().z));
+  }
+  EXPECT_LT(pitch, 0.5f);
+  EXPECT_LT(sliding.body->getVelocity().x, 0.3f);
+
+  // Positive control: pushed across its axis it rolls about the axis, so the contact does turn it.
+  Config across;
+  across.rotation = { 0, 0, 90 };
+  across.velocity = { 0, 0, 0.3f };
+  Roller rolling(across);
+
+  float roll = 0.0f;
+  for (int tick = 0; tick < 10; ++tick)
+  {
+    rolling.run(1);
+    roll = std::max(roll, std::fabs(rolling.body->getAngularVelocity().x));
+  }
+  EXPECT_GT(roll, 5.0f);
 }
 
 TEST(CapsuleRolling, ACapsuleTumblingOnItsCapRollsAboutAnyAxisAndComesToRest)

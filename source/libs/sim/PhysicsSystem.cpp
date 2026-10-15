@@ -793,7 +793,7 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   const bool turns = !faceContact;
   const bool otherHeld = pair.other.resting && pair.normal.y > 0.0f;
   const bool otherTurns = turns && !otherHeld;
-  const float bodyResistance = glm::dot(-direction, responseAt(pair.body, point, -direction, turns));
+  const float bodyResistance = glm::dot(-direction, frictionResponse(pair, point, -direction, turns));
   const float otherResistance = glm::dot(direction, responseAt(pair.other, point, direction, otherTurns));
   if (bodyResistance <= 0.0f)
   {
@@ -847,10 +847,40 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   }
 }
 
+std::pair<glm::vec3, glm::vec3> PhysicsSystem::splitAlongLine(const Pair& pair, const glm::vec3& direction,
+                                                              const bool turns)
+{
+  if (!turns || !pair.lineContact)
+  {
+    return { glm::vec3(0), direction };
+  }
+
+  const auto inPlane = pair.body.rollAxis - glm::dot(pair.body.rollAxis, pair.normal) * pair.normal;
+  const float length = glm::length(inPlane);
+  if (length <= 1e-6f)
+  {
+    return { glm::vec3(0), direction };
+  }
+
+  const auto along = inPlane / length * glm::dot(direction, inPlane / length);
+
+  return { along, direction - along };
+}
+
+glm::vec3 PhysicsSystem::frictionResponse(const Pair& pair, const glm::vec3& point, const glm::vec3& direction,
+                                          const bool turns)
+{
+  const auto [along, across] = splitAlongLine(pair, direction, turns);
+
+  return responseAt(pair.body, point, along, false) + responseAt(pair.body, point, across, turns);
+}
+
 void PhysicsSystem::stopBody(const Pair& pair, const glm::vec3& point, const glm::vec3& direction,
                              const float impulse, const float heldSpeed, const bool turns, const float dt)
 {
-  push(pair.body, -impulse * direction, point, turns, dt);
+  const auto [along, across] = splitAlongLine(pair, direction, turns);
+  push(pair.body, -impulse * along, point, false, dt);
+  push(pair.body, -impulse * across, point, turns, dt);
   if (heldSpeed > 0.0f)
   {
     holdAgainstDrive(pair, direction, heldSpeed);

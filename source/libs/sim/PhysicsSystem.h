@@ -126,6 +126,16 @@ private:
   // pressing the pair together this tick.
   static void applyFriction(const Pair& pair, const glm::vec3& point, float load, bool faceContact, float dt);
 
+  // Splits a friction direction into the part along a capsule's line contact and the rest. The line's far end
+  // holds the capsule against tipping from the first, so that part acts through its center; the rest rolls it.
+  // All of it is the second part unless the contact is a line and turns is set.
+  [[nodiscard]] static std::pair<glm::vec3, glm::vec3> splitAlongLine(const Pair& pair, const glm::vec3& direction,
+                                                                     bool turns);
+
+  // How the body's contact point moves per unit of friction impulse along direction.
+  [[nodiscard]] static glm::vec3 frictionResponse(const Pair& pair, const glm::vec3& point,
+                                                  const glm::vec3& direction, bool turns);
+
   // Pushes the body against its sliding. A nonzero heldSpeed, the speed in units per tick that static friction
   // removed in stopping the slide, also takes back the slide this tick's gravity and forces caused.
   static void stopBody(const Pair& pair, const glm::vec3& point, const glm::vec3& direction, float impulse,
