@@ -130,6 +130,7 @@ add_executable(${PROJECT_NAME}
   AssetNamingTest.cpp
   PrefabTest.cpp
   FixedTimestepTest.cpp
+  InertiaTensorTests.cpp
   PhysicsIntegrationTest.cpp
   PhysicsLandingTest.cpp
   PhysicsSlopeTest.cpp
