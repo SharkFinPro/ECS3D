@@ -18,6 +18,8 @@ add_library(${PROJECT_NAME}
   collisions/FaceManifold.cpp
   collisions/FaceManifold.h
   collisions/ManifoldInternal.h
+  collisions/PlanarHull.cpp
+  collisions/PlanarHull.h
   collisions/Support.cpp
   collisions/Support.h
   collisions/SupportFaces.cpp

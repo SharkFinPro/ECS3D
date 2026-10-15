@@ -3,7 +3,6 @@
 
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
-#include <array>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -42,12 +41,9 @@ public:
                               const std::shared_ptr<Object>& other, glm::vec3 minimumTranslationVector,
                               std::span<const glm::vec3> collisionPoints, float dt);
 
-  // The center of mass projected onto the contact plane, clamped into the hull of the first
-  // maxSupportPoints points.
+  // The center of mass projected onto the contact plane, clamped into the hull of the points.
   [[nodiscard]] static glm::vec3 supportPoint(const glm::vec3& centerOfMass, const glm::vec3& normal,
                                               std::span<const glm::vec3> collisionPoints);
-
-  static constexpr size_t maxSupportPoints = 4;
 
   // Degrees per second. Spin a resting body still carries relative to its support below this is dropped,
   // and any spin below it is too slow to turn a body at all.
@@ -62,6 +58,13 @@ private:
   // supportPoint, and whether the center of mass is over the manifold rather than clamped onto its edge.
   [[nodiscard]] static Support findSupport(const glm::vec3& centerOfMass, const glm::vec3& normal,
                                            std::span<const glm::vec3> collisionPoints);
+
+  // Up to this many points, the triangles among them cover their hull.
+  static constexpr size_t maxTriangulatedPoints = 4;
+
+  [[nodiscard]] static bool isOverSupport(std::span<const glm::vec3> points, const glm::vec3& target);
+
+  [[nodiscard]] static glm::vec3 nearestOnSupport(std::span<const glm::vec3> points, const glm::vec3& target);
 
   [[nodiscard]] static bool triangleContains(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
                                              const glm::vec3& point);
@@ -170,24 +173,14 @@ private:
 
   static void push(const Side& side, const glm::vec3& impulse, const glm::vec3& point, bool turns, float dt);
 
+  // Lays the body flush on the face it rests on when it is about to be, or already nearly is, and settles it there.
+  static void settleOnFace(RigidBody& body, Transform& transform, const std::shared_ptr<Collider>& collider,
+                           const std::shared_ptr<Object>& other, const Pair& pair, const Support& support, float dt);
+
   static void stopSpinIntoSupport(RigidBody& body, const Transform& transform, const std::shared_ptr<Object>& other,
                                   const glm::vec3& normal, std::span<const glm::vec3> contactPoints);
 
   static void comeToRest(RigidBody& body, const std::shared_ptr<Object>& other, const glm::vec3& normal);
-
-  // Whether the spin this tick carries the face the body rests toward flat against the support, or past it.
-  [[nodiscard]] static bool turnsFlatThisTick(const RigidBody& body, const Transform& transform,
-                                              const std::shared_ptr<Object>& other, const glm::vec3& supportFace,
-                                              float dt);
-
-  // The corners of the body's box face turned toward the support box, clamped onto its footprint the way the
-  // narrow phase clamps a manifold. Empty unless both colliders are boxes.
-  [[nodiscard]] static std::optional<std::array<glm::vec3, 4>> restingFace(const std::shared_ptr<Collider>& collider,
-                                                                           const std::shared_ptr<Object>& other,
-                                                                           const glm::vec3& supportFace);
-
-  static void layFlush(Transform& transform, const std::shared_ptr<Object>& other, const glm::vec3& normal,
-                       float maxTiltSine);
 
   static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 displacement);
 
