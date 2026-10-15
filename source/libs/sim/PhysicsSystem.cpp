@@ -26,6 +26,10 @@ namespace {
   // this a body resting on the face is laid flush with it.
   constexpr float flushTiltSine = 0.0175f;
 
+  // Cosine of 30 degrees. A body whose face meets a neighbor closer than this is finely faceted, like a drum or a
+  // ball: a tick of spin carries it across a facet, so it rolls on instead of landing on one. A box meets at 90.
+  constexpr float facetedCosine = 0.866f;
+
   // Units per tick. Slower sliding has no direction worth normalizing.
   constexpr float minSlidingSpeed = 1e-6f;
 
@@ -170,53 +174,91 @@ namespace {
   struct RestingFaces {
     collisions::SupportFace support;
     collisions::SupportFace own;
+    // The largest cosine between the body's face and any other face of the body: near one for a finely faceted
+    // body, zero for a box.
+    float neighborCosine = 0.0f;
   };
 
   // A body with no collider is taken as a box turned like its owner, and a support with no collider as a plane
   // along the contact normal. Neither has a footprint to land on.
-  std::vector<collisions::SupportFace> facesOfOwner(const std::shared_ptr<Collider>& collider,
-                                                    const Transform& transform)
+  RestingFaces ownerFace(const Transform& transform, const glm::vec3& direction)
   {
-    if (collider)
-    {
-      return collisions::supportFacesOf(*collider);
-    }
-
     const auto axes = glm::mat3_cast(orientationOf(transform));
-    std::vector<collisions::SupportFace> faces;
-    for (int axis = 0; axis < 3; ++axis)
+    int nearest = 0;
+    for (int axis = 1; axis < 3; ++axis)
     {
-      faces.push_back({ axes[axis], glm::vec3(0), {} });
-      faces.push_back({ -axes[axis], glm::vec3(0), {} });
+      if (std::fabs(glm::dot(axes[axis], direction)) > std::fabs(glm::dot(axes[nearest], direction)))
+      {
+        nearest = axis;
+      }
     }
 
-    return faces;
+    const float sign = glm::dot(axes[nearest], direction) < 0.0f ? -1.0f : 1.0f;
+
+    return { {}, { axes[nearest] * sign, glm::vec3(0), {} }, 0.0f };
+  }
+
+  // The body's face toward direction. Only a convex mesh needs all its faces, to tell how finely it is faceted.
+  std::optional<RestingFaces> ownFaceToward(const Transform& transform, const std::shared_ptr<Collider>& collider,
+                                            const glm::vec3& direction)
+  {
+    if (!collider)
+    {
+      return ownerFace(transform, direction);
+    }
+
+    if (collider->getColliderType() != ColliderType::convexMeshCollider)
+    {
+      auto face = collisions::supportFaceToward(*collider, direction);
+      return face ? std::optional<RestingFaces>(RestingFaces{ {}, std::move(*face), 0.0f }) : std::nullopt;
+    }
+
+    const auto faces = collisions::supportFacesOf(*collider);
+    const auto* toward = collisions::faceToward(faces, direction);
+    if (!toward)
+    {
+      return std::nullopt;
+    }
+
+    RestingFaces resting{ {}, *toward, -1.0f };
+    for (const auto& face : faces)
+    {
+      if (&face != toward)
+      {
+        resting.neighborCosine = std::max(resting.neighborCosine, glm::dot(face.normal, toward->normal));
+      }
+    }
+
+    return resting;
   }
 
   std::optional<RestingFaces> restingFacesOf(const Transform& transform, const std::shared_ptr<Collider>& collider,
                                              const std::shared_ptr<Object>& other, const glm::vec3& normal)
   {
-    const auto ownFaces = facesOfOwner(collider, transform);
-    if (ownFaces.empty())
-    {
-      return std::nullopt;
-    }
-
     const auto supportCollider = other->getComponent<Collider>(ComponentType::collider);
-    if (!supportCollider)
+
+    std::optional<collisions::SupportFace> support;
+    if (supportCollider)
     {
-      const auto* own = collisions::faceToward(ownFaces, -normal);
-      return RestingFaces{ { normal, glm::vec3(0), {} }, *own };
+      support = collisions::supportFaceToward(*supportCollider, normal);
+    }
+    else
+    {
+      support = collisions::SupportFace{ normal, glm::vec3(0), {} };
     }
 
-    const auto supportFaces = collisions::supportFacesOf(*supportCollider);
-    const auto* support = collisions::faceToward(supportFaces, normal);
     if (!support)
     {
       return std::nullopt;
     }
 
-    return RestingFaces{ *support, *collisions::faceToward(ownFaces, -support->normal) };
+    auto resting = ownFaceToward(transform, collider, -support->normal);
+    if (resting)
+    {
+      resting->support = std::move(*support);
+    }
+
+    return resting;
   }
 
   // The corners of the body's face, clamped onto the support's footprint the way the narrow phase clamps a manifold.
@@ -445,7 +487,7 @@ void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const st
 
   // One tick of support at an edge turns a body a degree or more, so it would go past flat onto its other
   // edge, and back, every tick. The tick its face would reach the support, it lands on the face instead.
-  if (faces->support.corners.empty() || faces->own.corners.empty() ||
+  if (faces->neighborCosine > facetedCosine || faces->support.corners.empty() || faces->own.corners.empty() ||
       !findSupport(transform.getPosition(), pair.normal, clampedCorners(*faces)).underCenterOfMass ||
       !turnsFlatThisTick(body, other, *faces, dt))
   {

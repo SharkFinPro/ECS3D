@@ -10,7 +10,7 @@ namespace {
   struct Point {
     float x;
     float y;
-    glm::vec3 position;
+    size_t index;
   };
 
   bool keepsTurn(const Point& o, const Point& a, const Point& b)
@@ -33,11 +33,13 @@ namespace {
 }
 
 namespace collisions {
-  std::vector<glm::vec3> convexOutline(const std::span<const glm::vec3> points, const glm::vec3& normal)
+  std::vector<size_t> convexOutlineIndices(const std::span<const glm::vec3> points, const glm::vec3& normal)
   {
     if (points.size() < 3)
     {
-      return { points.begin(), points.end() };
+      std::vector<size_t> all(points.size());
+      std::ranges::generate(all, [next = size_t{ 0 }]() mutable { return next++; });
+      return all;
     }
 
     const auto helper = std::fabs(normal.x) < 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
@@ -45,9 +47,9 @@ namespace collisions {
     const auto v = glm::cross(normal, u);
 
     std::vector<Point> sorted;
-    for (const auto& position : points)
+    for (size_t i = 0; i < points.size(); ++i)
     {
-      sorted.push_back({ glm::dot(position, u), glm::dot(position, v), position });
+      sorted.push_back({ glm::dot(points[i], u), glm::dot(points[i], v), i });
     }
     std::ranges::sort(sorted, [](const Point& a, const Point& b) { return a.x != b.x ? a.x < b.x : a.y < b.y; });
 
@@ -64,10 +66,21 @@ namespace collisions {
     }
     hull.pop_back();
 
-    std::vector<glm::vec3> outline;
+    std::vector<size_t> outline;
     for (const auto& point : hull)
     {
-      outline.push_back(point.position);
+      outline.push_back(point.index);
+    }
+
+    return outline;
+  }
+
+  std::vector<glm::vec3> convexOutline(const std::span<const glm::vec3> points, const glm::vec3& normal)
+  {
+    std::vector<glm::vec3> outline;
+    for (const auto index : convexOutlineIndices(points, normal))
+    {
+      outline.push_back(points[index]);
     }
 
     return outline;

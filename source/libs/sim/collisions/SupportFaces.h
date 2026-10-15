@@ -2,6 +2,7 @@
 #define SUPPORTFACES_H
 
 #include <glm/vec3.hpp>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -20,6 +21,10 @@ namespace collisions {
   // coplanar triangles merged into one polygon. A sphere or capsule has none, and a triangle with no area
   // is ignored.
   [[nodiscard]] std::vector<SupportFace> supportFacesOf(Collider& collider);
+
+  // The one face of the collider that supportFacesOf would return that points most along direction. A box builds
+  // only that face; a collider with no faces gives nullopt.
+  [[nodiscard]] std::optional<SupportFace> supportFaceToward(Collider& collider, const glm::vec3& direction);
 
   // The face whose normal points most along direction, or nullptr when there are no faces. Among equally
   // aligned faces, the first wins.

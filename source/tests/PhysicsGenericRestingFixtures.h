@@ -50,11 +50,12 @@ namespace restingFixtures {
     std::shared_ptr<RigidBody> rigidBody;
     CollisionSystem collisions;
 
-    Rig(const Shape bodyShape, const Shape groundShape, const Launch& launch, ConvexHull hull = {})
+    Rig(const Shape bodyShape, const Shape groundShape, const Launch& launch, ConvexHull hull = {},
+        ConvexHull groundHull = {})
     {
       const auto ground = fixtures::addObject(scene, "Ground", { 0, 0, 0 });
-      fixtures::transformOf(ground)->setScale({ 10, 1, 10 });
-      attach(ground, groundShape);
+      fixtures::transformOf(ground)->setScale(groundHull.vertices.empty() ? glm::vec3(10, 1, 10) : glm::vec3(1));
+      attach(ground, groundShape, std::move(groundHull));
 
       body = addBodyAt(launch, bodyShape, std::move(hull));
     }
