@@ -320,11 +320,8 @@ namespace {
 
   // Turns a capsule lying nearly in the support's plane the rest of the way into it: with its center of mass
   // between the two contact points nothing torques it down.
-  void layCapsuleFlush(Transform& transform, const glm::vec3& supportNormal)
+  void layCapsuleFlush(Transform& transform, const glm::vec3& axis, const glm::vec3& supportNormal)
   {
-    const auto orientation = orientationOf(transform);
-    const auto axis = orientation * glm::vec3(0, 1, 0);
-
     const float sine = glm::dot(axis, supportNormal);
     constexpr float minTiltSine = 1e-5f;
     if (std::fabs(sine) < minTiltSine || std::fabs(sine) > flushTiltSine)
@@ -333,7 +330,7 @@ namespace {
     }
 
     const auto turn = glm::angleAxis(-std::asin(sine), glm::normalize(glm::cross(axis, supportNormal)));
-    transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
+    transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientationOf(transform))));
   }
 }
 
@@ -504,9 +501,10 @@ void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const st
 {
   if (pair.lineContact)
   {
-    if (const auto face = supportFaceOf(other, pair.normal))
+    const auto face = supportFaceOf(other, pair.normal);
+    if (face && glm::dot(pair.body.rollAxis, pair.body.rollAxis) > 0.0f)
     {
-      layCapsuleFlush(transform, face->normal);
+      layCapsuleFlush(transform, pair.body.rollAxis, face->normal);
     }
 
     return;

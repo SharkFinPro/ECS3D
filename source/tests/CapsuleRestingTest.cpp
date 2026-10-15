@@ -8,6 +8,7 @@
 #include "objects/ObjectManager.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
+#include "objects/components/collisions/CapsuleCollider.h"
 
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
@@ -26,9 +27,11 @@ namespace {
     fixtures::Scene scene = makeScene();
     std::shared_ptr<Object> object;
     std::shared_ptr<RigidBody> body;
+    std::shared_ptr<CapsuleCollider> capsule;
     CollisionSystem collisions;
 
-    Lying(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& velocity)
+    Lying(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& velocity,
+          const glm::vec3& colliderRotation = glm::vec3(0))
     {
       // A slab whose top face is y = 1.
       const auto ground = addObject(scene, "Ground", { 0, 0, 0 });
@@ -37,7 +40,8 @@ namespace {
 
       object = addObject(scene, "Capsule", position);
       transformOf(object)->setRotation(rotation);
-      fixtures::addCapsuleCollider(object, 0.5f, 2.0f);
+      capsule = fixtures::addCapsuleCollider(object, 0.5f, 2.0f);
+      capsule->setRotation(colliderRotation);
       body = addBody(object, true);
       body->setVelocity(velocity);
     }
@@ -54,7 +58,8 @@ namespace {
     // Degrees between the capsule's axis and the horizontal plane.
     [[nodiscard]] float tiltDegrees() const
     {
-      const auto axis = localUpOf(transformOf(object)->getRotation());
+      const auto core = capsule->getSegment();
+      const auto axis = glm::normalize(core.end - core.start);
       return glm::degrees(std::asin(std::fabs(axis.y)));
     }
   };
@@ -125,5 +130,16 @@ TEST(CapsuleResting, ACapsuleTiltedWellPastTheFlushLimitIsNotSnappedOnContact)
 
   // Positive control: gravity then lays it down by itself.
   lying.run(400);
+  expectLyingFlushAtRest(lying);
+}
+
+TEST(CapsuleResting, ACapsuleLyingByItsColliderRotationRestsFlush)
+{
+  // The owner stands upright and the collider's own rotation lays the capsule down, so the owner's up is not its axis.
+  Lying lying({ 0, 2.0f, 0 }, { 0, 0, 1.0f }, { 0, 0, 0 }, { 0, 0, 90 });
+  EXPECT_GT(lying.tiltDegrees(), 0.5f);
+
+  lying.run(400);
+
   expectLyingFlushAtRest(lying);
 }
