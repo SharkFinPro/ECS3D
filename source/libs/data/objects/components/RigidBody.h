@@ -70,6 +70,11 @@ public:
   [[nodiscard]] glm::vec3 getHeldImpulse() const;
   void setHeldImpulse(const glm::vec3& heldImpulse);
 
+  // The velocity change that gravity and queued forces gave the body this tick, which moved it before any contact
+  // saw it. Friction that holds the body still takes back the part of it along the support.
+  [[nodiscard]] glm::vec3 getDriveStep() const;
+  void setDriveStep(const glm::vec3& driveStep);
+
   [[nodiscard]] nlohmann::json serialize() override;
 
   void loadFromJSON(const nlohmann::json& componentData) override;
@@ -92,6 +97,8 @@ private:
   float m_stackedLoad = 0.0f;
 
   glm::vec3 m_heldImpulse{ 0 };
+
+  glm::vec3 m_driveStep{ 0 };
 
   std::vector<PendingForce> m_pendingForces;
 };

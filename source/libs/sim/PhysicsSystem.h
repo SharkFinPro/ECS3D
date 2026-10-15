@@ -126,6 +126,14 @@ private:
   // pressing the pair together this tick.
   static void applyFriction(const Pair& pair, const glm::vec3& point, float load, bool faceContact, float dt);
 
+  // Pushes the body against its sliding. A nonzero heldSpeed, the speed in units per tick that static friction
+  // removed in stopping the slide, also takes back the slide this tick's gravity and forces caused.
+  static void stopBody(const Pair& pair, const glm::vec3& point, const glm::vec3& direction, float impulse,
+                       float heldSpeed, bool turns, float dt);
+
+  // Takes back up to stopped of the body's drive step along the support, if the body was sliding that way.
+  static void holdAgainstDrive(const Pair& pair, const glm::vec3& direction, float stopped);
+
   // A face resting on a face grinds against turning about the normal, which friction at a single support point under
   // the center cannot see.
   static void applySpinFriction(const Pair& pair, float load, float faceRadius, float dt);

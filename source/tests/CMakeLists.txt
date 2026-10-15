@@ -139,6 +139,7 @@ add_executable(${PROJECT_NAME}
   PhysicsStackingTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsContactResponseTest.cpp
+  PhysicsFrictionHoldTest.cpp
   DefaultProjectTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp

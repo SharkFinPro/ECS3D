@@ -22,7 +22,7 @@ namespace {
   constexpr int settledBy = 20;
 }
 
-// The body lands flush, then creeps along the slope. Every tick from landing on, its center must stay one body
+// The body lands flush and rests on the slope. Every tick from landing on, its center must stay one body
 // half-size plus one support half-size above the support's center plane, never pushed through the support.
 TEST(PhysicsSlope, ABoxStaysOnASlopedBoxSupport)
 {
