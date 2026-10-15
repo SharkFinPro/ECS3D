@@ -76,8 +76,13 @@ private:
     // Rested on a support last tick. In a pair of bodies the support takes the downward part of a push, so a
     // stack holds up whatever its masses, and what lands on it stops as it would on static geometry.
     bool resting = false;
-    // A sphere, which can roll on its contact.
+    // A sphere or capsule, which can roll on its contact.
     bool rolls = false;
+    // A capsule's unit axis, which it rolls about when lying along a line contact. Zero for a sphere.
+    glm::vec3 rollAxis{ 0 };
+    // A capsule's world radius, the lever arm of its rolling resistance. Zero for a sphere, whose arm is its
+    // center's distance from the contact point.
+    float rollRadius = 0.0f;
   };
 
   // The body resolving a contact, pushed along normal, and what it touches, pushed the other way.
@@ -85,16 +90,28 @@ private:
     Side body;
     Side other;
     glm::vec3 normal;
+    // Touching along a line under the center of mass, as a capsule lying on a flat support: friction there
+    // turns the body, as it rolls, but the line still grinds against spinning about the normal.
+    bool lineContact = false;
   };
 
   [[nodiscard]] static Pair pairOf(RigidBody& body, Transform& transform,
                                    const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
                                    const glm::vec3& normal);
 
+  // The lever arm of the friction against turning about the normal: a face under the center of mass, or a
+  // capsule's line contact under it, which also marks the pair as a line contact. Zero otherwise.
+  [[nodiscard]] static float twistRadius(Pair& pair, const std::shared_ptr<Collider>& collider,
+                                         const Support& support, const glm::vec3& centerOfMass,
+                                         std::span<const glm::vec3> collisionPoints);
+
+  // Marks the side as rolling when the collider is a sphere or a capsule.
+  static void markRolling(Side& side, const std::shared_ptr<Collider>& collider);
+
   static void integrate(RigidBody& body, Transform& transform, float dt);
 
-  // faceRadius: the lever arm of the friction against turning on a face under the center of mass, or zero for an
-  // edge or a point.
+  // faceRadius: the lever arm of the friction against turning on a face or a capsule's line under the center of
+  // mass, or zero for an edge or a point.
   static void resolve(const Pair& pair, glm::vec3 minimumTranslationVector, const glm::vec3& point, float faceRadius,
                       float dt);
 
