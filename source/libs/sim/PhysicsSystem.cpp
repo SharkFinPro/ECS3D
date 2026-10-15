@@ -163,6 +163,12 @@ namespace {
     return (toStart * toStart + toEnd * toEnd) / (2.0f * length);
   }
 
+  // What integrate adds to the velocity each tick.
+  glm::vec3 gravityStep(const RigidBody& body, const float dt)
+  {
+    return { 0.0f, body.getGravity() * dt * 0.1f, 0.0f };
+  }
+
   glm::vec3 horizontalOf(const glm::vec3& vector)
   {
     return { vector.x, 0.0f, vector.z };
@@ -291,8 +297,7 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
 
   if (body.getDoGravity())
   {
-    const glm::vec3 gravity = { 0, body.getGravity() * dt * 0.1f, 0 };
-    applyVelocityChange(body, transform, gravity, transform.getPosition(), dt);
+    applyVelocityChange(body, transform, gravityStep(body, dt), transform.getPosition(), dt);
   }
 
   transform.moveWorld(body.getVelocity());
@@ -757,6 +762,10 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
 
   const float impulse = std::min(stopping, grip);
   push(pair.body, -impulse * direction, point, turns, dt);
+  if (impulse >= stopping)
+  {
+    holdAgainstGravity(pair, direction, impulse * bodyResistance, dt);
+  }
 
   // The support takes the part it can hold, and holds the resting body from turning, so only the rest moves it.
   // Turning it by the whole drag of something far heavier would spin a light body up to thousands of degrees a
@@ -766,6 +775,27 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   {
     pair.other.body->setHeldImpulse(pair.other.body->getHeldImpulse() + std::min(impulse, held) * sideways);
   }
+}
+
+void PhysicsSystem::holdAgainstGravity(const Pair& pair, const glm::vec3& direction, const float stopped,
+                                       const float dt)
+{
+  if (pair.normal.y <= 0.0f || !pair.body.body->getDoGravity())
+  {
+    return;
+  }
+
+  // Integration moved the body by this tick's gravity before the contact saw it. Separation only undoes the
+  // part along the normal, so on a slope the rest is a slide that friction, holding the body, would not allow.
+  const auto gravity = gravityStep(*pair.body.body, dt);
+  const auto drift = gravity - glm::dot(gravity, pair.normal) * pair.normal;
+  const float along = glm::dot(drift, direction);
+  if (along <= 0.0f)
+  {
+    return;
+  }
+
+  pair.body.transform->moveWorld(-std::min(along, stopped) * direction);
 }
 
 std::pair<float, float> PhysicsSystem::squeeze(const Side& held, const glm::vec3& pushDirection, const float target,
