@@ -7,6 +7,7 @@
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
@@ -14,12 +15,14 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
+#include <glm/matrix.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <vector>
 
 namespace {
@@ -286,4 +289,113 @@ TEST(InertiaTensor, AnOffsetColliderMovesTheBodysTensorAwayFromItsOwnersPosition
   fixtures::addSphereCollider(object, 1.0f)->setPosition({ 0, 3, 0 });
 
   expectMatrix(inertia::worldTensor(object.get(), *transformOf(object)), diagonal(9.4f, 0.4f, 9.4f));
+}
+
+TEST(InertiaTensor, AScaledTurnedAndOffsetCapsuleColliderUsesItsWorldSegmentAndRadius)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Capsule", { 0, 0, 0 }, { 2, 3, 2 });
+  transformOf(object)->setRotation({ 0, 0, 90 });
+  const auto collider = fixtures::addCapsuleCollider(object, 0.5f, 4.0f);
+  collider->setPosition({ 1, 2, 3 });
+
+  // The radius is 0.5 * 2 = 1 and the half height 4 / 2 * 3 = 6, so the core is 10 long and, turned a quarter
+  // about z, lies along x. About its own center that is the textbook capsule; the offset adds 14 - d d^T.
+  const auto moments = capsuleMoments::textbook(1.0f, 10.0f);
+  const glm::vec3 offset(1, 2, 3);
+  const auto expected = diagonal(moments.aboutAxis, moments.acrossAxis, moments.acrossAxis) +
+                        glm::mat3(14.0f) - glm::outerProduct(offset, offset);
+
+  expectMatrix(inertia::worldTensor(object.get(), *transformOf(object)), expected, 1e-3f);
+}
+
+TEST(InertiaTensor, ACapsuleShorterThanItsDiameterIsASphere)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Stubby", { 0, 0, 0 });
+  fixtures::addCapsuleCollider(object, 1.0f, 1.0f);
+
+  expectMatrix(inertia::worldTensor(object.get(), *transformOf(object)), glm::mat3(0.4f));
+}
+
+TEST(InertiaTensor, AChildColliderUnderATurnedAndScaledParentUsesItsWorldPlacement)
+{
+  const auto scene = makeScene();
+  const auto parent = addObject(scene, "Parent", { 0, 0, 0 }, { 2, 2, 2 });
+  transformOf(parent)->setRotation({ 0, 0, 90 });
+  fixtures::addRigidBody(parent);
+
+  const auto child = addChildObject(scene, "Child", parent);
+  transformOf(child)->setPosition({ 1, 0, 0 });
+  const auto box = fixtures::addBoxCollider(child);
+  box->setScale({ 1, 2, 3 });
+
+  // The child sits at (0, 2, 0) with half extents (2, 4, 6) along its own axes, which the parent's quarter turn
+  // about z maps to (4, 2, 6) in the world: covariance diag(16/3, 4/3, 12) about its center, plus 4 along y.
+  expectMatrix(inertia::worldTensor(parent.get(), *transformOf(parent)), diagonal(52.0f / 3.0f, 52.0f / 3.0f, 32.0f / 3.0f),
+               1e-3f);
+}
+
+TEST(InertiaTensor, ABodyGathersGrandchildrenButNotAnotherBodysColliders)
+{
+  const auto scene = makeScene();
+  const auto owner = addObject(scene, "Owner", { 0, 0, 0 });
+  fixtures::addRigidBody(owner);
+
+  const auto bare = addChildObject(scene, "Bare", owner);
+  transformOf(bare)->setPosition({ 1, 0, 0 });
+  const auto grandchild = addChildObject(scene, "Grandchild", bare);
+  transformOf(grandchild)->setPosition({ 1, 0, 0 });
+  fixtures::addSphereCollider(grandchild, 1.0f);
+
+  const auto other = addChildObject(scene, "Other", owner);
+  transformOf(other)->setPosition({ 0, 5, 0 });
+  fixtures::addRigidBody(other);
+  fixtures::addSphereCollider(other, 3.0f);
+  const auto otherPart = addChildObject(scene, "OtherPart", other);
+  transformOf(otherPart)->setPosition({ 0, 0, 5 });
+  fixtures::addSphereCollider(otherPart, 3.0f);
+
+  // Only the grandchild's sphere, at x = 2, belongs to the owner.
+  expectMatrix(inertia::worldTensor(owner.get(), *transformOf(owner)), diagonal(0.4f, 4.4f, 4.4f));
+
+  // Positive control: the other body does take its own part, two equal spheres five apart.
+  expectMatrix(inertia::worldTensor(other.get(), *transformOf(other)), diagonal(16.1f, 16.1f, 3.6f), 1e-3f);
+}
+
+TEST(InertiaTensor, AMirroredBoxOrHullHasTheTensorOfItsAbsoluteSize)
+{
+  const auto scene = makeScene();
+  const auto expected = diagonal((4 + 1) / 3.0f, (1 + 1) / 3.0f, (1 + 4) / 3.0f);
+
+  const auto box = addObject(scene, "Box", { 0, 0, 0 }, { -1, 2, 1 });
+  fixtures::addBoxCollider(box);
+  expectMatrix(inertia::worldTensor(box.get(), *transformOf(box)), expected);
+
+  const auto hull = addObject(scene, "Hull", { 0, 0, 0 }, { -1, 2, 1 });
+  addHull(hull);
+  expectMatrix(inertia::worldTensor(hull.get(), *transformOf(hull)), expected);
+}
+
+TEST(InertiaTensor, DegenerateInputsGiveAZeroTensorRatherThanNaN)
+{
+  const auto scene = makeScene();
+  const glm::mat3 zero(0.0f);
+
+  const auto flat = addObject(scene, "Flat", { 0, 0, 0 }, { 0, 0, 0 });
+  fixtures::addBoxCollider(flat);
+  expectMatrix(inertia::worldTensor(flat.get(), *transformOf(flat)), zero);
+
+  const std::vector<glm::vec3> square{ { 0, 0, 0 }, { 1, 0, 0 }, { 1, 1, 0 }, { 0, 1, 0 } };
+  const std::vector<uint32_t> faces{ 0, 1, 2, 0, 2, 3 };
+  EXPECT_EQ(inertia::hull(square, faces).volume, 0.0f);
+
+  const std::array empty{ inertia::hull(square, faces), inertia::sphere({ 0, 0, 0 }, 0.0f) };
+  expectMatrix(inertia::tensorAbout(empty, { 0, 0, 0 }), zero);
+  expectMatrix(inertia::tensorAbout(std::span<const inertia::Distribution>(), { 0, 0, 0 }), zero);
+
+  // A volume that overflows a float is no shape: the body keeps the box of its scale.
+  const auto huge = addObject(scene, "Huge", { 0, 0, 0 });
+  fixtures::addSphereCollider(huge, 1e20f);
+  expectMatrix(inertia::worldTensor(huge.get(), *transformOf(huge)), glm::mat3(2.0f / 3.0f));
 }

@@ -16,6 +16,7 @@
 #include <memory>
 
 namespace {
+  // Absolute, so a vanishingly small body has no shape of its own and falls back to the box of its scale.
   constexpr float minVolume = 1e-12f;
 
   // Tetrahedra from a point inside a convex hull to each of its triangles, summed in double precision.
@@ -75,7 +76,7 @@ namespace {
     const auto collider = object.getComponent<Collider>(ComponentType::collider);
     if (collider && !collider->isTrigger() && object.getComponent<Transform>(ComponentType::transform))
     {
-      if (const auto shape = inertia::of(*collider); shape.volume > minVolume)
+      if (const auto shape = inertia::of(*collider); std::isfinite(shape.volume) && shape.volume > minVolume)
       {
         shapes.push_back(shape);
       }
@@ -205,6 +206,11 @@ namespace inertia {
     for (const auto& shape : shapes)
     {
       totalVolume += shape.volume;
+    }
+
+    if (!(totalVolume > 0.0f) || !std::isfinite(totalVolume))
+    {
+      return glm::mat3(0.0f);
     }
 
     glm::mat3 covariance(0.0f);
