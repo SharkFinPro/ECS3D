@@ -116,3 +116,49 @@ TEST(PhysicsFriction, ASphereOnASlopeRollsDownhill)
   EXPECT_GT(slope.slidDistance(), 0.5f);
   EXPECT_GT(glm::dot(fixtures::transformOf(slope.body)->getPosition() - slope.start, slope.downhill), 0.5f);
 }
+
+TEST(PhysicsFriction, TheFrictionAngleSeparatesHoldingFromSliding)
+{
+  Slope holds(25.0f);
+  holds.run(ticks, 0.1f);
+  Slope slides(28.0f);
+  slides.run(ticks, 0.1f);
+
+  EXPECT_LT(holds.slidDistance(), 1e-3f);
+  EXPECT_GT(slides.slidDistance(), 1.0f);
+}
+
+TEST(PhysicsFriction, ABoxSlidingUpTheSlopeStopsAndStaysPut)
+{
+  Slope slope(15.0f);
+  slope.rigidBody->setVelocity(-slope.downhill * 0.3f);
+  slope.run(60, 0.1f);
+  const auto stopped = fixtures::transformOf(slope.body)->getPosition();
+  slope.run(ticks, 0.1f);
+
+  EXPECT_GT(glm::dot(stopped - slope.start, -slope.downhill), 0.3f);
+  EXPECT_LT(glm::distance(fixtures::transformOf(slope.body)->getPosition(), stopped), 1e-3f);
+}
+
+// Measured with the hold skipped for rolling bodies; a hold that took the rolling slide back would lag it.
+TEST(PhysicsFriction, ASphereRollsTheSameDistanceOnASlope)
+{
+  Slope slope(5.71059f, true);
+  slope.run(60, 0.1f);
+
+  EXPECT_NEAR(slope.slidDistance(), 3.362058f, 1e-3f);
+}
+
+// A push below what friction holds adds to the slide gravity gives, and the hold takes both back.
+TEST(PhysicsFriction, APushedBoxBelowTheFrictionLimitStaysPut)
+{
+  Slope slope(15.0f);
+  for (int tick = 0; tick < ticks; ++tick)
+  {
+    slope.rigidBody->addPendingForce(slope.downhill * 0.15f, fixtures::transformOf(slope.body)->getPosition(),
+                                     ForceMode::acceleration);
+    slope.run(1, 0.1f);
+  }
+
+  EXPECT_LT(slope.slidDistance(), 1e-3f);
+}

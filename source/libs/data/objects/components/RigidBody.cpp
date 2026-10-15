@@ -162,6 +162,16 @@ void RigidBody::setHeldImpulse(const glm::vec3& heldImpulse)
   m_heldImpulse = heldImpulse;
 }
 
+glm::vec3 RigidBody::getDriveStep() const
+{
+  return m_driveStep;
+}
+
+void RigidBody::setDriveStep(const glm::vec3& driveStep)
+{
+  m_driveStep = driveStep;
+}
+
 nlohmann::json RigidBody::serialize()
 {
   const auto velocity = m_velocity.getInitialValue();

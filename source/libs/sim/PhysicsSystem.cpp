@@ -275,12 +275,15 @@ void PhysicsSystem::fixedUpdate(const ObjectManager& objectManager, const float 
       continue;
     }
 
+    rigidBody->setDriveStep(glm::vec3(0));
+
     // Apply any forces a script queued this tick (e.g. PlayerScript's input-driven movement), then
     // clear them, before integrating.
     for (const auto& pending : rigidBody->getPendingForces())
     {
-      applyVelocityChange(*rigidBody, *transform, velocityChangeOf(pending, rigidBody->getMass(), dt),
-                          pending.position, dt);
+      const auto change = velocityChangeOf(pending, rigidBody->getMass(), dt);
+      rigidBody->setDriveStep(rigidBody->getDriveStep() + change);
+      applyVelocityChange(*rigidBody, *transform, change, pending.position, dt);
     }
     rigidBody->clearPendingForces();
 
@@ -297,7 +300,9 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
 
   if (body.getDoGravity())
   {
-    applyVelocityChange(body, transform, gravityStep(body, dt), transform.getPosition(), dt);
+    const auto gravity = gravityStep(body, dt);
+    body.setDriveStep(body.getDriveStep() + gravity);
+    applyVelocityChange(body, transform, gravity, transform.getPosition(), dt);
   }
 
   transform.moveWorld(body.getVelocity());
@@ -761,11 +766,7 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   }
 
   const float impulse = std::min(stopping, grip);
-  push(pair.body, -impulse * direction, point, turns, dt);
-  if (impulse >= stopping)
-  {
-    holdAgainstGravity(pair, direction, impulse * bodyResistance, dt);
-  }
+  stopBody(pair, point, direction, impulse, impulse >= stopping ? impulse * bodyResistance : 0.0f, turns, dt);
 
   // The support takes the part it can hold, and holds the resting body from turning, so only the rest moves it.
   // Turning it by the whole drag of something far heavier would spin a light body up to thousands of degrees a
@@ -777,25 +778,35 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   }
 }
 
-void PhysicsSystem::holdAgainstGravity(const Pair& pair, const glm::vec3& direction, const float stopped,
-                                       const float dt)
+void PhysicsSystem::stopBody(const Pair& pair, const glm::vec3& point, const glm::vec3& direction,
+                             const float impulse, const float heldSpeed, const bool turns, const float dt)
 {
-  if (pair.normal.y <= 0.0f || !pair.body.body->getDoGravity())
+  push(pair.body, -impulse * direction, point, turns, dt);
+  if (heldSpeed > 0.0f)
+  {
+    holdAgainstDrive(pair, direction, heldSpeed);
+  }
+}
+
+void PhysicsSystem::holdAgainstDrive(const Pair& pair, const glm::vec3& direction, const float stopped)
+{
+  // A rolling body turns the slide into spin instead of holding still.
+  if (pair.normal.y <= 0.0f || pair.body.rolls)
   {
     return;
   }
 
-  // Integration moved the body by this tick's gravity before the contact saw it. Separation only undoes the
+  // Integration moved the body by this tick's drive step before the contact saw it. Separation only undoes the
   // part along the normal, so on a slope the rest is a slide that friction, holding the body, would not allow.
-  const auto gravity = gravityStep(*pair.body.body, dt);
-  const auto drift = gravity - glm::dot(gravity, pair.normal) * pair.normal;
-  const float along = glm::dot(drift, direction);
-  if (along <= 0.0f)
+  const auto step = pair.body.body->getDriveStep();
+  const auto drift = step - glm::dot(step, pair.normal) * pair.normal;
+  const float length = glm::length(drift);
+  if (length <= 0.0f || glm::dot(drift, direction) <= 0.0f)
   {
     return;
   }
 
-  pair.body.transform->moveWorld(-std::min(along, stopped) * direction);
+  pair.body.transform->moveWorld(-drift * std::min(1.0f, stopped / length));
 }
 
 std::pair<float, float> PhysicsSystem::squeeze(const Side& held, const glm::vec3& pushDirection, const float target,
