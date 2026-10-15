@@ -1,4 +1,5 @@
 #include "SupportFaces.h"
+#include "PlanarHull.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
 #include <glm/common.hpp>
@@ -27,46 +28,73 @@ namespace {
   // its normal is not stable, so it joins a face by its vertices' distance to the plane instead.
   constexpr float reliableAreaShare = 1e-2f;
 
-  // A corner whose edges' cross product is below this share of the product of their lengths lies on a
-  // straight edge.
-  constexpr float collinearShare = 1e-5f;
+  struct BoxFrame {
+    glm::vec3 center;
+    glm::mat3 axes;
+    glm::vec3 halfExtents;
+  };
+
+  BoxFrame boxFrameOf(Collider& collider)
+  {
+    return { collider.getPosition(), glm::mat3_cast(glm::quat(glm::radians(collider.getRotation()))),
+             glm::abs(collider.getScale()) };
+  }
+
+  SupportFace boxFace(const BoxFrame& box, const int axis, const float sign)
+  {
+    const int u = (axis + 1) % 3;
+    const int v = (axis + 2) % 3;
+    const auto alongU = box.axes[u] * box.halfExtents[u];
+    const auto alongV = box.axes[v] * box.halfExtents[v];
+
+    SupportFace face;
+    face.normal = box.axes[axis] * sign;
+    face.center = box.center + face.normal * box.halfExtents[axis];
+    face.corners = {
+      face.center - alongU - alongV,
+      face.center + alongU - alongV,
+      face.center + alongU + alongV,
+      face.center - alongU + alongV
+    };
+
+    if (sign < 0.0f)
+    {
+      std::ranges::reverse(face.corners);
+    }
+
+    return face;
+  }
 
   std::vector<SupportFace> boxFacesOf(Collider& collider)
   {
-    const auto center = collider.getPosition();
-    const auto axes = glm::mat3_cast(glm::quat(glm::radians(collider.getRotation())));
-    const auto halfExtents = glm::abs(collider.getScale());
+    const auto box = boxFrameOf(collider);
 
     std::vector<SupportFace> faces;
     for (int axis = 0; axis < 3; ++axis)
     {
-      const int u = (axis + 1) % 3;
-      const int v = (axis + 2) % 3;
-      const auto alongU = axes[u] * halfExtents[u];
-      const auto alongV = axes[v] * halfExtents[v];
-
       for (const float sign : { 1.0f, -1.0f })
       {
-        SupportFace face;
-        face.normal = axes[axis] * sign;
-        face.center = center + face.normal * halfExtents[axis];
-        face.corners = {
-          face.center - alongU - alongV,
-          face.center + alongU - alongV,
-          face.center + alongU + alongV,
-          face.center - alongU + alongV
-        };
-
-        if (sign < 0.0f)
-        {
-          std::ranges::reverse(face.corners);
-        }
-
-        faces.push_back(std::move(face));
+        faces.push_back(boxFace(box, axis, sign));
       }
     }
 
     return faces;
+  }
+
+  SupportFace boxFaceToward(Collider& collider, const glm::vec3& direction)
+  {
+    const auto box = boxFrameOf(collider);
+
+    int nearest = 0;
+    for (int axis = 1; axis < 3; ++axis)
+    {
+      if (std::fabs(glm::dot(box.axes[axis], direction)) > std::fabs(glm::dot(box.axes[nearest], direction)))
+      {
+        nearest = axis;
+      }
+    }
+
+    return boxFace(box, nearest, glm::dot(box.axes[nearest], direction) < 0.0f ? -1.0f : 1.0f);
   }
 
   using Vertices = std::vector<glm::vec3>;
@@ -217,63 +245,20 @@ namespace {
   // The convex outline of a group's vertices in its plane, counter-clockwise about its normal, as vertex ids.
   std::vector<uint32_t> outlineOf(const Group& group, const Vertices& vertices)
   {
-    const auto helper = std::fabs(group.normal.x) < 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
-    const auto u = glm::normalize(glm::cross(helper, group.normal));
-    const auto v = glm::cross(group.normal, u);
-
-    struct Point {
-      float x;
-      float y;
-      uint32_t id;
-    };
-
     auto ids = group.vertexIds;
     std::ranges::sort(ids);
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
 
-    std::vector<Point> points;
+    Vertices points;
     for (const auto id : ids)
     {
-      points.push_back({ glm::dot(vertices[id], u), glm::dot(vertices[id], v), id });
-    }
-    std::ranges::sort(points, [](const Point& a, const Point& b) { return a.x != b.x ? a.x < b.x : a.y < b.y; });
-
-    const auto keepsTurn = [](const Point& o, const Point& a, const Point& b)
-    {
-      const float turn = (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-      const float lengths = std::hypot(a.x - o.x, a.y - o.y) * std::hypot(b.x - o.x, b.y - o.y);
-
-      return turn > collinearShare * lengths;
-    };
-
-    std::vector<Point> hull;
-    const auto extend = [&](const Point& point, const size_t floor)
-    {
-      while (hull.size() >= floor && !keepsTurn(hull[hull.size() - 2], hull.back(), point))
-      {
-        hull.pop_back();
-      }
-      hull.push_back(point);
-    };
-
-    for (const auto& point : points)
-    {
-      extend(point, 2);
-    }
-    const size_t lower = hull.size() + 1;
-    for (auto point = points.rbegin() + 1; point != points.rend(); ++point)
-    {
-      extend(*point, lower);
-    }
-    if (!hull.empty())
-    {
-      hull.pop_back();
+      points.push_back(vertices[id]);
     }
 
     std::vector<uint32_t> outline;
-    for (const auto& point : hull)
+    for (const auto index : collisions::convexOutlineIndices(points, group.normal))
     {
-      outline.push_back(point.id);
+      outline.push_back(ids[index]);
     }
 
     return outline;
@@ -392,6 +377,22 @@ namespace collisions {
     }
 
     return {};
+  }
+
+  std::optional<SupportFace> supportFaceToward(Collider& collider, const glm::vec3& direction)
+  {
+    if (collider.getColliderType() == ColliderType::boxCollider)
+    {
+      return boxFaceToward(collider, direction);
+    }
+
+    const auto faces = supportFacesOf(collider);
+    if (const auto* face = faceToward(faces, direction))
+    {
+      return *face;
+    }
+
+    return std::nullopt;
   }
 
   const SupportFace* faceToward(const std::span<const SupportFace> faces, const glm::vec3& direction)
