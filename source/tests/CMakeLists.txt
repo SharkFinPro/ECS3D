@@ -76,6 +76,7 @@ add_executable(${PROJECT_NAME}
   SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp
   NarrowPhaseRotatedTest.cpp
+  EpaFlushContactTest.cpp
   SupportFacesTest.cpp
   SceneQueryTest.cpp
   ColliderWorldTransformTest.cpp
@@ -131,6 +132,7 @@ add_executable(${PROJECT_NAME}
   FixedTimestepTest.cpp
   PhysicsIntegrationTest.cpp
   PhysicsLandingTest.cpp
+  PhysicsSlopeTest.cpp
   PhysicsGenericRestingParityTest.cpp
   PhysicsGenericRestingShapesTest.cpp
   PlanarHullTest.cpp
