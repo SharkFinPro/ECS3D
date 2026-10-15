@@ -265,10 +265,16 @@ OwnedFaces facesOf(Collider& collider)
   return faces;
 }
 
-// Contact::points holds this many.
-// Float noise in a dot product grows with the magnitudes involved, so both EPA tests scale this by them.
+// Float noise in a dot product grows with the magnitudes involved, so every EPA facing test scales this by them.
 constexpr float visibilityTolerance = 1e-5f;
 
+static bool isInFrontOf(const glm::vec3& normal, const glm::vec3& planePoint, const glm::vec3& point)
+{
+  const float beyond = visibilityTolerance * glm::length(normal) * std::max(1.0f, glm::length(point));
+  return glm::dot(normal, point - planePoint) > beyond;
+}
+
+// Contact::points holds this many.
 constexpr size_t maxManifoldPoints = std::tuple_size_v<decltype(collisions::Contact::points)>;
 
 Polytope::Polytope(Collider& collider, Collider& otherCollider, Simplex &simplex)
@@ -648,8 +654,7 @@ std::vector<Edge> Polytope::deconstructPolytope(glm::vec3 supportPoint, float& c
 
     auto facePoint = m_vertices[faceVertices[0]].vertex;
 
-    const float visibleBeyond = visibilityTolerance * glm::length(normal) * std::max(1.0f, glm::length(supportPoint));
-    if (glm::dot(normal, supportPoint - facePoint) > visibleBeyond)
+    if (isInFrontOf(normal, facePoint, supportPoint))
     {
       edges.emplace_back( faceVertices[0], faceVertices[1] );
       edges.emplace_back( faceVertices[1], faceVertices[2] );
@@ -700,7 +705,7 @@ bool Polytope::isFacingInward(const FaceData& faceData) const
       continue;
     }
 
-    if (const glm::vec3 faceToVertex = m_vertices[i].vertex - faceData.a; sameDirection(faceData.normal, faceToVertex))
+    if (isInFrontOf(faceData.normal, faceData.a, m_vertices[i].vertex))
     {
       return true;
     }
