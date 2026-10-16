@@ -92,7 +92,7 @@ private:
     glm::vec3 normal;
     // Touching along a line under the center of mass, as a capsule lying on a flat support: friction there
     // turns the body, as it rolls, but the line still grinds against spinning about the normal.
-    // A capsule within a degree of the support's plane is also laid flush into it.
+    // A capsule in a line contact is also laid flush into the support's plane.
     bool lineContact = false;
     // The line is the other side's: it is the capsule, and this side is the body it lies on.
     bool lineOnOther = false;

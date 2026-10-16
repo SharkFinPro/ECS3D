@@ -318,13 +318,13 @@ namespace {
     transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
   }
 
-  // Turns a capsule lying nearly in the support's plane the rest of the way into it: with its center of mass
-  // between the two contact points nothing torques it down.
+  // Turns a capsule in a line contact the rest of the way into the support's plane: with its center of mass
+  // between the two contact points nothing torques it down. The manifold's line band decides how tilted it may be.
   void layCapsuleFlush(Transform& transform, const glm::vec3& axis, const glm::vec3& supportNormal)
   {
     const float sine = glm::dot(axis, supportNormal);
     constexpr float minTiltSine = 1e-5f;
-    if (std::fabs(sine) < minTiltSine || std::fabs(sine) > flushTiltSine)
+    if (std::fabs(sine) < minTiltSine)
     {
       return;
     }
