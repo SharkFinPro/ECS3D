@@ -238,21 +238,22 @@ namespace {
     return resting;
   }
 
+  // The face of the other object the contact normal points away from, or none when it has no face.
+  std::optional<collisions::SupportFace> supportFaceOf(const std::shared_ptr<Object>& other, const glm::vec3& normal)
+  {
+    const auto supportCollider = other->getComponent<Collider>(ComponentType::collider);
+    if (supportCollider)
+    {
+      return collisions::supportFaceToward(*supportCollider, normal);
+    }
+
+    return collisions::SupportFace{ normal, glm::vec3(0), {} };
+  }
+
   std::optional<RestingFaces> restingFacesOf(const Transform& transform, const std::shared_ptr<Collider>& collider,
                                              const std::shared_ptr<Object>& other, const glm::vec3& normal)
   {
-    const auto supportCollider = other->getComponent<Collider>(ComponentType::collider);
-
-    std::optional<collisions::SupportFace> support;
-    if (supportCollider)
-    {
-      support = collisions::supportFaceToward(*supportCollider, normal);
-    }
-    else
-    {
-      support = collisions::SupportFace{ normal, glm::vec3(0), {} };
-    }
-
+    auto support = supportFaceOf(other, normal);
     if (!support)
     {
       return std::nullopt;
@@ -315,6 +316,21 @@ namespace {
 
     const auto turn = glm::angleAxis(std::atan2(sine, cosine), axis / sine);
     transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
+  }
+
+  // Turns a capsule lying nearly in the support's plane the rest of the way into it: with its center of mass
+  // between the two contact points nothing torques it down.
+  void layCapsuleFlush(Transform& transform, const glm::vec3& axis, const glm::vec3& supportNormal)
+  {
+    const float sine = glm::dot(axis, supportNormal);
+    constexpr float minTiltSine = 1e-5f;
+    if (std::fabs(sine) < minTiltSine || std::fabs(sine) > flushTiltSine)
+    {
+      return;
+    }
+
+    const auto turn = glm::angleAxis(-std::asin(sine), glm::normalize(glm::cross(axis, supportNormal)));
+    transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientationOf(transform))));
   }
 }
 
@@ -483,6 +499,17 @@ void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const st
                                   const std::shared_ptr<Object>& other, const Pair& pair, const Support& support,
                                   const float dt)
 {
+  if (pair.lineContact)
+  {
+    const auto face = supportFaceOf(other, pair.normal);
+    if (face && glm::dot(pair.body.rollAxis, pair.body.rollAxis) > 0.0f)
+    {
+      layCapsuleFlush(transform, pair.body.rollAxis, face->normal);
+    }
+
+    return;
+  }
+
   const auto faces = restingFacesOf(transform, collider, other, pair.normal);
   if (!faces)
   {
