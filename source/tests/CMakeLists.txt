@@ -28,6 +28,7 @@ add_executable(${PROJECT_NAME}
   CapsuleGizmoTest.cpp
   CapsuleNarrowPhaseTest.cpp
   CapsulePhysicsTest.cpp
+  CapsuleRestingTest.cpp
   CapsuleRollingTest.cpp
   CapsuleSceneQueryTest.cpp
   ComponentLookupTest.cpp
