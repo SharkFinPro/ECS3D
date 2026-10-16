@@ -639,6 +639,11 @@ On a confirmed switch it resends its input for the new slot and points its View 
 `findPlayerCamera` finds that camera and is shared with `ClientApp`; a player with no `Camera` leaves the view alone.
 The join reply just records the slot, and an unanswered request times out so the combo is not stuck disabled.
 
+**Inertia.** `sim/InertiaTensor.h` computes each collider shape's world-space mass distribution: volume, centroid
+and second moment per unit mass. It combines a body's colliders by volume share into one per-unit-mass inertia
+tensor about the owner's position, with the parallel-axis theorem. A body with no usable collider falls back to
+the box of its scale.
+
 **Hull validation.** `ConvexHullValidation.h` holds `isValidConvexHull`, which checks a hull's structure but
 not its convexity: vertex and index counts within the limits, finite vertices, every index naming a vertex.
 `makeUnitCubeHull` is the default hull for a collider.

@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   PhysicsSystem.h
   FixedTimestep.cpp
   FixedTimestep.h
+  InertiaTensor.cpp
+  InertiaTensor.h
   CollisionSystem.cpp
   CollisionSystem.h
   collisions/NarrowPhase.cpp
@@ -41,7 +43,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 # CollisionSystem holds the migrated sweep-and-prune (CollisionManager). The GJK/EPA that arrived with it
 # (Collider.cpp, Simplex, Polytope) now sits behind collisions/NarrowPhase, which CollisionSystem calls
 # into. Both were transplanted nearly verbatim. PhysicsSystem carries the physics bodies
-# (integrate, applyForce, handleCollision/respondToCollision, getInertiaTensor, limitMovement)
+# (integrate, applyForce, handleCollision/respondToCollision, limitMovement)
 # lifted from RigidBody.cpp, and CollisionSystem routes its detected collisions into
 # PhysicsSystem::handleCollision.
 
