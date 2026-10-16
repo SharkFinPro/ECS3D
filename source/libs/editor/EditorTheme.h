@@ -270,9 +270,9 @@ namespace theme {
 
     c[ImGuiCol_Tab]               = ImVec4(0, 0, 0, 0);
     c[ImGuiCol_TabHovered]        = hover;
-    c[ImGuiCol_TabActive]         = panel;
-    c[ImGuiCol_TabUnfocused]      = ImVec4(0, 0, 0, 0);
-    c[ImGuiCol_TabUnfocusedActive]= panel;
+    c[ImGuiCol_TabSelected]       = panel;
+    c[ImGuiCol_TabDimmed]         = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_TabDimmedSelected] = panel;
 
     c[ImGuiCol_TextSelectedBg]  = accSoft;
     c[ImGuiCol_DragDropTarget]  = accent;
