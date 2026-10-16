@@ -120,8 +120,8 @@ TEST(CapsuleResting, ACapsuleRollingSidewaysStaysFlushAndComesToRest)
 
 TEST(CapsuleResting, ACapsuleJustPastTheFlushLimitIsNotSnappedOnContact)
 {
-  // Both start a hair above the slab, so they touch on the first tick. The start tilt is outside
-  // flushTiltSine (sin 1.5 degrees = 0.026) for the first capsule and inside it for the control.
+  // Both start a hair above the slab, so they touch on the first tick. The first capsule's end gap (sin 1.5
+  // degrees = 0.026) is outside the manifold's line band, so it has one contact point; the control is inside it.
   Lying past({ 0, 1.505f, 0 }, { 0, 0, 91.5f }, { 0, 0, 0 });
   Lying inside({ 0, 1.505f, 0 }, { 0, 0, 90.5f }, { 0, 0, 0 });
   EXPECT_NEAR(past.tiltDegrees(), 1.5f, 1e-3f);
@@ -139,6 +139,19 @@ TEST(CapsuleResting, ACapsuleJustPastTheFlushLimitIsNotSnappedOnContact)
   // It then lays itself down by gravity.
   past.run(400);
   expectLyingFlushAtRest(past);
+}
+
+TEST(CapsuleResting, ACapsuleInTheLineBandPastADegreeIsLaidFlush)
+{
+  // sin 1.1 degrees = 0.0192: past a degree, inside the manifold's 0.021 line band, so both ends touch.
+  Lying lying({ 0, 1.505f, 0 }, { 0, 0, 91.1f }, { 0, 0, 0 });
+  EXPECT_NEAR(lying.tiltDegrees(), 1.1f, 1e-3f);
+
+  lying.run(1);
+  EXPECT_LT(lying.tiltDegrees(), flushToleranceDegrees);
+
+  lying.run(400);
+  expectLyingFlushAtRest(lying);
 }
 
 TEST(CapsuleResting, ACapsuleLyingByItsColliderRotationRestsFlush)

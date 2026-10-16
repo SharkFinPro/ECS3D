@@ -10,6 +10,7 @@
 #include "objects/components/Transform.h"
 
 #include <glm/geometric.hpp>
+#include <algorithm>
 #include <cmath>
 #include <glm/vec3.hpp>
 #include <memory>
@@ -27,6 +28,7 @@ namespace {
 
   struct Config {
     bool capsule = true;
+    bool box = false;
     float height = 2.0f;
     glm::vec3 position{ 0, 1.6f, 0 };
     glm::vec3 rotation{ 0 };
@@ -51,7 +53,13 @@ namespace {
 
       object = addObject(scene, "Roller", Config.position);
       transformOf(object)->setRotation(Config.rotation);
-      if (Config.capsule)
+      if (Config.box)
+      {
+        // The capsule's footprint: two long and one wide, with the same underside height.
+        transformOf(object)->setScale({ 1, 0.5f, 0.5f });
+        fixtures::addBoxCollider(object);
+      }
+      else if (Config.capsule)
       {
         fixtures::addCapsuleCollider(object, 0.5f, Config.height);
       }
@@ -214,7 +222,14 @@ TEST(CapsuleRolling, ACapsuleSlidingAlongItsAxisStopsWithoutRolling)
   capsule.run(60);
   const float stopped = capsule.x();
 
-  EXPECT_NEAR(stopped, 1.19f, 0.05f);
+  // A box with the same friction, mass and speed loses nothing to tipping, so it is where the capsule should stop.
+  auto boxConfig = Config;
+  boxConfig.box = true;
+  boxConfig.rotation = { 0, 0, 0 };
+  Roller box(boxConfig);
+  box.run(60);
+  EXPECT_GT(box.x(), 1.0f);
+  EXPECT_NEAR(stopped, box.x(), 0.01f);
   EXPECT_LT(capsule.speed(), restSpeed);
   EXPECT_EQ(capsule.spinSpeed(), 0.0f);
 
@@ -223,6 +238,71 @@ TEST(CapsuleRolling, ACapsuleSlidingAlongItsAxisStopsWithoutRolling)
   early.run(3);
   EXPECT_LT(early.x(), stopped);
   EXPECT_GT(early.body->getVelocity().x, 0.0f);
+}
+
+TEST(CapsuleRolling, FrictionAlongALineContactDoesNotPitchTheCapsule)
+{
+  Config along;
+  along.rotation = { 0, 0, 90 };
+  along.velocity = { 0.3f, 0, 0 };
+  Roller sliding(along);
+
+  // The capsule lies along x. Pitching it would spin it about z, which the line's far end holds against.
+  float pitch = 0.0f;
+  for (int tick = 0; tick < 10; ++tick)
+  {
+    sliding.run(1);
+    pitch = std::max(pitch, std::fabs(sliding.body->getAngularVelocity().z));
+  }
+  EXPECT_LT(pitch, 0.5f);
+  EXPECT_LT(sliding.body->getVelocity().x, 0.3f);
+
+  // Positive control: pushed across its axis it rolls about the axis, so the contact does turn it.
+  Config across;
+  across.rotation = { 0, 0, 90 };
+  across.velocity = { 0, 0, 0.3f };
+  Roller rolling(across);
+
+  float roll = 0.0f;
+  for (int tick = 0; tick < 10; ++tick)
+  {
+    rolling.run(1);
+    roll = std::max(roll, std::fabs(rolling.body->getAngularVelocity().x));
+  }
+  EXPECT_GT(roll, 5.0f);
+}
+
+TEST(CapsuleRolling, ADynamicBoxUnderACapsuleIsNotPitchedByFrictionAlongTheLine)
+{
+  // The box's spin about z after the capsule's first tick on it. Where the capsule's weight lands off the box's
+  // center also turns it, so friction is judged against the same slide with none.
+  const auto spinOfBox = [](const glm::vec3& capsuleRotation, const float friction)
+  {
+    const auto scene = makeScene();
+    const auto support = addObject(scene, "Support", { 0, 0, 0 });
+    transformOf(support)->setScale({ 4, 1, 4 });
+    fixtures::addBoxCollider(support);
+    const auto supportBody = addBody(support, false);
+
+    const auto capsule = addObject(scene, "Capsule", { 0, 1.4f, 0 });
+    transformOf(capsule)->setRotation(capsuleRotation);
+    fixtures::addCapsuleCollider(capsule, 0.5f, 2.0f);
+    const auto body = addBody(capsule, false);
+    body->setVelocity({ 1.0f, -0.2f, 0 });
+    body->setFriction(friction);
+
+    CollisionSystem collisions;
+    PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
+    collisions.fixedUpdate(*scene.objectManager, dt);
+
+    return supportBody->getAngularVelocity().z;
+  };
+
+  // The capsule lies along x, the way it slides, so friction must not pitch the box about z.
+  EXPECT_NEAR(spinOfBox({ 0, 0, 90 }, 0.5f), spinOfBox({ 0, 0, 90 }, 0.0f), 0.5f);
+
+  // Positive control: lying along z, the same slide is across the line, and friction does turn the box.
+  EXPECT_GT(std::fabs(spinOfBox({ 90, 0, 0 }, 0.5f) - spinOfBox({ 90, 0, 0 }, 0.0f)), 1.0f);
 }
 
 TEST(CapsuleRolling, ACapsuleTumblingOnItsCapRollsAboutAnyAxisAndComesToRest)

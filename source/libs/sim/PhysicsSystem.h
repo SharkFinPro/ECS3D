@@ -92,8 +92,10 @@ private:
     glm::vec3 normal;
     // Touching along a line under the center of mass, as a capsule lying on a flat support: friction there
     // turns the body, as it rolls, but the line still grinds against spinning about the normal.
-    // A capsule within a degree of the support's plane is also laid flush into it.
+    // A capsule in a line contact is also laid flush into the support's plane.
     bool lineContact = false;
+    // The line is the other side's: it is the capsule, and this side is the body it lies on.
+    bool lineOnOther = false;
   };
 
   [[nodiscard]] static Pair pairOf(RigidBody& body, Transform& transform,
@@ -126,6 +128,27 @@ private:
   // Coulomb: opposes the contact point's sliding, up to the friction coefficient times load, the impulse
   // pressing the pair together this tick.
   static void applyFriction(const Pair& pair, const glm::vec3& point, float load, bool faceContact, float dt);
+
+  // Marks a line contact whose capsule is the other side, which the body's own collider cannot tell.
+  static void markLineOnOther(Pair& pair, const std::shared_ptr<Object>& other,
+                              std::span<const glm::vec3> collisionPoints);
+
+  [[nodiscard]] static glm::vec3 lineAxisOf(const Pair& pair);
+
+  // Splits a friction direction into the part along a capsule's line contact and the rest. The line's far end
+  // holds the capsule against tipping from the first, so that part acts through its center; the rest rolls it.
+  // All of it is the second part unless the contact is a line and turns is set.
+  [[nodiscard]] static std::pair<glm::vec3, glm::vec3> splitAlongLine(const Pair& pair, const glm::vec3& direction,
+                                                                     bool turns);
+
+  // How the side's contact point moves per unit of friction impulse along direction. The line's normal forces
+  // act equally and oppositely on both sides, so the split applies to either.
+  [[nodiscard]] static glm::vec3 frictionResponse(const Pair& pair, const Side& side, const glm::vec3& point,
+                                                  const glm::vec3& direction, bool turns);
+
+  // Pushes the side by a friction impulse, split by splitAlongLine.
+  static void pushFriction(const Pair& pair, const Side& side, const glm::vec3& impulse, const glm::vec3& point,
+                           bool turns, float dt);
 
   // Pushes the body against its sliding. A nonzero heldSpeed, the speed in units per tick that static friction
   // removed in stopping the slide, also takes back the slide this tick's gravity and forces caused.
