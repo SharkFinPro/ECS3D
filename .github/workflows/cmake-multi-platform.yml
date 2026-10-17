@@ -8,10 +8,8 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# A newer push to a pull request cancels that pull request's in-progress run, since only the newest result
-# matters. Every other event (pushes to main) gets a group of its own run id, so main runs are never queued
-# behind each other or cancelled - a shared group would queue them, and GitHub keeps only one pending run
-# per group, dropping the rest.
+# Only pull request runs share a group: main pushes get their own run id, since a shared group would queue
+# them and GitHub keeps one pending run per group, silently dropping the rest.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
