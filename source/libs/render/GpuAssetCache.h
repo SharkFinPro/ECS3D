@@ -28,6 +28,7 @@ public:
 
   [[nodiscard]] std::shared_ptr<vke::VulkanEngine> getRenderer() const;
 
+  // Both return nullptr for an unknown uuid or an asset that fails to load (logged once per path).
   std::shared_ptr<vke::Model> getModel(const uuids::uuid& uuid);
 
   std::shared_ptr<vke::Texture2D> getTexture(const uuids::uuid& uuid);
@@ -102,8 +103,10 @@ private:
 
   const AssetRegistry* m_assetRegistry;
 
-  std::unordered_map<uuids::uuid, std::shared_ptr<vke::Model>> m_models;
-  std::unordered_map<uuids::uuid, std::shared_ptr<vke::Texture2D>> m_textures;
+  // Keyed by asset uuid, so a record removed and re-added gets a fresh load; a failing asset is logged once
+  // and not retried.
+  SharedAssetLoads<vke::Model> m_models;
+  SharedAssetLoads<vke::Texture2D> m_textures;
   std::unordered_map<uuids::uuid, CachedRenderObject> m_renderObjects;
   std::unordered_map<uuids::uuid, std::vector<CachedGizmo>> m_colliderGizmos;
   std::unordered_map<uuids::uuid, CachedHullGizmo> m_hullGizmos;
