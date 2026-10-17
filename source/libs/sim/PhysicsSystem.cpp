@@ -791,7 +791,8 @@ void PhysicsSystem::resistSpin(const Pair& pair, const glm::vec3& axis, const fl
     return;
   }
 
-  const auto otherInertia = pair.other.body ? worldInverseInertia(*pair.other.body, *pair.other.transform) : std::nullopt;
+  const auto otherInertia =
+    pair.other.body ? worldInverseInertia(*pair.other.body, *pair.other.transform) : std::nullopt;
   const float bodyMass = pair.body.body->getMass();
   const float otherMass = pair.other.body ? pair.other.body->getMass() : 0.0f;
 
