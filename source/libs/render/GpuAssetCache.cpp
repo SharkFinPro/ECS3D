@@ -31,7 +31,7 @@ std::shared_ptr<vke::Model> GpuAssetCache::getModel(const uuids::uuid& uuid)
     return nullptr;
   }
 
-  return m_models.get(record->path, [this, &record] {
+  return m_models.get(uuids::to_string(uuid), record->path + " (" + uuids::to_string(uuid) + ")", [this, &record] {
     return m_renderer->getAssetManager()->loadModel(record->path.c_str());
   });
 }
@@ -44,7 +44,7 @@ std::shared_ptr<vke::Texture2D> GpuAssetCache::getTexture(const uuids::uuid& uui
     return nullptr;
   }
 
-  return m_textures.get(record->path, [this, &record] {
+  return m_textures.get(uuids::to_string(uuid), record->path + " (" + uuids::to_string(uuid) + ")", [this, &record] {
     return m_renderer->getAssetManager()->loadTexture(record->path.c_str());
   });
 }

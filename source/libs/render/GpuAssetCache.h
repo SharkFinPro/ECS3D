@@ -103,8 +103,8 @@ private:
 
   const AssetRegistry* m_assetRegistry;
 
-  // Keyed by asset path, so a record re-imported under a new path gets a fresh attempt while a path that
-  // failed is logged once and not retried.
+  // Keyed by asset uuid, so a record removed and re-added gets a fresh load; a failing asset is logged once
+  // and not retried.
   SharedAssetLoads<vke::Model> m_models;
   SharedAssetLoads<vke::Texture2D> m_textures;
   std::unordered_map<uuids::uuid, CachedRenderObject> m_renderObjects;
