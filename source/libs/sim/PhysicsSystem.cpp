@@ -500,18 +500,6 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   }
 
   const auto normal = normalize(minimumTranslationVector);
-
-  // A resting body met from below by a body above it: the contact is resolved from above, where the support
-  // takes the push and holds the friction, exactly as the upper body's own pass would have.
-  const auto upper = other->getComponent<RigidBody>(ComponentType::rigidBody);
-  const auto upperCollider = other->getComponent<Collider>(ComponentType::collider);
-  if (normal.y < 0.0f && !body.isFalling() && upper && upperCollider && collider)
-  {
-    handleCollision(*upper, upperCollider, collider->getOwner()->shared_from_this(), -minimumTranslationVector,
-                    collisionPoints, dt);
-    return;
-  }
-
   const auto support = collisionPoints.size() < 2 ? Support{ collisionPoints[0], false }
                                                   : findSupport(transform->getPosition(), normal, collisionPoints);
   auto pair = pairOf(body, *transform, collider, other, normal);
