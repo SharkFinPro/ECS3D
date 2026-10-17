@@ -525,7 +525,10 @@ component's own `serialize`/`loadFromJSON`/`pack`/`unpack` stays unexposed the s
 out `getPendingForces`/`clearPendingForces` (the queue `applyForce` already writes to; PhysicsSystem
 drains it). It also leaves out `setFalling`/`getNextFalling`/`setNextFalling` (PhysicsSystem's own double-buffered
 falling state; `isFalling` is the read-only query scripts get). The same goes for `getStackedLoad`/`setStackedLoad`/`getHeldImpulse`/`setHeldImpulse`
-(PhysicsSystem's per-tick record of what rests on the body and what its support has held). It leaves out `getDriveStep`/`setDriveStep` (the velocity gravity and queued forces gave it this tick) too, and `getSupportNormal`/`setSupportNormal`/`getNextSupportNormal`/`setNextSupportNormal` (the contact normal its support pressed on it with).
+(PhysicsSystem's per-tick record of what rests on the body and what its support has held).
+It leaves out `getDriveStep`/`setDriveStep` too: the velocity gravity and queued forces gave it this tick.
+So are `getSupportNormal`/`setSupportNormal`/`getNextSupportNormal`/`setNextSupportNormal`,
+the contact normal its support pressed on it with.
 `ColliderBindings` covers the shared trigger, layer and mask. It also covers each shape's offset and size:
 box size, sphere radius, capsule radius and height, and the convex mesh's offset and read-only vertex count.
 A shape's accessors fail safely on a collider of another shape. `CameraBindings` covers every field on
