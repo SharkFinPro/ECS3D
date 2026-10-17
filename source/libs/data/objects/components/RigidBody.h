@@ -65,8 +65,8 @@ public:
   [[nodiscard]] float getStackedLoad() const;
   void setStackedLoad(float stackedLoad);
 
-  // The horizontal impulse its support has held for it this tick against what presses on it from above. Friction
-  // there has only the rest of its grip for this body's own sliding, and pushes the opposite way cancel.
+  // The impulse along its support that the support has held for it this tick against what presses on it from above.
+  // Friction there has only the rest of its grip for this body's own sliding, and pushes the opposite way cancel.
   [[nodiscard]] glm::vec3 getHeldImpulse() const;
   void setHeldImpulse(const glm::vec3& heldImpulse);
 
@@ -74,6 +74,15 @@ public:
   // saw it. Friction that holds the body still takes back the part of it along the support.
   [[nodiscard]] glm::vec3 getDriveStep() const;
   void setDriveStep(const glm::vec3& driveStep);
+
+  // The contact normal of the support the body rested on last tick, or zero when it had none. A push from above
+  // splits along it, so a stack on a slope is held the way one on flat ground is.
+  [[nodiscard]] glm::vec3 getSupportNormal() const;
+  void setSupportNormal(const glm::vec3& supportNormal);
+
+  // The same normal as this tick's contacts report it, which becomes the support normal next tick.
+  [[nodiscard]] glm::vec3 getNextSupportNormal() const;
+  void setNextSupportNormal(const glm::vec3& nextSupportNormal);
 
   [[nodiscard]] nlohmann::json serialize() override;
 
@@ -99,6 +108,10 @@ private:
   glm::vec3 m_heldImpulse{ 0 };
 
   glm::vec3 m_driveStep{ 0 };
+
+  glm::vec3 m_supportNormal{ 0 };
+
+  glm::vec3 m_nextSupportNormal{ 0 };
 
   std::vector<PendingForce> m_pendingForces;
 };
