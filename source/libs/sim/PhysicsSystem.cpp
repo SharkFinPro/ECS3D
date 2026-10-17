@@ -514,8 +514,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
               << " otherResting=" << pair.other.resting << " otherBody=" << (pair.other.body != nullptr)
               << " bodyFalling=" << body.isFalling() << " bodySupportN=(" << sn.x << "," << sn.y << "," << sn.z
               << ") pos=(" << transform->getPosition().x << "," << transform->getPosition().y << ") vel=("
-              << body.getVelocity().x << "," << body.getVelocity().y << ")
-";
+              << body.getVelocity().x << "," << body.getVelocity().y << ")" << std::endl;
   }
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
