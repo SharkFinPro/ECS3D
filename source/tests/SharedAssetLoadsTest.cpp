@@ -98,3 +98,23 @@ TEST_F(SharedAssetLoadsTest, OnePathFailingDoesNotAffectAnother)
   EXPECT_EQ(*loaded, 3);
   EXPECT_EQ(m_sink->snapshot().size(), 1u);
 }
+
+TEST_F(SharedAssetLoadsTest, FailedPathDoesNotBlockADifferentPathForTheSameAsset)
+{
+  int goodCalls = 0;
+  const auto bad = []() -> std::shared_ptr<int> { throw std::runtime_error("corrupt"); };
+  const auto good = [&goodCalls] {
+    ++goodCalls;
+    return std::make_shared<int>(5);
+  };
+
+  EXPECT_EQ(m_loads.get("assets/models/old.glb", bad), nullptr);
+
+  const auto reimported = m_loads.get("assets/models/new.glb", good);
+  ASSERT_NE(reimported, nullptr);
+  EXPECT_EQ(*reimported, 5);
+  EXPECT_EQ(m_loads.get("assets/models/new.glb", good), reimported);
+  EXPECT_EQ(goodCalls, 1);
+  EXPECT_EQ(m_loads.get("assets/models/old.glb", good), nullptr);
+  EXPECT_EQ(m_sink->snapshot().size(), 1u);
+}
