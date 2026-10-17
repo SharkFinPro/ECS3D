@@ -19,7 +19,7 @@ namespace {
       const auto model = assetCache.getModel(modelUUID);
       if (!model)
       {
-        Log::warn(LogCategory::editor, "Convex hull: the source model is not a known asset");
+        Log::warn(LogCategory::editor, "Convex hull: the source model is unknown or could not be loaded");
         return std::nullopt;
       }
 

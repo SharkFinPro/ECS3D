@@ -98,3 +98,53 @@ TEST_F(SharedAssetLoadsTest, OnePathFailingDoesNotAffectAnother)
   EXPECT_EQ(*loaded, 3);
   EXPECT_EQ(m_sink->snapshot().size(), 1u);
 }
+
+TEST_F(SharedAssetLoadsTest, KeysWithTheSameLabelLoadIndependently)
+{
+  int calls = 0;
+  const auto load = [&calls] {
+    return std::make_shared<int>(++calls);
+  };
+
+  const auto first = m_loads.get("uuid-a", "assets/models/m.glb", load);
+  const auto second = m_loads.get("uuid-b", "assets/models/m.glb", load);
+
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(second, nullptr);
+  EXPECT_NE(first, second);
+  EXPECT_EQ(calls, 2);
+}
+
+TEST_F(SharedAssetLoadsTest, KeyedFailureLogsOnceNamingTheLabelNotTheKey)
+{
+  int calls = 0;
+  const auto load = [&calls]() -> std::shared_ptr<int> {
+    ++calls;
+    throw std::runtime_error("corrupt");
+  };
+
+  EXPECT_EQ(m_loads.get("key-1234", "assets/models/m.glb", load), nullptr);
+  EXPECT_EQ(m_loads.get("key-1234", "assets/models/m.glb", load), nullptr);
+
+  EXPECT_EQ(calls, 1);
+  const auto entries = m_sink->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_NE(entries[0].message.find("assets/models/m.glb"), std::string::npos);
+  EXPECT_EQ(entries[0].message.find("key-1234"), std::string::npos);
+}
+
+TEST_F(SharedAssetLoadsTest, KeyedSuccessIsCachedPerKey)
+{
+  int calls = 0;
+  const auto load = [&calls] {
+    return std::make_shared<int>(++calls);
+  };
+
+  const auto a = m_loads.get("k1", "label", load);
+  EXPECT_EQ(m_loads.get("k1", "label", load), a);
+  EXPECT_EQ(calls, 1);
+
+  const auto b = m_loads.get("k2", "label", load);
+  EXPECT_NE(a, b);
+  EXPECT_EQ(calls, 2);
+}
