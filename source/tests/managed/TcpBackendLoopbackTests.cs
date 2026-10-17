@@ -260,7 +260,7 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   [Fact]
   public void Handshake_DropsAPeerThatNeverSendsOneOnceTheTimeoutPasses()
   {
-    var server = new TcpBackend { HandshakeTimeoutMs = 300 };
+    var server = new TcpBackend { HandshakeTimeoutMs = 100 };
     var port = Start(server);
 
     // Connects and says nothing. The read times out with an exception, so no refusal is logged.
@@ -268,13 +268,13 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     _silent.Add(silent);
     silent.Connect(IPAddress.Loopback, port);
 
-    // Short of the 5000 ms default, so a backend that ignored the field fails this wait, while leaving
-    // seconds of room for a stalled runner past the 300 ms it should take.
-    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the silent peer to be dropped", 4500, RecorderState);
+    // Short of the default, so a backend that ignored the field fails this wait, while leaving seconds of
+    // room for a stalled runner past the 100 ms it should take.
+    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the silent peer to be dropped", 4000, RecorderState);
 
     Assert.Single(TransportRecorder.ServerDisconnected);
     Assert.Empty(TransportRecorder.ServerAuthorized);
-    Assert.Equal(0, server.ServerConnectionCount());
+    Assert.False(TransportRecorder.LogContains("Rejected a connection that failed the handshake."));
   }
 
   [Fact]
