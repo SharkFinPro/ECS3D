@@ -60,3 +60,50 @@ TEST(CompoundRollingArm, ABallOffsetFromItsOwnerRollsAboutItsOwnRadius)
   EXPECT_GT(large / small, 1.7f);
   EXPECT_LT(large / small, 2.2f);
 }
+
+namespace {
+  constexpr float boxHalfHeight = 0.5f;
+
+  // A non-rolling box pressed down onto a ball of the given radius whose top touches the box's bottom, with the
+  // box spinning about z while its bottom moves with the spin. Returns how much of the box's spin the contact's
+  // rolling resistance took, in degrees per second.
+  float spinRemovedFromBoxOnBall(const float radius)
+  {
+    const auto scene = fixtures::makeScene();
+
+    const auto boxOwner = addObject(scene, "Box", { 0, 0, 0 });
+    const auto boxBody = physicsFixtures::addBody(boxOwner, false);
+    const auto boxCollider = fixtures::addBoxCollider(boxOwner);
+
+    const auto ball = addObject(scene, "Ball", { 0, -boxHalfHeight - radius, 0 });
+    const auto ballBody = physicsFixtures::addBody(ball, false);
+    fixtures::addSphereCollider(ball, radius);
+
+    // Neither side counts as resting, so the push is shared by the two rather than held by a support.
+    boxBody->setFalling(true);
+    ballBody->setFalling(true);
+
+    const float spin = glm::degrees(spinPerTick) / physicsFixtures::dt;
+    boxBody->setAngularVelocity({ 0, 0, spin });
+    boxBody->setVelocity({ -spinPerTick * boxHalfHeight, -sinkSpeed, 0 });
+
+    PhysicsSystem::handleCollision(*boxBody, boxCollider, ball, { 0, 0.001f, 0 },
+                                   glm::vec3(0, -boxHalfHeight, 0), physicsFixtures::dt);
+
+    return spin - boxBody->getAngularVelocity().z;
+  }
+}
+
+TEST(CompoundRollingArm, ABoxPressedOnABallIsSlowedAboutTheBallsRadius)
+{
+  const float small = spinRemovedFromBoxOnBall(0.5f);
+  const float large = spinRemovedFromBoxOnBall(2.0f);
+
+  // Positive control: the contact did take some of the spin.
+  ASSERT_GT(small, 0.0f);
+
+  // The arm is the ball's radius, so four times the radius takes about four times the spin. Measured from the box's
+  // owner to the contact point instead, the arm is the same for both and so is the spin taken.
+  EXPECT_GT(large / small, 3.0f);
+  EXPECT_LT(large / small, 5.0f);
+}
