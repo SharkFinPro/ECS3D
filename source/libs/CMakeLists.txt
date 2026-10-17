@@ -58,16 +58,27 @@ FetchContent_Declare(
 # CMake raising that floor to 3.10 would break the configure. CMAKE_POLICY_VERSION_MINIMUM
 # (https://cmake.org/cmake/help/latest/variable/CMAKE_POLICY_VERSION_MINIMUM.html) raises the policy
 # version FetchContent hands them without touching their own files, heading that off; it is a no-op
-# on CMake < 4.0, where the variable does not exist yet, so CMAKE_WARN_DEPRECATED also covers today's
-# warning on those versions there. CMAKE_WARN_DEPRECATED only reliably takes effect as a cache entry
-# (a normal variable is not enough), so it is forced into the cache here and the caller's prior cache
+# on CMake < 4.0, where the variable does not exist yet, so the deprecation switch also covers today's
+# warning on those versions. CMAKE_WARN_DEPRECATED only reliably takes effect as a cache entry (a
+# normal variable is not enough), so it is forced into the cache here and the caller's prior cache
 # value, if any, is restored afterward rather than just unset. VulkanEngine is fetched separately,
 # after restoring both variables: its own floor (3.27) is already above 3.10, and its deprecation
 # warnings are the developer's own and should stay visible, not get masked by this guard. glm is
 # still made available first, inside the guard, so our pinned copy keeps winning FetchContent's
 # first-wins resolution before VulkanEngine's declare below runs.
+# CMake 4.4 warns when CMAKE_WARN_DEPRECATED is accessed or modified while CMP0218 is unset
+# (https://cmake.org/cmake/help/latest/policy/CMP0218.html). Setting it to NEW here and ignoring the
+# CMD_DEPRECATED diagnostic (cmake_diagnostic) avoids that; the dependencies reset policies, so they
+# should still read the cache entry. Both are popped before VulkanEngine.
+if(POLICY CMP0218 AND COMMAND cmake_diagnostic)
+  cmake_policy(PUSH)
+  cmake_policy(SET CMP0218 NEW)
+  cmake_diagnostic(PUSH)
+  cmake_diagnostic(SET CMD_DEPRECATED IGNORE)
+endif()
+
 if(DEFINED CACHE{CMAKE_WARN_DEPRECATED})
-  set(_ecs3d_saved_warn_deprecated "${CMAKE_WARN_DEPRECATED}")
+  set(_ecs3d_saved_warn_deprecated "$CACHE{CMAKE_WARN_DEPRECATED}")
 endif()
 set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
@@ -86,6 +97,11 @@ else()
   unset(CMAKE_WARN_DEPRECATED CACHE)
 endif()
 unset(CMAKE_POLICY_VERSION_MINIMUM)
+
+if(POLICY CMP0218 AND COMMAND cmake_diagnostic)
+  cmake_diagnostic(POP)
+  cmake_policy(POP)
+endif()
 
 FetchContent_MakeAvailable(VulkanEngine)
 
