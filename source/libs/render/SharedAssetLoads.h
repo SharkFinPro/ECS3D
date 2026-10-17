@@ -17,7 +17,14 @@ public:
   template <typename Loader>
   [[nodiscard]] std::shared_ptr<T> get(const std::string& path, Loader&& loader)
   {
-    if (const auto it = m_loads.find(path); it != m_loads.end())
+    return get(path, path, std::forward<Loader>(loader));
+  }
+
+  // Caches under key but names label in the log, for assets identified by something other than their path.
+  template <typename Loader>
+  [[nodiscard]] std::shared_ptr<T> get(const std::string& key, const std::string& label, Loader&& loader)
+  {
+    if (const auto it = m_loads.find(key); it != m_loads.end())
     {
       return it->second;
     }
@@ -29,15 +36,15 @@ public:
       asset = std::forward<Loader>(loader)();
       if (!asset)
       {
-        Log::error(LogCategory::assets, "Failed to load '" + path + "'");
+        Log::error(LogCategory::assets, "Failed to load '" + label + "'");
       }
     }
     catch (const std::exception& e)
     {
-      Log::error(LogCategory::assets, "Failed to load '" + path + "': " + e.what());
+      Log::error(LogCategory::assets, "Failed to load '" + label + "': " + e.what());
     }
 
-    m_loads.emplace(path, asset);
+    m_loads.emplace(key, asset);
 
     return asset;
   }
