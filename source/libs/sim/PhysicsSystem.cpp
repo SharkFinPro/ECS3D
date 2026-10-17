@@ -43,6 +43,10 @@ namespace {
   // Units per tick. A vertical speed below this is rounding left by contacts that cancel, not a body rising.
   constexpr float minRiseSpeed = 1e-5f;
 
+  // How far a contact normal must point down for a resting body to leave the pair to the resting body above it;
+  // a side-by-side contact, whose normal is level to rounding, is still resolved from both sides.
+  constexpr float fromBelowNormalY = -0.5f;
+
   // Rolling resistance as a share of the friction coefficient: a ball on a rough floor stops within a few of its
   // own widths rather than rolling on until the angular damping wears it down.
   constexpr float rollingResistanceShare = 0.1f;
@@ -508,7 +512,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   // Two resting bodies: the one above resolves the pair in its own pass, where its support takes the push. Met again
   // from below, the overlap would be separated fully, and the pair would then touch exactly at the next tick's
   // start, which the sweep misses, letting the upper body fall unheld and slide down a slope.
-  if (normal.y < 0.0f && pair.body.resting && pair.other.resting)
+  if (normal.y < fromBelowNormalY && pair.body.resting && pair.other.resting)
   {
     return;
   }
