@@ -505,6 +505,15 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
                                                   : findSupport(transform->getPosition(), normal, collisionPoints);
   auto pair = pairOf(body, *transform, collider, other, normal);
   noteSupportNormal(body, normal);
+
+  // Two resting bodies: the one above resolves the pair in its own pass, where its support takes the push. Met again
+  // from below, the overlap would be separated fully, and the pair would then touch exactly at the next tick's
+  // start, which the sweep misses, letting the upper body fall unheld and slide down a slope.
+  if (normal.y < 0.0f && pair.body.resting && pair.other.resting)
+  {
+    return;
+  }
+
   if (trace)
   {
     const auto sn = supportNormalOf(body);
