@@ -319,8 +319,11 @@ if(DOTNET_EXE)
     COMMAND ${DOTNET_EXE} test "${ECS3D_MANAGED_TESTS_CSPROJ}" ${ECS3D_MANAGED_TESTS_ARGS}
   )
 
+  # A parallel ctest run starts tests in descending cost order. With no recorded timings (CI never has
+  # them) this ~30 s test would otherwise start last and become the run's tail.
   set_tests_properties(ECS3DManagedTests PROPERTIES
     LABELS "managed"
+    COST 1000
   )
 endif()
 
@@ -328,10 +331,12 @@ endif()
 # than every test in the tree. --no-tests=error is the difference between a red build and a green one
 # when nothing registers: ctest exits 0 on an empty test set, which is how this step reported success
 # before the suite was wired up. COMMAND_EXPAND_LISTS is what splits the conditional --build-config into
-# two arguments; without it the pair arrives as one semicolon-joined argument that ctest rejects.
+# two arguments; without it the pair arrives as one semicolon-joined argument that ctest rejects. The
+# suite runs in parallel because most of its time is per-process startup across the ~1,700 separately
+# registered test cases.
 add_custom_target(check
   COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_CURRENT_BINARY_DIR}" --output-on-failure
-    --no-tests=error "$<$<BOOL:$<CONFIG>>:--build-config;$<CONFIG>>"
+    --no-tests=error --parallel "$<$<BOOL:$<CONFIG>>:--build-config;$<CONFIG>>"
   USES_TERMINAL
   VERBATIM
   COMMAND_EXPAND_LISTS
