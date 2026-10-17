@@ -527,7 +527,7 @@ drains it). It also leaves out `setFalling`/`getNextFalling`/`setNextFalling` (P
 falling state; `isFalling` is the read-only query scripts get). The same goes for `getStackedLoad`/`setStackedLoad`/`getHeldImpulse`/`setHeldImpulse`
 (PhysicsSystem's per-tick record of what rests on the body and what its support has held).
 It leaves out `getDriveStep`/`setDriveStep` too: the velocity gravity and queued forces gave it this tick.
-So are `getSupportNormal`/`setSupportNormal`/`getNextSupportNormal`/`setNextSupportNormal`,
+It also leaves out `getSupportNormal`/`setSupportNormal`/`getNextSupportNormal`/`setNextSupportNormal`,
 the contact normal its support pressed on it with.
 `ColliderBindings` covers the shared trigger, layer and mask. It also covers each shape's offset and size:
 box size, sphere radius, capsule radius and height, and the convex mesh's offset and read-only vertex count.
