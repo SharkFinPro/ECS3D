@@ -16,6 +16,7 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <iostream>
 #include <vector>
 
 namespace {
@@ -504,6 +505,18 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
                                                   : findSupport(transform->getPosition(), normal, collisionPoints);
   auto pair = pairOf(body, *transform, collider, other, normal);
   noteSupportNormal(body, normal);
+  if (trace)
+  {
+    const auto sn = supportNormalOf(body);
+    std::cout << "  HC " << body.getOwner()->getName() << " vs " << other->getName() << " n=(" << normal.x << ","
+              << normal.y << "," << normal.z << ") depth=" << glm::length(minimumTranslationVector)
+              << " pts=" << collisionPoints.size() << " bodyResting=" << pair.body.resting
+              << " otherResting=" << pair.other.resting << " otherBody=" << (pair.other.body != nullptr)
+              << " bodyFalling=" << body.isFalling() << " bodySupportN=(" << sn.x << "," << sn.y << "," << sn.z
+              << ") pos=(" << transform->getPosition().x << "," << transform->getPosition().y << ") vel=("
+              << body.getVelocity().x << "," << body.getVelocity().y << ")
+";
+  }
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.

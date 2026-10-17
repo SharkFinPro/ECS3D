@@ -176,3 +176,33 @@ TEST(PhysicsSlopeStack, AStackAboveTheFrictionAngleSlides)
     }
   }
 }
+
+// TEMPORARY diagnostic
+#include <iostream>
+TEST(PhysicsSlopeStack, DiagnosticTrace)
+{
+  SlopeStack stack(2, 15.0f);
+  PhysicsSystem::trace = true;
+  for (int tick = 0; tick < 30; ++tick)
+  {
+    std::cout << "TICK " << tick << "\n";
+    stack.run(1);
+    for (size_t i = 0; i < stack.boxes.size(); ++i)
+    {
+      const auto t = fixtures::transformOf(stack.boxes[i]);
+      const auto p = t->getPosition();
+      const auto v = stack.bodies[i]->getVelocity();
+      const auto a = stack.bodies[i]->getAngularVelocity();
+      const auto r = t->getRotation();
+      const auto s = stack.bodies[i]->getSupportNormal();
+      const auto h = stack.bodies[i]->getHeldImpulse();
+      std::cout << "  B" << i << " pos=(" << p.x << "," << p.y << "," << p.z << ") vel=(" << v.x << "," << v.y
+                << ") ang=(" << a.x << "," << a.y << "," << a.z << ") rot=(" << r.x << "," << r.y << "," << r.z
+                << ") falling=" << stack.bodies[i]->isFalling() << " supN=(" << s.x << "," << s.y << ") stacked="
+                << stack.bodies[i]->getStackedLoad() << " held=(" << h.x << "," << h.y << ")\n";
+    }
+    std::cout << "  overlap=" << stack.overlapWithBelow(1) << "\n";
+  }
+  PhysicsSystem::trace = false;
+  ADD_FAILURE() << "diagnostic";
+}
