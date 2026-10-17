@@ -61,16 +61,16 @@ FetchContent_Declare(
 # on CMake < 4.0, where the variable does not exist yet, so the deprecation switch also covers today's
 # warning on those versions. CMAKE_WARN_DEPRECATED only reliably takes effect as a cache entry (a
 # normal variable is not enough), so it is forced into the cache here and the caller's prior cache
-# value, if any, is restored afterward rather than just unset. The dependencies reset policies with
-# their own cmake_minimum_required(), leaving CMP0218 unset for them, so they still read that cache
-# entry. CMake 4.4 warns about every non-cache access of the variable while CMP0218 is unset
-# (https://cmake.org/cmake/help/latest/policy/CMP0218.html), so this scope sets the policy to NEW and
-# also ignores the CMD_DEPRECATED diagnostic, which the dependencies inherit
-# (https://cmake.org/cmake/help/latest/command/cmake_diagnostic.html). Both are popped before
-# VulkanEngine: its own floor (3.27) is already above 3.10, and its deprecation warnings are the
-# developer's own and should stay visible. glm is still made available first, inside the guard, so our
-# pinned copy keeps winning FetchContent's first-wins resolution before VulkanEngine's declare below runs.
-if(POLICY CMP0218)
+# value, if any, is restored afterward rather than just unset. VulkanEngine is fetched separately,
+# after restoring both variables: its own floor (3.27) is already above 3.10, and its deprecation
+# warnings are the developer's own and should stay visible, not get masked by this guard. glm is
+# still made available first, inside the guard, so our pinned copy keeps winning FetchContent's
+# first-wins resolution before VulkanEngine's declare below runs.
+# CMake 4.4 warns when CMAKE_WARN_DEPRECATED is accessed or modified while CMP0218 is unset
+# (https://cmake.org/cmake/help/latest/policy/CMP0218.html). Setting it to NEW here and ignoring the
+# CMD_DEPRECATED diagnostic (cmake_diagnostic) avoids that; the dependencies reset policies, so they
+# should still read the cache entry. Both are popped before VulkanEngine.
+if(POLICY CMP0218 AND COMMAND cmake_diagnostic)
   cmake_policy(PUSH)
   cmake_policy(SET CMP0218 NEW)
   cmake_diagnostic(PUSH)
@@ -98,7 +98,7 @@ else()
 endif()
 unset(CMAKE_POLICY_VERSION_MINIMUM)
 
-if(POLICY CMP0218)
+if(POLICY CMP0218 AND COMMAND cmake_diagnostic)
   cmake_diagnostic(POP)
   cmake_policy(POP)
 endif()
