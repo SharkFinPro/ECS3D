@@ -25,42 +25,28 @@ std::shared_ptr<vke::VulkanEngine> GpuAssetCache::getRenderer() const
 
 std::shared_ptr<vke::Model> GpuAssetCache::getModel(const uuids::uuid& uuid)
 {
-  if (const auto it = m_models.find(uuid); it != m_models.end())
-  {
-    return it->second;
-  }
-
   const auto record = m_assetRegistry->getByUUID(uuid);
   if (!record)
   {
     return nullptr;
   }
 
-  auto model = m_renderer->getAssetManager()->loadModel(record->path.c_str());
-
-  m_models.emplace(uuid, model);
-
-  return model;
+  return m_models.get(uuids::to_string(uuid), record->path + " (" + uuids::to_string(uuid) + ")", [this, &record] {
+    return m_renderer->getAssetManager()->loadModel(record->path.c_str());
+  });
 }
 
 std::shared_ptr<vke::Texture2D> GpuAssetCache::getTexture(const uuids::uuid& uuid)
 {
-  if (const auto it = m_textures.find(uuid); it != m_textures.end())
-  {
-    return it->second;
-  }
-
   const auto record = m_assetRegistry->getByUUID(uuid);
   if (!record)
   {
     return nullptr;
   }
 
-  auto texture = m_renderer->getAssetManager()->loadTexture(record->path.c_str());
-
-  m_textures.emplace(uuid, texture);
-
-  return texture;
+  return m_textures.get(uuids::to_string(uuid), record->path + " (" + uuids::to_string(uuid) + ")", [this, &record] {
+    return m_renderer->getAssetManager()->loadTexture(record->path.c_str());
+  });
 }
 
 std::shared_ptr<vke::RenderObject> GpuAssetCache::getRenderObject(const uuids::uuid& ownerUUID,
