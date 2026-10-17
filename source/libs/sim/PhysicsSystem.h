@@ -17,7 +17,6 @@ class Collider;
 
 class PhysicsSystem {
 public:
-  static inline bool trace = false; // TEMPORARY
   static void fixedUpdate(const ObjectManager& objectManager, float dt);
 
   // A change of velocity at position, in units per tick like the velocity it is added to. Mass does not scale
