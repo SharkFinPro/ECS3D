@@ -8,6 +8,12 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# Only pull request runs share a group: main pushes get their own run id, since a shared group would queue
+# them and GitHub keeps one pending run per group, silently dropping the rest.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     permissions:
