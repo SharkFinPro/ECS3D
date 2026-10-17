@@ -49,7 +49,10 @@ internal sealed class TcpBackend : TransportBackend
   // Bounds how long an accepted socket may sit unauthorized before it is dropped. Without this, a peer
   // that opens a connection and sends nothing holds a thread and a socket - and, before this change,
   // a spot on the broadcast list - forever.
-  private const int HandshakeTimeoutMs = 5000;
+  private const int DefaultHandshakeTimeoutMs = 5000;
+
+  // Instance copy of the default above, internal so ECS3DManagedTests can change it.
+  internal int HandshakeTimeoutMs = DefaultHandshakeTimeoutMs;
 
   // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
   // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
@@ -351,8 +354,9 @@ internal sealed class TcpBackend : TransportBackend
       // syscall against a peer that sends nothing at all, and the deadline below bounds the whole
       // handshake against a peer that trickles bytes just fast enough to keep individual reads from
       // timing out (ReadExact loops per partial read, so a per-read timeout alone doesn't bound the total).
-      client.ReceiveTimeout = HandshakeTimeoutMs;
-      var handshakeDeadline = Environment.TickCount64 + HandshakeTimeoutMs;
+      var handshakeTimeoutMs = HandshakeTimeoutMs;
+      client.ReceiveTimeout = handshakeTimeoutMs;
+      var handshakeDeadline = Environment.TickCount64 + handshakeTimeoutMs;
       if (ReadFrame(stream, out var handshakeType, out var handshakePayload, MaxHandshakeBytes, handshakeDeadline,
             BodyReadTimeoutMs) &&
           TryAuthorizeHandshake(handshakeType, handshakePayload, out var grantedRole))
