@@ -140,13 +140,14 @@ TEST(PhysicsFriction, ABoxSlidingUpTheSlopeStopsAndStaysPut)
   EXPECT_LT(glm::distance(fixtures::transformOf(slope.body)->getPosition(), stopped), 1e-3f);
 }
 
-// Measured with the hold skipped for rolling bodies; a hold that took the rolling slide back would lag it.
+// Measured with the hold skipped for rolling bodies and the sphere's radius as its rolling arm; a hold that took the
+// rolling slide back would lag it.
 TEST(PhysicsFriction, ASphereRollsTheSameDistanceOnASlope)
 {
   Slope slope(5.71059f, true);
   slope.run(60, 0.1f);
 
-  EXPECT_NEAR(slope.slidDistance(), 3.362058f, 1e-3f);
+  EXPECT_NEAR(slope.slidDistance(), 3.779873f, 1e-3f);
 }
 
 // A push below what friction holds adds to the slide gravity gives, and the hold takes both back.

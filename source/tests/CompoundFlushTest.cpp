@@ -23,7 +23,7 @@ TEST(CompoundFlush, ABoxChildWithItsOwnRotationSettlesFlushAndAtRest)
   const auto floor = addObject(scene, "Floor", { 0, 0, 0 }, { 50, 1, 50 });
   fixtures::addBoxCollider(floor);
 
-  const auto owner = addObject(scene, "Owner", { 0, 1.2f, 0 });
+  const auto owner = addObject(scene, "Owner", { 0, 4.0f, 0 });
   const auto body = physicsFixtures::addBody(owner, true);
 
   const auto part = addChildObject(scene, "Part", owner);
@@ -49,6 +49,6 @@ TEST(CompoundFlush, ABoxChildWithItsOwnRotationSettlesFlushAndAtRest)
 
   EXPECT_LT(glm::length(body->getVelocity()), 1e-3f);
   EXPECT_LT(glm::length(body->getAngularVelocity()), 1.0f);
-  // Positive control: it came down onto the floor rather than hanging where it started.
-  EXPECT_LT(fixtures::transformOf(owner)->getPosition().y, 1.1f);
+  // Positive control: it fell onto the floor, whose top is at 1, and rests on a face one half-extent above it.
+  EXPECT_NEAR(fixtures::transformOf(owner)->getPosition().y, 2.0f, 0.05f);
 }
