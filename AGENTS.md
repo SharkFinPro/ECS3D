@@ -113,7 +113,7 @@
   suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
   defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
   empty test set and would otherwise report green for a suite that registered nothing. It also passes
-  `--parallel` (one test per logical CPU), and `ECS3DManagedTests` has a high `COST` so it starts first.
+  `--parallel` (one test per logical CPU), and `ECS3DManagedTests` has a high test cost so it starts first.
   Under the `ecs3d-coverage` preset (`ECS3D_COVERAGE`) the same target also leaves the managed suite's
   cobertura output in `<build-dir>/coverage/managed`; the native side is read with gcovr.
 - **Managed tests** (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered
