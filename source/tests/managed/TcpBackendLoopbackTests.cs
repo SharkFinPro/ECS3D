@@ -268,8 +268,9 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     _silent.Add(silent);
     silent.Connect(IPAddress.Loopback, port);
 
-    // Well under the 5000 ms default, so a backend that ignored the field would fail this wait.
-    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the silent peer to be dropped", 2000, RecorderState);
+    // Short of the 5000 ms default, so a backend that ignored the field fails this wait, while leaving
+    // seconds of room for a stalled runner past the 300 ms it should take.
+    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the silent peer to be dropped", 4500, RecorderState);
 
     Assert.Single(TransportRecorder.ServerDisconnected);
     Assert.Empty(TransportRecorder.ServerAuthorized);

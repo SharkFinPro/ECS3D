@@ -131,8 +131,8 @@
   takes the addresses of `Transport`'s `[UnmanagedCallersOnly]` `set*Callback` exports as function pointers to
   register its own callbacks (and unregisters them afterward), and records what the backends deliver, so
   those tests share one non-parallel xUnit collection (`Transport`) and shorten `TcpBackend`'s internal
-  `SendTimeoutMs`/`BodyReadTimeoutMs`/`HandshakeTimeoutMs` fields and set `AcceptedSendBufferBytes` rather than waiting out
-  production values.
+  `SendTimeoutMs`/`BodyReadTimeoutMs`/`HandshakeTimeoutMs` fields and set `AcceptedSendBufferBytes` rather
+  than waiting out production values.
   `WebSocketBackendLoopbackTests` drives the WebSocket backend the same way: its `SendTimeoutMs` is also an internal
   field, and an internal `ClientReceiveLoopExiting` hook lets a test reconnect inside the window between the
   client receive loop stopping and releasing its connection. `TransportExportsTests` calls `Transport`'s exports
