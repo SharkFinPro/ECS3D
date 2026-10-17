@@ -28,11 +28,19 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   private const byte RoleEditor = 1;
   private const byte HandshakeType = 0xFF;
   private const int WaitMs = 5000;
+
+  // Long enough that a drop seen inside any wait is the refusal, never the server's handshake timeout.
+  private const int NoHandshakeTimeoutMs = 60000;
+
+  // A refusal is immediate on a healthy machine; the longer wait only absorbs scheduler stalls on a loaded
+  // runner and costs nothing when it passes.
+  private const int RefusalWaitMs = 20000;
   private const int MaxStartAttempts = 5;
 
   private readonly List<TcpBackend> _servers = new();
   private readonly List<TcpBackend> _clients = new();
   private readonly List<RawPeer> _peers = new();
+  private readonly List<TcpClient> _silent = new();
 
   public TcpBackendLoopbackTests()
   {
@@ -50,6 +58,11 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     foreach (var peer in _peers)
     {
       peer.Dispose();
+    }
+
+    foreach (var silent in _silent)
+    {
+      try { silent.Close(); } catch { /* ignore */ }
     }
 
     foreach (var server in _servers)
@@ -143,14 +156,24 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     return peer;
   }
 
-  private static void WaitFor(Func<bool> condition, string what)
+  private static void WaitFor(Func<bool> condition, string what, int timeoutMs = WaitMs, Func<string>? state = null)
   {
-    var deadline = Environment.TickCount64 + WaitMs;
+    var deadline = Environment.TickCount64 + timeoutMs;
     while (!condition())
     {
-      Assert.True(Environment.TickCount64 < deadline, $"Timed out waiting for {what}.");
+      Assert.True(Environment.TickCount64 < deadline,
+        $"Timed out waiting for {what} after {timeoutMs} ms{(state == null ? "" : $" ({state()})")}.");
       Thread.Sleep(5);
     }
+  }
+
+  private static string RecorderState()
+  {
+    var authorized = string.Join(", ",
+      TransportRecorder.ServerAuthorized.ToArray().Select(a => $"{a.ConnId}:{a.Role}"));
+    return $"server disconnects [{string.Join(", ", TransportRecorder.ServerDisconnected.ToArray())}], " +
+           $"authorized [{authorized}], client disconnects {TransportRecorder.ClientDisconnects}, " +
+           $"logs [{string.Join(" | ", TransportRecorder.Logs.ToArray())}]";
   }
 
   // The negative half of a check: the count must still be `expected` after it has had time to move.
@@ -189,14 +212,17 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   [Fact]
   public void Handshake_ReportsTheGrantedRoleAndRefusesAWrongEditorToken()
   {
-    var server = new TcpBackend();
+    var server = new TcpBackend { HandshakeTimeoutMs = NoHandshakeTimeoutMs };
     var port = Start(server, editMode: true, token: "secret");
 
     // The wrong token goes first so its refusal is settled before anything else is on the server.
     Connect(port, RoleEditor, "wrong");
-    WaitFor(() => TransportRecorder.ServerDisconnected.Count == 1, "the refused editor to be dropped");
+    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the refused editor to be dropped", RefusalWaitMs,
+      RecorderState);
     var refusedId = TransportRecorder.ServerDisconnected.Single();
-    WaitFor(() => TransportRecorder.ClientDisconnects == 1, "the refused client to be told");
+    Assert.True(TransportRecorder.LogContains("Rejected a connection that failed the handshake."));
+    WaitFor(() => TransportRecorder.ClientDisconnects == 1, "the refused client to be told", RefusalWaitMs,
+      RecorderState);
 
     Connect(port, RoleEditor, "secret");
     Connect(port, RolePlayer);
@@ -214,11 +240,14 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   public void Handshake_NeverReportsARoleThePeerMadeUp()
   {
     const byte unknownRole = 2;
-    var server = new TcpBackend();
+    var server = new TcpBackend { HandshakeTimeoutMs = NoHandshakeTimeoutMs };
     var port = Start(server, editMode: true, token: "secret");
 
     ConnectRaw(port, role: unknownRole);
-    WaitFor(() => TransportRecorder.ServerDisconnected.Count == 1, "the unknown-role peer to be dropped");
+    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the unknown-role peer to be dropped", RefusalWaitMs,
+      RecorderState);
+    Assert.Single(TransportRecorder.ServerDisconnected);
+    Assert.True(TransportRecorder.LogContains("Rejected a connection that failed the handshake."));
 
     Connect(port, RolePlayer);
     WaitFor(() => Authorized().Length == 1, "the player to be authorized");
@@ -226,6 +255,25 @@ public sealed class TcpBackendLoopbackTests : IDisposable
 
     Assert.Equal(RolePlayer, Authorized().Single().Role);
     Assert.Equal(1, server.ServerConnectionCount());
+  }
+
+  [Fact]
+  public void Handshake_DropsAPeerThatNeverSendsOneOnceTheTimeoutPasses()
+  {
+    var server = new TcpBackend { HandshakeTimeoutMs = 300 };
+    var port = Start(server);
+
+    // Connects and says nothing. The read times out with an exception, so no refusal is logged.
+    var silent = new TcpClient();
+    _silent.Add(silent);
+    silent.Connect(IPAddress.Loopback, port);
+
+    // Well under the 5000 ms default, so a backend that ignored the field would fail this wait.
+    WaitFor(() => !TransportRecorder.ServerDisconnected.IsEmpty, "the silent peer to be dropped", 2000, RecorderState);
+
+    Assert.Single(TransportRecorder.ServerDisconnected);
+    Assert.Empty(TransportRecorder.ServerAuthorized);
+    Assert.Equal(0, server.ServerConnectionCount());
   }
 
   [Fact]
