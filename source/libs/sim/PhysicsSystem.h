@@ -216,11 +216,9 @@ private:
 
   static void respondToCollision(RigidBody& body, Transform& transform, glm::vec3 displacement);
 
-  // Per unit mass, as a change of velocity turns the body whatever its mass. Empty for a body too degenerate to
-  // invert, which then gets no angular response.
-  [[nodiscard]] static std::optional<glm::mat3> worldInverseInertia(const Transform& transform);
-
-  [[nodiscard]] static glm::mat3x3 getInertiaTensor(const Transform& transform);
+  // Per unit mass, as a change of velocity turns the body whatever its mass, from the shapes of the body's
+  // colliders (InertiaTensor.h). Empty for a body too degenerate to invert, which then gets no angular response.
+  [[nodiscard]] static std::optional<glm::mat3> worldInverseInertia(const RigidBody& body, const Transform& transform);
 };
 
 

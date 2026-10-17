@@ -232,7 +232,7 @@ TEST(CompoundBodyContact, ASphereChildIsNotLaidFlushJustBecauseItsOwnerHoldsABox
 TEST(CompoundBodyContact, ASphereChildOfAnOwnerWithoutOneRollsToRest)
 {
   // Rolling resistance belongs to the sphere making the contact, not to whatever the owner carries.
-  // Stopping takes it about 5 to 6 units; without rolling resistance it coasts about 15. The bound sits
+  // Stopping takes it about 6.4 units; without rolling resistance it coasts about 15. The bound sits
   // between the two.
   const auto [stoppedPosition, stoppedVelocity] = compoundBallAfterRolling(Shape::none, 0.5f);
   EXPECT_LT(stoppedPosition.x, 10.0f);
