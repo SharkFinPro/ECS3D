@@ -23,7 +23,7 @@ namespace {
 
   // Each box above the first sinks about one tick of gravity into the one below it, since the upper contact is
   // resolved before the lower box is pushed back up. A box settles within this much of that per level.
-  constexpr float sinkPerLevel = 0.15f;
+  constexpr float sinkPerLevel = 0.2f;
 
   // Boxes stacked on a static box tilted about z, each turned like it and resting flush on the one below.
   struct SlopeStack {
