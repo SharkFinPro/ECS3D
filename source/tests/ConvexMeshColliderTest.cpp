@@ -478,3 +478,48 @@ TEST(ConvexMeshCollider, WorldVerticesFollowTheTransformTheOffsetsAndTheHull)
   hull->stop();
   expectNear(hull->findFurthestPoint({ 0.0f, 1.0f, 0.0f }), { 20.0f, 6.0f, 0.0f });
 }
+
+TEST(ConvexMeshCollider, TheWorldVerticesGenerationBumpsOnlyWhenTheyRegenerate)
+{
+  const auto scene = makeScene();
+  const auto object = fixtures::addObject(scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  object->addComponent(hull);
+
+  static_cast<void>(hull->getWorldVertices());
+  const auto first = hull->getWorldVerticesGeneration();
+  static_cast<void>(hull->getWorldVertices());
+  EXPECT_EQ(hull->getWorldVerticesGeneration(), first);
+
+  fixtures::transformOf(object)->setPosition({ 1.0f, 2.0f, 3.0f });
+  static_cast<void>(hull->getWorldVertices());
+  EXPECT_GT(hull->getWorldVerticesGeneration(), first);
+
+  const auto second = hull->getWorldVerticesGeneration();
+  hull->setScale({ 2.0f, 2.0f, 2.0f });
+  static_cast<void>(hull->getWorldVertices());
+  EXPECT_GT(hull->getWorldVerticesGeneration(), second);
+}
+
+TEST(ConvexMeshCollider, TheMassCacheIsDerivedStateOutsideTheSavedForm)
+{
+  ConvexMeshCollider::MassCache cache;
+  cache.volume = 4.0f;
+
+  const auto source = customCollider();
+  EXPECT_FALSE(source->getMassCache().has_value());
+  source->setMassCache(cache);
+  ASSERT_TRUE(source->getMassCache().has_value());
+  EXPECT_FLOAT_EQ(source->getMassCache()->volume, 4.0f);
+
+  ConvexMeshCollider loaded;
+  loaded.loadFromJSON(source->serialize());
+  EXPECT_FALSE(loaded.getMassCache().has_value());
+
+  ConvexMeshCollider fromWire;
+  unpackInto(fromWire, packed(*source));
+  EXPECT_FALSE(fromWire.getMassCache().has_value());
+
+  source->setPosition({ 5.0f, 0.0f, 0.0f });
+  EXPECT_FALSE(source->getMassCache().has_value());
+}

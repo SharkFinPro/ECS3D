@@ -2,21 +2,25 @@
 
 #include "InertiaTensor.h"
 #include "CapsuleMoments.h"
+#include "ConvexMeshFixtures.h"
 #include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
+#include "objects/components/collisions/ConvexHull.h"
 #include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/ConvexMeshCollider.h"
 #include "objects/components/collisions/SphereCollider.h"
 
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
 #include <glm/matrix.hpp>
 #include <glm/vec3.hpp>
+#include <glm/vector_relational.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -398,4 +402,78 @@ TEST(InertiaTensor, DegenerateInputsGiveAZeroTensorRatherThanNaN)
   const auto huge = addObject(scene, "Huge", { 0, 0, 0 });
   fixtures::addSphereCollider(huge, 1e20f);
   expectMatrix(inertia::worldTensor(huge.get(), *transformOf(huge)), glm::mat3(2.0f / 3.0f));
+}
+
+namespace {
+  bool sameDistribution(const inertia::Distribution& a, const inertia::Distribution& b)
+  {
+    return std::abs(a.volume - b.volume) < 1e-3f && glm::distance(a.centroid, b.centroid) < 1e-3f
+      && glm::all(glm::lessThan(glm::abs(a.covariance[0] - b.covariance[0]), glm::vec3(1e-3f)))
+      && glm::all(glm::lessThan(glm::abs(a.covariance[1] - b.covariance[1]), glm::vec3(1e-3f)))
+      && glm::all(glm::lessThan(glm::abs(a.covariance[2] - b.covariance[2]), glm::vec3(1e-3f)));
+  }
+
+  inertia::Distribution freshHull(ConvexMeshCollider& collider)
+  {
+    return inertia::hull(collider.getWorldVertices(), collider.getHull().indices);
+  }
+
+  // Applies a change, then checks the cached distribution followed it and that the change mattered.
+  template <typename Change>
+  void expectCacheFollows(ConvexMeshCollider& collider, Change change)
+  {
+    const auto stale = inertia::of(collider);
+    change();
+
+    const auto updated = inertia::of(collider);
+    const auto expected = freshHull(collider);
+
+    EXPECT_FALSE(sameDistribution(stale, expected));
+    EXPECT_TRUE(sameDistribution(updated, expected));
+  }
+}
+
+TEST(InertiaTensor, ACachedHullDistributionFollowsEveryChangeThatMovesTheWorldVertices)
+{
+  const auto scene = makeScene();
+  const auto parent = addObject(scene, "Parent", { 0, 0, 0 });
+  const auto object = addChildObject(scene, "Hull", parent);
+  const auto collider = addHull(object);
+  ASSERT_TRUE(collider->setHull(convexFixtures::tetrahedron()));
+
+  expectCacheFollows(*collider, [&] { transformOf(object)->setPosition({ 3, 1, -2 }); });
+  expectCacheFollows(*collider, [&] { transformOf(object)->setScale({ 2, 1, 3 }); });
+  expectCacheFollows(*collider, [&] { transformOf(object)->setRotation({ 20, 40, 60 }); });
+  expectCacheFollows(*collider, [&] { transformOf(parent)->setPosition({ -4, 2, 5 }); });
+  expectCacheFollows(*collider, [&] { transformOf(parent)->setScale({ 1.5f, 2.5f, 0.5f }); });
+  expectCacheFollows(*collider, [&] { collider->setPosition({ 1, 2, 3 }); });
+  expectCacheFollows(*collider, [&] { collider->setScale({ 3, 0.5f, 1 }); });
+  expectCacheFollows(*collider, [&] { collider->setRotation({ 15, 25, 35 }); });
+  expectCacheFollows(*collider, [&] {
+    ASSERT_TRUE(collider->setHull(*buildConvexHull(std::vector<glm::vec3>{ { 0, 0, 0 }, { 2, 0, 0 }, { 0, 3, 0 }, { 0, 0, 4 } })));
+  });
+}
+
+TEST(InertiaTensor, AnUnchangedHullIsServedFromItsCache)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Hull", { 1, 2, 3 });
+  fixtures::addRigidBody(object);
+  const auto collider = addHull(object);
+  ASSERT_TRUE(collider->setHull(convexFixtures::tetrahedron()));
+
+  EXPECT_FALSE(collider->getMassCache().has_value());
+
+  const auto first = inertia::of(*collider);
+  const auto generation = collider->getWorldVerticesGeneration();
+  ASSERT_TRUE(collider->getMassCache().has_value());
+  EXPECT_EQ(collider->getMassCache()->generation, generation);
+
+  const auto tensor = inertia::worldTensor(object.get(), *transformOf(object));
+  const auto second = inertia::of(*collider);
+
+  EXPECT_EQ(collider->getWorldVerticesGeneration(), generation);
+  EXPECT_EQ(collider->getMassCache()->generation, generation);
+  EXPECT_TRUE(sameDistribution(first, second));
+  expectMatrix(inertia::worldTensor(object.get(), *transformOf(object)), tensor, 1e-6f);
 }
