@@ -67,10 +67,16 @@ struct SceneControlPlan
 }
 
 // An edit server with no token would authorize any connection that claims the editor role, so one without a
-// token gets a generated one.
-[[nodiscard]] inline bool needsGeneratedEditToken(const bool editMode, const std::string& token)
+// token gets a generated one, unless it was explicitly launched open for development.
+[[nodiscard]] inline bool needsGeneratedEditToken(const bool editMode, const bool openEdit, const std::string& token)
 {
-  return editMode && token.empty();
+  return editMode && !openEdit && token.empty();
+}
+
+// An open edit server is only actually open when no token was given with it.
+[[nodiscard]] inline bool needsOpenEditWarning(const bool openEdit, const std::string& token)
+{
+  return openEdit && token.empty();
 }
 
 #endif //SERVERPOLICY_H

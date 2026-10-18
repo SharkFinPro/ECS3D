@@ -24,10 +24,23 @@ namespace {
 
 TEST(EditToken, OnlyAnEditServerWithoutATokenNeedsOne)
 {
-  EXPECT_TRUE(needsGeneratedEditToken(true, ""));
-  EXPECT_FALSE(needsGeneratedEditToken(true, "abc"));
-  EXPECT_FALSE(needsGeneratedEditToken(false, ""));
-  EXPECT_FALSE(needsGeneratedEditToken(false, "abc"));
+  EXPECT_TRUE(needsGeneratedEditToken(true, false, ""));
+  EXPECT_FALSE(needsGeneratedEditToken(true, false, "abc"));
+  EXPECT_FALSE(needsGeneratedEditToken(false, false, ""));
+  EXPECT_FALSE(needsGeneratedEditToken(false, false, "abc"));
+}
+
+TEST(EditToken, AnOpenEditServerGeneratesNoToken)
+{
+  EXPECT_FALSE(needsGeneratedEditToken(true, true, ""));
+  EXPECT_FALSE(needsGeneratedEditToken(true, true, "abc"));
+}
+
+TEST(EditToken, OpenEditWarnsOnlyWhenNoTokenWasGiven)
+{
+  EXPECT_TRUE(needsOpenEditWarning(true, ""));
+  EXPECT_FALSE(needsOpenEditWarning(true, "abc"));
+  EXPECT_FALSE(needsOpenEditWarning(false, ""));
 }
 
 TEST(EditToken, GeneratedTokenIs32LowercaseHexCharacters)
