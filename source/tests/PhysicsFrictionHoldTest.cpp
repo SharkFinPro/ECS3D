@@ -140,14 +140,17 @@ TEST(PhysicsFriction, ABoxSlidingUpTheSlopeStopsAndStaysPut)
   EXPECT_LT(glm::distance(fixtures::transformOf(slope.body)->getPosition(), stopped), 1e-3f);
 }
 
-// Measured with the hold skipped for rolling bodies and the sphere's radius as its rolling arm; a hold that took the
-// rolling slide back would lag it.
+// A solid sphere speeds up at g sin / 1.4 (I = 2/5 m r^2) minus its rolling resistance, with its radius as the
+// lever arm. It starts touching, so 60 ticks cover several units with that resistance and about 12.3 without it,
+// against the 3.4 the box of its scale gave. A hold that took the rolling slide back would lag the lower bound;
+// lost rolling resistance would pass the upper.
 TEST(PhysicsFriction, ASphereRollsTheSameDistanceOnASlope)
 {
   Slope slope(5.71059f, true);
   slope.run(60, 0.1f);
 
-  EXPECT_NEAR(slope.slidDistance(), 3.779873f, 1e-3f);
+  EXPECT_GT(slope.slidDistance(), 6.0f);
+  EXPECT_LT(slope.slidDistance(), 9.5f);
 }
 
 // A push below what friction holds adds to the slide gravity gives, and the hold takes both back.
