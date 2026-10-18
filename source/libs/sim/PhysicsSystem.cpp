@@ -1055,10 +1055,10 @@ float PhysicsSystem::frictionOf(const Pair& pair)
 
 float PhysicsSystem::holdingCapacity(const Side& side, const glm::vec3& direction)
 {
-  // What the side presses its support with this tick: its own fall into the support, which that contact is about
-  // to stop, and what is stacked on it.
-  const float fall = std::max(-glm::dot(side.body->getVelocity(), supportNormalOf(*side.body)), 0.0f);
-  const float pressing = side.body->getMass() * fall + side.body->getStackedLoad();
+  // What the side presses its support with this tick: its own fall, which that contact is about to stop, and
+  // what is stacked on it.
+  const float pressing = side.body->getMass() * std::max(-side.body->getVelocity().y, 0.0f) +
+                         side.body->getStackedLoad();
 
   return remainingHold(side.body->getHeldImpulse(), direction, std::max(side.body->getFriction(), 0.0f) * pressing);
 }
