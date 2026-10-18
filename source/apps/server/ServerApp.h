@@ -40,6 +40,8 @@ public:
     // instead of running until killed like a dedicated server.
     bool exitWhenEmpty = false;
     std::string authToken;
+    // Development only: an --edit server that admits any editor without a token.
+    bool openEdit = false;
   };
 
   explicit ServerApp(LaunchOptions options);

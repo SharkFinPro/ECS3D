@@ -17,7 +17,8 @@ namespace
 
   // --edit is the launch-capability gate that allows editor connections; absent it the server is a
   // pure play server. --token, when set, is the secret an editor must present to be authorized;
-  // main generates one for an --edit server given none.
+  // main generates one for an --edit server given none. --open-edit implies --edit and skips that, so any
+  // editor may edit (development only); an explicit --token still applies.
   // An empty project runs the built-in sample (scenes 1-3 + falling balls); --project loads a file.
   ServerApp::LaunchOptions parseOptions(const int argc, char** argv)
   {
@@ -44,6 +45,11 @@ namespace
         // running until killed like a dedicated server.
         options.exitWhenEmpty = true;
       }
+      else if (arg == "--open-edit")
+      {
+        options.editMode = true;
+        options.openEdit = true;
+      }
       else if (isValueFlag(arg, "--token", i, argc))
       {
         options.authToken = argv[++i];
@@ -64,7 +70,13 @@ int main(const int argc, char** argv)
 
     auto options = parseOptions(argc, argv);
 
-    if (needsGeneratedEditToken(options.editMode, options.authToken))
+    if (needsOpenEditWarning(options.openEdit, options.authToken))
+    {
+      Log::warn(LogCategory::server, "--open-edit: any editor that can reach port " + std::to_string(options.port) +
+                                       " may edit this server. Use it for development only.");
+    }
+
+    if (needsGeneratedEditToken(options.editMode, options.openEdit, options.authToken))
     {
       options.authToken = net::generateEditToken();
       Log::info(LogCategory::server, "No --token given; generated edit token " + options.authToken +
