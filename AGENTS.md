@@ -841,9 +841,9 @@ server-side, and sometimes answered with a resync snapshot) - the handlers are `
 ## Applications
 
 - **ECS3DServer** (`apps/server`) — headless authoritative sim. `main.cpp` parses `--project`, `--port`,
-  `--edit` (allow editor connections),
-  `--open-edit` (`--edit` with no token required, development only), `--ephemeral` (exit when the last
-  connection drops — a spawned local server), `--token`, `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
+  `--edit` (allow editor connections), `--open-edit` (`--edit` with no token required, development only),
+  `--ephemeral` (exit when the last connection drops — a spawned local server), `--token`,
+  `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
   Ships `defaultAssets/` and generates a built-in `DefaultProject` when no `--project` is given. Also
   registers a `RemoteLogSink` with `Log` and forwards it to editor connections every `run()` iteration,
   only when `--edit` is set — see Logging above.
@@ -867,8 +867,8 @@ server-side, and sometimes answered with a resync snapshot) - the handlers are `
 - An `--edit` server started without `--token` generates a random 128-bit token (`net::generateEditToken`, in
   `libs/net/EditToken.h`) and logs it once, so an editor can still attach with `--host`/`--token`. The editor
   uses the same generator for the server it spawns.
-  `--open-edit` (development only) implies `--edit` and skips generation, so any editor that reaches the port may
-  edit; it logs a warning, and an explicit `--token` still applies.
+- `--open-edit` (development only) implies `--edit` and skips that generation, so any editor that reaches the
+  port may edit. It logs a warning, and an explicit `--token` still applies.
 - `net::ServerProcess::launch` takes the child's flags as one string; a token holding spaces may be
   double quoted (there is no escape for a quote inside one). POSIX (Linux and macOS) splits the string itself, honoring
   those quotes; Windows hands it to the child's CRT (C runtime), which parses them the same way.
