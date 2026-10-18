@@ -80,8 +80,7 @@ private:
     bool rolls = false;
     // A capsule's unit axis, which it rolls about when lying along a line contact. Zero for a sphere.
     glm::vec3 rollAxis{ 0 };
-    // A capsule's world radius, the lever arm of its rolling resistance. Zero for a sphere, whose arm is its
-    // center's distance from the contact point.
+    // The world radius of the sphere or capsule, the lever arm of its rolling resistance. Zero when it has none.
     float rollRadius = 0.0f;
   };
 

@@ -10,6 +10,7 @@
 #include <objects/components/Transform.h>
 #include <objects/components/collisions/CapsuleCollider.h>
 #include <objects/components/collisions/Collider.h>
+#include <objects/components/collisions/SphereCollider.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
@@ -641,6 +642,7 @@ void PhysicsSystem::markRolling(Side& side, const std::shared_ptr<Collider>& col
   if (isSphere(collider))
   {
     side.rolls = true;
+    side.rollRadius = std::static_pointer_cast<SphereCollider>(collider)->getRadius();
     return;
   }
 
