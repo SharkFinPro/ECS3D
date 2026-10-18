@@ -73,8 +73,8 @@ private:
   struct Side {
     RigidBody* body = nullptr;
     Transform* transform = nullptr;
-    // Rested on a support last tick. In a pair of bodies the support takes the downward part of a push, so a
-    // stack holds up whatever its masses, and what lands on it stops as it would on static geometry.
+    // Rested on a support last tick. In a pair of bodies the support takes the part of a push that points into
+    // it, so a stack holds up whatever its masses, and what lands on it stops as it would on static geometry.
     bool resting = false;
     // A sphere or capsule, which can roll on its contact.
     bool rolls = false;
@@ -184,7 +184,7 @@ private:
   // The geometric mean of the two bodies' coefficients.
   [[nodiscard]] static float frictionOf(const Pair& pair);
 
-  // The horizontal impulse along the unit direction a resting side's own support can still hold for it this tick.
+  // The impulse along its support in the unit direction a resting side's own support can still hold for it this tick.
   [[nodiscard]] static float holdingCapacity(const Side& side, const glm::vec3& direction);
 
   // The part of a push along direction the side takes itself.

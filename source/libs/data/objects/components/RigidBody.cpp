@@ -172,6 +172,26 @@ void RigidBody::setDriveStep(const glm::vec3& driveStep)
   m_driveStep = driveStep;
 }
 
+glm::vec3 RigidBody::getSupportNormal() const
+{
+  return m_supportNormal;
+}
+
+void RigidBody::setSupportNormal(const glm::vec3& supportNormal)
+{
+  m_supportNormal = supportNormal;
+}
+
+glm::vec3 RigidBody::getNextSupportNormal() const
+{
+  return m_nextSupportNormal;
+}
+
+void RigidBody::setNextSupportNormal(const glm::vec3& nextSupportNormal)
+{
+  m_nextSupportNormal = nextSupportNormal;
+}
+
 nlohmann::json RigidBody::serialize()
 {
   const auto velocity = m_velocity.getInitialValue();
