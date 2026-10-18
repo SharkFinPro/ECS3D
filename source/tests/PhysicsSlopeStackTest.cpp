@@ -177,8 +177,8 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
   const auto& body = *stack.bodies[0];
   const float perBox = body.getMass() * -body.getGravity() * dt * 0.1f * glm::dot(stack.normal, glm::vec3(0, 1, 0));
 
-  // A top box that slid off the stack would leave the level under it with nothing to pass on.
-  EXPECT_LT(stack.slidDownhill(count - 1), sinkPerLevel * static_cast<float>(count - 1) + 0.02f + steepSlack);
+  // A top box that slid off would leave the level under it nothing to pass on; past the face's edge it would tip off.
+  EXPECT_LT(std::fabs(glm::dot(stack.positionOf(count - 1) - stack.positionOf(count - 2), stack.downhill)), 1.0f);
 
   for (int tick = 0; tick < 10; ++tick)
   {
