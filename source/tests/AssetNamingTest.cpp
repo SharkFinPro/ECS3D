@@ -1,12 +1,18 @@
 #include <gtest/gtest.h>
 
+#include "TestScene.h"
+
 #include <AssetNaming.h>
 #include <assets/AssetRegistry.h>
+#include <objects/Object.h>
+#include <objects/ObjectManager.h>
+#include <objects/components/Transform.h>
 
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <nlohmann/json.hpp>
 #include <string>
 
 namespace {
@@ -24,6 +30,12 @@ namespace {
     {
       m_registry.registerAsset({ .uuid = makeUUID(++m_next), .type = AssetType::Scene, .path = name,
                                  .displayName = displayName });
+    }
+
+    void addPrefab(const std::string& name)
+    {
+      m_registry.registerAsset({ .uuid = makeUUID(++m_next), .type = AssetType::Prefab, .path = name,
+                                 .body = "{}" });
     }
 
     void addScript(const std::string& className)
@@ -114,6 +126,93 @@ TEST_F(AssetNamingTest, ScriptNameSkipsAFileTheLambdaReports)
 
   EXPECT_EQ(assetNaming::uniqueScriptName(m_registry, "NewScript", noFiles), "NewScript");
   EXPECT_EQ(assetNaming::uniqueScriptName(m_registry, "NewScript", fileExists), "NewScript3");
+}
+
+TEST_F(AssetNamingTest, FreePrefabNameIsReturnedAsIs)
+{
+  addPrefab("Other");
+  EXPECT_EQ(assetNaming::uniquePrefabName(m_registry, "New Prefab"), "New Prefab");
+}
+
+TEST_F(AssetNamingTest, TakenPrefabNameGetsNumberedSuffixSkippingGaps)
+{
+  addPrefab("New Prefab");
+  EXPECT_EQ(assetNaming::uniquePrefabName(m_registry, "New Prefab"), "New Prefab (2)");
+
+  addPrefab("New Prefab (2)");
+  addPrefab("New Prefab (4)");
+  EXPECT_EQ(assetNaming::uniquePrefabName(m_registry, "New Prefab"), "New Prefab (3)");
+}
+
+TEST_F(AssetNamingTest, ASceneNameIsTakenForPrefabsAndTheOtherWayAround)
+{
+  addScene("New Prefab");
+  EXPECT_TRUE(assetNaming::isNameTaken(m_registry, AssetType::Prefab, "New Prefab"));
+  EXPECT_EQ(assetNaming::uniquePrefabName(m_registry, "New Prefab"), "New Prefab (2)");
+
+  addPrefab("New Scene");
+  EXPECT_TRUE(assetNaming::isNameTaken(m_registry, AssetType::Scene, "New Scene"));
+  EXPECT_EQ(assetNaming::uniqueSceneName(m_registry, "New Scene"), "New Scene (2)");
+  EXPECT_FALSE(assetNaming::isNameTaken(m_registry, AssetType::Scene, "Unused"));
+}
+
+TEST_F(AssetNamingTest, ScriptsKeepTheirOwnNameSpace)
+{
+  addScene("Shared");
+  addPrefab("Shared");
+  EXPECT_FALSE(assetNaming::isNameTaken(m_registry, AssetType::Script, "Shared"));
+}
+
+TEST_F(AssetNamingTest, DistinctSceneAndPrefabNamesAreBothRegistered)
+{
+  const auto sceneUUID = makeUUID(10);
+  const auto prefabUUID = makeUUID(11);
+  m_registry.registerAsset({ .uuid = sceneUUID, .type = AssetType::Scene, .path = "Level" });
+  m_registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                             .body = assetNaming::emptyPrefabBody("Block", uuids::to_string(makeUUID(903))) });
+  EXPECT_NE(m_registry.getByUUID(sceneUUID), nullptr);
+  EXPECT_NE(m_registry.getByUUID(prefabUUID), nullptr);
+}
+
+TEST_F(AssetNamingTest, RegistryDropsAPrefabSharingASceneName)
+{
+  const auto sceneUUID = makeUUID(20);
+  const auto prefabUUID = makeUUID(21);
+  m_registry.registerAsset({ .uuid = sceneUUID, .type = AssetType::Scene, .path = "Same" });
+  m_registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Same",
+                             .body = assetNaming::emptyPrefabBody("Same", uuids::to_string(makeUUID(904))) });
+  EXPECT_NE(m_registry.getByUUID(sceneUUID), nullptr);
+  EXPECT_EQ(m_registry.getByUUID(prefabUUID), nullptr);
+}
+
+TEST_F(AssetNamingTest, EmptyPrefabBodyInstantiatesAsOneObjectWithATransform)
+{
+  const std::string body = assetNaming::emptyPrefabBody("Fresh", uuids::to_string(makeUUID(900)));
+  ASSERT_FALSE(body.empty());
+  const auto parsed = nlohmann::json::parse(body);
+
+  fixtures::Scene scene;
+  const auto object = scene.objectManager->instantiate(parsed);
+  ASSERT_NE(object, nullptr);
+
+  EXPECT_EQ(object->getName(), "Fresh");
+  EXPECT_TRUE(object->getChildren().empty());
+  EXPECT_NE(object->getComponent<Transform>(ComponentType::transform), nullptr);
+  EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
+}
+
+TEST_F(AssetNamingTest, ReRegisteringAPrefabNameKeepsTheUUIDAndUpdatesTheBody)
+{
+  const auto first = makeUUID(1);
+  const auto second = makeUUID(2);
+  m_registry.registerAsset({ .uuid = first, .type = AssetType::Prefab, .path = "New Prefab",
+                             .body = assetNaming::emptyPrefabBody("New Prefab", uuids::to_string(makeUUID(901))) });
+  m_registry.registerAsset({ .uuid = second, .type = AssetType::Prefab, .path = "New Prefab",
+                             .body = assetNaming::emptyPrefabBody("Renamed", uuids::to_string(makeUUID(902))) });
+
+  ASSERT_NE(m_registry.getByUUID(first), nullptr);
+  EXPECT_EQ(m_registry.getByUUID(second), nullptr);
+  EXPECT_EQ(m_registry.getPrefabBody(first).at("name"), "Renamed");
 }
 
 class AssetNamingFileTest : public AssetNamingTest

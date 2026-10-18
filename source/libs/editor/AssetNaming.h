@@ -3,6 +3,7 @@
 
 #include <assets/AssetRegistry.h>
 #include <functional>
+#include <nlohmann/json.hpp>
 #include <string>
 
 namespace assetNaming {
@@ -13,11 +14,18 @@ namespace assetNaming {
     return record.type == AssetType::Script ? record.className : record.path;
   }
 
+  // The registry keys scenes and prefabs by one shared path map, so they share a name space.
+  [[nodiscard]] inline bool sharesNameSpace(const AssetType a, const AssetType b)
+  {
+    const auto named = [](const AssetType t) { return t == AssetType::Scene || t == AssetType::Prefab; };
+    return a == b || (named(a) && named(b));
+  }
+
   [[nodiscard]] inline bool isNameTaken(const AssetRegistry& registry, const AssetType type, const std::string& name)
   {
     for (const auto& [uuid, record] : registry.getAssets())
     {
-      if (record.type == type && (keyOf(record) == name || record.displayName == name))
+      if (sharesNameSpace(record.type, type) && (keyOf(record) == name || record.displayName == name))
       {
         return true;
       }
@@ -27,9 +35,10 @@ namespace assetNaming {
   }
 
   // Uses the same " (N)" suffix rule as SceneManager::uniqueSceneName, so the offered name matches the server.
-  [[nodiscard]] inline std::string uniqueSceneName(const AssetRegistry& registry, const std::string& base)
+  [[nodiscard]] inline std::string uniqueNameOfType(const AssetRegistry& registry, const AssetType type,
+                                                    const std::string& base)
   {
-    if (!isNameTaken(registry, AssetType::Scene, base))
+    if (!isNameTaken(registry, type, base))
     {
       return base;
     }
@@ -47,11 +56,40 @@ namespace assetNaming {
     for (size_t n = 2;; ++n)
     {
       std::string candidate = stem + " (" + std::to_string(n) + ")";
-      if (!isNameTaken(registry, AssetType::Scene, candidate))
+      if (!isNameTaken(registry, type, candidate))
       {
         return candidate;
       }
     }
+  }
+
+  [[nodiscard]] inline std::string uniqueSceneName(const AssetRegistry& registry, const std::string& base)
+  {
+    return uniqueNameOfType(registry, AssetType::Scene, base);
+  }
+
+  [[nodiscard]] inline std::string uniquePrefabName(const AssetRegistry& registry, const std::string& base)
+  {
+    return uniqueNameOfType(registry, AssetType::Prefab, base);
+  }
+
+  // An Object::serialize() blob for a lone object with the default Transform.
+  [[nodiscard]] inline std::string emptyPrefabBody(const std::string& name, const std::string& objectUUID)
+  {
+    const nlohmann::json body = {
+      { "name", name },
+      { "children", nlohmann::json::array() },
+      { "components", nlohmann::json::array({
+        { { "type", "Transform" },
+          { "position", { 0.0f, 0.0f, 0.0f } },
+          { "rotation", { 0.0f, 0.0f, 0.0f } },
+          { "scale", { 1.0f, 1.0f, 1.0f } } }
+      }) },
+      { "scripts", nlohmann::json::array() },
+      { "uuid", objectUUID }
+    };
+
+    return body.dump();
   }
 
   // A C# class name cannot hold a space or parentheses, so the suffix is a bare number.
