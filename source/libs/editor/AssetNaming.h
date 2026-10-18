@@ -14,11 +14,18 @@ namespace assetNaming {
     return record.type == AssetType::Script ? record.className : record.path;
   }
 
+  // The registry keys scenes and prefabs by one shared path map, so they share a name space.
+  [[nodiscard]] inline bool sharesNameSpace(const AssetType a, const AssetType b)
+  {
+    const auto named = [](const AssetType t) { return t == AssetType::Scene || t == AssetType::Prefab; };
+    return a == b || (named(a) && named(b));
+  }
+
   [[nodiscard]] inline bool isNameTaken(const AssetRegistry& registry, const AssetType type, const std::string& name)
   {
     for (const auto& [uuid, record] : registry.getAssets())
     {
-      if (record.type == type && (keyOf(record) == name || record.displayName == name))
+      if (sharesNameSpace(record.type, type) && (keyOf(record) == name || record.displayName == name))
       {
         return true;
       }

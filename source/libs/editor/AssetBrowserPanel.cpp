@@ -515,10 +515,10 @@ void AssetBrowserPanel::displayCreateAssetPopup()
     {
       m_createError = std::string("A script named ") + m_pending.name + " already exists.";
     }
-    else if (m_pending.type == PendingAsset::Type::Prefab &&
+    else if ((m_pending.type == PendingAsset::Type::Prefab || m_pending.type == PendingAsset::Type::Scene) &&
              assetNaming::isNameTaken(*m_assetRegistry, AssetType::Prefab, m_pending.name))
     {
-      m_createError = std::string("A prefab named ") + m_pending.name + " already exists.";
+      m_createError = std::string("A scene or prefab named ") + m_pending.name + " already exists.";
     }
     else
     {

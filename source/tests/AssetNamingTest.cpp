@@ -143,14 +143,45 @@ TEST_F(AssetNamingTest, TakenPrefabNameGetsNumberedSuffixSkippingGaps)
   EXPECT_EQ(assetNaming::uniquePrefabName(m_registry, "New Prefab"), "New Prefab (3)");
 }
 
-TEST_F(AssetNamingTest, ASceneWithTheSameNameDoesNotTakeThePrefabName)
+TEST_F(AssetNamingTest, ASceneNameIsTakenForPrefabsAndTheOtherWayAround)
 {
   addScene("New Prefab");
-  EXPECT_EQ(assetNaming::uniquePrefabName(m_registry, "New Prefab"), "New Prefab");
-
-  addPrefab("New Prefab");
+  EXPECT_TRUE(assetNaming::isNameTaken(m_registry, AssetType::Prefab, "New Prefab"));
   EXPECT_EQ(assetNaming::uniquePrefabName(m_registry, "New Prefab"), "New Prefab (2)");
-  EXPECT_EQ(assetNaming::uniqueSceneName(m_registry, "New Prefab"), "New Prefab (2)");
+
+  addPrefab("New Scene");
+  EXPECT_TRUE(assetNaming::isNameTaken(m_registry, AssetType::Scene, "New Scene"));
+  EXPECT_EQ(assetNaming::uniqueSceneName(m_registry, "New Scene"), "New Scene (2)");
+  EXPECT_FALSE(assetNaming::isNameTaken(m_registry, AssetType::Scene, "Unused"));
+}
+
+TEST_F(AssetNamingTest, ScriptsKeepTheirOwnNameSpace)
+{
+  addScene("Shared");
+  addPrefab("Shared");
+  EXPECT_FALSE(assetNaming::isNameTaken(m_registry, AssetType::Script, "Shared"));
+}
+
+TEST_F(AssetNamingTest, DistinctSceneAndPrefabNamesAreBothRegistered)
+{
+  const auto sceneUUID = makeUUID(10);
+  const auto prefabUUID = makeUUID(11);
+  m_registry.registerAsset({ .uuid = sceneUUID, .type = AssetType::Scene, .path = "Level" });
+  m_registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                             .body = assetNaming::emptyPrefabBody("Block", uuids::to_string(makeUUID(903))) });
+  EXPECT_NE(m_registry.getByUUID(sceneUUID), nullptr);
+  EXPECT_NE(m_registry.getByUUID(prefabUUID), nullptr);
+}
+
+TEST_F(AssetNamingTest, RegistryDropsAPrefabSharingASceneName)
+{
+  const auto sceneUUID = makeUUID(20);
+  const auto prefabUUID = makeUUID(21);
+  m_registry.registerAsset({ .uuid = sceneUUID, .type = AssetType::Scene, .path = "Same" });
+  m_registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Same",
+                             .body = assetNaming::emptyPrefabBody("Same", uuids::to_string(makeUUID(904))) });
+  EXPECT_NE(m_registry.getByUUID(sceneUUID), nullptr);
+  EXPECT_EQ(m_registry.getByUUID(prefabUUID), nullptr);
 }
 
 TEST_F(AssetNamingTest, EmptyPrefabBodyInstantiatesAsOneObjectWithATransform)
