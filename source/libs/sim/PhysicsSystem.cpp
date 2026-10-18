@@ -42,6 +42,13 @@ namespace {
   // not bounce, or a resting pile would keep hopping.
   constexpr float minBounceSpeed = 2.0f;
 
+  // Units per tick. A vertical speed below this is rounding left by contacts that cancel, not a body rising.
+  constexpr float minRiseSpeed = 1e-5f;
+
+  // How far a contact normal must point down for a resting body to leave the pair to the resting body above it;
+  // a side-by-side contact, whose normal is level to rounding, is still resolved from both sides.
+  constexpr float fromBelowNormalY = -0.5f;
+
   // Rolling resistance as a share of the friction coefficient: a ball on a rough floor stops within a few of its
   // own widths rather than rolling on until the angular damping wears it down.
   constexpr float rollingResistanceShare = 0.1f;
@@ -144,12 +151,30 @@ namespace {
     return { 0.0f, body.getGravity() * dt * 0.1f, 0.0f };
   }
 
-  glm::vec3 horizontalOf(const glm::vec3& vector)
+  // The normal of the surface a resting body's support holds it up with: world up until a contact says otherwise.
+  glm::vec3 supportNormalOf(const RigidBody& body)
   {
-    return { vector.x, 0.0f, vector.z };
+    const auto normal = body.getSupportNormal();
+
+    return glm::dot(normal, normal) > 0.0f ? normal : glm::vec3(0.0f, 1.0f, 0.0f);
   }
 
-  // How much more horizontal impulse along the unit direction a support can hold, having held already this tick,
+  // The part of a vector in the plane a support's normal is perpendicular to, which its friction holds.
+  glm::vec3 alongSupport(const glm::vec3& vector, const glm::vec3& normal)
+  {
+    return vector - glm::dot(vector, normal) * normal;
+  }
+
+  // The flattest support wins, so a body in a valley rests on the gentler side.
+  void noteSupportNormal(RigidBody& body, const glm::vec3& normal)
+  {
+    if (normal.y > 0.0f && normal.y > body.getNextSupportNormal().y)
+    {
+      body.setNextSupportNormal(normal);
+    }
+  }
+
+  // How much more impulse along the unit direction a support can hold, having held already this tick,
   // before friction there reaches limit. A push the other way first cancels what it has held.
   float remainingHold(const glm::vec3& held, const glm::vec3& direction, const float limit)
   {
@@ -371,6 +396,8 @@ void PhysicsSystem::integrate(RigidBody& body, Transform& transform, const float
   body.setNextFalling(true);
   body.setStackedLoad(0.0f);
   body.setHeldImpulse(glm::vec3(0));
+  body.setSupportNormal(body.getNextSupportNormal());
+  body.setNextSupportNormal(glm::vec3(0));
 
   if (body.getDoGravity())
   {
@@ -403,7 +430,7 @@ void PhysicsSystem::applyVelocityChange(RigidBody& body, const Transform& transf
   const auto velocity = body.getVelocity() + velocityChange;
   body.setVelocity(velocity);
 
-  if (velocity.y > 0 && velocity.y - velocityChange.y < 0)
+  if (velocity.y > minRiseSpeed && velocity.y - velocityChange.y < 0)
   {
     body.setFalling(true);
     body.setNextFalling(true);
@@ -482,6 +509,15 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   const auto support = collisionPoints.size() < 2 ? Support{ collisionPoints[0], false }
                                                   : findSupport(transform->getPosition(), normal, collisionPoints);
   auto pair = pairOf(body, *transform, collider, other, normal);
+  noteSupportNormal(body, normal);
+
+  // Two resting bodies: the one above resolves the pair in its own pass, where its support takes the push. Met again
+  // from below, the overlap would be separated fully, and the pair would then touch exactly at the next tick's
+  // start, which the sweep misses, letting the upper body fall unheld and slide down a slope.
+  if (normal.y < fromBelowNormalY && pair.body.resting && pair.other.resting)
+  {
+    return;
+  }
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
@@ -850,16 +886,17 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
 
   // A resting body's own support takes the drag first, as far as friction there can hold, so a light box under
   // a heavy one stays put rather than being swept along and letting the heavy one slide on.
-  // In units of this impulse, which moves the resting body sideways by only the horizontal part of direction. A
-  // straight-down drag goes to the support whole; a straight-up one it cannot hold at all.
-  const auto sideways = horizontalOf(direction);
+  // In units of this impulse, which moves the resting body along its support by only the tangent part of direction.
+  // A drag straight into the support goes to it whole; one straight away from it, it cannot hold at all.
+  const auto supportNormal = otherHeld ? supportNormalOf(*pair.other.body) : glm::vec3(0.0f, 1.0f, 0.0f);
+  const auto sideways = otherHeld ? alongSupport(direction, supportNormal) : glm::vec3(0);
   const float sidewaysShare = glm::length(sideways);
   float held = 0.0f;
   if (otherHeld && sidewaysShare > 1e-6f)
   {
     held = holdingCapacity(pair.other, sideways / sidewaysShare) / sidewaysShare;
   }
-  else if (otherHeld && direction.y < 0.0f)
+  else if (otherHeld && glm::dot(direction, supportNormal) < 0.0f)
   {
     held = std::numeric_limits<float>::max();
   }
@@ -870,11 +907,9 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   // A support that has already held a push from above this tick has only the rest of its grip for this body -
   // or all of it, if that push was the other way.
   float grip = friction * load;
-  const auto slide = horizontalOf(direction);
-  const float slideShare = glm::length(slide);
-  if (pair.normal.y > 0.0f && slideShare > 1e-6f)
+  if (pair.normal.y > 0.0f)
   {
-    grip = std::min(grip, remainingHold(pair.body.body->getHeldImpulse(), slide / slideShare, grip) / slideShare);
+    grip = std::min(grip, remainingHold(pair.body.body->getHeldImpulse(), direction, grip));
   }
 
   if (grip <= 0.0f)
@@ -974,17 +1009,18 @@ std::pair<float, float> PhysicsSystem::squeeze(const Side& held, const glm::vec3
                                                const float freeResistance, const float heldResistance)
 {
   const float anchored = target / freeResistance;
-  const auto sideways = horizontalOf(pushDirection);
+  const auto supportNormal = supportNormalOf(*held.body);
+  const auto sideways = alongSupport(pushDirection, supportNormal);
   const auto hold = [&held, &sideways](const float impulse)
   {
     held.body->setHeldImpulse(held.body->getHeldImpulse() + impulse * sideways);
   };
 
-  // The held side takes only the horizontal part of the push, and its support's friction holds even that inside
-  // the friction cone. Past it, the held side is squeezed out sideways by what its support cannot hold - but
+  // The held side takes only the part of the push along its support, and its support's friction holds even that
+  // inside the friction cone. Past it, the held side is squeezed out sideways by what its support cannot hold - but
   // only by that, rather than by the whole weight of what presses on it.
   const float slope = glm::length(sideways);
-  const float cone = std::max(held.body->getFriction(), 0.0f) * std::fabs(pushDirection.y);
+  const float cone = std::max(held.body->getFriction(), 0.0f) * std::fabs(glm::dot(pushDirection, supportNormal));
   if (slope <= cone || slope <= 1e-6f)
   {
     hold(anchored);
@@ -1040,7 +1076,14 @@ float PhysicsSystem::restitution(const Pair& pair, const float closingSpeed, con
 
 glm::vec3 PhysicsSystem::takenBy(const Side& side, const glm::vec3& direction)
 {
-  return side.resting && direction.y < 0.0f ? glm::vec3(direction.x, 0.0f, direction.z) : direction;
+  if (!side.resting || !side.body)
+  {
+    return direction;
+  }
+
+  const auto supportNormal = supportNormalOf(*side.body);
+
+  return glm::dot(direction, supportNormal) < 0.0f ? alongSupport(direction, supportNormal) : direction;
 }
 
 glm::vec3 PhysicsSystem::velocityAt(const Side& side, const glm::vec3& point, const glm::vec3& pushDirection,
