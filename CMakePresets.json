@@ -28,7 +28,7 @@
       "name": "ecs3d-release",
       "inherits": "ecs3d-base",
       "displayName": "ECS3D Release",
-      "description": "Optimized build. The configuration the engine is run and profiled in, and the second build type CI covers. Writes to cmake-build-ecs3d-release.",
+      "description": "Optimized build. The configuration the engine is run in, and the second build type CI covers. Writes to cmake-build-ecs3d-release.",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
@@ -52,6 +52,16 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ECS3D_COVERAGE": "ON"
+      }
+    },
+    {
+      "name": "ecs3d-profile",
+      "inherits": "ecs3d-base",
+      "displayName": "ECS3D Profile",
+      "description": "Optimized build with full debug info and frame pointers, for sampling profilers. Unlike ecs3d-release, call stacks unwind and resolve to source lines. Writes to cmake-build-ecs3d-profile.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "ECS3D_PROFILE": "ON"
       }
     }
   ]

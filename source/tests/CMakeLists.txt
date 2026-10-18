@@ -141,6 +141,7 @@ add_executable(${PROJECT_NAME}
   PhysicsGenericRestingParityTest.cpp
   PhysicsGenericRestingShapesTest.cpp
   PlanarHullTest.cpp
+  PresetsTest.cpp
   PhysicsStackingTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsContactResponseTest.cpp
@@ -271,7 +272,12 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
   RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/tests
   RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/tests
+  RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/tests
 )
+
+# PresetsTest reads CMakePresets.json from the repo root, which is CMAKE_SOURCE_DIR since this directory is
+# only added when ECS3D is top-level.
+target_compile_definitions(${PROJECT_NAME} PRIVATE ECS3D_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 include(GoogleTest)
 
