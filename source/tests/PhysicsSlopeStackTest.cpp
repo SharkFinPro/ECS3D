@@ -137,8 +137,8 @@ INSTANTIATE_TEST_SUITE_P(PhysicsSlopeStack, StackOnSlope,
                          testing::Values(std::pair{ 2, 15.0f }, std::pair{ 3, 15.0f }, std::pair{ 4, 15.0f },
                                          std::pair{ 2, 10.0f }, std::pair{ 3, 20.0f },
                                          std::pair{ 2, 0.0f }, std::pair{ 3, 0.0f },
-                                         // Friction 0.5 holds up to about 26.6 degrees; each level passes the load
-                                         // on along the support's normal, so a higher stack holds as long.
+                                         // Friction 0.5 holds up to about 26.6 degrees. Closer to it, a settled stack's
+                                         // creep depends on the platform's float rounding.
                                          std::pair{ 2, 22.0f }, std::pair{ 3, 22.0f },
                                          std::pair{ 2, 24.0f }));
 
