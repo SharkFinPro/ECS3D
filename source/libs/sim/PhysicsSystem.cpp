@@ -749,11 +749,14 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     push(*held, -squeezed * freeDirection, point, false, dt);
   }
 
-  // What rests on the body presses it into this contact too, and passes on to a resting support below.
-  const float load = impulse + pair.body.body->getStackedLoad() * std::max(pair.normal.y, 0.0f);
+  // What rests on the body presses it into this contact too, and passes on to a resting support below. Both are
+  // taken along the support's normal, since on a slope the part along world up would shed a cosine per level.
+  const float load = impulse + pair.body.body->getStackedLoad() *
+                               std::max(glm::dot(pair.normal, supportNormalOf(*pair.body.body)), 0.0f);
   if (pair.other.resting && pair.normal.y > 0.0f)
   {
-    pair.other.body->setStackedLoad(pair.other.body->getStackedLoad() + load * pair.normal.y);
+    const float passedOn = load * std::max(glm::dot(pair.normal, supportNormalOf(*pair.other.body)), 0.0f);
+    pair.other.body->setStackedLoad(pair.other.body->getStackedLoad() + passedOn);
   }
 
   applyFriction(pair, point, load, faceRadius > 0.0f && !pair.lineContact, dt);

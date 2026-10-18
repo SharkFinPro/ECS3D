@@ -25,6 +25,11 @@ namespace {
   // resolved before the lower box is pushed back up. A box settles within this much of that per level.
   constexpr float sinkPerLevel = 0.2f;
 
+  // Near the friction angle a settled stack creeps by float noise that differs between platforms, so the
+  // distance from the start gets this much extra there. A slide still fails the settled and velocity checks.
+  constexpr float steepSlope = 20.0f;
+  constexpr float steepSlack = 0.3f;
+
   // Boxes stacked on a static box tilted about z, each turned like it and resting flush on the one below.
   struct SlopeStack {
     fixtures::Scene scene = fixtures::makeScene();
@@ -105,6 +110,7 @@ class StackOnSlope : public testing::TestWithParam<std::pair<int, float>> {};
 TEST_P(StackOnSlope, BelowTheFrictionAngleStaysPut)
 {
   const auto [count, degrees] = GetParam();
+  const float slack = degrees > steepSlope ? steepSlack : 0.0f;
   SlopeStack stack(count, degrees);
 
   stack.run(100);
@@ -117,7 +123,7 @@ TEST_P(StackOnSlope, BelowTheFrictionAngleStaysPut)
 
     EXPECT_LT(glm::distance(stack.positionOf(level), settled[level]), 1e-3f);
     EXPECT_LT(glm::distance(stack.positionOf(level), stack.start[level]),
-              sinkPerLevel * static_cast<float>(level) + 0.02f);
+              sinkPerLevel * static_cast<float>(level) + 0.02f + slack);
     EXPECT_LT(glm::length(stack.bodies[level]->getVelocity()), 1e-3f);
 
     if (level > 0)
@@ -130,7 +136,11 @@ TEST_P(StackOnSlope, BelowTheFrictionAngleStaysPut)
 INSTANTIATE_TEST_SUITE_P(PhysicsSlopeStack, StackOnSlope,
                          testing::Values(std::pair{ 2, 15.0f }, std::pair{ 3, 15.0f }, std::pair{ 4, 15.0f },
                                          std::pair{ 2, 10.0f }, std::pair{ 3, 20.0f },
-                                         std::pair{ 2, 0.0f }, std::pair{ 3, 0.0f }));
+                                         std::pair{ 2, 0.0f }, std::pair{ 3, 0.0f },
+                                         // Friction 0.5 holds up to about 26.6 degrees. Closer to it, a settled stack's
+                                         // creep depends on the platform's float rounding.
+                                         std::pair{ 2, 22.0f }, std::pair{ 3, 22.0f },
+                                         std::pair{ 2, 24.0f }));
 
 TEST(PhysicsSlopeStack, ATwoBoxStackHoldsWhateverTheMassesInIt)
 {
@@ -155,6 +165,33 @@ TEST(PhysicsSlopeStack, ATwoBoxStackHoldsWhateverTheMassesInIt)
   }
 }
 
+TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
+{
+  constexpr int count = 5;
+  SlopeStack stack(count, 20.0f);
+  stack.run(100);
+
+  // Each box presses its support with a tick of its own weight along the normal, and the support passes what rests
+  // on it on whole, so every level holds one box's load more than the level above it. Projected onto world up,
+  // what a level passes on would shrink by the cosine of the slope at every level below it.
+  const auto& body = *stack.bodies[0];
+  const float perBox = body.getMass() * -body.getGravity() * dt * 0.1f * glm::dot(stack.normal, glm::vec3(0, 1, 0));
+
+  for (int tick = 0; tick < 10; ++tick)
+  {
+    stack.run(1);
+
+    // The top box's own contact records no load on the box below it, so the comparison stops short of the top.
+    for (int level = 0; level + 2 < count; ++level)
+    {
+      SCOPED_TRACE(testing::Message() << "tick " << tick << ", level " << level);
+
+      const float added = stack.bodies[level]->getStackedLoad() - stack.bodies[level + 1]->getStackedLoad();
+      EXPECT_NEAR(added, perBox, 0.01f * perBox);
+    }
+  }
+}
+
 TEST(PhysicsSlopeStack, AStackAboveTheFrictionAngleSlides)
 {
   for (const int count : { 2, 3 })
@@ -166,6 +203,8 @@ TEST(PhysicsSlopeStack, AStackAboveTheFrictionAngleSlides)
     holds.run(40);
     SlopeStack slides(count, 40.0f);
     slides.run(40);
+    SlopeStack justAbove(count, 34.0f);
+    justAbove.run(40);
 
     for (size_t level = 0; level < static_cast<size_t>(count); ++level)
     {
@@ -173,6 +212,7 @@ TEST(PhysicsSlopeStack, AStackAboveTheFrictionAngleSlides)
 
       EXPECT_LT(holds.slidDownhill(level), 0.3f);
       EXPECT_GT(slides.slidDownhill(level), 2.0f);
+      EXPECT_GT(justAbove.slidDownhill(level), 2.0f);
     }
   }
 }
