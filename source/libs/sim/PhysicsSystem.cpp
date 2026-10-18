@@ -749,11 +749,14 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     push(*held, -squeezed * freeDirection, point, false, dt);
   }
 
-  // What rests on the body presses it into this contact too, and passes on to a resting support below.
-  const float load = impulse + pair.body.body->getStackedLoad() * std::max(pair.normal.y, 0.0f);
+  // What rests on the body presses it into this contact too, and passes on to a resting support below. Both are
+  // taken along the support's normal, since on a slope the part along world up would shed a cosine per level.
+  const float load = impulse + pair.body.body->getStackedLoad() *
+                               std::max(glm::dot(pair.normal, supportNormalOf(*pair.body.body)), 0.0f);
   if (pair.other.resting && pair.normal.y > 0.0f)
   {
-    pair.other.body->setStackedLoad(pair.other.body->getStackedLoad() + load * pair.normal.y);
+    const float passedOn = load * std::max(glm::dot(pair.normal, supportNormalOf(*pair.other.body)), 0.0f);
+    pair.other.body->setStackedLoad(pair.other.body->getStackedLoad() + passedOn);
   }
 
   applyFriction(pair, point, load, faceRadius > 0.0f && !pair.lineContact, dt);
@@ -1052,10 +1055,10 @@ float PhysicsSystem::frictionOf(const Pair& pair)
 
 float PhysicsSystem::holdingCapacity(const Side& side, const glm::vec3& direction)
 {
-  // What the side presses its support with this tick: its own fall, which that contact is about to stop, and
-  // what is stacked on it.
-  const float pressing = side.body->getMass() * std::max(-side.body->getVelocity().y, 0.0f) +
-                         side.body->getStackedLoad();
+  // What the side presses its support with this tick: its own fall into the support, which that contact is about
+  // to stop, and what is stacked on it.
+  const float fall = std::max(-glm::dot(side.body->getVelocity(), supportNormalOf(*side.body)), 0.0f);
+  const float pressing = side.body->getMass() * fall + side.body->getStackedLoad();
 
   return remainingHold(side.body->getHeldImpulse(), direction, std::max(side.body->getFriction(), 0.0f) * pressing);
 }
