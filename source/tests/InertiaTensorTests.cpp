@@ -450,7 +450,8 @@ TEST(InertiaTensor, ACachedHullDistributionFollowsEveryChangeThatMovesTheWorldVe
   expectCacheFollows(*collider, [&] { collider->setScale({ 3, 0.5f, 1 }); });
   expectCacheFollows(*collider, [&] { collider->setRotation({ 15, 25, 35 }); });
   expectCacheFollows(*collider, [&] {
-    ASSERT_TRUE(collider->setHull(*buildConvexHull(std::vector<glm::vec3>{ { 0, 0, 0 }, { 2, 0, 0 }, { 0, 3, 0 }, { 0, 0, 4 } })));
+    const std::vector<glm::vec3> points{ { 0, 0, 0 }, { 2, 0, 0 }, { 0, 3, 0 }, { 0, 0, 4 } };
+    ASSERT_TRUE(collider->setHull(*buildConvexHull(points)));
   });
 }
 
@@ -476,4 +477,34 @@ TEST(InertiaTensor, AnUnchangedHullIsServedFromItsCache)
   EXPECT_EQ(collider->getMassCache()->generation, generation);
   EXPECT_TRUE(sameDistribution(first, second));
   expectMatrix(inertia::worldTensor(object.get(), *transformOf(object)), tensor, 1e-6f);
+
+  // A planted value at the current generation is returned as is, so a hit is not a recompute.
+  constexpr float sentinel = 123.0f;
+  collider->setMassCache({ generation, sentinel, glm::vec3(0.0f), glm::mat3(0.0f) });
+  EXPECT_FLOAT_EQ(inertia::of(*collider).volume, sentinel);
+
+  transformOf(object)->setPosition({ 4, 5, 6 });
+  const auto regenerated = inertia::of(*collider);
+  EXPECT_GT(collider->getWorldVerticesGeneration(), generation);
+  EXPECT_NEAR(regenerated.volume, first.volume, tolerance);
+}
+
+TEST(InertiaTensor, ACacheFromAnotherGenerationIsIgnored)
+{
+  const auto scene = makeScene();
+  const auto object = addObject(scene, "Hull");
+  const auto collider = addHull(object);
+  ASSERT_TRUE(collider->setHull(convexFixtures::tetrahedron()));
+
+  const auto real = inertia::of(*collider);
+  const auto generation = collider->getWorldVerticesGeneration();
+
+  for (const auto other : { generation - 1, generation + 1 })
+  {
+    collider->setMassCache({ other, 123.0f, glm::vec3(0.0f), glm::mat3(0.0f) });
+
+    const auto shape = inertia::of(*collider);
+    EXPECT_TRUE(sameDistribution(shape, real));
+    EXPECT_EQ(collider->getMassCache()->generation, generation);
+  }
 }

@@ -512,14 +512,42 @@ TEST(ConvexMeshCollider, TheMassCacheIsDerivedStateOutsideTheSavedForm)
   ASSERT_TRUE(source->getMassCache().has_value());
   EXPECT_FLOAT_EQ(source->getMassCache()->volume, 4.0f);
 
+  // Seeded first, so an empty cache afterward is a reset and not a fresh object.
   ConvexMeshCollider loaded;
+  loaded.setMassCache(cache);
+  ASSERT_TRUE(loaded.getMassCache().has_value());
   loaded.loadFromJSON(source->serialize());
   EXPECT_FALSE(loaded.getMassCache().has_value());
 
   ConvexMeshCollider fromWire;
+  fromWire.setMassCache(cache);
+  ASSERT_TRUE(fromWire.getMassCache().has_value());
   unpackInto(fromWire, packed(*source));
   EXPECT_FALSE(fromWire.getMassCache().has_value());
+}
 
-  source->setPosition({ 5.0f, 0.0f, 0.0f });
-  EXPECT_FALSE(source->getMassCache().has_value());
+TEST(ConvexMeshCollider, EveryGeometryChangeClearsTheMassCache)
+{
+  const auto scene = makeScene();
+  const auto object = fixtures::addObject(scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  object->addComponent(hull);
+
+  ConvexMeshCollider::MassCache cache;
+  cache.volume = 4.0f;
+
+  const auto expectCleared = [&](const char* what, const auto& change)
+  {
+    hull->setMassCache(cache);
+    ASSERT_TRUE(hull->getMassCache().has_value()) << what;
+    change();
+    EXPECT_FALSE(hull->getMassCache().has_value()) << what;
+  };
+
+  expectCleared("setPosition", [&] { hull->setPosition({ 1.0f, 0.0f, 0.0f }); });
+  expectCleared("setScale", [&] { hull->setScale({ 2.0f, 2.0f, 2.0f }); });
+  expectCleared("setRotation", [&] { hull->setRotation({ 0.0f, 30.0f, 0.0f }); });
+  expectCleared("setHull", [&] { EXPECT_TRUE(hull->setHull(tetrahedron())); });
+  expectCleared("start", [&] { hull->start(); });
+  expectCleared("stop", [&] { hull->stop(); });
 }
