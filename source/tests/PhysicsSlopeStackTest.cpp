@@ -138,9 +138,9 @@ INSTANTIATE_TEST_SUITE_P(PhysicsSlopeStack, StackOnSlope,
                                          std::pair{ 2, 10.0f }, std::pair{ 3, 20.0f },
                                          std::pair{ 2, 0.0f }, std::pair{ 3, 0.0f },
                                          // Friction 0.5 holds up to about 26.6 degrees. Closer to it, a settled stack's
-                                         // creep depends on the platform's float rounding.
+                                         // creep depends on the platform's float rounding, and the slack allows for it.
                                          std::pair{ 2, 22.0f }, std::pair{ 3, 22.0f },
-                                         std::pair{ 2, 24.0f }));
+                                         std::pair{ 2, 24.0f }, std::pair{ 3, 24.0f }, std::pair{ 3, 25.0f }));
 
 TEST(PhysicsSlopeStack, ATwoBoxStackHoldsWhateverTheMassesInIt)
 {
@@ -177,12 +177,14 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
   const auto& body = *stack.bodies[0];
   const float perBox = body.getMass() * -body.getGravity() * dt * 0.1f * glm::dot(stack.normal, glm::vec3(0, 1, 0));
 
+  // A top box that slid off would leave the level under it nothing to pass on; past the face's edge it would tip off.
+  EXPECT_LT(std::fabs(glm::dot(stack.positionOf(count - 1) - stack.positionOf(count - 2), stack.downhill)), 1.0f);
+
   for (int tick = 0; tick < 10; ++tick)
   {
     stack.run(1);
 
-    // The top box's own contact records no load on the box below it, so the comparison stops short of the top.
-    for (int level = 0; level + 2 < count; ++level)
+    for (int level = 0; level + 1 < count; ++level)
     {
       SCOPED_TRACE(testing::Message() << "tick " << tick << ", level " << level);
 

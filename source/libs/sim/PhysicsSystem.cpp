@@ -637,6 +637,12 @@ PhysicsSystem::Pair PhysicsSystem::pairOf(RigidBody& body, Transform& transform,
   return pair;
 }
 
+PhysicsSystem::Pair PhysicsSystem::mirrored(const Pair& pair)
+{
+  // The same contact seen from the other body, so friction treats a resting body below as it does from above.
+  return { pair.other, pair.body, -pair.normal, pair.lineContact, pair.lineContact && !pair.lineOnOther };
+}
+
 void PhysicsSystem::markRolling(Side& side, const std::shared_ptr<Collider>& collider)
 {
   if (isSphere(collider))
@@ -712,6 +718,9 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
   const Side* held = pair.other.resting && pair.normal.y > 0.0f ? &pair.other
                      : pair.body.resting && pair.normal.y < 0.0f ? &pair.body
                                                                  : nullptr;
+  // The free side is the one pressing on the held one.
+  const Side& freeSide = held == &pair.body ? pair.other : pair.body;
+  const auto freeDirection = held == &pair.body ? -pair.normal : pair.normal;
   float impulse = 0.0f;
 
   if (!held)
@@ -728,10 +737,6 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
   }
   else
   {
-    // The free side is the one pressing down on the held one.
-    const Side& freeSide = held == &pair.other ? pair.body : pair.other;
-    const auto freeDirection = held == &pair.other ? pair.normal : -pair.normal;
-
     const float freeResistance = glm::dot(freeDirection, responseAt(freeSide, point, freeDirection, true));
     if (freeResistance <= 0.0f)
     {
@@ -751,15 +756,16 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
 
   // What rests on the body presses it into this contact too, and passes on to a resting support below. Both are
   // taken along the support's normal, since on a slope the part along world up would shed a cosine per level.
-  const float load = impulse + pair.body.body->getStackedLoad() *
-                               std::max(glm::dot(pair.normal, supportNormalOf(*pair.body.body)), 0.0f);
-  if (pair.other.resting && pair.normal.y > 0.0f)
+  const float load = impulse + freeSide.body->getStackedLoad() *
+                               std::max(glm::dot(freeDirection, supportNormalOf(*freeSide.body)), 0.0f);
+  if (held)
   {
-    const float passedOn = load * std::max(glm::dot(pair.normal, supportNormalOf(*pair.other.body)), 0.0f);
-    pair.other.body->setStackedLoad(pair.other.body->getStackedLoad() + passedOn);
+    const float passedOn = load * std::max(glm::dot(freeDirection, supportNormalOf(*held->body)), 0.0f);
+    held->body->setStackedLoad(held->body->getStackedLoad() + passedOn);
   }
 
-  applyFriction(pair, point, load, faceRadius > 0.0f && !pair.lineContact, dt);
+  // Met from below, the contact's friction is resolved as it would be from above, where the support takes the drag.
+  applyFriction(held == &pair.body ? mirrored(pair) : pair, point, load, faceRadius > 0.0f && !pair.lineContact, dt);
   applySpinFriction(pair, load, faceRadius, dt);
   applyRollingResistance(pair, point, load, dt);
 }

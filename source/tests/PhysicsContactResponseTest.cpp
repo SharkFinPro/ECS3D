@@ -88,6 +88,69 @@ TEST(PhysicsIntegration, ABodyLandingOnAnotherRestingOnASupportStopsAsOnStaticGe
 }
 
 namespace {
+  struct SlidingLanding {
+    glm::vec3 upperVelocity;
+    glm::vec3 lowerVelocity;
+    float lowerLoad;
+  };
+
+  // A sliding box lands on one resting beneath it, with the contact resolved from the upper box's pass or from
+  // the lower one's, as when the upper had no contact in its own pass.
+  SlidingLanding landSlidingOnARestingBox(const bool fromBelow)
+  {
+    const auto scene = makeScene();
+
+    const auto lower = addObject(scene, "Lower", { 0, 0, 0 });
+    const auto lowerBody = addBody(lower, false);
+    const auto upper = addObject(scene, "Upper", { 0, 0.99f, 0 });
+    const auto upperBody = addBody(upper, false);
+
+    lowerBody->setFriction(0.5f);
+    lowerBody->setFalling(false);
+    lowerBody->setNextFalling(false);
+    upperBody->setFriction(0.5f);
+    upperBody->setFalling(true);
+    upperBody->setVelocity({ 0.05f, -0.2f, 0 });
+
+    const std::array<glm::vec3, 4> contactFace{
+      glm::vec3{ -0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
+      glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, 0.5f }
+    };
+
+    if (fromBelow)
+    {
+      PhysicsSystem::handleCollision(*lowerBody, ownColliderOf(*lowerBody), upper, { 0, -0.01f, 0 }, contactFace, dt);
+    }
+    else
+    {
+      PhysicsSystem::handleCollision(*upperBody, ownColliderOf(*upperBody), lower, { 0, 0.01f, 0 }, contactFace, dt);
+    }
+
+    return { upperBody->getVelocity(), lowerBody->getVelocity(), lowerBody->getStackedLoad() };
+  }
+}
+
+TEST(PhysicsIntegration, ABoxLandingOnARestingBoxGetsTheSameResponseWhicheverSideResolvesTheContact)
+{
+  const float landingImpulse = defaultMass * 0.2f;
+
+  for (const bool fromBelow : { false, true })
+  {
+    SCOPED_TRACE(fromBelow ? "from below" : "from above");
+
+    // Friction at 0.5 of the landing impulse stops the slide, and the lower box's own support holds the drag.
+    const auto landing = landSlidingOnARestingBox(fromBelow);
+
+    expectNear("upper velocity", landing.upperVelocity, { 0, 0, 0 });
+    expectNear("lower velocity", landing.lowerVelocity, { 0, 0, 0 });
+    EXPECT_NEAR(landing.lowerLoad, landingImpulse, 1e-4f);
+  }
+
+  expectNear("from below against above", landSlidingOnARestingBox(true).upperVelocity,
+             landSlidingOnARestingBox(false).upperVelocity);
+}
+
+namespace {
   // A body of mass 10 lands at unit speed on one of mass 0.1 resting on a support, touching along normal, the
   // way a heavy box comes down on a small one at an angle in a pile.
   struct Squeeze {

@@ -101,6 +101,8 @@ private:
                                    const std::shared_ptr<Collider>& collider, const std::shared_ptr<Object>& other,
                                    const glm::vec3& normal);
 
+  [[nodiscard]] static Pair mirrored(const Pair& pair);
+
   // The lever arm of the friction against turning about the normal: a face under the center of mass, or a
   // capsule's line contact under it, which also marks the pair as a line contact. Zero otherwise.
   [[nodiscard]] static float twistRadius(Pair& pair, const std::shared_ptr<Collider>& collider,
