@@ -19,6 +19,7 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
 
   # compile_commands.json, which is what gives clangd and the IDEs navigation across the whole tree, and
   # what clang-tidy would read if it is ever wired up. Only meaningful for the generators that emit it
@@ -75,6 +76,29 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
       add_link_options(--coverage)
     else()
       message(WARNING "ECS3D_COVERAGE is on but ${CMAKE_CXX_COMPILER_ID} has no coverage flags here; building without them.")
+    endif()
+  endif()
+
+  # The profile preset. Like the others it is a whole-build decision, so the flags are set before
+  # anything is added and reach every target. RelWithDebInfo already brings optimization and debug info.
+  option(ECS3D_PROFILE "Build optimized with frame pointers and linker settings that keep profiles readable" OFF)
+
+  if (ECS3D_PROFILE)
+    if (NOT CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+      message(WARNING "ECS3D_PROFILE is meant for the RelWithDebInfo build type, not '${CMAKE_BUILD_TYPE}'.")
+    endif()
+
+    if (MSVC)
+      # RelWithDebInfo's /DEBUG turns /OPT:REF and /OPT:ICF off, leaving a larger and slower binary than
+      # Release. REF is turned back on; ICF stays off because folding identical functions makes a
+      # profiler attribute samples to the wrong one.
+      add_link_options(/DEBUG /OPT:REF /OPT:NOICF /INCREMENTAL:NO)
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+      # Frame pointers let perf and other sampling profilers unwind without DWARF; -g comes from the
+      # build type.
+      add_compile_options(-fno-omit-frame-pointer)
+    else()
+      message(WARNING "ECS3D_PROFILE is on but ${CMAKE_CXX_COMPILER_ID} has no profiling flags here; building without them.")
     endif()
   endif()
 endif()

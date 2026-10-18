@@ -116,3 +116,24 @@ With Clang, including Apple Clang on macOS, add `--gcov-executable "llvm-cov gco
 The managed suite writes its cobertura report to `cmake-build-ecs3d-coverage/coverage/managed`. On Windows,
 run the test executable under `Microsoft.CodeCoverage.Console collect "<exe>" --output-format cobertura`.
 CI runs this preset on Linux gcc and uploads the reports as the `coverage-report` artifact.
+
+### Profiling
+
+The `ecs3d-profile` preset builds with `RelWithDebInfo`: Release optimization plus full debug info and
+frame pointers, so a sampling profiler can unwind call stacks and resolve them to source lines.
+
+```bash
+cmake --preset ecs3d-profile
+cmake --build cmake-build-ecs3d-profile
+```
+
+Run the apps from `cmake-build-ecs3d-profile/bin`, as with any other preset.
+
+- **Windows:** the PDBs sit beside the executables. Visual Studio's Performance Profiler, ETW-based tools
+  and VTune read them. The preset keeps the linker's `/OPT:REF` but not `/OPT:ICF`, which would fold
+  identical functions together and blur which one a sample belongs to.
+- **Linux:** `perf record --call-graph fp ./ECS3DServer`, then `perf report`.
+- **macOS:** profile the executable with Instruments.
+
+The managed assemblies (scripts and the network transport) are always built in Release, whatever the
+preset.
