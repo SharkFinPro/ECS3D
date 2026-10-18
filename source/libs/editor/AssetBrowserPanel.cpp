@@ -451,6 +451,11 @@ void AssetBrowserPanel::displayCreateItems()
     beginCreate(PendingAsset::Type::Scene, "", assetNaming::uniqueSceneName(*m_assetRegistry, "New Scene"));
   }
 
+  if (ImGui::MenuItem("New Prefab"))
+  {
+    beginCreate(PendingAsset::Type::Prefab, "", assetNaming::uniquePrefabName(*m_assetRegistry, "New Prefab"));
+  }
+
   if (ImGui::MenuItem("New Script"))
   {
     beginCreate(PendingAsset::Type::Script, "",
@@ -509,6 +514,11 @@ void AssetBrowserPanel::displayCreateAssetPopup()
               scriptFileExists(m_pending.name)))
     {
       m_createError = std::string("A script named ") + m_pending.name + " already exists.";
+    }
+    else if (m_pending.type == PendingAsset::Type::Prefab &&
+             assetNaming::isNameTaken(*m_assetRegistry, AssetType::Prefab, m_pending.name))
+    {
+      m_createError = std::string("A prefab named ") + m_pending.name + " already exists.";
     }
     else
     {
@@ -574,6 +584,10 @@ void AssetBrowserPanel::commitAsset()
       break;
     case PendingAsset::Type::Scene:
       addAsset = { { "assetType", "scene" }, { "uuid", uuid }, { "name", name } };
+      break;
+    case PendingAsset::Type::Prefab:
+      addAsset = { { "assetType", "prefab" }, { "uuid", uuid }, { "name", name },
+                   { "body", assetNaming::emptyPrefabBody(name, uuids::to_string(newUUID())) } };
       break;
     case PendingAsset::Type::Script:
     {

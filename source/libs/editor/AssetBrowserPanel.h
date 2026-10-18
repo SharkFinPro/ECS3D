@@ -49,7 +49,7 @@ private:
 
   // A model/texture import or scene/script creation awaiting a name in the create popup.
   struct PendingAsset {
-    enum class Type { None, Model, Texture, Scene, Script } type = Type::None;
+    enum class Type { None, Model, Texture, Scene, Script, Prefab } type = Type::None;
     std::string sourcePath; // the picked file, for Model/Texture
     char name[128] = {};
   };
