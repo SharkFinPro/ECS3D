@@ -4,8 +4,11 @@
 #include "Collider.h"
 #include "ConvexHull.h"
 #include "ConvexHullValidation.h"
+#include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <uuid.h>
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 // A convex hull collider. The hull lives inline in the component (local-space vertices and triangle
@@ -14,6 +17,14 @@
 // default BoxCollider until a model is picked.
 class ConvexMeshCollider final : public Collider {
 public:
+  // The hull's world-space mass distribution, filled by the sim. Derived state: never serialized or packed.
+  struct MassCache {
+    uint64_t generation = 0;
+    float volume = 0.0f;
+    glm::vec3 centroid{ 0.0f };
+    glm::mat3 covariance{ 0.0f };
+  };
+
   ConvexMeshCollider();
 
   // Local (collider-offset) accessors for the editor; getPosition/getScale/getRotation below are the
@@ -36,6 +47,13 @@ public:
 
   // The hull's vertices under the collider's current world placement, refreshed when the transform moved.
   [[nodiscard]] const std::vector<glm::vec3>& getWorldVertices();
+
+  // Counts the times the world vertices were rebuilt; a MassCache is current only while its generation matches.
+  [[nodiscard]] uint64_t getWorldVerticesGeneration() const;
+
+  [[nodiscard]] const std::optional<MassCache>& getMassCache() const;
+
+  void setMassCache(const MassCache& cache);
 
   [[nodiscard]] nlohmann::json serialize() override;
 
@@ -63,6 +81,10 @@ private:
   std::vector<glm::vec3> m_worldVertices;
 
   uint64_t m_currentTransformUpdateID = 255;
+
+  uint64_t m_worldVerticesGeneration = 0;
+
+  std::optional<MassCache> m_massCache;
 
   // Editing the collider's own offset or hull doesn't bump the transform's update id, so force a rebuild.
   bool m_meshDirty = true;

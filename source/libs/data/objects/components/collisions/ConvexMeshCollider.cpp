@@ -195,6 +195,21 @@ const std::vector<glm::vec3>& ConvexMeshCollider::getWorldVertices()
   return m_worldVertices;
 }
 
+uint64_t ConvexMeshCollider::getWorldVerticesGeneration() const
+{
+  return m_worldVerticesGeneration;
+}
+
+const std::optional<ConvexMeshCollider::MassCache>& ConvexMeshCollider::getMassCache() const
+{
+  return m_massCache;
+}
+
+void ConvexMeshCollider::setMassCache(const MassCache& cache)
+{
+  m_massCache = cache;
+}
+
 nlohmann::json ConvexMeshCollider::serialize()
 {
   const auto position = m_position.getInitialValue();
@@ -362,6 +377,7 @@ void ConvexMeshCollider::generateWorldVertices(const std::shared_ptr<Transform>&
   }
 
   m_currentTransformUpdateID = transform->getWorldUpdateID();
+  ++m_worldVerticesGeneration;
 }
 
 std::shared_ptr<Transform> ConvexMeshCollider::ownerTransform()
@@ -399,5 +415,6 @@ void ConvexMeshCollider::assign(Data data)
 void ConvexMeshCollider::invalidateGeometry()
 {
   m_meshDirty = true;
+  m_massCache.reset();
   invalidateBoundingBox();
 }

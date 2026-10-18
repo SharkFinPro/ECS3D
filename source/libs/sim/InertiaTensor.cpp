@@ -68,7 +68,19 @@ namespace {
 
   inertia::Distribution hullOf(ConvexMeshCollider& collider)
   {
-    return inertia::hull(collider.getWorldVertices(), collider.getHull().indices);
+    // Refresh the vertices first: the generation only moves when they are rebuilt.
+    const auto& vertices = collider.getWorldVertices();
+    const auto generation = collider.getWorldVerticesGeneration();
+
+    if (const auto& cache = collider.getMassCache(); cache && cache->generation == generation)
+    {
+      return { cache->volume, cache->centroid, cache->covariance };
+    }
+
+    const auto shape = inertia::hull(vertices, collider.getHull().indices);
+    collider.setMassCache({ generation, shape.volume, shape.centroid, shape.covariance });
+
+    return shape;
   }
 
   void collect(const Object& object, std::vector<inertia::Distribution>& shapes)
