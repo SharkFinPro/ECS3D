@@ -105,7 +105,7 @@
   carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h` and `KeyHoldRepeat.h` are reached
   through the `libs/editor` include path alone. The header-only `apps/server/ServerPolicy.h`
   (mutation authorization, scene-control plans, token generation check) is covered the same way, by including it, and the
-  header-only `libs/net/EditToken.h` is reached through the `libs/net` include path. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
+  header-only `libs/net/EditToken.h` is reached through the `libs/net` include path. `PresetsTest` reads `CMakePresets.json` from the repo root via the `ECS3D_SOURCE_DIR` compile definition. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
   `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
   `PROJECT_IS_TOP_LEVEL` and `BUILD_TESTING` together — `BUILD_TESTING` is a cache variable a parent project may
   already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching

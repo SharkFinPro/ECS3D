@@ -28,7 +28,7 @@
       "name": "ecs3d-release",
       "inherits": "ecs3d-base",
       "displayName": "ECS3D Release",
-      "description": "Optimized build. The configuration the engine is run and profiled in, and the second build type CI covers. Writes to cmake-build-ecs3d-release.",
+      "description": "Optimized build. The configuration the engine is run in, and the second build type CI covers. Writes to cmake-build-ecs3d-release.",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }

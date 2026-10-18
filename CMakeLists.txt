@@ -89,9 +89,9 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     endif()
 
     if (MSVC)
-      # RelWithDebInfo's /DEBUG turns /OPT:REF and /OPT:ICF off, leaving a larger and slower binary than
-      # Release. REF is turned back on; ICF stays off because folding identical functions makes a
-      # profiler attribute samples to the wrong one.
+      # /DEBUG turns /OPT:REF off, leaving a larger and slower binary than Release, so REF is set back
+      # on. /DEBUG already implies NOICF; it is stated to keep ICF off, since folding identical functions
+      # makes a profiler attribute samples to the wrong one. /INCREMENTAL:NO conflicts with /OPT.
       add_link_options(/DEBUG /OPT:REF /OPT:NOICF /INCREMENTAL:NO)
     elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
       # Frame pointers let perf and other sampling profilers unwind without DWARF; -g comes from the

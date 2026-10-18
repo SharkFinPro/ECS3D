@@ -40,7 +40,7 @@ cmake --build cmake-build-ecs3d-debug
 ```
 
 `ecs3d-release` is the same with optimizations on, writing to `cmake-build-ecs3d-release`, so the two can
-coexist.
+coexist. For profiling, see [Profiling](#profiling).
 
 The C# projects are built **through CMake**, never directly. Running `dotnet build` or `dotnet publish`
 on them produces a second set of generated attributes and the next CMake build fails with `CS0579:
