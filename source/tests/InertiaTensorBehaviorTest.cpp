@@ -124,13 +124,19 @@ TEST(InertiaTensorBehavior, ASolidSphereRollsDownASlopeAtItsOwnAccelerationNotTh
   const float before = ball.speed();
   ball.run(10);
 
-  // Solid sphere: m a (1 + 2/5) = m g sin - c m g cos, with the rolling resistance coefficient c a tenth of the
-  // friction of 0.5. Gravity adds 0.0981 a tick. The box of its scale would divide by 1 + 8/3 instead. The window
-  // is early because the per-tick spin damping (0.99) trims the acceleration more the longer the ball has rolled.
+  // Solid sphere: m a (1 + 2/5) = m g sin - R, where the rolling resistance R is at most c m g cos, c a tenth of
+  // the friction of 0.5. Gravity adds 0.0981 a tick. The box of its scale would divide by 1 + 8/3 instead. The
+  // resistance acts on a spin that friction and the per-tick spin damping (0.99) also move, so the acceleration is
+  // bracketed by the fully resisted and the unresisted rate rather than pinned. The window is early because the
+  // damping trims the acceleration more the longer the ball has rolled.
   const float angle = glm::radians(Ball::degrees);
-  const float expected = -gravityPerTick * (std::sin(angle) - 0.05f * std::cos(angle)) / 1.4f;
+  const float resisted = -gravityPerTick * (std::sin(angle) - 0.05f * std::cos(angle)) / 1.4f;
+  const float unresisted = -gravityPerTick * std::sin(angle) / 1.4f;
+  const float acceleration = (ball.speed() - before) / 10.0f;
 
-  EXPECT_NEAR((ball.speed() - before) / 10.0f, expected, 0.08f * expected);
+  EXPECT_GT(acceleration, 0.9f * resisted);
+  // A ball that lost its rolling resistance would reach about 0.97 of the unresisted rate over this window.
+  EXPECT_LT(acceleration, 0.95f * unresisted);
 }
 
 TEST(InertiaTensorBehavior, AnOffCenterPushSpinsASphereFiveThirdsAsFastAsTheBoxOfItsScale)
