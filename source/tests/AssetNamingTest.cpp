@@ -34,7 +34,8 @@ namespace {
 
     void addPrefab(const std::string& name)
     {
-      m_registry.registerAsset({ .uuid = makeUUID(++m_next), .type = AssetType::Prefab, .path = name });
+      m_registry.registerAsset({ .uuid = makeUUID(++m_next), .type = AssetType::Prefab, .path = name,
+                                 .body = "{}" });
     }
 
     void addScript(const std::string& className)
