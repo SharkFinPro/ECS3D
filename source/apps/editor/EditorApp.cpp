@@ -259,6 +259,8 @@ void EditorApp::setupSaveUI()
 {
   m_saveUI = std::make_shared<SaveUI>(m_projectSerializer.get(), m_renderer);
   m_saveUI->setLoadProjectCallback([this] { onLoadProject(); });
+  m_saveUI->setProjectRootCallback([this](const std::filesystem::path& root) { m_assetCache->setProjectRoot(root); });
+  m_saveUI->setStartupProject(m_options.project);
 }
 
 void EditorApp::launchServer()

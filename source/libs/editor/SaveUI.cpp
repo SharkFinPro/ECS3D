@@ -1,6 +1,7 @@
 #include "SaveUI.h"
 #include "GuiComponents.h"
 #include <Log.h>
+#include <ProjectPaths.h>
 #include <ProjectSerializer.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <imgui.h>
@@ -10,6 +11,7 @@
 #include <array>
 #include <fstream>
 #include <random>
+#include <system_error>
 #include <sstream>
 #include <vector>
 
@@ -46,6 +48,18 @@ void SaveUI::setLoadProjectCallback(LoadProjectCallback callback)
   m_onLoadProject = std::move(callback);
 }
 
+void SaveUI::setProjectRootCallback(ProjectRootCallback callback)
+{
+  m_onProjectRoot = std::move(callback);
+}
+
+void SaveUI::setStartupProject(const std::filesystem::path& argument)
+{
+  const auto location = locateProject(argument);
+  m_saveFile = location.projectFile.string();
+  m_projectRoot = location.root;
+}
+
 void SaveUI::setEditable(const bool editable)
 {
   m_editable = editable;
@@ -53,40 +67,85 @@ void SaveUI::setEditable(const bool editable)
 
 bool SaveUI::save()
 {
-  if (m_saveFile.empty() && !createSaveFile())
+  if (m_saveFile.empty())
   {
-    return false;
+    return saveAs();
   }
 
+  return writeProject(m_saveFile);
+}
+
+bool SaveUI::saveAs()
+{
+  std::filesystem::path folder;
+  return chooseSaveFolder(folder) && saveToFolder(folder);
+}
+
+bool SaveUI::writeProject(const std::string& file)
+{
   // Serialize the editor's replicated project (kept current by snapshots/deltas) straight to disk.
-  if (!m_projectSerializer->save(m_saveFile))
+  if (!m_projectSerializer->save(file))
   {
-    Log::error(LogCategory::editor, "Failed to save project to " + m_saveFile);
+    Log::error(LogCategory::editor, "Failed to save project to " + file);
     return false;
   }
 
   m_unsavedChanges.markSaved();
 
-  Log::info(LogCategory::editor, "Saved project to " + m_saveFile);
+  Log::info(LogCategory::editor, "Saved project to " + file);
   return true;
 }
 
-void SaveUI::saveAs()
+bool SaveUI::saveToFolder(const std::filesystem::path& folder)
 {
-  if (createSaveFile())
+  std::error_code error;
+  if (!ensureProjectFolders(folder, error))
   {
-    static_cast<void>(save());
+    Log::error(LogCategory::editor, "Could not create the project folder " + folder.string() + ": " + error.message());
+    return false;
+  }
+
+  copyProjectContent(m_projectRoot, folder, error);
+  if (error)
+  {
+    Log::error(LogCategory::editor, "Could not copy the project's assets and scripts to " + folder.string() + ": " +
+      error.message());
+    return false;
+  }
+
+  const auto file = projectFileInFolder(folder).string();
+  if (!writeProject(file))
+  {
+    return false;
+  }
+
+  m_saveFile = file;
+
+  if (folder != m_projectRoot)
+  {
+    setProjectRoot(folder);
+  }
+
+  return true;
+}
+
+void SaveUI::setProjectRoot(const std::filesystem::path& root)
+{
+  m_projectRoot = root;
+
+  if (m_onProjectRoot)
+  {
+    m_onProjectRoot(root);
   }
 }
 
 void SaveUI::open()
 {
-  if (!chooseSaveFile())
+  std::string file;
+  if (chooseProjectFile(file))
   {
-    return;
+    loadFromFile(file);
   }
-
-  loadFromFile(m_saveFile);
 }
 
 void SaveUI::requestNewProject()
@@ -111,30 +170,40 @@ bool SaveUI::isDirty() const
 
 void SaveUI::loadFromFile(const std::string& path)
 {
-  const std::ifstream f(path);
+  const auto location = locateProject(path);
+
+  const std::ifstream f(location.projectFile);
   if (!f.is_open())
   {
-    Log::error(LogCategory::editor, "Could not open project file: " + path);
+    Log::error(LogCategory::editor, "Could not open project file: " + location.projectFile.string());
     return;
   }
 
   std::stringstream buffer;
   buffer << f.rdbuf();
-  const std::string content = buffer.str();
 
-  m_saveFile = path;
+  if (!loadProjectBlob(buffer.str(), location.projectFile, location.root))
+  {
+    return;
+  }
 
-  loadProjectBlob(content);
-  Log::info(LogCategory::editor, "Opened project " + path);
+  Log::info(LogCategory::editor, "Opened project " + location.projectFile.string());
+
+  if (isLegacyProjectFile(location.projectFile))
+  {
+    Log::info(LogCategory::editor,
+      "This is a legacy project file: Save writes it in place, and Save As moves it into a project folder.");
+  }
 }
 
-void SaveUI::loadProjectBlob(const std::string& projectJson)
+bool SaveUI::loadProjectBlob(const std::string& projectJson, const std::filesystem::path& projectFile,
+                             const std::filesystem::path& root)
 {
   const auto json = nlohmann::json::parse(projectJson, nullptr, false);
   if (json.is_discarded())
   {
     Log::error(LogCategory::editor, "Project file is not valid JSON.");
-    return;
+    return false;
   }
 
   // Apply it locally for immediate feedback (the editor's replicated managers), then notify the app to
@@ -147,8 +216,14 @@ void SaveUI::loadProjectBlob(const std::string& projectJson)
   catch (const std::exception& e)
   {
     Log::error(LogCategory::editor, std::string("Failed to load project: ") + e.what());
-    return;
+    return false;
   }
+
+  m_saveFile = projectFile.string();
+
+  // Told on every load, even for the same folder: the project's asset records may differ. Before the load
+  // callback, so the asset cache resolves against the new folder from the first frame.
+  setProjectRoot(root);
 
   // A freshly loaded project has nothing unsaved yet.
   m_unsavedChanges.markSaved();
@@ -157,6 +232,8 @@ void SaveUI::loadProjectBlob(const std::string& projectJson)
   {
     m_onLoadProject();
   }
+
+  return true;
 }
 
 void SaveUI::createNewProject()
@@ -178,11 +255,10 @@ void SaveUI::createNewProject()
     { "currentSceneUUID", sceneUUID }
   };
 
-  m_saveFile = "";
-  loadProjectBlob(project.dump());
+  static_cast<void>(loadProjectBlob(project.dump(), {}, {}));
 }
 
-bool SaveUI::chooseSaveFile()
+bool SaveUI::chooseProjectFile(std::string& file)
 {
   if (NFD_Init() != NFD_OKAY)
   {
@@ -191,7 +267,7 @@ bool SaveUI::chooseSaveFile()
   }
 
   nfdu8char_t* outPath = nullptr;
-  const std::array<nfdu8filteritem_t, 1> filters { { { "ECS3D Project Files", "json" } } };
+  const std::array<nfdu8filteritem_t, 1> filters { { { "ECS3D Project Files", "ecs3d,json" } } };
 
   const nfdopendialogu8args_t args {
     .filterList = filters.data(),
@@ -206,14 +282,14 @@ bool SaveUI::chooseSaveFile()
     return false;
   }
 
-  m_saveFile = std::string(outPath);
+  file = std::string(outPath);
   NFD_FreePathU8(outPath);
   NFD_Quit();
 
   return true;
 }
 
-bool SaveUI::createSaveFile()
+bool SaveUI::chooseSaveFolder(std::filesystem::path& folder)
 {
   if (NFD_Init() != NFD_OKAY)
   {
@@ -222,23 +298,14 @@ bool SaveUI::createSaveFile()
   }
 
   nfdu8char_t* outPath = nullptr;
-  const std::array<nfdu8filteritem_t, 1> filters { { { "ECS3D Project Files", "json" } } };
 
-  const nfdsavedialogu8args_t args {
-    .filterList = filters.data(),
-    .filterCount = static_cast<nfdfiltersize_t>(filters.size()),
-    .defaultName = "project.json"
-  };
-
-  const nfdresult_t result = NFD_SaveDialogU8_With(&outPath, &args);
-
-  if (result != NFD_OKAY)
+  if (NFD_PickFolderU8(&outPath, nullptr) != NFD_OKAY)
   {
     NFD_Quit();
     return false;
   }
 
-  m_saveFile = std::string(outPath);
+  folder = std::filesystem::path(outPath);
   NFD_FreePathU8(outPath);
   NFD_Quit();
 

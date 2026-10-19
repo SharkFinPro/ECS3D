@@ -29,9 +29,17 @@ public:
 
   [[nodiscard]] std::shared_ptr<vke::VulkanEngine> getRenderer() const;
 
-  // The project folder asset paths resolve against first; empty means built-in assets only. Applies to loads
-  // that happen after the call.
+  // The project folder asset paths resolve against first; empty means built-in assets only. Every call
+  // schedules a reset of the loaded models, textures and render objects, so a project (re)opened under any
+  // root re-resolves its assets. The reset waits for applyPendingReset.
   void setProjectRoot(std::filesystem::path projectRoot);
+
+  [[nodiscard]] const std::filesystem::path& getProjectRoot() const;
+
+  // Runs a reset setProjectRoot scheduled. Called at the start of RenderSystem::variableUpdate, before any
+  // render object is submitted for the frame; the dropped vke objects wait for the device to idle in their
+  // destructors, so nothing a command buffer still uses is freed early.
+  void applyPendingReset();
 
   // Both return nullptr for an unknown uuid or an asset that fails to load (logged once per path).
   std::shared_ptr<vke::Model> getModel(const uuids::uuid& uuid);
@@ -113,6 +121,8 @@ private:
   const AssetRegistry* m_assetRegistry;
 
   std::filesystem::path m_projectRoot;
+
+  bool m_resetPending = false;
 
   // Keyed by asset uuid, so a record removed and re-added gets a fresh load; a failing asset is logged once
   // and not retried.

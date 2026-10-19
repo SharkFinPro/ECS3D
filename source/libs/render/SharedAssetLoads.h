@@ -49,6 +49,11 @@ public:
     return asset;
   }
 
+  void clear()
+  {
+    m_loads.clear();
+  }
+
 private:
   std::unordered_map<std::string, std::shared_ptr<T>> m_loads;
 };

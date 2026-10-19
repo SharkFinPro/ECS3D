@@ -5,6 +5,8 @@
 #include "GuiComponents.h"
 #include "Selection.h"
 #include <GpuAssetCache.h>
+#include <Log.h>
+#include <ProjectPaths.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
@@ -560,16 +562,26 @@ void AssetBrowserPanel::commitAsset()
   const auto assetUUID = newUUID();
   const std::string uuid = uuids::to_string(assetUUID);
 
-  // Copy an imported file into the project's assets dir (relative to the working dir = exe dir) so the
-  // GpuAssetCache can load it; then send the registry record to the authoritative server.
-  const auto importFile = [&](const char* dir) {
-    const std::filesystem::path destDir = dir;
-    std::filesystem::create_directories(destDir);
+  // Copy an imported file into the project folder's assets dir so the GpuAssetCache can load it; then send
+  // the registry record to the authoritative server. A project with no folder yet imports into the working
+  // dir (the exe dir), as before project folders.
+  const auto importFile = [&](const ImportKind kind) {
+    const auto& root = m_assetCache->getProjectRoot();
 
-    const auto dest = destDir / (name + std::filesystem::path(m_pending.sourcePath).extension().string());
-    std::filesystem::copy_file(m_pending.sourcePath, dest, std::filesystem::copy_options::overwrite_existing);
+    static bool warnedNoFolder = false;
+    if (root.empty() && !warnedNoFolder)
+    {
+      warnedNoFolder = true;
+      Log::info(LogCategory::editor,
+        "The project has no folder yet: imports are copied next to the editor, not into a project. Save it to a folder first.");
+    }
 
-    return dest.generic_string();
+    const auto destination = importDestination(root, m_pending.sourcePath, name, kind);
+    std::filesystem::create_directories(destination.absolute.parent_path());
+    std::filesystem::copy_file(m_pending.sourcePath, destination.absolute,
+                               std::filesystem::copy_options::overwrite_existing);
+
+    return destination.relative;
   };
 
   nlohmann::json addAsset;
@@ -577,10 +589,10 @@ void AssetBrowserPanel::commitAsset()
   switch (m_pending.type)
   {
     case PendingAsset::Type::Model:
-      addAsset = { { "assetType", "model" }, { "uuid", uuid }, { "path", importFile("assets/models") } };
+      addAsset = { { "assetType", "model" }, { "uuid", uuid }, { "path", importFile(ImportKind::model) } };
       break;
     case PendingAsset::Type::Texture:
-      addAsset = { { "assetType", "texture" }, { "uuid", uuid }, { "path", importFile("assets/textures") } };
+      addAsset = { { "assetType", "texture" }, { "uuid", uuid }, { "path", importFile(ImportKind::texture) } };
       break;
     case PendingAsset::Type::Scene:
       addAsset = { { "assetType", "scene" }, { "uuid", uuid }, { "name", name } };

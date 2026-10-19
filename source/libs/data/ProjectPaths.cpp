@@ -109,3 +109,92 @@ std::optional<std::filesystem::path> resolveAssetPath(const std::filesystem::pat
 
   return path;
 }
+
+std::filesystem::path projectFileInFolder(const std::filesystem::path& folder)
+{
+  return folder / projectFileName;
+}
+
+bool isLegacyProjectFile(const std::filesystem::path& file)
+{
+  return !file.empty() && !hasProjectExtension(file);
+}
+
+bool ensureProjectFolders(const std::filesystem::path& root, std::error_code& error)
+{
+  for (const auto& folder : { root, root / "assets", root / "scripts" })
+  {
+    std::filesystem::create_directories(folder, error);
+    if (error)
+    {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void copyProjectContent(const std::filesystem::path& from, const std::filesystem::path& to, std::error_code& error)
+{
+  error.clear();
+  if (from.empty() || to.empty())
+  {
+    return;
+  }
+
+  const auto source = std::filesystem::weakly_canonical(from, error);
+  if (error)
+  {
+    return;
+  }
+
+  const auto target = std::filesystem::weakly_canonical(to, error);
+  if (error)
+  {
+    return;
+  }
+
+  const auto relation = target.lexically_relative(source);
+  if (!relation.empty() && *relation.begin() != "..")
+  {
+    return;
+  }
+
+  for (const char* sub : { "assets", "scripts" })
+  {
+    if (!std::filesystem::is_directory(source / sub, error))
+    {
+      error.clear();
+      continue;
+    }
+
+    std::filesystem::copy(source / sub, target / sub,
+                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing,
+                          error);
+    if (error)
+    {
+      return;
+    }
+  }
+}
+
+ImportDestination importDestination(const std::filesystem::path& root, const std::filesystem::path& sourceFile,
+                                    const std::string& name, const ImportKind kind)
+{
+  const std::filesystem::path folder =
+    std::filesystem::path("assets") / (kind == ImportKind::model ? "models" : "textures");
+  const std::string stem = name.empty() ? sourceFile.stem().string() : name;
+  const std::string extension = sourceFile.extension().string();
+
+  std::string fileName = stem + extension;
+  if (!root.empty())
+  {
+    std::error_code error;
+    for (int suffix = 1; std::filesystem::exists(root / folder / fileName, error) && suffix < 100000; ++suffix)
+    {
+      fileName = stem + "-" + std::to_string(suffix) + extension;
+    }
+  }
+
+  return { root / folder / fileName, (folder / fileName).generic_string() };
+}
