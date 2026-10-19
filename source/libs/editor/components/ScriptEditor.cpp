@@ -67,6 +67,24 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
         edited = true;
       }
     }
+    else if (type == "string")
+    {
+      char buffer[1024] = {};
+      const auto& value = field.at("value");
+      // A mixed field shows empty with a hint, but not while it is being typed into: the typed text
+      // is the primary's value then, and blanking it would drop every keystroke after the first.
+      const bool typing = ImGui::GetActiveID() == ImGui::GetID(name.c_str());
+      if (value.is_string() && (!fieldMixed || typing))
+      {
+        value.get_ref<const std::string&>().copy(buffer, sizeof(buffer) - 1);
+      }
+
+      if (ImGui::InputTextWithHint(name.c_str(), fieldMixed ? "(mixed)" : "", buffer, sizeof(buffer)))
+      {
+        field["value"] = std::string(buffer);
+        edited = true;
+      }
+    }
     else if (type == "vector3")
     {
       const auto& value = field.at("value");

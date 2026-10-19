@@ -903,8 +903,6 @@ void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,
     const std::string type = field.at("type");
     const auto fieldName = name.c_str();
 
-    // A well-formed "string" field falls through every branch below: the ABI has no string setter, so
-    // it is dropped without a warning rather than reported as bad input.
     if (type == "float")
     {
       m_engine->setFieldFloat(uuidStr.c_str(), className.c_str(), fieldName, field.at("value").get<float>());
@@ -916,6 +914,11 @@ void ScriptSystem::writeFieldsToInstance(const uuids::uuid& uuid,
     else if (type == "bool")
     {
       m_engine->setFieldBool(uuidStr.c_str(), className.c_str(), fieldName, field.at("value").get<bool>());
+    }
+    else if (type == "string")
+    {
+      const auto value = field.at("value").get<std::string>();
+      m_engine->setFieldString(uuidStr.c_str(), className.c_str(), fieldName, value.c_str());
     }
     else if (type == "vector3")
     {
@@ -964,6 +967,10 @@ nlohmann::json ScriptSystem::readFieldsFromInstance(const uuids::uuid& uuid,
     else if (field.type == "bool")
     {
       entry["value"] = m_engine->getFieldBool(uuidStr.c_str(), className.c_str(), fieldName);
+    }
+    else if (field.type == "string")
+    {
+      entry["value"] = m_engine->getFieldString(uuidStr.c_str(), className.c_str(), fieldName);
     }
     else if (field.type == "vector3")
     {

@@ -559,6 +559,20 @@ public static class Bridge
             () => (byte)(((bool)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? false)) ? 1 : 0), (byte)0);
     }
 
+    // Caller frees the result with freeString. A null string field or a missing instance reads as empty;
+    // a faulted instance returns IntPtr.Zero, which the native side reads as empty too.
+    [UnmanagedCallersOnly]
+    public static IntPtr getFieldString(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        return RunGuarded(uuid, className, nameof(getFieldString),
+            () => StringFieldToCoTaskMem(GetField(uuidPtr, classNamePtr, fieldNamePtr)), IntPtr.Zero);
+    }
+
+    internal static IntPtr StringFieldToCoTaskMem(object? value) =>
+        Marshal.StringToCoTaskMemUTF8(value as string ?? "");
+
     [UnmanagedCallersOnly]
     public static unsafe void getFieldVector3(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
                                               float* x, float* y, float* z)
@@ -621,6 +635,15 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static void setFieldString(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, IntPtr valuePtr)
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        RunGuarded(uuid, className, nameof(setFieldString),
+            () => SetField(uuidPtr, classNamePtr, fieldNamePtr, Marshal.PtrToStringUTF8(valuePtr) ?? ""));
+    }
+
+    [UnmanagedCallersOnly]
     public static void setFieldVector3(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
                                        float x, float y, float z)
     {
@@ -669,6 +692,14 @@ public static class Bridge
         {
             converted = value;
             return true;
+        }
+
+        // ChangeType would turn a string into a number or a number into a string; a string field takes
+        // only a string and every other field refuses one.
+        if (fieldType == typeof(string) || value is string)
+        {
+            converted = null;
+            return false;
         }
 
         try
