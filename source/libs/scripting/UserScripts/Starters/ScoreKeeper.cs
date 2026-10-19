@@ -1,5 +1,4 @@
 // A scene script that totals collected points per player, logs a leaderboard and publishes score and match events.
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using ScriptBridge;
@@ -33,6 +32,7 @@ public class ScoreKeeper : SceneScript
         m_scores.Remove(slot);
     }
 
+    // A collected value may be negative; the winner is the highest score, whatever its sign.
     private void onCollected(CollectedEvent collected)
     {
         if (collected == null || collected.Slot < 0)
@@ -68,6 +68,11 @@ public class ScoreKeeper : SceneScript
             m_scores[slot] = 0;
             publish(StarterEvents.ScoreChanged, new ScoreChangedEvent { Slot = slot, Score = 0 });
         }
+
+        if (m_scores.Count > 0)
+        {
+            Log.info(leaderboard());
+        }
     }
 
     private string leaderboard()
@@ -77,11 +82,12 @@ public class ScoreKeeper : SceneScript
 
     private string describeWinner()
     {
-        var top = m_scores.Count == 0 ? 0 : m_scores.Values.Max();
-        if (top <= 0)
+        if (m_scores.Values.All(score => score == 0))
         {
             return "no scores";
         }
+
+        var top = m_scores.Values.Max();
 
         var leaders = m_scores.Where(entry => entry.Value == top).Select(entry => entry.Key).ToList();
         return leaders.Count > 1 ? $"tie at {top}" : $"P{leaders[0]} wins with {top}";

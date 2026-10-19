@@ -41,7 +41,7 @@ public class RoundTimer : SceneScript
         }
     }
 
-    private void startRound(int round)
+    private bool startRound(int round)
     {
         m_waiting = false;
         if (m_roundSeconds <= 0)
@@ -52,13 +52,14 @@ public class RoundTimer : SceneScript
                 Log.warn($"RoundTimer: Round Seconds is {m_roundSeconds}; it must be above zero, so no round runs.");
             }
 
-            return;
+            return false;
         }
 
         m_round = round;
         m_secondsLeft = m_roundSeconds;
         Log.info($"Round {round} started: {m_roundSeconds}s");
         m_tick = every(1.0f, onTick);
+        return true;
     }
 
     private void onTick()
@@ -90,8 +91,10 @@ public class RoundTimer : SceneScript
         m_waiting = true;
         after(Math.Max(0.0f, m_intermissionSeconds), () =>
         {
-            publish(StarterEvents.RoundStarted, new RoundStartedEvent { Round = next });
-            startRound(next);
+            if (startRound(next))
+            {
+                publish(StarterEvents.RoundStarted, new RoundStartedEvent { Round = next });
+            }
         });
     }
 

@@ -31,6 +31,17 @@ public unsafe class StarterScoringTests : IDisposable
     }
   }
 
+  public class Orderer : SceneScript
+  {
+    public List<string> Order { get; } = new();
+
+    public override void start()
+    {
+      subscribe<RoundTickEvent>(StarterEvents.RoundTick, e => Order.Add("tick" + e.SecondsLeft));
+      subscribe<RoundOverEvent>(StarterEvents.RoundOver, e => Order.Add("over" + e.Round));
+    }
+  }
+
   private const string SceneUuid = "scene-uuid";
   private const string Keeper = nameof(ScoreKeeper);
   private const string Timer = nameof(RoundTimer);
@@ -225,7 +236,7 @@ public unsafe class StarterScoringTests : IDisposable
 
     RoundOver(3);
 
-    Assert.Equal(new[] { "Round 3 over: P0 wins with 4" }, Infos());
+    Assert.Equal(new[] { "Round 3 over: P0 wins with 4", "Scores: P0 0, P1 0" }, Infos());
     Assert.Equal(new[] { (0, 0), (1, 0) }, recorder.Scores.Select(e => (e.Slot, e.Score)).ToArray());
     Assert.Equal(0, keeper.getScore(0));
     Assert.Equal(0, keeper.getScore(1));
@@ -242,7 +253,7 @@ public unsafe class StarterScoringTests : IDisposable
 
     RoundOver(1);
 
-    Assert.Equal(new[] { "Round 1 over: tie at 3" }, Infos());
+    Assert.Equal(new[] { "Round 1 over: tie at 3", "Scores: P0 0, P1 0, P2 0" }, Infos());
   }
 
   [Fact]
@@ -449,5 +460,85 @@ public unsafe class StarterScoringTests : IDisposable
     Run(2f);
 
     Assert.Equal(new[] { 2, 1, 0 }, recorder.Ticks);
+  }
+
+  [Fact]
+  public void ScoreKeeper_ANegativeTopScoreStillNamesAWinner()
+  {
+    AddKeeper();
+    Collect(0, -3);
+    Collect(1, -1);
+    LogCalls.Clear();
+
+    RoundOver(1);
+
+    Assert.Contains("Round 1 over: P1 wins with -1", Infos());
+  }
+
+  [Fact]
+  public void RoundTimer_PublishesNoRoundStartedWhenTheRoundCannotStart()
+  {
+    var recorder = AddRecorder();
+    var timer = AddTimer(3, intermission: 2f);
+    Run(3f);
+    Assert.Equal(new[] { 1 }, recorder.Overs);
+
+    SetField(timer, "m_roundSeconds", 0);
+    Run(3f);
+
+    Assert.Empty(recorder.Starts);
+    Assert.Equal(new[] { 2, 1, 0 }, recorder.Ticks);
+    Assert.Single(Warnings());
+  }
+
+  [Fact]
+  public void RoundTimer_PublishesTheLastTickBeforeRoundOver()
+  {
+    var orderer = new Orderer();
+    Bridge.AddInstance(SceneUuid, nameof(Orderer), orderer);
+    orderer.start();
+    AddTimer(2, restart: false);
+
+    Run(2f);
+
+    Assert.Equal(new[] { "tick1", "tick0", "over1" }, orderer.Order);
+  }
+
+  [Fact]
+  public void ScoreKeeper_StopsScoringOnceRemoved()
+  {
+    var keeper = AddKeeper();
+    Collect(0, 2);
+
+    Bridge.RemoveInstance(SceneUuid, Keeper);
+    Collect(0, 5);
+
+    Assert.Equal(2, keeper.getScore(0));
+  }
+
+  [Fact]
+  public void RoundTimer_StopsTickingOnceRemoved()
+  {
+    var recorder = AddRecorder();
+    AddTimer(5);
+    Run(1f);
+    Assert.Equal(new[] { 4 }, recorder.Ticks);
+
+    Bridge.RemoveInstance(SceneUuid, Timer);
+    Run(3f);
+
+    Assert.Equal(new[] { 4 }, recorder.Ticks);
+  }
+
+  [Fact]
+  public void ScoreKeeper_IsReachableThroughTheWorldLookup()
+  {
+    var keeper = AddKeeper();
+    Collect(1, 7);
+
+    Assert.True(World.tryGetSceneScript<ScoreKeeper>(out var found));
+
+    Assert.Same(keeper, found);
+    Assert.Equal(7, found.getScore(1));
   }
 }
