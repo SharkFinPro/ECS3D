@@ -262,4 +262,15 @@ public class BridgeFieldMarshallingTests
     Assert.False(ok);
     Assert.Null(converted);
   }
+
+  [Fact]
+  public void TryConvertFieldValue_LeavesANonStringFieldUntouchedWhenAStringIsRefused()
+  {
+    // Positive control is TryConvertFieldValue_AssignsAStringToAStringField above.
+    var instance = new SampleFields();
+
+    Assert.False(Bridge.TryConvertFieldValue(
+      Bridge.FindExposedField(instance, "count")!.FieldType, "12", out _));
+    Assert.Equal(7, instance.count);
+  }
 }

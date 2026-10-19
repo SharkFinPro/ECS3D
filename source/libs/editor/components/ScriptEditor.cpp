@@ -5,8 +5,30 @@
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
+#include <cstddef>
 #include <memory>
 #include <string>
+#include <utility>
+
+namespace {
+  int growStringBuffer(ImGuiInputTextCallbackData* data)
+  {
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+    {
+      auto* text = static_cast<std::string*>(data->UserData);
+      text->resize(static_cast<std::size_t>(data->BufTextLen));
+      data->Buf = text->data();
+    }
+
+    return 0;
+  }
+
+  bool inputTextString(const char* label, const char* hint, std::string& text)
+  {
+    return ImGui::InputTextWithHint(label, hint, text.data(), text.capacity() + 1,
+                                    ImGuiInputTextFlags_CallbackResize, growStringBuffer, &text);
+  }
+}
 
 bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
 {
@@ -69,19 +91,15 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
     }
     else if (type == "string")
     {
-      char buffer[1024] = {};
       const auto& value = field.at("value");
       // A mixed field shows empty with a hint, but not while it is being typed into: the typed text
       // is the primary's value then, and blanking it would drop every keystroke after the first.
       const bool typing = ImGui::GetActiveID() == ImGui::GetID(name.c_str());
-      if (value.is_string() && (!fieldMixed || typing))
-      {
-        value.get_ref<const std::string&>().copy(buffer, sizeof(buffer) - 1);
-      }
+      std::string text = value.is_string() && (!fieldMixed || typing) ? value.get<std::string>() : std::string();
 
-      if (ImGui::InputTextWithHint(name.c_str(), fieldMixed ? "(mixed)" : "", buffer, sizeof(buffer)))
+      if (inputTextString(name.c_str(), fieldMixed ? "(mixed)" : "", text))
       {
-        field["value"] = std::string(buffer);
+        field["value"] = std::move(text);
         edited = true;
       }
     }
