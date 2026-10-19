@@ -1,8 +1,4 @@
-"""
-Writes the generated default assets into source/apps/server/defaultAssets/.
-
-Run from anywhere: python tools/shapes/generate.py
-"""
+"""Writes the generated default assets into source/apps/server/defaultAssets/ ."""
 import sys
 
 sys.dont_write_bytecode = True

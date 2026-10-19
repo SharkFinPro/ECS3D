@@ -1,8 +1,5 @@
-"""
-Minimal glTF 2.0 binary (.glb) writer for one-mesh, triangle-only models.
-
-Standard library only. A flat-shaded mesh is just a mesh whose vertices are duplicated per face.
-"""
+"""Minimal glTF 2.0 binary (.glb) writer for one-mesh, triangle-only models."""
+# A flat-shaded mesh is just a mesh whose vertices are duplicated per face.
 import json
 import math
 import struct
@@ -32,9 +29,7 @@ def _triangle_normal(a, b, c):
 
 
 def check_winding(positions, normals, indices):
-    """
-    Raises if any triangle's counter-clockwise normal disagrees with its vertex normals.
-    """
+    """Raise if any triangle winds against its vertex normals."""
     for t in range(0, len(indices), 3):
         ids = indices[t:t + 3]
         n = _triangle_normal(*(positions[i] for i in ids))
@@ -54,9 +49,7 @@ def _validate(positions, normals, uvs, indices):
 
 
 def _pack_buffers(pos, normals, uvs, indices):
-    """
-    Returns the four raw attribute and index chunks, the position list rounded as written.
-    """
+    """Return the raw position, normal, UV and index chunks, and whether indices are 32 bit."""
     pos_bytes = b"".join(struct.pack("<3f", *p) for p in pos)
     nrm_bytes = b"".join(struct.pack("<3f", *(_clean(c) for c in n)) for n in normals)
     uv_bytes = b"".join(struct.pack("<2f", *(_clean(c) for c in uv)) for uv in uvs)
@@ -120,9 +113,7 @@ def write_glb(path, name, positions, normals, uvs, indices):
 
 
 def _oriented(face, centroid):
-    """
-    Returns the face's corners wound counter-clockwise from outside, and its unit normal.
-    """
+    """Return the face corners wound counter-clockwise from outside, and the unit normal."""
     pts = list(face)
     n = _newell(pts)
     center = [sum(p[k] for p in pts) / len(pts) for k in range(3)]
@@ -133,9 +124,7 @@ def _oriented(face, centroid):
 
 
 def _planar_uvs(pts, n):
-    """
-    UVs from the face's own planar bounding box, 0-1 on both axes.
-    """
+    """Planar UV coordinates from the face's own bounding box, 0-1 on both axes."""
     u_axis = _unit([pts[1][k] - pts[0][k] for k in range(3)])
     v_axis = _cross(n, u_axis)
     us = [sum(p[k] * u_axis[k] for k in range(3)) for p in pts]
@@ -145,14 +134,9 @@ def _planar_uvs(pts, n):
 
 
 def flat_faces(faces):
-    """
-    Flat-shaded mesh of a convex polyhedron.
-
-    faces is a list of polygons, each a list of (x, y, z) corners in cyclic order and either winding.
-    Each polygon is wound counter-clockwise seen from outside (away from the shape's centroid),
-    fan-triangulated, given its face normal, and given 0-1 UVs from its own planar bounding box.
-    Returns (positions, normals, uvs, indices).
-    """
+    """Build a flat-shaded mesh from convex polygons given as corner lists in cyclic order."""
+    # Each polygon is wound counter-clockwise from outside, fan-triangulated, and given its own
+    # normal and planar 0-1 UVs. Returns (positions, normals, uvs, indices).
     corners = [c for face in faces for c in face]
     centroid = [sum(c[k] for c in corners) / len(corners) for k in range(3)]
     positions, normals, uvs, indices = [], [], [], []

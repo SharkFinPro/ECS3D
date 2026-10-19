@@ -25,7 +25,7 @@ def _chunk(kind, data):
 
 
 def write_png(path, width, height, pixel):
-    """pixel(x, y) -> (r, g, b). Writes an 8-bit RGB PNG."""
+    """Write an 8-bit RGB PNG whose pixel(x, y) callback returns (r, g, b)."""
     rows = bytearray()
     for y in range(height):
         rows.append(0)
