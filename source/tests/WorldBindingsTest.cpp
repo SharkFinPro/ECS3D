@@ -11,6 +11,7 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Transform.h"
+#include <Protocol.h>
 
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
