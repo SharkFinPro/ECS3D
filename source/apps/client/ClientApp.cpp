@@ -1,6 +1,7 @@
 #include "ClientApp.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
+#include <ProjectPaths.h>
 #include <ProjectPacker.h>
 #include <Replication.h>
 #include <PlayerSlots.h>
@@ -42,6 +43,14 @@ ClientApp::ClientApp(ConnectOptions options)
   createRenderer();
 
   m_assetCache = std::make_shared<GpuAssetCache>(m_renderer, m_assetRegistry.get());
+  if (m_options.project.empty())
+  {
+    Log::info(LogCategory::client, "No project folder is set; project assets fall back to the built-in ones.");
+  }
+  else
+  {
+    m_assetCache->setProjectRoot(locateProject(m_options.project).root);
+  }
   m_renderSystem = std::make_shared<RenderSystem>();
 
   m_netClient = std::make_shared<net::NetClient>(m_host);
@@ -183,7 +192,11 @@ void ClientApp::connectToServer()
     // Its own log file rather than the server's default: a client and an editor on one machine would
     // otherwise truncate and interleave the same one. This app's --log-file/--no-log-file are not
     // forwarded - the child's log is the child's.
-    const std::string arguments = "--ephemeral " + logFileArgument("client-server");
+    std::string arguments = "--ephemeral " + logFileArgument("client-server");
+    if (!m_options.project.empty())
+    {
+      arguments += " --project \"" + m_options.project + "\"";
+    }
     if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {
       Log::error(LogCategory::client, "Failed to launch local server (ECS3DServer) next to this executable.");
