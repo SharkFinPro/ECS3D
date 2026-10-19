@@ -122,7 +122,7 @@
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
-  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). The component wrappers (`World`, `Transform`, `RigidBody`, `Camera`, `Collider`, `ModelRenderer`,
+  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, `ScriptCompiler` (the pure compile step `Bridge` uses, exercised by `ShippedScriptsCompileTests` over every shipped script, which finds the source tree through an `ECS3DSourceRoot` assembly attribute set in the csproj), and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). The component wrappers (`World`, `Transform`, `RigidBody`, `Camera`, `Collider`, `ModelRenderer`,
   `LightRenderer`, `PlayerController`, `InputUtils`/`PlayerInput`, `ScriptBase`) are covered too:
   `FakeNatives.Install()` points every `NativeBindings.*` table at `[UnmanagedCallersOnly]` fakes that record
   each call and answer from canned values (a native `bool` is a `byte` there, since the test assembly keeps runtime
@@ -451,7 +451,7 @@ against bound/notYetBound/nativeOnly; a new enumerator with no row fails the bui
 without deciding its scripting story can't go unnoticed. Script field edits are validated
 (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
 refused with a warning and does not fault the script.
-A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
+A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them. A class name declared in two script files fails the compile with a message naming both files (`partial` declarations are one class).
 A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about
 once and left unattached until the next hot reload or until its Script component is replaced (a stop
 rebuild or scene switch), which retries it and warns again if it still fails. Field read-back skips a
