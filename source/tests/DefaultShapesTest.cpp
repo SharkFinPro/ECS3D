@@ -277,9 +277,10 @@ TEST(DefaultShapes, EveryLibraryHullIsTheVerticesOfItsModel)
     SCOPED_TRACE(spec.name);
     const auto hull = spec.build();
     const auto positions = glbPositions(spec.model);
+    ASSERT_TRUE(positions.has_value());
 
-    EXPECT_EQ(positions.size(), hull.vertices.size());
-    for (const auto& position : positions)
+    EXPECT_EQ(positions->size(), hull.vertices.size());
+    for (const auto& position : *positions)
     {
       EXPECT_TRUE(hasVertexNear(hull, position));
     }

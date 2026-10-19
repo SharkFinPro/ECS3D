@@ -49,7 +49,7 @@
 | `source/apps/` | The executables. `apps/CMakeLists.txt` orders them (server first — client/editor depend on it). |
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
 | `source/apps/launcher/` | The standalone C# Avalonia launcher. **Has its own `AGENTS.md`** — treat it as an independent project. |
-| `tools/shapes/` | Python generator, using only the standard library, for the generated default models and textures in `source/apps/server/defaultAssets/`. Its output is committed, so builds do not run it; the README records the ground-tile convention. |
+| `tools/shapes/` | Python generator, using only the standard library, for the generated default models and textures in `source/apps/server/defaultAssets/`. Its output is committed, so builds do not run it; the README records the ground-tile convention. `library.py` holds the convex shape library's vertex formulas, a small convex hull and the flat-shaded models. |
 | `source/tests/` | `ECS3DTests` — the GoogleTest suite. Headless by construction (no window, GPU or server), registered with CTest. `tests/managed/` — `ECS3DManagedTests`, an xUnit project covering `ECS3DNetTransport`, also registered with CTest. |
 | `.github/workflows/` | `cmake-multi-platform.yml` — builds Release **and** Debug on Windows (MSVC), Linux (gcc+clang), macOS (clang) with the Vulkan SDK, then runs the suite through the `check` target; two more Linux rows (gcc, clang) run the `ecs3d-sanitize` preset's suite under ASan+UBSan, and one Linux gcc row runs `ecs3d-coverage` and uploads a gcovr/cobertura `coverage-report` artifact. A newer push to a pull request cancels that pull request's previous run. |
 
@@ -850,7 +850,9 @@ server-side, and sometimes answered with a resync snapshot) - the handlers are `
   `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
   Ships `defaultAssets/` (each file's source and license in `defaultAssets/LICENSES.md`) and generates a
   built-in `DefaultProject` when no `--project` is given. `DefaultShapes` builds the hulls of its Cylinder
-  and Ramp prefabs from formula vertices through `buildConvexHull`. Also
+  and Ramp prefabs from formula vertices through `buildConvexHull`. It also builds the nine shape library
+  hulls (D4, D6, D8, D12, D20, Hex Prism, Drum, Gem, Boulder), whose formulas and seeded Boulder generator
+  mirror `tools/shapes/library.py`, and a test pins coordinates from both. Also
   registers a `RemoteLogSink` with `Log` and forwards it to editor connections every `run()` iteration,
   only when `--edit` is set — see Logging above.
 - **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project`/`--console`/`--server-console`
