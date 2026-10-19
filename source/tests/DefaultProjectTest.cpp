@@ -137,7 +137,15 @@ namespace {
     { "a383cc8f-ee6e-4373-ae06-f10f85ef159b", "assets/models/cylinder.glb" },
     { "e77194e0-e50e-4070-aacd-2f5d917b2da7", "assets/models/ramp.glb" },
     { "6a742837-aa60-43fe-a652-32a3d385cde0", "assets/models/plane_tile.glb" },
-    { "7a1cd753-3775-44a0-858f-27239f8740f5", "assets/models/torus.glb" }
+    { "7a1cd753-3775-44a0-858f-27239f8740f5", "assets/models/torus.glb" },
+    { "4e4e2499-ff78-43d8-998e-c7cfc149337e", "assets/models/d4.glb" },
+    { "6539110c-cfb2-4d1e-8888-6dcefc76a66b", "assets/models/d8.glb" },
+    { "5f4873d6-d2c7-4313-b232-728b949f1dd6", "assets/models/d12.glb" },
+    { "f810cee9-5c0b-47f6-9943-ae185c0105bd", "assets/models/d20.glb" },
+    { "dc62625e-9c71-4de3-9a1d-56e6d7ba47c0", "assets/models/hex_prism.glb" },
+    { "75fac0ef-08ca-4c20-81fa-de5aa9269d50", "assets/models/drum.glb" },
+    { "ad754062-1662-4446-8aac-aefa926d49b6", "assets/models/gem.glb" },
+    { "9d0e47fd-8a6f-4ff9-9614-ddb0c5dddd5a", "assets/models/boulder.glb" }
   };
 
   const std::vector<std::pair<std::string, std::string>> newTextures = {
@@ -335,7 +343,8 @@ TEST(DefaultProject, TheNewPrefabsRoundTripAndInstantiate)
 {
   const auto project = buildDefaultProject();
 
-  for (const char* name : { "Capsule", "Cylinder", "Ramp" })
+  for (const char* name : { "Capsule", "Cylinder", "Ramp", "D4", "D6", "D8", "D12", "D20", "Hex Prism", "Drum",
+                            "Gem", "Boulder" })
   {
     SCOPED_TRACE(name);
     const auto& body = prefabBody(project, name);
@@ -430,4 +439,53 @@ TEST(DefaultProject, TheHullPrefabsHoldValidHullsNamingTheirModels)
     EXPECT_GT(hullVolume(hull), 0.0f);
     EXPECT_EQ(collider.at("sourceModel"), model);
   }
+}
+
+TEST(DefaultProject, TheShapeLibraryPrefabsAreRegisteredWithStableUuidsAndWeighTheirVolume)
+{
+  struct Entry
+  {
+    const char* name;
+    const char* uuid;
+    const char* model;
+    ConvexHull (*hull)();
+  };
+
+  const Entry entries[] = {
+    { "D4", "d973cf42-3ef2-4ea6-a4a4-e505fa2d0c17", "4e4e2499-ff78-43d8-998e-c7cfc149337e", d4Hull },
+    { "D6", "f02de30b-fa89-400f-b2ba-fbabcd219775", "58034695-0495-4cfb-8f75-90cf24a9073b", d6Hull },
+    { "D8", "fab33a9c-0c55-488f-b5ab-516cc7558075", "6539110c-cfb2-4d1e-8888-6dcefc76a66b", d8Hull },
+    { "D12", "c901eb04-d6b1-480b-a556-19f9fba037c7", "5f4873d6-d2c7-4313-b232-728b949f1dd6", d12Hull },
+    { "D20", "32cf047d-3fa4-40a5-9dbd-5377aa5bbaa1", "f810cee9-5c0b-47f6-9943-ae185c0105bd", d20Hull },
+    { "Hex Prism", "cb56959b-90d6-4b14-b2bb-64bc5e3b08f1", "dc62625e-9c71-4de3-9a1d-56e6d7ba47c0", hexPrismHull },
+    { "Drum", "41980fde-c3d9-4672-87a3-71d80acdc734", "75fac0ef-08ca-4c20-81fa-de5aa9269d50", drumHull },
+    { "Gem", "98f4b839-f256-4562-b8ff-266094c98725", "ad754062-1662-4446-8aac-aefa926d49b6", gemHull },
+    { "Boulder", "dca2e8d6-7dab-4706-84f2-61da7ad076f1", "9d0e47fd-8a6f-4ff9-9614-ddb0c5dddd5a", boulderHull }
+  };
+
+  const auto project = buildDefaultProject();
+
+  for (const auto& entry : entries)
+  {
+    SCOPED_TRACE(entry.name);
+    const auto* asset = assetWithUUID(project, entry.uuid);
+    ASSERT_NE(asset, nullptr);
+    EXPECT_EQ(asset->at("name"), entry.name);
+
+    const auto& body = asset->at("body");
+    const auto collider = componentsByType(body).at("Collider/ConvexMesh");
+    EXPECT_EQ(collider.at("sourceModel"), entry.model);
+    EXPECT_EQ(componentsByType(body).at("ModelRenderer").at("modelUUID"), entry.model);
+    EXPECT_EQ(componentsByType(body).at("ModelRenderer").at("textureUUID"), "425f3784-74eb-4e09-bfbb-88facfb014d0");
+    EXPECT_NE(assetWithUUID(project, entry.model), nullptr);
+
+    const float volume = hullVolume(entry.hull());
+    EXPECT_GT(volume, 0.1f);
+    EXPECT_NEAR(rigidBodyIn(body).at("mass").get<float>(), volume, volume * 1e-4f);
+    EXPECT_FLOAT_EQ(rigidBodyIn(body).at("friction").get<float>(), 0.5f);
+    EXPECT_EQ(hullOfCollider(collider).vertices.size(), entry.hull().vertices.size());
+  }
+
+  // The unit cube hull weighs what the Block does.
+  EXPECT_NEAR(rigidBodyIn(prefabBody(project, "D6")).at("mass").get<float>(), unitBlockMass, 1e-3f);
 }
