@@ -1,31 +1,39 @@
 using System;
 using System.Globalization;
-using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using ScriptBridge;
 using Xunit;
 
 namespace ECS3DManagedTests;
 
-// The shared starter helpers and PlayerScript's key bindings, against FakeNatives. Warnings come out of
-// ScriptBridge's Log console fallback, which these tests capture.
+// The shared starter helpers and PlayerScript's key bindings, against FakeNatives. Warnings come through
+// a recording Log binding.
 [Collection("BridgeInstances")]
-public class StarterUtilsTests : IDisposable
+public unsafe class StarterUtilsTests : IDisposable
 {
   private readonly IDisposable _natives = FakeNatives.Install();
-  private readonly TextWriter _originalError = Console.Error;
-  private readonly StringWriter _error = new();
+  private readonly LogBindings _originalLog = NativeBindings.Log;
+
+  private static readonly List<(int Level, string Message)> LogCalls = new();
+
+  [UnmanagedCallersOnly]
+  private static void RecordLog(int level, IntPtr message)
+    => LogCalls.Add((level, Marshal.PtrToStringUTF8(message) ?? ""));
 
   public StarterUtilsTests()
   {
-    Console.SetError(_error);
+    LogCalls.Clear();
+    NativeBindings.Log = new LogBindings { write = &RecordLog };
   }
 
   public void Dispose()
   {
-    Console.SetError(_originalError);
+    NativeBindings.Log = _originalLog;
+    LogCalls.Clear();
     var error = FakeNatives.LastError;
     _natives.Dispose();
     Assert.Null(error);
@@ -260,6 +268,14 @@ public class StarterUtilsTests : IDisposable
     Assert.Equal(half, q.W, 1e-5f);
     Assert.Equal(0f, q.Y, 1e-5f);
     Assert.Equal(0f, q.Z, 1e-5f);
+  }
+
+  [Fact]
+  public void QuaternionToEuler_DegeneratePitchTermsUseTwiceAtan2OfXAndW()
+  {
+    var half = MathF.Sqrt(0.5f);
+
+    AssertVec(new Vector3(90f, 0f, 0f), StarterUtils.quaternionToEuler(new Quaternion(half, 0f, 0f, half)), 1e-3f);
   }
 
   [Fact]

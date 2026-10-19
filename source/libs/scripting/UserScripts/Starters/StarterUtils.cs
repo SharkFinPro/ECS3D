@@ -190,7 +190,7 @@ public static class StarterUtils
 
         float pitchY = 2.0f * (q.Y * q.Z + q.W * q.X);
         float pitchX = q.W * q.W - q.X * q.X - q.Y * q.Y + q.Z * q.Z;
-        float pitch = MathF.Abs(pitchX) < float.Epsilon && MathF.Abs(pitchY) < float.Epsilon
+        float pitch = MathF.Abs(pitchX) < 1.1920929e-7f && MathF.Abs(pitchY) < 1.1920929e-7f
             ? 2.0f * MathF.Atan2(q.X, q.W)
             : MathF.Atan2(pitchY, pitchX);
         float yaw = MathF.Asin(Math.Clamp(-2.0f * (q.X * q.Z - q.W * q.Y), -1.0f, 1.0f));
