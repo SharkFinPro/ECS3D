@@ -49,6 +49,7 @@
 | `source/apps/` | The executables. `apps/CMakeLists.txt` orders them (server first — client/editor depend on it). |
 | `source/apps/{server,client,editor}/` | The three C++ apps: a thin `main.cpp` (argv parsing) + a `*App` class. |
 | `source/apps/launcher/` | The standalone C# Avalonia launcher. **Has its own `AGENTS.md`** — treat it as an independent project. |
+| `tools/shapes/` | Python generator (standard library only) for the generated default models and textures in `source/apps/server/defaultAssets/`. Its output is committed, so builds never run it; its README records the ground-tile convention. |
 | `source/tests/` | `ECS3DTests` — the GoogleTest suite. Headless by construction (no window, GPU or server), registered with CTest. `tests/managed/` — `ECS3DManagedTests`, an xUnit project covering `ECS3DNetTransport`, also registered with CTest. |
 | `.github/workflows/` | `cmake-multi-platform.yml` — builds Release **and** Debug on Windows (MSVC), Linux (gcc+clang), macOS (clang) with the Vulkan SDK, then runs the suite through the `check` target; two more Linux rows (gcc, clang) run the `ecs3d-sanitize` preset's suite under ASan+UBSan, and one Linux gcc row runs `ecs3d-coverage` and uploads a gcovr/cobertura `coverage-report` artifact. A newer push to a pull request cancels that pull request's previous run. |
 
@@ -98,7 +99,7 @@
   `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the few sources compiled in directly, below) — so the suite stays runnable without a
   window, GPU or server. `net/MessageQueue.cpp` is compiled straight into the target rather than linked,
   because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
-  `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` is compiled in the same way, as is
+  `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp` and `DefaultShapes.cpp` are compiled in the same way, as is
   `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is
   `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
   json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
@@ -306,8 +307,8 @@ which rides 1.3's existing `objectSpawned` replication (one message carries the 
 reaches the registry through **`BindingContext::setAssetRegistry`**, injected once at startup exactly like the
 sim's raycast/overlap statics. **Instances are detached copies** — nothing records which prefab an object came
 from, so overrides and prefab→instance propagation don't exist (deliberately deferred).
-`DefaultProject` defines its `Block`/`Rigid Block`/`Sphere`/`Player` bodies once, registers them as prefabs
-with stable uuids, and builds its scenes by instancing them. **Editing a prefab's contents** happens in the
+`DefaultProject` defines its `Block`/`Rigid Block`/`Sphere`/`Player`/`Capsule`/`Cylinder`/`Ramp` bodies once,
+registers them as prefabs with stable uuids, and builds its scenes by instancing them. **Editing a prefab's contents** happens in the
 Inspector: `AssetInspector` deserializes the body into a `TransientObject` (editor lib) — a detached `Object`
 living in a private scratch `ObjectManager` that is not wired to a scene/`SceneManager`/replication, uuids
 preserved so the body is stable across edits — and draws it with a reused `ObjectInspector`. Its edits apply
@@ -847,7 +848,9 @@ server-side, and sometimes answered with a resync snapshot) - the handlers are `
   `--edit` (allow editor connections), `--open-edit` (`--edit` with no token required, development only),
   `--ephemeral` (exit when the last connection drops — a spawned local server), `--token`,
   `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
-  Ships `defaultAssets/` and generates a built-in `DefaultProject` when no `--project` is given. Also
+  Ships `defaultAssets/` (each file's source and license in `defaultAssets/LICENSES.md`) and generates a
+  built-in `DefaultProject` when no `--project` is given. `DefaultShapes` builds the hulls of its Cylinder
+  and Ramp prefabs from formula vertices through `buildConvexHull`. Also
   registers a `RemoteLogSink` with `Log` and forwards it to editor connections every `run()` iteration,
   only when `--edit` is set — see Logging above.
 - **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project`/`--console`/`--server-console`

@@ -10,6 +10,8 @@ add_executable(${PROJECT_NAME}
   ServerApp.h
   DefaultProject.cpp
   DefaultProject.h
+  DefaultShapes.cpp
+  DefaultShapes.h
   ServerPolicy.h
 )
 
