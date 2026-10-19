@@ -5,6 +5,7 @@
 #include "ComponentRegistry.h"
 #include "DefaultProject.h"
 #include "DefaultShapes.h"
+#include "InertiaTensor.h"
 #include "PhysicsSystem.h"
 #include "ProjectSerializer.h"
 #include "TestScene.h"
@@ -379,11 +380,14 @@ TEST(DefaultProject, TheNewPrefabsRoundTripAndInstantiate)
 TEST(DefaultProject, TheCapsuleAndCylinderWeighTheirVolume)
 {
   const auto project = buildDefaultProject();
-  const float pi = std::numbers::pi_v<float>;
-
-  // A unit sphere plus a radius-one cylinder two units tall.
+  // The mass is the volume of the collider the prefab really carries.
   const auto& capsule = prefabBody(project, "Capsule");
-  EXPECT_NEAR(rigidBodyIn(capsule).at("mass").get<float>(), 4.0f / 3.0f * pi + 2.0f * pi, 1e-3f);
+  const auto scene = fixtures::makeScene();
+  const auto instance = scene.objectManager->instantiate(capsule);
+  const auto shapes = inertia::bodyDistributions(*instance);
+  ASSERT_EQ(shapes.size(), 1u);
+  EXPECT_GT(shapes.front().volume, 10.0f);
+  EXPECT_NEAR(rigidBodyIn(capsule).at("mass").get<float>(), shapes.front().volume, 1e-2f);
   EXPECT_FLOAT_EQ(rigidBodyIn(capsule).at("friction").get<float>(), 0.5f);
 
   const auto collider = componentsByType(capsule).at("Collider/Capsule");

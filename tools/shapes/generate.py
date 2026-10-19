@@ -2,8 +2,11 @@
 
 Run from anywhere: python tools/shapes/generate.py
 """
-import os
 import sys
+
+sys.dont_write_bytecode = True
+
+import os  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

@@ -15,6 +15,7 @@
 #include <iterator>
 #include <map>
 #include <numbers>
+#include <optional>
 #include <set>
 #include <string>
 #include <tuple>
@@ -23,16 +24,28 @@
 
 namespace {
   // The distinct POSITION values of the first mesh in a default asset's .glb.
-  std::set<std::tuple<float, float, float>> glbPositions(const std::string& file)
+  std::optional<std::set<std::tuple<float, float, float>>> glbPositions(const std::string& file)
   {
     const auto path = std::filesystem::path(ECS3D_SOURCE_DIR) / "source" / "apps" / "server" / "defaultAssets"
       / "models" / file;
     std::ifstream stream(path, std::ios::binary);
-    EXPECT_TRUE(stream.is_open()) << "cannot open " << path.string();
+    if (!stream.is_open())
+    {
+      return std::nullopt;
+    }
     const std::vector<char> bytes((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+
+    if (bytes.size() < 20)
+    {
+      return std::nullopt;
+    }
 
     uint32_t jsonLength = 0;
     std::memcpy(&jsonLength, bytes.data() + 12, sizeof(jsonLength));
+    if (bytes.size() < 28 + static_cast<size_t>(jsonLength))
+    {
+      return std::nullopt;
+    }
     const auto gltf = nlohmann::json::parse(bytes.begin() + 20, bytes.begin() + 20 + jsonLength);
 
     const auto& primitive = gltf.at("meshes").at(0).at("primitives").at(0);
@@ -41,8 +54,14 @@ namespace {
     const size_t binaryStart = 20 + jsonLength + 8;
     const size_t offset = binaryStart + view.value("byteOffset", 0) + accessor.value("byteOffset", 0);
 
+    const size_t count = accessor.at("count").get<size_t>();
+    if (bytes.size() < offset + count * 3 * sizeof(float))
+    {
+      return std::nullopt;
+    }
+
     std::set<std::tuple<float, float, float>> positions;
-    for (size_t i = 0; i < accessor.at("count").get<size_t>(); ++i)
+    for (size_t i = 0; i < count; ++i)
     {
       float v[3];
       std::memcpy(v, bytes.data() + offset + i * sizeof(v), sizeof(v));
@@ -109,8 +128,9 @@ TEST(DefaultShapes, TheRampHullIsTheSixCornersOfTheWedge)
   EXPECT_NEAR(hullVolume(hull), 4.0f, 1e-4f);
 
   const auto corners = glbPositions("ramp.glb");
-  EXPECT_EQ(corners.size(), 6u);
-  for (const auto& corner : corners)
+  ASSERT_TRUE(corners.has_value());
+  EXPECT_EQ(corners->size(), 6u);
+  for (const auto& corner : *corners)
   {
     EXPECT_TRUE(hasVertexNear(hull, corner));
   }
@@ -125,8 +145,10 @@ TEST(DefaultShapes, TheCylinderHullMatchesTheRingsOfCylinderGlb)
   EXPECT_NEAR(hullVolume(hull), 32.0f * std::sin(std::numbers::pi_v<float> / 16.0f), 1e-3f);
 
   // The glb also holds each cap's center; the ring vertices are the ones at radius one.
+  const auto positions = glbPositions("cylinder.glb");
+  ASSERT_TRUE(positions.has_value());
   size_t ringVertices = 0;
-  for (const auto& position : glbPositions("cylinder.glb"))
+  for (const auto& position : *positions)
   {
     const float radius = std::hypot(std::get<0>(position), std::get<2>(position));
     if (radius < 0.5f)
