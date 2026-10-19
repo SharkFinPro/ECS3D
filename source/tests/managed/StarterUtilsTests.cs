@@ -40,7 +40,7 @@ public unsafe class StarterUtilsTests : IDisposable
   }
 
   private string[] Warnings() =>
-    _error.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    LogCalls.Where(call => call.Level == 3).Select(call => call.Message).ToArray();
 
   private static int Lookups() => FakeNatives.Calls.Count(c => c.StartsWith("World.findObjectByName(", StringComparison.Ordinal));
 
