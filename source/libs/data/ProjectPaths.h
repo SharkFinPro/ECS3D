@@ -28,4 +28,9 @@ struct ProjectLocation {
 [[nodiscard]] std::optional<std::filesystem::path> resolveAssetPath(const std::filesystem::path& projectRoot,
                                                                     const std::string& filePath);
 
+// A --project value ready to put on a spawned server's command line: double quoted, with trailing separators
+// removed since a final backslash would escape the closing quote. A root such as "C:\\" keeps a separator
+// and gains a "." ("C:\."), because "C:" alone means the drive's current directory.
+[[nodiscard]] std::string quotedProjectArgument(const std::string& project);
+
 #endif //PROJECTPATHS_H

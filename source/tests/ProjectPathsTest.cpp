@@ -150,3 +150,17 @@ TEST_F(ProjectPathsTest, AllowsDotDotThatStaysInside)
   ASSERT_TRUE(resolved.has_value());
   expectSamePath(*resolved, m_dir / "assets/x");
 }
+
+TEST(QuotedProjectArgumentTest, QuotesAndStripsTrailingSeparators)
+{
+  EXPECT_EQ(quotedProjectArgument("C:\proj"), "\"C:\proj\"");
+  EXPECT_EQ(quotedProjectArgument("C:\proj\\"), "\"C:\proj\"");
+  EXPECT_EQ(quotedProjectArgument("/home/p//"), "\"/home/p\"");
+  EXPECT_EQ(quotedProjectArgument("proj.ecs3d"), "\"proj.ecs3d\"");
+}
+
+TEST(QuotedProjectArgumentTest, RootsKeepASeparatorAndGainADot)
+{
+  EXPECT_EQ(quotedProjectArgument("C:\\"), "\"C:\.\"");
+  EXPECT_EQ(quotedProjectArgument("/"), "\"/.\"");
+}

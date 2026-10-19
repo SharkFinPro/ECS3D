@@ -1,6 +1,21 @@
 #include "ProjectPaths.h"
 #include <system_error>
 
+std::string quotedProjectArgument(const std::string& project)
+{
+  auto end = project.find_last_not_of("/\\");
+  std::string value = end == std::string::npos ? project.substr(0, 1) : project.substr(0, end + 1);
+
+  const bool isRoot = end == std::string::npos || value.back() == ':';
+  if (isRoot)
+  {
+    value += project.size() > value.size() ? project.substr(value.size(), 1) : std::string();
+    value += ".";
+  }
+
+  return "\"" + value + "\"";
+}
+
 ProjectLocation locateProject(const std::filesystem::path& argument)
 {
   if (argument.empty())

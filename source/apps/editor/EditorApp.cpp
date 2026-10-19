@@ -280,7 +280,7 @@ void EditorApp::launchServer()
     std::string arguments = "--edit --ephemeral " + logFileArgument("editor-server");
     if (!m_options.project.empty())
     {
-      arguments += " --project \"" + m_options.project + "\"";
+      arguments += " --project " + quotedProjectArgument(m_options.project);
     }
     arguments += " --token " + m_authToken;
     if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
