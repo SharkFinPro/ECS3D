@@ -23,6 +23,7 @@ public unsafe class StarterMotionTargetsTests : IDisposable
   private static readonly Dictionary<string, Vector3> Scales = new();
   private static readonly Dictionary<string, Vector3> Rotations = new();
   private static readonly Dictionary<string, Vector3> Velocities = new();
+  private static readonly Dictionary<string, Vector3> LocalPositions = new();
   private static readonly HashSet<string> Bodies = new();
   private static readonly List<(string Uuid, Vector3 Delta)> Moves = new();
   private static readonly List<(string Uuid, Vector3 Force, int Mode)> Forces = new();
@@ -34,6 +35,7 @@ public unsafe class StarterMotionTargetsTests : IDisposable
     Scales.Clear();
     Rotations.Clear();
     Velocities.Clear();
+    LocalPositions.Clear();
     Bodies.Clear();
     Moves.Clear();
     Forces.Clear();
@@ -44,6 +46,8 @@ public unsafe class StarterMotionTargetsTests : IDisposable
       getPosition = &TransformGetPosition,
       getScale = &TransformGetScale,
       getRotation = &TransformGetRotation,
+      getLocalPosition = &TransformGetLocalPosition,
+      getLocalRotation = &TransformGetRotation,
       setRotation = &TransformSetRotation,
       move = &TransformMove,
       setPosition = &TransformSetPosition,
@@ -82,6 +86,10 @@ public unsafe class StarterMotionTargetsTests : IDisposable
 
   [UnmanagedCallersOnly]
   private static void TransformGetPosition(IntPtr u, float* x, float* y, float* z) => Out(Positions, u, x, y, z);
+
+  [UnmanagedCallersOnly]
+  private static void TransformGetLocalPosition(IntPtr u, float* x, float* y, float* z) =>
+    Out(LocalPositions.ContainsKey(Id(u)) ? LocalPositions : Positions, u, x, y, z);
 
   [UnmanagedCallersOnly]
   private static void TransformGetScale(IntPtr u, float* x, float* y, float* z) => Out(Scales, u, x, y, z);
@@ -256,23 +264,45 @@ public unsafe class StarterMotionTargetsTests : IDisposable
   }
 
   [Fact]
-  public void LookAtTarget_MissingPlayerSlotScansOncePerSecondAndWarnsOnce()
+  public void TargetRef_MissingPlayerSlotScansOncePerSecondAndWarnsOnce()
   {
-    AddObject("me", Vector3.Zero);
-    AddPlayers(("p0", 0, new Vector3(0f, 0f, 10f)));
-    var script = Make<LookAtTarget>(("m_targetPlayerSlot", 3), ("m_turnSpeed", 0f));
+    AddPlayers(("p0", 0, Vector3.Zero));
+    var target = new TargetRef("Test script") { Slot = 3 };
 
-    Ticks(script, 8, 0.25f);
+    for (var tick = 0; tick < 8; tick++)
+    {
+      Assert.False(target.tryResolve(0.25f, out _));
+    }
 
     Assert.Equal(2, PlayerScans());
     var warnings = Warnings();
     Assert.Single(warnings);
     Assert.Contains("slot 3", warnings[0]);
-    AssertVec(new Vector3(0f, 0f, -1f), Facing("me"));
 
-    AddPlayers(("p0", 0, new Vector3(0f, 0f, 10f)), ("p3", 3, new Vector3(10f, 0f, 0f)));
-    Ticks(script, 4, 0.25f);
-    AssertVec(new Vector3(1f, 0f, 0f), Facing("me"));
+    AddPlayers(("p0", 0, Vector3.Zero), ("p3", 3, Vector3.One));
+    var found = false;
+    var uuid = "";
+    for (var tick = 0; tick < 4 && !found; tick++)
+    {
+      found = target.tryResolve(0.25f, out uuid);
+    }
+
+    Assert.True(found);
+    Assert.Equal("p3", uuid);
+  }
+
+  [Fact]
+  public void LookAtTarget_KeepsItsYawWhenTheTargetIsStraightAbove()
+  {
+    AddObject("me", Vector3.Zero);
+    AddNamed("Target", "t1", new Vector3(0.0005f, 5f, 0f));
+    var script = Make<LookAtTarget>(("m_target", "Target"), ("m_turnSpeed", 0f), ("m_yawOnly", false));
+    Rotations["me"] = new Vector3(0f, 40f, 0f);
+
+    Tick(script, 0.1f);
+
+    Assert.Equal(40f, Rotations["me"].Y, 1e-3f);
+    Assert.Equal(90f, Rotations["me"].X, 1e-2f);
   }
 
   [Fact]
@@ -485,7 +515,8 @@ public unsafe class StarterMotionTargetsTests : IDisposable
     Ticks(script, 8, 0.25f);
     AssertVec(new Vector3(0f, 4f, 0f), Positions["me"]);
 
-    Ticks(script, 3, 0.25f);
+    // The hold lasts the full second: four ticks at the end after the one that arrives.
+    Ticks(script, 4, 0.25f);
     AssertVec(new Vector3(0f, 4f, 0f), Positions["me"]);
 
     Tick(script, 0.25f);
@@ -494,7 +525,7 @@ public unsafe class StarterMotionTargetsTests : IDisposable
     Ticks(script, 7, 0.25f);
     AssertVec(Vector3.Zero, Positions["me"]);
 
-    Ticks(script, 3, 0.25f);
+    Ticks(script, 4, 0.25f);
     AssertVec(Vector3.Zero, Positions["me"]);
 
     Tick(script, 0.25f);
@@ -600,10 +631,141 @@ public unsafe class StarterMotionTargetsTests : IDisposable
     Ticks(script, 8, 0.25f);
     AssertVec(new Vector3(4f, 1.5f, 0f), Positions["above"]);
 
-    Ticks(script, 3, 0.25f);
+    Ticks(script, 4, 0.25f);
     AssertVec(new Vector3(4f, 1.5f, 0f), Positions["above"]);
 
     Tick(script, 0.25f);
     AssertVec(new Vector3(3.5f, 1.5f, 0f), Positions["above"]);
+  }
+
+  [Fact]
+  public void Follower_WithARigidBodyBrakesBeforeTheStopDistanceInsteadOfCoastingPast()
+  {
+    AddObject("me", Vector3.Zero);
+    AddBody("me", new Vector3(0.4f, 0f, 0f));
+    AddNamed("Target", "t1", new Vector3(3f, 0f, 0f));
+    var script = Make<Follower>(("m_target", "Target"));
+
+    // One unit short of the stop point at 0.4 per tick, which carries on for about four units: brake.
+    Tick(script, 0.1f);
+    AssertVec(new Vector3(-0.04f, 0f, 0f), Assert.Single(Forces).Force, 1e-4f);
+
+    // Control: the same distance at rest is still a push toward the target.
+    Forces.Clear();
+    Velocities["me"] = Vector3.Zero;
+    Tick(script, 0.1f);
+    AssertVec(new Vector3(0.04f, 0f, 0f), Assert.Single(Forces).Force, 1e-4f);
+  }
+
+  [Fact]
+  public void PingPongMover_CarriesARiderUpAVerticalLeg()
+  {
+    var script = Platform(false);
+    AddObject("above", new Vector3(0f, 1.5f, 0f));
+    AddBody("above");
+    script.onCollisionEnter("above");
+
+    Ticks(script, 2, 0.25f);
+
+    AssertVec(new Vector3(0f, 1f, 0f), Positions["me"]);
+    AssertVec(new Vector3(0f, 2.5f, 0f), Positions["above"]);
+  }
+
+  [Fact]
+  public void PingPongMover_ADestroyedRiderIsDroppedAndTheOthersCarryOn()
+  {
+    var script = SidewaysPlatform(true);
+    AddObject("second", new Vector3(0f, 1.5f, 1f));
+    AddBody("second");
+    script.onCollisionEnter("second");
+    Tick(script, 0.25f);
+    AssertVec(new Vector3(0.5f, 1.5f, 0f), Positions["above"]);
+
+    Positions.Remove("above");
+    Tick(script, 0.25f);
+
+    AssertVec(new Vector3(1f, 1.5f, 1f), Positions["second"]);
+    Assert.False(Positions.ContainsKey("above"));
+  }
+
+  [Fact]
+  public void PingPongMover_ARiderThatIsAChildIsNotCarried()
+  {
+    var script = SidewaysPlatform(true);
+    LocalPositions["above"] = new Vector3(0f, 0.5f, 0f);
+
+    Tick(script, 0.25f);
+
+    AssertVec(new Vector3(0.5f, 0f, 0f), Positions["me"]);
+    AssertVec(new Vector3(0f, 1.5f, 0f), Positions["above"]);
+  }
+
+  [Fact]
+  public void PingPongMover_TheTopComesFromABoxColliderOffsetAndSize()
+  {
+    var script = SidewaysPlatform(true);
+    FakeNatives.Set("Collider.has", true);
+    FakeNatives.Set("Collider.getShape", (int)ColliderShape.Box);
+    FakeNatives.Set("Collider.getBoxOffset", new Vector3(0f, 1f, 0f));
+    FakeNatives.Set("Collider.getBoxOffset.ok", true);
+    FakeNatives.Set("Collider.getBoxSize", new Vector3(1f, 2f, 1f));
+    FakeNatives.Set("Collider.getBoxSize.ok", true);
+    AddObject("low", new Vector3(0f, 1.8f, 0f));
+    AddBody("low");
+    script.onCollisionEnter("low");
+
+    Tick(script, 0.25f);
+
+    // Top is 0 + offset 1 + size 2 * scale 0.5 = 2: the riders at 1.5 and 1.8 sit inside it, not on it.
+    AssertVec(new Vector3(0f, 1.5f, 0f), Positions["above"]);
+    AssertVec(new Vector3(0f, 1.8f, 0f), Positions["low"]);
+
+    AddObject("high", new Vector3(0f, 2.2f, 0f));
+    AddBody("high");
+    script.onCollisionEnter("high");
+    Tick(script, 0.25f);
+    AssertVec(new Vector3(0.5f, 2.2f, 0f), Positions["high"]);
+  }
+
+  [Fact]
+  public void PingPongMover_AnotherColliderShapeFallsBackToTheYScale()
+  {
+    var script = SidewaysPlatform(true);
+    FakeNatives.Set("Collider.has", true);
+    FakeNatives.Set("Collider.getShape", (int)ColliderShape.Sphere);
+
+    Tick(script, 0.25f);
+
+    AssertVec(new Vector3(0.5f, 1.5f, 0f), Positions["above"]);
+    AssertVec(new Vector3(0f, 0.2f, 0f), Positions["below"]);
+  }
+
+  [Fact]
+  public void PingPongMover_ZeroPauseTurnsAroundAtOnce()
+  {
+    var script = Platform(false);
+    typeof(PingPongMover).GetField("m_pauseSeconds", BindingFlags.Instance | BindingFlags.NonPublic)!
+      .SetValue(script, 0f);
+
+    Ticks(script, 8, 0.25f);
+    AssertVec(new Vector3(0f, 4f, 0f), Positions["me"]);
+
+    Tick(script, 0.25f);
+    AssertVec(new Vector3(0f, 3.5f, 0f), Positions["me"]);
+  }
+
+  [Fact]
+  public void PingPongMover_ZeroSpeedHoldsStillWithoutThrowing()
+  {
+    var script = Platform(false);
+    var speed = typeof(PingPongMover).GetField("m_speed", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    speed.SetValue(script, 0f);
+
+    Ticks(script, 4, 0.25f);
+    AssertVec(Vector3.Zero, Positions["me"]);
+
+    speed.SetValue(script, 2f);
+    Ticks(script, 2, 0.25f);
+    AssertVec(new Vector3(0f, 1f, 0f), Positions["me"]);
   }
 }

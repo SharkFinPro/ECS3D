@@ -1,4 +1,5 @@
-// Turns to face a named object or a player body at a capped rate: aiming, players by slot, quaternion slerp.
+// Turns to face a named object or a player body at a capped rate. Use it on a root object: a child's aim is in
+// its parent's frame, not the world's.
 using System;
 using System.Numerics;
 using ScriptBridge;
@@ -19,15 +20,9 @@ public class LookAtTarget : ScriptBase
     [ExposeToEditor("Yaw Only")]
     private bool m_yawOnly = true;
 
-    private const float SlotRetrySeconds = 1.0f;
     private const float ToDegrees = 180.0f / MathF.PI;
 
-    private readonly NamedObject m_targetObject = new NamedObject("LookAtTarget");
-    private string m_slotUuid = "";
-    private int m_resolvedSlot = -1;
-    private float m_sinceSlotLookup;
-    private bool m_slotLooked;
-    private bool m_slotWarned;
+    private readonly TargetRef m_targetRef = new TargetRef("LookAtTarget");
 
     public override void start()
     {
@@ -40,7 +35,10 @@ public class LookAtTarget : ScriptBase
 
     public override void fixedUpdate(float dt)
     {
-        if (!tryResolveTarget(dt, out string targetUuid) || !World.tryGetTransform(targetUuid, out Transform target))
+        m_targetRef.Name = m_target;
+        m_targetRef.Slot = m_targetPlayerSlot;
+        if (!m_targetRef.tryResolve(dt, out string targetUuid) ||
+            !World.tryGetTransform(targetUuid, out Transform target))
         {
             return;
         }
@@ -52,14 +50,18 @@ public class LookAtTarget : ScriptBase
         }
 
         float length = delta.Length();
-        if (length < 1e-4f)
+        if (length < 1e-3f)
         {
             return;
         }
 
+        Vector3 localRotation = transform.getLocalRotation();
+
         // Forward is -Z; with the engine's Euler order (yaw about Y after pitch about X) it points along
-        // (-cos(pitch) sin(yaw), sin(pitch), -cos(pitch) cos(yaw)).
-        float yaw = MathF.Atan2(-delta.X, -delta.Z) * ToDegrees;
+        // (-cos(pitch) sin(yaw), sin(pitch), -cos(pitch) cos(yaw)). Straight above or below, yaw is undefined,
+        // so it keeps what it had.
+        float horizontal = MathF.Sqrt(delta.X * delta.X + delta.Z * delta.Z);
+        float yaw = horizontal < 1e-3f ? localRotation.Y : MathF.Atan2(-delta.X, -delta.Z) * ToDegrees;
         float pitch = m_yawOnly ? 0.0f : MathF.Asin(Math.Clamp(delta.Y / length, -1.0f, 1.0f)) * ToDegrees;
         Vector3 goal = new Vector3(pitch, yaw, 0.0f);
 
@@ -69,7 +71,7 @@ public class LookAtTarget : ScriptBase
             return;
         }
 
-        Quaternion current = StarterUtils.eulerToQuaternion(transform.getRotation());
+        Quaternion current = StarterUtils.eulerToQuaternion(localRotation);
         Quaternion desired = StarterUtils.eulerToQuaternion(goal);
         float dot = Quaternion.Dot(current, desired);
         if (dot < 0.0f)
@@ -89,65 +91,5 @@ public class LookAtTarget : ScriptBase
         Quaternion turned = Quaternion.Normalize(Quaternion.Slerp(current, desired, maxStep / angle));
         Vector3 euler = StarterUtils.quaternionToEuler(turned);
         transform.setRotation(euler.X, euler.Y, euler.Z);
-    }
-
-    private bool tryResolveTarget(float dt, out string uuid)
-    {
-        if (m_targetPlayerSlot < 0)
-        {
-            m_targetObject.Name = m_target;
-            return m_targetObject.tryResolve(dt, out uuid);
-        }
-
-        return tryResolveSlot(dt, out uuid);
-    }
-
-    private bool tryResolveSlot(float dt, out string uuid)
-    {
-        uuid = "";
-        if (m_resolvedSlot != m_targetPlayerSlot)
-        {
-            m_resolvedSlot = m_targetPlayerSlot;
-            m_slotUuid = "";
-            m_slotLooked = false;
-            m_slotWarned = false;
-        }
-
-        if (m_slotUuid.Length > 0)
-        {
-            if (World.tryGetPlayerController(m_slotUuid, out PlayerController controller) &&
-                controller.getPlayerSlot() == m_targetPlayerSlot)
-            {
-                uuid = m_slotUuid;
-                return true;
-            }
-
-            m_slotUuid = "";
-            m_slotLooked = false;
-        }
-
-        m_sinceSlotLookup += dt;
-        if (m_slotLooked && m_sinceSlotLookup < SlotRetrySeconds)
-        {
-            return false;
-        }
-
-        m_slotLooked = true;
-        m_sinceSlotLookup = 0.0f;
-        m_slotUuid = StarterUtils.findPlayerBody(m_targetPlayerSlot);
-        if (m_slotUuid.Length > 0)
-        {
-            m_slotWarned = false;
-            uuid = m_slotUuid;
-            return true;
-        }
-
-        if (!m_slotWarned)
-        {
-            m_slotWarned = true;
-            Log.warn($"LookAtTarget: no player body holds slot {m_targetPlayerSlot}; it will keep looking.");
-        }
-
-        return false;
     }
 }

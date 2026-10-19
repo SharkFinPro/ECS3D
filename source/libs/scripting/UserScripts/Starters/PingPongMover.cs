@@ -1,4 +1,5 @@
-// Moves between its start and start + Offset, pausing at each end with `after`; can carry bodies resting on top.
+// Moves between its start and start + Offset (both in its parent's frame), pausing at each end with `after`, and
+// can carry bodies resting on top. Carried riders must be root objects, whose world and local positions match.
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -6,6 +7,7 @@ using ScriptBridge;
 
 public class PingPongMover : ScriptBase
 {
+    // Local: in the parent's frame, like the position it starts from.
     [ExposeToEditor("Offset")]
     private Vector3 m_offset = new Vector3(0.0f, 4.0f, 0.0f);
 
@@ -30,15 +32,17 @@ public class PingPongMover : ScriptBase
     private float m_progress;
     private float m_direction = 1.0f;
     private bool m_paused;
+    private bool m_pausePending;
     private readonly List<string> m_riders = new List<string>();
 
     public override void start()
     {
-        m_start = transform.getPosition();
+        m_start = transform.getLocalPosition();
         m_current = m_start;
         m_progress = 0.0f;
         m_direction = 1.0f;
         m_paused = false;
+        m_pausePending = false;
         m_riders.Clear();
 
         if (World.tryGetRigidBody(EntityId, out _))
@@ -50,6 +54,14 @@ public class PingPongMover : ScriptBase
 
     public override void fixedUpdate(float dt)
     {
+        // Timers tick before fixedUpdate, so scheduling on the tick after arrival makes the hold last the full
+        // Pause Seconds instead of a tick less.
+        if (m_pausePending)
+        {
+            m_pausePending = false;
+            after(m_pauseSeconds, () => m_paused = false);
+        }
+
         Vector3 displacement = Vector3.Zero;
         float length = m_offset.Length();
         if (!m_paused && length > 1e-4f && m_speed > 0.0f)
@@ -59,7 +71,8 @@ public class PingPongMover : ScriptBase
             {
                 m_progress = Math.Clamp(m_progress, 0.0f, 1.0f);
                 m_direction = -m_direction;
-                pauseAtEnd();
+                m_paused = m_pauseSeconds > 0.0f;
+                m_pausePending = m_paused;
             }
 
             float shaped = m_ease ? m_progress * m_progress * (3.0f - 2.0f * m_progress) : m_progress;
@@ -69,7 +82,7 @@ public class PingPongMover : ScriptBase
             transform.setPosition(position);
         }
 
-        if (m_carryRiders && displacement != Vector3.Zero)
+        if (m_carryRiders && displacement != Vector3.Zero && m_riders.Count > 0)
         {
             carryRiders(displacement);
         }
@@ -88,21 +101,23 @@ public class PingPongMover : ScriptBase
         m_riders.Remove(otherUuid);
     }
 
-    private void pauseAtEnd()
+    // A Box collider gives the top exactly: its offset plus its size times the Y scale (the box is scaled by the
+    // object's scale). Any other shape falls back to the Y scale alone, which is a half-extent.
+    private float topHeight()
     {
-        if (m_pauseSeconds <= 0.0f)
+        float height = transform.getPosition().Y;
+        if (World.tryGetCollider(EntityId, out Collider collider) && collider.getShape() == ColliderShape.Box &&
+            collider.tryGetBoxOffset(out Vector3 offset) && collider.tryGetBoxSize(out Vector3 size))
         {
-            return;
+            return height + offset.Y + size.Y * transform.getScale().Y;
         }
 
-        m_paused = true;
-        after(m_pauseSeconds, () => m_paused = false);
+        return height + transform.getScale().Y;
     }
 
-    // The top is the platform's height plus its half-extent, which is its Y scale (a scale is a half-extent).
     private void carryRiders(Vector3 displacement)
     {
-        float top = m_current.Y + transform.getScale().Y;
+        float top = topHeight();
         for (int i = m_riders.Count - 1; i >= 0; i--)
         {
             if (!World.tryGetTransform(m_riders[i], out Transform rider))
@@ -112,7 +127,8 @@ public class PingPongMover : ScriptBase
             }
 
             Vector3 position = rider.getPosition();
-            if (position.Y >= top)
+            bool isRoot = Vector3.DistanceSquared(position, rider.getLocalPosition()) < 1e-6f;
+            if (isRoot && position.Y >= top)
             {
                 rider.setPosition(position + displacement);
             }
