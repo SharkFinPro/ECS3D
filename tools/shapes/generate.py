@@ -1,4 +1,5 @@
-"""Writes the generated default assets into source/apps/server/defaultAssets/.
+"""
+Writes the generated default assets into source/apps/server/defaultAssets/.
 
 Run from anywhere: python tools/shapes/generate.py
 """

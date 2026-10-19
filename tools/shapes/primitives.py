@@ -5,7 +5,8 @@ from glb import flat_faces
 
 
 def _grid(rows, segments, poles):
-    """Indexed triangles over a grid of vertex-index rows, each segments + 1 wide.
+    """
+    Indexed triangles over a grid of vertex-index rows, each segments + 1 wide.
 
     With poles, the first and last rows are single points repeated per segment, so they contribute
     one triangle per segment instead of a triangle plus a degenerate one.
