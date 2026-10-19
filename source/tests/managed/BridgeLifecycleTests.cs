@@ -446,6 +446,20 @@ public class BridgeLifecycleTests : IDisposable
   }
 
   [Fact]
+  public void CollectSourceFiles_SkipsBinObjAndDotFolders()
+  {
+    var project = Path.Combine(_dir, "project");
+    var kept = WriteIn(Path.Combine(project, "enemies"), "keep.cs", ScriptSource("Kept"));
+    WriteIn(Path.Combine(project, "obj", "Debug"), "gen.cs", ScriptSource("Generated"));
+    WriteIn(Path.Combine(project, "bin"), "b.cs", ScriptSource("Binary"));
+    WriteIn(Path.Combine(project, ".vs"), "h.cs", ScriptSource("Hidden"));
+
+    var files = Bridge.CollectSourceFiles(new[] { project });
+
+    Assert.Equal(new[] { kept }, files);
+  }
+
+  [Fact]
   public void Initialize_ADuplicateClassAcrossDirectoriesLoadsNothing()
   {
     var builtIn = Path.Combine(_dir, "builtin");

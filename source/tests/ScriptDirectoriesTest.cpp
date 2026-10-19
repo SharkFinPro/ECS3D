@@ -34,6 +34,21 @@ namespace {
     EXPECT_EQ(scripting::joinScriptDirectories({ "a", "b", "c" }), "a\nb\nc");
   }
 
+  TEST(ScriptDirectoriesTest, TheBridgeFormIsUtf8ForNonAsciiPaths)
+  {
+    const std::filesystem::path path(u8"caf\u00e9");
+
+    EXPECT_EQ(scripting::joinScriptDirectories({ path }), "caf\xC3\xA9");
+  }
+
+  TEST(ScriptDirectoriesTest, IgnoredFoldersAreBinObjAndDotFolders)
+  {
+    EXPECT_TRUE(scripting::isIgnoredScriptFolder("bin"));
+    EXPECT_TRUE(scripting::isIgnoredScriptFolder("obj"));
+    EXPECT_TRUE(scripting::isIgnoredScriptFolder(".vs"));
+    EXPECT_FALSE(scripting::isIgnoredScriptFolder("enemies"));
+  }
+
   class ScriptSystemProjectScriptsTest : public ScriptSystemTest {
   protected:
     std::filesystem::path root;
@@ -80,6 +95,24 @@ namespace {
     writeScript(projectScripts, "Added");
     reloading.fixedUpdate(manager(), 0.6f);
 
+    EXPECT_EQ(count("reload"), 1);
+  }
+
+  TEST_F(ScriptSystemProjectScriptsTest, FilesUnderObjAndDotFoldersDoNotTriggerAReload)
+  {
+    writeScript(projectScripts, "Real");
+    addScriptedObject("A", { "Mover" });
+    reloading.start(manager());
+    reloading.fixedUpdate(manager(), 0.6f);
+    ASSERT_EQ(count("reload"), 0);
+
+    writeScript(projectScripts / "obj", "Generated");
+    writeScript(projectScripts / ".vs", "Hidden");
+    reloading.fixedUpdate(manager(), 0.6f);
+    EXPECT_EQ(count("reload"), 0);
+
+    writeScript(projectScripts, "Added");
+    reloading.fixedUpdate(manager(), 0.6f);
     EXPECT_EQ(count("reload"), 1);
   }
 

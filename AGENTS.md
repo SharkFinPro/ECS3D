@@ -469,6 +469,7 @@ A project's own scripts, `<project root>/scripts/**/*.cs`, compile together with
 its `ScriptSystem` after locating the project so it can pass the root.
 The bridge's `init` takes the list as one string joined with newlines, and `ScriptSystem` polls every listed
 directory for changes. A project without a `scripts` folder is normal and silent.
+Files under `bin`, `obj` and dot-folders are skipped, so an IDE project there cannot inject generated sources.
 A class declared in both a project script and a built-in script is a compile error naming both files.
 The root is fixed at startup, so loading another project at runtime keeps the first project's scripts.
 Two script classes that share a simple name fail the compile, with a message naming their files. The runtime finds

@@ -306,8 +306,8 @@ public static class Bridge
             .OfType<ScriptBase>()
             .Where(script => script.EntityId == uuid);
 
-    // The native side joins the directories with '\n' into the one string this export always took: no path on a
-    // supported platform contains a newline, and the export's signature stays as it was. The first directory is
+    // The native side joins the directories with '\n' into the one string this export always took. A newline is
+    // legal in a POSIX name but no realistic path holds one; such a path is skipped. The signature stays as it was. The first directory is
     // the built-in scripts; the rest are optional, such as a project's own.
     [UnmanagedCallersOnly]
     public static void init(IntPtr scriptDirsPtr)
@@ -399,10 +399,19 @@ public static class Bridge
 
     // Every .cs file under each existing directory, in directory order. A directory that is absent contributes
     // nothing: a project without scripts of its own is normal.
+    // Files under bin, obj and dot-folders are skipped: an IDE project there generates sources of its own.
     internal static IReadOnlyList<string> CollectSourceFiles(IEnumerable<string> dirs) =>
         dirs.Where(Directory.Exists)
-            .SelectMany(dir => Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories))
+            .SelectMany(dir => Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
+                .Where(file => !IsInIgnoredFolder(dir, file)))
             .ToList();
+
+    private static bool IsInIgnoredFolder(string root, string file)
+    {
+        var relative = Path.GetRelativePath(root, Path.GetDirectoryName(file)!);
+        return relative != "." && relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(part => part == "bin" || part == "obj" || part.StartsWith('.'));
+    }
 
     // False when the sources failed to compile; true with a null context when there is nothing to compile.
     private static bool TryCompile(out ScriptContext? ctx)
@@ -417,6 +426,11 @@ public static class Bridge
         var sourceFiles = CollectSourceFiles(_scriptDirs);
         if (sourceFiles.Count == 0)
         {
+            if (_scriptDirs.Count == 1 && !Directory.Exists(_scriptDirs[0]))
+            {
+                return true;
+            }
+
             Log.warn("No .cs files found in script directories.");
             return true;
         }

@@ -1,4 +1,5 @@
 #include "ScriptSystem.h"
+#include "ScriptDirectories.h"
 #include "ScriptFieldEdit.h"
 #include "bindings/BindingContext.h"
 #include <Log.h>
@@ -597,15 +598,15 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
 
   m_timeSinceLastSnapshot = 0.0f;
 
-  auto now = takeSnapshot();
-  if (now == m_scriptsSnapshot)
-  {
-    return;
-  }
-
-  Log::info(LogCategory::script, "Change detected - reloading scripts...");
   try
   {
+    auto now = takeSnapshot();
+    if (now == m_scriptsSnapshot)
+    {
+      return;
+    }
+
+    Log::info(LogCategory::script, "Change detected - reloading scripts...");
     // Preserve live field values across the reload: read them back into each Script's data blob, then
     // recompile. The new instances are recreated lazily on the next fixedUpdate, which pushes the
     // refreshed blob back in.
@@ -1005,13 +1006,29 @@ ScriptSystem::ScriptsSnapshot ScriptSystem::takeSnapshot() const
   std::error_code ec;
   for (const auto& directory : m_scriptDirectories)
   {
-    for (auto& entry : std::filesystem::recursive_directory_iterator(directory, ec))
+    std::filesystem::recursive_directory_iterator it(
+      directory, std::filesystem::directory_options::skip_permission_denied, ec);
+    for (; !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec))
     {
-      if (entry.is_regular_file(ec))
+      std::error_code entryEc;
+      if (it->is_directory(entryEc))
       {
-        times[entry.path().string()] = entry.last_write_time(ec);
+        if (scripting::isIgnoredScriptFolder(it->path().filename().string()))
+        {
+          it.disable_recursion_pending();
+        }
+      }
+      else if (it->is_regular_file(entryEc))
+      {
+        const auto time = it->last_write_time(entryEc);
+        if (!entryEc)
+        {
+          times[it->path().string()] = time;
+        }
       }
     }
+
+    ec.clear();
   }
 
   return times;
