@@ -2,8 +2,10 @@
 #define SCRIPTENGINE_H
 
 #include "ScriptRuntime.h"
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 class ManagedHost;
 
@@ -14,10 +16,11 @@ class ScriptEngine final : public ScriptRuntime {
 public:
   explicit ScriptEngine(std::shared_ptr<ManagedHost> host);
 
-  // bridgeDir holds ScriptBridge.dll (+ runtimeconfig); scriptDir holds the user .cs files the bridge
-  // compiles. Resolves every entrypoint, registers bindings, then tells the bridge to compile.
+  // bridgeDir holds ScriptBridge.dll (+ runtimeconfig); scriptDirs hold the .cs files the bridge compiles
+  // together (see ScriptDirectories.h). Resolves every entrypoint, registers bindings, then tells the bridge
+  // to compile.
   void init(const std::string& bridgeDir,
-            const std::string& scriptDir);
+            const std::vector<std::filesystem::path>& scriptDirs);
 
   [[nodiscard]] bool reloadScripts() const override;
 

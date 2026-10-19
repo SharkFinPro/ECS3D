@@ -11,9 +11,13 @@
 #include <system_error>
 #include <utility>
 
-ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::filesystem::path userScriptsDir)
+ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::vector<std::filesystem::path> scriptDirectories)
   : m_makeRuntime(std::move(makeRuntime)),
-    m_userScriptsDir(std::move(userScriptsDir))
+    m_scriptDirectories(std::move(scriptDirectories))
+{}
+
+ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::filesystem::path scriptDirectory)
+  : ScriptSystem(std::move(makeRuntime), std::vector{ std::move(scriptDirectory) })
 {}
 
 ScriptSystem::~ScriptSystem() = default;
@@ -999,11 +1003,14 @@ ScriptSystem::ScriptsSnapshot ScriptSystem::takeSnapshot() const
 {
   ScriptsSnapshot times;
   std::error_code ec;
-  for (auto& entry : std::filesystem::recursive_directory_iterator(m_userScriptsDir, ec))
+  for (const auto& directory : m_scriptDirectories)
   {
-    if (entry.is_regular_file(ec))
+    for (auto& entry : std::filesystem::recursive_directory_iterator(directory, ec))
     {
-      times[entry.path().string()] = entry.last_write_time(ec);
+      if (entry.is_regular_file(ec))
+      {
+        times[entry.path().string()] = entry.last_write_time(ec);
+      }
     }
   }
 

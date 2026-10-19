@@ -14,7 +14,7 @@ namespace ScriptBridge;
 
 public static class Bridge
 {
-    private static string _scriptDir = "";
+    private static IReadOnlyList<string> _scriptDirs = Array.Empty<string>();
     private static ScriptContext? _ctx;
 
     private static readonly Dictionary<string, ScriptInstance> _instances = new();
@@ -306,18 +306,24 @@ public static class Bridge
             .OfType<ScriptBase>()
             .Where(script => script.EntityId == uuid);
 
+    // The native side joins the directories with '\n' into the one string this export always took: no path on a
+    // supported platform contains a newline, and the export's signature stays as it was. The first directory is
+    // the built-in scripts; the rest are optional, such as a project's own.
     [UnmanagedCallersOnly]
-    public static void init(IntPtr scriptDirPtr)
+    public static void init(IntPtr scriptDirsPtr)
     {
-        Initialize(Marshal.PtrToStringUTF8(scriptDirPtr)
-                   ?? throw new ArgumentNullException(nameof(scriptDirPtr)));
+        var joined = Marshal.PtrToStringUTF8(scriptDirsPtr)
+                     ?? throw new ArgumentNullException(nameof(scriptDirsPtr));
+        Initialize(joined.Split('\n', StringSplitOptions.RemoveEmptyEntries));
     }
 
-    internal static void Initialize(string scriptDir)
-    {
-        _scriptDir = scriptDir;
+    internal static void Initialize(string scriptDir) => Initialize(new[] { scriptDir });
 
-        Log.info($"Script directory: {_scriptDir}");
+    internal static void Initialize(IReadOnlyList<string> scriptDirs)
+    {
+        _scriptDirs = scriptDirs.ToArray();
+
+        Log.info($"Script directories: {string.Join(", ", _scriptDirs)}");
         if (TryCompile(out var compiled) && compiled is not null)
         {
             _ctx = compiled;
@@ -388,28 +394,35 @@ public static class Bridge
         _faulted.Clear();
         _ctx?.Unload();
         _ctx = null;
-        _scriptDir = "";
+        _scriptDirs = Array.Empty<string>();
     }
+
+    // Every .cs file under each existing directory, in directory order. A directory that is absent contributes
+    // nothing: a project without scripts of its own is normal.
+    internal static IReadOnlyList<string> CollectSourceFiles(IEnumerable<string> dirs) =>
+        dirs.Where(Directory.Exists)
+            .SelectMany(dir => Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories))
+            .ToList();
 
     // False when the sources failed to compile; true with a null context when there is nothing to compile.
     private static bool TryCompile(out ScriptContext? ctx)
     {
         ctx = null;
 
-        if (!Directory.Exists(_scriptDir))
+        if (_scriptDirs.Count > 0 && !Directory.Exists(_scriptDirs[0]))
         {
-            Log.error($"Script directory not found: {_scriptDir}");
+            Log.error($"Script directory not found: {_scriptDirs[0]}");
+        }
+
+        var sourceFiles = CollectSourceFiles(_scriptDirs);
+        if (sourceFiles.Count == 0)
+        {
+            Log.warn("No .cs files found in script directories.");
             return true;
         }
 
-        var sourceFiles = Directory.GetFiles(_scriptDir, "*.cs", SearchOption.AllDirectories);
-        if (sourceFiles.Length == 0)
-        {
-            Log.warn("No .cs files found in script directory.");
-            return true;
-        }
-
-        Log.info($"Compiling {sourceFiles.Length} script file(s)...");
+        Log.info($"Compiling {sourceFiles.Count} script file(s) from: " +
+                 string.Join(", ", _scriptDirs.Where(Directory.Exists)));
 
         var result = ScriptCompiler.Compile(sourceFiles);
 

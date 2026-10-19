@@ -9,12 +9,14 @@ namespace {
   const std::string kScriptBridgeDir = "scripts/ScriptBridge";
 }
 
-std::function<std::unique_ptr<ScriptRuntime>()> makeScriptEngineFactory(std::shared_ptr<ManagedHost> host)
+std::function<std::unique_ptr<ScriptRuntime>()> makeScriptEngineFactory(
+  std::shared_ptr<ManagedHost> host,
+  std::vector<std::filesystem::path> scriptDirectories)
 {
-  return [host = std::move(host)]() -> std::unique_ptr<ScriptRuntime>
+  return [host = std::move(host), scriptDirectories = std::move(scriptDirectories)]() -> std::unique_ptr<ScriptRuntime>
   {
     auto engine = std::make_unique<ScriptEngine>(host);
-    engine->init(kScriptBridgeDir, scripting::defaultUserScriptsDir);
+    engine->init(kScriptBridgeDir, scriptDirectories);
 
     return engine;
   };
