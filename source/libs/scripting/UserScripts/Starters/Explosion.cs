@@ -78,7 +78,6 @@ public class Explosion : ScriptBase
             }
 
             Vector3 position = otherTransform.getPosition();
-            ++hit;
 
             Vector3 offset = position - center;
             float distance = offset.Length();
@@ -88,6 +87,7 @@ public class Explosion : ScriptBase
                 continue;
             }
 
+            ++hit;
             body.applyForce(blastDirection(offset, distance) * StarterUtils.perTick(magnitude, dt), position,
                 ForceMode.VelocityChange);
         }

@@ -16,7 +16,14 @@ public class ColorOnHit : ScriptBase
 
     private ModelRenderer? m_renderer = null;
 
+    // Read just before the first swap, so a texture changed after start() is still the one restored.
     private string m_originalTexture = "";
+
+    private bool m_originalCaptured = false;
+
+    private bool m_warnedFailure = false;
+
+    private bool m_warnedNoOriginal = false;
 
     // Kept per object, so a repeated enter for one object does not need two exits.
     private readonly HashSet<string> m_contacts = new HashSet<string>();
@@ -24,11 +31,11 @@ public class ColorOnHit : ScriptBase
     public override void start()
     {
         m_contacts.Clear();
+        m_originalCaptured = false;
 
         if (World.tryGetModelRenderer(EntityId, out ModelRenderer renderer))
         {
             m_renderer = renderer;
-            m_originalTexture = renderer.getTextureUUID();
         }
         else
         {
@@ -46,7 +53,13 @@ public class ColorOnHit : ScriptBase
 
         if (m_contacts.Count == 1)
         {
-            m_renderer.setTexture(m_hitTexture);
+            if (!m_originalCaptured)
+            {
+                m_originalTexture = m_renderer.getTextureUUID();
+                m_originalCaptured = true;
+            }
+
+            apply(m_hitTexture);
         }
     }
 
@@ -59,7 +72,27 @@ public class ColorOnHit : ScriptBase
 
         if (m_contacts.Count == 0 && m_revertOnExit)
         {
-            m_renderer.setTexture(m_originalTexture);
+            if (m_originalTexture.Length == 0)
+            {
+                if (!m_warnedNoOriginal)
+                {
+                    m_warnedNoOriginal = true;
+                    Log.warn("ColorOnHit: the object had no texture to restore, so it keeps the hit texture.");
+                }
+
+                return;
+            }
+
+            apply(m_originalTexture);
+        }
+    }
+
+    private void apply(string texture)
+    {
+        if (!m_renderer!.setTexture(texture) && !m_warnedFailure)
+        {
+            m_warnedFailure = true;
+            Log.warn($"ColorOnHit: texture '{texture}' could not be applied; check that it names a texture asset.");
         }
     }
 

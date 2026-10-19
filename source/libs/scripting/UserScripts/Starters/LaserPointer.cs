@@ -66,9 +66,13 @@ public class LaserPointer : ScriptBase
         m_lastHit = hitUuid;
         if (m_logChanges)
         {
-            Log.info(hitUuid.Length == 0
-                ? "LaserPointer hit nothing"
-                : $"LaserPointer hit '{World.getObjectName(hitUuid)}'");
+            Log.info(hitUuid.Length == 0 ? "LaserPointer hit nothing" : $"LaserPointer hit '{describe(hitUuid)}'");
         }
+    }
+
+    private static string describe(string uuid)
+    {
+        string name = World.getObjectName(uuid);
+        return name.Length == 0 ? uuid : name;
     }
 }

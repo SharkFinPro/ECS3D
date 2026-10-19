@@ -213,8 +213,9 @@ public unsafe class StarterInteractionTests : IDisposable
     var middle = Numbers(CallsTo("RigidBody.applyForce").Single(c => c.StartsWith("RigidBody.applyForce(middle,")));
     AssertVec(new Vector3(0f, 1.8f, 0f), new Vector3(middle[0], middle[1], middle[2]));
 
-    // At the edge the falloff reaches zero, so nothing is applied.
+    // At the edge the falloff reaches zero, so nothing is applied and the body is not counted.
     Assert.Equal(0, Blasts("edge"));
+    Assert.Equal(new[] { "Explosion hit 3 bodies" }, Infos());
   }
 
   [Fact]
@@ -376,6 +377,35 @@ public unsafe class StarterInteractionTests : IDisposable
   }
 
   [Fact]
+  public void LaserPointer_CombinedRotationFollowsTheEngineEulerConvention()
+  {
+    var laser = NewLaser();
+    FakeNatives.Set("Transform.getRotation", new Vector3(30f, 45f, 20f));
+    Aim("target", "Target");
+
+    laser.fixedUpdate(0.1f);
+
+    // (0, 0, -1) turned by glm::quat(radians(30, 45, 20)), i.e. Rz * Ry * Rx, worked out in Python.
+    var args = Args(Assert.Single(CallsTo("World.raycast")));
+    var direction = new Vector3(
+      float.Parse(args[3], CultureInfo.InvariantCulture),
+      float.Parse(args[4], CultureInfo.InvariantCulture),
+      float.Parse(args[5], CultureInfo.InvariantCulture));
+    AssertVec(new Vector3(-0.7464519f, 0.2604026f, -0.6123724f), direction, 1e-4f);
+  }
+
+  [Fact]
+  public void LaserPointer_LogsTheUuidWhenTheHitObjectHasNoName()
+  {
+    var laser = NewLaser();
+    Aim("unnamed-uuid", "");
+
+    laser.fixedUpdate(0.1f);
+
+    Assert.Equal(new[] { "LaserPointer hit 'unnamed-uuid'" }, Infos());
+  }
+
+  [Fact]
   public void LaserPointer_HidesTheMarkerOnAMissAndDoesNotMoveIt()
   {
     var laser = NewLaser();
@@ -460,6 +490,7 @@ public unsafe class StarterInteractionTests : IDisposable
     SetField(pad, "m_playersOnly", playersOnly);
     FakeNatives.Set("ModelRenderer.has", renderer);
     FakeNatives.SetString("ModelRenderer.getTextureUUID", "tex-orig");
+    FakeNatives.Set("ModelRenderer.setTextureUUID", true);
     FakeNatives.Set("PlayerController.has:p1", true);
     pad.start();
     return pad;
@@ -526,6 +557,53 @@ public unsafe class StarterInteractionTests : IDisposable
     pad.onCollisionExit("a");
 
     Assert.Equal(new[] { PaletteRed }, Textures());
+  }
+
+  [Fact]
+  public void ColorOnHit_ReadsTheOriginalTextureJustBeforeTheFirstSwap()
+  {
+    var pad = NewColorOnHit();
+    FakeNatives.SetString("ModelRenderer.getTextureUUID", "tex-later");
+
+    pad.onCollisionEnter("a");
+    pad.onCollisionExit("a");
+
+    Assert.Equal(new[] { PaletteRed, "tex-later" }, Textures());
+  }
+
+  [Fact]
+  public void ColorOnHit_AnEmptyOriginalIsNeverRestoredAndWarnsOnce()
+  {
+    FakeNatives.SetString("ModelRenderer.getTextureUUID", null);
+    var pad = NewColorOnHit();
+    FakeNatives.SetString("ModelRenderer.getTextureUUID", null);
+
+    for (var round = 0; round < 2; round++)
+    {
+      pad.onCollisionEnter("a");
+      pad.onCollisionExit("a");
+    }
+
+    Assert.Equal(new[] { PaletteRed, PaletteRed }, Textures());
+    var warnings = Warnings();
+    Assert.Single(warnings);
+    Assert.Contains("texture", warnings[0]);
+  }
+
+  [Fact]
+  public void ColorOnHit_AFailedSwapWarnsOnce()
+  {
+    var pad = NewColorOnHit();
+    FakeNatives.Set("ModelRenderer.setTextureUUID", false);
+
+    pad.onCollisionEnter("a");
+    pad.onCollisionExit("a");
+    pad.onCollisionEnter("a");
+
+    Assert.Equal(3, Textures().Length);
+    var warnings = Warnings();
+    Assert.Single(warnings);
+    Assert.Contains(PaletteRed, warnings[0]);
   }
 
   [Fact]
