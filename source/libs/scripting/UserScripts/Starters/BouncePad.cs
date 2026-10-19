@@ -1,4 +1,5 @@
 // Collision enter and a velocity change: sets the speed of whatever lands on it along Direction to Strength.
+// The colliding object itself must carry the RigidBody; a child collider of a compound body is not bounced.
 using System.Collections.Generic;
 using System.Numerics;
 using ScriptBridge;
@@ -45,7 +46,7 @@ public class BouncePad : ScriptBase
             return;
         }
 
-        PruneExpired();
+        pruneExpired();
         m_readyAt[otherUuid] = m_time + m_cooldown;
 
         Vector3 direction = Vector3.Normalize(m_direction);
@@ -54,7 +55,7 @@ public class BouncePad : ScriptBase
         body.setVelocity(velocity - along * direction + StarterUtils.perTick(m_strength, m_dt) * direction);
     }
 
-    private void PruneExpired()
+    private void pruneExpired()
     {
         List<string>? expired = null;
         foreach (KeyValuePair<string, float> entry in m_readyAt)

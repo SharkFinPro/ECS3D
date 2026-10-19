@@ -1,4 +1,5 @@
 // Timers, prefab spawning and destroying: drops a prefab at intervals and keeps at most Max Alive of them.
+// Interval and Seed are read at start; the other fields apply live. A Max Alive below 1 spawns nothing.
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -40,6 +41,7 @@ public class Spawner : ScriptBase
     private float m_dt = DefaultDt;
     private Random m_random = new Random();
     private bool m_warnedBadPrefab = false;
+    private bool m_warnedNoCapacity = false;
     private readonly List<string> m_spawned = new();
 
     public override void start()
@@ -67,13 +69,19 @@ public class Spawner : ScriptBase
         float angle = 2.0f * MathF.PI * (float)m_random.NextDouble();
         float distance = m_offsetRadius * MathF.Sqrt((float)m_random.NextDouble());
 
-        m_spawned.RemoveAll(id => !World.objectExists(id));
-        int cap = Math.Max(m_maxAlive, 1);
-        while (m_spawned.Count >= cap)
+        if (m_maxAlive < 1)
         {
-            World.destroy(m_spawned[0]);
-            m_spawned.RemoveAt(0);
+            if (!m_warnedNoCapacity)
+            {
+                m_warnedNoCapacity = true;
+                Log.warn("Spawner: Max Alive is below 1, so nothing will be spawned.");
+            }
+
+            return;
         }
+
+        m_warnedNoCapacity = false;
+        m_spawned.RemoveAll(id => !World.objectExists(id));
 
         Vector3 position = transform.getPosition() +
             new Vector3(distance * MathF.Cos(angle), m_heightOffset, distance * MathF.Sin(angle));
@@ -91,6 +99,12 @@ public class Spawner : ScriptBase
 
         m_warnedBadPrefab = false;
         m_spawned.Add(uuid);
+        while (m_spawned.Count > m_maxAlive)
+        {
+            World.destroy(m_spawned[0]);
+            m_spawned.RemoveAt(0);
+        }
+
         if (m_initialVelocity != Vector3.Zero && World.tryGetRigidBody(uuid, out RigidBody body))
         {
             body.setVelocity(StarterUtils.perTick(m_initialVelocity.X, m_dt),

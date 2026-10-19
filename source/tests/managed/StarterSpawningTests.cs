@@ -319,4 +319,38 @@ public unsafe class StarterSpawningTests : IDisposable
     Assert.Single(warnings);
     Assert.Contains("prefab-1", warnings[0]);
   }
+
+  [Fact]
+  public void Spawner_ABadPrefabDoesNotShrinkThePool()
+  {
+    var spawner = NewSpawner(max: 1);
+    Exists("s1");
+    FakeNatives.SetString("World.spawnPrefab", "s1");
+    spawner.start();
+
+    FakeNatives.SetString("World.spawnPrefab", null);
+    Step(spawner, 0.5f);
+    Step(spawner, 0.5f);
+    Assert.Empty(CallsTo("World.destroyObject"));
+
+    NextSpawn(spawner, "s2");
+    Assert.Equal(new[] { "World.destroyObject(s1)" }, CallsTo("World.destroyObject"));
+  }
+
+  [Fact]
+  public void Spawner_MaxAliveBelowOneSpawnsNothingAndWarnsOnce()
+  {
+    var spawner = NewSpawner(max: 0);
+    FakeNatives.SetString("World.spawnPrefab", "s1");
+    spawner.start();
+    Step(spawner, 0.5f);
+    Step(spawner, 0.5f);
+    Assert.Empty(CallsTo("World.spawnPrefab"));
+    Assert.Single(Warnings());
+
+    SetField(spawner, "m_maxAlive", 1);
+    Step(spawner, 0.5f);
+    Step(spawner, 0.5f);
+    Assert.Single(CallsTo("World.spawnPrefab"));
+  }
 }

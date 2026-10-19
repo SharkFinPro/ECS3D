@@ -1,4 +1,4 @@
-// A timer that ends the object: destroys it after Seconds of running time (paused time does not count).
+// A timer that ends the object: destroys it after Seconds of running time (paused time does not count). Seconds is read at start.
 using ScriptBridge;
 
 public class Lifetime : ScriptBase
