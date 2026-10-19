@@ -31,6 +31,8 @@ internal sealed unsafe class WorldModel : IDisposable
   internal readonly List<(string Uuid, Vector3 To)> Moves = new();
   internal readonly List<(int Level, string Message)> LogCalls = new();
 
+  internal readonly List<string> Failures = new();
+
   internal bool FailSpawns;
 
   internal WorldModel()
@@ -52,6 +54,16 @@ internal sealed unsafe class WorldModel : IDisposable
     {
       getPosition = &GetPosition,
       setPosition = &SetPosition,
+      getScale = &FailGetter,
+      getRotation = &FailGetter,
+      getLocalPosition = &FailGetter,
+      getLocalScale = &FailGetter,
+      getLocalRotation = &FailGetter,
+      setScale = &FailSetter,
+      setRotation = &FailSetter,
+      move = &FailSetter,
+      start = &FailLifecycle,
+      stop = &FailLifecycle,
       has = (delegate* unmanaged<IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, byte>)&TransformHas
     };
     NativeBindings.Log = new LogBindings { write = &WriteLog };
@@ -176,6 +188,23 @@ internal sealed unsafe class WorldModel : IDisposable
   }
 
   [UnmanagedCallersOnly]
+  private static void FailGetter(IntPtr uuid, float* x, float* y, float* z)
+  {
+    s_current!.Failures.Add($"an unexpected Transform getter was called for '{Read(uuid)}'");
+    *x = 0f;
+    *y = 0f;
+    *z = 0f;
+  }
+
+  [UnmanagedCallersOnly]
+  private static void FailSetter(IntPtr uuid, float x, float y, float z) =>
+    s_current!.Failures.Add($"an unexpected Transform setter was called for '{Read(uuid)}'");
+
+  [UnmanagedCallersOnly]
+  private static void FailLifecycle(IntPtr uuid) =>
+    s_current!.Failures.Add($"an unexpected Transform start/stop was called for '{Read(uuid)}'");
+
+  [UnmanagedCallersOnly]
   private static byte TransformHas(IntPtr uuid) => s_current!._names.ContainsKey(Read(uuid)) ? (byte)1 : (byte)0;
 
   [UnmanagedCallersOnly]
@@ -211,10 +240,12 @@ public class StarterWorldTests : IDisposable
   {
     Bridge.RemoveInstance("listener-scene", nameof(StarterWorldListener));
     Bridge.Events.clear();
+    var failures = _world.Failures.ToArray();
     _world.Dispose();
     var error = FakeNatives.LastError;
     _natives.Dispose();
     Assert.Null(error);
+    Assert.Empty(failures);
   }
 
   private static void SetField(object script, string name, object value) =>
@@ -346,6 +377,57 @@ public class StarterWorldTests : IDisposable
 
     manager.onPlayerJoined(1);
     Assert.Equal(3, _world.Spawns.Count);
+  }
+
+  [Fact]
+  public void ReconnectingRepeatedly_AlwaysLandsOnTheGround()
+  {
+    AddSpawnPoints();
+    var manager = NewManager();
+
+    for (var round = 0; round < 8; round++)
+    {
+      manager.onPlayerJoined(0);
+      manager.onPlayerLeft(0);
+    }
+
+    Assert.Equal(8, _world.Spawns.Count);
+    Assert.All(_world.Spawns, s => AssertVec(new Vector3(10f, 1f, 1f), s.At));
+  }
+
+  [Fact]
+  public void FivePlayersAtOnce_OnlyTheFifthIsLifted_AndALeaverFreesItsPoint()
+  {
+    AddSpawnPoints();
+    var manager = NewManager();
+
+    for (var slot = 0; slot < 5; slot++)
+    {
+      manager.onPlayerJoined(slot);
+    }
+
+    Assert.Equal(new[] { 1f, 1f, 1f, 1f, 4f }, _world.Spawns.Select(s => s.At.Y).ToArray());
+
+    manager.onPlayerLeft(1);
+    manager.onPlayerJoined(5);
+
+    AssertVec(new Vector3(20f, 1f, 2f), _world.Spawns[5].At);
+  }
+
+  [Fact]
+  public void ASlotSwitch_LeavesThenJoins_DestroyingAndRespawningTheBody()
+  {
+    AddSpawnPoints();
+    var manager = NewManager();
+    manager.onPlayerJoined(0);
+
+    manager.onPlayerLeft(0);
+    manager.onPlayerJoined(1);
+
+    Assert.Equal(new[] { "spawned-1" }, _world.Destroyed);
+    Assert.Equal(2, _world.Spawns.Count);
+    AssertVec(new Vector3(10f, 1f, 1f), _world.Spawns[1].At);
+    Assert.True(Called("PlayerController.setPlayerSlot(spawned-2,1)"));
   }
 
   [Fact]
@@ -702,6 +784,53 @@ public class StarterWorldTests : IDisposable
 
     Assert.NotEmpty(_world.Moves);
     Assert.True(FakeNatives.Calls.Any(c => c.StartsWith("LightRenderer.setColor(", StringComparison.Ordinal)));
+  }
+
+  private static float LastDiffuseSetOn(string uuid)
+  {
+    var call = FakeNatives.Calls.Last(c => c.StartsWith($"LightRenderer.setDiffuse({uuid},", StringComparison.Ordinal));
+    return float.Parse(call.Substring(call.LastIndexOf(',') + 1).TrimEnd(')'), CultureInfo.InvariantCulture);
+  }
+
+  [Fact]
+  public void TheBaseDiffuseIsReadOncePerLight_SoDimmingDoesNotCompound()
+  {
+    var cycle = NewCycle(0.75f);
+    cycle.fixedUpdate(0.0f);
+    Assert.Equal(0.16f, LastDiffuseSetOn("sun"), 1e-4f);
+
+    FakeNatives.Set("LightRenderer.getDiffuse", 0.16f);
+    cycle.fixedUpdate(60.0f);
+
+    Assert.Equal(0.8f, LastDiffuseSetOn("sun"), 1e-4f);
+    Assert.Equal(1, FakeNatives.Calls.Count(c => c == "LightRenderer.getDiffuse(sun)"));
+  }
+
+  [Fact]
+  public void ChangingTheLightName_RestoresThePreviousLightsDiffuse()
+  {
+    var cycle = NewCycle(0.75f);
+    _world.Add("moon", "Moon", Vector3.Zero);
+    cycle.fixedUpdate(0.0f);
+    Assert.Equal(0.16f, LastDiffuseSetOn("sun"), 1e-4f);
+
+    SetField(cycle, "m_light", "Moon");
+    cycle.fixedUpdate(0.0f);
+
+    Assert.Equal(0.8f, LastDiffuseSetOn("sun"), 1e-4f);
+    Assert.Equal(0.16f, LastDiffuseSetOn("moon"), 1e-4f);
+  }
+
+  [Fact]
+  public void Stopping_RestoresTheLightsDiffuse()
+  {
+    var cycle = NewCycle(0.75f);
+    cycle.fixedUpdate(0.0f);
+    Assert.Equal(0.16f, LastDiffuseSetOn("sun"), 1e-4f);
+
+    cycle.stop();
+
+    Assert.Equal(0.8f, LastDiffuseSetOn("sun"), 1e-4f);
   }
 
   [Fact]

@@ -1,5 +1,6 @@
 // Scene script: moves a point light over a vertical arc and blends its color and ambient through a day.
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using ScriptBridge;
 
@@ -44,12 +45,19 @@ public class DayNightCycle : SceneScript
     private readonly NamedObject m_sun = new NamedObject("DayNightCycle");
     private float m_elapsed;
     private string m_litUuid = "";
-    private float m_baseDiffuse;
+    private string m_litName = "";
+    private readonly Dictionary<string, float> m_baseDiffuse = new();
     private bool m_warnedNoLight;
     private bool m_warnedRigidBody;
 
     public override void fixedUpdate(float dt)
     {
+        if (m_light != m_litName)
+        {
+            restoreDiffuse();
+            m_litName = m_light;
+        }
+
         m_sun.Name = m_light;
         m_elapsed += dt;
         if (!m_sun.tryResolve(dt, out string uuid) || !World.tryGetTransform(uuid, out Transform transform))
@@ -78,6 +86,23 @@ public class DayNightCycle : SceneScript
         applyLight(uuid, light, height, position);
     }
 
+    public override void stop()
+    {
+        restoreDiffuse();
+    }
+
+    // Puts back the diffuse the light had before this script first dimmed it.
+    private void restoreDiffuse()
+    {
+        if (m_litUuid.Length > 0 && m_baseDiffuse.TryGetValue(m_litUuid, out float baseDiffuse) &&
+            World.tryGetLightRenderer(m_litUuid, out LightRenderer light))
+        {
+            light.setDiffuse(baseDiffuse);
+        }
+
+        m_litUuid = "";
+    }
+
     private float currentPhase()
     {
         float phase = m_periodSeconds > 0.0f ? m_startTime + m_elapsed / m_periodSeconds : m_startTime;
@@ -86,18 +111,19 @@ public class DayNightCycle : SceneScript
 
     private void applyLight(string uuid, LightRenderer light, float height, Vector3 position)
     {
-        if (uuid != m_litUuid)
+        m_litUuid = uuid;
+        if (!m_baseDiffuse.TryGetValue(uuid, out float baseDiffuse))
         {
-            m_litUuid = uuid;
-            m_baseDiffuse = light.getDiffuse();
+            baseDiffuse = light.getDiffuse();
+            m_baseDiffuse[uuid] = baseDiffuse;
         }
 
-        float ambient = MathF.Max(m_nightAmbient, lerp(m_nightAmbient, m_dayAmbient, saturate(height)));
+        float ambient = lerp(m_nightAmbient, m_dayAmbient, saturate(height));
         float diffuseScale = m_dayAmbient > 0.0f ? saturate(ambient / m_dayAmbient) : 1.0f;
 
         light.setColor(colorAt(height));
         light.setAmbient(ambient);
-        light.setDiffuse(m_baseDiffuse * diffuseScale);
+        light.setDiffuse(baseDiffuse * diffuseScale);
 
         if (light.getIsSpotLight())
         {

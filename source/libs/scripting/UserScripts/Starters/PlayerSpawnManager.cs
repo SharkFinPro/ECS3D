@@ -1,4 +1,6 @@
 // Scene script: gives every joining player a body, adopting a placed one or spawning the player prefab.
+// A spawned body is destroyed when its player leaves, so a slot switch (leave, then join) respawns it.
+// Spawned bodies keep the prefab's name for now.
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -38,14 +40,14 @@ public class PlayerSpawnManager : SceneScript
         public string Uuid = "";
         public bool Spawned;
         public Vector3 Home;
+        public int Point = -1;
         public bool RespawnPending;
     }
 
     private readonly Dictionary<int, Tracked> m_players = new();
-    private int m_joins;
     private bool m_warnedNoSpawnPoints;
 
-    // Every join takes the next spawn point, an adopted player's included, so a placed player is not stood on.
+    // A join takes the spawn point with the fewest live players on it, so churn does not raise the spawn height.
     public override void onPlayerJoined(int slot)
     {
         if (m_players.TryGetValue(slot, out var known) && World.objectExists(known.Uuid))
@@ -53,19 +55,20 @@ public class PlayerSpawnManager : SceneScript
             return;
         }
 
-        int join = m_joins++;
+        var points = findSpawnPoints();
         string placed = StarterUtils.findPlayerBody(slot);
         if (placed.Length > 0)
         {
             Vector3 home = World.tryGetTransform(placed, out Transform transform)
                 ? transform.getPosition()
                 : Vector3.Zero;
-            m_players[slot] = new Tracked { Uuid = placed, Spawned = false, Home = home };
+            m_players[slot] = new Tracked { Uuid = placed, Spawned = false, Home = home, Point = nearestPoint(points, home) };
             publish(StarterEvents.PlayerSpawned, new PlayerSpawnedEvent { Slot = slot, Uuid = placed });
             return;
         }
 
-        var entry = new Tracked { Home = homeFor(join) };
+        var entry = new Tracked();
+        chooseHome(points, entry);
         m_players[slot] = entry;
         spawnBody(slot, entry);
     }
@@ -154,10 +157,9 @@ public class PlayerSpawnManager : SceneScript
         publish(StarterEvents.PlayerSpawned, new PlayerSpawnedEvent { Slot = slot, Uuid = uuid });
     }
 
-    // Join n takes point n mod count; each full lap over the points sits another LapHeight higher.
-    private Vector3 homeFor(int join)
+    // Ties go to the lowest index; each live player already on the point lifts the newcomer LapHeight.
+    private void chooseHome(List<Vector3> points, Tracked entry)
     {
-        var points = findSpawnPoints();
         if (points.Count == 0)
         {
             if (!m_warnedNoSpawnPoints)
@@ -167,11 +169,56 @@ public class PlayerSpawnManager : SceneScript
                          "spawning players at the origin.");
             }
 
-            return new Vector3(0.0f, m_spawnHeight, 0.0f);
+            entry.Home = new Vector3(0.0f, m_spawnHeight, 0.0f);
+            return;
         }
 
-        Vector3 point = points[join % points.Count];
-        return point + new Vector3(0.0f, m_spawnHeight + LapHeight * (join / points.Count), 0.0f);
+        int best = 0;
+        int bestCount = int.MaxValue;
+        for (int i = 0; i < points.Count; i++)
+        {
+            int count = livePlayersOn(i);
+            if (count < bestCount)
+            {
+                best = i;
+                bestCount = count;
+            }
+        }
+
+        entry.Point = best;
+        entry.Home = points[best] + new Vector3(0.0f, m_spawnHeight + LapHeight * bestCount, 0.0f);
+    }
+
+    private int livePlayersOn(int point)
+    {
+        int count = 0;
+        foreach (var other in m_players.Values)
+        {
+            if (other.Point == point && other.Uuid.Length > 0 && World.objectExists(other.Uuid))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    // A placed player counts toward the spawn point it stands on, if any is within a unit horizontally.
+    private static int nearestPoint(List<Vector3> points, Vector3 position)
+    {
+        int best = -1;
+        float bestDistance = 1.0f;
+        for (int i = 0; i < points.Count; i++)
+        {
+            float distance = Vector2.Distance(new Vector2(points[i].X, points[i].Z), new Vector2(position.X, position.Z));
+            if (distance <= bestDistance)
+            {
+                best = i;
+                bestDistance = distance;
+            }
+        }
+
+        return best;
     }
 
     private List<Vector3> findSpawnPoints()
