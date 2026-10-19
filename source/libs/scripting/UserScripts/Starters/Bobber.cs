@@ -1,4 +1,5 @@
-// Moves its object back and forth along an axis on a sine wave around the position it started at.
+// Moves its object back and forth along an axis on a sine wave around the position it started at. Positions
+// are local, so the axis is in the parent's frame for a child object.
 using System;
 using System.Numerics;
 using ScriptBridge;
@@ -19,12 +20,12 @@ public class Bobber : ScriptBase
 
     private Vector3 m_startPosition = Vector3.Zero;
 
-    private float m_time = 0.0f;
+    private double m_time = 0.0;
 
     public override void start()
     {
-        m_startPosition = transform.getPosition();
-        m_time = 0.0f;
+        m_startPosition = transform.getLocalPosition();
+        m_time = 0.0;
 
         if (World.tryGetRigidBody(EntityId, out _))
         {
@@ -41,8 +42,8 @@ public class Bobber : ScriptBase
             return;
         }
 
-        float phase = m_phaseDegrees * (MathF.PI / 180.0f);
-        float wave = MathF.Sin(2.0f * MathF.PI * m_frequencyHz * m_time + phase);
+        double phase = m_phaseDegrees * (Math.PI / 180.0);
+        float wave = (float)Math.Sin(2.0 * Math.PI * m_frequencyHz * m_time + phase);
         transform.setPosition(m_startPosition + Vector3.Normalize(m_axis) * (m_amplitude * wave));
     }
 }

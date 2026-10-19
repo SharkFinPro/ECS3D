@@ -1,5 +1,6 @@
-// Turns its object about a world-space axis: composes quaternions on a kinematic object, and sets the
-// angular velocity on a physics body so the engine stays in charge.
+// Turns its object about an axis: composes quaternions on a kinematic object, and sets the angular velocity
+// on a physics body so the engine stays in charge. The axis is in the parent's frame for a child object
+// (the local rotation is what it reads and writes), and in world space for a root object.
 using System;
 using System.Numerics;
 using ScriptBridge;
@@ -35,7 +36,7 @@ public class Spinner : ScriptBase
 
         float radians = StarterUtils.perTick(m_degreesPerSecond, dt) * (MathF.PI / 180.0f);
         Quaternion step = Quaternion.CreateFromAxisAngle(axis, radians);
-        Vector3 read = transform.getRotation();
+        Vector3 read = transform.getLocalRotation();
         if (m_lastWritten is not Vector3 last || !closeTo(last, read))
         {
             m_orientation = StarterUtils.eulerToQuaternion(read);

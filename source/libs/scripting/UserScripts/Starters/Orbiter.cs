@@ -1,4 +1,6 @@
 // Circles a point or a named object, following it if it moves, and can turn to face its direction of travel.
+// The center is read in world space and the position is written locally, so the orbiter should be a root
+// object; a parented orbiter orbits in its parent's frame, offset by the parent.
 using System;
 using System.Numerics;
 using ScriptBridge;
@@ -28,15 +30,20 @@ public class Orbiter : ScriptBase
 
     private readonly NamedObject m_centerLookup = new NamedObject("Orbiter Center Object");
 
-    private float m_time = 0.0f;
+    private double m_time = 0.0;
 
     public override void start()
     {
-        m_time = 0.0f;
+        m_time = 0.0;
 
         if (World.tryGetRigidBody(EntityId, out _))
         {
             Log.warn("Orbiter: this object has a RigidBody, so physics and the script will fight over its position.");
+        }
+
+        if (hasParent())
+        {
+            Log.warn("Orbiter: this object has a parent, so it orbits in its parent's frame; make it a root object.");
         }
     }
 
@@ -55,8 +62,9 @@ public class Orbiter : ScriptBase
         Vector3 axis = Vector3.Normalize(m_axis);
         orbitBasis(axis, out Vector3 u, out Vector3 v);
 
-        float turns = m_periodSeconds > 0.0f ? m_time / m_periodSeconds : 0.0f;
-        float angle = (m_startAngle + 360.0f * turns) * (MathF.PI / 180.0f);
+        double turns = m_periodSeconds > 0.0f ? m_time / m_periodSeconds : 0.0;
+        double degrees = (m_startAngle + 360.0 * turns) % 360.0;
+        float angle = (float)(degrees * (Math.PI / 180.0));
         Vector3 radial = u * MathF.Cos(angle) + v * MathF.Sin(angle);
         transform.setPosition(center + radial * m_radius);
 
@@ -67,11 +75,18 @@ public class Orbiter : ScriptBase
         }
     }
 
+    // A parent shows up as a world transform that differs from the local one.
+    private bool hasParent()
+    {
+        return Vector3.Distance(transform.getPosition(), transform.getLocalPosition()) > 1e-4f ||
+               Vector3.Distance(transform.getRotation(), transform.getLocalRotation()) > 1e-3f;
+    }
+
     // False while a named center is missing, so the object holds still instead of jumping to the fixed Center.
     private bool tryGetCenter(bool centerFound, string centerUuid, out Vector3 center)
     {
         center = m_center;
-        if (m_centerObject.Length == 0)
+        if (string.IsNullOrEmpty(m_centerObject))
         {
             return true;
         }

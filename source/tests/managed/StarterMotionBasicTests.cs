@@ -89,11 +89,11 @@ public unsafe class StarterMotionBasicTests : IDisposable
       spinner.fixedUpdate(dt);
       var written = Vec3Calls("Transform.setRotation");
       Assert.Single(written);
-      FakeNatives.Set("Transform.getRotation", written[0]);
+      FakeNatives.Set("Transform.getLocalRotation", written[0]);
     }
   }
 
-  private static Vector3 CurrentRotation() => FakeNatives.Get<Vector3>("Transform.getRotation");
+  private static Vector3 CurrentRotation() => FakeNatives.Get<Vector3>("Transform.getLocalRotation");
 
   [Fact]
   public void Spinner_TurnsAboutWorldYByDegreesPerSecondTimesElapsedTime()
@@ -123,7 +123,7 @@ public unsafe class StarterMotionBasicTests : IDisposable
   public void Spinner_TurnsAboutTheWorldAxisNotTheObjectsOwn()
   {
     var start = new Vector3(90f, 0f, 0f);
-    FakeNatives.Set("Transform.getRotation", start);
+    FakeNatives.Set("Transform.getLocalRotation", start);
     var spinner = NewScript<Spinner>(("m_degreesPerSecond", 45.0f));
 
     SpinTicks(spinner, 10, 0.1f);
@@ -154,7 +154,7 @@ public unsafe class StarterMotionBasicTests : IDisposable
     SpinTicks(spinner, 10, 0.1f);
 
     var external = new Vector3(0f, 0f, 90f);
-    FakeNatives.Set("Transform.getRotation", external);
+    FakeNatives.Set("Transform.getLocalRotation", external);
     SpinTicks(spinner, 10, 0.1f);
 
     // 45 degrees about world Y applied to the externally set roll of 90.
@@ -196,11 +196,11 @@ public unsafe class StarterMotionBasicTests : IDisposable
   [Fact]
   public void Bobber_ReachesAmplitudeAlongAxisAtAQuarterPeriod()
   {
-    FakeNatives.Set("Transform.getPosition", new Vector3(1f, 2f, 3f));
+    FakeNatives.Set("Transform.getLocalPosition", new Vector3(1f, 2f, 3f));
     var bobber = NewScript<Bobber>(("m_axis", new Vector3(2f, 0f, 0f)), ("m_amplitude", 2.0f),
       ("m_frequencyHz", 0.25f));
     bobber.start();
-    FakeNatives.Set("Transform.getPosition", new Vector3(9f, 9f, 9f));
+    FakeNatives.Set("Transform.getLocalPosition", new Vector3(9f, 9f, 9f));
 
     bobber.fixedUpdate(0.25f);
     AssertVec(new Vector3(1f, 2f, 3f) + new Vector3(2f * MathF.Sin(MathF.PI / 8.0f), 0f, 0f),
@@ -366,6 +366,25 @@ public unsafe class StarterMotionBasicTests : IDisposable
     var rotation = Vec3Calls("Transform.setRotation").Last();
     AssertVec(new Vector3(0f, 1f, 0f), StarterUtils.rotate(rotation, new Vector3(0f, 0f, -1f)));
     AssertVec(new Vector3(0f, 0f, 1f), StarterUtils.rotate(rotation, new Vector3(0f, 1f, 0f)));
+  }
+
+  [Fact]
+  public void Orbiter_WarnsOnceWhenItHasAParentAndNotWhenItIsARoot()
+  {
+    var root = NewScript<Orbiter>();
+    root.start();
+    root.fixedUpdate(0.1f);
+    Assert.Empty(Warnings());
+
+    FakeNatives.Set("Transform.getPosition", new Vector3(1f, 0f, 0f));
+    var child = NewScript<Orbiter>();
+    child.start();
+    child.fixedUpdate(0.1f);
+    child.fixedUpdate(0.1f);
+
+    var warnings = Warnings();
+    Assert.Single(warnings);
+    Assert.Contains("parent", warnings[0]);
   }
 
   [Fact]
