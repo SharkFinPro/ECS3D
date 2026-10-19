@@ -273,9 +273,10 @@ public unsafe class StarterUtilsTests : IDisposable
   [Fact]
   public void QuaternionToEuler_DegeneratePitchTermsUseTwiceAtan2OfXAndW()
   {
-    var half = MathF.Sqrt(0.5f);
-
-    AssertVec(new Vector3(90f, 0f, 0f), StarterUtils.quaternionToEuler(new Quaternion(half, 0f, 0f, half)), 1e-3f);
+    // w=0.5, x=0.5, y=-0.5, z=0.5: both pitch terms are exactly 0, so glm takes 2 * atan2(x, w) = 90; yaw is
+    // asin(-1) = -90 and roll is atan2(0, 0) = 0. The ordinary pitch formula would give 0.
+    AssertVec(new Vector3(90f, -90f, 0f), StarterUtils.quaternionToEuler(new Quaternion(0.5f, -0.5f, 0.5f, 0.5f)),
+      1e-3f);
   }
 
   [Fact]
