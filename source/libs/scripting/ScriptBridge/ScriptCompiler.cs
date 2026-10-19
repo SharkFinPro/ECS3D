@@ -70,32 +70,46 @@ internal static class ScriptCompiler
         };
     }
 
-    // Scripts are looked up by class name, so the same name in two files is ambiguous. Partial
-    // declarations of one class are fine, however many files they span.
+    // Scripts are looked up by simple class name, so two distinct types sharing one are ambiguous, whatever
+    // their namespaces or files. Partial declarations of one qualified name are one type.
     private static List<string> FindDuplicateClasses(IEnumerable<SyntaxTree> trees)
     {
         var declarations = trees
             .SelectMany(tree => tree.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()
                 .Where(c => c.Parent is not TypeDeclarationSyntax)
-                .Select(c => (name: c.Identifier.Text, file: tree.FilePath,
-                              isPartial: c.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)))));
+                .Select(c => (name: c.Identifier.Text, qualified: QualifiedName(c), file: tree.FilePath,
+                              isPartial: c.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)))))
+            .ToList();
 
         var messages = new List<string>();
-        foreach (var group in declarations.GroupBy(d => d.name).OrderBy(g => g.Key, StringComparer.Ordinal))
+        foreach (var byName in declarations.GroupBy(d => d.name).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
-            var files = group.Select(d => d.file).Distinct().ToList();
-            if (files.Count < 2 || group.All(d => d.isPartial))
+            var types = byName.GroupBy(d => d.qualified).ToList();
+            var splitAcrossFiles = types.Any(t => t.Select(d => d.file).Distinct().Count() > 1 &&
+                                                  !t.All(d => d.isPartial));
+            if (types.Count < 2 && !splitAcrossFiles)
             {
                 continue;
             }
 
-            var joined = files.Count == 2
-                ? $"{files[0]} and {files[1]}"
-                : string.Join(", ", files.Take(files.Count - 1)) + " and " + files[^1];
-            messages.Add($"Duplicate script class '{group.Key}' in {joined}");
+            var files = byName.Select(d => d.file).Distinct().ToList();
+            var joined = files.Count == 1
+                ? files[0]
+                : files.Count == 2
+                    ? $"{files[0]} and {files[1]}"
+                    : string.Join(", ", files.Take(files.Count - 1)) + " and " + files[^1];
+            messages.Add($"Duplicate script class '{byName.Key}' in {joined}");
         }
 
         return messages;
+    }
+
+    private static string QualifiedName(ClassDeclarationSyntax declaration)
+    {
+        var namespaces = declaration.Ancestors().OfType<BaseNamespaceDeclarationSyntax>()
+            .Select(n => n.Name.ToString())
+            .Reverse();
+        return string.Join(".", namespaces.Append(declaration.Identifier.Text));
     }
 
     // [ExposeToEditor] fields on script types whose type the editor cannot show; Bridge silently skips them.

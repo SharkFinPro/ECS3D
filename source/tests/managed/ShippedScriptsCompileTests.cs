@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Loader;
 using ScriptBridge;
 using Xunit;
 
@@ -78,11 +79,11 @@ public class ShippedScriptsCompileTests : IDisposable
 
   private static List<string> UnsupportedFields(byte[] assembly)
   {
-    using var ms = new MemoryStream(assembly);
-    var context = new ScriptContext(ms);
+    var context = new AssemblyLoadContext("unsupported-fields", isCollectible: true);
     try
     {
-      var asm = context.ScriptTypes[0].Assembly;
+      using var ms = new MemoryStream(assembly);
+      var asm = context.LoadFromStream(ms);
       return ScriptCompiler.UnsupportedExposedFields(asm)
         .Select(u => $"{u.scriptType.Name}.{u.field.Name}: {u.field.FieldType.Name}")
         .ToList();
@@ -141,6 +142,59 @@ public class ShippedScriptsCompileTests : IDisposable
     Assert.Contains("'Dup'", message);
     Assert.Contains(a, message);
     Assert.Contains(b, message);
+  }
+
+  [Fact]
+  public void SameNameInDifferentNamespaces_FailsNamingBothFiles()
+  {
+    var a = Write("A.cs", "using ScriptBridge;\nnamespace A { public class Foo : ScriptBase { } }\n");
+    var b = Write("B.cs", "using ScriptBridge;\nnamespace B { public class Foo : ScriptBase { } }\n");
+
+    var result = ScriptCompiler.Compile(new[] { a, b });
+
+    Assert.Empty(result.Errors);
+    Assert.False(result.Success);
+    var message = Assert.Single(result.DuplicateMessages);
+    Assert.Contains("'Foo'", message);
+    Assert.Contains(a, message);
+    Assert.Contains(b, message);
+  }
+
+  [Fact]
+  public void SameNameInTwoNamespacesOfOneFile_Fails()
+  {
+    var a = Write("A.cs",
+      "using ScriptBridge;\nnamespace A { public class Foo : ScriptBase { } }\n" +
+      "namespace B { public class Foo : ScriptBase { } }\n");
+
+    var result = ScriptCompiler.Compile(new[] { a });
+
+    Assert.False(result.Success);
+    var message = Assert.Single(result.DuplicateMessages);
+    Assert.Contains(a, message);
+  }
+
+  [Fact]
+  public void PartialClassesInDifferentNamespaces_Fail()
+  {
+    var a = Write("A.cs", "using ScriptBridge;\nnamespace A { public partial class Foo : ScriptBase { } }\n");
+    var b = Write("B.cs", "using ScriptBridge;\nnamespace B { public partial class Foo : ScriptBase { } }\n");
+
+    var result = ScriptCompiler.Compile(new[] { a, b });
+
+    Assert.False(result.Success);
+    Assert.Single(result.DuplicateMessages);
+  }
+
+  [Fact]
+  public void PartialClassInOneNamespaceAcrossFiles_Compiles()
+  {
+    var a = Write("A.cs", "using ScriptBridge;\nnamespace A { public partial class Foo : ScriptBase { } }\n");
+    var b = Write("B.cs", "namespace A { public partial class Foo { public int V = 1; } }\n");
+
+    var result = ScriptCompiler.Compile(new[] { a, b });
+
+    Assert.True(result.Success, Describe(result));
   }
 
   [Fact]
