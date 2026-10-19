@@ -12,7 +12,7 @@ internal static unsafe class FakeWorldNatives
   private static IntPtr WorldFindObjectByName(IntPtr name)
   {
     Rec("World.findObjectByName", name);
-    return Get<IntPtr>("World.findObjectByName");
+    return GetFor<IntPtr>("World.findObjectByName", name);
   }
 
   [UnmanagedCallersOnly]
@@ -26,7 +26,7 @@ internal static unsafe class FakeWorldNatives
   private static byte WorldObjectExists(IntPtr u)
   {
     Rec("World.objectExists", u);
-    return Flag("World.objectExists");
+    return FlagFor("World.objectExists", u);
   }
 
   [UnmanagedCallersOnly]

@@ -128,6 +128,15 @@ internal static unsafe class FakeNatives
 
   internal static byte Flag(string key) => Get<bool>(key) ? (byte)1 : (byte)0;
 
+  // An answer keyed to one argument ("key:arg") when a test set one, else the plain per-function answer.
+  private static string Scoped(string key, string arg) => Canned.ContainsKey($"{key}:{arg}") ? $"{key}:{arg}" : key;
+
+  internal static T GetFor<T>(string key, IntPtr arg) => Get<T>(Scoped(key, Marshal.PtrToStringUTF8(arg) ?? ""));
+
+  internal static byte FlagFor(string key, IntPtr arg) => Flag(Scoped(key, Marshal.PtrToStringUTF8(arg) ?? ""));
+
+  internal static byte FlagForKey(string key, int code) => Flag(Scoped(key, code.ToString(CultureInfo.InvariantCulture)));
+
   private static string Text(object arg) => arg switch
   {
     IntPtr ptr => Marshal.PtrToStringUTF8(ptr) ?? "null",
