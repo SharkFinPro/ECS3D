@@ -5,6 +5,7 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <string>
 #include <system_error>
 
@@ -17,8 +18,9 @@ namespace {
     {
       static std::atomic<int> counter{0};
       const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+      std::random_device device;
       m_dir = fs::temp_directory_path() / ("ecs3d_project_paths_" + std::string(info->name()) + "_"
-        + std::to_string(counter++));
+        + std::to_string(device()) + "_" + std::to_string(counter++));
       fs::remove_all(m_dir);
       fs::create_directories(m_dir);
     }
@@ -151,16 +153,47 @@ TEST_F(ProjectPathsTest, AllowsDotDotThatStaysInside)
   expectSamePath(*resolved, m_dir / "assets/x");
 }
 
-TEST(QuotedProjectArgumentTest, QuotesAndStripsTrailingSeparators)
+TEST_F(ProjectPathsTest, BareEcs3dFileRootsAtCurrentDirectory)
 {
-  EXPECT_EQ(quotedProjectArgument("C:\proj"), "\"C:\proj\"");
-  EXPECT_EQ(quotedProjectArgument("C:\proj\\"), "\"C:\proj\"");
-  EXPECT_EQ(quotedProjectArgument("/home/p//"), "\"/home/p\"");
-  EXPECT_EQ(quotedProjectArgument("proj.ecs3d"), "\"proj.ecs3d\"");
+  const auto location = locateProject("project.ecs3d");
+
+  EXPECT_EQ(location.projectFile, fs::path("project.ecs3d"));
+  EXPECT_EQ(location.root, fs::path("."));
 }
 
-TEST(QuotedProjectArgumentTest, RootsKeepASeparatorAndGainADot)
+TEST_F(ProjectPathsTest, Ecs3dExtensionIsCaseInsensitive)
 {
-  EXPECT_EQ(quotedProjectArgument("C:\\"), "\"C:\.\"");
-  EXPECT_EQ(quotedProjectArgument("/"), "\"/.\"");
+  const auto location = locateProject(m_dir / "game" / "PROJECT.ECS3D");
+
+  expectSamePath(location.root, m_dir / "game");
+  EXPECT_TRUE(locateProject(m_dir / "game" / "project.json").root.empty());
+}
+
+TEST(AbsoluteProjectArgumentTest, MakesRelativeAbsoluteAndKeepsEmptyAndAbsolute)
+{
+  EXPECT_TRUE(fs::path(absoluteProjectArgument("games/a")).is_absolute());
+  EXPECT_TRUE(absoluteProjectArgument("").empty());
+
+  const auto absolute = fs::absolute("games/a").string();
+  EXPECT_EQ(absoluteProjectArgument(absolute), absolute);
+}
+
+TEST(QuotedProjectArgumentTest, QuotesAndStripsTrailingSeparators)
+{
+  EXPECT_EQ(quotedProjectArgument(R"(C:\proj)"), R"("C:\proj")");
+  EXPECT_EQ(quotedProjectArgument(R"(C:\proj\)"), R"("C:\proj")");
+  EXPECT_EQ(quotedProjectArgument("/home/p//"), R"("/home/p")");
+  EXPECT_EQ(quotedProjectArgument("proj.ecs3d"), R"("proj.ecs3d")");
+}
+
+TEST(QuotedProjectArgumentTest, DriveRootsKeepASeparatorAndGainADot)
+{
+  EXPECT_EQ(quotedProjectArgument(R"(C:\)"), R"("C:\.")");
+  EXPECT_EQ(quotedProjectArgument("/"), R"("/.")");
+}
+
+TEST(QuotedProjectArgumentTest, OnlyATwoCharacterDriveIsARoot)
+{
+  EXPECT_EQ(quotedProjectArgument("foo:"), R"("foo:")");
+  EXPECT_EQ(quotedProjectArgument("foo:/"), R"("foo:")");
 }
