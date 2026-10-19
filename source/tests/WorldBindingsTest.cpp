@@ -4,6 +4,7 @@
 #include "TestScene.h"
 
 #include "BindingContext.h"
+#include "Replication.h"
 #include "WorldBindings.h"
 
 #include "assets/AssetRegistry.h"
@@ -132,6 +133,7 @@ namespace {
       BindingContext::takeSpawned();
       BindingContext::takeDestroyed();
       BindingContext::takeComponentEdits();
+      (void)BindingContext::takeStructuralComponentChanges();
     }
 
     fixtures::Scene scene;
@@ -347,6 +349,87 @@ namespace {
     // Positive control: the same call with the live uuid does record.
     bindings.destroyObject(uuidOf(object).c_str());
     EXPECT_EQ(BindingContext::takeDestroyed().size(), 1u);
+  }
+
+  // --- setObjectName ---------------------------------------------------------------------------------
+
+  TEST_F(WorldBindingsTest, SetObjectNameRenamesAndIsVisibleToLookups)
+  {
+    const auto object = fixtures::addObject(scene, "Body");
+    const auto uuid = uuidOf(object);
+
+    EXPECT_TRUE(bindings.setObjectName(uuid.c_str(), "Player 3"));
+
+    EXPECT_EQ(object->getName(), "Player 3");
+    EXPECT_EQ(copyOut(bindings.getObjectName(uuid.c_str())), "Player 3");
+    EXPECT_EQ(copyOut(bindings.findObjectByName("Player 3")), uuid);
+    EXPECT_EQ(copyOut(bindings.findObjectByName("Body")), "");
+  }
+
+  TEST_F(WorldBindingsTest, SetObjectNameRecordsTheObjectOnceEvenWhenRenamedTwice)
+  {
+    const auto object = fixtures::addObject(scene, "Body");
+    const auto uuid = uuidOf(object);
+
+    EXPECT_TRUE(bindings.setObjectName(uuid.c_str(), "First"));
+    EXPECT_TRUE(bindings.setObjectName(uuid.c_str(), "Second"));
+
+    const auto changed = BindingContext::takeStructuralComponentChanges();
+    ASSERT_EQ(changed.size(), 1u);
+    EXPECT_EQ(changed[0], object->getUUID());
+    EXPECT_EQ(object->getName(), "Second");
+  }
+
+  TEST_F(WorldBindingsTest, SetObjectNameRefusesUnknownMalformedAndEmptyInput)
+  {
+    const auto object = fixtures::addObject(scene, "Body");
+    const auto uuid = uuidOf(object);
+
+    EXPECT_FALSE(bindings.setObjectName(uuids::to_string(unknownUUID()).c_str(), "X"));
+    EXPECT_FALSE(bindings.setObjectName("not-a-uuid", "X"));
+    EXPECT_FALSE(bindings.setObjectName(nullptr, "X"));
+    EXPECT_FALSE(bindings.setObjectName(uuid.c_str(), ""));
+    EXPECT_FALSE(bindings.setObjectName(uuid.c_str(), nullptr));
+    EXPECT_EQ(object->getName(), "Body");
+    EXPECT_TRUE(BindingContext::takeStructuralComponentChanges().empty());
+
+    // Positive control: a valid name on the same object is accepted.
+    EXPECT_TRUE(bindings.setObjectName(uuid.c_str(), "Renamed"));
+    EXPECT_EQ(object->getName(), "Renamed");
+    EXPECT_EQ(BindingContext::takeStructuralComponentChanges().size(), 1u);
+  }
+
+  TEST_F(WorldBindingsTest, SetObjectNameRefusesAnObjectMarkedForDeletion)
+  {
+    const auto doomed = fixtures::addObject(scene, "Doomed");
+    const auto alive = fixtures::addObject(scene, "Alive");
+
+    bindings.destroyObject(uuidOf(doomed).c_str());
+
+    EXPECT_FALSE(bindings.setObjectName(uuidOf(doomed).c_str(), "Ghost"));
+    EXPECT_EQ(doomed->getName(), "Doomed");
+    EXPECT_TRUE(BindingContext::takeStructuralComponentChanges().empty());
+
+    EXPECT_TRUE(bindings.setObjectName(uuidOf(alive).c_str(), "Still Here"));
+    EXPECT_EQ(BindingContext::takeStructuralComponentChanges().size(), 1u);
+  }
+
+  TEST_F(WorldBindingsTest, SetObjectNameReplicatesThroughObjectComponentsChanged)
+  {
+    const auto object = fixtures::addObject(scene, "Body");
+
+    const auto view = fixtures::makeScene();
+    auto viewObject = std::make_shared<Object>("Body", object->getUUID());
+    view.objectManager->addObject(viewObject);
+
+    ASSERT_TRUE(bindings.setObjectName(uuidOf(object).c_str(), "Player 1"));
+    const auto changed = BindingContext::takeStructuralComponentChanges();
+    ASSERT_EQ(changed.size(), 1u);
+
+    replication::applyObjectComponentsChanged(*view.objectManager,
+                                              replication::buildObjectComponentsChanged(*object));
+
+    EXPECT_EQ(viewObject->getName(), "Player 1");
   }
 
   // --- Queries ---------------------------------------------------------------------------------------
