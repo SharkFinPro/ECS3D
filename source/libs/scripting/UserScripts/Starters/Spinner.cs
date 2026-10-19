@@ -12,6 +12,12 @@ public class Spinner : ScriptBase
     [ExposeToEditor("Degrees Per Second")]
     private float m_degreesPerSecond = 45.0f;
 
+    // Kept across ticks because Euler angles lose precision near +/-90 degrees of yaw; reseeded whenever the
+    // rotation read back is not the one written last tick (an editor or another script turned the object).
+    private Quaternion m_orientation = Quaternion.Identity;
+
+    private Vector3? m_lastWritten;
+
     public override void fixedUpdate(float dt)
     {
         if (m_axis.LengthSquared() <= 0.0f || !float.IsFinite(m_axis.LengthSquared()))
@@ -29,8 +35,22 @@ public class Spinner : ScriptBase
 
         float radians = StarterUtils.perTick(m_degreesPerSecond, dt) * (MathF.PI / 180.0f);
         Quaternion step = Quaternion.CreateFromAxisAngle(axis, radians);
-        Quaternion current = StarterUtils.eulerToQuaternion(transform.getRotation());
-        Vector3 euler = StarterUtils.quaternionToEuler(Quaternion.Normalize(step * current));
+        Vector3 read = transform.getRotation();
+        if (m_lastWritten is not Vector3 last || !closeTo(last, read))
+        {
+            m_orientation = StarterUtils.eulerToQuaternion(read);
+        }
+
+        m_orientation = Quaternion.Normalize(step * m_orientation);
+        Vector3 euler = StarterUtils.quaternionToEuler(m_orientation);
+        m_lastWritten = euler;
         transform.setRotation(euler.X, euler.Y, euler.Z);
+    }
+
+    private static bool closeTo(Vector3 a, Vector3 b)
+    {
+        const float tolerance = 1e-3f;
+        return MathF.Abs(a.X - b.X) <= tolerance && MathF.Abs(a.Y - b.Y) <= tolerance &&
+               MathF.Abs(a.Z - b.Z) <= tolerance;
     }
 }

@@ -137,6 +137,33 @@ public unsafe class StarterMotionBasicTests : IDisposable
   }
 
   [Fact]
+  public void Spinner_KeepsTurningCleanlyThroughYawNinety()
+  {
+    var spinner = NewScript<Spinner>(("m_degreesPerSecond", 45.0f));
+
+    SpinTicks(spinner, 30, 0.1f);
+
+    var v = new Vector3(1f, 2f, 3f);
+    AssertVec(Rodrigues(v, new Vector3(0f, 1f, 0f), 135.0f), StarterUtils.rotate(CurrentRotation(), v));
+  }
+
+  [Fact]
+  public void Spinner_PicksUpARotationChangedByAnotherSourceMidSpin()
+  {
+    var spinner = NewScript<Spinner>(("m_degreesPerSecond", 45.0f));
+    SpinTicks(spinner, 10, 0.1f);
+
+    var external = new Vector3(0f, 0f, 90f);
+    FakeNatives.Set("Transform.getRotation", external);
+    SpinTicks(spinner, 10, 0.1f);
+
+    // 45 degrees about world Y applied to the externally set roll of 90.
+    var v = new Vector3(1f, 0f, 0f);
+    AssertVec(Rodrigues(StarterUtils.rotate(external, v), new Vector3(0f, 1f, 0f), 45.0f),
+      StarterUtils.rotate(CurrentRotation(), v));
+  }
+
+  [Fact]
   public void Spinner_OnARigidBodySetsAngularVelocityInDegreesPerSecondAndNeverSetsRotation()
   {
     FakeNatives.Set("RigidBody.has", true);
