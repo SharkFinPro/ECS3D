@@ -1,4 +1,4 @@
-"""Writes the generated default assets into source/apps/server/defaultAssets/ ."""
+"""Writes the generated default assets into source/apps/server/defaultAssets/."""
 import sys
 
 sys.dont_write_bytecode = True
