@@ -527,8 +527,8 @@ its subscriptions ending with it.
 `StarterUtils` holds their shared helpers (throttled lookup by name, `findPlayerBody`, `parseKey`, the Euler
 rotation mirror of `RotationConvention.h`) and `StarterEvents` the event names and payload classes. Objects are
 referenced by name, assets and prefabs by uuid string. `PlayerScript` exposes its keys as string fields
-(default WASD and Space) that `parseKey` reads, re-parsing when a value changes; the managed `Key` enum names
-`SPACE` for that.
+(W, A, S and D to move and the space bar to jump by default) that `parseKey` reads, re-parsing when a
+value changes; the managed `Key` enum gained a space bar value for that.
 
 **Script binding coverage.** Each *Bindings provider exposes its component's full public surface except
 for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight. Every
