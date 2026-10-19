@@ -201,7 +201,7 @@ public class BridgeFieldMarshallingTests
   private class NullStringField
   {
     [ExposeToEditor("Label")]
-    public string? label = null;
+    public string? label;
   }
 
   private static string ReadAndFree(System.IntPtr ptr)

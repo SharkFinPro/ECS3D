@@ -5,6 +5,7 @@
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <cstddef>
 #include <memory>
 #include <string>

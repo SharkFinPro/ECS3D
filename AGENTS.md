@@ -451,7 +451,7 @@ against bound/notYetBound/nativeOnly; a new enumerator with no row fails the bui
 without deciding its scripting story can't go unnoticed. Script field edits are validated
 (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
 refused with a warning and does not fault the script. Exposed fields may be float, int, bool, string or
-vector3: each type has a `getField*`/`setField*` export, and a string crosses as UTF-8 that the native side
+vector3: each type has a `getField*`/`setField*` export, and a string crosses as UTF-8 (Unicode Transformation Format, 8-bit) that the native side
 frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
 every other type, and the Inspector draws a string field as a text box.
 A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
