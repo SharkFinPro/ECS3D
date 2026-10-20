@@ -197,4 +197,80 @@ public class BridgeFieldMarshallingTests
     Assert.False(ok);
     Assert.Null(converted);
   }
+
+  private class NullStringField
+  {
+    [ExposeToEditor("Label")]
+    public string? label;
+  }
+
+  private static string ReadAndFree(System.IntPtr ptr)
+  {
+    var text = System.Runtime.InteropServices.Marshal.PtrToStringUTF8(ptr)!;
+    System.Runtime.InteropServices.Marshal.FreeCoTaskMem(ptr);
+    return text;
+  }
+
+  [Fact]
+  public void StringFieldToCoTaskMem_CarriesTheCurrentValueAsUtf8()
+  {
+    var instance = new SampleFields { label = "caf\u00e9 player" };
+
+    var text = ReadAndFree(Bridge.StringFieldToCoTaskMem(Bridge.ReadExposedField(instance, "label")));
+
+    Assert.Equal("caf\u00e9 player", text);
+  }
+
+  [Fact]
+  public void StringFieldToCoTaskMem_ReadsANullStringFieldAsEmpty()
+  {
+    // Positive control is StringFieldToCoTaskMem_CarriesTheCurrentValueAsUtf8 above.
+    var instance = new NullStringField();
+
+    var text = ReadAndFree(Bridge.StringFieldToCoTaskMem(Bridge.ReadExposedField(instance, "label")));
+
+    Assert.Equal("", text);
+  }
+
+  [Fact]
+  public void TryConvertFieldValue_AssignsAStringToAStringField()
+  {
+    var ok = Bridge.TryConvertFieldValue(typeof(string), "Player 1", out var converted);
+
+    Assert.True(ok);
+    Assert.Equal("Player 1", converted);
+  }
+
+  [Fact]
+  public void TryConvertFieldValue_RefusesANumberForAStringField()
+  {
+    // Positive control is TryConvertFieldValue_AssignsAStringToAStringField above: Convert.ChangeType
+    // would otherwise turn 5 into "5".
+    var ok = Bridge.TryConvertFieldValue(typeof(string), 5, out var converted);
+
+    Assert.False(ok);
+    Assert.Null(converted);
+  }
+
+  [Fact]
+  public void TryConvertFieldValue_RefusesAStringForANumericField()
+  {
+    // Positive control is TryConvertFieldValue_ConvertsBetweenConvertibleTypes above: ChangeType
+    // would otherwise parse "5" into an int.
+    var ok = Bridge.TryConvertFieldValue(typeof(int), "5", out var converted);
+
+    Assert.False(ok);
+    Assert.Null(converted);
+  }
+
+  [Fact]
+  public void TryConvertFieldValue_LeavesANonStringFieldUntouchedWhenAStringIsRefused()
+  {
+    // Positive control is TryConvertFieldValue_AssignsAStringToAStringField above.
+    var instance = new SampleFields();
+
+    Assert.False(Bridge.TryConvertFieldValue(
+      Bridge.FindExposedField(instance, "count")!.FieldType, "12", out _));
+    Assert.Equal(7, instance.count);
+  }
 }
