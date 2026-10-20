@@ -1,8 +1,6 @@
-"""The convex shape library: vertex formulas and flat-shaded models.
-
-Every formula is mirrored in source/apps/server/DefaultShapes.cpp, which hulls the same points. Math is
-done in double so both sides agree to float precision.
-"""
+"""The convex shape library: vertex formulas and flat-shaded models."""
+# Every formula is mirrored in source/apps/server/DefaultShapes.cpp, which hulls the same points. Math is
+# done in double so both sides agree to float precision.
 import itertools
 import math
 
@@ -68,7 +66,7 @@ def drum_points():
 
 
 def gem_points():
-    """Brilliant cut: a point below, an 8-sided girdle, an 8-sided table above."""
+    """Return a brilliant cut: a point below, an 8-sided girdle, an 8-sided table above."""
     points = [(0.0, -1.0, 0.0)]
     for y, radius in ((0.1, 1.0), (0.55, 0.55)):
         for k in range(8):
@@ -122,12 +120,8 @@ def _unit(v):
     return (v[0] / length, v[1] / length, v[2] / length)
 
 
-def convex_faces(points):
-    """Faces of the convex hull of a small point set as polygons of its points (coplanar triangles merged).
-
-    Brute force over point triples; points that are not hull vertices are dropped. Raises if a point sits
-    close to a face plane without being on it, since the C++ hull could then disagree about it.
-    """
+def _planes_of(points):
+    """Return the distinct outward face planes of the points as (normal, offset, signed distances)."""
     planes = []
     for i, j, k in itertools.combinations(range(len(points)), 3):
         n = _cross(_sub(points[j], points[i]), _sub(points[k], points[i]))
@@ -140,38 +134,55 @@ def convex_faces(points):
             if min(distances) < -_PLANE_EPSILON:
                 continue
             n, d, distances = (-n[0], -n[1], -n[2]), -d, [-s for s in distances]
-        for pn, pd, _ in planes:
-            if _dot(n, pn) > 1.0 - 1e-9 and abs(d - pd) < 1e-6:
-                break
-        else:
+        if not any(_dot(n, pn) > 1.0 - 1e-9 and abs(d - pd) < 1e-6 for pn, pd, _ in planes):
             planes.append((n, d, distances))
+    return planes
 
+
+def _face_ids(planes):
+    """Return (normal, point ids on the plane) per plane, refusing points that are only nearly on one."""
     faces = []
-    for n, d, distances in planes:
-        for s in distances:
-            if _PLANE_EPSILON < abs(s) < 1e-3:
-                raise ValueError("a point is nearly on a face plane")
+    for n, _, distances in planes:
+        if any(_PLANE_EPSILON < abs(s) < 1e-3 for s in distances):
+            raise ValueError("a point is nearly on a face plane")
         faces.append((n, [idx for idx, s in enumerate(distances) if abs(s) <= _PLANE_EPSILON]))
+    return faces
 
+
+def _hull_vertex_ids(faces):
+    """Return the ids that lie on at least three faces, which are the hull's vertices."""
     uses = {}
     for _, ids in faces:
         for idx in ids:
             uses[idx] = uses.get(idx, 0) + 1
-    vertices = {idx for idx, count in uses.items() if count >= 3}
+    return {idx for idx, count in uses.items() if count >= 3}
 
-    polygons = []
-    for n, ids in faces:
-        ids = [idx for idx in ids if idx in vertices]
-        center = tuple(sum(points[idx][k] for idx in ids) / len(ids) for k in range(3))
-        u = _unit(_sub(points[ids[0]], center))
-        v = _cross(n, u)
-        ids.sort(key=lambda idx: math.atan2(_dot(_sub(points[idx], center), v),
-                                            _dot(_sub(points[idx], center), u)))
-        polygons.append([points[idx] for idx in ids])
 
+def _ordered_polygon(points, normal, ids):
+    """Return the points of a face in cyclic order around its center."""
+    center = tuple(sum(points[idx][k] for idx in ids) / len(ids) for k in range(3))
+    u = _unit(_sub(points[ids[0]], center))
+    v = _cross(normal, u)
+    ids = sorted(ids, key=lambda idx: math.atan2(_dot(_sub(points[idx], center), v),
+                                                 _dot(_sub(points[idx], center), u)))
+    return [points[idx] for idx in ids]
+
+
+def _check_closed(vertex_count, polygons):
+    """Raise unless the polygons form a closed polyhedron by Euler's formula."""
     edges = sum(len(p) for p in polygons) // 2
-    if len(vertices) - edges + len(polygons) != 2:
+    if vertex_count - edges + len(polygons) != 2:
         raise ValueError("hull is not a closed polyhedron")
+
+
+def convex_faces(points):
+    """Return the faces of the convex hull of a small point set, coplanar triangles merged."""
+    # Brute force over point triples; points that are not hull vertices are dropped. A point close to a
+    # face plane without being on it is refused, since the C++ hull could then disagree about it.
+    faces = _face_ids(_planes_of(points))
+    vertices = _hull_vertex_ids(faces)
+    polygons = [_ordered_polygon(points, n, [idx for idx in ids if idx in vertices]) for n, ids in faces]
+    _check_closed(len(vertices), polygons)
     return polygons
 
 
