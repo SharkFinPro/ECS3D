@@ -177,8 +177,22 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
   const auto& body = *stack.bodies[0];
   const float perBox = body.getMass() * -body.getGravity() * dt * 0.1f * glm::dot(stack.normal, glm::vec3(0, 1, 0));
 
-  // A top box that slid off would leave the level under it nothing to pass on; past the face's edge it would tip off.
+  // A top box that slid off would leave the level under it nothing to pass on.
+  // Measured along the slope, so sinking into the boxes below does not count. The top box falls three ticks onto
+  // a stack still settling and slips about 0.3 before friction holds it; a slide off the stack is over 1.
+  constexpr float topBoxBound = 0.35f;
+  EXPECT_LT(std::fabs(stack.slidDownhill(count - 1)), topBoxBound);
   EXPECT_LT(std::fabs(glm::dot(stack.positionOf(count - 1) - stack.positionOf(count - 2), stack.downhill)), 1.0f);
+
+  // Positive control: the bound is not vacuous, since the same stack on a steeper slope moves farther than it.
+  SlopeStack sliding(count, 40.0f);
+  sliding.run(100);
+  EXPECT_GT(sliding.slidDownhill(count - 1), topBoxBound);
+
+  for (const auto& box : stack.bodies)
+  {
+    EXPECT_LT(glm::length(box->getAngularVelocity()), 0.5f);
+  }
 
   for (int tick = 0; tick < 10; ++tick)
   {

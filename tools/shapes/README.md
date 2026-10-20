@@ -15,8 +15,11 @@ generator twice produces identical bytes. Re-run it and commit the result whenev
   vertices duplicated per face).
 - `primitives.py` - `capsule`, `ramp`, `plane_tile`, `torus`.
 - `textures.py` - the PNG writer and texture definitions.
-- `generate.py` - the entry point. Later shapes (the convex shape library) add builders to `primitives.py` and
-  an entry to `MODELS`.
+- `library.py` - the convex shape library (D4, D8, D12, D20, Hex Prism, Drum, Gem, Boulder): the vertex
+  formulas, a brute-force convex hull for small point sets that merges coplanar triangles into polygons, and
+  flat-shaded models from them. The Boulder's points come from an explicit 32-bit xorshift with a fixed seed,
+  so `DefaultShapes.cpp` reproduces them exactly. The D6 hull uses `cube_1x1x1.glb`.
+- `generate.py` - the entry point. A new model adds a builder and an entry to `MODELS`.
 
 ## Conventions
 
