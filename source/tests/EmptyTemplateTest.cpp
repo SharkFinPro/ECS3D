@@ -10,6 +10,7 @@
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
+#include "objects/components/LightRenderer.h"
 #include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
@@ -299,7 +300,7 @@ TEST(EmptyTemplate, HasOneSunAndAnActiveMainCamera)
   int lights = 0;
   for (const auto& object : scene.getObjectManager()->getAllObjects())
   {
-    lights += object->getComponent(ComponentType::lightRenderer) ? 1 : 0;
+    lights += object->getComponent<LightRenderer>(ComponentType::lightRenderer) ? 1 : 0;
   }
 
   EXPECT_EQ(lights, 1);
