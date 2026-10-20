@@ -7,3 +7,4 @@ cmake-build-ecs3d-release
 cmake-build-ecs3d-sanitize
 cmake-build-ecs3d-profile
 .idea
+__pycache__/

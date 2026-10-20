@@ -119,6 +119,91 @@ public sealed class KeyBinding
     }
 }
 
+// An object named by a field or, when Slot is 0 or more, the body of that player (the slot wins over the name).
+// A missing slot is rescanned at most once a second and logs one warning until the body is found.
+public sealed class TargetRef
+{
+    private const float SlotRetrySeconds = 1.0f;
+
+    private readonly NamedObject _named;
+    private string _slotUuid = "";
+    private int _resolvedSlot = -1;
+    private float _sinceSlotLookup;
+    private bool _slotLooked;
+    private bool _slotWarned;
+
+    public TargetRef(string owner)
+    {
+        _named = new NamedObject(owner);
+        _owner = owner;
+    }
+
+    private readonly string _owner;
+
+    public int Slot { get; set; } = -1;
+
+    public string Name
+    {
+        get => _named.Name;
+        set => _named.Name = value;
+    }
+
+    // Call once per fixed tick. False (with an empty uuid) while the target cannot be found.
+    public bool tryResolve(float dt, out string uuid)
+    {
+        if (Slot < 0)
+        {
+            return _named.tryResolve(dt, out uuid);
+        }
+
+        uuid = "";
+        if (_resolvedSlot != Slot)
+        {
+            _resolvedSlot = Slot;
+            _slotUuid = "";
+            _slotLooked = false;
+            _slotWarned = false;
+        }
+
+        if (_slotUuid.Length > 0)
+        {
+            if (World.tryGetPlayerController(_slotUuid, out PlayerController controller) &&
+                controller.getPlayerSlot() == Slot)
+            {
+                uuid = _slotUuid;
+                return true;
+            }
+
+            _slotUuid = "";
+            _slotLooked = false;
+        }
+
+        _sinceSlotLookup += dt;
+        if (_slotLooked && _sinceSlotLookup < SlotRetrySeconds)
+        {
+            return false;
+        }
+
+        _slotLooked = true;
+        _sinceSlotLookup = 0.0f;
+        _slotUuid = StarterUtils.findPlayerBody(Slot);
+        if (_slotUuid.Length > 0)
+        {
+            _slotWarned = false;
+            uuid = _slotUuid;
+            return true;
+        }
+
+        if (!_slotWarned)
+        {
+            _slotWarned = true;
+            Log.warn($"{_owner}: no player body holds slot {Slot}; it will keep looking.");
+        }
+
+        return false;
+    }
+}
+
 public static class StarterUtils
 {
     // One-shot lookup of an object by name: its uuid, or "" when the name is empty or nothing has it.
