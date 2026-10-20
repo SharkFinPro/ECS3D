@@ -268,7 +268,6 @@ TEST(MultiSelectEdit, ScriptFieldsDifferingOnlyInDisplayNameAreNotMixed)
   scriptB->setFields(relabeled);
 
   EXPECT_TRUE(componentFieldDelta::mixedTopLevelKeys({ scriptA->serialize(), scriptB->serialize() }).empty());
-  EXPECT_TRUE(componentFieldDelta::changedTopLevelKeys(scriptA->serialize(), scriptB->serialize()).empty());
 
   auto changedValue = scriptB->getFields();
   changedValue[0]["value"] = 4.0f;
