@@ -1,6 +1,6 @@
 // Scene script: gives every joining player a body, adopting a placed one or spawning the player prefab.
 // A spawned body is destroyed when its player leaves, so a slot switch (leave, then join) respawns it.
-// Spawned bodies keep the prefab's name for now.
+// A spawned body is named "Player <slot>"; an adopted placed body keeps its own name.
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -144,6 +144,7 @@ public class PlayerSpawnManager : SceneScript
 
         entry.Uuid = uuid;
         entry.Spawned = true;
+        World.setObjectName(uuid, $"Player {slot}");
         if (World.tryGetPlayerController(uuid, out PlayerController controller))
         {
             controller.setPlayerSlot(slot);

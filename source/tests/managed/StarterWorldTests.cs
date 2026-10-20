@@ -28,6 +28,7 @@ internal sealed unsafe class WorldModel : IDisposable
 
   internal readonly List<(string Prefab, Vector3 At)> Spawns = new();
   internal readonly List<string> Destroyed = new();
+  internal readonly List<(string Uuid, string Name)> Renames = new();
   internal readonly List<(string Uuid, Vector3 To)> Moves = new();
   internal readonly List<(int Level, string Message)> LogCalls = new();
 
@@ -48,7 +49,8 @@ internal sealed unsafe class WorldModel : IDisposable
       destroyObject = &DestroyObject,
       raycast = &Raycast,
       overlapSphere = &OverlapSphere,
-      spawnPrefab = &SpawnPrefab
+      spawnPrefab = &SpawnPrefab,
+      setObjectName = (delegate* unmanaged<IntPtr, IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, IntPtr, byte>)&SetObjectName
     };
     NativeBindings.Transform = new TransformBindings
     {
@@ -166,6 +168,21 @@ internal sealed unsafe class WorldModel : IDisposable
     FakeNatives.Set($"PlayerController.has:{uuid}", true);
     FakeNatives.Set($"PlayerController.getPlayerSlot:{uuid}", -1);
     return model.Text(uuid);
+  }
+
+  [UnmanagedCallersOnly]
+  private static byte SetObjectName(IntPtr uuid, IntPtr name)
+  {
+    var model = s_current!;
+    var id = Read(uuid);
+    if (!model._names.ContainsKey(id))
+    {
+      return 0;
+    }
+
+    model._names[id] = Read(name);
+    model.Renames.Add((id, Read(name)));
+    return 1;
   }
 
   [UnmanagedCallersOnly]
@@ -306,6 +323,35 @@ public class StarterWorldTests : IDisposable
 
     manager.onPlayerJoined(1);
     Assert.True(Called("PlayerController.setPlayerSlot(spawned-2,1)"));
+  }
+
+  [Fact]
+  public void SpawnedBodies_AreNamedAfterTheirSlot()
+  {
+    AddSpawnPoints();
+    var manager = NewManager();
+
+    manager.onPlayerJoined(0);
+    manager.onPlayerJoined(3);
+
+    Assert.Equal(new[] { ("spawned-1", "Player 0"), ("spawned-2", "Player 3") }, _world.Renames);
+    Assert.Equal("Player 3", World.getObjectName("spawned-2"));
+  }
+
+  [Fact]
+  public void AdoptedBody_KeepsItsName_WhileASpawnedOneInTheSameSceneIsRenamed()
+  {
+    AddSpawnPoints();
+    _world.Add("placed", "Hero", new Vector3(10f, 1f, 1f));
+    FakeNatives.Set("PlayerController.has:placed", true);
+    FakeNatives.Set("PlayerController.getPlayerSlot:placed", 0);
+    var manager = NewManager();
+
+    manager.onPlayerJoined(0);
+    manager.onPlayerJoined(1);
+
+    Assert.Equal(new[] { ("spawned-1", "Player 1") }, _world.Renames);
+    Assert.Equal("Hero", World.getObjectName("placed"));
   }
 
   [Fact]
