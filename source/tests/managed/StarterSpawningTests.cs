@@ -186,7 +186,7 @@ public unsafe class StarterSpawningTests : IDisposable
     return spawner;
   }
 
-  private static void Exists(string uuid, bool exists = true) => FakeNatives.Set($"World.objectExists:{uuid}", exists);
+  private static void Exists(string uuid, bool present = true) => FakeNatives.Set($"World.objectExists:{uuid}", present);
 
   // Lets one interval (1 s) pass, answering the spawn with this uuid.
   private static void NextSpawn(Spawner spawner, string uuid)
@@ -278,7 +278,7 @@ public unsafe class StarterSpawningTests : IDisposable
     Assert.Single(CallsTo("World.spawnPrefab"));
 
     FakeNatives.Calls.Clear();
-    var eager = NewSpawner(onStart: true);
+    var eager = NewSpawner();
     eager.start();
     Assert.Single(CallsTo("World.spawnPrefab"));
   }
