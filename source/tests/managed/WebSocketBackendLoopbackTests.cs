@@ -450,6 +450,45 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   }
 
   [Fact]
+  public void ServerStop_WaitsForAConnectionThatIsAlreadyDeliveringItsDisconnect()
+  {
+    using var entered = new ManualResetEventSlim();
+    using var release = new ManualResetEventSlim();
+    Action<int> holdExit = _ =>
+    {
+      entered.Set();
+      release.Wait(10000);
+    };
+    var server = new WebSocketBackend { ServerConnectionExiting = holdExit };
+    var port = Start(server);
+
+    var client = Connect(port, RolePlayer);
+    WaitFor(() => server.ServerConnectionCount() == 1, "the client to join");
+    var id = Authorized()[0].ConnId;
+
+    RunWithDeadline(client.ClientDisconnect, "ClientDisconnect");
+    WaitFor(() => entered.IsSet, "the server's connection thread to start exiting");
+
+    var stop = Task.Run(server.ServerStop);
+    try
+    {
+      // The thread is parked before its disconnect callback; a stop that returns now could see that
+      // callback land after it, in whatever owns the callbacks next.
+      Assert.False(stop.Wait(500), "ServerStop returned before the exiting connection delivered its disconnect.");
+      Assert.Empty(TransportRecorder.ServerDisconnected);
+    }
+    finally
+    {
+      release.Set();
+    }
+
+    Assert.True(stop.Wait(10000), "ServerStop did not return once the connection was released.");
+    stop.GetAwaiter().GetResult();
+    Assert.Equal(new[] { id }, TransportRecorder.ServerDisconnected.ToArray());
+    AssertStays(() => TransportRecorder.ServerDisconnected.Count, 1, "disconnects after ServerStop");
+  }
+
+  [Fact]
   public void ClientDisconnect_ReturnsAndTheServerSeesTheConnectionGo()
   {
     var server = new WebSocketBackend();

@@ -93,6 +93,7 @@ add_executable(${PROJECT_NAME}
   LogFilterTest.cpp
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
+  ScriptFieldLabelTest.cpp
   AttachedScriptsTest.cpp
   ScriptSystemLifecycleTest.cpp
   ScriptSystemSceneScriptTest.cpp
@@ -105,6 +106,7 @@ add_executable(${PROJECT_NAME}
   CompoundFlushTest.cpp
   CompoundRollingArmTest.cpp
   SettingsStoreTest.cpp
+  RecentProjectsTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp
   RemoteLogSinkTest.cpp
@@ -151,6 +153,7 @@ add_executable(${PROJECT_NAME}
   PhysicsSlopeStackTest.cpp
   DefaultProjectTest.cpp
   DefaultShapesTest.cpp
+  ShapeDropTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp
   ObjectComponentsChangedTest.cpp

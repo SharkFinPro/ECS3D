@@ -38,6 +38,9 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 | `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `ProjectTemplate` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
 | `source/Assets/` | Bundled `AvaloniaResource`s: `Fonts/` (Geist, GeistMono) and `scene_render.png`. |
 
+**Shared files:** `recent-projects.json` is also written by the editor; its schema is in
+`source/libs/settings/RecentProjects.md` (repository root).
+
 ## Build & Run
 
 - **Standalone (the normal way to develop this):** `dotnet run` from this directory, or open the folder in
