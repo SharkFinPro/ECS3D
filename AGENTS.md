@@ -135,7 +135,8 @@
   cobertura output in `<build-dir>/coverage/managed`; the native side is read with gcovr.
 - **Managed tests** (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered
   as a single CTest test through `add_test` in `tests/CMakeLists.txt` (guarded on `DOTNET_EXE`) rather
-  than a native executable. It covers pure, testable logic via `ProjectReference`s to
+  than a native executable. The launcher's `source/Services` (plain C#, no Avalonia) are compiled into it by
+  link. It covers pure, testable logic via `ProjectReference`s to
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
