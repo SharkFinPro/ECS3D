@@ -1,4 +1,5 @@
 #include "ProjectSerializer.h"
+#include "ProjectPaths.h"
 #include "assets/AssetRegistry.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneAsset.h"
@@ -125,12 +126,12 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
   }
 }
 
-bool ProjectSerializer::save(const std::string& path) const
+bool ProjectSerializer::save(const std::filesystem::path& path) const
 {
   std::ofstream outFile(path);
   if (!outFile.is_open())
   {
-    Log::error(LogCategory::assets, "Could not open project file for writing: " + path);
+    Log::error(LogCategory::assets, "Could not open project file for writing: " + pathToUtf8(path));
     return false;
   }
 
