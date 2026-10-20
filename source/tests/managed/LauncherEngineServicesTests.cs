@@ -12,8 +12,9 @@ namespace ECS3DManagedTests;
 
 public class LauncherEngineServicesTests
 {
-  private static readonly string EngineDir = Path.Combine("engine", "bin");
-  private static readonly string LauncherDir = Path.Combine("launcher", "dir");
+  private static readonly string EngineDir = Path.GetFullPath(Path.Combine(EngineRoot, "bin"));
+  private static readonly string LauncherDir = Path.GetFullPath(Path.Combine("launcher", "dir"));
+  private static readonly string EngineRoot = Path.GetFullPath("engine");
   private static readonly LaunchOptions NoOptions = new(false, false);
   private static readonly LaunchOptions BothOptions = new(true, true);
 
@@ -22,10 +23,10 @@ public class LauncherEngineServicesTests
       .Select(executable => Path.Combine(folder, EngineExecutableNames.FileName(executable, os)))
       .ToArray();
 
-  private static EngineLocation CompleteEngine(string folder = "engine")
+  private static EngineLocation CompleteEngine()
   {
-    var locator = new EngineLocator(new FakeFileSystem(AllFiles(folder, HostOs.Linux)), HostOs.Linux, LauncherDir);
-    return locator.Locate(folder);
+    var files = new FakeFileSystem(AllFiles(EngineRoot, HostOs.Linux));
+    return new EngineLocator(files, HostOs.Linux, LauncherDir).Locate(EngineRoot);
   }
 
   [Fact]
@@ -42,7 +43,8 @@ public class LauncherEngineServicesTests
   [Fact]
   public void LocatorFindsEverythingWhenAllExecutablesArePresent()
   {
-    var locator = new EngineLocator(new FakeFileSystem(AllFiles(LauncherDir, HostOs.Windows)), HostOs.Windows, LauncherDir);
+    var files = new FakeFileSystem(AllFiles(LauncherDir, HostOs.Windows));
+    var locator = new EngineLocator(files, HostOs.Windows, LauncherDir);
 
     var location = locator.Locate(null);
 
@@ -97,6 +99,21 @@ public class LauncherEngineServicesTests
   }
 
   [Fact]
+  public void RelativeOverrideResolvesToAbsolutePaths()
+  {
+    var relative = Path.Combine("..", "somewhere", "engine");
+    var absolute = Path.GetFullPath(relative);
+    var locator = new EngineLocator(new FakeFileSystem(AllFiles(absolute, HostOs.Linux)), HostOs.Linux, LauncherDir);
+
+    var location = locator.Locate(relative);
+
+    Assert.True(location.IsComplete);
+    Assert.Equal(absolute, location.Folder);
+    Assert.All(location.Found.Values, path => Assert.True(Path.IsPathRooted(path)));
+    Assert.Equal(Path.Combine(absolute, "ECS3DClient"), location.Found[EngineExecutable.Client]);
+  }
+
+  [Fact]
   public void SingleMissingExecutableReadsAsOneSentence()
   {
     var files = AllFiles(EngineDir, HostOs.Windows).Where(path => !path.EndsWith("ECS3DEditor.exe")).ToArray();
@@ -126,7 +143,7 @@ public class LauncherEngineServicesTests
     Assert.True(result.Succeeded);
     var launch = Assert.Single(runner.Launches);
     Assert.Equal(new[] { "--project", "/p/Courtyard" }, launch.Arguments.ToArray());
-    Assert.Equal(Path.Combine("engine", "ECS3DEditor"), launch.FileName);
+    Assert.Equal(Path.Combine(EngineRoot, "ECS3DEditor"), launch.FileName);
     Assert.False(launch.HideWindow);
   }
 
@@ -167,7 +184,7 @@ public class LauncherEngineServicesTests
     new EngineLauncher(runner, CompleteEngine()).PlayProject("/p/Sample");
 
     var launch = Assert.Single(runner.Launches);
-    Assert.Equal(Path.Combine("engine", "ECS3DClient"), launch.FileName);
+    Assert.Equal(Path.Combine(EngineRoot, "ECS3DClient"), launch.FileName);
     Assert.Equal(new[] { "--project", "/p/Sample" }, launch.Arguments.ToArray());
   }
 
@@ -181,7 +198,7 @@ public class LauncherEngineServicesTests
     launcher.PlayProject("/p/Coin");
 
     Assert.Equal(new[] { "--project", "/p/Coin", "--port", "3000" }, runner.Launches[0].Arguments.ToArray());
-    Assert.Equal(Path.Combine("engine", "ECS3DServer"), runner.Launches[0].FileName);
+    Assert.Equal(Path.Combine(EngineRoot, "ECS3DServer"), runner.Launches[0].FileName);
     Assert.True(runner.Launches[0].HideWindow);
     Assert.False(runner.Launches[1].HideWindow);
   }
@@ -198,7 +215,7 @@ public class LauncherEngineServicesTests
     launcher.StartServer("/p", 3000);
 
     Assert.Equal(4, runner.Launches.Count);
-    Assert.All(runner.Launches, launch => Assert.Equal("engine", launch.WorkingDirectory));
+    Assert.All(runner.Launches, launch => Assert.Equal(EngineRoot, launch.WorkingDirectory));
   }
 
   [Fact]
@@ -214,8 +231,8 @@ public class LauncherEngineServicesTests
   [Fact]
   public void MissingExecutableNeverReachesTheRunner()
   {
-    var files = AllFiles("engine", HostOs.Linux).Where(path => !path.EndsWith("ECS3DEditor")).ToArray();
-    var location = new EngineLocator(new FakeFileSystem(files), HostOs.Linux, LauncherDir).Locate("engine");
+    var files = AllFiles(EngineRoot, HostOs.Linux).Where(path => !path.EndsWith("ECS3DEditor")).ToArray();
+    var location = new EngineLocator(new FakeFileSystem(files), HostOs.Linux, LauncherDir).Locate(EngineRoot);
     var runner = new FakeProcessRunner();
     var launcher = new EngineLauncher(runner, location);
 
@@ -223,7 +240,7 @@ public class LauncherEngineServicesTests
     var present = launcher.PlayProject("/p");
 
     Assert.False(missing.Succeeded);
-    Assert.Equal("ECS3DEditor was not found in engine", missing.Error);
+    Assert.Equal($"ECS3DEditor was not found in {EngineRoot}", missing.Error);
     Assert.True(present.Succeeded);
     Assert.Single(runner.Launches);
   }
@@ -245,78 +262,66 @@ public class LauncherEngineServicesTests
     Assert.Null(started.Error);
   }
 
-  private static EarlyExitWatcher Watcher(FakeClock clock) =>
-    new(clock, new UserDataDirectory(HostOs.Linux, name => name == "HOME" ? "/home/u" : null));
+  private static readonly TimeSpan ShortWindow = TimeSpan.FromMilliseconds(50);
+
+  private static EarlyExitWatcher Watcher(TimeSpan window) =>
+    new(new UserDataDirectory(HostOs.Linux, name => name == "HOME" ? "/home/u" : null), window);
 
   [Theory]
   [InlineData(EngineExecutable.Editor, "editor.log")]
   [InlineData(EngineExecutable.Client, "client.log")]
   [InlineData(EngineExecutable.Server, "server.log")]
-  public async Task NonZeroExitInsideTheWindowIsReported(EngineExecutable kind, string logName)
+  public async Task NonZeroExitBeforeTheWindowEndsIsReported(EngineExecutable kind, string logName)
   {
-    var clock = new FakeClock();
     var process = new FakeRunningProcess();
 
-    var watch = Watcher(clock).WatchAsync(process, kind, CancellationToken.None);
-    clock.Advance(TimeSpan.FromSeconds(3));
+    var watch = Watcher(TimeSpan.FromMinutes(1)).WatchAsync(process, kind, CancellationToken.None);
     process.Exit(3);
-    var exit = await watch;
+    var result = await watch;
 
-    Assert.NotNull(exit);
-    Assert.Equal(kind, exit.Executable);
-    Assert.Equal(3, exit.ExitCode);
-    Assert.Equal(Path.Combine("/home/u", ".config", "ECS3D", "logs", logName), exit.LogPath);
+    Assert.Equal(EarlyExitKind.ExitedEarly, result.Kind);
+    Assert.Equal(kind, result.Executable);
+    Assert.Equal(3, result.ExitCode);
+    Assert.Equal(Path.Combine("/home/u", ".config", "ECS3D", "logs", logName), result.LogPath);
   }
 
   [Fact]
-  public async Task ZeroExitInsideTheWindowReportsNothing()
+  public async Task ZeroExitIsCleanAndHasNoLog()
   {
-    var clock = new FakeClock();
     var process = new FakeRunningProcess();
 
-    var watch = Watcher(clock).WatchAsync(process, EngineExecutable.Editor, CancellationToken.None);
-    clock.Advance(TimeSpan.FromSeconds(1));
+    var watch = Watcher(TimeSpan.FromMinutes(1)).WatchAsync(process, EngineExecutable.Editor, CancellationToken.None);
     process.Exit(0);
+    var result = await watch;
 
-    Assert.Null(await watch);
+    Assert.Equal(EarlyExitKind.ExitedCleanly, result.Kind);
+    Assert.Null(result.LogPath);
   }
 
   [Fact]
-  public async Task NonZeroExitAfterTheWindowReportsNothing()
+  public async Task ProcessStillRunningWhenTheWindowEndsIsNotReported()
   {
-    var clock = new FakeClock();
     var process = new FakeRunningProcess();
 
-    var watch = Watcher(clock).WatchAsync(process, EngineExecutable.Editor, CancellationToken.None);
-    clock.Advance(TimeSpan.FromSeconds(11));
-    process.Exit(1);
+    var result = await Watcher(ShortWindow).WatchAsync(process, EngineExecutable.Server, CancellationToken.None);
 
-    Assert.Null(await watch);
+    Assert.Equal(EarlyExitKind.StillRunning, result.Kind);
+    Assert.Null(result.ExitCode);
+    Assert.Null(result.LogPath);
   }
 
   [Fact]
-  public async Task NonZeroExitExactlyAtTheWindowEdgeIsStillEarly()
-  {
-    var clock = new FakeClock();
-    var process = new FakeRunningProcess();
-
-    var watch = Watcher(clock).WatchAsync(process, EngineExecutable.Server, CancellationToken.None);
-    clock.Advance(TimeSpan.FromSeconds(10));
-    process.Exit(2);
-
-    Assert.Equal(2, (await watch)?.ExitCode);
-  }
-
-  [Fact]
-  public async Task ACancelledWatchReportsNothing()
+  public async Task ACancelledWatchIsDistinctFromAnExpiredWindow()
   {
     using var cancel = new CancellationTokenSource();
     var process = new FakeRunningProcess();
 
-    var watch = Watcher(new FakeClock()).WatchAsync(process, EngineExecutable.Client, cancel.Token);
+    var watch = Watcher(TimeSpan.FromMinutes(1)).WatchAsync(process, EngineExecutable.Client, cancel.Token);
     cancel.Cancel();
+    var result = await watch;
 
-    Assert.Null(await watch);
+    Assert.Equal(EarlyExitKind.Cancelled, result.Kind);
+    Assert.Null(result.ExitCode);
   }
 
   private static UserDataDirectory UserData(HostOs os, params (string Name, string? Value)[] variables)
@@ -410,9 +415,8 @@ public class LauncherEngineServicesTests
   {
     var assembly = typeof(LauncherEngineServicesTests).Assembly;
     var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-    var expected = AppVersion.Choose(informational, assembly.GetName().Version?.ToString());
 
-    Assert.Equal(expected, AppVersion.From(assembly));
-    Assert.DoesNotContain("+", AppVersion.From(assembly));
+    Assert.False(string.IsNullOrEmpty(informational));
+    Assert.Equal(informational!.Split('+')[0], AppVersion.From(assembly));
   }
 }

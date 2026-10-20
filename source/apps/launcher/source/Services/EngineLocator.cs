@@ -24,7 +24,8 @@ public sealed class EngineLocator
 
     public EngineLocation Locate(string? overrideFolder)
     {
-        var folder = string.IsNullOrWhiteSpace(overrideFolder) ? _launcherDirectory : overrideFolder;
+        var chosen = string.IsNullOrWhiteSpace(overrideFolder) ? _launcherDirectory : overrideFolder;
+        var folder = Path.GetFullPath(chosen);
         var found = new Dictionary<EngineExecutable, string>();
         var missing = new List<MissingExecutable>();
 

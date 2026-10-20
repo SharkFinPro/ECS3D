@@ -43,9 +43,23 @@ public sealed class SystemProcessRunner : IProcessRunner
             _process = process;
         }
 
-        public bool HasExited => _process.HasExited;
+        private int? _finalExitCode;
+        private bool _disposed;
 
-        public int? ExitCode => _process.HasExited ? _process.ExitCode : null;
+        public bool HasExited => _disposed || _process.HasExited;
+
+        public int? ExitCode
+        {
+            get
+            {
+                if (_disposed)
+                {
+                    return _finalExitCode;
+                }
+
+                return _process.HasExited ? _process.ExitCode : null;
+            }
+        }
 
         public async Task<int> WaitForExitAsync(CancellationToken cancellationToken)
         {
@@ -55,10 +69,36 @@ public sealed class SystemProcessRunner : IProcessRunner
 
         public void Kill()
         {
-            if (!_process.HasExited)
+            if (_disposed)
+            {
+                return;
+            }
+
+            try
             {
                 _process.Kill(true);
             }
+            catch (Exception exception)
+                when (exception is InvalidOperationException or Win32Exception or AggregateException)
+            {
+                // The process exited first, or part of its tree already had; either way it is gone.
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_process.HasExited)
+            {
+                _finalExitCode = _process.ExitCode;
+            }
+
+            _disposed = true;
+            _process.Dispose();
         }
     }
 }

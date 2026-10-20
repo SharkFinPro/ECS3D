@@ -35,6 +35,10 @@ internal sealed class FakeRunningProcess : IRunningProcess
   public Task<int> WaitForExitAsync(CancellationToken cancellationToken) => _exit.Task.WaitAsync(cancellationToken);
 
   public void Kill() => Killed = true;
+
+  public void Dispose()
+  {
+  }
 }
 
 internal sealed class FakeProcessRunner : IProcessRunner
@@ -56,11 +60,4 @@ internal sealed class FakeProcessRunner : IProcessRunner
     Last = new FakeRunningProcess();
     return Last;
   }
-}
-
-internal sealed class FakeClock : IClock
-{
-  public DateTimeOffset UtcNow { get; set; } = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-
-  public void Advance(TimeSpan span) => UtcNow += span;
 }

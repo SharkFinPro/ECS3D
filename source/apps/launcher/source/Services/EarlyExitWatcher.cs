@@ -8,29 +8,26 @@ public sealed class EarlyExitWatcher
 {
     private static readonly TimeSpan DefaultWindow = TimeSpan.FromSeconds(10);
 
-    private readonly IClock _clock;
     private readonly UserDataDirectory _userData;
     private readonly TimeSpan _window;
 
-    public EarlyExitWatcher(IClock clock, UserDataDirectory userData)
-        : this(clock, userData, DefaultWindow)
+    public EarlyExitWatcher(UserDataDirectory userData)
+        : this(userData, DefaultWindow)
     {
     }
 
-    public EarlyExitWatcher(IClock clock, UserDataDirectory userData, TimeSpan window)
+    public EarlyExitWatcher(UserDataDirectory userData, TimeSpan window)
     {
-        _clock = clock;
         _userData = userData;
         _window = window;
     }
 
-    // Returns null for a clean exit, a process that outlives the window, or a cancelled watch.
-    public async Task<EarlyExit?> WatchAsync(
+    // A caller that kills the process itself must cancel the watch first, or the kill reads as an early exit.
+    public async Task<EarlyExitResult> WatchAsync(
         IRunningProcess process,
         EngineExecutable executable,
         CancellationToken cancellationToken)
     {
-        var started = _clock.UtcNow;
         using var windowEnd = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         windowEnd.CancelAfter(_window);
 
@@ -41,14 +38,17 @@ public sealed class EarlyExitWatcher
         }
         catch (OperationCanceledException)
         {
-            return null;
+            var kind = cancellationToken.IsCancellationRequested
+                ? EarlyExitKind.Cancelled
+                : EarlyExitKind.StillRunning;
+            return new EarlyExitResult(kind, executable, null, null);
         }
 
-        if (exitCode == 0 || _clock.UtcNow - started > _window)
+        if (exitCode == 0)
         {
-            return null;
+            return new EarlyExitResult(EarlyExitKind.ExitedCleanly, executable, 0, null);
         }
 
-        return new EarlyExit(executable, exitCode, _userData.LogFile(executable));
+        return new EarlyExitResult(EarlyExitKind.ExitedEarly, executable, exitCode, _userData.LogFile(executable));
     }
 }
