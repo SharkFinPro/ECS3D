@@ -1,6 +1,7 @@
 #include "SaveUI.h"
 #include "GuiComponents.h"
 #include <Log.h>
+#include <ProjectOrigin.h>
 #include <ProjectPaths.h>
 #include <ProjectSerializer.h>
 #include <VulkanEngine/VulkanEngine.h>
@@ -58,6 +59,25 @@ void SaveUI::setStartupProject(const std::filesystem::path& argument)
   const auto location = locateProject(argument);
   m_saveFile = location.projectFile;
   m_projectRoot = location.root;
+  setOrigin(location);
+}
+
+void SaveUI::setOrigin(const ProjectLocation& location)
+{
+  m_isTemplate = isTemplateProject(location);
+  m_templateName = m_isTemplate ? templateDisplayName(location) : std::nullopt;
+  m_savedToFolderSinceOpen = false;
+  updateWindowTitle();
+}
+
+void SaveUI::updateWindowTitle()
+{
+  const std::string base = "ECS3D Editor";
+  const auto title = saveActsAsSaveAs(m_isTemplate, m_savedToFolderSinceOpen)
+    ? untitledTitle(m_templateName) + " - " + base
+    : base;
+
+  glfwSetWindowTitle(m_renderer->getWindow()->getWindow(), title.c_str());
 }
 
 void SaveUI::setEditable(const bool editable)
@@ -67,7 +87,7 @@ void SaveUI::setEditable(const bool editable)
 
 bool SaveUI::save()
 {
-  if (m_saveFile.empty())
+  if (m_saveFile.empty() || saveActsAsSaveAs(m_isTemplate, m_savedToFolderSinceOpen))
   {
     return saveAs();
   }
@@ -78,7 +98,21 @@ bool SaveUI::save()
 bool SaveUI::saveAs()
 {
   std::filesystem::path folder;
-  return chooseSaveFolder(folder) && saveToFolder(folder);
+  std::filesystem::path startIn;
+  std::string defaultName;
+
+  if (saveActsAsSaveAs(m_isTemplate, m_savedToFolderSinceOpen))
+  {
+    startIn = defaultProjectsDirectory();
+    if (!startIn.empty())
+    {
+      std::error_code error;
+      std::filesystem::create_directories(startIn, error);
+      defaultName = pathToUtf8(defaultSaveFolder(startIn, m_templateName.value_or("New Project")).filename());
+    }
+  }
+
+  return chooseSaveFolder(folder, startIn, defaultName) && saveToFolder(folder);
 }
 
 bool SaveUI::writeProject(const std::filesystem::path& file)
@@ -98,7 +132,16 @@ bool SaveUI::writeProject(const std::filesystem::path& file)
 
 bool SaveUI::saveToFolder(const std::filesystem::path& folder)
 {
-  if (saveFolderHoldsOtherProject(folder, m_projectRoot))
+  if (saveActsAsSaveAs(m_isTemplate, m_savedToFolderSinceOpen))
+  {
+    if (const auto refusal = templateSaveRefusal(folder, m_projectRoot))
+    {
+      Log::error(LogCategory::editor, "Not saving: " + pathToUtf8(folder) + " cannot take a new project: " +
+        *refusal + ". Choose a new or empty folder.");
+      return false;
+    }
+  }
+  else if (saveFolderHoldsOtherProject(folder, m_projectRoot))
   {
     Log::error(LogCategory::editor, "Not saving: " + pathToUtf8(folder) + " already holds a project. " +
       "Choose an empty folder, or open that project to edit it.");
@@ -133,6 +176,10 @@ bool SaveUI::saveToFolder(const std::filesystem::path& folder)
   {
     setProjectRoot(folder, false);
   }
+
+  m_isTemplate = false;
+  m_savedToFolderSinceOpen = true;
+  updateWindowTitle();
 
   return true;
 }
@@ -228,6 +275,7 @@ bool SaveUI::loadProjectBlob(const std::string& projectJson, const std::filesyst
   }
 
   m_saveFile = projectFile;
+  setOrigin({ projectFile, root });
 
   // Told on every load, even for the same folder: the project's asset records may differ. Before the load
   // callback, so the asset cache resolves against the new folder from the first frame.
@@ -263,7 +311,12 @@ void SaveUI::createNewProject()
     { "currentSceneUUID", sceneUUID }
   };
 
-  static_cast<void>(loadProjectBlob(project.dump(), {}, {}));
+  if (loadProjectBlob(project.dump(), {}, {}))
+  {
+    m_isTemplate = false;
+    m_templateName.reset();
+    updateWindowTitle();
+  }
 }
 
 bool SaveUI::chooseProjectFile(std::filesystem::path& file)
@@ -297,7 +350,8 @@ bool SaveUI::chooseProjectFile(std::filesystem::path& file)
   return true;
 }
 
-bool SaveUI::chooseSaveFolder(std::filesystem::path& folder)
+bool SaveUI::chooseSaveFolder(std::filesystem::path& folder, const std::filesystem::path& startIn,
+                              const std::string& defaultName)
 {
   if (NFD_Init() != NFD_OKAY)
   {
@@ -307,7 +361,24 @@ bool SaveUI::chooseSaveFolder(std::filesystem::path& folder)
 
   nfdu8char_t* outPath = nullptr;
 
-  if (NFD_PickFolderU8(&outPath, nullptr) != NFD_OKAY)
+  const std::string start = pathToUtf8(startIn);
+  const char* startPath = start.empty() ? nullptr : start.c_str();
+
+  nfdresult_t result;
+  if (defaultName.empty())
+  {
+    result = NFD_PickFolderU8(&outPath, startPath);
+  }
+  else
+  {
+    const nfdsavedialogu8args_t args {
+      .defaultPath = startPath,
+      .defaultName = defaultName.c_str()
+    };
+    result = NFD_SaveDialogU8_With(&outPath, &args);
+  }
+
+  if (result != NFD_OKAY)
   {
     NFD_Quit();
     return false;

@@ -16,6 +16,9 @@ The copy also holds this `README.md`, so code listing `templates/` must skip non
   thumbnail.png        640x360
 ```
 
+The editor never saves into a folder that holds a `template.json`: opening one gives an untitled project whose
+first Save asks for a fresh folder.
+
 Creating a project copies everything except `template.json`. Asset paths resolve against the project
 folder first, then the engine's built-in `assets/`, so a template references built-in assets without
 copying them.
