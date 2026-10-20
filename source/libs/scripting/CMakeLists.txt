@@ -7,6 +7,7 @@ add_library(${PROJECT_NAME}
   ScriptEngineFactory.cpp
   ScriptEngineFactory.h
   ScriptRuntime.h
+  ScriptDirectories.h
   ScriptEngine.h
   AttachedScripts.cpp
   AttachedScripts.h

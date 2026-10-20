@@ -90,6 +90,7 @@
   registered with the relative path. A new script goes to `<root>/scripts`. The spawned server gets the
   project by the `loadProject` blob. Its own root, used for scripts, stays what `--project` gave it.
   Dialog and drop paths arrive as 8-bit Unicode text (`pathFromUtf8`), and logs use `pathToUtf8`.
+  The server compiles `<root>/scripts/**/*.cs` together with the built-in scripts (see Scripting).
 - **Precompiled headers (PCH)** are set up in one block at the end of `source/CMakeLists.txt`: each
   multi-file ECS3D target gets its own PCH of the most-included standard and third-party headers.
   Targets differ in compile definitions (VulkanEngine adds the `GLM_FORCE_*`/`VULKAN_HPP_*` set), so
@@ -480,6 +481,15 @@ vector3: each type has a `getField*`/`setField*` export, and a string crosses as
 native side frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
 every other type, and the Inspector draws a string field as a text box.
 A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
+A project's own scripts, `<project root>/scripts/**/*.cs`, compile together with the built-in
+`scripts/UserScripts` into one script assembly, at startup and on every hot reload.
+`scripting::scriptDirectories` (`ScriptDirectories.h`) builds the list, built-in first, and `ServerApp` creates
+its `ScriptSystem` after locating the project so it can pass the root.
+The bridge's `init` takes the list as one string joined with newlines, and `ScriptSystem` polls every listed
+directory for changes. A project without a `scripts` folder is normal and silent.
+Files under `bin`, `obj` and dot-folders are skipped, so an IDE project there cannot inject generated sources.
+A class declared in both a project script and a built-in script is a compile error naming both files.
+The root is fixed at startup, so loading another project at runtime keeps the first project's scripts.
 Two script classes that share a simple name fail the compile, with a message naming their files. The runtime finds
 scripts by that name, so this holds across namespaces too; the parts of one `partial` class count as one class.
 A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about
