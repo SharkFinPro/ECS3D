@@ -31,6 +31,13 @@
         <ProjectReference Include="../../libs/scripting/ScriptBridge/ScriptBridge.csproj" />
     </ItemGroup>
 
+    <!-- The user and starter scripts are plain C# over ScriptBridge, so they compile into this assembly and are
+         tested through FakeNatives like the wrappers. The CMake copy that ships them is unaffected. -->
+    <ItemGroup>
+        <Compile Include="../../libs/scripting/UserScripts/**/*.cs"
+                 Link="UserScripts/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+
     <!-- ShippedScriptsCompileTests finds the shipped scripts from the source tree this project lives in. -->
     <ItemGroup>
         <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">

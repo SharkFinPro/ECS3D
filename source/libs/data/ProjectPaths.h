@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <system_error>
 
 inline constexpr const char* projectFileName = "project.ecs3d";
 
@@ -39,5 +40,52 @@ struct ProjectLocation {
 // Makes a --project value absolute against the current directory, so an app and the server it spawns (which
 // runs from the executable's directory) agree on it. Empty stays empty; on failure the value is unchanged.
 [[nodiscard]] std::string absoluteProjectArgument(const std::string& project);
+
+// The project file a project folder holds.
+[[nodiscard]] std::filesystem::path projectFileInFolder(const std::filesystem::path& folder);
+
+// True for a project file path that is not a ".ecs3d" one (a bare .json from before project folders).
+// Saving it writes the same file; only Save As moves it into a folder. An empty path is not legacy.
+[[nodiscard]] bool isLegacyProjectFile(const std::filesystem::path& file);
+
+// A path from a UTF-8 string such as the ones the native file dialogs and GLFW hand out, which the
+// narrow-string path constructor would misread on Windows. Null yields an empty path.
+[[nodiscard]] std::filesystem::path pathFromUtf8(const char* utf8);
+
+// The path as UTF-8, for logs: path::string() throws or drops characters on Windows for non-ANSI names.
+[[nodiscard]] std::string pathToUtf8(const std::filesystem::path& path);
+
+// True when saving a project into folder would overwrite a different project: folder already holds a
+// project file and is not the folder the project currently lives in (currentRoot, empty for none).
+[[nodiscard]] bool saveFolderHoldsOtherProject(const std::filesystem::path& folder,
+                                               const std::filesystem::path& currentRoot);
+
+// Creates the folder and its assets/ and scripts/ subfolders. False (error filled in) when one cannot be made.
+[[nodiscard]] bool ensureProjectFolders(const std::filesystem::path& root, std::error_code& error);
+
+// Copies the project's own assets/ and scripts/ from one folder into another, keeping files the target
+// already has. Does nothing for an empty source, the same folder, or a target inside the source.
+void copyProjectContent(const std::filesystem::path& from, const std::filesystem::path& to,
+                        std::error_code& error);
+
+enum class ImportKind {
+  model,
+  texture
+};
+
+struct ImportDestination {
+  std::filesystem::path absolute;
+  // Forward slashes, relative to the project root: what the asset record stores.
+  std::string relative;
+};
+
+// Where an imported file goes inside a project: <root>/assets/models or <root>/assets/textures, named
+// <name><source extension> (the source's own stem when name is empty). Only the last component of name is
+// used, so a typed name cannot reach outside assets/. A name already taken there gains
+// "-1", "-2", ... before the extension. With an empty root the destination is relative to the working
+// directory and an existing file is overwritten, as before project folders.
+[[nodiscard]] ImportDestination importDestination(const std::filesystem::path& root,
+                                                  const std::filesystem::path& sourceFile,
+                                                  const std::string& name, ImportKind kind);
 
 #endif //PROJECTPATHS_H

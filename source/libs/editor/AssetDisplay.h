@@ -93,7 +93,7 @@ namespace assetDisplay {
 
   // The size of a file-backed asset on disk, or nullopt when the file isn't present editor-side (the
   // editor and server may share no filesystem).
-  inline std::optional<std::string> fileSize(const std::string& path)
+  inline std::optional<std::string> fileSize(const std::filesystem::path& path)
   {
     std::error_code ec;
     const auto bytes = std::filesystem::file_size(path, ec);

@@ -197,3 +197,144 @@ TEST(QuotedProjectArgumentTest, OnlyATwoCharacterDriveIsARoot)
   EXPECT_EQ(quotedProjectArgument("foo:"), R"("foo:")");
   EXPECT_EQ(quotedProjectArgument("foo:/"), R"("foo:")");
 }
+
+TEST_F(ProjectPathsTest, ProjectFileInFolderNamesTheProjectFile)
+{
+  expectSamePath(projectFileInFolder(m_dir), m_dir / "project.ecs3d");
+  EXPECT_EQ(locateProject(projectFileInFolder(m_dir)).root.lexically_normal(), m_dir.lexically_normal());
+}
+
+TEST(LegacyProjectFileTest, OnlyANonEcs3dFileIsLegacy)
+{
+  EXPECT_TRUE(isLegacyProjectFile("old/project.json"));
+  EXPECT_TRUE(isLegacyProjectFile("game"));
+  EXPECT_FALSE(isLegacyProjectFile("new/project.ecs3d"));
+  EXPECT_FALSE(isLegacyProjectFile("new/PROJECT.ECS3D"));
+  EXPECT_FALSE(isLegacyProjectFile(""));
+}
+
+TEST_F(ProjectPathsTest, EnsureProjectFoldersCreatesAssetsAndScripts)
+{
+  std::error_code error;
+  const auto root = m_dir / "My Game";
+
+  ASSERT_TRUE(ensureProjectFolders(root, error));
+  EXPECT_TRUE(fs::is_directory(root / "assets"));
+  EXPECT_TRUE(fs::is_directory(root / "scripts"));
+  EXPECT_TRUE(ensureProjectFolders(root, error));
+}
+
+TEST_F(ProjectPathsTest, ImportDestinationPutsAModelUnderAssetsModels)
+{
+  const auto destination = importDestination(m_dir, "C:/downloads/Rock.GLB", "boulder", ImportKind::model);
+
+  EXPECT_EQ(destination.relative, "assets/models/boulder.GLB");
+  expectSamePath(destination.absolute, m_dir / "assets" / "models" / "boulder.GLB");
+}
+
+TEST_F(ProjectPathsTest, ImportDestinationPutsATextureUnderAssetsTextures)
+{
+  const auto destination = importDestination(m_dir, "wood.png", "", ImportKind::texture);
+
+  EXPECT_EQ(destination.relative, "assets/textures/wood.png");
+  expectSamePath(destination.absolute, m_dir / "assets" / "textures" / "wood.png");
+}
+
+TEST_F(ProjectPathsTest, ImportDestinationSuffixesANameThatIsTaken)
+{
+  touch("assets/models/rock.glb");
+
+  EXPECT_EQ(importDestination(m_dir, "x/rock.glb", "rock", ImportKind::model).relative, "assets/models/rock-1.glb");
+
+  touch("assets/models/rock-1.glb");
+  const auto third = importDestination(m_dir, "x/rock.glb", "rock", ImportKind::model);
+
+  EXPECT_EQ(third.relative, "assets/models/rock-2.glb");
+  expectSamePath(third.absolute, m_dir / "assets" / "models" / "rock-2.glb");
+  EXPECT_EQ(importDestination(m_dir, "x/rock.glb", "other", ImportKind::model).relative, "assets/models/other.glb");
+}
+
+TEST_F(ProjectPathsTest, ImportDestinationWithNoRootIsRelativeAndOverwrites)
+{
+  const auto destination = importDestination({}, "x/rock.glb", "rock", ImportKind::model);
+
+  EXPECT_EQ(destination.relative, "assets/models/rock.glb");
+  EXPECT_EQ(destination.absolute, fs::path("assets/models/rock.glb"));
+}
+
+TEST_F(ProjectPathsTest, CopyProjectContentCopiesAssetsAndScriptsButKeepsExistingFiles)
+{
+  touch("a/assets/models/m.glb");
+  touch("a/scripts/S.cs");
+  touch("a/project.ecs3d");
+  touch("b/assets/models/m.glb");
+  { std::ofstream(m_dir / "b/assets/models/m.glb") << "keep"; }
+
+  std::error_code error;
+  copyProjectContent(m_dir / "a", m_dir / "b", error);
+
+  ASSERT_FALSE(error);
+  EXPECT_TRUE(fs::exists(m_dir / "b/scripts/S.cs"));
+  EXPECT_FALSE(fs::exists(m_dir / "b/project.ecs3d"));
+  EXPECT_EQ(fs::file_size(m_dir / "b/assets/models/m.glb"), 4u);
+}
+
+TEST_F(ProjectPathsTest, CopyProjectContentIgnoresEmptyOrNestedTargets)
+{
+  touch("a/assets/m.glb");
+  std::error_code error;
+
+  copyProjectContent({}, m_dir / "b", error);
+  EXPECT_FALSE(fs::exists(m_dir / "b"));
+
+  copyProjectContent(m_dir / "a", m_dir / "a" / "assets" / "inner", error);
+  EXPECT_FALSE(error);
+  EXPECT_FALSE(fs::exists(m_dir / "a/assets/inner"));
+
+  copyProjectContent(m_dir / "a", m_dir / "a", error);
+  EXPECT_FALSE(error);
+  EXPECT_FALSE(fs::exists(m_dir / "a/assets/assets"));
+
+  copyProjectContent(m_dir / "a", m_dir / "c", error);
+  EXPECT_FALSE(error);
+  EXPECT_TRUE(fs::exists(m_dir / "c/assets/m.glb"));
+}
+
+TEST(PathFromUtf8Test, KeepsNonAsciiCharacters)
+{
+  const char* utf8 = "proj/caf\xC3\xA9/\xE3\x82\xB2\xE3\x83\xBC\xE3\x83\xA0.ecs3d";
+  const auto path = pathFromUtf8(utf8);
+
+  EXPECT_EQ(pathToUtf8(path.filename()), "\xE3\x82\xB2\xE3\x83\xBC\xE3\x83\xA0.ecs3d");
+  EXPECT_EQ(pathToUtf8(path), std::string(utf8));
+  EXPECT_EQ(pathToUtf8(pathFromUtf8("plain/path")), "plain/path");
+  EXPECT_TRUE(pathFromUtf8(nullptr).empty());
+}
+
+TEST_F(ProjectPathsTest, SaveFolderHoldsOtherProjectOnlyForADifferentFolderWithAProject)
+{
+  touch("a/project.ecs3d");
+  fs::create_directories(m_dir / "empty");
+
+  EXPECT_TRUE(saveFolderHoldsOtherProject(m_dir / "a", {}));
+  EXPECT_TRUE(saveFolderHoldsOtherProject(m_dir / "a", m_dir / "empty"));
+  EXPECT_FALSE(saveFolderHoldsOtherProject(m_dir / "a", m_dir / "a"));
+  EXPECT_FALSE(saveFolderHoldsOtherProject(m_dir / "empty", m_dir / "a"));
+  EXPECT_FALSE(saveFolderHoldsOtherProject(m_dir / "missing", {}));
+}
+
+TEST_F(ProjectPathsTest, ImportDestinationKeepsATypedNameInsideAssets)
+{
+  const auto inside = [this](const ImportDestination& destination) {
+    return destination.absolute.parent_path().lexically_normal() ==
+           (m_dir / "assets" / "models").lexically_normal();
+  };
+
+  EXPECT_TRUE(inside(importDestination(m_dir, "x/rock.glb", "..\\x", ImportKind::model)));
+  EXPECT_TRUE(inside(importDestination(m_dir, "x/rock.glb", "/abs/evil", ImportKind::model)));
+  EXPECT_TRUE(inside(importDestination(m_dir, "x/rock.glb", "../../up", ImportKind::model)));
+  EXPECT_TRUE(inside(importDestination(m_dir, "x/rock.glb", "..", ImportKind::model)));
+  EXPECT_EQ(importDestination(m_dir, "x/rock.glb", "/abs/evil", ImportKind::model).relative,
+            "assets/models/evil.glb");
+  EXPECT_EQ(importDestination(m_dir, "x/rock.glb", "..", ImportKind::model).relative, "assets/models/rock.glb");
+}

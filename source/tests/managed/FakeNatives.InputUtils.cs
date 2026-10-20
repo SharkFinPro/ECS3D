@@ -26,7 +26,7 @@ internal static unsafe class FakeInputUtilsNatives
   private static byte InputKeyIsPressedForObject(IntPtr u, int key)
   {
     Rec("InputUtils.keyIsPressedForObject", u, key);
-    return Flag("InputUtils.keyIsPressedForObject");
+    return FlagForKey("InputUtils.keyIsPressedForObject", key);
   }
 
   [UnmanagedCallersOnly]
