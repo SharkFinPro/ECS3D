@@ -50,7 +50,8 @@ WorldBindings WorldBindingsProvider::getBindings()
     .destroyObject = &bindDestroyObject,
     .raycast = &bindRaycast,
     .overlapSphere = &bindOverlapSphere,
-    .spawnPrefab = &bindSpawnPrefab
+    .spawnPrefab = &bindSpawnPrefab,
+    .setObjectName = &bindSetObjectName
   };
 }
 
@@ -106,6 +107,39 @@ const char* WorldBindingsProvider::bindGetObjectName(const char* uuid)
   }
 
   return store(object->getName());
+}
+
+bool WorldBindingsProvider::bindSetObjectName(const char* uuid, const char* name)
+{
+  const auto objectManager = BindingContext::getObjectManager();
+  if (!objectManager || !uuid || !name || name[0] == '\0')
+  {
+    return false;
+  }
+
+  const auto parsed = uuids::uuid::from_string(std::string(uuid));
+  if (!parsed.has_value())
+  {
+    return false;
+  }
+
+  const auto object = objectManager->getObjectByUUID(parsed.value());
+  if (!object)
+  {
+    return false;
+  }
+
+  // Due to leave the scene in this tick's deletion pass, after the structural broadcast that would carry
+  // the rename.
+  if (objectManager->isMarkedForDeletion(object))
+  {
+    return false;
+  }
+
+  object->setName(name);
+  BindingContext::recordStructuralComponentChange(object->getUUID());
+
+  return true;
 }
 
 bool WorldBindingsProvider::bindObjectExists(const char* uuid)

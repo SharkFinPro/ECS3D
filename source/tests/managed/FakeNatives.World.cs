@@ -71,6 +71,13 @@ internal static unsafe class FakeWorldNatives
     return Get<IntPtr>("World.spawnPrefab");
   }
 
+  [UnmanagedCallersOnly]
+  private static byte WorldSetObjectName(IntPtr u, IntPtr name)
+  {
+    Rec("World.setObjectName", u, name);
+    return Flag("World.setObjectName");
+  }
+
   internal static WorldBindings Make() => new()
   {
     findObjectByName = &WorldFindObjectByName,
@@ -81,6 +88,7 @@ internal static unsafe class FakeWorldNatives
     destroyObject = &WorldDestroyObject,
     raycast = &WorldRaycast,
     overlapSphere = &WorldOverlapSphere,
-    spawnPrefab = &WorldSpawnPrefab
+    spawnPrefab = &WorldSpawnPrefab,
+    setObjectName = (delegate* unmanaged<IntPtr, IntPtr, bool>)(void*)(delegate* unmanaged<IntPtr, IntPtr, byte>)&WorldSetObjectName
   };
 }

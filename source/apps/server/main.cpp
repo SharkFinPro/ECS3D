@@ -1,5 +1,6 @@
 #include "ServerApp.h"
 #include "ServerPolicy.h"
+#include <ProjectPaths.h>
 #include <EditToken.h>
 #include <Log.h>
 #include <ConsoleSink.h>
@@ -29,7 +30,7 @@ namespace
       const std::string arg = argv[i];
       if (isValueFlag(arg, "--project", i, argc))
       {
-        options.project = argv[++i];
+        options.project = absoluteProjectArgument(argv[++i]);
       }
       else if (isValueFlag(arg, "--port", i, argc))
       {

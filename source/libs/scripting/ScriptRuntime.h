@@ -76,6 +76,10 @@ public:
                                           const char* className,
                                           const char* fieldName) const = 0;
 
+  [[nodiscard]] virtual std::string getFieldString(const char* uuid,
+                                                   const char* className,
+                                                   const char* fieldName) const = 0;
+
   virtual void getFieldVector3(const char* uuid,
                                const char* className,
                                const char* fieldName,
@@ -95,6 +99,11 @@ public:
                             const char* className,
                             const char* fieldName,
                             bool value) const = 0;
+
+  virtual void setFieldString(const char* uuid,
+                              const char* className,
+                              const char* fieldName,
+                              const char* value) const = 0;
 
   virtual void setFieldVector3(const char* uuid,
                                const char* className,
