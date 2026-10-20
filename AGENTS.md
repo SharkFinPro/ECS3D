@@ -153,8 +153,9 @@
   than waiting out production values.
   `WebSocketBackendLoopbackTests` drives the WebSocket backend the same way: its `SendTimeoutMs` is also an internal
   field, and an internal `ClientReceiveLoopExiting` hook lets a test reconnect inside the window between the
-  client receive loop stopping and releasing its connection. `TransportExportsTests` calls `Transport`'s exports
-  through function pointers.
+  client receive loop stopping and releasing its connection. Both loopback backends have an internal
+  `ServerConnectionExiting` hook, which lets a test hold a connection thread just before its disconnect is
+  delivered. `TransportExportsTests` calls `Transport`'s exports through function pointers.
   The test project also compiles `UserScripts/` in (a `Compile` link in `ECS3DManagedTests.csproj`), so
   `PlayerScript` and the starter scripts are tested through `FakeNatives` like the wrappers; a fake can
   answer per uuid, name or key code by setting `"<fake key>:<argument>"`.
@@ -403,6 +404,8 @@ Shutdown joins every socket thread it started before returning: `ServerStop` fli
 takes its snapshot of started threads in the same lock the accept loop checks that flag and registers a
 new thread under, so a thread that starts is one this call goes on to join; it then closes the listener
 and all connection sockets and joins the accept thread and each per-connection thread.
+A connection thread removes itself from that list only after it has delivered its disconnect, so a stop
+that returns has no disconnect callback still to come.
 `ClientDisconnect` closes the connection then joins the receive thread the same way. Each join is bounded
 by `ShutdownJoinTimeoutMs`, logging a warning if a thread has not exited by then instead of waiting past
 it, and skips a thread that is the caller (joining that thread would deadlock). `NetServer::stop`/
