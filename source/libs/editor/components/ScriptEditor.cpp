@@ -2,6 +2,7 @@
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
 #include "../MixedFields.h"
+#include "ScriptFieldLabel.h"
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
@@ -44,6 +45,7 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
 
     const std::string name = field.at("name");
     const std::string type = field.at("type");
+    const std::string label = scriptFieldLabel(field) + "##" + name;
     // mixedTopLevelKeys reports a disagreeing script field as "fields.<name>" rather than the whole
     // "fields" array, so only this one entry's widget shows a mixed state.
     const bool fieldMixed = mixed.contains("fields." + name);
@@ -55,7 +57,7 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
       float value = field.at("value");
       const float previous = value;
       ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, fieldMixed);
-      const bool changed = ImGui::DragFloat(name.c_str(), &value, 0.1f);
+      const bool changed = ImGui::DragFloat(label.c_str(), &value, 0.1f);
       ImGui::PopItemFlag();
       if (changed && gc::acceptFinite(name.c_str(), &value, previous))
       {
@@ -67,7 +69,7 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
     {
       int value = field.at("value");
       ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, fieldMixed);
-      const bool changed = ImGui::DragInt(name.c_str(), &value);
+      const bool changed = ImGui::DragInt(label.c_str(), &value);
       ImGui::PopItemFlag();
       if (changed)
       {
@@ -79,7 +81,7 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
     {
       bool value = field.at("value");
       ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, fieldMixed);
-      const bool changed = ImGui::Checkbox(name.c_str(), &value);
+      const bool changed = ImGui::Checkbox(label.c_str(), &value);
       ImGui::PopItemFlag();
       if (changed)
       {
@@ -95,10 +97,10 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
       const auto& value = field.at("value");
       // A mixed field shows empty with a hint, but not while it is being typed into: the typed text
       // is the primary's value then, and blanking it would drop every keystroke after the first.
-      const bool typing = ImGui::GetActiveID() == ImGui::GetID(name.c_str());
+      const bool typing = ImGui::GetActiveID() == ImGui::GetID(label.c_str());
       std::string text = value.is_string() && (!fieldMixed || typing) ? value.get<std::string>() : std::string();
 
-      if (inputTextString(name.c_str(), fieldMixed ? "(mixed)" : "", text))
+      if (inputTextString(label.c_str(), fieldMixed ? "(mixed)" : "", text))
       {
         field["value"] = std::move(text);
         edited = true;
@@ -114,7 +116,7 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
       };
       const float previous[3] = { vec[0], vec[1], vec[2] };
       ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, fieldMixed);
-      const bool changed = ImGui::DragFloat3(name.c_str(), vec, 0.1f);
+      const bool changed = ImGui::DragFloat3(label.c_str(), vec, 0.1f);
       ImGui::PopItemFlag();
       if (changed)
       {
@@ -133,7 +135,7 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
     }
     else
     {
-      ImGui::LabelText(name.c_str(), "%s", field.at("value").is_string()
+      ImGui::LabelText(label.c_str(), "%s", field.at("value").is_string()
         ? std::string(field.at("value")).c_str() : "");
     }
 

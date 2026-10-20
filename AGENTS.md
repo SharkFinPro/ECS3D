@@ -117,7 +117,7 @@
   `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is
   `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
   json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
-  carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h` and `KeyHoldRepeat.h` are reached
+  carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h`, `KeyHoldRepeat.h` and `ScriptFieldLabel.h` are reached
   through the `libs/editor` include path alone. The header-only `apps/server/ServerPolicy.h`
   (mutation authorization, scene-control plans, token generation check) is covered the same way, by including it, and the
   header-only `libs/net/EditToken.h` is reached through the `libs/net` include path. `PresetsTest` reads `CMakePresets.json` from the repo root via the `ECS3D_SOURCE_DIR` compile definition. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
@@ -468,8 +468,9 @@ movement can be relative to wherever the camera actually faces, degrading to the
 without the `tryGet` ceremony since `ScriptBase` constructs one for the script's own object (like
 `transform`/`rigidBody`/`input`). `bindings/BindingCoverage.h` holds a table of every `ComponentType`
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
-without deciding its scripting story can't go unnoticed. Script field edits are validated
-(`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
+without deciding its scripting story can't go unnoticed. A Script field entry may carry a `displayName`, the
+`[ExposeToEditor]` label the Inspector shows; a bare attribute shows the field name. Script field edits are
+validated (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
 refused with a warning and does not fault the script. Exposed fields may be float, int, bool, string or
 vector3: each type has a `getField*`/`setField*` export, and a string crosses as 8-bit Unicode text that the
 native side frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
