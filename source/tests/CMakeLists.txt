@@ -105,6 +105,7 @@ add_executable(${PROJECT_NAME}
   CompoundFlushTest.cpp
   CompoundRollingArmTest.cpp
   SettingsStoreTest.cpp
+  RecentProjectsTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp
   RemoteLogSinkTest.cpp
