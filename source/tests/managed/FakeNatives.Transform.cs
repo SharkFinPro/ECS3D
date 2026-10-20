@@ -12,7 +12,10 @@ internal static unsafe class FakeTransformNatives
   private static void TransformGetPosition(IntPtr u, float* x, float* y, float* z)
   {
     Rec("Transform.getPosition", u);
-    OutVec3("Transform.getPosition", x, y, z);
+    var position = GetFor<Vector3>("Transform.getPosition", u);
+    *x = position.X;
+    *y = position.Y;
+    *z = position.Z;
   }
 
   [UnmanagedCallersOnly]

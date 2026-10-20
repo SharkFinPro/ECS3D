@@ -3,6 +3,8 @@ project(ECS3DSettings)
 add_library(${PROJECT_NAME}
   SettingsStore.cpp
   SettingsStore.h
+  RecentProjects.cpp
+  RecentProjects.h
   Keybinds.cpp
   Keybinds.h
   EditorCameraSettings.cpp

@@ -7,6 +7,7 @@ import os  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import library  # noqa: E402
 import primitives  # noqa: E402
 import textures  # noqa: E402
 from glb import write_glb  # noqa: E402
@@ -19,6 +20,14 @@ MODELS = {
     "ramp": primitives.ramp,
     "plane_tile": primitives.plane_tile,
     "torus": primitives.torus,
+    "d4": library.d4,
+    "d8": library.d8,
+    "d12": library.d12,
+    "d20": library.d20,
+    "hex_prism": library.hex_prism,
+    "drum": library.drum,
+    "gem": library.gem,
+    "boulder": library.boulder,
 }
 
 
