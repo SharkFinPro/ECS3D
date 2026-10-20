@@ -189,6 +189,13 @@ void copyProjectContent(const std::filesystem::path& from, const std::filesystem
     return;
   }
 
+  // std::filesystem::copy creates only the last level of a directory target.
+  std::filesystem::create_directories(target, error);
+  if (error)
+  {
+    return;
+  }
+
   for (const char* sub : { "assets", "scripts" })
   {
     if (!std::filesystem::is_directory(source / sub, error))

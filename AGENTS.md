@@ -86,7 +86,7 @@
   `<root>/assets/models` or `assets/textures`, and `importDestination` adds `-1`, `-2` on a name clash. It is
   registered with the relative path. A new script goes to `<root>/scripts`. The spawned server gets the
   project by the `loadProject` blob. Its own root, used for scripts, stays what `--project` gave it.
-  Dialog and drop paths are UTF-8 (`pathFromUtf8`), and logs use `pathToUtf8`.
+  Dialog and drop paths arrive as 8-bit Unicode text (`pathFromUtf8`), and logs use `pathToUtf8`.
 - **Precompiled headers (PCH)** are set up in one block at the end of `source/CMakeLists.txt`: each
   multi-file ECS3D target gets its own PCH of the most-included standard and third-party headers.
   Targets differ in compile definitions (VulkanEngine adds the `GLM_FORCE_*`/`VULKAN_HPP_*` set), so
