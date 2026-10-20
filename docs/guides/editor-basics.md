@@ -32,6 +32,7 @@ The "Inspector" shows the selected object: a Name field, its components, and its
 - Edit a component by changing its widgets. Dragging a slider is one undo step, not one per frame.
 - Add Component lists Rigid Body, Model Renderer, Light Renderer, Box Collider, Sphere Collider, Capsule
   Collider, Convex Mesh Collider, Player Controller and Camera. A type the object already has is hidden.
+  An object has at most one collider, so once it has one, the other collider kinds are hidden too.
   Every object has a Transform, which cannot be added or removed.
 - Scripts are not in that list. Drag a script asset from the Assets panel onto the Inspector's Scripts
   area. See [Your first script](your-first-script.md).
@@ -68,7 +69,8 @@ The selected object shows a gizmo for moving, rotating or scaling it.
 
 The "Scene Status" panel along the top holds the play controls and some view choices.
 
-- Play, Pause and Stop buttons. Play also resumes a paused scene. Buttons that do not apply are grayed out.
+- The play, pause and stop icon buttons. Play also resumes a paused scene. Buttons that do not apply are
+  grayed out.
 - A readout of the scene name and its state: Stopped, Running or Paused.
 - A Ray Tracing checkbox. This is a local rendering setting, grayed out if the device cannot ray trace.
 - The View combo chooses what the viewport looks through: Editor Camera, or any object in the scene that has

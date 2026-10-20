@@ -15,6 +15,12 @@ own copy is `source/libs/scripting/UserScripts`, and each build copies it over t
 - A script is found by its simple class name, so two classes with the same name anywhere in the folder are
   a compile error. Put each class in a file and give it a unique name.
 - The class must be `public`, not `abstract`, and derive from `ScriptBase`.
+- New Script writes into the editor's own `scripts/UserScripts`. That is the server's folder when the editor
+  started its own server (the default). With `--host` to a separate server, place the file in that server's
+  scripts folder instead.
+- A new script is only compiled while the scene is running. After saving one, press Play, wait for
+  "Reload successful." in the Console, then press Stop. Its fields now appear in the Inspector, and the next
+  Play runs it from the start. On that first run the class logs "could not be instantiated" until the reload.
 - A new script you want to keep belongs in `source/libs/scripting/UserScripts` as well. A build copies that
   folder over `bin`, which overwrites a file of the same name there.
 
@@ -40,12 +46,13 @@ collider marked as a trigger still raises these events but does not push anythin
 Every `ScriptBase` has these members:
 
 - `transform`: `getPosition()`, `getRotation()`, `getScale()` (world values), `getLocalPosition()`,
-  `setPosition(Vector3)`, `setRotation(x, y, z)`, `move(x, y, z)`.
+  `setPosition(Vector3)`, `setRotation(x, y, z)`, `move(x, y, z)`. The getters above return world
+  values, while `setPosition` and `move` act on the local position.
 - `rigidBody`: `getVelocity()`, `setVelocity(...)`, `applyForce(force, position, ForceMode)`, `isFalling()`
   and more.
 - `input`: this script's own player's keys and mouse, resolved through a Player Controller on the same
   object.
-- `camera`: read-only access to this object's Camera component.
+- `camera`: this object's Camera component.
 - `EntityId`: the object's uuid, a string.
 
 Vectors are `System.Numerics.Vector3`. To reach other objects, use `World`:
@@ -67,8 +74,8 @@ handle with `cancel()`. They count fixed ticks, so they freeze while the scene i
 Mark a field with `[ExposeToEditor("Label")]` and it becomes editable in the Inspector. The field can be
 private. Supported types are `float`, `int`, `bool`, `string` and `Vector3`. Any other type is ignored.
 
-The Inspector names each widget after the C# field, so a field called `m_speed` shows as `m_speed`. Values
-you set are saved with the scene and are kept when scripts reload.
+The Inspector widget shows the field's label. In these guides the field name matches its label. Values you
+set in the Inspector are saved with the scene and are kept when scripts reload. Other fields reset.
 
 ## A worked example
 
@@ -83,10 +90,10 @@ using ScriptBridge;
 public class BobbingCoin : ScriptBase
 {
     [ExposeToEditor("Height")]
-    private float m_height = 0.5f;
+    private float Height = 0.5f;
 
     [ExposeToEditor("Speed")]
-    private float m_speed = 2.0f;
+    private float Speed = 2.0f;
 
     private Vector3 m_home;
     private float m_time;
@@ -103,7 +110,7 @@ public class BobbingCoin : ScriptBase
     public override void fixedUpdate(float dt)
     {
         m_time += dt;
-        float offset = MathF.Sin(m_time * m_speed) * m_height;
+        float offset = MathF.Sin(m_time * Speed) * Height;
         transform.setPosition(new Vector3(m_home.X, m_home.Y + offset, m_home.Z));
     }
 
@@ -125,18 +132,19 @@ To try it:
 
 1. Add a Box Collider to the coin object and tick Is Trigger, so players pass through it. Give the
    coin no Rigid Body, because physics would fight the script for its position.
-2. Make sure the player object has a Rigid Body and a Player Controller. Contact events are produced when
-   at least one of the two objects has a Rigid Body.
-3. Drag `BobbingCoin` from the Assets panel onto the coin's Inspector. Height and Speed appear under its
-   Scripts section.
+2. Make sure the player object has a collider (any kind), a Rigid Body and a Player Controller. Contact
+   events are produced when both objects have colliders and at least one has a Rigid Body.
+3. Drag `BobbingCoin` from the Assets panel onto the coin's Inspector. Once the script has been compiled
+   (see Where scripts live), Height and Speed appear under its Scripts section.
 4. Press Play and walk the player into the coin. Watch the Console for "Player 0 touched the coin."
 
 ## Hot reload
 
 While the scene is Running, the server checks the script folder about twice a second. When any file changes
-it recompiles everything. Live field values are saved first, new instances are created from the new code,
-and your fields keep their values. In the Console you see "Change detected - reloading scripts..." then
-"Reload successful."
+it recompiles everything. Live field values are saved first. A successful reload calls `stop()` on every
+live script and then `start()` on fresh instances. Only `[ExposeToEditor]` fields keep their values.
+Other fields reset. `BobbingCoin` re-centers on wherever it is at the moment of a reload.
+In the Console you see "Change detected - reloading scripts..." then "Reload successful."
 
 Nothing is checked while the scene is Stopped or Paused, so edit a script, press Play, and it compiles.
 

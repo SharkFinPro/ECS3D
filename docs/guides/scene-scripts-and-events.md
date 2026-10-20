@@ -28,7 +28,9 @@ cannot be put on a scene. If you do, the server logs one warning and leaves it u
 ## Adding a scene script
 
 1. Create the script with Assets, then New Script. The template derives from `ScriptBase`, so edit the file
-   and change the base class to `SceneScript`.
+   and change the base class to `SceneScript`. Then press Play, wait for "Reload successful." in the
+   Console, and press Stop. A new script is only compiled while the scene runs, and a reload restarts
+   scripts, so `onSceneLoaded` does not run on that first Play.
 2. Open Window, then Scene Scripts.
 3. Press Add Scene Script and pick the class. You can also drag a script asset onto the panel.
 4. Each script shows its exposed fields (`[ExposeToEditor]`, as for object scripts). Up and down arrows
@@ -99,8 +101,8 @@ public class CoinScoreKeeper : SceneScript
 {
     public const string CoinCollected = "coinCollected";
 
-    [ExposeToEditor("Coins To Win")]
-    private int m_target = 5;
+    [ExposeToEditor("Target")]
+    private int Target = 5;
 
     private readonly Dictionary<int, int> m_scores = new Dictionary<int, int>();
 
@@ -112,7 +114,7 @@ public class CoinScoreKeeper : SceneScript
     public override void onSceneLoaded()
     {
         m_scores.Clear();
-        Log.info($"Collect {m_target} coins to win.");
+        Log.info($"Collect {Target} coins to win.");
     }
 
     public override void onPlayerLeft(int slot)
@@ -134,7 +136,7 @@ public class CoinScoreKeeper : SceneScript
 
         Log.info($"Player {slot} has {score} coin(s). Total collected: {total}.");
 
-        if (score >= m_target)
+        if (score >= Target)
         {
             Log.info($"Player {slot} wins!");
         }
@@ -164,7 +166,8 @@ Next, change the coin from the previous guide so it publishes instead of only lo
     }
 ```
 
-Add `CoinScoreKeeper` in the Scene Scripts panel, press Play, and walk through coins. The Console prints a
+Add `CoinScoreKeeper` in the Scene Scripts panel. If it is new, run the compile cycle described above
+first. Then press Play, and walk through coins. The Console prints a
 running total each time. Because the keeper starts before any object script, it is already subscribed when
 the first coin is touched. The payload is a plain `int`, so `subscribe<int>` matches it. For richer data,
 define a small class and publish an instance of it, then subscribe with that class as `T`.
