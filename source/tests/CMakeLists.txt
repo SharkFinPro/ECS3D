@@ -93,6 +93,7 @@ add_executable(${PROJECT_NAME}
   LogFilterTest.cpp
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
+  ScriptFieldLabelTest.cpp
   AttachedScriptsTest.cpp
   ScriptSystemLifecycleTest.cpp
   ScriptSystemSceneScriptTest.cpp

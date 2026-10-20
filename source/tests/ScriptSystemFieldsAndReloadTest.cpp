@@ -342,4 +342,41 @@ namespace {
     EXPECT_EQ(count("reload"), 2);
     EXPECT_EQ(count(call("attach", a, "Mover")), 1);
   }
+
+  TEST_F(ScriptSystemTest, SyncFieldsToDataCarriesTheReportedDisplayName)
+  {
+    state.exposedByClass["Mover"] =
+      R"([{"name":"m_speed","displayName":"Top Speed","type":"float"},{"name":"count","type":"int"}])";
+    const auto a = fixtures::addObject(scene, "A");
+    const auto script = addScript(a, "Mover");
+    scriptSystem.start(manager());
+
+    scriptSystem.syncFieldsToData(manager());
+
+    ASSERT_EQ(script->getFields().size(), 2u);
+    EXPECT_EQ(findField(script, "m_speed").at("displayName"), "Top Speed");
+    EXPECT_EQ(findField(script, "m_speed").at("name"), "m_speed");
+    EXPECT_FALSE(findField(script, "count").contains("displayName"));
+    EXPECT_EQ(findField(script, "count").at("type"), "int");
+  }
+
+  TEST_F(ScriptSystemTest, AChangedDisplayNameKeepsTheStoredValue)
+  {
+    state.exposedByClass["Mover"] = R"([{"name":"speed","displayName":"Old Label","type":"float"}])";
+    const auto a = fixtures::addObject(scene, "A");
+    const auto script = addScript(a, "Mover");
+    scriptSystem.start(manager());
+    state.floats["speed"] = 3.0f;
+    scriptSystem.syncFieldsToData(manager());
+    ASSERT_EQ(findField(script, "speed").at("displayName"), "Old Label");
+    scriptSystem.stop(manager());
+
+    state.floats["speed"] = 0.0f;
+    state.exposedByClass["Mover"] = R"([{"name":"speed","displayName":"New Label","type":"float"}])";
+    scriptSystem.start(manager());
+    scriptSystem.syncFieldsToData(manager());
+
+    EXPECT_EQ(findField(script, "speed").at("displayName"), "New Label");
+    EXPECT_FLOAT_EQ(findField(script, "speed").at("value").get<float>(), 3.0f);
+  }
 }

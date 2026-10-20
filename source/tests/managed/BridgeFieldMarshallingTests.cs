@@ -121,9 +121,9 @@ public class BridgeFieldMarshallingTests
     Assert.Equal("Speed", speed!.Value.GetProperty("displayName").GetString());
     Assert.Equal("float", speed.Value.GetProperty("type").GetString());
 
-    // count uses the attribute's default display name ("Script Variable") since none was given.
+    // A bare [ExposeToEditor] gives no label, so the field's own name is reported instead.
     Assert.NotNull(count);
-    Assert.Equal("Script Variable", count!.Value.GetProperty("displayName").GetString());
+    Assert.Equal("count", count!.Value.GetProperty("displayName").GetString());
     Assert.Equal("int", count.Value.GetProperty("type").GetString());
   }
 

@@ -136,6 +136,7 @@ private:
   struct ExposedField {
     std::string name;
     std::string type;
+    std::string displayName;
   };
 
   // The (uuid, class) pair behind a cache key, kept alongside it so an entry whose Script component is
