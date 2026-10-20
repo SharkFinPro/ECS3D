@@ -5,6 +5,8 @@
 #include "GuiComponents.h"
 #include "Selection.h"
 #include <GpuAssetCache.h>
+#include <Log.h>
+#include <ProjectPaths.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
@@ -62,10 +64,16 @@ namespace {
     return generator();
   }
 
-  [[nodiscard]] bool scriptFileExists(const std::string& name)
+  // New scripts go in the project's own scripts/ folder; a project with no folder keeps the working dir's.
+  [[nodiscard]] std::filesystem::path scriptDirectory(const std::filesystem::path& projectRoot)
+  {
+    return projectRoot.empty() ? std::filesystem::path("scripts/UserScripts") : projectRoot / "scripts";
+  }
+
+  [[nodiscard]] bool scriptFileExists(const std::filesystem::path& projectRoot, const std::string& name)
   {
     std::error_code ec;
-    const bool exists = std::filesystem::exists(std::filesystem::path("scripts/UserScripts") / (name + ".cs"), ec);
+    const bool exists = std::filesystem::exists(scriptDirectory(projectRoot) / (name + ".cs"), ec);
     return !ec && exists;
   }
 
@@ -459,7 +467,9 @@ void AssetBrowserPanel::displayCreateItems()
   if (ImGui::MenuItem("New Script"))
   {
     beginCreate(PendingAsset::Type::Script, "",
-                assetNaming::uniqueScriptName(*m_assetRegistry, "NewScript", scriptFileExists));
+                assetNaming::uniqueScriptName(*m_assetRegistry, "NewScript", [this](const std::string& name) {
+                  return scriptFileExists(m_assetCache->getProjectRoot(), name);
+                }));
   }
 
   ImGui::EndDisabled();
@@ -511,7 +521,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
     }
     else if (m_pending.type == PendingAsset::Type::Script &&
              (assetNaming::isNameTaken(*m_assetRegistry, AssetType::Script, m_pending.name) ||
-              scriptFileExists(m_pending.name)))
+              scriptFileExists(m_assetCache->getProjectRoot(), m_pending.name)))
     {
       m_createError = std::string("A script named ") + m_pending.name + " already exists.";
     }
@@ -560,16 +570,26 @@ void AssetBrowserPanel::commitAsset()
   const auto assetUUID = newUUID();
   const std::string uuid = uuids::to_string(assetUUID);
 
-  // Copy an imported file into the project's assets dir (relative to the working dir = exe dir) so the
-  // GpuAssetCache can load it; then send the registry record to the authoritative server.
-  const auto importFile = [&](const char* dir) {
-    const std::filesystem::path destDir = dir;
-    std::filesystem::create_directories(destDir);
+  // Copy an imported file into the project folder's assets dir so the GpuAssetCache can load it; then send
+  // the registry record to the authoritative server. A project with no folder yet imports into the working
+  // dir (the exe dir), as before project folders.
+  const auto importFile = [&](const ImportKind kind) {
+    const auto& root = m_assetCache->getProjectRoot();
 
-    const auto dest = destDir / (name + std::filesystem::path(m_pending.sourcePath).extension().string());
-    std::filesystem::copy_file(m_pending.sourcePath, dest, std::filesystem::copy_options::overwrite_existing);
+    static bool warnedNoFolder = false;
+    if (root.empty() && !warnedNoFolder)
+    {
+      warnedNoFolder = true;
+      Log::info(LogCategory::editor,
+        "The project has no folder yet: imports are copied next to the editor, not into a project. Save it to a folder first.");
+    }
 
-    return dest.generic_string();
+    const auto destination = importDestination(root, m_pending.sourcePath, name, kind);
+    std::filesystem::create_directories(destination.absolute.parent_path());
+    std::filesystem::copy_file(m_pending.sourcePath, destination.absolute,
+                               std::filesystem::copy_options::overwrite_existing);
+
+    return destination.relative;
   };
 
   nlohmann::json addAsset;
@@ -577,10 +597,10 @@ void AssetBrowserPanel::commitAsset()
   switch (m_pending.type)
   {
     case PendingAsset::Type::Model:
-      addAsset = { { "assetType", "model" }, { "uuid", uuid }, { "path", importFile("assets/models") } };
+      addAsset = { { "assetType", "model" }, { "uuid", uuid }, { "path", importFile(ImportKind::model) } };
       break;
     case PendingAsset::Type::Texture:
-      addAsset = { { "assetType", "texture" }, { "uuid", uuid }, { "path", importFile("assets/textures") } };
+      addAsset = { { "assetType", "texture" }, { "uuid", uuid }, { "path", importFile(ImportKind::texture) } };
       break;
     case PendingAsset::Type::Scene:
       addAsset = { { "assetType", "scene" }, { "uuid", uuid }, { "name", name } };
@@ -591,8 +611,10 @@ void AssetBrowserPanel::commitAsset()
       break;
     case PendingAsset::Type::Script:
     {
-      std::filesystem::create_directories("scripts/UserScripts");
-      const std::filesystem::path path = std::filesystem::path("scripts/UserScripts") / (name + ".cs");
+      const auto& root = m_assetCache->getProjectRoot();
+      const auto directory = scriptDirectory(root);
+      std::filesystem::create_directories(directory);
+      const std::filesystem::path path = directory / (name + ".cs");
 
       std::ofstream out(path);
       out <<
@@ -607,7 +629,8 @@ void AssetBrowserPanel::commitAsset()
         "    public override void stop() {}\n"
         "}\n";
 
-      addAsset = { { "assetType", "script" }, { "uuid", uuid }, { "path", path.generic_string() }, { "className", name } };
+      addAsset = { { "assetType", "script" }, { "uuid", uuid }, { "path", (root.empty() ? path : std::filesystem::path("scripts") / (name + ".cs")).generic_string() },
+                   { "className", name } };
       break;
     }
     default:
