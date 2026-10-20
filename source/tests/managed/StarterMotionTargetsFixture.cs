@@ -129,22 +129,28 @@ public abstract unsafe class StarterMotionTargetsFixture : IDisposable
   protected static string[] Warnings() =>
     LogCalls.Where(c => c.Level == 3).Select(c => c.Message).ToArray();
 
-  protected static void AssertVec(Vector3 expected, Vector3 actual, float tolerance = 1e-3f)
+  protected static void AssertVec(Vector3 expected, Vector3 actual) => AssertVec(expected, actual, 1e-3f);
+
+  protected static void AssertVec(Vector3 expected, Vector3 actual, float tolerance)
   {
     Assert.True(Vector3.Distance(expected, actual) <= tolerance, $"expected {expected} but got {actual}");
   }
 
-  protected static void AddObject(string uuid, Vector3 position, Vector3? scale = null)
+  protected static void AddObject(string uuid, Vector3 position) => AddObject(uuid, position, Vector3.One);
+
+  protected static void AddObject(string uuid, Vector3 position, Vector3 scale)
   {
     Positions[uuid] = position;
-    Scales[uuid] = scale ?? Vector3.One;
+    Scales[uuid] = scale;
     Rotations[uuid] = Vector3.Zero;
   }
 
-  protected static void AddBody(string uuid, Vector3? velocity = null)
+  protected static void AddBody(string uuid) => AddBody(uuid, Vector3.Zero);
+
+  protected static void AddBody(string uuid, Vector3 velocity)
   {
     Bodies.Add(uuid);
-    Velocities[uuid] = velocity ?? Vector3.Zero;
+    Velocities[uuid] = velocity;
   }
 
   protected static void AddNamed(string name, string uuid, Vector3 position)
