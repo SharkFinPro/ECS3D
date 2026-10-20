@@ -12,6 +12,20 @@
 #include <system_error>
 #include <utility>
 
+namespace {
+  std::string exposedDisplayName(const nlohmann::json& field)
+  {
+    const auto it = field.find("displayName");
+    if (it == field.end() || !it->is_string())
+    {
+      return {};
+    }
+
+    auto displayName = it->get<std::string>();
+    return displayName == field.at("name").get<std::string>() ? std::string() : displayName;
+  }
+}
+
 ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::vector<std::filesystem::path> scriptDirectories)
   : m_makeRuntime(std::move(makeRuntime)),
     m_scriptDirectories(std::move(scriptDirectories))
@@ -675,7 +689,7 @@ void ScriptSystem::attach(const Object& object, const std::shared_ptr<Script>& s
   fields.clear();
   for (const auto& f : nlohmann::json::parse(m_engine->getExposedFields(uuidStr.c_str(), className.c_str())))
   {
-    fields.push_back({ f.at("name").get<std::string>(), f.at("type").get<std::string>() });
+    fields.push_back({ f.at("name").get<std::string>(), f.at("type").get<std::string>(), exposedDisplayName(f) });
   }
 
   writeFieldsToInstance(uuid, className, script->getFields());
@@ -789,7 +803,7 @@ void ScriptSystem::attachSceneScript(const SceneAsset& scene, const std::shared_
   fields.clear();
   for (const auto& f : nlohmann::json::parse(m_engine->getExposedFields(uuidStr.c_str(), className.c_str())))
   {
-    fields.push_back({ f.at("name").get<std::string>(), f.at("type").get<std::string>() });
+    fields.push_back({ f.at("name").get<std::string>(), f.at("type").get<std::string>(), exposedDisplayName(f) });
   }
 
   writeFieldsToInstance(uuid, className, script->getFields());
@@ -960,6 +974,11 @@ nlohmann::json ScriptSystem::readFieldsFromInstance(const uuids::uuid& uuid,
       { "type", field.type },
       { "value", "" }
     };
+
+    if (!field.displayName.empty())
+    {
+      entry["displayName"] = field.displayName;
+    }
 
     if (field.type == "float")
     {

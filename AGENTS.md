@@ -118,7 +118,7 @@
   `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is
   `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
   json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
-  carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h` and `KeyHoldRepeat.h` are reached
+  carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h`, `KeyHoldRepeat.h` and `ScriptFieldLabel.h` are reached
   through the `libs/editor` include path alone. The header-only `apps/server/ServerPolicy.h`
   (mutation authorization, scene-control plans, token generation check) is covered the same way, by including it, and the
   header-only `libs/net/EditToken.h` is reached through the `libs/net` include path. `PresetsTest` reads `CMakePresets.json` from the repo root via the `ECS3D_SOURCE_DIR` compile definition. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
@@ -154,8 +154,9 @@
   than waiting out production values.
   `WebSocketBackendLoopbackTests` drives the WebSocket backend the same way: its `SendTimeoutMs` is also an internal
   field, and an internal `ClientReceiveLoopExiting` hook lets a test reconnect inside the window between the
-  client receive loop stopping and releasing its connection. `TransportExportsTests` calls `Transport`'s exports
-  through function pointers.
+  client receive loop stopping and releasing its connection. Both loopback backends have an internal
+  `ServerConnectionExiting` hook, which lets a test hold a connection thread just before its disconnect is
+  delivered. `TransportExportsTests` calls `Transport`'s exports through function pointers.
   The test project also compiles `UserScripts/` in (a `Compile` link in `ECS3DManagedTests.csproj`), so
   `PlayerScript` and the starter scripts are tested through `FakeNatives` like the wrappers; a fake can
   answer per uuid, name or key code by setting `"<fake key>:<argument>"`.
@@ -404,6 +405,8 @@ Shutdown joins every socket thread it started before returning: `ServerStop` fli
 takes its snapshot of started threads in the same lock the accept loop checks that flag and registers a
 new thread under, so a thread that starts is one this call goes on to join; it then closes the listener
 and all connection sockets and joins the accept thread and each per-connection thread.
+A connection thread removes itself from that list only after it has delivered its disconnect, so a stop
+that returns has no disconnect callback still to come.
 `ClientDisconnect` closes the connection then joins the receive thread the same way. Each join is bounded
 by `ShutdownJoinTimeoutMs`, logging a warning if a thread has not exited by then instead of waiting past
 it, and skips a thread that is the caller (joining that thread would deadlock). `NetServer::stop`/
@@ -469,8 +472,9 @@ movement can be relative to wherever the camera actually faces, degrading to the
 without the `tryGet` ceremony since `ScriptBase` constructs one for the script's own object (like
 `transform`/`rigidBody`/`input`). `bindings/BindingCoverage.h` holds a table of every `ComponentType`
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
-without deciding its scripting story can't go unnoticed. Script field edits are validated
-(`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
+without deciding its scripting story can't go unnoticed. A Script field entry may carry a `displayName`, the
+`[ExposeToEditor]` label the Inspector shows; a bare attribute shows the field name. Script field edits are
+validated (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
 refused with a warning and does not fault the script. Exposed fields may be float, int, bool, string or
 vector3: each type has a `getField*`/`setField*` export, and a string crosses as 8-bit Unicode text that the
 native side frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
