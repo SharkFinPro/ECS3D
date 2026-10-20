@@ -20,6 +20,7 @@
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -126,6 +127,113 @@ namespace
   }
 }
 
+namespace
+{
+  glm::vec3 expectGridTile(const nlohmann::json& tile)
+  {
+    const auto tileTransform = componentOf(tile, "Transform");
+    EXPECT_EQ(vec3Of(tileTransform.at("scale")), glm::vec3(10, 1, 10));
+
+    const auto renderer = componentOf(tile, "ModelRenderer");
+    EXPECT_TRUE(renderer.at("shouldRender").get<bool>());
+    EXPECT_EQ(renderer.at("modelUUID"), planeTileModel);
+    EXPECT_EQ(renderer.at("textureUUID"), gridCheckerTexture);
+    EXPECT_FALSE(hasComponent(tile, "Collider"));
+
+    return vec3Of(tileTransform.at("position"));
+  }
+
+  int countMatches(const std::vector<glm::vec3>& positions, const glm::vec3& expected)
+  {
+    int matches = 0;
+    for (const auto& position : positions)
+    {
+      matches += position == expected ? 1 : 0;
+    }
+
+    return matches;
+  }
+
+  std::vector<std::string> registeredAssetUuids(const nlohmann::json& project)
+  {
+    std::vector<std::string> registered;
+    for (const char* list : { "models", "textures" })
+    {
+      for (const auto& asset : project.at("assets").at(list))
+      {
+        registered.push_back(asset.at("uuid").get<std::string>());
+        EXPECT_EQ(asset.at("filePath").get<std::string>().rfind("assets/", 0), 0u);
+      }
+    }
+
+    return registered;
+  }
+
+  bool contains(const std::vector<std::string>& values, const std::string& wanted)
+  {
+    return std::find(values.begin(), values.end(), wanted) != values.end();
+  }
+
+  // Returns how many asset references the object and its children hold, expecting each to be registered.
+  int checkReferences(const nlohmann::json& object, const std::vector<std::string>& registered)
+  {
+    int references = 0;
+    for (const auto& component : object.at("components"))
+    {
+      if (component.at("type") != "ModelRenderer")
+      {
+        continue;
+      }
+
+      for (const char* key : { "modelUUID", "textureUUID", "specularMapUUID" })
+      {
+        EXPECT_TRUE(contains(registered, component.at(key).get<std::string>())) << key;
+        ++references;
+      }
+    }
+
+    for (const auto& child : object.at("children"))
+    {
+      references += checkReferences(child, registered);
+    }
+
+    return references;
+  }
+
+  std::shared_ptr<Object> dropBlock(ObjectManager& objectManager)
+  {
+    const auto block = std::make_shared<Object>("Block");
+    objectManager.addObject(block);
+    fixtures::transformOf(block)->setPosition(glm::vec3(0, 3, 0));
+    fixtures::addBoxCollider(block)->setScale(glm::vec3(1));
+    fixtures::addRigidBody(block)->setMass(8.0f);
+
+    return block;
+  }
+
+  void tick(const ObjectManager& objectManager, const int count)
+  {
+    CollisionSystem collisionSystem;
+    for (int i = 0; i < count; ++i)
+    {
+      PhysicsSystem::fixedUpdate(objectManager, 1.0f / 50.0f);
+      collisionSystem.fixedUpdate(objectManager, 1.0f / 50.0f);
+    }
+  }
+
+  void expectRestingOnGround(const std::shared_ptr<Object>& block)
+  {
+    const auto position = fixtures::positionOf(block);
+    EXPECT_TRUE(std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z));
+    EXPECT_NEAR(position.y, 1.0f, 0.05f);
+
+    const auto body = block->getComponent<RigidBody>(ComponentType::rigidBody);
+    ASSERT_NE(body, nullptr);
+    EXPECT_LT(glm::length(body->getVelocity()), 0.05f);
+    EXPECT_LT(glm::length(body->getAngularVelocity()), 1.0f);
+  }
+}
+
 TEST(EmptyTemplate, ManifestParsesWithTheShippedFields)
 {
   std::string error;
@@ -172,27 +280,13 @@ TEST(EmptyTemplate, GroundIsFortyByFortyOfFourGridTiles)
   std::vector<glm::vec3> positions;
   for (const auto& tile : ground.at("children"))
   {
-    const auto tileTransform = componentOf(tile, "Transform");
-    EXPECT_EQ(vec3Of(tileTransform.at("scale")), glm::vec3(10, 1, 10));
-    positions.push_back(vec3Of(tileTransform.at("position")));
-
-    const auto renderer = componentOf(tile, "ModelRenderer");
-    EXPECT_TRUE(renderer.at("shouldRender").get<bool>());
-    EXPECT_EQ(renderer.at("modelUUID"), planeTileModel);
-    EXPECT_EQ(renderer.at("textureUUID"), gridCheckerTexture);
-    EXPECT_FALSE(hasComponent(tile, "Collider"));
+    positions.push_back(expectGridTile(tile));
   }
 
   for (const auto& expected : { glm::vec3(-10, 1, -10), glm::vec3(10, 1, -10),
                                 glm::vec3(-10, 1, 10), glm::vec3(10, 1, 10) })
   {
-    int matches = 0;
-    for (const auto& position : positions)
-    {
-      matches += position == expected ? 1 : 0;
-    }
-
-    EXPECT_EQ(matches, 1) << expected.x << ", " << expected.z;
+    EXPECT_EQ(countMatches(positions, expected), 1) << expected.x << ", " << expected.z;
   }
 }
 
@@ -234,61 +328,13 @@ TEST(EmptyTemplate, EveryReferencedAssetIsRegistered)
   std::ifstream file(templateFolder / "project.ecs3d");
   ASSERT_TRUE(file.is_open());
   const auto project = nlohmann::json::parse(file);
+  const auto registered = registeredAssetUuids(project);
 
-  std::vector<std::string> registered;
-  for (const char* list : { "models", "textures" })
-  {
-    for (const auto& asset : project.at("assets").at(list))
-    {
-      registered.push_back(asset.at("uuid").get<std::string>());
-      EXPECT_EQ(asset.at("filePath").get<std::string>().rfind("assets/", 0), 0u);
-    }
-  }
-
-  const auto isRegistered = [&](const std::string& uuid)
-  {
-    for (const auto& candidate : registered)
-    {
-      if (candidate == uuid)
-      {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  // Ground and four tiles, three references each; the positive control for the loop below.
+  // Ground and four tiles, three references each; the positive control for the walk.
   int references = 0;
-  std::vector<nlohmann::json> pending;
   for (const auto& object : project.at("assets").at("scenes").at(0).at("objects"))
   {
-    pending.push_back(object);
-  }
-
-  while (!pending.empty())
-  {
-    const auto object = pending.back();
-    pending.pop_back();
-
-    for (const auto& component : object.at("components"))
-    {
-      if (component.at("type") != "ModelRenderer")
-      {
-        continue;
-      }
-
-      for (const char* key : { "modelUUID", "textureUUID", "specularMapUUID" })
-      {
-        EXPECT_TRUE(isRegistered(component.at(key).get<std::string>())) << key;
-        ++references;
-      }
-    }
-
-    for (const auto& child : object.at("children"))
-    {
-      pending.push_back(child);
-    }
+    references += checkReferences(object, registered);
   }
 
   EXPECT_EQ(references, 15);
@@ -305,19 +351,8 @@ TEST(EmptyTemplate, AGroundCatchesADroppedBlockAndNothingElseMoves)
   ASSERT_EQ(before.size(), 7u);
 
   // The template holds nothing dynamic, so a Block like DefaultProject's is the positive control.
-  const auto block = std::make_shared<Object>("Block");
-  objectManager.addObject(block);
-  fixtures::transformOf(block)->setPosition(glm::vec3(0, 3, 0));
-  fixtures::addBoxCollider(block)->setScale(glm::vec3(1));
-  const auto body = fixtures::addRigidBody(block);
-  body->setMass(8.0f);
-
-  CollisionSystem collisionSystem;
-  for (int tick = 0; tick < 300; ++tick)
-  {
-    PhysicsSystem::fixedUpdate(objectManager, 1.0f / 50.0f);
-    collisionSystem.fixedUpdate(objectManager, 1.0f / 50.0f);
-  }
+  const auto block = dropBlock(objectManager);
+  tick(objectManager, 300);
 
   const auto after = transformsOf(objectManager);
   ASSERT_EQ(after.size(), before.size() + 1);
@@ -327,11 +362,7 @@ TEST(EmptyTemplate, AGroundCatchesADroppedBlockAndNothingElseMoves)
     EXPECT_EQ(after[i], before[i]);
   }
 
-  const auto position = fixtures::positionOf(block);
-  EXPECT_TRUE(std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z));
-  EXPECT_NEAR(position.y, 1.0f, 0.05f);
-  EXPECT_LT(glm::length(body->getVelocity()), 0.05f);
-  EXPECT_LT(glm::length(body->getAngularVelocity()), 1.0f);
+  expectRestingOnGround(block);
 }
 
 TEST(EmptyTemplate, ThumbnailIs640By360)
