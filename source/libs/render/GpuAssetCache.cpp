@@ -27,7 +27,15 @@ std::shared_ptr<vke::VulkanEngine> GpuAssetCache::getRenderer() const
 
 void GpuAssetCache::setProjectRoot(std::filesystem::path projectRoot)
 {
-  m_projectRoot = std::move(projectRoot);
+  if (projectRoot != m_projectRoot)
+  {
+    m_projectRoot = std::move(projectRoot);
+    m_resetPending = true;
+  }
+}
+
+void GpuAssetCache::requestAssetReset()
+{
   m_resetPending = true;
 }
 
@@ -289,9 +297,19 @@ void GpuAssetCache::applyPendingReset()
   }
 
   m_resetPending = false;
+
+  const auto assetManager = m_renderer->getAssetManager();
+
+  for (auto& entry : m_renderObjects)
+  {
+    assetManager->release(std::move(entry.second.renderObject));
+  }
   m_renderObjects.clear();
-  m_models.clear();
-  m_textures.clear();
+
+  m_models.drain([&assetManager](std::shared_ptr<vke::Model> model) { assetManager->release(std::move(model)); });
+  m_textures.drain([&assetManager](std::shared_ptr<vke::Texture2D> texture) {
+    assetManager->release(std::move(texture));
+  });
 }
 
 void GpuAssetCache::pruneStale(const std::unordered_set<uuids::uuid>& liveUUIDs)

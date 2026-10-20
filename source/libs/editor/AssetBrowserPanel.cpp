@@ -64,10 +64,16 @@ namespace {
     return generator();
   }
 
-  [[nodiscard]] bool scriptFileExists(const std::string& name)
+  // New scripts go in the project's own scripts/ folder; a project with no folder keeps the working dir's.
+  [[nodiscard]] std::filesystem::path scriptDirectory(const std::filesystem::path& projectRoot)
+  {
+    return projectRoot.empty() ? std::filesystem::path("scripts/UserScripts") : projectRoot / "scripts";
+  }
+
+  [[nodiscard]] bool scriptFileExists(const std::filesystem::path& projectRoot, const std::string& name)
   {
     std::error_code ec;
-    const bool exists = std::filesystem::exists(std::filesystem::path("scripts/UserScripts") / (name + ".cs"), ec);
+    const bool exists = std::filesystem::exists(scriptDirectory(projectRoot) / (name + ".cs"), ec);
     return !ec && exists;
   }
 
@@ -461,7 +467,9 @@ void AssetBrowserPanel::displayCreateItems()
   if (ImGui::MenuItem("New Script"))
   {
     beginCreate(PendingAsset::Type::Script, "",
-                assetNaming::uniqueScriptName(*m_assetRegistry, "NewScript", scriptFileExists));
+                assetNaming::uniqueScriptName(*m_assetRegistry, "NewScript", [this](const std::string& name) {
+                  return scriptFileExists(m_assetCache->getProjectRoot(), name);
+                }));
   }
 
   ImGui::EndDisabled();
@@ -513,7 +521,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
     }
     else if (m_pending.type == PendingAsset::Type::Script &&
              (assetNaming::isNameTaken(*m_assetRegistry, AssetType::Script, m_pending.name) ||
-              scriptFileExists(m_pending.name)))
+              scriptFileExists(m_assetCache->getProjectRoot(), m_pending.name)))
     {
       m_createError = std::string("A script named ") + m_pending.name + " already exists.";
     }
@@ -603,8 +611,10 @@ void AssetBrowserPanel::commitAsset()
       break;
     case PendingAsset::Type::Script:
     {
-      std::filesystem::create_directories("scripts/UserScripts");
-      const std::filesystem::path path = std::filesystem::path("scripts/UserScripts") / (name + ".cs");
+      const auto& root = m_assetCache->getProjectRoot();
+      const auto directory = scriptDirectory(root);
+      std::filesystem::create_directories(directory);
+      const std::filesystem::path path = directory / (name + ".cs");
 
       std::ofstream out(path);
       out <<
@@ -619,7 +629,8 @@ void AssetBrowserPanel::commitAsset()
         "    public override void stop() {}\n"
         "}\n";
 
-      addAsset = { { "assetType", "script" }, { "uuid", uuid }, { "path", path.generic_string() }, { "className", name } };
+      addAsset = { { "assetType", "script" }, { "uuid", uuid }, { "path", (root.empty() ? path : std::filesystem::path("scripts") / (name + ".cs")).generic_string() },
+                   { "className", name } };
       break;
     }
     default:

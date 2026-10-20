@@ -56,7 +56,7 @@ void SaveUI::setProjectRootCallback(ProjectRootCallback callback)
 void SaveUI::setStartupProject(const std::filesystem::path& argument)
 {
   const auto location = locateProject(argument);
-  m_saveFile = location.projectFile.string();
+  m_saveFile = location.projectFile;
   m_projectRoot = location.root;
 }
 
@@ -81,39 +81,47 @@ bool SaveUI::saveAs()
   return chooseSaveFolder(folder) && saveToFolder(folder);
 }
 
-bool SaveUI::writeProject(const std::string& file)
+bool SaveUI::writeProject(const std::filesystem::path& file)
 {
   // Serialize the editor's replicated project (kept current by snapshots/deltas) straight to disk.
   if (!m_projectSerializer->save(file))
   {
-    Log::error(LogCategory::editor, "Failed to save project to " + file);
+    Log::error(LogCategory::editor, "Failed to save project to " + pathToUtf8(file));
     return false;
   }
 
   m_unsavedChanges.markSaved();
 
-  Log::info(LogCategory::editor, "Saved project to " + file);
+  Log::info(LogCategory::editor, "Saved project to " + pathToUtf8(file));
   return true;
 }
 
 bool SaveUI::saveToFolder(const std::filesystem::path& folder)
 {
+  if (saveFolderHoldsOtherProject(folder, m_projectRoot))
+  {
+    Log::error(LogCategory::editor, "Not saving: " + pathToUtf8(folder) + " already holds a project. " +
+      "Choose an empty folder, or open that project to edit it.");
+    return false;
+  }
+
   std::error_code error;
   if (!ensureProjectFolders(folder, error))
   {
-    Log::error(LogCategory::editor, "Could not create the project folder " + folder.string() + ": " + error.message());
+    Log::error(LogCategory::editor, "Could not create the project folder " + pathToUtf8(folder) + ": " +
+      error.message());
     return false;
   }
 
   copyProjectContent(m_projectRoot, folder, error);
   if (error)
   {
-    Log::error(LogCategory::editor, "Could not copy the project's assets and scripts to " + folder.string() + ": " +
+    Log::error(LogCategory::editor, "Could not copy the project's assets and scripts to " + pathToUtf8(folder) + ": " +
       error.message());
     return false;
   }
 
-  const auto file = projectFileInFolder(folder).string();
+  const auto file = projectFileInFolder(folder);
   if (!writeProject(file))
   {
     return false;
@@ -123,25 +131,25 @@ bool SaveUI::saveToFolder(const std::filesystem::path& folder)
 
   if (folder != m_projectRoot)
   {
-    setProjectRoot(folder);
+    setProjectRoot(folder, false);
   }
 
   return true;
 }
 
-void SaveUI::setProjectRoot(const std::filesystem::path& root)
+void SaveUI::setProjectRoot(const std::filesystem::path& root, const bool reopened)
 {
   m_projectRoot = root;
 
   if (m_onProjectRoot)
   {
-    m_onProjectRoot(root);
+    m_onProjectRoot(root, reopened);
   }
 }
 
 void SaveUI::open()
 {
-  std::string file;
+  std::filesystem::path file;
   if (chooseProjectFile(file))
   {
     loadFromFile(file);
@@ -168,14 +176,14 @@ bool SaveUI::isDirty() const
   return m_unsavedChanges.isDirty();
 }
 
-void SaveUI::loadFromFile(const std::string& path)
+void SaveUI::loadFromFile(const std::filesystem::path& path)
 {
   const auto location = locateProject(path);
 
   const std::ifstream f(location.projectFile);
   if (!f.is_open())
   {
-    Log::error(LogCategory::editor, "Could not open project file: " + location.projectFile.string());
+    Log::error(LogCategory::editor, "Could not open project file: " + pathToUtf8(location.projectFile));
     return;
   }
 
@@ -187,7 +195,7 @@ void SaveUI::loadFromFile(const std::string& path)
     return;
   }
 
-  Log::info(LogCategory::editor, "Opened project " + location.projectFile.string());
+  Log::info(LogCategory::editor, "Opened project " + pathToUtf8(location.projectFile));
 
   if (isLegacyProjectFile(location.projectFile))
   {
@@ -219,11 +227,11 @@ bool SaveUI::loadProjectBlob(const std::string& projectJson, const std::filesyst
     return false;
   }
 
-  m_saveFile = projectFile.string();
+  m_saveFile = projectFile;
 
   // Told on every load, even for the same folder: the project's asset records may differ. Before the load
   // callback, so the asset cache resolves against the new folder from the first frame.
-  setProjectRoot(root);
+  setProjectRoot(root, true);
 
   // A freshly loaded project has nothing unsaved yet.
   m_unsavedChanges.markSaved();
@@ -258,7 +266,7 @@ void SaveUI::createNewProject()
   static_cast<void>(loadProjectBlob(project.dump(), {}, {}));
 }
 
-bool SaveUI::chooseProjectFile(std::string& file)
+bool SaveUI::chooseProjectFile(std::filesystem::path& file)
 {
   if (NFD_Init() != NFD_OKAY)
   {
@@ -282,7 +290,7 @@ bool SaveUI::chooseProjectFile(std::string& file)
     return false;
   }
 
-  file = std::string(outPath);
+  file = pathFromUtf8(outPath);
   NFD_FreePathU8(outPath);
   NFD_Quit();
 
@@ -305,7 +313,7 @@ bool SaveUI::chooseSaveFolder(std::filesystem::path& folder)
     return false;
   }
 
-  folder = std::filesystem::path(outPath);
+  folder = pathFromUtf8(outPath);
   NFD_FreePathU8(outPath);
   NFD_Quit();
 
@@ -325,7 +333,7 @@ void SaveUI::registerWindowEvents()
 
     if (e.paths.size() == 1)
     {
-      guardDiscard(PendingDiscard::loadFile, e.paths.front());
+      guardDiscard(PendingDiscard::loadFile, pathFromUtf8(e.paths.front().c_str()));
     }
   });
 
@@ -334,7 +342,7 @@ void SaveUI::registerWindowEvents()
   glfwSetWindowCloseCallback(window->getWindow(), windowCloseCallback);
 }
 
-void SaveUI::guardDiscard(const PendingDiscard action, std::string path)
+void SaveUI::guardDiscard(const PendingDiscard action, std::filesystem::path path)
 {
   // A drag-and-drop drop fires straight from GLFW and isn't blocked by the modal the way menu items are.
   switch (decideDiscard(isDirty(), m_showUnsavedChangesModal))
@@ -357,7 +365,7 @@ void SaveUI::guardDiscard(const PendingDiscard action, std::string path)
   m_showUnsavedChangesModal = true;
 }
 
-void SaveUI::performDiscard(const PendingDiscard action, const std::string& path)
+void SaveUI::performDiscard(const PendingDiscard action, const std::filesystem::path& path)
 {
   switch (action)
   {

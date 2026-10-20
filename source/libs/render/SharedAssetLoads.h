@@ -49,8 +49,18 @@ public:
     return asset;
   }
 
-  void clear()
+  // Hands every loaded asset to release, then forgets all loads (failed ones included, so they are retried).
+  template <typename Release>
+  void drain(Release&& release)
   {
+    for (auto& entry : m_loads)
+    {
+      if (entry.second)
+      {
+        release(std::move(entry.second));
+      }
+    }
+
     m_loads.clear();
   }
 

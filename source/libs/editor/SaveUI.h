@@ -19,8 +19,9 @@ namespace vke {
 // KeybindDispatcher (Ctrl+S / Ctrl+Shift+S), wired in EditorApp rather than here. Save serializes the
 // editor's replicated project straight to disk. A project lives in a folder (<folder>/project.ecs3d beside
 // assets/ and scripts/): Save As picks a folder, Open takes a project file or, by drop, a folder. A legacy
-// bare .json project keeps being saved in place until Save As moves it into a folder. Open/New apply the project locally (instant feedback)
-// AND notify via a callback the EditorApp turns into a loadProject command (packing its now-current
+// bare .json project keeps being saved in place until Save As moves it into a folder.
+//
+// Open/New apply the project locally (instant feedback) AND notify via a callback the EditorApp turns into a loadProject command (packing its now-current
 // managers), so the authoritative server reloads + re-snapshots and everyone stays in sync.
 //
 // Also owns the "unsaved changes" gate: New, Open, a dropped project file, and closing the window all
@@ -30,8 +31,9 @@ namespace vke {
 class SaveUI {
 public:
   using LoadProjectCallback = std::function<void()>;
-  // Called with the project folder (empty for none) whenever it changes, before the load callback fires.
-  using ProjectRootCallback = std::function<void(const std::filesystem::path& root)>;
+  // Called with the project folder (empty for none) when it changes. reopened is true for a project load, which
+  // fires it before the load callback even if the folder is the same, and false for a Save As into a new folder.
+  using ProjectRootCallback = std::function<void(const std::filesystem::path& root, bool reopened)>;
 
   SaveUI(ProjectSerializer* projectSerializer, std::shared_ptr<vke::VulkanEngine> renderer);
 
@@ -59,7 +61,7 @@ public:
   void open();
 
   // path is a project folder, a ".ecs3d" file or a legacy project file.
-  void loadFromFile(const std::string& path);
+  void loadFromFile(const std::filesystem::path& path);
 
   void createNewProject();
 
@@ -98,9 +100,9 @@ private:
                        const std::filesystem::path& root);
 
   // Runs the action directly if the project isn't dirty; otherwise defers it behind the modal.
-  void guardDiscard(PendingDiscard action, std::string path = "");
+  void guardDiscard(PendingDiscard action, std::filesystem::path path = {});
 
-  void performDiscard(PendingDiscard action, const std::string& path);
+  void performDiscard(PendingDiscard action, const std::filesystem::path& path);
 
   static void windowCloseCallback(GLFWwindow* window);
 
@@ -112,7 +114,7 @@ private:
 
   ProjectRootCallback m_onProjectRoot;
 
-  std::string m_saveFile;
+  std::filesystem::path m_saveFile;
 
   std::filesystem::path m_projectRoot;
 
@@ -123,18 +125,18 @@ private:
   UnsavedChanges m_unsavedChanges;
 
   PendingDiscard m_pendingDiscard = PendingDiscard::none;
-  std::string m_pendingLoadPath;
+  std::filesystem::path m_pendingLoadPath;
   bool m_showUnsavedChangesModal = false;
 
-  [[nodiscard]] static bool chooseProjectFile(std::string& file);
+  [[nodiscard]] static bool chooseProjectFile(std::filesystem::path& file);
 
   [[nodiscard]] static bool chooseSaveFolder(std::filesystem::path& folder);
 
-  [[nodiscard]] bool writeProject(const std::string& file);
+  [[nodiscard]] bool writeProject(const std::filesystem::path& file);
 
   [[nodiscard]] bool saveToFolder(const std::filesystem::path& folder);
 
-  void setProjectRoot(const std::filesystem::path& root);
+  void setProjectRoot(const std::filesystem::path& root, bool reopened);
 
   void registerWindowEvents();
 };

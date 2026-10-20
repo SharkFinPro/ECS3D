@@ -2,6 +2,7 @@
 #define PROJECTSERIALIZER_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -23,7 +24,7 @@ public:
 
   // Returns false (and logs why) if the file could not be written, so callers can avoid discarding
   // pending state on a save that didn't actually land.
-  [[nodiscard]] bool save(const std::string& path) const;
+  [[nodiscard]] bool save(const std::filesystem::path& path) const;
 
   // Returns false (and logs why) on a missing/malformed project, so callers can react instead of
   // silently running with no scene.

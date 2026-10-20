@@ -1,4 +1,5 @@
 #include "ProjectPaths.h"
+#include <string_view>
 #include <system_error>
 
 namespace
@@ -120,6 +121,34 @@ bool isLegacyProjectFile(const std::filesystem::path& file)
   return !file.empty() && !hasProjectExtension(file);
 }
 
+std::filesystem::path pathFromUtf8(const char* utf8)
+{
+  if (!utf8)
+  {
+    return {};
+  }
+
+  const std::string_view view(utf8);
+  return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(view.data()), view.size()));
+}
+
+std::string pathToUtf8(const std::filesystem::path& path)
+{
+  const auto text = path.u8string();
+  return std::string(reinterpret_cast<const char*>(text.data()), text.size());
+}
+
+bool saveFolderHoldsOtherProject(const std::filesystem::path& folder, const std::filesystem::path& currentRoot)
+{
+  std::error_code error;
+  if (!std::filesystem::exists(projectFileInFolder(folder), error))
+  {
+    return false;
+  }
+
+  return currentRoot.empty() || !std::filesystem::equivalent(folder, currentRoot, error);
+}
+
 bool ensureProjectFolders(const std::filesystem::path& root, std::error_code& error)
 {
   for (const auto& folder : { root, root / "assets", root / "scripts" })
@@ -169,7 +198,8 @@ void copyProjectContent(const std::filesystem::path& from, const std::filesystem
     }
 
     std::filesystem::copy(source / sub, target / sub,
-                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing,
+                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing |
+                            std::filesystem::copy_options::copy_symlinks,
                           error);
     if (error)
     {
@@ -183,7 +213,8 @@ ImportDestination importDestination(const std::filesystem::path& root, const std
 {
   const std::filesystem::path folder =
     std::filesystem::path("assets") / (kind == ImportKind::model ? "models" : "textures");
-  const std::string stem = name.empty() ? sourceFile.stem().string() : name;
+  const std::filesystem::path typedName = std::filesystem::path(name).filename();
+  const std::string stem = typedName.empty() || typedName == "." || typedName == ".." ? sourceFile.stem().string() : typedName.string();
   const std::string extension = sourceFile.extension().string();
 
   std::string fileName = stem + extension;

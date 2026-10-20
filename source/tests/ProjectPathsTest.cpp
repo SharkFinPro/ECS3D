@@ -293,4 +293,48 @@ TEST_F(ProjectPathsTest, CopyProjectContentIgnoresEmptyOrNestedTargets)
 
   copyProjectContent(m_dir / "a", m_dir / "a", error);
   EXPECT_FALSE(error);
+  EXPECT_FALSE(fs::exists(m_dir / "a/assets/assets"));
+
+  copyProjectContent(m_dir / "a", m_dir / "c", error);
+  EXPECT_FALSE(error);
+  EXPECT_TRUE(fs::exists(m_dir / "c/assets/m.glb"));
+}
+
+TEST(PathFromUtf8Test, KeepsNonAsciiCharacters)
+{
+  const char* utf8 = "proj/caf\xC3\xA9/\xE3\x82\xB2\xE3\x83\xBC\xE3\x83\xA0.ecs3d";
+  const auto path = pathFromUtf8(utf8);
+
+  EXPECT_EQ(pathToUtf8(path.filename()), "\xE3\x82\xB2\xE3\x83\xBC\xE3\x83\xA0.ecs3d");
+  EXPECT_EQ(pathToUtf8(path), std::string(utf8));
+  EXPECT_EQ(pathToUtf8(pathFromUtf8("plain/path")), "plain/path");
+  EXPECT_TRUE(pathFromUtf8(nullptr).empty());
+}
+
+TEST_F(ProjectPathsTest, SaveFolderHoldsOtherProjectOnlyForADifferentFolderWithAProject)
+{
+  touch("a/project.ecs3d");
+  fs::create_directories(m_dir / "empty");
+
+  EXPECT_TRUE(saveFolderHoldsOtherProject(m_dir / "a", {}));
+  EXPECT_TRUE(saveFolderHoldsOtherProject(m_dir / "a", m_dir / "empty"));
+  EXPECT_FALSE(saveFolderHoldsOtherProject(m_dir / "a", m_dir / "a"));
+  EXPECT_FALSE(saveFolderHoldsOtherProject(m_dir / "empty", m_dir / "a"));
+  EXPECT_FALSE(saveFolderHoldsOtherProject(m_dir / "missing", {}));
+}
+
+TEST_F(ProjectPathsTest, ImportDestinationKeepsATypedNameInsideAssets)
+{
+  const auto inside = [this](const ImportDestination& destination) {
+    return destination.absolute.parent_path().lexically_normal() ==
+           (m_dir / "assets" / "models").lexically_normal();
+  };
+
+  EXPECT_TRUE(inside(importDestination(m_dir, "x/rock.glb", "..\\x", ImportKind::model)));
+  EXPECT_TRUE(inside(importDestination(m_dir, "x/rock.glb", "/abs/evil", ImportKind::model)));
+  EXPECT_TRUE(inside(importDestination(m_dir, "x/rock.glb", "../../up", ImportKind::model)));
+  EXPECT_TRUE(inside(importDestination(m_dir, "x/rock.glb", "..", ImportKind::model)));
+  EXPECT_EQ(importDestination(m_dir, "x/rock.glb", "/abs/evil", ImportKind::model).relative,
+            "assets/models/evil.glb");
+  EXPECT_EQ(importDestination(m_dir, "x/rock.glb", "..", ImportKind::model).relative, "assets/models/rock.glb");
 }
