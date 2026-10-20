@@ -501,6 +501,9 @@ that restarts the scene delivers unloading then loaded again. Handler spawns sta
 them right after each out-of-tick dispatch, and a stop discards what unloading handlers buffered. A
 `setSceneScriptFields` edit is pushed to the live instance before the snapshot, since the snapshot reads instance
 values back.
+`World.setObjectName(uuid, name)` renames a live object at once, refusing an unknown or marked-for-deletion object
+or an empty name. It replicates through the same deduped `objectComponentsChanged` resync as the component ops
+below, since `Object::pack`/`unpack` carry the name.
 `ComponentOpsBindings` (`World.hasComponent`/`addComponent`/`removeComponent`/`getComponentTypes`) gives
 scripts generic access to an object's component set, keyed by the same `ComponentRegistry` type-name
 strings unpack/loadFromJSON use ("RigidBody", "Box", "Sphere", ...) rather than `ComponentType`'s packed
