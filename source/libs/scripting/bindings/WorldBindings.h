@@ -22,6 +22,7 @@ struct WorldBindings
   const char*(*overlapSphere)(float cx, float cy, float cz, float radius, uint32_t layerMask,
                               const char* ignoreUuid);
   const char*(*spawnPrefab)(const char* prefabUuid, float x, float y, float z);
+  bool(*setObjectName)(const char* uuid, const char* name);
 };
 
 class WorldBindingsProvider {
@@ -33,6 +34,10 @@ private:
   static const char* bindGetObjectName(const char* uuid);
   static bool bindObjectExists(const char* uuid);
   static const char* bindGetAllObjectUuids();
+
+  // Renames a live object at once; false for an unknown or marked-for-deletion object or an empty name.
+  // The change replicates as an objectComponentsChanged resync, since Object::pack carries the name.
+  static bool bindSetObjectName(const char* uuid, const char* name);
 
   // Spawn a minimal object (a Transform at the given position); returns its new uuid. destroyObject marks
   // the object for deletion through the existing path.

@@ -50,6 +50,18 @@ public class WorldWrapperTests : IDisposable
   }
 
   [Fact]
+  public void SetObjectName_PassesUuidAndNameAndReturnsNativeAnswer()
+  {
+    FakeNatives.Set("World.setObjectName", true);
+    Assert.True(World.setObjectName("u-1", "Player 2"));
+
+    FakeNatives.Set("World.setObjectName", false);
+    Assert.False(World.setObjectName("u-2", "X"));
+
+    Assert.Equal(new[] { "World.setObjectName(u-1,Player 2)", "World.setObjectName(u-2,X)" }, FakeNatives.Calls);
+  }
+
+  [Fact]
   public void ObjectExists_ReflectsNativeAnswer()
   {
     FakeNatives.Set("World.objectExists", true);
