@@ -151,6 +151,62 @@ TEST(PhysicsIntegration, ABoxLandingOnARestingBoxGetsTheSameResponseWhicheverSid
 }
 
 namespace {
+  // A box falls flat onto a resting one that sits 0.4 to the side, so the two centers project to different points
+  // of the shared face. The contact is resolved from the upper box's pass or from the lower one's.
+  struct OffsetLanding {
+    glm::vec3 upperSpin;
+    glm::vec3 upperVelocity;
+  };
+
+  OffsetLanding landFlatOnAnOffsetRestingBox(const bool fromBelow)
+  {
+    const auto scene = makeScene();
+
+    const auto lower = addObject(scene, "Lower", { 0, 0, 0 });
+    const auto lowerBody = addBody(lower, false);
+    const auto upper = addObject(scene, "Upper", { 0.4f, 0.99f, 0 });
+    const auto upperBody = addBody(upper, false);
+
+    lowerBody->setFriction(0.5f);
+    lowerBody->setFalling(false);
+    lowerBody->setNextFalling(false);
+    upperBody->setFriction(0.5f);
+    upperBody->setFalling(true);
+    upperBody->setVelocity({ 0, -0.2f, 0 });
+
+    const std::array<glm::vec3, 4> overlap{
+      glm::vec3{ -0.1f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
+      glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.1f, 0.5f, 0.5f }
+    };
+
+    if (fromBelow)
+    {
+      PhysicsSystem::handleCollision(*lowerBody, ownColliderOf(*lowerBody), upper, { 0, -0.01f, 0 }, overlap, dt);
+    }
+    else
+    {
+      PhysicsSystem::handleCollision(*upperBody, ownColliderOf(*upperBody), lower, { 0, 0.01f, 0 }, overlap, dt);
+    }
+
+    return { upperBody->getAngularVelocity(), upperBody->getVelocity() };
+  }
+}
+
+TEST(PhysicsIntegration, ABoxLandingFlatOnAnOffsetRestingBoxIsNotSpunWhicheverSideResolvesTheContact)
+{
+  for (const bool fromBelow : { false, true })
+  {
+    SCOPED_TRACE(fromBelow ? "from below" : "from above");
+
+    const auto landing = landFlatOnAnOffsetRestingBox(fromBelow);
+
+    // Positive control: the landing was resolved, so the fall was stopped.
+    EXPECT_NEAR(landing.upperVelocity.y, 0.0f, 1e-4f);
+    expectNear("upper spin", landing.upperSpin, { 0, 0, 0 });
+  }
+}
+
+namespace {
   // A body of mass 10 lands at unit speed on one of mass 0.1 resting on a support, touching along normal, the
   // way a heavy box comes down on a small one at an angle in a pile.
   struct Squeeze {
