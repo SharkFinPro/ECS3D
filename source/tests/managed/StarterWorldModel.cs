@@ -248,7 +248,7 @@ public abstract class StarterWorldFixture : IDisposable
   protected const string PaletteOrange = "ea184ad8-ca64-48cd-b69e-92bcb4649158";
 
   protected readonly IDisposable _natives = FakeNatives.Install();
-  protected readonly WorldModel _world = new();
+  private protected readonly WorldModel _world = new();
 
   protected StarterWorldFixture()
   {
