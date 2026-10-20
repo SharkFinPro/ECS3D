@@ -3,6 +3,7 @@
 #include "ServerPolicy.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
+#include <ProjectPaths.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
 #include <assets/AssetRegistry.h>
@@ -96,10 +97,16 @@ void ServerApp::loadStartupProject()
     // code because the procedural scenes can't be a static file on disk.
     m_projectSerializer->deserialize(buildDefaultProject());
   }
-  else if (!m_projectSerializer->load(m_options.project) || !m_sceneManager->getCurrentScene())
+  else
   {
-    Log::error(LogCategory::server, "No scene loaded from project '" + m_options.project
-      + "' - the server will run but simulate nothing. Check the project path and working directory.");
+    const auto location = locateProject(m_options.project);
+    m_projectRoot = location.root;
+
+    if (!m_projectSerializer->load(location.projectFile.string()) || !m_sceneManager->getCurrentScene())
+    {
+      Log::error(LogCategory::server, "No scene loaded from project '" + location.projectFile.string()
+        + "' - the server will run but simulate nothing. Check the project path and working directory.");
+    }
   }
 }
 

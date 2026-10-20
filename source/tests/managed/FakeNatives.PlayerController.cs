@@ -12,14 +12,14 @@ internal static unsafe class FakePlayerControllerNatives
   private static byte PlayerHas(IntPtr u)
   {
     Rec("PlayerController.has", u);
-    return Flag("PlayerController.has");
+    return FlagFor("PlayerController.has", u);
   }
 
   [UnmanagedCallersOnly]
   private static int PlayerGetSlot(IntPtr u)
   {
     Rec("PlayerController.getPlayerSlot", u);
-    return Get<int>("PlayerController.getPlayerSlot");
+    return GetFor<int>("PlayerController.getPlayerSlot", u);
   }
 
   [UnmanagedCallersOnly]

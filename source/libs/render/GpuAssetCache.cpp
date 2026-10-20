@@ -1,6 +1,7 @@
 #include "GpuAssetCache.h"
 #include "HullGizmoMesh.h"
 #include <assets/AssetRegistry.h>
+#include <ProjectPaths.h>
 #include <Log.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/assets/AssetManager.h>
@@ -10,6 +11,7 @@
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <cstddef>
 #include <exception>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,6 +25,36 @@ std::shared_ptr<vke::VulkanEngine> GpuAssetCache::getRenderer() const
   return m_renderer;
 }
 
+void GpuAssetCache::setProjectRoot(std::filesystem::path projectRoot)
+{
+  if (projectRoot != m_projectRoot)
+  {
+    m_projectRoot = std::move(projectRoot);
+    m_resetPending = true;
+  }
+}
+
+void GpuAssetCache::requestAssetReset()
+{
+  m_resetPending = true;
+}
+
+const std::filesystem::path& GpuAssetCache::getProjectRoot() const
+{
+  return m_projectRoot;
+}
+
+std::string GpuAssetCache::resolveRecordPath(const std::string& recordPath) const
+{
+  const auto resolved = resolveAssetPath(m_projectRoot, recordPath);
+  if (!resolved)
+  {
+    throw std::runtime_error("asset path leaves the project folder");
+  }
+
+  return resolved->string();
+}
+
 std::shared_ptr<vke::Model> GpuAssetCache::getModel(const uuids::uuid& uuid)
 {
   const auto record = m_assetRegistry->getByUUID(uuid);
@@ -32,7 +64,7 @@ std::shared_ptr<vke::Model> GpuAssetCache::getModel(const uuids::uuid& uuid)
   }
 
   return m_models.get(uuids::to_string(uuid), record->path + " (" + uuids::to_string(uuid) + ")", [this, &record] {
-    return m_renderer->getAssetManager()->loadModel(record->path.c_str());
+    return m_renderer->getAssetManager()->loadModel(resolveRecordPath(record->path).c_str());
   });
 }
 
@@ -45,7 +77,7 @@ std::shared_ptr<vke::Texture2D> GpuAssetCache::getTexture(const uuids::uuid& uui
   }
 
   return m_textures.get(uuids::to_string(uuid), record->path + " (" + uuids::to_string(uuid) + ")", [this, &record] {
-    return m_renderer->getAssetManager()->loadTexture(record->path.c_str());
+    return m_renderer->getAssetManager()->loadTexture(resolveRecordPath(record->path).c_str());
   });
 }
 
@@ -255,6 +287,29 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getLightGizmo(const uuids::uui
   m_lightGizmos[ownerUUID] = renderObject;
 
   return renderObject;
+}
+
+void GpuAssetCache::applyPendingReset()
+{
+  if (!m_resetPending)
+  {
+    return;
+  }
+
+  m_resetPending = false;
+
+  const auto assetManager = m_renderer->getAssetManager();
+
+  for (auto& entry : m_renderObjects)
+  {
+    assetManager->release(std::move(entry.second.renderObject));
+  }
+  m_renderObjects.clear();
+
+  m_models.drain([&assetManager](std::shared_ptr<vke::Model> model) { assetManager->release(std::move(model)); });
+  m_textures.drain([&assetManager](std::shared_ptr<vke::Texture2D> texture) {
+    assetManager->release(std::move(texture));
+  });
 }
 
 void GpuAssetCache::pruneStale(const std::unordered_set<uuids::uuid>& liveUUIDs)

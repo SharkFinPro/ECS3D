@@ -1,5 +1,6 @@
 #include "ClientApp.h"
 #include "ConsoleWindow.h"
+#include <ProjectPaths.h>
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <LogSetup.h>
@@ -42,7 +43,7 @@ namespace
       }
       else if (arg == "--project" && i + 1 < argc)
       {
-        options.project = argv[++i];
+        options.project = absoluteProjectArgument(argv[++i]);
       }
       else if (arg == "--server-console")
       {

@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   ComponentRegistry.h
   ComponentRegistration.cpp
   ComponentRegistration.h
+  ProjectPaths.cpp
+  ProjectPaths.h
   ProjectSerializer.cpp
   ProjectSerializer.h
   ProjectPacker.cpp
