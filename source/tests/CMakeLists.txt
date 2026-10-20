@@ -147,6 +147,8 @@ add_executable(${PROJECT_NAME}
   PresetsTest.cpp
   TemplateManifestTest.cpp
   ProjectPathsTest.cpp
+  TemplateValidation.h
+  TemplateValidationTest.cpp
   PhysicsStackingTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsContactResponseTest.cpp

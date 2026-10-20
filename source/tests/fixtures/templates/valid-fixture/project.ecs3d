@@ -1,0 +1,119 @@
+{
+  "assets": {
+    "models": [
+      {
+        "filePath": "assets/models/cube_1x1x1.glb",
+        "name": "assets/models/cube_1x1x1.glb",
+        "uuid": "11111111-1111-4111-8111-111111111111"
+      }
+    ],
+    "textures": [
+      {
+        "filePath": "assets/textures/white.png",
+        "name": "assets/textures/white.png",
+        "uuid": "22222222-2222-4222-8222-222222222222"
+      }
+    ],
+    "scripts": [
+      {
+        "className": "PlayerScript",
+        "filePath": "scripts/UserScripts/PlayerScript.cs",
+        "uuid": "33333333-3333-4333-8333-333333333333"
+      }
+    ],
+    "prefabs": [
+      {
+        "name": "Block",
+        "uuid": "44444444-4444-4444-8444-444444444444",
+        "body": {
+          "name": "Block",
+          "children": [],
+          "components": [
+            {
+              "type": "Transform",
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            },
+            {
+              "type": "ModelRenderer",
+              "shouldRender": true,
+              "modelUUID": "11111111-1111-4111-8111-111111111111",
+              "textureUUID": "22222222-2222-4222-8222-222222222222",
+              "specularMapUUID": "22222222-2222-4222-8222-222222222222"
+            }
+          ],
+          "scripts": [],
+          "uuid": "55555555-5555-4555-8555-555555555555"
+        }
+      }
+    ],
+    "scenes": [
+      {
+        "name": "Main",
+        "objects": [
+          {
+            "name": "Player",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  0,
+                  1,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ],
+                "scale": [
+                  1,
+                  1,
+                  1
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "modelUUID": "11111111-1111-4111-8111-111111111111",
+                "textureUUID": "22222222-2222-4222-8222-222222222222",
+                "specularMapUUID": "22222222-2222-4222-8222-222222222222"
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "PlayerScript",
+                "fields": [
+                  {
+                    "name": "m_label",
+                    "type": "string",
+                    "value": "hello"
+                  }
+                ]
+              }
+            ],
+            "uuid": "66666666-6666-4666-8666-666666666666"
+          }
+        ],
+        "scripts": [],
+        "uuid": "77777777-7777-4777-8777-777777777777"
+      }
+    ]
+  },
+  "currentSceneUUID": "77777777-7777-4777-8777-777777777777"
+}

@@ -2,6 +2,7 @@
 
 Each folder here is one template or sample, shown on a launcher card and used to create a new project.
 The whole directory is copied to `<runtime output dir>/templates/` at configure time, this file included.
+`TemplateValidationTest` validates every folder here, so a broken template fails the test suite.
 The copy also holds this `README.md`, so code listing `templates/` must skip non-directories.
 
 ## Folder layout
