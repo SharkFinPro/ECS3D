@@ -145,6 +145,9 @@
   field, and an internal `ClientReceiveLoopExiting` hook lets a test reconnect inside the window between the
   client receive loop stopping and releasing its connection. `TransportExportsTests` calls `Transport`'s exports
   through function pointers.
+  The test project also compiles `UserScripts/` in (a `Compile` link in `ECS3DManagedTests.csproj`), so
+  `PlayerScript` and the starter scripts are tested through `FakeNatives` like the wrappers; a fake can
+  answer per uuid, name or key code by setting `"<fake key>:<argument>"`.
   What stays uncovered is whatever is itself an `[UnmanagedCallersOnly]` entry point that is not
   reachable through a function pointer taken with `&`, as `TransportRecorder` does — start with `ScriptBridge` for a new test only once the logic in question is
   reachable the same way, as pure code over plain objects or through a fake binding table. Private product logic is exposed to this
@@ -534,6 +537,13 @@ already use for other script-driven structural changes. Scripts can `publish`/`s
 bridge-owned channel (`EventChannel`): delivery is synchronous, each handler runs under its own script's fault
 gate, publishes nested deeper than 16 are refused, and only a live instance can subscribe (from `start()` on),
 its subscriptions ending with it.
+
+**Starter scripts.** Example gameplay scripts live in `UserScripts/Starters/`, one public class per file.
+`StarterUtils` holds their shared helpers (throttled lookup by name, `findPlayerBody`, `parseKey`, the Euler
+rotation mirror of `RotationConvention.h`) and `StarterEvents` the event names and payload classes. Objects are
+referenced by name, assets and prefabs by uuid string. `PlayerScript` exposes its keys as string fields
+(W, A, S and D to move and the space bar to jump by default) that `parseKey` reads, re-parsing when a
+value changes; the managed `Key` enum gained a space bar value for that.
 
 **Script binding coverage.** Each *Bindings provider exposes its component's full public surface except
 for internal bookkeeping, listed here so a future gap is a deliberate decision, not an oversight. Every
