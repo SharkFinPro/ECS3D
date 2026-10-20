@@ -2,15 +2,46 @@
 #include <Log.h>
 #include <UserDataDirectory.h>
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <limits>
+#include <optional>
+#include <random>
+#include <string_view>
+#include <thread>
 #include <utility>
 
 namespace {
   constexpr int currentVersion = 1;
+  constexpr int renameAttempts = 5;
+  constexpr std::chrono::milliseconds renameRetryDelay{ 20 };
+
+  // Paths are held as UTF-8 text: the narrow native encoding on Windows is the ANSI code page.
+  std::string toUtf8(const std::filesystem::path& path)
+  {
+    const auto text = path.generic_u8string();
+    return std::string(reinterpret_cast<const char*>(text.data()), text.size());
+  }
+
+  std::filesystem::path fromUtf8(const std::string& text)
+  {
+    const auto* first = reinterpret_cast<const char8_t*>(text.data());
+    return std::filesystem::path(first, first + text.size());
+  }
+
+  std::string asciiLower(std::string text)
+  {
+    for (auto& c : text)
+    {
+      if (c >= 'A' && c <= 'Z')
+      {
+        c = static_cast<char>(c - 'A' + 'a');
+      }
+    }
+
+    return text;
+  }
 
   // Days since 1970-01-01 for a proleptic Gregorian date (Howard Hinnant's days_from_civil).
   std::int64_t daysFromCivil(std::int64_t year, const unsigned month, const unsigned day)
@@ -45,43 +76,81 @@ namespace {
     return { year, month, day };
   }
 
-  // Seconds since the epoch, or the minimum value for anything that is not the exact written format,
-  // so a missing or garbled time sorts as the oldest.
-  std::int64_t parseUtc(const nlohmann::json& entry)
+  bool matchesTimeShape(const std::string& text)
   {
-    constexpr auto oldest = std::numeric_limits<std::int64_t>::min();
+    constexpr std::string_view shape = "dddd-dd-ddTdd:dd:ddZ";
 
-    const auto it = entry.find("lastOpenedUtc");
-    if (it == entry.end() || !it->is_string())
+    if (text.size() != shape.size())
     {
-      return oldest;
+      return false;
     }
 
-    const auto text = it->get<std::string>();
-    int year = 0;
-    int month = 0;
-    int day = 0;
-    int hour = 0;
-    int minute = 0;
-    int second = 0;
-    int consumed = 0;
-
-    if (text.size() != 20
-        || std::sscanf(text.c_str(), "%4d-%2d-%2dT%2d:%2d:%2dZ%n", &year, &month, &day, &hour, &minute,
-                       &second, &consumed) != 6
-        || consumed != 20)
+    for (std::size_t i = 0; i < shape.size(); ++i)
     {
-      return oldest;
+      const bool matches = shape[i] == 'd' ? (text[i] >= '0' && text[i] <= '9') : text[i] == shape[i];
+      if (!matches)
+      {
+        return false;
+      }
     }
 
-    if (year < 0 || month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute < 0
-        || minute > 59 || second < 0 || second > 60)
+    return true;
+  }
+
+  int readNumber(const std::string& text, const std::size_t position, const std::size_t length)
+  {
+    int value = 0;
+    for (std::size_t i = 0; i < length; ++i)
     {
-      return oldest;
+      value = value * 10 + (text[position + i] - '0');
+    }
+
+    return value;
+  }
+
+  int daysInMonth(const int year, const int month)
+  {
+    static constexpr int lengths[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    const bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+
+    return month == 2 && leap ? 29 : lengths[month - 1];
+  }
+
+  // Only the exact written format parses; anything else is nullopt.
+  std::optional<std::int64_t> parseUtc(const std::string& text)
+  {
+    if (!matchesTimeShape(text))
+    {
+      return std::nullopt;
+    }
+
+    const int year = readNumber(text, 0, 4);
+    const int month = readNumber(text, 5, 2);
+    const int day = readNumber(text, 8, 2);
+    const int hour = readNumber(text, 11, 2);
+    const int minute = readNumber(text, 14, 2);
+    const int second = readNumber(text, 17, 2);
+
+    if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59
+        || second > 59)
+    {
+      return std::nullopt;
     }
 
     return daysFromCivil(year, static_cast<unsigned>(month), static_cast<unsigned>(day)) * 86400
            + hour * 3600 + minute * 60 + second;
+  }
+
+  std::string stringField(const nlohmann::json& entry, const char* key)
+  {
+    const auto it = entry.find(key);
+    return it != entry.end() && it->is_string() ? it->get<std::string>() : std::string();
+  }
+
+  // A missing or unparseable time sorts as the oldest.
+  std::int64_t entryTime(const nlohmann::json& entry)
+  {
+    return parseUtc(stringField(entry, "lastOpenedUtc")).value_or(std::numeric_limits<std::int64_t>::min());
   }
 
   bool isPinned(const nlohmann::json& entry)
@@ -93,58 +162,273 @@ namespace {
   std::string comparisonKey(std::string path)
   {
 #if defined(_WIN32) || defined(__APPLE__)
-    for (auto& c : path)
-    {
-      if (c >= 'A' && c <= 'Z')
-      {
-        c = static_cast<char>(c - 'A' + 'a');
-      }
-    }
+    path = asciiLower(std::move(path));
 #endif
     return path;
   }
 
-  std::string normalizedPath(const std::filesystem::path& projectPath)
+  // The form a project is recorded in: absolute, generic separators, no trailing separator except on a
+  // root. A project file under a folder (project.ecs3d) is recorded as the folder.
+  std::string canonicalPath(const std::string& text)
   {
     std::error_code error;
-    auto absolute = std::filesystem::absolute(projectPath, error);
+    auto absolute = std::filesystem::absolute(fromUtf8(text), error);
     if (error)
     {
-      absolute = projectPath;
+      absolute = fromUtf8(text);
     }
 
-    auto text = absolute.lexically_normal().generic_string();
-    while (text.size() > 1 && text.back() == '/')
+    absolute = absolute.lexically_normal();
+
+    if (asciiLower(toUtf8(absolute.extension())) == ".ecs3d")
     {
-      text.pop_back();
+      absolute = absolute.parent_path();
     }
 
-    return text;
+    auto result = toUtf8(absolute);
+    const auto rootLength = toUtf8(absolute.root_path()).size();
+    while (result.size() > rootLength && result.size() > 1 && result.back() == '/')
+    {
+      result.pop_back();
+    }
+
+    return result;
   }
 
-  bool hasProjectFileExtension(std::string extension)
+  std::string displayName(const std::string& canonical)
   {
-    std::transform(extension.begin(), extension.end(), extension.begin(),
-                   [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    const auto path = fromUtf8(canonical);
 
-    return extension == ".json" || extension == ".ecs3d";
-  }
-
-  std::string displayName(const std::string& normalized)
-  {
-    const std::filesystem::path path(normalized);
-    if (hasProjectFileExtension(path.extension().generic_string()))
+    if (asciiLower(toUtf8(path.extension())) == ".json")
     {
-      return path.stem().generic_string();
+      return toUtf8(path.stem());
     }
 
-    return path.filename().generic_string();
+    return toUtf8(path.filename());
   }
 
   void removeQuietly(const std::filesystem::path& path)
   {
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
+  }
+
+  std::optional<nlohmann::json> readDocument(const std::filesystem::path& file)
+  {
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(file, error) || error)
+    {
+      return std::nullopt;
+    }
+
+    const auto name = toUtf8(file);
+
+    std::ifstream in(file);
+    if (!in)
+    {
+      Log::warn(LogCategory::editor, "Could not open recent projects file '" + name + "'.");
+      return std::nullopt;
+    }
+
+    nlohmann::json parsed;
+    try
+    {
+      in >> parsed;
+    }
+    catch (const nlohmann::json::exception& e)
+    {
+      Log::warn(LogCategory::editor, "Recent projects file '" + name + "' is not valid JSON ("
+        + e.what() + "); starting with an empty list.");
+      return std::nullopt;
+    }
+
+    if (!parsed.is_object() || (parsed.contains("projects") && !parsed.at("projects").is_array()))
+    {
+      Log::warn(LogCategory::editor,
+        "Recent projects file '" + name + "' has an unexpected shape; starting with an empty list.");
+      return std::nullopt;
+    }
+
+    return parsed;
+  }
+
+  std::vector<nlohmann::json> validEntries(const nlohmann::json& projects)
+  {
+    std::vector<nlohmann::json> result;
+    std::size_t dropped = 0;
+
+    for (const auto& entry : projects)
+    {
+      if (entry.is_object() && entry.contains("path") && entry.at("path").is_string())
+      {
+        result.push_back(entry);
+      }
+      else
+      {
+        ++dropped;
+      }
+    }
+
+    if (dropped > 0)
+    {
+      Log::warn(LogCategory::editor,
+        "Dropped " + std::to_string(dropped) + " malformed entries from the recent projects file.");
+    }
+
+    return result;
+  }
+
+  std::optional<std::string> serializeDocument(nlohmann::json document,
+                                               const std::vector<nlohmann::json>& projects)
+  {
+    if (const auto it = document.find("version");
+        it == document.end() || !it->is_number_integer() || it->get<int>() < currentVersion)
+    {
+      document["version"] = currentVersion;
+    }
+
+    document["projects"] = projects;
+
+    try
+    {
+      return document.dump(2, ' ', false, nlohmann::json::error_handler_t::replace);
+    }
+    catch (const std::exception& e)
+    {
+      Log::warn(LogCategory::editor, std::string("Could not serialize the recent projects: ") + e.what());
+      return std::nullopt;
+    }
+  }
+
+  bool ensureDirectory(const std::filesystem::path& file)
+  {
+    const auto directory = file.parent_path();
+    if (directory.empty())
+    {
+      return true;
+    }
+
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    if (error)
+    {
+      Log::warn(LogCategory::editor, "Could not create the directory for the recent projects file '"
+        + toUtf8(directory) + "': " + error.message());
+      return false;
+    }
+
+    return true;
+  }
+
+  // Unique per writer, so the editor and the launcher never interleave on one temporary file.
+  std::filesystem::path uniqueTemporary(const std::filesystem::path& file)
+  {
+    std::random_device device;
+    char suffix[16];
+    std::snprintf(suffix, sizeof(suffix), "%08x", static_cast<unsigned>(device()));
+
+    auto temporary = file;
+    temporary += ".";
+    temporary += suffix;
+    temporary += ".tmp";
+
+    return temporary;
+  }
+
+  bool writeContents(const std::filesystem::path& file, const std::string& contents)
+  {
+    std::ofstream out(file, std::ios::trunc);
+    out << contents << '\n';
+    out.flush();
+
+    return static_cast<bool>(out);
+  }
+
+  // The destination can be held open for a moment by the other program that reads this file.
+  bool renameWithRetry(const std::filesystem::path& from, const std::filesystem::path& to)
+  {
+    std::error_code error;
+
+    for (int attempt = 0; attempt < renameAttempts; ++attempt)
+    {
+      if (attempt > 0)
+      {
+        std::this_thread::sleep_for(renameRetryDelay);
+      }
+
+      std::filesystem::rename(from, to, error);
+      if (!error)
+      {
+        return true;
+      }
+    }
+
+    Log::warn(LogCategory::editor, "Could not move recent projects file '" + toUtf8(from)
+      + "' into place: " + error.message());
+    return false;
+  }
+
+  // Removes every entry for the key and returns the first of them, or a new empty entry.
+  nlohmann::json takeMatching(std::vector<nlohmann::json>& projects, const std::string& key)
+  {
+    std::optional<nlohmann::json> first;
+
+    for (auto it = projects.begin(); it != projects.end();)
+    {
+      if (comparisonKey(canonicalPath(it->at("path").get<std::string>())) != key)
+      {
+        ++it;
+        continue;
+      }
+
+      if (!first)
+      {
+        first = std::move(*it);
+      }
+
+      it = projects.erase(it);
+    }
+
+    return first ? *first : nlohmann::json::object();
+  }
+
+  // The front entry is the one just recorded, so it is never a candidate. The oldest wins, and on a tie
+  // the later entry, since the list runs newest first.
+  std::vector<nlohmann::json>::iterator findVictim(std::vector<nlohmann::json>& projects)
+  {
+    auto victim = projects.end();
+    std::int64_t victimTime = 0;
+
+    for (auto it = projects.begin() + 1; it != projects.end(); ++it)
+    {
+      if (isPinned(*it))
+      {
+        continue;
+      }
+
+      const auto time = entryTime(*it);
+      if (victim == projects.end() || time <= victimTime)
+      {
+        victim = it;
+        victimTime = time;
+      }
+    }
+
+    return victim;
+  }
+
+  void evictOverflow(std::vector<nlohmann::json>& projects)
+  {
+    while (projects.size() > RecentProjects::maxEntries)
+    {
+      const auto victim = findVictim(projects);
+      if (victim == projects.end())
+      {
+        return;
+      }
+
+      projects.erase(victim);
+    }
   }
 }
 
@@ -163,117 +447,40 @@ void RecentProjects::load()
   m_extra = nlohmann::json::object();
   m_projects.clear();
 
-  std::error_code error;
-  if (!std::filesystem::is_regular_file(m_file, error) || error)
+  auto document = readDocument(m_file);
+  if (!document)
   {
     return;
   }
 
-  std::ifstream in(m_file);
-  if (!in)
+  if (const auto it = document->find("projects"); it != document->end())
   {
-    Log::warn(LogCategory::editor, "Could not open recent projects file '" + m_file.string() + "'.");
-    return;
+    m_projects = validEntries(*it);
+    document->erase(it);
   }
 
-  nlohmann::json parsed;
-  try
-  {
-    in >> parsed;
-  }
-  catch (const nlohmann::json::exception& e)
-  {
-    Log::warn(LogCategory::editor, "Recent projects file '" + m_file.string() + "' is not valid JSON ("
-      + e.what() + "); starting with an empty list.");
-    return;
-  }
-
-  if (!parsed.is_object() || !parsed.contains("projects") || !parsed.at("projects").is_array())
-  {
-    Log::warn(LogCategory::editor, "Recent projects file '" + m_file.string()
-      + "' has an unexpected shape; starting with an empty list.");
-    return;
-  }
-
-  std::size_t dropped = 0;
-  for (const auto& entry : parsed.at("projects"))
-  {
-    if (!entry.is_object() || !entry.contains("path") || !entry.at("path").is_string())
-    {
-      ++dropped;
-      continue;
-    }
-
-    m_projects.push_back(entry);
-  }
-
-  if (dropped > 0)
-  {
-    Log::warn(LogCategory::editor,
-      "Dropped " + std::to_string(dropped) + " malformed entries from the recent projects file.");
-  }
-
-  parsed.erase("projects");
-  m_extra = std::move(parsed);
+  m_extra = std::move(*document);
 }
 
 bool RecentProjects::save() const
 {
-  auto document = m_extra;
-
-  if (const auto it = document.find("version");
-      it == document.end() || !it->is_number_integer() || it->get<int>() < currentVersion)
+  const auto serialized = serializeDocument(m_extra, m_projects);
+  if (!serialized || !ensureDirectory(m_file))
   {
-    document["version"] = currentVersion;
-  }
-
-  document["projects"] = m_projects;
-
-  std::error_code error;
-  if (const auto directory = m_file.parent_path(); !directory.empty())
-  {
-    std::filesystem::create_directories(directory, error);
-    if (error)
-    {
-      Log::warn(LogCategory::editor, "Could not create the directory for the recent projects file '"
-        + directory.string() + "': " + error.message());
-      return false;
-    }
-  }
-
-  std::string serialized;
-  try
-  {
-    serialized = document.dump(2, ' ', false, nlohmann::json::error_handler_t::replace);
-  }
-  catch (const std::exception& e)
-  {
-    Log::warn(LogCategory::editor, std::string("Could not serialize the recent projects: ") + e.what());
     return false;
   }
 
-  auto temporary = m_file;
-  temporary += ".tmp";
+  const auto temporary = uniqueTemporary(m_file);
 
+  if (!writeContents(temporary, *serialized))
   {
-    std::ofstream out(temporary, std::ios::trunc);
-    out << serialized << '\n';
-    out.flush();
-
-    if (!out)
-    {
-      Log::warn(LogCategory::editor, "Could not write recent projects file '" + temporary.string() + "'.");
-      out.close();
-      removeQuietly(temporary);
-      return false;
-    }
+    Log::warn(LogCategory::editor, "Could not write recent projects file '" + toUtf8(temporary) + "'.");
+    removeQuietly(temporary);
+    return false;
   }
 
-  std::filesystem::rename(temporary, m_file, error);
-  if (error)
+  if (!renameWithRetry(temporary, m_file))
   {
-    Log::warn(LogCategory::editor, "Could not move recent projects file '" + temporary.string()
-      + "' into place: " + error.message());
     removeQuietly(temporary);
     return false;
   }
@@ -284,29 +491,16 @@ bool RecentProjects::save() const
 void RecentProjects::recordOpened(const std::filesystem::path& projectPath,
                                   const std::chrono::system_clock::time_point now)
 {
-  const auto path = normalizedPath(projectPath);
-  const auto key = comparisonKey(path);
+  const auto path = canonicalPath(toUtf8(projectPath));
 
-  nlohmann::json entry = nlohmann::json::object();
-
-  const auto existing = std::find_if(m_projects.begin(), m_projects.end(), [&key](const nlohmann::json& candidate)
-  {
-    return comparisonKey(candidate.at("path").get<std::string>()) == key;
-  });
-
-  if (existing != m_projects.end())
-  {
-    entry = std::move(*existing);
-    m_projects.erase(existing);
-  }
-
+  auto entry = takeMatching(m_projects, comparisonKey(path));
   entry["path"] = path;
   entry["name"] = displayName(path);
   entry["lastOpenedUtc"] = formatUtc(now);
 
   m_projects.insert(m_projects.begin(), std::move(entry));
 
-  evictOverflow();
+  evictOverflow(m_projects);
 }
 
 std::vector<RecentProjectEntry> RecentProjects::entries() const
@@ -314,16 +508,10 @@ std::vector<RecentProjectEntry> RecentProjects::entries() const
   std::vector<RecentProjectEntry> result;
   result.reserve(m_projects.size());
 
-  const auto stringField = [](const nlohmann::json& entry, const char* key)
-  {
-    const auto it = entry.find(key);
-    return it != entry.end() && it->is_string() ? it->get<std::string>() : std::string();
-  };
-
   for (const auto& entry : m_projects)
   {
     result.push_back({
-      entry.at("path").get<std::string>(),
+      stringField(entry, "path"),
       stringField(entry, "name"),
       stringField(entry, "lastOpenedUtc"),
       isPinned(entry),
@@ -360,38 +548,6 @@ std::string RecentProjects::formatUtc(const std::chrono::system_clock::time_poin
                 static_cast<long long>(secondOfDay % 60));
 
   return buffer;
-}
-
-void RecentProjects::evictOverflow()
-{
-  while (m_projects.size() > maxEntries)
-  {
-    // The oldest time wins, and on a tie the later entry, since the list runs newest first.
-    auto victim = m_projects.end();
-    std::int64_t victimTime = 0;
-
-    for (auto it = m_projects.begin(); it != m_projects.end(); ++it)
-    {
-      if (isPinned(*it))
-      {
-        continue;
-      }
-
-      const auto time = parseUtc(*it);
-      if (victim == m_projects.end() || time <= victimTime)
-      {
-        victim = it;
-        victimTime = time;
-      }
-    }
-
-    if (victim == m_projects.end())
-    {
-      return;
-    }
-
-    m_projects.erase(victim);
-  }
 }
 
 bool recordProjectOpened(const std::filesystem::path& projectPath)

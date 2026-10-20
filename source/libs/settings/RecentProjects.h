@@ -37,7 +37,10 @@ public:
   [[nodiscard]] bool save() const;
 
   // Moves the entry for this path to the front (or inserts one), stamps the time, recomputes the name and
-  // applies the cap. The entry's pinned, template and unknown fields are kept.
+  // applies the cap. The entry's pinned, template and unknown fields are kept; if the list holds several
+  // entries for the path, the first is kept and the others are removed. A project file such as
+  // project.ecs3d is recorded as its folder. The entry just recorded is never evicted by the cap, so a
+  // list of pinned entries grows by one.
   void recordOpened(const std::filesystem::path& projectPath, std::chrono::system_clock::time_point now);
 
   [[nodiscard]] std::vector<RecentProjectEntry> entries() const;
@@ -52,8 +55,6 @@ private:
 
   nlohmann::json m_extra = nlohmann::json::object();
   std::vector<nlohmann::json> m_projects;
-
-  void evictOverflow();
 };
 
 // load -> recordOpened(now) -> save on the default file. Returns whether the save succeeded.
