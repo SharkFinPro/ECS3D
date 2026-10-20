@@ -410,17 +410,24 @@ internal sealed class TcpBackend : TransportBackend
 
     try { client.Close(); } catch { /* ignore */ }
 
-    ServerConnectionExiting?.Invoke(connId);
-
-    // Let the server release any player slot bound to this connection. A no-op on the C++ side if the
-    // connection never joined (e.g. a rejected handshake), since it holds no slot for it.
-    Transport.DeliverServerDisconnect(connId);
-
-    // Last, so ServerStop's join still covers this thread through the delivery above. Removed any earlier,
-    // a stop that raced the exit would return before the callback, which could land in the next owner.
-    lock (_clientsLock)
+    try
     {
-      _connectionThreads.Remove(Thread.CurrentThread);
+      ServerConnectionExiting?.Invoke(connId);
+
+      // Let the server release any player slot bound to this connection. A no-op on the C++ side if the
+      // connection never joined (e.g. a rejected handshake), since it holds no slot for it.
+      Transport.DeliverServerDisconnect(connId);
+    }
+    finally
+    {
+      // Last, so ServerStop's join covers this thread through the delivery above. Removed any earlier, a
+      // stop that raced the exit would return before the callback, which could then land in the next
+      // registrant of the transport callbacks (the next test, or a NetServer after it cleared its
+      // active-server pointer).
+      lock (_clientsLock)
+      {
+        _connectionThreads.Remove(Thread.CurrentThread);
+      }
     }
   }
 

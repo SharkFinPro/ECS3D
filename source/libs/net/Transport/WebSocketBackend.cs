@@ -403,30 +403,35 @@ internal sealed class WebSocketBackend : TransportBackend
         }
       }
 
-      if (conn != null)
+      try
       {
-        ServerConnectionExiting?.Invoke(connId);
+        if (conn != null)
+        {
+          ServerConnectionExiting?.Invoke(connId);
 
-        // Release any player slot the server bound to this connection (only admitted connections, which
-        // are the ones that got a connId, reach here with conn != null).
-        Transport.DeliverServerDisconnect(connId);
+          // Release any player slot the server bound to this connection (only admitted connections, which
+          // are the ones that got a connId, reach here with conn != null).
+          Transport.DeliverServerDisconnect(connId);
+        }
       }
-
-      if (ws != null)
+      finally
       {
-        Close(ws, cts);
-      }
-      else
-      {
-        cts?.Dispose();
-      }
+        if (ws != null)
+        {
+          Close(ws, cts);
+        }
+        else
+        {
+          cts?.Dispose();
+        }
 
-      try { tcp.Close(); } catch { /* ignore */ }
+        try { tcp.Close(); } catch { /* ignore */ }
 
-      // Last, so ServerStop's join covers this thread through the disconnect delivery above.
-      lock (_clientsLock)
-      {
-        _connectionThreads.Remove(Thread.CurrentThread);
+        // Last, so ServerStop's join covers this thread through the disconnect delivery above.
+        lock (_clientsLock)
+        {
+          _connectionThreads.Remove(Thread.CurrentThread);
+        }
       }
     }
   }

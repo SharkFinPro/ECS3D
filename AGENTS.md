@@ -143,8 +143,9 @@
   than waiting out production values.
   `WebSocketBackendLoopbackTests` drives the WebSocket backend the same way: its `SendTimeoutMs` is also an internal
   field, and an internal `ClientReceiveLoopExiting` hook lets a test reconnect inside the window between the
-  client receive loop stopping and releasing its connection. `TransportExportsTests` calls `Transport`'s exports
-  through function pointers.
+  client receive loop stopping and releasing its connection. Both loopback backends have an internal
+  `ServerConnectionExiting` hook, which lets a test hold a connection thread just before its disconnect is
+  delivered. `TransportExportsTests` calls `Transport`'s exports through function pointers.
   The test project also compiles `UserScripts/` in (a `Compile` link in `ECS3DManagedTests.csproj`), so
   `PlayerScript` and the starter scripts are tested through `FakeNatives` like the wrappers; a fake can
   answer per uuid, name or key code by setting `"<fake key>:<argument>"`.

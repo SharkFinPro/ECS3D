@@ -523,11 +523,12 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   {
     using var entered = new ManualResetEventSlim();
     using var release = new ManualResetEventSlim();
-    var server = new TcpBackend { ServerConnectionExiting = _ =>
+    Action<int> holdExit = _ =>
     {
       entered.Set();
       release.Wait(10000);
-    } };
+    };
+    var server = new TcpBackend { ServerConnectionExiting = holdExit };
     var port = Start(server);
 
     var client = Connect(port, RolePlayer);
