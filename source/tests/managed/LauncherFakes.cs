@@ -38,6 +38,7 @@ internal sealed class FakeRunningProcess : IRunningProcess
 
   public void Dispose()
   {
+    // A fake process holds no handle to release.
   }
 }
 

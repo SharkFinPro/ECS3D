@@ -12,9 +12,10 @@ namespace ECS3DManagedTests;
 
 public class LauncherEngineServicesTests
 {
+  // Static initializers run in textual order, so EngineRoot comes before the fields built from it.
+  private static readonly string EngineRoot = Path.GetFullPath("engine");
   private static readonly string EngineDir = Path.GetFullPath(Path.Combine(EngineRoot, "bin"));
   private static readonly string LauncherDir = Path.GetFullPath(Path.Combine("launcher", "dir"));
-  private static readonly string EngineRoot = Path.GetFullPath("engine");
   private static readonly LaunchOptions NoOptions = new(false, false);
   private static readonly LaunchOptions BothOptions = new(true, true);
 
