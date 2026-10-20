@@ -1,0 +1,321 @@
+{
+  "assets": {
+    "models": [
+      {
+        "filePath": "assets/models/cube_1x1x1.glb",
+        "name": "assets/models/cube_1x1x1.glb",
+        "uuid": "58034695-0495-4cfb-8f75-90cf24a9073b"
+      },
+      {
+        "filePath": "assets/models/plane_tile.glb",
+        "name": "assets/models/plane_tile.glb",
+        "uuid": "6a742837-aa60-43fe-a652-32a3d385cde0"
+      }
+    ],
+    "textures": [
+      {
+        "filePath": "assets/textures/white.png",
+        "name": "assets/textures/white.png",
+        "uuid": "a3628d76-f753-4e27-be83-35744d1ac44d"
+      },
+      {
+        "filePath": "assets/textures/grid_checker.png",
+        "name": "assets/textures/grid_checker.png",
+        "uuid": "48ad67dd-957f-4fc9-bd7b-019debffa1d0"
+      }
+    ],
+    "scripts": [],
+    "prefabs": [],
+    "scenes": [
+      {
+        "name": "Main",
+        "objects": [
+          {
+            "name": "Ground",
+            "children": [
+              {
+                "name": "Tile 1",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [
+                      -10,
+                      1,
+                      -10
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "scale": [
+                      10,
+                      1,
+                      10
+                    ]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0.0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "5d1c7a40-3b8e-4f26-9a15-c0e2d7b4a601"
+              },
+              {
+                "name": "Tile 2",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [
+                      10,
+                      1,
+                      -10
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "scale": [
+                      10,
+                      1,
+                      10
+                    ]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0.0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "5d1c7a40-3b8e-4f26-9a15-c0e2d7b4a602"
+              },
+              {
+                "name": "Tile 3",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [
+                      -10,
+                      1,
+                      10
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "scale": [
+                      10,
+                      1,
+                      10
+                    ]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0.0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "5d1c7a40-3b8e-4f26-9a15-c0e2d7b4a603"
+              },
+              {
+                "name": "Tile 4",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [
+                      10,
+                      1,
+                      10
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "scale": [
+                      10,
+                      1,
+                      10
+                    ]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0.0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "5d1c7a40-3b8e-4f26-9a15-c0e2d7b4a604"
+              }
+            ],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  0,
+                  -1,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ],
+                "scale": [
+                  1,
+                  1,
+                  1
+                ]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": false,
+                "useStandardPipeline": true,
+                "reflectivity": 0.0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [
+                  0,
+                  0,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ],
+                "scale": [
+                  20,
+                  1,
+                  20
+                ],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "e2f4a6b8-1c3d-4e5f-8a7b-9c0d1e2f3a4b"
+          },
+          {
+            "name": "Sun",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  10,
+                  25,
+                  10
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ],
+                "scale": [
+                  1,
+                  1,
+                  1
+                ]
+              },
+              {
+                "type": "LightRenderer",
+                "color": [
+                  1.0,
+                  0.97,
+                  0.9
+                ],
+                "direction": [
+                  0,
+                  -1,
+                  0
+                ],
+                "isSpotlight": false,
+                "ambient": 0.25,
+                "diffuse": 0.8,
+                "specular": 0.5,
+                "coneAngle": 0.0
+              }
+            ],
+            "scripts": [],
+            "uuid": "7a3b9c1d-6e2f-4a58-b0c4-d1e3f5a7b9c2"
+          },
+          {
+            "name": "Main Camera",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [
+                  0,
+                  6,
+                  18
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ],
+                "scale": [
+                  1,
+                  1,
+                  1
+                ]
+              },
+              {
+                "type": "Camera",
+                "direction": [
+                  0.0,
+                  -0.31622776601683794,
+                  -0.9486832980505138
+                ],
+                "fov": 45.0,
+                "nearPlane": 0.1,
+                "farPlane": 1000.0,
+                "active": true
+              }
+            ],
+            "scripts": [],
+            "uuid": "b4c6d8e0-2a4c-4b6d-9e8f-0a1b2c3d4e5f"
+          }
+        ],
+        "scripts": [],
+        "uuid": "c9d1e3f5-7a9b-4c1d-8e3f-5a7b9c1d3e5f"
+      }
+    ]
+  },
+  "currentSceneUUID": "c9d1e3f5-7a9b-4c1d-8e3f-5a7b9c1d3e5f"
+}

@@ -155,6 +155,7 @@ add_executable(${PROJECT_NAME}
   PhysicsFrictionHoldTest.cpp
   PhysicsSlopeStackTest.cpp
   DefaultProjectTest.cpp
+  EmptyTemplateTest.cpp
   DefaultShapesTest.cpp
   ShapeDropTest.cpp
   RuntimeComponentTest.cpp
