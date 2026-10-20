@@ -204,8 +204,7 @@ TEST(PhysicsSlopeStack, TraceLanding)
   int tick = 0;
   PhysicsSystem::traceSink = [&tick](const char* line)
   {
-    std::printf("TRACE hook tick=%d %s
-", tick, line);
+    std::printf("TRACE hook tick=%d %s\n", tick, line);
   };
 
   const auto printState = [&stack](const int at)
@@ -223,8 +222,7 @@ TEST(PhysicsSlopeStack, TraceLanding)
 
       std::printf("TRACE state tick=%d box=%zu pos=(%.5f %.5f %.5f) rotDeg=(%.4f %.4f %.4f) vel=(%.5f %.5f %.5f) "
                   "angVelDegPerSec=(%.4f %.4f %.4f) falling=%d supportNormal=(%.4f %.4f %.4f) stackedLoad=%.5f "
-                  "heldImpulse=(%.5f %.5f %.5f)
-",
+                  "heldImpulse=(%.5f %.5f %.5f)\n",
                   at, level, static_cast<double>(position.x), static_cast<double>(position.y),
                   static_cast<double>(position.z), static_cast<double>(rotation.x), static_cast<double>(rotation.y),
                   static_cast<double>(rotation.z), static_cast<double>(velocity.x), static_cast<double>(velocity.y),
