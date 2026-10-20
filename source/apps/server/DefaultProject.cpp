@@ -261,13 +261,14 @@ const json& cylinderBody()
 
 // A library shape: its own model, a convex mesh collider holding the model's hull, and a mass of the hull's
 // volume at density one. Built once per name, so every call hands back the same body.
-const json& shapeBody(const std::string& name, const std::string& model, const ConvexHull& hull)
+const json& shapeBody(const std::string& name, const std::string& model, ConvexHull (*buildHull)())
 {
   static std::map<std::string, json> bodies;
 
   auto found = bodies.find(name);
   if (found == bodies.end())
   {
+    const ConvexHull hull = buildHull();
     found = bodies.emplace(name, makeObject(name, json::array({
       transform(glm::vec3(0)),
       modelRenderer(model, checkerOrangeTexture, whiteTexture),
@@ -621,15 +622,15 @@ json buildDefaultProject()
         prefabAsset("Capsule", capsulePrefab, capsuleBody()),
         prefabAsset("Cylinder", cylinderPrefab, cylinderBody()),
         prefabAsset("Ramp", rampPrefab, rampBody()),
-        prefabAsset("D4", d4Prefab, shapeBody("D4", d4Model, d4Hull())),
-        prefabAsset("D6", d6Prefab, shapeBody("D6", cubeModel, d6Hull())),
-        prefabAsset("D8", d8Prefab, shapeBody("D8", d8Model, d8Hull())),
-        prefabAsset("D12", d12Prefab, shapeBody("D12", d12Model, d12Hull())),
-        prefabAsset("D20", d20Prefab, shapeBody("D20", d20Model, d20Hull())),
-        prefabAsset("Hex Prism", hexPrismPrefab, shapeBody("Hex Prism", hexPrismModel, hexPrismHull())),
-        prefabAsset("Drum", drumPrefab, shapeBody("Drum", drumModel, drumHull())),
-        prefabAsset("Gem", gemPrefab, shapeBody("Gem", gemModel, gemHull())),
-        prefabAsset("Boulder", boulderPrefab, shapeBody("Boulder", boulderModel, boulderHull()))
+        prefabAsset("D4", d4Prefab, shapeBody("D4", d4Model, d4Hull)),
+        prefabAsset("D6", d6Prefab, shapeBody("D6", cubeModel, d6Hull)),
+        prefabAsset("D8", d8Prefab, shapeBody("D8", d8Model, d8Hull)),
+        prefabAsset("D12", d12Prefab, shapeBody("D12", d12Model, d12Hull)),
+        prefabAsset("D20", d20Prefab, shapeBody("D20", d20Model, d20Hull)),
+        prefabAsset("Hex Prism", hexPrismPrefab, shapeBody("Hex Prism", hexPrismModel, hexPrismHull)),
+        prefabAsset("Drum", drumPrefab, shapeBody("Drum", drumModel, drumHull)),
+        prefabAsset("Gem", gemPrefab, shapeBody("Gem", gemModel, gemHull)),
+        prefabAsset("Boulder", boulderPrefab, shapeBody("Boulder", boulderModel, boulderHull))
       })},
       { "scenes", json::array({
         scene("Scene 1", scene1UUID, buildScene1()),

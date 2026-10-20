@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <numbers>
 #include <optional>
 #include <set>
