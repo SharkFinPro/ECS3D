@@ -216,7 +216,7 @@ public unsafe class StarterScoringTests : IDisposable
   public void ScoreKeeper_NeverWinsWithoutATarget()
   {
     var recorder = AddRecorder();
-    AddKeeper(target: 0);
+    AddKeeper();
 
     Collect(0, 1000);
 
@@ -357,7 +357,7 @@ public unsafe class StarterScoringTests : IDisposable
   public void RoundTimer_StartsTheNextRoundAfterTheIntermission()
   {
     var recorder = AddRecorder();
-    AddTimer(3, intermission: 2f);
+    AddTimer(3);
 
     Run(4.5f);
     Assert.Empty(recorder.Starts);
@@ -479,7 +479,7 @@ public unsafe class StarterScoringTests : IDisposable
   public void RoundTimer_PublishesNoRoundStartedWhenTheRoundCannotStart()
   {
     var recorder = AddRecorder();
-    var timer = AddTimer(3, intermission: 2f);
+    var timer = AddTimer(3);
     Run(3f);
     Assert.Equal(new[] { 1 }, recorder.Overs);
 
