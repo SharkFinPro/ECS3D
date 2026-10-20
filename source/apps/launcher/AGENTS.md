@@ -15,9 +15,11 @@
   launching the editor.
 - Built with **Avalonia 12** (cross-platform XAML UI) on **.NET 10**, using the **MVVM** pattern via
   **CommunityToolkit.Mvvm** (`ObservableObject`, `SetProperty`, `RelayCommand`).
-- **Status: UI shell only.** Everything is presentation right now — the project/template/sample lists are
-  hardcoded sample data (see `ProjectsViewModel`, `DesignData`) and commands only drive navigation. There
-  is **no engine backend wired in yet**: no real project loading, no process launching, no persistence.
+- **Status: UI shell with a backend starting to exist.** The tabs still show hardcoded sample data (see
+  `ProjectsViewModel`, `DesignData`) and commands only drive navigation. The first services
+  (`source/Services/`: engine location, process launching, early-exit watching, the per-user data folder,
+  the app version) exist and are tested, but no view model uses them yet: no real project loading,
+  no persistence.
 - Ships as a single-file `ECS3DLauncher.exe` beside the C++ executables in `bin/`. It is
   **framework-dependent** (shares the machine's installed .NET 10) and does **not** boot the CLR the way
   the engine apps do — it is just an ordinary .NET desktop process.
@@ -32,6 +34,7 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 | `source/App.axaml{,.cs}` | Application composition: merges `Theme.axaml` + `Icons.axaml` resources and `AppStyles.axaml`; sets the dark `FluentTheme`; creates the single `MainWindow` with its `MainWindowViewModel`. Attaches Avalonia DevTools (F12) in DEBUG only. |
 | `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav + which tab is active + derived title/subtitle), `NavItemViewModel`. |
 | `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch (e.g. Projects → Templates). |
+| `source/Services/` | UI-free services behind interfaces: `EngineLocator`, `EngineLauncher` (over `IProcessRunner`), `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `IFileSystem`. No Avalonia types. |
 | `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `ProjectTemplate` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
 | `source/Assets/` | Bundled `AvaloniaResource`s: `Fonts/` (Geist, GeistMono) and `scene_render.png`. |
 
@@ -57,6 +60,9 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 - **MVVM, strictly.** Views are XAML; state and commands live in view models (`ObservableObject` +
   hand-written `SetProperty` properties and `RelayCommand` fields built in the constructor - no source generators, so no `partial` classes). `AvaloniaUseCompiledBindingsByDefault` is on —
   give bindings an `x:DataType` so they compile. `Nullable` is enabled.
+- **Services stay free of Avalonia and CommunityToolkit references.** `ECS3DManagedTests` compiles
+  `source/Services/**` in by link, so they must build without the UI packages; a type that needs them belongs in `Tabs` or `Shared`. Anything that touches the
+  filesystem, processes, the clock or the environment goes behind an interface or an injected function.
 - **Navigation is centralized.** `MainWindowViewModel.ActiveNav` (a string key) selects `CurrentTab`; the
   window's `ContentControl` maps the active view model to its view by type. Tabs never navigate directly —
   they call back into the shell (see `ProjectsViewModel`'s `openTemplates`).
