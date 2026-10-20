@@ -229,7 +229,7 @@ public unsafe class StarterInteractionTests : IDisposable
     Hold(true);
     explosion.fixedUpdate(0.1f);
 
-    var pushed = CallsTo("RigidBody.applyForce").Select(c => c.Split('(', ',')[1]).ToArray();
+    var pushed = CallsTo("RigidBody.applyForce").Select(c => c.Split(new[] { '(', ',' })[1]).ToArray();
     Assert.Equal(new[] { "a" }, pushed);
     Assert.Equal(new[] { "Explosion hit 1 bodies" }, Infos());
   }
@@ -391,7 +391,7 @@ public unsafe class StarterInteractionTests : IDisposable
       float.Parse(args[3], CultureInfo.InvariantCulture),
       float.Parse(args[4], CultureInfo.InvariantCulture),
       float.Parse(args[5], CultureInfo.InvariantCulture));
-    AssertVec(new Vector3(-0.7464519f, 0.2604026f, -0.6123724f), direction, 1e-4f);
+    AssertVec(new Vector3(-0.7464519f, 0.2604026f, -0.6123724f), direction);
   }
 
   [Fact]
