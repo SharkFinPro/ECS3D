@@ -128,6 +128,8 @@
   each call and answer from canned values (a native `bool` is a `byte` there, since the test assembly keeps runtime
   marshalling on), and restores the tables when disposed; those suites share the serial `BridgeInstances`
   collection.
+  `ShippedScriptsCompileTests` compiles every shipped script through `ScriptCompiler`, the compile step `Bridge`
+  uses at runtime. It finds the source tree through an `ECS3DSourceRoot` assembly attribute the csproj sets.
   `TcpBackendLoopbackTests` also drives a live `TcpBackend` over loopback sockets: `TransportRecorder`
   takes the addresses of `Transport`'s `[UnmanagedCallersOnly]` `set*Callback` exports as function pointers to
   register its own callbacks (and unregisters them afterward), and records what the backends deliver, so
@@ -452,6 +454,8 @@ without deciding its scripting story can't go unnoticed. Script field edits are 
 (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
 refused with a warning and does not fault the script.
 A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
+Two script classes that share a simple name fail the compile, with a message naming their files. The runtime finds
+scripts by that name, so this holds across namespaces too; the parts of one `partial` class count as one class.
 A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about
 once and left unattached until the next hot reload or until its Script component is replaced (a stop
 rebuild or scene switch), which retries it and warns again if it still fails. Field read-back skips a

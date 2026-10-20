@@ -306,19 +306,6 @@ public static class Bridge
             .OfType<ScriptBase>()
             .Where(script => script.EntityId == uuid);
 
-    private static string ReadFileSafe(string path)
-    {
-        using var fs = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete
-        );
-
-        using var reader = new StreamReader(fs);
-        return reader.ReadToEnd();
-    }
-
     [UnmanagedCallersOnly]
     public static void init(IntPtr scriptDirPtr)
     {
@@ -424,30 +411,9 @@ public static class Bridge
 
         Log.info($"Compiling {sourceFiles.Length} script file(s)...");
 
-        var syntaxTrees = sourceFiles
-            .Select(path => CSharpSyntaxTree.ParseText(ReadFileSafe(path), path: path))
-            .ToArray();
+        var result = ScriptCompiler.Compile(sourceFiles);
 
-        var compilation = CSharpCompilation.Create(
-            assemblyName: "UserScripts_" + Guid.NewGuid().ToString("N")[..8],
-            syntaxTrees: syntaxTrees,
-            references: Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-                            .Where(dll => {
-                                try { System.Reflection.AssemblyName.GetAssemblyName(dll); return true; }
-                                catch { return false; }
-                            })
-                            .Select(dll => (MetadataReference)MetadataReference.CreateFromFile(dll))
-                            .Append(MetadataReference.CreateFromFile(typeof(ScriptBase).Assembly.Location))
-                            .ToArray(),
-            options: new CSharpCompilationOptions(
-                OutputKind.DynamicallyLinkedLibrary,
-                optimizationLevel: OptimizationLevel.Debug,
-                nullableContextOptions: NullableContextOptions.Enable));
-
-        using var ms = new MemoryStream();
-        var result = compilation.Emit(ms);
-
-        foreach (var diag in result.Diagnostics.Where(d => d.Severity >= DiagnosticSeverity.Warning))
+        foreach (var diag in result.Warnings)
         {
             Log.info($"    {diag}");
         }
@@ -455,7 +421,11 @@ public static class Bridge
         if (!result.Success)
         {
             Log.error("Compilation failed:");
-            foreach (var e in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
+            foreach (var message in result.DuplicateMessages)
+            {
+                Log.error($"    {message}");
+            }
+            foreach (var e in result.Errors)
             {
                 Log.error($"    {e}");
             }
@@ -464,7 +434,7 @@ public static class Bridge
 
         Log.info("Compilation succeeded.");
 
-        ms.Seek(0, SeekOrigin.Begin);
+        using var ms = new MemoryStream(result.Assembly!);
         ctx = new ScriptContext(ms);
 
         Log.info($"{ctx.ScriptTypes.Length} script type(s) available.");
