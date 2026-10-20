@@ -5,10 +5,14 @@
 #include "ComponentRegistry.h"
 #include "PhysicsSystem.h"
 #include "ProjectSerializer.h"
+#include "TestScene.h"
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
+#include "objects/components/RigidBody.h"
+#include "objects/components/Transform.h"
+#include "objects/components/collisions/BoxCollider.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include "templates/TemplateManifest.h"
@@ -290,14 +294,23 @@ TEST(EmptyTemplate, EveryReferencedAssetIsRegistered)
   EXPECT_EQ(references, 15);
 }
 
-TEST(EmptyTemplate, NothingMovesOverThreeHundredTicks)
+TEST(EmptyTemplate, AGroundCatchesADroppedBlockAndNothingElseMoves)
 {
   LoadedTemplate project;
   ASSERT_TRUE(project.loaded);
 
-  const auto& objectManager = *project.sceneManager.getCurrentScene()->getObjectManager();
+  const auto objectManagerPtr = project.sceneManager.getCurrentScene()->getObjectManager();
+  auto& objectManager = *objectManagerPtr;
   const auto before = transformsOf(objectManager);
   ASSERT_EQ(before.size(), 7u);
+
+  // The template holds nothing dynamic, so a Block like DefaultProject's is the positive control.
+  const auto block = std::make_shared<Object>("Block");
+  objectManager.addObject(block);
+  fixtures::transformOf(block)->setPosition(glm::vec3(0, 3, 0));
+  fixtures::addBoxCollider(block)->setScale(glm::vec3(1));
+  const auto body = fixtures::addRigidBody(block);
+  body->setMass(8.0f);
 
   CollisionSystem collisionSystem;
   for (int tick = 0; tick < 300; ++tick)
@@ -307,12 +320,18 @@ TEST(EmptyTemplate, NothingMovesOverThreeHundredTicks)
   }
 
   const auto after = transformsOf(objectManager);
-  ASSERT_EQ(after.size(), before.size());
-  for (std::size_t i = 0; i < after.size(); ++i)
+  ASSERT_EQ(after.size(), before.size() + 1);
+  for (std::size_t i = 0; i < before.size(); ++i)
   {
     EXPECT_TRUE(allFinite(after[i]));
     EXPECT_EQ(after[i], before[i]);
   }
+
+  const auto position = fixtures::positionOf(block);
+  EXPECT_TRUE(std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z));
+  EXPECT_NEAR(position.y, 1.0f, 0.05f);
+  EXPECT_LT(glm::length(body->getVelocity()), 0.05f);
+  EXPECT_LT(glm::length(body->getAngularVelocity()), 1.0f);
 }
 
 TEST(EmptyTemplate, ThumbnailIs640By360)
