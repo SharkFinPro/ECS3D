@@ -80,6 +80,10 @@ public:
                                   const char* className,
                                   const char* fieldName) const override;
 
+  [[nodiscard]] std::string getFieldString(const char* uuid,
+                                           const char* className,
+                                           const char* fieldName) const override;
+
   void getFieldVector3(const char* uuid,
                        const char* className,
                        const char* fieldName,
@@ -99,6 +103,11 @@ public:
                     const char* className,
                     const char* fieldName,
                     bool value) const override;
+
+  void setFieldString(const char* uuid,
+                      const char* className,
+                      const char* fieldName,
+                      const char* value) const override;
 
   void setFieldVector3(const char* uuid,
                        const char* className,
@@ -126,11 +135,13 @@ private:
   using GetFieldFloatFn = float(*)(const char*, const char*, const char*);
   using GetFieldIntFn = int(*)(const char*, const char*, const char*);
   using GetFieldBoolFn = bool(*)(const char*, const char*, const char*);
+  using GetFieldStringFn = char*(*)(const char*, const char*, const char*);
   using GetFieldVector3Fn = void(*)(const char*, const char*, const char*, float*, float*, float*);
 
   using SetFieldFloatFn = void(*)(const char*, const char*, const char*, float);
   using SetFieldIntFn = void(*)(const char*, const char*, const char*, int);
   using SetFieldBoolFn = void(*)(const char*, const char*, const char*, bool);
+  using SetFieldStringFn = void(*)(const char*, const char*, const char*, const char*);
   using SetFieldVector3Fn = void(*)(const char*, const char*, const char*, float, float, float);
 
   std::shared_ptr<ManagedHost> m_host;
@@ -154,11 +165,13 @@ private:
   GetFieldFloatFn m_getFieldFloat = nullptr;
   GetFieldIntFn m_getFieldInt = nullptr;
   GetFieldBoolFn m_getFieldBool = nullptr;
+  GetFieldStringFn m_getFieldString = nullptr;
   GetFieldVector3Fn m_getFieldVector3 = nullptr;
 
   SetFieldFloatFn m_setFieldFloat = nullptr;
   SetFieldIntFn m_setFieldInt = nullptr;
   SetFieldBoolFn m_setFieldBool = nullptr;
+  SetFieldStringFn m_setFieldString = nullptr;
   SetFieldVector3Fn m_setFieldVector3 = nullptr;
 
   void registerBindings(const std::string& assemblyPath,

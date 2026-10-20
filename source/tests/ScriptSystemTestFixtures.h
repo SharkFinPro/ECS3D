@@ -56,6 +56,7 @@ namespace scriptSystemFixtures {
     std::map<std::string, float> floats;
     std::map<std::string, int> ints;
     std::map<std::string, bool> bools;
+    std::map<std::string, std::string> strings;
     std::map<std::string, glm::vec3> vectors;
     bool reloadThrows = false;
     bool reloadReplaces = true;
@@ -170,6 +171,11 @@ namespace scriptSystemFixtures {
       return m_state.bools[fieldName];
     }
 
+    [[nodiscard]] std::string getFieldString(const char*, const char*, const char* fieldName) const override
+    {
+      return m_state.strings[fieldName];
+    }
+
     void getFieldVector3(const char*, const char*, const char* fieldName, float& x, float& y, float& z) const override
     {
       const auto value = m_state.vectors[fieldName];
@@ -196,6 +202,12 @@ namespace scriptSystemFixtures {
       m_state.bools[fieldName] = value;
     }
 
+    void setFieldString(const char*, const char*, const char* fieldName, const char* value) const override
+    {
+      m_state.calls.push_back(std::string("setString|") + fieldName);
+      m_state.strings[fieldName] = value;
+    }
+
     void setFieldVector3(const char*, const char*, const char* fieldName, float x, float y, float z) const override
     {
       m_state.calls.push_back(std::string("setVector3|") + fieldName);
@@ -209,6 +221,8 @@ namespace scriptSystemFixtures {
   const char* const exposedFieldsJson =
     R"([{"name":"speed","type":"float"},{"name":"count","type":"int"},)"
     R"({"name":"enabled","type":"bool"},{"name":"offset","type":"vector3"}])";
+
+  const char* const exposedStringFieldJson = R"([{"name":"label","type":"string"},{"name":"count","type":"int"}])";
 
   class ScriptSystemTest : public ::testing::Test {
   protected:

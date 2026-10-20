@@ -306,19 +306,6 @@ public static class Bridge
             .OfType<ScriptBase>()
             .Where(script => script.EntityId == uuid);
 
-    private static string ReadFileSafe(string path)
-    {
-        using var fs = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete
-        );
-
-        using var reader = new StreamReader(fs);
-        return reader.ReadToEnd();
-    }
-
     [UnmanagedCallersOnly]
     public static void init(IntPtr scriptDirPtr)
     {
@@ -424,30 +411,9 @@ public static class Bridge
 
         Log.info($"Compiling {sourceFiles.Length} script file(s)...");
 
-        var syntaxTrees = sourceFiles
-            .Select(path => CSharpSyntaxTree.ParseText(ReadFileSafe(path), path: path))
-            .ToArray();
+        var result = ScriptCompiler.Compile(sourceFiles);
 
-        var compilation = CSharpCompilation.Create(
-            assemblyName: "UserScripts_" + Guid.NewGuid().ToString("N")[..8],
-            syntaxTrees: syntaxTrees,
-            references: Directory.GetFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-                            .Where(dll => {
-                                try { System.Reflection.AssemblyName.GetAssemblyName(dll); return true; }
-                                catch { return false; }
-                            })
-                            .Select(dll => (MetadataReference)MetadataReference.CreateFromFile(dll))
-                            .Append(MetadataReference.CreateFromFile(typeof(ScriptBase).Assembly.Location))
-                            .ToArray(),
-            options: new CSharpCompilationOptions(
-                OutputKind.DynamicallyLinkedLibrary,
-                optimizationLevel: OptimizationLevel.Debug,
-                nullableContextOptions: NullableContextOptions.Enable));
-
-        using var ms = new MemoryStream();
-        var result = compilation.Emit(ms);
-
-        foreach (var diag in result.Diagnostics.Where(d => d.Severity >= DiagnosticSeverity.Warning))
+        foreach (var diag in result.Warnings)
         {
             Log.info($"    {diag}");
         }
@@ -455,7 +421,11 @@ public static class Bridge
         if (!result.Success)
         {
             Log.error("Compilation failed:");
-            foreach (var e in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
+            foreach (var message in result.DuplicateMessages)
+            {
+                Log.error($"    {message}");
+            }
+            foreach (var e in result.Errors)
             {
                 Log.error($"    {e}");
             }
@@ -464,7 +434,7 @@ public static class Bridge
 
         Log.info("Compilation succeeded.");
 
-        ms.Seek(0, SeekOrigin.Begin);
+        using var ms = new MemoryStream(result.Assembly!);
         ctx = new ScriptContext(ms);
 
         Log.info($"{ctx.ScriptTypes.Length} script type(s) available.");
@@ -559,6 +529,20 @@ public static class Bridge
             () => (byte)(((bool)(GetField(uuidPtr, classNamePtr, fieldNamePtr) ?? false)) ? 1 : 0), (byte)0);
     }
 
+    // Caller frees the result with freeString. A null string field or a missing instance reads as empty;
+    // a faulted instance returns IntPtr.Zero, which the native side reads as empty too.
+    [UnmanagedCallersOnly]
+    public static IntPtr getFieldString(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr)
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        return RunGuarded(uuid, className, nameof(getFieldString),
+            () => StringFieldToCoTaskMem(GetField(uuidPtr, classNamePtr, fieldNamePtr)), IntPtr.Zero);
+    }
+
+    internal static IntPtr StringFieldToCoTaskMem(object? value) =>
+        Marshal.StringToCoTaskMemUTF8(value as string ?? "");
+
     [UnmanagedCallersOnly]
     public static unsafe void getFieldVector3(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
                                               float* x, float* y, float* z)
@@ -621,6 +605,15 @@ public static class Bridge
     }
 
     [UnmanagedCallersOnly]
+    public static void setFieldString(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr, IntPtr valuePtr)
+    {
+        var uuid = Marshal.PtrToStringUTF8(uuidPtr)!;
+        var className = Marshal.PtrToStringUTF8(classNamePtr)!;
+        RunGuarded(uuid, className, nameof(setFieldString),
+            () => SetField(uuidPtr, classNamePtr, fieldNamePtr, Marshal.PtrToStringUTF8(valuePtr) ?? ""));
+    }
+
+    [UnmanagedCallersOnly]
     public static void setFieldVector3(IntPtr uuidPtr, IntPtr classNamePtr, IntPtr fieldNamePtr,
                                        float x, float y, float z)
     {
@@ -669,6 +662,14 @@ public static class Bridge
         {
             converted = value;
             return true;
+        }
+
+        // ChangeType would turn a string into a number or a number into a string; a string field takes
+        // only a string and every other field refuses one.
+        if (fieldType == typeof(string) || value is string)
+        {
+            converted = null;
+            return false;
         }
 
         try

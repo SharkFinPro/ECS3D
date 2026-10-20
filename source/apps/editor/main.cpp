@@ -1,5 +1,6 @@
 #include "EditorApp.h"
 #include "ConsoleWindow.h"
+#include <ProjectPaths.h>
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <LogSetup.h>
@@ -46,7 +47,7 @@ namespace
       }
       else if (isValueFlag(arg, "--project", i, argc))
       {
-        options.project = argv[++i];
+        options.project = absoluteProjectArgument(argv[++i]);
       }
       else if (isValueFlag(arg, "--token", i, argc))
       {
