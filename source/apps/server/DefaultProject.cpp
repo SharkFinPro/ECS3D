@@ -1,8 +1,10 @@
 #include "DefaultProject.h"
+#include "DefaultShapes.h"
 #include <nlohmann/json.hpp>
 #include <glm/vec3.hpp>
 #include <glm/geometric.hpp>
 #include <algorithm>
+#include <numbers>
 #include <random>
 #include <string>
 #include <uuid.h>
@@ -19,17 +21,36 @@ const std::string whiteTexture = "a3628d76-f753-4e27-be83-35744d1ac44d";
 const std::string earthTexture = "2cfcc1b3-86f7-487b-bf37-6255111ab0ca";
 const std::string earthSpecularTexture = "9e4b3267-a29c-43ac-aca4-ccd06f078f5c";
 const std::string playerScript = "de114693-8cf3-4123-a308-70dbb2af120f";
+const std::string capsuleModel = "953f4317-65aa-4eb0-b186-c0b94bec185e";
+const std::string rampModel = "e77194e0-e50e-4070-aacd-2f5d917b2da7";
+const std::string planeTileModel = "6a742837-aa60-43fe-a652-32a3d385cde0";
+const std::string torusModel = "7a1cd753-3775-44a0-858f-27239f8740f5";
+const std::string cylinderModel = "a383cc8f-ee6e-4373-ae06-f10f85ef159b";
+const std::string gridCheckerTexture = "48ad67dd-957f-4fc9-bd7b-019debffa1d0";
+const std::string checkerOrangeTexture = "425f3784-74eb-4e09-bfbb-88facfb014d0";
+const std::string checkerBlueTexture = "05325ffd-75bd-4d76-a50d-7b80e183b081";
+const std::string paletteRedTexture = "7c8c01db-771f-4048-94c2-004b8d19e7aa";
+const std::string paletteGreenTexture = "c5eee5e6-9bd0-4f9b-977f-b9220a21a630";
+const std::string paletteBlueTexture = "66a8a6fc-d151-4567-9ce5-2e17cc675fe0";
+const std::string paletteYellowTexture = "1d5edebf-57f9-499c-9840-b84a57174422";
+const std::string paletteOrangeTexture = "ea184ad8-ca64-48cd-b69e-92bcb4649158";
+const std::string palettePurpleTexture = "8925b024-c923-4839-9e6b-fa67e69e6752";
 
 // Stable prefab UUIDs, so a script can spawn one by a uuid it can hardcode (World.spawnPrefab).
 const std::string blockPrefab = "0a1e5c2d-7b3f-4a91-8c60-1d4e2f6a8b03";
 const std::string rigidBlockPrefab = "3f8c1a47-92d5-4e08-b1a6-5c7e09f4d2b1";
 const std::string spherePrefab = "6d2b4f19-08ac-4d73-9e52-b83a1c6f0e47";
 const std::string playerPrefab = "9c7f0e83-4d16-4b52-a09e-27f5b3d81c6a";
+const std::string capsulePrefab = "39e415e0-ff7a-475c-b677-72062ce2954a";
+const std::string cylinderPrefab = "62f97ec2-a58e-4e6d-b9e4-a466dc04669a";
+const std::string rampPrefab = "1b112469-4331-402e-bc4a-94cd0368ef52";
 
 // Masses are volumes at a density of one, so bodies of one material push each other by their size. A Block's
 // half-extents are its scale, so the unit Block is 2 x 2 x 2; a unit Sphere or Player has a radius of one.
 constexpr float blockMass = 8.0f;
 constexpr float sphereMass = 4.18879f;
+// A unit sphere (the two hemispheres) plus a radius-one cylinder two units tall.
+constexpr float capsuleMass = 4.0f / 3.0f * std::numbers::pi_v<float> + 2.0f * std::numbers::pi_v<float>;
 
 constexpr float propFriction = 0.5f;
 // PlayerScript steers the player's velocity itself; friction with the ground would only fight it.
@@ -107,6 +128,22 @@ json sphereCollider()
   };
 }
 
+json capsuleCollider()
+{
+  return {
+    { "type", "Collider" },
+    { "subType", "Capsule" },
+    { "position", vec(glm::vec3(0)) },
+    { "rotation", vec(glm::vec3(0)) },
+    { "radius", 1.0 },
+    { "height", 4.0 },
+    { "renderCollider", false },
+    { "isTrigger", false },
+    { "layer", 0u },
+    { "mask", 0xFFFFFFFFu }
+  };
+}
+
 json playerController(const int slot = 0)
 {
   return {
@@ -174,6 +211,43 @@ const json& sphereBody()
     modelRenderer(sphereModel, earthTexture, earthSpecularTexture),
     rigidBody(sphereMass, propFriction),
     sphereCollider()
+  }));
+
+  return body;
+}
+
+const json& capsuleBody()
+{
+  static const json body = makeObject("Capsule", json::array({
+    transform(glm::vec3(0)),
+    modelRenderer(capsuleModel, checkerOrangeTexture, whiteTexture),
+    rigidBody(capsuleMass, propFriction),
+    capsuleCollider()
+  }));
+
+  return body;
+}
+
+const json& cylinderBody()
+{
+  static const ConvexHull hull = cylinderHull();
+  static const json body = makeObject("Cylinder", json::array({
+    transform(glm::vec3(0)),
+    modelRenderer(cylinderModel, checkerOrangeTexture, whiteTexture),
+    rigidBody(hullVolume(hull), propFriction),
+    convexMeshCollider(hull, cylinderModel)
+  }));
+
+  return body;
+}
+
+// Static structure: no RigidBody.
+const json& rampBody()
+{
+  static const json body = makeObject("Ramp", json::array({
+    transform(glm::vec3(0)),
+    modelRenderer(rampModel, checkerBlueTexture, whiteTexture),
+    convexMeshCollider(rampHull(), rampModel)
   }));
 
   return body;
@@ -465,13 +539,27 @@ json buildDefaultProject()
         { { "filePath", "assets/models/sphere.glb" }, { "name", "assets/models/sphere.glb" }, { "uuid", playerModel } },
         { { "filePath", "assets/models/sphere_2.glb" }, { "name", "assets/models/sphere_2.glb" }, { "uuid", newUUID() } },
         { { "filePath", "assets/models/sphere_3.glb" }, { "name", "assets/models/sphere_3.glb" }, { "uuid", sphereModel } },
-        { { "filePath", "assets/models/square.glb" }, { "name", "assets/models/square.glb" }, { "uuid", newUUID() } }
+        { { "filePath", "assets/models/square.glb" }, { "name", "assets/models/square.glb" }, { "uuid", newUUID() } },
+        { { "filePath", "assets/models/capsule.glb" }, { "name", "assets/models/capsule.glb" }, { "uuid", capsuleModel } },
+        { { "filePath", "assets/models/cylinder.glb" }, { "name", "assets/models/cylinder.glb" }, { "uuid", cylinderModel } },
+        { { "filePath", "assets/models/ramp.glb" }, { "name", "assets/models/ramp.glb" }, { "uuid", rampModel } },
+        { { "filePath", "assets/models/plane_tile.glb" }, { "name", "assets/models/plane_tile.glb" }, { "uuid", planeTileModel } },
+        { { "filePath", "assets/models/torus.glb" }, { "name", "assets/models/torus.glb" }, { "uuid", torusModel } }
       })},
       { "textures", json::array({
         { { "filePath", "assets/textures/black.png" }, { "name", "assets/textures/black.png" }, { "uuid", newUUID() } },
         { { "filePath", "assets/textures/white.png" }, { "name", "assets/textures/white.png" }, { "uuid", whiteTexture } },
         { { "filePath", "assets/textures/earth.png" }, { "name", "assets/textures/earth.png" }, { "uuid", earthTexture } },
-        { { "filePath", "assets/textures/earth_specular.png" }, { "name", "assets/textures/earth_specular.png" }, { "uuid", earthSpecularTexture } }
+        { { "filePath", "assets/textures/earth_specular.png" }, { "name", "assets/textures/earth_specular.png" }, { "uuid", earthSpecularTexture } },
+        { { "filePath", "assets/textures/grid_checker.png" }, { "name", "assets/textures/grid_checker.png" }, { "uuid", gridCheckerTexture } },
+        { { "filePath", "assets/textures/checker_orange.png" }, { "name", "assets/textures/checker_orange.png" }, { "uuid", checkerOrangeTexture } },
+        { { "filePath", "assets/textures/checker_blue.png" }, { "name", "assets/textures/checker_blue.png" }, { "uuid", checkerBlueTexture } },
+        { { "filePath", "assets/textures/palette_red.png" }, { "name", "assets/textures/palette_red.png" }, { "uuid", paletteRedTexture } },
+        { { "filePath", "assets/textures/palette_green.png" }, { "name", "assets/textures/palette_green.png" }, { "uuid", paletteGreenTexture } },
+        { { "filePath", "assets/textures/palette_blue.png" }, { "name", "assets/textures/palette_blue.png" }, { "uuid", paletteBlueTexture } },
+        { { "filePath", "assets/textures/palette_yellow.png" }, { "name", "assets/textures/palette_yellow.png" }, { "uuid", paletteYellowTexture } },
+        { { "filePath", "assets/textures/palette_orange.png" }, { "name", "assets/textures/palette_orange.png" }, { "uuid", paletteOrangeTexture } },
+        { { "filePath", "assets/textures/palette_purple.png" }, { "name", "assets/textures/palette_purple.png" }, { "uuid", palettePurpleTexture } }
       })},
       { "scripts", json::array({
         { { "className", "BlockScript" }, { "filePath", "scripts/UserScripts/BlockScript.cs" }, { "uuid", newUUID() } },
@@ -483,7 +571,10 @@ json buildDefaultProject()
         prefabAsset("Block", blockPrefab, blockBody()),
         prefabAsset("Rigid Block", rigidBlockPrefab, rigidBlockBody()),
         prefabAsset("Sphere", spherePrefab, sphereBody()),
-        prefabAsset("Player", playerPrefab, playerBody())
+        prefabAsset("Player", playerPrefab, playerBody()),
+        prefabAsset("Capsule", capsulePrefab, capsuleBody()),
+        prefabAsset("Cylinder", cylinderPrefab, cylinderBody()),
+        prefabAsset("Ramp", rampPrefab, rampBody())
       })},
       { "scenes", json::array({
         scene("Scene 1", scene1UUID, buildScene1()),
