@@ -158,13 +158,20 @@ namespace {
     glm::vec3 upperVelocity;
   };
 
-  OffsetLanding landFlatOnAnOffsetRestingBox(const bool fromBelow)
+  OffsetLanding landFlatOnAnOffsetRestingBox(const bool fromBelow, const bool wideLower)
   {
     const auto scene = makeScene();
 
+    // A wide lower box reaches only 0.6 under the upper one's side, so its center lies outside the overlap while
+    // the upper box's is inside it.
     const auto lower = addObject(scene, "Lower", { 0, 0, 0 });
+    if (wideLower)
+    {
+      fixtures::transformOf(lower)->setScale({ 3, 1, 1 });
+    }
     const auto lowerBody = addBody(lower, false);
-    const auto upper = addObject(scene, "Upper", { 0.4f, 0.99f, 0 });
+    const float upperX = wideLower ? 1.4f : 0.4f;
+    const auto upper = addObject(scene, "Upper", { upperX, 0.99f, 0 });
     const auto upperBody = addBody(upper, false);
 
     lowerBody->setFriction(0.5f);
@@ -174,9 +181,11 @@ namespace {
     upperBody->setFalling(true);
     upperBody->setVelocity({ 0, -0.2f, 0 });
 
+    const float left = wideLower ? 0.9f : -0.1f;
+    const float right = wideLower ? 1.5f : 0.5f;
     const std::array<glm::vec3, 4> overlap{
-      glm::vec3{ -0.1f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
-      glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.1f, 0.5f, 0.5f }
+      glm::vec3{ left, 0.5f, -0.5f }, glm::vec3{ right, 0.5f, -0.5f },
+      glm::vec3{ right, 0.5f, 0.5f }, glm::vec3{ left, 0.5f, 0.5f }
     };
 
     if (fromBelow)
@@ -194,15 +203,19 @@ namespace {
 
 TEST(PhysicsIntegration, ABoxLandingFlatOnAnOffsetRestingBoxIsNotSpunWhicheverSideResolvesTheContact)
 {
-  for (const bool fromBelow : { false, true })
+  for (const bool wideLower : { false, true })
   {
-    SCOPED_TRACE(fromBelow ? "from below" : "from above");
+    for (const bool fromBelow : { false, true })
+    {
+      SCOPED_TRACE(testing::Message() << (fromBelow ? "from below" : "from above")
+                                      << (wideLower ? ", lower center outside the overlap" : ""));
 
-    const auto landing = landFlatOnAnOffsetRestingBox(fromBelow);
+      const auto landing = landFlatOnAnOffsetRestingBox(fromBelow, wideLower);
 
-    // Positive control: the landing was resolved, so the fall was stopped.
-    EXPECT_NEAR(landing.upperVelocity.y, 0.0f, 1e-4f);
-    expectNear("upper spin", landing.upperSpin, { 0, 0, 0 });
+      // Positive control: the landing was resolved, so the fall was stopped.
+      EXPECT_NEAR(landing.upperVelocity.y, 0.0f, 1e-4f);
+      expectNear("upper spin", landing.upperSpin, { 0, 0, 0 });
+    }
   }
 }
 

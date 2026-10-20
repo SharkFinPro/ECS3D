@@ -522,14 +522,13 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
   stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
-  const float faceRadius = twistRadius(pair, collider, support, transform->getPosition(), collisionPoints);
+  // Met from below, the pair is resolved with the roles swapped, so the push and its friction go where the body
+  // pressing down would have put them from above: its own center of mass clamped into the manifold.
+  const bool swapped = normal.y < 0.0f && pair.body.resting;
+  const auto lead = swapped ? findSupport(pair.other.transform->getPosition(), normal, collisionPoints) : support;
+  const float faceRadius = twistRadius(pair, collider, lead, transform->getPosition(), collisionPoints);
   markLineOnOther(pair, other, collisionPoints);
-  // Met from below, the pair is resolved with the roles swapped, so the push lands where the body pressing down
-  // would have put it from above: its own center of mass clamped into the manifold, which turns it by nothing.
-  const auto point = normal.y < 0.0f && pair.body.resting && pair.other.body
-                       ? findSupport(pair.other.transform->getPosition(), normal, collisionPoints).point
-                       : support.point;
-  resolve(pair, minimumTranslationVector, point, faceRadius, dt);
+  resolve(pair, minimumTranslationVector, lead.point, faceRadius, dt);
 
   if (normal.y > 0.0f)
   {
