@@ -35,3 +35,9 @@ ecs3d_deploy_clr_runtime(${PROJECT_NAME})
 # asset paths against the working directory. Deployed at configure time so it doesn't depend on build
 # order, and unconditionally (the apps need it whether or not the tests are built).
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/defaultAssets/" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/assets/")
+
+# Templates and samples ship next to the executable too (the launcher and editor read them from
+# <exe dir>/templates), copied at configure time like defaultAssets.
+# CONFIGURE_DEPENDS re-runs configure, and so the copy, when a template file is added or removed.
+file(GLOB_RECURSE ECS3D_TEMPLATE_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../../templates/*")
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/../../templates/" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/templates/")

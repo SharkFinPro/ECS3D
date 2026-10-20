@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   ComponentRegistry.h
   ComponentRegistration.cpp
   ComponentRegistration.h
+  ProjectPaths.cpp
+  ProjectPaths.h
   ProjectSerializer.cpp
   ProjectSerializer.h
   ProjectPacker.cpp
@@ -33,6 +35,8 @@ add_library(${PROJECT_NAME}
   scenes/SceneAsset.h
   scenes/SceneScriptEdits.cpp
   scenes/SceneScriptEdits.h
+  templates/TemplateManifest.cpp
+  templates/TemplateManifest.h
   objects/Object.cpp
   objects/Object.h
   objects/ObjectManager.cpp

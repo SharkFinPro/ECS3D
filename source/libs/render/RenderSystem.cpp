@@ -99,6 +99,8 @@ void RenderSystem::variableUpdate(const ObjectManager& objectManager, GpuAssetCa
   const auto renderer = assetCache.getRenderer();
   const auto lightingManager = renderer->getLightingManager();
 
+  assetCache.applyPendingReset();
+
   // The picker only rewrites the flags of objects submitted this frame, so an object that stops being
   // drawn (a light sprite in play mode, a hidden model) would otherwise stay picked.
   for (auto& entry : m_selected)

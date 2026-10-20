@@ -22,6 +22,28 @@ public class PlayerScript : ScriptBase
     // tick, on the ground or in the air.
     private const float Grip = 0.1f;
 
+    // Key names, read with StarterUtils.parseKey. The arrow keys always move too.
+    [ExposeToEditor("Forward Key")]
+    private string m_forward = "W";
+
+    [ExposeToEditor("Back Key")]
+    private string m_back = "S";
+
+    [ExposeToEditor("Left Key")]
+    private string m_left = "A";
+
+    [ExposeToEditor("Right Key")]
+    private string m_right = "D";
+
+    [ExposeToEditor("Jump Key")]
+    private string m_jump = "Space";
+
+    private readonly KeyBinding m_forwardBinding = new KeyBinding("PlayerScript Forward Key");
+    private readonly KeyBinding m_backBinding = new KeyBinding("PlayerScript Back Key");
+    private readonly KeyBinding m_leftBinding = new KeyBinding("PlayerScript Left Key");
+    private readonly KeyBinding m_rightBinding = new KeyBinding("PlayerScript Right Key");
+    private readonly KeyBinding m_jumpBinding = new KeyBinding("PlayerScript Jump Key");
+
     // The way the player steers this tick, of unit length or zero, read from input.
     private Vector3 m_heading = Vector3.Zero;
 
@@ -136,23 +158,23 @@ public class PlayerScript : ScriptBase
         // ground plane (yaw only, so looking up/down doesn't tilt movement). Assumes the camera's forward
         // is the object's -Z, so the body's yaw is the movement heading.
         float forwardInput = 0;
-        if (input.keyIsPressed(Key.UP))
+        if (isHeld(m_forwardBinding.refresh(m_forward), Key.UP))
         {
             forwardInput += 1.0f;
         }
 
-        if (input.keyIsPressed(Key.DOWN))
+        if (isHeld(m_backBinding.refresh(m_back), Key.DOWN))
         {
             forwardInput -= 1.0f;
         }
 
         float strafeInput = 0;
-        if (input.keyIsPressed(Key.RIGHT))
+        if (isHeld(m_rightBinding.refresh(m_right), Key.RIGHT))
         {
             strafeInput += 1.0f;
         }
 
-        if (input.keyIsPressed(Key.LEFT))
+        if (isHeld(m_leftBinding.refresh(m_left), Key.LEFT))
         {
             strafeInput -= 1.0f;
         }
@@ -184,10 +206,16 @@ public class PlayerScript : ScriptBase
             }
         }
 
-        if (!m_wasJumping && !rigidBody.isFalling() && input.keyIsPressed(Key.X))
+        Key? jumpKey = m_jumpBinding.refresh(m_jump);
+        if (!m_wasJumping && !rigidBody.isFalling() && jumpKey.HasValue && input.keyIsPressed(jumpKey.Value))
         {
             m_jumpRequested = true;
             m_wasJumping = true;
         }
+    }
+
+    private bool isHeld(Key? bound, Key alternate)
+    {
+        return (bound.HasValue && input.keyIsPressed(bound.Value)) || input.keyIsPressed(alternate);
     }
 }
