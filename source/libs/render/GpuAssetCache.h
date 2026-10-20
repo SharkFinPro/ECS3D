@@ -3,6 +3,7 @@
 
 #include "SharedAssetLoads.h"
 #include <cstddef>
+#include <filesystem>
 #include <objects/components/collisions/ConvexHull.h>
 #include <memory>
 #include <string>
@@ -27,6 +28,10 @@ public:
   GpuAssetCache(std::shared_ptr<vke::VulkanEngine> renderer, const AssetRegistry* assetRegistry);
 
   [[nodiscard]] std::shared_ptr<vke::VulkanEngine> getRenderer() const;
+
+  // The project folder asset paths resolve against first; empty means built-in assets only. Applies to loads
+  // that happen after the call.
+  void setProjectRoot(std::filesystem::path projectRoot);
 
   // Both return nullptr for an unknown uuid or an asset that fails to load (logged once per path).
   std::shared_ptr<vke::Model> getModel(const uuids::uuid& uuid);
@@ -82,6 +87,10 @@ private:
     uuids::uuid specularMapUUID;
   };
 
+  // The path to load for a registry record: the project folder's copy, else the built-in one. Throws for a
+  // path that leaves the project folder, which the caller's shared load logs once and turns into null.
+  [[nodiscard]] std::string resolveRecordPath(const std::string& recordPath) const;
+
   // Loads the shared quad model and icon once. A missing or invalid file is logged once and remembered, so
   // it is not retried every frame.
   void loadLightGizmoAssets();
@@ -102,6 +111,8 @@ private:
   std::shared_ptr<vke::VulkanEngine> m_renderer;
 
   const AssetRegistry* m_assetRegistry;
+
+  std::filesystem::path m_projectRoot;
 
   // Keyed by asset uuid, so a record removed and re-added gets a fresh load; a failing asset is logged once
   // and not retried.

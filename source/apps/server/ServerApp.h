@@ -6,6 +6,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -52,8 +53,13 @@ public:
 
   void run();
 
+  // The folder that owns the project's assets and scripts; empty for a legacy file or the built-in sample.
+  [[nodiscard]] const std::filesystem::path& projectRoot() const { return m_projectRoot; }
+
 private:
   LaunchOptions m_options;
+
+  std::filesystem::path m_projectRoot;
 
   std::shared_ptr<ManagedHost> m_host;
   std::shared_ptr<net::NetServer> m_netServer;

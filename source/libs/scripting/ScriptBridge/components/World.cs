@@ -17,6 +17,7 @@ public unsafe struct WorldBindings
     public delegate* unmanaged<float, float, float, float, float, float, float, uint, IntPtr, IntPtr> raycast;
     public delegate* unmanaged<float, float, float, float, uint, IntPtr, IntPtr> overlapSphere;
     public delegate* unmanaged<IntPtr, float, float, float, IntPtr> spawnPrefab;
+    public delegate* unmanaged<IntPtr, IntPtr, bool> setObjectName;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -65,6 +66,21 @@ public static unsafe class World
         }
         finally
         {
+            Marshal.FreeCoTaskMem(uuidPtr);
+        }
+    }
+
+    public static bool setObjectName(string uuid, string name)
+    {
+        var uuidPtr = Marshal.StringToCoTaskMemUTF8(uuid);
+        var namePtr = Marshal.StringToCoTaskMemUTF8(name);
+        try
+        {
+            return NativeBindings.World.setObjectName(uuidPtr, namePtr);
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(namePtr);
             Marshal.FreeCoTaskMem(uuidPtr);
         }
     }
