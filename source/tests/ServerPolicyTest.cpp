@@ -150,13 +150,13 @@ TEST(ServerPolicyTest, LoadSceneHasNoLifecyclePlan)
 {
   EXPECT_EQ(planSceneControl(net::SceneControlOp::loadScene, true), plan());
   EXPECT_EQ(planSceneControl(net::SceneControlOp::loadScene, false), plan());
+}
 
-  TEST(ServerPolicyTest, ScriptsArePolledOnlyForAStoppedSceneOnAnEditServer)
-  {
-    EXPECT_TRUE(shouldPollScriptsWhileStopped(true, true, SceneStatus::stopped));
-    EXPECT_FALSE(shouldPollScriptsWhileStopped(true, true, SceneStatus::running));
-    EXPECT_FALSE(shouldPollScriptsWhileStopped(true, true, SceneStatus::paused));
-    EXPECT_FALSE(shouldPollScriptsWhileStopped(false, true, SceneStatus::stopped));
-    EXPECT_FALSE(shouldPollScriptsWhileStopped(true, false, SceneStatus::stopped));
-  }
+TEST(ServerPolicyTest, ScriptsArePolledOnlyForAStoppedSceneOnAnEditServer)
+{
+  EXPECT_TRUE(shouldPollScriptsWhileStopped(true, true, SceneStatus::stopped));
+  EXPECT_FALSE(shouldPollScriptsWhileStopped(true, true, SceneStatus::running));
+  EXPECT_FALSE(shouldPollScriptsWhileStopped(true, true, SceneStatus::paused));
+  EXPECT_FALSE(shouldPollScriptsWhileStopped(false, true, SceneStatus::stopped));
+  EXPECT_FALSE(shouldPollScriptsWhileStopped(true, false, SceneStatus::stopped));
 }
