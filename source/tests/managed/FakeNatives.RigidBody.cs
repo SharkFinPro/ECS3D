@@ -28,7 +28,7 @@ internal static unsafe class FakeRigidBodyNatives
   private static byte RigidBodyHas(IntPtr u)
   {
     Rec("RigidBody.has", u);
-    return Flag("RigidBody.has");
+    return FlagFor("RigidBody.has", u);
   }
 
   [UnmanagedCallersOnly]
