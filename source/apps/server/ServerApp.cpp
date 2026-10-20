@@ -244,6 +244,8 @@ void ServerApp::run()
     // the sim to advance to see it.
     forwardLogToEditors();
 
+    pollScriptChangesWhileStopped(dt);
+
     // Don't busy-spin a core between ticks.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
@@ -252,6 +254,27 @@ void ServerApp::run()
 bool ServerApp::scriptsLive() const
 {
   return m_sceneManager->getCurrentScene() && m_sceneManager->getSceneStatus() != SceneStatus::stopped;
+}
+
+void ServerApp::pollScriptChangesWhileStopped(const float dt) const
+{
+  const auto scene = m_sceneManager->getCurrentScene();
+  if (!m_options.editMode || !scene || m_sceneManager->getSceneStatus() != SceneStatus::stopped)
+  {
+    return;
+  }
+
+  try
+  {
+    if (m_scriptSystem->pollScriptChanges(*scene, dt))
+    {
+      broadcastSnapshot();
+    }
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::server, std::string("Script change check failed: ") + e.what());
+  }
 }
 
 void ServerApp::startSceneScripts(SceneAsset& scene) const

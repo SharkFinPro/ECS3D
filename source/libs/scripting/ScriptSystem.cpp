@@ -580,7 +580,27 @@ void ScriptSystem::applySceneScriptFieldEdit(const uuids::uuid& sceneUUID,
   writeFieldsToInstance(sceneUUID, className, fields);
 }
 
-void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields, const float dt)
+bool ScriptSystem::pollScriptChanges(SceneAsset& scene, const float dt)
+{
+  ensureEngine();
+
+  const auto objectManager = scene.getObjectManager();
+  BindingContext::setObjectManager(objectManager.get());
+
+  if (!checkForScriptChanges([&] { syncFieldsToData(scene); }, dt))
+  {
+    return false;
+  }
+
+  // Attached but not started, so a class that just compiled exposes its fields to the next snapshot while
+  // the scene stays stopped.
+  attachAll(scene);
+  syncFieldsToData(scene);
+
+  return true;
+}
+
+bool ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields, const float dt)
 {
   constexpr float minimumSnapshotInterval = 1.0f / 2.0f; // 2 checks every second
 
@@ -588,7 +608,7 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
 
   if (m_timeSinceLastSnapshot < minimumSnapshotInterval)
   {
-    return;
+    return false;
   }
 
   m_timeSinceLastSnapshot = 0.0f;
@@ -596,7 +616,7 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
   auto now = takeSnapshot();
   if (now == m_scriptsSnapshot)
   {
-    return;
+    return false;
   }
 
   Log::info(LogCategory::script, "Change detected - reloading scripts...");
@@ -615,7 +635,7 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
 
     if (!replaced)
     {
-      return;
+      return false;
     }
 
     m_attached.clear();
@@ -628,12 +648,16 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
     m_unresolvedSceneScripts.clear();
 
     Log::info(LogCategory::script, "Reload successful.");
+
+    return true;
   }
   catch (const std::exception& ex)
   {
     Log::error(LogCategory::script,
                std::string("Script hot-reload failed: ") + ex.what() + " - continuing with previous scripts.");
   }
+
+  return false;
 }
 
 void ScriptSystem::attach(const Object& object, const std::shared_ptr<Script>& script)

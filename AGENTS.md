@@ -465,6 +465,10 @@ vector3: each type has a `getField*`/`setField*` export, and a string crosses as
 native side frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
 every other type, and the Inspector draws a string field as a text box.
 A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
+`ScriptSystem::pollScriptChanges(scene, dt)` makes the same throttled check for a scene that is not ticking:
+`ServerApp` calls it every `run()` iteration on an edit-mode server whose scene is stopped (a paused scene is
+left alone). After a successful reload it attaches the scene's scripts without starting them and reads their
+fields back, then the server re-snapshots, so a new or edited script's exposed fields reach the Inspector before Play.
 Two script classes that share a simple name fail the compile, with a message naming their files. The runtime finds
 scripts by that name, so this holds across namespaces too; the parts of one `partial` class count as one class.
 A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about
