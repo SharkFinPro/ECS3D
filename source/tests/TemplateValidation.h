@@ -146,79 +146,84 @@ namespace templateValidation {
     return false;
   }
 
-  inline void validateProject(const std::filesystem::path& folder, const Context& context,
-                              const std::optional<TemplateManifest>& manifest,
-                              std::vector<std::string>& problems)
-  {
-    std::ifstream file(folder / "project.ecs3d");
-    if (!file.is_open())
-    {
-      problems.push_back("project: project.ecs3d is missing");
-      return;
-    }
+  using Problems = std::vector<std::string>;
 
-    const auto project = nlohmann::json::parse(file);
-
-    const auto componentRegistry = std::make_shared<ComponentRegistry>();
-    registerDataComponents(*componentRegistry);
-    {
-      AssetRegistry assetRegistry;
-      SceneManager sceneManager;
-      ProjectSerializer(&assetRegistry, &sceneManager, componentRegistry).deserialize(project);
-    }
-
-    const auto& assets = project.at("assets");
-    const auto listOf = [&](const char* key) {
-      return assets.contains(key) ? assets.at(key) : nlohmann::json::array();
-    };
-
+  struct ProjectAssets {
+    nlohmann::json scenes;
+    nlohmann::json prefabs;
+    nlohmann::json scripts;
     std::set<std::string> modelUUIDs;
     std::set<std::string> textureUUIDs;
     std::set<std::string> assetUUIDs;
-    const auto registerFiles = [&](const char* key, std::set<std::string>& into) {
-      for (const auto& asset : listOf(key))
+  };
+
+  inline nlohmann::json listOf(const nlohmann::json& assets, const char* key)
+  {
+    return assets.contains(key) ? assets.at(key) : nlohmann::json::array();
+  }
+
+  inline void registerFiles(const std::filesystem::path& folder, const Context& context,
+                            const nlohmann::json& list, std::set<std::string>& into,
+                            ProjectAssets& found, Problems& problems)
+  {
+    for (const auto& asset : list)
+    {
+      const auto uuid = canonical(asset.at("uuid").get<std::string>());
+      into.insert(uuid);
+      found.assetUUIDs.insert(uuid);
+
+      const auto filePath = asset.at("filePath").get<std::string>();
+      if (!staysInside(filePath) || !existsAnywhere(folder, context, filePath))
       {
-        const auto uuid = canonical(asset.at("uuid").get<std::string>());
-        into.insert(uuid);
-        assetUUIDs.insert(uuid);
-
-        const auto filePath = asset.at("filePath").get<std::string>();
-        if (!staysInside(filePath) || !existsAnywhere(folder, context, filePath))
-        {
-          problems.push_back("asset-file: missing or outside the folder: " + filePath);
-        }
+        problems.push_back("asset-file: missing or outside the folder: " + filePath);
       }
-    };
+    }
+  }
 
-    registerFiles("models", modelUUIDs);
-    registerFiles("textures", textureUUIDs);
+  inline ProjectAssets collectAssets(const nlohmann::json& project, const std::filesystem::path& folder,
+                                     const Context& context, Problems& problems)
+  {
+    const auto& assets = project.at("assets");
+    ProjectAssets found;
+    registerFiles(folder, context, listOf(assets, "models"), found.modelUUIDs, found, problems);
+    registerFiles(folder, context, listOf(assets, "textures"), found.textureUUIDs, found, problems);
 
-    const auto scenes = listOf("scenes");
-    const auto prefabs = listOf("prefabs");
-    const auto scriptAssets = listOf("scripts");
-    for (const auto* list : { &scriptAssets, &prefabs, &scenes })
+    found.scenes = listOf(assets, "scenes");
+    found.prefabs = listOf(assets, "prefabs");
+    found.scripts = listOf(assets, "scripts");
+    for (const auto* list : { &found.scripts, &found.prefabs, &found.scenes })
     {
       for (const auto& asset : *list)
       {
-        assetUUIDs.insert(canonical(asset.at("uuid").get<std::string>()));
+        found.assetUUIDs.insert(canonical(asset.at("uuid").get<std::string>()));
       }
     }
 
-    if (manifest)
+    return found;
+  }
+
+  inline void checkEntryScene(const nlohmann::json& scenes, const std::optional<TemplateManifest>& manifest,
+                              Problems& problems)
+  {
+    if (!manifest)
     {
-      bool foundEntry = false;
-      for (const auto& scene : scenes)
-      {
-        foundEntry = foundEntry || scene.at("name").get<std::string>() == manifest->entryScene;
-      }
-
-      if (!foundEntry)
-      {
-        problems.push_back("entryScene: no scene named " + manifest->entryScene);
-      }
+      return;
     }
 
-    Walk walk;
+    bool foundEntry = false;
+    for (const auto& scene : scenes)
+    {
+      foundEntry = foundEntry || scene.at("name").get<std::string>() == manifest->entryScene;
+    }
+
+    if (!foundEntry)
+    {
+      problems.push_back("entryScene: no scene named " + manifest->entryScene);
+    }
+  }
+
+  inline void collectSceneObjects(const nlohmann::json& scenes, Walk& walk)
+  {
     for (const auto& scene : scenes)
     {
       for (const auto& object : scene.at("objects"))
@@ -234,50 +239,74 @@ namespace templateValidation {
         }
       }
     }
+  }
 
+  inline bool prefabInstantiates(const nlohmann::json& prefab, const std::string& name,
+                                 const std::shared_ptr<ComponentRegistry>& componentRegistry,
+                                 Problems& problems)
+  {
+    if (!prefab.contains("body") || !prefab.at("body").is_object())
+    {
+      problems.push_back("prefab: " + name + " has no body");
+      return false;
+    }
+
+    try
+    {
+      ObjectManager scratch(componentRegistry);
+      scratch.instantiate(prefab.at("body"));
+    }
+    catch (const std::exception& e)
+    {
+      problems.push_back("prefab: " + name + " does not instantiate: " + e.what());
+      return false;
+    }
+
+    return true;
+  }
+
+  inline void collectPrefabs(const nlohmann::json& prefabs,
+                             const std::shared_ptr<ComponentRegistry>& componentRegistry, Walk& walk,
+                             Problems& problems)
+  {
     for (const auto& prefab : prefabs)
     {
       const auto name = prefab.value("name", std::string("?"));
-      if (!prefab.contains("body") || !prefab.at("body").is_object())
+      if (prefabInstantiates(prefab, name, componentRegistry, problems))
       {
-        problems.push_back("prefab: " + name + " has no body");
-        continue;
+        collectObject(prefab.at("body"), walk);
       }
-
-      try
-      {
-        ObjectManager scratch(componentRegistry);
-        scratch.instantiate(prefab.at("body"));
-      }
-      catch (const std::exception& e)
-      {
-        problems.push_back("prefab: " + name + " does not instantiate: " + e.what());
-        continue;
-      }
-
-      collectObject(prefab.at("body"), walk);
     }
+  }
 
+  inline void checkReference(const nlohmann::json& component, const char* key,
+                             const std::set<std::string>& known, Problems& problems)
+  {
+    const auto value = component.value(key, std::string());
+    if (!value.empty() && !known.contains(canonical(value)))
+    {
+      problems.push_back(std::string("reference: ") + key + " " + value + " is not registered");
+    }
+  }
+
+  inline void checkReferences(const Walk& walk, const ProjectAssets& assets, Problems& problems)
+  {
     for (const auto* component : walk.components)
     {
-      const auto check = [&](const char* key, const std::set<std::string>& known) {
-        const auto value = component->value(key, std::string());
-        if (!value.empty() && !known.contains(canonical(value)))
-        {
-          problems.push_back(std::string("reference: ") + key + " " + value + " is not registered");
-        }
-      };
-
       if (component->value("type", std::string()) == "ModelRenderer")
       {
-        check("modelUUID", modelUUIDs);
-        check("textureUUID", textureUUIDs);
-        check("specularMapUUID", textureUUIDs);
+        checkReference(*component, "modelUUID", assets.modelUUIDs, problems);
+        checkReference(*component, "textureUUID", assets.textureUUIDs, problems);
+        checkReference(*component, "specularMapUUID", assets.textureUUIDs, problems);
       }
 
-      check("sourceModel", modelUUIDs);
+      checkReference(*component, "sourceModel", assets.modelUUIDs, problems);
     }
+  }
 
+  inline std::set<std::string> checkScriptClasses(const std::filesystem::path& folder, const Context& context,
+                                                  const nlohmann::json& scriptAssets, Problems& problems)
+  {
     const auto builtIn = scriptClassesIn(context.builtInScripts);
     const auto own = scriptClassesIn(folder / "scripts");
     auto classes = builtIn;
@@ -299,6 +328,33 @@ namespace templateValidation {
       }
     }
 
+    return classes;
+  }
+
+  inline void checkFieldUUID(const nlohmann::json& field, const Walk& walk,
+                             const std::set<std::string>& assetUUIDs, Problems& problems)
+  {
+    if (!field.contains("value") || !field.at("value").is_string()
+        || !isUUID(field.at("value").get<std::string>()))
+    {
+      return;
+    }
+
+    const auto value = canonical(field.at("value").get<std::string>());
+    const auto fieldName = field.value("name", std::string("?"));
+    if (walk.objectUUIDs.contains(value))
+    {
+      problems.push_back("script-uuid: field " + fieldName + " holds an object uuid");
+    }
+    else if (!assetUUIDs.contains(value))
+    {
+      problems.push_back("script-uuid: field " + fieldName + " names no registered asset or prefab");
+    }
+  }
+
+  inline void checkScriptEntries(const Walk& walk, const std::set<std::string>& classes,
+                                 const std::set<std::string>& assetUUIDs, Problems& problems)
+  {
     for (const auto* script : walk.scriptEntries)
     {
       const auto className = script->value("className", std::string());
@@ -314,24 +370,42 @@ namespace templateValidation {
 
       for (const auto& field : script->at("fields"))
       {
-        if (!field.contains("value") || !field.at("value").is_string()
-            || !isUUID(field.at("value").get<std::string>()))
-        {
-          continue;
-        }
-
-        const auto value = canonical(field.at("value").get<std::string>());
-        const auto fieldName = field.value("name", std::string("?"));
-        if (walk.objectUUIDs.contains(value))
-        {
-          problems.push_back("script-uuid: field " + fieldName + " holds an object uuid");
-        }
-        else if (!assetUUIDs.contains(value))
-        {
-          problems.push_back("script-uuid: field " + fieldName + " names no registered asset or prefab");
-        }
+        checkFieldUUID(field, walk, assetUUIDs, problems);
       }
     }
+  }
+
+  inline void validateProject(const std::filesystem::path& folder, const Context& context,
+                              const std::optional<TemplateManifest>& manifest,
+                              std::vector<std::string>& problems)
+  {
+    std::ifstream file(folder / "project.ecs3d");
+    if (!file.is_open())
+    {
+      problems.push_back("project: project.ecs3d is missing");
+      return;
+    }
+
+    const auto project = nlohmann::json::parse(file);
+
+    const auto componentRegistry = std::make_shared<ComponentRegistry>();
+    registerDataComponents(*componentRegistry);
+    {
+      AssetRegistry assetRegistry;
+      SceneManager sceneManager;
+      ProjectSerializer(&assetRegistry, &sceneManager, componentRegistry).deserialize(project);
+    }
+
+    const auto assets = collectAssets(project, folder, context, problems);
+    checkEntryScene(assets.scenes, manifest, problems);
+
+    Walk walk;
+    collectSceneObjects(assets.scenes, walk);
+    collectPrefabs(assets.prefabs, componentRegistry, walk, problems);
+    checkReferences(walk, assets, problems);
+
+    const auto classes = checkScriptClasses(folder, context, assets.scripts, problems);
+    checkScriptEntries(walk, classes, assets.assetUUIDs, problems);
   }
 
   inline std::vector<std::string> validate(const std::filesystem::path& folder, const Context& context)
