@@ -254,3 +254,26 @@ TEST(MultiSelectEdit, MixedTopLevelKeysReportsScriptFieldsByName)
   // The whole "fields" key itself is not reported - the per-entry names are more precise.
   EXPECT_EQ(std::ranges::find(mixed, std::string("fields")), mixed.end());
 }
+
+TEST(MultiSelectEdit, ScriptFieldsDifferingOnlyInDisplayNameAreNotMixed)
+{
+  fixtures::Scene scene;
+  const auto a = fixtures::addObject(scene, "A");
+  const auto b = fixtures::addObject(scene, "B");
+
+  const auto scriptA = addMoverScript(a, 1.0f, 5.0f);
+  const auto scriptB = addMoverScript(b, 1.0f, 5.0f);
+  auto relabeled = scriptB->getFields();
+  relabeled[0]["displayName"] = "Top Speed";
+  scriptB->setFields(relabeled);
+
+  EXPECT_TRUE(componentFieldDelta::mixedTopLevelKeys({ scriptA->serialize(), scriptB->serialize() }).empty());
+
+  auto changedValue = scriptB->getFields();
+  changedValue[0]["value"] = 4.0f;
+  scriptB->setFields(changedValue);
+
+  const auto mixed = componentFieldDelta::mixedTopLevelKeys({ scriptA->serialize(), scriptB->serialize() });
+  EXPECT_NE(std::ranges::find(mixed, std::string("fields.speed")), mixed.end());
+  EXPECT_FALSE(componentFieldDelta::changedTopLevelKeys(scriptA->serialize(), scriptB->serialize()).empty());
+}

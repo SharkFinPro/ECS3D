@@ -93,6 +93,7 @@ add_executable(${PROJECT_NAME}
   LogFilterTest.cpp
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
+  ScriptFieldLabelTest.cpp
   AttachedScriptsTest.cpp
   ScriptSystemLifecycleTest.cpp
   ScriptSystemSceneScriptTest.cpp
@@ -105,6 +106,7 @@ add_executable(${PROJECT_NAME}
   CompoundFlushTest.cpp
   CompoundRollingArmTest.cpp
   SettingsStoreTest.cpp
+  RecentProjectsTest.cpp
   FileSinkTest.cpp
   LogFilePathTest.cpp
   RemoteLogSinkTest.cpp
@@ -142,6 +144,7 @@ add_executable(${PROJECT_NAME}
   PhysicsGenericRestingShapesTest.cpp
   PlanarHullTest.cpp
   PresetsTest.cpp
+  TemplateManifestTest.cpp
   ProjectPathsTest.cpp
   PhysicsStackingTest.cpp
   PhysicsTwoBodyTest.cpp
@@ -149,6 +152,8 @@ add_executable(${PROJECT_NAME}
   PhysicsFrictionHoldTest.cpp
   PhysicsSlopeStackTest.cpp
   DefaultProjectTest.cpp
+  DefaultShapesTest.cpp
+  ShapeDropTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp
   ObjectComponentsChangedTest.cpp
@@ -232,6 +237,7 @@ add_executable(${PROJECT_NAME}
   # The server's built-in project is plain JSON over json, glm and uuid, so it is compiled in the same way
   # rather than linking the server app.
   ../apps/server/DefaultProject.cpp
+  ../apps/server/DefaultShapes.cpp
 
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
   # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).
