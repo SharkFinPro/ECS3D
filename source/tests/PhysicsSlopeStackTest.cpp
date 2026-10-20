@@ -242,7 +242,7 @@ TEST(PhysicsSlopeStack, TraceLanding)
   }
 
   PhysicsSystem::traceSink = nullptr;
-  SUCCEED();
+  ADD_FAILURE() << "diagnostic trace only; fails so ctest prints its output";
 }
 
 TEST(PhysicsSlopeStack, AStackAboveTheFrictionAngleSlides)
