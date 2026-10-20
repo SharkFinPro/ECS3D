@@ -360,6 +360,20 @@ namespace {
     EXPECT_EQ(findField(script, "count").at("type"), "int");
   }
 
+  TEST_F(ScriptSystemTest, ADisplayNameEqualToTheFieldNameIsNotStored)
+  {
+    state.exposedByClass["Mover"] =
+      R"([{"name":"speed","displayName":"speed","type":"float"},{"name":"count","displayName":"Count","type":"int"}])";
+    const auto a = fixtures::addObject(scene, "A");
+    const auto script = addScript(a, "Mover");
+    scriptSystem.start(manager());
+
+    scriptSystem.syncFieldsToData(manager());
+
+    EXPECT_FALSE(findField(script, "speed").contains("displayName"));
+    EXPECT_EQ(findField(script, "count").at("displayName"), "Count");
+  }
+
   TEST_F(ScriptSystemTest, AChangedDisplayNameKeepsTheStoredValue)
   {
     state.exposedByClass["Mover"] = R"([{"name":"speed","displayName":"Old Label","type":"float"}])";

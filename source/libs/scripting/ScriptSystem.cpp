@@ -15,7 +15,13 @@ namespace {
   std::string exposedDisplayName(const nlohmann::json& field)
   {
     const auto it = field.find("displayName");
-    return it != field.end() && it->is_string() ? it->get<std::string>() : std::string();
+    if (it == field.end() || !it->is_string())
+    {
+      return {};
+    }
+
+    auto displayName = it->get<std::string>();
+    return displayName == field.at("name").get<std::string>() ? std::string() : displayName;
   }
 }
 

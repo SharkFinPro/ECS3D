@@ -1,8 +1,8 @@
 #include "ScriptEditor.h"
 #include "../ComponentEditor.h"
 #include "../GuiComponents.h"
-#include "ScriptFieldLabel.h"
 #include "../MixedFields.h"
+#include "ScriptFieldLabel.h"
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
