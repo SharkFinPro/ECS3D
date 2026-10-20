@@ -18,14 +18,17 @@
 // "Untitled (from <name>)", or "Untitled (from the built-in project)" without a name.
 [[nodiscard]] std::string untitledTitle(const std::optional<std::string>& templateName);
 
-// <Documents>/ECS3D Projects. Empty when the environment names no home directory.
+// <Documents>/ECS3D Projects, with Documents from the system on Windows (it may be redirected) and
+// $HOME/Documents elsewhere. Empty when no home directory can be found.
 [[nodiscard]] std::filesystem::path defaultProjectsDirectory();
 
-// A folder a new project can be created in: it does not exist, or exists as an empty directory.
+// A folder a new project can be created in: it does not exist, or it is an empty directory, possibly
+// holding only empty assets/ and scripts/ folders (what a failed earlier save leaves behind).
 [[nodiscard]] bool folderIsFreeForNewProject(const std::filesystem::path& folder);
 
 // The first of "<name>", "<name> 2", "<name> 3", ... under projectsDir that isTaken does not report.
-// Characters a folder name cannot hold are dropped from templateName; nothing left becomes "New Project".
+// Characters a folder name cannot hold are dropped from templateName, the name is capped at 64 bytes,
+// and a Windows device name such as CON gains " Project". Nothing left becomes "New Project".
 [[nodiscard]] std::filesystem::path defaultSaveFolder(const std::filesystem::path& projectsDir,
                                                       const std::string& templateName,
                                                       const std::function<bool(const std::filesystem::path&)>& isTaken);
@@ -38,6 +41,12 @@
 // folder), or nullopt when it may.
 [[nodiscard]] std::optional<std::string> templateSaveRefusal(const std::filesystem::path& folder,
                                                              const std::filesystem::path& templateRoot);
+
+// Importing or creating a file writes into the project's folder, which a template must not receive.
+[[nodiscard]] constexpr bool assetWritesBlocked(const bool isTemplate, const bool savedToFolderSinceOpen)
+{
+  return isTemplate && !savedToFolderSinceOpen;
+}
 
 // Save writes in place unless the project is a template that has not yet been saved to a folder of its own.
 [[nodiscard]] constexpr bool saveActsAsSaveAs(const bool isTemplate, const bool savedToFolderSinceOpen)

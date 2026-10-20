@@ -95,6 +95,23 @@ bool SaveUI::save()
   return writeProject(m_saveFile);
 }
 
+bool SaveUI::isUntitledTemplate() const
+{
+  return assetWritesBlocked(m_isTemplate, m_savedToFolderSinceOpen);
+}
+
+bool SaveUI::blockAssetWrites()
+{
+  if (!isUntitledTemplate())
+  {
+    return false;
+  }
+
+  Log::info(LogCategory::editor, "Save the project to a folder first - templates are never modified.");
+  static_cast<void>(saveAs());
+  return true;
+}
+
 bool SaveUI::saveAs()
 {
   std::filesystem::path folder;
@@ -106,8 +123,12 @@ bool SaveUI::saveAs()
     startIn = defaultProjectsDirectory();
     if (!startIn.empty())
     {
+      // The dialog only starts in a folder that exists, so make it when missing.
       std::error_code error;
-      std::filesystem::create_directories(startIn, error);
+      if (!std::filesystem::exists(startIn, error))
+      {
+        std::filesystem::create_directories(startIn, error);
+      }
       defaultName = pathToUtf8(defaultSaveFolder(startIn, m_templateName.value_or("New Project")).filename());
     }
   }

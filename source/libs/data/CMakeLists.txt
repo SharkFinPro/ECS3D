@@ -102,6 +102,11 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DLog
 )
 
+if(WIN32)
+  # ProjectOrigin asks the system for the Documents folder.
+  target_link_libraries(${PROJECT_NAME} PRIVATE shell32 ole32)
+endif()
+
 # ECS3DData is feature-complete: all component data, Object/ObjectManager, scenes (SceneManager/
 # SceneAsset), the AssetRegistry, and the ProjectSerializer live here, with no Vulkan/imgui includes.
 # The remaining migration work is in the systems/editor/net/clrHost libs and the app wiring.

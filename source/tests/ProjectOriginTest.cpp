@@ -119,8 +119,58 @@ TEST_F(ProjectOriginTest, DefaultSaveFolderTakesTheFirstFreeName)
 TEST_F(ProjectOriginTest, DefaultSaveFolderCleansTheName)
 {
   EXPECT_EQ(defaultSaveFolder(m_dir, "A/B:C?"), m_dir / "ABC");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "A\\B|C"), m_dir / "ABC");
   EXPECT_EQ(defaultSaveFolder(m_dir, "  "), m_dir / "New Project");
   EXPECT_EQ(defaultSaveFolder(m_dir, "???"), m_dir / "New Project");
+}
+
+TEST_F(ProjectOriginTest, DefaultSaveFolderKeepsNonAsciiBytes)
+{
+  const std::string name = "Caf\xC3\xA9";
+  const auto folder = defaultSaveFolder(m_dir, name);
+
+  EXPECT_EQ(pathToUtf8(folder.filename()), name);
+}
+
+TEST_F(ProjectOriginTest, DefaultSaveFolderAvoidsDeviceNames)
+{
+  EXPECT_EQ(defaultSaveFolder(m_dir, "con"), m_dir / "con Project");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "NUL.txt"), m_dir / "NUL.txt Project");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "Com1"), m_dir / "Com1 Project");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "LPT9"), m_dir / "LPT9 Project");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "Com0"), m_dir / "Com0");
+  EXPECT_EQ(defaultSaveFolder(m_dir, "Console"), m_dir / "Console");
+}
+
+TEST_F(ProjectOriginTest, DefaultSaveFolderCapsTheNameLength)
+{
+  const auto folder = defaultSaveFolder(m_dir, std::string(200, 'a'));
+  EXPECT_EQ(pathToUtf8(folder.filename()), std::string(64, 'a'));
+
+  // 63 ASCII bytes then a two-byte letter would straddle the cap; the letter must be dropped whole.
+  const auto cut = defaultSaveFolder(m_dir, std::string(63, 'a') + "\xC3\xA9\xC3\xA9");
+  EXPECT_EQ(pathToUtf8(cut.filename()), std::string(63, 'a'));
+}
+
+TEST_F(ProjectOriginTest, FolderHoldingOnlyEmptyProjectSubfoldersIsFree)
+{
+  fs::create_directories(m_dir / "retry" / "assets");
+  fs::create_directories(m_dir / "retry" / "scripts");
+  EXPECT_TRUE(folderIsFreeForNewProject(m_dir / "retry"));
+
+  touch("retry/assets/a.glb");
+  EXPECT_FALSE(folderIsFreeForNewProject(m_dir / "retry"));
+
+  fs::create_directories(m_dir / "other" / "elsewhere");
+  EXPECT_FALSE(folderIsFreeForNewProject(m_dir / "other"));
+}
+
+TEST_F(ProjectOriginTest, AssetWritesAreBlockedOnlyOnAnUnsavedTemplate)
+{
+  EXPECT_TRUE(assetWritesBlocked(true, false));
+  EXPECT_FALSE(assetWritesBlocked(true, true));
+  EXPECT_FALSE(assetWritesBlocked(false, false));
+  EXPECT_FALSE(assetWritesBlocked(false, true));
 }
 
 TEST_F(ProjectOriginTest, DefaultSaveFolderSkipsFilledFoldersButNotEmptyOnes)
