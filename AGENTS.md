@@ -127,7 +127,7 @@
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
-  `TryConvertFieldValue`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). The component wrappers (`World`, `Transform`, `RigidBody`, `Camera`, `Collider`, `ModelRenderer`,
+  `TryConvertFieldValue` (including its string rules)/`StringFieldToCoTaskMem`/`MapTypeName`/`Key`, plus the by-name script lookup `TryFindScript`/`ScriptHandle`, and the fault gate and init/reload sweep through `RunGuarded`/`Initialize`/`Reload`, which `ResetForTests` returns to a fresh state). The component wrappers (`World`, `Transform`, `RigidBody`, `Camera`, `Collider`, `ModelRenderer`,
   `LightRenderer`, `PlayerController`, `InputUtils`/`PlayerInput`, `ScriptBase`) are covered too:
   `FakeNatives.Install()` points every `NativeBindings.*` table at `[UnmanagedCallersOnly]` fakes that record
   each call and answer from canned values (a native `bool` is a `byte` there, since the test assembly keeps runtime
@@ -457,7 +457,10 @@ without the `tryGet` ceremony since `ScriptBase` constructs one for the script's
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
 without deciding its scripting story can't go unnoticed. Script field edits are validated
 (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
-refused with a warning and does not fault the script.
+refused with a warning and does not fault the script. Exposed fields may be float, int, bool, string or
+vector3: each type has a `getField*`/`setField*` export, and a string crosses as 8-bit Unicode text that the
+native side frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
+every other type, and the Inspector draws a string field as a text box.
 A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
 Two script classes that share a simple name fail the compile, with a message naming their files. The runtime finds
 scripts by that name, so this holds across namespaces too; the parts of one `partial` class count as one class.
