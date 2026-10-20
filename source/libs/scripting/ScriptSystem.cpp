@@ -8,6 +8,7 @@
 #include <objects/components/Script.h>
 #include <scenes/SceneAsset.h>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <system_error>
 #include <utility>
 
@@ -582,7 +583,12 @@ void ScriptSystem::applySceneScriptFieldEdit(const uuids::uuid& sceneUUID,
 
 bool ScriptSystem::pollScriptChanges(SceneAsset& scene, const float dt)
 {
-  ensureEngine();
+  // Never builds the engine: a runtime that keeps failing to initialize must not be retried on every loop
+  // pass. The snapshot, start and tick paths own that retry.
+  if (!m_engine)
+  {
+    return false;
+  }
 
   const auto objectManager = scene.getObjectManager();
   BindingContext::setObjectManager(objectManager.get());
@@ -604,7 +610,8 @@ bool ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
 {
   constexpr float minimumSnapshotInterval = 1.0f / 2.0f; // 2 checks every second
 
-  m_timeSinceLastSnapshot += dt;
+  // Capped so one long stall (a blocking reload) cannot bank more than a single interval.
+  m_timeSinceLastSnapshot += std::min(dt, minimumSnapshotInterval);
 
   if (m_timeSinceLastSnapshot < minimumSnapshotInterval)
   {
@@ -623,8 +630,8 @@ bool ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
   try
   {
     // Preserve live field values across the reload: read them back into each Script's data blob, then
-    // recompile. The new instances are recreated lazily on the next fixedUpdate, which pushes the
-    // refreshed blob back in.
+    // recompile. New instances are attached lazily (the next fixedUpdate, or pollScriptChanges for a
+    // stopped scene), which pushes the refreshed blob back in.
     syncFields();
 
     const bool replaced = m_engine->reloadScripts();
@@ -1023,12 +1030,19 @@ ScriptSystem::ScriptsSnapshot ScriptSystem::takeSnapshot() const
 {
   ScriptsSnapshot times;
   std::error_code ec;
-  for (auto& entry : std::filesystem::recursive_directory_iterator(m_userScriptsDir, ec))
+  std::filesystem::recursive_directory_iterator it(m_userScriptsDir, ec);
+  const std::filesystem::recursive_directory_iterator end;
+
+  // increment(ec) rather than ++, which throws on an entry that cannot be read; a missing directory leaves
+  // the iterator at end, giving the same empty snapshot as before.
+  while (!ec && it != end)
   {
-    if (entry.is_regular_file(ec))
+    if (it->is_regular_file(ec))
     {
-      times[entry.path().string()] = entry.last_write_time(ec);
+      times[it->path().string()] = it->last_write_time(ec);
     }
+
+    it.increment(ec);
   }
 
   return times;

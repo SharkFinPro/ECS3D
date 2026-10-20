@@ -259,7 +259,7 @@ bool ServerApp::scriptsLive() const
 void ServerApp::pollScriptChangesWhileStopped(const float dt) const
 {
   const auto scene = m_sceneManager->getCurrentScene();
-  if (!m_options.editMode || !scene || m_sceneManager->getSceneStatus() != SceneStatus::stopped)
+  if (!shouldPollScriptsWhileStopped(m_options.editMode, scene != nullptr, m_sceneManager->getSceneStatus()))
   {
     return;
   }
