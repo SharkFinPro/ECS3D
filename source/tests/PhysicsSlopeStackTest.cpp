@@ -177,8 +177,8 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
   const auto& body = *stack.bodies[0];
   const float perBox = body.getMass() * -body.getGravity() * dt * 0.1f * glm::dot(stack.normal, glm::vec3(0, 1, 0));
 
-  // A top box that slid off would leave the level under it nothing to pass on. Measured along the slope, so sinking into the
-  // boxes below does not count; the slide this guards against was over a unit.
+  // A top box that slid off would leave the level under it nothing to pass on.
+  // Measured along the slope, so sinking into the boxes below does not count; the slide this guards against was over a unit.
   constexpr float topBoxBound = 0.25f;
   EXPECT_LT(std::fabs(stack.slidDownhill(count - 1)), topBoxBound);
   EXPECT_LT(std::fabs(glm::dot(stack.positionOf(count - 1) - stack.positionOf(count - 2), stack.downhill)), 1.0f);
