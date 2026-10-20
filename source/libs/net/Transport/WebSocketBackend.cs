@@ -86,6 +86,9 @@ internal sealed class WebSocketBackend : TransportBackend
   private Thread? _clientThread;
   private volatile bool _clientRunning;
 
+  // Lets a test hold a connection's thread between dropping it and delivering its disconnect.
+  internal Action<int>? ServerConnectionExiting;
+
   // Lets a test reconnect inside the window between the receive loop stopping and releasing its connection.
   internal Action? ClientReceiveLoopExiting;
 
@@ -398,12 +401,12 @@ internal sealed class WebSocketBackend : TransportBackend
         {
           _connections.Remove(conn);
         }
-
-        _connectionThreads.Remove(Thread.CurrentThread);
       }
 
       if (conn != null)
       {
+        ServerConnectionExiting?.Invoke(connId);
+
         // Release any player slot the server bound to this connection (only admitted connections, which
         // are the ones that got a connId, reach here with conn != null).
         Transport.DeliverServerDisconnect(connId);
@@ -419,6 +422,12 @@ internal sealed class WebSocketBackend : TransportBackend
       }
 
       try { tcp.Close(); } catch { /* ignore */ }
+
+      // Last, so ServerStop's join covers this thread through the disconnect delivery above.
+      lock (_clientsLock)
+      {
+        _connectionThreads.Remove(Thread.CurrentThread);
+      }
     }
   }
 

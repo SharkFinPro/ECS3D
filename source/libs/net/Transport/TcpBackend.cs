@@ -68,6 +68,9 @@ internal sealed class TcpBackend : TransportBackend
   // auto-tune large enough that a stalled peer never blocks a send. Left unset in production.
   internal int? AcceptedSendBufferBytes;
 
+  // Lets a test hold a connection's thread between closing its socket and delivering its disconnect.
+  internal Action<int>? ServerConnectionExiting;
+
   // -- Client --
   private TcpClient? _client;
   private Thread? _clientThread;
@@ -403,14 +406,22 @@ internal sealed class TcpBackend : TransportBackend
       }
 
       _pending.Remove(client);
-      _connectionThreads.Remove(Thread.CurrentThread);
     }
 
     try { client.Close(); } catch { /* ignore */ }
 
+    ServerConnectionExiting?.Invoke(connId);
+
     // Let the server release any player slot bound to this connection. A no-op on the C++ side if the
     // connection never joined (e.g. a rejected handshake), since it holds no slot for it.
     Transport.DeliverServerDisconnect(connId);
+
+    // Last, so ServerStop's join still covers this thread through the delivery above. Removed any earlier,
+    // a stop that raced the exit would return before the callback, which could land in the next owner.
+    lock (_clientsLock)
+    {
+      _connectionThreads.Remove(Thread.CurrentThread);
+    }
   }
 
   public override byte ClientConnect(string host, int port, byte role, string token)
