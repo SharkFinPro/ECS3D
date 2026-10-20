@@ -100,6 +100,11 @@ void AssetBrowserPanel::setAddAssetCallback(AddAssetCallback callback)
   m_onAddAsset = std::move(callback);
 }
 
+void AssetBrowserPanel::setBlockWritesCallback(BlockWritesCallback callback)
+{
+  m_blockWrites = std::move(callback);
+}
+
 void AssetBrowserPanel::setSelection(std::shared_ptr<EditorSelection> selection)
 {
   m_selection = std::move(selection);
@@ -563,6 +568,15 @@ void AssetBrowserPanel::commitAsset()
 {
   if (!m_onAddAsset)
   {
+    return;
+  }
+
+  const bool writesFiles = m_pending.type == PendingAsset::Type::Model ||
+                           m_pending.type == PendingAsset::Type::Texture ||
+                           m_pending.type == PendingAsset::Type::Script;
+  if (writesFiles && m_blockWrites && m_blockWrites())
+  {
+    m_pending = {};
     return;
   }
 
