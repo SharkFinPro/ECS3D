@@ -13,6 +13,7 @@
 #include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <cmath>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <utility>
@@ -192,6 +193,58 @@ TEST(PhysicsSlopeStack, EachLevelPassesItsWholeLoadDownTheSlope)
       EXPECT_NEAR(added, perBox, 0.01f * perBox);
     }
   }
+}
+
+TEST(PhysicsSlopeStack, TraceLanding)
+{
+  constexpr int count = 5;
+  constexpr int ticks = 60;
+  SlopeStack stack(count, 20.0f);
+
+  int tick = 0;
+  PhysicsSystem::traceSink = [&tick](const char* line)
+  {
+    std::printf("TRACE hook tick=%d %s
+", tick, line);
+  };
+
+  const auto printState = [&stack](const int at)
+  {
+    for (size_t level = 0; level < stack.boxes.size(); ++level)
+    {
+      const auto transform = fixtures::transformOf(stack.boxes[level]);
+      const auto& body = *stack.bodies[level];
+      const auto position = transform->getPosition();
+      const auto rotation = transform->getRotation();
+      const auto velocity = body.getVelocity();
+      const auto spin = body.getAngularVelocity();
+      const auto support = body.getSupportNormal();
+      const auto held = body.getHeldImpulse();
+
+      std::printf("TRACE state tick=%d box=%zu pos=(%.5f %.5f %.5f) rotDeg=(%.4f %.4f %.4f) vel=(%.5f %.5f %.5f) "
+                  "angVelDegPerSec=(%.4f %.4f %.4f) falling=%d supportNormal=(%.4f %.4f %.4f) stackedLoad=%.5f "
+                  "heldImpulse=(%.5f %.5f %.5f)
+",
+                  at, level, static_cast<double>(position.x), static_cast<double>(position.y),
+                  static_cast<double>(position.z), static_cast<double>(rotation.x), static_cast<double>(rotation.y),
+                  static_cast<double>(rotation.z), static_cast<double>(velocity.x), static_cast<double>(velocity.y),
+                  static_cast<double>(velocity.z), static_cast<double>(spin.x), static_cast<double>(spin.y),
+                  static_cast<double>(spin.z), static_cast<int>(body.isFalling()), static_cast<double>(support.x),
+                  static_cast<double>(support.y), static_cast<double>(support.z),
+                  static_cast<double>(body.getStackedLoad()), static_cast<double>(held.x),
+                  static_cast<double>(held.y), static_cast<double>(held.z));
+    }
+  };
+
+  printState(0);
+  for (tick = 1; tick <= ticks; ++tick)
+  {
+    stack.run(1);
+    printState(tick);
+  }
+
+  PhysicsSystem::traceSink = nullptr;
+  SUCCEED();
 }
 
 TEST(PhysicsSlopeStack, AStackAboveTheFrictionAngleSlides)

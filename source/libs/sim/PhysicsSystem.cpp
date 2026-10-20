@@ -15,6 +15,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -59,6 +60,21 @@ namespace {
 
   // A translation vector this short has no direction to normalize, so it is no contact at all.
   constexpr float minTranslationLengthSquared = 1e-12f;
+
+  template <typename... Args>
+  void trace(const char* format, const Args... args)
+  {
+    if (!PhysicsSystem::traceSink)
+    {
+      return;
+    }
+
+    char buffer[768];
+    std::snprintf(buffer, sizeof(buffer), format, args...);
+    PhysicsSystem::traceSink(buffer);
+  }
+
+#define V3(v) static_cast<double>((v).x), static_cast<double>((v).y), static_cast<double>((v).z)
 
   // glm's Euler constructor composes Rz * Ry * Rx, the same order the colliders and renderer apply.
   glm::quat orientationOf(const Transform& transform)
@@ -342,6 +358,9 @@ namespace {
     }
 
     const auto turn = glm::angleAxis(std::atan2(sine, cosine), axis / sine);
+    trace("layFlush angleDeg=%.4f axis=(%.4f %.4f %.4f) sine=%.5f max=%.5f",
+          static_cast<double>(glm::degrees(std::atan2(sine, cosine))), V3(axis / sine), static_cast<double>(sine),
+          static_cast<double>(maxTiltSine));
     transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientation)));
   }
 
@@ -357,6 +376,7 @@ namespace {
     }
 
     const auto turn = glm::angleAxis(-std::asin(sine), glm::normalize(glm::cross(axis, supportNormal)));
+    trace("layCapsuleFlush angleDeg=%.4f", static_cast<double>(glm::degrees(-std::asin(sine))));
     transform.setWorldRotation(glm::degrees(glm::eulerAngles(turn * orientationOf(transform))));
   }
 }
@@ -444,6 +464,9 @@ void PhysicsSystem::applyVelocityChange(RigidBody& body, const Transform& transf
 
   if (const auto inverseInertia = worldInverseInertia(body, transform))
   {
+    trace("    pushOffCenter %s dv=(%.5f %.5f %.5f) arm=(%.4f %.4f %.4f) dW=(%.4f %.4f %.4f)",
+          body.getOwner()->getName().c_str(), V3(velocityChange), V3(r),
+          V3(glm::degrees(*inverseInertia * glm::cross(r, velocityChange)) / dt));
     body.setAngularVelocity(body.getAngularVelocity() +
                             glm::degrees(*inverseInertia * glm::cross(r, velocityChange)) / dt);
   }
@@ -475,8 +498,12 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
     return;
   }
 
+  trace("contact1 body=%s other=%s mtv=(%.5f %.5f %.5f) depth=%.5f point=(%.4f %.4f %.4f) w0=(%.4f %.4f %.4f)",
+        body.getOwner()->getName().c_str(), other->getName().c_str(), V3(minimumTranslationVector),
+        static_cast<double>(glm::length(minimumTranslationVector)), V3(collisionPoint), V3(body.getAngularVelocity()));
   resolve(pairOf(body, *transform, collider, other, normalize(minimumTranslationVector)), minimumTranslationVector,
           collisionPoint, 0.0f, dt);
+  trace("contact1 end w=(%.4f %.4f %.4f)", V3(body.getAngularVelocity()));
 }
 
 void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Collider>& collider,
@@ -511,11 +538,26 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   auto pair = pairOf(body, *transform, collider, other, normal);
   noteSupportNormal(body, normal);
 
+  trace("contact body=%s other=%s n=(%.5f %.5f %.5f) depth=%.5f points=%d supportPt=(%.4f %.4f %.4f) underCom=%d "
+        "bodyResting=%d otherResting=%d com=(%.4f %.4f %.4f)",
+        body.getOwner()->getName().c_str(), other->getName().c_str(), V3(normal),
+        static_cast<double>(glm::length(minimumTranslationVector)), static_cast<int>(collisionPoints.size()),
+        V3(support.point), static_cast<int>(support.underCenterOfMass), static_cast<int>(pair.body.resting),
+        static_cast<int>(pair.other.resting), V3(transform->getPosition()));
+  for (const auto& point : collisionPoints)
+  {
+    trace("  manifoldPoint (%.4f %.4f %.4f)", V3(point));
+  }
+  trace("  before v=(%.5f %.5f %.5f) w=(%.4f %.4f %.4f) otherV=(%.5f %.5f %.5f) otherW=(%.4f %.4f %.4f)",
+        V3(body.getVelocity()), V3(body.getAngularVelocity()),
+        V3(pair.other.body ? pair.other.body->getVelocity() : glm::vec3(0)), V3(spinOf(other)));
+
   // Two resting bodies: the one above resolves the pair in its own pass, where its support takes the push. Met again
   // from below, the overlap would be separated fully, and the pair would then touch exactly at the next tick's
   // start, which the sweep misses, letting the upper body fall unheld and slide down a slope.
   if (normal.y < fromBelowNormalY && pair.body.resting && pair.other.resting)
   {
+    trace("  skippedFromBelow");
     return;
   }
 
@@ -524,13 +566,20 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
   const float faceRadius = twistRadius(pair, collider, support, transform->getPosition(), collisionPoints);
   markLineOnOther(pair, other, collisionPoints);
+  trace("  afterSpinShed w=(%.4f %.4f %.4f) faceRadius=%.4f line=%d", V3(body.getAngularVelocity()),
+        static_cast<double>(faceRadius), static_cast<int>(pair.lineContact));
   resolve(pair, minimumTranslationVector, support.point, faceRadius, dt);
+  trace("  afterResolve v=(%.5f %.5f %.5f) w=(%.4f %.4f %.4f) otherV=(%.5f %.5f %.5f) otherW=(%.4f %.4f %.4f)",
+        V3(body.getVelocity()), V3(body.getAngularVelocity()),
+        V3(pair.other.body ? pair.other.body->getVelocity() : glm::vec3(0)), V3(spinOf(other)));
 
   if (normal.y > 0.0f)
   {
     settleOnFace(body, *transform, collider, other, pair, support, dt);
   }
 
+  trace("  afterSettle w=(%.4f %.4f %.4f) rot=(%.4f %.4f %.4f)", V3(body.getAngularVelocity()),
+        V3(transform->getRotation()));
   comeToRest(body, other, normal);
 }
 
@@ -557,6 +606,7 @@ void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const st
 
   if (support.underCenterOfMass)
   {
+    trace("  settle: under center of mass, layFlush");
     layFlush(transform, *faces, flushTiltSine);
     return;
   }
@@ -570,6 +620,7 @@ void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const st
     return;
   }
 
+  trace("  settle: lands flat this tick (edge support), neighborCos=%.3f", static_cast<double>(faces->neighborCosine));
   layFlush(transform, *faces, 1.0f);
 
   if (const auto flat = restingFacesOf(transform, collider, other, pair.normal))
@@ -577,6 +628,7 @@ void PhysicsSystem::settleOnFace(RigidBody& body, Transform& transform, const st
     const auto flatCorners = clampedCorners(*flat);
     stopSpinIntoSupport(body, transform, other, pair.normal, flatCorners);
     const auto faceSupport = findSupport(transform.getPosition(), pair.normal, flatCorners);
+    trace("  settle: second impulse at (%.4f %.4f %.4f)", V3(faceSupport.point));
     applyContactImpulse(pair, faceSupport.point, grindingRadius(faceSupport.point, flatCorners), dt);
   }
 }
@@ -714,6 +766,8 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
   }
 
   const float target = (1.0f + restitution(pair, closingSpeed, dt)) * closingSpeed;
+  trace("  impulse: point=(%.4f %.4f %.4f) closing=%.5f target=%.5f faceRadius=%.4f", V3(point),
+        static_cast<double>(closingSpeed), static_cast<double>(target), static_cast<double>(faceRadius));
 
   const Side* held = pair.other.resting && pair.normal.y > 0.0f ? &pair.other
                      : pair.body.resting && pair.normal.y < 0.0f ? &pair.body
@@ -732,6 +786,7 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     }
 
     impulse = target / resistance;
+    trace("  impulse: free pair impulse=%.5f", static_cast<double>(impulse));
     push(pair.body, impulse * pair.normal, point, true, dt);
     push(pair.other, -impulse * pair.normal, point, true, dt);
   }
@@ -749,6 +804,9 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     const float heldResistance = glm::dot(-freeDirection, responseAt(*held, point, -freeDirection, false));
     const auto [pressed, squeezed] = squeeze(*held, -freeDirection, target, freeResistance, heldResistance);
     impulse = pressed;
+    trace("  impulse: held by %s pressed=%.5f squeezed=%.5f freeRes=%.5f heldRes=%.5f",
+          held->body->getOwner()->getName().c_str(), static_cast<double>(pressed), static_cast<double>(squeezed),
+          static_cast<double>(freeResistance), static_cast<double>(heldResistance));
 
     push(freeSide, impulse * freeDirection, point, true, dt);
     push(*held, -squeezed * freeDirection, point, false, dt);
@@ -763,6 +821,10 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
     const float passedOn = load * std::max(glm::dot(freeDirection, supportNormalOf(*held->body)), 0.0f);
     held->body->setStackedLoad(held->body->getStackedLoad() + passedOn);
   }
+
+  trace("  load=%.5f freeStacked=%.5f heldStackedAfter=%.5f", static_cast<double>(load),
+        static_cast<double>(freeSide.body->getStackedLoad()),
+        static_cast<double>(held ? held->body->getStackedLoad() : 0.0f));
 
   // Met from below, the contact's friction is resolved as it would be from above, where the support takes the drag.
   applyFriction(held == &pair.body ? mirrored(pair) : pair, point, load, faceRadius > 0.0f && !pair.lineContact, dt);
@@ -851,6 +913,8 @@ void PhysicsSystem::resistSpin(const Pair& pair, const glm::vec3& axis, const fl
   }
 
   const float impulse = std::min(rate / resistance, limit);
+  trace("  resistSpin axis=(%.3f %.3f %.3f) rate=%.6f limit=%.5f impulse=%.5f", V3(axis), static_cast<double>(rate),
+        static_cast<double>(limit), static_cast<double>(impulse));
 
   auto& body = *pair.body.body;
   body.setAngularVelocity(body.getAngularVelocity() - glm::degrees(*bodyInertia * axis * (impulse / bodyMass)) / dt);
@@ -927,6 +991,12 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   }
 
   const float impulse = std::min(stopping, grip);
+  trace("  friction: speed=%.5f dir=(%.4f %.4f %.4f) turns=%d otherHeld=%d heldCap=%.5f stopping=%.5f grip=%.5f "
+        "impulse=%.5f bodyRes=%.5f otherRes=%.5f at=%s",
+        static_cast<double>(speed), V3(direction), static_cast<int>(turns), static_cast<int>(otherHeld),
+        static_cast<double>(held), static_cast<double>(stopping), static_cast<double>(grip),
+        static_cast<double>(impulse), static_cast<double>(bodyResistance), static_cast<double>(otherResistance),
+        turns ? "point" : "center");
   stopBody(pair, point, direction, impulse, impulse >= stopping ? impulse * bodyResistance : 0.0f, turns, dt);
 
   // The support takes the part it can hold, and holds the resting body from turning, so only the rest moves it.
@@ -1011,6 +1081,8 @@ void PhysicsSystem::holdAgainstDrive(const Pair& pair, const glm::vec3& directio
     return;
   }
 
+  trace("  holdAgainstDrive: drift=%.5f stopped=%.5f moveBack=%.5f", static_cast<double>(length),
+        static_cast<double>(stopped), static_cast<double>(length * std::min(1.0f, stopped / length)));
   pair.body.transform->moveWorld(-drift * std::min(1.0f, stopped / length));
 }
 
@@ -1203,6 +1275,10 @@ void PhysicsSystem::stopSpinIntoSupport(RigidBody& body, const Transform& transf
     }
   }
 
+  if (angularVelocity != body.getAngularVelocity())
+  {
+    trace("  spinShed from=(%.4f %.4f %.4f) to=(%.4f %.4f %.4f)", V3(body.getAngularVelocity()), V3(angularVelocity));
+  }
   body.setAngularVelocity(angularVelocity);
 }
 
@@ -1213,6 +1289,7 @@ void PhysicsSystem::comeToRest(RigidBody& body, const std::shared_ptr<Object>& o
   const auto supportSpin = spinOf(other);
   if (normal.y > 0.0f && glm::length(body.getAngularVelocity() - supportSpin) < restAngularSpeed)
   {
+    trace("  comeToRest zeroes spin %.5f", static_cast<double>(glm::length(body.getAngularVelocity() - supportSpin)));
     body.setAngularVelocity(supportSpin);
   }
 }

@@ -4,6 +4,7 @@
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -17,6 +18,9 @@ class Collider;
 
 class PhysicsSystem {
 public:
+  // Temporary diagnostics: when set, contact resolution reports each step as a line of text.
+  static inline std::function<void(const char*)> traceSink;
+
   static void fixedUpdate(const ObjectManager& objectManager, float dt);
 
   // A change of velocity at position, in units per tick like the velocity it is added to. Mass does not scale
