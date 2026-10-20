@@ -128,8 +128,9 @@ std::filesystem::path pathFromUtf8(const char* utf8)
     return {};
   }
 
-  const std::string_view view(utf8);
-  return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(view.data()), view.size()));
+  // A char8_t range, not a std::u8string: clang with libstdc++ 12 leaves that constructor undefined at link time.
+  const auto* begin = reinterpret_cast<const char8_t*>(utf8);
+  return std::filesystem::path(begin, begin + std::string_view(utf8).size());
 }
 
 std::string pathToUtf8(const std::filesystem::path& path)
