@@ -153,6 +153,7 @@ add_executable(${PROJECT_NAME}
   PhysicsSlopeStackTest.cpp
   DefaultProjectTest.cpp
   DefaultShapesTest.cpp
+  ShapeDropTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp
   ObjectComponentsChangedTest.cpp
