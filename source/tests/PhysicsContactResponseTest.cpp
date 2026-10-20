@@ -151,6 +151,75 @@ TEST(PhysicsIntegration, ABoxLandingOnARestingBoxGetsTheSameResponseWhicheverSid
 }
 
 namespace {
+  // A box falls flat onto a resting one that sits 0.4 to the side, so the two centers project to different points
+  // of the shared face. The contact is resolved from the upper box's pass or from the lower one's.
+  struct OffsetLanding {
+    glm::vec3 upperSpin;
+    glm::vec3 upperVelocity;
+  };
+
+  OffsetLanding landFlatOnAnOffsetRestingBox(const bool fromBelow, const bool wideLower)
+  {
+    const auto scene = makeScene();
+
+    // A wide lower box reaches only 0.6 under the upper one's side, so its center lies outside the overlap while
+    // the upper box's is inside it.
+    const auto lower = addObject(scene, "Lower", { 0, 0, 0 });
+    if (wideLower)
+    {
+      fixtures::transformOf(lower)->setScale({ 3, 1, 1 });
+    }
+    const auto lowerBody = addBody(lower, false);
+    const float upperX = wideLower ? 1.4f : 0.4f;
+    const auto upper = addObject(scene, "Upper", { upperX, 0.99f, 0 });
+    const auto upperBody = addBody(upper, false);
+
+    lowerBody->setFriction(0.5f);
+    lowerBody->setFalling(false);
+    lowerBody->setNextFalling(false);
+    upperBody->setFriction(0.5f);
+    upperBody->setFalling(true);
+    upperBody->setVelocity({ 0, -0.2f, 0 });
+
+    const float left = wideLower ? 0.9f : -0.1f;
+    const float right = wideLower ? 1.5f : 0.5f;
+    const std::array<glm::vec3, 4> overlap{
+      glm::vec3{ left, 0.5f, -0.5f }, glm::vec3{ right, 0.5f, -0.5f },
+      glm::vec3{ right, 0.5f, 0.5f }, glm::vec3{ left, 0.5f, 0.5f }
+    };
+
+    if (fromBelow)
+    {
+      PhysicsSystem::handleCollision(*lowerBody, ownColliderOf(*lowerBody), upper, { 0, -0.01f, 0 }, overlap, dt);
+    }
+    else
+    {
+      PhysicsSystem::handleCollision(*upperBody, ownColliderOf(*upperBody), lower, { 0, 0.01f, 0 }, overlap, dt);
+    }
+
+    return { upperBody->getAngularVelocity(), upperBody->getVelocity() };
+  }
+}
+
+TEST(PhysicsIntegration, ABoxLandingFlatOnAnOffsetRestingBoxIsNotSpunWhicheverSideResolvesTheContact)
+{
+  for (const bool wideLower : { false, true })
+  {
+    for (const bool fromBelow : { false, true })
+    {
+      SCOPED_TRACE(testing::Message() << (fromBelow ? "from below" : "from above")
+                                      << (wideLower ? ", lower center outside the overlap" : ""));
+
+      const auto landing = landFlatOnAnOffsetRestingBox(fromBelow, wideLower);
+
+      // Positive control: the landing was resolved, so the fall was stopped.
+      EXPECT_NEAR(landing.upperVelocity.y, 0.0f, 1e-4f);
+      expectNear("upper spin", landing.upperSpin, { 0, 0, 0 });
+    }
+  }
+}
+
+namespace {
   // A body of mass 10 lands at unit speed on one of mass 0.1 resting on a support, touching along normal, the
   // way a heavy box comes down on a small one at an angle in a pile.
   struct Squeeze {
