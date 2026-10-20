@@ -4,6 +4,7 @@
 #include "ObjectInspector.h"
 #include "TransientObject.h"
 #include <GpuAssetCache.h>
+#include <ProjectPaths.h>
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <objects/Object.h>
@@ -194,7 +195,13 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
     return;
   }
 
-  if (const auto size = assetDisplay::fileSize(record.path))
+  const auto resolved = resolveAssetPath(m_assetCache->getProjectRoot(), record.path);
+  if (!resolved)
+  {
+    return;
+  }
+
+  if (const auto size = assetDisplay::fileSize(*resolved))
   {
     m_fileSize = *size;
   }
@@ -204,7 +211,7 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
   if (record.type == AssetType::Texture)
   {
     int comp = 0;
-    m_haveImageSize = stbi_info(record.path.c_str(), &m_imageWidth, &m_imageHeight, &comp) != 0;
+    m_haveImageSize = stbi_info(resolved->string().c_str(), &m_imageWidth, &m_imageHeight, &comp) != 0;
   }
 
   // Mesh stats come from the loaded vke::Model (its vertex/index arrays are already in memory once the
@@ -230,7 +237,7 @@ void AssetInspector::refreshMeta(const AssetRecord& record)
   // when the file isn't reachable - e.g. attached to a server that shares no filesystem.
   if (record.type == AssetType::Script)
   {
-    if (std::ifstream in(record.path, std::ios::binary); in)
+    if (std::ifstream in(*resolved, std::ios::binary); in)
     {
       std::ostringstream ss;
       ss << in.rdbuf();
