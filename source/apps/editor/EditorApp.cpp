@@ -2,6 +2,7 @@
 #include "DarkTitleBar.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
+#include <ProjectPaths.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
 #include <Replication.h>
@@ -103,6 +104,14 @@ EditorApp::EditorApp(LaunchOptions options)
   m_consolePanel = std::make_unique<ConsolePanel>(m_consoleSink);
 
   m_assetCache = std::make_shared<GpuAssetCache>(m_renderer, m_assetRegistry.get());
+  if (m_options.project.empty())
+  {
+    Log::info(LogCategory::editor, "No project folder is set; project assets fall back to the built-in ones.");
+  }
+  else
+  {
+    m_assetCache->setProjectRoot(locateProject(m_options.project).root);
+  }
   m_renderSystem = std::make_shared<RenderSystem>();
 
   m_componentEditor = std::make_shared<ComponentEditor>();
@@ -268,8 +277,12 @@ void EditorApp::launchServer()
     // Its own log file rather than the server's default: an editor and a client on one machine would
     // otherwise truncate and interleave the same one. This app's --log-file/--no-log-file are not
     // forwarded - the child's log is the child's. --token goes last, since it consumes what follows.
-    const std::string arguments = "--edit --ephemeral " + logFileArgument("editor-server")
-      + " --token " + m_authToken;
+    std::string arguments = "--edit --ephemeral " + logFileArgument("editor-server");
+    if (!m_options.project.empty())
+    {
+      arguments += " --project " + quotedProjectArgument(m_options.project);
+    }
+    arguments += " --token " + m_authToken;
     if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {
       Log::error(LogCategory::editor, "Failed to launch local server (ECS3DServer) next to this executable.");

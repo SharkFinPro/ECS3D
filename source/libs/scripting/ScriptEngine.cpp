@@ -65,11 +65,13 @@ void ScriptEngine::init(const std::string& bridgeDir,
   m_getFieldFloat = reinterpret_cast<GetFieldFloatFn>(resolve("getFieldFloat"));
   m_getFieldInt = reinterpret_cast<GetFieldIntFn>(resolve("getFieldInt"));
   m_getFieldBool = reinterpret_cast<GetFieldBoolFn>(resolve("getFieldBool"));
+  m_getFieldString = reinterpret_cast<GetFieldStringFn>(resolve("getFieldString"));
   m_getFieldVector3 = reinterpret_cast<GetFieldVector3Fn>(resolve("getFieldVector3"));
 
   m_setFieldFloat = reinterpret_cast<SetFieldFloatFn>(resolve("setFieldFloat"));
   m_setFieldInt = reinterpret_cast<SetFieldIntFn>(resolve("setFieldInt"));
   m_setFieldBool = reinterpret_cast<SetFieldBoolFn>(resolve("setFieldBool"));
+  m_setFieldString = reinterpret_cast<SetFieldStringFn>(resolve("setFieldString"));
   m_setFieldVector3 = reinterpret_cast<SetFieldVector3Fn>(resolve("setFieldVector3"));
 
   registerBindings(assemblyPath, kBridgeType);
@@ -296,6 +298,30 @@ bool ScriptEngine::getFieldBool(const char* uuid,
   return m_getFieldBool ? m_getFieldBool(uuid, className, fieldName) : false;
 }
 
+std::string ScriptEngine::getFieldString(const char* uuid,
+                                         const char* className,
+                                         const char* fieldName) const
+{
+  if (!m_getFieldString)
+  {
+    return {};
+  }
+
+  char* raw = m_getFieldString(uuid, className, fieldName);
+  if (!raw)
+  {
+    return {};
+  }
+
+  std::string result(raw);
+  if (m_freeString)
+  {
+    m_freeString(raw);
+  }
+
+  return result;
+}
+
 void ScriptEngine::getFieldVector3(const char* uuid,
                                    const char* className,
                                    const char* fieldName,
@@ -337,6 +363,17 @@ void ScriptEngine::setFieldBool(const char* uuid,
   if (m_setFieldBool)
   {
     m_setFieldBool(uuid, className, fieldName, value);
+  }
+}
+
+void ScriptEngine::setFieldString(const char* uuid,
+                                  const char* className,
+                                  const char* fieldName,
+                                  const char* value) const
+{
+  if (m_setFieldString)
+  {
+    m_setFieldString(uuid, className, fieldName, value);
   }
 }
 
