@@ -270,7 +270,9 @@ public abstract class StarterWorldFixture : IDisposable
   protected static void SetField(object script, string name, object value) =>
     script.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(script, value);
 
-  protected static void AssertVec(Vector3 expected, Vector3 actual, float tolerance = 1e-3f) =>
+  protected static void AssertVec(Vector3 expected, Vector3 actual) => AssertVec(expected, actual, 1e-3f);
+
+  protected static void AssertVec(Vector3 expected, Vector3 actual, float tolerance) =>
     Assert.True(Vector3.Distance(expected, actual) <= tolerance, $"expected {expected} but got {actual}");
 
   protected static float[] ArgsOf(string callPrefix)
