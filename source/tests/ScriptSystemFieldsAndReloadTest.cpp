@@ -54,6 +54,65 @@ namespace {
               (std::vector<float>{ 4.0f, 5.0f, 6.0f }));
   }
 
+  TEST_F(ScriptSystemTest, AttachWritesAStoredStringField)
+  {
+    state.exposedByClass["Mover"] = exposedStringFieldJson;
+    const auto a = fixtures::addObject(scene, "A");
+    addScript(a, "Mover", {
+      { { "name", "label" }, { "type", "string" }, { "value", "Player One" } }
+    });
+
+    scriptSystem.start(manager());
+
+    EXPECT_EQ(count("setString|label"), 1);
+    EXPECT_EQ(state.strings["label"], "Player One");
+  }
+
+  TEST_F(ScriptSystemTest, AStoredNonStringValueIsNotWrittenToAStringField)
+  {
+    // Positive control is AttachWritesAStoredStringField above.
+    state.exposedByClass["Mover"] = exposedStringFieldJson;
+    const auto a = fixtures::addObject(scene, "A");
+    addScript(a, "Mover", {
+      { { "name", "label" }, { "type", "string" }, { "value", 5 } },
+      { { "name", "count" }, { "type", "int" }, { "value", "5" } }
+    });
+
+    scriptSystem.start(manager());
+
+    EXPECT_EQ(count("setString|label"), 0);
+    EXPECT_EQ(count("setInt|count"), 0);
+  }
+
+  TEST_F(ScriptSystemTest, SyncFieldsToDataReadsAStringFieldBack)
+  {
+    state.exposedByClass["Mover"] = exposedStringFieldJson;
+    const auto a = fixtures::addObject(scene, "A");
+    const auto script = addScript(a, "Mover");
+    scriptSystem.start(manager());
+    state.strings["label"] = "Edited";
+
+    scriptSystem.syncFieldsToData(manager());
+
+    ASSERT_EQ(script->getFields().size(), 2u);
+    EXPECT_EQ(findField(script, "label").at("type"), "string");
+    EXPECT_EQ(findField(script, "label").at("value"), "Edited");
+  }
+
+  TEST_F(ScriptSystemTest, ApplyScriptFieldEditWritesAStringToAnAttachedInstance)
+  {
+    state.exposedByClass["Mover"] = exposedStringFieldJson;
+    const auto attached = addScriptedObject("A", { "Mover" });
+    scriptSystem.start(manager());
+    const nlohmann::json edit = nlohmann::json::array({
+      { { "name", "label" }, { "type", "string" }, { "value", "Renamed" } }
+    });
+
+    scriptSystem.applyScriptFieldEdit(attached->getUUID(), "Mover", edit);
+
+    EXPECT_EQ(state.strings["label"], "Renamed");
+  }
+
   TEST_F(ScriptSystemTest, AStoredFieldWhoseTypeDisagreesWithTheInstanceIsNotWritten)
   {
     state.exposedByClass["Mover"] = exposedFieldsJson;
