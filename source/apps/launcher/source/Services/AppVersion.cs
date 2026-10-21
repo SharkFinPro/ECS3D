@@ -4,7 +4,7 @@ namespace ECS3DLauncher.Services;
 
 public static class AppVersion
 {
-    public const string Fallback = "dev";
+    internal const string Fallback = "dev";
 
     public static string Current() => From(Assembly.GetEntryAssembly());
 
