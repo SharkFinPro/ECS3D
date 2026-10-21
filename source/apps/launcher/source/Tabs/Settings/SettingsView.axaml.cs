@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
@@ -16,12 +17,12 @@ public class SettingsView : UserControl
         AddHandler(KeyDownEvent, OnKeyDown);
     }
 
-    // Text boxes commit when they lose focus, so Enter just gives focus up.
+    // Text boxes commit when they lose focus; Enter commits the box it was pressed in.
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && e.Source is TextBox)
+        if (e.Key == Key.Enter && e.Source is TextBox box)
         {
-            TopLevel.GetTopLevel(this)?.FocusManager?.ClearFocus();
+            BindingOperations.GetBindingExpressionBase(box, TextBox.TextProperty)?.UpdateSource();
             e.Handled = true;
         }
     }
