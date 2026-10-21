@@ -198,7 +198,7 @@ TEST(DefaultProject, AScaledInstanceKeepsItsPrefabsDensity)
   const auto project = buildDefaultProject();
 
   int checked = 0;
-  for (const auto& object : sceneObjects(project, "Scene 3"))
+  for (const auto& object : sceneObjects(project, "Tower Collapse"))
   {
     const auto name = object.at("name").get<std::string>();
     if (name != "Block" && name != "Sphere")
@@ -216,7 +216,7 @@ TEST(DefaultProject, AScaledInstanceKeepsItsPrefabsDensity)
     ++checked;
   }
 
-  // Scene 3 is generated at random, but always as a grid of several hundred bodies.
+  // Tower Collapse is generated at random, but always as a grid of several hundred bodies.
   EXPECT_GT(checked, 100);
 }
 
@@ -230,9 +230,18 @@ TEST(DefaultProject, LoadsAndItsFirstSceneSettles)
 
   serializer.deserialize(buildDefaultProject());
 
-  const auto scene = sceneManager.getCurrentScene();
+  std::shared_ptr<SceneAsset> scene;
+  for (const auto& [uuid, candidate] : sceneManager.getScenes())
+  {
+    if (candidate->getName() == "Lights and Players")
+    {
+      scene = candidate;
+    }
+  }
+
   ASSERT_NE(scene, nullptr);
-  ASSERT_EQ(scene->getName(), "Scene 1");
+  sceneManager.loadScene(scene);
+  ASSERT_EQ(sceneManager.getCurrentScene(), scene);
 
   const auto& objectManager = *scene->getObjectManager();
   CollisionSystem collisionSystem;

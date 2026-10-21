@@ -160,6 +160,8 @@ add_executable(${PROJECT_NAME}
   DefaultProjectTest.cpp
   EmptyTemplateTest.cpp
   DefaultShapesTest.cpp
+  DefaultWelcomePhysicsTest.cpp
+  DefaultWelcomeTest.cpp
   ShapeDropTest.cpp
   RuntimeComponentTest.cpp
   ScriptComponentOpsTest.cpp
@@ -245,6 +247,8 @@ add_executable(${PROJECT_NAME}
   # rather than linking the server app.
   ../apps/server/DefaultProject.cpp
   ../apps/server/DefaultShapes.cpp
+  ../apps/server/DefaultWelcome.cpp
+  ../apps/server/RestPose.cpp
 
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
   # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).

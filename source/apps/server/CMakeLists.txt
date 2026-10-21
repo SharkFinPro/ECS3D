@@ -10,8 +10,13 @@ add_executable(${PROJECT_NAME}
   ServerApp.h
   DefaultProject.cpp
   DefaultProject.h
+  DefaultProjectParts.h
   DefaultShapes.cpp
   DefaultShapes.h
+  DefaultWelcome.cpp
+  DefaultWelcome.h
+  RestPose.cpp
+  RestPose.h
   ServerPolicy.h
 )
 
