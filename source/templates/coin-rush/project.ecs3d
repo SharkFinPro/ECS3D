@@ -335,7 +335,7 @@
               "type": "Transform",
               "position": [0, 0, 0],
               "rotation": [0, 0, 0],
-              "scale": [1.4, 1.4, 1.4]
+              "scale": [2, 2, 2]
             },
             {
               "type": "ModelRenderer",
@@ -353,7 +353,7 @@
               "friction": 0.5,
               "doGravity": true,
               "gravity": -9.81,
-              "mass": 3.964753
+              "mass": 11.559047
             },
             {
               "type": "Collider",
@@ -1496,6 +1496,11 @@
                     "name": "m_offsetRadius",
                     "type": "float",
                     "value": 2
+                  },
+                  {
+                    "name": "m_initialVelocity",
+                    "type": "vector3",
+                    "value": [5, 0, 1.5]
                   }
                 ]
               }

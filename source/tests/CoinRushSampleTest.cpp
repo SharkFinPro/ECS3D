@@ -7,6 +7,7 @@
 #include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/RigidBody.h"
 #include "objects/components/Transform.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
@@ -396,6 +397,30 @@ TEST(CoinRushSample, EverySpawnerNamesARegisteredPrefabWithItsSettings)
   }
 }
 
+TEST(CoinRushSample, BoulderSpawnerThrowsHorizontallyAndClearsTheDais)
+{
+  LoadedTemplate project(templateFolder);
+  ASSERT_TRUE(project.loaded);
+  const auto& scene = *project.sceneManager.getCurrentScene();
+  const auto spawner = objectNamed(scene, "Boulder Spawner");
+  const auto velocity = vec3Of(fieldOf(scriptNamed(spawner, "Spawner"), "m_initialVelocity"));
+
+  EXPECT_EQ(velocity.y, 0.0f);
+  EXPECT_GT(std::abs(velocity.x), 0.0f);
+  EXPECT_GT(std::abs(velocity.z), 0.0f);
+
+  // The hull's farthest vertex at the prefab's scale bounds how low a boulder can hang below its center.
+  const auto body = prefabNamed(projectJson(templateFolder), "Big Boulder").at("body");
+  float reach = 0.0f;
+  for (const auto& vertex : worldHullVertices(body))
+  {
+    reach = std::max(reach, glm::length(vertex));
+  }
+
+  EXPECT_GT(reach, 1.0f);
+  EXPECT_GT(positionOfJson(spawner).y - reach, 2.0f);
+}
+
 TEST(CoinRushSample, CoinsAreUprightTriggerRingsWithNoRigidBody)
 {
   LoadedTemplate project(templateFolder);
@@ -442,12 +467,13 @@ TEST(CoinRushSample, BigBoulderMassIsTheScaledVolumeOfTheBuiltInBouldersHull)
   const float volume = hullVolume(hull);
   const float reference = hullVolume(boulderHull());
 
-  EXPECT_EQ(scaleOfJson(body), glm::vec3(1.4f));
+  EXPECT_EQ(scaleOfJson(body), glm::vec3(2.0f));
   EXPECT_EQ(hull.vertices.size(), 24u);
   EXPECT_GT(volume, 0.5f);
   EXPECT_NEAR(volume, reference, reference * 1e-3f);
-  EXPECT_NEAR(componentOf(body, "RigidBody").at("mass").get<float>(), reference * 1.4f * 1.4f * 1.4f,
-              reference * 2.744f * 1e-3f);
+  EXPECT_NEAR(componentOf(body, "RigidBody").at("mass").get<float>(), reference * 8.0f,
+              reference * 8.0f * 1e-3f);
+  EXPECT_NEAR(componentOf(body, "RigidBody").at("mass").get<float>(), 11.56f, 0.1f);
 }
 
 TEST(CoinRushSample, SceneScriptsCarryTheRequiredFields)
@@ -568,6 +594,33 @@ TEST(CoinRushSample, PlayersBoulderAndDaisSettleWithoutFallingThrough)
   const auto boulderPosition = fixtures::positionOf(boulder);
   EXPECT_TRUE(std::isfinite(boulderPosition.x) && std::isfinite(boulderPosition.y) && std::isfinite(boulderPosition.z));
   EXPECT_GT(boulderPosition.y, 0.5f);
+}
+
+TEST(CoinRushSample, AThrownBoulderLeavesTheDaisFootprint)
+{
+  LoadedTemplate project(templateFolder);
+  ASSERT_TRUE(project.loaded);
+  auto& objectManager = *project.sceneManager.getCurrentScene()->getObjectManager();
+  const auto& scene = *project.sceneManager.getCurrentScene();
+  const auto velocity = vec3Of(fieldOf(scriptNamed(objectNamed(scene, "Boulder Spawner"), "Spawner"),
+                                       "m_initialVelocity"));
+
+  const auto boulder = objectManager.instantiate(prefabNamed(projectJson(templateFolder), "Big Boulder").at("body"));
+  fixtures::transformOf(boulder)->setPosition({ 1, 7, -1 });
+  boulder->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity(velocity * dt);
+
+  CollisionSystem collisionSystem;
+  bool left = false;
+  for (int tick = 0; tick < 300 && !left; ++tick)
+  {
+    PhysicsSystem::fixedUpdate(objectManager, dt);
+    collisionSystem.fixedUpdate(objectManager, dt);
+    const auto position = fixtures::positionOf(boulder);
+    left = std::max(std::abs(position.x), std::abs(position.z)) > 6.0f;
+  }
+
+  EXPECT_TRUE(left);
+  EXPECT_GT(fixtures::positionOf(boulder).y, 0.5f);
 }
 
 TEST(CoinRushSample, ThumbnailIs640By360)
