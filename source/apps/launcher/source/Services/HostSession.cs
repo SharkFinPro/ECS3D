@@ -192,23 +192,10 @@ public sealed class HostSession
         CancellationTokenSource start)
     {
         var cancellationToken = start.Token;
-        bool inUse;
-        try
+        var portCheck = await CheckPortIsFreeAsync(port, cancellationToken);
+        if (portCheck is not null)
         {
-            // The server exits with one generic failure code whatever went wrong, so a port that already
-            // answers before we start anything is the only way to give port-in-use its own message.
-            inUse = await _probe.AcceptsConnectionAsync(LocalHost, port, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            return CancelledResult();
-        }
-
-        if (inUse)
-        {
-            return HostStartResult.Of(
-                HostStartKind.PortInUse,
-                $"Port {port} is already in use; choose another port in Settings.");
+            return portCheck;
         }
 
         var launch = _launcher.StartServer(projectFolder, port);
@@ -246,6 +233,27 @@ public sealed class HostSession
 
         _ = WatchAsync(session, token);
         return OpenHostWindow(session, port);
+    }
+
+    // Null when the port is free. The server exits with one generic failure code whatever went wrong, so a
+    // port that already answers before we start anything is the only way to give port-in-use its own message.
+    private async Task<HostStartResult?> CheckPortIsFreeAsync(int port, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!await _probe.AcceptsConnectionAsync(LocalHost, port, cancellationToken))
+            {
+                return null;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return CancelledResult();
+        }
+
+        return HostStartResult.Of(
+            HostStartKind.PortInUse,
+            $"Port {port} is already in use; choose another port in Settings.");
     }
 
     // A failed game window leaves the server running: others may still join, and the UI can retry.
