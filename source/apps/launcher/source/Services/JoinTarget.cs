@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 
 namespace ECS3DLauncher.Services;
@@ -11,13 +12,20 @@ public sealed record JoinTarget(string Address, int Port)
 
     internal const string AddressError = "Enter the host's address.";
 
+    internal const string InvalidAddressError = "That is not a valid host address.";
+
     // A blank port field means the default port.
     public static JoinTargetResult Parse(string? addressText, string? portText, int defaultPort)
     {
-        var address = (addressText ?? string.Empty).Trim();
+        var address = StripBrackets((addressText ?? string.Empty).Trim());
         if (address.Length == 0)
         {
             return JoinTargetResult.Failed(AddressError);
+        }
+
+        if (!IsPlausibleAddress(address))
+        {
+            return JoinTargetResult.Failed(InvalidAddressError);
         }
 
         var port = (portText ?? string.Empty).Trim();
@@ -42,18 +50,33 @@ public sealed record JoinTarget(string Address, int Port)
         var trimmed = (text ?? string.Empty).Trim();
         if (trimmed.StartsWith('['))
         {
-            var close = trimmed.IndexOf("]:", System.StringComparison.Ordinal);
-            if (close > 1)
-            {
-                return (trimmed.Substring(1, close - 1), trimmed.Substring(close + 2));
-            }
-
-            return (trimmed, null);
+            var close = trimmed.IndexOf("]:", StringComparison.Ordinal);
+            return close > 1
+                ? (trimmed.Substring(1, close - 1), trimmed.Substring(close + 2))
+                : (StripBrackets(trimmed), null);
         }
 
         var colon = trimmed.IndexOf(':');
         var single = colon > 0 && colon == trimmed.LastIndexOf(':') && colon < trimmed.Length - 1;
         return single ? (trimmed.Substring(0, colon), trimmed.Substring(colon + 1)) : (trimmed, null);
+    }
+
+    private static string StripBrackets(string address) =>
+        address.Length > 2 && address[0] == '[' && address[^1] == ']'
+            ? address.Substring(1, address.Length - 2)
+            : address;
+
+    // A leading '-' would reach the client's command line as an option; a lone leading or trailing
+    // colon is a half-typed "address:port".
+    private static bool IsPlausibleAddress(string address)
+    {
+        if (address[0] == '-')
+        {
+            return false;
+        }
+
+        var single = address.IndexOf(':') == address.LastIndexOf(':') && address.Contains(':');
+        return !(single && (address[0] == ':' || address[^1] == ':'));
     }
 }
 

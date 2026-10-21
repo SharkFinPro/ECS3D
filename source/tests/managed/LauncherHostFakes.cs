@@ -34,12 +34,19 @@ internal sealed class FakePortProbe : IPortProbe
 {
   public bool Accepts { get; set; }
 
+  public Exception? Failure { get; set; }
+
   public int Calls { get; private set; }
 
   public Task<bool> AcceptsConnectionAsync(string host, int port, CancellationToken cancellationToken)
   {
     cancellationToken.ThrowIfCancellationRequested();
     Calls++;
+    if (Failure is not null)
+    {
+      throw Failure;
+    }
+
     return Task.FromResult(Accepts);
   }
 }

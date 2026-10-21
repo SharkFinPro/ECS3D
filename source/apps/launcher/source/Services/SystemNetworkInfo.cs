@@ -6,14 +6,29 @@ namespace ECS3DLauncher.Services;
 
 public sealed class SystemNetworkInfo : INetworkInfo
 {
-    public IReadOnlyList<NetworkInterfaceInfo> GetInterfaces() =>
-        NetworkInterface.GetAllNetworkInterfaces()
-            .Select(item => new NetworkInterfaceInfo(
-                item.Name,
-                KindOf(item.NetworkInterfaceType),
-                item.OperationalStatus == OperationalStatus.Up,
-                item.GetIPProperties().UnicastAddresses.Select(address => address.Address).ToList()))
-            .ToList();
+    public IReadOnlyList<NetworkInterfaceInfo> GetInterfaces()
+    {
+        var result = new List<NetworkInterfaceInfo>();
+        foreach (var item in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            try
+            {
+                var addresses = item.GetIPProperties().UnicastAddresses.Select(address => address.Address).ToList();
+                var kind = KindOf(item.NetworkInterfaceType);
+                result.Add(new NetworkInterfaceInfo(item.Name, kind, IsUsable(item), addresses));
+            }
+            catch (NetworkInformationException)
+            {
+                // An interface that cannot report its addresses cannot be shared, so it is left out.
+            }
+        }
+
+        return result;
+    }
+
+    // Linux VPN interfaces (tun, wireguard) report Unknown while carrying traffic.
+    private static bool IsUsable(NetworkInterface item) =>
+        item.OperationalStatus is OperationalStatus.Up or OperationalStatus.Unknown;
 
     private static NetworkInterfaceKind KindOf(NetworkInterfaceType type) => type switch
     {

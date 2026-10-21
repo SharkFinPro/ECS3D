@@ -7,7 +7,8 @@ namespace ECS3DLauncher.Services;
 
 // One hosted server at a time, owned by the launcher. The UI calls it from its own thread; Ended is raised
 // from a thread-pool continuation, so a handler must marshal to the UI thread itself. Nothing stops the
-// server on its own (not even disposal): quitting while hosting is the UI's prompt, so it reads IsRunning.
+// server on its own (not even disposal): quitting while hosting is the UI's prompt, so it reads IsRunning
+// and IsStarting.
 public sealed class HostSession
 {
     private const string LocalHost = "127.0.0.1";
@@ -25,7 +26,7 @@ public sealed class HostSession
     private readonly object _gate = new();
 
     private ActiveSession? _active;
-    private bool _starting;
+    private CancellationTokenSource? _pending;
 
     public HostSession(EngineLauncher launcher, IPortProbe probe, UserDataDirectory userData)
         : this(launcher, probe, userData, TimeProvider.System, DefaultWindow, DefaultPollInterval, Task.Delay)
@@ -50,8 +51,21 @@ public sealed class HostSession
         _delay = delay;
     }
 
-    // Raised when the server exits on its own, with any exit code. Not raised by Stop.
+    // Raised when the server exits on its own, with any exit code. Not raised by Stop. Handlers must not
+    // throw: the exception would fault an unobserved task and skip later handlers.
     public event Action<HostSessionEnd>? Ended;
+
+    // True while StartAsync is waiting for the server; Stop cancels it.
+    public bool IsStarting
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _pending is not null;
+            }
+        }
+    }
 
     public bool IsRunning
     {
@@ -103,32 +117,40 @@ public sealed class HostSession
         int port,
         CancellationToken cancellationToken)
     {
+        CancellationTokenSource start;
         lock (_gate)
         {
-            if (_active is not null || _starting)
+            if (_active is not null || _pending is not null)
             {
                 return HostStartResult.Of(
                     HostStartKind.AlreadyRunning,
                     "A game is already being hosted. Stop it before hosting another.");
             }
 
-            _starting = true;
+            start = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _pending = start;
         }
 
         try
         {
-            return await StartCoreAsync(projectFolder, displayName, port, cancellationToken);
+            return await StartCoreAsync(projectFolder, displayName, port, start);
         }
         finally
         {
             lock (_gate)
             {
-                _starting = false;
+                if (ReferenceEquals(_pending, start))
+                {
+                    _pending = null;
+                }
             }
+
+            start.Dispose();
         }
     }
 
-    // Returns false when nothing was being hosted. Never raises Ended.
+    // Ends the running session, or cancels a start in progress (which kills the server it launched).
+    // Returns false when there was neither. Never raises Ended.
     public bool Stop()
     {
         ActiveSession? session;
@@ -136,42 +158,53 @@ public sealed class HostSession
         {
             session = _active;
             _active = null;
+            if (session is null)
+            {
+                _pending?.Cancel();
+                return _pending is not null;
+            }
         }
 
-        if (session is null)
-        {
-            return false;
-        }
-
-        // The watch is cancelled before the kill, or the kill would read as a crash.
-        session.Cancel.Cancel();
+        // _active is already cleared, so the watch ignores the exit this kill causes and disposes the process.
         session.Process.Kill();
-        session.Dispose();
+        session.Cancel.Cancel();
         return true;
     }
 
-    public LaunchResult OpenAnotherWindow()
+    // Returns an error message, or null when the window was started.
+    public string? OpenAnotherWindow()
     {
         var port = Port;
         if (port is null)
         {
-            return LaunchResult.Failed("No game is being hosted.");
+            return "No game is being hosted.";
         }
 
         var result = _launcher.JoinGame(LocalHost, port.Value);
         result.Process?.Dispose();
-        return result;
+        return result.Error;
     }
 
     private async Task<HostStartResult> StartCoreAsync(
         string projectFolder,
         string displayName,
         int port,
-        CancellationToken cancellationToken)
+        CancellationTokenSource start)
     {
-        // The server exits with one generic failure code whatever went wrong, so a port that already
-        // answers before we start anything is the only way to give port-in-use its own message.
-        if (await _probe.AcceptsConnectionAsync(LocalHost, port, cancellationToken))
+        var cancellationToken = start.Token;
+        bool inUse;
+        try
+        {
+            // The server exits with one generic failure code whatever went wrong, so a port that already
+            // answers before we start anything is the only way to give port-in-use its own message.
+            inUse = await _probe.AcceptsConnectionAsync(LocalHost, port, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return CancelledResult();
+        }
+
+        if (inUse)
         {
             return HostStartResult.Of(
                 HostStartKind.PortInUse,
@@ -192,25 +225,56 @@ public sealed class HostSession
         }
 
         var session = new ActiveSession(server, displayName, port, _clock.GetUtcNow());
+        var token = session.Cancel.Token;
+        bool cancelled;
         lock (_gate)
         {
-            _active = session;
+            cancelled = start.IsCancellationRequested;
+            if (!cancelled)
+            {
+                _active = session;
+                _pending = null;
+            }
         }
 
-        _ = WatchAsync(session);
-
-        // A failed game window leaves the server running: others may still join, and the UI can retry.
-        var window = _launcher.JoinGame(LocalHost, port);
-        if (!window.Succeeded)
+        if (cancelled)
         {
-            return HostStartResult.Of(HostStartKind.StartedWithoutWindow, window.Error);
+            server.Kill();
+            server.Dispose();
+            return CancelledResult();
         }
 
-        window.Process?.Dispose();
-        return HostStartResult.Of(HostStartKind.Started, null);
+        _ = WatchAsync(session, token);
+        return OpenHostWindow(session, port);
     }
 
+    // A failed game window leaves the server running: others may still join, and the UI can retry.
+    private HostStartResult OpenHostWindow(ActiveSession session, int port)
+    {
+        var window = _launcher.JoinGame(LocalHost, port);
+        window.Process?.Dispose();
+
+        int? exitCode;
+        lock (_gate)
+        {
+            exitCode = session.ExitCode;
+        }
+
+        if (exitCode is not null)
+        {
+            return ServerExitedResult(exitCode.Value);
+        }
+
+        return window.Succeeded
+            ? HostStartResult.Of(HostStartKind.Started, null)
+            : HostStartResult.Of(HostStartKind.StartedWithoutWindow, window.Error);
+    }
+
+    private static HostStartResult CancelledResult() =>
+        HostStartResult.Of(HostStartKind.Cancelled, "Starting the server was cancelled.");
+
     // Null when the server is listening; otherwise the failure, with the server already cleaned up.
+    // Any other exception from the probe or the delay kills the server too and propagates.
     private async Task<HostStartResult?> WaitUntilListeningAsync(
         IRunningProcess server,
         int port,
@@ -243,15 +307,26 @@ public sealed class HostSession
         {
             server.Kill();
             server.Dispose();
-            return HostStartResult.Of(HostStartKind.Cancelled, "Starting the server was cancelled.");
+            return CancelledResult();
+        }
+        catch (Exception)
+        {
+            server.Kill();
+            server.Dispose();
+            throw;
         }
     }
 
     private HostStartResult ServerExited(IRunningProcess server)
     {
         var code = server.ExitCode ?? -1;
-        var log = _userData.LogFile(EngineExecutable.Server);
         server.Dispose();
+        return ServerExitedResult(code);
+    }
+
+    private HostStartResult ServerExitedResult(int code)
+    {
+        var log = _userData.LogFile(EngineExecutable.Server);
         return new HostStartResult(
             HostStartKind.ServerExited,
             $"The server exited with code {code.ToString(CultureInfo.InvariantCulture)}. See {log}.",
@@ -263,40 +338,48 @@ public sealed class HostSession
         var log = _userData.LogFile(EngineExecutable.Server);
         server.Kill();
         server.Dispose();
-        var seconds = ((int)Math.Round(_window.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+        var count = (int)Math.Round(_window.TotalSeconds);
+        var unit = count == 1 ? "second" : "seconds";
+        var seconds = count.ToString(CultureInfo.InvariantCulture);
         return new HostStartResult(
             HostStartKind.TimedOut,
-            $"The server did not start listening within {seconds} seconds. See {log}.",
+            $"The server did not start listening within {seconds} {unit}. See {log}.",
             log);
     }
 
-    private async Task WatchAsync(ActiveSession session)
+    // Owns the process once the session is published: disposes it when the wait ends, by exit or by Stop.
+    private async Task WatchAsync(ActiveSession session, CancellationToken token)
     {
         int code;
         try
         {
-            code = await session.Process.WaitForExitAsync(session.Cancel.Token);
+            code = await session.Process.WaitForExitAsync(token);
         }
         catch (OperationCanceledException)
         {
+            session.Process.Dispose();
             return;
         }
 
+        bool stillActive;
         lock (_gate)
         {
-            if (!ReferenceEquals(_active, session))
+            stillActive = ReferenceEquals(_active, session);
+            if (stillActive)
             {
-                return;
+                _active = null;
+                session.ExitCode = code;
             }
-
-            _active = null;
         }
 
-        session.Dispose();
-        Ended?.Invoke(new HostSessionEnd(code, _userData.LogFile(EngineExecutable.Server)));
+        session.Process.Dispose();
+        if (stillActive)
+        {
+            Ended?.Invoke(new HostSessionEnd(code, _userData.LogFile(EngineExecutable.Server)));
+        }
     }
 
-    private sealed class ActiveSession : IDisposable
+    private sealed class ActiveSession
     {
         public ActiveSession(IRunningProcess process, string displayName, int port, DateTimeOffset startedAt)
         {
@@ -316,10 +399,7 @@ public sealed class HostSession
 
         public CancellationTokenSource Cancel { get; } = new();
 
-        public void Dispose()
-        {
-            Cancel.Dispose();
-            Process.Dispose();
-        }
+        // Set under the host's lock when the server exits by itself.
+        public int? ExitCode { get; set; }
     }
 }

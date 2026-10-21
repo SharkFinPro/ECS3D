@@ -148,7 +148,7 @@ public class LauncherHostSessionTests
     var result = await rig.StartAsync();
 
     Assert.Equal(HostStartKind.TimedOut, result.Kind);
-    Assert.Contains("within 1 seconds", result.Message);
+    Assert.Contains("within 1 second.", result.Message);
     Assert.True(rig.Runner.Processes[0].Killed);
     Assert.Single(rig.Runner.Launches);
     Assert.False(rig.Session.IsRunning);
@@ -167,6 +167,76 @@ public class LauncherHostSessionTests
     Assert.Equal(HostStartKind.Cancelled, result.Kind);
     Assert.True(rig.Runner.Processes[0].Killed);
     Assert.Single(rig.Runner.Launches);
+    Assert.False(rig.Session.IsRunning);
+  }
+
+  [Fact]
+  public async Task CancellingDuringThePortCheckReturnsCancelled()
+  {
+    var rig = NewRig();
+    using var cancel = new CancellationTokenSource();
+    await cancel.CancelAsync();
+
+    var result = await rig.StartAsync(3001, cancel.Token);
+
+    Assert.Equal(HostStartKind.Cancelled, result.Kind);
+    Assert.Empty(rig.Runner.Launches);
+    Assert.False(rig.Session.IsStarting);
+  }
+
+  [Fact]
+  public async Task StopDuringStartupCancelsTheStartAndKillsTheServer()
+  {
+    var rig = NewRig();
+    var starting = false;
+    var stopped = false;
+    rig.OnDelay = () =>
+    {
+      starting = rig.Session.IsStarting;
+      stopped = rig.Session.Stop();
+    };
+
+    var result = await rig.StartAsync();
+
+    Assert.True(starting);
+    Assert.True(stopped);
+    Assert.Equal(HostStartKind.Cancelled, result.Kind);
+    Assert.True(rig.Runner.Processes[0].Killed);
+    Assert.False(rig.Session.IsStarting);
+    Assert.False(rig.Session.IsRunning);
+  }
+
+  [Fact]
+  public async Task AProbeFailureKillsTheServerAndPropagates()
+  {
+    var rig = NewRig();
+    rig.OnDelay = () => rig.Probe.Failure = new InvalidOperationException("probe broke");
+
+    await Assert.ThrowsAsync<InvalidOperationException>(() => rig.StartAsync());
+
+    Assert.True(rig.Runner.Processes[0].Killed);
+    Assert.False(rig.Session.IsStarting);
+    Assert.False(rig.Session.IsRunning);
+  }
+
+  [Fact]
+  public async Task ServerDyingWhileTheHostWindowOpensIsReportedAsExited()
+  {
+    var rig = NewRig().ListenAfterFirstWait();
+    rig.Runner.FailFor = launch =>
+    {
+      if (launch.FileName.Contains("ECS3DClient"))
+      {
+        rig.Runner.Processes[0].Exit(9);
+      }
+
+      return null;
+    };
+
+    var result = await rig.StartAsync();
+
+    Assert.Equal(HostStartKind.ServerExited, result.Kind);
+    Assert.Contains("code 9", result.Message);
     Assert.False(rig.Session.IsRunning);
   }
 
@@ -223,8 +293,8 @@ public class LauncherHostSessionTests
     await rig.StartAsync();
 
     var stopped = rig.Session.Stop();
+    // The fake's continuations run inline, so a watch still registered would raise Ended inside Exit.
     rig.Runner.Processes[0].Exit(1);
-    await Task.Yield();
 
     Assert.True(stopped);
     Assert.True(rig.Runner.Processes[0].Killed);
@@ -254,13 +324,13 @@ public class LauncherHostSessionTests
   {
     var rig = NewRig().ListenAfterFirstWait();
 
-    Assert.False(rig.Session.OpenAnotherWindow().Succeeded);
+    Assert.NotNull(rig.Session.OpenAnotherWindow());
     Assert.Empty(rig.Runner.Launches);
 
     await rig.StartAsync();
     var extra = rig.Session.OpenAnotherWindow();
 
-    Assert.True(extra.Succeeded);
+    Assert.Null(extra);
     Assert.Equal(3, rig.Runner.Launches.Count);
     Assert.Equal(new[] { "--host", "127.0.0.1", "--port", "3001" }, rig.Runner.Launches[2].Arguments);
   }
@@ -284,6 +354,21 @@ public class LauncherHostSessionTests
     Assert.Equal(
       new[] { "Ethernet 198.51.100.5", "Wi-Fi 192.0.2.24", "tun0 203.0.113.2" },
       found.Select(item => $"{item.Label} {item.Address}").ToArray());
+  }
+
+  [Fact]
+  public void InterfacesSharingALabelAreToldApartByName()
+  {
+    var found = LanAddresses.From(
+    [
+      Nic("eth0", NetworkInterfaceKind.Ethernet, true, "198.51.100.5"),
+      Nic("eth1", NetworkInterfaceKind.Ethernet, true, "203.0.113.5"),
+      Nic("wlan0", NetworkInterfaceKind.Wireless, true, "192.0.2.5"),
+    ]);
+
+    Assert.Equal(
+      new[] { "Ethernet (eth0)", "Ethernet (eth1)", "Wi-Fi" },
+      found.Select(item => item.Label).ToArray());
   }
 
   [Fact]
@@ -314,6 +399,10 @@ public class LauncherHostSessionTests
   }
 
   [Theory]
+  [InlineData("host:", "3000", JoinTarget.InvalidAddressError)]
+  [InlineData(":3000", "3000", JoinTarget.InvalidAddressError)]
+  [InlineData("-host", "3000", JoinTarget.InvalidAddressError)]
+  [InlineData("--port", "", JoinTarget.InvalidAddressError)]
   [InlineData("", "3000", JoinTarget.AddressError)]
   [InlineData("   ", "3000", JoinTarget.AddressError)]
   [InlineData("host", "0", JoinTarget.PortError)]
@@ -341,6 +430,13 @@ public class LauncherHostSessionTests
   public void PastedAddressSplitsOnlyWhenItCarriesAPort(string pasted, string address, string? port)
   {
     Assert.Equal((address, port), JoinTarget.SplitPasted(pasted));
+  }
+
+  [Fact]
+  public void BracketedAddressLosesItsBracketsEverywhere()
+  {
+    Assert.Equal(("::1", (string?)null), JoinTarget.SplitPasted("[::1]"));
+    Assert.Equal("::1", JoinTarget.Parse("[::1]", "3000", 3000).Target?.Address);
   }
 
   [Fact]

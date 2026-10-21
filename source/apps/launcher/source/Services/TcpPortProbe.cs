@@ -21,6 +21,7 @@ public sealed class TcpPortProbe : IPortProbe
         _attemptTimeout = attemptTimeout;
     }
 
+    // Each successful probe shows up as a rejected handshake in the server's log.
     public async Task<bool> AcceptsConnectionAsync(string host, int port, CancellationToken cancellationToken)
     {
         using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
