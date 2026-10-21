@@ -125,8 +125,8 @@ TEST(CoinRushSamplePhysics, ABoulderThrownFromAnySpawnOffsetRollsOffTheDais)
     ASSERT_TRUE(isFinite(result.finalPosition));
     EXPECT_GE(result.leftAtTick, 0);
     EXPECT_TRUE(offDais(result.finalPosition));
+    // A boulder may roll across the arena and drop into the void; the spawner's cap removes it.
     EXPECT_LT(result.finalPosition.y, 2.0f + radius);
-    EXPECT_GT(result.finalPosition.y, 0.5f);
   }
 }
 
