@@ -60,6 +60,8 @@ public class ProjectsViewModel : ObservableObject
 
     public string? ExploreTooltip { get; }
 
+    public string? OpenTooltip { get; }
+
     public IRelayCommand SetGridCommand { get; }
     public IRelayCommand SetListCommand { get; }
     public IRelayCommand NewProjectCommand { get; }
@@ -71,12 +73,14 @@ public class ProjectsViewModel : ObservableObject
         IRelayCommand exploreCommand,
         IRelayCommand<Project> openProjectCommand,
         string? exploreTooltip,
+        string? openTooltip,
         IEnumerable<Project> projects)
     {
         _openTemplates = openTemplates;
         ExploreCommand = exploreCommand;
         OpenProjectCommand = openProjectCommand;
         ExploreTooltip = exploreTooltip;
+        OpenTooltip = openTooltip;
         SetGridCommand = new RelayCommand(() => IsGridView = true);
         SetListCommand = new RelayCommand(() => IsGridView = false);
         NewProjectCommand = new RelayCommand(() => _openTemplates());

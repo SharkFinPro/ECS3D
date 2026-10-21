@@ -1,4 +1,3 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
@@ -19,9 +18,8 @@ public class ProjectsView : UserControl
     private void OnCardDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (e.Source is Visual source && source.FindAncestorOfType<Button>(true) is null &&
-            (e.Source as StyledElement)?.DataContext is Project { IsRealCard: true } project &&
-            DataContext is ProjectsViewModel viewModel &&
-            viewModel.OpenProjectCommand.CanExecute(project))
+            source.DataContext is Project project &&
+            DataContext is ProjectsViewModel viewModel)
         {
             viewModel.OpenProjectCommand.Execute(project);
         }

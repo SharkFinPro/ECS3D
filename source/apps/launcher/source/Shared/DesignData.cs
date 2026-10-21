@@ -19,6 +19,7 @@ public static class DesignData
         new RelayCommand(() => { }),
         new RelayCommand<Project>(_ => { }),
         null,
+        null,
         [
             new()
             {

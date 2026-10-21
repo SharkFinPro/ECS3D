@@ -208,6 +208,32 @@ public class LauncherShellTests
   }
 
   [Fact]
+  public async Task UnwrappedStartExceptionBecomesANotice()
+  {
+    var runner = new ThrowingProcessRunner(new InvalidOperationException("bad start"), null);
+    var recorder = new NoticeRecorder();
+    var coordinator = ShellFixtures.CoordinatorFor(ShellFixtures.EngineWithout(), runner, LongWindow, recorder);
+
+    await coordinator.OpenProjectAsync("/p", ShellFixtures.NoOptions);
+
+    var notice = Assert.Single(recorder.Notices);
+    Assert.Equal("bad start", notice.Message);
+    Assert.Null(notice.LogPath);
+  }
+
+  [Fact]
+  public async Task WatchExceptionBecomesANotice()
+  {
+    var runner = new ThrowingProcessRunner(null, new InvalidOperationException("wait broke"));
+    var recorder = new NoticeRecorder();
+    var coordinator = ShellFixtures.CoordinatorFor(ShellFixtures.EngineWithout(), runner, LongWindow, recorder);
+
+    await coordinator.ExploreEngineAsync(ShellFixtures.NoOptions);
+
+    Assert.Equal("wait broke", Assert.Single(recorder.Notices).Message);
+  }
+
+  [Fact]
   public async Task LaunchingWithoutTheEditorReportsTheMissingFile()
   {
     var runner = new FakeProcessRunner();

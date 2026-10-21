@@ -1,5 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ECS3DLauncher.Services;
@@ -22,6 +24,7 @@ public class MainWindowViewModel : ObservableObject
     private readonly EngineLocation _engine;
     private readonly EngineActions _actions;
     private readonly LaunchCoordinator _coordinator;
+    private readonly Action<Action> _post;
 
     public string Version { get; }
 
@@ -89,6 +92,8 @@ public class MainWindowViewModel : ObservableObject
     }
 
     // The engine-not-found banner: null text means the engine is complete.
+    // Computed from the engine located at startup; the Settings task must re-locate and raise
+    // PropertyChanged for these when the engine folder changes.
     public string? EngineBannerText => _engine.Describe();
     public bool HasEngineBanner => EngineBannerText is not null;
 
@@ -120,7 +125,7 @@ public class MainWindowViewModel : ObservableObject
     public bool HasToastLog => ToastLogPath is not null;
 
     // Set by the window, which owns the OS "open with the default app" call.
-    public Action<string>? OpenLogFile { get; set; }
+    public Func<string, Task<bool>>? OpenLogFile { get; set; }
 
     public IRelayCommand<string?> SelectNavCommand { get; }
     public IRelayCommand NewProjectCommand { get; }
@@ -135,7 +140,8 @@ public class MainWindowViewModel : ObservableObject
             new EngineLocator(new PhysicalFileSystem()).Locate(null),
             new SystemProcessRunner(),
             new EarlyExitWatcher(new UserDataDirectory()),
-            AppVersion.Current())
+            AppVersion.Current(),
+            action => Dispatcher.UIThread.Post(action))
     {
     }
 
@@ -143,8 +149,10 @@ public class MainWindowViewModel : ObservableObject
         EngineLocation engine,
         IProcessRunner runner,
         EarlyExitWatcher watcher,
-        string version)
+        string version,
+        Action<Action> post)
     {
+        _post = post;
         _engine = engine;
         _actions = new EngineActions(engine);
         _coordinator = new LaunchCoordinator(new EngineLauncher(runner, engine), watcher, ShowNotice);
@@ -156,13 +164,14 @@ public class MainWindowViewModel : ObservableObject
         ExploreCommand = new RelayCommand(Explore, () => _actions.Explore.Available);
         OpenProjectCommand = new RelayCommand<Project>(OpenProject, _ => _actions.Open.Available);
         DismissToastCommand = new RelayCommand(DismissToast);
-        OpenLogsCommand = new RelayCommand(OpenLogs, () => HasToastLog);
+        OpenLogsCommand = new RelayCommand(() => _ = OpenLogsAsync(), () => HasToastLog);
 
         Projects = new ProjectsViewModel(
             () => ActiveNav = "templates",
             ExploreCommand,
             OpenProjectCommand,
             _actions.Explore.Tooltip,
+            _actions.Open.Tooltip,
             []);
 
         NavItems =
@@ -194,13 +203,16 @@ public class MainWindowViewModel : ObservableObject
 
     private void OpenProject(Project? project)
     {
-        if (project is not null)
+        if (project is { IsRealCard: true } && _actions.Open.Available)
         {
             _ = _coordinator.OpenProjectAsync(project.Path, DefaultLaunchOptions);
         }
     }
 
-    private void ShowNotice(LaunchNotice notice)
+    // Notices come from background continuations, so they are handed to the UI thread explicitly.
+    private void ShowNotice(LaunchNotice notice) => _post(() => ApplyNotice(notice));
+
+    private void ApplyNotice(LaunchNotice notice)
     {
         ToastLogPath = notice.LogPath;
         ToastMessage = notice.Message;
@@ -214,11 +226,27 @@ public class MainWindowViewModel : ObservableObject
         OpenLogsCommand.NotifyCanExecuteChanged();
     }
 
-    private void OpenLogs()
+    private async Task OpenLogsAsync()
     {
-        if (ToastLogPath is not null)
+        var path = ToastLogPath;
+        if (path is null)
         {
-            OpenLogFile?.Invoke(ToastLogPath);
+            return;
+        }
+
+        var opened = false;
+        try
+        {
+            opened = OpenLogFile is not null && await OpenLogFile(path);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            opened = false;
+        }
+
+        if (!opened)
+        {
+            ApplyNotice(EarlyExitNotice.Failure($"Could not open the log file {path}"));
         }
     }
 

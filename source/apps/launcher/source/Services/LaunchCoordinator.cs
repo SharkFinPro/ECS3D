@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,13 +23,25 @@ public sealed class LaunchCoordinator
 
     // The returned task ends when the watch window does; callers that do not care may drop it.
     public Task OpenProjectAsync(string projectFolder, LaunchOptions options) =>
-        ReportAsync(_launcher.OpenProject(projectFolder, options), EngineExecutable.Editor);
+        ReportAsync(() => _launcher.OpenProject(projectFolder, options), EngineExecutable.Editor);
 
     public Task ExploreEngineAsync(LaunchOptions options) =>
-        ReportAsync(_launcher.ExploreEngine(options), EngineExecutable.Editor);
+        ReportAsync(() => _launcher.ExploreEngine(options), EngineExecutable.Editor);
 
-    private async Task ReportAsync(LaunchResult result, EngineExecutable executable)
+    // Callers drop the task, so nothing the start or the watch throws may escape it.
+    private async Task ReportAsync(Func<LaunchResult> start, EngineExecutable executable)
     {
+        LaunchResult result;
+        try
+        {
+            result = start();
+        }
+        catch (Exception exception) when (IsLaunchFailure(exception))
+        {
+            _notify(EarlyExitNotice.Failure(exception.Message));
+            return;
+        }
+
         if (result.Process is null)
         {
             _notify(EarlyExitNotice.Failure(result.Error ?? "The process could not be started."));
@@ -36,11 +50,24 @@ public sealed class LaunchCoordinator
 
         // Disposing releases the launcher's handle only; the process keeps running.
         using var process = result.Process;
-        var outcome = await _watcher.WatchAsync(process, executable, CancellationToken.None);
-        var notice = EarlyExitNotice.From(outcome);
+        LaunchNotice? notice;
+        try
+        {
+            var outcome = await _watcher.WatchAsync(process, executable, CancellationToken.None);
+            notice = EarlyExitNotice.From(outcome);
+        }
+        catch (Exception exception) when (IsLaunchFailure(exception))
+        {
+            notice = EarlyExitNotice.Failure(exception.Message);
+        }
+
         if (notice is not null)
         {
             _notify(notice);
         }
     }
+
+    private static bool IsLaunchFailure(Exception exception) =>
+        exception is InvalidOperationException or Win32Exception or ArgumentException
+            or PlatformNotSupportedException or IOException or ProcessStartException;
 }

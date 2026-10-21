@@ -2,9 +2,53 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using ECS3DLauncher.Services;
 
 namespace ECS3DManagedTests;
+
+internal sealed class ThrowingProcessRunner : IProcessRunner
+{
+  private readonly Exception? _startError;
+  private readonly Exception? _waitError;
+
+  public ThrowingProcessRunner(Exception? startError, Exception? waitError)
+  {
+    _startError = startError;
+    _waitError = waitError;
+  }
+
+  public IRunningProcess Start(ProcessLaunch launch) =>
+    _startError is null ? new ThrowingWaitProcess(_waitError) : throw _startError;
+
+  private sealed class ThrowingWaitProcess : IRunningProcess
+  {
+    private readonly Exception? _waitError;
+
+    public ThrowingWaitProcess(Exception? waitError)
+    {
+      _waitError = waitError;
+    }
+
+    public bool HasExited => false;
+
+    public int? ExitCode => null;
+
+    public Task<int> WaitForExitAsync(CancellationToken cancellationToken) =>
+      _waitError is null ? Task.FromResult(0) : throw _waitError;
+
+    public void Kill()
+    {
+      // Nothing runs.
+    }
+
+    public void Dispose()
+    {
+      // Nothing to release.
+    }
+  }
+}
 
 internal sealed class NoticeRecorder
 {
@@ -36,7 +80,7 @@ internal static class ShellFixtures
 
   public static LaunchCoordinator CoordinatorFor(
     EngineLocation engine,
-    FakeProcessRunner runner,
+    IProcessRunner runner,
     TimeSpan window,
     NoticeRecorder recorder) =>
     new(new EngineLauncher(runner, engine), new EarlyExitWatcher(UserData, window), recorder.Record);

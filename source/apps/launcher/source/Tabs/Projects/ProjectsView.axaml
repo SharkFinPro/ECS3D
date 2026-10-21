@@ -115,6 +115,8 @@
                                                    Margin="7,0,0,0" Foreground="{StaticResource T2Brush}"
                                                    VerticalAlignment="Center" />
                                         <Button Grid.Column="2" Classes="open" Theme="{StaticResource BareButton}" Content="Open"
+                                                ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenTooltip, FallbackValue={x:Null}}"
+                                                ToolTip.ShowOnDisabled="True"
                                                 VerticalAlignment="Center"
                                                 Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
                                                 CommandParameter="{Binding}" />
@@ -184,6 +186,8 @@
                                            FontSize="11.5" Foreground="{StaticResource T2Brush}"
                                            VerticalAlignment="Center" />
                                 <Button Grid.Column="3" Classes="open" Theme="{StaticResource BareButton}" Content="Open"
+                                                ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenTooltip, FallbackValue={x:Null}}"
+                                                ToolTip.ShowOnDisabled="True"
                                                 VerticalAlignment="Center" Margin="0,0,14,0"
                                                 Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
                                                 CommandParameter="{Binding}" />

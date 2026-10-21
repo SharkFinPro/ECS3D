@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 
 namespace ECS3DLauncher.Shell;
@@ -49,16 +50,13 @@ public class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel viewModel)
         {
-            viewModel.OpenLogFile = path => _ = OpenWithDefaultAppAsync(path);
+            viewModel.OpenLogFile = OpenWithDefaultAppAsync;
         }
     }
 
-    private async Task OpenWithDefaultAppAsync(string path)
+    private async Task<bool> OpenWithDefaultAppAsync(string path)
     {
-        if (Launcher is { } launcher)
-        {
-            await launcher.LaunchUriAsync(new Uri(Path.GetFullPath(path)));
-        }
+        return Launcher is { } launcher && await launcher.LaunchFileInfoAsync(new FileInfo(path));
     }
 
     private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)
