@@ -256,7 +256,8 @@ TEST(DefaultWelcome, EveryScriptClassAndFieldItNamesIsShipped)
 
 TEST(DefaultWelcome, ObjectsScriptsLookUpByNameExistOnce)
 {
-  const auto& objects = sceneNamed(buildDefaultProject(), "Welcome").at("objects");
+  const auto project = buildDefaultProject();
+  const auto& objects = sceneNamed(project, "Welcome").at("objects");
 
   for (const char* name : { "Earth", "LaserMarker", "Sun" })
   {
