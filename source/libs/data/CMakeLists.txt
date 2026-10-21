@@ -20,6 +20,8 @@ add_library(${PROJECT_NAME}
   WireTypes.h
   assets/AssetRegistry.cpp
   assets/AssetRegistry.h
+  assets/ScriptClassAssets.cpp
+  assets/ScriptClassAssets.h
   edits/AssetWireType.h
   edits/EditCommand.cpp
   edits/EditCommand.h

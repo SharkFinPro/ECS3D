@@ -60,6 +60,7 @@ namespace scriptSystemFixtures {
     std::map<std::string, glm::vec3> vectors;
     bool reloadThrows = false;
     bool reloadReplaces = true;
+    std::optional<std::vector<ScriptClassInfo>> classNames;
     // Classes the fake cannot instantiate, and classes it reports as faulted.
     std::set<std::string> unresolvedClasses;
     std::set<std::string> unhealthyClasses;
@@ -87,6 +88,11 @@ namespace scriptSystemFixtures {
       }
 
       return m_state.reloadReplaces;
+    }
+
+    [[nodiscard]] std::optional<std::vector<ScriptClassInfo>> scriptClassNames() const override
+    {
+      return m_state.classNames;
     }
 
     [[nodiscard]] bool attachScript(const char* uuid, const char* className) const override

@@ -99,6 +99,7 @@ add_executable(${PROJECT_NAME}
   ScriptDirectoriesTest.cpp
   ScriptFieldLabelTest.cpp
   AttachedScriptsTest.cpp
+  ScriptClassAssetsTest.cpp
   ScriptSystemLifecycleTest.cpp
   ScriptSystemSceneScriptTest.cpp
   ScriptSystemSceneEventsTest.cpp
@@ -164,6 +165,7 @@ add_executable(${PROJECT_NAME}
   TemplateValidation.h
   TemplateValidationTest.cpp
   PhysicsStackingTest.cpp
+  PhysicsTippingTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsContactResponseTest.cpp
   PhysicsFrictionHoldTest.cpp
@@ -193,6 +195,8 @@ add_executable(${PROJECT_NAME}
   ProtocolFramingTest.cpp
   ServerPolicyTest.cpp
   EditTokenTest.cpp
+  EditorConnectionsTest.cpp
+  CommandLineSplitTest.cpp
   InputStatePayloadTest.cpp
   InputStateTest.cpp
   InputUtilsBindingsTest.cpp
@@ -220,8 +224,11 @@ add_executable(${PROJECT_NAME}
   # suite that is headless by construction. That is also the constraint the arrangement rests on - do
   # not add ECS3DNet to the link libraries below, or these objects and the library's duplicate. Anything
   # else in net that needs covering will hit the same wall. TransportLog.cpp and ServerLog.cpp are
-  # compiled in the same way, since both depend only on ECS3DLog + ECS3DNetProtocol.
+  # compiled in the same way, since both depend only on ECS3DLog + ECS3DNetProtocol. CommandLineSplit.cpp and
+  # EditorConnections.cpp are the CLR-free pieces split out of ServerProcess and NetServer.
   ../libs/net/MessageQueue.cpp
+  ../libs/net/CommandLineSplit.cpp
+  ../libs/net/EditorConnections.cpp
   # The Transform/RigidBody/Camera/InputUtils binding providers (and InputState, which InputUtilsBindings
   # reads) depend only on ECS3DData, so they are compiled in directly for the same reason as LogBindings.
   ../libs/scripting/bindings/TransformBindings.cpp
