@@ -113,6 +113,7 @@ add_executable(${PROJECT_NAME}
   RemoteLogSinkTest.cpp
   KeybindsTest.cpp
   BillboardTest.cpp
+  ThumbnailImageTest.cpp
   LightGizmoVisibilityTest.cpp
   PlayControlsTest.cpp
   GridVisibilityTest.cpp
@@ -264,10 +265,21 @@ add_executable(${PROJECT_NAME}
   # The billboard math depends only on glm, compiled in rather than linking ECS3DRender, which pulls in
   # Vulkan.
   ../libs/render/Billboard.cpp
+
+  # The thumbnail letterbox and PNG encode depend only on the standard library and stb_image_write.
+  ../libs/render/ThumbnailImage.cpp
 )
 
 
+# stb is fetched by VulkanEngine, which libs/ configures before this directory. FetchContent_MakeAvailable
+# sets stb_SOURCE_DIR only in the scope that called it, so read the global FetchContent property instead.
+FetchContent_GetProperties(stb SOURCE_DIR ECS3D_STB_SOURCE_DIR)
+if(NOT ECS3D_STB_SOURCE_DIR)
+  message(FATAL_ERROR "stb was not fetched; ECS3DTests needs it for ThumbnailImage")
+endif()
+
 target_include_directories(${PROJECT_NAME} PRIVATE
+  ${ECS3D_STB_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/../apps/server
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/net
   ${CMAKE_CURRENT_SOURCE_DIR}/../libs/scripting/bindings
