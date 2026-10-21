@@ -266,3 +266,76 @@ TEST(PhysicsTipping, ASpinningBoxThatDidNotRestOnThisPlaneLastTickStillShedsIt)
   // Positive control: the same spin on a body that rested on this plane is kept.
   fixtures::expectNear("resting here", spinAfterFlatContact(true), { 180, 0, 0 }, 1e-3f);
 }
+
+TEST(PhysicsTipping, APushJustPastTheEnergyToSwingTheBoxOverItsEdgeTipsIt)
+{
+  Dominoes dominoes(serverTick);
+  dominoes.addDomino(0, 1);
+  dominoes.settle();
+
+  // A push of 0.13 just carries its center over the edge when it swings about that edge, and 0.16 is above it. The
+  // rocking test above pushes with 0.1, which is below.
+  dominoes.pushHigh(0, { 0.16f, 0, 0 });
+  dominoes.tick(300);
+
+  EXPECT_GT(tiltOf(dominoes.objects[0]), 85.0f);
+  EXPECT_NEAR(transformOf(dominoes.objects[0])->getPosition().y, 0.15f, 0.05f);
+  EXPECT_GT(transformOf(dominoes.objects[0])->getPosition().x, 0.5f);
+}
+
+TEST(PhysicsTipping, ABoxReleasedLeaningPivotsOnItsBottomEdgeAndLandsOnItsSide)
+{
+  Dominoes dominoes(serverTick);
+  dominoes.addDomino(0, 1.01f);
+  const auto& domino = dominoes.objects[0];
+  transformOf(domino)->setRotation({ 0, 0, -15 });
+
+  const auto edgeOf = [&domino]
+  {
+    const auto& transform = *transformOf(domino);
+
+    return transform.getPosition() + transform.getOrientation() * glm::vec3(0.15f, -1.0f, 0.0f);
+  };
+  const float startX = edgeOf().x;
+
+  // The edge it stands on stays about where it was while the box swings through 45 degrees.
+  float mostSlipped = 0.0f;
+  int ticks = 0;
+  while (tiltOf(domino) < 45.0f && ticks < 600)
+  {
+    dominoes.tick();
+    mostSlipped = std::max(mostSlipped, std::fabs(edgeOf().x - startX));
+    ++ticks;
+  }
+
+  EXPECT_LT(ticks, 600);
+  EXPECT_LT(mostSlipped, 0.05f);
+
+  // Turned all the way about the edge, its center ends a half height beyond it and a half thickness up.
+  dominoes.tick(150);
+  EXPECT_GT(tiltOf(domino), 85.0f);
+  EXPECT_NEAR(transformOf(domino)->getPosition().x, startX + 1.0f, 0.15f);
+  EXPECT_NEAR(transformOf(domino)->getPosition().y, 0.15f, 0.05f);
+}
+
+TEST(PhysicsTipping, ALeaningDominoToppleChainReachesItsLastDomino)
+{
+  constexpr int chainLength = 5;
+  Dominoes dominoes(serverTick);
+
+  dominoes.addDomino(0, 1.01f);
+  transformOf(dominoes.objects[0])->setRotation({ 0, 0, -15 });
+  for (int index = 1; index < chainLength; ++index)
+  {
+    dominoes.addDomino(1.2f * static_cast<float>(index), 1);
+  }
+
+  dominoes.tick(600);
+
+  // Each domino must swing over its edge with the energy it was handed, or the chain loses enough at every step to
+  // stop within a few dominoes.
+  for (int index = 0; index < chainLength; ++index)
+  {
+    EXPECT_GT(tiltOf(dominoes.objects[index]), 45.0f) << "domino " << index;
+  }
+}
