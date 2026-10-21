@@ -53,6 +53,9 @@ internal sealed class FakeTreeFileSystem : IFileSystem
   }
 
   public void CreateDirectory(string path) => CreatedDirectories.Add(path);
+
+  // Matches the IFileSystem member the template catalog adds; this fake knows no folders.
+  public IReadOnlyList<string> EnumerateDirectories(string path) => [];
 }
 
 internal sealed class FixedTimeProvider : TimeProvider
