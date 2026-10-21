@@ -1,0 +1,11 @@
+{
+  "id": "coin-rush",
+  "name": "Coin Rush",
+  "description": "A 1-4 player arena: grab coins, shove rivals into the void, win the round. Host it and have friends join over your network.",
+  "category": "sample",
+  "tags": ["multiplayer", "scripting", "game"],
+  "thumbnail": "thumbnail.png",
+  "entryScene": "Arena",
+  "minEngineVersion": "0.0.1",
+  "players": { "min": 1, "max": 4 }
+}

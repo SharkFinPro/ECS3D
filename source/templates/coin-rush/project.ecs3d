@@ -1,0 +1,1684 @@
+{
+  "assets": {
+    "models": [
+      {
+        "filePath": "assets/models/cube_1x1x1.glb",
+        "name": "assets/models/cube_1x1x1.glb",
+        "uuid": "58034695-0495-4cfb-8f75-90cf24a9073b"
+      },
+      {
+        "filePath": "assets/models/sphere.glb",
+        "name": "assets/models/sphere.glb",
+        "uuid": "bcf01ddf-e82a-4ed1-90a7-b93b4184f647"
+      },
+      {
+        "filePath": "assets/models/cylinder.glb",
+        "name": "assets/models/cylinder.glb",
+        "uuid": "a383cc8f-ee6e-4373-ae06-f10f85ef159b"
+      },
+      {
+        "filePath": "assets/models/ramp.glb",
+        "name": "assets/models/ramp.glb",
+        "uuid": "e77194e0-e50e-4070-aacd-2f5d917b2da7"
+      },
+      {
+        "filePath": "assets/models/plane_tile.glb",
+        "name": "assets/models/plane_tile.glb",
+        "uuid": "6a742837-aa60-43fe-a652-32a3d385cde0"
+      },
+      {
+        "filePath": "assets/models/torus.glb",
+        "name": "assets/models/torus.glb",
+        "uuid": "7a1cd753-3775-44a0-858f-27239f8740f5"
+      },
+      {
+        "filePath": "assets/models/boulder.glb",
+        "name": "assets/models/boulder.glb",
+        "uuid": "9d0e47fd-8a6f-4ff9-9614-ddb0c5dddd5a"
+      }
+    ],
+    "textures": [
+      {
+        "filePath": "assets/textures/white.png",
+        "name": "assets/textures/white.png",
+        "uuid": "a3628d76-f753-4e27-be83-35744d1ac44d"
+      },
+      {
+        "filePath": "assets/textures/grid_checker.png",
+        "name": "assets/textures/grid_checker.png",
+        "uuid": "48ad67dd-957f-4fc9-bd7b-019debffa1d0"
+      },
+      {
+        "filePath": "assets/textures/checker_orange.png",
+        "name": "assets/textures/checker_orange.png",
+        "uuid": "425f3784-74eb-4e09-bfbb-88facfb014d0"
+      },
+      {
+        "filePath": "assets/textures/checker_blue.png",
+        "name": "assets/textures/checker_blue.png",
+        "uuid": "05325ffd-75bd-4d76-a50d-7b80e183b081"
+      },
+      {
+        "filePath": "assets/textures/palette_red.png",
+        "name": "assets/textures/palette_red.png",
+        "uuid": "7c8c01db-771f-4048-94c2-004b8d19e7aa"
+      },
+      {
+        "filePath": "assets/textures/palette_green.png",
+        "name": "assets/textures/palette_green.png",
+        "uuid": "c5eee5e6-9bd0-4f9b-977f-b9220a21a630"
+      },
+      {
+        "filePath": "assets/textures/palette_blue.png",
+        "name": "assets/textures/palette_blue.png",
+        "uuid": "66a8a6fc-d151-4567-9ce5-2e17cc675fe0"
+      },
+      {
+        "filePath": "assets/textures/palette_yellow.png",
+        "name": "assets/textures/palette_yellow.png",
+        "uuid": "1d5edebf-57f9-499c-9840-b84a57174422"
+      },
+      {
+        "filePath": "assets/textures/palette_orange.png",
+        "name": "assets/textures/palette_orange.png",
+        "uuid": "ea184ad8-ca64-48cd-b69e-92bcb4649158"
+      },
+      {
+        "filePath": "assets/textures/palette_purple.png",
+        "name": "assets/textures/palette_purple.png",
+        "uuid": "8925b024-c923-4839-9e6b-fa67e69e6752"
+      }
+    ],
+    "scripts": [],
+    "prefabs": [
+      {
+        "name": "Player",
+        "uuid": "9c7f0e83-4d16-4b52-a09e-27f5b3d81c6a",
+        "body": {
+          "name": "Player",
+          "children": [],
+          "components": [
+            {
+              "type": "Transform",
+              "position": [0, 0, 0],
+              "rotation": [0, 0, 0],
+              "scale": [1, 1, 1]
+            },
+            {
+              "type": "ModelRenderer",
+              "shouldRender": true,
+              "useStandardPipeline": true,
+              "reflectivity": 0,
+              "modelUUID": "bcf01ddf-e82a-4ed1-90a7-b93b4184f647",
+              "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+              "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+            },
+            {
+              "type": "RigidBody",
+              "velocity": [0, 0, 0],
+              "angularVelocity": [0, 0, 0],
+              "friction": 0,
+              "doGravity": true,
+              "gravity": -9.81,
+              "mass": 4.18879
+            },
+            {
+              "type": "Collider",
+              "subType": "Sphere",
+              "radius": 1,
+              "position": [0, 0, 0]
+            },
+            {
+              "type": "PlayerController",
+              "playerSlot": 0
+            },
+            {
+              "type": "Camera",
+              "direction": [0, 0, -1],
+              "fov": 45,
+              "nearPlane": 0.1,
+              "farPlane": 1000,
+              "active": true
+            }
+          ],
+          "scripts": [
+            {
+              "type": "Script",
+              "className": "PlayerScript",
+              "fields": [
+                {
+                  "name": "m_topSpeed",
+                  "type": "float",
+                  "value": 9
+                },
+                {
+                  "name": "m_jumpSpeed",
+                  "type": "float",
+                  "value": 15
+                }
+              ]
+            }
+          ],
+          "uuid": "4b0c8f2a-5d61-4e37-9a84-c1f7e2d03b56"
+        }
+      },
+      {
+        "name": "Coin",
+        "uuid": "6d8e7448-37c9-442a-8b3f-081dab2eb553",
+        "body": {
+          "name": "Coin",
+          "children": [],
+          "components": [
+            {
+              "type": "Transform",
+              "position": [0, 0, 0],
+              "rotation": [90, 0, 0],
+              "scale": [0.8, 0.8, 0.8]
+            },
+            {
+              "type": "ModelRenderer",
+              "shouldRender": true,
+              "useStandardPipeline": true,
+              "reflectivity": 0,
+              "modelUUID": "7a1cd753-3775-44a0-858f-27239f8740f5",
+              "textureUUID": "1d5edebf-57f9-499c-9840-b84a57174422",
+              "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+            },
+            {
+              "type": "Collider",
+              "subType": "Sphere",
+              "radius": 1,
+              "renderCollider": false,
+              "position": [0, 0, 0],
+              "isTrigger": true,
+              "layer": 0,
+              "mask": 4294967295
+            }
+          ],
+          "scripts": [
+            {
+              "type": "Script",
+              "className": "Collectible",
+              "fields": [
+                {
+                  "name": "m_value",
+                  "type": "int",
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "type": "Script",
+              "className": "Spinner",
+              "fields": [
+                {
+                  "name": "m_axis",
+                  "type": "vector3",
+                  "value": [0, 1, 0]
+                },
+                {
+                  "name": "m_degreesPerSecond",
+                  "type": "float",
+                  "value": 90
+                }
+              ]
+            },
+            {
+              "type": "Script",
+              "className": "Bobber",
+              "fields": [
+                {
+                  "name": "m_amplitude",
+                  "type": "float",
+                  "value": 0.25
+                },
+                {
+                  "name": "m_frequencyHz",
+                  "type": "float",
+                  "value": 0.5
+                }
+              ]
+            }
+          ],
+          "uuid": "dc2de4b1-aa59-48fa-831c-04ef9c6702a3"
+        }
+      },
+      {
+        "name": "Big Coin",
+        "uuid": "2e00e3f7-a15e-45b4-bb3c-7bbe22392376",
+        "body": {
+          "name": "Big Coin",
+          "children": [],
+          "components": [
+            {
+              "type": "Transform",
+              "position": [0, 0, 0],
+              "rotation": [90, 0, 0],
+              "scale": [1.3, 1.3, 1.3]
+            },
+            {
+              "type": "ModelRenderer",
+              "shouldRender": true,
+              "useStandardPipeline": true,
+              "reflectivity": 0,
+              "modelUUID": "7a1cd753-3775-44a0-858f-27239f8740f5",
+              "textureUUID": "1d5edebf-57f9-499c-9840-b84a57174422",
+              "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+            },
+            {
+              "type": "Collider",
+              "subType": "Sphere",
+              "radius": 1,
+              "renderCollider": false,
+              "position": [0, 0, 0],
+              "isTrigger": true,
+              "layer": 0,
+              "mask": 4294967295
+            }
+          ],
+          "scripts": [
+            {
+              "type": "Script",
+              "className": "Collectible",
+              "fields": [
+                {
+                  "name": "m_value",
+                  "type": "int",
+                  "value": 3
+                }
+              ]
+            },
+            {
+              "type": "Script",
+              "className": "Spinner",
+              "fields": [
+                {
+                  "name": "m_axis",
+                  "type": "vector3",
+                  "value": [0, 1, 0]
+                },
+                {
+                  "name": "m_degreesPerSecond",
+                  "type": "float",
+                  "value": 90
+                }
+              ]
+            },
+            {
+              "type": "Script",
+              "className": "Bobber",
+              "fields": [
+                {
+                  "name": "m_amplitude",
+                  "type": "float",
+                  "value": 0.25
+                },
+                {
+                  "name": "m_frequencyHz",
+                  "type": "float",
+                  "value": 0.5
+                }
+              ]
+            }
+          ],
+          "uuid": "4161b8f0-4444-4a82-999e-bbd03272d691"
+        }
+      },
+      {
+        "name": "Big Boulder",
+        "uuid": "89d32afe-b7f1-4547-be29-6135427fb9d7",
+        "body": {
+          "name": "Big Boulder",
+          "children": [],
+          "components": [
+            {
+              "type": "Transform",
+              "position": [0, 0, 0],
+              "rotation": [0, 0, 0],
+              "scale": [1.4, 1.4, 1.4]
+            },
+            {
+              "type": "ModelRenderer",
+              "shouldRender": true,
+              "useStandardPipeline": true,
+              "reflectivity": 0,
+              "modelUUID": "9d0e47fd-8a6f-4ff9-9614-ddb0c5dddd5a",
+              "textureUUID": "425f3784-74eb-4e09-bfbb-88facfb014d0",
+              "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+            },
+            {
+              "type": "RigidBody",
+              "velocity": [0, 0, 0],
+              "angularVelocity": [0, 0, 0],
+              "friction": 0.5,
+              "doGravity": true,
+              "gravity": -9.81,
+              "mass": 3.964753
+            },
+            {
+              "type": "Collider",
+              "subType": "ConvexMesh",
+              "position": [0, 0, 0],
+              "rotation": [0, 0, 0],
+              "scale": [1, 1, 1],
+              "sourceModel": "9d0e47fd-8a6f-4ff9-9614-ddb0c5dddd5a",
+              "vertices": [
+                0.34230164, 0.5538972, 0.053800896, -0.38854134, 0.54437494, 0.41718554, 0.05238757, 0.39859578, -0.5285579, 0.3248869, 0.33976135, 0.58325684,
+                -0.7364068, 0.39090952, -0.22091557, 0.48911625, 0.37881413, -0.42886502, -0.14544554, 0.35377824, 0.71124804, -0.3585087, 0.1679853, -0.88275594,
+                0.7682158, 0.20822552, 0.2312058, -0.68443096, 0.12990841, 0.29821754, 0.29163334, 0.067504816, -0.83138615, 0.4313888, 0.059028838, 0.79038024,
+                -0.70747143, -0.12823051, -0.57968915, 0.8412988, -0.028428044, -0.2629276, -0.41362587, -0.14104797, 0.60821337, -0.104649976, -0.12201078, -0.7299008,
+                0.51321125, -0.2939722, 0.56263703, -0.772315, -0.32580712, 0.04026985, 0.41329613, -0.3983722, -0.37672248, -0.0021156878, -0.3384631, 0.8507372,
+                -0.32823536, -0.46054316, -0.48470998, 0.57285696, -0.47959697, 0.27173454, -0.38338467, -0.43326128, 0.25921384, 0.061592367, -0.5401266, -0.13673109
+              ],
+              "indices": [
+                0, 1, 3, 0, 4, 1, 0, 2, 4, 0, 5, 2,
+                0, 3, 8, 0, 8, 5, 1, 6, 3, 1, 4, 9,
+                1, 9, 6, 2, 7, 4, 2, 5, 10, 2, 10, 7,
+                3, 6, 11, 3, 11, 8, 4, 7, 12, 4, 17, 9,
+                4, 12, 17, 5, 8, 13, 5, 13, 10, 6, 9, 14,
+                6, 19, 11, 6, 14, 19, 7, 10, 15, 7, 20, 12,
+                7, 15, 20, 8, 11, 16, 8, 21, 13, 8, 16, 21,
+                9, 17, 14, 10, 13, 18, 10, 20, 15, 10, 18, 20,
+                11, 19, 16, 12, 20, 17, 13, 21, 18, 14, 17, 19,
+                16, 19, 21, 17, 22, 19, 17, 20, 22, 18, 23, 20,
+                18, 21, 23, 19, 23, 21, 19, 22, 23, 20, 23, 22
+              ],
+              "renderCollider": false,
+              "isTrigger": false,
+              "layer": 0,
+              "mask": 4294967295
+            }
+          ],
+          "scripts": [],
+          "uuid": "12773fd5-5d26-4b27-a539-ce1ed9349d4e"
+        }
+      },
+      {
+        "name": "Ramp",
+        "uuid": "1b112469-4331-402e-bc4a-94cd0368ef52",
+        "body": {
+          "name": "Ramp",
+          "children": [],
+          "components": [
+            {
+              "type": "Transform",
+              "position": [0, 0, 0],
+              "rotation": [0, 0, 0],
+              "scale": [1, 1, 1]
+            },
+            {
+              "type": "ModelRenderer",
+              "shouldRender": true,
+              "useStandardPipeline": true,
+              "reflectivity": 0,
+              "modelUUID": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+              "textureUUID": "05325ffd-75bd-4d76-a50d-7b80e183b081",
+              "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+            },
+            {
+              "type": "Collider",
+              "subType": "ConvexMesh",
+              "position": [0, 0, 0],
+              "rotation": [0, 0, 0],
+              "scale": [1, 1, 1],
+              "sourceModel": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+              "vertices": [
+                -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1,
+                1, 1, -1, 1, 1, 1
+              ],
+              "indices": [
+                0, 1, 2, 0, 2, 3, 1, 4, 5, 1, 5, 2,
+                0, 3, 5, 0, 5, 4, 0, 4, 1, 3, 2, 5
+              ],
+              "renderCollider": false,
+              "isTrigger": false,
+              "layer": 0,
+              "mask": 4294967295
+            }
+          ],
+          "scripts": [],
+          "uuid": "0d3a6c91-7e48-4f25-b1c0-8a52d9e4f673"
+        }
+      }
+    ],
+    "scenes": [
+      {
+        "name": "Arena",
+        "objects": [
+          {
+            "name": "Ground",
+            "children": [
+              {
+                "name": "Tile 1",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [-20, 1, -20],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "a6deca95-bec2-49a4-b5b0-124ec6348ff6"
+              },
+              {
+                "name": "Tile 2",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [0, 1, -20],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "7b3b7105-366e-415e-9050-2bccd16ac3b6"
+              },
+              {
+                "name": "Tile 3",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [20, 1, -20],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "cbb7fbcf-dbfc-44d4-a697-e4850ff715a1"
+              },
+              {
+                "name": "Tile 4",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [-20, 1, 0],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "083212df-25e4-468b-94f4-ddc07ec5ff12"
+              },
+              {
+                "name": "Tile 5",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [0, 1, 0],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "10c440e0-341f-4dd2-8223-fbeb52921f4a"
+              },
+              {
+                "name": "Tile 6",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [20, 1, 0],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "8e7baf14-171d-4644-ad53-51713f052361"
+              },
+              {
+                "name": "Tile 7",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [-20, 1, 20],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "8710ec44-abb2-4ca6-a13c-ad1e38f0f413"
+              },
+              {
+                "name": "Tile 8",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [0, 1, 20],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "09fb9aff-0cec-4f95-a75a-90aa36b30269"
+              },
+              {
+                "name": "Tile 9",
+                "children": [],
+                "components": [
+                  {
+                    "type": "Transform",
+                    "position": [20, 1, 20],
+                    "rotation": [0, 0, 0],
+                    "scale": [10, 1, 10]
+                  },
+                  {
+                    "type": "ModelRenderer",
+                    "shouldRender": true,
+                    "useStandardPipeline": true,
+                    "reflectivity": 0,
+                    "modelUUID": "6a742837-aa60-43fe-a652-32a3d385cde0",
+                    "textureUUID": "48ad67dd-957f-4fc9-bd7b-019debffa1d0",
+                    "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+                  }
+                ],
+                "scripts": [],
+                "uuid": "1d26ae1a-f7a5-4a22-b737-909f28808268"
+              }
+            ],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, -1, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": false,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "a3628d76-f753-4e27-be83-35744d1ac44d",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [30, 1, 30],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "772df7da-44f8-4c0c-bff5-05e2be1612a7"
+          },
+          {
+            "name": "Sun",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [10, 35, 10],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1]
+              },
+              {
+                "type": "LightRenderer",
+                "color": [1, 0.97, 0.9],
+                "direction": [0, -1, 0],
+                "isSpotlight": false,
+                "ambient": 0.25,
+                "diffuse": 0.8,
+                "specular": 0.5,
+                "coneAngle": 0
+              }
+            ],
+            "scripts": [],
+            "uuid": "c736afa8-fef6-42c3-866b-dac0683168ad"
+          },
+          {
+            "name": "Dais",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 1, 0],
+                "rotation": [0, 0, 0],
+                "scale": [6, 1, 6]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "05325ffd-75bd-4d76-a50d-7b80e183b081",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "c78cdf0e-34cf-4b1a-89a0-6c29f96951dc"
+          },
+          {
+            "name": "Ramp West",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [-10, 1, 0],
+                "rotation": [0, 0, 0],
+                "scale": [4, 1, 3]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+                "textureUUID": "05325ffd-75bd-4d76-a50d-7b80e183b081",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "ConvexMesh",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "sourceModel": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+                "vertices": [
+                  -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1,
+                  1, 1, -1, 1, 1, 1
+                ],
+                "indices": [
+                  0, 1, 2, 0, 2, 3, 1, 4, 5, 1, 5, 2,
+                  0, 3, 5, 0, 5, 4, 0, 4, 1, 3, 2, 5
+                ],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "b6c257d4-eb02-405a-b1d4-a464af89bf78"
+          },
+          {
+            "name": "Ramp East",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [10, 1, 0],
+                "rotation": [0, 180, 0],
+                "scale": [4, 1, 3]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+                "textureUUID": "05325ffd-75bd-4d76-a50d-7b80e183b081",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "ConvexMesh",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "sourceModel": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+                "vertices": [
+                  -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1,
+                  1, 1, -1, 1, 1, 1
+                ],
+                "indices": [
+                  0, 1, 2, 0, 2, 3, 1, 4, 5, 1, 5, 2,
+                  0, 3, 5, 0, 5, 4, 0, 4, 1, 3, 2, 5
+                ],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "51b4b29d-fd2c-4114-9733-19c1ba4e2f5b"
+          },
+          {
+            "name": "Ramp North",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 1, -10],
+                "rotation": [0, -90, 0],
+                "scale": [4, 1, 3]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+                "textureUUID": "05325ffd-75bd-4d76-a50d-7b80e183b081",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "ConvexMesh",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "sourceModel": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+                "vertices": [
+                  -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1,
+                  1, 1, -1, 1, 1, 1
+                ],
+                "indices": [
+                  0, 1, 2, 0, 2, 3, 1, 4, 5, 1, 5, 2,
+                  0, 3, 5, 0, 5, 4, 0, 4, 1, 3, 2, 5
+                ],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "344e6398-cb01-4bc7-a0e6-9d6bcc2f4d88"
+          },
+          {
+            "name": "Ramp South",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 1, 10],
+                "rotation": [0, 90, 0],
+                "scale": [4, 1, 3]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+                "textureUUID": "05325ffd-75bd-4d76-a50d-7b80e183b081",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "ConvexMesh",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "sourceModel": "e77194e0-e50e-4070-aacd-2f5d917b2da7",
+                "vertices": [
+                  -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1,
+                  1, 1, -1, 1, 1, 1
+                ],
+                "indices": [
+                  0, 1, 2, 0, 2, 3, 1, 4, 5, 1, 5, 2,
+                  0, 3, 5, 0, 5, 4, 0, 4, 1, 3, 2, 5
+                ],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "95583970-94a2-4174-b6d2-57b417d4be87"
+          },
+          {
+            "name": "SpawnPoint1",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [-24, 0.02, -24],
+                "rotation": [0, 0, 0],
+                "scale": [2, 0.02, 2]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "a383cc8f-ee6e-4373-ae06-f10f85ef159b",
+                "textureUUID": "7c8c01db-771f-4048-94c2-004b8d19e7aa",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              }
+            ],
+            "scripts": [],
+            "uuid": "34f8f0c6-ff98-4321-8191-d5f60ca0e06a"
+          },
+          {
+            "name": "SpawnPoint2",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [24, 0.02, -24],
+                "rotation": [0, 0, 0],
+                "scale": [2, 0.02, 2]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "a383cc8f-ee6e-4373-ae06-f10f85ef159b",
+                "textureUUID": "66a8a6fc-d151-4567-9ce5-2e17cc675fe0",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              }
+            ],
+            "scripts": [],
+            "uuid": "772ce3bb-3734-45e3-b536-887ffee68aa5"
+          },
+          {
+            "name": "SpawnPoint3",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [24, 0.02, 24],
+                "rotation": [0, 0, 0],
+                "scale": [2, 0.02, 2]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "a383cc8f-ee6e-4373-ae06-f10f85ef159b",
+                "textureUUID": "c5eee5e6-9bd0-4f9b-977f-b9220a21a630",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              }
+            ],
+            "scripts": [],
+            "uuid": "4fc5ef45-2b83-4066-921b-cc62f46fdd62"
+          },
+          {
+            "name": "SpawnPoint4",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [-24, 0.02, 24],
+                "rotation": [0, 0, 0],
+                "scale": [2, 0.02, 2]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "a383cc8f-ee6e-4373-ae06-f10f85ef159b",
+                "textureUUID": "ea184ad8-ca64-48cd-b69e-92bcb4649158",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              }
+            ],
+            "scripts": [],
+            "uuid": "23784d7a-f28b-4309-9ac4-c81b91a1e386"
+          },
+          {
+            "name": "Score Pillar 1",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [-28, 0.1, -24],
+                "rotation": [0, 0, 0],
+                "scale": [0.75, 0.1, 0.75]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "7c8c01db-771f-4048-94c2-004b8d19e7aa",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "ScorePillar",
+                "fields": [
+                  {
+                    "name": "m_slot",
+                    "type": "int",
+                    "value": 0
+                  }
+                ]
+              }
+            ],
+            "uuid": "5de847af-0bcc-4920-ac53-29f117c1f607"
+          },
+          {
+            "name": "Score Pillar 2",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [28, 0.1, -24],
+                "rotation": [0, 0, 0],
+                "scale": [0.75, 0.1, 0.75]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "66a8a6fc-d151-4567-9ce5-2e17cc675fe0",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "ScorePillar",
+                "fields": [
+                  {
+                    "name": "m_slot",
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            "uuid": "adb7640e-3117-42d7-becb-725b184fe7c5"
+          },
+          {
+            "name": "Score Pillar 3",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [28, 0.1, 24],
+                "rotation": [0, 0, 0],
+                "scale": [0.75, 0.1, 0.75]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "c5eee5e6-9bd0-4f9b-977f-b9220a21a630",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "ScorePillar",
+                "fields": [
+                  {
+                    "name": "m_slot",
+                    "type": "int",
+                    "value": 2
+                  }
+                ]
+              }
+            ],
+            "uuid": "dbe29fe7-b178-4448-a5b7-de6817824711"
+          },
+          {
+            "name": "Score Pillar 4",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [-28, 0.1, 24],
+                "rotation": [0, 0, 0],
+                "scale": [0.75, 0.1, 0.75]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "ea184ad8-ca64-48cd-b69e-92bcb4649158",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "ScorePillar",
+                "fields": [
+                  {
+                    "name": "m_slot",
+                    "type": "int",
+                    "value": 3
+                  }
+                ]
+              }
+            ],
+            "uuid": "b8acbf0a-8d30-4333-81af-a18130e1ebc3"
+          },
+          {
+            "name": "Sky Island North",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 5, -31],
+                "rotation": [0, 0, 0],
+                "scale": [5, 1, 3]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "05325ffd-75bd-4d76-a50d-7b80e183b081",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "a2fce135-8a24-44f4-a563-c44b66f07b4f"
+          },
+          {
+            "name": "Sky Island South",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 5, 31],
+                "rotation": [0, 0, 0],
+                "scale": [5, 1, 3]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "05325ffd-75bd-4d76-a50d-7b80e183b081",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [],
+            "uuid": "212c2351-9d28-4c6c-a6e4-04628115a8f4"
+          },
+          {
+            "name": "Lift North",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 0.25, -26],
+                "rotation": [0, 0, 0],
+                "scale": [2, 0.25, 2]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "8925b024-c923-4839-9e6b-fa67e69e6752",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "PingPongMover",
+                "fields": [
+                  {
+                    "name": "m_offset",
+                    "type": "vector3",
+                    "value": [0, 6, 0]
+                  },
+                  {
+                    "name": "m_speed",
+                    "type": "float",
+                    "value": 2
+                  },
+                  {
+                    "name": "m_pauseSeconds",
+                    "type": "float",
+                    "value": 2
+                  },
+                  {
+                    "name": "m_carryRiders",
+                    "type": "bool",
+                    "value": true
+                  }
+                ]
+              }
+            ],
+            "uuid": "64b47a02-665a-42c6-a832-da55ac11cbdd"
+          },
+          {
+            "name": "Lift South",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 0.25, 26],
+                "rotation": [0, 0, 0],
+                "scale": [2, 0.25, 2]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "8925b024-c923-4839-9e6b-fa67e69e6752",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "PingPongMover",
+                "fields": [
+                  {
+                    "name": "m_offset",
+                    "type": "vector3",
+                    "value": [0, 6, 0]
+                  },
+                  {
+                    "name": "m_speed",
+                    "type": "float",
+                    "value": 2
+                  },
+                  {
+                    "name": "m_pauseSeconds",
+                    "type": "float",
+                    "value": 2
+                  },
+                  {
+                    "name": "m_carryRiders",
+                    "type": "bool",
+                    "value": true
+                  }
+                ]
+              }
+            ],
+            "uuid": "2e44cf79-a6d4-441f-bff9-0df635983240"
+          },
+          {
+            "name": "Pusher 1",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [-18, 2, -6],
+                "rotation": [0, 0, 0],
+                "scale": [2, 2, 2]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "8925b024-c923-4839-9e6b-fa67e69e6752",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "PingPongMover",
+                "fields": [
+                  {
+                    "name": "m_offset",
+                    "type": "vector3",
+                    "value": [0, 0, 10]
+                  },
+                  {
+                    "name": "m_speed",
+                    "type": "float",
+                    "value": 3
+                  },
+                  {
+                    "name": "m_pauseSeconds",
+                    "type": "float",
+                    "value": 0.5
+                  },
+                  {
+                    "name": "m_carryRiders",
+                    "type": "bool",
+                    "value": false
+                  }
+                ]
+              }
+            ],
+            "uuid": "5b53b581-7abf-452d-8e67-26be481082f2"
+          },
+          {
+            "name": "Pusher 2",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [18, 2, 6],
+                "rotation": [0, 0, 0],
+                "scale": [2, 2, 2]
+              },
+              {
+                "type": "ModelRenderer",
+                "shouldRender": true,
+                "useStandardPipeline": true,
+                "reflectivity": 0,
+                "modelUUID": "58034695-0495-4cfb-8f75-90cf24a9073b",
+                "textureUUID": "8925b024-c923-4839-9e6b-fa67e69e6752",
+                "specularMapUUID": "a3628d76-f753-4e27-be83-35744d1ac44d"
+              },
+              {
+                "type": "Collider",
+                "subType": "Box",
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1],
+                "renderCollider": false,
+                "isTrigger": false,
+                "layer": 0,
+                "mask": 4294967295
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "PingPongMover",
+                "fields": [
+                  {
+                    "name": "m_offset",
+                    "type": "vector3",
+                    "value": [0, 0, -10]
+                  },
+                  {
+                    "name": "m_speed",
+                    "type": "float",
+                    "value": 3
+                  },
+                  {
+                    "name": "m_pauseSeconds",
+                    "type": "float",
+                    "value": 0.5
+                  },
+                  {
+                    "name": "m_carryRiders",
+                    "type": "bool",
+                    "value": false
+                  }
+                ]
+              }
+            ],
+            "uuid": "d46355da-75af-4b01-abf5-7e11744eded5"
+          },
+          {
+            "name": "Boulder Spawner",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 7, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1]
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "Spawner",
+                "fields": [
+                  {
+                    "name": "m_prefab",
+                    "type": "string",
+                    "value": "89d32afe-b7f1-4547-be29-6135427fb9d7"
+                  },
+                  {
+                    "name": "m_interval",
+                    "type": "float",
+                    "value": 8
+                  },
+                  {
+                    "name": "m_maxAlive",
+                    "type": "int",
+                    "value": 3
+                  },
+                  {
+                    "name": "m_offsetRadius",
+                    "type": "float",
+                    "value": 2
+                  }
+                ]
+              }
+            ],
+            "uuid": "040c935c-376f-42a9-bd12-45e071d4a8be"
+          },
+          {
+            "name": "Coin Spawner",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 1.5, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1]
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "Spawner",
+                "fields": [
+                  {
+                    "name": "m_prefab",
+                    "type": "string",
+                    "value": "6d8e7448-37c9-442a-8b3f-081dab2eb553"
+                  },
+                  {
+                    "name": "m_interval",
+                    "type": "float",
+                    "value": 1.5
+                  },
+                  {
+                    "name": "m_maxAlive",
+                    "type": "int",
+                    "value": 12
+                  },
+                  {
+                    "name": "m_offsetRadius",
+                    "type": "float",
+                    "value": 20
+                  }
+                ]
+              }
+            ],
+            "uuid": "3242de59-8563-4612-8493-0310dbce0575"
+          },
+          {
+            "name": "Island Spawner North",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 7.5, -31],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1]
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "Spawner",
+                "fields": [
+                  {
+                    "name": "m_prefab",
+                    "type": "string",
+                    "value": "2e00e3f7-a15e-45b4-bb3c-7bbe22392376"
+                  },
+                  {
+                    "name": "m_interval",
+                    "type": "float",
+                    "value": 15
+                  },
+                  {
+                    "name": "m_maxAlive",
+                    "type": "int",
+                    "value": 3
+                  },
+                  {
+                    "name": "m_offsetRadius",
+                    "type": "float",
+                    "value": 3
+                  }
+                ]
+              }
+            ],
+            "uuid": "a3d7b3de-c6da-44d8-b900-dadd1058c0ea"
+          },
+          {
+            "name": "Island Spawner South",
+            "children": [],
+            "components": [
+              {
+                "type": "Transform",
+                "position": [0, 7.5, 31],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1]
+              }
+            ],
+            "scripts": [
+              {
+                "type": "Script",
+                "className": "Spawner",
+                "fields": [
+                  {
+                    "name": "m_prefab",
+                    "type": "string",
+                    "value": "2e00e3f7-a15e-45b4-bb3c-7bbe22392376"
+                  },
+                  {
+                    "name": "m_interval",
+                    "type": "float",
+                    "value": 15
+                  },
+                  {
+                    "name": "m_maxAlive",
+                    "type": "int",
+                    "value": 3
+                  },
+                  {
+                    "name": "m_offsetRadius",
+                    "type": "float",
+                    "value": 3
+                  }
+                ]
+              }
+            ],
+            "uuid": "2521e882-8cae-4945-8bee-9114af56deaa"
+          }
+        ],
+        "scripts": [
+          {
+            "type": "Script",
+            "className": "PlayerSpawnManager",
+            "fields": [
+              {
+                "name": "m_respawnBelowY",
+                "type": "float",
+                "value": -20
+              },
+              {
+                "name": "m_tintPlayers",
+                "type": "bool",
+                "value": true
+              }
+            ]
+          },
+          {
+            "type": "Script",
+            "className": "ScoreKeeper",
+            "fields": [
+              {
+                "name": "m_targetScore",
+                "type": "int",
+                "value": 0
+              },
+              {
+                "name": "m_resetOnRoundOver",
+                "type": "bool",
+                "value": true
+              }
+            ]
+          },
+          {
+            "type": "Script",
+            "className": "RoundTimer",
+            "fields": [
+              {
+                "name": "m_roundSeconds",
+                "type": "int",
+                "value": 90
+              },
+              {
+                "name": "m_intermissionSeconds",
+                "type": "float",
+                "value": 5
+              }
+            ]
+          }
+        ],
+        "uuid": "5b0a4c2e-8d97-4f31-a6e5-3c1f9d70b248"
+      }
+    ]
+  },
+  "currentSceneUUID": "5b0a4c2e-8d97-4f31-a6e5-3c1f9d70b248"
+}
