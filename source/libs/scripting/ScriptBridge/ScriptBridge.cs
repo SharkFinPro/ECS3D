@@ -387,15 +387,13 @@ public static class Bridge
     internal static IReadOnlyList<string> LoadedScriptTypeNames =>
         _ctx?.ScriptTypes.Select(t => t.Name).ToList() ?? new List<string>();
 
-    // The loaded script class names, sorted and joined with '
-', for the editor's script asset list. Caller
+    // The loaded script class names, sorted and joined with newlines, for the editor's script asset list. Caller
     // frees the result with freeString.
     [UnmanagedCallersOnly]
     public static IntPtr getScriptClassNames() => Marshal.StringToCoTaskMemUTF8(JoinedScriptClassNames());
 
     internal static string JoinedScriptClassNames() =>
-        string.Join('
-', LoadedScriptTypeNames.OrderBy(name => name, StringComparer.Ordinal));
+        string.Join('\n', LoadedScriptTypeNames.OrderBy(name => name, StringComparer.Ordinal));
 
     // Returns the static state to what a fresh process has, so tests do not leak into each other.
     internal static void ResetForTests()

@@ -194,8 +194,7 @@ public class BridgeLifecycleTests : IDisposable
     WriteScript("a.cs", ScriptSource("Alpha"));
     Bridge.Initialize(_dir);
 
-    Assert.Equal("Alpha
-Zeta", Bridge.JoinedScriptClassNames());
+    Assert.Equal("Alpha\nZeta", Bridge.JoinedScriptClassNames());
   }
 
   [Fact]

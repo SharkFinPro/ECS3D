@@ -279,8 +279,7 @@ std::vector<std::string> ScriptEngine::scriptClassNames() const
 
   std::vector<std::string> names;
   std::istringstream stream(joined);
-  for (std::string name; std::getline(stream, name, '
-');)
+  for (std::string name; std::getline(stream, name, '\n');)
   {
     if (!name.empty())
     {
