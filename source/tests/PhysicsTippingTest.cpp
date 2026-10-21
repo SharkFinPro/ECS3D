@@ -251,8 +251,10 @@ TEST(PhysicsTipping, ASideContactIsTheSameWhicheverWayRoundingTiltsItsNormal)
   EXPECT_GT(upVelocity.x, 0.01f);
   EXPECT_GT(glm::length(upSpin), 1.0f);
 
-  expectNear("velocity", downVelocity, upVelocity);
-  fixtures::expectNear("spin", downSpin, upSpin, 1e-3f);
+  // The two normals differ by 2e-6, so the responses may differ by about as much relatively; the sign-dependent
+  // bug this guards against gave a spin of zero on one side.
+  fixtures::expectNear("velocity", downVelocity, upVelocity, 1e-4f * glm::length(upVelocity));
+  fixtures::expectNear("spin", downSpin, upSpin, 1e-4f * glm::length(upSpin));
 }
 
 TEST(PhysicsTipping, ASpinningBoxThatDidNotRestOnThisPlaneLastTickStillShedsIt)
