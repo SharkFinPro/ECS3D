@@ -7,9 +7,9 @@ public sealed record JoinTarget(string Address, int Port)
     private const int MinPort = 1;
     private const int MaxPort = 65535;
 
-    public const string PortError = "The port must be a whole number from 1 to 65535.";
+    internal const string PortError = "The port must be a whole number from 1 to 65535.";
 
-    public const string AddressError = "Enter the host's address.";
+    internal const string AddressError = "Enter the host's address.";
 
     // A blank port field means the default port.
     public static JoinTargetResult Parse(string? addressText, string? portText, int defaultPort)
