@@ -492,7 +492,7 @@ refused with a warning and does not fault the script. Exposed fields may be floa
 vector3: each type has a `getField*`/`setField*` export, and a string crosses as 8-bit Unicode text that the
 native side frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
 every other type, and the Inspector draws a string field as a text box.
-Script asset records for compiled classes are a view the server derives, never saved. Before each snapshot,
+The server derives Script asset records for compiled classes, and `serialize` skips them. Before each snapshot,
 `ServerApp::broadcastSnapshot` syncs the records with `ScriptRuntime::scriptClassNames` (`syncScriptClassAssets`).
 Every record of a compiled class takes its `scriptKind`, "scene" or "object", so each picker skips the other's
 classes; a class with no record gets a pathless one, with a uuid derived from the name. Once a compile has
