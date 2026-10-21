@@ -18,6 +18,8 @@ public class ProjectsViewModel : ObservableObject
     private readonly Action _openTemplates;
     private string _searchText = "";
     private bool _isGridView = true;
+    private string? _exploreTooltip;
+    private string? _openTooltip;
 
     public ObservableCollection<Project> Projects { get; }
 
@@ -31,6 +33,7 @@ public class ProjectsViewModel : ObservableObject
         {
             if (SetProperty(ref _isGridView, value))
             {
+                ViewChosen?.Invoke(value);
                 OnPropertyChanged(nameof(IsListView));
                 OnPropertyChanged(nameof(ShowGrid));
                 OnPropertyChanged(nameof(ShowList));
@@ -58,9 +61,20 @@ public class ProjectsViewModel : ObservableObject
         }
     }
 
-    public string? ExploreTooltip { get; }
+    // Called with true for the grid when the choice changes; the shell saves it.
+    public Action<bool>? ViewChosen { get; set; }
 
-    public string? OpenTooltip { get; }
+    public string? ExploreTooltip
+    {
+        get => _exploreTooltip;
+        private set => SetProperty(ref _exploreTooltip, value);
+    }
+
+    public string? OpenTooltip
+    {
+        get => _openTooltip;
+        private set => SetProperty(ref _openTooltip, value);
+    }
 
     public IRelayCommand SetGridCommand { get; }
     public IRelayCommand SetListCommand { get; }
@@ -94,6 +108,12 @@ public class ProjectsViewModel : ObservableObject
             OnPropertyChanged(nameof(ShowList));
         };
         RebuildTiles();
+    }
+
+    public void UpdateTooltips(string? exploreTooltip, string? openTooltip)
+    {
+        ExploreTooltip = exploreTooltip;
+        OpenTooltip = openTooltip;
     }
 
     private void RebuildTiles()

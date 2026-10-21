@@ -1,7 +1,66 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="using:ECS3DLauncher.Shared.Controls"
-             x:Class="ECS3DLauncher.Tabs.Settings.SettingsView">
+             xmlns:local="using:ECS3DLauncher.Tabs.Settings"
+             x:Class="ECS3DLauncher.Tabs.Settings.SettingsView"
+             x:DataType="local:SettingsViewModel">
 
-    <controls:EmptyState IconData="{StaticResource IconSettings}" Heading="Settings" />
+    <UserControl.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="LetterSpacing" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource T3Brush}" />
+            <Setter Property="Margin" Value="0,18,0,8" />
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource T3Brush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel MaxWidth="640" HorizontalAlignment="Left" Spacing="8">
+
+        <TextBlock Classes="section" Text="ENGINE" Margin="0,0,0,8" />
+        <TextBlock Text="Engine folder" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <TextBox Grid.Column="0" Text="{Binding EngineFolder}"
+                     PlaceholderText="Empty: the launcher's own folder" />
+            <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
+                    Content="Browse..." Command="{Binding BrowseEngineCommand}" />
+            <Button Grid.Column="2" Classes="secondary" Theme="{StaticResource BareButton}"
+                    Content="Reset to default" Command="{Binding ResetEngineCommand}" />
+        </Grid>
+        <TextBlock Classes="error" Text="{Binding EngineError}" IsVisible="{Binding HasEngineError}" />
+        <TextBlock Classes="hint" Text="{Binding EngineFoundText}"
+                   IsVisible="{Binding EngineFoundText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+        <TextBlock Classes="error" Text="{Binding EngineMissingText}" IsVisible="{Binding HasEngineMissing}" />
+
+        <TextBlock Classes="section" Text="PROJECTS" />
+        <TextBlock Text="Default location for new projects" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Grid.Column="0" Text="{Binding ProjectsFolder}" />
+            <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
+                    Content="Browse..." Command="{Binding BrowseProjectsCommand}" />
+        </Grid>
+
+        <TextBlock Classes="section" Text="LAUNCHING" />
+        <CheckBox IsChecked="{Binding EditorConsole}" Content="Open a console window with the editor" />
+        <CheckBox IsChecked="{Binding ServerConsole}" Content="Open a console window for its server" />
+        <CheckBox IsChecked="{Binding CloseAfterOpen}" Content="Close the launcher after opening a project" />
+        <TextBlock Classes="hint" Text="The last option is saved but not applied yet." />
+
+        <TextBlock Classes="section" Text="MULTIPLAYER" />
+        <TextBlock Text="Port for hosting" FontWeight="SemiBold" />
+        <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left" />
+        <TextBlock Classes="error" Text="{Binding PortError}" IsVisible="{Binding HasPortError}" />
+        <TextBlock Text="Last joined" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <TextBlock Text="{Binding LastJoinText}" FontFamily="{StaticResource MonoFontFamily}"
+                   Foreground="{StaticResource T2Brush}" />
+    </StackPanel>
 </UserControl>
