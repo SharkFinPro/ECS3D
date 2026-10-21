@@ -1,0 +1,10 @@
+{
+  "id": "valid-fixture",
+  "name": "Valid Fixture",
+  "description": "A minimal template used to prove the validator accepts a good one.",
+  "category": "template",
+  "tags": ["fixture"],
+  "thumbnail": "thumbnail.png",
+  "entryScene": "Main",
+  "minEngineVersion": "0.0.1"
+}

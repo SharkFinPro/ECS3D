@@ -11,6 +11,7 @@
 #include "bindings/LightRendererBindings.h"
 #include "bindings/PlayerControllerBindings.h"
 #include "bindings/LogBindings.h"
+#include "ScriptDirectories.h"
 #include <Log.h>
 #include <ManagedHost.h>
 #include <filesystem>
@@ -28,7 +29,7 @@ ScriptEngine::ScriptEngine(std::shared_ptr<ManagedHost> host)
 {}
 
 void ScriptEngine::init(const std::string& bridgeDir,
-                        const std::string& scriptDir)
+                        const std::vector<std::filesystem::path>& scriptDirs)
 {
   if (!m_host || !m_host->isInitialized())
   {
@@ -76,8 +77,9 @@ void ScriptEngine::init(const std::string& bridgeDir,
 
   registerBindings(assemblyPath, kBridgeType);
 
-  Log::info(LogCategory::script, "Initializing bridge, script dir: " + scriptDir);
-  initBridge(scriptDir.c_str());
+  const std::string joinedDirs = scripting::joinScriptDirectories(scriptDirs);
+  Log::info(LogCategory::script, "Initializing bridge, script dirs: " + joinedDirs);
+  initBridge(joinedDirs.c_str());
 
   m_initialized = true;
   Log::info(LogCategory::script, "Initialized successfully.");

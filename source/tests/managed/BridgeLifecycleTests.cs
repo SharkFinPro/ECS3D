@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using ScriptBridge;
 using Xunit;
 
@@ -372,6 +373,149 @@ public class BridgeLifecycleTests : IDisposable
     Bridge.Reload();
 
     Assert.Equal(new[] { ClassName }, Bridge.LoadedScriptTypeNames);
+  }
+
+  private string WriteIn(string dir, string fileName, string source)
+  {
+    Directory.CreateDirectory(dir);
+    var path = Path.Combine(dir, fileName);
+    File.WriteAllText(path, source);
+    return path;
+  }
+
+  [Fact]
+  public void Initialize_CompilesScriptsFromEveryDirectoryTogether()
+  {
+    var builtIn = Path.Combine(_dir, "builtin");
+    var project = Path.Combine(_dir, "project");
+    WriteIn(builtIn, "a.cs", ScriptSource("BuiltInScript"));
+    WriteIn(project, "b.cs", ScriptSource("ProjectScript"));
+
+    Bridge.Initialize(new[] { builtIn, project });
+
+    Assert.Equal(new[] { "BuiltInScript", "ProjectScript" }, Bridge.LoadedScriptTypeNames.OrderBy(n => n));
+  }
+
+  [Fact]
+  public void Initialize_ScriptsInANestedProjectFolderAreIncluded()
+  {
+    var builtIn = Path.Combine(_dir, "builtin");
+    var project = Path.Combine(_dir, "project");
+    WriteIn(builtIn, "a.cs", ScriptSource("BuiltInScript"));
+    WriteIn(Path.Combine(project, "enemies"), "b.cs", ScriptSource("NestedScript"));
+
+    Bridge.Initialize(new[] { builtIn, project });
+
+    Assert.Contains("NestedScript", Bridge.LoadedScriptTypeNames);
+  }
+
+  [Fact]
+  public void Initialize_ProjectScriptsCanUseABuiltInClass()
+  {
+    var builtIn = Path.Combine(_dir, "builtin");
+    var project = Path.Combine(_dir, "project");
+    WriteIn(builtIn, "a.cs", "using ScriptBridge;\npublic class Base : ScriptBase { }\n");
+    WriteIn(project, "b.cs", "public class Derived : Base { }\n");
+
+    Bridge.Initialize(new[] { builtIn, project });
+
+    Assert.Equal(new[] { "Base", "Derived" }, Bridge.LoadedScriptTypeNames.OrderBy(n => n));
+  }
+
+  [Fact]
+  public void Initialize_ProjectScriptsDirectoryMayBeMissing()
+  {
+    var builtIn = Path.Combine(_dir, "builtin");
+    WriteIn(builtIn, "a.cs", ScriptSource("BuiltInScript"));
+
+    var thrown = Record.Exception(() => Bridge.Initialize(new[] { builtIn, Path.Combine(_dir, "project") }));
+
+    Assert.Null(thrown);
+    Assert.Equal(new[] { "BuiltInScript" }, Bridge.LoadedScriptTypeNames);
+  }
+
+  [Fact]
+  public void Initialize_ScriptsInTheProjectAloneStillCompileWhenTheBuiltInDirectoryIsMissing()
+  {
+    var project = Path.Combine(_dir, "project");
+    WriteIn(project, "b.cs", ScriptSource("ProjectScript"));
+
+    Bridge.Initialize(new[] { Path.Combine(_dir, "missing"), project });
+
+    Assert.Equal(new[] { "ProjectScript" }, Bridge.LoadedScriptTypeNames);
+  }
+
+  [Fact]
+  public void CollectSourceFiles_SkipsBinObjAndDotFolders()
+  {
+    var project = Path.Combine(_dir, "project");
+    var kept = WriteIn(Path.Combine(project, "enemies"), "keep.cs", ScriptSource("Kept"));
+    WriteIn(Path.Combine(project, "obj", "Debug"), "gen.cs", ScriptSource("Generated"));
+    WriteIn(Path.Combine(project, "bin"), "b.cs", ScriptSource("Binary"));
+    WriteIn(Path.Combine(project, ".vs"), "h.cs", ScriptSource("Hidden"));
+
+    var files = Bridge.CollectSourceFiles(new[] { project });
+
+    Assert.Equal(new[] { kept }, files);
+  }
+
+  [Fact]
+  public void Initialize_ADuplicateClassAcrossDirectoriesLoadsNothing()
+  {
+    var builtIn = Path.Combine(_dir, "builtin");
+    var project = Path.Combine(_dir, "project");
+    WriteIn(builtIn, "a.cs", ScriptSource("Shared"));
+    WriteIn(project, "b.cs", ScriptSource("Shared"));
+
+    Bridge.Initialize(new[] { builtIn, project });
+
+    Assert.Empty(Bridge.LoadedScriptTypeNames);
+  }
+
+  [Fact]
+  public void DuplicateAcrossDirectories_ErrorNamesBothFiles()
+  {
+    var builtIn = Path.Combine(_dir, "builtin");
+    var project = Path.Combine(_dir, "project");
+    var first = WriteIn(builtIn, "a.cs", ScriptSource("Shared"));
+    var second = WriteIn(project, "b.cs", ScriptSource("Shared"));
+
+    var result = ScriptCompiler.Compile(Bridge.CollectSourceFiles(new[] { builtIn, project }));
+
+    Assert.False(result.Success);
+    var message = Assert.Single(result.DuplicateMessages);
+    Assert.Contains(first, message);
+    Assert.Contains(second, message);
+  }
+
+  [Fact]
+  public void Reload_ADuplicateAcrossDirectoriesKeepsThePreviousScripts()
+  {
+    var builtIn = Path.Combine(_dir, "builtin");
+    var project = Path.Combine(_dir, "project");
+    WriteIn(builtIn, "a.cs", ScriptSource("Shared"));
+    Bridge.Initialize(new[] { builtIn, project });
+    Assert.Equal(new[] { "Shared" }, Bridge.LoadedScriptTypeNames);
+
+    WriteIn(project, "b.cs", ScriptSource("Shared"));
+
+    Assert.False(Bridge.Reload());
+    Assert.Equal(new[] { "Shared" }, Bridge.LoadedScriptTypeNames);
+  }
+
+  [Fact]
+  public void Reload_PicksUpAFileAddedToTheProjectDirectory()
+  {
+    var builtIn = Path.Combine(_dir, "builtin");
+    var project = Path.Combine(_dir, "project");
+    WriteIn(builtIn, "a.cs", ScriptSource("BuiltInScript"));
+    Bridge.Initialize(new[] { builtIn, project });
+    Assert.Equal(new[] { "BuiltInScript" }, Bridge.LoadedScriptTypeNames);
+
+    WriteIn(project, "b.cs", ScriptSource("ProjectScript"));
+
+    Assert.True(Bridge.Reload());
+    Assert.Equal(new[] { "BuiltInScript", "ProjectScript" }, Bridge.LoadedScriptTypeNames.OrderBy(n => n));
   }
 
   private class HostileStop : ScriptBase

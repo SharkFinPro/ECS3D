@@ -327,6 +327,36 @@ public unsafe class StarterScoringTests : IDisposable
   }
 
   [Fact]
+  public void ScoreKeeper_PublishesZeroForASlotThatLeavesWithAScore()
+  {
+    var recorder = AddRecorder();
+    var keeper = AddKeeper();
+    Collect(0, 4);
+    Assert.Equal(4, keeper.getScore(0));
+    recorder.Scores.Clear();
+
+    keeper.onPlayerLeft(0);
+
+    var change = Assert.Single(recorder.Scores);
+    Assert.Equal((0, 0), (change.Slot, change.Score));
+  }
+
+  [Fact]
+  public void ScoreKeeper_PublishesNothingWhenASlotWithoutAScoreLeaves()
+  {
+    var recorder = AddRecorder();
+    var keeper = AddKeeper();
+    Collect(1, 2);
+    recorder.Scores.Clear();
+
+    keeper.onPlayerLeft(0);
+    Assert.Empty(recorder.Scores);
+
+    keeper.onPlayerLeft(1);
+    Assert.Single(recorder.Scores);
+  }
+
+  [Fact]
   public void RoundTimer_PublishesOneTickPerSecondCountingDown()
   {
     var recorder = AddRecorder();
