@@ -15,6 +15,7 @@
 #include <Log.h>
 #include <ManagedHost.h>
 #include <filesystem>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -61,6 +62,7 @@ void ScriptEngine::init(const std::string& bridgeDir,
   m_onSceneEvent = reinterpret_cast<OnSceneEventFn>(resolve("onSceneEvent"));
 
   m_getExposedFields = reinterpret_cast<GetExposedFieldsFn>(resolve("getExposedFields"));
+  m_getScriptClassNames = reinterpret_cast<GetScriptClassNamesFn>(resolve("getScriptClassNames"));
   m_freeString = reinterpret_cast<FreeStringFn>(resolve("freeString"));
 
   m_getFieldFloat = reinterpret_cast<GetFieldFloatFn>(resolve("getFieldFloat"));
@@ -254,6 +256,39 @@ void ScriptEngine::onSceneEvent(const char* sceneUuid,
   {
     m_onSceneEvent(sceneUuid, className, event, objectUuid, slot);
   }
+}
+
+std::optional<std::vector<ScriptClassInfo>> ScriptEngine::scriptClassNames() const
+{
+  if (!m_getScriptClassNames)
+  {
+    return std::nullopt;
+  }
+
+  char* raw = m_getScriptClassNames();
+  if (!raw)
+  {
+    return std::nullopt;
+  }
+
+  const std::string joined(raw);
+  if (m_freeString)
+  {
+    m_freeString(raw);
+  }
+
+  std::vector<ScriptClassInfo> names;
+  std::istringstream stream(joined);
+  for (std::string line; std::getline(stream, line, '\n');)
+  {
+    const auto tab = line.find('\t');
+    if (tab != 0 && !line.empty())
+    {
+      names.push_back({ line.substr(0, tab), tab != std::string::npos && line.substr(tab + 1) == "scene" });
+    }
+  }
+
+  return names;
 }
 
 std::string ScriptEngine::getExposedFields(const char* uuid,

@@ -68,6 +68,8 @@ public:
                     const char* objectUuid,
                     int slot) const override;
 
+  [[nodiscard]] std::optional<std::vector<ScriptClassInfo>> scriptClassNames() const override;
+
   [[nodiscard]] std::string getExposedFields(const char* uuid,
                                              const char* className) const override;
 
@@ -133,6 +135,7 @@ private:
   using InitBridgeFn = void(*)(const char*);
 
   using GetExposedFieldsFn = char*(*)(const char*, const char*);
+  using GetScriptClassNamesFn = char*(*)();
   using FreeStringFn = void(*)(char*);
 
   using GetFieldFloatFn = float(*)(const char*, const char*, const char*);
@@ -163,6 +166,7 @@ private:
   ReloadFn m_reload = nullptr;
 
   GetExposedFieldsFn m_getExposedFields = nullptr;
+  GetScriptClassNamesFn m_getScriptClassNames = nullptr;
   FreeStringFn m_freeString = nullptr;
 
   GetFieldFloatFn m_getFieldFloat = nullptr;
