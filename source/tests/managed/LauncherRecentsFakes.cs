@@ -15,7 +15,7 @@ internal sealed class FakeTreeFileSystem : IFileSystem
 
   public int FailNextWrites { get; set; }
 
-  public int Attempts { get; private set; }
+  public int Attempts { get; set; }
 
   public int Writes { get; private set; }
 
