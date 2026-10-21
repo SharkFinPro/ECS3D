@@ -62,6 +62,10 @@ TEST(CommandLineSplit, AdjacentQuotedPartsMergeIntoOneToken)
 TEST(CommandLineSplit, AnUnterminatedQuoteSwallowsTheRestOfTheLine)
 {
   EXPECT_EQ(net::splitArguments("a \"b c d"), (Tokens{ "a", "b c d" }));
+}
+
+TEST(CommandLineSplit, ATerminatedQuoteAroundOneWordLeavesTheNeighborsSeparate)
+{
   EXPECT_EQ(net::splitArguments("a \"b\" c"), (Tokens{ "a", "b", "c" }));
 }
 

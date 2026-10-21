@@ -4,6 +4,7 @@
 
 #include <Protocol.h>
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <thread>
@@ -153,6 +154,17 @@ TEST(EditorConnections, ConcurrentSocketThreadCallsAreAllRecorded)
   constexpr int idsPerThread = 200;
   constexpr int total = threadCount * idsPerThread;
 
+  // A smoke test under ASan, not a race detector: the reader only exercises the locks while writers run.
+  std::atomic<bool> writing{ true };
+  std::thread reader([&connections, &writing]
+  {
+    while (writing.load())
+    {
+      static_cast<void>(connections.editorIds());
+      static_cast<void>(connections.isEditor(0));
+    }
+  });
+
   std::vector<std::thread> threads;
   for (int t = 0; t < threadCount; ++t)
   {
@@ -170,6 +182,8 @@ TEST(EditorConnections, ConcurrentSocketThreadCallsAreAllRecorded)
   {
     thread.join();
   }
+  writing = false;
+  reader.join();
 
   EXPECT_EQ(connections.editorIds().size(), static_cast<size_t>(total));
   EXPECT_TRUE(connections.isEditor(0));
