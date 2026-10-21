@@ -258,17 +258,17 @@ void ScriptEngine::onSceneEvent(const char* sceneUuid,
   }
 }
 
-std::vector<ScriptClassInfo> ScriptEngine::scriptClassNames() const
+std::optional<std::vector<ScriptClassInfo>> ScriptEngine::scriptClassNames() const
 {
   if (!m_getScriptClassNames)
   {
-    return {};
+    return std::nullopt;
   }
 
   char* raw = m_getScriptClassNames();
   if (!raw)
   {
-    return {};
+    return std::nullopt;
   }
 
   const std::string joined(raw);

@@ -2,6 +2,7 @@
 #define SCRIPTRUNTIME_H
 
 #include <assets/ScriptClassAssets.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,8 +21,9 @@ public:
   // the compile failed and the previous instances keep running.
   [[nodiscard]] virtual bool reloadScripts() const = 0;
 
-  // The names of the script classes the last successful compile produced, object and scene scripts alike.
-  [[nodiscard]] virtual std::vector<ScriptClassInfo> scriptClassNames() const = 0;
+  // The script classes the last successful compile produced, object and scene scripts alike. nullopt until a
+  // compile has succeeded, which is not the same as a compile that produced no classes.
+  [[nodiscard]] virtual std::optional<std::vector<ScriptClassInfo>> scriptClassNames() const = 0;
 
   // True when a managed instance now exists under the pair; false when the class is missing or its
   // constructor threw.

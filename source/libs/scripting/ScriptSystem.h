@@ -62,8 +62,8 @@ public:
   // Builds the runtime now rather than on first use, so the compile does not land on the first join's snapshot.
   void warmUp();
 
-  // The class names the runtime's last successful compile produced; empty before the runtime exists.
-  [[nodiscard]] std::vector<ScriptClassInfo> scriptClassNames() const;
+  // The class names the runtime's last successful compile produced; nullopt before the runtime has compiled.
+  [[nodiscard]] std::optional<std::vector<ScriptClassInfo>> scriptClassNames() const;
 
   // Attach + start every Script's managed instance, pushing each Script's saved field blob into it.
   void start(ObjectManager& objectManager);

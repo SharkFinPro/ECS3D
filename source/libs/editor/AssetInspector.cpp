@@ -506,9 +506,10 @@ void AssetInspector::displayDeleteButton(const AssetRecord& record)
   ImGui::Separator();
   ImGui::Spacing();
 
-  if (isCompiledScriptRecord(record))
+  if (!canDeleteAsset(record))
   {
-    gc::dashedBox("Comes from a compiled script; remove its .cs file instead");
+    gc::dashedBox(record.path.empty() ? "Comes from a compiled script; remove its .cs file instead"
+                                      : "Its class still compiles; remove the class from its .cs file first");
     return;
   }
 

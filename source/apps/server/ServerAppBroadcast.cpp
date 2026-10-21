@@ -40,11 +40,11 @@ void ServerApp::broadcastSnapshot() const
     }
   }
 
-  // Run after the project is loaded or the scripts are recompiled, so the Script slot lists every class the
-  // server can attach, whatever the project file lists.
+  // Run after the project is loaded or the scripts are recompiled, so the Script slot lists exactly the classes
+  // the server can attach, whatever the project file lists.
   try
   {
-    registerScriptClassAssets(*m_assetRegistry, m_scriptSystem->scriptClassNames());
+    syncScriptClassAssets(*m_assetRegistry, m_scriptSystem->scriptClassNames());
   }
   catch (const std::exception& e)
   {

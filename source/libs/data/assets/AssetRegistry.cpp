@@ -1,5 +1,6 @@
 #include "AssetRegistry.h"
 #include <nlohmann/json.hpp>
+#include <Log.h>
 #include <Protocol.h>
 #include <vector>
 
@@ -58,6 +59,11 @@ void AssetRegistry::registerAsset(const AssetRecord& record)
         m_loadedPaths.emplace(record.path, uuid);
         ++m_version;
       }
+      else
+      {
+        Log::debug(LogCategory::assets, "Dropped script record '" + record.path + "': class '" + record.className
+          + "' is already registered from '" + existing.path + "'.");
+      }
 
       return;
     }
@@ -85,6 +91,20 @@ void AssetRegistry::renameAsset(const uuids::uuid& uuid, const std::string& disp
   // resolves the asset by path or uuid is disturbed - only the shown name changes.
   it->second.displayName = displayName;
   ++m_version;
+}
+
+bool AssetRegistry::setScriptKind(const uuids::uuid& uuid, const ScriptKind kind)
+{
+  const auto it = m_assets.find(uuid);
+  if (it == m_assets.end() || it->second.type != AssetType::Script || it->second.scriptKind == kind)
+  {
+    return false;
+  }
+
+  it->second.scriptKind = kind;
+  ++m_version;
+
+  return true;
 }
 
 void AssetRegistry::removeAsset(const uuids::uuid& uuid)
@@ -203,6 +223,12 @@ nlohmann::json AssetRegistry::serialize() const
         data["textures"].push_back(withDisplayName({ { "name", record.path }, { "filePath", record.path }, { "uuid", uuidString } }, record));
         break;
       case AssetType::Script:
+        // A pathless record is derived from the compile and rebuilt on the next snapshot.
+        if (record.path.empty())
+        {
+          break;
+        }
+
         data["scripts"].push_back(withDisplayName({ { "className", record.className }, { "filePath", record.path }, { "uuid", uuidString } }, record));
         break;
       case AssetType::Prefab:

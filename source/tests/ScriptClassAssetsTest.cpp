@@ -11,13 +11,16 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace {
   using namespace scriptSystemFixtures;
 
-  std::vector<ScriptClassInfo> objectClasses(const std::vector<std::string>& names)
+  using Compiled = std::optional<std::vector<ScriptClassInfo>>;
+
+  Compiled objectClasses(const std::vector<std::string>& names)
   {
     std::vector<ScriptClassInfo> classes;
     for (const auto& name : names)
@@ -26,6 +29,11 @@ namespace {
     }
 
     return classes;
+  }
+
+  uuids::uuid fixedUuid(const char* text)
+  {
+    return uuids::uuid::from_string(text).value();
   }
 
   std::vector<std::string> scriptClassesOf(const AssetRegistry& registry)
@@ -48,9 +56,7 @@ namespace {
   {
     AssetRegistry registry;
 
-    const auto added = registerScriptClassAssets(registry, objectClasses({ "Spinner", "Collectible" }));
-
-    EXPECT_EQ(added, 2u);
+    EXPECT_TRUE(syncScriptClassAssets(registry, objectClasses({ "Spinner", "Collectible" })));
     EXPECT_EQ(scriptClassesOf(registry), (std::vector<std::string>{ "Collectible", "Spinner" }));
   }
 
@@ -59,8 +65,8 @@ namespace {
     AssetRegistry first;
     AssetRegistry second;
 
-    registerScriptClassAssets(first, objectClasses({ "Spinner" }));
-    registerScriptClassAssets(second, objectClasses({ "Spinner" }));
+    syncScriptClassAssets(first, objectClasses({ "Spinner" }));
+    syncScriptClassAssets(second, objectClasses({ "Spinner" }));
 
     EXPECT_EQ(uuids::to_string(scriptClassUuid("Spinner")), "a3ea623f-88b5-59dc-a2c2-f6b95121c510");
     EXPECT_NE(scriptClassUuid("Spinner"), scriptClassUuid("Collectible"));
@@ -75,9 +81,7 @@ namespace {
     registry.registerAsset({ .uuid = listed, .type = AssetType::Script,
       .path = "scripts/UserScripts/PlayerScript.cs", .className = "PlayerScript" });
 
-    const auto added = registerScriptClassAssets(registry, objectClasses({ "PlayerScript", "Spinner" }));
-
-    EXPECT_EQ(added, 1u);
+    EXPECT_TRUE(syncScriptClassAssets(registry, objectClasses({ "PlayerScript", "Spinner" })));
     EXPECT_EQ(scriptClassesOf(registry), (std::vector<std::string>{ "PlayerScript", "Spinner" }));
     const auto* kept = registry.getByUUID(listed);
     ASSERT_NE(kept, nullptr);
@@ -88,19 +92,19 @@ namespace {
   TEST(ScriptClassAssets, AddsNothingOnASecondPassOrForAnEmptyName)
   {
     AssetRegistry registry;
-    registerScriptClassAssets(registry, objectClasses({ "Spinner" }));
+    syncScriptClassAssets(registry, objectClasses({ "Spinner" }));
     const auto version = registry.getVersion();
 
-    EXPECT_EQ(registerScriptClassAssets(registry, objectClasses({ "Spinner", "" })), 0u);
+    EXPECT_FALSE(syncScriptClassAssets(registry, objectClasses({ "Spinner", "" })));
     EXPECT_EQ(registry.getVersion(), version);
-    EXPECT_EQ(registerScriptClassAssets(registry, objectClasses({ "Spawner" })), 1u);
+    EXPECT_TRUE(syncScriptClassAssets(registry, objectClasses({ "Spinner", "Spawner" })));
     EXPECT_GT(registry.getVersion(), version);
   }
 
   TEST(ScriptClassAssets, ARecordRoundTripsThroughTheSnapshotWithItsClassName)
   {
     AssetRegistry registry;
-    registerScriptClassAssets(registry, objectClasses({ "Spinner" }));
+    syncScriptClassAssets(registry, objectClasses({ "Spinner" }));
 
     net::Message message(net::MessageType::snapshot);
     registry.pack(message);
@@ -117,7 +121,7 @@ namespace {
   TEST(ScriptClassAssets, ALateFileBackedRecordMergesIntoTheCompiledOneAndFillsItsPath)
   {
     AssetRegistry registry;
-    registerScriptClassAssets(registry, objectClasses({ "Spinner" }));
+    syncScriptClassAssets(registry, objectClasses({ "Spinner" }));
     const auto fileUuid = uuids::uuid::from_string("22222222-2222-2222-2222-222222222222").value();
 
     registry.registerAsset({ .uuid = fileUuid, .type = AssetType::Script,
@@ -129,7 +133,6 @@ namespace {
     ASSERT_NE(merged, nullptr);
     EXPECT_EQ(merged->path, "scripts/Spinner.cs");
     EXPECT_EQ(registry.getByPath("scripts/Spinner.cs"), merged);
-    EXPECT_FALSE(isCompiledScriptRecord(*merged));
   }
 
   TEST(ScriptClassAssets, AFileBackedRecordKeepsItsPathWhenALaterOneNamesTheSameClass)
@@ -147,20 +150,85 @@ namespace {
     EXPECT_EQ(scriptClassesOf(registry), (std::vector<std::string>{ "Dup" }));
   }
 
-  TEST(ScriptClassAssets, OnlyAPathlessScriptRecordIsCompiled)
+  TEST(ScriptClassAssets, OnlyARecordOfAClassThatNoLongerCompilesCanBeDeleted)
   {
-    const auto uuid = scriptClassUuid("Spinner");
+    AssetRecord compiled{ .uuid = scriptClassUuid("Spinner"), .type = AssetType::Script, .className = "Spinner",
+                          .scriptKind = ScriptKind::Object };
+    AssetRecord orphan{ .uuid = scriptClassUuid("Gone"), .type = AssetType::Script, .path = "g.cs",
+                        .className = "Gone" };
 
-    EXPECT_TRUE(isCompiledScriptRecord({ .uuid = uuid, .type = AssetType::Script, .className = "Spinner" }));
-    EXPECT_FALSE(isCompiledScriptRecord({ .uuid = uuid, .type = AssetType::Script, .path = "s.cs",
-                                          .className = "Spinner" }));
-    EXPECT_FALSE(isCompiledScriptRecord({ .uuid = uuid, .type = AssetType::Model }));
+    EXPECT_FALSE(canDeleteAsset(compiled));
+    compiled.path = "s.cs";
+    EXPECT_FALSE(canDeleteAsset(compiled));
+    EXPECT_TRUE(canDeleteAsset(orphan));
+    EXPECT_TRUE(canDeleteAsset({ .uuid = scriptClassUuid("M"), .type = AssetType::Model }));
+  }
+
+  TEST(ScriptClassAssets, ARegistrySavesOnlyFileBackedScriptRecords)
+  {
+    AssetRegistry registry;
+    registry.registerAsset({ .uuid = fixedUuid("11111111-1111-1111-1111-111111111111"), .type = AssetType::Script,
+                             .path = "scripts/Mover.cs", .className = "Mover" });
+    syncScriptClassAssets(registry, objectClasses({ "Mover", "Spinner" }));
+    ASSERT_NE(registry.getByUUID(scriptClassUuid("Spinner")), nullptr);
+
+    const auto saved = registry.serialize();
+    AssetRegistry loaded;
+    loaded.loadFromJSON(saved);
+
+    EXPECT_EQ(scriptClassesOf(loaded), (std::vector<std::string>{ "Mover" }));
+    EXPECT_EQ(saved.at("scripts").size(), 1u);
+  }
+
+  TEST(ScriptClassAssets, EveryRecordOfACompiledClassTakesTheCompileKind)
+  {
+    AssetRegistry registry;
+    const auto listed = fixedUuid("11111111-1111-1111-1111-111111111111");
+    registry.registerAsset({ .uuid = listed, .type = AssetType::Script, .path = "scripts/Rules.cs",
+                             .className = "Rules" });
+
+    EXPECT_TRUE(syncScriptClassAssets(registry, Compiled(std::vector<ScriptClassInfo>{ { "Rules", true } })));
+
+    EXPECT_EQ(registry.getByUUID(listed)->scriptKind, ScriptKind::Scene);
+    EXPECT_FALSE(usableOnObject(*registry.getByUUID(listed)));
+  }
+
+  TEST(ScriptClassAssets, ARecordWhoseClassStopsCompilingLosesItsKindOrItself)
+  {
+    AssetRegistry registry;
+    const auto listed = fixedUuid("11111111-1111-1111-1111-111111111111");
+    registry.registerAsset({ .uuid = listed, .type = AssetType::Script, .path = "scripts/Mover.cs",
+                             .className = "Mover" });
+    syncScriptClassAssets(registry, objectClasses({ "Mover", "Spinner" }));
+    ASSERT_EQ(registry.getByUUID(listed)->scriptKind, ScriptKind::Object);
+    ASSERT_NE(registry.getByUUID(scriptClassUuid("Spinner")), nullptr);
+
+    EXPECT_TRUE(syncScriptClassAssets(registry, objectClasses({})));
+
+    ASSERT_NE(registry.getByUUID(listed), nullptr);
+    EXPECT_EQ(registry.getByUUID(listed)->scriptKind, ScriptKind::Either);
+    EXPECT_EQ(registry.getByUUID(scriptClassUuid("Spinner")), nullptr);
+    EXPECT_FALSE(syncScriptClassAssets(registry, objectClasses({})));
+  }
+
+  TEST(ScriptClassAssets, NothingChangesBeforeACompileHasSucceeded)
+  {
+    AssetRegistry registry;
+    syncScriptClassAssets(registry, objectClasses({ "Spinner" }));
+    const auto version = registry.getVersion();
+
+    EXPECT_FALSE(syncScriptClassAssets(registry, std::nullopt));
+
+    EXPECT_EQ(registry.getVersion(), version);
+    EXPECT_EQ(scriptClassesOf(registry), (std::vector<std::string>{ "Spinner" }));
+    EXPECT_TRUE(syncScriptClassAssets(registry, objectClasses({})));
+    EXPECT_TRUE(scriptClassesOf(registry).empty());
   }
 
   TEST(ScriptClassAssets, TheKindDecidesWhichHostAClassCanAttachTo)
   {
     AssetRegistry registry;
-    registerScriptClassAssets(registry, { { "Spinner", false }, { "Rules", true } });
+    syncScriptClassAssets(registry, Compiled(std::vector<ScriptClassInfo>{ { "Spinner", false }, { "Rules", true } }));
     const auto* object = registry.getByUUID(scriptClassUuid("Spinner"));
     const auto* scene = registry.getByUUID(scriptClassUuid("Rules"));
     ASSERT_NE(object, nullptr);
@@ -183,7 +251,7 @@ namespace {
   TEST(ScriptClassAssets, TheKindSurvivesTheSnapshot)
   {
     AssetRegistry registry;
-    registerScriptClassAssets(registry, { { "Rules", true } });
+    syncScriptClassAssets(registry, Compiled(std::vector<ScriptClassInfo>{ { "Rules", true } }));
 
     net::Message message(net::MessageType::snapshot);
     registry.pack(message);
@@ -201,7 +269,7 @@ namespace {
   TEST(ScriptClassAssets, ASceneScriptClassIsNotOfferedToTheObjectPickerOrAnObjectClassToTheScenePanel)
   {
     AssetRegistry registry;
-    registerScriptClassAssets(registry, { { "Spinner", false }, { "Rules", true } });
+    syncScriptClassAssets(registry, Compiled(std::vector<ScriptClassInfo>{ { "Spinner", false }, { "Rules", true } }));
     const auto scene = std::make_shared<SceneAsset>(scriptClassUuid("Scene"), "S",
                                                     std::make_shared<ComponentRegistry>());
 
@@ -212,7 +280,7 @@ namespace {
   TEST(RecordEdits, ASecondScriptRecordForAKnownClassRecordsNothingButANewClassRecordsAnAdd)
   {
     AssetRegistry registry;
-    registerScriptClassAssets(registry, objectClasses({ "Spinner" }));
+    syncScriptClassAssets(registry, objectClasses({ "Spinner" }));
     const auto fresh = uuids::uuid::from_string("33333333-3333-3333-3333-333333333333").value();
 
     const nlohmann::json known = { { "assetType", "script" }, { "uuid", uuids::to_string(fresh) },
@@ -226,16 +294,29 @@ namespace {
 
   TEST_F(ScriptSystemTest, ReportsTheRuntimesClassNamesOnceTheRuntimeExists)
   {
-    state.classNames = { { "Spinner", false }, { "Spawner", true } };
+    state.classNames = std::vector<ScriptClassInfo>{ { "Spinner", false }, { "Spawner", true } };
 
-    EXPECT_TRUE(scriptSystem.scriptClassNames().empty());
+    EXPECT_FALSE(scriptSystem.scriptClassNames().has_value());
 
     scriptSystem.warmUp();
 
     const auto reported = scriptSystem.scriptClassNames();
-    ASSERT_EQ(reported.size(), 2u);
-    EXPECT_EQ(reported[0].name, "Spinner");
-    EXPECT_FALSE(reported[0].sceneScript);
-    EXPECT_TRUE(reported[1].sceneScript);
+    ASSERT_TRUE(reported.has_value());
+    ASSERT_EQ(reported->size(), 2u);
+    EXPECT_EQ((*reported)[0].name, "Spinner");
+    EXPECT_FALSE((*reported)[0].sceneScript);
+    EXPECT_TRUE((*reported)[1].sceneScript);
+  }
+
+  TEST_F(ScriptSystemTest, ReportsNothingUntilTheRuntimeHasCompiledEvenWithAnEngine)
+  {
+    scriptSystem.warmUp();
+
+    EXPECT_FALSE(scriptSystem.scriptClassNames().has_value());
+
+    state.classNames = std::vector<ScriptClassInfo>{};
+
+    ASSERT_TRUE(scriptSystem.scriptClassNames().has_value());
+    EXPECT_TRUE(scriptSystem.scriptClassNames()->empty());
   }
 }

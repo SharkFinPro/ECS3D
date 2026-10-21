@@ -65,6 +65,9 @@ public:
   // uuid. Bumps the version.
   void removeAsset(const uuids::uuid& uuid);
 
+  // Returns true when the record exists and its kind changed.
+  bool setScriptKind(const uuids::uuid& uuid, ScriptKind kind);
+
   // Drop all records (used when (re)loading a project / applying a fresh snapshot).
   void clear();
 

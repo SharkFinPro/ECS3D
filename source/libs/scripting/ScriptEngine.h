@@ -68,7 +68,7 @@ public:
                     const char* objectUuid,
                     int slot) const override;
 
-  [[nodiscard]] std::vector<ScriptClassInfo> scriptClassNames() const override;
+  [[nodiscard]] std::optional<std::vector<ScriptClassInfo>> scriptClassNames() const override;
 
   [[nodiscard]] std::string getExposedFields(const char* uuid,
                                              const char* className) const override;

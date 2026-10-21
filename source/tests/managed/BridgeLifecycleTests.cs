@@ -188,7 +188,7 @@ public class BridgeLifecycleTests : IDisposable
   [Fact]
   public void JoinedScriptClassNames_ListsEveryLoadedClassSortedWithItsKind()
   {
-    Assert.Equal("", Bridge.JoinedScriptClassNames());
+    Assert.Null(Bridge.JoinedScriptClassNames());
 
     WriteScript("b.cs", ScriptSource("Zeta"));
     WriteScript("a.cs", ScriptSource("Alpha"));
@@ -196,6 +196,16 @@ public class BridgeLifecycleTests : IDisposable
     Bridge.Initialize(_dir);
 
     Assert.Equal("Alpha\tobject\nMiddle\tscene\nZeta\tobject", Bridge.JoinedScriptClassNames());
+  }
+
+  [Fact]
+  public void JoinedScriptClassNames_IsEmptyNotNullOnceAnEmptyDirectoryHasCompiled()
+  {
+    Assert.Null(Bridge.JoinedScriptClassNames());
+
+    Bridge.Initialize(_dir);
+
+    Assert.Equal("", Bridge.JoinedScriptClassNames());
   }
 
   [Fact]

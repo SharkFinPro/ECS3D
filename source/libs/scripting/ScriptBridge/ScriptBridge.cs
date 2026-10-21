@@ -16,6 +16,7 @@ public static class Bridge
 {
     private static IReadOnlyList<string> _scriptDirs = Array.Empty<string>();
     private static ScriptContext? _ctx;
+    private static bool _compiled;
 
     private static readonly Dictionary<string, ScriptInstance> _instances = new();
     internal static string Key(string uuid, string className) => $"{uuid}_{className}";
@@ -324,9 +325,13 @@ public static class Bridge
         _scriptDirs = scriptDirs.ToArray();
 
         Log.info($"Script directories: {string.Join(", ", _scriptDirs)}");
-        if (TryCompile(out var compiled) && compiled is not null)
+        if (TryCompile(out var compiled))
         {
-            _ctx = compiled;
+            _compiled = true;
+            if (compiled is not null)
+            {
+                _ctx = compiled;
+            }
         }
     }
 
@@ -376,6 +381,7 @@ public static class Bridge
 
         var previous = _ctx;
         _ctx = next;
+        _compiled = true;
         previous?.Unload();
 
         GC.Collect();
@@ -388,12 +394,14 @@ public static class Bridge
         _ctx?.ScriptTypes.Select(t => t.Name).ToList() ?? new List<string>();
 
     // The loaded script class names, sorted and joined with newlines, for the server's script asset records. Caller
-    // frees the result with freeString.
+    // frees the result with freeString; null when no compile has succeeded yet.
     [UnmanagedCallersOnly]
-    public static IntPtr getScriptClassNames() => Marshal.StringToCoTaskMemUTF8(JoinedScriptClassNames());
+    public static IntPtr getScriptClassNames() =>
+        JoinedScriptClassNames() is { } joined ? Marshal.StringToCoTaskMemUTF8(joined) : IntPtr.Zero;
 
-    // One "Name<tab>kind" line per class, kind being "scene" for a SceneScript and "object" otherwise.
-    internal static string JoinedScriptClassNames() =>
+    // One "Name<tab>kind" line per class, kind being "scene" for a SceneScript and "object" otherwise. Null until a
+    // compile has succeeded.
+    internal static string? JoinedScriptClassNames() => !_compiled ? null :
         string.Join('\n', (_ctx?.ScriptTypes ?? Array.Empty<Type>())
             .OrderBy(type => type.Name, StringComparer.Ordinal)
             .Select(type => $"{type.Name}\t{(type.IsSubclassOf(typeof(SceneScript)) ? "scene" : "object")}"));
@@ -405,6 +413,7 @@ public static class Bridge
         _faulted.Clear();
         _ctx?.Unload();
         _ctx = null;
+        _compiled = false;
         _scriptDirs = Array.Empty<string>();
     }
 

@@ -2,7 +2,7 @@
 #define SCRIPTCLASSASSETS_H
 
 #include "AssetRegistry.h"
-#include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 #include <uuid.h>
@@ -13,7 +13,7 @@ struct ScriptClassInfo {
   bool sceneScript = false;
 };
 
-// A record from a project file has kind Either, which counts as usable on both hosts.
+// A record whose class is not compiled has kind Either, which counts as usable on both hosts.
 [[nodiscard]] inline bool usableOnObject(const AssetRecord& record)
 {
   return record.type == AssetType::Script && record.scriptKind != ScriptKind::Scene;
@@ -28,14 +28,17 @@ struct ScriptClassInfo {
 // across runs and servers.
 [[nodiscard]] uuids::uuid scriptClassUuid(const std::string& className);
 
-// Registers a Script record for each class no Script record names yet, noting its kind. The record
-// has no source path, since the compiler does not say which file a class came from. Returns how many were added.
-size_t registerScriptClassAssets(AssetRegistry& registry, const std::vector<ScriptClassInfo>& classes);
+// Brings the Script records in line with the compile; nullopt means no compile has succeeded yet, so nothing
+// is known and nothing changes. Every record of a compiled class takes the compile's kind. A compiled class
+// with no record gets a pathless one, since the compiler does not say which file a class came from. A pathless
+// record whose class no longer compiles is removed, and a file-backed one goes back to Either.
+// Returns true when anything changed.
+bool syncScriptClassAssets(AssetRegistry& registry, const std::optional<std::vector<ScriptClassInfo>>& compiled);
 
-// A record with no path comes from a compiled class rather than a file the user can remove.
-[[nodiscard]] inline bool isCompiledScriptRecord(const AssetRecord& record)
+// A class that still compiles comes back at the next sync, so its record cannot be deleted from the editor.
+[[nodiscard]] inline bool canDeleteAsset(const AssetRecord& record)
 {
-  return record.type == AssetType::Script && record.path.empty();
+  return record.type != AssetType::Script || record.scriptKind == ScriptKind::Either;
 }
 
 #endif //SCRIPTCLASSASSETS_H
