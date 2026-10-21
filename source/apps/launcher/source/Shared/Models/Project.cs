@@ -11,7 +11,6 @@ public sealed class Project
     public required string Name { get; init; }
     public required string Path { get; init; }
     public required string Edited { get; init; }
-    public required string Version { get; init; }
     public bool Pinned { get; init; }
 
     // The leading "New Project" tile is modeled as a sentinel so it flows inline

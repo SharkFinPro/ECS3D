@@ -1,6 +1,8 @@
 project(ECS3DNet)
 
 add_library(${PROJECT_NAME}
+  ClientConnectionState.cpp
+  ClientConnectionState.h
   CommandLineSplit.cpp
   CommandLineSplit.h
   EditorConnections.cpp

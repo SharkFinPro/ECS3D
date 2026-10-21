@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   ComponentRegistry.h
   ComponentRegistration.cpp
   ComponentRegistration.h
+  ProjectFingerprint.cpp
+  ProjectFingerprint.h
   ProjectOrigin.cpp
   ProjectOrigin.h
   ProjectPaths.cpp
