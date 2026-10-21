@@ -2,6 +2,7 @@
 #include "DarkTitleBar.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
+#include <ProjectFingerprint.h>
 #include <ProjectPaths.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
@@ -110,7 +111,9 @@ EditorApp::EditorApp(LaunchOptions options)
   }
   else
   {
-    m_assetCache->setProjectRoot(locateProject(m_options.project).root);
+    const auto location = locateProject(m_options.project);
+    m_assetCache->setProjectRoot(location.root);
+    m_projectIdentity.setOwnProject(fingerprintProjectFile(location.projectFile), m_options.launchLocalServer);
   }
   m_renderSystem = std::make_shared<RenderSystem>();
 
@@ -317,6 +320,7 @@ void EditorApp::connectToServer()
   m_playHistory.reset();
   m_historyScope.reset(std::nullopt);
   m_projectLoads.reset();
+  m_projectIdentity.reset();
 
   // The (just-spawned) server needs a moment to boot the CLR and start listening, so retry.
   const auto deadline = std::chrono::steady_clock::now() + 15s;

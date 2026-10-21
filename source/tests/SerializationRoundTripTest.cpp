@@ -452,6 +452,50 @@ TEST(SerializationRoundTrip, ATruncatedSnapshotKeepsTheReceiversLoadIdAndProject
   EXPECT_EQ(canonical(receiver.serializer->serialize()), canonical(before));
 }
 
+TEST(SerializationRoundTrip, TheProjectFingerprintTravelsWithTheSnapshot)
+{
+  const auto sender = makeProject();
+  buildProject(sender);
+  sender.packer->setProjectFingerprint(0x0123456789abcdefULL);
+
+  net::Message message(net::MessageType::snapshot);
+  sender.packer->pack(message);
+
+  const auto receiver = makeProject();
+  ASSERT_EQ(receiver.packer->getProjectFingerprint(), 0u);
+
+  receiver.packer->unpack(message);
+
+  EXPECT_EQ(receiver.packer->getProjectFingerprint(), 0x0123456789abcdefULL);
+}
+
+TEST(SerializationRoundTrip, ATruncatedFingerprintKeepsTheReceiversFingerprint)
+{
+  const auto sender = makeProject();
+  buildProject(sender);
+  sender.packer->setProjectFingerprint(0x0123456789abcdefULL);
+
+  net::Message message(net::MessageType::snapshot);
+  sender.packer->pack(message);
+
+  const auto receiver = makeProject();
+  receiver.packer->setProjectFingerprint(42);
+
+  net::Message truncated(net::MessageType::snapshot);
+  const auto bytes = message.bytes();
+  for (std::size_t i = 0; i + 4 < bytes.size(); ++i)
+  {
+    truncated.write(bytes[i]);
+  }
+
+  EXPECT_ANY_THROW(receiver.packer->unpack(truncated));
+  EXPECT_EQ(receiver.packer->getProjectFingerprint(), 42u);
+
+  // Control: the whole message still unpacks.
+  receiver.packer->unpack(message);
+  EXPECT_EQ(receiver.packer->getProjectFingerprint(), 0x0123456789abcdefULL);
+}
+
 TEST(SerializationRoundTrip, UnpackingTwiceIntoTheSameManagerReplacesRatherThanAppends)
 {
   const auto source = fixtures::makeScene();

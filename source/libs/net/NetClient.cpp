@@ -49,13 +49,12 @@ NetClient::NetClient(std::shared_ptr<ManagedHost> host)
 
 void NetClient::connect(const std::string& host, const int port, const Role role, const std::string& authToken)
 {
-  if (m_connected)
+  if (m_state.isConnected())
   {
     return;
   }
 
-  // A fresh connection attempt: any earlier lifecycle's requested-disconnect no longer applies.
-  m_disconnectRequested = false;
+  m_state.beginConnect();
 
   m_connectFn = m_host->getDelegate(kAssembly, kType, "clientConnect");
   m_disconnectFn = m_host->getDelegate(kAssembly, kType, "clientDisconnect");
@@ -79,19 +78,19 @@ void NetClient::connect(const std::string& host, const int port, const Role role
     authToken.c_str()
   );
 
-  m_connected = ok != 0;
+  m_state.setConnected(ok != 0);
 }
 
 void NetClient::disconnect()
 {
-  if (!m_connected)
+  if (!m_state.isConnected())
   {
     return;
   }
 
   // Set before the managed call: closing the socket below wakes the receive thread, which may reach
   // enqueueDisconnect before this function returns.
-  m_disconnectRequested = true;
+  m_state.requestDisconnect();
 
   // The managed disconnect joins the client's receive thread before returning (TcpBackend/
   // WebSocketBackend ClientDisconnect), so no socket thread can still be inside enqueue/
@@ -99,12 +98,12 @@ void NetClient::disconnect()
   reinterpret_cast<ClientDisconnectFn>(m_disconnectFn)();
 
   g_activeClient.store(nullptr, std::memory_order_release);
-  m_connected = false;
+  m_state.setConnected(false);
 }
 
 void NetClient::send(const Message& message) const
 {
-  if (!m_connected)
+  if (!m_state.isConnected())
   {
     return;
   }
@@ -148,20 +147,12 @@ void NetClient::enqueue(const uint8_t type, const uint8_t* data, const int32_t l
 
 void NetClient::enqueueDisconnect()
 {
-  // A disconnect this side asked for is not a lost connection - disconnect() already set m_connected
-  // false and has no notice to show.
-  if (m_disconnectRequested)
-  {
-    return;
-  }
-
-  m_connected = false;
-  m_connectionLost = true;
+  m_state.onTransportDisconnect();
 }
 
 bool NetClient::takeConnectionLost()
 {
-  return m_connectionLost.exchange(false);
+  return m_state.takeConnectionLost();
 }
 
 }

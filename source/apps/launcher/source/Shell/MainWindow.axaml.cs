@@ -1,9 +1,12 @@
 using System;
+using System.IO;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 
 namespace ECS3DLauncher.Shell;
@@ -39,6 +42,21 @@ public class MainWindow : Window
         // whenever a press lands outside any TextBox. handledEventsToo so it still runs
         // even when a control (e.g. a Button) marks the event handled.
         AddHandler(PointerPressedEvent, OnGlobalPointerPressed, RoutingStrategies.Bubble, handledEventsToo: true);
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    // Opening a file with the OS default app is a view concern; the view model only decides when.
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.OpenLogFile = OpenWithDefaultAppAsync;
+        }
+    }
+
+    private async Task<bool> OpenWithDefaultAppAsync(string path)
+    {
+        return Launcher is { } launcher && await launcher.LaunchFileInfoAsync(new FileInfo(path));
     }
 
     private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)

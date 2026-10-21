@@ -1,6 +1,11 @@
+using System;
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ECS3DLauncher.Services;
+using ECS3DLauncher.Shared.Models;
 using ECS3DLauncher.Tabs.Learn;
 using ECS3DLauncher.Tabs.Projects;
 using ECS3DLauncher.Tabs.Samples;
@@ -9,11 +14,19 @@ using ECS3DLauncher.Tabs.Templates;
 
 namespace ECS3DLauncher.Shell;
 
-// Shell state: window chrome info, sidebar navigation, and which tab is showing.
+// Shell state: window chrome info, sidebar navigation, the per-tab header, the engine banner and the toast.
 // Each tab owns its content via its own view model under source/Tabs/*.
 public class MainWindowViewModel : ObservableObject
 {
-    public string Version => "v0.0.1";
+    // Launch options come from the Settings tab once it exists.
+    private static readonly LaunchOptions DefaultLaunchOptions = new(false, false);
+
+    private readonly EngineLocation _engine;
+    private readonly EngineActions _actions;
+    private readonly LaunchCoordinator _coordinator;
+    private readonly Action<Action> _post;
+
+    public string Version { get; }
 
     public ObservableCollection<NavItemViewModel> NavItems { get; }
 
@@ -27,6 +40,9 @@ public class MainWindowViewModel : ObservableObject
     // model; the window's ContentControl maps it to a view by type.
     private string _activeNav = "projects";
     private object? _currentTab;
+    private string _searchText = "";
+    private string? _toastMessage;
+    private string? _toastLogPath;
 
     public string ActiveNav
     {
@@ -38,18 +54,22 @@ public class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            CurrentTab = value switch
+            CurrentTab = LauncherTabs.Parse(value) switch
             {
-                "templates" => Templates,
-                "samples"   => Samples,
-                "learn"     => Learn,
-                "settings"  => Settings,
-                _           => (object)Projects,
+                LauncherTab.Templates => Templates,
+                LauncherTab.Samples => Samples,
+                LauncherTab.Learn => Learn,
+                LauncherTab.Settings => Settings,
+                _ => (object)Projects,
             };
 
+            SearchText = "";
             UpdateActiveFlags();
             OnPropertyChanged(nameof(ViewTitle));
             OnPropertyChanged(nameof(ViewSubtitle));
+            OnPropertyChanged(nameof(SearchPlaceholder));
+            OnPropertyChanged(nameof(ShowSearch));
+            OnPropertyChanged(nameof(ShowViewToggle));
         }
     }
 
@@ -59,47 +79,176 @@ public class MainWindowViewModel : ObservableObject
         set => SetProperty(ref _currentTab, value);
     }
 
-    // UI-only; no engine backend yet.
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetProperty(ref _searchText, value))
+            {
+                Projects.SearchText = value;
+            }
+        }
+    }
+
+    // The engine-not-found banner: null text means the engine is complete.
+    // Computed from the engine located at startup; the Settings task must re-locate and raise
+    // PropertyChanged for these when the engine folder changes.
+    public string? EngineBannerText => _engine.Describe();
+    public bool HasEngineBanner => EngineBannerText is not null;
+
+    public string? ToastMessage
+    {
+        get => _toastMessage;
+        private set
+        {
+            if (SetProperty(ref _toastMessage, value))
+            {
+                OnPropertyChanged(nameof(HasToast));
+            }
+        }
+    }
+
+    public string? ToastLogPath
+    {
+        get => _toastLogPath;
+        private set
+        {
+            if (SetProperty(ref _toastLogPath, value))
+            {
+                OnPropertyChanged(nameof(HasToastLog));
+            }
+        }
+    }
+
+    public bool HasToast => ToastMessage is not null;
+    public bool HasToastLog => ToastLogPath is not null;
+
+    // Set by the window, which owns the OS "open with the default app" call.
+    public Func<string, Task<bool>>? OpenLogFile { get; set; }
+
     public IRelayCommand<string?> SelectNavCommand { get; }
     public IRelayCommand NewProjectCommand { get; }
+    public IRelayCommand OpenSettingsCommand { get; }
+    public IRelayCommand ExploreCommand { get; }
+    public IRelayCommand<Project> OpenProjectCommand { get; }
+    public IRelayCommand DismissToastCommand { get; }
+    public IRelayCommand OpenLogsCommand { get; }
 
     public MainWindowViewModel()
+        : this(
+            new EngineLocator(new PhysicalFileSystem()).Locate(null),
+            new SystemProcessRunner(),
+            new EarlyExitWatcher(new UserDataDirectory()),
+            AppVersion.Current(),
+            action => Dispatcher.UIThread.Post(action))
     {
+    }
+
+    public MainWindowViewModel(
+        EngineLocation engine,
+        IProcessRunner runner,
+        EarlyExitWatcher watcher,
+        string version,
+        Action<Action> post)
+    {
+        _post = post;
+        _engine = engine;
+        _actions = new EngineActions(engine);
+        _coordinator = new LaunchCoordinator(new EngineLauncher(runner, engine), watcher, ShowNotice);
+        Version = VersionLabel.Format(version);
+
         SelectNavCommand = new RelayCommand<string?>(key => ActiveNav = key!);
         NewProjectCommand = new RelayCommand(() => ActiveNav = "templates");
+        OpenSettingsCommand = new RelayCommand(() => ActiveNav = "settings");
+        ExploreCommand = new RelayCommand(Explore, () => _actions.Explore.Available);
+        OpenProjectCommand = new RelayCommand<Project>(OpenProject, _ => _actions.Open.Available);
+        DismissToastCommand = new RelayCommand(DismissToast);
+        OpenLogsCommand = new RelayCommand(() => _ = OpenLogsAsync(), () => HasToastLog);
 
-        Projects = new ProjectsViewModel(openTemplates: () => ActiveNav = "templates");
+        Projects = new ProjectsViewModel(
+            () => ActiveNav = "templates",
+            ExploreCommand,
+            OpenProjectCommand,
+            _actions.Explore.Tooltip,
+            _actions.Open.Tooltip,
+            []);
 
         NavItems =
         [
-            new() { Key = "projects",  Label = "Projects",  Icon = "IconFolder", Count = Projects.Projects.Count.ToString() },
+            new() { Key = "projects",  Label = "Projects",  Icon = "IconFolder", Count = ProjectCount() },
             new() { Key = "templates", Label = "Templates", Icon = "IconLayers" },
             new() { Key = "samples",   Label = "Samples",   Icon = "IconSparkle" },
             new() { Key = "learn",     Label = "Learn",     Icon = "IconBook" },
         ];
+        Projects.Projects.CollectionChanged += (_, _) => NavItems[0].Count = ProjectCount();
 
         CurrentTab = Projects;
         UpdateActiveFlags();
     }
 
-    // ----- Derived view state (mirrors the mockup's title map) -----
-    public string ViewTitle => ActiveNav switch
-    {
-        "templates" => "Templates",
-        "samples"   => "Samples",
-        "learn"     => "Learn",
-        "settings"  => "Settings",
-        _           => "Recent Projects",
-    };
+    // ----- Derived view state: the header table, per tab -----
+    public string ViewTitle => Header.Title;
+    public string ViewSubtitle => Header.Subtitle;
+    public string SearchPlaceholder => Header.SearchPlaceholder;
+    public bool ShowSearch => Header.ShowSearch;
+    public bool ShowViewToggle => Header.ShowViewToggle;
 
-    public string ViewSubtitle => ActiveNav switch
+    private TabHeader Header => LauncherTabs.Header(LauncherTabs.Parse(ActiveNav));
+
+    private string ProjectCount() => Projects.Projects.Count.ToString();
+
+    // The task is dropped on purpose: failures and early exits arrive through ShowNotice.
+    private void Explore() => _ = _coordinator.ExploreEngineAsync(DefaultLaunchOptions);
+
+    private void OpenProject(Project? project)
     {
-        "templates" => "Start a project from a ready-made scene.",
-        "samples"   => "Example projects bundled with ECS3D.",
-        "learn"     => "Guides and documentation for the engine.",
-        "settings"  => "Editor preferences.",
-        _           => "Pick up where you left off, or start something new.",
-    };
+        if (project is { IsRealCard: true } && _actions.Open.Available)
+        {
+            _ = _coordinator.OpenProjectAsync(project.Path, DefaultLaunchOptions);
+        }
+    }
+
+    // Notices come from background continuations, so they are handed to the UI thread explicitly.
+    private void ShowNotice(LaunchNotice notice) => _post(() => ApplyNotice(notice));
+
+    private void ApplyNotice(LaunchNotice notice)
+    {
+        ToastLogPath = notice.LogPath;
+        ToastMessage = notice.Message;
+        OpenLogsCommand.NotifyCanExecuteChanged();
+    }
+
+    private void DismissToast()
+    {
+        ToastMessage = null;
+        ToastLogPath = null;
+        OpenLogsCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task OpenLogsAsync()
+    {
+        var path = ToastLogPath;
+        if (path is null)
+        {
+            return;
+        }
+
+        var opened = false;
+        try
+        {
+            opened = OpenLogFile is not null && await OpenLogFile(path);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            opened = false;
+        }
+
+        if (!opened)
+        {
+            ApplyNotice(EarlyExitNotice.Failure($"Could not open the log file {path}"));
+        }
+    }
 
     private void UpdateActiveFlags()
     {
