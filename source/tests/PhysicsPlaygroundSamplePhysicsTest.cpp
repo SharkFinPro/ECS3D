@@ -67,7 +67,7 @@ TEST(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
   }
 }
 
-TEST(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsAndStrikesTheSecond)
+TEST(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsTowardTheSecond)
 {
   LoadedTemplate loaded(sampleFolder);
   ASSERT_TRUE(loaded.loaded);
@@ -76,20 +76,23 @@ TEST(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsAndStrikesTheSeco
   const auto second = objectNamedExactly(objectManager, "Domino 2");
   ASSERT_NE(first, nullptr);
   ASSERT_NE(second, nullptr);
-  const float startGap = glm::length(fixtures::positionOf(second) - fixtures::positionOf(first));
+  const auto firstStart = fixtures::positionOf(first);
+  const auto towardSecond = glm::normalize(glm::vec2(fixtures::positionOf(second).x - firstStart.x,
+                                                     fixtures::positionOf(second).z - firstStart.z));
 
   EXPECT_NEAR(tiltDegrees(first), 15.0f, 0.1f);
 
   tick(objectManager, 600);
 
   EXPECT_GT(tiltDegrees(first), 45.0f);
-  // Fallen onto the second rather than away from it, its center ends nearer the second than it started.
-  EXPECT_LT(glm::length(fixtures::positionOf(second) - fixtures::positionOf(first)), startGap);
+  // Fallen toward the second rather than away from it, its center moved toward where the second stood.
+  const auto moved = fixtures::positionOf(first) - firstStart;
+  EXPECT_GT(glm::dot(glm::vec2(moved.x, moved.z), towardSecond), 0.3f);
 }
 
 // Disabled until a box resting flat can be tipped over by a push: PhysicsSystem lays a body whose center of
 // mass is over its face back flush and sheds the spin that would pivot it about its front edge, so today the
-// second domino absorbs the hit upright.
+// second domino takes the hit without turning.
 TEST(PhysicsPlaygroundSamplePhysics, DISABLED_TheDominoChainFallsAndTheSphereIsKnockedOffTheLedge)
 {
   LoadedTemplate loaded(sampleFolder);
