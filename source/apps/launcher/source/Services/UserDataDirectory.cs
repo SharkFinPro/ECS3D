@@ -39,6 +39,10 @@ public sealed class UserDataDirectory
     public string LogFile(EngineExecutable executable) =>
         Path.Combine(Resolve(), "logs", EngineExecutableNames.LogName(executable) + ".log");
 
+    public string LauncherLogFile() => Path.Combine(Resolve(), "logs", "launcher.log");
+
+    public string SettingsFile() => Path.Combine(Resolve(), "launcher-settings.json");
+
     // An empty variable is as useless as an unset one.
     private string? Under(string variable, params string[] subfolders)
     {
