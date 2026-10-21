@@ -15,6 +15,8 @@ add_executable(${PROJECT_NAME}
   DefaultShapes.h
   DefaultWelcome.cpp
   DefaultWelcome.h
+  RestPose.cpp
+  RestPose.h
   ServerPolicy.h
 )
 
