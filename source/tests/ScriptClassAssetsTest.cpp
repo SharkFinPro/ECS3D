@@ -8,6 +8,7 @@
 #include "edits/RecordEdits.h"
 #include "scenes/SceneAsset.h"
 
+#include <Protocol.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <memory>
