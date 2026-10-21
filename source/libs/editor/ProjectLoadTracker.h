@@ -6,13 +6,20 @@
 
 // Tells another editor's loadProject apart from an ordinary re-snapshot, by the project load id each
 // snapshot ends with (ProjectPacker). Known limit: if the server refuses this editor's load, its id never
-// comes back and the tracker keeps waiting until this editor loads again.
+// comes back and the tracker keeps waiting until this editor loads again or reconnects.
 class ProjectLoadTracker {
 public:
   // This editor is about to send loadProject carrying id.
   void expectOwnLoad(const uuids::uuid& id)
   {
     m_pendingOwn = id;
+  }
+
+  // A new connection starts a new baseline.
+  void reset()
+  {
+    m_current.reset();
+    m_pendingOwn.reset();
   }
 
   // Called with each snapshot's load id. True when the snapshot belongs to a project load this editor did

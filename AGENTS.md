@@ -310,8 +310,8 @@ Each prefills a unique default name (`AssetNaming.h`).
 The panel refuses a taken script name, and a taken scene or prefab name.
 Scenes and prefabs share one name space, because the registry keys both by path.
 A snapshot ends with a project load id: the server mints one at startup and takes the editor's on each
-`loadProject`. An editor that sees another editor's load (`ProjectLoadTracker.h`) drops its save file and project
-folder, so the next Save asks for one.
+`loadProject`. An editor that sees another editor's load (`ProjectLoadTracker.h`) drops its save file and
+project folder, so the next Save asks for one. The tracker resets on every connect.
 Runtime structural changes from a *script* (spawn/destroy) take a third path: lightweight
 `objectSpawned` (one packed `Object`) / `objectDestroyed` (a uuid) messages the client splices into/out of
 its scene incrementally — kept off the full-snapshot path so frequent spawning stays cheap. Build/apply

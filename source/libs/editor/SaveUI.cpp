@@ -247,7 +247,8 @@ bool SaveUI::isDirty() const
 void SaveUI::forgetSaveTarget()
 {
   Log::info(LogCategory::editor,
-    "Another editor loaded a different project on the server; Save will ask for a folder.");
+    "Another editor loaded a different project on the server; Save will ask for a new folder, "
+    "and that project's asset files are not copied into it.");
 
   m_saveFile.clear();
   m_isTemplate = false;

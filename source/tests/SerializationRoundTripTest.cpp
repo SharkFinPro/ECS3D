@@ -435,11 +435,10 @@ TEST(SerializationRoundTrip, ATruncatedSnapshotKeepsTheReceiversLoadIdAndProject
   sender.packer->pack(message);
 
   const auto receiver = makeProject();
-  buildProject(receiver);
   const auto known = uuidFrom("99999999-8888-7777-6666-555555555555");
   receiver.packer->setProjectLoadId(known);
-  const auto sceneCount = receiver.sceneManager->getScenes().size();
-  ASSERT_GT(sceneCount, 0u);
+  const auto before = receiver.serializer->serialize();
+  ASSERT_NE(canonical(before), canonical(sender.serializer->serialize()));
 
   net::Message truncated(net::MessageType::snapshot);
   const auto bytes = message.bytes();
@@ -450,7 +449,7 @@ TEST(SerializationRoundTrip, ATruncatedSnapshotKeepsTheReceiversLoadIdAndProject
 
   EXPECT_ANY_THROW(receiver.packer->unpack(truncated));
   EXPECT_EQ(receiver.packer->getProjectLoadId(), known);
-  EXPECT_EQ(receiver.sceneManager->getScenes().size(), sceneCount);
+  EXPECT_EQ(canonical(receiver.serializer->serialize()), canonical(before));
 }
 
 TEST(SerializationRoundTrip, UnpackingTwiceIntoTheSameManagerReplacesRatherThanAppends)
