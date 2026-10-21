@@ -122,7 +122,7 @@
   `CMakeLists.txt` before adding more. The server's `DefaultProject.cpp`, `DefaultShapes.cpp`, `DefaultWelcome.cpp` and `RestPose.cpp` are compiled in the same
   way, as is
   `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is
-  `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), `render/ThumbnailImage.cpp` (depends only on stb_image_write; the suite takes stb's include directory from the global `stb` FetchContent property, since VulkanEngine fetches it), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
+  `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
   json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
   carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h`, `KeyHoldRepeat.h`, `ProjectLoadTracker.h` and `ScriptFieldLabel.h` are reached
   through the `libs/editor` include path alone. The header-only `apps/server/ServerPolicy.h`
@@ -138,6 +138,8 @@
   `--parallel` (one test per logical CPU), and `ECS3DManagedTests` has a high test cost so it starts first.
   Under the `ecs3d-coverage` preset (`ECS3D_COVERAGE`) the same target also leaves the managed suite's
   cobertura output in `<build-dir>/coverage/managed`; the native side is read with gcovr.
+  `render/ThumbnailImage.cpp` is also compiled straight into the suite; it needs only stb_image_write.
+  VulkanEngine fetches stb, so the suite reads its include directory from the global `stb` FetchContent property.
 - **Managed tests** (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered
   as a single CTest test through `add_test` in `tests/CMakeLists.txt` (guarded on `DOTNET_EXE`) rather
   than a native executable. The launcher's `source/Services` (plain C#, no Avalonia) are compiled into it by
