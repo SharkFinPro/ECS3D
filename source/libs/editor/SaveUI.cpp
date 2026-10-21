@@ -67,16 +67,27 @@ void SaveUI::setStartupProject(const std::filesystem::path& argument)
   std::error_code error;
   if (std::filesystem::is_regular_file(location.projectFile, error))
   {
-    recordRecent(location.projectFile);
+    recordRecent(location, false);
   }
 }
 
-void SaveUI::recordRecent(const std::filesystem::path& projectPath) const
+void SaveUI::recordRecent(const ProjectLocation& location, const bool savedToFolderSinceOpen) const
 {
-  if (const auto recorded = recentProjectToRecord(projectPath, isUntitledTemplate()))
+  const auto recorded = recentProjectToRecord(location, savedToFolderSinceOpen);
+  if (!recorded)
   {
-    // A recent list that cannot be written is logged by the store and must not fail the editor's own work.
+    return;
+  }
+
+  // The recent list must never fail the editor's own save or load; the store logs a failed write itself.
+  try
+  {
     static_cast<void>(recordProjectOpened(*recorded));
+  }
+  catch (const std::exception& exception)
+  {
+    Log::warn(LogCategory::editor, "Could not record " + pathToUtf8(*recorded) +
+      " in the recent projects: " + exception.what());
   }
 }
 
@@ -115,7 +126,7 @@ bool SaveUI::save()
     return false;
   }
 
-  recordRecent(m_saveFile);
+  recordRecent({ m_saveFile, m_projectRoot }, m_savedToFolderSinceOpen);
   return true;
 }
 
@@ -226,7 +237,7 @@ bool SaveUI::saveToFolder(const std::filesystem::path& folder)
   m_savedToFolderSinceOpen = true;
   updateWindowTitle();
 
-  recordRecent(file);
+  recordRecent({ file, folder }, true);
 
   return true;
 }
@@ -349,7 +360,7 @@ bool SaveUI::loadProjectBlob(const std::string& projectJson, const std::filesyst
   // A freshly loaded project has nothing unsaved yet.
   m_unsavedChanges.markSaved();
 
-  recordRecent(projectFile);
+  recordRecent({ projectFile, root }, false);
 
   if (m_onLoadProject)
   {

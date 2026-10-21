@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <string>
 
@@ -24,36 +25,58 @@ namespace {
       std::filesystem::remove_all(m_directory, error);
     }
 
+    // A project folder holding project.ecs3d, plus template.json when asTemplate.
+    [[nodiscard]] ProjectLocation makeProject(const std::string& name, const bool asTemplate) const
+    {
+      const auto folder = m_directory / name;
+      std::filesystem::create_directories(folder);
+      std::ofstream(folder / "project.ecs3d") << "{}";
+      if (asTemplate)
+      {
+        std::ofstream(folder / "template.json") << "{}";
+      }
+
+      return locateProject(folder);
+    }
+
     std::filesystem::path m_directory;
     std::filesystem::path m_file;
   };
 }
 
-TEST_F(RecentProjectRecordingTest, UntitledTemplateRecordsNothingButTheSamePathOtherwiseDoes)
+TEST_F(RecentProjectRecordingTest, TemplateFolderIsNotRecordedButTheSameFolderWithoutTemplateJsonIs)
 {
-  const auto path = m_directory / "Courtyard" / "project.ecs3d";
-
-  EXPECT_FALSE(recentProjectToRecord(path, true).has_value());
-
-  const auto recorded = recentProjectToRecord(path, false);
+  const auto plain = makeProject("Plain", false);
+  const auto recorded = recentProjectToRecord(plain, false);
   ASSERT_TRUE(recorded.has_value());
-  EXPECT_EQ(*recorded, path);
+  EXPECT_EQ(*recorded, plain.projectFile);
+
+  EXPECT_FALSE(recentProjectToRecord(makeProject("Template", true), false).has_value());
 }
 
-TEST_F(RecentProjectRecordingTest, ProjectWithNoFileYetRecordsNothing)
+TEST_F(RecentProjectRecordingTest, TemplateIsRecordedOnceSavedToAFolder)
 {
-  EXPECT_FALSE(recentProjectToRecord({}, false).has_value());
-  EXPECT_FALSE(recentProjectToRecord({}, true).has_value());
-  EXPECT_TRUE(recentProjectToRecord(m_directory / "Game.json", false).has_value());
+  const auto tpl = makeProject("Template", true);
+
+  EXPECT_FALSE(recentProjectToRecord(tpl, false).has_value());
+  EXPECT_TRUE(recentProjectToRecord(tpl, true).has_value());
+}
+
+TEST_F(RecentProjectRecordingTest, BuiltInDefaultIsNotRecorded)
+{
+  EXPECT_FALSE(recentProjectToRecord(locateProject({}), false).has_value());
+  EXPECT_TRUE(recentProjectToRecord(makeProject("Plain", false), false).has_value());
 }
 
 TEST_F(RecentProjectRecordingTest, LegacyJsonIsRecordedAsTheFile)
 {
-  const auto path = m_directory / "Legacy" / "Game.json";
+  std::filesystem::create_directories(m_directory);
+  const auto legacy = m_directory / "Game.json";
+  std::ofstream(legacy) << "{}";
 
-  const auto recorded = recentProjectToRecord(path, false);
+  const auto recorded = recentProjectToRecord(locateProject(legacy), false);
   ASSERT_TRUE(recorded.has_value());
-  EXPECT_EQ(*recorded, path);
+  EXPECT_EQ(*recorded, legacy);
 }
 
 TEST_F(RecentProjectRecordingTest, RecordedPathLandsAtTheFrontOfTheList)
@@ -62,7 +85,7 @@ TEST_F(RecentProjectRecordingTest, RecordedPathLandsAtTheFrontOfTheList)
   RecentProjects recent(m_file);
   recent.recordOpened(m_directory / "Older", now);
 
-  const auto recorded = recentProjectToRecord(m_directory / "Courtyard" / "project.ecs3d", false);
+  const auto recorded = recentProjectToRecord(makeProject("Courtyard", false), false);
   ASSERT_TRUE(recorded.has_value());
   recent.recordOpened(*recorded, now + std::chrono::seconds(1));
   ASSERT_TRUE(recent.save());
