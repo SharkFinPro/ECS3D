@@ -2,6 +2,7 @@
 #define PROJECTPACKER_H
 
 #include <uuid.h>
+#include <cstdint>
 #include <memory>
 
 class AssetRegistry;
@@ -36,6 +37,13 @@ public:
 
   [[nodiscard]] const uuids::uuid& getProjectLoadId() const;
 
+  // The fingerprint (ProjectFingerprint.h) of the project file the server loaded, zero for none. It ends the
+  // snapshot after the load id, so an editor attached with --host can tell whether the server holds the
+  // project it started with.
+  void setProjectFingerprint(uint64_t fingerprint);
+
+  [[nodiscard]] uint64_t getProjectFingerprint() const;
+
 private:
   AssetRegistry* m_assetRegistry;
 
@@ -44,6 +52,8 @@ private:
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
 
   uuids::uuid m_projectLoadId;
+
+  uint64_t m_projectFingerprint = 0;
 };
 
 

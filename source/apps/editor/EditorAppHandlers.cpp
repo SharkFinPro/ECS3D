@@ -229,6 +229,7 @@ void EditorApp::onLoadProject()
 
   const auto loadId = makeProjectLoadId();
   m_projectPacker->setProjectLoadId(loadId);
+  m_projectPacker->setProjectFingerprint(0);
   m_projectLoads.expectOwnLoad(loadId);
 
   net::Message message(net::MessageType::loadProject);
