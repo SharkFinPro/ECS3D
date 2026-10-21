@@ -80,7 +80,7 @@ internal static class RecentProjectPaths
         return os == HostOs.Windows ? text.Replace('\\', '/') : text;
     }
 
-    private static (string Root, string Rest) SplitRoot(string text, HostOs os)
+    private static (string Root, string Remainder) SplitRoot(string text, HostOs os)
     {
         if (text.Length >= 3 && char.IsAsciiLetter(text[0]) && text[1] == ':' && text[2] == '/')
         {
