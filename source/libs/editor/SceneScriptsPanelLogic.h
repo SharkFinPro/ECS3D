@@ -2,6 +2,7 @@
 #define SCENESCRIPTSPANELLOGIC_H
 
 #include <assets/AssetRegistry.h>
+#include <assets/ScriptClassAssets.h>
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -30,7 +31,7 @@ namespace sceneScriptPanel {
       // A named record rather than a structured binding: clang before 16 cannot capture a binding in a lambda.
       const auto& record = entry.second;
 
-      if (record.type != AssetType::Script || record.className.empty())
+      if (!usableOnScene(record) || record.className.empty())
       {
         continue;
       }
