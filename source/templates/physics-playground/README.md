@@ -28,11 +28,13 @@ other stations loop on their own.
 - **Bounce pads** (east): pads with strengths 8, 14 and 20, each flashing red on contact, with balls
   dropping onto them.
 - **Ramp race** (south west): a sphere, a drum, a hex log, a capsule lying across, a capsule lying along and
-  a block go down a 25 degree ramp. Each lane releases a new body every 10 seconds.
+  a block go down a 25 degree ramp. Each lane releases a new body every 10 seconds; the drum and hex log
+  get a small push downhill so they start moving.
 - **Explosion pit** (south): a heap of 25 small shapes; press E to blow it apart.
 - **Shape rain** (south east): five spawners drop polyhedra into a basin; the pile holds at 60 shapes.
 
 ## Notes
 
-Bodies released by a spawner appear exactly on their surface, tilted to lie flat on it. The Capsule Along
+Bodies released by a spawner appear exactly on their surface, tilted to lie flat on it. The Spawner gives the
+drum and hex log 3 units per second downhill, because friction at 25 degrees would otherwise hold them still. The Capsule Along
 prefab has friction 0.2 so it slides rather than holding inside the friction cone at 25 degrees.
