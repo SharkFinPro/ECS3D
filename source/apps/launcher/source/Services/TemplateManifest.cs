@@ -14,9 +14,10 @@ public sealed record TemplateManifest(
     IReadOnlyList<string> Tags,
     string Thumbnail,
     string EntryScene,
-    string MinEngineVersion,
-    TemplatePlayers? Players)
+    string MinEngineVersion)
 {
+    public TemplatePlayers? Players { get; init; }
+
     public const string TemplateCategory = "template";
 
     public const string SampleCategory = "sample";

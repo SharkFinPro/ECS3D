@@ -14,6 +14,9 @@ public sealed record TemplateCatalogContents(
     IReadOnlyList<TemplateEntry> Templates,
     IReadOnlyList<TemplateEntry> Samples)
 {
+    // True when the templates folder exists but listing it failed.
+    public bool Unreadable { get; init; }
+
     public bool IsEmpty => Templates.Count == 0 && Samples.Count == 0;
 }
 
@@ -39,13 +42,34 @@ public sealed class TemplateCatalog
             return new TemplateCatalogContents(root, false, [], []);
         }
 
+        IReadOnlyList<string> folders;
+        try
+        {
+            folders = _files.EnumerateDirectories(root);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.Warn($"Could not read the templates folder {root}: {ex.Message}");
+            return new TemplateCatalogContents(root, true, [], []) { Unreadable = true };
+        }
+
         var entries = new List<TemplateEntry>();
-        foreach (var folder in _files.EnumerateDirectories(root))
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var folder in folders)
         {
             var entry = ReadFolder(folder);
-            if (entry is not null)
+            if (entry is null)
+            {
+                continue;
+            }
+
+            if (ids.Add(entry.Manifest.Id))
             {
                 entries.Add(entry);
+            }
+            else
+            {
+                Skip(folder, $"id '{entry.Manifest.Id}' is already used by an earlier folder");
             }
         }
 

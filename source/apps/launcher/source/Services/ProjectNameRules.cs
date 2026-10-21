@@ -12,8 +12,14 @@ public static class ProjectNameRules
 
     private const int MaxSuffix = 100000;
 
+    private static readonly string[] DeviceNumbers =
+        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "\u00B9", "\u00B2", "\u00B3"];
+
     private static readonly string[] ReservedNames =
-        ["CON", "PRN", "AUX", "NUL", .. Enumerable.Range(1, 9).SelectMany(n => new[] { $"COM{n}", $"LPT{n}" })];
+        ["CON", "PRN", "AUX", "NUL", .. DeviceNumbers.SelectMany(n => new[] { $"COM{n}", $"LPT{n}" })];
+
+    // Room kept for " 99999" when a default gets a numeric suffix.
+    private const int SuffixRoom = 6;
 
     // Null when the name is acceptable; otherwise the message for the first rule it breaks.
     public static string? Validate(string? name)
@@ -41,13 +47,22 @@ public static class ProjectNameRules
         return IsReserved(name) ? $"\"{name}\" is a reserved name on Windows." : null;
     }
 
-    // First-Person, then First-Person 2, 3... as the editor's default save folder does.
+    // First-Person, then First-Person 2, 3... as the editor's default save folder does. The base is stripped of
+    // invalid characters and cut short so every candidate fits the length rule.
     public static string UniqueDefault(string baseName, Func<string, bool> isTaken)
     {
-        var candidate = baseName;
+        var cleaned = new string(baseName.Where(c => !char.IsControl(c) && !InvalidCharacters.Contains(c)).ToArray());
+        if (cleaned.Length > MaxLength - SuffixRoom)
+        {
+            cleaned = cleaned[..(MaxLength - SuffixRoom)];
+        }
+
+        cleaned = cleaned.Trim(' ', '.');
+        var root = cleaned.Length == 0 ? "Project" : cleaned;
+        var candidate = root;
         for (var suffix = 2; isTaken(candidate) && suffix < MaxSuffix; suffix++)
         {
-            candidate = $"{baseName} {suffix}";
+            candidate = $"{root} {suffix}";
         }
 
         return candidate;

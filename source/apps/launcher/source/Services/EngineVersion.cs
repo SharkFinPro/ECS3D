@@ -5,7 +5,7 @@ using System.Globalization;
 namespace ECS3DLauncher.Services;
 
 // A dotted numeric version with an optional "-suffix" pre-release, or the "dev" build that outranks every release.
-public sealed class EngineVersion : IComparable<EngineVersion>
+public sealed class EngineVersion
 {
     private const string DevName = "dev";
 
@@ -58,29 +58,24 @@ public sealed class EngineVersion : IComparable<EngineVersion>
     }
 
     // Missing trailing parts count as 0, and a pre-release sorts before its release.
-    public int CompareTo(EngineVersion? other)
+    public static int Compare(EngineVersion left, EngineVersion right)
     {
-        if (other is null)
+        if (left._isDev || right._isDev)
         {
-            return 1;
+            return left._isDev.CompareTo(right._isDev);
         }
 
-        if (_isDev || other._isDev)
-        {
-            return _isDev.CompareTo(other._isDev);
-        }
-
-        var count = Math.Max(_parts.Count, other._parts.Count);
+        var count = Math.Max(left._parts.Count, right._parts.Count);
         for (var i = 0; i < count; i++)
         {
-            var difference = PartAt(i).CompareTo(other.PartAt(i));
+            var difference = left.PartAt(i).CompareTo(right.PartAt(i));
             if (difference != 0)
             {
                 return difference;
             }
         }
 
-        return ComparePreRelease(_preRelease, other._preRelease);
+        return ComparePreRelease(left._preRelease, right._preRelease);
     }
 
     private int PartAt(int index) => index < _parts.Count ? _parts[index] : 0;
@@ -92,6 +87,7 @@ public sealed class EngineVersion : IComparable<EngineVersion>
             return (left.Length == 0).CompareTo(right.Length == 0);
         }
 
+        // Two pre-releases compare ordinally; only "pre-release < release" is relied on.
         return Math.Sign(string.CompareOrdinal(left, right));
     }
 }
@@ -107,6 +103,6 @@ public static class TemplateCompatibility
             return false;
         }
 
-        return required.CompareTo(current) > 0;
+        return EngineVersion.Compare(required, current) > 0;
     }
 }

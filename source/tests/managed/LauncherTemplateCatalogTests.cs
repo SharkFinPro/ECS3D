@@ -12,12 +12,17 @@ public class LauncherTemplateCatalogTests
   private static readonly string EngineRoot = Path.GetFullPath("engine");
   private static readonly string TemplatesRoot = Path.Combine(EngineRoot, "templates");
 
-  private static string ManifestJson(string id, string name, string category, string extra = "") =>
+  private static string ManifestJson(string id, string name, string category) => ManifestJson(id, name, category, "");
+
+  private static string ManifestJson(string id, string name, string category, string extra) =>
     "{\"id\":\"" + id + "\",\"name\":\"" + name + "\",\"description\":\"d\",\"category\":\"" + category
     + "\",\"tags\":[\"a\"],\"thumbnail\":\"thumbnail.png\",\"entryScene\":\"Main\",\"minEngineVersion\":\"0.0.1\""
     + extra + "}";
 
-  private static string Folder(FakeFileSystem files, string folderName, string? manifest, bool thumbnail = false)
+  private static string Folder(FakeFileSystem files, string folderName, string? manifest) =>
+    Folder(files, folderName, manifest, false);
+
+  private static string Folder(FakeFileSystem files, string folderName, string? manifest, bool thumbnail)
   {
     var folder = Path.Combine(TemplatesRoot, folderName);
     files.AddDirectory(TemplatesRoot);
@@ -148,7 +153,7 @@ public class LauncherTemplateCatalogTests
   public void ThumbnailPathIsFullWhenPresentAndNullWhenMissing()
   {
     var files = new FakeFileSystem();
-    var withImage = Folder(files, "with", ManifestJson("with", "With", "template"), thumbnail: true);
+    var withImage = Folder(files, "with", ManifestJson("with", "With", "template"), true);
     Folder(files, "without", ManifestJson("without", "Without", "template"));
 
     var contents = Load(files, new RecordingLauncherLog());
@@ -227,9 +232,11 @@ public class LauncherTemplateCatalogTests
   {
     Assert.True(EngineVersion.TryParse("dev", out var dev));
     Assert.True(EngineVersion.TryParse("999.0.0", out var release));
-    Assert.True(dev.CompareTo(release) > 0);
-    Assert.True(release.CompareTo(dev) < 0);
-    Assert.Equal(0, dev.CompareTo(EngineVersion.Dev));
+    Assert.True(EngineVersion.Compare(dev, release) > 0);
+    Assert.True(EngineVersion.Compare(release, dev) < 0);
+    Assert.Equal(0, EngineVersion.Compare(dev, EngineVersion.Dev));
+    Assert.False(TemplateCompatibility.NeedsNewerEngine("dev", "dev"));
+    Assert.True(TemplateCompatibility.NeedsNewerEngine("dev", "99.0.0"));
   }
 
   [Theory]
@@ -310,6 +317,15 @@ public class LauncherTemplateCatalogTests
   [InlineData("lpt9")]
   [InlineData("con.txt")]
   [InlineData("NUL.tar.gz")]
+  [InlineData("CON .txt")]
+  [InlineData("COM0")]
+  [InlineData("lpt0")]
+  [InlineData("COM\u00B9")]
+  [InlineData("COM\u00B2")]
+  [InlineData("com\u00B3.txt")]
+  [InlineData("LPT\u00B9")]
+  [InlineData("LPT\u00B2")]
+  [InlineData("LPT\u00B3")]
   public void ReservedWindowsNamesFail(string name)
   {
     Assert.Contains("reserved", ProjectNameRules.Validate(name));
@@ -328,6 +344,67 @@ public class LauncherTemplateCatalogTests
     Assert.Equal("First-Person 2", ProjectNameRules.UniqueDefault("First-Person", n => n == "First-Person"));
     string[] taken = ["First-Person", "First-Person 2", "First-Person 3"];
     Assert.Equal("First-Person 4", ProjectNameRules.UniqueDefault("First-Person", n => taken.Contains(n)));
+  }
+
+  [Fact]
+  public void UniqueDefaultFitsTheRulesWhateverTheTemplateName()
+  {
+    var longName = new string('a', 64);
+    Assert.Null(ProjectNameRules.Validate(longName));
+    var cleaned = ProjectNameRules.UniqueDefault(longName, _ => false);
+    Assert.Null(ProjectNameRules.Validate(cleaned));
+    var suffixed = ProjectNameRules.UniqueDefault(longName, n => n.Length < 64 && !n.EndsWith("99999", StringComparison.Ordinal));
+    Assert.Null(ProjectNameRules.Validate(suffixed));
+    Assert.EndsWith(" 99999", suffixed);
+    Assert.Equal("ab", ProjectNameRules.UniqueDefault("a:b", _ => false));
+    Assert.Equal("Project", ProjectNameRules.UniqueDefault("???", _ => false));
+  }
+
+  [Fact]
+  public void AnIdWithATrailingNewlineIsSkipped()
+  {
+    var files = new FakeFileSystem();
+    Folder(files, "ok", ManifestJson("ok", "Ok", "template"));
+    Folder(files, "nl", ManifestJson("ok\\n", "Nl", "template"));
+    var log = new RecordingLauncherLog();
+
+    var contents = Load(files, log);
+
+    Assert.Equal(new[] { "ok" }, contents.Templates.Select(e => e.Manifest.Id).ToArray());
+    Assert.Contains("field 'id'", Assert.Single(log.Warnings));
+  }
+
+  [Fact]
+  public void AnUnlistableTemplatesFolderIsReportedUnreadable()
+  {
+    var files = new FakeFileSystem();
+    Folder(files, "good", ManifestJson("good", "Good", "template"));
+    files.FailEnumerate = true;
+    var log = new RecordingLauncherLog();
+
+    var contents = Load(files, log);
+
+    Assert.True(contents.Unreadable);
+    Assert.True(contents.IsEmpty);
+    Assert.Contains(TemplatesRoot, Assert.Single(log.Warnings));
+    Assert.False(Load(new FakeFileSystem(), new RecordingLauncherLog()).Unreadable);
+  }
+
+  [Fact]
+  public void ADuplicateIdKeepsTheFirstFolderAndWarns()
+  {
+    var files = new FakeFileSystem();
+    Folder(files, "a", ManifestJson("same", "First", "template"));
+    var second = Folder(files, "b", ManifestJson("same", "Second", "sample"));
+    var log = new RecordingLauncherLog();
+
+    var contents = Load(files, log);
+
+    Assert.Equal("First", Assert.Single(contents.Templates).Manifest.Name);
+    Assert.Empty(contents.Samples);
+    var warning = Assert.Single(log.Warnings);
+    Assert.Contains(second, warning);
+    Assert.Contains("already used", warning);
   }
 
   [Fact]

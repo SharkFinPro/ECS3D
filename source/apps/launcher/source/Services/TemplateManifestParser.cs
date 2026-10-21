@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace ECS3DLauncher.Services;
 
@@ -15,8 +14,6 @@ public static class TemplateManifestParser
         ["id", "name", "description", "category", "thumbnail", "entryScene", "minEngineVersion"];
 
     private static readonly string[] NonEmptyFields = ["name", "description", "entryScene", "minEngineVersion"];
-
-    private static readonly Regex IdPattern = new("^[a-z0-9]+(-[a-z0-9]+)*$", RegexOptions.CultureInvariant);
 
     public static bool TryParse(string json, out TemplateManifest? manifest, out string reason)
     {
@@ -73,7 +70,7 @@ public static class TemplateManifestParser
         }
 
         manifest = new TemplateManifest(values["id"], values["name"], values["description"], values["category"], tags,
-            values["thumbnail"], values["entryScene"], values["minEngineVersion"], players);
+            values["thumbnail"], values["entryScene"], values["minEngineVersion"]) { Players = players };
         return true;
     }
 
@@ -87,7 +84,7 @@ public static class TemplateManifestParser
             }
         }
 
-        if (!IdPattern.IsMatch(values["id"]))
+        if (!IsValidId(values["id"]))
         {
             return "field 'id' must be lowercase letters and digits separated by single hyphens";
         }
@@ -100,6 +97,27 @@ public static class TemplateManifestParser
         return EngineVersion.TryParse(values["minEngineVersion"], out _)
             ? null
             : "field 'minEngineVersion' is not a version";
+    }
+
+    // Lowercase letters and digits separated by single hyphens, as the engine's isValidId.
+    private static bool IsValidId(string id)
+    {
+        if (id.Length == 0 || id[0] == '-' || id[^1] == '-')
+        {
+            return false;
+        }
+
+        for (var i = 0; i < id.Length; i++)
+        {
+            var c = id[i];
+            var valid = c is >= 'a' and <= 'z' or >= '0' and <= '9' or '-';
+            if (!valid || (c == '-' && id[i - 1] == '-'))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool TryReadTags(JsonElement root, out IReadOnlyList<string> tags, out string reason)

@@ -23,6 +23,8 @@ internal sealed class FakeFileSystem : IFileSystem
 
   public bool FailReads { get; set; }
 
+  public bool FailEnumerate { get; set; }
+
   public bool FailWrites { get; set; }
 
   public bool FailMoves { get; set; }
@@ -31,8 +33,15 @@ internal sealed class FakeFileSystem : IFileSystem
 
   public bool DirectoryExists(string path) => _directories.Contains(path);
 
-  public IReadOnlyList<string> EnumerateDirectories(string path) =>
-    _directories.Where(directory => Path.GetDirectoryName(directory) == path).Order(StringComparer.Ordinal).ToList();
+  public IReadOnlyList<string> EnumerateDirectories(string path)
+  {
+    if (FailEnumerate)
+    {
+      throw new UnauthorizedAccessException("access denied");
+    }
+
+    return _directories.Where(directory => Path.GetDirectoryName(directory) == path).Order(StringComparer.Ordinal).ToList();
+  }
 
   public void AddDirectory(string path) => _directories.Add(path);
 
