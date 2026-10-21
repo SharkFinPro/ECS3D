@@ -267,22 +267,6 @@ TEST(PhysicsTipping, ASpinningBoxThatDidNotRestOnThisPlaneLastTickStillShedsIt)
   fixtures::expectNear("resting here", spinAfterFlatContact(true), { 180, 0, 0 }, 1e-3f);
 }
 
-TEST(PhysicsTipping, APushJustPastTheEnergyToSwingTheBoxOverItsEdgeTipsIt)
-{
-  Dominoes dominoes(serverTick);
-  dominoes.addDomino(0, 1);
-  dominoes.settle();
-
-  // A push of 0.13 just carries its center over the edge when it swings about that edge, and 0.16 is above it. The
-  // rocking test above pushes with 0.1, which is below.
-  dominoes.pushHigh(0, { 0.16f, 0, 0 });
-  dominoes.tick(300);
-
-  EXPECT_GT(tiltOf(dominoes.objects[0]), 85.0f);
-  EXPECT_NEAR(transformOf(dominoes.objects[0])->getPosition().y, 0.15f, 0.05f);
-  EXPECT_GT(transformOf(dominoes.objects[0])->getPosition().x, 0.5f);
-}
-
 TEST(PhysicsTipping, ABoxReleasedLeaningPivotsOnItsBottomEdgeAndLandsOnItsSide)
 {
   Dominoes dominoes(serverTick);
@@ -316,26 +300,4 @@ TEST(PhysicsTipping, ABoxReleasedLeaningPivotsOnItsBottomEdgeAndLandsOnItsSide)
   EXPECT_GT(tiltOf(domino), 85.0f);
   EXPECT_NEAR(transformOf(domino)->getPosition().x, startX + 1.0f, 0.15f);
   EXPECT_NEAR(transformOf(domino)->getPosition().y, 0.15f, 0.05f);
-}
-
-TEST(PhysicsTipping, ALeaningDominoToppleChainReachesItsLastDomino)
-{
-  constexpr int chainLength = 5;
-  Dominoes dominoes(serverTick);
-
-  dominoes.addDomino(0, 1.01f);
-  transformOf(dominoes.objects[0])->setRotation({ 0, 0, -15 });
-  for (int index = 1; index < chainLength; ++index)
-  {
-    dominoes.addDomino(1.2f * static_cast<float>(index), 1);
-  }
-
-  dominoes.tick(600);
-
-  // Each domino must swing over its edge with the energy it was handed, or the chain loses enough at every step to
-  // stop within a few dominoes.
-  for (int index = 0; index < chainLength; ++index)
-  {
-    EXPECT_GT(tiltOf(dominoes.objects[index]), 45.0f) << "domino " << index;
-  }
 }

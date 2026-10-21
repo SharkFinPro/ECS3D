@@ -315,16 +315,15 @@ namespace {
     return corners;
   }
 
-  // Whether a body resting on its support is turning over an edge of it, with its center of mass over the support
-  // or past the edge. Its spin turns it faster than the flush window closes in a tick, so the corners it drives into
-  // the support are the edge it pivots about. The contact impulse at that edge already holds it there, so shedding
-  // the spin as well would take the energy of the swing and leave the body turning about its center. A body counts
-  // as resting when it rested on this plane last tick, since falling alone is also cleared by a side contact.
-  // Landing and finely faceted bodies shed it as usual.
+  // Whether a body resting flat on its support is turning over its edge. Its spin turns it faster than the flush
+  // window closes in a tick, so the corners it drives into the support are the edge it pivots about; shedding that
+  // spin would leave a push only its linear part. A body counts as resting when it rested on this plane last tick,
+  // since falling alone is also cleared by a side contact. Landing and finely faceted bodies shed it as usual.
   bool isTippedOverEdge(const RigidBody& body, const Transform& transform, const std::shared_ptr<Collider>& collider,
-                        const std::shared_ptr<Object>& other, const glm::vec3& normal, const float dt)
+                        const std::shared_ptr<Object>& other, const glm::vec3& normal, const bool overCenter,
+                        const float dt)
   {
-    if (body.isFalling() || normal.y <= sideContactNormalY ||
+    if (!overCenter || body.isFalling() || normal.y <= sideContactNormalY ||
         glm::dot(body.getSupportNormal(), normal) <= restingNormalCosine)
     {
       return false;
@@ -555,7 +554,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
-  if (!isTippedOverEdge(body, *transform, collider, other, normal, dt))
+  if (!isTippedOverEdge(body, *transform, collider, other, normal, support.underCenterOfMass, dt))
   {
     stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
   }
