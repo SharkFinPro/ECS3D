@@ -5,9 +5,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
 #define STBI_ONLY_PNG
 #define STBI_NO_STDIO
 #include <stb_image.h>
@@ -39,6 +41,22 @@ namespace
   {
     const std::size_t at = (y * image.width + x) * 3;
     return {image.pixels[at], image.pixels[at + 1], image.pixels[at + 2]};
+  }
+
+  std::vector<std::uint8_t> splitTopBottomRgba(const std::uint32_t width, const std::uint32_t height)
+  {
+    auto pixels = solidRgba(width, height, red);
+    for (std::size_t y = height / 2; y < height; ++y)
+    {
+      for (std::size_t x = 0; x < width; ++x)
+      {
+        const std::size_t at = (y * width + x) * 4;
+        pixels[at] = blue[0];
+        pixels[at + 1] = blue[1];
+        pixels[at + 2] = blue[2];
+      }
+    }
+    return pixels;
   }
 
   void expectColorNear(const Color& actual, const Color& expected, const int tolerance)
@@ -149,6 +167,89 @@ TEST(ThumbnailImageTest, HalfAndHalfKeepsItsSplitColumn)
   expectColorNear(pixelAt(image, 321, 100), blue, 1);
 }
 
+TEST(ThumbnailImageTest, TopAndBottomHalvesKeepTheirSplitRow)
+{
+  const auto image = letterbox(splitTopBottomRgba(1280, 720), 1280, 720, PixelFormat::rgba8);
+
+  expectOutputSize(image);
+  for (const std::size_t x : {0u, 200u, 639u})
+  {
+    expectColorNear(pixelAt(image, x, 0), red, 1);
+    expectColorNear(pixelAt(image, x, 179), red, 1);
+    expectColorNear(pixelAt(image, x, 180), blue, 1);
+    expectColorNear(pixelAt(image, x, 359), blue, 1);
+  }
+}
+
+TEST(ThumbnailImageTest, TwoPixelSourceUpscalesAsARamp)
+{
+  const std::vector<std::uint8_t> pixels = {red[0], red[1], red[2], 255, blue[0], blue[1], blue[2], 255};
+  const auto image = letterbox(pixels, 2, 1, PixelFormat::rgba8);
+
+  expectOutputSize(image);
+  // A 2 x 1 source fits as 640 x 320, so rows 20..339 hold the image.
+  expectColorNear(pixelAt(image, 0, 180), red, 1);
+  expectColorNear(pixelAt(image, 639, 180), blue, 1);
+  for (std::size_t x = 1; x < thumbnailWidth; ++x)
+  {
+    const Color before = pixelAt(image, x - 1, 180);
+    const Color now = pixelAt(image, x, 180);
+    EXPECT_LE(now[0], before[0]) << "column " << x;
+    EXPECT_GE(now[2], before[2]) << "column " << x;
+  }
+  const Color middle = pixelAt(image, 320, 180);
+  EXPECT_LT(middle[0], red[0]);
+  EXPECT_GT(middle[0], blue[0]);
+  EXPECT_GT(middle[2], red[2]);
+  EXPECT_LT(middle[2], blue[2]);
+}
+
+TEST(ThumbnailImageTest, ShrinkingBlendsABoundaryColumnByCoverage)
+{
+  // Three columns into two: the first output column covers 1 red and half a blue source column.
+  const std::vector<std::uint8_t> pixels = {red[0],  red[1],  red[2],  255, blue[0], blue[1], blue[2], 255,
+                                            blue[0], blue[1], blue[2], 255};
+  const auto image = letterbox(pixels, 3, 1, PixelFormat::rgba8, 2, 1);
+
+  ASSERT_EQ(image.width, 2u);
+  ASSERT_EQ(image.height, 1u);
+  expectColorNear(pixelAt(image, 0, 0), {140, 40, 100}, 1);
+  expectColorNear(pixelAt(image, 1, 0), blue, 1);
+}
+
+TEST(ThumbnailImageTest, ShrinkingBlendsABoundaryRowByCoverage)
+{
+  // The same case down a column, which exercises the row weights and the row stride.
+  const std::vector<std::uint8_t> pixels = {red[0],  red[1],  red[2],  255, blue[0], blue[1], blue[2], 255,
+                                            blue[0], blue[1], blue[2], 255};
+  const auto image = letterbox(pixels, 1, 3, PixelFormat::rgba8, 1, 2);
+
+  ASSERT_EQ(image.width, 1u);
+  ASSERT_EQ(image.height, 2u);
+  expectColorNear(pixelAt(image, 0, 0), {140, 40, 100}, 1);
+  expectColorNear(pixelAt(image, 0, 1), blue, 1);
+}
+
+TEST(ThumbnailImageTest, SpareRowOfAnOddRemainderGoesToTheBottom)
+{
+  const auto image = letterbox(solidRgba(641, 360, red), 641, 360, PixelFormat::rgba8);
+
+  expectOutputSize(image);
+  // 641 x 360 scales to 640 x 359, and the one spare row is below the image.
+  expectColorNear(pixelAt(image, 320, 0), red, 1);
+  expectColorNear(pixelAt(image, 320, 358), red, 1);
+  EXPECT_EQ(pixelAt(image, 320, 359), barColor);
+}
+
+TEST(ThumbnailImageTest, SourceSidesAbove65535AreRejected)
+{
+  const std::vector<std::uint8_t> wide(65536u * 4u, 255);
+
+  EXPECT_FALSE(letterbox(std::span(wide).first(65535u * 4u), 65535, 1, PixelFormat::rgba8).empty());
+  EXPECT_TRUE(letterbox(wide, 65536, 1, PixelFormat::rgba8).empty());
+  EXPECT_TRUE(letterbox(wide, 1, 65536, PixelFormat::rgba8).empty());
+}
+
 TEST(ThumbnailImageTest, BgraInputSwapsRedAndBlue)
 {
   std::vector<std::uint8_t> pixels(4 * 4 * 4);
@@ -238,5 +339,28 @@ TEST(ThumbnailImageTest, PngDecodesToExactlyTheLetterboxedPixels)
   EXPECT_EQ(decodedWidth, static_cast<int>(thumbnailWidth));
   EXPECT_EQ(decodedHeight, static_cast<int>(thumbnailHeight));
   EXPECT_TRUE(std::equal(expected.pixels.begin(), expected.pixels.end(), decoded));
+  stbi_image_free(decoded);
+}
+
+TEST(ThumbnailImageTest, PngOfATopAndBottomSplitDecodesToExactlyTheLetterboxedPixels)
+{
+  const auto expected = letterbox(splitTopBottomRgba(800, 600), 800, 600, PixelFormat::rgba8);
+  const auto png = encodePng(expected);
+  ASSERT_FALSE(png.empty());
+
+  int decodedWidth = 0;
+  int decodedHeight = 0;
+  int components = 0;
+  stbi_uc* decoded =
+    stbi_load_from_memory(png.data(), static_cast<int>(png.size()), &decodedWidth, &decodedHeight, &components, 3);
+  ASSERT_NE(decoded, nullptr);
+
+  EXPECT_EQ(decodedWidth, static_cast<int>(thumbnailWidth));
+  EXPECT_EQ(decodedHeight, static_cast<int>(thumbnailHeight));
+  EXPECT_TRUE(std::equal(expected.pixels.begin(), expected.pixels.end(), decoded));
+  const std::size_t topRow = (10 * thumbnailWidth + 320) * 3;
+  const std::size_t bottomRow = (350 * thumbnailWidth + 320) * 3;
+  EXPECT_NEAR(decoded[topRow], red[0], 1);
+  EXPECT_NEAR(decoded[bottomRow], blue[0], 1);
   stbi_image_free(decoded);
 }

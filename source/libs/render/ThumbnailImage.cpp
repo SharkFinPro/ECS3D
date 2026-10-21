@@ -3,6 +3,7 @@
 #include <cmath>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_STATIC
 #define STBI_WRITE_NO_STDIO
 #include <stb_image_write.h>
 
@@ -10,6 +11,8 @@ namespace thumbnail
 {
   namespace
   {
+    constexpr std::uint32_t maxSourceDimension = 65535;
+
     struct Tap
     {
       std::size_t index;
@@ -76,7 +79,8 @@ namespace thumbnail
                      const std::uint32_t height, const PixelFormat format, const std::uint32_t targetWidth,
                      const std::uint32_t targetHeight)
   {
-    if (width == 0 || height == 0 || targetWidth == 0 || targetHeight == 0)
+    if (width == 0 || height == 0 || targetWidth == 0 || targetHeight == 0 || width > maxSourceDimension ||
+        height > maxSourceDimension)
     {
       return {};
     }

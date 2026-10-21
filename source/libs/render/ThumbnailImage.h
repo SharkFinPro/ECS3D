@@ -39,7 +39,7 @@ namespace thumbnail
   // Fits the source inside the target keeping its aspect ratio, centers it, and fills the bars with the
   // bar color. A larger source is shrunk by area averaging (box filter with fractional edge coverage),
   // a smaller one enlarged by bilinear interpolation. Source alpha is ignored. Returns an empty image
-  // when a size is zero or the buffer holds fewer than width * height * 4 bytes.
+  // when a size is zero, a source side exceeds 65535, or the buffer holds fewer than width * height * 4 bytes.
   [[nodiscard]] RgbImage letterbox(std::span<const std::uint8_t> source, std::uint32_t width, std::uint32_t height,
                                    PixelFormat format, std::uint32_t targetWidth = thumbnailWidth,
                                    std::uint32_t targetHeight = thumbnailHeight);
