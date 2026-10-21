@@ -36,7 +36,7 @@ internal sealed class ThrowingProcessRunner : IProcessRunner
     public int? ExitCode => null;
 
     public Task<int> WaitForExitAsync(CancellationToken cancellationToken) =>
-      _waitError is null ? Task.FromResult(0) : throw _waitError;
+      _waitError is null ? Task.FromResult(0).WaitAsync(cancellationToken) : throw _waitError;
 
     public void Kill()
     {
