@@ -3,12 +3,13 @@
 #include "CollisionSystem.h"
 #include "DefaultShapes.h"
 #include "PhysicsSystem.h"
+#include "CoinRushTestHelpers.h"
 #include "TemplateTestHelpers.h"
 #include "TestScene.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
-#include "objects/components/RigidBody.h"
-#include "objects/components/Transform.h"
+#include "objects/components/Component.h"
+#include "objects/components/Script.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include "templates/TemplateManifest.h"
@@ -21,6 +22,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <numbers>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -31,91 +33,8 @@
 #include <vector>
 
 using namespace templateTest;
+using namespace coinrushTest;
 
-namespace
-{
-  const std::filesystem::path templateFolder = sourceRoot / "templates" / "coin-rush";
-
-  constexpr const char* gridCheckerTexture = "48ad67dd-957f-4fc9-bd7b-019debffa1d0";
-  constexpr const char* torusModel = "7a1cd753-3775-44a0-858f-27239f8740f5";
-  constexpr const char* paletteYellowTexture = "1d5edebf-57f9-499c-9840-b84a57174422";
-  constexpr const char* playerPrefab = "9c7f0e83-4d16-4b52-a09e-27f5b3d81c6a";
-  constexpr float dt = 1.0f / 50.0f;
-
-  // Palette red, blue, green and orange: the textures of player slots 0 to 3.
-  const std::vector<std::string> slotTextures = {
-    "7c8c01db-771f-4048-94c2-004b8d19e7aa", "66a8a6fc-d151-4567-9ce5-2e17cc675fe0",
-    "c5eee5e6-9bd0-4f9b-977f-b9220a21a630", "ea184ad8-ca64-48cd-b69e-92bcb4649158"
-  };
-
-  bool approx(const float a, const float b)
-  {
-    return std::abs(a - b) < 1e-4f;
-  }
-
-  std::set<std::string> rootNames(const SceneAsset& scene)
-  {
-    std::set<std::string> names;
-    for (const auto& object : scene.getObjectManager()->getObjects())
-    {
-      names.insert(object->getName());
-    }
-
-    return names;
-  }
-
-  nlohmann::json scriptNamed(const nlohmann::json& object, const std::string& className)
-  {
-    for (const auto& entry : object.at("scripts"))
-    {
-      if (entry.at("className") == className)
-      {
-        return entry;
-      }
-    }
-
-    ADD_FAILURE() << object.at("name") << " has no script " << className;
-    return nlohmann::json::object();
-  }
-
-  nlohmann::json fieldOf(const nlohmann::json& script, const std::string& name)
-  {
-    for (const auto& field : script.at("fields"))
-    {
-      if (field.at("name") == name)
-      {
-        return field.at("value");
-      }
-    }
-
-    ADD_FAILURE() << script.at("className") << " has no field " << name;
-    return nullptr;
-  }
-
-  nlohmann::json prefabBody(const LoadedTemplate& project, const std::string& uuid)
-  {
-    return project.assetRegistry.getPrefabBody(uuids::uuid::from_string(uuid).value());
-  }
-
-  nlohmann::json prefabNamed(const nlohmann::json& project, const std::string& name)
-  {
-    for (const auto& prefab : project.at("assets").at("prefabs"))
-    {
-      if (prefab.at("name") == name)
-      {
-        return prefab;
-      }
-    }
-
-    ADD_FAILURE() << "no prefab named " << name;
-    return nlohmann::json::object();
-  }
-
-  std::string textureOf(const nlohmann::json& object)
-  {
-    return componentOf(object, "ModelRenderer").at("textureUUID").get<std::string>();
-  }
-}
 
 TEST(CoinRushSample, ManifestParsesWithTheShippedFields)
 {
@@ -298,6 +217,13 @@ TEST(CoinRushSample, EachLiftReachesItsIslandFromTheSide)
     const float liftFar = positionOfJson(lift).z + sign * scaleOfJson(lift).z;
     const float islandNear = positionOfJson(island).z - sign * scaleOfJson(island).z;
     EXPECT_TRUE(approx(liftFar, islandNear));
+
+    // Seen from above the lift sits wholly on the island's width, and it rests on the floor at its low point.
+    const float liftMin = positionOfJson(lift).x - scaleOfJson(lift).x;
+    const float liftMax = positionOfJson(lift).x + scaleOfJson(lift).x;
+    EXPECT_GE(liftMin, positionOfJson(island).x - scaleOfJson(island).x);
+    EXPECT_LE(liftMax, positionOfJson(island).x + scaleOfJson(island).x);
+    EXPECT_TRUE(approx(positionOfJson(lift).y - scaleOfJson(lift).y, 0.0f));
   }
 }
 
@@ -409,16 +335,27 @@ TEST(CoinRushSample, BoulderSpawnerThrowsHorizontallyAndClearsTheDais)
   EXPECT_GT(std::abs(velocity.x), 0.0f);
   EXPECT_GT(std::abs(velocity.z), 0.0f);
 
-  // The hull's farthest vertex at the prefab's scale bounds how low a boulder can hang below its center.
   const auto body = prefabNamed(projectJson(templateFolder), "Big Boulder").at("body");
-  float reach = 0.0f;
-  for (const auto& vertex : worldHullVertices(body))
-  {
-    reach = std::max(reach, glm::length(vertex));
-  }
+  const float radius = boulderWorldRadius(body);
 
-  EXPECT_GT(reach, 1.0f);
-  EXPECT_GT(positionOfJson(spawner).y - reach, 2.0f);
+  EXPECT_GT(radius, 1.0f);
+  EXPECT_GT(positionOfJson(spawner).y - radius - 1.0f, 2.0f);
+}
+
+TEST(CoinRushSample, BigBoulderIsADensityOneBallOfTheScaledHullVolume)
+{
+  const auto body = prefabNamed(projectJson(templateFolder), "Big Boulder").at("body");
+  const float reference = hullVolume(boulderHull());
+  const float mass = componentOf(body, "RigidBody").at("mass").get<float>();
+  const float radius = boulderWorldRadius(body);
+  const float ballVolume = 4.0f / 3.0f * std::numbers::pi_v<float> * radius * radius * radius;
+
+  EXPECT_EQ(scaleOfJson(body), glm::vec3(2.0f));
+  EXPECT_EQ(componentOf(body, "ModelRenderer").at("modelUUID"), boulderModel);
+  EXPECT_FALSE(componentOf(body, "Collider", "Sphere").at("isTrigger").get<bool>());
+  EXPECT_NEAR(mass, reference * 8.0f, reference * 8.0f * 1e-3f);
+  EXPECT_NEAR(mass, 11.56f, 0.1f);
+  EXPECT_NEAR(ballVolume, mass, mass * 1e-3f);
 }
 
 TEST(CoinRushSample, CoinsAreUprightTriggerRingsWithNoRigidBody)
@@ -449,31 +386,6 @@ TEST(CoinRushSample, CoinsAreUprightTriggerRingsWithNoRigidBody)
     EXPECT_EQ(fieldOf(scriptNamed(body, "Bobber"), "m_amplitude").get<float>(), 0.25f);
     EXPECT_EQ(fieldOf(scriptNamed(body, "Bobber"), "m_frequencyHz").get<float>(), 0.5f);
   }
-}
-
-TEST(CoinRushSample, BigBoulderMassIsTheScaledVolumeOfTheBuiltInBouldersHull)
-{
-  const auto body = prefabNamed(projectJson(templateFolder), "Big Boulder").at("body");
-  const auto collider = componentOf(body, "Collider", "ConvexMesh");
-
-  ConvexHull hull;
-  const auto flat = collider.at("vertices");
-  for (std::size_t i = 0; i + 2 < flat.size(); i += 3)
-  {
-    hull.vertices.emplace_back(flat[i].get<float>(), flat[i + 1].get<float>(), flat[i + 2].get<float>());
-  }
-
-  hull.indices = collider.at("indices").get<std::vector<std::uint32_t>>();
-  const float volume = hullVolume(hull);
-  const float reference = hullVolume(boulderHull());
-
-  EXPECT_EQ(scaleOfJson(body), glm::vec3(2.0f));
-  EXPECT_EQ(hull.vertices.size(), 24u);
-  EXPECT_GT(volume, 0.5f);
-  EXPECT_NEAR(volume, reference, reference * 1e-3f);
-  EXPECT_NEAR(componentOf(body, "RigidBody").at("mass").get<float>(), reference * 8.0f,
-              reference * 8.0f * 1e-3f);
-  EXPECT_NEAR(componentOf(body, "RigidBody").at("mass").get<float>(), 11.56f, 0.1f);
 }
 
 TEST(CoinRushSample, SceneScriptsCarryTheRequiredFields)
@@ -561,66 +473,6 @@ TEST(CoinRushSample, ScriptsFolderHoldsOnlyScorePillarAndItsReadme)
   }
 
   EXPECT_EQ(files, (std::set<std::string>{ "README.md", "ScorePillar.cs" }));
-}
-
-TEST(CoinRushSample, PlayersBoulderAndDaisSettleWithoutFallingThrough)
-{
-  LoadedTemplate project(templateFolder);
-  ASSERT_TRUE(project.loaded);
-  auto& objectManager = *project.sceneManager.getCurrentScene()->getObjectManager();
-  const auto playerBody = prefabBody(project, playerPrefab);
-  const auto boulderBody = prefabNamed(projectJson(templateFolder), "Big Boulder").at("body");
-
-  const auto place = [&](const nlohmann::json& body, const glm::vec3& position) {
-    const auto object = objectManager.instantiate(body);
-    fixtures::transformOf(object)->setPosition(position);
-    return object;
-  };
-
-  const auto atSpawn = place(playerBody, { -24, 1.02f, -24 });
-  const auto onDais = place(playerBody, { 0, 3.02f, 0 });
-  const auto boulder = place(boulderBody, { 3, 7, 3 });
-
-  CollisionSystem collisionSystem;
-  for (int tick = 0; tick < 300; ++tick)
-  {
-    PhysicsSystem::fixedUpdate(objectManager, dt);
-    collisionSystem.fixedUpdate(objectManager, dt);
-  }
-
-  EXPECT_NEAR(fixtures::positionOf(atSpawn).y, 1.0f, 0.1f);
-  EXPECT_NEAR(fixtures::positionOf(onDais).y, 3.0f, 0.1f);
-
-  const auto boulderPosition = fixtures::positionOf(boulder);
-  EXPECT_TRUE(std::isfinite(boulderPosition.x) && std::isfinite(boulderPosition.y) && std::isfinite(boulderPosition.z));
-  EXPECT_GT(boulderPosition.y, 0.5f);
-}
-
-TEST(CoinRushSample, AThrownBoulderLeavesTheDaisFootprint)
-{
-  LoadedTemplate project(templateFolder);
-  ASSERT_TRUE(project.loaded);
-  auto& objectManager = *project.sceneManager.getCurrentScene()->getObjectManager();
-  const auto& scene = *project.sceneManager.getCurrentScene();
-  const auto velocity = vec3Of(fieldOf(scriptNamed(objectNamed(scene, "Boulder Spawner"), "Spawner"),
-                                       "m_initialVelocity"));
-
-  const auto boulder = objectManager.instantiate(prefabNamed(projectJson(templateFolder), "Big Boulder").at("body"));
-  fixtures::transformOf(boulder)->setPosition({ 1, 7, -1 });
-  boulder->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity(velocity * dt);
-
-  CollisionSystem collisionSystem;
-  bool left = false;
-  for (int tick = 0; tick < 300 && !left; ++tick)
-  {
-    PhysicsSystem::fixedUpdate(objectManager, dt);
-    collisionSystem.fixedUpdate(objectManager, dt);
-    const auto position = fixtures::positionOf(boulder);
-    left = std::max(std::abs(position.x), std::abs(position.z)) > 6.0f;
-  }
-
-  EXPECT_TRUE(left);
-  EXPECT_GT(fixtures::positionOf(boulder).y, 0.5f);
 }
 
 TEST(CoinRushSample, ThumbnailIs640By360)

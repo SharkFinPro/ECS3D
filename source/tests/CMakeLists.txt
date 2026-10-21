@@ -25,6 +25,9 @@ add_executable(${PROJECT_NAME}
   ColliderPersistenceTest.cpp
   ColliderCacheTest.cpp
   CapsuleColliderTest.cpp
+  CoinRushSampleTest.cpp
+  CoinRushSamplePhysicsTest.cpp
+  CoinRushTestHelpers.h
   CapsuleGizmoTest.cpp
   CapsuleNarrowPhaseTest.cpp
   CapsulePhysicsTest.cpp
@@ -145,7 +148,6 @@ add_executable(${PROJECT_NAME}
   PhysicsGenericRestingShapesTest.cpp
   FirstPersonTemplateTest.cpp
   FirstPersonTemplateAssetsTest.cpp
-  CoinRushSampleTest.cpp
   PlanarHullTest.cpp
   PresetsTest.cpp
   TemplateManifestTest.cpp
