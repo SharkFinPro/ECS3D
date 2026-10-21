@@ -244,6 +244,23 @@ bool SaveUI::isDirty() const
   return m_unsavedChanges.isDirty();
 }
 
+void SaveUI::forgetSaveTarget()
+{
+  Log::info(LogCategory::editor,
+    "Another editor loaded a different project on the server; Save will ask for a folder.");
+
+  m_saveFile.clear();
+  m_isTemplate = false;
+  m_templateName.reset();
+  m_savedToFolderSinceOpen = false;
+
+  // The old folder's assets and scripts are not this project's, and Save As copies the root's content.
+  setProjectRoot({}, true);
+
+  m_unsavedChanges.markEdited();
+  updateWindowTitle();
+}
+
 void SaveUI::loadFromFile(const std::filesystem::path& path)
 {
   const auto location = locateProject(path);

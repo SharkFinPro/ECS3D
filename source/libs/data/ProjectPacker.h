@@ -1,6 +1,7 @@
 #ifndef PROJECTPACKER_H
 #define PROJECTPACKER_H
 
+#include <uuid.h>
 #include <memory>
 
 class AssetRegistry;
@@ -15,7 +16,8 @@ namespace net {
 // network Snapshot. It produces the same full project state (assets + scenes + current scene) as a
 // tightly packed binary blob instead of JSON, reusing the existing pack()/unpack() on AssetRegistry,
 // SceneAsset, ObjectManager, Object, and the components. ProjectSerializer stays the JSON path for
-// file I/O (save/load).
+// file I/O (save/load). A snapshot also ends with a session-only project load id, which names the load of
+// a project it belongs to so an editor can tell another editor's loadProject from a plain re-snapshot.
 class ProjectPacker {
 public:
   ProjectPacker(AssetRegistry* assetRegistry,
@@ -28,7 +30,11 @@ public:
   // Rebuilds the project from a packed snapshot. Like deserialize(), it parses into local instances
   // first and only commits (clearing + replacing the live state) once everything has parsed, so a
   // malformed packet leaves the current project intact.
-  void unpack(const net::Message& message) const;
+  void unpack(const net::Message& message);
+
+  void setProjectLoadId(const uuids::uuid& id);
+
+  [[nodiscard]] const uuids::uuid& getProjectLoadId() const;
 
 private:
   AssetRegistry* m_assetRegistry;
@@ -36,6 +42,8 @@ private:
   SceneManager* m_sceneManager;
 
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
+
+  uuids::uuid m_projectLoadId;
 };
 
 

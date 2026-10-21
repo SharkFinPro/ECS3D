@@ -407,6 +407,52 @@ TEST(SerializationRoundTrip, ATruncatedSnapshotLeavesTheProjectIntact)
   EXPECT_EQ(canonical(project.serializer->serialize()), canonical(before));
 }
 
+TEST(SerializationRoundTrip, TheProjectLoadIdTravelsWithTheSnapshot)
+{
+  const auto sender = makeProject();
+  buildProject(sender);
+  const auto id = uuidFrom("11111111-2222-3333-4444-555555555555");
+  sender.packer->setProjectLoadId(id);
+
+  net::Message message(net::MessageType::snapshot);
+  sender.packer->pack(message);
+
+  const auto receiver = makeProject();
+  ASSERT_TRUE(receiver.packer->getProjectLoadId().is_nil());
+
+  receiver.packer->unpack(message);
+
+  EXPECT_EQ(receiver.packer->getProjectLoadId(), id);
+}
+
+TEST(SerializationRoundTrip, ATruncatedSnapshotKeepsTheReceiversLoadIdAndProject)
+{
+  const auto sender = makeProject();
+  buildProject(sender);
+  sender.packer->setProjectLoadId(uuidFrom("11111111-2222-3333-4444-555555555555"));
+
+  net::Message message(net::MessageType::snapshot);
+  sender.packer->pack(message);
+
+  const auto receiver = makeProject();
+  buildProject(receiver);
+  const auto known = uuidFrom("99999999-8888-7777-6666-555555555555");
+  receiver.packer->setProjectLoadId(known);
+  const auto sceneCount = receiver.sceneManager->getScenes().size();
+  ASSERT_GT(sceneCount, 0u);
+
+  net::Message truncated(net::MessageType::snapshot);
+  const auto bytes = message.bytes();
+  for (std::size_t i = 0; i + 1 < bytes.size(); ++i)
+  {
+    truncated.write(bytes[i]);
+  }
+
+  EXPECT_ANY_THROW(receiver.packer->unpack(truncated));
+  EXPECT_EQ(receiver.packer->getProjectLoadId(), known);
+  EXPECT_EQ(receiver.sceneManager->getScenes().size(), sceneCount);
+}
+
 TEST(SerializationRoundTrip, UnpackingTwiceIntoTheSameManagerReplacesRatherThanAppends)
 {
   const auto source = fixtures::makeScene();
