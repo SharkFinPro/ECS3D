@@ -4,6 +4,7 @@
 #include "SceneScriptsPanelLogic.h"
 #include "components/ScriptEditor.h"
 #include <assets/AssetRegistry.h>
+#include <assets/ScriptClassAssets.h>
 #include <scenes/SceneAsset.h>
 #include <scenes/SceneManager.h>
 #include <scenes/SceneScriptEdits.h>
@@ -269,6 +270,10 @@ void SceneScriptsPanel::displayDropTarget(const SceneAsset& scene)
     const auto parsed = uuids::uuid::from_string(uuidStr);
     const auto* record = parsed && m_assetRegistry ? m_assetRegistry->getByUUIDOfType(*parsed, AssetType::Script)
                                                    : nullptr;
+    if (record && !usableOnScene(*record))
+    {
+      record = nullptr;
+    }
 
     if (record && !record->className.empty() && !replication::sceneScriptIndex(scene, record->className))
     {

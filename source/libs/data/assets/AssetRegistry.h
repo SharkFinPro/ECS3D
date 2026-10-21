@@ -2,6 +2,7 @@
 #define ASSETREGISTRY_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <uuid.h>
@@ -21,6 +22,13 @@ enum class AssetType {
   Prefab
 };
 
+// Which host a Script record's class can attach to. Packed raw over the wire, so only ever APPEND.
+enum class ScriptKind : uint8_t {
+  Either,
+  Object,
+  Scene
+};
+
 struct AssetRecord {
   uuids::uuid uuid;
   AssetType type = AssetType::Unknown;
@@ -30,6 +38,7 @@ struct AssetRecord {
   std::string displayName; // optional rename override: when non-empty it replaces the derived display
                            // name (see assetDisplay::name). The file on disk and `path` (the registry
                            // key) never change - a rename is display-only.
+  ScriptKind scriptKind = ScriptKind::Either; // scripts only: set for a compiled class, not saved to a project
 };
 
 // uuid<->path registry + serialize. Carries asset metadata only (no GPU resources, no GUI).
@@ -55,6 +64,9 @@ public:
   // No-op for an unknown uuid. References to it dangle by design - lookups already null-tolerate a missing
   // uuid. Bumps the version.
   void removeAsset(const uuids::uuid& uuid);
+
+  // Returns true when the record exists and its kind changed.
+  bool setScriptKind(const uuids::uuid& uuid, ScriptKind kind);
 
   // Drop all records (used when (re)loading a project / applying a fresh snapshot).
   void clear();
