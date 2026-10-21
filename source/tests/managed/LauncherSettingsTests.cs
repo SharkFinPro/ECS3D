@@ -261,8 +261,8 @@ public class LauncherSettingsTests
   [Fact]
   public void DocumentsFolderIsMyDocumentsOnWindowsAndHomeDocumentsElsewhere()
   {
-    static string Folder(Environment.SpecialFolder folder) =>
-      folder == Environment.SpecialFolder.MyDocuments ? "C:/Users/a/Documents" : "/home/a";
+    static string Folder(Environment.SpecialFolder which) =>
+      which == Environment.SpecialFolder.MyDocuments ? "C:/Users/a/Documents" : "/home/a";
 
     Assert.Equal("C:/Users/a/Documents", LauncherSettingsStore.DocumentsFolder(HostOs.Windows, Folder));
     Assert.Equal(Path.Combine("/home/a", "Documents"), LauncherSettingsStore.DocumentsFolder(HostOs.Linux, Folder));
