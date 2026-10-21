@@ -129,18 +129,21 @@ public sealed class RecentProjectsStore
     // The editor may hold the file open for a moment, as the engine's writer allows for.
     private void WriteWithRetry(string contents)
     {
-        for (var attempt = 1; ; attempt++)
+        for (var attempt = 1; attempt < WriteAttempts; attempt++)
         {
             try
             {
                 _fileSystem.WriteAllTextAtomic(_path, contents);
                 return;
             }
-            catch (Exception ex) when (attempt < WriteAttempts && ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 _delay(WriteRetryDelay);
             }
         }
+
+        // The last attempt's failure reaches Save, which reports it.
+        _fileSystem.WriteAllTextAtomic(_path, contents);
     }
 
     public void RecordOpened(string path) => RecordOpened(path, null);
