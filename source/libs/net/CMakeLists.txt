@@ -1,6 +1,10 @@
 project(ECS3DNet)
 
 add_library(${PROJECT_NAME}
+  CommandLineSplit.cpp
+  CommandLineSplit.h
+  EditorConnections.cpp
+  EditorConnections.h
   MessageQueue.cpp
   MessageQueue.h
   NetServer.cpp
