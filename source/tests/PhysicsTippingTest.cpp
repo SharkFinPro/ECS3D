@@ -22,8 +22,8 @@ namespace {
   using fixtures::addObject;
   using fixtures::transformOf;
 
-  // A thin domino, 0.3 by 2 by 1, so a push high on it has a long lever and a short base to pivot on.
-  const glm::vec3 dominoScale{ 0.3f, 2.0f, 1.0f };
+  // A thin domino, 0.3 by 2 by 1 (a box collider spans twice the scale), so a push high on it has a long lever and a short base to pivot on.
+  const glm::vec3 dominoScale{ 0.15f, 1.0f, 0.5f };
 
   // How far the box's up axis leans from the world's, in degrees.
   float tiltOf(const std::shared_ptr<Object>& object)
@@ -42,7 +42,7 @@ namespace {
     // The ground's top is the plane y = 0.
     Dominoes()
     {
-      const auto ground = addObject(scene, "Ground", { 3, -0.5f, 0 }, { 40, 1, 10 });
+      const auto ground = addObject(scene, "Ground", { 3, -1, 0 }, { 40, 1, 10 });
       fixtures::addBoxCollider(ground);
     }
 
@@ -97,6 +97,8 @@ TEST(PhysicsTipping, APushHighOnARestingBoxTipsItOverItsFarBottomEdge)
   dominoes.addDomino(0, 1);
   dominoes.tick(30);
   ASSERT_LT(tiltOf(dominoes.objects[0]), 0.1f);
+  ASSERT_NEAR(transformOf(dominoes.objects[0])->getPosition().y, 1.0f, 0.05f);
+  ASSERT_FALSE(dominoes.bodies[0]->isFalling());
 
   // About three times the push that just tips it, so the margin is wide. Before the spin of a push high on a
   // resting box was kept, the corners it drives into the ground shed it and the box only slid.
@@ -113,6 +115,8 @@ TEST(PhysicsTipping, ASmallPushLeavesARestingBoxFlush)
   Dominoes dominoes;
   dominoes.addDomino(0, 1);
   dominoes.tick(30);
+  ASSERT_NEAR(transformOf(dominoes.objects[0])->getPosition().y, 1.0f, 0.05f);
+  ASSERT_FALSE(dominoes.bodies[0]->isFalling());
 
   // The spin of this push turns the box less than the flush window in a tick, so it is laid flush as before.
   dominoes.pushHigh(0, { 0.04f, 0, 0 });
@@ -134,6 +138,8 @@ TEST(PhysicsTipping, APushTooSmallToTipABoxRocksItAndItComesBackFlush)
   Dominoes dominoes;
   dominoes.addDomino(0, 1);
   dominoes.tick(30);
+  ASSERT_NEAR(transformOf(dominoes.objects[0])->getPosition().y, 1.0f, 0.05f);
+  ASSERT_FALSE(dominoes.bodies[0]->isFalling());
 
   // Turns the box past the flush window in the first tick, but is far under the push that carries its center of
   // mass over the far edge: positive control that the box is tipped by enough of a push and no more.
