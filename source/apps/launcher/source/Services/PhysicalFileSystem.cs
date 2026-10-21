@@ -16,7 +16,8 @@ public sealed class PhysicalFileSystem : IFileSystem
 
     public void WriteAllTextAtomic(string path, string contents)
     {
-        var temp = path + ".tmp";
+        // A unique name, so two launchers saving at once never delete each other's temp file.
+        var temp = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
             File.WriteAllText(temp, contents, Utf8NoBom);

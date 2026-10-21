@@ -39,7 +39,7 @@ internal sealed class FakeFileSystem : IFileSystem
     return _text.TryGetValue(path, out var text) ? text : throw new FileNotFoundException(path);
   }
 
-  // A failed move removes the temp file, as the contract says, and leaves the target as it was.
+  // A failed write or move leaves the target as it was, as the contract says.
   public void WriteAllTextAtomic(string path, string contents)
   {
     if (FailWrites)
@@ -47,9 +47,6 @@ internal sealed class FakeFileSystem : IFileSystem
       throw new IOException("write failed");
     }
 
-    var temp = path + ".tmp";
-    _text[temp] = contents;
-    _text.Remove(temp);
     if (FailMoves)
     {
       throw new IOException("move failed");
@@ -63,8 +60,6 @@ internal sealed class FakeFileSystem : IFileSystem
   public void Seed(string path, string contents) => _text[path] = contents;
 
   public string? TextOf(string path) => _text.GetValueOrDefault(path);
-
-  public bool HasTemp(string path) => _text.ContainsKey(path + ".tmp");
 }
 
 internal sealed class RecordingLauncherLog : ILauncherLog

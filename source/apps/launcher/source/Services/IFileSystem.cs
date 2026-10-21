@@ -9,7 +9,7 @@ public interface IFileSystem
 
     string ReadAllText(string path);
 
-    // Writes UTF-8 to "<path>.tmp" beside the target, then replaces the target; the temp file never survives.
+    // Writes UTF-8 to a uniquely named temp file beside the target, then replaces the target; the temp file never survives.
     void WriteAllTextAtomic(string path, string contents);
 
     void CreateDirectory(string path);

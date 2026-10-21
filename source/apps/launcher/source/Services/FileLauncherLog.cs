@@ -32,10 +32,11 @@ public sealed class FileLauncherLog : ILauncherLog
             {
                 Write(line);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
+                                           or ArgumentException)
             {
-                // Logging must never take the launcher down; the line is dropped.
-                _started = true;
+                // Logging must never take the launcher down; the line is dropped and the next write retries.
+                return;
             }
         }
     }

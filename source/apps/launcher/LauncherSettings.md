@@ -7,7 +7,7 @@ does not read it. `LauncherSettingsStore` owns it.
 | --- | --- | --- |
 | `version` | number | 1 |
 | `engineDirectory` | string or null | null (the launcher's own folder; empty means the same) |
-| `projectsDirectory` | string | `<Documents>/ECS3D Projects` |
+| `projectsDirectory` | string | `<Documents>/ECS3D Projects` (`<home>/Documents` on Linux and macOS) |
 | `editorConsole` | bool | false |
 | `serverConsole` | bool | false |
 | `closeAfterOpen` | bool | false |
@@ -19,4 +19,4 @@ does not read it. `LauncherSettingsStore` owns it.
   one warning in the launcher log, and is replaced by the next save.
 - A field of the wrong type or out of range takes its default and logs a warning; the other fields keep their values.
 - Unknown fields, including inside `lastJoin`, survive a load and save.
-- Writes go to `<file>.tmp` and then replace the target, so a failed write leaves the old file.
+- Writes go to a uniquely named `<file>.<id>.tmp` and then replace the target, so a failed write leaves the old file.

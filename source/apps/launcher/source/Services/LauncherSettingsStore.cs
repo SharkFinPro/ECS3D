@@ -19,7 +19,7 @@ public sealed class LauncherSettingsStore
     private JsonObject _root = new();
 
     public LauncherSettingsStore(IFileSystem fileSystem, ILauncherLog log, UserDataDirectory userData)
-        : this(fileSystem, log, userData, () => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments))
+        : this(fileSystem, log, userData, () => DocumentsFolder(HostOsDetector.Current(), Environment.GetFolderPath))
     {
     }
 
@@ -36,6 +36,12 @@ public sealed class LauncherSettingsStore
     }
 
     public string FilePath => _path;
+
+    // .NET maps MyDocuments to the home folder on Linux and macOS; the engine uses <home>/Documents there.
+    public static string DocumentsFolder(HostOs os, Func<Environment.SpecialFolder, string> getFolder) =>
+        os == HostOs.Windows
+            ? getFolder(Environment.SpecialFolder.MyDocuments)
+            : Path.Combine(getFolder(Environment.SpecialFolder.UserProfile), "Documents");
 
     public LauncherSettings Defaults() =>
         new() { ProjectsDirectory = Path.Combine(_documents(), ProjectsFolderName) };
@@ -54,8 +60,18 @@ public sealed class LauncherSettingsStore
             return Defaults();
         }
 
-        _root = root;
-        return Parse(new SettingsFieldReader(root, _path, _log));
+        try
+        {
+            var settings = Parse(new SettingsFieldReader(root, _path, _log));
+            _root = root;
+            return settings;
+        }
+        catch (ArgumentException ex)
+        {
+            // A hand-edited file with a repeated key can surface here, when a field is first read.
+            _log.Warn($"{_path}: could not read settings: {ex.Message}; using defaults");
+            return Defaults();
+        }
     }
 
     public bool Save(LauncherSettings settings)
@@ -91,7 +107,7 @@ public sealed class LauncherSettingsStore
 
             _log.Warn($"{_path}: the top level is not an object; using defaults");
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or ArgumentException)
         {
             _log.Warn($"{_path}: could not read settings: {ex.Message}; using defaults");
         }
@@ -105,7 +121,7 @@ public sealed class LauncherSettingsStore
         return new LauncherSettings
         {
             EngineDirectory = reader.ReadNullableString("engineDirectory", defaults.EngineDirectory),
-            ProjectsDirectory = reader.ReadString("projectsDirectory", defaults.ProjectsDirectory),
+            ProjectsDirectory = reader.ReadFolder("projectsDirectory", defaults.ProjectsDirectory),
             EditorConsole = reader.ReadBool("editorConsole", defaults.EditorConsole),
             ServerConsole = reader.ReadBool("serverConsole", defaults.ServerConsole),
             CloseAfterOpen = reader.ReadBool("closeAfterOpen", defaults.CloseAfterOpen),
@@ -118,7 +134,9 @@ public sealed class LauncherSettingsStore
 
     private void Apply(LauncherSettings settings)
     {
-        _root["version"] = SchemaVersion;
+        // A file a newer launcher wrote keeps its version, so this one does not claim to have downgraded it.
+        var existing = _root["version"] is JsonValue value && value.TryGetValue<int>(out var number) ? number : 0;
+        _root["version"] = Math.Max(SchemaVersion, existing);
         _root["engineDirectory"] = settings.EngineDirectory;
         _root["projectsDirectory"] = settings.ProjectsDirectory;
         _root["editorConsole"] = settings.EditorConsole;

@@ -4,8 +4,8 @@ public sealed record LastJoin(string Address, int Port);
 
 public sealed record LauncherSettings
 {
-    public const string GridView = "grid";
-    public const string ListView = "list";
+    public static string GridView => "grid";
+    public static string ListView => "list";
 
     // Null or empty means the launcher's own folder.
     public string? EngineDirectory { get; init; }

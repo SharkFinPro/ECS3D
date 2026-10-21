@@ -30,6 +30,9 @@ internal sealed class SettingsFieldReader
     public string ReadString(string name, string fallback) =>
         Read(name, fallback, _ => true, "a string");
 
+    public string ReadFolder(string name, string fallback) =>
+        Read(name, fallback, value => !string.IsNullOrWhiteSpace(value), "a folder path");
+
     public bool ReadBool(string name, bool fallback) => Read(name, fallback, _ => true, "true or false");
 
     public int ReadPort(string name, int fallback) =>

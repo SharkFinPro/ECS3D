@@ -58,7 +58,7 @@ public class LauncherSettingsTests
       ServerConsole = true,
       CloseAfterOpen = true,
       HostPort = 4242,
-      LastJoin = new LastJoin("192.168.1.24", 3001),
+      LastJoin = new LastJoin("192.0.2.24", 3001),
       ProjectsView = "list",
     };
 
@@ -76,17 +76,17 @@ public class LauncherSettingsTests
   {
     _files.Seed(SettingsPath, """
       { "version": 1, "futureThing": { "a": [1, 2] }, "hostPort": 3000,
-        "lastJoin": { "address": "10.0.0.2", "port": 3000, "nickname": "lan" } }
+        "lastJoin": { "address": "198.51.100.2", "port": 3000, "nickname": "lan" } }
       """);
     var store = NewStore();
     var loaded = store.Load();
 
-    Assert.True(store.Save(loaded with { HostPort = 3100, LastJoin = new LastJoin("10.0.0.3", 3002) }));
+    Assert.True(store.Save(loaded with { HostPort = 3100, LastJoin = new LastJoin("198.51.100.3", 3002) }));
 
     var saved = Saved();
     Assert.Equal(2, saved["futureThing"]!["a"]!.AsArray().Count);
     Assert.Equal("lan", (string)saved["lastJoin"]!["nickname"]!);
-    Assert.Equal("10.0.0.3", (string)saved["lastJoin"]!["address"]!);
+    Assert.Equal("198.51.100.3", (string)saved["lastJoin"]!["address"]!);
     Assert.Equal(3100, (int)saved["hostPort"]!);
   }
 
@@ -187,8 +187,12 @@ public class LauncherSettingsTests
     Assert.False(store.Save(loaded with { HostPort = 3200 }));
 
     Assert.Equal(before, _files.TextOf(SettingsPath));
-    Assert.False(_files.HasTemp(SettingsPath));
     Assert.Equal(2, _log.Warnings.Count);
+    Assert.All(_log.Warnings, line => Assert.Contains("could not save settings", line));
+
+    _files.FailMoves = false;
+    Assert.True(store.Save(loaded with { HostPort = 3200 }));
+    Assert.Equal(3200, (int)Saved()["hostPort"]!);
   }
 
   [Fact]
@@ -199,7 +203,70 @@ public class LauncherSettingsTests
     Assert.True(store.Save(store.Defaults()));
 
     Assert.NotNull(_files.TextOf(SettingsPath));
-    Assert.False(_files.HasTemp(SettingsPath));
+    Assert.Equal(1, (int)Saved()["version"]!);
+  }
+
+  [Fact]
+  public void SaveKeepsTheVersionANewerLauncherWrote()
+  {
+    _files.Seed(SettingsPath, """{ "version": 2, "hostPort": 3100 }""");
+    var store = NewStore();
+
+    Assert.True(store.Save(store.Load()));
+
+    Assert.Equal(2, (int)Saved()["version"]!);
+  }
+
+  [Theory]
+  [InlineData("\"3000\"")]
+  [InlineData("3000.5")]
+  [InlineData("0")]
+  [InlineData("-1")]
+  [InlineData("true")]
+  public void HostPortOfTheWrongTypeOrRangeFallsBack(string value)
+  {
+    _files.Seed(SettingsPath, $$"""{ "hostPort": {{value}}, "serverConsole": true }""");
+
+    var settings = NewStore().Load();
+
+    Assert.Equal(EnginePorts.Default, settings.HostPort);
+    Assert.True(settings.ServerConsole);
+    Assert.Contains(_log.Warnings, line => line.Contains("'hostPort'"));
+  }
+
+  [Theory]
+  [InlineData("\"\"")]
+  [InlineData("\"   \"")]
+  [InlineData("42")]
+  public void EmptyOrNonStringProjectsDirectoryFallsBack(string value)
+  {
+    _files.Seed(SettingsPath, $$"""{ "projectsDirectory": {{value}} }""");
+
+    var settings = NewStore().Load();
+
+    Assert.Equal(Path.Combine(Documents, "ECS3D Projects"), settings.ProjectsDirectory);
+    Assert.Contains(_log.Warnings, line => line.Contains("'projectsDirectory'"));
+  }
+
+  [Fact]
+  public void RepeatedKeysNeverThrow()
+  {
+    _files.Seed(SettingsPath, """{ "hostPort": 3100, "hostPort": 3200 }""");
+
+    var exception = Record.Exception(() => NewStore().Load());
+
+    Assert.Null(exception);
+  }
+
+  [Fact]
+  public void DocumentsFolderIsMyDocumentsOnWindowsAndHomeDocumentsElsewhere()
+  {
+    static string Folder(Environment.SpecialFolder folder) =>
+      folder == Environment.SpecialFolder.MyDocuments ? "C:/Users/a/Documents" : "/home/a";
+
+    Assert.Equal("C:/Users/a/Documents", LauncherSettingsStore.DocumentsFolder(HostOs.Windows, Folder));
+    Assert.Equal(Path.Combine("/home/a", "Documents"), LauncherSettingsStore.DocumentsFolder(HostOs.Linux, Folder));
+    Assert.Equal(Path.Combine("/home/a", "Documents"), LauncherSettingsStore.DocumentsFolder(HostOs.MacOs, Folder));
   }
 
   [Fact]
@@ -274,8 +341,8 @@ public sealed class LauncherPhysicalFileTests : IDisposable
 
     Assert.ThrowsAny<Exception>(() => files.WriteAllTextAtomic(target, "x"));
 
-    Assert.False(File.Exists(target + ".tmp"));
     Assert.True(Directory.Exists(target));
+    Assert.Empty(Directory.GetFiles(_folder));
   }
 
   [Fact]
@@ -304,5 +371,23 @@ public sealed class LauncherPhysicalFileTests : IDisposable
     log.Warn("dropped");
 
     Assert.Equal("a file, not a folder", File.ReadAllText(blocker));
+  }
+
+  [Fact]
+  public void LauncherLogThatFailedFirstStillTruncatesOnItsFirstSuccessfulWrite()
+  {
+    var logs = Path.Combine(_folder, "logs");
+    var path = Path.Combine(logs, "launcher.log");
+    File.WriteAllText(logs, "a file where the logs folder goes");
+    var log = new FileLauncherLog(path, () => DateTimeOffset.UnixEpoch);
+
+    log.Warn("dropped");
+    File.Delete(logs);
+    Directory.CreateDirectory(logs);
+    File.WriteAllText(path, "old run
+");
+    log.Warn("kept");
+
+    Assert.Equal(new[] { "1970-01-01T00:00:00.000Z [warn] kept" }, File.ReadAllLines(path));
   }
 }
