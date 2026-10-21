@@ -145,6 +145,7 @@ add_executable(${PROJECT_NAME}
   PhysicsGenericRestingShapesTest.cpp
   FirstPersonTemplateTest.cpp
   FirstPersonTemplateAssetsTest.cpp
+  CoinRushSampleTest.cpp
   PlanarHullTest.cpp
   PresetsTest.cpp
   TemplateManifestTest.cpp
