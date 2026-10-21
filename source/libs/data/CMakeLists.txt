@@ -5,6 +5,8 @@ add_library(${PROJECT_NAME}
   ComponentRegistry.h
   ComponentRegistration.cpp
   ComponentRegistration.h
+  ProjectOrigin.cpp
+  ProjectOrigin.h
   ProjectPaths.cpp
   ProjectPaths.h
   ProjectSerializer.cpp
@@ -99,6 +101,11 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
   ECS3DNetProtocol
   ECS3DLog
 )
+
+if(WIN32)
+  # ProjectOrigin asks the system for the Documents folder.
+  target_link_libraries(${PROJECT_NAME} PRIVATE shell32 ole32)
+endif()
 
 # ECS3DData is feature-complete: all component data, Object/ObjectManager, scenes (SceneManager/
 # SceneAsset), the AssetRegistry, and the ProjectSerializer live here, with no Vulkan/imgui includes.

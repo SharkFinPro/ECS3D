@@ -1,4 +1,5 @@
 #include "ScriptSystem.h"
+#include "ScriptDirectories.h"
 #include "ScriptFieldEdit.h"
 #include "bindings/BindingContext.h"
 #include <Log.h>
@@ -25,9 +26,13 @@ namespace {
   }
 }
 
-ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::filesystem::path userScriptsDir)
+ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::vector<std::filesystem::path> scriptDirectories)
   : m_makeRuntime(std::move(makeRuntime)),
-    m_userScriptsDir(std::move(userScriptsDir))
+    m_scriptDirectories(std::move(scriptDirectories))
+{}
+
+ScriptSystem::ScriptSystem(RuntimeFactory makeRuntime, std::filesystem::path scriptDirectory)
+  : ScriptSystem(std::move(makeRuntime), std::vector{ std::move(scriptDirectory) })
 {}
 
 ScriptSystem::~ScriptSystem() = default;
@@ -607,15 +612,15 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
 
   m_timeSinceLastSnapshot = 0.0f;
 
-  auto now = takeSnapshot();
-  if (now == m_scriptsSnapshot)
-  {
-    return;
-  }
-
-  Log::info(LogCategory::script, "Change detected - reloading scripts...");
   try
   {
+    auto now = takeSnapshot();
+    if (now == m_scriptsSnapshot)
+    {
+      return;
+    }
+
+    Log::info(LogCategory::script, "Change detected - reloading scripts...");
     // Preserve live field values across the reload: read them back into each Script's data blob, then
     // recompile. The new instances are recreated lazily on the next fixedUpdate, which pushes the
     // refreshed blob back in.
@@ -1018,12 +1023,31 @@ ScriptSystem::ScriptsSnapshot ScriptSystem::takeSnapshot() const
 {
   ScriptsSnapshot times;
   std::error_code ec;
-  for (auto& entry : std::filesystem::recursive_directory_iterator(m_userScriptsDir, ec))
+  for (const auto& directory : m_scriptDirectories)
   {
-    if (entry.is_regular_file(ec))
+    std::filesystem::recursive_directory_iterator it(
+      directory, std::filesystem::directory_options::skip_permission_denied, ec);
+    for (; !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec))
     {
-      times[entry.path().string()] = entry.last_write_time(ec);
+      std::error_code entryEc;
+      if (it->is_directory(entryEc))
+      {
+        if (scripting::isIgnoredScriptFolder(it->path().filename().string()))
+        {
+          it.disable_recursion_pending();
+        }
+      }
+      else if (it->is_regular_file(entryEc))
+      {
+        const auto time = it->last_write_time(entryEc);
+        if (!entryEc)
+        {
+          times[it->path().string()] = time;
+        }
+      }
     }
+
+    ec.clear();
   }
 
   return times;

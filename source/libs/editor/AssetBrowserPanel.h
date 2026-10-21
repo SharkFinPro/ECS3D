@@ -30,6 +30,11 @@ public:
 
   void setAddAssetCallback(AddAssetCallback callback);
 
+  // Asked before an action writes into the project folder; true means it was handled (the project is an
+  // untitled template) and nothing must be written.
+  using BlockWritesCallback = std::function<bool()>;
+  void setBlockWritesCallback(BlockWritesCallback callback);
+
   // The shared selection slot owned by EditorApp: a tile click selects that asset here (the same slot
   // the object tree/Inspector use), so selecting an asset deselects any object and vice versa.
   void setSelection(std::shared_ptr<EditorSelection> selection);
@@ -63,6 +68,7 @@ private:
 
   LoadSceneCallback m_onLoadScene;
   AddAssetCallback m_onAddAsset;
+  BlockWritesCallback m_blockWrites;
 
   AssetTypeFilter m_filter;
 

@@ -26,10 +26,13 @@ public class ScoreKeeper : SceneScript
         subscribe<RoundOverEvent>(StarterEvents.RoundOver, onRoundOver);
     }
 
-    // A slot's score is dropped without a scoreChanged, so a leaving player's pillar keeps its last height.
+    // Publishing zero lets a score display clear the departed slot.
     public override void onPlayerLeft(int slot)
     {
-        m_scores.Remove(slot);
+        if (m_scores.Remove(slot))
+        {
+            publish(StarterEvents.ScoreChanged, new ScoreChangedEvent { Slot = slot, Score = 0 });
+        }
     }
 
     // A collected value may be negative; the winner is the highest score, whatever its sign.

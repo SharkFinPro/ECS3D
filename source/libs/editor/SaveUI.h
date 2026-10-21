@@ -7,9 +7,11 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 class ProjectSerializer;
+struct ProjectLocation;
 
 namespace vke {
   class VulkanEngine;
@@ -51,12 +53,21 @@ public:
   // note rather than loading it, since loading replaces the server's project.
   void setEditable(bool editable);
 
-  // Returns false if no destination was chosen (a Save As dialog the user canceled) or the write failed,
+  // Save on a template (the built-in project, or a folder holding a template.json) acts as Save As, so
+  // the template is not written. Returns false if no destination was chosen (a Save As dialog the user canceled) or the write failed,
   // so a caller discarding the current project afterward knows not to proceed.
   [[nodiscard]] bool save();
 
   // Picks a project folder and saves into it. False if the dialog was canceled or the save failed.
   bool saveAs();
+
+  // True while the project is an unsaved template: nothing may be written into its folder.
+  [[nodiscard]] bool isUntitledTemplate() const;
+
+  // For actions that write files into the project folder (imports, new scripts). On an untitled template
+  // it logs why, starts Save As and returns true, and the caller must not write; the user repeats the
+  // action once saved.
+  [[nodiscard]] bool blockAssetWrites();
 
   void open();
 
@@ -118,6 +129,10 @@ private:
 
   std::filesystem::path m_projectRoot;
 
+  bool m_isTemplate = false;
+  std::optional<std::string> m_templateName;
+  bool m_savedToFolderSinceOpen = false;
+
   bool m_editable = true;
 
   vke::EventListener<vke::DropEvent> m_dropEventListener;
@@ -130,11 +145,18 @@ private:
 
   [[nodiscard]] static bool chooseProjectFile(std::filesystem::path& file);
 
-  [[nodiscard]] static bool chooseSaveFolder(std::filesystem::path& folder);
+  // With a non-empty defaultName the dialog is a save dialog prefilled with it, since a folder picker cannot be.
+  [[nodiscard]] static bool chooseSaveFolder(std::filesystem::path& folder, const std::filesystem::path& startIn,
+                                             const std::string& defaultName);
 
   [[nodiscard]] bool writeProject(const std::filesystem::path& file);
 
   [[nodiscard]] bool saveToFolder(const std::filesystem::path& folder);
+
+  // Sets m_isTemplate and m_templateName from where the project came from; a New project is neither.
+  void setOrigin(const ProjectLocation& location);
+
+  void updateWindowTitle();
 
   void setProjectRoot(const std::filesystem::path& root, bool reopened);
 

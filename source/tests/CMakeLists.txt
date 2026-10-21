@@ -93,6 +93,7 @@ add_executable(${PROJECT_NAME}
   LogFilterTest.cpp
   LogBindingsTest.cpp
   ScriptFieldEditTest.cpp
+  ScriptDirectoriesTest.cpp
   ScriptFieldLabelTest.cpp
   AttachedScriptsTest.cpp
   ScriptSystemLifecycleTest.cpp
@@ -146,13 +147,17 @@ add_executable(${PROJECT_NAME}
   PlanarHullTest.cpp
   PresetsTest.cpp
   TemplateManifestTest.cpp
+  ProjectOriginTest.cpp
   ProjectPathsTest.cpp
+  TemplateValidation.h
+  TemplateValidationTest.cpp
   PhysicsStackingTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsContactResponseTest.cpp
   PhysicsFrictionHoldTest.cpp
   PhysicsSlopeStackTest.cpp
   DefaultProjectTest.cpp
+  EmptyTemplateTest.cpp
   DefaultShapesTest.cpp
   ShapeDropTest.cpp
   RuntimeComponentTest.cpp
