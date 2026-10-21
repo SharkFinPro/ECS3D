@@ -25,7 +25,7 @@ internal static class ScorePillarMath
 public class ScorePillar : ScriptBase
 {
     [ExposeToEditor("Slot")]
-    private int m_slot = 0;
+    private int m_slot;
 
     [ExposeToEditor("Units Per Point")]
     private float m_unitsPerPoint = 0.5f;

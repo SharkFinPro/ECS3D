@@ -82,7 +82,7 @@ public unsafe class ScorePillarTests : IDisposable
     Assert.Null(error);
   }
 
-  private static ScorePillar StartPillar(Vector3 position, Vector3 scale, params (string Field, object Value)[] fields)
+  private static void StartPillar(Vector3 position, Vector3 scale, params (string Field, object Value)[] fields)
   {
     Positions[PillarUuid] = position;
     Scales[PillarUuid] = scale;
@@ -96,11 +96,10 @@ public unsafe class ScorePillarTests : IDisposable
     }
 
     pillar.start();
-    return pillar;
   }
 
-  private static void Score(int slot, int score)
-    => Bridge.Events.publish(StarterEvents.ScoreChanged, new ScoreChangedEvent { Slot = slot, Score = score });
+  private static void Score(int slot, int points)
+    => Bridge.Events.publish(StarterEvents.ScoreChanged, new ScoreChangedEvent { Slot = slot, Score = points });
 
   private static float Height() => Scales[PillarUuid].Y * 2.0f;
 

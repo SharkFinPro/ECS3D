@@ -38,7 +38,7 @@
                  Link="UserScripts/%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
-    <!-- A sample's own scripts are tested the same way. -->
+    <!-- Coin Rush's own scripts, so its ScorePillar is tested like the starters. -->
     <ItemGroup>
         <Compile Include="../../templates/coin-rush/scripts/**/*.cs"
                  Link="CoinRush/Scripts/%(RecursiveDir)%(Filename)%(Extension)" />

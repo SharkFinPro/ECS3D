@@ -167,6 +167,8 @@
   The test project also compiles `UserScripts/` in (a `Compile` link in `ECS3DManagedTests.csproj`), so
   `PlayerScript` and the starter scripts are tested through `FakeNatives` like the wrappers; a fake can
   answer per uuid, name or key code by setting `"<fake key>:<argument>"`.
+  It also links `source/templates/coin-rush/scripts`, so the sample's `ScorePillar` is tested through
+  `FakeNatives` too.
   What stays uncovered is whatever is itself an `[UnmanagedCallersOnly]` entry point that is not
   reachable through a function pointer taken with `&`, as `TransportRecorder` does — start with `ScriptBridge` for a new test only once the logic in question is
   reachable the same way, as pure code over plain objects or through a fake binding table. Private product logic is exposed to this
