@@ -467,8 +467,8 @@ another object's component is a **`tryGet`** (`World.tryGetTransform(uuid, out t
 absent/destroyed; it does not throw in the tick loop) — future component wrappers follow this; (2) a binding
 that mutates scene structure can't touch the net layer, so it **buffers the change on `BindingContext`**
 and the app drains + replicates it after the tick (see the spawn/destroy path in Replication above).
-Spawning is also deferred a level lower, in `ObjectManager` itself: `ScriptSystem::fixedUpdate`/
-`variableUpdate` range over `getAllObjects()` and run script code inside the loop, so `addObject` cannot
+Spawning is also deferred a level lower, in `ObjectManager` itself: `ScriptSystem`'s update, start,
+stop and attach loops range over `getAllObjects()` and run script code inside the loop, so `addObject` cannot
 append straight to that live vector without risking a reallocation mid-iteration. `ScriptSystem` holds an
 `ObjectManager::ScriptPassGuard` around each of those loops; while one is alive, `addObject` queues the new
 object instead (still immediately parented/started/`getObjectByUUID`-able) and `flushPendingAdditions`

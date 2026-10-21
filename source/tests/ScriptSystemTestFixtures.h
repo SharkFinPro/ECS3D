@@ -52,6 +52,9 @@ namespace scriptSystemFixtures {
     std::vector<SceneEventCall> sceneEvents;
     // Runs inside onSceneEvent, standing in for a handler's side effects.
     std::function<void(const SceneEventCall&)> sceneEventHook;
+    // Run inside start/stop (uuid, class name), standing in for a script that spawns objects.
+    std::function<void(const std::string&, const std::string&)> startHook;
+    std::function<void(const std::string&, const std::string&)> stopHook;
     std::map<std::string, std::string> exposedByClass;
     std::map<std::string, float> floats;
     std::map<std::string, int> ints;
@@ -122,11 +125,21 @@ namespace scriptSystemFixtures {
     void start(const char* uuid, const char* className) const override
     {
       m_state.calls.push_back(describe("start", uuid, className));
+
+      if (m_state.startHook)
+      {
+        m_state.startHook(uuid, className);
+      }
     }
 
     void stop(const char* uuid, const char* className) const override
     {
       m_state.calls.push_back(describe("stop", uuid, className));
+
+      if (m_state.stopHook)
+      {
+        m_state.stopHook(uuid, className);
+      }
     }
 
     void fixedUpdate(const char* uuid, const char* className, float) const override

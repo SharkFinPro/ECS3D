@@ -78,6 +78,8 @@ void ScriptSystem::start(SceneAsset& scene)
   const auto objectManager = scene.getObjectManager();
   BindingContext::setObjectManager(objectManager.get());
 
+  const ObjectManager::ScriptPassGuard scriptPassGuard(*objectManager);
+
   // Scene scripts start before every object script. Iterates a copy of the list, since a script's start()
   // could reach code that edits it.
   for (const auto& script : std::vector(scene.getScripts()))
@@ -96,6 +98,9 @@ void ScriptSystem::start(SceneAsset& scene)
 
 void ScriptSystem::startObjects(ObjectManager& objectManager)
 {
+  // Spawns from a script callback are deferred while this loop runs; see fixedUpdate.
+  const ObjectManager::ScriptPassGuard scriptPassGuard(objectManager);
+
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -164,6 +169,9 @@ void ScriptSystem::stop(SceneAsset& scene)
 
 void ScriptSystem::stopObjects(ObjectManager& objectManager)
 {
+  // Spawns from a script callback are deferred while this loop runs; see fixedUpdate.
+  const ObjectManager::ScriptPassGuard scriptPassGuard(objectManager);
+
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
@@ -498,6 +506,9 @@ void ScriptSystem::attachAll(SceneAsset& scene)
 
 void ScriptSystem::attachAllObjects(ObjectManager& objectManager)
 {
+  // Spawns from a script constructor are deferred while this loop runs; see fixedUpdate.
+  const ObjectManager::ScriptPassGuard scriptPassGuard(objectManager);
+
   for (const auto& object : objectManager.getAllObjects())
   {
     for (const auto& scriptComponent : object->getScripts())
