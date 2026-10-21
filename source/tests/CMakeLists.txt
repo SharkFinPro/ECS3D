@@ -164,6 +164,7 @@ add_executable(${PROJECT_NAME}
   TemplateValidation.h
   TemplateValidationTest.cpp
   PhysicsStackingTest.cpp
+  PhysicsTippingTest.cpp
   PhysicsTwoBodyTest.cpp
   PhysicsContactResponseTest.cpp
   PhysicsFrictionHoldTest.cpp
