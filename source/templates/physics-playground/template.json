@@ -1,0 +1,13 @@
+{
+  "id": "physics-playground",
+  "name": "Physics Playground",
+  "description": "A hands-on tour of the simulation: dominoes, a pyramid, friction slopes, bounce pads, a ramp race, an explosion pit and a rain of polyhedra. Walk between the stations and watch each behavior in isolation.",
+  "category": "sample",
+  "tags": [
+    "physics",
+    "scripting"
+  ],
+  "thumbnail": "thumbnail.png",
+  "entryScene": "Playground",
+  "minEngineVersion": "0.0.1"
+}

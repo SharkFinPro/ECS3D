@@ -33,12 +33,14 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 | `source/App.axaml{,.cs}` | Application composition: merges `Theme.axaml` + `Icons.axaml` resources and `AppStyles.axaml`; sets the dark `FluentTheme`; creates the single `MainWindow` with its `MainWindowViewModel`. Attaches Avalonia DevTools (F12) in DEBUG only. |
 | `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the Explore/Open commands), `NavItemViewModel`. |
 | `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch (e.g. Projects → Templates). |
-| `source/Services/` | UI-free services behind interfaces (`EngineLocator`, `EngineLauncher`, `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `LauncherTabs`, `EngineActions`, `EarlyExitNotice`, `LaunchCoordinator`, `VersionLabel`, `SearchMatch`). No Avalonia types. |
-| `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `ProjectTemplate` — plain models), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
-| `source/Assets/` | Bundled `AvaloniaResource`s: `Fonts/` (Geist, GeistMono). |
+| `source/Services/` | UI-free services behind interfaces (`EngineLocator`, `EngineLauncher`, `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `IFileSystem`, `ILauncherLog`/`FileLauncherLog`, `LauncherSettings`/`LauncherSettingsStore`, `SettingsInput`, `EnginePorts`, `LauncherTabs`, `EngineActions`, `EarlyExitNotice`, `LaunchCoordinator`, `VersionLabel`, `SearchMatch`). No Avalonia types. |
+| `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `ProjectTemplate` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
+| `source/Assets/` | Bundled `AvaloniaResource`s: `Fonts/` (Geist, GeistMono) and `scene_render.png`. |
 
 **Shared files:** `recent-projects.json` is also written by the editor; its schema is in
 `source/libs/settings/RecentProjects.md` (repository root).
+`launcher-settings.json` is the launcher's own (`LauncherSettingsStore`, schema in `LauncherSettings.md`). It is
+written atomically, keeps unknown fields, and falls back to defaults with a line in `logs/launcher.log` when unreadable.
 
 ## Build & Run
 

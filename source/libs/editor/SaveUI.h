@@ -162,6 +162,9 @@ private:
 
   void updateWindowTitle();
 
+  // Adds a saved or opened project to the shared recent list; never an untitled template.
+  void recordRecent(const ProjectLocation& location, bool savedToFolderSinceOpen) const;
+
   void setProjectRoot(const std::filesystem::path& root, bool reopened);
 
   void registerWindowEvents();

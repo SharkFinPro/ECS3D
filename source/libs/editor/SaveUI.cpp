@@ -1,9 +1,11 @@
 #include "SaveUI.h"
 #include "GuiComponents.h"
+#include "RecentProjectRecording.h"
 #include <Log.h>
 #include <ProjectOrigin.h>
 #include <ProjectPaths.h>
 #include <ProjectSerializer.h>
+#include <RecentProjects.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <imgui.h>
 #include <nfd.h>
@@ -60,6 +62,33 @@ void SaveUI::setStartupProject(const std::filesystem::path& argument)
   m_saveFile = location.projectFile;
   m_projectRoot = location.root;
   setOrigin(location);
+
+  // The server loads the project; a file that exists is the closest signal available here.
+  std::error_code error;
+  if (std::filesystem::is_regular_file(location.projectFile, error))
+  {
+    recordRecent(location, false);
+  }
+}
+
+void SaveUI::recordRecent(const ProjectLocation& location, const bool savedToFolderSinceOpen) const
+{
+  const auto recorded = recentProjectToRecord(location, savedToFolderSinceOpen);
+  if (!recorded)
+  {
+    return;
+  }
+
+  // The recent list must never fail the editor's own save or load; the store logs a failed write itself.
+  try
+  {
+    static_cast<void>(recordProjectOpened(*recorded));
+  }
+  catch (const std::exception& exception)
+  {
+    Log::warn(LogCategory::editor, "Could not record " + pathToUtf8(*recorded) +
+      " in the recent projects: " + exception.what());
+  }
 }
 
 void SaveUI::setOrigin(const ProjectLocation& location)
@@ -92,7 +121,13 @@ bool SaveUI::save()
     return saveAs();
   }
 
-  return writeProject(m_saveFile);
+  if (!writeProject(m_saveFile))
+  {
+    return false;
+  }
+
+  recordRecent({ m_saveFile, m_projectRoot }, m_savedToFolderSinceOpen);
+  return true;
 }
 
 bool SaveUI::isUntitledTemplate() const
@@ -201,6 +236,8 @@ bool SaveUI::saveToFolder(const std::filesystem::path& folder)
   m_isTemplate = false;
   m_savedToFolderSinceOpen = true;
   updateWindowTitle();
+
+  recordRecent({ file, folder }, true);
 
   return true;
 }
@@ -322,6 +359,8 @@ bool SaveUI::loadProjectBlob(const std::string& projectJson, const std::filesyst
 
   // A freshly loaded project has nothing unsaved yet.
   m_unsavedChanges.markSaved();
+
+  recordRecent({ projectFile, root }, false);
 
   if (m_onLoadProject)
   {
