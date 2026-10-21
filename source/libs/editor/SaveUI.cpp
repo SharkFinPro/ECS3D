@@ -1,9 +1,11 @@
 #include "SaveUI.h"
 #include "GuiComponents.h"
+#include "RecentProjectRecording.h"
 #include <Log.h>
 #include <ProjectOrigin.h>
 #include <ProjectPaths.h>
 #include <ProjectSerializer.h>
+#include <RecentProjects.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <imgui.h>
 #include <nfd.h>
@@ -60,6 +62,22 @@ void SaveUI::setStartupProject(const std::filesystem::path& argument)
   m_saveFile = location.projectFile;
   m_projectRoot = location.root;
   setOrigin(location);
+
+  // The server loads the project; a file that exists is the closest signal available here.
+  std::error_code error;
+  if (std::filesystem::is_regular_file(location.projectFile, error))
+  {
+    recordRecent(location.projectFile);
+  }
+}
+
+void SaveUI::recordRecent(const std::filesystem::path& projectPath) const
+{
+  if (const auto recorded = recentProjectToRecord(projectPath, isUntitledTemplate()))
+  {
+    // A recent list that cannot be written is logged by the store and must not fail the editor's own work.
+    static_cast<void>(recordProjectOpened(*recorded));
+  }
 }
 
 void SaveUI::setOrigin(const ProjectLocation& location)
@@ -92,7 +110,13 @@ bool SaveUI::save()
     return saveAs();
   }
 
-  return writeProject(m_saveFile);
+  if (!writeProject(m_saveFile))
+  {
+    return false;
+  }
+
+  recordRecent(m_saveFile);
+  return true;
 }
 
 bool SaveUI::isUntitledTemplate() const
@@ -201,6 +225,8 @@ bool SaveUI::saveToFolder(const std::filesystem::path& folder)
   m_isTemplate = false;
   m_savedToFolderSinceOpen = true;
   updateWindowTitle();
+
+  recordRecent(file);
 
   return true;
 }
@@ -322,6 +348,8 @@ bool SaveUI::loadProjectBlob(const std::string& projectJson, const std::filesyst
 
   // A freshly loaded project has nothing unsaved yet.
   m_unsavedChanges.markSaved();
+
+  recordRecent(projectFile);
 
   if (m_onLoadProject)
   {
