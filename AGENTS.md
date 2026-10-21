@@ -495,6 +495,10 @@ directory for changes. A project without a `scripts` folder is normal and silent
 Files under `bin`, `obj` and dot-folders are skipped, so an IDE project there cannot inject generated sources.
 A class declared in both a project script and a built-in script is a compile error naming both files.
 The root is fixed at startup, so loading another project at runtime keeps the first project's scripts.
+`ScriptSystem::pollScriptChanges(scene, dt)` makes the same throttled check for a scene that is not ticking:
+`ServerApp` calls it every `run()` iteration on an edit-mode server whose scene is stopped (a paused scene is
+left alone). After a successful reload it attaches the scene's scripts without starting them and reads their
+fields back, then the server re-snapshots, so a new or edited script's exposed fields reach the Inspector before Play.
 Two script classes that share a simple name fail the compile, with a message naming their files. The runtime finds
 scripts by that name, so this holds across namespaces too; the parts of one `partial` class count as one class.
 A Script whose class cannot be instantiated (missing, failed compile, throwing constructor) is warned about

@@ -1,5 +1,8 @@
 #include "ScriptSystemTestFixtures.h"
 
+#include "ComponentRegistry.h"
+#include "scenes/SceneAsset.h"
+
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -392,5 +395,204 @@ namespace {
 
     EXPECT_EQ(findField(script, "speed").at("displayName"), "New Label");
     EXPECT_FLOAT_EQ(findField(script, "speed").at("value").get<float>(), 3.0f);
+  }
+
+  class StoppedSceneReloadTest : public ScriptSystemHotReloadTest {
+  protected:
+    std::shared_ptr<SceneAsset> stoppedScene = std::make_shared<SceneAsset>(
+      uuids::uuid::from_string("99999999-9999-9999-9999-999999999999").value(), "Stopped", scene.componentRegistry);
+
+    std::shared_ptr<Script> addScriptToStoppedScene(const std::string& className)
+    {
+      const auto object = std::make_shared<Object>("Scripted");
+      stoppedScene->getObjectManager()->addObject(object);
+
+      return addScript(object, className);
+    }
+  };
+
+  TEST_F(StoppedSceneReloadTest, AChangeIsCompiledOnlyAfterTheThrottleInterval)
+  {
+    writeScript("Existing.cs");
+    reloading.warmUp();
+
+    writeScript("Added.cs");
+
+    EXPECT_FALSE(reloading.pollScriptChanges(*stoppedScene, 0.1f));
+    EXPECT_EQ(count("reload"), 0);
+
+    EXPECT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.5f));
+    EXPECT_EQ(count("reload"), 1);
+  }
+
+  TEST_F(StoppedSceneReloadTest, ANewlyCompiledClassIsAttachedWithoutStartAndExposesItsFields)
+  {
+    state.exposedByClass["Fresh"] = exposedFieldsJson;
+    state.unresolvedClasses.insert("Fresh");
+    state.floats["speed"] = 4.5f;
+    const auto script = addScriptToStoppedScene("Fresh");
+    reloading.warmUp();
+    reloading.attachAll(*stoppedScene);
+    ASSERT_TRUE(script->getFields().empty());
+
+    state.unresolvedClasses.clear();
+    writeScript("Fresh.cs");
+
+    ASSERT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+
+    const auto speed = findField(script, "speed");
+    ASSERT_FALSE(speed.is_null());
+    EXPECT_FLOAT_EQ(speed.at("value").get<float>(), 4.5f);
+    EXPECT_EQ(script->getFields().size(), 4u);
+    EXPECT_EQ(std::ranges::count_if(state.calls, [](const std::string& entry) {
+      return entry.starts_with("start|") || entry.starts_with("fixed|") || entry.starts_with("variable|");
+    }), 0);
+  }
+
+  TEST_F(StoppedSceneReloadTest, NothingHappensWhenTheSourcesDidNotChange)
+  {
+    writeScript("Existing.cs");
+    addScriptToStoppedScene("Mover");
+    reloading.warmUp();
+    reloading.attachAll(*stoppedScene);
+    const auto callsBefore = state.calls.size();
+
+    EXPECT_FALSE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+    EXPECT_FALSE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+
+    EXPECT_EQ(count("reload"), 0);
+    EXPECT_EQ(state.calls.size(), callsBefore);
+
+    writeScript("Added.cs");
+
+    EXPECT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+  }
+
+  TEST_F(StoppedSceneReloadTest, ACompileErrorReportsNoReplacementAndIsNotRetried)
+  {
+    addScriptToStoppedScene("Mover");
+    reloading.warmUp();
+    state.reloadReplaces = false;
+    writeScript("Broken.cs");
+
+    EXPECT_FALSE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+    EXPECT_FALSE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+
+    EXPECT_EQ(count("reload"), 1);
+  }
+
+  TEST_F(StoppedSceneReloadTest, TheRunningPathStillReloadsAndStartsTheInstancesAgain)
+  {
+    const auto a = addScriptedObject("A", { "Mover" });
+    reloading.start(manager());
+    writeScript("Added.cs");
+
+    reloading.fixedUpdate(manager(), 0.6f);
+
+    EXPECT_EQ(count("reload"), 1);
+    EXPECT_EQ(count(call("start", a, "Mover")), 2);
+  }
+
+  TEST_F(StoppedSceneReloadTest, AFailingRuntimeFactoryIsNotRetriedByThePoll)
+  {
+    int attempts = 0;
+    ScriptSystem failing{ [&attempts]() -> std::unique_ptr<ScriptRuntime>
+    {
+      ++attempts;
+      throw std::runtime_error("init failed");
+    }, scriptsDir };
+
+    for (int i = 0; i < 5; ++i)
+    {
+      EXPECT_FALSE(failing.pollScriptChanges(*stoppedScene, 0.6f));
+    }
+
+    EXPECT_EQ(attempts, 0);
+
+    reloading.warmUp();
+    writeScript("Added.cs");
+
+    EXPECT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+  }
+
+  TEST_F(StoppedSceneReloadTest, AHugeDtBanksNoMoreThanOneInterval)
+  {
+    reloading.warmUp();
+    writeScript("One.cs");
+
+    EXPECT_TRUE(reloading.pollScriptChanges(*stoppedScene, 1.0e9f));
+    writeScript("Two.cs");
+
+    EXPECT_FALSE(reloading.pollScriptChanges(*stoppedScene, 0.1f));
+    EXPECT_EQ(count("reload"), 1);
+    EXPECT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.5f));
+    EXPECT_EQ(count("reload"), 2);
+  }
+
+  TEST_F(StoppedSceneReloadTest, AMissingScriptDirectoryDoesNotThrow)
+  {
+    std::filesystem::remove_all(scriptsDir);
+    ScriptSystem missing{ factory(), scriptsDir / "nope" };
+    missing.warmUp();
+
+    bool replaced = true;
+    EXPECT_NO_THROW(replaced = missing.pollScriptChanges(*stoppedScene, 0.6f));
+    EXPECT_FALSE(replaced);
+  }
+
+  TEST_F(StoppedSceneReloadTest, StartingAfterAStoppedReloadStartsEachScriptOnceAndDeliversLoadedOnce)
+  {
+    const auto object = std::make_shared<Object>("Scripted");
+    stoppedScene->getObjectManager()->addObject(object);
+    addScript(object, "Mover");
+    ASSERT_TRUE(stoppedScene->addScript(std::make_shared<Script>("Director")));
+    reloading.warmUp();
+    writeScript("Added.cs");
+    ASSERT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+
+    reloading.start(*stoppedScene);
+
+    const auto sceneId = uuids::to_string(stoppedScene->getUUID());
+    EXPECT_EQ(count(call("start", object, "Mover")), 1);
+    EXPECT_EQ(count(describe("start", sceneId.c_str(), "Director")), 1);
+    ASSERT_EQ(state.sceneEvents.size(), 1u);
+    EXPECT_EQ(state.sceneEvents.front().event, static_cast<int>(SceneEvent::loaded));
+  }
+
+  TEST_F(StoppedSceneReloadTest, AFieldEditedWhileStoppedSurvivesTheReload)
+  {
+    state.exposedByClass["Mover"] = exposedFieldsJson;
+    const auto object = std::make_shared<Object>("Scripted");
+    stoppedScene->getObjectManager()->addObject(object);
+    const auto script = addScript(object, "Mover");
+    reloading.warmUp();
+    reloading.attachAll(*stoppedScene);
+
+    const nlohmann::json edited = nlohmann::json::array({
+      { { "name", "speed" }, { "type", "float" }, { "value", 7.5 } } });
+    script->setFields(edited);
+    reloading.applyScriptFieldEdit(object->getUUID(), "Mover", edited);
+    writeScript("Added.cs");
+
+    ASSERT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+
+    EXPECT_FLOAT_EQ(findField(script, "speed").at("value").get<float>(), 7.5f);
+  }
+
+  TEST_F(StoppedSceneReloadTest, RemovingTheScriptAfterAStoppedReloadDetachesItOnTheNextAttachAll)
+  {
+    const auto object = std::make_shared<Object>("Scripted");
+    stoppedScene->getObjectManager()->addObject(object);
+    const auto script = addScript(object, "Mover");
+    reloading.warmUp();
+    writeScript("Added.cs");
+    ASSERT_TRUE(reloading.pollScriptChanges(*stoppedScene, 0.6f));
+    ASSERT_EQ(count(call("attach", object, "Mover")), 1);
+    ASSERT_EQ(count(call("detach", object, "Mover")), 0);
+
+    object->removeComponent(script);
+    reloading.attachAll(*stoppedScene);
+
+    EXPECT_EQ(count(call("detach", object, "Mover")), 1);
   }
 }
