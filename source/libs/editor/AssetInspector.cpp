@@ -7,6 +7,7 @@
 #include <ProjectPaths.h>
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
+#include <assets/ScriptClassAssets.h>
 #include <objects/Object.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
@@ -504,6 +505,13 @@ void AssetInspector::displayDeleteButton(const AssetRecord& record)
   ImGui::Spacing();
   ImGui::Separator();
   ImGui::Spacing();
+
+  if (!canDeleteAsset(record))
+  {
+    gc::dashedBox(record.path.empty() ? "Comes from a compiled script; remove its .cs file instead"
+                                      : "Its class still compiles; remove the class from its .cs file first");
+    return;
+  }
 
   ImGui::BeginDisabled(!m_editable);
 

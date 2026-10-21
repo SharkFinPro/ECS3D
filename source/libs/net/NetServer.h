@@ -1,12 +1,11 @@
 #ifndef NETSERVER_H
 #define NETSERVER_H
 
+#include "EditorConnections.h"
 #include "MessageQueue.h"
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 class ManagedHost;
@@ -67,14 +66,8 @@ private:
 
   MessageQueue m_inbox;
 
-  // Dropped connection ids pushed from the socket threads, drained on the tick thread.
-  std::mutex m_disconnectMutex;
-  std::vector<int32_t> m_disconnected;
-
-  // Connections the transport authorized as Role::editor, touched from both the socket threads
-  // (authorize/disconnect) and the tick thread (isEditor), hence its own mutex.
-  mutable std::mutex m_editorMutex;
-  std::unordered_set<int32_t> m_editorConnections;
+  // Editor authorizations and dropped connection ids, shared between the socket and tick threads.
+  EditorConnections m_connections;
 
   bool m_editMode = false;
   bool m_started = false;

@@ -152,19 +152,14 @@ void NetServer::sendToEditors(const Message& message) const
     return;
   }
 
-  // Copied out and the lock released before the transport is touched at all: this runs on the
-  // authoritative tick thread, and sendToMany below can block on a stalled socket. Holding m_editorMutex
+  // Copied out under the lock and the lock released before the transport is touched at all: this runs on
+  // the authoritative tick thread, and sendToMany below can block on a stalled socket. Holding the lock
   // across that would let a stalled editor connection block authorize()/isEditor()/takeDisconnected() -
   // none of which have anything to do with sending - for as long as the transport's own send budget runs.
-  std::vector<int32_t> connIds;
+  const auto connIds = m_connections.editorIds();
+  if (connIds.empty())
   {
-    std::lock_guard lock(m_editorMutex);
-    if (m_editorConnections.empty())
-    {
-      return;
-    }
-
-    connIds.assign(m_editorConnections.begin(), m_editorConnections.end());
+    return;
   }
 
   // One call for the whole fan-out (rather than one per editor) so the transport can apply a single
@@ -210,52 +205,24 @@ void NetServer::enqueue(const int32_t connId, const uint8_t type, const uint8_t*
 
 void NetServer::enqueueDisconnect(const int32_t connId)
 {
-  // isEditor must not be revoked here: this runs on the socket thread, and a message this same
-  // connection sent moments before disconnecting may still be sitting in the inbox, undrained until the
-  // tick thread's next poll loop. Erasing now would make that message read back as unauthorized - an
-  // editor that edits and then closes (an ordinary flow) would have its last edit refused and logged.
-  std::lock_guard lock(m_disconnectMutex);
-  m_disconnected.push_back(connId);
+  m_connections.enqueueDisconnect(connId);
 }
 
 std::vector<int32_t> NetServer::takeDisconnected()
 {
-  std::vector<int32_t> disconnected;
-  {
-    std::lock_guard lock(m_disconnectMutex);
-    disconnected = std::exchange(m_disconnected, {});
-  }
-
   // Called on the tick thread after that tick's inbox drain, so any message from a now-dropped
-  // connection has already been handled with its authorization intact. Connection ids are never
-  // reused (both transport backends assign them via Interlocked.Increment), so a deferred erase here
-  // cannot let a new connection inherit a stale editor entry.
-  {
-    std::lock_guard lock(m_editorMutex);
-    for (const auto connId : disconnected)
-    {
-      m_editorConnections.erase(connId);
-    }
-  }
-
-  return disconnected;
+  // connection has already been handled with its authorization intact.
+  return m_connections.takeDisconnected();
 }
 
 void NetServer::authorize(const int32_t connId, const uint8_t role)
 {
-  if (static_cast<Role>(role) != Role::editor)
-  {
-    return;
-  }
-
-  std::lock_guard lock(m_editorMutex);
-  m_editorConnections.insert(connId);
+  m_connections.authorize(connId, role);
 }
 
 bool NetServer::isEditor(const int32_t connectionId) const
 {
-  std::lock_guard lock(m_editorMutex);
-  return m_editorConnections.contains(connectionId);
+  return m_connections.isEditor(connectionId);
 }
 
 }

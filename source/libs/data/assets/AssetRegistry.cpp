@@ -1,5 +1,6 @@
 #include "AssetRegistry.h"
 #include <nlohmann/json.hpp>
+#include <Log.h>
 #include <Protocol.h>
 #include <vector>
 
@@ -41,6 +42,33 @@ void AssetRegistry::registerAsset(const AssetRecord& record)
     return;
   }
 
+  // One Script record per class: a file-backed registration that arrives after a compiled-class record
+  // (or the reverse) fills in the missing path instead of adding a second record.
+  if (record.type == AssetType::Script && !record.className.empty())
+  {
+    for (auto& [uuid, existing] : m_assets)
+    {
+      if (existing.type != AssetType::Script || existing.className != record.className)
+      {
+        continue;
+      }
+
+      if (existing.path.empty() && !record.path.empty())
+      {
+        existing.path = record.path;
+        m_loadedPaths.emplace(record.path, uuid);
+        ++m_version;
+      }
+      else
+      {
+        Log::debug(LogCategory::assets, "Dropped script record '" + record.path + "': class '" + record.className
+          + "' is already registered from '" + existing.path + "'.");
+      }
+
+      return;
+    }
+  }
+
   m_assets.emplace(record.uuid, record);
 
   if (!record.path.empty())
@@ -63,6 +91,20 @@ void AssetRegistry::renameAsset(const uuids::uuid& uuid, const std::string& disp
   // resolves the asset by path or uuid is disturbed - only the shown name changes.
   it->second.displayName = displayName;
   ++m_version;
+}
+
+bool AssetRegistry::setScriptKind(const uuids::uuid& uuid, const ScriptKind kind)
+{
+  const auto it = m_assets.find(uuid);
+  if (it == m_assets.end() || it->second.type != AssetType::Script || it->second.scriptKind == kind)
+  {
+    return false;
+  }
+
+  it->second.scriptKind = kind;
+  ++m_version;
+
+  return true;
 }
 
 void AssetRegistry::removeAsset(const uuids::uuid& uuid)
@@ -181,6 +223,12 @@ nlohmann::json AssetRegistry::serialize() const
         data["textures"].push_back(withDisplayName({ { "name", record.path }, { "filePath", record.path }, { "uuid", uuidString } }, record));
         break;
       case AssetType::Script:
+        // A pathless record is derived from the compile and rebuilt on the next snapshot.
+        if (record.path.empty())
+        {
+          break;
+        }
+
         data["scripts"].push_back(withDisplayName({ { "className", record.className }, { "filePath", record.path }, { "uuid", uuidString } }, record));
         break;
       case AssetType::Prefab:
@@ -288,6 +336,7 @@ void AssetRegistry::pack(net::Message& message) const
     message.writeString(record->className);   // empty for non-scripts
     message.writeString(record->body);        // empty for non-prefabs
     message.writeString(record->displayName); // empty unless renamed (append-only wire field)
+    message.write(record->scriptKind);        // Either unless a compiled script (append-only wire field)
   }
 }
 
@@ -302,8 +351,9 @@ void AssetRegistry::unpack(net::MessageReader& messageReader)
     const auto className = messageReader.readString();
     const auto body = messageReader.readString();
     const auto displayName = messageReader.readString();
+    const auto scriptKind = messageReader.read<ScriptKind>();
 
     registerAsset({ .uuid = uuid, .type = type, .path = path, .className = className, .body = body,
-                    .displayName = displayName });
+                    .displayName = displayName, .scriptKind = scriptKind });
   }
 }
