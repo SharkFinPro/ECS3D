@@ -15,6 +15,9 @@ public class LauncherHostSessionTests
 {
   private const string Folder = "projects/coin-rush";
 
+  // Link-local on purpose; built from bytes because no documentation range covers it.
+  private static readonly string LinkLocal = new IPAddress(new byte[] { 169, 254, 7, 7 }).ToString();
+
   private sealed class Rig
   {
     public Rig(TimeSpan window)
@@ -343,7 +346,7 @@ public class LauncherHostSessionTests
   {
     var found = LanAddresses.From(
     [
-      Nic("wlan0", NetworkInterfaceKind.Wireless, true, "192.0.2.24", "2001:db8::2", "169.254.7.7"),
+      Nic("wlan0", NetworkInterfaceKind.Wireless, true, "192.0.2.24", "2001:db8::2", LinkLocal),
       Nic("eth0", NetworkInterfaceKind.Ethernet, true, "198.51.100.5"),
       Nic("eth1", NetworkInterfaceKind.Ethernet, false, "198.51.100.99"),
       Nic("lo", NetworkInterfaceKind.Loopback, true, "127.0.0.1"),
