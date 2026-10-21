@@ -490,6 +490,11 @@ refused with a warning and does not fault the script. Exposed fields may be floa
 vector3: each type has a `getField*`/`setField*` export, and a string crosses as 8-bit Unicode text that the
 native side frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
 every other type, and the Inspector draws a string field as a text box.
+Every compiled script class gets a Script asset record, so the Script slot lists starters and the project's own
+scripts whether or not the project file lists them. `ServerApp::broadcastSnapshot` registers a record for each class
+(`ScriptRuntime::scriptClassNames`, `registerScriptClassAssets`) that has none, with a uuid derived from the class
+name and no source path. Such a record is saved like any other, which is harmless since a load skips a class that
+already has one. Deleting one lasts only until the next snapshot while the class still compiles.
 A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
 A project's own scripts, `<project root>/scripts/**/*.cs`, compile together with the built-in
 `scripts/UserScripts` into one script assembly, at startup and on every hot reload.

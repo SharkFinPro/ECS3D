@@ -15,6 +15,7 @@
 #include <Log.h>
 #include <ManagedHost.h>
 #include <filesystem>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -61,6 +62,7 @@ void ScriptEngine::init(const std::string& bridgeDir,
   m_onSceneEvent = reinterpret_cast<OnSceneEventFn>(resolve("onSceneEvent"));
 
   m_getExposedFields = reinterpret_cast<GetExposedFieldsFn>(resolve("getExposedFields"));
+  m_getScriptClassNames = reinterpret_cast<GetScriptClassNamesFn>(resolve("getScriptClassNames"));
   m_freeString = reinterpret_cast<FreeStringFn>(resolve("freeString"));
 
   m_getFieldFloat = reinterpret_cast<GetFieldFloatFn>(resolve("getFieldFloat"));
@@ -254,6 +256,39 @@ void ScriptEngine::onSceneEvent(const char* sceneUuid,
   {
     m_onSceneEvent(sceneUuid, className, event, objectUuid, slot);
   }
+}
+
+std::vector<std::string> ScriptEngine::scriptClassNames() const
+{
+  if (!m_getScriptClassNames)
+  {
+    return {};
+  }
+
+  char* raw = m_getScriptClassNames();
+  if (!raw)
+  {
+    return {};
+  }
+
+  const std::string joined(raw);
+  if (m_freeString)
+  {
+    m_freeString(raw);
+  }
+
+  std::vector<std::string> names;
+  std::istringstream stream(joined);
+  for (std::string name; std::getline(stream, name, '
+');)
+  {
+    if (!name.empty())
+    {
+      names.push_back(std::move(name));
+    }
+  }
+
+  return names;
 }
 
 std::string ScriptEngine::getExposedFields(const char* uuid,

@@ -43,6 +43,11 @@ void ScriptSystem::warmUp()
   ensureEngine();
 }
 
+std::vector<std::string> ScriptSystem::scriptClassNames() const
+{
+  return m_engine ? m_engine->scriptClassNames() : std::vector<std::string>{};
+}
+
 void ScriptSystem::ensureEngine()
 {
   if (m_engine)

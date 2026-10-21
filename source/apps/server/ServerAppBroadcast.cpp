@@ -1,4 +1,6 @@
 #include "ServerApp.h"
+#include <assets/AssetRegistry.h>
+#include <assets/ScriptClassAssets.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
 #include <Replication.h>
@@ -36,6 +38,17 @@ void ServerApp::broadcastSnapshot() const
     {
       Log::error(LogCategory::server, std::string("Script attach/field sync failed, sending snapshot with last-known field values: ") + e.what());
     }
+  }
+
+  // Run after the project is loaded or the scripts are recompiled, so the Script slot lists every class the
+  // server can attach, whatever the project file lists.
+  try
+  {
+    registerScriptClassAssets(*m_assetRegistry, m_scriptSystem->scriptClassNames());
+  }
+  catch (const std::exception& e)
+  {
+    Log::error(LogCategory::server, std::string("Script class assets were not registered: ") + e.what());
   }
 
   // Binary snapshot: ProjectPacker writes the same project state ProjectSerializer::serialize would,
