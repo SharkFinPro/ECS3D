@@ -9,6 +9,7 @@
 #include <objects/components/Script.h>
 #include <scenes/SceneAsset.h>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <system_error>
 #include <utility>
 
@@ -599,15 +600,41 @@ void ScriptSystem::applySceneScriptFieldEdit(const uuids::uuid& sceneUUID,
   writeFieldsToInstance(sceneUUID, className, fields);
 }
 
-void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields, const float dt)
+bool ScriptSystem::pollScriptChanges(SceneAsset& scene, const float dt)
+{
+  // Never builds the engine: a runtime that keeps failing to initialize must not be retried on every loop
+  // pass. The snapshot, start and tick paths own that retry.
+  if (!m_engine)
+  {
+    return false;
+  }
+
+  const auto objectManager = scene.getObjectManager();
+  BindingContext::setObjectManager(objectManager.get());
+
+  if (!checkForScriptChanges([&] { syncFieldsToData(scene); }, dt))
+  {
+    return false;
+  }
+
+  // Attached but not started, so a class that just compiled exposes its fields to the next snapshot while
+  // the scene stays stopped.
+  attachAll(scene);
+  syncFieldsToData(scene);
+
+  return true;
+}
+
+bool ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields, const float dt)
 {
   constexpr float minimumSnapshotInterval = 1.0f / 2.0f; // 2 checks every second
 
-  m_timeSinceLastSnapshot += dt;
+  // Capped so one long stall (a blocking reload) cannot bank more than a single interval.
+  m_timeSinceLastSnapshot += std::min(dt, minimumSnapshotInterval);
 
   if (m_timeSinceLastSnapshot < minimumSnapshotInterval)
   {
-    return;
+    return false;
   }
 
   m_timeSinceLastSnapshot = 0.0f;
@@ -617,13 +644,13 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
     auto now = takeSnapshot();
     if (now == m_scriptsSnapshot)
     {
-      return;
+      return false;
     }
 
     Log::info(LogCategory::script, "Change detected - reloading scripts...");
     // Preserve live field values across the reload: read them back into each Script's data blob, then
-    // recompile. The new instances are recreated lazily on the next fixedUpdate, which pushes the
-    // refreshed blob back in.
+    // recompile. New instances are attached lazily (the next fixedUpdate, or pollScriptChanges for a
+    // stopped scene), which pushes the refreshed blob back in.
     syncFields();
 
     const bool replaced = m_engine->reloadScripts();
@@ -634,7 +661,7 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
 
     if (!replaced)
     {
-      return;
+      return false;
     }
 
     m_attached.clear();
@@ -647,12 +674,16 @@ void ScriptSystem::checkForScriptChanges(const std::function<void()>& syncFields
     m_unresolvedSceneScripts.clear();
 
     Log::info(LogCategory::script, "Reload successful.");
+
+    return true;
   }
   catch (const std::exception& ex)
   {
     Log::error(LogCategory::script,
                std::string("Script hot-reload failed: ") + ex.what() + " - continuing with previous scripts.");
   }
+
+  return false;
 }
 
 void ScriptSystem::attach(const Object& object, const std::shared_ptr<Script>& script)

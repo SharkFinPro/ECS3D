@@ -181,6 +181,11 @@ private:
   // on a non-edit server, which has no m_remoteLogSink.
   void forwardLogToEditors() const;
 
+  // Hot reload for an edit-mode scene that is stopped, where fixedUpdate never runs: compiles a new or
+  // changed script so its fields reach the editor before Play, and re-snapshots when the reload replaced
+  // the scripts. Paused scenes are left alone.
+  void pollScriptChangesWhileStopped(float dt) const;
+
   void broadcastSnapshot() const;
 
   // Tells clients whether this server accepts edits (true only for an edit-mode server), so an editor
