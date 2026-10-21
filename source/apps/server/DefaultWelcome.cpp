@@ -444,7 +444,8 @@ namespace {
   // Turns a stable face of the hull to point straight down; lowest is then its lowest vertex at unit scale.
   RestPose restPose(const ConvexHull& hull)
   {
-    const auto& largest = stablestFacet(hull, facetsOf(hull));
+    const auto facets = facetsOf(hull);
+    const auto& largest = stablestFacet(hull, facets);
 
     const glm::vec3 down(0.0f, -1.0f, 0.0f);
     const auto axis = glm::cross(largest.normal, down);

@@ -167,7 +167,8 @@ namespace {
     std::vector<glm::vec2> face;
     for (const auto& vertex : world)
     {
-      // Wide enough for the Euler round trip of the prop rotation, which loses precision near a pole.
+      // The prop stores its rotation as float Euler angles and world is taken from that same round trip, so
+      // the face is flat to a fraction of a degree rather than exactly.
       if (vertex.y < lowest + 0.005f)
       {
         face.emplace_back(vertex.x, vertex.z);
