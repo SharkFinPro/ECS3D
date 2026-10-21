@@ -141,7 +141,7 @@
             </Border>
 
             <!-- ===== MAIN ===== -->
-            <Grid Grid.Column="1" RowDefinitions="Auto,*">
+            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
 
                 <!-- Toolbar -->
                 <Grid Grid.Row="0" Margin="28,20,28,16" ColumnDefinitions="*,Auto,Auto,Auto">
@@ -154,18 +154,21 @@
 
                     <!-- Search -->
                     <Border Grid.Column="1" Width="230" Height="36" CornerRadius="8" Margin="0,0,14,0"
+                            IsVisible="{Binding ShowSearch}"
                             Background="{StaticResource InsetBrush}"
                             BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
                         <Grid ColumnDefinitions="Auto,*" Margin="12,0">
                             <Path Grid.Column="0" Classes="icon t3" Width="10.5" Height="10.5"
                                   VerticalAlignment="Center" Data="{StaticResource IconSearch}" />
-                            <TextBox Grid.Column="1" Classes="search" PlaceholderText="Search projects"
+                            <TextBox Grid.Column="1" Classes="search" PlaceholderText="{Binding SearchPlaceholder}"
+                                     Text="{Binding SearchText}"
                                      Margin="9,0,0,0" Foreground="{StaticResource T1Brush}" FontSize="13" />
                         </Grid>
                     </Border>
 
                     <!-- Grid/List toggle (drives the Projects tab) -->
                     <Border Grid.Column="2" CornerRadius="8" Padding="3" Margin="0,0,14,0"
+                            IsVisible="{Binding ShowViewToggle}"
                             Background="{StaticResource InsetBrush}"
                             BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
                         <StackPanel Orientation="Horizontal" Spacing="3">
@@ -192,11 +195,24 @@
                     </Button>
                 </Grid>
 
+                <!-- Engine-not-found banner: on every tab while an executable is missing -->
+                <Border Grid.Row="1" IsVisible="{Binding HasEngineBanner}" Margin="28,0,28,12" Padding="14,10"
+                        CornerRadius="8" Background="{StaticResource DangerDim}"
+                        BorderBrush="{StaticResource DangerBrush}" BorderThickness="1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding EngineBannerText}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
+                                Content="Open Settings" Margin="14,0,0,0"
+                                Command="{Binding OpenSettingsCommand}" />
+                    </Grid>
+                </Border>
+
                 <!-- Content: the active tab's view model, templated to its view.
                      Padding lives on the content, not the ScrollViewer: ScrollViewer
                      padding doesn't scroll with the content, so the bottom inset
                      was lost once the view overflowed and cards got cut off. -->
-                <ScrollViewer Grid.Row="1">
+                <ScrollViewer Grid.Row="2">
                     <ContentControl Margin="28,4,28,32" Content="{Binding CurrentTab}">
                         <ContentControl.DataTemplates>
                             <DataTemplate DataType="projects:ProjectsViewModel">
@@ -217,6 +233,27 @@
                         </ContentControl.DataTemplates>
                     </ContentControl>
                 </ScrollViewer>
+
+                <!-- Toast: start failures and early exits, bottom right over the content -->
+                <Border Grid.Row="2" IsVisible="{Binding HasToast}" Width="360" Padding="14"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,24"
+                        CornerRadius="10" Background="{StaticResource PanelBrush}"
+                        BorderBrush="{StaticResource DangerBrush}" BorderThickness="1">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="10">
+                            <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" />
+                            <Button Classes="secondary" Theme="{StaticResource BareButton}"
+                                    HorizontalAlignment="Left" Content="Open logs"
+                                    IsVisible="{Binding HasToastLog}"
+                                    Command="{Binding OpenLogsCommand}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Classes="win" Theme="{StaticResource BareButton}"
+                                VerticalAlignment="Top" Margin="8,-6,-6,0"
+                                Command="{Binding DismissToastCommand}" ToolTip.Tip="Dismiss">
+                            <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
+                        </Button>
+                    </Grid>
+                </Border>
             </Grid>
         </Grid>
     </Grid>

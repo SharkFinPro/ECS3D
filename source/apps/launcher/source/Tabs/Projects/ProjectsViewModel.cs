@@ -1,10 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ECS3DLauncher.Services;
 using ECS3DLauncher.Shared.Models;
 
 namespace ECS3DLauncher.Tabs.Projects;
@@ -12,15 +12,17 @@ namespace ECS3DLauncher.Tabs.Projects;
 // State for the Projects tab: the project list and the grid-vs-list toggle.
 public class ProjectsViewModel : ObservableObject
 {
+    private static readonly Project NewTile = new() { IsNewCard = true, Name = "", Path = "", Edited = "" };
+
     // The shell owns navigation; the tab only asks it to open Templates.
     private readonly Action _openTemplates;
+    private string _searchText = "";
+    private bool _isGridView = true;
 
     public ObservableCollection<Project> Projects { get; }
 
-    // Projects preceded by the "New Project" sentinel, for the item panels.
-    public ObservableCollection<Project> ProjectTiles { get; }
-
-    private bool _isGridView = true;
+    // The "New Project" sentinel followed by the projects matching the search, for the item panels.
+    public ObservableCollection<Project> ProjectTiles { get; } = [];
 
     public bool IsGridView
     {
@@ -30,51 +32,77 @@ public class ProjectsViewModel : ObservableObject
             if (SetProperty(ref _isGridView, value))
             {
                 OnPropertyChanged(nameof(IsListView));
+                OnPropertyChanged(nameof(ShowGrid));
+                OnPropertyChanged(nameof(ShowList));
             }
         }
     }
 
     public bool IsListView => !IsGridView;
 
+    public bool IsEmpty => Projects.Count == 0;
+
+    public bool ShowGrid => !IsEmpty && IsGridView;
+
+    public bool ShowList => !IsEmpty && IsListView;
+
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetProperty(ref _searchText, value))
+            {
+                RebuildTiles();
+            }
+        }
+    }
+
+    public string? ExploreTooltip { get; }
+
+    public string? OpenTooltip { get; }
+
     public IRelayCommand SetGridCommand { get; }
     public IRelayCommand SetListCommand { get; }
     public IRelayCommand NewProjectCommand { get; }
+    public IRelayCommand ExploreCommand { get; }
+    public IRelayCommand<Project> OpenProjectCommand { get; }
 
-    public ProjectsViewModel(Action openTemplates)
+    public ProjectsViewModel(
+        Action openTemplates,
+        IRelayCommand exploreCommand,
+        IRelayCommand<Project> openProjectCommand,
+        string? exploreTooltip,
+        string? openTooltip,
+        IEnumerable<Project> projects)
     {
         _openTemplates = openTemplates;
+        ExploreCommand = exploreCommand;
+        OpenProjectCommand = openProjectCommand;
+        ExploreTooltip = exploreTooltip;
+        OpenTooltip = openTooltip;
         SetGridCommand = new RelayCommand(() => IsGridView = true);
         SetListCommand = new RelayCommand(() => IsGridView = false);
         NewProjectCommand = new RelayCommand(() => _openTemplates());
 
-        Projects =
-        [
-            new() { Name = "Solar Sandbox",     Path = "~/ecs3d/solar_sandbox",  Edited = "12 minutes ago", Version = "0.0.1", Pinned = true,  Thumbnail = Load("scene_render.png") },
-            new() { Name = "Physics Playground", Path = "~/ecs3d/physics_play",  Edited = "3 hours ago",    Version = "0.0.1", Pinned = true,  GlowColor = Color.Parse("#8C1FB8D4"), PlaceholderIcon = "IconScene" },
-            new() { Name = "Marble Run",        Path = "~/ecs3d/marble_run",     Edited = "Yesterday",      Version = "0.0.1", GlowColor = Color.Parse("#85A78BFA"), PlaceholderIcon = "IconModel" },
-            new() { Name = "Voxel Terrain",     Path = "~/ecs3d/voxel_terrain",  Edited = "2 days ago",     Version = "0.0.1", GlowColor = Color.Parse("#7D5CBF6A"), PlaceholderIcon = "IconModel" },
-            new() { Name = "Boids Flock",       Path = "~/ecs3d/boids",          Edited = "Last week",      Version = "0.0.1", GlowColor = Color.Parse("#7DE6B35A"), PlaceholderIcon = "IconScene" },
-            new() { Name = "Particle Demo",     Path = "~/ecs3d/particles",      Edited = "Last week",      Version = "0.0.1", GlowColor = Color.Parse("#7AE5565B"), PlaceholderIcon = "IconScene" },
-            new() { Name = "Shader Lab",        Path = "~/ecs3d/shader_lab",     Edited = "2 weeks ago",    Version = "0.0.1", GlowColor = Color.Parse("#854D93F5"), PlaceholderIcon = "IconModel" },
-        ];
-
-        ProjectTiles = [new() { IsNewCard = true, Name = "", Path = "", Edited = "", Version = "" }];
-        foreach (var p in Projects)
+        Projects = new ObservableCollection<Project>(projects);
+        Projects.CollectionChanged += (_, _) =>
         {
-            ProjectTiles.Add(p);
-        }
+            RebuildTiles();
+            OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(ShowGrid));
+            OnPropertyChanged(nameof(ShowList));
+        };
+        RebuildTiles();
     }
 
-    private static Bitmap? Load(string file)
+    private void RebuildTiles()
     {
-        try
+        ProjectTiles.Clear();
+        ProjectTiles.Add(NewTile);
+        foreach (var project in Projects.Where(item => SearchMatch.Matches(_searchText, item.Name, item.Path)))
         {
-            var uri = new Uri($"avares://ECS3DLauncher/source/Assets/{file}");
-            return new Bitmap(AssetLoader.Open(uri));
-        }
-        catch
-        {
-            return null;
+            ProjectTiles.Add(project);
         }
     }
 }

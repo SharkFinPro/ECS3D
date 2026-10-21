@@ -99,6 +99,39 @@
         <Setter Property="Background" Value="{StaticResource AccHoverBrush}" />
     </Style>
 
+    <!-- ===== Secondary and card Open buttons ===== -->
+    <Style Selector="Button.secondary">
+        <Setter Property="Background" Value="{StaticResource InsetBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+    </Style>
+    <Style Selector="Button.open">
+        <Setter Property="Background" Value="{StaticResource AccDim}" />
+        <Setter Property="Foreground" Value="{StaticResource AccBrush}" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.open:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource AccDim2}" />
+    </Style>
+    <Style Selector="Button:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+
     <!-- ===== New-project dashed cards ===== -->
     <Style Selector="Button.card-btn:pointerover Rectangle.dash">
         <Setter Property="Fill" Value="{StaticResource AccDim2}" />
