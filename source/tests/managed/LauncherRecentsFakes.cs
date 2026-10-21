@@ -5,14 +5,17 @@ using ECS3DLauncher.Services;
 
 namespace ECS3DManagedTests;
 
-// A file system that also knows folders, which FakeFileSystem does not.
+// A file system whose writes can fail a set number of times before succeeding.
 internal sealed class FakeTreeFileSystem : IFileSystem
 {
   private readonly HashSet<string> _files = [];
-  private readonly HashSet<string> _directories = [];
   private readonly Dictionary<string, string> _text = [];
 
   public bool FailWrites { get; set; }
+
+  public int FailNextWrites { get; set; }
+
+  public int Attempts { get; private set; }
 
   public int Writes { get; private set; }
 
@@ -20,21 +23,26 @@ internal sealed class FakeTreeFileSystem : IFileSystem
 
   public void AddFile(string path) => _files.Add(path);
 
-  public void AddDirectory(string path) => _directories.Add(path);
-
   public void Seed(string path, string contents) => _text[path] = contents;
 
   public string? TextOf(string path) => _text.GetValueOrDefault(path);
 
   public bool FileExists(string path) => _files.Contains(path) || _text.ContainsKey(path);
 
-  public bool DirectoryExists(string path) => _directories.Contains(path);
+  public bool DirectoryExists(string path) => false;
 
   public string ReadAllText(string path) =>
     _text.TryGetValue(path, out var text) ? text : throw new FileNotFoundException(path);
 
   public void WriteAllTextAtomic(string path, string contents)
   {
+    Attempts++;
+    if (FailNextWrites > 0)
+    {
+      FailNextWrites--;
+      throw new IOException("write failed");
+    }
+
     if (FailWrites)
     {
       throw new IOException("write failed");

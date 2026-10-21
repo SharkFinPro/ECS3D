@@ -21,7 +21,7 @@ public class LauncherRecentProjectsTests
 
   private RecentProjectsStore NewStore(HostOs os)
   {
-    var store = new RecentProjectsStore(_files, _log, _userData, _time, os);
+    var store = new RecentProjectsStore(_files, _log, _userData, _time, os, _ => { });
     store.Load();
     return store;
   }
@@ -69,11 +69,51 @@ public class LauncherRecentProjectsTests
     store.RecordOpened("/home/a/Proj");
 
     Assert.True(store.Save());
-    Assert.Equal([System.IO.Path.Combine("/cfg", "ECS3D")], _files.CreatedDirectories);
+    Assert.Equal([System.IO.Path.GetDirectoryName(store.FilePath)], _files.CreatedDirectories);
 
     _files.FailWrites = true;
+    _files.Attempts = 0;
     Assert.False(store.Save());
     Assert.Single(_log.Warnings);
+    Assert.Equal(5, _files.Attempts);
+  }
+
+  [Fact]
+  public void SaveRetriesAWriteTheEditorBlocked()
+  {
+    var store = NewStore();
+    store.RecordOpened("/home/a/Proj");
+    _files.FailNextWrites = 2;
+
+    Assert.True(store.Save());
+
+    Assert.Equal(3, _files.Attempts);
+    Assert.Empty(_log.Warnings);
+    Assert.Single(Saved()["projects"]!.AsArray());
+  }
+
+  [Theory]
+  [InlineData("{\"version\":1,\"version\":2,\"projects\":[]}")]
+  [InlineData("{\"projects\":[{\"path\":\"/home/a/A\",\"path\":\"/home/a/B\"}]}")]
+  public void ARepeatedKeyGivesAnEmptyListWithOneWarning(string text)
+  {
+    _files.Seed(FilePath, text);
+
+    var store = NewStore();
+
+    Assert.Empty(store.Entries());
+    Assert.Single(_log.Warnings);
+  }
+
+  [Fact]
+  public void RecordingAnEmptyPathChangesNothing()
+  {
+    var store = NewStore();
+    store.RecordOpened("/home/a/Proj");
+
+    store.RecordOpened("");
+
+    Assert.Equal(["/home/a/Proj"], Paths(store));
   }
 
   [Theory]
@@ -163,6 +203,8 @@ public class LauncherRecentProjectsTests
   [InlineData("/home/a//x/../Proj/./", "/home/a/Proj")]
   [InlineData("/home/a/Game.json", "/home/a/Game.json")]
   [InlineData("/", "/")]
+  [InlineData("//home//a/Proj", "/home/a/Proj")]
+  [InlineData("/home/a/Proj.ecs3d/", "/home/a/Proj.ecs3d")]
   public void PathsAreRecordedNormalized(string given, string expected)
   {
     var store = NewStore();
@@ -182,6 +224,16 @@ public class LauncherRecentProjectsTests
     store.RecordOpened(@"C:\");
 
     Assert.Equal(["C:/", "c:/users/A/proj"], Paths(store));
+  }
+
+  [Fact]
+  public void AUncShareIsTheRootSoParentSegmentsCannotClimbPastIt()
+  {
+    var store = NewStore(HostOs.Windows);
+
+    store.RecordOpened("//server/share/../../x/Proj");
+
+    Assert.Equal(["//server/share/x/Proj"], Paths(store));
   }
 
   [Fact]
@@ -276,6 +328,22 @@ public class LauncherRecentProjectsTests
   }
 
   [Fact]
+  public void AnEvictionTieGoesToTheLaterListEntry()
+  {
+    var entries = Enumerable.Range(0, RecentProjectsStore.MaxEntries)
+      .Select(i => $"{{\"path\":\"/home/a/P{i}\",\"lastOpenedUtc\":\"2026-01-01T00:00:00Z\"}}");
+    _files.Seed(FilePath, "{\"projects\":[" + string.Join(",", entries) + "]}");
+    var store = NewStore();
+
+    store.RecordOpened("/home/a/New");
+
+    var paths = Paths(store);
+    Assert.DoesNotContain("/home/a/P49", paths);
+    Assert.Contains("/home/a/P48", paths);
+    Assert.Contains("/home/a/P0", paths);
+  }
+
+  [Fact]
   public void AnUnparseableTimeCountsAsOldestForEviction()
   {
     var store = NewStore();
@@ -356,6 +424,21 @@ public class LauncherRecentProjectsTests
     Assert.Single(entries);
     Assert.Equal("/home/a/Target", entries[0].Path);
     Assert.True(entries[0].Pinned);
+  }
+
+  [Fact]
+  public void RelocateOntoAnEntryKeepsTheNewerTimeAndFillsAMissingTemplate()
+  {
+    _files.Seed(FilePath,
+      "{\"projects\":[{\"path\":\"/a/Old\",\"lastOpenedUtc\":\"2026-01-01T00:00:00Z\"},"
+      + "{\"path\":\"/a/Target\",\"lastOpenedUtc\":\"2026-02-01T00:00:00Z\",\"template\":\"sample\"}]}");
+    var store = NewStore();
+
+    Assert.True(store.Relocate("/a/Old", "/a/Target"));
+
+    var entry = Assert.Single(store.Entries());
+    Assert.Equal("2026-02-01T00:00:00Z", entry.LastOpenedUtc);
+    Assert.Equal("sample", entry.Template);
   }
 
   [Fact]

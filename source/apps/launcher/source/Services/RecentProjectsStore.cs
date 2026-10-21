@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 
 namespace ECS3DLauncher.Services;
 
@@ -11,9 +12,11 @@ namespace ECS3DLauncher.Services;
 // The editor writes the file too, so callers Load again before each change they want to keep.
 public sealed class RecentProjectsStore
 {
-    public const int MaxEntries = 50;
+    internal const int MaxEntries = 50;
 
     private const int SchemaVersion = 1;
+    private const int WriteAttempts = 5;
+    private static readonly TimeSpan WriteRetryDelay = TimeSpan.FromMilliseconds(20);
 
     private static readonly JsonSerializerOptions Pretty = new() { WriteIndented = true };
 
@@ -22,6 +25,7 @@ public sealed class RecentProjectsStore
     private readonly string _path;
     private readonly TimeProvider _time;
     private readonly HostOs _os;
+    private readonly Action<TimeSpan> _delay;
     private JsonObject _extra = new();
     private List<JsonObject> _projects = [];
 
@@ -31,7 +35,20 @@ public sealed class RecentProjectsStore
         UserDataDirectory userData,
         TimeProvider time,
         HostOs os)
+        : this(fileSystem, log, userData, time, os, Thread.Sleep)
     {
+    }
+
+    // The delay between write attempts is injected so tests do not wait.
+    public RecentProjectsStore(
+        IFileSystem fileSystem,
+        ILauncherLog log,
+        UserDataDirectory userData,
+        TimeProvider time,
+        HostOs os,
+        Action<TimeSpan> delay)
+    {
+        _delay = delay;
         _fileSystem = fileSystem;
         _log = log;
         _path = userData.RecentProjectsFile();
@@ -52,6 +69,21 @@ public sealed class RecentProjectsStore
             return;
         }
 
+        try
+        {
+            LoadDocument();
+        }
+        catch (ArgumentException ex)
+        {
+            // A repeated key surfaces here, when a field is first read.
+            _extra = new JsonObject();
+            _projects = [];
+            _log.Warn($"{_path}: could not read recent projects: {ex.Message}; starting with an empty list");
+        }
+    }
+
+    private void LoadDocument()
+    {
         var root = ReadRoot();
         if (root is null)
         {
@@ -83,13 +115,31 @@ public sealed class RecentProjectsStore
                 _fileSystem.CreateDirectory(directory);
             }
 
-            _fileSystem.WriteAllTextAtomic(_path, BuildDocument().ToJsonString(Pretty));
+            WriteWithRetry(BuildDocument().ToJsonString(Pretty));
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
+                                       or ArgumentException)
         {
             _log.Warn($"{_path}: could not save recent projects: {ex.Message}");
             return false;
+        }
+    }
+
+    // The editor may hold the file open for a moment, as the engine's writer allows for.
+    private void WriteWithRetry(string contents)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                _fileSystem.WriteAllTextAtomic(_path, contents);
+                return;
+            }
+            catch (Exception ex) when (attempt < WriteAttempts && ex is IOException or UnauthorizedAccessException)
+            {
+                _delay(WriteRetryDelay);
+            }
         }
     }
 
@@ -98,6 +148,11 @@ public sealed class RecentProjectsStore
     // A template id is only ever set here, never cleared by a later open.
     public void RecordOpened(string path, string? template)
     {
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
         var normalized = RecentProjectPaths.Normalize(path, _os);
         var entry = TakeMatching(KeyOf(path)) ?? new JsonObject();
         entry["path"] = normalized;
@@ -151,15 +206,36 @@ public sealed class RecentProjectsStore
         var normalized = RecentProjectPaths.Normalize(newPath, _os);
         var newKey = KeyOf(newPath);
         var duplicates = _projects.Where(other => !ReferenceEquals(other, entry) && StoredKey(other) == newKey).ToList();
-        if (duplicates.Any(IsPinned))
+        foreach (var duplicate in duplicates)
         {
-            entry["pinned"] = true;
+            Absorb(entry, duplicate);
         }
 
         _projects.RemoveAll(duplicates.Contains);
         entry["path"] = normalized;
         entry["name"] = RecentProjectPaths.DisplayName(normalized);
         return true;
+    }
+
+    // The survivor keeps the newer open time, and any pin or template the other one had.
+    private static void Absorb(JsonObject entry, JsonObject duplicate)
+    {
+        if (IsPinned(duplicate))
+        {
+            entry["pinned"] = true;
+        }
+
+        if (StringField(entry, "template") is null && StringField(duplicate, "template") is { } template)
+        {
+            entry["template"] = template;
+        }
+
+        var mine = RecentProjectTime.Parse(StringField(entry, "lastOpenedUtc"));
+        var theirs = RecentProjectTime.Parse(StringField(duplicate, "lastOpenedUtc"));
+        if (theirs is not null && (mine is null || theirs > mine))
+        {
+            entry["lastOpenedUtc"] = StringField(duplicate, "lastOpenedUtc");
+        }
     }
 
     private string KeyOf(string path) => RecentProjectPaths.Key(path, _os);

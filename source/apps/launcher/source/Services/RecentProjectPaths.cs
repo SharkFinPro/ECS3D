@@ -1,14 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace ECS3DLauncher.Services;
 
 // Mirrors canonicalPath/displayName in the engine's source/libs/settings/RecentProjects.cpp.
 internal static class RecentProjectPaths
 {
-    public const string ProjectFileName = "project.ecs3d";
-
     private const string ProjectExtension = ".ecs3d";
     private const string LegacyExtension = ".json";
 
@@ -26,9 +25,11 @@ internal static class RecentProjectPaths
             text = MakeAbsolute(text, os);
         }
 
-        var (root, rest) = SplitRoot(text);
+        var (root, rest) = SplitRoot(text, os);
         var segments = Collapse(rest);
-        if (segments.Count > 0 && HasExtension(segments[^1], ProjectExtension))
+
+        // A trailing separator leaves the C++ path with an empty filename, so a ".ecs3d" folder name stays.
+        if (!text.EndsWith('/') && segments.Count > 0 && HasExtension(segments[^1], ProjectExtension))
         {
             segments.RemoveAt(segments.Count - 1);
         }
@@ -50,11 +51,7 @@ internal static class RecentProjectPaths
         return HasExtension(name, LegacyExtension) ? name[..^LegacyExtension.Length] : name;
     }
 
-    public static bool IsLegacyFile(string path) => HasExtension(path, LegacyExtension);
-
-    public static string ProjectFileIn(string folder) => folder.TrimEnd('/', '\\') + "/" + ProjectFileName;
-
-    public static bool HasExtension(string name, string extension) =>
+    private static bool HasExtension(string name, string extension) =>
         name.Length > extension.Length && name.EndsWith(extension, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAbsolute(string text, HostOs os)
@@ -83,16 +80,20 @@ internal static class RecentProjectPaths
         return os == HostOs.Windows ? text.Replace('\\', '/') : text;
     }
 
-    private static (string Root, string Rest) SplitRoot(string text)
+    private static (string Root, string Rest) SplitRoot(string text, HostOs os)
     {
         if (text.Length >= 3 && char.IsAsciiLetter(text[0]) && text[1] == ':' && text[2] == '/')
         {
             return (text[..3], text[3..]);
         }
 
-        if (text.StartsWith("//", StringComparison.Ordinal))
+        if (os == HostOs.Windows && text.StartsWith("//", StringComparison.Ordinal))
         {
-            return ("//", text[2..]);
+            // The server and share form the root, so ".." cannot climb past them.
+            var parts = text[2..].Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var share = parts.Take(2).ToArray();
+            var root = "//" + string.Join('/', share) + (share.Length > 0 ? "/" : string.Empty);
+            return (root, string.Join('/', parts.Skip(2)));
         }
 
         return text.StartsWith('/') ? ("/", text[1..]) : (string.Empty, text);
