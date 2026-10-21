@@ -1,8 +1,8 @@
 #ifndef NETCLIENT_H
 #define NETCLIENT_H
 
+#include "ClientConnectionState.h"
 #include "MessageQueue.h"
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -21,7 +21,7 @@ public:
 
   void send(const Message& message) const;
 
-  [[nodiscard]] bool isConnected() const { return m_connected; }
+  [[nodiscard]] bool isConnected() const { return m_state.isConnected(); }
 
   [[nodiscard]] bool poll(Message& message);
 
@@ -42,12 +42,7 @@ private:
 
   MessageQueue m_inbox;
 
-  std::atomic<bool> m_connected = false;
-  std::atomic<bool> m_connectionLost = false;
-
-  // Set before calling the managed disconnect, so enqueueDisconnect (racing in on the socket thread as
-  // that same disconnect closes the socket) knows the drop was requested, not a lost connection.
-  std::atomic<bool> m_disconnectRequested = false;
+  ClientConnectionState m_state;
 
   // Resolved [UnmanagedCallersOnly] entrypoints in the C# transport assembly.
   void* m_connectFn = nullptr;
