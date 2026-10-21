@@ -353,7 +353,7 @@ public class LauncherTemplateCatalogTests
     Assert.Null(ProjectNameRules.Validate(longName));
     var cleaned = ProjectNameRules.UniqueDefault(longName, _ => false);
     Assert.Null(ProjectNameRules.Validate(cleaned));
-    var suffixed = ProjectNameRules.UniqueDefault(longName, n => n.Length < 64 && !n.EndsWith("99999", StringComparison.Ordinal));
+    var suffixed = ProjectNameRules.UniqueDefault(longName, n => !n.EndsWith(" 99999", StringComparison.Ordinal));
     Assert.Null(ProjectNameRules.Validate(suffixed));
     Assert.EndsWith(" 99999", suffixed);
     Assert.Equal("ab", ProjectNameRules.UniqueDefault("a:b", _ => false));
