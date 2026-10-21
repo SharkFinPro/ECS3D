@@ -13,8 +13,35 @@
 
     <Panel>
 
+        <!-- PROJECTS: EMPTY -->
+        <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" Margin="0,70,0,0" Spacing="14">
+            <Border Width="54" Height="54" CornerRadius="14" HorizontalAlignment="Center"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                <Path Classes="icon" Width="20" Height="20" StrokeThickness="1.8"
+                      Data="{StaticResource IconFolder}"
+                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Spacing="5">
+                <TextBlock Text="No recent projects yet" FontSize="14" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="Look around the engine first, or start a project of your own."
+                           FontSize="12.5" Foreground="{StaticResource T3Brush}"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Explore the engine"
+                        Command="{Binding ExploreCommand}"
+                        ToolTip.Tip="{Binding ExploreTooltip}" ToolTip.ShowOnDisabled="True" />
+                <Button Classes="cta" Theme="{StaticResource BareButton}" Command="{Binding NewProjectCommand}">
+                    <TextBlock Text="New Project" FontSize="13" FontWeight="Bold"
+                               Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                </Button>
+            </StackPanel>
+        </StackPanel>
+
         <!-- PROJECTS: GRID -->
-        <ItemsControl IsVisible="{Binding IsGridView}" ItemsSource="{Binding ProjectTiles}">
+        <ItemsControl IsVisible="{Binding ShowGrid}" ItemsSource="{Binding ProjectTiles}">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate><WrapPanel Margin="-9" /></ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
@@ -87,13 +114,10 @@
                                         <TextBlock Grid.Column="1" Text="{Binding Edited}" FontSize="11.5"
                                                    Margin="7,0,0,0" Foreground="{StaticResource T2Brush}"
                                                    VerticalAlignment="Center" />
-                                        <Border Grid.Column="2" CornerRadius="20" Padding="9,2"
-                                                Background="{StaticResource InsetBrush}"
-                                                BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
-                                            <TextBlock Text="{Binding Version, StringFormat=v{0}}" FontSize="10.5" FontWeight="SemiBold"
-                                                       FontFamily="{StaticResource MonoFontFamily}"
-                                                       Foreground="{StaticResource T2Brush}" />
-                                        </Border>
+                                        <Button Grid.Column="2" Classes="open" Theme="{StaticResource BareButton}" Content="Open"
+                                                VerticalAlignment="Center"
+                                                Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding}" />
                                     </Grid>
                                 </StackPanel>
                             </StackPanel>
@@ -104,7 +128,7 @@
         </ItemsControl>
 
         <!-- PROJECTS: LIST -->
-        <ItemsControl IsVisible="{Binding IsListView}" ItemsSource="{Binding ProjectTiles}">
+        <ItemsControl IsVisible="{Binding ShowList}" ItemsSource="{Binding ProjectTiles}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="m:Project">
                     <Panel Margin="0,0,0,8">
@@ -159,14 +183,10 @@
                                 <TextBlock Grid.Column="2" Text="{Binding Edited}" Width="110"
                                            FontSize="11.5" Foreground="{StaticResource T2Brush}"
                                            VerticalAlignment="Center" />
-                                <Border Grid.Column="3" CornerRadius="20" Padding="9,2" Margin="0,0,14,0"
-                                        VerticalAlignment="Center"
-                                        Background="{StaticResource InsetBrush}"
-                                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
-                                    <TextBlock Text="{Binding Version, StringFormat=v{0}}" FontSize="10.5" FontWeight="SemiBold"
-                                               FontFamily="{StaticResource MonoFontFamily}"
-                                               Foreground="{StaticResource T2Brush}" />
-                                </Border>
+                                <Button Grid.Column="3" Classes="open" Theme="{StaticResource BareButton}" Content="Open"
+                                                VerticalAlignment="Center" Margin="0,0,14,0"
+                                                Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
+                                                CommandParameter="{Binding}" />
                                 <Path Grid.Column="4" Classes="icon fill" Width="10.5" Height="10.5"
                                       IsVisible="{Binding Pinned}" VerticalAlignment="Center"
                                       Data="{StaticResource IconStar}" />

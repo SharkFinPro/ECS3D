@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -39,6 +41,24 @@ public class MainWindow : Window
         // whenever a press lands outside any TextBox. handledEventsToo so it still runs
         // even when a control (e.g. a Button) marks the event handled.
         AddHandler(PointerPressedEvent, OnGlobalPointerPressed, RoutingStrategies.Bubble, handledEventsToo: true);
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    // Opening a file with the OS default app is a view concern; the view model only decides when.
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.OpenLogFile = path => _ = OpenWithDefaultAppAsync(path);
+        }
+    }
+
+    private async Task OpenWithDefaultAppAsync(string path)
+    {
+        if (Launcher is { } launcher)
+        {
+            await launcher.LaunchUriAsync(new Uri(Path.GetFullPath(path)));
+        }
     }
 
     private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)

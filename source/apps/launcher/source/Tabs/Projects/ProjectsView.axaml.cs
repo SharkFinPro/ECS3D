@@ -1,9 +1,29 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.VisualTree;
+using ECS3DLauncher.Shared.Models;
 
 namespace ECS3DLauncher.Tabs.Projects;
 
 public class ProjectsView : UserControl
 {
-    public ProjectsView() => AvaloniaXamlLoader.Load(this);
+    public ProjectsView()
+    {
+        AvaloniaXamlLoader.Load(this);
+        AddHandler(DoubleTappedEvent, OnCardDoubleTapped);
+    }
+
+    // A double-click on a card opens it; a double-click on a button inside it is the button's own.
+    private void OnCardDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is Visual source && source.FindAncestorOfType<Button>(true) is null &&
+            (e.Source as StyledElement)?.DataContext is Project { IsRealCard: true } project &&
+            DataContext is ProjectsViewModel viewModel &&
+            viewModel.OpenProjectCommand.CanExecute(project))
+        {
+            viewModel.OpenProjectCommand.Execute(project);
+        }
+    }
 }

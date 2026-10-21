@@ -20,6 +20,8 @@
     <SolidColorBrush x:Key="T3Brush"       Color="#646A76" />
     <SolidColorBrush x:Key="TitleBg"       Color="#17181C" />
     <SolidColorBrush x:Key="CloseRed"      Color="#E5565B" />
+    <SolidColorBrush x:Key="DangerBrush"   Color="#E5565B" />
+    <SolidColorBrush x:Key="DangerDim"     Color="#26E5565B" />
 
     <!-- Diagonal hatch used behind placeholder thumbnails -->
     <LinearGradientBrush x:Key="ThumbStripes" StartPoint="0%,0%" EndPoint="7%,7%"
