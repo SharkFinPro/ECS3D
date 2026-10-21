@@ -24,6 +24,8 @@ public sealed class TemplateCatalog
 {
     public static string ManifestFileName => "template.json";
 
+    private static readonly char[] PathSeparators = ['/', '\\'];
+
     private readonly IFileSystem _files;
     private readonly ILauncherLog _log;
 
@@ -115,7 +117,7 @@ public sealed class TemplateCatalog
 
     private string? ThumbnailPathOf(string folder, string thumbnail)
     {
-        var escapes = Path.IsPathRooted(thumbnail) || thumbnail.Split(['/', '\\']).Contains("..");
+        var escapes = Path.IsPathRooted(thumbnail) || thumbnail.Split(PathSeparators).Contains("..");
         var path = Path.Combine(folder, thumbnail);
         return !escapes && thumbnail.Length > 0 && _files.FileExists(path) ? path : null;
     }
