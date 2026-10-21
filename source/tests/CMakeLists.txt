@@ -158,6 +158,7 @@ add_executable(${PROJECT_NAME}
   DefaultProjectTest.cpp
   EmptyTemplateTest.cpp
   DefaultShapesTest.cpp
+  DefaultWelcomePhysicsTest.cpp
   DefaultWelcomeTest.cpp
   ShapeDropTest.cpp
   RuntimeComponentTest.cpp
