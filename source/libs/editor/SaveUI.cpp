@@ -283,7 +283,7 @@ bool SaveUI::isDirty() const
 
 void SaveUI::forgetSaveTarget(const std::string& reason)
 {
-  Log::info(LogCategory::editor, reason + "; Save will ask for a new folder, "
+  Log::warn(LogCategory::editor, reason + ". Save will ask for a new folder, "
     "and that project's asset files are not copied into it.");
 
   m_saveFile.clear();

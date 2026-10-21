@@ -72,16 +72,14 @@ void EditorApp::handleSnapshot(const net::Message& message)
 
   const bool foreignLoad = m_projectLoads.observeSnapshot(m_projectPacker->getProjectLoadId());
   const bool foreignProject = m_projectIdentity.observeSnapshot(m_projectPacker->getProjectFingerprint());
-  if (foreignProject)
-  {
-    Log::warn(LogCategory::editor, "The server holds a different project than this editor's --project '"
-      + m_options.project + "'; Save will not write to it.");
-  }
-
+  // After any editor's loadProject the server reports no fingerprint, so a second --host editor on the same
+  // project is told to choose a folder; line endings that differ across machines also read as a mismatch.
+  // Both only drop the save target.
   if ((foreignLoad || foreignProject) && m_saveUI)
   {
-    m_saveUI->forgetSaveTarget(foreignProject ? "The server holds a different project than the editor started with"
-                                              : "Another editor loaded a different project on the server");
+    m_saveUI->forgetSaveTarget(foreignProject
+      ? "The server holds a different (or editor-sent) project than this editor's --project '" + m_options.project + "'"
+      : "Another editor loaded a different project on the server");
   }
 
   const auto scene = m_sceneManager->getCurrentScene();
