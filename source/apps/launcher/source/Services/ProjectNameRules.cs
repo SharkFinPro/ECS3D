@@ -6,7 +6,7 @@ namespace ECS3DLauncher.Services;
 // A project name becomes a folder name, so it must be valid on Windows, macOS and Linux alike.
 public static class ProjectNameRules
 {
-    public const int MaxLength = 64;
+    public static int MaxLength => 64;
 
     private const string InvalidCharacters = "<>:\"/\\|?*";
 

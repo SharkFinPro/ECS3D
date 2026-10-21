@@ -18,9 +18,9 @@ public sealed record TemplateManifest(
 {
     public TemplatePlayers? Players { get; init; }
 
-    public const string TemplateCategory = "template";
+    public static string TemplateCategory => "template";
 
-    public const string SampleCategory = "sample";
+    public static string SampleCategory => "sample";
 
     public bool IsMultiplayer => Players is { Max: > 1 };
 
