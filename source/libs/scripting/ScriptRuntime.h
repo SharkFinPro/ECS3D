@@ -1,7 +1,10 @@
 #ifndef SCRIPTRUNTIME_H
 #define SCRIPTRUNTIME_H
 
+#include <assets/ScriptClassAssets.h>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace scripting {
   inline const std::string defaultUserScriptsDir = "scripts/UserScripts";
@@ -17,6 +20,10 @@ public:
   // True when freshly compiled scripts replaced the loaded ones, so every instance is gone; false when
   // the compile failed and the previous instances keep running.
   [[nodiscard]] virtual bool reloadScripts() const = 0;
+
+  // The script classes the last successful compile produced, object and scene scripts alike. nullopt until a
+  // compile has succeeded, which is not the same as a compile that produced no classes.
+  [[nodiscard]] virtual std::optional<std::vector<ScriptClassInfo>> scriptClassNames() const = 0;
 
   // True when a managed instance now exists under the pair; false when the class is missing or its
   // constructor threw.

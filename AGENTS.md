@@ -492,6 +492,13 @@ refused with a warning and does not fault the script. Exposed fields may be floa
 vector3: each type has a `getField*`/`setField*` export, and a string crosses as 8-bit Unicode text that the
 native side frees with `freeString`. `TryConvertFieldValue` takes a string only for a string field and refuses one for
 every other type, and the Inspector draws a string field as a text box.
+The server derives Script asset records for compiled classes, and `serialize` skips them. Before each snapshot,
+`ServerApp::broadcastSnapshot` syncs the records with `ScriptRuntime::scriptClassNames` (`syncScriptClassAssets`).
+Every record of a compiled class takes its `scriptKind`, "scene" or "object", so each picker skips the other's
+classes; a class with no record gets a pathless one, with a uuid derived from the name. Once a compile has
+succeeded, a pathless record of a class that stopped compiling is removed. A record whose class compiles cannot be
+deleted in the Assets inspector, since the next sync would restore it. A later Script record naming the same class,
+such as the new-script action's, merges into the existing one and fills in the path.
 A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
 A project's own scripts, `<project root>/scripts/**/*.cs`, compile together with the built-in
 `scripts/UserScripts` into one script assembly, at startup and on every hot reload.

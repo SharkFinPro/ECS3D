@@ -186,6 +186,29 @@ public class BridgeLifecycleTests : IDisposable
   }
 
   [Fact]
+  public void JoinedScriptClassNames_ListsEveryLoadedClassSortedWithItsKind()
+  {
+    Assert.Null(Bridge.JoinedScriptClassNames());
+
+    WriteScript("b.cs", ScriptSource("Zeta"));
+    WriteScript("a.cs", ScriptSource("Alpha"));
+    WriteScript("m.cs", "using ScriptBridge;\npublic class Middle : SceneScript { }\n");
+    Bridge.Initialize(_dir);
+
+    Assert.Equal("Alpha\tobject\nMiddle\tscene\nZeta\tobject", Bridge.JoinedScriptClassNames());
+  }
+
+  [Fact]
+  public void JoinedScriptClassNames_IsEmptyNotNullOnceAnEmptyDirectoryHasCompiled()
+  {
+    Assert.Null(Bridge.JoinedScriptClassNames());
+
+    Bridge.Initialize(_dir);
+
+    Assert.Equal("", Bridge.JoinedScriptClassNames());
+  }
+
+  [Fact]
   public void Initialize_MissingDirectoryLeavesLoadedTypesAsTheyWere()
   {
     var loadedDir = Path.Combine(_dir, "loaded");

@@ -2,6 +2,7 @@
 #define ASSETNAMING_H
 
 #include <assets/AssetRegistry.h>
+#include <assets/ScriptClassAssets.h>
 #include <functional>
 #include <nlohmann/json.hpp>
 #include <string>

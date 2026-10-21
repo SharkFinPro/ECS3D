@@ -99,6 +99,7 @@ add_executable(${PROJECT_NAME}
   ScriptDirectoriesTest.cpp
   ScriptFieldLabelTest.cpp
   AttachedScriptsTest.cpp
+  ScriptClassAssetsTest.cpp
   ScriptSystemLifecycleTest.cpp
   ScriptSystemSceneScriptTest.cpp
   ScriptSystemSceneEventsTest.cpp
