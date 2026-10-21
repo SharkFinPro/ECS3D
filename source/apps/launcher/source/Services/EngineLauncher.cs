@@ -39,6 +39,12 @@ public sealed class EngineLauncher
             new List<string> { "--project", projectFolder, "--port", port.ToString(CultureInfo.InvariantCulture) },
             true);
 
+    public LaunchResult JoinGame(string address, int port) =>
+        Launch(
+            EngineExecutable.Client,
+            new List<string> { "--host", address, "--port", port.ToString(CultureInfo.InvariantCulture) },
+            false);
+
     private static void AppendEditorOptions(List<string> arguments, LaunchOptions options)
     {
         if (options.EditorConsole)

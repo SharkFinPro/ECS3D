@@ -28,6 +28,14 @@ namespace {
   // this a body resting on the face is laid flush with it.
   constexpr float flushTiltSine = 0.0175f;
 
+  // A contact whose normal leans this little from level is a side contact. Rounding in the narrow phase gives a
+  // wall a normal.y of either sign, which must not decide whether a body counts as pressed on or held.
+  constexpr float sideContactNormalY = flushTiltSine;
+
+  // The previous tick's support normal agrees with this tick's contact normal above this cosine: the body rested
+  // on that plane.
+  constexpr float restingNormalCosine = 0.99f;
+
   // Cosine of 30 degrees. A body whose face meets a neighbor closer than this is finely faceted, like a drum or a
   // ball: a tick of spin carries it across a facet, so it rolls on instead of landing on one. A box meets at 90.
   constexpr float facetedCosine = 0.866f;
@@ -168,7 +176,7 @@ namespace {
   // The flattest support wins, so a body in a valley rests on the gentler side.
   void noteSupportNormal(RigidBody& body, const glm::vec3& normal)
   {
-    if (normal.y > 0.0f && normal.y > body.getNextSupportNormal().y)
+    if (normal.y > sideContactNormalY && normal.y > body.getNextSupportNormal().y)
     {
       body.setNextSupportNormal(normal);
     }
@@ -305,6 +313,31 @@ namespace {
     }
 
     return corners;
+  }
+
+  // Whether a body resting flat on its support is turning over its edge. Its spin turns it faster than the flush
+  // window closes in a tick, so the corners it drives into the support are the edge it pivots about; shedding that
+  // spin would leave a push only its linear part. A body counts as resting when it rested on this plane last tick,
+  // since falling alone is also cleared by a side contact. Landing and finely faceted bodies shed it as usual.
+  bool isTippedOverEdge(const RigidBody& body, const Transform& transform, const std::shared_ptr<Collider>& collider,
+                        const std::shared_ptr<Object>& other, const glm::vec3& normal, const bool overCenter,
+                        const float dt)
+  {
+    if (!overCenter || body.isFalling() || normal.y <= sideContactNormalY ||
+        glm::dot(body.getSupportNormal(), normal) <= restingNormalCosine)
+    {
+      return false;
+    }
+
+    const auto tipping = alongSupport(spinPerTick(body.getAngularVelocity() - spinOf(other), dt), normal);
+    if (glm::dot(tipping, tipping) <= flushTiltSine * flushTiltSine)
+    {
+      return false;
+    }
+
+    const auto faces = restingFacesOf(transform, collider, other, normal);
+
+    return faces && faces->neighborCosine <= facetedCosine;
   }
 
   // Whether the spin this tick carries the face the body rests toward flat against the support, or past it.
@@ -521,16 +554,19 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
-  stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
+  if (!isTippedOverEdge(body, *transform, collider, other, normal, support.underCenterOfMass, dt))
+  {
+    stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
+  }
   // Met from below, the pair is resolved with the roles swapped, so the push and its friction go where the body
   // pressing down would have put them from above: its own center of mass clamped into the manifold.
-  const bool swapped = normal.y < 0.0f && pair.body.resting;
+  const bool swapped = normal.y < -sideContactNormalY && pair.body.resting;
   const auto lead = swapped ? findSupport(pair.other.transform->getPosition(), normal, collisionPoints) : support;
   const float faceRadius = twistRadius(pair, collider, lead, transform->getPosition(), collisionPoints);
   markLineOnOther(pair, other, collisionPoints);
   resolve(pair, minimumTranslationVector, lead.point, faceRadius, dt);
 
-  if (normal.y > 0.0f)
+  if (normal.y > sideContactNormalY)
   {
     settleOnFace(body, *transform, collider, other, pair, support, dt);
   }
@@ -719,8 +755,8 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
 
   const float target = (1.0f + restitution(pair, closingSpeed, dt)) * closingSpeed;
 
-  const Side* held = pair.other.resting && pair.normal.y > 0.0f ? &pair.other
-                     : pair.body.resting && pair.normal.y < 0.0f ? &pair.body
+  const Side* held = pair.other.resting && pair.normal.y > sideContactNormalY ? &pair.other
+                     : pair.body.resting && pair.normal.y < -sideContactNormalY ? &pair.body
                                                                  : nullptr;
   // The free side is the one pressing on the held one.
   const Side& freeSide = held == &pair.body ? pair.other : pair.body;
@@ -888,7 +924,7 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
 
   // Resting on a face, friction does not tip the body over: its weight shifts toward the leading edge instead.
   const bool turns = !faceContact;
-  const bool otherHeld = pair.other.resting && pair.normal.y > 0.0f;
+  const bool otherHeld = pair.other.resting && pair.normal.y > sideContactNormalY;
   const bool otherTurns = turns && !otherHeld;
   const float bodyResistance = glm::dot(-direction, frictionResponse(pair, pair.body, point, -direction, turns));
   const float otherResistance = glm::dot(direction, frictionResponse(pair, pair.other, point, direction, otherTurns));
@@ -920,7 +956,7 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
   // A support that has already held a push from above this tick has only the rest of its grip for this body -
   // or all of it, if that push was the other way.
   float grip = friction * load;
-  if (pair.normal.y > 0.0f)
+  if (pair.normal.y > sideContactNormalY)
   {
     grip = std::min(grip, remainingHold(pair.body.body->getHeldImpulse(), direction, grip));
   }
@@ -1000,7 +1036,7 @@ void PhysicsSystem::stopBody(const Pair& pair, const glm::vec3& point, const glm
 void PhysicsSystem::holdAgainstDrive(const Pair& pair, const glm::vec3& direction, const float stopped)
 {
   // A rolling body turns the slide into spin instead of holding still.
-  if (pair.normal.y <= 0.0f || pair.body.rolls)
+  if (pair.normal.y <= sideContactNormalY || pair.body.rolls)
   {
     return;
   }
@@ -1082,7 +1118,8 @@ float PhysicsSystem::restitution(const Pair& pair, const float closingSpeed, con
 
   // Free bodies trade their closing speed. What lands on a resting body lands on its support too, and like anything
   // landing on static geometry it does not bounce.
-  const bool supported = (pair.body.resting && pair.normal.y < 0.0f) || (pair.other.resting && pair.normal.y > 0.0f);
+  const bool supported = (pair.body.resting && pair.normal.y < -sideContactNormalY) ||
+                         (pair.other.resting && pair.normal.y > sideContactNormalY);
 
   return supported ? 0.0f : 1.0f;
 }
@@ -1110,7 +1147,7 @@ glm::vec3 PhysicsSystem::velocityAt(const Side& side, const glm::vec3& point, co
   // Gravity has a resting body falling until its own support's contact stops it later in the tick, which would
   // hide how fast whatever lands on it is closing.
   auto velocity = side.body->getVelocity();
-  if (side.resting && pushDirection.y < 0.0f)
+  if (side.resting && pushDirection.y < -sideContactNormalY)
   {
     velocity.y = std::max(velocity.y, 0.0f);
   }
@@ -1215,7 +1252,7 @@ void PhysicsSystem::comeToRest(RigidBody& body, const std::shared_ptr<Object>& o
   // Spin about the contact normal is left to the damping, which only approaches zero. A body resting on
   // something below it is brought the rest of the way once it is too slow to see.
   const auto supportSpin = spinOf(other);
-  if (normal.y > 0.0f && glm::length(body.getAngularVelocity() - supportSpin) < restAngularSpeed)
+  if (normal.y > sideContactNormalY && glm::length(body.getAngularVelocity() - supportSpin) < restAngularSpeed)
   {
     body.setAngularVelocity(supportSpin);
   }

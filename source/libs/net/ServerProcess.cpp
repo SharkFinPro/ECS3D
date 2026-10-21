@@ -1,4 +1,5 @@
 #include "ServerProcess.h"
+#include "CommandLineSplit.h"
 #include <filesystem>
 #include <string>
 #include <utility>
@@ -45,50 +46,6 @@ namespace {
     MultiByteToWideChar(CP_ACP, 0, text.data(), static_cast<int>(text.size()), wide.data(), length);
 
     return wide;
-  }
-}
-#else
-namespace {
-  // The arguments arrive as one command line and execv wants them split. Double quotes group a token so
-  // an argument can hold a path with spaces, which the caller relies on: the per-user directory the
-  // spawned server logs into contains one on macOS. Windows leaves this to the child's own CRT parser.
-  std::vector<std::string> splitArguments(const std::string& arguments)
-  {
-    std::vector<std::string> tokens;
-
-    std::string token;
-    bool quoted = false;
-    bool started = false;
-
-    for (const char character : arguments)
-    {
-      if (character == '"')
-      {
-        quoted = !quoted;
-        started = true;
-      }
-      else if (!quoted && (character == ' ' || character == '\t'))
-      {
-        if (started)
-        {
-          tokens.push_back(token);
-          token.clear();
-          started = false;
-        }
-      }
-      else
-      {
-        token.push_back(character);
-        started = true;
-      }
-    }
-
-    if (started)
-    {
-      tokens.push_back(token);
-    }
-
-    return tokens;
   }
 }
 #endif
