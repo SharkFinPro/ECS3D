@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 
@@ -12,6 +13,17 @@ public class SettingsView : UserControl
     {
         AvaloniaXamlLoader.Load(this);
         DataContextChanged += OnDataContextChanged;
+        AddHandler(KeyDownEvent, OnKeyDown);
+    }
+
+    // Text boxes commit when they lose focus, so Enter just gives focus up.
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && e.Source is TextBox)
+        {
+            TopLevel.GetTopLevel(this)?.FocusManager?.ClearFocus();
+            e.Handled = true;
+        }
     }
 
     // The OS folder picker is a view concern; the view model only decides when to ask.

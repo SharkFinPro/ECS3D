@@ -66,12 +66,12 @@ public sealed class SettingsEditor
         }
 
         EngineError = null;
+        Engine = location!;
         if (folder == _settings.EngineDirectory)
         {
-            return SettingsUpdate.None;
+            return new SettingsUpdate(false, false, location);
         }
 
-        Engine = location!;
         return Commit(_settings with { EngineDirectory = folder }, location);
     }
 

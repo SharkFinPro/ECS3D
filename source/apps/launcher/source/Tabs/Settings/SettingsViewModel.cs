@@ -8,19 +8,22 @@ using ECS3DLauncher.Services;
 namespace ECS3DLauncher.Tabs.Settings;
 
 // State for the Settings tab: a thin wrapper over SettingsEditor, which decides, validates and saves.
-// Every edit is applied at once; the shell hears about the outcome through the applied callback.
+// Text boxes commit on losing focus or Enter, other controls at once; the shell hears about the outcome through the applied callback.
 public sealed class SettingsViewModel : ObservableObject
 {
     private readonly SettingsEditor _editor;
     private readonly Action<SettingsUpdate> _applied;
+    private readonly Action<string> _fail;
+    private bool _browsing;
     private string _engineFolder;
     private string _projectsFolder;
     private string _portText;
 
-    public SettingsViewModel(SettingsEditor editor, Action<SettingsUpdate> applied)
+    public SettingsViewModel(SettingsEditor editor, Action<SettingsUpdate> applied, Action<string> fail)
     {
         _editor = editor;
         _applied = applied;
+        _fail = fail;
         _engineFolder = editor.EngineFolderText;
         _projectsFolder = editor.Current.ProjectsDirectory;
         _portText = editor.Current.HostPort.ToString(CultureInfo.InvariantCulture);
@@ -68,10 +71,14 @@ public sealed class SettingsViewModel : ObservableObject
         get => _projectsFolder;
         set
         {
-            if (SetProperty(ref _projectsFolder, value))
+            if (!SetProperty(ref _projectsFolder, value))
             {
-                _applied(_editor.SetProjectsDirectory(value));
+                return;
             }
+
+            _applied(_editor.SetProjectsDirectory(value));
+            var shown = _editor.Current.ProjectsDirectory;
+            SetProperty(ref _projectsFolder, shown);
         }
     }
 
@@ -120,13 +127,30 @@ public sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(property);
     }
 
-    // A cancelled picker returns null and changes nothing.
-    private static async Task BrowseAsync(Func<Task<string?>>? pick, Action<string> choose)
+    // A cancelled picker returns null and changes nothing; a second Browse while one is open is ignored.
+    private async Task BrowseAsync(Func<Task<string?>>? pick, Action<string> choose)
     {
-        var path = pick is null ? null : await pick();
-        if (!string.IsNullOrEmpty(path))
+        if (_browsing || pick is null)
         {
-            choose(path);
+            return;
+        }
+
+        _browsing = true;
+        try
+        {
+            var path = await pick();
+            if (!string.IsNullOrEmpty(path))
+            {
+                choose(path);
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _fail($"Could not open the folder picker: {exception.Message}");
+        }
+        finally
+        {
+            _browsing = false;
         }
     }
 }

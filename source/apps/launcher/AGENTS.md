@@ -19,7 +19,7 @@
   engine-not-found banner when one is missing, opens projects and the built-in Welcome project in the editor,
   and toasts a failed start or an early exit. The launcher loads `launcher-settings.json` at startup and uses it:
   editor launches take their console flags from it, the engine folder override feeds `EngineLocator`, and the
-  Projects grid/list choice starts from it. The Settings tab edits every field at once, and a changed engine folder
+  Projects grid/list choice starts from it. The Settings tab saves each change at once (text boxes when they lose focus or on Enter), and a changed engine folder
   re-locates the engine and refreshes the banner and the Explore/Open actions. Projects have no store yet, so the
   Projects tab is always empty (design-time data aside); the Templates tab still shows hardcoded cards and the
   other tabs are placeholders. "Close the launcher after opening a project" is saved but not honored yet.

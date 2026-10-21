@@ -161,7 +161,8 @@ public class LauncherSettingsTabTests
     Assert.True(update.Saved);
     Assert.Equal(LauncherDir, update.Engine!.Folder);
     Assert.Null(editor.Current.EngineDirectory);
-    Assert.Null(Saved()["engineDirectory"]);
+    Assert.True(Saved().TryGetPropertyValue("engineDirectory", out var written));
+    Assert.Null(written);
     Assert.Equal("", editor.EngineFolderText);
   }
 
@@ -263,5 +264,60 @@ public class LauncherSettingsTabTests
     Assert.Equal(
       new[] { "--project", "/p", "--console", "--server-console" }, runner.Launches[2].Arguments.ToArray());
     Assert.Equal(new[] { "--console", "--server-console" }, runner.Launches[3].Arguments.ToArray());
+  }
+
+  [Fact]
+  public void RetypingTheSameFolderRelocatesWithoutSaving()
+  {
+    var editor = NewEditor();
+    editor.SetEngineDirectory(OtherDir);
+    Assert.False(editor.Engine.IsComplete);
+    AddEngine(OtherDir);
+
+    var update = editor.SetEngineDirectory(OtherDir);
+
+    Assert.False(update.Saved);
+    Assert.True(update.Engine!.IsComplete);
+    Assert.True(editor.Engine.IsComplete);
+  }
+
+  [Fact]
+  public void ResetOnTheDefaultFolderRelocates()
+  {
+    var editor = NewEditor();
+    AddEngine(LauncherDir);
+
+    var update = editor.ResetEngineDirectory();
+
+    Assert.False(update.Saved);
+    Assert.True(update.Engine!.IsComplete);
+    Assert.True(editor.Engine.IsComplete);
+  }
+
+  [Fact]
+  public void InvalidSavedEngineFolderFallsBackAndReportsAnError()
+  {
+    AddEngine(LauncherDir);
+    _files.Seed(SettingsPath, new JsonObject { ["engineDirectory"] = "bad\0folder" }.ToJsonString());
+
+    var editor = NewEditor();
+
+    Assert.NotNull(editor.EngineError);
+    Assert.Equal(LauncherDir, editor.Engine.Folder);
+    Assert.True(editor.Engine.IsComplete);
+  }
+
+  [Fact]
+  public void RetypingAValidFolderClearsTheEngineError()
+  {
+    AddEngine(OtherDir);
+    var editor = NewEditor();
+    editor.SetEngineDirectory("bad\0folder");
+    Assert.NotNull(editor.EngineError);
+
+    var update = editor.SetEngineDirectory(OtherDir);
+
+    Assert.Null(editor.EngineError);
+    Assert.True(update.Saved);
   }
 }

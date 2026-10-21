@@ -187,7 +187,7 @@ public class MainWindowViewModel : ObservableObject
 
         Projects.IsGridView = settings.Current.ProjectsView != LauncherSettings.ListView;
         Projects.ViewChosen = grid => ApplyUpdate(_settings.SetProjectsView(grid));
-        Settings = new SettingsViewModel(settings, ApplyUpdate);
+        Settings = new SettingsViewModel(settings, ApplyUpdate, message => ApplyNotice(EarlyExitNotice.Failure(message)));
 
         CurrentTab = Projects;
         UpdateActiveFlags();

@@ -29,7 +29,7 @@
         <TextBlock Classes="section" Text="ENGINE" Margin="0,0,0,8" />
         <TextBlock Text="Engine folder" FontWeight="SemiBold" />
         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-            <TextBox Grid.Column="0" Text="{Binding EngineFolder}"
+            <TextBox Grid.Column="0" Text="{Binding EngineFolder, UpdateSourceTrigger=LostFocus}"
                      PlaceholderText="Empty: the launcher's own folder" />
             <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
                     Content="Browse..." Command="{Binding BrowseEngineCommand}" />
@@ -44,7 +44,7 @@
         <TextBlock Classes="section" Text="PROJECTS" />
         <TextBlock Text="Default location for new projects" FontWeight="SemiBold" />
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <TextBox Grid.Column="0" Text="{Binding ProjectsFolder}" />
+            <TextBox Grid.Column="0" Text="{Binding ProjectsFolder, UpdateSourceTrigger=LostFocus}" />
             <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
                     Content="Browse..." Command="{Binding BrowseProjectsCommand}" />
         </Grid>
@@ -57,7 +57,7 @@
 
         <TextBlock Classes="section" Text="MULTIPLAYER" />
         <TextBlock Text="Port for hosting" FontWeight="SemiBold" />
-        <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left" />
+        <TextBox Text="{Binding PortText, UpdateSourceTrigger=LostFocus}" Width="120" HorizontalAlignment="Left" />
         <TextBlock Classes="error" Text="{Binding PortError}" IsVisible="{Binding HasPortError}" />
         <TextBlock Text="Last joined" FontWeight="SemiBold" Margin="0,8,0,0" />
         <TextBlock Text="{Binding LastJoinText}" FontFamily="{StaticResource MonoFontFamily}"
