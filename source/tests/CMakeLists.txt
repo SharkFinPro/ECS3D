@@ -143,6 +143,8 @@ add_executable(${PROJECT_NAME}
   PhysicsSlopeTest.cpp
   PhysicsGenericRestingParityTest.cpp
   PhysicsGenericRestingShapesTest.cpp
+  FirstPersonTemplateTest.cpp
+  FirstPersonTemplateAssetsTest.cpp
   PlanarHullTest.cpp
   PresetsTest.cpp
   TemplateManifestTest.cpp
