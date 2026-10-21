@@ -17,6 +17,7 @@
 #include <CollisionSystem.h>
 #include <queries/SceneQueries.h>
 #include <ScriptSystem.h>
+#include <ScriptDirectories.h>
 #include <ScriptEngineFactory.h>
 #include <bindings/InputState.h>
 #include <bindings/BindingContext.h>
@@ -50,7 +51,6 @@ ServerApp::ServerApp(LaunchOptions options)
   m_projectSerializer = std::make_shared<ProjectSerializer>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_projectPacker = std::make_shared<ProjectPacker>(m_assetRegistry.get(), m_sceneManager.get(), m_componentRegistry);
   m_collisionSystem = std::make_shared<CollisionSystem>();
-  m_scriptSystem = std::make_shared<ScriptSystem>(makeScriptEngineFactory(m_host));
   m_netServer = std::make_shared<net::NetServer>(m_host);
 
   // Feeds forwardLogToEditors: the server is headless, so this is the only way a connected editor - local
@@ -72,6 +72,10 @@ ServerApp::ServerApp(LaunchOptions options)
   BindingContext::setAssetRegistry(m_assetRegistry.get());
 
   loadStartupProject();
+
+  // Built after the project is located, since the project's own scripts compile with the built-in ones.
+  const auto scriptDirs = scripting::scriptDirectories(scripting::defaultUserScriptsDir, m_projectRoot);
+  m_scriptSystem = std::make_shared<ScriptSystem>(makeScriptEngineFactory(m_host, scriptDirs), scriptDirs);
 
   // Compiling the user scripts is the slowest part of boot; doing it before listening keeps it off the
   // first editor's join, whose snapshot would otherwise wait on it.

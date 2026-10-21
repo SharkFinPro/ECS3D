@@ -2,6 +2,7 @@
 
 Each folder here is one template or sample, shown on a launcher card and used to create a new project.
 The whole directory is copied to `<runtime output dir>/templates/` at configure time, this file included.
+`TemplateValidationTest` validates every folder here, so a broken template fails the test suite.
 The copy also holds this `README.md`, so code listing `templates/` must skip non-directories.
 
 ## Folder layout
@@ -15,6 +16,9 @@ The copy also holds this `README.md`, so code listing `templates/` must skip non
   template.json        the manifest (below)
   thumbnail.png        640x360
 ```
+
+Opening a folder that holds a `template.json` in the editor gives an untitled project. Its first Save asks for a
+fresh folder, and imports and new scripts wait until then, so the template folder is left as it was.
 
 Creating a project copies everything except `template.json`. Asset paths resolve against the project
 folder first, then the engine's built-in `assets/`, so a template references built-in assets without

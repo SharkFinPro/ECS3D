@@ -1,0 +1,12 @@
+{
+  "id": "empty-3d",
+  "name": "Empty 3D",
+  "description": "A lit, empty ground with a camera. The starting point for a new project.",
+  "category": "template",
+  "tags": [
+    "starter"
+  ],
+  "thumbnail": "thumbnail.png",
+  "entryScene": "Main",
+  "minEngineVersion": "0.0.1"
+}

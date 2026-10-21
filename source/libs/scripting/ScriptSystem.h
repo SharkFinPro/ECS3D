@@ -51,9 +51,11 @@ public:
   using RuntimeFactory = std::function<std::unique_ptr<ScriptRuntime>()>;
 
   // The factory runs once, on first use, and returns an initialized runtime; a throw leaves the system
-  // without one so the next call retries. userScriptsDir is the directory polled for hot reload.
+  // without one so the next call retries. scriptDirectories are the directories polled for hot reload.
   explicit ScriptSystem(RuntimeFactory makeRuntime,
-                        std::filesystem::path userScriptsDir = scripting::defaultUserScriptsDir);
+                        std::vector<std::filesystem::path> scriptDirectories = { scripting::defaultUserScriptsDir });
+
+  explicit ScriptSystem(RuntimeFactory makeRuntime, std::filesystem::path scriptDirectory);
 
   ~ScriptSystem();
 
@@ -135,7 +137,7 @@ public:
 
 private:
   RuntimeFactory m_makeRuntime;
-  std::filesystem::path m_userScriptsDir;
+  std::vector<std::filesystem::path> m_scriptDirectories;
   std::unique_ptr<ScriptRuntime> m_engine;
 
   struct ExposedField {
