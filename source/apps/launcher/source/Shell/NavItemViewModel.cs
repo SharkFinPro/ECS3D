@@ -8,9 +8,14 @@ public class NavItemViewModel : ObservableObject
     public required string Key { get; init; }
     public required string Label { get; init; }
     public required string Icon { get; init; }
-    public string? Count { get; init; }
-
+    private string? _count;
     private bool _isActive;
+
+    public string? Count
+    {
+        get => _count;
+        set => SetProperty(ref _count, value);
+    }
 
     public bool IsActive
     {
