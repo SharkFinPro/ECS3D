@@ -7,6 +7,7 @@
 #include <edits/HistoryScope.h>
 #include <edits/PlaySessionHistory.h>
 #include <UndoRequestGate.h>
+#include <ProjectIdentityCheck.h>
 #include <ProjectLoadTracker.h>
 #include <PlayControls.h>
 #include <scenes/SceneManager.h>
@@ -159,6 +160,8 @@ private:
   edits::HistoryScope m_historyScope;
 
   ProjectLoadTracker m_projectLoads;
+
+  ProjectIdentityCheck m_projectIdentity;
 
   // See requestUndo()/requestRedo() in EditorAppUndoMenu.cpp: while the gate is blocked, a further
   // undo/redo request is ignored (and the Edit menu's items disabled) until the server's rebroadcast of

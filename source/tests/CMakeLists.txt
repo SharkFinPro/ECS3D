@@ -157,6 +157,8 @@ add_executable(${PROJECT_NAME}
   PlanarHullTest.cpp
   PresetsTest.cpp
   TemplateManifestTest.cpp
+  ProjectFingerprintTest.cpp
+  ProjectIdentityCheckTest.cpp
   ProjectLoadTrackerTest.cpp
   ProjectOriginTest.cpp
   ProjectPathsTest.cpp

@@ -314,6 +314,12 @@ Scenes and prefabs share one name space, because the registry keys both by path.
 A snapshot ends with a project load id: the server mints one at startup and takes the editor's on each
 `loadProject`. An editor that sees another editor's load (`ProjectLoadTracker.h`) drops its save file and
 project folder, so the next Save asks for one. The tracker resets on every connect.
+The snapshot then carries a project fingerprint: a 64-bit hash of the project file the server loaded from
+disk (`ProjectFingerprint.h`), zero for the built-in project or one an editor sent.
+On the first snapshot of a connection, `ProjectIdentityCheck.h` compares it with the fingerprint of the
+editor's own `--project` file and drops the save target on a mismatch, with a warning.
+This catches `--host` against a server started on another project.
+A server the editor spawned is trusted, and an editor with no `--project` has nothing to drop.
 Runtime structural changes from a *script* (spawn/destroy) take a third path: lightweight
 `objectSpawned` (one packed `Object`) / `objectDestroyed` (a uuid) messages the client splices into/out of
 its scene incrementally — kept off the full-snapshot path so frequent spawning stays cheap. Build/apply

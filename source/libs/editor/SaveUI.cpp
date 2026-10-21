@@ -281,10 +281,9 @@ bool SaveUI::isDirty() const
   return m_unsavedChanges.isDirty();
 }
 
-void SaveUI::forgetSaveTarget()
+void SaveUI::forgetSaveTarget(const std::string& reason)
 {
-  Log::info(LogCategory::editor,
-    "Another editor loaded a different project on the server; Save will ask for a new folder, "
+  Log::info(LogCategory::editor, reason + "; Save will ask for a new folder, "
     "and that project's asset files are not copied into it.");
 
   m_saveFile.clear();

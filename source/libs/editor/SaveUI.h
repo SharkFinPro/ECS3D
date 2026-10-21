@@ -90,9 +90,9 @@ public:
 
   [[nodiscard]] bool isDirty() const;
 
-  // Another editor replaced the server's project, so the save file and folder no longer describe it.
+  // The server holds a project other than the one the save file and folder describe, for the reason given.
   // Save then asks for a folder, and closing or opening prompts, since the held project has no file.
-  void forgetSaveTarget();
+  void forgetSaveTarget(const std::string& reason);
 
   // Draws the "unsaved changes" modal when a guarded action is pending. Called every frame, regardless
   // of whether the rest of the GUI is shown, so a window-close prompt can't be hidden behind a toggled-off

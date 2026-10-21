@@ -31,6 +31,7 @@ void ProjectPacker::pack(net::Message& message) const
   const auto currentScene = m_sceneManager->getCurrentScene();
   message.writeString(currentScene ? uuids::to_string(currentScene->getUUID()) : "");
   message.write(m_projectLoadId);
+  message.write(m_projectFingerprint);
 }
 
 void ProjectPacker::setProjectLoadId(const uuids::uuid& id)
@@ -41,6 +42,16 @@ void ProjectPacker::setProjectLoadId(const uuids::uuid& id)
 const uuids::uuid& ProjectPacker::getProjectLoadId() const
 {
   return m_projectLoadId;
+}
+
+void ProjectPacker::setProjectFingerprint(const uint64_t fingerprint)
+{
+  m_projectFingerprint = fingerprint;
+}
+
+uint64_t ProjectPacker::getProjectFingerprint() const
+{
+  return m_projectFingerprint;
 }
 
 void ProjectPacker::unpack(const net::Message& message)
@@ -62,11 +73,13 @@ void ProjectPacker::unpack(const net::Message& message)
 
   const std::string currentSceneUUID = reader.readString();
   const auto parsedLoadId = reader.read<uuids::uuid>();
+  const auto parsedFingerprint = reader.read<uint64_t>();
 
   // Commit phase: nothing below throws, so the swap to the new project is all-or-nothing. A fresh
   // snapshot must REPLACE the current state (the registries are keyed and won't overwrite), so clear
   // first.
   m_projectLoadId = parsedLoadId;
+  m_projectFingerprint = parsedFingerprint;
   m_sceneManager->clear();
   *m_assetRegistry = std::move(parsedAssets);
 

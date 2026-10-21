@@ -70,9 +70,18 @@ void EditorApp::handleSnapshot(const net::Message& message)
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
 
-  if (m_projectLoads.observeSnapshot(m_projectPacker->getProjectLoadId()) && m_saveUI)
+  const bool foreignLoad = m_projectLoads.observeSnapshot(m_projectPacker->getProjectLoadId());
+  const bool foreignProject = m_projectIdentity.observeSnapshot(m_projectPacker->getProjectFingerprint());
+  if (foreignProject)
   {
-    m_saveUI->forgetSaveTarget();
+    Log::warn(LogCategory::editor, "The server holds a different project than this editor's --project '"
+      + m_options.project + "'; Save will not write to it.");
+  }
+
+  if ((foreignLoad || foreignProject) && m_saveUI)
+  {
+    m_saveUI->forgetSaveTarget(foreignProject ? "The server holds a different project than the editor started with"
+                                              : "Another editor loaded a different project on the server");
   }
 
   const auto scene = m_sceneManager->getCurrentScene();

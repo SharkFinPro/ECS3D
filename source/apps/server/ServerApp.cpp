@@ -3,6 +3,7 @@
 #include "ServerPolicy.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
+#include <ProjectFingerprint.h>
 #include <ProjectPaths.h>
 #include <ProjectSerializer.h>
 #include <ProjectPacker.h>
@@ -112,7 +113,13 @@ void ServerApp::loadStartupProject()
     const auto location = locateProject(m_options.project);
     m_projectRoot = location.root;
 
-    if (!m_projectSerializer->load(location.projectFile.string()) || !m_sceneManager->getCurrentScene())
+    const bool loaded = m_projectSerializer->load(location.projectFile.string());
+    if (loaded)
+    {
+      m_projectPacker->setProjectFingerprint(fingerprintProjectFile(location.projectFile));
+    }
+
+    if (!loaded || !m_sceneManager->getCurrentScene())
     {
       Log::error(LogCategory::server, "No scene loaded from project '" + location.projectFile.string()
         + "' - the server will run but simulate nothing. Check the project path and working directory.");
