@@ -38,6 +38,12 @@
                  Link="UserScripts/%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
+    <!-- Coin Rush's own scripts, so its ScorePillar is tested like the starters. -->
+    <ItemGroup>
+        <Compile Include="../../templates/coin-rush/scripts/**/*.cs"
+                 Link="CoinRush/Scripts/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+
     <!-- The launcher is an Avalonia WinExe, so it is not referenced. Its services are plain C# with no UI
          dependency, so they compile into this assembly by link instead. -->
     <ItemGroup>
