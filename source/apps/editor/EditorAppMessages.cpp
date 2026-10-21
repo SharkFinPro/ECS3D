@@ -1,5 +1,6 @@
 #include "EditorApp.h"
 #include <ProjectPacker.h>
+#include <SaveUI.h>
 #include <Replication.h>
 #include <PlayerSlots.h>
 #include <scenes/SceneManager.h>
@@ -68,6 +69,11 @@ void EditorApp::handleSnapshot(const net::Message& message)
 {
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
+
+  if (m_projectLoads.observeSnapshot(m_projectPacker->getProjectLoadId()) && m_saveUI)
+  {
+    m_saveUI->forgetSaveTarget();
+  }
 
   const auto scene = m_sceneManager->getCurrentScene();
   Log::info(LogCategory::editor, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "

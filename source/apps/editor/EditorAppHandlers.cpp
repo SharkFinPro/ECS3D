@@ -19,11 +19,19 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace {
+  uuids::uuid makeProjectLoadId()
+  {
+    std::mt19937 rng{ std::random_device{}() };
+    uuids::uuid_random_generator generator{ rng };
+    return generator();
+  }
+
   // Nothing faithful could be derived for an edit (see RecordEdits.h): the edit still goes out, only the
   // history entry is skipped.
   void logUnrecordedEdit(const std::string& what)
@@ -218,6 +226,10 @@ void EditorApp::onLoadProject()
   clearEditHistory();
   const auto loadedScene = m_sceneManager->getCurrentScene();
   m_historyScope.reset(loadedScene ? std::optional(loadedScene->getUUID()) : std::nullopt);
+
+  const auto loadId = makeProjectLoadId();
+  m_projectPacker->setProjectLoadId(loadId);
+  m_projectLoads.expectOwnLoad(loadId);
 
   net::Message message(net::MessageType::loadProject);
   m_projectPacker->pack(message);

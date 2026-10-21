@@ -2,6 +2,7 @@
 #include "assets/AssetRegistry.h"
 #include "scenes/SceneManager.h"
 #include "scenes/SceneAsset.h"
+#include "WireTypes.h"
 #include <Protocol.h>
 #include <utility>
 #include <vector>
@@ -29,9 +30,20 @@ void ProjectPacker::pack(net::Message& message) const
 
   const auto currentScene = m_sceneManager->getCurrentScene();
   message.writeString(currentScene ? uuids::to_string(currentScene->getUUID()) : "");
+  message.write(m_projectLoadId);
 }
 
-void ProjectPacker::unpack(const net::Message& message) const
+void ProjectPacker::setProjectLoadId(const uuids::uuid& id)
+{
+  m_projectLoadId = id;
+}
+
+const uuids::uuid& ProjectPacker::getProjectLoadId() const
+{
+  return m_projectLoadId;
+}
+
+void ProjectPacker::unpack(const net::Message& message)
 {
   net::MessageReader reader(message);
 
@@ -49,10 +61,12 @@ void ProjectPacker::unpack(const net::Message& message) const
   }
 
   const std::string currentSceneUUID = reader.readString();
+  const auto parsedLoadId = reader.read<uuids::uuid>();
 
   // Commit phase: nothing below throws, so the swap to the new project is all-or-nothing. A fresh
   // snapshot must REPLACE the current state (the registries are keyed and won't overwrite), so clear
   // first.
+  m_projectLoadId = parsedLoadId;
   m_sceneManager->clear();
   *m_assetRegistry = std::move(parsedAssets);
 

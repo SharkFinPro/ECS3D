@@ -316,6 +316,7 @@ void EditorApp::connectToServer()
   clearEditHistory();
   m_playHistory.reset();
   m_historyScope.reset(std::nullopt);
+  m_projectLoads.reset();
 
   // The (just-spawned) server needs a moment to boot the CLR and start listening, so retry.
   const auto deadline = std::chrono::steady_clock::now() + 15s;

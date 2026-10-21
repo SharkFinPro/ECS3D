@@ -26,10 +26,12 @@
 #include <Log.h>
 #include <RemoteLogSink.h>
 #include <nlohmann/json.hpp>
+#include <uuid.h>
 #include <chrono>
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <random>
 #include <string>
 #include <thread>
 #include <utility>
@@ -70,6 +72,10 @@ ServerApp::ServerApp(LaunchOptions options)
   // The World spawnPrefab binding resolves a prefab uuid to its body through the registry. Injected once:
   // loadProject reassigns the registry's contents, never the object.
   BindingContext::setAssetRegistry(m_assetRegistry.get());
+
+  // A restarted server must read as a different project load to the editors attached to it.
+  std::mt19937 rng{ std::random_device{}() };
+  m_projectPacker->setProjectLoadId(uuids::uuid_random_generator{ rng }());
 
   loadStartupProject();
 
