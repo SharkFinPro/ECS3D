@@ -97,7 +97,7 @@ void ServerApp::loadStartupProject()
 {
   if (m_options.project.empty())
   {
-    // No project file requested: run the built-in sample (scenes 1-3 + falling balls). It's generated in
+    // No project file requested: run the built-in sample (Welcome and the demo scenes). It's generated in
     // code because the procedural scenes can't be a static file on disk.
     m_projectSerializer->deserialize(buildDefaultProject());
   }

@@ -20,7 +20,7 @@ namespace
   // pure play server. --token, when set, is the secret an editor must present to be authorized;
   // main generates one for an --edit server given none. --open-edit implies --edit and skips that, so any
   // editor may edit (development only); an explicit --token still applies.
-  // An empty project runs the built-in sample (scenes 1-3 + falling balls); --project loads a file.
+  // An empty project runs the built-in sample (Welcome and the demo scenes); --project loads a file.
   ServerApp::LaunchOptions parseOptions(const int argc, char** argv)
   {
     ServerApp::LaunchOptions options;

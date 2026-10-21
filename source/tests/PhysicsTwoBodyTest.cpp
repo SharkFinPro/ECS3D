@@ -59,7 +59,7 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
   const auto ground = addObject(scene, "Ground", { 0, -9, 0 }, { 100, 10, 100 });
   fixtures::addBoxCollider(ground);
 
-  // Scene 3 of the default project in miniature: a grid of spheres and turned boxes of random sizes, each as
+  // Tower Collapse of the default project in miniature: a grid of spheres and turned boxes of random sizes, each as
   // heavy as its volume, so the pile they fall into mixes masses a hundred times apart.
   PileRandom random;
   std::vector<std::shared_ptr<RigidBody>> bodies;

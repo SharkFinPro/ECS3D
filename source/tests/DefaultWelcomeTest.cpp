@@ -4,6 +4,7 @@
 #include "ComponentRegistration.h"
 #include "ComponentRegistry.h"
 #include "DefaultProject.h"
+#include "DefaultProjectParts.h"
 #include "PhysicsSystem.h"
 #include "ProjectSerializer.h"
 #include "TestScene.h"
@@ -18,73 +19,96 @@
 #include "scenes/SceneManager.h"
 
 #include <glm/geometric.hpp>
-#include <glm/trigonometric.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <memory>
 #include <regex>
 #include <set>
-#include <sstream>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
   constexpr float dt = 1.0f / 50.0f;
 
-  using ClassFields = std::map<std::string, std::set<std::string>>;
+  // The distance PhysicsSystem's gravity step moves a body in one tick (gravityStep in PhysicsSystem.cpp).
+  constexpr float gravityStepPerTick = 9.81f * dt * 0.1f;
 
-  // Every class declared under UserScripts and the [ExposeToEditor] fields declared after it in its file.
+  // Class name -> exposed field name -> C# type name.
+  using ClassFields = std::map<std::string, std::map<std::string, std::string>>;
+
+  std::string fileText(const std::filesystem::path& path)
+  {
+    std::ifstream stream(path);
+
+    return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+  }
+
+  // Adds the classes of one file and the [ExposeToEditor] fields declared after each.
+  void parseScriptFile(const std::string& text, ClassFields& classes)
+  {
+    const std::regex classPattern(R"(\bclass\s+(\w+))");
+    const std::regex fieldPattern(
+      R"(\[ExposeToEditor[^\]]*\]\s*(?:public|private|protected|internal)?\s*([\w<>]+)\s+(\w+))");
+
+    std::vector<std::pair<size_t, std::string>> declared;
+    for (std::sregex_iterator it(text.begin(), text.end(), classPattern), end; it != end; ++it)
+    {
+      declared.emplace_back(static_cast<size_t>(it->position()), (*it)[1].str());
+      classes[(*it)[1].str()];
+    }
+
+    for (std::sregex_iterator it(text.begin(), text.end(), fieldPattern), end; it != end; ++it)
+    {
+      const auto position = static_cast<size_t>(it->position());
+      const std::string* owner = nullptr;
+      for (const auto& [at, name] : declared)
+      {
+        if (at < position)
+        {
+          owner = &name;
+        }
+      }
+
+      if (owner)
+      {
+        classes[*owner][(*it)[2].str()] = (*it)[1].str();
+      }
+    }
+  }
+
   ClassFields shippedScriptClasses()
   {
     const auto root = std::filesystem::path(ECS3D_SOURCE_DIR) / "source" / "libs" / "scripting" / "UserScripts";
-    const std::regex classPattern(R"(\bclass\s+(\w+))");
-    const std::regex fieldPattern(R"(\[ExposeToEditor[^\]]*\]\s*(?:public|private|protected|internal)?\s*[\w<>]+\s+(\w+))");
 
     ClassFields classes;
     for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
     {
-      if (entry.path().extension() != ".cs")
+      if (entry.path().extension() == ".cs")
       {
-        continue;
-      }
-
-      std::ifstream stream(entry.path());
-      const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-
-      std::vector<std::pair<size_t, std::string>> declared;
-      for (std::sregex_iterator it(text.begin(), text.end(), classPattern), end; it != end; ++it)
-      {
-        declared.emplace_back(static_cast<size_t>(it->position()), (*it)[1].str());
-        classes[(*it)[1].str()];
-      }
-
-      for (std::sregex_iterator it(text.begin(), text.end(), fieldPattern), end; it != end; ++it)
-      {
-        const auto position = static_cast<size_t>(it->position());
-        const std::string* owner = nullptr;
-        for (const auto& [at, name] : declared)
-        {
-          if (at < position)
-          {
-            owner = &name;
-          }
-        }
-
-        if (owner)
-        {
-          classes[*owner].insert((*it)[1].str());
-        }
+        parseScriptFile(fileText(entry.path()), classes);
       }
     }
 
     return classes;
+  }
+
+  // The wire type tag a C# field type is exposed as.
+  std::string tagOf(const std::string& csType)
+  {
+    return csType == "Vector3" ? "vector3" : csType;
   }
 
   void collectScripts(const nlohmann::json& object, std::vector<nlohmann::json>& scripts)
@@ -152,6 +176,56 @@ namespace {
     throw std::runtime_error("no scene named " + name);
   }
 
+  size_t countNamed(const nlohmann::json& objects, const std::string& name)
+  {
+    size_t count = 0;
+    for (const auto& object : objects)
+    {
+      count += object.at("name") == name ? 1 : 0;
+      count += countNamed(object.at("children"), name);
+    }
+
+    return count;
+  }
+
+  std::vector<nlohmann::json> scriptsOf(const nlohmann::json& project)
+  {
+    std::vector<nlohmann::json> scripts;
+    const auto& welcome = sceneNamed(project, "Welcome");
+    for (const auto& object : welcome.at("objects"))
+    {
+      collectScripts(object, scripts);
+    }
+
+    for (const auto& script : welcome.at("scripts"))
+    {
+      scripts.push_back(script);
+    }
+
+    for (const auto& prefab : project.at("assets").at("prefabs"))
+    {
+      collectScripts(prefab.at("body"), scripts);
+    }
+
+    return scripts;
+  }
+
+  void expectFieldMatches(const nlohmann::json& field, const std::map<std::string, std::string>& declared,
+                          const std::set<std::string>& known)
+  {
+    const std::regex uuidPattern(R"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})");
+    const auto name = field.at("name").get<std::string>();
+    SCOPED_TRACE(name);
+
+    ASSERT_TRUE(declared.contains(name));
+    EXPECT_EQ(field.at("type"), tagOf(declared.at(name)));
+
+    if (field.at("value").is_string() && std::regex_match(field.at("value").get<std::string>(), uuidPattern))
+    {
+      EXPECT_TRUE(known.contains(field.at("value").get<std::string>())) << "not an asset or prefab uuid";
+    }
+  }
+
   struct LoadedProject
   {
     std::shared_ptr<ComponentRegistry> componentRegistry = std::make_shared<ComponentRegistry>();
@@ -183,6 +257,156 @@ namespace {
     }
 
     return blocks;
+  }
+
+  std::shared_ptr<Object> objectNamed(const ObjectManager& objectManager, const std::string& name)
+  {
+    for (const auto& object : objectManager.getAllObjects())
+    {
+      if (object->getName() == name)
+      {
+        return object;
+      }
+    }
+
+    return nullptr;
+  }
+
+  bool isOnShelf(const std::shared_ptr<Object>& object)
+  {
+    const auto position = fixtures::positionOf(object);
+
+    return object->getComponent<RigidBody>(ComponentType::rigidBody) && position.x > -19.0f && position.x < -15.0f
+      && position.z > 17.5f && position.z < 26.5f;
+  }
+
+  std::vector<std::shared_ptr<Object>> shelfProps(const ObjectManager& objectManager)
+  {
+    std::vector<std::shared_ptr<Object>> props;
+    for (const auto& object : objectManager.getAllObjects())
+    {
+      if (isOnShelf(object))
+      {
+        props.push_back(object);
+      }
+    }
+
+    return props;
+  }
+
+  // Zero when the pair does not touch, which is also what exactly touching colliders report.
+  float contactDepth(const std::shared_ptr<Object>& object, const std::shared_ptr<Object>& other)
+  {
+    auto first = object->getComponent<Collider>(ComponentType::collider);
+    auto second = other->getComponent<Collider>(ComponentType::collider);
+    const auto contact = collisions::findContact(*first, *second);
+
+    return contact ? contact->depth() : 0.0f;
+  }
+
+  void tick(const ObjectManager& objectManager, const int count)
+  {
+    CollisionSystem collisionSystem;
+    for (int i = 0; i < count; ++i)
+    {
+      PhysicsSystem::fixedUpdate(objectManager, dt);
+      collisionSystem.fixedUpdate(objectManager, dt);
+    }
+  }
+
+  // The hull's volume centroid, from tetrahedra to its triangles.
+  glm::vec3 centroidOf(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices)
+  {
+    glm::vec3 weighted(0.0f);
+    float volume = 0.0f;
+    for (size_t i = 0; i + 2 < indices.size(); i += 3)
+    {
+      const auto& a = vertices[indices[i]];
+      const auto& b = vertices[indices[i + 1]];
+      const auto& c = vertices[indices[i + 2]];
+      const float tetrahedron = glm::dot(a, glm::cross(b, c)) / 6.0f;
+      weighted += tetrahedron * (a + b + c) / 4.0f;
+      volume += tetrahedron;
+    }
+
+    return weighted / volume;
+  }
+
+  // Convex outline of the points, counter-clockwise (monotone chain).
+  std::vector<glm::vec2> outline(std::vector<glm::vec2> points)
+  {
+    std::sort(points.begin(), points.end(), [](const glm::vec2& a, const glm::vec2& b) {
+      return a.x < b.x || (a.x == b.x && a.y < b.y);
+    });
+
+    const auto turn = [](const glm::vec2& o, const glm::vec2& a, const glm::vec2& b) {
+      return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    };
+
+    std::vector<glm::vec2> hull;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+      const size_t start = hull.size();
+      for (const auto& point : points)
+      {
+        while (hull.size() >= start + 2 && turn(hull[hull.size() - 2], hull.back(), point) <= 0.0f)
+        {
+          hull.pop_back();
+        }
+
+        hull.push_back(point);
+      }
+
+      hull.pop_back();
+      std::reverse(points.begin(), points.end());
+    }
+
+    return hull;
+  }
+
+  // Distance from the centroid's footprint to the nearest edge of the resting face; negative when outside it.
+  float restingMargin(const std::shared_ptr<Object>& prop, const ConvexHull& hull)
+  {
+    const auto transform = fixtures::transformOf(prop);
+    const auto orientation = transform->getOrientation();
+    const auto scale = transform->getScale();
+
+    std::vector<glm::vec3> world;
+    for (const auto& vertex : hull.vertices)
+    {
+      world.push_back(orientation * (vertex * scale));
+    }
+
+    const auto centroid = centroidOf(world, hull.indices);
+    const float lowest = std::min_element(world.begin(), world.end(), [](const glm::vec3& a, const glm::vec3& b) {
+      return a.y < b.y;
+    })->y;
+
+    std::vector<glm::vec2> face;
+    for (const auto& vertex : world)
+    {
+      if (vertex.y < lowest + 1e-3f)
+      {
+        face.emplace_back(vertex.x, vertex.z);
+      }
+    }
+
+    const auto polygon = outline(face);
+    if (polygon.size() < 3)
+    {
+      return -1.0f;
+    }
+
+    float margin = std::numeric_limits<float>::max();
+    for (size_t i = 0; i < polygon.size(); ++i)
+    {
+      const auto& p = polygon[i];
+      const auto edge = polygon[(i + 1) % polygon.size()] - p;
+      const glm::vec2 inward = glm::normalize(glm::vec2(-edge.y, edge.x));
+      margin = std::min(margin, glm::dot(glm::vec2(centroid.x, centroid.z) - p, inward));
+    }
+
+    return margin;
   }
 }
 
@@ -223,27 +447,11 @@ TEST(DefaultWelcome, EveryScriptClassAndFieldItNamesIsShipped)
   ASSERT_TRUE(classes.contains("Spinner"));
   ASSERT_TRUE(classes.at("Spinner").contains("m_degreesPerSecond"));
   ASSERT_FALSE(classes.at("Spinner").contains("m_noSuchField"));
+  EXPECT_EQ(classes.at("Spinner").at("m_axis"), "Vector3");
 
   const auto project = buildDefaultProject();
   const auto known = assetUuids(project);
-  const std::regex uuidPattern(R"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})");
-
-  std::vector<nlohmann::json> scripts;
-  const auto& welcome = sceneNamed(project, "Welcome");
-  for (const auto& object : welcome.at("objects"))
-  {
-    collectScripts(object, scripts);
-  }
-
-  for (const auto& script : welcome.at("scripts"))
-  {
-    scripts.push_back(script);
-  }
-
-  for (const auto& prefab : project.at("assets").at("prefabs"))
-  {
-    collectScripts(prefab.at("body"), scripts);
-  }
+  const auto scripts = scriptsOf(project);
 
   // Positive control: the Welcome scene really uses scripts.
   EXPECT_GT(scripts.size(), 15u);
@@ -256,20 +464,22 @@ TEST(DefaultWelcome, EveryScriptClassAndFieldItNamesIsShipped)
 
     for (const auto& field : script.at("fields"))
     {
-      const auto name = field.at("name").get<std::string>();
-      SCOPED_TRACE(name);
-      EXPECT_TRUE(classes.at(className).contains(name));
-
-      if (field.at("value").is_string())
-      {
-        const auto value = field.at("value").get<std::string>();
-        if (std::regex_match(value, uuidPattern))
-        {
-          EXPECT_TRUE(known.contains(value)) << "not an asset or prefab uuid: " << value;
-        }
-      }
+      expectFieldMatches(field, classes.at(className), known);
     }
   }
+}
+
+TEST(DefaultWelcome, ObjectsScriptsLookUpByNameExistOnce)
+{
+  const auto& objects = sceneNamed(buildDefaultProject(), "Welcome").at("objects");
+
+  for (const char* name : { "Earth", "LaserMarker", "Sun" })
+  {
+    EXPECT_EQ(countNamed(objects, name), 1u) << name;
+  }
+
+  // Positive control for the counter: the tower has many blocks of one name.
+  EXPECT_EQ(countNamed(objects, "Tower Block"), 24u);
 }
 
 TEST(DefaultWelcome, EveryAssetItReferencesIsRegistered)
@@ -278,21 +488,9 @@ TEST(DefaultWelcome, EveryAssetItReferencesIsRegistered)
   const auto known = assetUuids(project);
 
   std::vector<std::string> references;
-  const auto& welcome = sceneNamed(project, "Welcome");
-  for (const auto& object : welcome.at("objects"))
+  for (const auto& object : sceneNamed(project, "Welcome").at("objects"))
   {
     collectAssetReferences(object, references);
-  }
-
-  for (const auto& script : welcome.at("scripts"))
-  {
-    for (const auto& field : script.at("fields"))
-    {
-      if (field.at("name") == "m_playerPrefab")
-      {
-        references.push_back(field.at("value").get<std::string>());
-      }
-    }
   }
 
   EXPECT_GT(references.size(), 100u);
@@ -322,24 +520,14 @@ TEST(DefaultWelcome, NoPairOfCollidersStartsOverlapping)
 
   ASSERT_GT(withColliders.size(), 30u);
 
-  size_t touching = 0;
   for (size_t i = 0; i < withColliders.size(); ++i)
   {
     for (size_t j = i + 1; j < withColliders.size(); ++j)
     {
-      auto first = withColliders[i]->getComponent<Collider>(ComponentType::collider);
-      auto second = withColliders[j]->getComponent<Collider>(ComponentType::collider);
-
-      if (const auto contact = collisions::findContact(*first, *second))
-      {
-        ++touching;
-        EXPECT_LT(contact->depth(), 0.01f) << withColliders[i]->getName() << " / " << withColliders[j]->getName();
-      }
+      EXPECT_LT(contactDepth(withColliders[i], withColliders[j]), 0.01f)
+        << withColliders[i]->getName() << " / " << withColliders[j]->getName();
     }
   }
-
-  // Resting contacts exist (the tower on the ground), so the check above ran on something.
-  EXPECT_GT(touching, 0u);
 }
 
 TEST(DefaultWelcome, ItSettlesAndTheTowerStands)
@@ -359,12 +547,7 @@ TEST(DefaultWelcome, ItSettlesAndTheTowerStands)
     startOrientations.push_back(fixtures::transformOf(block)->getOrientation());
   }
 
-  CollisionSystem collisionSystem;
-  for (int tick = 0; tick < 300; ++tick)
-  {
-    PhysicsSystem::fixedUpdate(objectManager, dt);
-    collisionSystem.fixedUpdate(objectManager, dt);
-  }
+  tick(objectManager, 300);
 
   for (const auto& object : objectManager.getAllObjects())
   {
@@ -377,7 +560,13 @@ TEST(DefaultWelcome, ItSettlesAndTheTowerStands)
   for (size_t i = 0; i < blocks.size(); ++i)
   {
     SCOPED_TRACE(i);
-    EXPECT_LT(glm::length(fixtures::positionOf(blocks[i]) - startPositions[i]), 0.05f);
+    const auto moved = fixtures::positionOf(blocks[i]) - startPositions[i];
+    EXPECT_LT(glm::length(glm::vec2(moved.x, moved.z)), 0.05f);
+
+    // Each box rests one gravity step low on the one below, so the allowance grows with the level.
+    const float level = std::round(startPositions[i].y - 0.5f);
+    EXPECT_LT(-moved.y, (level + 1.0f) * gravityStepPerTick + 0.01f);
+    EXPECT_GT(moved.y, -1.0f);
 
     const float alignment = std::min(1.0f, std::abs(glm::dot(fixtures::transformOf(blocks[i])->getOrientation(),
                                                               startOrientations[i])));
@@ -385,84 +574,102 @@ TEST(DefaultWelcome, ItSettlesAndTheTowerStands)
   }
 }
 
-TEST(DefaultWelcome, TheTowerBlocksAndShelfPropsTouchTheirSupports)
+TEST(DefaultWelcome, TheTowerBlocksTouchTheGround)
+{
+  LoadedProject loaded;
+  load(loaded, buildDefaultProject());
+  const auto& objectManager = *loaded.sceneManager.getCurrentScene()->getObjectManager();
+  const auto ground = objectNamed(objectManager, "Ground");
+  ASSERT_NE(ground, nullptr);
+
+  size_t grounded = 0;
+  for (const auto& block : towerBlocks(objectManager))
+  {
+    if (fixtures::positionOf(block).y < 1.0f)
+    {
+      EXPECT_LT(contactDepth(block, ground), 0.01f);
+      EXPECT_NEAR(fixtures::positionOf(block).y, 0.5f, 1e-4f);
+      ++grounded;
+    }
+  }
+
+  EXPECT_EQ(grounded, 4u);
+}
+
+TEST(DefaultWelcome, TheShelfPropsTouchTheShelfAndStayPut)
+{
+  LoadedProject loaded;
+  load(loaded, buildDefaultProject());
+  const auto& objectManager = *loaded.sceneManager.getCurrentScene()->getObjectManager();
+  const auto shelf = objectNamed(objectManager, "Shape Shelf");
+  ASSERT_NE(shelf, nullptr);
+
+  const auto props = shelfProps(objectManager);
+  ASSERT_EQ(props.size(), 9u);
+
+  std::vector<float> startHeights;
+  for (const auto& prop : props)
+  {
+    EXPECT_LT(contactDepth(prop, shelf), 0.01f) << prop->getName();
+    startHeights.push_back(fixtures::positionOf(prop).y);
+  }
+
+  // A prop that started in the air would have dropped by now; one that started sunk would have been pushed up.
+  tick(objectManager, 50);
+
+  for (size_t i = 0; i < props.size(); ++i)
+  {
+    EXPECT_NEAR(fixtures::positionOf(props[i]).y, startHeights[i], 0.02f) << props[i]->getName();
+  }
+}
+
+TEST(DefaultWelcome, EveryShelfPropRestsWithItsCenterOfMassOverItsFace)
 {
   LoadedProject loaded;
   load(loaded, buildDefaultProject());
   const auto& objectManager = *loaded.sceneManager.getCurrentScene()->getObjectManager();
 
-  std::shared_ptr<Object> ground;
-  std::shared_ptr<Object> shelf;
-  for (const auto& object : objectManager.getAllObjects())
+  size_t checked = 0;
+  for (const auto& prop : shelfProps(objectManager))
   {
-    if (object->getName() == "Ground")
+    for (const auto& shape : defaultproject::libraryShapes())
     {
-      ground = object;
-    }
-    else if (object->getName() == "Shape Shelf")
-    {
-      shelf = object;
+      if (shape.name == prop->getName())
+      {
+        // 0.05 at unit scale, and a prop is half size.
+        EXPECT_GE(restingMargin(prop, shape.hull()), 0.025f - 1e-3f) << shape.name;
+        ++checked;
+      }
     }
   }
 
+  EXPECT_EQ(checked, 9u);
+}
+
+TEST(DefaultWelcome, TheGroundIsSixteenTilesCoveringTheFloor)
+{
+  LoadedProject loaded;
+  load(loaded, buildDefaultProject());
+  const auto ground = objectNamed(*loaded.sceneManager.getCurrentScene()->getObjectManager(), "Ground");
   ASSERT_NE(ground, nullptr);
-  ASSERT_NE(shelf, nullptr);
+  ASSERT_EQ(ground->getChildren().size(), 16u);
 
-  const auto bottomBlock = [&](const std::shared_ptr<Object>& object) {
-    return fixtures::positionOf(object).y < 1.0f;
-  };
-
-  size_t grounded = 0;
-  for (const auto& block : towerBlocks(objectManager))
+  std::set<std::pair<float, float>> centers;
+  float low = 1000.0f;
+  float high = -1000.0f;
+  for (const auto& tile : ground->getChildren())
   {
-    if (!bottomBlock(block))
-    {
-      continue;
-    }
+    const auto transform = fixtures::transformOf(tile);
+    fixtures::expectNear("tile scale", transform->getScale(), glm::vec3(10.0f, 1.0f, 10.0f), 1e-4f);
 
-    auto blockCollider = block->getComponent<Collider>(ComponentType::collider);
-    auto groundCollider = ground->getComponent<Collider>(ComponentType::collider);
-    const auto contact = collisions::findContact(*blockCollider, *groundCollider);
-    EXPECT_LT(contact ? contact->depth() : 0.0f, 0.01f);
-    EXPECT_NEAR(fixtures::positionOf(block).y, 0.5f, 1e-4f);
-    ++grounded;
+    const auto position = transform->getPosition();
+    EXPECT_NEAR(position.y, 0.0f, 1e-4f);
+    centers.insert({ std::round(position.x), std::round(position.z) });
+    low = std::min({ low, position.x - 10.0f, position.z - 10.0f });
+    high = std::max({ high, position.x + 10.0f, position.z + 10.0f });
   }
 
-  EXPECT_EQ(grounded, 4u);
-
-  std::vector<std::shared_ptr<Object>> shelfProps;
-  std::vector<float> startHeights;
-  for (const auto& object : objectManager.getAllObjects())
-  {
-    const auto position = fixtures::positionOf(object);
-    if (!object->getComponent<RigidBody>(ComponentType::rigidBody) || position.x < -19.0f || position.x > -15.0f
-        || position.z < 17.5f || position.z > 26.5f)
-    {
-      continue;
-    }
-
-    SCOPED_TRACE(object->getName());
-    auto shapeCollider = object->getComponent<Collider>(ComponentType::collider);
-    auto shelfCollider = shelf->getComponent<Collider>(ComponentType::collider);
-    const auto contact = collisions::findContact(*shapeCollider, *shelfCollider);
-    EXPECT_LT(contact ? contact->depth() : 0.0f, 0.01f);
-    shelfProps.push_back(object);
-    startHeights.push_back(position.y);
-  }
-
-  ASSERT_EQ(shelfProps.size(), 9u);
-
-  // A prop that started in the air would have dropped by now; one that started sunk would have been pushed up.
-  CollisionSystem collisionSystem;
-  for (int tick = 0; tick < 50; ++tick)
-  {
-    PhysicsSystem::fixedUpdate(objectManager, dt);
-    collisionSystem.fixedUpdate(objectManager, dt);
-  }
-
-  for (size_t i = 0; i < shelfProps.size(); ++i)
-  {
-    SCOPED_TRACE(shelfProps[i]->getName());
-    EXPECT_NEAR(fixtures::positionOf(shelfProps[i]).y, startHeights[i], 0.02f);
-  }
+  EXPECT_EQ(centers.size(), 16u);
+  EXPECT_NEAR(low, -40.0f, 1e-3f);
+  EXPECT_NEAR(high, 40.0f, 1e-3f);
 }
