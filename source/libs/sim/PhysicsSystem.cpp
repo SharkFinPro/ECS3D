@@ -307,6 +307,29 @@ namespace {
     return corners;
   }
 
+  // Whether a body resting flat on its support is being tipped by a push. Its spin turns it faster than the flush
+  // window closes in a tick, so the corners it drives into the support are the edge it pivots about; shedding that
+  // spin would leave the push only its linear part. A body that is landing, or finely faceted, sheds it as usual.
+  bool isTippedOverEdge(const RigidBody& body, const Transform& transform, const std::shared_ptr<Collider>& collider,
+                        const std::shared_ptr<Object>& other, const glm::vec3& normal, const bool overCenter,
+                        const float dt)
+  {
+    if (!overCenter || body.isFalling() || normal.y <= 0.0f)
+    {
+      return false;
+    }
+
+    const auto tipping = alongSupport(spinPerTick(body.getAngularVelocity() - spinOf(other), dt), normal);
+    if (glm::dot(tipping, tipping) <= flushTiltSine * flushTiltSine)
+    {
+      return false;
+    }
+
+    const auto faces = restingFacesOf(transform, collider, other, normal);
+
+    return faces && faces->neighborCosine <= facetedCosine;
+  }
+
   // Whether the spin this tick carries the face the body rests toward flat against the support, or past it.
   bool turnsFlatThisTick(const RigidBody& body, const std::shared_ptr<Object>& other, const RestingFaces& faces,
                          const float dt)
@@ -521,7 +544,10 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
 
   // Before the impulse, which would otherwise answer spin into the support with a push away from it and leave
   // the body lifting off once that spin is stopped.
-  stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
+  if (!isTippedOverEdge(body, *transform, collider, other, normal, support.underCenterOfMass, dt))
+  {
+    stopSpinIntoSupport(body, *transform, other, normal, collisionPoints);
+  }
   // Met from below, the pair is resolved with the roles swapped, so the push and its friction go where the body
   // pressing down would have put them from above: its own center of mass clamped into the manifold.
   const bool swapped = normal.y < 0.0f && pair.body.resting;
