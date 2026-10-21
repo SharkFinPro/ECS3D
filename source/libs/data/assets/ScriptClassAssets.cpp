@@ -39,7 +39,7 @@ size_t registerScriptClassAssets(AssetRegistry& registry, const std::vector<Scri
     }
 
     registry.registerAsset({ .uuid = uuid, .type = AssetType::Script, .className = className,
-                             .body = sceneScript ? sceneScriptKind : objectScriptKind });
+                             .scriptKind = sceneScript ? ScriptKind::Scene : ScriptKind::Object });
     ++added;
   }
 

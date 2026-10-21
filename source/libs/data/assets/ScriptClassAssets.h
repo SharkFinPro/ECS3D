@@ -13,26 +13,22 @@ struct ScriptClassInfo {
   bool sceneScript = false;
 };
 
-// What a synthesized Script record keeps in AssetRecord::body. A record from a project file has an empty body,
-// which counts as usable on both hosts.
-inline constexpr const char* sceneScriptKind = "scene";
-inline constexpr const char* objectScriptKind = "object";
-
+// A record from a project file has kind Either, which counts as usable on both hosts.
 [[nodiscard]] inline bool usableOnObject(const AssetRecord& record)
 {
-  return record.type == AssetType::Script && record.body != sceneScriptKind;
+  return record.type == AssetType::Script && record.scriptKind != ScriptKind::Scene;
 }
 
 [[nodiscard]] inline bool usableOnScene(const AssetRecord& record)
 {
-  return record.type == AssetType::Script && record.body != objectScriptKind;
+  return record.type == AssetType::Script && record.scriptKind != ScriptKind::Object;
 }
 
 // The uuid every machine derives for a script class of this name, so a record registered here is the same
 // across runs and servers.
 [[nodiscard]] uuids::uuid scriptClassUuid(const std::string& className);
 
-// Registers a Script record for each class no Script record names yet, noting its kind in the body. The record
+// Registers a Script record for each class no Script record names yet, noting its kind. The record
 // has no source path, since the compiler does not say which file a class came from. Returns how many were added.
 size_t registerScriptClassAssets(AssetRegistry& registry, const std::vector<ScriptClassInfo>& classes);
 

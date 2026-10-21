@@ -308,8 +308,9 @@ void AssetRegistry::pack(net::Message& message) const
     message.writeString(uuids::to_string(record->uuid));
     message.writeString(record->path);
     message.writeString(record->className);   // empty for non-scripts
-    message.writeString(record->body);        // empty unless a prefab or a compiled script
+    message.writeString(record->body);        // empty for non-prefabs
     message.writeString(record->displayName); // empty unless renamed (append-only wire field)
+    message.write(record->scriptKind);        // Either unless a compiled script (append-only wire field)
   }
 }
 
@@ -324,8 +325,9 @@ void AssetRegistry::unpack(net::MessageReader& messageReader)
     const auto className = messageReader.readString();
     const auto body = messageReader.readString();
     const auto displayName = messageReader.readString();
+    const auto scriptKind = messageReader.read<ScriptKind>();
 
     registerAsset({ .uuid = uuid, .type = type, .path = path, .className = className, .body = body,
-                    .displayName = displayName });
+                    .displayName = displayName, .scriptKind = scriptKind });
   }
 }

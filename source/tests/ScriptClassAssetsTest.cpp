@@ -171,6 +171,9 @@ namespace {
     EXPECT_TRUE(usableOnScene(*scene));
     EXPECT_FALSE(usableOnObject(*scene));
 
+    EXPECT_EQ(object->scriptKind, ScriptKind::Object);
+    EXPECT_EQ(scene->scriptKind, ScriptKind::Scene);
+
     const AssetRecord listed{ .uuid = scriptClassUuid("Other"), .type = AssetType::Script, .path = "o.cs",
                               .className = "Other" };
     EXPECT_TRUE(usableOnObject(listed));
@@ -190,7 +193,9 @@ namespace {
 
     const auto* record = received.getByUUID(scriptClassUuid("Rules"));
     ASSERT_NE(record, nullptr);
+    EXPECT_EQ(record->scriptKind, ScriptKind::Scene);
     EXPECT_FALSE(usableOnObject(*record));
+    EXPECT_TRUE(usableOnScene(*record));
   }
 
   TEST(ScriptClassAssets, ASceneScriptClassIsNotOfferedToTheObjectPickerOrAnObjectClassToTheScenePanel)

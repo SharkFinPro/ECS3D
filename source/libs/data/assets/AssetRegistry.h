@@ -2,6 +2,7 @@
 #define ASSETREGISTRY_H
 
 #include <nlohmann/json_fwd.hpp>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <uuid.h>
@@ -21,16 +22,23 @@ enum class AssetType {
   Prefab
 };
 
+// Which host a Script record's class can attach to. Packed raw over the wire, so only ever APPEND.
+enum class ScriptKind : uint8_t {
+  Either,
+  Object,
+  Scene
+};
+
 struct AssetRecord {
   uuids::uuid uuid;
   AssetType type = AssetType::Unknown;
   std::string path;        // scenes and prefabs store their display name here instead
   std::string className;   // scripts only
-  std::string body;        // prefabs: a serialized Object blob (Object::serialize().dump()); compiled scripts:
-                           // their kind (see ScriptClassAssets.h)
+  std::string body;        // prefabs only: a serialized Object blob (Object::serialize().dump())
   std::string displayName; // optional rename override: when non-empty it replaces the derived display
                            // name (see assetDisplay::name). The file on disk and `path` (the registry
                            // key) never change - a rename is display-only.
+  ScriptKind scriptKind = ScriptKind::Either; // scripts only: set for a compiled class, not saved to a project
 };
 
 // uuid<->path registry + serialize. Carries asset metadata only (no GPU resources, no GUI).
