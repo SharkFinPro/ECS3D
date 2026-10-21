@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 
+#include "PhysicsPlaygroundTestHelpers.h"
 #include "TemplateTestHelpers.h"
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
 #include "objects/components/LightRenderer.h"
+#include "objects/components/Script.h"
 #include "scenes/SceneAsset.h"
 #include "scenes/SceneManager.h"
 #include "templates/TemplateManifest.h"
@@ -22,85 +24,11 @@
 #include <vector>
 
 using namespace templateTest;
+using namespace playgroundtest;
 using nlohmann::json;
 
 namespace
 {
-  const std::filesystem::path sampleFolder = sourceRoot / "templates" / "physics-playground";
-
-  const json& project()
-  {
-    static const json loaded = projectJson(sampleFolder);
-    return loaded;
-  }
-
-  void collect(const json& object, std::vector<const json*>& into)
-  {
-    into.push_back(&object);
-    for (const auto& child : object.at("children"))
-    {
-      collect(child, into);
-    }
-  }
-
-  std::vector<const json*> allObjects()
-  {
-    std::vector<const json*> objects;
-    for (const auto& object : project().at("assets").at("scenes").at(0).at("objects"))
-    {
-      collect(object, objects);
-    }
-
-    return objects;
-  }
-
-  std::vector<const json*> named(const std::string& prefix)
-  {
-    std::vector<const json*> matches;
-    for (const auto* object : allObjects())
-    {
-      if (object->at("name").get<std::string>().rfind(prefix, 0) == 0)
-      {
-        matches.push_back(object);
-      }
-    }
-
-    return matches;
-  }
-
-  json scriptField(const json& object, const std::string& className, const std::string& field)
-  {
-    for (const auto& script : object.at("scripts"))
-    {
-      if (script.at("className") != className)
-      {
-        continue;
-      }
-
-      for (const auto& entry : script.at("fields"))
-      {
-        if (entry.at("name") == field)
-        {
-          return entry.at("value");
-        }
-      }
-    }
-
-    ADD_FAILURE() << object.at("name") << " has no " << className << "." << field;
-    return json();
-  }
-
-  std::map<std::string, json> prefabsByUuid()
-  {
-    std::map<std::string, json> prefabs;
-    for (const auto& prefab : project().at("assets").at("prefabs"))
-    {
-      prefabs[prefab.at("uuid").get<std::string>()] = prefab;
-    }
-
-    return prefabs;
-  }
-
   glm::vec3 vertexAt(const std::vector<float>& flat, const int index)
   {
     return { flat[index * 3], flat[index * 3 + 1], flat[index * 3 + 2] };
@@ -414,4 +342,62 @@ TEST(PhysicsPlaygroundSample, HubHoldsPlayerZeroAndTheSceneScript)
   ASSERT_EQ(player.size(), 1u);
   EXPECT_EQ(componentOf(*player.front(), "PlayerController").at("playerSlot"), 0);
   EXPECT_EQ(vec3Of(componentOf(*player.front(), "Camera").at("direction")), glm::vec3(0, 0, -1));
+}
+
+namespace
+{
+  const json* dominoNumbered(const int number)
+  {
+    for (const auto* object : dominoes())
+    {
+      if (object->at("name") == "Domino " + std::to_string(number))
+      {
+        return object;
+      }
+    }
+
+    return nullptr;
+  }
+
+  float planDistance(const json& a, const json& b)
+  {
+    const auto delta = positionOfJson(a) - positionOfJson(b);
+    return std::hypot(delta.x, delta.z);
+  }
+}
+
+TEST(PhysicsPlaygroundSample, ConsecutiveDominoesAreTwelveTenthsApart)
+{
+  for (int number = 2; number < 30; ++number)
+  {
+    const auto* current = dominoNumbered(number);
+    const auto* next = dominoNumbered(number + 1);
+    ASSERT_NE(current, nullptr);
+    ASSERT_NE(next, nullptr);
+    EXPECT_NEAR(planDistance(*current, *next), 1.2f, 1e-3f) << number;
+  }
+
+  // The first leans about its front edge, so its center sits a little ahead of its slot.
+  EXPECT_NEAR(planDistance(*dominoNumbered(1), *dominoNumbered(2)), 1.2f - 0.264f, 1e-2f);
+}
+
+TEST(PhysicsPlaygroundSample, TheLastDominoStandsOnTheLedgeWithTheSphereAhead)
+{
+  const auto& ledge = only("Domino Ledge");
+  const float ledgeTop = positionOfJson(ledge).y + scaleOfJson(ledge).y;
+  const auto* last = dominoNumbered(30);
+  ASSERT_NE(last, nullptr);
+
+  EXPECT_NEAR(ledgeTop, 0.85f, 1e-5f);
+  EXPECT_NEAR(positionOfJson(*last).y, ledgeTop + 1.0f, 1e-4f);
+  EXPECT_LT(planDistance(*last, ledge), scaleOfJson(ledge).x);
+
+  // The sphere rests on the same ledge, ahead of the domino and no further than the ledge end.
+  const auto& sphere = only("Domino Sphere");
+  EXPECT_NEAR(positionOfJson(sphere).y, ledgeTop + 0.5f, 1e-4f);
+  EXPECT_GT(planDistance(sphere, *last), 0.8f);
+  EXPECT_LT(planDistance(sphere, ledge), scaleOfJson(ledge).x);
+
+  // Positive control: an upright domino on the ground is lower by the ledge height.
+  EXPECT_NEAR(positionOfJson(*dominoNumbered(29)).y, 1.05f, 1e-4f);
 }
