@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ECS3DLauncher.Services;
@@ -11,6 +12,7 @@ internal sealed class FakeFileSystem : IFileSystem
 {
   private readonly HashSet<string> _files;
   private readonly Dictionary<string, string> _text = [];
+  private readonly HashSet<string> _directories = [];
 
   public FakeFileSystem(params string[] files)
   {
@@ -27,7 +29,12 @@ internal sealed class FakeFileSystem : IFileSystem
 
   public bool FileExists(string path) => _files.Contains(path) || _text.ContainsKey(path);
 
-  public bool DirectoryExists(string path) => false;
+  public bool DirectoryExists(string path) => _directories.Contains(path);
+
+  public IReadOnlyList<string> EnumerateDirectories(string path) =>
+    _directories.Where(directory => Path.GetDirectoryName(directory) == path).Order(StringComparer.Ordinal).ToList();
+
+  public void AddDirectory(string path) => _directories.Add(path);
 
   public string ReadAllText(string path)
   {

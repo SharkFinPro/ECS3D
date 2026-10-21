@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace ECS3DLauncher.Services;
@@ -11,6 +13,11 @@ public sealed class PhysicalFileSystem : IFileSystem
     public bool FileExists(string path) => File.Exists(path);
 
     public bool DirectoryExists(string path) => Directory.Exists(path);
+
+    public IReadOnlyList<string> EnumerateDirectories(string path) =>
+        Directory.Exists(path)
+            ? Directory.GetDirectories(path).OrderBy(directory => directory, StringComparer.Ordinal).ToArray()
+            : [];
 
     public string ReadAllText(string path) => File.ReadAllText(path, Utf8NoBom);
 
