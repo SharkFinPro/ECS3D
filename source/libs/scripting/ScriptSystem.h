@@ -63,7 +63,7 @@ public:
   void warmUp();
 
   // The class names the runtime's last successful compile produced; empty before the runtime exists.
-  [[nodiscard]] std::vector<std::string> scriptClassNames() const;
+  [[nodiscard]] std::vector<ScriptClassInfo> scriptClassNames() const;
 
   // Attach + start every Script's managed instance, pushing each Script's saved field blob into it.
   void start(ObjectManager& objectManager);

@@ -13,7 +13,7 @@ uuids::uuid scriptClassUuid(const std::string& className)
   return uuids::uuid_name_generator(scriptClassNamespace)(className);
 }
 
-size_t registerScriptClassAssets(AssetRegistry& registry, const std::vector<std::string>& classNames)
+size_t registerScriptClassAssets(AssetRegistry& registry, const std::vector<ScriptClassInfo>& classes)
 {
   std::unordered_set<std::string> known;
   for (const auto& [uuid, record] : registry.getAssets())
@@ -25,7 +25,7 @@ size_t registerScriptClassAssets(AssetRegistry& registry, const std::vector<std:
   }
 
   size_t added = 0;
-  for (const auto& className : classNames)
+  for (const auto& [className, sceneScript] : classes)
   {
     if (className.empty() || !known.insert(className).second)
     {
@@ -38,7 +38,8 @@ size_t registerScriptClassAssets(AssetRegistry& registry, const std::vector<std:
       continue;
     }
 
-    registry.registerAsset({ .uuid = uuid, .type = AssetType::Script, .className = className });
+    registry.registerAsset({ .uuid = uuid, .type = AssetType::Script, .className = className,
+                             .body = sceneScript ? sceneScriptKind : objectScriptKind });
     ++added;
   }
 

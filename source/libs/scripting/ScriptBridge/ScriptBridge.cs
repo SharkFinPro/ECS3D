@@ -387,13 +387,16 @@ public static class Bridge
     internal static IReadOnlyList<string> LoadedScriptTypeNames =>
         _ctx?.ScriptTypes.Select(t => t.Name).ToList() ?? new List<string>();
 
-    // The loaded script class names, sorted and joined with newlines, for the editor's script asset list. Caller
+    // The loaded script class names, sorted and joined with newlines, for the server's script asset records. Caller
     // frees the result with freeString.
     [UnmanagedCallersOnly]
     public static IntPtr getScriptClassNames() => Marshal.StringToCoTaskMemUTF8(JoinedScriptClassNames());
 
+    // One "Name<tab>kind" line per class, kind being "scene" for a SceneScript and "object" otherwise.
     internal static string JoinedScriptClassNames() =>
-        string.Join('\n', LoadedScriptTypeNames.OrderBy(name => name, StringComparer.Ordinal));
+        string.Join('\n', (_ctx?.ScriptTypes ?? Array.Empty<Type>())
+            .OrderBy(type => type.Name, StringComparer.Ordinal)
+            .Select(type => $"{type.Name}\t{(type.IsSubclassOf(typeof(SceneScript)) ? "scene" : "object")}"));
 
     // Returns the static state to what a fresh process has, so tests do not leak into each other.
     internal static void ResetForTests()

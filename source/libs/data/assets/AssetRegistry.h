@@ -26,7 +26,8 @@ struct AssetRecord {
   AssetType type = AssetType::Unknown;
   std::string path;        // scenes and prefabs store their display name here instead
   std::string className;   // scripts only
-  std::string body;        // prefabs only: a serialized Object blob (Object::serialize().dump())
+  std::string body;        // prefabs: a serialized Object blob (Object::serialize().dump()); compiled scripts:
+                           // their kind (see ScriptClassAssets.h)
   std::string displayName; // optional rename override: when non-empty it replaces the derived display
                            // name (see assetDisplay::name). The file on disk and `path` (the registry
                            // key) never change - a rename is display-only.

@@ -41,6 +41,28 @@ void AssetRegistry::registerAsset(const AssetRecord& record)
     return;
   }
 
+  // One Script record per class: a file-backed registration that arrives after a compiled-class record
+  // (or the reverse) fills in the missing path instead of adding a second record.
+  if (record.type == AssetType::Script && !record.className.empty())
+  {
+    for (auto& [uuid, existing] : m_assets)
+    {
+      if (existing.type != AssetType::Script || existing.className != record.className)
+      {
+        continue;
+      }
+
+      if (existing.path.empty() && !record.path.empty())
+      {
+        existing.path = record.path;
+        m_loadedPaths.emplace(record.path, uuid);
+        ++m_version;
+      }
+
+      return;
+    }
+  }
+
   m_assets.emplace(record.uuid, record);
 
   if (!record.path.empty())
@@ -286,7 +308,7 @@ void AssetRegistry::pack(net::Message& message) const
     message.writeString(uuids::to_string(record->uuid));
     message.writeString(record->path);
     message.writeString(record->className);   // empty for non-scripts
-    message.writeString(record->body);        // empty for non-prefabs
+    message.writeString(record->body);        // empty unless a prefab or a compiled script
     message.writeString(record->displayName); // empty unless renamed (append-only wire field)
   }
 }

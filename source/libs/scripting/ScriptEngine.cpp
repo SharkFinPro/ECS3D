@@ -258,7 +258,7 @@ void ScriptEngine::onSceneEvent(const char* sceneUuid,
   }
 }
 
-std::vector<std::string> ScriptEngine::scriptClassNames() const
+std::vector<ScriptClassInfo> ScriptEngine::scriptClassNames() const
 {
   if (!m_getScriptClassNames)
   {
@@ -277,13 +277,14 @@ std::vector<std::string> ScriptEngine::scriptClassNames() const
     m_freeString(raw);
   }
 
-  std::vector<std::string> names;
+  std::vector<ScriptClassInfo> names;
   std::istringstream stream(joined);
-  for (std::string name; std::getline(stream, name, '\n');)
+  for (std::string line; std::getline(stream, line, '\n');)
   {
-    if (!name.empty())
+    const auto tab = line.find('\t');
+    if (tab != 0 && !line.empty())
     {
-      names.push_back(std::move(name));
+      names.push_back({ line.substr(0, tab), tab != std::string::npos && line.substr(tab + 1) == "scene" });
     }
   }
 

@@ -1,6 +1,7 @@
 #ifndef SCRIPTRUNTIME_H
 #define SCRIPTRUNTIME_H
 
+#include <assets/ScriptClassAssets.h>
 #include <string>
 #include <vector>
 
@@ -20,7 +21,7 @@ public:
   [[nodiscard]] virtual bool reloadScripts() const = 0;
 
   // The names of the script classes the last successful compile produced, object and scene scripts alike.
-  [[nodiscard]] virtual std::vector<std::string> scriptClassNames() const = 0;
+  [[nodiscard]] virtual std::vector<ScriptClassInfo> scriptClassNames() const = 0;
 
   // True when a managed instance now exists under the pair; false when the class is missing or its
   // constructor threw.

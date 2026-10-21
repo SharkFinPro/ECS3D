@@ -518,6 +518,19 @@ std::optional<EditCommand> commandForAddAsset(const nlohmann::json& asset, const
                                      path, className, body);
   }
 
+  // A Script op for a class that already has a record merges into it (registerAsset), creating nothing under
+  // the incoming uuid, so there is no faithful command to record.
+  if (type == AssetType::Script && !className.empty())
+  {
+    for (const auto& [uuid, record] : view.getAssets())
+    {
+      if (record.type == AssetType::Script && record.className == className)
+      {
+        return std::nullopt;
+      }
+    }
+  }
+
   return EditCommand::addAsset(assetUUID.value(), type, path, className, body);
 }
 

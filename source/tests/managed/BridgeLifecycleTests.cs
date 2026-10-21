@@ -186,15 +186,16 @@ public class BridgeLifecycleTests : IDisposable
   }
 
   [Fact]
-  public void JoinedScriptClassNames_ListsEveryLoadedClassSortedOnePerLine()
+  public void JoinedScriptClassNames_ListsEveryLoadedClassSortedWithItsKind()
   {
     Assert.Equal("", Bridge.JoinedScriptClassNames());
 
     WriteScript("b.cs", ScriptSource("Zeta"));
     WriteScript("a.cs", ScriptSource("Alpha"));
+    WriteScript("m.cs", "using ScriptBridge;\npublic class Middle : SceneScript { }\n");
     Bridge.Initialize(_dir);
 
-    Assert.Equal("Alpha\nZeta", Bridge.JoinedScriptClassNames());
+    Assert.Equal("Alpha\tobject\nMiddle\tscene\nZeta\tobject", Bridge.JoinedScriptClassNames());
   }
 
   [Fact]

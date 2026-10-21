@@ -6,6 +6,7 @@
 #include <Log.h>
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
+#include <assets/ScriptClassAssets.h>
 #include <objects/ComponentFieldDelta.h>
 #include <objects/Object.h>
 #include <objects/components/Component.h>
@@ -629,7 +630,7 @@ void ObjectInspector::displayScriptDragDropArea(const float dropZoneStartY,
         {
           if (const auto* record = m_assetRegistry->getByUUID(parsed.value()))
           {
-            if (!record->className.empty() && m_sceneEditCallback)
+            if (usableOnObject(*record) && !record->className.empty() && m_sceneEditCallback)
             {
               m_sceneEditCallback(replication::buildAddScript(object->getUUID(), record->className));
             }

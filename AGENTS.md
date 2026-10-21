@@ -493,8 +493,11 @@ every other type, and the Inspector draws a string field as a text box.
 Every compiled script class gets a Script asset record, so the Script slot lists starters and the project's own
 scripts whether or not the project file lists them. `ServerApp::broadcastSnapshot` registers a record for each class
 (`ScriptRuntime::scriptClassNames`, `registerScriptClassAssets`) that has none, with a uuid derived from the class
-name and no source path. Such a record is saved like any other, which is harmless since a load skips a class that
-already has one. Deleting one lasts only until the next snapshot while the class still compiles.
+name and no source path. Its body holds the class kind, "scene" or "object", so the object Script slot and the
+Scene Scripts panel each skip the other's classes; a record from a project file has no kind and fits both.
+Such a record is saved like any other, which is harmless since a load skips a class that already has one.
+A later Script record naming the same class, such as the new-script action's, merges into it and fills in the
+path. The Assets inspector offers no Delete for a pathless Script record, since the next snapshot would restore it.
 A hot reload compiles before swapping (`reloadScripts` reports whether it did), so a compile error leaves the previous scripts running and `ScriptSystem` keeps its attachments; a missing or empty script directory still unloads them.
 A project's own scripts, `<project root>/scripts/**/*.cs`, compile together with the built-in
 `scripts/UserScripts` into one script assembly, at startup and on every hot reload.
