@@ -86,8 +86,12 @@ TEST(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedOff
 
   tick(objectManager, 600);
 
-  EXPECT_GT(tiltDegrees(first), 45.0f);
-  EXPECT_GT(tiltDegrees(last), 45.0f);
+  for (int index = 1; index <= 30; ++index)
+  {
+    const auto domino = objectNamedExactly(objectManager, "Domino " + std::to_string(index));
+    ASSERT_NE(domino, nullptr);
+    EXPECT_GT(tiltDegrees(domino), 45.0f) << "Domino " << index << " is still standing";
+  }
   EXPECT_GT(planeTravel(sphere, sphereStart), 1.0f);
 }
 
