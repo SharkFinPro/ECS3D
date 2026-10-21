@@ -89,6 +89,11 @@ public:
 
   void attachAll(SceneAsset& scene);
 
+  // Hot reload for a scene that is not ticking: the same throttled check fixedUpdate makes. When a reload
+  // replaced the scripts, attaches the scene's scripts (without starting them) and refreshes their field
+  // blobs, so a newly compiled class exposes its fields. Returns true then, so the caller can re-snapshot.
+  [[nodiscard]] bool pollScriptChanges(SceneAsset& scene, float dt);
+
   // Also refreshes each scene script's blob, skipping a missing or faulted instance so saved values stay.
   void syncFieldsToData(const SceneAsset& scene) const;
 
@@ -191,7 +196,8 @@ private:
 
   // syncFields refreshes the data blobs of whatever the caller drives, right before a reload discards the
   // live instances.
-  void checkForScriptChanges(const std::function<void()>& syncFields, float dt);
+  // Returns true when a reload replaced the scripts.
+  bool checkForScriptChanges(const std::function<void()>& syncFields, float dt);
 
   // The per-object passes shared by the ObjectManager and SceneAsset entry points.
   void startObjects(ObjectManager& objectManager);

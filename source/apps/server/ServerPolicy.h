@@ -2,6 +2,7 @@
 #define SERVERPOLICY_H
 
 #include <Protocol.h>
+#include <scenes/SceneManager.h>
 #include <string>
 
 // ServerApp cannot be built into the headless test suite (its constructor boots the CLR), so the pure
@@ -20,6 +21,14 @@
 [[nodiscard]] constexpr bool forwardsLogToEditors(const bool editMode) noexcept
 {
   return editMode;
+}
+
+// Hot reload is polled only where fixedUpdate never runs: an edit-mode server whose scene is stopped. A play
+// server auto-starts, and a paused scene keeps its started instances.
+[[nodiscard]] constexpr bool shouldPollScriptsWhileStopped(const bool editMode, const bool hasScene,
+                                                           const SceneStatus status) noexcept
+{
+  return editMode && hasScene && status == SceneStatus::stopped;
 }
 
 // What a scene-control op does. The order the steps run in lives in ServerApp::applySceneControl.
