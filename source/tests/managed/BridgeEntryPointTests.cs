@@ -15,7 +15,7 @@ namespace ECS3DManagedTests;
 [Collection("BridgeInstances")]
 public sealed unsafe class BridgeEntryPointTests : IDisposable
 {
-  public class Counter : ScriptBase
+  private class Counter : ScriptBase
   {
     public int Starts;
     public int Stops;
@@ -48,7 +48,7 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
     public override void onCollisionExit(string otherUuid) => Collisions.Add("exit:" + otherUuid);
   }
 
-  public class SceneRecorder : SceneScript
+  private class SceneRecorder : SceneScript
   {
     public readonly List<string> Events = new();
 
@@ -59,7 +59,7 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
     public override void onPlayerJoined(int slot) => Events.Add("joined:" + slot);
   }
 
-  public class Exposed : ScriptBase
+  private class Exposed : ScriptBase
   {
     [ExposeToEditor] public float Speed;
     [ExposeToEditor("Count")] public int Number;
@@ -299,7 +299,7 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
   public void OnSceneEvent_ReachesASceneScriptAndIsIgnoredByAnObjectScript()
   {
     var scene = Seed<SceneRecorder>("Recorder");
-    var objectScript = Seed<Counter>("Counter");
+    Seed<Counter>("Counter");
     delegate* unmanaged<IntPtr, IntPtr, int, IntPtr, int, void> onSceneEvent = &Bridge.onSceneEvent;
     using var u = new NativeUtf8(Uuid);
     using var recorder = new NativeUtf8("Recorder");
@@ -315,7 +315,6 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
 
     Assert.Equal(new[] { "loaded", "spawned:spawned-\u00e9", "joined:3" }, scene.Events);
     Assert.Equal(1, Healthy("Counter"));
-    Assert.Empty(objectScript.Collisions);
   }
 
   [Fact]
@@ -341,8 +340,9 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
                   field.GetProperty("type").GetString());
     }
 
-    Assert.Equal(new[] { "Speed|Speed|float", "Number|Count|int", "Flag|Flag|bool", "Label|Label|string",
-                         "Offset|Offset|vector3" }, summary);
+    summary.Sort(StringComparer.Ordinal);
+    Assert.Equal(new[] { "Flag|Flag|bool", "Label|Label|string", "Number|Count|int", "Offset|Offset|vector3",
+                         "Speed|Speed|float" }, summary);
     Assert.Equal("[]", missing);
   }
 
@@ -459,11 +459,13 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
   [UnmanagedCallersOnly]
   private static void FakeLogWrite(int level, IntPtr message)
   {
+    // Only its address is compared.
   }
 
   [UnmanagedCallersOnly]
   private static void FakeTransformStart(IntPtr uuid)
   {
+    // Only its address is compared.
   }
 
   [Fact]

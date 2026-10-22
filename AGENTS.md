@@ -172,9 +172,9 @@
   It also links `source/templates/coin-rush/scripts`, so the sample's `ScorePillar` is tested through
   `FakeNatives` too.
   `BridgeEntryPointTests` calls `ScriptBridge`'s `[UnmanagedCallersOnly]` entry points through function
-  pointers taken with `&`, with UTF-8 arguments marshalled as native code does, as `TransportExportsTests`
-  does for `Transport`'s exports. Logic behind an entry point that no function pointer reaches is
-  tested as pure code over plain objects or through a fake binding table. Private product logic is exposed to this
+  pointers taken with `&`, with string arguments marshalled as native code does, as `TransportExportsTests`
+  does for `Transport`'s exports. Logic outside the entry points is tested as pure code over plain objects
+  or through a fake binding table. Private product logic is exposed to this
   project through `internal` + `InternalsVisibleTo` (declared in `source/libs/net/Transport/AssemblyInfo.cs` and
   `source/libs/scripting/ScriptBridge/AssemblyInfo.cs`), not reflection. Its `Directory.Build.props` redirects `obj`/`bin`
   under `$(BuildRoot)obj/tests/` and `$(BuildRoot)bin/tests/` — one level deeper than `Transport`'s own
