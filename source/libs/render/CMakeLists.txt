@@ -15,6 +15,8 @@ add_library(${PROJECT_NAME}
   InputCapture.h
   OutlineColors.h
   SharedAssetLoads.h
+  ThumbnailImage.cpp
+  ThumbnailImage.h
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
