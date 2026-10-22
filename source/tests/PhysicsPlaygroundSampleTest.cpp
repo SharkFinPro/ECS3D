@@ -11,6 +11,7 @@
 #include "templates/TemplateManifest.h"
 
 #include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -381,23 +382,33 @@ TEST(PhysicsPlaygroundSample, ConsecutiveDominoesAreTwelveTenthsApart)
   EXPECT_NEAR(planDistance(*dominoNumbered(1), *dominoNumbered(2)), 1.2f - 0.264f, 1e-2f);
 }
 
-TEST(PhysicsPlaygroundSample, TheLastDominoStandsOnTheLedgeWithTheSphereAhead)
+TEST(PhysicsPlaygroundSample, TheLastDominoStandsOnThePadBehindALedgeThatHoldsTheSphere)
 {
   const auto& ledge = only("Domino Ledge");
+  const auto& sphere = only("Domino Sphere");
   const float ledgeTop = positionOfJson(ledge).y + scaleOfJson(ledge).y;
   const auto* last = dominoNumbered(30);
+  const auto* previous = dominoNumbered(29);
   ASSERT_NE(last, nullptr);
+  ASSERT_NE(previous, nullptr);
 
+  // Positive control: the one before it stands on the pad, and the last stands at the same height.
+  EXPECT_NEAR(positionOfJson(*previous).y, 1.05f, 1e-4f);
+  EXPECT_NEAR(positionOfJson(*last).y, 1.05f, 1e-4f);
   EXPECT_NEAR(ledgeTop, 0.85f, 1e-5f);
-  EXPECT_NEAR(positionOfJson(*last).y, ledgeTop + 1.0f, 1e-4f);
-  EXPECT_LT(planDistance(*last, ledge), scaleOfJson(ledge).x);
 
-  // The sphere rests on the same ledge, ahead of the domino and no further than the ledge end.
-  const auto& sphere = only("Domino Sphere");
+  // Distances along the run, which the dominoes' yaw turns away from the world x axis.
+  const float yaw = glm::radians(vec3Of(componentOf(*last, "Transform").at("rotation")).y);
+  const glm::vec3 run{ std::cos(yaw), 0.0f, -std::sin(yaw) };
+  const auto alongRun = [&](const json& object) { return glm::dot(positionOfJson(object) - positionOfJson(*last), run); };
+
+  const float frontFace = scaleOfJson(*last).x;
+  const float ledgeNearEdge = alongRun(ledge) - scaleOfJson(ledge).x;
+  EXPECT_GT(ledgeNearEdge, frontFace);
+
+  // The sphere rests on the ledge, over its near half, ahead of the domino.
   EXPECT_NEAR(positionOfJson(sphere).y, ledgeTop + 0.5f, 1e-4f);
-  EXPECT_GT(planDistance(sphere, *last), 0.8f);
-  EXPECT_LT(planDistance(sphere, ledge), scaleOfJson(ledge).x);
-
-  // Positive control: an upright domino on the ground is lower by the ledge height.
-  EXPECT_NEAR(positionOfJson(*dominoNumbered(29)).y, 1.05f, 1e-4f);
+  EXPECT_GT(alongRun(sphere), alongRun(ledge) - scaleOfJson(ledge).x);
+  EXPECT_LT(alongRun(sphere), alongRun(ledge));
+  EXPECT_GT(alongRun(sphere) - 0.5f, frontFace);
 }

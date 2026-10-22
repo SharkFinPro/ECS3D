@@ -92,9 +92,7 @@ TEST(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsTowardTheSecond)
   EXPECT_GT(glm::dot(glm::vec2(moved.x, moved.z), towardSecond), 0.3f);
 }
 
-// Disabled: a resting box tips over its edge when pushed high, but at this suite's 0.1 tick each domino
-// hands on too little of its fall for thirty to topple in turn. A model of the same chain stops after about three.
-TEST(PhysicsPlaygroundSamplePhysics, DISABLED_TheDominoChainFallsAndTheSphereIsKnockedOffTheLedge)
+TEST(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedOffTheLedge)
 {
   LoadedTemplate loaded(sampleFolder);
   ASSERT_TRUE(loaded.loaded);
