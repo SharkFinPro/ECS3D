@@ -43,6 +43,8 @@ public sealed class UserDataDirectory
 
     public string SettingsFile() => Path.Combine(Resolve(), "launcher-settings.json");
 
+    public string RecentProjectsFile() => Path.Combine(Resolve(), "recent-projects.json");
+
     // An empty variable is as useless as an unset one.
     private string? Under(string variable, params string[] subfolders)
     {
