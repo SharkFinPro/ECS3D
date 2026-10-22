@@ -70,7 +70,8 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   give bindings an `x:DataType` so they compile. `Nullable` is enabled.
 - **Services stay free of Avalonia and CommunityToolkit references.** `ECS3DManagedTests` compiles
   `source/Services/**` in by link, so they must build without the UI packages; a type that needs them
-  belongs in `Tabs` or `Shared`. Anything that touches the filesystem, processes or the environment goes
+  belongs in `Tabs` or `Shared`. The test project also compiles the view models and models in, over Avalonia
+  and CommunityToolkit.Mvvm; Services still avoid those packages so they remain plain logic. Anything that touches the filesystem, processes or the environment goes
   behind an interface or an injected function.
 - **Navigation is centralized.** `MainWindowViewModel.ActiveNav` (a string key) selects `CurrentTab`; the
   window's `ContentControl` maps the active view model to its view by type. Tabs never navigate directly —

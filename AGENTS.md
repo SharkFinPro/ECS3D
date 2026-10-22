@@ -143,7 +143,7 @@
 - **Managed tests** (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered
   as a single CTest test through `add_test` in `tests/CMakeLists.txt` (guarded on `DOTNET_EXE`) rather
   than a native executable. The launcher's `source/Services` (plain C#, no Avalonia) are compiled into it by
-  link. It covers pure, testable logic via `ProjectReference`s to
+  link. Its view models and models are too, over the Avalonia and CommunityToolkit.Mvvm packages. It covers pure, testable logic via `ProjectReference`s to
   `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
   (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
   `getField*`/`setField*` — `Bridge.BuildExposedFieldsJson`/`FindExposedField`/`ReadExposedField`/
@@ -194,7 +194,7 @@
   `.cs` file under `source/tests/managed/` (globbed automatically, unlike the native suite's explicit
   source list) and running it through `check`, the same way as every other test here. On a machine with
   a cold NuGet cache, that first `check` run restores `xunit`, `xunit.runner.visualstudio`, the
-  test-SDK package, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (the first three are listed in
+  test-SDK package, `Avalonia`, `CommunityToolkit.Mvvm`, and (via `ScriptBridge`) `Microsoft.CodeAnalysis.CSharp` (the first five are listed in
   `ECS3DManagedTests.csproj`), which needs network access.
 - **Dependency direction (must hold unless a deliberate change updates this section):** `log` → nothing. `protocol` → nothing. `settings` → log (+ json). `data` →
   protocol + log (+ json/glm/uuid).
