@@ -124,7 +124,7 @@
   `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is
   `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and
   json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
-  carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h`, `KeyHoldRepeat.h`, `ProjectLoadTracker.h`, `RecentProjectRecording.h` and `ScriptFieldAsset.h`, `ScriptFieldLabel.h` are reached
+  carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h`, `KeyHoldRepeat.h`, `ProjectLoadTracker.h`, `RecentProjectRecording.h`, `ScriptFieldAsset.h` and `ScriptFieldLabel.h` are reached
   through the `libs/editor` include path alone. The header-only `apps/server/ServerPolicy.h`
   (mutation authorization, scene-control plans, token generation check) is covered the same way, by including it, and the
   header-only `libs/net/EditToken.h` is reached through the `libs/net` include path. `PresetsTest` reads `CMakePresets.json` from the repo root via the `ECS3D_SOURCE_DIR` compile definition. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
