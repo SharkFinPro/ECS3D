@@ -24,7 +24,9 @@ internal sealed class LauncherRig
 {
   public static readonly string LauncherDir = Path.GetFullPath(Path.Combine("vm-launcher", "dir"));
   public static readonly string OtherDir = Path.GetFullPath(Path.Combine("vm-other", "bin"));
-  public static readonly string DefaultProjects = Path.Combine("/docs", "ECS3D Projects");
+  private const string Documents = "/docs";
+
+  public static readonly string DefaultProjects = Path.Combine(Documents, "ECS3D Projects");
 
   public FakeFileSystem Files { get; } = new();
 
@@ -42,7 +44,7 @@ internal sealed class LauncherRig
 
   public SettingsEditor NewEditor()
   {
-    var store = new LauncherSettingsStore(Files, Log, ShellFixtures.UserData, () => "/docs");
+    var store = new LauncherSettingsStore(Files, Log, ShellFixtures.UserData, () => Documents);
     return new SettingsEditor(store, new EngineLocator(Files, HostOs.Linux, LauncherDir));
   }
 

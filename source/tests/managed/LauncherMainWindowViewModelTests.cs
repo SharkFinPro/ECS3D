@@ -44,6 +44,7 @@ public class LauncherMainWindowViewModelTests
 
     Assert.Same(model.Projects, model.CurrentTab);
     Assert.Equal("projects", model.ActiveNav);
+    Assert.True(model.Projects.IsGridView);
     Assert.Equal(new[] { "projects" }, ActiveKeys(model));
     Assert.Equal(header.Title, model.ViewTitle);
     Assert.Equal(header.Subtitle, model.ViewSubtitle);
@@ -142,12 +143,6 @@ public class LauncherMainWindowViewModelTests
   }
 
   [Fact]
-  public void TheProjectsViewDefaultsToTheGrid()
-  {
-    Assert.True(NewMain().Projects.IsGridView);
-  }
-
-  [Fact]
   public void FixingTheEngineFolderClearsTheBannerAndEnablesExplore()
   {
     _rig.AddEngine(LauncherRig.OtherDir);
@@ -171,7 +166,7 @@ public class LauncherMainWindowViewModelTests
   }
 
   [Fact]
-  public void AMissingClientKeepsTheBannerButNotTheEditorActions()
+  public void AMissingClientKeepsTheBannerWhileExploreAndOpenStayEnabled()
   {
     _rig.AddEngine(LauncherRig.LauncherDir, EngineExecutable.Client);
 

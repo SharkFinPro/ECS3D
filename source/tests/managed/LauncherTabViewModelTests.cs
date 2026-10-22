@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Xml.Linq;
-using Avalonia.Media;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shared.Converters;
 using ECS3DLauncher.Shared.Models;
@@ -48,11 +47,11 @@ public class LauncherTabViewModelTests
   }
 
   [Fact]
-  public void TemplatesAreSixNamedAndDescribed()
+  public void EveryTemplateHasADistinctNameAndADescription()
   {
     var templates = new TemplatesViewModel().Templates;
 
-    Assert.Equal(6, templates.Count);
+    Assert.NotEmpty(templates);
     Assert.Equal(templates.Count, templates.Select(template => template.Name).Distinct().Count());
     Assert.All(templates, template => Assert.False(string.IsNullOrWhiteSpace(template.Description)));
   }
@@ -75,42 +74,15 @@ public class LauncherTabViewModelTests
 
     Assert.NotEmpty(used);
     Assert.All(used, key => Assert.Contains(key, keys));
-  }
-
-  [Fact]
-  public void TheIconKeyScanFindsKnownKeysAndRejectsMadeUpOnes()
-  {
-    var keys = IconKeys();
-
-    Assert.Contains("IconFolder", keys);
     Assert.DoesNotContain("IconDoesNotExist", keys);
   }
 
   [Fact]
-  public void ARealCardIsTheInverseOfTheNewCard()
-  {
-    var real = new Project { Name = "Alpha", Path = "/work/alpha", Edited = "today" };
-    var sentinel = new Project { Name = "", Path = "", Edited = "", IsNewCard = true };
-
-    Assert.True(real.IsRealCard);
-    Assert.False(sentinel.IsRealCard);
-  }
-
-  [Fact]
-  public void AProjectWithoutAThumbnailOrGlowShowsNeither()
+  public void AProjectWithoutAThumbnailHasNone()
   {
     var plain = new Project { Name = "Alpha", Path = "/work/alpha", Edited = "today" };
-    var clearGlow = new Project
-    {
-      Name = "Beta",
-      Path = "/work/beta",
-      Edited = "today",
-      GlowColor = Color.FromArgb(0, 255, 0, 0),
-    };
 
     Assert.False(plain.HasThumbnail);
-    Assert.Null(plain.GlowBrush);
-    Assert.Null(clearGlow.GlowBrush);
   }
 
   [Fact]

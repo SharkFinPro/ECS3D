@@ -68,11 +68,12 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - **MVVM, strictly.** Views are XAML; state and commands live in view models (`ObservableObject` +
   hand-written `SetProperty` properties and `RelayCommand` fields built in the constructor - no source generators, so no `partial` classes). `AvaloniaUseCompiledBindingsByDefault` is on —
   give bindings an `x:DataType` so they compile. `Nullable` is enabled.
-- **Services stay free of Avalonia and CommunityToolkit references.** `ECS3DManagedTests` compiles
-  `source/Services/**` in by link, so they must build without the UI packages; a type that needs them
-  belongs in `Tabs` or `Shared`. The test project also compiles the view models and models in, over Avalonia
-  and CommunityToolkit.Mvvm; Services still avoid those packages so they remain plain logic. Anything that touches the filesystem, processes or the environment goes
-  behind an interface or an injected function.
+- **Services stay free of Avalonia and CommunityToolkit references.** This is a convention, so they remain
+  plain, testable logic; a type that needs those packages belongs in `Tabs` or `Shared`. `ECS3DManagedTests`
+  links `source/Services/**`, the view models (`Shell/MainWindowViewModel.cs`, `Shell/NavItemViewModel.cs`,
+  `Tabs/**/*ViewModel.cs`), `Shared/Models` and `Shared/Converters`. A new shell view model, or one not named
+  `*ViewModel.cs`, must be added to that link list. Anything that touches the filesystem, processes or the
+  environment goes behind an interface or an injected function.
 - **Navigation is centralized.** `MainWindowViewModel.ActiveNav` (a string key) selects `CurrentTab`; the
   window's `ContentControl` maps the active view model to its view by type. Tabs never navigate directly —
   they call back into the shell (see `ProjectsViewModel`'s `openTemplates`).
@@ -101,7 +102,8 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   or to extend the mock UI.
 - Keep the MVVM split clean: no app logic in code-behind, no view construction in view models.
 - Add UI dependencies via `PackageReference` in `ECS3DLauncher.csproj`; keep Debug-only tooling under the
-  `Configuration == Debug` item group so it never ships.
+  `Configuration == Debug` item group so it never ships. `ECS3DManagedTests.csproj` pins the same Avalonia and
+  CommunityToolkit.Mvvm versions, so bump both together.
 - Prefer extending existing tabs/resources over introducing parallel navigation or theming systems.
 - Update this document when the launcher's structure or conventions meaningfully change — especially once
   a real backend is wired in.
