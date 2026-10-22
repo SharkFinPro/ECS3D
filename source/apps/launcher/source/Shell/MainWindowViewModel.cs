@@ -18,13 +18,13 @@ namespace ECS3DLauncher.Shell;
 // Each tab owns its content via its own view model under source/Tabs/*.
 public class MainWindowViewModel : ObservableObject
 {
-    // Launch options come from the Settings tab once it exists.
-    private static readonly LaunchOptions DefaultLaunchOptions = new(false, false);
-
-    private readonly EngineLocation _engine;
-    private readonly EngineActions _actions;
-    private readonly LaunchCoordinator _coordinator;
+    private readonly SettingsEditor _settings;
+    private readonly IProcessRunner _runner;
+    private readonly EarlyExitWatcher _watcher;
     private readonly Action<Action> _post;
+    private EngineLocation _engine;
+    private EngineActions _actions;
+    private LaunchCoordinator _coordinator;
 
     public string Version { get; }
 
@@ -34,7 +34,7 @@ public class MainWindowViewModel : ObservableObject
     public TemplatesViewModel Templates { get; } = new();
     public SamplesViewModel Samples { get; } = new();
     public LearnViewModel Learn { get; } = new();
-    public SettingsViewModel Settings { get; } = new();
+    public SettingsViewModel Settings { get; }
 
     // Which library section is showing. CurrentTab is the active tab's view
     // model; the window's ContentControl maps it to a view by type.
@@ -92,8 +92,7 @@ public class MainWindowViewModel : ObservableObject
     }
 
     // The engine-not-found banner: null text means the engine is complete.
-    // Computed from the engine located at startup; the Settings task must re-locate and raise
-    // PropertyChanged for these when the engine folder changes.
+    // Re-located when the Settings tab changes the engine folder.
     public string? EngineBannerText => _engine.Describe();
     public bool HasEngineBanner => EngineBannerText is not null;
 
@@ -137,7 +136,7 @@ public class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
         : this(
-            new EngineLocator(new PhysicalFileSystem()).Locate(null),
+            NewSettings(),
             new SystemProcessRunner(),
             new EarlyExitWatcher(new UserDataDirectory()),
             AppVersion.Current(),
@@ -146,16 +145,19 @@ public class MainWindowViewModel : ObservableObject
     }
 
     public MainWindowViewModel(
-        EngineLocation engine,
+        SettingsEditor settings,
         IProcessRunner runner,
         EarlyExitWatcher watcher,
         string version,
         Action<Action> post)
     {
         _post = post;
-        _engine = engine;
-        _actions = new EngineActions(engine);
-        _coordinator = new LaunchCoordinator(new EngineLauncher(runner, engine), watcher, ShowNotice);
+        _settings = settings;
+        _runner = runner;
+        _watcher = watcher;
+        _engine = settings.Engine;
+        _actions = new EngineActions(_engine);
+        _coordinator = NewCoordinator(_engine);
         Version = VersionLabel.Format(version);
 
         SelectNavCommand = new RelayCommand<string?>(key => ActiveNav = key!);
@@ -183,8 +185,49 @@ public class MainWindowViewModel : ObservableObject
         ];
         Projects.Projects.CollectionChanged += (_, _) => NavItems[0].Count = ProjectCount();
 
+        Projects.IsGridView = settings.Current.ProjectsView != LauncherSettings.ListView;
+        Projects.ViewChosen = grid => ApplyUpdate(_settings.SetProjectsView(grid));
+        Settings = new SettingsViewModel(settings, ApplyUpdate, message => ApplyNotice(EarlyExitNotice.Failure(message)));
+
         CurrentTab = Projects;
         UpdateActiveFlags();
+    }
+
+    private static SettingsEditor NewSettings()
+    {
+        var fileSystem = new PhysicalFileSystem();
+        var userData = new UserDataDirectory();
+        var store = new LauncherSettingsStore(fileSystem, new FileLauncherLog(userData), userData);
+        return new SettingsEditor(store, new EngineLocator(fileSystem));
+    }
+
+    private LaunchCoordinator NewCoordinator(EngineLocation engine) =>
+        new(new EngineLauncher(_runner, engine), _watcher, ShowNotice);
+
+    // A failed save shows the toast; a moved engine folder replaces the located engine and what depends on it.
+    private void ApplyUpdate(SettingsUpdate update)
+    {
+        if (update.SaveFailed)
+        {
+            ApplyNotice(EarlyExitNotice.Failure($"Could not save the launcher settings to {_settings.FilePath}"));
+        }
+
+        if (update.Engine is { } engine)
+        {
+            ApplyEngine(engine);
+        }
+    }
+
+    private void ApplyEngine(EngineLocation engine)
+    {
+        _engine = engine;
+        _actions = new EngineActions(engine);
+        _coordinator = NewCoordinator(engine);
+        Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip);
+        ExploreCommand.NotifyCanExecuteChanged();
+        OpenProjectCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(EngineBannerText));
+        OnPropertyChanged(nameof(HasEngineBanner));
     }
 
     // ----- Derived view state: the header table, per tab -----
@@ -199,13 +242,13 @@ public class MainWindowViewModel : ObservableObject
     private string ProjectCount() => Projects.Projects.Count.ToString();
 
     // The task is dropped on purpose: failures and early exits arrive through ShowNotice.
-    private void Explore() => _ = _coordinator.ExploreEngineAsync(DefaultLaunchOptions);
+    private void Explore() => _ = _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions());
 
     private void OpenProject(Project? project)
     {
         if (project is { IsRealCard: true } && _actions.Open.Available)
         {
-            _ = _coordinator.OpenProjectAsync(project.Path, DefaultLaunchOptions);
+            _ = _coordinator.OpenProjectAsync(project.Path, _settings.Current.ToLaunchOptions());
         }
     }
 
