@@ -1,5 +1,14 @@
 #include "ScriptSystemTestFixtures.h"
 
+#include "ComponentRegistry.h"
+#include "scenes/SceneAsset.h"
+
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+
 namespace {
   using namespace scriptSystemFixtures;
 
@@ -272,5 +281,150 @@ namespace {
 
     EXPECT_EQ(state.created, 1);
     EXPECT_EQ(count(call("attach", a, "Mover")), 1);
+  }
+
+  const auto spawnSceneUUID = uuids::uuid::from_string("99999999-9999-9999-9999-999999999999").value();
+  constexpr std::size_t spawnsPerCallback = 64;
+
+  class ScriptSpawnDuringLifecycleTest : public ScriptSystemTest {
+  protected:
+    std::shared_ptr<SceneAsset> spawnScene =
+      std::make_shared<SceneAsset>(spawnSceneUUID, "Spawn", scene.componentRegistry);
+    std::vector<std::shared_ptr<Object>> scripted;
+    std::size_t sizeBefore = 0;
+    std::size_t callbacks = 0;
+    bool listGrewInside = false;
+
+    [[nodiscard]] ObjectManager& sceneObjects() const
+    {
+      return *spawnScene->getObjectManager();
+    }
+
+    void addScripted(const std::string& name, const std::string& className)
+    {
+      const auto object = std::make_shared<Object>(name);
+      sceneObjects().addObject(object);
+      addScript(object, className);
+      scripted.push_back(object);
+    }
+
+    void addScriptedObjects()
+    {
+      addScripted("A", "Mover");
+      addScripted("B", "Mover");
+      addScripted("C", "Mover");
+      sizeBefore = sceneObjects().getAllObjects().size();
+    }
+
+    [[nodiscard]] std::function<void(const std::string&, const std::string&)> spawner()
+    {
+      return [this](const std::string&, const std::string&)
+      {
+        ++callbacks;
+        for (std::size_t i = 0; i < spawnsPerCallback; ++i)
+        {
+          sceneObjects().addObject(std::make_shared<Object>("Spawned"));
+        }
+
+        if (sceneObjects().getAllObjects().size() != sizeBefore)
+        {
+          listGrewInside = true;
+        }
+      };
+    }
+
+    void expectDeferred(const std::size_t expectedCallbacks)
+    {
+      EXPECT_EQ(callbacks, expectedCallbacks);
+      EXPECT_FALSE(listGrewInside);
+      EXPECT_EQ(sceneObjects().getAllObjects().size(), sizeBefore);
+      EXPECT_EQ(sceneObjects().getPendingAdditions().size(), expectedCallbacks * spawnsPerCallback);
+    }
+  };
+
+  TEST_F(ScriptSpawnDuringLifecycleTest, ObjectScriptStartThatSpawnsDefersTheSpawnsOnTheSceneOverload)
+  {
+    addScriptedObjects();
+    state.startHook = spawner();
+
+    spawnScene->start();
+    scriptSystem.start(*spawnScene);
+
+    expectDeferred(scripted.size());
+    for (const auto& object : scripted)
+    {
+      EXPECT_EQ(count(call("start", object, "Mover")), 1) << id(object);
+    }
+
+    sceneObjects().flushPendingAdditions();
+
+    EXPECT_EQ(sceneObjects().getAllObjects().size(), sizeBefore + scripted.size() * spawnsPerCallback);
+    EXPECT_TRUE(sceneObjects().getPendingAdditions().empty());
+  }
+
+  TEST_F(ScriptSpawnDuringLifecycleTest, ObjectScriptStartThatSpawnsDefersTheSpawnsOnTheManagerOverload)
+  {
+    addScriptedObjects();
+    state.startHook = spawner();
+
+    scriptSystem.start(sceneObjects());
+
+    expectDeferred(scripted.size());
+    for (const auto& object : scripted)
+    {
+      EXPECT_EQ(count(call("start", object, "Mover")), 1) << id(object);
+    }
+  }
+
+  TEST_F(ScriptSpawnDuringLifecycleTest, SceneScriptStartThatSpawnsDefersTheSpawns)
+  {
+    addScriptedObjects();
+    const auto sceneScript = std::make_shared<Script>("Director");
+    ASSERT_TRUE(spawnScene->addScript(sceneScript));
+    state.startHook = [this, inner = spawner()](const std::string& uuid, const std::string& className)
+    {
+      if (className == "Director")
+      {
+        inner(uuid, className);
+      }
+    };
+
+    spawnScene->start();
+    scriptSystem.start(*spawnScene);
+
+    expectDeferred(1);
+    EXPECT_EQ(count(describe("start", uuids::to_string(spawnSceneUUID).c_str(), "Director")), 1);
+    for (const auto& object : scripted)
+    {
+      EXPECT_EQ(count(call("start", object, "Mover")), 1) << id(object);
+    }
+  }
+
+  TEST_F(ScriptSpawnDuringLifecycleTest, ObjectScriptStopThatSpawnsDefersTheSpawnsAndTheRebuildDropsThem)
+  {
+    addScriptedObjects();
+
+    spawnScene->start();
+    scriptSystem.start(*spawnScene);
+    ASSERT_TRUE(sceneObjects().getPendingAdditions().empty());
+
+    state.stopHook = spawner();
+    scriptSystem.stop(*spawnScene);
+
+    expectDeferred(scripted.size());
+    for (const auto& object : scripted)
+    {
+      EXPECT_EQ(count(call("stop", object, "Mover")), 1) << id(object);
+    }
+
+    spawnScene->stop();
+
+    EXPECT_TRUE(sceneObjects().getPendingAdditions().empty());
+    sceneObjects().flushPendingAdditions();
+    EXPECT_EQ(sceneObjects().getAllObjects().size(), sizeBefore);
+    for (const auto& object : scripted)
+    {
+      EXPECT_NE(sceneObjects().getObjectByUUID(object->getUUID()), nullptr) << id(object);
+    }
   }
 }
