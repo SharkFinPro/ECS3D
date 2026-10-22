@@ -127,6 +127,39 @@ public class BridgeFieldMarshallingTests
     Assert.Equal("int", count.Value.GetProperty("type").GetString());
   }
 
+  private class PrefabFields
+  {
+    [ExposeToEditor("Prefab")]
+    [PrefabReference]
+    public string prefab = "";
+
+    [ExposeToEditor("Label")]
+    public string label = "";
+
+    [ExposeToEditor("Amount")]
+    [PrefabReference]
+    public float amount = 1f;
+  }
+
+  [Fact]
+  public void BuildExposedFieldsJson_ReportsAssetOnlyForAPrefabReferenceString()
+  {
+    using var doc = JsonDocument.Parse(Bridge.BuildExposedFieldsJson(new PrefabFields()));
+
+    var byName = new System.Collections.Generic.Dictionary<string, JsonElement>();
+    foreach (var element in doc.RootElement.EnumerateArray())
+    {
+      byName[element.GetProperty("name").GetString()!] = element;
+    }
+
+    Assert.Equal("prefab", byName["prefab"].GetProperty("asset").GetString());
+    Assert.Equal("string", byName["prefab"].GetProperty("type").GetString());
+    Assert.Equal("Prefab", byName["prefab"].GetProperty("displayName").GetString());
+    Assert.False(byName["label"].TryGetProperty("asset", out _));
+    Assert.False(byName["amount"].TryGetProperty("asset", out _));
+    Assert.Equal("float", byName["amount"].GetProperty("type").GetString());
+  }
+
   [Fact]
   public void FindExposedField_FindsAnAttributedFieldByName()
   {

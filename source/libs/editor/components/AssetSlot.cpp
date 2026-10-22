@@ -1,9 +1,9 @@
 #include "AssetSlot.h"
+#include "../AssetDisplay.h"
 #include <assets/AssetRegistry.h>
 #include <GpuAssetCache.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
 #include <exception>
-#include <filesystem>
 #include <string>
 
 bool drawAssetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegistry* registry,
@@ -16,7 +16,7 @@ bool drawAssetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegis
   {
     if (const auto* record = registry->getByUUID(current))
     {
-      name = std::filesystem::path(record->path).filename().string();
+      name = assetDisplay::name(*record);
 
       if (style.isTexture && cache)
       {

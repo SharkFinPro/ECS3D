@@ -37,12 +37,13 @@ namespace {
     return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
   }
 
-  // Adds the classes of one file and the [ExposeToEditor] fields declared after each.
+  // Adds the classes of one file and the [ExposeToEditor] fields declared after each. Further attribute
+  // lists between [ExposeToEditor] and the field, such as [PrefabReference], are skipped.
   void parseScriptFile(const std::string& text, ClassFields& classes)
   {
     const std::regex classPattern(R"(\bclass\s+(\w+))");
     const std::regex fieldPattern(
-      R"(\[ExposeToEditor[^\]]*\]\s*(?:public|private|protected|internal)?\s*([\w<>]+)\s+(\w+))");
+      R"(\[ExposeToEditor[^\]]*\](?:\s*\[[^\]]*\])*\s*(?:public|private|protected|internal)?\s*([\w<>]+)\s+(\w+))");
 
     std::vector<std::pair<size_t, std::string>> declared;
     for (std::sregex_iterator it(text.begin(), text.end(), classPattern), end; it != end; ++it)

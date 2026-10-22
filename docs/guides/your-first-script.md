@@ -74,6 +74,9 @@ handle with `cancel()`. They count fixed ticks, so they freeze while the scene i
 Mark a field with `[ExposeToEditor("Label")]` and it becomes editable in the Inspector. The field can be
 private. Supported types are `float`, `int`, `bool`, `string` and `Vector3`. Any other type is ignored.
 
+Put `[PrefabReference]` on a `string` field as well and the Inspector draws a prefab slot instead of a text
+box. Drag a prefab from the Assets panel onto it. Right-click the slot and choose Clear to empty it. The field still holds the prefab's uuid as text.
+
 The Inspector widget shows the field's label. In these guides the field name matches its label. Values you
 set in the Inspector are saved with the scene and are kept when scripts reload. Other fields reset.
 

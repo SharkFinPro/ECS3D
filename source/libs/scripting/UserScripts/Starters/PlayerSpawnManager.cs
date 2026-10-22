@@ -9,6 +9,7 @@ using ScriptBridge;
 public class PlayerSpawnManager : SceneScript
 {
     [ExposeToEditor("Player Prefab")]
+    [PrefabReference]
     private string m_playerPrefab = "9c7f0e83-4d16-4b52-a09e-27f5b3d81c6a";
 
     [ExposeToEditor("Spawn Point Prefix")]

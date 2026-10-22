@@ -363,6 +363,22 @@ namespace {
     EXPECT_EQ(findField(script, "count").at("type"), "int");
   }
 
+  TEST_F(ScriptSystemTest, SyncFieldsToDataCarriesTheReportedAssetKind)
+  {
+    state.exposedByClass["Spawner"] =
+      R"([{"name":"m_prefab","type":"string","asset":"prefab"},{"name":"m_label","type":"string"}])";
+    const auto a = fixtures::addObject(scene, "A");
+    const auto script = addScript(a, "Spawner");
+    scriptSystem.start(manager());
+
+    scriptSystem.syncFieldsToData(manager());
+
+    ASSERT_EQ(script->getFields().size(), 2u);
+    EXPECT_EQ(findField(script, "m_prefab").at("asset"), "prefab");
+    EXPECT_FALSE(findField(script, "m_label").contains("asset"));
+    EXPECT_EQ(findField(script, "m_label").at("type"), "string");
+  }
+
   TEST_F(ScriptSystemTest, ADisplayNameEqualToTheFieldNameIsNotStored)
   {
     state.exposedByClass["Mover"] =

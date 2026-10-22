@@ -157,7 +157,7 @@ are read at start; the other fields apply live.
 
 | Label | Type | Default |
 |-------|------|---------|
-| Prefab | string (prefab uuid) | the default project's Sphere prefab |
+| Prefab | prefab slot (uuid string) | the default project's Sphere prefab |
 | Interval | float (seconds) | 1 |
 | Max Alive | int | 10 |
 | Offset Radius | float | 2 |
@@ -286,7 +286,7 @@ and drops that player.
 
 | Label | Type | Default |
 |-------|------|---------|
-| Player Prefab | string (prefab uuid) | the default project's Player prefab |
+| Player Prefab | prefab slot (uuid string) | the default project's Player prefab |
 | Spawn Point Prefix | string | SpawnPoint |
 | Spawn Height | float | 1 |
 | Respawn Below Y | float | -20 |
