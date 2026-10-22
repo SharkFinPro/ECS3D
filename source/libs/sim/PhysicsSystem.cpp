@@ -57,6 +57,10 @@ namespace {
   // this close to the support's normal. Leaning on its side, as one domino on the next, it can tip the body over.
   constexpr float stackedNormalCosine = 0.7071f;
 
+  // Cosine of 60 degrees. Only a contact this close to level can carry a body's weight, so only there does the weight
+  // dropping straight down decide whether it is over its support. Nearer a wall the drop runs off to infinity.
+  constexpr float supportingNormalY = 0.5f;
+
   // How far a contact normal must point down for a resting body to leave the pair to the resting body above it;
   // a side-by-side contact, whose normal is level to rounding, is still resolved from both sides.
   constexpr float fromBelowNormalY = -0.5f;
@@ -1310,7 +1314,7 @@ PhysicsSystem::Support PhysicsSystem::findSupport(const glm::vec3& centerOfMass,
 
   // Whether the body tips over its edge depends on where its weight acts, straight down, which on a slope is not
   // under it along the normal.
-  const auto below = std::fabs(normal.y) > sideContactNormalY
+  const auto below = std::fabs(normal.y) > supportingNormalY
                        ? centerOfMass - glm::vec3(0.0f, glm::dot(centerOfMass - centroid, normal) / normal.y, 0.0f)
                        : target;
   if (!isOverSupport(points, below))

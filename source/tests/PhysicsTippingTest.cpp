@@ -457,6 +457,22 @@ TEST(PhysicsTipping, TheSupportPointIsWhereTheCenterOfMassDropsStraightDownOntoT
   expectNearBy("high", PhysicsSystem::supportPoint(high, normal, square), -0.5f * uphill);
 }
 
+TEST(PhysicsTipping, ASupportPointOnANearlyLevelWallStaysUnderTheCenterOfMass)
+{
+  // A wall leaning just past the side-contact window: dropped straight down, the center of mass would land tens of
+  // units away and put the push on the manifold's edge.
+  const glm::vec3 normal = glm::normalize(glm::vec3(1.0f, 0.02f, 0.0f));
+  const glm::vec3 up = glm::normalize(glm::vec3(-0.02f, 1.0f, 0.0f));
+  const glm::vec3 across{ 0, 0, 1 };
+
+  const std::array<glm::vec3, 4> square{
+    -0.5f * up - 0.5f * across, 0.5f * up - 0.5f * across, 0.5f * up + 0.5f * across, -0.5f * up + 0.5f * across
+  };
+
+  const glm::vec3 centerOfMass = 0.1f * up + 0.2f * across + 0.8f * normal;
+  expectNearBy("wall", PhysicsSystem::supportPoint(centerOfMass, normal, square), 0.1f * up + 0.2f * across);
+}
+
 TEST(PhysicsTipping, ALeaningContactTurnsARestingBodyButAStackedOneOnlyPushesItDown)
 {
   // 0.05 up for 0.1 across puts the normal about 27 degrees above level: a body leaning on its side, which is

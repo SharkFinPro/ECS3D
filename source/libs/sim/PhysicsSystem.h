@@ -41,7 +41,8 @@ public:
                               const std::shared_ptr<Object>& other, glm::vec3 minimumTranslationVector,
                               std::span<const glm::vec3> collisionPoints, float dt);
 
-  // The center of mass projected onto the contact plane, clamped into the hull of the points.
+  // The center of mass projected onto the contact plane, clamped into the hull of the points. On a support that can
+  // carry the body it is dropped straight down, where its weight acts; on a steeper one, along the normal.
   [[nodiscard]] static glm::vec3 supportPoint(const glm::vec3& centerOfMass, const glm::vec3& normal,
                                               std::span<const glm::vec3> collisionPoints);
 
