@@ -10,9 +10,11 @@
 #include "objects/components/Transform.h"
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -300,4 +302,187 @@ TEST(PhysicsTipping, ABoxReleasedLeaningPivotsOnItsBottomEdgeAndLandsOnItsSide)
   EXPECT_GT(tiltOf(domino), 85.0f);
   EXPECT_NEAR(transformOf(domino)->getPosition().x, startX + 1.0f, 0.15f);
   EXPECT_NEAR(transformOf(domino)->getPosition().y, 0.15f, 0.05f);
+}
+
+namespace {
+  // A static ramp turned about z by slopeDegrees. Bodies are placed to lie flat on its top face, down to a
+  // thousandth of overlap, as a spawner puts them.
+  struct Ramp {
+    fixtures::Scene scene;
+    CollisionSystem collisions;
+    glm::vec3 normal;
+    static constexpr float slopeDegrees = 25.0f;
+    static constexpr float halfThickness = 0.5f;
+
+    Ramp()
+    {
+      const auto ramp = addObject(scene, "Ramp", { 0, 0, 0 }, { 10, halfThickness, 10 });
+      transformOf(ramp)->setRotation({ 0, 0, slopeDegrees });
+      fixtures::addBoxCollider(ramp);
+      normal = transformOf(ramp)->getOrientation() * glm::vec3(0, 1, 0);
+    }
+
+    std::shared_ptr<Object> addBox(const glm::vec3& scale, const float friction)
+    {
+      const auto box = addObject(scene, "Box", normal * (halfThickness + scale.y - 0.001f), scale);
+      transformOf(box)->setRotation({ 0, 0, slopeDegrees });
+      fixtures::addBoxCollider(box);
+      addBody(box, true)->setFriction(friction);
+
+      return box;
+    }
+
+    void tick(const int count)
+    {
+      for (int i = 0; i < count; ++i)
+      {
+        PhysicsSystem::fixedUpdate(*scene.objectManager, serverTick);
+        collisions.fixedUpdate(*scene.objectManager, serverTick);
+      }
+    }
+
+    // How far the box's up axis has turned from the slope's normal, in degrees.
+    [[nodiscard]] float tiltFromSlope(const std::shared_ptr<Object>& box) const
+    {
+      const float up = glm::dot(transformOf(box)->getOrientation() * glm::vec3(0, 1, 0), normal);
+
+      return glm::degrees(std::acos(std::clamp(up, -1.0f, 1.0f)));
+    }
+  };
+
+  void expectNearBy(const char* what, const glm::vec3& actual, const glm::vec3& expected)
+  {
+    fixtures::expectNear(what, actual, expected, 1e-4f);
+  }
+}
+
+TEST(PhysicsTipping, AYawedDominoLeaningOnTheNextTipsItOver)
+{
+  Dominoes dominoes(serverTick);
+  dominoes.addDomino(0, 1.01f);
+  dominoes.addDomino(0, 1);
+
+  // The pair stands on the run's line, turned 30 degrees about y. The first leans 15 degrees along the run.
+  const float yaw = glm::radians(30.0f);
+  const glm::vec3 run{ std::cos(yaw), 0.0f, -std::sin(yaw) };
+  const glm::quat turn = glm::angleAxis(yaw, glm::vec3(0, 1, 0));
+  transformOf(dominoes.objects[0])->setPosition(glm::vec3(0, 1.01f, 0));
+  transformOf(dominoes.objects[0])->setWorldOrientation(turn * glm::angleAxis(glm::radians(-15.0f), glm::vec3(0, 0, 1)));
+  transformOf(dominoes.objects[1])->setPosition(glm::vec3(0, 1, 0) + 1.2f * run);
+  transformOf(dominoes.objects[1])->setWorldOrientation(turn);
+  for (const auto& body : dominoes.bodies)
+  {
+    body->setMass(0.6f);
+    body->setFriction(0.5f);
+  }
+
+  dominoes.tick(300);
+
+  EXPECT_GT(tiltOf(dominoes.objects[0]), 45.0f);
+  EXPECT_GT(tiltOf(dominoes.objects[1]), 45.0f);
+}
+
+TEST(PhysicsTipping, AYawedDominoPushedHighTipsOverItsFarBottomEdge)
+{
+  Dominoes dominoes(serverTick);
+  dominoes.addDomino(0, 1);
+  transformOf(dominoes.objects[0])->setRotation({ 0, 30, 0 });
+  dominoes.settle();
+
+  dominoes.pushHigh(0, { std::cos(glm::radians(30.0f)), 0, -std::sin(glm::radians(30.0f)) });
+  dominoes.tick(150);
+
+  EXPECT_GT(tiltOf(dominoes.objects[0]), 45.0f);
+  EXPECT_LT(transformOf(dominoes.objects[0])->getPosition().y, 0.5f);
+}
+
+TEST(PhysicsTipping, AYawedDominoGivenOnlyASmallPushComesBackFlush)
+{
+  Dominoes dominoes(serverTick);
+  dominoes.addDomino(0, 1);
+  transformOf(dominoes.objects[0])->setRotation({ 0, 30, 0 });
+  dominoes.settle();
+
+  dominoes.pushHigh(0, { 0.1f * std::cos(glm::radians(30.0f)), 0, -0.1f * std::sin(glm::radians(30.0f)) });
+  dominoes.tick(300);
+
+  EXPECT_LT(tiltOf(dominoes.objects[0]), 1.0f);
+  EXPECT_NEAR(transformOf(dominoes.objects[0])->getPosition().y, 1.0f, 0.05f);
+}
+
+
+TEST(PhysicsTipping, ATallBoxFallsOverOnASlopeSteeperThanItsTippingAngle)
+{
+  Ramp ramp;
+  const auto tall = ramp.addBox({ 0.15f, 1.0f, 0.5f }, 1.0f);
+
+  ASSERT_LT(ramp.tiltFromSlope(tall), 0.1f);
+
+  ramp.tick(300);
+
+  EXPECT_GT(ramp.tiltFromSlope(tall), 45.0f);
+}
+
+TEST(PhysicsTipping, ASquatBoxHoldsOnTheSameSlope)
+{
+  Ramp ramp;
+  const auto cube = ramp.addBox({ 0.5f, 0.5f, 0.5f }, 1.0f);
+  const auto start = fixtures::positionOf(cube);
+
+  ramp.tick(300);
+
+  EXPECT_LT(ramp.tiltFromSlope(cube), 2.0f);
+  EXPECT_LT(glm::distance(fixtures::positionOf(cube), start), 0.1f);
+}
+
+TEST(PhysicsTipping, TheSupportPointIsWhereTheCenterOfMassDropsStraightDownOntoTheContactPlane)
+{
+  constexpr float angle = glm::radians(25.0f);
+  const glm::vec3 normal{ -std::sin(angle), std::cos(angle), 0.0f };
+  const glm::vec3 uphill{ std::cos(angle), std::sin(angle), 0.0f };
+  const glm::vec3 across{ 0, 0, 1 };
+
+  const std::array<glm::vec3, 4> square{
+    -0.5f * uphill - 0.5f * across, 0.5f * uphill - 0.5f * across,
+    0.5f * uphill + 0.5f * across, -0.5f * uphill + 0.5f * across
+  };
+
+  // Positive control: low over the square, it is over the square either way, so the support is straight under it
+  // along the normal.
+  const glm::vec3 low = 0.2f * uphill + 0.3f * normal + 0.1f * across;
+  expectNearBy("low", PhysicsSystem::supportPoint(low, normal, square), 0.2f * uphill + 0.1f * across);
+
+  // High above the square's center along the normal, its weight acts straight down, well downhill of the square.
+  const glm::vec3 high = 3.0f * normal;
+  expectNearBy("high", PhysicsSystem::supportPoint(high, normal, square), -0.5f * uphill);
+}
+
+TEST(PhysicsTipping, ASupportPointOnANearlyLevelWallStaysUnderTheCenterOfMass)
+{
+  // A wall leaning just past the side-contact window: dropped straight down, the center of mass would land tens of
+  // units away and put the push on the manifold's edge.
+  const glm::vec3 normal = glm::normalize(glm::vec3(1.0f, 0.02f, 0.0f));
+  const glm::vec3 up = glm::normalize(glm::vec3(-0.02f, 1.0f, 0.0f));
+  const glm::vec3 across{ 0, 0, 1 };
+
+  const std::array<glm::vec3, 4> square{
+    -0.5f * up - 0.5f * across, 0.5f * up - 0.5f * across, 0.5f * up + 0.5f * across, -0.5f * up + 0.5f * across
+  };
+
+  const glm::vec3 centerOfMass = 0.1f * up + 0.2f * across + 0.8f * normal;
+  expectNearBy("wall", PhysicsSystem::supportPoint(centerOfMass, normal, square), 0.1f * up + 0.2f * across);
+}
+
+TEST(PhysicsTipping, ALeaningContactTurnsARestingBodyButAStackedOneOnlyPushesItDown)
+{
+  // 0.05 up for 0.1 across puts the normal about 27 degrees above level: a body leaning on its side, which is
+  // not within 45 degrees of the resting body's support normal, so the hit lands off its center and turns it.
+  const auto [leanVelocity, leanSpin] = restingBodyAfterSideHit(0.05f);
+  EXPECT_GT(glm::length(leanSpin), 1.0f);
+  EXPECT_GT(leanVelocity.x, 0.01f);
+
+  // Positive control: 0.3 up for 0.1 across is within 18 degrees of straight down onto it, a body stacked on it,
+  // pushed through its center and held by its support.
+  const auto [stackedVelocity, stackedSpin] = restingBodyAfterSideHit(0.3f);
+  EXPECT_LT(glm::length(stackedSpin), 1.0f);
 }

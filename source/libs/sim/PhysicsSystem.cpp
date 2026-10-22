@@ -53,6 +53,14 @@ namespace {
   // Units per tick. A vertical speed below this is rounding left by contacts that cancel, not a body rising.
   constexpr float minRiseSpeed = 1e-5f;
 
+  // Cosine of 45 degrees. A contact presses a resting body into its support, as a body stacked on it does, only
+  // this close to the support's normal. Leaning on its side, as one domino on the next, it can tip the body over.
+  constexpr float stackedNormalCosine = 0.7071f;
+
+  // Cosine of 60 degrees. Only a contact this close to level can carry a body's weight, so only there does the weight
+  // dropping straight down decide whether it is over its support. Nearer a wall the drop runs off to infinity.
+  constexpr float supportingNormalY = 0.5f;
+
   // How far a contact normal must point down for a resting body to leave the pair to the resting body above it;
   // a side-by-side contact, whose normal is level to rounding, is still resolved from both sides.
   constexpr float fromBelowNormalY = -0.5f;
@@ -560,7 +568,7 @@ void PhysicsSystem::handleCollision(RigidBody& body, const std::shared_ptr<Colli
   }
   // Met from below, the pair is resolved with the roles swapped, so the push and its friction go where the body
   // pressing down would have put them from above: its own center of mass clamped into the manifold.
-  const bool swapped = normal.y < -sideContactNormalY && pair.body.resting;
+  const bool swapped = pressesIntoSupport(pair.body, normal);
   const auto lead = swapped ? findSupport(pair.other.transform->getPosition(), normal, collisionPoints) : support;
   const float faceRadius = twistRadius(pair, collider, lead, transform->getPosition(), collisionPoints);
   markLineOnOther(pair, other, collisionPoints);
@@ -755,9 +763,9 @@ void PhysicsSystem::applyContactImpulse(const Pair& pair, const glm::vec3& point
 
   const float target = (1.0f + restitution(pair, closingSpeed, dt)) * closingSpeed;
 
-  const Side* held = pair.other.resting && pair.normal.y > sideContactNormalY ? &pair.other
-                     : pair.body.resting && pair.normal.y < -sideContactNormalY ? &pair.body
-                                                                 : nullptr;
+  const Side* held = pressesIntoSupport(pair.other, -pair.normal) ? &pair.other
+                     : pressesIntoSupport(pair.body, pair.normal) ? &pair.body
+                                                                  : nullptr;
   // The free side is the one pressing on the held one.
   const Side& freeSide = held == &pair.body ? pair.other : pair.body;
   const auto freeDirection = held == &pair.body ? -pair.normal : pair.normal;
@@ -924,7 +932,7 @@ void PhysicsSystem::applyFriction(const Pair& pair, const glm::vec3& point, cons
 
   // Resting on a face, friction does not tip the body over: its weight shifts toward the leading edge instead.
   const bool turns = !faceContact;
-  const bool otherHeld = pair.other.resting && pair.normal.y > sideContactNormalY;
+  const bool otherHeld = pressesIntoSupport(pair.other, -pair.normal);
   const bool otherTurns = turns && !otherHeld;
   const float bodyResistance = glm::dot(-direction, frictionResponse(pair, pair.body, point, -direction, turns));
   const float otherResistance = glm::dot(direction, frictionResponse(pair, pair.other, point, direction, otherTurns));
@@ -1118,10 +1126,15 @@ float PhysicsSystem::restitution(const Pair& pair, const float closingSpeed, con
 
   // Free bodies trade their closing speed. What lands on a resting body lands on its support too, and like anything
   // landing on static geometry it does not bounce.
-  const bool supported = (pair.body.resting && pair.normal.y < -sideContactNormalY) ||
-                         (pair.other.resting && pair.normal.y > sideContactNormalY);
+  const bool supported = pressesIntoSupport(pair.body, pair.normal) || pressesIntoSupport(pair.other, -pair.normal);
 
   return supported ? 0.0f : 1.0f;
+}
+
+bool PhysicsSystem::pressesIntoSupport(const Side& side, const glm::vec3& pushDirection)
+{
+  return side.resting && side.body &&
+         glm::dot(pushDirection, supportNormalOf(*side.body)) < -stackedNormalCosine * glm::length(pushDirection);
 }
 
 glm::vec3 PhysicsSystem::takenBy(const Side& side, const glm::vec3& direction)
@@ -1299,7 +1312,17 @@ PhysicsSystem::Support PhysicsSystem::findSupport(const glm::vec3& centerOfMass,
 
   const auto target = onPlane(centerOfMass);
 
-  return isOverSupport(points, target) ? Support{ target, true } : Support{ nearestOnSupport(points, target), false };
+  // Whether the body tips over its edge depends on where its weight acts, straight down, which on a slope is not
+  // under it along the normal.
+  const auto below = std::fabs(normal.y) > supportingNormalY
+                       ? centerOfMass - glm::vec3(0.0f, glm::dot(centerOfMass - centroid, normal) / normal.y, 0.0f)
+                       : target;
+  if (!isOverSupport(points, below))
+  {
+    return { nearestOnSupport(points, below), false };
+  }
+
+  return { isOverSupport(points, target) ? target : nearestOnSupport(points, target), true };
 }
 
 bool PhysicsSystem::isOverSupport(const std::span<const glm::vec3> points, const glm::vec3& target)

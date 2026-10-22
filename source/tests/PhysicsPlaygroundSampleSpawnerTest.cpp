@@ -90,7 +90,7 @@ namespace
   }
 }
 
-TEST(PhysicsPlaygroundSampleSpawners, RaceLanesSpawnTheirPrefabsInOrderAndOnlyRollersGetAPush)
+TEST(PhysicsPlaygroundSampleSpawners, RaceLanesSpawnTheirPrefabsInOrderAndOnlyTheHexLogGetsAPush)
 {
   const std::vector<std::pair<std::string, std::string>> lanes = {
     { "Race Spawner Sphere", "Sphere" }, { "Race Spawner Drum", "Drum Rolling" },
@@ -106,7 +106,7 @@ TEST(PhysicsPlaygroundSampleSpawners, RaceLanesSpawnTheirPrefabsInOrderAndOnlyRo
     EXPECT_GT(x, previousX) << object;
     previousX = x;
 
-    const bool pushed = object == "Race Spawner Drum" || object == "Race Spawner Hex Log";
+    const bool pushed = object == "Race Spawner Hex Log";
     const auto& fields = only(object).at("scripts").at(0).at("fields");
     const bool hasVelocity = std::ranges::any_of(fields, [](const json& field) {
       return field.at("name") == "m_initialVelocity";
@@ -114,7 +114,7 @@ TEST(PhysicsPlaygroundSampleSpawners, RaceLanesSpawnTheirPrefabsInOrderAndOnlyRo
     EXPECT_EQ(hasVelocity, pushed) << object;
   }
 
-  const auto velocity = vec3Of(scriptField(only("Race Spawner Drum"), "Spawner", "m_initialVelocity"));
+  const auto velocity = vec3Of(scriptField(only("Race Spawner Hex Log"), "Spawner", "m_initialVelocity"));
   EXPECT_NEAR(glm::length(velocity), 3.0f, 1e-3f);
   EXPECT_LT(velocity.y, 0.0f);
   EXPECT_GT(velocity.z, 0.0f);

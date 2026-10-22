@@ -201,15 +201,39 @@ namespace collisions {
 
     std::vector<Candidate> candidates;
     std::vector<glm::vec3> placed;
+    std::vector<glm::vec3> incidentOnPlane;
+    float incidentOffset = 0.0f;
     for (const auto& vertex : touchingFeature(incident.vertices, towardReference, incident.featureEpsilon))
     {
       const float offset = glm::dot(vertex - planePoint, faceNormal);
+      incidentOnPlane.push_back(vertex - faceNormal * offset);
+      incidentOffset += offset;
       const glm::vec3 point = clampToPolygon(vertex - faceNormal * offset, polygon, faceNormal) + faceNormal * offset;
 
       if (!containsNear(placed, point))
       {
         placed.push_back(point);
         candidates.push_back({ point, -offset });
+      }
+    }
+
+    // Clamping alone finds the overlap only while the incident face lies inside the reference one. A face larger
+    // than the reference, or turned against it, clamps its corners onto as few as two of the reference's, so the
+    // reference corners that lie over the incident face belong to the overlap too, taken at the incident face's depth
+    // like the clamped corners.
+    const auto incidentPolygon = convexPolygon(incidentOnPlane, faceNormal);
+    if (incidentPolygon.size() >= 3)
+    {
+      incidentOffset /= static_cast<float>(incidentOnPlane.size());
+      for (const auto& corner : polygon)
+      {
+        const glm::vec3 point = corner + faceNormal * incidentOffset;
+        if (glm::distance(clampToPolygon(corner, incidentPolygon, faceNormal), corner) < detail::dedupeDistance &&
+            !containsNear(placed, point))
+        {
+          placed.push_back(point);
+          candidates.push_back({ point, -incidentOffset });
+        }
       }
     }
 

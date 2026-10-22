@@ -41,7 +41,8 @@ public:
                               const std::shared_ptr<Object>& other, glm::vec3 minimumTranslationVector,
                               std::span<const glm::vec3> collisionPoints, float dt);
 
-  // The center of mass projected onto the contact plane, clamped into the hull of the points.
+  // The center of mass projected onto the contact plane, clamped into the hull of the points. On a support that can
+  // carry the body it is dropped straight down, where its weight acts; on a steeper one, along the normal.
   [[nodiscard]] static glm::vec3 supportPoint(const glm::vec3& centerOfMass, const glm::vec3& normal,
                                               std::span<const glm::vec3> collisionPoints);
 
@@ -187,6 +188,10 @@ private:
 
   // The impulse along its support in the unit direction a resting side's own support can still hold for it this tick.
   [[nodiscard]] static float holdingCapacity(const Side& side, const glm::vec3& direction);
+
+  // Whether a push along pushDirection presses the resting side into its support, close enough to the support's
+  // normal that the support holds it up without it turning.
+  [[nodiscard]] static bool pressesIntoSupport(const Side& side, const glm::vec3& pushDirection);
 
   // The part of a push along direction the side takes itself.
   [[nodiscard]] static glm::vec3 takenBy(const Side& side, const glm::vec3& direction);
