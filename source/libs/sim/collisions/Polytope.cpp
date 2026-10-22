@@ -3,6 +3,7 @@
 #include "Support.h"
 #include "ContactManifold.h"
 #include "FaceManifold.h"
+#include "ManifoldInternal.h"
 #include "NarrowPhase.h"
 #include <objects/components/collisions/Collider.h>
 #include <objects/components/collisions/CapsuleCollider.h>
@@ -452,14 +453,40 @@ std::vector<glm::vec3> Polytope::boxContactPoints() const
 
   const auto incidentVertices = touchingVertices(incidentBox, towardReference);
 
-  std::vector<glm::vec3> points;
-  points.reserve(incidentVertices.size());
+  std::vector<collisions::detail::Candidate> candidates;
+  std::vector<glm::vec3> placed;
+  const auto add = [&candidates, &placed](const glm::vec3& point)
+  {
+    if (!collisions::detail::containsNear(placed, point))
+    {
+      placed.push_back(point);
+      candidates.push_back({ point, 0.0f });
+    }
+  };
+
   for (const auto& vertex : incidentVertices)
   {
-    points.push_back(clampToFootprint(vertex, referenceBox, referenceAxisIndex));
+    add(clampToFootprint(vertex, referenceBox, referenceAxisIndex));
   }
 
-  return points;
+  // Clamping alone finds the overlap only while the incident face lies inside the reference one. A face larger
+  // than the reference, or turned against it, clamps its corners onto as few as two of the reference's, so the
+  // reference corners that lie over the incident face belong to the overlap too, taken at the incident face's depth
+  // like the clamped corners. An edge or corner has no face to lie over.
+  constexpr size_t faceCorners = 4;
+  const auto incidentAxisIndex = aIsReference ? axisIndexB : axisIndexA;
+  const auto referenceVertices = incidentVertices.size() == faceCorners
+                                   ? touchingVertices(referenceBox, -towardReference)
+                                   : std::vector<glm::vec3>{};
+  for (const auto& vertex : referenceVertices)
+  {
+    if (glm::distance(clampToFootprint(vertex, incidentBox, incidentAxisIndex), vertex) < collisions::detail::dedupeDistance)
+    {
+      add(vertex + glm::dot(incidentVertices.front() - vertex, normal) * normal);
+    }
+  }
+
+  return collisions::detail::spreadOut(candidates, maxManifoldPoints);
 }
 
 void Polytope::EPA()

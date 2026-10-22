@@ -188,6 +188,10 @@ private:
   // The impulse along its support in the unit direction a resting side's own support can still hold for it this tick.
   [[nodiscard]] static float holdingCapacity(const Side& side, const glm::vec3& direction);
 
+  // Whether a push along pushDirection presses the resting side into its support, close enough to the support's
+  // normal that the support holds it up without it turning.
+  [[nodiscard]] static bool pressesIntoSupport(const Side& side, const glm::vec3& pushDirection);
+
   // The part of a push along direction the side takes itself.
   [[nodiscard]] static glm::vec3 takenBy(const Side& side, const glm::vec3& direction);
 

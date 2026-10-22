@@ -2872,7 +2872,7 @@
                 "components": [
                   {
                     "type": "Transform",
-                    "position": [11.915458, 1.85, -3.276812],
+                    "position": [11.915458, 1.05, -3.276812],
                     "rotation": [0.0, 4.002992, 0.0],
                     "scale": [0.15, 1, 0.5]
                   },
@@ -2915,7 +2915,7 @@
                 "components": [
                   {
                     "type": "Transform",
-                    "position": [12.464116, 0.45, -3.315207],
+                    "position": [13.58266, 0.45, -3.393482],
                     "rotation": [0.0, 4.002992, 0.0],
                     "scale": [0.85, 0.4, 0.8]
                   },
@@ -2949,7 +2949,7 @@
                 "components": [
                   {
                     "type": "Transform",
-                    "position": [12.863141, 1.35, -3.34313],
+                    "position": [13.233514, 1.35, -3.369049],
                     "rotation": [0.0, 0.0, 0.0],
                     "scale": [0.5, 0.5, 0.5]
                   },
@@ -2987,7 +2987,7 @@
                 "components": [
                   {
                     "type": "Transform",
-                    "position": [16.304724, 0.45, -3.58397],
+                    "position": [17.423268, 0.45, -3.662245],
                     "rotation": [0.0, 184.002992, 0.0],
                     "scale": [3, 0.4, 1.2]
                   },
@@ -6434,11 +6434,6 @@
                         "name": "m_offsetRadius",
                         "type": "float",
                         "value": 0.0
-                      },
-                      {
-                        "name": "m_initialVelocity",
-                        "type": "vector3",
-                        "value": [0.0, -1.267855, 2.718923]
                       }
                     ]
                   }
