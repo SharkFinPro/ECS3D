@@ -1,10 +1,16 @@
 #include "ScriptEditor.h"
 #include "../ComponentEditor.h"
+#include "../AssetDisplay.h"
+#include "../AssetDragDrop.h"
+#include "../EditorTheme.h"
 #include "../GuiComponents.h"
 #include "../MixedFields.h"
+#include "AssetSlot.h"
+#include "ScriptFieldAsset.h"
 #include "ScriptFieldLabel.h"
 #include <objects/components/Script.h>
 #include <nlohmann/json.hpp>
+#include <uuid.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <cstddef>
@@ -32,7 +38,7 @@ namespace {
   }
 }
 
-bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
+bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed, const AssetRegistry* registry)
 {
   bool edited = false;
 
@@ -92,6 +98,19 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
         edited = true;
       }
     }
+    else if (isPrefabReferenceField(field))
+    {
+      const std::string kind = scriptFieldLabel(field);
+      const AssetSlotStyle slot{ "prefabSlot", kind.c_str(), assetDragDrop::prefab, false,
+                                 gc::SecIcon::block, assetDisplay::color(AssetType::Prefab) };
+      uuids::uuid dropped;
+
+      if (drawAssetSlot(nullptr, registry, slot, scriptFieldUUID(field.at("value")), dropped, fieldMixed))
+      {
+        field["value"] = uuids::to_string(dropped);
+        edited = true;
+      }
+    }
     else if (type == "string")
     {
       const auto& value = field.at("value");
@@ -145,10 +164,10 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed)
   return edited;
 }
 
-void registerScriptEditor(ComponentEditor& componentEditor)
+void registerScriptEditor(ComponentEditor& componentEditor, const AssetRegistry* registry)
 {
   componentEditor.registerHandler("Script",
-    [](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
+    [registry](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
     const auto script = std::dynamic_pointer_cast<Script>(component);
     if (!script)
     {
@@ -162,7 +181,7 @@ void registerScriptEditor(ComponentEditor& componentEditor)
       // The exposed-field blob is synced from the live C# instance on the server. Edit a copy and push
       // it back; the editor sends it on as a component edit, the server writes it into the instance.
       nlohmann::json fields = script->getFields();
-      edited = drawScriptFieldWidgets(fields, mixed);
+      edited = drawScriptFieldWidgets(fields, mixed, registry);
 
       if (edited)
       {

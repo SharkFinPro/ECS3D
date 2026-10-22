@@ -213,7 +213,7 @@ void SceneScriptsPanel::displayRow(const SceneAsset& scene, const std::size_t in
 
   const nlohmann::json* shown = m_fieldEdits.shown(className);
   nlohmann::json fields = shown ? *shown : script->getFields();
-  if (drawScriptFieldWidgets(fields, MixedFields{}))
+  if (drawScriptFieldWidgets(fields, MixedFields{}, m_assetRegistry))
   {
     m_fieldEdits.edit(className, std::move(fields));
   }

@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -518,17 +519,24 @@ public static class Bridge
 
     // The reflection + JSON side of getExposedFields, pulled out of the [UnmanagedCallersOnly] entry
     // point so it is reachable without an IntPtr uuid/className pair or a live _instances entry.
+    private static readonly JsonSerializerOptions OmitNullOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     internal static string BuildExposedFieldsJson(object instance)
     {
         var fields = SupportedExposedFields(instance)
             .Select(f => new {
                 name        = f.Name,
                 displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
-                type        = MapTypeName(f.FieldType)!
+                type        = MapTypeName(f.FieldType)!,
+                asset       = f.GetCustomAttribute<PrefabReferenceAttribute>() != null
+                              && MapTypeName(f.FieldType) == "string" ? "prefab" : null
             })
             .ToArray();
 
-        return JsonSerializer.Serialize(fields);
+        return JsonSerializer.Serialize(fields, OmitNullOptions);
     }
 
     // The [ExposeToEditor] fields of a supported type: what BuildExposedFieldsJson reports and what

@@ -9,6 +9,7 @@ public class Spawner : ScriptBase
 {
     // The Sphere prefab of the default project.
     [ExposeToEditor("Prefab")]
+    [PrefabReference]
     private string m_prefab = "6d2b4f19-08ac-4d73-9e52-b83a1c6f0e47";
 
     [ExposeToEditor("Interval")]
