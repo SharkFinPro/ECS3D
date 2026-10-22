@@ -527,12 +527,13 @@ public static class Bridge
     internal static string BuildExposedFieldsJson(object instance)
     {
         var fields = SupportedExposedFields(instance)
-            .Select(f => new {
-                name        = f.Name,
-                displayName = f.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? f.Name,
-                type        = MapTypeName(f.FieldType)!,
-                asset       = f.GetCustomAttribute<PrefabReferenceAttribute>() != null
-                              && MapTypeName(f.FieldType) == "string" ? "prefab" : null
+            .Select(f => (Field: f, Type: MapTypeName(f.FieldType)!))
+            .Select(x => new {
+                name        = x.Field.Name,
+                displayName = x.Field.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? x.Field.Name,
+                type        = x.Type,
+                asset       = x.Type == "string" && x.Field.GetCustomAttribute<PrefabReferenceAttribute>() != null
+                              ? "prefab" : null
             })
             .ToArray();
 

@@ -110,6 +110,18 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed, co
         field["value"] = uuids::to_string(dropped);
         edited = true;
       }
+
+      if (ImGui::BeginPopupContextItem("prefabSlotMenu"))
+      {
+        const bool empty = field.at("value").is_string() && field.at("value").get<std::string>().empty();
+        if (ImGui::MenuItem("Clear", nullptr, false, fieldMixed || !empty))
+        {
+          field["value"] = "";
+          edited = true;
+        }
+
+        ImGui::EndPopup();
+      }
     }
     else if (type == "string")
     {

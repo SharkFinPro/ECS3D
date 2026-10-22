@@ -187,6 +187,21 @@ namespace {
     EXPECT_EQ(count(mainCall("variable", "Alpha")), 1);
   }
 
+  TEST_F(SceneScriptSystemTest, SyncFieldsToDataCarriesTheReportedAssetKindForASceneScript)
+  {
+    state.exposedByClass["Alpha"] =
+      R"([{"name":"m_prefab","type":"string","asset":"prefab"},{"name":"m_label","type":"string"}])";
+    const auto alpha = addSceneScript(*mainScene, "Alpha");
+
+    scriptSystem.start(*mainScene);
+    scriptSystem.syncFieldsToData(*mainScene);
+
+    ASSERT_EQ(alpha->getFields().size(), 2u);
+    EXPECT_EQ(findField(alpha, "m_prefab").at("asset"), "prefab");
+    EXPECT_FALSE(findField(alpha, "m_label").contains("asset"));
+    EXPECT_EQ(findField(alpha, "m_label").at("type"), "string");
+  }
+
   TEST_F(SceneScriptSystemTest, AnUnresolvedSceneScriptIsWarnedOnceNeverTickedAndKeepsItsSavedFields)
   {
     state.unresolvedClasses.insert("Ghost");
