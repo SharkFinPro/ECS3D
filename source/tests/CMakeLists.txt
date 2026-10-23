@@ -74,7 +74,9 @@ add_executable(${PROJECT_NAME}
   EditHistoryPlayStopTest.cpp
   HistoryScopeTest.cpp
   PlaySessionHistoryTest.cpp
-  RecordEditsTest.cpp
+  RecordEditsAssetTest.cpp
+  RecordEditsObjectTest.cpp
+  RecordEditsReorderTest.cpp
   CollisionMathTest.cpp
   ContactManifoldTest.cpp
   SweepEquivalenceTest.cpp
@@ -221,6 +223,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryFixtures.h
   ObjectManagerFixtures.h
   SceneEditFixtures.h
+  RecordEditsFixtures.h
   GizmoFixtures.h
   PhysicsTestHelpers.h
   PhysicsGenericRestingFixtures.h
