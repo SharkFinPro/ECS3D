@@ -52,7 +52,8 @@ public class LauncherProjectsTabTests
       "1.2.3",
       action => action(),
       () => _rig.Time.Now,
-      new PresentFileSystem());
+      new PresentFileSystem(),
+      work => work());
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Projects.Projects.Select(project => project.Name).ToArray();

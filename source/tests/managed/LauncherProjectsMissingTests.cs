@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shared.Models;
@@ -72,6 +73,7 @@ public class LauncherProjectsMissingTests
   private readonly LauncherRig _rig = new();
   private readonly RecordingProcessRunner _runner = new();
   private readonly ProjectTreeFileSystem _tree = new();
+  private int _posts;
 
   private void Seed(params (string Path, bool Pinned)[] entries)
   {
@@ -86,7 +88,7 @@ public class LauncherProjectsMissingTests
     _rig.Files.Seed(_rig.RecentsPath, document.ToJsonString());
   }
 
-  private MainWindowViewModel NewMain()
+  private MainWindowViewModel NewMain(Action<Action>? runInBackground = null)
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
     return new MainWindowViewModel(
@@ -97,9 +99,14 @@ public class LauncherProjectsMissingTests
       _rig.NewCatalog(),
       _ => null,
       "1.2.3",
-      action => action(),
+      action =>
+      {
+        action();
+        Interlocked.Increment(ref _posts);
+      },
       () => _rig.Time.Now,
-      _tree);
+      _tree,
+      runInBackground ?? (work => work()));
   }
 
   private static Project Card(MainWindowViewModel model, string name) =>
@@ -339,64 +346,106 @@ public class LauncherProjectsMissingTests
   [Fact]
   public void TheInEditorBadgeShowsWhileTheEditorRunsAndClearsWhenItExits()
   {
-    NoContext.Run(() =>
-    {
-      _tree.AddProject(Alpha);
-      _tree.AddProject(Beta);
-      Seed((Alpha, false), (Beta, false));
-      var model = NewMain();
-      Assert.False(Card(model, "alpha").IsInEditor);
+    _tree.AddProject(Alpha);
+    _tree.AddProject(Beta);
+    Seed((Alpha, false), (Beta, false));
+    var model = NewMain();
+    Assert.False(Card(model, "alpha").IsInEditor);
 
-      model.OpenProjectCommand.Execute(Card(model, "alpha"));
+    model.OpenProjectCommand.Execute(Card(model, "alpha"));
 
-      Assert.True(Card(model, "alpha").IsInEditor);
-      Assert.False(Card(model, "beta").IsInEditor);
+    Assert.True(Card(model, "alpha").IsInEditor);
+    Assert.False(Card(model, "beta").IsInEditor);
 
-      _runner.Processes[0].Exit(0);
+    ExitAndWait(0, 0);
 
-      Assert.False(Card(model, "alpha").IsInEditor);
-      Assert.False(_runner.Processes[0].Killed);
-    });
+    Assert.False(Card(model, "alpha").IsInEditor);
+    Assert.False(_runner.Processes[0].Killed);
   }
 
   [Fact]
   public void TheBadgeStaysUntilTheLastEditorOfTheProjectExits()
   {
-    NoContext.Run(() =>
-    {
-      _tree.AddProject(Alpha);
-      Seed((Alpha, false));
-      var model = NewMain();
+    _tree.AddProject(Alpha);
+    Seed((Alpha, false));
+    var model = NewMain();
 
-      model.OpenProjectCommand.Execute(Card(model, "alpha"));
-      model.OpenProjectCommand.Execute(Card(model, "alpha"));
-      Assert.Equal(2, _runner.Processes.Count);
+    model.OpenProjectCommand.Execute(Card(model, "alpha"));
+    model.OpenProjectCommand.Execute(Card(model, "alpha"));
+    Assert.Equal(2, _runner.Processes.Count);
 
-      _runner.Processes[0].Exit(0);
-      Assert.True(Card(model, "alpha").IsInEditor);
+    ExitAndWait(0, 0);
+    Assert.True(Card(model, "alpha").IsInEditor);
 
-      _runner.Processes[1].Exit(0);
-      Assert.False(Card(model, "alpha").IsInEditor);
-    });
+    ExitAndWait(1, 0);
+    Assert.False(Card(model, "alpha").IsInEditor);
   }
 
   [Fact]
   public void PlayingAProjectDoesNotShowTheBadge()
   {
-    NoContext.Run(() =>
+    _tree.AddProject(Alpha);
+    _tree.AddProject(Beta);
+    Seed((Alpha, false), (Beta, false));
+    var model = NewMain();
+
+    model.PlayProjectCommand.Execute(Card(model, "beta"));
+    Assert.Single(_runner.Launches);
+    Assert.False(Card(model, "beta").IsInEditor);
+
+    model.OpenProjectCommand.Execute(Card(model, "alpha"));
+    Assert.True(Card(model, "alpha").IsInEditor);
+    Assert.False(Card(model, "beta").IsInEditor);
+  }
+
+  [Fact]
+  public void APickedItemWithNoLocalPathToastsInsteadOfCancelling()
+  {
+    _tree.AddProject(Moved);
+    Seed((Alpha, false));
+    var model = NewMain();
+    model.PickProjectFolder = Picks(string.Empty);
+    model.PickProjectFile = Picks(string.Empty);
+
+    model.LocateProjectCommand.Execute(Card(model, "alpha"));
+    Assert.Equal("Choose a folder on this computer.", model.ToastMessage);
+
+    model.OpenExistingCommand.Execute(null);
+    Assert.Equal("Choose a file on this computer.", model.ToastMessage);
+    Assert.Empty(_runner.Launches);
+
+    model.PickProjectFolder = Picks(Moved);
+    model.LocateProjectCommand.Execute(Card(model, "alpha"));
+    Assert.Equal(Moved, (string)Stored().Single()["path"]!);
+  }
+
+  [Fact]
+  public void TheDiskChecksRunInTheBackgroundAndAreAppliedWhenTheyFinish()
+  {
+    _tree.AddProject(Alpha);
+    Seed((Alpha, false));
+    var queued = new List<Action>();
+    var model = NewMain(queued.Add);
+    Assert.Single(queued);
+    Assert.False(Card(model, "alpha").IsMissing);
+
+    _tree.RemoveProject(Alpha);
+    model.Refresh();
+    Assert.False(Card(model, "alpha").IsMissing);
+
+    foreach (var work in queued.ToList())
     {
-      _tree.AddProject(Alpha);
-      _tree.AddProject(Beta);
-      Seed((Alpha, false), (Beta, false));
-      var model = NewMain();
+      work();
+    }
 
-      model.PlayProjectCommand.Execute(Card(model, "beta"));
-      Assert.Single(_runner.Launches);
-      Assert.False(Card(model, "beta").IsInEditor);
+    Assert.True(Card(model, "alpha").IsMissing);
+  }
 
-      model.OpenProjectCommand.Execute(Card(model, "alpha"));
-      Assert.True(Card(model, "alpha").IsInEditor);
-      Assert.False(Card(model, "beta").IsInEditor);
-    });
+  // Waits for the post that follows the exit; the tracker finishes on another thread.
+  private void ExitAndWait(int index, int exitCode)
+  {
+    var before = Volatile.Read(ref _posts);
+    _runner.Processes[index].Exit(exitCode);
+    Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref _posts) > before, TimeSpan.FromSeconds(5)));
   }
 }

@@ -82,7 +82,7 @@ public class MainWindow : Window
             Title = "Locate the project folder",
             AllowMultiple = false,
         });
-        return folders.Count == 0 ? null : folders[0].TryGetLocalPath();
+        return folders.Count == 0 ? null : folders[0].TryGetLocalPath() ?? string.Empty;
     }
 
     // A project folder is chosen by picking the project.ecs3d inside it.
@@ -94,11 +94,11 @@ public class MainWindow : Window
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new FilePickerFileType("ECS3D project") { Patterns = ["project.ecs3d"] },
+                new FilePickerFileType("ECS3D project") { Patterns = ["*.ecs3d"] },
                 new FilePickerFileType("Legacy project (.json)") { Patterns = ["*.json"] },
             ],
         });
-        return files.Count == 0 ? null : files[0].TryGetLocalPath();
+        return files.Count == 0 ? null : files[0].TryGetLocalPath() ?? string.Empty;
     }
 
     // The editor may have recorded a project while the launcher was in the background.

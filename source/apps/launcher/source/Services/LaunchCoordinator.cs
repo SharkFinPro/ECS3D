@@ -16,11 +16,16 @@ public sealed class LaunchCoordinator
     private readonly RunningEditors? _editors;
 
     // When editors is given, a project's editor stays tracked until its process exits.
+    public LaunchCoordinator(EngineLauncher launcher, EarlyExitWatcher watcher, Action<LaunchNotice> notify)
+        : this(launcher, watcher, notify, null)
+    {
+    }
+
     public LaunchCoordinator(
         EngineLauncher launcher,
         EarlyExitWatcher watcher,
         Action<LaunchNotice> notify,
-        RunningEditors? editors = null)
+        RunningEditors? editors)
     {
         _launcher = launcher;
         _watcher = watcher;
@@ -33,13 +38,13 @@ public sealed class LaunchCoordinator
         ReportAsync(() => _launcher.OpenProject(projectFolder, options), EngineExecutable.Editor, projectFolder);
 
     public Task ExploreEngineAsync(LaunchOptions options) =>
-        ReportAsync(() => _launcher.ExploreEngine(options), EngineExecutable.Editor);
+        ReportAsync(() => _launcher.ExploreEngine(options), EngineExecutable.Editor, null);
 
     public Task PlayProjectAsync(string projectFolder) =>
-        ReportAsync(() => _launcher.PlayProject(projectFolder), EngineExecutable.Client);
+        ReportAsync(() => _launcher.PlayProject(projectFolder), EngineExecutable.Client, null);
 
     // Callers drop the task, so nothing the start or the watch throws may escape it.
-    private async Task ReportAsync(Func<LaunchResult> start, EngineExecutable executable, string? trackedProject = null)
+    private async Task ReportAsync(Func<LaunchResult> start, EngineExecutable executable, string? trackedProject)
     {
         LaunchResult result;
         try
@@ -62,7 +67,7 @@ public sealed class LaunchCoordinator
         // handle is released by the tracker once the process exits.
         var process = result.Process;
         var tracked = _editors is not null && trackedProject is not null;
-        var watchEnded = new TaskCompletionSource();
+        var watchEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (tracked)
         {
             _ = TrackAsync(process, trackedProject!, watchEnded.Task);
@@ -97,9 +102,9 @@ public sealed class LaunchCoordinator
     // early-exit watch has finished with it.
     private async Task TrackAsync(IRunningProcess process, string projectPath, Task watchEnded)
     {
-        _editors!.Started(projectPath);
         try
         {
+            _editors!.Started(projectPath);
             await process.WaitForExitAsync(CancellationToken.None);
         }
         catch (Exception exception) when (IsLaunchFailure(exception))
@@ -110,7 +115,7 @@ public sealed class LaunchCoordinator
         {
             await watchEnded;
             process.Dispose();
-            _editors.Stopped(projectPath);
+            _editors!.Stopped(projectPath);
         }
     }
 

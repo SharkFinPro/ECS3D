@@ -32,6 +32,8 @@ public class MainWindowViewModel : ObservableObject
     private readonly Func<DateTimeOffset> _now;
     private readonly Func<string, Bitmap?> _loadThumbnail;
     private readonly IFileSystem _fileSystem;
+    private readonly Action<Action> _runInBackground;
+    private Dictionary<string, bool> _missing = [];
     private readonly RunningEditors _editors;
     private List<(RecentProject Entry, string Edited, bool Missing, bool InEditor)> _shown = [];
     private EngineLocation _engine;
@@ -147,7 +149,8 @@ public class MainWindowViewModel : ObservableObject
     // Set by the window, which owns the OS "open in the default browser" call.
     public Func<string, Task<bool>>? OpenUrl { get; set; }
 
-    // Set by the window, which owns the pickers; each returns the chosen path, or null when cancelled.
+    // Set by the window, which owns the pickers; each returns the chosen path, null when cancelled and an empty
+    // string when the item has no local path.
     public Func<Task<string?>>? PickProjectFolder { get; set; }
 
     public Func<Task<string?>>? PickProjectFile { get; set; }
@@ -190,11 +193,39 @@ public class MainWindowViewModel : ObservableObject
         Func<string, Bitmap?> loadThumbnail,
         string version,
         Action<Action> post,
+        Func<DateTimeOffset> now)
+        : this(
+            settings,
+            recents,
+            runner,
+            watcher,
+            catalog,
+            loadThumbnail,
+            version,
+            post,
+            now,
+            new PhysicalFileSystem(),
+            work => _ = Task.Run(work))
+    {
+    }
+
+    // runInBackground runs the disk checks off the UI thread; a dead network share can block them for seconds.
+    public MainWindowViewModel(
+        SettingsEditor settings,
+        RecentProjectsStore recents,
+        IProcessRunner runner,
+        EarlyExitWatcher watcher,
+        TemplateCatalog catalog,
+        Func<string, Bitmap?> loadThumbnail,
+        string version,
+        Action<Action> post,
         Func<DateTimeOffset> now,
-        IFileSystem? fileSystem = null)
+        IFileSystem fileSystem,
+        Action<Action> runInBackground)
     {
         _post = post;
-        _fileSystem = fileSystem ?? new PhysicalFileSystem();
+        _fileSystem = fileSystem;
+        _runInBackground = runInBackground;
         _editors = new RunningEditors(recents.ProjectKey, () => _post(ShowStored));
         _recents = recents;
         _now = now;
@@ -361,10 +392,39 @@ public class MainWindowViewModel : ObservableObject
     // A read that failed keeps the list on screen as it is.
     public void Refresh()
     {
-        if (_recents.Load())
+        if (!_recents.Load())
         {
-            ShowStored();
+            return;
         }
+
+        ShowStored();
+        CheckMissingInBackground();
+    }
+
+    // The flags are checked off the UI thread and applied when done; every other redraw reuses the last result.
+    private void CheckMissingInBackground()
+    {
+        var entries = _recents.Entries();
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        var keys = entries.Select(entry => _recents.ProjectKey(entry.Path)).ToList();
+        _runInBackground(() =>
+        {
+            var missing = new Dictionary<string, bool>();
+            for (var index = 0; index < entries.Count; index++)
+            {
+                missing[keys[index]] = RecentProjectsView.IsMissing(_fileSystem, entries[index]);
+            }
+
+            _post(() =>
+            {
+                _missing = missing;
+                ShowStored();
+            });
+        });
     }
 
     // Leaves the list alone when nothing it shows has changed, which spares re-decoding the thumbnails.
@@ -375,7 +435,7 @@ public class MainWindowViewModel : ObservableObject
             .Select(entry => (
                 entry,
                 RecentProjectsView.EditedText(entry.LastOpenedUtc, _now()),
-                RecentProjectsView.IsMissing(_fileSystem, entry),
+                _missing.GetValueOrDefault(_recents.ProjectKey(entry.Path)),
                 _editors.IsRunning(entry.Path)))
             .ToList();
         if (shown.SequenceEqual(_shown))
@@ -522,6 +582,12 @@ public class MainWindowViewModel : ObservableObject
             return;
         }
 
+        if (chosen.Length == 0)
+        {
+            ApplyNotice(EarlyExitNotice.Failure("Choose a folder on this computer."));
+            return;
+        }
+
         var result = ProjectPathKind.Classify(_fileSystem, chosen);
         if (result.Type == ProjectPathType.Invalid)
         {
@@ -529,6 +595,7 @@ public class MainWindowViewModel : ObservableObject
             return;
         }
 
+        // A running editor's badge stays keyed to the old path until it exits.
         ChangeStored(() => _recents.Relocate(project.Path, result.Path));
     }
 
@@ -536,6 +603,12 @@ public class MainWindowViewModel : ObservableObject
     {
         if (await PickAsync(PickProjectFile) is not { } chosen)
         {
+            return;
+        }
+
+        if (chosen.Length == 0)
+        {
+            ApplyNotice(EarlyExitNotice.Failure("Choose a file on this computer."));
             return;
         }
 
