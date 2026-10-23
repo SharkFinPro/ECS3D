@@ -7,12 +7,12 @@ public sealed record LearnGuide(int Number, string Title, string Summary, string
 // The Learn tab's content: the numbered guides and the shipped-content counts behind the banner.
 public static class LearnCatalog
 {
-    public const string GuidesUrl = "https://github.com/SharkFinPro/ECS3D/blob/main/docs/guides/";
+    public static string GuidesUrl => "https://github.com/SharkFinPro/ECS3D/blob/main/docs/guides/";
 
-    public const int SampleCount = 2;
-    public const int TemplateCount = 2;
-    public const int StarterScriptCount = 17;
-    public const int ConvexShapeCount = 9;
+    public static int SampleCount => 2;
+    public static int TemplateCount => 2;
+    public static int StarterScriptCount => 17;
+    public static int ConvexShapeCount => 9;
 
     public static string BoxSummary =>
         $"Every install includes {SampleCount} samples, {TemplateCount} templates, "
