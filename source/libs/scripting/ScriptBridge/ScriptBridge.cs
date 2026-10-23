@@ -532,8 +532,8 @@ public static class Bridge
                 name        = x.Field.Name,
                 displayName = x.Field.GetCustomAttribute<ExposeToEditorAttribute>()!.DisplayName ?? x.Field.Name,
                 type        = x.Type,
-                asset       = x.Type == "string" && x.Field.GetCustomAttribute<PrefabReferenceAttribute>() != null
-                              ? "prefab" : null
+                asset       = x.Type == "string"
+                              ? x.Field.GetCustomAttributes<AssetReferenceAttribute>().FirstOrDefault()?.Asset : null
             })
             .ToArray();
 

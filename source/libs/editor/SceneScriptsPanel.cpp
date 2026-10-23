@@ -27,6 +27,11 @@ void SceneScriptsPanel::setAssetRegistry(const AssetRegistry* registry)
   m_assetRegistry = registry;
 }
 
+void SceneScriptsPanel::setAssetCache(std::shared_ptr<GpuAssetCache> cache)
+{
+  m_assetCache = std::move(cache);
+}
+
 void SceneScriptsPanel::setSceneManager(const SceneManager* sceneManager)
 {
   m_sceneManager = sceneManager;
@@ -213,7 +218,7 @@ void SceneScriptsPanel::displayRow(const SceneAsset& scene, const std::size_t in
 
   const nlohmann::json* shown = m_fieldEdits.shown(className);
   nlohmann::json fields = shown ? *shown : script->getFields();
-  if (drawScriptFieldWidgets(fields, MixedFields{}, m_assetRegistry))
+  if (drawScriptFieldWidgets(fields, MixedFields{}, m_assetRegistry, m_assetCache))
   {
     m_fieldEdits.edit(className, std::move(fields));
   }

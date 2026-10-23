@@ -6,6 +6,7 @@ public class ColorOnHit : ScriptBase
 {
     // The palette_red texture.
     [ExposeToEditor("Hit Texture")]
+    [TextureReference]
     private string m_hitTexture = "7c8c01db-771f-4048-94c2-004b8d19e7aa";
 
     [ExposeToEditor("Revert On Exit")]

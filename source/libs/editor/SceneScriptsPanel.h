@@ -12,6 +12,7 @@
 #include <uuid.h>
 
 class AssetRegistry;
+class GpuAssetCache;
 class SceneAsset;
 class SceneManager;
 
@@ -23,6 +24,8 @@ public:
   using SceneEditCallback = std::function<void(const nlohmann::json& edit)>;
 
   void setAssetRegistry(const AssetRegistry* registry);
+
+  void setAssetCache(std::shared_ptr<GpuAssetCache> cache);
 
   void setSceneManager(const SceneManager* sceneManager);
 
@@ -41,6 +44,7 @@ public:
 
 private:
   const AssetRegistry* m_assetRegistry = nullptr;
+  std::shared_ptr<GpuAssetCache> m_assetCache;
   const SceneManager* m_sceneManager = nullptr;
   SceneEditCallback m_sceneEditCallback;
 

@@ -1,22 +1,46 @@
 #ifndef SCRIPTFIELDASSET_H
 #define SCRIPTFIELDASSET_H
 
+#include <assets/AssetRegistry.h>
 #include <nlohmann/json.hpp>
 #include <uuid.h>
+#include <optional>
 #include <string>
 
-// Whether a script field is a string holding a prefab's uuid, so it is drawn as a prefab slot.
-[[nodiscard]] inline bool isPrefabReferenceField(const nlohmann::json& field)
+// The asset type a script field's uuid string names, so it is drawn as that type's slot. Empty for a field that
+// is not a string or marks no asset a slot can hold.
+[[nodiscard]] inline std::optional<AssetType> scriptFieldAssetType(const nlohmann::json& field)
 {
   if (!field.is_object())
   {
-    return false;
+    return std::nullopt;
   }
 
   const auto type = field.find("type");
   const auto asset = field.find("asset");
-  return type != field.end() && type->is_string() && type->get<std::string>() == "string"
-    && asset != field.end() && asset->is_string() && asset->get<std::string>() == "prefab";
+  if (type == field.end() || !type->is_string() || type->get<std::string>() != "string"
+      || asset == field.end() || !asset->is_string())
+  {
+    return std::nullopt;
+  }
+
+  const auto kind = asset->get<std::string>();
+  if (kind == "prefab")
+  {
+    return AssetType::Prefab;
+  }
+
+  if (kind == "model")
+  {
+    return AssetType::Model;
+  }
+
+  if (kind == "texture")
+  {
+    return AssetType::Texture;
+  }
+
+  return std::nullopt;
 }
 
 // The uuid a string field value holds, or the nil uuid for a value that is not a string or not a uuid.
