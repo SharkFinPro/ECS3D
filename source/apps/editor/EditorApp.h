@@ -30,6 +30,7 @@ class ComponentRegistry;
 class AssetRegistry;
 class SceneManager;
 class SceneAsset;
+class ObjectManager;
 class ProjectSerializer;
 class ProjectPacker;
 class RenderSystem;
@@ -283,6 +284,14 @@ private:
 
   void handlePlayerSlot(const net::Message& message);
 
+  // The editStatus, sceneStatus, serverLog and playerSlot messages, split out of applyMessage().
+  void applyStatusMessage(const net::Message& message);
+
+  // Drops the save target when the snapshot shows the server holds a project other than this editor's.
+  void checkSnapshotProject();
+
+  void logSnapshotApplied(const net::Message& message, const std::shared_ptr<SceneAsset>& scene) const;
+
   void sendJoin();
 
   void requestPlayerSlot(int32_t slot);
@@ -380,6 +389,10 @@ private:
   void displayMessageLog();
 
   void variableUpdate();
+
+  void dropStaleViewCamera(const ObjectManager* objectManager);
+
+  void applyViewCamera(const ObjectManager* objectManager);
 
   // The editor spawns a child ECS3DServer (ServerProcess) in edit mode and connects over localhost as
   // Role::editor, authorized by the --token it shares with that server at the handshake; edits then
