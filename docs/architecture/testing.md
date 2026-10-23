@@ -48,7 +48,8 @@ Managed tests (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit p
 as a single CTest test through `add_test` in `tests/CMakeLists.txt` (guarded on `DOTNET_EXE`) rather
 than a native executable. The launcher's `source/Services` (plain C#, no Avalonia) are compiled into it by
 link, and so are its view models, models and `IconKeyConverter`, over the Avalonia and
-CommunityToolkit.Mvvm packages; the window, views and `DesignData` stay out. It covers pure, testable
+CommunityToolkit.Mvvm packages; the window, views and `DesignData` stay out. Launcher view helpers with Avalonia behavior (`CardMenu`) are tested on Avalonia's
+headless platform through `HeadlessUnitTestSession`. It covers pure, testable
 logic via `ProjectReference`s to
 `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
 (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
