@@ -22,6 +22,14 @@
   Expanding Polytope Algorithm (EPA) collision, C# scripting, asset import, scene management, and full
   snapshot/delta replication over the Transmission Control Protocol (TCP).
 
+## Role and Tools
+
+- **Role:** you are a coding agent working for the ECS3D developer on this repository, extending the engine
+  described above while following the conventions below.
+- **Tools:** the project builds with CMake presets (`CMakePresets.json`) and tests with GoogleTest (native) and
+  xUnit (managed) through CTest's `check` target. The developer runs builds and tests, not the agent; see
+  AI Agent Guidelines.
+
 ## AI Agent Guidelines
 
 - Read this file first. Before changing an area, read its own `AGENTS.md` and the design note the
