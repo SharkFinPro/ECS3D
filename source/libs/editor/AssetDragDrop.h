@@ -50,10 +50,10 @@ namespace assetDragDrop {
   }
 
   // The record a slot may show: one of the slot's own type, so another type's uuid reads as empty.
-  [[nodiscard]] inline const AssetRecord* slotRecord(const AssetRegistry& registry, const char* payloadId,
+  [[nodiscard]] inline const AssetRecord* slotRecord(const AssetRegistry& registry, const char* id,
                                                      const uuids::uuid& uuid)
   {
-    const auto type = typeOfPayload(payloadId);
+    const auto type = typeOfPayload(id);
 
     return type ? registry.getByUUIDOfType(uuid, *type) : nullptr;
   }
