@@ -37,7 +37,7 @@ public class MainWindowViewModel : ObservableObject
     public ProjectsViewModel Projects { get; }
     public TemplatesViewModel Templates { get; } = new();
     public SamplesViewModel Samples { get; }
-    public LearnViewModel Learn { get; } = new();
+    public LearnViewModel Learn { get; }
     public SettingsViewModel Settings { get; }
 
     // Which library section is showing. CurrentTab is the active tab's view
@@ -92,6 +92,7 @@ public class MainWindowViewModel : ObservableObject
             {
                 Projects.SearchText = value;
                 Samples.SearchText = value;
+                Learn.SearchText = value;
             }
         }
     }
@@ -130,6 +131,9 @@ public class MainWindowViewModel : ObservableObject
 
     // Set by the window, which owns the OS "open with the default app" call.
     public Func<string, Task<bool>>? OpenLogFile { get; set; }
+
+    // Set by the window, which owns the OS "open in the default browser" call.
+    public Func<string, Task<bool>>? OpenUrl { get; set; }
 
     public IRelayCommand<string?> SelectNavCommand { get; }
     public IRelayCommand NewProjectCommand { get; }
@@ -189,6 +193,12 @@ public class MainWindowViewModel : ObservableObject
             []);
         Samples = new SamplesViewModel(PlaySampleCommand, _actions.Play.Tooltip, loadThumbnail);
         Samples.Reload(_catalog.Load(_engine.Folder));
+
+        Learn = new LearnViewModel(
+            url => _ = OpenUrlAsync(url),
+            () => ActiveNav = "samples",
+            ExploreCommand,
+            _actions.Explore.Tooltip);
 
         NavItems =
         [
@@ -252,6 +262,7 @@ public class MainWindowViewModel : ObservableObject
         _actions = new EngineActions(engine);
         _coordinator = NewCoordinator(engine);
         Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip);
+        Learn.UpdateTooltip(_actions.Explore.Tooltip);
         ExploreCommand.NotifyCanExecuteChanged();
         OpenProjectCommand.NotifyCanExecuteChanged();
         Samples.UpdatePlay(_actions.Play.Tooltip);
@@ -334,6 +345,24 @@ public class MainWindowViewModel : ObservableObject
         if (!opened)
         {
             ApplyNotice(EarlyExitNotice.Failure($"Could not open the log file {path}"));
+        }
+    }
+
+    private async Task OpenUrlAsync(string url)
+    {
+        var opened = false;
+        try
+        {
+            opened = OpenUrl is not null && await OpenUrl(url);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            opened = false;
+        }
+
+        if (!opened)
+        {
+            ApplyNotice(EarlyExitNotice.Failure($"Could not open {url}"));
         }
     }
 

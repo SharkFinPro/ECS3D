@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
 using ECS3DLauncher.Shared.Models;
+using ECS3DLauncher.Tabs.Learn;
 using ECS3DLauncher.Tabs.Projects;
 using ECS3DLauncher.Tabs.Samples;
 using ECS3DLauncher.Tabs.Templates;
@@ -52,4 +53,7 @@ public static class DesignData
             "C:/ECS3D/templates", true, [], [new TemplateEntry(manifest, "C:/ECS3D/templates/coin_rush", null)]));
         return model;
     }
+
+    public static LearnViewModel Learn { get; } =
+        new(_ => { }, () => { }, new RelayCommand(() => { }), null);
 }

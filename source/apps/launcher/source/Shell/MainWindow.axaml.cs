@@ -51,12 +51,18 @@ public class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.OpenLogFile = OpenWithDefaultAppAsync;
+            viewModel.OpenUrl = OpenInBrowserAsync;
         }
     }
 
     private async Task<bool> OpenWithDefaultAppAsync(string path)
     {
         return Launcher is { } launcher && await launcher.LaunchFileInfoAsync(new FileInfo(path));
+    }
+
+    private async Task<bool> OpenInBrowserAsync(string url)
+    {
+        return Launcher is { } launcher && await launcher.LaunchUriAsync(new Uri(url));
     }
 
     private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)
