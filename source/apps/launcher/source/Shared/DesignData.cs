@@ -2,6 +2,7 @@ using Avalonia.Media;
 using CommunityToolkit.Mvvm.Input;
 using ECS3DLauncher.Shell;
 using ECS3DLauncher.Shared.Models;
+using ECS3DLauncher.Tabs.Learn;
 using ECS3DLauncher.Tabs.Projects;
 using ECS3DLauncher.Tabs.Templates;
 
@@ -34,4 +35,7 @@ public static class DesignData
         ]);
 
     public static TemplatesViewModel Templates { get; } = new();
+
+    public static LearnViewModel Learn { get; } =
+        new(_ => { }, () => { }, new RelayCommand(() => { }), null);
 }

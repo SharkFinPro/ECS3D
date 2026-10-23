@@ -1,7 +1,76 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="using:ECS3DLauncher.Shared.Controls"
-             x:Class="ECS3DLauncher.Tabs.Learn.LearnView">
+             xmlns:svc="using:ECS3DLauncher.Services"
+             xmlns:local="using:ECS3DLauncher.Tabs.Learn"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:dd="using:ECS3DLauncher.Shared"
+             mc:Ignorable="d"
+             d:DesignWidth="960" d:DesignHeight="720"
+             d:DataContext="{x:Static dd:DesignData.Learn}"
+             x:Class="ECS3DLauncher.Tabs.Learn.LearnView"
+             x:DataType="local:LearnViewModel">
 
-    <controls:EmptyState IconData="{StaticResource IconBook}" Heading="Documentation" />
+    <StackPanel Spacing="24">
+
+        <!-- GUIDE CARDS -->
+        <ItemsControl ItemsSource="{Binding Guides}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><WrapPanel Margin="-9" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="svc:LearnGuide">
+                    <Button Classes="card-btn" Theme="{StaticResource BareButton}" Width="330" Margin="9"
+                            CornerRadius="11" HorizontalContentAlignment="Stretch"
+                            Command="{Binding $parent[local:LearnView].((local:LearnViewModel)DataContext).OpenGuideCommand, FallbackValue={x:Null}}"
+                            CommandParameter="{Binding}">
+                        <Border Classes="card" CornerRadius="11" Padding="18">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9"
+                                        VerticalAlignment="Top" Background="{StaticResource AccDim}">
+                                    <TextBlock Text="{Binding Number}" FontSize="15" FontWeight="Bold"
+                                               FontFamily="{StaticResource MonoFontFamily}"
+                                               Foreground="{StaticResource AccBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Summary}" FontSize="12" TextWrapping="Wrap"
+                                               LineHeight="18" Foreground="{StaticResource T2Brush}" />
+                                    <TextBlock Text="Opens in your browser" FontSize="11" Margin="0,6,0,0"
+                                               Foreground="{StaticResource T3Brush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock IsVisible="{Binding HasNoMatches}" Text="No guides match your search."
+                   FontSize="12.5" Foreground="{StaticResource T3Brush}" />
+
+        <!-- WHAT'S IN THE BOX -->
+        <Border CornerRadius="11" Padding="20"
+                Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+                <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="What's in the box" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding BoxSummary}" FontSize="12" TextWrapping="Wrap"
+                               LineHeight="18" Foreground="{StaticResource T2Brush}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Go to Samples"
+                            Command="{Binding GoToSamplesCommand}" />
+                    <Button Classes="cta" Theme="{StaticResource BareButton}"
+                            Command="{Binding ExploreCommand}"
+                            ToolTip.Tip="{Binding ExploreTooltip}" ToolTip.ShowOnDisabled="True">
+                        <TextBlock Text="Open Welcome scene" FontSize="13" FontWeight="Bold"
+                                   Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </StackPanel>
 </UserControl>
