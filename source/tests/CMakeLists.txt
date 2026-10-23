@@ -272,6 +272,7 @@ add_executable(${PROJECT_NAME}
   # The server's built-in project is plain JSON over json, glm and uuid, so it is compiled in the same way
   # rather than linking the server app.
   ../apps/server/DefaultProject.cpp
+  ../apps/server/DefaultScenes.cpp
   ../apps/server/DefaultShapes.cpp
   ../apps/server/DefaultWelcome.cpp
   ../apps/server/RestPose.cpp
