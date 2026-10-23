@@ -184,39 +184,44 @@ bool ServerApp::isActive() const
   return !m_hasConnected || m_netServer->connectionCount() > 0;
 }
 
+void ServerApp::drainNetwork()
+{
+  net::Message message;
+  int32_t senderId = 0;
+  while (m_netServer->poll(message, senderId))
+  {
+    // A bad/malicious message (or a script-bridge hiccup while building a snapshot) must not take the
+    // whole server down - that would look like "client connected, then nothing".
+    try
+    {
+      handleClientMessage(message, senderId);
+    }
+    catch (const std::exception& e)
+    {
+      Log::error(LogCategory::server, std::string("Failed to handle client message: ") + e.what());
+    }
+  }
+
+  // Release the player slot of any connection that dropped, so a departed player's input doesn't linger
+  // and its slot is free for the next joiner.
+  for (const auto connId : m_netServer->takeDisconnected())
+  {
+    try
+    {
+      handleDisconnect(connId);
+    }
+    catch (const std::exception& e)
+    {
+      Log::error(LogCategory::server, std::string("Failed to handle disconnect: ") + e.what());
+    }
+  }
+}
+
 void ServerApp::run()
 {
   while (isActive())
   {
-    net::Message message;
-    int32_t senderId = 0;
-    while (m_netServer->poll(message, senderId))
-    {
-      // A bad/malicious message (or a script-bridge hiccup while building a snapshot) must not take the
-      // whole server down - that would look like "client connected, then nothing".
-      try
-      {
-        handleClientMessage(message, senderId);
-      }
-      catch (const std::exception& e)
-      {
-        Log::error(LogCategory::server, std::string("Failed to handle client message: ") + e.what());
-      }
-    }
-
-    // Release the player slot of any connection that dropped, so a departed player's input doesn't linger
-    // and its slot is free for the next joiner.
-    for (const auto connId : m_netServer->takeDisconnected())
-    {
-      try
-      {
-        handleDisconnect(connId);
-      }
-      catch (const std::exception& e)
-      {
-        Log::error(LogCategory::server, std::string("Failed to handle disconnect: ") + e.what());
-      }
-    }
+    drainNetwork();
 
     const auto now = std::chrono::steady_clock::now();
     const float dt = std::chrono::duration<float>(now - m_previousTime).count();

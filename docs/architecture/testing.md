@@ -20,7 +20,7 @@ Tests (`source/tests/`) build as `ECS3DTests`, linking `ECS3DData`, `ECS3DSim`, 
 `ECS3DNetProtocol` — not the renderer, the editor or `ECS3DNet` (bar the few sources compiled in directly, below) — so the suite stays runnable without a
 window, GPU or server. `net/MessageQueue.cpp` (and the CLR-free `net/CommandLineSplit.cpp`, `net/ClientConnectionState.cpp` and `net/EditorConnections.cpp`) are compiled straight into the target rather than linked,
 because it is the one piece of `ECS3DNet` with no CLR dependency; see the comment in the test
-`CMakeLists.txt` before adding more. The server's `DefaultProject.cpp`, `DefaultShapes.cpp`, `DefaultWelcome.cpp` and `RestPose.cpp` are compiled in the same
+`CMakeLists.txt` before adding more. The server's `DefaultProject.cpp`, `DefaultScenes.cpp`, `DefaultShapes.cpp`, `DefaultWelcome.cpp` and `RestPose.cpp` are compiled in the same
 way, as is
 `scripting/ScriptSystem.cpp` (it depends only on data, log, json and the `ScriptRuntime` interface), as is
 `editor/Gizmo.cpp` and `render/Billboard.cpp` (each depends only on glm), the header-only `render/SharedAssetLoads.h` (depends only on `ECS3DLog`), the header-only `render/CapsuleGizmo.h` (depends only on glm), the header-only `render/HullGizmoMesh.h` (depends on glm and the hull type) and `editor/TransientObject.cpp` (depends only on `ECS3DData` and

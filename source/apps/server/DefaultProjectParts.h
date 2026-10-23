@@ -110,6 +110,14 @@ struct LibraryShape
 [[nodiscard]] nlohmann::json light(const glm::vec3& position, const glm::vec3& color, float ambient,
                                    float diffuse, float specular);
 
+// A scene asset: its name, uuid and objects. The builders below return the objects of the built-in scenes.
+[[nodiscard]] nlohmann::json scene(const std::string& name, const std::string& uuid, nlohmann::json objects);
+
+[[nodiscard]] nlohmann::json buildScene1();
+[[nodiscard]] nlohmann::json buildScene2();
+[[nodiscard]] nlohmann::json buildScene3();
+[[nodiscard]] nlohmann::json buildFallingBalls();
+
 }
 
 #endif //DEFAULTPROJECTPARTS_H
