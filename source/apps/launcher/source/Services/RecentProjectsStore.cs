@@ -28,7 +28,6 @@ public sealed class RecentProjectsStore
     private readonly Action<TimeSpan> _delay;
     private JsonObject _extra = new();
     private List<JsonObject> _projects = [];
-    private bool _unreadable;
 
     public RecentProjectsStore(
         IFileSystem fileSystem,
@@ -67,15 +66,15 @@ public sealed class RecentProjectsStore
     {
         _extra = new JsonObject();
         _projects = [];
-        _unreadable = false;
         if (!_fileSystem.FileExists(_path))
         {
             return true;
         }
 
+        var readable = true;
         try
         {
-            LoadDocument();
+            readable = LoadDocument();
         }
         catch (ArgumentException ex)
         {
@@ -85,15 +84,16 @@ public sealed class RecentProjectsStore
             _log.Warn($"{_path}: could not read recent projects: {ex.Message}; starting with an empty list");
         }
 
-        return !_unreadable;
+        return readable;
     }
 
-    private void LoadDocument()
+    // False when the file could not be read at all.
+    private bool LoadDocument()
     {
-        var root = ReadRoot();
+        var root = ReadRoot(out var readable);
         if (root is null)
         {
-            return;
+            return readable;
         }
 
         if (root.TryGetPropertyValue("projects", out var node))
@@ -101,7 +101,7 @@ public sealed class RecentProjectsStore
             if (node is not JsonArray array)
             {
                 _log.Warn($"{_path}: 'projects' is not an array; starting with an empty list");
-                return;
+                return true;
             }
 
             _projects = ValidEntries(array);
@@ -109,6 +109,7 @@ public sealed class RecentProjectsStore
         }
 
         _extra = root;
+        return true;
     }
 
     public bool Save()
@@ -294,8 +295,9 @@ public sealed class RecentProjectsStore
         }
     }
 
-    private JsonObject? ReadRoot()
+    private JsonObject? ReadRoot(out bool readable)
     {
+        readable = true;
         try
         {
             var node = JsonNode.Parse(_fileSystem.ReadAllText(_path));
@@ -308,7 +310,7 @@ public sealed class RecentProjectsStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _unreadable = true;
+            readable = false;
             _log.Warn($"{_path}: could not read recent projects: {ex.Message}; leaving the file alone");
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException)

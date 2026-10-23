@@ -133,7 +133,7 @@ public class ProjectsViewModel : ObservableObject
         RebuildTiles();
     }
 
-    public void UpdateTooltips(string? exploreTooltip, string? openTooltip, string? playTooltip = null)
+    public void UpdateTooltips(string? exploreTooltip, string? openTooltip, string? playTooltip)
     {
         ExploreTooltip = exploreTooltip;
         OpenTooltip = openTooltip;
