@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -29,6 +30,7 @@ public class MainWindowViewModel : ObservableObject
     private readonly RecentProjectsStore _recents;
     private readonly Func<DateTimeOffset> _now;
     private readonly Func<string, Bitmap?> _loadThumbnail;
+    private List<(RecentProject Entry, string Edited)> _shown = [];
     private EngineLocation _engine;
     private EngineActions _actions;
     private LaunchCoordinator _coordinator;
@@ -223,6 +225,7 @@ public class MainWindowViewModel : ObservableObject
         {
             NavItems[0].Count = ProjectCount();
             OnPropertyChanged(nameof(ViewTitle));
+            OnPropertyChanged(nameof(ShowViewToggle));
         };
 
         Projects.IsGridView = settings.Current.ProjectsView != LauncherSettings.ListView;
@@ -308,15 +311,26 @@ public class MainWindowViewModel : ObservableObject
     private void Explore() => _ = _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions());
 
     // Reads the stored list again, as the editor may have recorded a project meanwhile.
+    // A read that failed keeps the list on screen as it is.
     public void Refresh()
     {
-        _recents.Load();
-        ShowStored();
+        if (_recents.Load())
+        {
+            ShowStored();
+        }
     }
 
+    // Leaves the list alone when nothing it shows has changed, which spares re-decoding the thumbnails.
     private void ShowStored()
     {
         var sorted = RecentProjectsView.Sort(_recents.Entries());
+        var shown = sorted.Select(entry => (entry, RecentProjectsView.EditedText(entry.LastOpenedUtc, _now()))).ToList();
+        if (shown.SequenceEqual(_shown))
+        {
+            return;
+        }
+
+        _shown = shown;
         Projects.SetProjects(sorted.Select(ToProject).ToList());
     }
 
@@ -343,11 +357,16 @@ public class MainWindowViewModel : ObservableObject
     private static Color GlowFor(string name) => Glows[name.Sum(letter => (int)letter) % Glows.Length];
 
     // Another process may have changed the file, so it is read again before each change that is kept.
-    private void ChangeStored(Action change)
+    // A file that cannot be read is left alone, as saving would replace what is in it.
+    private void ChangeStored(Func<bool> change)
     {
-        _recents.Load();
-        change();
-        if (!_recents.Save())
+        if (!_recents.Load())
+        {
+            ApplyNotice(EarlyExitNotice.Failure($"Could not read {_recents.FilePath}"));
+            return;
+        }
+
+        if (change() && !_recents.Save())
         {
             ApplyNotice(EarlyExitNotice.Failure($"Could not save the recent projects list to {_recents.FilePath}"));
         }
@@ -359,7 +378,7 @@ public class MainWindowViewModel : ObservableObject
     {
         if (project is { IsRealCard: true })
         {
-            ChangeStored(() => _recents.SetPinned(project.Path, !project.Pinned));
+            ChangeStored(() => _recents.TogglePinned(project.Path));
         }
     }
 
@@ -407,14 +426,25 @@ public class MainWindowViewModel : ObservableObject
     private static string ContainingFolder(string path)
     {
         var cut = path.LastIndexOfAny(['/', '\\']);
-        return cut < 0 ? "." : path[..Math.Max(cut, 1)];
+        if (cut < 0)
+        {
+            return ".";
+        }
+
+        // A root keeps its separator: "/" and "C:/".
+        var folder = path[..cut];
+        return folder.Length == 0 || folder.EndsWith(':') ? path[..(cut + 1)] : folder;
     }
 
     private void OpenProject(Project? project)
     {
         if (project is { IsRealCard: true } && _actions.Open.Available)
         {
-            ChangeStored(() => _recents.RecordOpened(project.Path));
+            ChangeStored(() =>
+            {
+                _recents.RecordOpened(project.Path);
+                return true;
+            });
             _ = _coordinator.OpenProjectAsync(project.Path, _settings.Current.ToLaunchOptions());
         }
     }

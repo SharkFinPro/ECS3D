@@ -105,29 +105,29 @@
                                 CornerRadius="11" ClipToBounds="True">
                             <Border.ContextMenu>
                                 <ContextMenu>
-                                <MenuItem Header="Open in editor"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}" />
-                                <MenuItem Header="Play"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}"
-                                          ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
-                                          ToolTip.ShowOnDisabled="True" />
-                                <MenuItem Header="Show in folder"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}" />
-                                <Separator />
-                                <MenuItem Header="Pin to top"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}"
-                                          IsVisible="{Binding !Pinned}" />
-                                <MenuItem Header="Unpin"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}"
-                                          IsVisible="{Binding Pinned}" />
-                                <MenuItem Header="Remove from list"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}" />
+                                    <MenuItem Header="Open in editor"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}" />
+                                    <MenuItem Header="Play"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}"
+                                              ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
+                                              ToolTip.ShowOnDisabled="True" />
+                                    <MenuItem Header="Show in folder"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}" />
+                                    <Separator />
+                                    <MenuItem Header="Pin to top"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}"
+                                              IsVisible="{Binding !Pinned}" />
+                                    <MenuItem Header="Unpin"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}"
+                                              IsVisible="{Binding Pinned}" />
+                                    <MenuItem Header="Remove from list"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}" />
                                 </ContextMenu>
                             </Border.ContextMenu>
                             <StackPanel>
@@ -172,9 +172,9 @@
                                                 Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
                                                 CommandParameter="{Binding}" />
                                         <Button Grid.Column="3" Classes="more" Theme="{StaticResource BareButton}" Click="OnMoreClick"
-                                ToolTip.Tip="More" VerticalAlignment="Center" Margin="6,0,0,0">
-                            <TextBlock Text="..." FontSize="13" FontWeight="Bold" Foreground="{StaticResource T2Brush}" />
-                        </Button>
+                                                ToolTip.Tip="More" VerticalAlignment="Center" Margin="6,0,0,0">
+                                            <TextBlock Text="..." FontSize="13" FontWeight="Bold" Foreground="{StaticResource T2Brush}" />
+                                        </Button>
                                     </Grid>
                                 </StackPanel>
                             </StackPanel>
@@ -219,29 +219,29 @@
                         <Border Classes="card row" IsVisible="{Binding IsRealCard}" CornerRadius="9">
                             <Border.ContextMenu>
                                 <ContextMenu>
-                                <MenuItem Header="Open in editor"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}" />
-                                <MenuItem Header="Play"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}"
-                                          ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
-                                          ToolTip.ShowOnDisabled="True" />
-                                <MenuItem Header="Show in folder"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}" />
-                                <Separator />
-                                <MenuItem Header="Pin to top"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}"
-                                          IsVisible="{Binding !Pinned}" />
-                                <MenuItem Header="Unpin"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}"
-                                          IsVisible="{Binding Pinned}" />
-                                <MenuItem Header="Remove from list"
-                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
-                                          CommandParameter="{Binding}" />
+                                    <MenuItem Header="Open in editor"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}" />
+                                    <MenuItem Header="Play"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}"
+                                              ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
+                                              ToolTip.ShowOnDisabled="True" />
+                                    <MenuItem Header="Show in folder"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}" />
+                                    <Separator />
+                                    <MenuItem Header="Pin to top"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}"
+                                              IsVisible="{Binding !Pinned}" />
+                                    <MenuItem Header="Unpin"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}"
+                                              IsVisible="{Binding Pinned}" />
+                                    <MenuItem Header="Remove from list"
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}" />
                                 </ContextMenu>
                             </Border.ContextMenu>
                             <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="14,9">
@@ -277,9 +277,9 @@
                                       IsVisible="{Binding Pinned}" VerticalAlignment="Center"
                                       Data="{StaticResource IconStar}" />
                                 <Button Grid.Column="5" Classes="more" Theme="{StaticResource BareButton}" Click="OnMoreClick"
-                                ToolTip.Tip="More" VerticalAlignment="Center" Margin="10,0,0,0">
-                            <TextBlock Text="..." FontSize="13" FontWeight="Bold" Foreground="{StaticResource T2Brush}" />
-                        </Button>
+                                        ToolTip.Tip="More" VerticalAlignment="Center" Margin="10,0,0,0">
+                                    <TextBlock Text="..." FontSize="13" FontWeight="Bold" Foreground="{StaticResource T2Brush}" />
+                                </Button>
                             </Grid>
                         </Border>
                     </Panel>

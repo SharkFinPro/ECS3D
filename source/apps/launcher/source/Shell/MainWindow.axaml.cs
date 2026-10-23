@@ -20,6 +20,7 @@ public class MainWindow : Window
     private readonly Button _maxButton;
     private readonly Border _glyphMax;
     private readonly Panel _glyphRestore;
+    private bool _activatedOnce;
 
     private const double ResizeBorder = 6;
 
@@ -69,7 +70,13 @@ public class MainWindow : Window
     // The editor may have recorded a project while the launcher was in the background.
     private void OnActivated(object? sender, EventArgs e)
     {
-        (DataContext as MainWindowViewModel)?.Refresh();
+        // The first activation is the launch itself, and the list was just loaded.
+        if (_activatedOnce)
+        {
+            (DataContext as MainWindowViewModel)?.Refresh();
+        }
+
+        _activatedOnce = true;
     }
 
     private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)

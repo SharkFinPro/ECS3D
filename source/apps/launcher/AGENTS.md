@@ -23,8 +23,9 @@
   re-locates the engine and refreshes the banner and the Explore/Open actions.
   The Projects tab lists the stored recent projects (pinned first, then newest). A card opens, plays, pins,
   removes (from the list only) and shows the project in the file manager. While the list is empty, three first-run
-  cards replace it. The list reloads when the window regains focus. A missing project folder, Open existing... and
-  the In editor badge are not built yet. The Templates tab still shows hardcoded cards and the
+  cards replace it and the grid/list toggle is hidden. The list reloads when the window regains focus; a file that
+  cannot be read is never overwritten. A missing project folder, Open existing... and the In editor badge are not
+  built yet. The Templates tab still shows hardcoded cards and the
   other tabs are placeholders. "Close the launcher after opening a project" is saved but not honored yet.
 - Ships as a single-file `ECS3DLauncher.exe` beside the C++ executables in `bin/`. It is
   **framework-dependent** (shares the machine's installed .NET 10) and does **not** boot the CLR the way

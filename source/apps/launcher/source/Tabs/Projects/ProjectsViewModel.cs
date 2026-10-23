@@ -21,6 +21,7 @@ public class ProjectsViewModel : ObservableObject
     private string? _exploreTooltip;
     private string? _openTooltip;
     private string? _playTooltip;
+    private bool _replacing;
 
     public ObservableCollection<Project> Projects { get; }
 
@@ -119,6 +120,11 @@ public class ProjectsViewModel : ObservableObject
         Projects = new ObservableCollection<Project>(projects);
         Projects.CollectionChanged += (_, _) =>
         {
+            if (_replacing)
+            {
+                return;
+            }
+
             RebuildTiles();
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(ShowGrid));
@@ -134,14 +140,27 @@ public class ProjectsViewModel : ObservableObject
         PlayTooltip = playTooltip;
     }
 
-    // Replaces the whole list in one step, keeping the current search.
+    // Replaces the whole list and rebuilds the tiles once, keeping the current search.
     public void SetProjects(IReadOnlyList<Project> projects)
     {
-        Projects.Clear();
-        foreach (var project in projects)
+        _replacing = true;
+        try
         {
-            Projects.Add(project);
+            Projects.Clear();
+            foreach (var project in projects)
+            {
+                Projects.Add(project);
+            }
         }
+        finally
+        {
+            _replacing = false;
+        }
+
+        RebuildTiles();
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(ShowGrid));
+        OnPropertyChanged(nameof(ShowList));
     }
 
     private void RebuildTiles()

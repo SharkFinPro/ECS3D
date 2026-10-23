@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shared.Models;
 using ECS3DLauncher.Shell;
@@ -39,7 +41,7 @@ public class LauncherProjectsTabTests
     return NewMainWithCurrentEngine();
   }
 
-  private MainWindowViewModel NewMainWithCurrentEngine() =>
+  private MainWindowViewModel NewMainWithCurrentEngine(Func<string, Bitmap?>? loadThumbnail = null) =>
     new(
       _rig.NewEditor(),
       _rig.NewRecents(),
@@ -48,7 +50,7 @@ public class LauncherProjectsTabTests
       "1.2.3",
       action => action(),
       () => _rig.Time.Now,
-      _ => null);
+      loadThumbnail ?? (_ => null));
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Projects.Projects.Select(project => project.Name).ToArray();
@@ -57,6 +59,10 @@ public class LauncherProjectsTabTests
     ((JsonArray)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!["projects"]!)
       .Select(node => (string)node!["path"]!)
       .ToArray();
+
+  private JsonNode StoredEntry(string path) =>
+    ((JsonArray)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!["projects"]!)
+      .Single(node => (string)node!["path"]! == path)!;
 
   private static Project Card(MainWindowViewModel model, string name) =>
     model.Projects.Projects.Single(project => project.Name == name);
@@ -155,8 +161,8 @@ public class LauncherProjectsTabTests
     model.OpenProjectCommand.Execute(Card(model, "alpha"));
 
     Assert.Equal([Alpha, Beta], StoredPaths());
-    var saved = (JsonObject)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!;
-    Assert.Equal("2026-10-18T20:00:00Z", (string)saved["projects"]![0]!["lastOpenedUtc"]!);
+    Assert.Equal("2026-10-18T20:00:00Z", (string)StoredEntry(Alpha)["lastOpenedUtc"]!);
+    Assert.Equal("2026-10-18T12:00:00Z", (string)StoredEntry(Beta)["lastOpenedUtc"]!);
     Assert.Equal(["alpha", "beta"], Names(model));
     var launch = Assert.Single(_runner.Launches);
     Assert.EndsWith("ECS3DEditor", launch.FileName);
@@ -233,21 +239,19 @@ public class LauncherProjectsTabTests
 
     Assert.Equal(["alpha", "beta"], Names(model));
     Assert.True(Card(model, "alpha").Pinned);
-    Assert.True((bool)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!["projects"]![0]!["pinned"]!);
+    Assert.True((bool)StoredEntry(Alpha)["pinned"]!);
 
     model.TogglePinCommand.Execute(Card(model, "alpha"));
 
     Assert.Equal(["beta", "alpha"], Names(model));
     Assert.False(Card(model, "alpha").Pinned);
-    Assert.DoesNotContain("\"pinned\": true", _rig.Files.TextOf(_rig.RecentsPath));
+    Assert.False(StoredEntry(Alpha)["pinned"]?.GetValue<bool>() ?? false);
   }
 
   [Fact]
-  public void RemovingDropsTheEntryFromTheFileAndLeavesTheProjectFilesAlone()
+  public void RemovingDropsOnlyThatEntryFromTheFile()
   {
     Seed((Alpha, "2026-10-18T10:00:00Z", false), (Beta, "2026-10-18T12:00:00Z", false));
-    _rig.Files.AddDirectory(Alpha);
-    _rig.Files.Seed(Alpha + "/project.ecs3d", "{}");
     var model = NewMain();
 
     model.RemoveProjectCommand.Execute(Card(model, "alpha"));
@@ -255,13 +259,13 @@ public class LauncherProjectsTabTests
     Assert.Equal(["beta"], Names(model));
     Assert.Equal([Beta], StoredPaths());
     Assert.Equal("1", model.NavItems[0].Count);
-    Assert.True(_rig.Files.DirectoryExists(Alpha));
-    Assert.True(_rig.Files.FileExists(Alpha + "/project.ecs3d"));
   }
 
   [Theory]
   [InlineData(Alpha, Alpha)]
   [InlineData(Legacy, "/work/old")]
+  [InlineData("C:/old.json", "C:/")]
+  [InlineData("/top.json", "/")]
   public void ShowInFolderOpensTheProjectFolderOrTheOneHoldingALegacyFile(string path, string expected)
   {
     Seed((path, "2026-10-18T10:00:00Z", false));
@@ -328,5 +332,173 @@ public class LauncherProjectsTabTests
     model.Projects.NewProjectCommand.Execute(null);
 
     Assert.Same(model.Templates, model.CurrentTab);
+  }
+
+  private MainWindowViewModel NewMain(List<string> requested)
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    return NewMainWithCurrentEngine(path =>
+    {
+      requested.Add(path);
+      return null;
+    });
+  }
+
+  [Fact]
+  public void ThumbnailsAreRequestedFromTheProjectFolderAndNeverForALegacyFile()
+  {
+    Seed((Alpha, "2026-10-18T10:00:00Z", false), (Legacy, "2026-10-18T09:00:00Z", false));
+    var requested = new List<string>();
+
+    NewMain(requested);
+
+    Assert.Equal([Path.Combine(Alpha, "thumbnail.png")], requested);
+  }
+
+  [Fact]
+  public void RefreshingAnUnchangedListDoesNotDecodeThumbnailsAgain()
+  {
+    Seed((Alpha, "2026-10-18T10:00:00Z", false));
+    var requested = new List<string>();
+    var model = NewMain(requested);
+    Assert.Single(requested);
+
+    model.Refresh();
+    Assert.Single(requested);
+
+    Seed((Alpha, "2026-10-18T10:00:00Z", false), (Beta, "2026-10-18T12:00:00Z", false));
+    model.Refresh();
+    Assert.Equal(3, requested.Count);
+  }
+
+  [Fact]
+  public void ATogglePinUsesTheFileAsItIsNowAndKeepsEntriesAnotherProgramAdded()
+  {
+    Seed((Alpha, "2026-10-18T10:00:00Z", false));
+    var model = NewMain();
+    var stale = Card(model, "alpha");
+    Assert.False(stale.Pinned);
+
+    Seed((Alpha, "2026-10-18T10:00:00Z", true), (Beta, "2026-10-18T12:00:00Z", false));
+    model.TogglePinCommand.Execute(stale);
+
+    Assert.False(StoredEntry(Alpha)["pinned"]?.GetValue<bool>() ?? false);
+    Assert.Equal(Beta, (string)StoredEntry(Beta)["path"]!);
+    Assert.Equal(2, StoredPaths().Length);
+    Assert.Equal(["beta", "alpha"], Names(model));
+  }
+
+  [Fact]
+  public void NothingToChangeLeavesTheFileUntouched()
+  {
+    Seed((Alpha, "2026-10-18T10:00:00Z", false));
+    var model = NewMain();
+    var before = _rig.Files.TextOf(_rig.RecentsPath);
+
+    model.RemoveProjectCommand.Execute(new Project { Name = "ghost", Path = "/work/ghost", Edited = "" });
+    Assert.Equal(before, _rig.Files.TextOf(_rig.RecentsPath));
+
+    model.RemoveProjectCommand.Execute(Card(model, "alpha"));
+    Assert.NotEqual(before, _rig.Files.TextOf(_rig.RecentsPath));
+  }
+
+  [Theory]
+  [InlineData("pin")]
+  [InlineData("remove")]
+  public void AChangeDuringAFailedReadLeavesTheFileAloneAndToasts(string change)
+  {
+    Seed((Alpha, "2026-10-18T10:00:00Z", false), (Beta, "2026-10-18T12:00:00Z", false));
+    var model = NewMain();
+    var before = _rig.Files.TextOf(_rig.RecentsPath);
+    var alpha = Card(model, "alpha");
+    _rig.Files.FailReads = true;
+
+    if (change == "pin")
+    {
+      model.TogglePinCommand.Execute(alpha);
+    }
+    else
+    {
+      model.RemoveProjectCommand.Execute(alpha);
+    }
+
+    Assert.Equal(before, _rig.Files.TextOf(_rig.RecentsPath));
+    Assert.True(model.HasToast);
+    Assert.Contains("Could not read", model.ToastMessage);
+    Assert.Equal(["beta", "alpha"], Names(model));
+
+    _rig.Files.FailReads = false;
+    model.DismissToastCommand.Execute(null);
+    model.RemoveProjectCommand.Execute(alpha);
+    Assert.Equal([Beta], StoredPaths());
+    Assert.False(model.HasToast);
+  }
+
+  [Fact]
+  public void AFailedReadStillOpensTheProjectWithoutSavingOverTheFile()
+  {
+    Seed((Alpha, "2026-10-18T10:00:00Z", false), (Beta, "2026-10-18T12:00:00Z", false));
+    var model = NewMain();
+    var before = _rig.Files.TextOf(_rig.RecentsPath);
+    _rig.Files.FailReads = true;
+
+    model.OpenProjectCommand.Execute(Card(model, "alpha"));
+
+    Assert.Equal(before, _rig.Files.TextOf(_rig.RecentsPath));
+    Assert.Single(_runner.Launches);
+  }
+
+  [Fact]
+  public void RefreshDuringAFailedReadKeepsTheListAndRecoversAfterwards()
+  {
+    Seed((Alpha, "2026-10-18T10:00:00Z", false));
+    var model = NewMain();
+    _rig.Files.FailReads = true;
+
+    model.Refresh();
+
+    Assert.Equal(["alpha"], Names(model));
+    Assert.Equal("Recent Projects", model.ViewTitle);
+
+    _rig.Files.FailReads = false;
+    Seed((Alpha, "2026-10-18T10:00:00Z", false), (Beta, "2026-10-18T12:00:00Z", false));
+    model.Refresh();
+    Assert.Equal(["beta", "alpha"], Names(model));
+  }
+
+  [Fact]
+  public void CorruptJsonIsStillReplacedByTheNextChange()
+  {
+    _rig.Files.Seed(_rig.RecentsPath, "this is { not json");
+    var model = NewMain();
+    Assert.True(model.Projects.IsEmpty);
+
+    model.OpenProjectCommand.Execute(new Project { Name = "alpha", Path = Alpha, Edited = "" });
+
+    Assert.Equal([Alpha], StoredPaths());
+    Assert.False(model.Projects.IsEmpty);
+  }
+
+  [Fact]
+  public void TheWelcomeTitleAndHiddenToggleReturnWhenTheListEmpties()
+  {
+    Seed((Alpha, "2026-10-18T10:00:00Z", false));
+    var model = NewMain();
+    Assert.Equal("Recent Projects", model.ViewTitle);
+    Assert.True(model.ShowViewToggle);
+
+    model.RemoveProjectCommand.Execute(Card(model, "alpha"));
+    Assert.Equal("Welcome to ECS3D", model.ViewTitle);
+    Assert.False(model.ShowViewToggle);
+
+    Seed((Alpha, "2026-10-18T10:00:00Z", false));
+    model.Refresh();
+    Assert.Equal("Recent Projects", model.ViewTitle);
+    Assert.True(model.ShowViewToggle);
+
+    _rig.Files.Seed(_rig.RecentsPath, "{\"version\":1,\"projects\":[]}");
+    model.Refresh();
+    Assert.Equal("Welcome to ECS3D", model.ViewTitle);
+    Assert.False(model.ShowViewToggle);
   }
 }

@@ -128,6 +128,13 @@
     <Style Selector="Button.open:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="{StaticResource AccDim2}" />
     </Style>
+    <Style Selector="Button.more">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="8,2" />
+    </Style>
+    <Style Selector="Button.more:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+    </Style>
     <Style Selector="Button:disabled">
         <Setter Property="Opacity" Value="0.45" />
     </Style>

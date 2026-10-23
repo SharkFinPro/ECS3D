@@ -28,6 +28,7 @@ public sealed class RecentProjectsStore
     private readonly Action<TimeSpan> _delay;
     private JsonObject _extra = new();
     private List<JsonObject> _projects = [];
+    private bool _unreadable;
 
     public RecentProjectsStore(
         IFileSystem fileSystem,
@@ -60,13 +61,16 @@ public sealed class RecentProjectsStore
 
     public IReadOnlyList<RecentProject> Entries() => _projects.Select(ToEntry).ToList();
 
-    public void Load()
+    // False when the file exists but could not be read (a sharing violation, a lock): the list is then empty
+    // only for lack of a read, so callers must not save it over the real file. Corrupt JSON still returns true.
+    public bool Load()
     {
         _extra = new JsonObject();
         _projects = [];
+        _unreadable = false;
         if (!_fileSystem.FileExists(_path))
         {
-            return;
+            return true;
         }
 
         try
@@ -80,6 +84,8 @@ public sealed class RecentProjectsStore
             _projects = [];
             _log.Warn($"{_path}: could not read recent projects: {ex.Message}; starting with an empty list");
         }
+
+        return !_unreadable;
     }
 
     private void LoadDocument()
@@ -190,6 +196,13 @@ public sealed class RecentProjectsStore
         return true;
     }
 
+    // Pins an unpinned entry and unpins a pinned one, judged from the entry as loaded.
+    public bool TogglePinned(string path)
+    {
+        var entry = FindEntry(KeyOf(path));
+        return entry is not null && SetPinned(path, !IsPinned(entry));
+    }
+
     // Never touches the project's files.
     public bool Remove(string path)
     {
@@ -293,7 +306,12 @@ public sealed class RecentProjectsStore
 
             _log.Warn($"{_path}: the top level is not an object; starting with an empty list");
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _unreadable = true;
+            _log.Warn($"{_path}: could not read recent projects: {ex.Message}; leaving the file alone");
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
             _log.Warn($"{_path}: could not read recent projects: {ex.Message}; starting with an empty list");
         }
