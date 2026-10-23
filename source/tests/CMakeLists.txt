@@ -160,6 +160,7 @@ add_executable(${PROJECT_NAME}
   PhysicsPlaygroundTestHelpers.h
   PlanarHullTest.cpp
   PresetsTest.cpp
+  AgentDocsTest.cpp
   TemplateManifestTest.cpp
   ProjectFingerprintTest.cpp
   ProjectIdentityCheckTest.cpp
@@ -329,8 +330,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/tests
 )
 
-# PresetsTest reads CMakePresets.json from the repo root, which is CMAKE_SOURCE_DIR since this directory is
-# only added when ECS3D is top-level.
+# PresetsTest and AgentDocsTest read CMakePresets.json and the agent docs from the repo root, which is
+# CMAKE_SOURCE_DIR since this directory is only added when ECS3D is top-level.
 target_compile_definitions(${PROJECT_NAME} PRIVATE ECS3D_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 include(GoogleTest)

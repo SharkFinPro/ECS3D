@@ -14,3 +14,5 @@ are in [docs/architecture/testing.md](../../docs/architecture/testing.md).
 - Give an assertion that only checks absence a positive control in the same test, so a subsystem that stopped working
   cannot pass it.
 - Managed tests live in `managed/` and have their own `AGENTS.md`.
+- Template fixtures live in `fixtures/templates/`, and `TemplateValidation.h` is the validator
+  `TemplateValidationTest` runs over every shipped template.
