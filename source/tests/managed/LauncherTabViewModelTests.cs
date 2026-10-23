@@ -64,6 +64,8 @@ public class LauncherTabViewModelTests
       new LauncherRig().NewEditor(),
       new FakeProcessRunner(),
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
+      new LauncherRig().NewCatalog(),
+      _ => null,
       "1.2.3",
       action => action());
     var used = shell.NavItems.Select(item => item.Icon)

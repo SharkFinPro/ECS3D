@@ -21,6 +21,8 @@ public class LauncherMainWindowViewModelTests
       _rig.NewEditor(),
       _runner,
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
+      _rig.NewCatalog(),
+      _ => null,
       "1.2.3",
       post ?? (action => action()));
 
