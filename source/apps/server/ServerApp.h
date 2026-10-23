@@ -107,6 +107,9 @@ private:
   // Release a dropped connection's slot and clear its input.
   void handleDisconnect(int32_t connId);
 
+  // Handle every queued client message and release the slots of dropped connections.
+  void drainNetwork();
+
   void fixedUpdate(float dt) const;
 
   // Feed this tick's collision enter/stay/exit pairs (from CollisionSystem) into the scripts. Bridges
