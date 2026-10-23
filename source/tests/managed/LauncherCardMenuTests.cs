@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -7,9 +8,16 @@ using Xunit;
 
 namespace ECS3DManagedTests;
 
+// The headless session swaps process-wide Avalonia state, so these tests run alone.
+[CollectionDefinition("AvaloniaHeadless", DisableParallelization = true)]
+public class AvaloniaHeadlessCollection
+{
+}
+
+[Collection("AvaloniaHeadless")]
 public class LauncherCardMenuTests
 {
-  private static Task OnUiThread(System.Action action) =>
+  private static Task OnUiThread(Action action) =>
     HeadlessUnitTestSession.GetOrStartForAssembly(typeof(LauncherCardMenuTests).Assembly)
       .Dispatch(action, CancellationToken.None);
 

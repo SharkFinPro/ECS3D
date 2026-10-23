@@ -47,9 +47,10 @@
                  Link="CoinRush/Scripts/%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
-    <!-- The launcher is an Avalonia WinExe, so it is not referenced. Its services, view models and models compile
-         into this assembly by link, over the two UI packages above. The window, views and DesignData stay out, except CardMenu, which needs no XAML:
-         DesignData builds the real default view model against the user's data folder. -->
+    <!-- The launcher is an Avalonia WinExe, so it is not referenced. Its services, view models, models and the
+         XAML-free CardMenu helper compile into this assembly by link, over the two UI packages above. The window,
+         views and DesignData stay out: DesignData builds the real default view model against the user's data
+         folder. -->
     <ItemGroup>
         <Compile Include="../../apps/launcher/source/Services/**/*.cs"
                  Link="Launcher/Services/%(RecursiveDir)%(Filename)%(Extension)" />
