@@ -1,6 +1,9 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -21,6 +24,7 @@ public class MainWindowViewModel : ObservableObject
     private readonly SettingsEditor _settings;
     private readonly IProcessRunner _runner;
     private readonly EarlyExitWatcher _watcher;
+    private readonly TemplateCatalog _catalog;
     private readonly Action<Action> _post;
     private EngineLocation _engine;
     private EngineActions _actions;
@@ -32,7 +36,7 @@ public class MainWindowViewModel : ObservableObject
 
     public ProjectsViewModel Projects { get; }
     public TemplatesViewModel Templates { get; } = new();
-    public SamplesViewModel Samples { get; } = new();
+    public SamplesViewModel Samples { get; }
     public LearnViewModel Learn { get; }
     public SettingsViewModel Settings { get; }
 
@@ -87,6 +91,7 @@ public class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _searchText, value))
             {
                 Projects.SearchText = value;
+                Samples.SearchText = value;
                 Learn.SearchText = value;
             }
         }
@@ -135,6 +140,7 @@ public class MainWindowViewModel : ObservableObject
     public IRelayCommand OpenSettingsCommand { get; }
     public IRelayCommand ExploreCommand { get; }
     public IRelayCommand<Project> OpenProjectCommand { get; }
+    public IRelayCommand<SampleCard> PlaySampleCommand { get; }
     public IRelayCommand DismissToastCommand { get; }
     public IRelayCommand OpenLogsCommand { get; }
 
@@ -143,6 +149,8 @@ public class MainWindowViewModel : ObservableObject
             NewSettings(),
             new SystemProcessRunner(),
             new EarlyExitWatcher(new UserDataDirectory()),
+            new TemplateCatalog(new PhysicalFileSystem(), new FileLauncherLog(new UserDataDirectory())),
+            LoadThumbnail,
             AppVersion.Current(),
             action => Dispatcher.UIThread.Post(action))
     {
@@ -152,6 +160,8 @@ public class MainWindowViewModel : ObservableObject
         SettingsEditor settings,
         IProcessRunner runner,
         EarlyExitWatcher watcher,
+        TemplateCatalog catalog,
+        Func<string, Bitmap?> loadThumbnail,
         string version,
         Action<Action> post)
     {
@@ -159,6 +169,7 @@ public class MainWindowViewModel : ObservableObject
         _settings = settings;
         _runner = runner;
         _watcher = watcher;
+        _catalog = catalog;
         _engine = settings.Engine;
         _actions = new EngineActions(_engine);
         _coordinator = NewCoordinator(_engine);
@@ -169,6 +180,7 @@ public class MainWindowViewModel : ObservableObject
         OpenSettingsCommand = new RelayCommand(() => ActiveNav = "settings");
         ExploreCommand = new RelayCommand(Explore, () => _actions.Explore.Available);
         OpenProjectCommand = new RelayCommand<Project>(OpenProject, _ => _actions.Open.Available);
+        PlaySampleCommand = new RelayCommand<SampleCard>(PlaySample, _ => _actions.Play.Available);
         DismissToastCommand = new RelayCommand(DismissToast);
         OpenLogsCommand = new RelayCommand(() => _ = OpenLogsAsync(), () => HasToastLog);
 
@@ -179,6 +191,8 @@ public class MainWindowViewModel : ObservableObject
             _actions.Explore.Tooltip,
             _actions.Open.Tooltip,
             []);
+        Samples = new SamplesViewModel(PlaySampleCommand, _actions.Play.Tooltip, loadThumbnail);
+        Samples.Reload(_catalog.Load(_engine.Folder));
 
         Learn = new LearnViewModel(
             url => _ = OpenUrlAsync(url),
@@ -190,7 +204,7 @@ public class MainWindowViewModel : ObservableObject
         [
             new() { Key = "projects",  Label = "Projects",  Icon = "IconFolder", Count = ProjectCount() },
             new() { Key = "templates", Label = "Templates", Icon = "IconLayers" },
-            new() { Key = "samples",   Label = "Samples",   Icon = "IconSparkle" },
+            new() { Key = "samples",   Label = "Samples",   Icon = "IconSparkle", Count = SampleCount() },
             new() { Key = "learn",     Label = "Learn",     Icon = "IconBook" },
         ];
         Projects.Projects.CollectionChanged += (_, _) => NavItems[0].Count = ProjectCount();
@@ -209,6 +223,20 @@ public class MainWindowViewModel : ObservableObject
         var userData = new UserDataDirectory();
         var store = new LauncherSettingsStore(fileSystem, new FileLauncherLog(userData), userData);
         return new SettingsEditor(store, new EngineLocator(fileSystem));
+    }
+
+    private static Bitmap? LoadThumbnail(string path)
+    {
+        try
+        {
+            return new Bitmap(path);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException
+                or InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private LaunchCoordinator NewCoordinator(EngineLocation engine) =>
@@ -237,6 +265,10 @@ public class MainWindowViewModel : ObservableObject
         Learn.UpdateTooltip(_actions.Explore.Tooltip);
         ExploreCommand.NotifyCanExecuteChanged();
         OpenProjectCommand.NotifyCanExecuteChanged();
+        Samples.UpdatePlay(_actions.Play.Tooltip);
+        Samples.Reload(_catalog.Load(engine.Folder));
+        SamplesNavItem.Count = SampleCount();
+        PlaySampleCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EngineBannerText));
         OnPropertyChanged(nameof(HasEngineBanner));
     }
@@ -252,6 +284,10 @@ public class MainWindowViewModel : ObservableObject
 
     private string ProjectCount() => Projects.Projects.Count.ToString();
 
+    private NavItemViewModel SamplesNavItem => NavItems.Single(item => item.Key == "samples");
+
+    private string SampleCount() => Samples.Samples.Count.ToString();
+
     // The task is dropped on purpose: failures and early exits arrive through ShowNotice.
     private void Explore() => _ = _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions());
 
@@ -260,6 +296,14 @@ public class MainWindowViewModel : ObservableObject
         if (project is { IsRealCard: true } && _actions.Open.Available)
         {
             _ = _coordinator.OpenProjectAsync(project.Path, _settings.Current.ToLaunchOptions());
+        }
+    }
+
+    private void PlaySample(SampleCard? card)
+    {
+        if (card is not null && _actions.Play.Available)
+        {
+            _ = _coordinator.PlayProjectAsync(card.FolderPath);
         }
     }
 
