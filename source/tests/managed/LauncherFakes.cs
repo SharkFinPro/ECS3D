@@ -90,6 +90,7 @@ internal sealed class RecordingLauncherLog : ILauncherLog
 internal sealed class FakeRunningProcess : IRunningProcess
 {
   private readonly TaskCompletionSource<int> _exit = new();
+  private int _disposeCount;
 
   public bool HasExited => _exit.Task.IsCompleted;
 
@@ -97,16 +98,15 @@ internal sealed class FakeRunningProcess : IRunningProcess
 
   public bool Killed { get; private set; }
 
+  public int DisposeCount => Volatile.Read(ref _disposeCount);
+
   public void Exit(int code) => _exit.SetResult(code);
 
   public Task<int> WaitForExitAsync(CancellationToken cancellationToken) => _exit.Task.WaitAsync(cancellationToken);
 
   public void Kill() => Killed = true;
 
-  public void Dispose()
-  {
-    // A fake process holds no handle to release.
-  }
+  public void Dispose() => Interlocked.Increment(ref _disposeCount);
 }
 
 internal sealed class FakeProcessRunner : IProcessRunner

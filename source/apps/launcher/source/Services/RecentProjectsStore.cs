@@ -255,6 +255,9 @@ public sealed class RecentProjectsStore
         }
     }
 
+    // Two spellings of one project path give the same key.
+    public string ProjectKey(string path) => KeyOf(path);
+
     private string KeyOf(string path) => RecentProjectPaths.Key(path, _os);
 
     private string StoredKey(JsonObject entry) => KeyOf(StringField(entry, "path") ?? string.Empty);

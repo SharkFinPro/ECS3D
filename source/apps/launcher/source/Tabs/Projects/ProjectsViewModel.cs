@@ -91,6 +91,7 @@ public class ProjectsViewModel : ObservableObject
     public IRelayCommand<Project> PlayProjectCommand { get; set; } = new RelayCommand<Project>(_ => { });
     public IRelayCommand<Project> ShowInFolderCommand { get; set; } = new RelayCommand<Project>(_ => { });
     public IRelayCommand<Project> TogglePinCommand { get; set; } = new RelayCommand<Project>(_ => { });
+    public IRelayCommand<Project> LocateProjectCommand { get; set; } = new RelayCommand<Project>(_ => { });
     public IRelayCommand<Project> RemoveProjectCommand { get; set; } = new RelayCommand<Project>(_ => { });
     public IRelayCommand BrowseSamplesCommand { get; set; } = new RelayCommand(() => { });
 

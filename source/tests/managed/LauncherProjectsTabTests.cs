@@ -51,7 +51,9 @@ public class LauncherProjectsTabTests
       loadThumbnail ?? (_ => null),
       "1.2.3",
       action => action(),
-      () => _rig.Time.Now);
+      () => _rig.Time.Now,
+      new PresentFileSystem(),
+      work => work());
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Projects.Projects.Select(project => project.Name).ToArray();
