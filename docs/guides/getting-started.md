@@ -5,7 +5,8 @@ template, and how to walk around in it. It assumes ECS3D is built.
 
 ## What is in `bin/`
 
-The build writes everything to the `bin/` folder:
+The build writes everything to a `bin/` folder inside the CMake build folder, for example
+`cmake-build-ecs3d-debug/bin` with the Debug preset:
 
 - `ECS3DLauncher`: the launcher, a small window that finds the engine and starts the editor.
 - `ECS3DEditor`: the editor, where you build and try scenes.
@@ -14,16 +15,18 @@ The build writes everything to the `bin/` folder:
 - `templates/`: the shipped templates and samples, one folder each (First-Person, Coin Rush and others).
 
 On Windows each program has an `.exe` extension. The programs read their assets, scripts and templates relative
-to the folder they are run from, so run them from `bin/`. The launcher does this for you.
+to the folder they are run from, so run them from `bin/`. The launcher does this for you. The commands in these guides use bare program names.
+On Linux and macOS prefix a program with `./`, and in PowerShell with `.\`, for example
+`./ECS3DEditor --project templates/first-person`.
 
 ## The launcher
 
 The launcher looks for the three engine programs in its own folder. If one is missing, a banner at the top
 names the missing file and the folder it looked in, and its Open Settings button goes to the Settings page.
 There you can point the launcher at a different engine folder and choose whether the editor and its server open
-a console window. The launcher saves each change at once.
+a console window. The launcher saves automatically, and a text field saves when you leave it.
 
-The Projects page starts empty. Its Explore the engine button opens the editor on the built-in Welcome scene.
+On first run the Projects page is empty ("No recent projects yet"). Its Explore the engine button opens the editor on the built-in Welcome scene.
 That project is unsaved, so nothing is written until you choose to save it.
 
 ## Start a project from the First-Person template

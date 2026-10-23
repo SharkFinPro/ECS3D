@@ -60,8 +60,9 @@ firewall allows incoming TCP on the port you chose.
 
 ## Troubleshooting
 
-- **The port is in use.** Another program, or an earlier server, already holds the port, so the server cannot
-  start listening. Pick another with `--port`, and give the same number to every client.
+- **The port is in use.** Another program, or an earlier server, already holds the port. The server then
+  stops right after it starts, with an error about the address being in use or with no clear message. Pick
+  another with `--port`, and give the same number to every client.
 - **A client cannot connect.** Check the address and port, that the server is still running, and that the
   firewall allows it.
 - **Use the same build.** Run the server and every client from the same build of ECS3D. The connection does not
