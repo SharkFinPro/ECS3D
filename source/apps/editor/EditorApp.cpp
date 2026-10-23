@@ -498,6 +498,22 @@ void EditorApp::variableUpdate()
     m_renderSystem->variableUpdate(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
   }
 
+  dropStaleViewCamera(objectManager);
+  applyViewCamera(objectManager);
+
+  RenderSystem::setGridVisible(*m_assetCache, shouldShowGrid(editorViewportSettings::readShowGrid(*m_settings),
+                                                             objectManager && m_viewCameraObject));
+
+  if (objectManager && shouldDrawLightGizmos(m_sceneStatus, m_renderer->getRenderingManager()->isRayTracingEnabled()))
+  {
+    m_renderSystem->drawLightGizmos(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
+  }
+
+  m_renderer->render();
+}
+
+void EditorApp::dropStaleViewCamera(const ObjectManager* objectManager)
+{
   // Drop a stale choice (the object left the scene, or lost its Camera) rather than freezing the viewport
   // on that camera's last pose.
   if (objectManager && m_viewCameraObject)
@@ -509,7 +525,10 @@ void EditorApp::variableUpdate()
       m_viewCameraObject.reset();
     }
   }
+}
 
+void EditorApp::applyViewCamera(const ObjectManager* objectManager)
+{
   // Look through the selected scene camera, or hand the viewport back to the editor's free-fly camera.
   if (objectManager && m_viewCameraObject)
   {
@@ -519,16 +538,6 @@ void EditorApp::variableUpdate()
   {
     m_renderSystem->useFreeFlyCamera(*m_assetCache);
   }
-
-  RenderSystem::setGridVisible(*m_assetCache, shouldShowGrid(editorViewportSettings::readShowGrid(*m_settings),
-                                                             objectManager && m_viewCameraObject));
-
-  if (objectManager && shouldDrawLightGizmos(m_sceneStatus, m_renderer->getRenderingManager()->isRayTracingEnabled()))
-  {
-    m_renderSystem->drawLightGizmos(*objectManager, *m_assetCache, m_inspectorPanel->getHighlightUUIDs());
-  }
-
-  m_renderer->render();
 }
 
 void EditorApp::setupImGuiStyle()

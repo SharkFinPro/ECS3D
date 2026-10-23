@@ -45,6 +45,16 @@ void EditorApp::applyMessage(const net::Message& message)
       handleObjectComponentsChanged(message);
       break;
 
+    default:
+      applyStatusMessage(message);
+      break;
+  }
+}
+
+void EditorApp::applyStatusMessage(const net::Message& message)
+{
+  switch (message.getType())
+  {
     case net::MessageType::editStatus:
       handleEditStatus(message);
       break;
@@ -70,22 +80,10 @@ void EditorApp::handleSnapshot(const net::Message& message)
   // Full state on join: rebuild the replicated scene from the packed project blob.
   m_projectPacker->unpack(message);
 
-  const bool foreignLoad = m_projectLoads.observeSnapshot(m_projectPacker->getProjectLoadId());
-  const bool foreignProject = m_projectIdentity.observeSnapshot(m_projectPacker->getProjectFingerprint());
-  // After any editor's loadProject the server reports no fingerprint, so a second --host editor on the same
-  // project is told to choose a folder; line endings that differ across machines also read as a mismatch.
-  // Both only drop the save target.
-  if ((foreignLoad || foreignProject) && m_saveUI)
-  {
-    m_saveUI->forgetSaveTarget(foreignProject
-      ? "The server holds a different (or editor-sent) project than this editor's --project '" + m_options.project + "'"
-      : "Another editor loaded a different project on the server");
-  }
+  checkSnapshotProject();
 
   const auto scene = m_sceneManager->getCurrentScene();
-  Log::info(LogCategory::editor, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "
-    + (scene ? scene->getName() : "<none>") + " ("
-    + std::to_string(scene ? scene->getObjectManager()->getAllObjects().size() : 0) + " objects).");
+  logSnapshotApplied(message, scene);
 
   // The server re-snapshots (rather than echoing a targeted result) after every sceneEdit and asset
   // mutation, so this is the rebroadcast a structural or asset undo/redo request is waiting on - see the
@@ -101,6 +99,28 @@ void EditorApp::handleSnapshot(const net::Message& message)
 
     clearEditHistory();
   }
+}
+
+void EditorApp::checkSnapshotProject()
+{
+  const bool foreignLoad = m_projectLoads.observeSnapshot(m_projectPacker->getProjectLoadId());
+  const bool foreignProject = m_projectIdentity.observeSnapshot(m_projectPacker->getProjectFingerprint());
+  // After any editor's loadProject the server reports no fingerprint, so a second --host editor on the same
+  // project is told to choose a folder; line endings that differ across machines also read as a mismatch.
+  // Both only drop the save target.
+  if ((foreignLoad || foreignProject) && m_saveUI)
+  {
+    m_saveUI->forgetSaveTarget(foreignProject
+      ? "The server holds a different (or editor-sent) project than this editor's --project '" + m_options.project + "'"
+      : "Another editor loaded a different project on the server");
+  }
+}
+
+void EditorApp::logSnapshotApplied(const net::Message& message, const std::shared_ptr<SceneAsset>& scene) const
+{
+  Log::info(LogCategory::editor, "Applied snapshot (" + std::to_string(message.size()) + " bytes). Current scene: "
+    + (scene ? scene->getName() : "<none>") + " ("
+    + std::to_string(scene ? scene->getObjectManager()->getAllObjects().size() : 0) + " objects).");
 }
 
 void EditorApp::handleStateDelta(const net::Message& message) const
