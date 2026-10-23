@@ -37,8 +37,8 @@ Development Principles.
 `ECS3DData` — the foundation. Component **data** (Transform, RigidBody, ModelRenderer, LightRenderer, Colliders
 (box, sphere and capsule; their cached bounds and box mesh key on `Transform::getWorldUpdateID`, which also
 moves when an ancestor does or the object is reparented), Script, PlayerController, Camera) - whose float and
-vec3 setters ignore non-finite input, since a non-finite float saves as json null and makes the file unreadable
-- `Transform`'s world getters compose with the parent as `parentWorld * local` (position through the parent's
+vec3 setters ignore non-finite input, since a non-finite float saves as json null and makes the file unreadable -
+`Transform`'s world getters compose with the parent as `parentWorld * local` (position through the parent's
 turn and scale, orientation by quaternion with the `RotationConvention.h` Euler mapping every system shares,
 scale component-wise; a child box collider's rotation composes through the parent while its position offset
 stays world-axis) - `Object`/`ObjectManager`, scenes (a `SceneAsset` also carries an ordered list of scene
