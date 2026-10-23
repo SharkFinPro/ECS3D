@@ -31,7 +31,9 @@ internal sealed class FakeFileSystem : IFileSystem
 
   public bool FileExists(string path) => _files.Contains(path) || _text.ContainsKey(path);
 
-  public bool DirectoryExists(string path) => _directories.Contains(path);
+  // Like the real file system, a trailing separator still names the folder.
+  public bool DirectoryExists(string path) =>
+    _directories.Contains(path) || (path.Length > 1 && _directories.Contains(path.TrimEnd('/', '\\')));
 
   public IReadOnlyList<string> EnumerateDirectories(string path)
   {
