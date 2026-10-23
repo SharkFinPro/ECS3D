@@ -57,7 +57,7 @@ std::string GpuAssetCache::resolveRecordPath(const std::string& recordPath) cons
 
 std::shared_ptr<vke::Model> GpuAssetCache::getModel(const uuids::uuid& uuid)
 {
-  const auto record = m_assetRegistry->getByUUID(uuid);
+  const auto record = m_assetRegistry->getByUUIDOfType(uuid, AssetType::Model);
   if (!record)
   {
     return nullptr;
@@ -70,7 +70,7 @@ std::shared_ptr<vke::Model> GpuAssetCache::getModel(const uuids::uuid& uuid)
 
 std::shared_ptr<vke::Texture2D> GpuAssetCache::getTexture(const uuids::uuid& uuid)
 {
-  const auto record = m_assetRegistry->getByUUID(uuid);
+  const auto record = m_assetRegistry->getByUUIDOfType(uuid, AssetType::Texture);
   if (!record)
   {
     return nullptr;
