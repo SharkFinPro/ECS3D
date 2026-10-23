@@ -66,10 +66,11 @@ public class LauncherTabViewModelTests
       rig.NewRecents(),
       new FakeProcessRunner(),
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
+      new LauncherRig().NewCatalog(),
+      _ => null,
       "1.2.3",
       action => action(),
-      () => rig.Time.Now,
-      _ => null);
+      () => rig.Time.Now);
     var used = shell.NavItems.Select(item => item.Icon)
       .Concat(shell.Templates.Templates.Select(template => template.Icon))
       .Append(new Project { Name = "", Path = "", Edited = "" }.PlaceholderIcon)

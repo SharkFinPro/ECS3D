@@ -22,10 +22,11 @@ public class LauncherMainWindowViewModelTests
       _rig.NewRecents(),
       _runner,
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
+      _rig.NewCatalog(),
+      _ => null,
       "1.2.3",
       post ?? (action => action()),
-      () => _rig.Time.Now,
-      _ => null);
+      () => _rig.Time.Now);
 
   private static object TabModel(MainWindowViewModel model, LauncherTab tab) => tab switch
   {

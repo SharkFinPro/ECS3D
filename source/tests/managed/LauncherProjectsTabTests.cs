@@ -47,10 +47,11 @@ public class LauncherProjectsTabTests
       _rig.NewRecents(),
       _runner,
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
+      _rig.NewCatalog(),
+      loadThumbnail ?? (_ => null),
       "1.2.3",
       action => action(),
-      () => _rig.Time.Now,
-      loadThumbnail ?? (_ => null));
+      () => _rig.Time.Now);
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Projects.Projects.Select(project => project.Name).ToArray();

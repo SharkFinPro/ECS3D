@@ -26,6 +26,7 @@ public class MainWindowViewModel : ObservableObject
     private readonly SettingsEditor _settings;
     private readonly IProcessRunner _runner;
     private readonly EarlyExitWatcher _watcher;
+    private readonly TemplateCatalog _catalog;
     private readonly Action<Action> _post;
     private readonly RecentProjectsStore _recents;
     private readonly Func<DateTimeOffset> _now;
@@ -41,7 +42,7 @@ public class MainWindowViewModel : ObservableObject
 
     public ProjectsViewModel Projects { get; }
     public TemplatesViewModel Templates { get; } = new();
-    public SamplesViewModel Samples { get; } = new();
+    public SamplesViewModel Samples { get; }
     public LearnViewModel Learn { get; } = new();
     public SettingsViewModel Settings { get; }
 
@@ -96,6 +97,7 @@ public class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _searchText, value))
             {
                 Projects.SearchText = value;
+                Samples.SearchText = value;
             }
         }
     }
@@ -147,6 +149,7 @@ public class MainWindowViewModel : ObservableObject
     public IRelayCommand<Project> ShowInFolderCommand { get; }
     public IRelayCommand<Project> TogglePinCommand { get; }
     public IRelayCommand<Project> RemoveProjectCommand { get; }
+    public IRelayCommand<SampleCard> PlaySampleCommand { get; }
     public IRelayCommand DismissToastCommand { get; }
     public IRelayCommand OpenLogsCommand { get; }
 
@@ -156,10 +159,11 @@ public class MainWindowViewModel : ObservableObject
             NewRecents(),
             new SystemProcessRunner(),
             new EarlyExitWatcher(new UserDataDirectory()),
+            new TemplateCatalog(new PhysicalFileSystem(), new FileLauncherLog(new UserDataDirectory())),
+            LoadThumbnail,
             AppVersion.Current(),
             action => Dispatcher.UIThread.Post(action),
-            TimeProvider.System.GetUtcNow,
-            LoadThumbnail)
+            TimeProvider.System.GetUtcNow)
     {
     }
 
@@ -168,10 +172,11 @@ public class MainWindowViewModel : ObservableObject
         RecentProjectsStore recents,
         IProcessRunner runner,
         EarlyExitWatcher watcher,
+        TemplateCatalog catalog,
+        Func<string, Bitmap?> loadThumbnail,
         string version,
         Action<Action> post,
-        Func<DateTimeOffset> now,
-        Func<string, Bitmap?> loadThumbnail)
+        Func<DateTimeOffset> now)
     {
         _post = post;
         _recents = recents;
@@ -180,6 +185,7 @@ public class MainWindowViewModel : ObservableObject
         _settings = settings;
         _runner = runner;
         _watcher = watcher;
+        _catalog = catalog;
         _engine = settings.Engine;
         _actions = new EngineActions(_engine);
         _coordinator = NewCoordinator(_engine);
@@ -194,6 +200,7 @@ public class MainWindowViewModel : ObservableObject
         ShowInFolderCommand = new RelayCommand<Project>(project => _ = ShowInFolderAsync(project));
         TogglePinCommand = new RelayCommand<Project>(TogglePin);
         RemoveProjectCommand = new RelayCommand<Project>(RemoveProject);
+        PlaySampleCommand = new RelayCommand<SampleCard>(PlaySample, _ => _actions.Play.Available);
         DismissToastCommand = new RelayCommand(DismissToast);
         OpenLogsCommand = new RelayCommand(() => _ = OpenLogsAsync(), () => HasToastLog);
 
@@ -213,12 +220,14 @@ public class MainWindowViewModel : ObservableObject
         };
         Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip, _actions.Play.Tooltip);
         Refresh();
+        Samples = new SamplesViewModel(PlaySampleCommand, _actions.Play.Tooltip, loadThumbnail);
+        Samples.Reload(_catalog.Load(_engine.Folder));
 
         NavItems =
         [
             new() { Key = "projects",  Label = "Projects",  Icon = "IconFolder", Count = ProjectCount() },
             new() { Key = "templates", Label = "Templates", Icon = "IconLayers" },
-            new() { Key = "samples",   Label = "Samples",   Icon = "IconSparkle" },
+            new() { Key = "samples",   Label = "Samples",   Icon = "IconSparkle", Count = SampleCount() },
             new() { Key = "learn",     Label = "Learn",     Icon = "IconBook" },
         ];
         Projects.Projects.CollectionChanged += (_, _) =>
@@ -258,9 +267,9 @@ public class MainWindowViewModel : ObservableObject
         {
             return File.Exists(path) ? new Bitmap(path) : null;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-                                              or ArgumentException or NotSupportedException
-                                              or InvalidOperationException)
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException
+                or InvalidOperationException)
         {
             return null;
         }
@@ -292,6 +301,10 @@ public class MainWindowViewModel : ObservableObject
         ExploreCommand.NotifyCanExecuteChanged();
         OpenProjectCommand.NotifyCanExecuteChanged();
         PlayProjectCommand.NotifyCanExecuteChanged();
+        Samples.UpdatePlay(_actions.Play.Tooltip);
+        Samples.Reload(_catalog.Load(engine.Folder));
+        SamplesNavItem.Count = SampleCount();
+        PlaySampleCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EngineBannerText));
         OnPropertyChanged(nameof(HasEngineBanner));
     }
@@ -306,6 +319,10 @@ public class MainWindowViewModel : ObservableObject
     private TabHeader Header => LauncherTabs.Header(LauncherTabs.Parse(ActiveNav), Projects.IsEmpty);
 
     private string ProjectCount() => Projects.Projects.Count.ToString();
+
+    private NavItemViewModel SamplesNavItem => NavItems.Single(item => item.Key == "samples");
+
+    private string SampleCount() => Samples.Samples.Count.ToString();
 
     // The task is dropped on purpose: failures and early exits arrive through ShowNotice.
     private void Explore() => _ = _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions());
@@ -446,6 +463,14 @@ public class MainWindowViewModel : ObservableObject
                 return true;
             });
             _ = _coordinator.OpenProjectAsync(project.Path, _settings.Current.ToLaunchOptions());
+        }
+    }
+
+    private void PlaySample(SampleCard? card)
+    {
+        if (card is not null && _actions.Play.Available)
+        {
+            _ = _coordinator.PlayProjectAsync(card.FolderPath);
         }
     }
 

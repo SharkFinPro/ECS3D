@@ -55,6 +55,8 @@ internal sealed class LauncherRig
     return new SettingsEditor(store, new EngineLocator(Files, HostOs.Linux, LauncherDir));
   }
 
+  public TemplateCatalog NewCatalog() => new(Files, Log);
+
   public JsonObject? Saved() =>
     Files.TextOf(SettingsPath) is { } text ? (JsonObject)JsonNode.Parse(text)! : null;
 }
