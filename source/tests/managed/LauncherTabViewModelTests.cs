@@ -60,12 +60,16 @@ public class LauncherTabViewModelTests
   public void EveryIconKeyTheShellAndTemplatesUseIsDefined()
   {
     var keys = IconKeys();
+    var rig = new LauncherRig();
     var shell = new MainWindowViewModel(
-      new LauncherRig().NewEditor(),
+      rig.NewEditor(),
+      rig.NewRecents(),
       new FakeProcessRunner(),
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
       "1.2.3",
-      action => action());
+      action => action(),
+      () => rig.Time.Now,
+      _ => null);
     var used = shell.NavItems.Select(item => item.Icon)
       .Concat(shell.Templates.Templates.Select(template => template.Icon))
       .Append(new Project { Name = "", Path = "", Edited = "" }.PlaceholderIcon)

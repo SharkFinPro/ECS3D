@@ -34,6 +34,13 @@ internal sealed class LauncherRig
 
   public string SettingsPath => ShellFixtures.UserData.SettingsFile();
 
+  public string RecentsPath => ShellFixtures.UserData.RecentProjectsFile();
+
+  public FixedTimeProvider Time { get; } = new();
+
+  public RecentProjectsStore NewRecents() =>
+    new(Files, Log, ShellFixtures.UserData, Time, HostOs.Linux, _ => { });
+
   public void AddEngine(string folder, params EngineExecutable[] skip)
   {
     foreach (var executable in Enum.GetValues<EngineExecutable>().Where(item => !skip.Contains(item)))

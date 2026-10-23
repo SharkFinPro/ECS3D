@@ -1,6 +1,10 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,6 +26,9 @@ public class MainWindowViewModel : ObservableObject
     private readonly IProcessRunner _runner;
     private readonly EarlyExitWatcher _watcher;
     private readonly Action<Action> _post;
+    private readonly RecentProjectsStore _recents;
+    private readonly Func<DateTimeOffset> _now;
+    private readonly Func<string, Bitmap?> _loadThumbnail;
     private EngineLocation _engine;
     private EngineActions _actions;
     private LaunchCoordinator _coordinator;
@@ -126,32 +133,48 @@ public class MainWindowViewModel : ObservableObject
     // Set by the window, which owns the OS "open with the default app" call.
     public Func<string, Task<bool>>? OpenLogFile { get; set; }
 
+    // Set by the window, which owns showing a folder in the file manager.
+    public Func<string, Task<bool>>? ShowFolder { get; set; }
+
     public IRelayCommand<string?> SelectNavCommand { get; }
     public IRelayCommand NewProjectCommand { get; }
     public IRelayCommand OpenSettingsCommand { get; }
     public IRelayCommand ExploreCommand { get; }
     public IRelayCommand<Project> OpenProjectCommand { get; }
+    public IRelayCommand<Project> PlayProjectCommand { get; }
+    public IRelayCommand<Project> ShowInFolderCommand { get; }
+    public IRelayCommand<Project> TogglePinCommand { get; }
+    public IRelayCommand<Project> RemoveProjectCommand { get; }
     public IRelayCommand DismissToastCommand { get; }
     public IRelayCommand OpenLogsCommand { get; }
 
     public MainWindowViewModel()
         : this(
             NewSettings(),
+            NewRecents(),
             new SystemProcessRunner(),
             new EarlyExitWatcher(new UserDataDirectory()),
             AppVersion.Current(),
-            action => Dispatcher.UIThread.Post(action))
+            action => Dispatcher.UIThread.Post(action),
+            TimeProvider.System.GetUtcNow,
+            LoadThumbnail)
     {
     }
 
     public MainWindowViewModel(
         SettingsEditor settings,
+        RecentProjectsStore recents,
         IProcessRunner runner,
         EarlyExitWatcher watcher,
         string version,
-        Action<Action> post)
+        Action<Action> post,
+        Func<DateTimeOffset> now,
+        Func<string, Bitmap?> loadThumbnail)
     {
         _post = post;
+        _recents = recents;
+        _now = now;
+        _loadThumbnail = loadThumbnail;
         _settings = settings;
         _runner = runner;
         _watcher = watcher;
@@ -165,6 +188,10 @@ public class MainWindowViewModel : ObservableObject
         OpenSettingsCommand = new RelayCommand(() => ActiveNav = "settings");
         ExploreCommand = new RelayCommand(Explore, () => _actions.Explore.Available);
         OpenProjectCommand = new RelayCommand<Project>(OpenProject, _ => _actions.Open.Available);
+        PlayProjectCommand = new RelayCommand<Project>(PlayProject, _ => _actions.Play.Available);
+        ShowInFolderCommand = new RelayCommand<Project>(project => _ = ShowInFolderAsync(project));
+        TogglePinCommand = new RelayCommand<Project>(TogglePin);
+        RemoveProjectCommand = new RelayCommand<Project>(RemoveProject);
         DismissToastCommand = new RelayCommand(DismissToast);
         OpenLogsCommand = new RelayCommand(() => _ = OpenLogsAsync(), () => HasToastLog);
 
@@ -174,7 +201,16 @@ public class MainWindowViewModel : ObservableObject
             OpenProjectCommand,
             _actions.Explore.Tooltip,
             _actions.Open.Tooltip,
-            []);
+            [])
+        {
+            PlayProjectCommand = PlayProjectCommand,
+            ShowInFolderCommand = ShowInFolderCommand,
+            TogglePinCommand = TogglePinCommand,
+            RemoveProjectCommand = RemoveProjectCommand,
+            BrowseSamplesCommand = new RelayCommand(() => ActiveNav = "samples"),
+        };
+        Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip, _actions.Play.Tooltip);
+        Refresh();
 
         NavItems =
         [
@@ -183,7 +219,11 @@ public class MainWindowViewModel : ObservableObject
             new() { Key = "samples",   Label = "Samples",   Icon = "IconSparkle" },
             new() { Key = "learn",     Label = "Learn",     Icon = "IconBook" },
         ];
-        Projects.Projects.CollectionChanged += (_, _) => NavItems[0].Count = ProjectCount();
+        Projects.Projects.CollectionChanged += (_, _) =>
+        {
+            NavItems[0].Count = ProjectCount();
+            OnPropertyChanged(nameof(ViewTitle));
+        };
 
         Projects.IsGridView = settings.Current.ProjectsView != LauncherSettings.ListView;
         Projects.ViewChosen = grid => ApplyUpdate(_settings.SetProjectsView(grid));
@@ -199,6 +239,28 @@ public class MainWindowViewModel : ObservableObject
         var userData = new UserDataDirectory();
         var store = new LauncherSettingsStore(fileSystem, new FileLauncherLog(userData), userData);
         return new SettingsEditor(store, new EngineLocator(fileSystem));
+    }
+
+    private static RecentProjectsStore NewRecents()
+    {
+        var userData = new UserDataDirectory();
+        return new RecentProjectsStore(
+            new PhysicalFileSystem(), new FileLauncherLog(userData), userData, TimeProvider.System, HostOsDetector.Current());
+    }
+
+    // A missing or unreadable image is no thumbnail; the card shows its placeholder.
+    private static Bitmap? LoadThumbnail(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? new Bitmap(path) : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                                              or ArgumentException or NotSupportedException
+                                              or InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private LaunchCoordinator NewCoordinator(EngineLocation engine) =>
@@ -223,9 +285,10 @@ public class MainWindowViewModel : ObservableObject
         _engine = engine;
         _actions = new EngineActions(engine);
         _coordinator = NewCoordinator(engine);
-        Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip);
+        Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip, _actions.Play.Tooltip);
         ExploreCommand.NotifyCanExecuteChanged();
         OpenProjectCommand.NotifyCanExecuteChanged();
+        PlayProjectCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EngineBannerText));
         OnPropertyChanged(nameof(HasEngineBanner));
     }
@@ -237,17 +300,121 @@ public class MainWindowViewModel : ObservableObject
     public bool ShowSearch => Header.ShowSearch;
     public bool ShowViewToggle => Header.ShowViewToggle;
 
-    private TabHeader Header => LauncherTabs.Header(LauncherTabs.Parse(ActiveNav));
+    private TabHeader Header => LauncherTabs.Header(LauncherTabs.Parse(ActiveNav), Projects.IsEmpty);
 
     private string ProjectCount() => Projects.Projects.Count.ToString();
 
     // The task is dropped on purpose: failures and early exits arrive through ShowNotice.
     private void Explore() => _ = _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions());
 
+    // Reads the stored list again, as the editor may have recorded a project meanwhile.
+    public void Refresh()
+    {
+        _recents.Load();
+        ShowStored();
+    }
+
+    private void ShowStored()
+    {
+        var sorted = RecentProjectsView.Sort(_recents.Entries());
+        Projects.SetProjects(sorted.Select(ToProject).ToList());
+    }
+
+    private Project ToProject(RecentProject entry)
+    {
+        var legacy = RecentProjectPaths.IsLegacyFile(entry.Path);
+        return new Project
+        {
+            Name = entry.Name,
+            Path = entry.Path,
+            Edited = RecentProjectsView.EditedText(entry.LastOpenedUtc, _now()),
+            Pinned = entry.Pinned,
+            Thumbnail = legacy ? null : _loadThumbnail(System.IO.Path.Combine(entry.Path, "thumbnail.png")),
+            GlowColor = GlowFor(entry.Name),
+        };
+    }
+
+    private static readonly Color[] Glows =
+    [
+        Color.Parse("#8C1FB8D4"), Color.Parse("#85A78BFA"), Color.Parse("#7A4ADE80"), Color.Parse("#80F59E0B"),
+    ];
+
+    // Stable per name, so a card keeps its color from one launch to the next.
+    private static Color GlowFor(string name) => Glows[name.Sum(letter => (int)letter) % Glows.Length];
+
+    // Another process may have changed the file, so it is read again before each change that is kept.
+    private void ChangeStored(Action change)
+    {
+        _recents.Load();
+        change();
+        if (!_recents.Save())
+        {
+            ApplyNotice(EarlyExitNotice.Failure($"Could not save the recent projects list to {_recents.FilePath}"));
+        }
+
+        ShowStored();
+    }
+
+    private void TogglePin(Project? project)
+    {
+        if (project is { IsRealCard: true })
+        {
+            ChangeStored(() => _recents.SetPinned(project.Path, !project.Pinned));
+        }
+    }
+
+    private void RemoveProject(Project? project)
+    {
+        if (project is { IsRealCard: true })
+        {
+            ChangeStored(() => _recents.Remove(project.Path));
+        }
+    }
+
+    private void PlayProject(Project? project)
+    {
+        if (project is { IsRealCard: true } && _actions.Play.Available)
+        {
+            _ = _coordinator.PlayProjectAsync(project.Path);
+        }
+    }
+
+    // A legacy project is a file, so its folder is the one that holds it.
+    private async Task ShowInFolderAsync(Project? project)
+    {
+        if (project is not { IsRealCard: true })
+        {
+            return;
+        }
+
+        var folder = RecentProjectPaths.IsLegacyFile(project.Path) ? ContainingFolder(project.Path) : project.Path;
+        var shown = false;
+        try
+        {
+            shown = ShowFolder is not null && await ShowFolder(folder);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            shown = false;
+        }
+
+        if (!shown)
+        {
+            ApplyNotice(EarlyExitNotice.Failure($"Could not open the folder {folder}"));
+        }
+    }
+
+    private static string ContainingFolder(string path)
+    {
+        var cut = path.LastIndexOfAny(['/', '\\']);
+        return cut < 0 ? "." : path[..Math.Max(cut, 1)];
+    }
+
     private void OpenProject(Project? project)
     {
         if (project is { IsRealCard: true } && _actions.Open.Available)
         {
+            ChangeStored(() => _recents.RecordOpened(project.Path));
             _ = _coordinator.OpenProjectAsync(project.Path, _settings.Current.ToLaunchOptions());
         }
     }

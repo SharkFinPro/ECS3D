@@ -13,32 +13,56 @@
 
     <Panel>
 
-        <!-- PROJECTS: EMPTY -->
-        <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" Margin="0,70,0,0" Spacing="14">
-            <Border Width="54" Height="54" CornerRadius="14" HorizontalAlignment="Center"
+        <!-- PROJECTS: FIRST RUN -->
+        <WrapPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" Margin="0,40,0,0">
+            <Border Width="236" Margin="9" Padding="18" CornerRadius="11"
                     Background="{StaticResource PanelBrush}"
                     BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
-                <Path Classes="icon" Width="20" Height="20" StrokeThickness="1.8"
-                      Data="{StaticResource IconFolder}"
-                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Explore the engine" FontSize="14" FontWeight="SemiBold" />
+                        <TextBlock Text="Open the Welcome scene and look around before making anything." FontSize="12.5" TextWrapping="Wrap"
+                                   Foreground="{StaticResource T3Brush}" />
+                    </StackPanel>
+                    <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Open Welcome scene" HorizontalAlignment="Left"
+                            Command="{Binding ExploreCommand}"
+                                ToolTip.Tip="{Binding ExploreTooltip}" ToolTip.ShowOnDisabled="True" />
+                </StackPanel>
             </Border>
-            <StackPanel Spacing="5">
-                <TextBlock Text="No recent projects yet" FontSize="14" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" />
-                <TextBlock Text="Look around the engine first, or start a project of your own."
-                           FontSize="12.5" Foreground="{StaticResource T3Brush}"
-                           HorizontalAlignment="Center" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Explore the engine"
-                        Command="{Binding ExploreCommand}"
-                        ToolTip.Tip="{Binding ExploreTooltip}" ToolTip.ShowOnDisabled="True" />
-                <Button Classes="cta" Theme="{StaticResource BareButton}" Command="{Binding NewProjectCommand}">
-                    <TextBlock Text="New Project" FontSize="13" FontWeight="Bold"
-                               Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
-                </Button>
-            </StackPanel>
-        </StackPanel>
+            <Border Width="236" Margin="9" Padding="18" CornerRadius="11"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Start a project" FontSize="14" FontWeight="SemiBold" />
+                        <TextBlock Text="Begin from a template and make it your own." FontSize="12.5" TextWrapping="Wrap"
+                                   Foreground="{StaticResource T3Brush}" />
+                    </StackPanel>
+                    <Button Classes="cta" Theme="{StaticResource BareButton}" HorizontalAlignment="Left"
+                            Command="{Binding NewProjectCommand}">
+                            <TextBlock Text="New Project" FontSize="13" FontWeight="Bold"
+                                       Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                        </Button>
+                </StackPanel>
+            </Border>
+            <Border Width="236" Margin="9" Padding="18" CornerRadius="11"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Try a sample" FontSize="14" FontWeight="SemiBold" />
+                        <TextBlock Text="Open a finished example project and see how it is built." FontSize="12.5" TextWrapping="Wrap"
+                                   Foreground="{StaticResource T3Brush}" />
+                    </StackPanel>
+                    <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Browse samples" HorizontalAlignment="Left"
+                            Command="{Binding BrowseSamplesCommand}" />
+                </StackPanel>
+            </Border>
+        </WrapPanel>
+
+        <!-- PROJECTS: NO MATCHES -->
+        <TextBlock IsVisible="{Binding ShowNoMatches}" Text="No projects match" FontSize="12.5"
+                   Foreground="{StaticResource T3Brush}" HorizontalAlignment="Center" Margin="0,200,0,0" />
 
         <!-- PROJECTS: GRID -->
         <ItemsControl IsVisible="{Binding ShowGrid}" ItemsSource="{Binding ProjectTiles}">
@@ -79,6 +103,33 @@
                         <!-- Project card -->
                         <Border Classes="card" IsVisible="{Binding IsRealCard}"
                                 CornerRadius="11" ClipToBounds="True">
+                            <Border.ContextMenu>
+                                <ContextMenu>
+                                <MenuItem Header="Open in editor"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}" />
+                                <MenuItem Header="Play"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}"
+                                          ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
+                                          ToolTip.ShowOnDisabled="True" />
+                                <MenuItem Header="Show in folder"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}" />
+                                <Separator />
+                                <MenuItem Header="Pin to top"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}"
+                                          IsVisible="{Binding !Pinned}" />
+                                <MenuItem Header="Unpin"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}"
+                                          IsVisible="{Binding Pinned}" />
+                                <MenuItem Header="Remove from list"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}" />
+                                </ContextMenu>
+                            </Border.ContextMenu>
                             <StackPanel>
                                 <!-- thumbnail -->
                                 <Panel Height="146" Background="{StaticResource InsetBrush}">
@@ -108,7 +159,7 @@
                                                FontFamily="{StaticResource MonoFontFamily}"
                                                Foreground="{StaticResource T3Brush}"
                                                TextTrimming="CharacterEllipsis" />
-                                    <Grid Margin="0,11,0,0" ColumnDefinitions="Auto,*,Auto">
+                                    <Grid Margin="0,11,0,0" ColumnDefinitions="Auto,*,Auto,Auto">
                                         <Path Grid.Column="0" Classes="icon t3" Width="10" Height="10"
                                               VerticalAlignment="Center" Data="{StaticResource IconClock}" />
                                         <TextBlock Grid.Column="1" Text="{Binding Edited}" FontSize="11.5"
@@ -120,6 +171,10 @@
                                                 VerticalAlignment="Center"
                                                 Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
                                                 CommandParameter="{Binding}" />
+                                        <Button Grid.Column="3" Classes="more" Theme="{StaticResource BareButton}" Click="OnMoreClick"
+                                ToolTip.Tip="More" VerticalAlignment="Center" Margin="6,0,0,0">
+                            <TextBlock Text="..." FontSize="13" FontWeight="Bold" Foreground="{StaticResource T2Brush}" />
+                        </Button>
                                     </Grid>
                                 </StackPanel>
                             </StackPanel>
@@ -162,7 +217,34 @@
 
                         <!-- Project row -->
                         <Border Classes="card row" IsVisible="{Binding IsRealCard}" CornerRadius="9">
-                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="14,9">
+                            <Border.ContextMenu>
+                                <ContextMenu>
+                                <MenuItem Header="Open in editor"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}" />
+                                <MenuItem Header="Play"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}"
+                                          ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
+                                          ToolTip.ShowOnDisabled="True" />
+                                <MenuItem Header="Show in folder"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}" />
+                                <Separator />
+                                <MenuItem Header="Pin to top"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}"
+                                          IsVisible="{Binding !Pinned}" />
+                                <MenuItem Header="Unpin"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}"
+                                          IsVisible="{Binding Pinned}" />
+                                <MenuItem Header="Remove from list"
+                                          Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
+                                          CommandParameter="{Binding}" />
+                                </ContextMenu>
+                            </Border.ContextMenu>
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="14,9">
                                 <Border Grid.Column="0" Width="60" Height="38" CornerRadius="6"
                                         ClipToBounds="True" Background="{StaticResource InsetBrush}">
                                     <Panel>
@@ -194,6 +276,10 @@
                                 <Path Grid.Column="4" Classes="icon fill" Width="10.5" Height="10.5"
                                       IsVisible="{Binding Pinned}" VerticalAlignment="Center"
                                       Data="{StaticResource IconStar}" />
+                                <Button Grid.Column="5" Classes="more" Theme="{StaticResource BareButton}" Click="OnMoreClick"
+                                ToolTip.Tip="More" VerticalAlignment="Center" Margin="10,0,0,0">
+                            <TextBlock Text="..." FontSize="13" FontWeight="Bold" Foreground="{StaticResource T2Brush}" />
+                        </Button>
                             </Grid>
                         </Border>
                     </Panel>

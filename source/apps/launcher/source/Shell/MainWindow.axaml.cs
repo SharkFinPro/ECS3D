@@ -43,6 +43,7 @@ public class MainWindow : Window
         // even when a control (e.g. a Button) marks the event handled.
         AddHandler(PointerPressedEvent, OnGlobalPointerPressed, RoutingStrategies.Bubble, handledEventsToo: true);
         DataContextChanged += OnDataContextChanged;
+        Activated += OnActivated;
     }
 
     // Opening a file with the OS default app is a view concern; the view model only decides when.
@@ -51,12 +52,24 @@ public class MainWindow : Window
         if (DataContext is MainWindowViewModel viewModel)
         {
             viewModel.OpenLogFile = OpenWithDefaultAppAsync;
+            viewModel.ShowFolder = ShowFolderAsync;
         }
     }
 
     private async Task<bool> OpenWithDefaultAppAsync(string path)
     {
         return Launcher is { } launcher && await launcher.LaunchFileInfoAsync(new FileInfo(path));
+    }
+
+    private async Task<bool> ShowFolderAsync(string path)
+    {
+        return Launcher is { } launcher && await launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(path));
+    }
+
+    // The editor may have recorded a project while the launcher was in the background.
+    private void OnActivated(object? sender, EventArgs e)
+    {
+        (DataContext as MainWindowViewModel)?.Refresh();
     }
 
     private void OnGlobalPointerPressed(object? sender, PointerPressedEventArgs e)

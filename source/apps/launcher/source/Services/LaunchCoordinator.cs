@@ -28,6 +28,8 @@ public sealed class LaunchCoordinator
     public Task ExploreEngineAsync(LaunchOptions options) =>
         ReportAsync(() => _launcher.ExploreEngine(options), EngineExecutable.Editor);
 
+    public Task PlayProjectAsync(string projectFolder) => ReportAsync(() => _launcher.PlayProject(projectFolder), EngineExecutable.Client);
+
     // Callers drop the task, so nothing the start or the watch throws may escape it.
     private async Task ReportAsync(Func<LaunchResult> start, EngineExecutable executable)
     {
