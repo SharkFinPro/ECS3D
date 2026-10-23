@@ -54,12 +54,18 @@ public class MainWindow : Window
         {
             viewModel.OpenLogFile = OpenWithDefaultAppAsync;
             viewModel.ShowFolder = ShowFolderAsync;
+            viewModel.OpenUrl = OpenInBrowserAsync;
         }
     }
 
     private async Task<bool> OpenWithDefaultAppAsync(string path)
     {
         return Launcher is { } launcher && await launcher.LaunchFileInfoAsync(new FileInfo(path));
+    }
+
+    private async Task<bool> OpenInBrowserAsync(string url)
+    {
+        return Launcher is { } launcher && await launcher.LaunchUriAsync(new Uri(url));
     }
 
     private async Task<bool> ShowFolderAsync(string path)
