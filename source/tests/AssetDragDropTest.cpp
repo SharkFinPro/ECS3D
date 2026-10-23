@@ -81,3 +81,35 @@ TEST(AssetDragDropPayloadIdTest,SceneIdIsDistinctFromEveryOtherType)
 
   EXPECT_EQ(assetDragDrop::payloadId(AssetType::Unknown), nullptr);
 }
+
+TEST_F(AssetDragDropTest, TypeOfPayloadInvertsPayloadId)
+{
+  const AssetType all[] = { AssetType::Model, AssetType::Texture, AssetType::Script, AssetType::Prefab,
+                            AssetType::Scene };
+  for (const AssetType type : all)
+  {
+    EXPECT_EQ(assetDragDrop::typeOfPayload(assetDragDrop::payloadId(type)), type);
+  }
+
+  EXPECT_FALSE(assetDragDrop::typeOfPayload(nullptr).has_value());
+  EXPECT_FALSE(assetDragDrop::typeOfPayload("asset_unknown").has_value());
+}
+
+TEST_F(AssetDragDropTest, SlotRecordShowsOnlyARecordOfTheSlotsType)
+{
+  const auto textureUUID = uuidFrom("33333333-3333-3333-3333-333333333333");
+  m_registry.registerAsset({ .uuid = textureUUID, .type = AssetType::Texture, .path = "assets/textures/a.png" });
+
+  const auto* model = assetDragDrop::slotRecord(m_registry, assetDragDrop::model, modelUUID);
+  ASSERT_NE(model, nullptr);
+  EXPECT_EQ(model->uuid, modelUUID);
+  const auto* texture = assetDragDrop::slotRecord(m_registry, assetDragDrop::texture, textureUUID);
+  ASSERT_NE(texture, nullptr);
+  EXPECT_EQ(texture->uuid, textureUUID);
+
+  EXPECT_EQ(assetDragDrop::slotRecord(m_registry, assetDragDrop::texture, modelUUID), nullptr);
+  EXPECT_EQ(assetDragDrop::slotRecord(m_registry, assetDragDrop::model, textureUUID), nullptr);
+  EXPECT_EQ(assetDragDrop::slotRecord(m_registry, assetDragDrop::model, missingUUID), nullptr);
+  EXPECT_EQ(assetDragDrop::slotRecord(m_registry, "asset_unknown", modelUUID), nullptr);
+  EXPECT_EQ(assetDragDrop::slotRecord(m_registry, nullptr, modelUUID), nullptr);
+}

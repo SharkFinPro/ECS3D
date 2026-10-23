@@ -1,5 +1,6 @@
 #include "AssetSlot.h"
 #include "../AssetDisplay.h"
+#include "../AssetDragDrop.h"
 #include <assets/AssetRegistry.h>
 #include <GpuAssetCache.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
@@ -14,7 +15,7 @@ bool drawAssetSlot(const std::shared_ptr<GpuAssetCache>& cache, const AssetRegis
 
   if (registry && !mixed)
   {
-    if (const auto* record = registry->getByUUID(current))
+    if (const auto* record = assetDragDrop::slotRecord(*registry, style.payloadId, current))
     {
       name = assetDisplay::name(*record);
 

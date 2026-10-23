@@ -2,6 +2,7 @@
 #define ASSETDRAGDROP_H
 
 #include <assets/AssetRegistry.h>
+#include <cstring>
 #include <optional>
 #include <string_view>
 #include <uuid.h>
@@ -27,6 +28,34 @@ namespace assetDragDrop {
       case AssetType::Scene: return scene;
       default: return nullptr;
     }
+  }
+
+  [[nodiscard]] inline std::optional<AssetType> typeOfPayload(const char* id)
+  {
+    if (!id)
+    {
+      return std::nullopt;
+    }
+
+    for (const AssetType type : { AssetType::Model, AssetType::Texture, AssetType::Script, AssetType::Prefab,
+                                  AssetType::Scene })
+    {
+      if (std::strcmp(id, payloadId(type)) == 0)
+      {
+        return type;
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  // The record a slot may show: one of the slot's own type, so another type's uuid reads as empty.
+  [[nodiscard]] inline const AssetRecord* slotRecord(const AssetRegistry& registry, const char* id,
+                                                     const uuids::uuid& uuid)
+  {
+    const auto type = typeOfPayload(id);
+
+    return type ? registry.getByUUIDOfType(uuid, *type) : nullptr;
   }
 
   // The scene a dropped payload names, or nothing when the bytes (a uuid string with no terminator) do not
