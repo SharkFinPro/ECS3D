@@ -452,32 +452,9 @@ The current scene's scene scripts are reached through `World.tryGetSceneScript<T
 `getSceneScript<T>` and `requireSceneScript<T>`, which logs one error per caller instance and type for each stretch when
 none is attached. A faulted scene script is skipped, as an object script is.
 
-**Logging.** The server is headless, so its own log (and, via `LogBindings`, the scripts running on it) is
-forwarded to connected editors rather than only reaching its console window/log file. `ServerApp` registers
-a `RemoteLogSink` with `Log` alongside its file/console sinks, but only in edit mode: a play server admits an
-editor without a token, so forwarding there would leak its log. Each `run()` iteration (not gated on a fixed
-tick, so a line still gets out while the scene is stopped/paused) drains it - capped by both entry count and
-an estimated byte size (`RemoteLogSink::drain`'s two limits; a single oversized message is truncated with a
-marker at `write()` time, so one huge entry can neither dominate the sink's memory nor stall the queue for
-everyone behind it) - and forwards what comes out as a `MessageType::serverLog` (`net::packServerLog`/
-`unpackServerLog`) via `NetServer::sendToEditors`, skipping the send entirely when there is nothing queued
-and no one to send it to. That copies out the current editor connection ids under `m_editorMutex` and
-releases the lock before calling the transport, then makes one call (`Transport.serverSendToMany`, alongside
-`serverBroadcast`) for the whole batch of editor connections rather than one call per editor, so a stalled
-editor connection costs this send one shared time budget no matter how many editors are connected - the same
-guarantee `ServerBroadcast` already gives its own per-connection sends across every connection. A
-per-connection loop on the authoritative tick thread would instead let K stalled editors block physics and
-state deltas for K times that budget. Only connections authorized as `Role::editor` are named, so play
-clients do not receive it. `RemoteLogSink::drain` also reports how many entries it had to evict (queue full, nobody
-draining fast enough); the editor surfaces that count as a warning instead of silently missing history.
-`EditorApp::handleServerLog` writes each forwarded entry straight into its own `RingBufferSink` (bypassing
-`Log::write`, which would otherwise stamp it with arrival time instead of the time it carried on the wire),
-message-prefixed `"[server] "` so it reads apart from the editor's own logging in the same `LogCategory`
-(both sides log under `net`, for instance) without collapsing every entry into one category and losing the
-Console panel's level/category filters. This works for an edit-mode server the
-editor spawned *and* one it only connected to (`--host`) — it rides the same connection, not a pipe to a
-child process. The separate `--console`/`showServerConsole` window some launches show is unrelated and
-keeps behaving exactly as before.
+**Logging.** An edit-mode server forwards its own log, scripts included, to editor connections only, as
+`MessageType::serverLog` through `NetServer::sendToEditors`. The editor's Console panel shows those entries
+prefixed `"[server] "`. Detail: [docs/architecture/logging.md](docs/architecture/logging.md).
 
 **Contact clipping.** `sim/collisions/ContactManifold.h` builds contact points for two convex shapes from
 plain vertex spans. Each shape's touching feature is the vertices within a tolerance of the extreme one along
@@ -495,52 +472,10 @@ A pair holding a capsule and a hull takes its manifold from that clipping in `Po
 `Contact::points` wide, with the capsule's cap points as its feature. `PhysicsSystem` skips the box-axis flush
 snap when a hull is in the pair, since a hull has no box faces to lie flush against.
 
-**Camera.** `Camera` is a plain-field data component (`direction`, `fov`, `nearPlane`, `farPlane`,
-`active`) — position comes from the object's `Transform`, so only the *look* needs its own field.
-`RenderSystem::updateCamera` finds the active `Camera` (optionally restricted to one object; that rule, the view
-math and the View combo's labels live in the headless `data/objects/CameraSelection`), builds
-`lookAt(pos, pos + q·direction, worldUp)` — `q` is the object's orientation, so the camera turns as the
-object turns, but `worldUp` (not an orientation-derived up) keeps the horizon level — then disables
-`vke::Camera`'s free-fly and calls `Renderer3D::setCameraParameters`; no active camera re-enables free-fly
-(`RenderSystem::useFreeFlyCamera`, which also pushes the free-fly pose once on the handover — `render()`
-only pushes it while the scene view is focused, so without that the component camera's last pose lingers).
-The editor's **View** combo (Scene Status) picks what its viewport looks through: its own free-fly camera
-(the default) or any object in the scene carrying a `Camera`, which is how you see a client's view — a
-player camera is labelled with its `PlayerController` slot. A stale choice (object gone, `Camera` removed)
-falls back to free-fly. **Field of view (FOV) and near/far drive the actual projection**:
-`RenderSystem::updateCamera` also pushes the active `Camera`'s fov/near/far into `Renderer3D::setProjectionParameters` (only when they
-differ from what was last applied), and the free-fly fallback (`RenderSystem::enableFreeFlyCamera`) resets
-it to a named default (45/0.1/1000, `vke`'s own defaults) unless that default is already applied.
-`setProjectionParameters` throws for a degenerate triple; `RenderSystem` catches that and logs once, though
-the `Camera` setters already clamp to a valid range so it should not fire in practice.
-One upstream caveat carries through: raster geometry is clipped at roughly twice the near plane,
-since the projection maps depth to -1..1 while Vulkan clips at 0. A client picks its
-*own* camera via the player↔object association (`PlayerController.playerSlot` + a `Camera` on the same
-object) using a **nonce-over-broadcast** handshake: the client tags its `join` with a random nonce, the
-server echoes `(nonce, slot)` back over the existing broadcast (`NetServer` has no targeted-send path), and
-only the client whose nonce matches keeps it — chosen over adding a targeted-send ABI to the C# transport,
-which would have meant touching both backends for one bit of routing. The handshake's build and parse live in
-`data/Replication.{h,cpp}` (see Replication above). `PlayerScript` mouse-look rotates the
-object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
-gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;
-movement is relative to the `Camera.direction` (via the binding above) rotated by that yaw, not a hardcoded
-forward axis. **The editor must not gate forwarded mouse input on `io.WantCaptureMouse`** (unless its viewport stops being an ImGui window): its 3D viewport
-*is* an ImGui window under the dockspace, so that flag is set whenever the cursor is over the scene, and
-gating on it silently swallows the right-drag mouse-look. `EditorApp::captureGatedInput` (called from `sendInput`) instead forwards the mouse
-only while the viewport looks through a scene camera (in free-fly the right-drag belongs to the editor's own
-camera, so forwarding it too would turn the player at the same time) **and** `RenderingManager::isSceneFocused()`
-is true — the same signal `vke` gates its free-fly camera on. The keyboard still gates on
-`io.WantCaptureKeyboard`, which only trips for text input, so WASD (the movement keys) reaches the game from either view.
-Connections are bound to slots by `PlayerSlotTable` (`data/PlayerSlots`).
-The editor joins with a nonce too, so it learns its slot the same way a client does.
-Its Scene Status "Player" combo (`EditorApp::displayPlayerSelector`) sends `possessSlot` to move its input to another slot.
-That is not a mutation message, but the server honors it only on an edit-mode server, from the authorized editor connection.
-The server refuses a slot another live connection holds.
-`ServerApp::handlePossessSlot` answers every request, granted or refused, with a `playerSlot` for that connection's nonce.
-The editor follows only that answer.
-On a confirmed switch it resends its input for the new slot and points its View at that player's `Camera`.
-`findPlayerCamera` finds that camera and is shared with `ClientApp`; a player with no `Camera` leaves the view alone.
-The join reply just records the slot, and an unanswered request times out so the combo is not stuck disabled.
+**Camera.** `Camera` is a plain-field data component. `RenderSystem::updateCamera` drives the view and
+projection from the active one and falls back to the editor's free-fly camera. A client finds its own camera
+through its `PlayerController` slot. Input forwarding rules, including why the editor does not gate mouse input
+on `io.WantCaptureMouse`: [docs/architecture/camera-and-input.md](docs/architecture/camera-and-input.md).
 
 **Inertia.** `sim/InertiaTensor.h` computes each collider shape's world-space mass distribution: volume, centroid
 and second moment per unit mass. It combines a body's colliders by volume share into one per-unit-mass inertia
@@ -561,149 +496,15 @@ mass distribution, filled by `InertiaTensor`'s `hullOf` and keyed on a counter i
 they rebuild. The narrow phase, scene queries, scripts and the inspector all handle it, as their own sections
 describe.
 
-**Viewport gizmos.** The selected object's translate/rotate/scale gizmo is drawn through the VulkanEngine
-scene overlay hook (`RenderingManager::setSceneOverlay`, one callback per frame into the scene window's own
-`ImDrawList`) rather than a separate render pass; `RenderSystem::viewParams` gives the overlay the view
-matrix and projection whichever camera (free-fly or a component `Camera`) is currently live. `ViewportGizmo`
-builds a `gizmo::Input` from the target's `Transform` each frame, runs the headless `gizmo::` core (hit-
-testing and drag math, `source/libs/editor/Gizmo.{h,cpp}`; a world-space drag is mapped back to local through the
-parent's world frame, which `Input` carries), and draws the result through `GizmoRenderer` -
-an interface so a native backend could replace `ImGuiGizmoRenderer` later without `ViewportGizmo` changing.
-A drag sends a per-frame `editComponent` while it moves (matching the Inspector's own slider drags, so
-other connected views see it move smoothly) and one committed edit - one undo entry - on release.
-`EditorApp::handlePicking` runs from `run()`, in its original spot after `sendInput()` - not from the
-overlay callback, because picking reads `RenderSystem::isSelected`, vke's `MousePicker` flags, which
-`variableUpdate()` clears at the start of every frame and only sets again inside `render()`, after the
-overlay runs; reading them from the overlay saw every flag already cleared for the frame. The same-frame
-race the overlay placement was chasing - a mouse that moves onto a handle and presses in the same frame -
-is instead handled by `ViewportGizmo::capturesMouseAt(mouse)`, which re-runs the headless core on copies of
-the last frame it actually drew (no side effects) with the given mouse position and the button up, so
-`handlePicking` can ask "is this mouse over a handle" without waiting for this frame's own overlay to run.
-Picking skips a click `capturesMouseAt` reports as captured, so grabbing a handle leaves the selection as it
-is. Viewport picking is Ctrl-gated: Ctrl+click selects the picked object (replacing the selection) or
-clears it on empty space; Ctrl+Shift+click toggles the picked object in/out of the selection, and does
-nothing on empty space; a plain click (focusing the viewport, dragging a gizmo handle) leaves the selection
-as it is. The editor sets `ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true` (in `setupImGuiStyle`)
-so a drag inside a detached scene window's body drives the gizmo instead of moving the OS window.
-Each light also gets a sprite at its position, drawn through `RenderSystem::drawLightGizmos`, which only the
-editor calls, and only while the scene is stopped and ray tracing is off (`LightGizmoVisibility.h`): the ray
-traced path traces every submitted object as lit geometry and has no raster pass to draw an icon in. It reports
-through the same pick flag as the light object's model, so Ctrl+click selects the light;
-`RenderSystem::variableUpdate` clears every pick flag before submitting, since the picker only rewrites the
-flags of objects drawn that frame. The icon carries alpha, but the unlit textured pipeline ignores it for now,
-so it reads as a slate badge until that pipeline gains an alpha cutoff. The shared
-quad model and icon load once through `GpuAssetCache`; a failed load is logged once and leaves lights
-without sprites.
-A scene asset tile also drags onto the viewport to make that scene active: the same scene overlay callback
-opens an ImGui drop target over the scene image (`EditorApp::acceptSceneDrop`), accepting only
-`assetDragDrop::scene` payloads that `sceneFromPayload` resolves to a registered Scene record, and loads
-through `onLoadScene` exactly like a double-click, with the same editable-server gate and no unsaved-changes
-prompt (switching scenes discards no authored edits; runtime changes of a playing scene are still discarded
-when it stops). Dropping the already-active scene does nothing, since reloading it would restart it.
+**Viewport gizmos.** The selected object's transform gizmo draws through the VulkanEngine scene overlay hook,
+over the headless `gizmo::` core in `editor/Gizmo.{h,cpp}`. Picking runs from `EditorApp::run()`, not from the
+overlay, and is Ctrl-gated. Detail:
+[docs/architecture/viewport-gizmos.md](docs/architecture/viewport-gizmos.md).
 
-**Editor Undo/Redo.** `data/edits/EditCommand.h` and `EditHistory.h` hold the undo/redo stack. It is
-headless by design (it links `ECS3DData` and nothing UI-side). The design decision that shapes it: **undo is a new edit, not a
-local rewind** - undoing sends an ordinary reverse edit back through the normal replication path and waits
-for the rebroadcast like any other change, so the server stays the single source of truth and every
-connected view converges the same way. A command records its target uuid(s) and a before/after state in
-replicated form (a component's `serialize()` blob, an object's name/parent, a whole removed subtree, a
-whole asset record); the payload to send is built on demand from `Replication.h`'s own builders, rather than
-stored as a built `net::Message` (a `Command` stays a plain, copyable, comparable value that way).
-**Validation happens once, at the moment of undo/redo - not on every snapshot**, which would invalidate
-the whole stack on every structural edit even in single-user editing. It compares the command's
-after-state (undo) or before-state (redo) against the live scene/registry; a mismatch refuses the whole
-edit and drops that entry and everything older still on the stack being popped (undo is sequential -
-skipping a dropped entry to reach an older one would apply reverts out of order), naming which uuid
-conflicted. Every kind is reversible today. `removeObject` was the one exception until `restoreObject`
-grew its `"adopt"` field (see the Replication paragraph above): `ObjectManager::deleteObjectsMarkedForDeletion`
-promotes the removed object's children up to its own parent (preserving their world placement) rather than
-deleting them, so undo has to both recreate the removed object and reclaim those already-live children
-back under it, in one atomic `Command` payload - `EditCommand::buildUndoJSON`'s `removeObject` case builds
-exactly that from the recorded subtree, and its `validateForUndo` checks the object is absent, the
-recorded parent exists, and every recorded direct child is still living under that parent (where
-`deleteObjectsMarkedForDeletion` left it) before undo is attempted. `isReversible()` stays a real check
-(not a constant `true`) as the extension point for a future kind with no faithful reverse. Every structural
-kind *is* reversible: `removeComponent` undoes through `addComponent`'s optional `"data"` field (the removed
-component's own `serialize()` blob, loaded onto the freshly created component in the same op that creates
-it, rather than the blank default a bare `addComponent` normally makes) and redoes through the ordinary
-`removeComponent` op; `duplicateObject`/`instantiatePrefab` undo through `removeSubtree` (named by the
-created root's uuid alone - it deletes the whole subtree immediately, unlike `removeObject`, so it needs
-none of the descendants' uuids) and redo by re-sending the original creating op (`instantiatePrefab`'s
-command also carries the prefab asset's body as it was at record time, since `AssetRegistry` lets a
-prefab's body be replaced in place under the same uuid - a re-save between undo and redo - and
-`validateForRedo` refuses rather than silently instantiating whatever the registry holds now). Redoing that way - rather
-than replaying a captured subtree - means a duplicate's or prefab instance's descendants get fresh uuids
-each time it is recreated, the same limitation `addObject`'s redo already has (it does not restore the
-original uuid either): today the editor waits for the server to confirm a structural edit and rebuild the
-snapshot rather than applying it to its own view up front, so `RecordEdits` has no way to learn what uuids
-the server will mint for those descendants at the moment it derives the command, before the edit is even
-sent. **Every
-editor mutation is recorded**: each of `EditorApp`'s mutation callbacks (component edit, scene edit, add
-asset, rename/remove asset) asks `edits/RecordEdits.h` for the command before it sends, deriving the
-before state from the replicated view while that view still holds it, and records what comes back; an edit
-nothing faithful can be derived for (a stale view, an op with no matching kind) is logged at debug and
-skipped rather than refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
-prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
-"Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
-and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
-(New/Open), scene switch, and (re)connect (any stashed authored history goes too). A snapshot clears them too when its active scene
-differs from the one the history was recorded against, as after another editor's load or scene switch.
-`edits/HistoryScope.h` tracks that scene. Play does not clear them:
-pressing Start stashes the authored history (`edits/PlaySessionHistory.h`) and runs the session on a fresh
-one, keeping authored commands apart from play-time ones (only structural and name edits made while playing
-yield usable entries, since `Transform::serialize` reads authored values, so a live component edit records
-before == after and is dropped); pressing Stop discards the play-session history and restores the stash, which is valid because `SceneAsset::stop()` rebuilds the authored
-tree with uuids preserved. The swap happens when the request is sent, not when the status returns, since the
-server applies edits in the order sent and an edit sent just after Start belongs to the runtime scene; a
-`sceneStatus` the server reports before it has seen the request is stale and ignored: outstanding requests are
-matched to statuses in order, so a stale one cannot confirm a later request. The reported status is
-followed only for a start/stop made elsewhere. A pause/resume leaves the scene, and so the history, as it is.
-
-The `SceneScriptsPanel` is what sends the scene-script ops. While a widget is held it edits a panel-owned
-copy of a script's fields, then sends one `setSceneScriptFields`. It keeps the copy until the echo arrives,
-so the replicated view still holds the "before" state that undo records. A pending gate ignores structural
-clicks until the list changes, since a duplicate would record a duplicate undo entry.
-
-A history entry can also group several commands (`EditHistory::recordBatch`), sent and undone/redone as
-one unit - the editor's multi-object delete/duplicate (see the `ECS3DEditorLib` row above) records one of
-these instead of one entry per object. The editor does not apply a structural edit to its own replicated
-view before sending it (see above), so that view is still pre-batch when `undo()`/`redo()` reverse a
-group; each simulates the reverse on a scratch copy of the live scene (`ObjectManager::makeScratchCopy`),
-validating and building each command's undo/redo op in turn against what the ones before it in that same
-group would have left behind, and sends the collected ops as one `replication::buildBatch` - one Ctrl+Z
-reverses the whole group in one sceneEdit. A single-command entry is unchanged: no scratch copy, no batch
-wrapping, the same payload as before grouping existed.
-
-The four scene script ops each have an undo kind (`addSceneScript`, `removeSceneScript`, `reorderSceneScript`,
-`setSceneScriptFields`), recorded from the pre-edit `SceneAsset`. Undo and redo validate them against the
-scene passed to `EditHistory::undo`/`redo`; with no scene they are refused, naming the scene's uuid. `recordBatch` refuses
-them, since group undo simulates on a scratch `ObjectManager` that has no script list.
-
-`EditorApp::undo()`/`redo()` are what read the stacks back: each peeks the top of the relevant stack with
-`EditHistory::nextUndoIsReversible()`/`nextRedoIsReversible()` before calling `undo()`/`redo()`, and sends
-whatever payload comes back for any reversible kind - every kind today, but a future non-reversible kind on
-top would be refused with a log message and left in place rather than handed
-to `EditHistory::undo()`/`redo()`, which would otherwise treat "a kind with no reverse" the same as a validation conflict and drop it (and
-everything older beneath it) even though nothing about it is actually wrong. `reportHistoryOutcome` sends
-whichever of `jsonPayload`/`messagePayload` `HistoryOutcome` set, matching `payloadForm()`: a sceneEdit
-json payload (`addObject`, `reparentObject`, `reorderObject`, `renameObject`, `addComponent`) is chunked
-into a `sceneEdit` message the same way `EditorApp::onSceneEdit` does for a normal edit; a networkMessage
-payload (`componentEdit` and every asset kind) is sent as-is. Ctrl+Z/Ctrl+Shift+Z and an Edit menu (between
-File and Window) call `undo()`/`redo()` through `requestUndo()`/`requestRedo()` (`EditorAppUndoMenu.cpp`; holding the chord repeats the step, and the in-flight gate below still paces it);
-the menu items read `EditHistory::nextUndoLabel()`/`nextRedoLabel()` (built from
-`EditCommand::describeForMenu()`) to name the action they would perform ("Undo Rename Cube") instead of
-showing a bare "Undo"/"Redo", and disable themselves with nothing to act on, a read-only server, or a
-request already in flight - `requestUndo()`/`requestRedo()` ignore a further request once one has actually
-popped a stack entry (the in-flight gate, its injectable clock and the `gainedOneEntry`/`canActOnHistoryItem` checks are the headless `editor/UndoRequestGate.h`) until the server's rebroadcast lands (`handleSnapshot`/`handleEditComponent`) or a
-short timeout passes, since undo validates against the editor's replicated view, which only updates on that
-rebroadcast, and a second press inside one round trip would otherwise validate against a still-stale value.
-A refusal is logged the same way for a stale target (`targetMissing`/`targetChanged`, naming the conflicting
-uuid) or an empty stack. `EditHistory::
-reportUndoRejected()`/`reportRedoRejected()` exist for a server rejection of the edit undo()/redo() just
-sent, but nothing calls them yet: today's `editComponent`/`sceneEdit` handling has no wire-level
-acknowledgement back to the sender for a rejected edit to hook into (a failed edit is only logged
-server-side, and sometimes answered with a resync snapshot) - the handlers are `ServerApp::handleSceneEdit`/
-`handleEditComponent`.
+**Editor Undo/Redo.** Undo sends a new reverse edit through the normal replication path rather than rewinding
+locally, so the server stays the single source of truth. `data/edits/` holds the headless `EditHistory`, and
+every editor mutation records its command before it sends. Read
+[docs/architecture/undo-redo.md](docs/architecture/undo-redo.md) before adding an edit kind or a mutation path.
 
 ## Development Principles
 
@@ -749,7 +550,7 @@ server-side, and sometimes answered with a resync snapshot) - the handlers are `
   hulls (D4, D6, D8, D12, D20, Hex Prism, Drum, Gem, Boulder), whose formulas and seeded Boulder generator
   mirror `tools/shapes/library.py`, and a test pins coordinates from both. Also
   registers a `RemoteLogSink` with `Log` and forwards it to editor connections every `run()` iteration,
-  only when `--edit` is set — see Logging above.
+  only when `--edit` is set — see [docs/architecture/logging.md](docs/architecture/logging.md).
 - **ECS3DClient** (`apps/client`) — the lightweight view. `--host`/`--port`/`--project` (folder or file, also passed to the spawned server)/`--console`/`--server-console`
   (opens a console window; Windows builds are GUI-subsystem and have none by
   default)/`--log-file`/`--no-log-file`. Links
