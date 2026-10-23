@@ -67,6 +67,7 @@ add_executable(${PROJECT_NAME}
   EditHistoryRoundTripTest.cpp
   EditHistoryRoundTripSubtreeTest.cpp
   EditHistoryLabelTest.cpp
+  EditHistoryRefusalKindsTest.cpp
   EditHistoryRefusalTest.cpp
   EditHistoryStructuralRefusalTest.cpp
   EditHistoryBatchTest.cpp
