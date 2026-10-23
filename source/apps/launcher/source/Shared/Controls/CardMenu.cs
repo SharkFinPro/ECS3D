@@ -12,7 +12,7 @@ public static class CardMenu
         {
             if (ancestor is Control { ContextMenu: { } menu } owner)
             {
-                // ContextMenu.Open throws unless it is given the control the menu is attached to.
+                // ContextMenu.Open throws when given a control other than one the menu is attached to.
                 menu.PlacementTarget = anchor;
                 menu.Placement = PlacementMode.BottomEdgeAlignedRight;
                 menu.Open(owner);

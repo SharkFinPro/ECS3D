@@ -1,8 +1,12 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Templates;
 using Avalonia.Headless;
+using Avalonia.VisualTree;
 using ECS3DLauncher.Shared.Controls;
 using Xunit;
 
@@ -21,14 +25,30 @@ public class LauncherCardMenuTests
     HeadlessUnitTestSession.GetOrStartForAssembly(typeof(LauncherCardMenuTests).Assembly)
       .Dispatch(action, CancellationToken.None);
 
+  // Without a theme a Window has no template, so its content would never join the visual tree.
+  private static Window ShowInWindow(Control content, Control attached)
+  {
+    var window = new Window
+    {
+      Content = content,
+      Template = new FuncControlTemplate<Window>((w, _) =>
+      {
+        var presenter = new ContentPresenter { Name = "PART_ContentPresenter" };
+        presenter.Bind(ContentPresenter.ContentProperty, w.GetObservable(ContentControl.ContentProperty));
+        return presenter;
+      })
+    };
+    window.Show();
+    Assert.NotNull(attached.GetVisualRoot());
+    return window;
+  }
+
   private static (Button Button, ContextMenu Menu, Window Window) ShowCard()
   {
     var button = new Button();
     var menu = new ContextMenu { Items = { new MenuItem { Header = "Open" } } };
     var card = new Border { ContextMenu = menu, Child = new StackPanel { Children = { button } } };
-    var window = new Window { Content = card };
-    window.Show();
-    return (button, menu, window);
+    return (button, menu, ShowInWindow(card, button));
   }
 
   [Fact]
@@ -38,6 +58,7 @@ public class LauncherCardMenuTests
     {
       var (button, menu, window) = ShowCard();
 
+      Assert.Throws<ArgumentException>(() => menu.Open(button));
       Assert.True(CardMenu.OpenFrom(button));
       Assert.True(menu.IsOpen);
 
@@ -52,10 +73,19 @@ public class LauncherCardMenuTests
     await OnUiThread(() =>
     {
       var (button, menu, window) = ShowCard();
+      Control? target = null;
+      var placement = PlacementMode.Pointer;
+      menu.Opened += (_, _) =>
+      {
+        target = menu.PlacementTarget;
+        placement = menu.Placement;
+      };
 
       Assert.True(CardMenu.OpenFrom(button));
       menu.Close();
 
+      Assert.Same(button, target);
+      Assert.Equal(PlacementMode.BottomEdgeAlignedRight, placement);
       Assert.Null(menu.PlacementTarget);
       Assert.Equal(PlacementMode.Pointer, menu.Placement);
       window.Close();
@@ -69,8 +99,7 @@ public class LauncherCardMenuTests
     {
       var (withMenu, menu, menuWindow) = ShowCard();
       var bare = new Button();
-      var bareWindow = new Window { Content = new StackPanel { Children = { bare } } };
-      bareWindow.Show();
+      var bareWindow = ShowInWindow(new StackPanel { Children = { bare } }, bare);
 
       Assert.True(CardMenu.OpenFrom(withMenu));
       Assert.True(menu.IsOpen);
