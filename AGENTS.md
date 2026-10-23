@@ -13,9 +13,9 @@
 - The engine is **authoritative client/server multiplayer** by design. A headless server owns the simulation;
   clients render a replicated view and send input. Singleplayer is the same server spawned as a local child
   process. This is the shape of the whole codebase, not an add-on.
-- C++ owns the engine, the data and the wire protocol. **C# runs in-process on CoreCLR**, the .NET Common
-  Language Runtime (CLR) hosted through nethost/hostfxr, for gameplay scripting (`ScriptBridge`) and for the network transport
-  (`ECS3DNetTransport`), which owns the sockets.
+- C++ owns the engine, the data and the wire protocol. **C# runs in-process on CoreCLR**, the Common
+  Language Runtime (CLR) hosted through nethost/hostfxr, for gameplay scripting (`ScriptBridge`) and for the
+  network transport (`ECS3DNetTransport`), which owns the sockets.
 - Four executables ship: **ECS3DServer**, **ECS3DClient**, **ECS3DEditor** (all C++) and **ECS3DLauncher**, a
   standalone C# Avalonia app with [its own AGENTS.md](source/apps/launcher/AGENTS.md).
 - Scope today: an editor plus play and edit servers, rigid-body physics with Gilbert-Johnson-Keerthi (GJK) and
@@ -148,14 +148,14 @@ Folders with their own `AGENTS.md`: `source/libs/{data,sim,render,editor,net,scr
 - **The serialize/loadFromJSON boundary is the contract.** Replication, save/load and the registry all ride on it.
   Thread a new component field through it, and no layer learns the concrete type.
 - **A user preference is not project data.** Project state replicates to every client, so preferences live in
-  `ECS3DSettings` (a JSON file in the per-user data directory), never in a scene, a prefab or a snapshot.
+  `ECS3DSettings` (a JSON file in the per-user data directory), not in a scene, a prefab or a snapshot.
 - **Respect the layer boundaries.** A new component splits into fields (`data`), physics (`sim`), rendering
   (`render`), bindings (`scripting`) and an inspector widget (`editor`), and registers in `registerDataComponents()`.
 - **Comments:** write them sparingly. Prefer self-documenting code (clear names, small functions) over a comment.
   Comment only what the code cannot say for itself - the *why* behind a non-obvious algorithm, design decision,
   workaround or caveat - in one or two lines. Do not narrate implementation history ("was X", "moved from Y",
-  "Phase N", "temporary") or point at external plans. **Comments are ASCII only:** use `-`, `->` and `<->` instead
-  of em dashes, arrows or other Unicode.
+  "Phase N", "temporary") or point at external plans. **Comments are ASCII (plain 7-bit text) only:** use `-`, `->`
+  and `<->` instead of em dashes, arrows or other Unicode.
 
 ## Applications
 
