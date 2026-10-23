@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
 using Xunit;
@@ -39,13 +41,13 @@ public class LauncherSamplesTabTests
     AddEntry(engineFolder, "blank", Manifest("blank", "Blank Template", "template", "Start empty", "\"empty\"", ""));
   }
 
-  private MainWindowViewModel NewMain() =>
+  private MainWindowViewModel NewMain(Func<string, Bitmap?>? loadThumbnail = null) =>
     new(
       _rig.NewEditor(),
       _runner,
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
       _rig.NewCatalog(),
-      _ => null,
+      loadThumbnail ?? (_ => null),
       "1.2.3",
       action => action());
 
@@ -246,6 +248,58 @@ public class LauncherSamplesTabTests
     Assert.Equal(
       new[] { "--project", FolderOf(LauncherRig.OtherDir, "only") },
       Assert.Single(_runner.Launches).Arguments.ToArray());
+  }
+
+  [Fact]
+  public void OnlyASampleWithAThumbnailFileCallsTheLoader()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddStandardEntries(LauncherRig.LauncherDir);
+    var thumbnail = Path.Combine(FolderOf(LauncherRig.LauncherDir, "rush"), "thumbnail.png");
+    _rig.Files.Seed(thumbnail, "png");
+    var requested = new List<string>();
+
+    var cards = NewMain(path =>
+    {
+      requested.Add(path);
+      return null;
+    }).Samples.Samples;
+
+    Assert.Equal(new[] { thumbnail }, requested.ToArray());
+    Assert.False(cards.Single(card => card.Name == "Coin Rush").HasThumbnail);
+    Assert.False(cards.Single(card => card.Name == "Physics Playground").HasThumbnail);
+  }
+
+  [Fact]
+  public void ChangingTheEngineFolderRaisesPlayCanExecuteChanged()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir, EngineExecutable.Client);
+    _rig.AddEngine(LauncherRig.OtherDir);
+    var model = NewMain();
+    var changes = 0;
+    model.Samples.PlayCommand.CanExecuteChanged += (_, _) => changes++;
+
+    model.Settings.EngineFolder = LauncherRig.OtherDir;
+
+    Assert.True(changes > 0);
+  }
+
+  [Fact]
+  public void AShellSearchSurvivesAnEngineFolderReload()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddStandardEntries(LauncherRig.LauncherDir);
+    _rig.AddEngine(LauncherRig.OtherDir);
+    AddStandardEntries(LauncherRig.OtherDir);
+    var model = NewMain();
+    model.SearchText = "arcade";
+    Assert.Equal(new[] { "Coin Rush" }, Names(model));
+
+    model.Settings.EngineFolder = LauncherRig.OtherDir;
+
+    Assert.Equal(new[] { "Coin Rush" }, Names(model));
+    Assert.Equal(FolderOf(LauncherRig.OtherDir, "rush"), model.Samples.VisibleSamples[0].FolderPath);
+    Assert.Equal(2, model.Samples.Samples.Count);
   }
 
   [Fact]

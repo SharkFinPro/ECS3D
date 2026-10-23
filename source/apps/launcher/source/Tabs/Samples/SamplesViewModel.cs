@@ -60,7 +60,6 @@ public class SamplesViewModel : ObservableObject
         PlayCommand = playCommand;
         _playTooltip = playTooltip;
         _loadThumbnail = loadThumbnail;
-        Reload(new TemplateCatalogContents("", false, [], []));
     }
 
     public void UpdatePlay(string? playTooltip) => PlayTooltip = playTooltip;

@@ -100,9 +100,9 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 
 - Read this file before changing the launcher. You should **not** need the root `AGENTS.md` or any C++
   engine knowledge for launcher work.
-- Engine location and launching are real; project storage, templates and settings are not yet. When asked
-  to "load projects" and the like, confirm whether the task is to build the missing service and its wiring
-  or to extend the mock UI.
+- Engine location and launching, settings, the recent-projects store and the template catalog (Samples tab) are
+  real; project creation and the hosting UI are not yet. When asked to "load projects" and the like, confirm
+  whether the task is to build the missing service and its wiring or to extend the mock UI.
 - Keep the MVVM split clean: no app logic in code-behind, no view construction in view models.
 - Add UI dependencies via `PackageReference` in `ECS3DLauncher.csproj`; keep Debug-only tooling under the
   `Configuration == Debug` item group so it never ships. `ECS3DManagedTests.csproj` pins the same Avalonia and

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -255,7 +256,7 @@ public class MainWindowViewModel : ObservableObject
         OpenProjectCommand.NotifyCanExecuteChanged();
         Samples.UpdatePlay(_actions.Play.Tooltip);
         Samples.Reload(_catalog.Load(engine.Folder));
-        NavItems[2].Count = SampleCount();
+        SamplesNavItem.Count = SampleCount();
         PlaySampleCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EngineBannerText));
         OnPropertyChanged(nameof(HasEngineBanner));
@@ -271,6 +272,8 @@ public class MainWindowViewModel : ObservableObject
     private TabHeader Header => LauncherTabs.Header(LauncherTabs.Parse(ActiveNav));
 
     private string ProjectCount() => Projects.Projects.Count.ToString();
+
+    private NavItemViewModel SamplesNavItem => NavItems.Single(item => item.Key == "samples");
 
     private string SampleCount() => Samples.Samples.Count.ToString();
 
