@@ -84,8 +84,8 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   plain, testable logic; a type that needs those packages belongs in `Tabs` or `Shared`. `ECS3DManagedTests`
   links `source/Services/**`, the view models (`Shell/MainWindowViewModel.cs`, `Shell/NavItemViewModel.cs`,
   `Tabs/**/*ViewModel.cs`), `Shared/Models`, `Shared/Converters` and `Shared/Controls/CardMenu.cs`. A new shell
-  view model, or one not named `*ViewModel.cs`, must be added to that link list. Anything that touches the filesystem, processes or the
-  environment goes behind an interface or an injected function.
+  view model, or one not named `*ViewModel.cs`, must be added to that link list. Anything that touches the
+  filesystem, processes or the environment goes behind an interface or an injected function.
 - **Navigation is centralized.** `MainWindowViewModel.ActiveNav` (a string key) selects `CurrentTab`; the
   window's `ContentControl` maps the active view model to its view by type. Tabs never navigate directly —
   they call back into the shell (see `ProjectsViewModel`'s `openTemplates`).
