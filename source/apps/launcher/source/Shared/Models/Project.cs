@@ -13,6 +13,13 @@ public sealed class Project
     public required string Edited { get; init; }
     public bool Pinned { get; init; }
 
+    // The folder (or project file) is gone; the card offers Locate and Remove instead of Open.
+    public bool IsMissing { get; init; }
+    public bool IsPresent => !IsMissing;
+
+    // An editor the launcher started for this project is still running.
+    public bool IsInEditor { get; init; }
+
     // The leading "New Project" tile is modeled as a sentinel so it flows inline
     // with the real cards in the same items panel.
     public bool IsNewCard { get; init; }

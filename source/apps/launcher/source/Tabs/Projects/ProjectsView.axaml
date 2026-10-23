@@ -143,6 +143,17 @@
                                               HorizontalAlignment="Center" VerticalAlignment="Center"
                                               Data="{Binding PlaceholderIcon, Converter={StaticResource IconKey}}" />
                                     </Panel>
+                                    <Border IsVisible="{Binding IsMissing}" Background="#CC0D0E10">
+                                        <TextBlock Text="Folder not found" FontSize="12.5" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource DangerBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <Border IsVisible="{Binding IsInEditor}" CornerRadius="6" Padding="8,3"
+                                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="9"
+                                            Background="{StaticResource AccDim2}">
+                                        <TextBlock Text="In editor" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource AccBrush}" />
+                                    </Border>
                                     <Border IsVisible="{Binding Pinned}" Width="24" Height="24" CornerRadius="6"
                                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="9"
                                             Background="#A60D0E10">
@@ -161,11 +172,23 @@
                                                TextTrimming="CharacterEllipsis" />
                                     <Grid Margin="0,11,0,0" ColumnDefinitions="Auto,*,Auto,Auto">
                                         <Path Grid.Column="0" Classes="icon t3" Width="10" Height="10"
+                                              IsVisible="{Binding IsPresent}"
                                               VerticalAlignment="Center" Data="{StaticResource IconClock}" />
                                         <TextBlock Grid.Column="1" Text="{Binding Edited}" FontSize="11.5"
+                                                   IsVisible="{Binding IsPresent}"
                                                    Margin="7,0,0,0" Foreground="{StaticResource T2Brush}"
                                                    VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="6"
+                                                    IsVisible="{Binding IsMissing}" VerticalAlignment="Center">
+                                            <Button Classes="open" Theme="{StaticResource BareButton}" Content="Locate"
+                                                    Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).LocateProjectCommand, FallbackValue={x:Null}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Classes="open" Theme="{StaticResource BareButton}" Content="Remove"
+                                                    Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
+                                                    CommandParameter="{Binding}" />
+                                        </StackPanel>
                                         <Button Grid.Column="2" Classes="open" Theme="{StaticResource BareButton}" Content="Open"
+                                                IsVisible="{Binding IsPresent}"
                                                 ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenTooltip, FallbackValue={x:Null}}"
                                                 ToolTip.ShowOnDisabled="True"
                                                 VerticalAlignment="Center"
@@ -257,17 +280,37 @@
                                     </Panel>
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0" Spacing="2">
-                                    <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
-                                               TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <Border IsVisible="{Binding IsInEditor}" CornerRadius="6" Padding="8,2"
+                                                VerticalAlignment="Center" Background="{StaticResource AccDim2}">
+                                            <TextBlock Text="In editor" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AccBrush}" />
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock Text="{Binding Path}" FontSize="11.5"
                                                FontFamily="{StaticResource MonoFontFamily}"
                                                Foreground="{StaticResource T3Brush}"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="2" Text="{Binding Edited}" Width="110"
-                                           FontSize="11.5" Foreground="{StaticResource T2Brush}"
-                                           VerticalAlignment="Center" />
+                                <Panel Grid.Column="2" Width="110" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Edited}" IsVisible="{Binding IsPresent}"
+                                               FontSize="11.5" Foreground="{StaticResource T2Brush}" />
+                                    <TextBlock Text="Folder not found" IsVisible="{Binding IsMissing}"
+                                               FontSize="11.5" Foreground="{StaticResource DangerBrush}" />
+                                </Panel>
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" Margin="0,0,14,0"
+                                            IsVisible="{Binding IsMissing}" VerticalAlignment="Center">
+                                    <Button Classes="open" Theme="{StaticResource BareButton}" Content="Locate"
+                                            Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).LocateProjectCommand, FallbackValue={x:Null}}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Classes="open" Theme="{StaticResource BareButton}" Content="Remove"
+                                            Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
                                 <Button Grid.Column="3" Classes="open" Theme="{StaticResource BareButton}" Content="Open"
+                                                IsVisible="{Binding IsPresent}"
                                                 ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenTooltip, FallbackValue={x:Null}}"
                                                 ToolTip.ShowOnDisabled="True"
                                                 VerticalAlignment="Center" Margin="0,0,14,0"

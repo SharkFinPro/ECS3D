@@ -55,6 +55,8 @@ public class MainWindow : Window
             viewModel.OpenLogFile = OpenWithDefaultAppAsync;
             viewModel.ShowFolder = ShowFolderAsync;
             viewModel.OpenUrl = OpenInBrowserAsync;
+            viewModel.PickProjectFolder = PickProjectFolderAsync;
+            viewModel.PickProjectFile = PickProjectFileAsync;
         }
     }
 
@@ -71,6 +73,32 @@ public class MainWindow : Window
     private async Task<bool> ShowFolderAsync(string path)
     {
         return Launcher is { } launcher && await launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(path));
+    }
+
+    private async Task<string?> PickProjectFolderAsync()
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Locate the project folder",
+            AllowMultiple = false,
+        });
+        return folders.Count == 0 ? null : folders[0].TryGetLocalPath();
+    }
+
+    // A project folder is chosen by picking the project.ecs3d inside it.
+    private async Task<string?> PickProjectFileAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open an existing project",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("ECS3D project") { Patterns = ["project.ecs3d"] },
+                new FilePickerFileType("Legacy project (.json)") { Patterns = ["*.json"] },
+            ],
+        });
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
     // The editor may have recorded a project while the launcher was in the background.

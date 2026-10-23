@@ -144,7 +144,7 @@
             <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
 
                 <!-- Toolbar -->
-                <Grid Grid.Row="0" Margin="28,20,28,16" ColumnDefinitions="*,Auto,Auto,Auto">
+                <Grid Grid.Row="0" Margin="28,20,28,16" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
                         <TextBlock Text="{Binding ViewTitle}" FontSize="19" FontWeight="Bold"
                                    LetterSpacing="-0.2" />
@@ -183,8 +183,14 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Open existing (Projects tab only) -->
+                    <Button Grid.Column="3" Classes="secondary" Theme="{StaticResource BareButton}"
+                            Content="Open existing..." Margin="0,0,10,0"
+                            IsVisible="{Binding ShowOpenExisting}"
+                            Command="{Binding OpenExistingCommand}" />
+
                     <!-- New Project -->
-                    <Button Grid.Column="3" Classes="cta" Theme="{StaticResource BareButton}"
+                    <Button Grid.Column="4" Classes="cta" Theme="{StaticResource BareButton}"
                             Command="{Binding NewProjectCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Path Classes="icon dark" Width="12" Height="12" StrokeThickness="1.5"
