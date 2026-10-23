@@ -60,18 +60,21 @@ public sealed class RecentProjectsStore
 
     public IReadOnlyList<RecentProject> Entries() => _projects.Select(ToEntry).ToList();
 
-    public void Load()
+    // False when the file exists but could not be read (a sharing violation, a lock): the list is then empty
+    // only for lack of a read, so callers must not save it over the real file. Corrupt JSON still returns true.
+    public bool Load()
     {
         _extra = new JsonObject();
         _projects = [];
         if (!_fileSystem.FileExists(_path))
         {
-            return;
+            return true;
         }
 
+        var readable = true;
         try
         {
-            LoadDocument();
+            readable = LoadDocument();
         }
         catch (ArgumentException ex)
         {
@@ -80,14 +83,17 @@ public sealed class RecentProjectsStore
             _projects = [];
             _log.Warn($"{_path}: could not read recent projects: {ex.Message}; starting with an empty list");
         }
+
+        return readable;
     }
 
-    private void LoadDocument()
+    // False when the file could not be read at all.
+    private bool LoadDocument()
     {
-        var root = ReadRoot();
+        var root = ReadRoot(out var readable);
         if (root is null)
         {
-            return;
+            return readable;
         }
 
         if (root.TryGetPropertyValue("projects", out var node))
@@ -95,7 +101,7 @@ public sealed class RecentProjectsStore
             if (node is not JsonArray array)
             {
                 _log.Warn($"{_path}: 'projects' is not an array; starting with an empty list");
-                return;
+                return true;
             }
 
             _projects = ValidEntries(array);
@@ -103,6 +109,7 @@ public sealed class RecentProjectsStore
         }
 
         _extra = root;
+        return true;
     }
 
     public bool Save()
@@ -188,6 +195,13 @@ public sealed class RecentProjectsStore
         }
 
         return true;
+    }
+
+    // Pins an unpinned entry and unpins a pinned one, judged from the entry as loaded.
+    public bool TogglePinned(string path)
+    {
+        var entry = FindEntry(KeyOf(path));
+        return entry is not null && SetPinned(path, !IsPinned(entry));
     }
 
     // Never touches the project's files.
@@ -281,8 +295,9 @@ public sealed class RecentProjectsStore
         }
     }
 
-    private JsonObject? ReadRoot()
+    private JsonObject? ReadRoot(out bool readable)
     {
+        readable = true;
         try
         {
             var node = JsonNode.Parse(_fileSystem.ReadAllText(_path));
@@ -293,7 +308,12 @@ public sealed class RecentProjectsStore
 
             _log.Warn($"{_path}: the top level is not an object; starting with an empty list");
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            readable = false;
+            _log.Warn($"{_path}: could not read recent projects: {ex.Message}; leaving the file alone");
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
             _log.Warn($"{_path}: could not read recent projects: {ex.Message}; starting with an empty list");
         }

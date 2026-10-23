@@ -24,12 +24,14 @@ public class LauncherLearnTabTests
   private MainWindowViewModel NewMain() =>
     new(
       _rig.NewEditor(),
+      _rig.NewRecents(),
       _runner,
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
       _rig.NewCatalog(),
       _ => null,
       "1.2.3",
-      action => action());
+      action => action(),
+      () => _rig.Time.Now);
 
   private static string[] Titles(MainWindowViewModel model) => model.Learn.Guides.Select(item => item.Title).ToArray();
 

@@ -44,12 +44,14 @@ public class LauncherSamplesTabTests
   private MainWindowViewModel NewMain(Func<string, Bitmap?>? loadThumbnail = null) =>
     new(
       _rig.NewEditor(),
+      _rig.NewRecents(),
       _runner,
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
       _rig.NewCatalog(),
       loadThumbnail ?? (_ => null),
       "1.2.3",
-      action => action());
+      action => action(),
+      () => _rig.Time.Now);
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Samples.VisibleSamples.Select(card => card.Name).ToArray();

@@ -142,7 +142,7 @@ public class LauncherProjectsViewModelTests
     var model = NewModel();
     var log = new PropertyLog(model);
 
-    model.UpdateTooltips("new explore", "new open");
+    model.UpdateTooltips("new explore", "new open", null);
 
     Assert.Equal("new explore", model.ExploreTooltip);
     Assert.Equal("new open", model.OpenTooltip);
@@ -150,7 +150,7 @@ public class LauncherProjectsViewModelTests
     Assert.Contains(nameof(ProjectsViewModel.OpenTooltip), log.Names);
 
     log.Names.Clear();
-    model.UpdateTooltips("new explore", "new open");
+    model.UpdateTooltips("new explore", "new open", null);
     Assert.Empty(log.Names);
   }
 }

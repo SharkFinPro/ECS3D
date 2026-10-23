@@ -44,8 +44,9 @@ and write it, so this page is the one description of the schema. It lives in the
   unparseable time counts as oldest, and on a tie the later entry goes) until 50 remain. Pinned entries and
   the entry just recorded are never dropped, so a list of 50 pinned entries grows to 51.
 - Treat an unreadable file (bad JSON, or `projects` not an array) as empty, log it once, and replace it on
-  the next write. A missing file is simply empty. A file with no `projects` key is an empty list whose
-  other top-level fields are kept. An entry that is not an object, or has no string `path`, is dropped and
+  the next write. A file that cannot be read at all (a sharing violation, a lock) is not replaced: the launcher
+  skips its change and tries again later. A missing file is simply empty. A file with no `projects` key is an
+  empty list whose other top-level fields are kept. An entry that is not an object, or has no string `path`, is dropped and
   logged.
 - Opening a project that is already listed moves its entry to the front and keeps its other fields.
 

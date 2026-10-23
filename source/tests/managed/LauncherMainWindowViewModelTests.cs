@@ -19,12 +19,14 @@ public class LauncherMainWindowViewModelTests
   private MainWindowViewModel NewMain(Action<Action>? post = null) =>
     new(
       _rig.NewEditor(),
+      _rig.NewRecents(),
       _runner,
       new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
       _rig.NewCatalog(),
       _ => null,
       "1.2.3",
-      post ?? (action => action()));
+      post ?? (action => action()),
+      () => _rig.Time.Now);
 
   private static object TabModel(MainWindowViewModel model, LauncherTab tab) => tab switch
   {
@@ -42,7 +44,7 @@ public class LauncherMainWindowViewModelTests
   public void StartsOnTheProjectsTab()
   {
     var model = NewMain();
-    var header = LauncherTabs.Header(LauncherTab.Projects);
+    var header = LauncherTabs.Header(LauncherTab.Projects, true);
 
     Assert.Same(model.Projects, model.CurrentTab);
     Assert.Equal("projects", model.ActiveNav);
@@ -94,7 +96,7 @@ public class LauncherMainWindowViewModelTests
     model.SelectNavCommand.Execute("templates");
     model.SelectNavCommand.Execute("bogus");
     Assert.Same(model.Projects, model.CurrentTab);
-    Assert.Equal(LauncherTabs.Header(LauncherTab.Projects).Title, model.ViewTitle);
+    Assert.Equal(LauncherTabs.Header(LauncherTab.Projects, true).Title, model.ViewTitle);
 
     model.NewProjectCommand.Execute(null);
     Assert.Same(model.Templates, model.CurrentTab);

@@ -37,6 +37,12 @@ public static class LauncherTabs
         _ => LauncherTab.Projects,
     };
 
+    // With no stored projects the Projects tab greets instead of listing, so the grid/list toggle has nothing to do.
+    public static TabHeader Header(LauncherTab tab, bool noProjects) =>
+        tab == LauncherTab.Projects && noProjects
+            ? Header(tab) with { Title = "Welcome to ECS3D", ShowViewToggle = false }
+            : Header(tab);
+
     public static TabHeader Header(LauncherTab tab) => tab switch
     {
         LauncherTab.Templates => new TabHeader(

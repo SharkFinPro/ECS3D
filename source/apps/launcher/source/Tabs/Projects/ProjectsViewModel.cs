@@ -20,6 +20,8 @@ public class ProjectsViewModel : ObservableObject
     private bool _isGridView = true;
     private string? _exploreTooltip;
     private string? _openTooltip;
+    private string? _playTooltip;
+    private bool _replacing;
 
     public ObservableCollection<Project> Projects { get; }
 
@@ -49,6 +51,9 @@ public class ProjectsViewModel : ObservableObject
 
     public bool ShowList => !IsEmpty && IsListView;
 
+    // Projects are stored but the search hides every one of them; only the New Project tile is left.
+    public bool ShowNoMatches => !IsEmpty && ProjectTiles.Count == 1;
+
     public string SearchText
     {
         get => _searchText;
@@ -76,6 +81,19 @@ public class ProjectsViewModel : ObservableObject
         private set => SetProperty(ref _openTooltip, value);
     }
 
+    public string? PlayTooltip
+    {
+        get => _playTooltip;
+        private set => SetProperty(ref _playTooltip, value);
+    }
+
+    // The card menu and first-run commands are set by the shell, which owns the store and the engine.
+    public IRelayCommand<Project> PlayProjectCommand { get; set; } = new RelayCommand<Project>(_ => { });
+    public IRelayCommand<Project> ShowInFolderCommand { get; set; } = new RelayCommand<Project>(_ => { });
+    public IRelayCommand<Project> TogglePinCommand { get; set; } = new RelayCommand<Project>(_ => { });
+    public IRelayCommand<Project> RemoveProjectCommand { get; set; } = new RelayCommand<Project>(_ => { });
+    public IRelayCommand BrowseSamplesCommand { get; set; } = new RelayCommand(() => { });
+
     public IRelayCommand SetGridCommand { get; }
     public IRelayCommand SetListCommand { get; }
     public IRelayCommand NewProjectCommand { get; }
@@ -102,6 +120,11 @@ public class ProjectsViewModel : ObservableObject
         Projects = new ObservableCollection<Project>(projects);
         Projects.CollectionChanged += (_, _) =>
         {
+            if (_replacing)
+            {
+                return;
+            }
+
             RebuildTiles();
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(ShowGrid));
@@ -110,19 +133,48 @@ public class ProjectsViewModel : ObservableObject
         RebuildTiles();
     }
 
-    public void UpdateTooltips(string? exploreTooltip, string? openTooltip)
+    public void UpdateTooltips(string? exploreTooltip, string? openTooltip, string? playTooltip)
     {
         ExploreTooltip = exploreTooltip;
         OpenTooltip = openTooltip;
+        PlayTooltip = playTooltip;
+    }
+
+    // Replaces the whole list and rebuilds the tiles once, keeping the current search.
+    public void SetProjects(IReadOnlyList<Project> projects)
+    {
+        _replacing = true;
+        try
+        {
+            Projects.Clear();
+            foreach (var project in projects)
+            {
+                Projects.Add(project);
+            }
+        }
+        finally
+        {
+            _replacing = false;
+        }
+
+        RebuildTiles();
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(ShowGrid));
+        OnPropertyChanged(nameof(ShowList));
     }
 
     private void RebuildTiles()
     {
         ProjectTiles.Clear();
         ProjectTiles.Add(NewTile);
-        foreach (var project in Projects.Where(item => SearchMatch.Matches(_searchText, item.Name, item.Path)))
+        foreach (var project in Projects.Where(item => RecentProjectsView.Filter([ToEntry(item)], _searchText).Count > 0))
         {
             ProjectTiles.Add(project);
         }
+
+        OnPropertyChanged(nameof(ShowNoMatches));
     }
+
+    private static RecentProject ToEntry(Project project) =>
+        new(project.Path, project.Name, "", project.Pinned, null);
 }
