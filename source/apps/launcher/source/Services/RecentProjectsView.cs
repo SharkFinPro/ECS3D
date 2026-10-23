@@ -18,19 +18,24 @@ public static class RecentProjectsView
     // Matches the name or the path, ignoring case; a blank query keeps everything.
     public static IReadOnlyList<RecentProject> Filter(IEnumerable<RecentProject> entries, string? query)
     {
-        var text = query?.Trim() ?? string.Empty;
-        return entries
-            .Where(entry => text.Length == 0
-                || entry.Name.Contains(text, StringComparison.OrdinalIgnoreCase)
-                || entry.Path.Contains(text, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        return entries.Where(entry => SearchMatch.Matches(query, entry.Name, entry.Path)).ToList();
     }
 
     // A folder without project.ecs3d counts as missing, as does a legacy file that is gone.
-    public static bool IsMissing(IFileSystem fileSystem, RecentProject entry) =>
-        RecentProjectPaths.IsLegacyFile(entry.Path)
-            ? !fileSystem.FileExists(entry.Path)
-            : !fileSystem.FileExists(RecentProjectPaths.ProjectFileIn(entry.Path));
+    public static bool IsMissing(IFileSystem fileSystem, RecentProject entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Path))
+        {
+            return true;
+        }
+
+        if (fileSystem.DirectoryExists(entry.Path))
+        {
+            return !fileSystem.FileExists(RecentProjectPaths.ProjectFileIn(entry.Path));
+        }
+
+        return !(RecentProjectPaths.IsLegacyFile(entry.Path) && fileSystem.FileExists(entry.Path));
+    }
 
     // Relative for the first week, then the date; the date is in UTC like the stored time.
     public static string EditedText(string lastOpenedUtc, DateTimeOffset now)

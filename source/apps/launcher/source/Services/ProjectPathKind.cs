@@ -36,7 +36,7 @@ public static class ProjectPathKind
         }
 
         var name = path[(path.LastIndexOfAny(['/', '\\']) + 1)..];
-        if (string.Equals(name, RecentProjectPaths.ProjectFileName, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(name, RecentProjectPaths.ProjectFileName, StringComparison.Ordinal))
         {
             return new ProjectPathResult(ProjectPathType.ProjectFile, FolderOf(path, name), null);
         }

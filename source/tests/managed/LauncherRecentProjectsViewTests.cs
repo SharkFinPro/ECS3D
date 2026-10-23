@@ -34,6 +34,20 @@ public class LauncherRecentProjectsViewTests
   }
 
   [Fact]
+  public void SortKeepsInputOrderForEqualAndUnparseableTimes()
+  {
+    var sorted = RecentProjectsView.Sort([
+      Entry("bad1", "garbage", false),
+      Entry("same1", "2026-03-01T00:00:00Z", false),
+      Entry("bad2", "", false),
+      Entry("same2", "2026-03-01T00:00:00Z", false),
+      Entry("older", "2026-02-01T00:00:00Z", false),
+    ]);
+
+    Assert.Equal(["same1", "same2", "older", "bad1", "bad2"], sorted.Select(e => e.Name).ToList());
+  }
+
+  [Fact]
   public void FilterMatchesNameOrPathIgnoringCaseAndTrimsTheQuery()
   {
     var entries = new[]
@@ -94,6 +108,29 @@ public class LauncherRecentProjectsViewTests
     Assert.True(RecentProjectsView.IsMissing(_files, At("/home/a/Gone.JSON")));
   }
 
+  [Fact]
+  public void AFolderNamedLikeALegacyFileIsJudgedAsAFolder()
+  {
+    _files.AddDirectory("/home/a/Foo.json");
+    _files.Seed("/home/a/Foo.json/project.ecs3d", "{}");
+    _files.AddDirectory("/home/a/Bare.json");
+
+    Assert.False(RecentProjectsView.IsMissing(_files, At("/home/a/Foo.json")));
+    Assert.True(RecentProjectsView.IsMissing(_files, At("/home/a/Bare.json")));
+    Assert.True(RecentProjectsView.IsMissing(_files, At("/home/a/Gone.json")));
+  }
+
+  [Fact]
+  public void ABlankPathIsMissing()
+  {
+    _files.AddDirectory("/home/a/Here");
+    _files.Seed("/home/a/Here/project.ecs3d", "{}");
+
+    Assert.True(RecentProjectsView.IsMissing(_files, At("")));
+    Assert.True(RecentProjectsView.IsMissing(_files, At("  ")));
+    Assert.False(RecentProjectsView.IsMissing(_files, At("/home/a/Here")));
+  }
+
   [Theory]
   [InlineData(0, "just now")]
   [InlineData(59, "just now")]
@@ -122,7 +159,6 @@ public class LauncherRecentProjectsViewTests
   public void AFutureTimeReadsAsJustNow(int secondsAgo)
   {
     Assert.Equal("just now", EditedAgo(secondsAgo));
-    Assert.Equal("1 minute ago", EditedAgo(60));
   }
 
   [Fact]
@@ -186,12 +222,22 @@ public class LauncherRecentProjectsViewTests
     Assert.Equal(ProjectPathType.Folder, ProjectPathKind.Classify(_files, "/home/a/Proj").Type);
   }
 
+  [Fact]
+  public void ClassifyMatchesTheProjectFileNameExactly()
+  {
+    _files.Seed("/home/a/A/project.ecs3d", "{}");
+    _files.Seed("/home/a/B/PROJECT.ECS3D", "{}");
+
+    Assert.Equal(ProjectPathType.ProjectFile, ProjectPathKind.Classify(_files, "/home/a/A/project.ecs3d").Type);
+    Assert.Equal(ProjectPathType.Invalid, ProjectPathKind.Classify(_files, "/home/a/B/PROJECT.ECS3D").Type);
+  }
+
   [Theory]
   [InlineData("C:/project.ecs3d", "C:/")]
   [InlineData("C:\\project.ecs3d", "C:\\")]
   [InlineData("/project.ecs3d", "/")]
   [InlineData("C:\\Games\\Proj\\project.ecs3d", "C:\\Games\\Proj")]
-  [InlineData("PROJECT.ECS3D", ".")]
+  [InlineData("project.ecs3d", ".")]
   public void ClassifyReturnsTheFolderOfAProjectFileKeepingARootSeparator(string file, string folder)
   {
     _files.Seed(file, "{}");

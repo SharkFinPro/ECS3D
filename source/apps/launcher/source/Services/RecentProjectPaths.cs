@@ -53,7 +53,9 @@ internal static class RecentProjectPaths
         return HasExtension(name, LegacyExtension) ? name[..^LegacyExtension.Length] : name;
     }
 
-    public static bool IsLegacyFile(string path) => HasExtension(path, LegacyExtension);
+    // Judges the last segment only, so a folder named Foo.json inside another path is not a legacy file.
+    public static bool IsLegacyFile(string path) =>
+        HasExtension(path[(path.LastIndexOfAny(['/', '\\']) + 1)..], LegacyExtension);
 
     // Accepts either separator, as a folder from the file dialog may use backslashes.
     public static string ProjectFileIn(string folder) => folder.TrimEnd('/', '\\') + "/" + ProjectFileName;
