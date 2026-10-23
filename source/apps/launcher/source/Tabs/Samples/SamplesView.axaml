@@ -1,7 +1,84 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:m="using:ECS3DLauncher.Shared.Models"
              xmlns:controls="using:ECS3DLauncher.Shared.Controls"
-             x:Class="ECS3DLauncher.Tabs.Samples.SamplesView">
+             xmlns:local="using:ECS3DLauncher.Tabs.Samples"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:dd="using:ECS3DLauncher.Shared"
+             mc:Ignorable="d"
+             d:DesignWidth="960" d:DesignHeight="720"
+             d:DataContext="{x:Static dd:DesignData.Samples}"
+             x:Class="ECS3DLauncher.Tabs.Samples.SamplesView"
+             x:DataType="local:SamplesViewModel">
 
-    <controls:EmptyState IconData="{StaticResource IconSparkle}" Heading="Sample projects" />
+    <Panel>
+
+        <controls:EmptyState IsVisible="{Binding ShowEmptyState}"
+                             IconData="{StaticResource IconSparkle}" Heading="{Binding EmptyHeading}" />
+
+        <ItemsControl ItemsSource="{Binding VisibleSamples}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="m:SampleCard">
+                    <Border Classes="card" Margin="0,0,0,14" CornerRadius="11" ClipToBounds="True">
+                        <Grid ColumnDefinitions="260,*">
+                            <Panel Grid.Column="0" MinHeight="150" Background="{StaticResource InsetBrush}">
+                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                       IsVisible="{Binding HasThumbnail}" />
+                                <Panel IsVisible="{Binding !HasThumbnail}">
+                                    <Border Background="{StaticResource ThumbStripes}" />
+                                    <Border Background="{StaticResource AccDim}" />
+                                    <Path Classes="icon" Width="30" Height="30"
+                                          Stroke="#2EFFFFFF" StrokeThickness="2.4"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Data="{StaticResource IconSparkle}" />
+                                </Panel>
+                            </Panel>
+                            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" Margin="20,16">
+                                <TextBlock Grid.Row="0" Text="{Binding Name}" FontSize="16" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Row="1" Text="{Binding Description}" FontSize="12.5" Margin="0,6,0,0"
+                                           LineHeight="18" MaxLines="2" TextWrapping="Wrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{StaticResource T2Brush}" />
+                                <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="0,12,0,0"
+                                              VerticalAlignment="Top">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Border Margin="0,0,6,6" Padding="8,2" CornerRadius="10"
+                                                    Background="{StaticResource InsetBrush}"
+                                                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                                                <TextBlock Text="{Binding}" FontSize="11"
+                                                           Foreground="{StaticResource T2Brush}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto" Margin="0,10,0,0">
+                                    <Border Grid.Column="0" IsVisible="{Binding HasPlayers}" Padding="9,3"
+                                            CornerRadius="10" VerticalAlignment="Center"
+                                            Background="{StaticResource AccDim}">
+                                        <TextBlock Text="{Binding PlayersLabel}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource AccBrush}" />
+                                    </Border>
+                                    <Button Grid.Column="2" Classes="cta" Theme="{StaticResource BareButton}"
+                                            Command="{Binding $parent[local:SamplesView].((local:SamplesViewModel)DataContext).PlayCommand, FallbackValue={x:Null}}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip.Tip="{Binding $parent[local:SamplesView].((local:SamplesViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
+                                            ToolTip.ShowOnDisabled="True">
+                                        <TextBlock Text="Play" FontSize="13" FontWeight="Bold"
+                                                   Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+    </Panel>
 </UserControl>

@@ -1,8 +1,10 @@
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.Input;
+using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
 using ECS3DLauncher.Shared.Models;
 using ECS3DLauncher.Tabs.Projects;
+using ECS3DLauncher.Tabs.Samples;
 using ECS3DLauncher.Tabs.Templates;
 
 namespace ECS3DLauncher.Shared;
@@ -34,4 +36,20 @@ public static class DesignData
         ]);
 
     public static TemplatesViewModel Templates { get; } = new();
+
+    public static SamplesViewModel Samples { get; } = NewSamples();
+
+    private static SamplesViewModel NewSamples()
+    {
+        var model = new SamplesViewModel(new RelayCommand<SampleCard>(_ => { }), null, _ => null);
+        var manifest = new TemplateManifest(
+            "coin_rush", "Coin Rush", "Collect every coin before the timer runs out, alone or with friends.",
+            "sample", ["multiplayer", "scripting"], "thumbnail.png", "Main", "0.1.0")
+        {
+            Players = new TemplatePlayers(1, 4),
+        };
+        model.Reload(new TemplateCatalogContents(
+            "C:/ECS3D/templates", true, [], [new TemplateEntry(manifest, "C:/ECS3D/templates/coin_rush", null)]));
+        return model;
+    }
 }
