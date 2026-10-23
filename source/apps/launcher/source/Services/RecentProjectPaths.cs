@@ -8,6 +8,8 @@ namespace ECS3DLauncher.Services;
 // Mirrors canonicalPath/displayName in the engine's source/libs/settings/RecentProjects.cpp.
 internal static class RecentProjectPaths
 {
+    public const string ProjectFileName = "project.ecs3d";
+
     private const string ProjectExtension = ".ecs3d";
     private const string LegacyExtension = ".json";
 
@@ -50,6 +52,11 @@ internal static class RecentProjectPaths
         var name = normalized[(normalized.LastIndexOf('/') + 1)..];
         return HasExtension(name, LegacyExtension) ? name[..^LegacyExtension.Length] : name;
     }
+
+    public static bool IsLegacyFile(string path) => HasExtension(path, LegacyExtension);
+
+    // Accepts either separator, as a folder from the file dialog may use backslashes.
+    public static string ProjectFileIn(string folder) => folder.TrimEnd('/', '\\') + "/" + ProjectFileName;
 
     private static bool HasExtension(string name, string extension) =>
         name.Length > extension.Length && name.EndsWith(extension, StringComparison.OrdinalIgnoreCase);
