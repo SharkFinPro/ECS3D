@@ -3,6 +3,10 @@
 Agents load this file when they read a file in `source/libs/data/`. It holds what a change here must keep. The full
 notes are in the ECS3DData section of [docs/architecture/library-reference.md](../../../docs/architecture/library-reference.md).
 
+Related design notes: [replication.md](../../../docs/architecture/replication.md),
+[prefabs.md](../../../docs/architecture/prefabs.md), [undo-redo.md](../../../docs/architecture/undo-redo.md),
+[physics.md](../../../docs/architecture/physics.md).
+
 - The headless server links this library, so it takes no Vulkan or ImGui include. Lifting that needs a deliberate
   architecture decision recorded in the root `AGENTS.md`.
 - A component holds state only: fields plus `serialize`/`loadFromJSON` for files and `pack`/`unpack` for the wire.

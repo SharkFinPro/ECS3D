@@ -3,6 +3,11 @@
 Agents load this file when they read a file in `source/libs/editor/`. It holds what a change here must keep. The full
 notes are in [docs/architecture/editor.md](../../../docs/architecture/editor.md).
 
+Related design notes: [undo-redo.md](../../../docs/architecture/undo-redo.md),
+[viewport-gizmos.md](../../../docs/architecture/viewport-gizmos.md),
+[prefabs.md](../../../docs/architecture/prefabs.md),
+[camera-and-input.md](../../../docs/architecture/camera-and-input.md).
+
 - The authoritative scene lives on the edit server. An edit becomes a command sent to it, not a local mutation, and
   the editor's view updates when the server rebroadcasts. Asset mutations are the exception: they apply locally first,
   then send.

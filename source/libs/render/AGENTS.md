@@ -4,6 +4,9 @@ Agents load this file when they read a file in `source/libs/render/`. It holds w
 notes are in the ECS3DRender section of
 [docs/architecture/library-reference.md](../../../docs/architecture/library-reference.md).
 
+Related design notes: [camera-and-input.md](../../../docs/architecture/camera-and-input.md),
+[viewport-gizmos.md](../../../docs/architecture/viewport-gizmos.md).
+
 - The server does not link this library. Logic worth testing goes in a headless header (`Billboard.h`,
   `CapsuleGizmo.h`, `HullGizmoMesh.h`, `SharedAssetLoads.h`, `GridVisibility.h`, `LightGizmoVisibility.h`,
   `OutlineColors.h`) that the test suite compiles without Vulkan.
