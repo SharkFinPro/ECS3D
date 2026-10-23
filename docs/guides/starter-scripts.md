@@ -241,7 +241,7 @@ no `ModelRenderer`. The change replicates to every client.
 
 | Label | Type | Default |
 |-------|------|---------|
-| Hit Texture | string (texture uuid) | the palette_red texture |
+| Hit Texture | texture slot (uuid string) | the palette_red texture |
 | Revert On Exit | bool | true |
 | Players Only | bool | false |
 

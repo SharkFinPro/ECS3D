@@ -38,7 +38,8 @@ namespace {
   }
 }
 
-bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed, const AssetRegistry* registry)
+bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed, const AssetRegistry* registry,
+                            const std::shared_ptr<GpuAssetCache>& cache)
 {
   bool edited = false;
 
@@ -98,20 +99,21 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed, co
         edited = true;
       }
     }
-    else if (isPrefabReferenceField(field))
+    else if (const auto assetType = scriptFieldAssetType(field))
     {
       const std::string kind = scriptFieldLabel(field);
-      const AssetSlotStyle slot{ "prefabSlot", kind.c_str(), assetDragDrop::prefab, false,
-                                 gc::SecIcon::block, assetDisplay::color(AssetType::Prefab) };
+      const AssetSlotStyle slot{ "assetSlot", kind.c_str(), assetDragDrop::payloadId(*assetType),
+                                 *assetType == AssetType::Texture, assetDisplay::icon(*assetType),
+                                 assetDisplay::color(*assetType) };
       uuids::uuid dropped;
 
-      if (drawAssetSlot(nullptr, registry, slot, scriptFieldUUID(field.at("value")), dropped, fieldMixed))
+      if (drawAssetSlot(cache, registry, slot, scriptFieldUUID(field.at("value")), dropped, fieldMixed))
       {
         field["value"] = uuids::to_string(dropped);
         edited = true;
       }
 
-      if (ImGui::BeginPopupContextItem("prefabSlotMenu"))
+      if (ImGui::BeginPopupContextItem("assetSlotMenu"))
       {
         const bool empty = field.at("value").is_string() && field.at("value").get<std::string>().empty();
         if (ImGui::MenuItem("Clear", nullptr, false, fieldMixed || !empty))
@@ -176,10 +178,11 @@ bool drawScriptFieldWidgets(nlohmann::json& fields, const MixedFields& mixed, co
   return edited;
 }
 
-void registerScriptEditor(ComponentEditor& componentEditor, const AssetRegistry* registry)
+void registerScriptEditor(ComponentEditor& componentEditor, const AssetRegistry* registry,
+                          const std::shared_ptr<GpuAssetCache>& cache)
 {
   componentEditor.registerHandler("Script",
-    [registry](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
+    [registry, cache](const std::shared_ptr<Component>& component, const MixedFields& mixed) -> bool {
     const auto script = std::dynamic_pointer_cast<Script>(component);
     if (!script)
     {
@@ -193,7 +196,7 @@ void registerScriptEditor(ComponentEditor& componentEditor, const AssetRegistry*
       // The exposed-field blob is synced from the live C# instance on the server. Edit a copy and push
       // it back; the editor sends it on as a component edit, the server writes it into the instance.
       nlohmann::json fields = script->getFields();
-      edited = drawScriptFieldWidgets(fields, mixed, registry);
+      edited = drawScriptFieldWidgets(fields, mixed, registry, cache);
 
       if (edited)
       {

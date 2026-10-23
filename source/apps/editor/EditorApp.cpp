@@ -246,6 +246,7 @@ void EditorApp::setupSceneScriptsPanel()
 {
   m_sceneScriptsPanel = std::make_unique<SceneScriptsPanel>();
   m_sceneScriptsPanel->setAssetRegistry(m_assetRegistry.get());
+  m_sceneScriptsPanel->setAssetCache(m_assetCache);
   m_sceneScriptsPanel->setSceneManager(m_sceneManager.get());
   m_sceneScriptsPanel->setSceneEditCallback([this](const nlohmann::json& edit) { onSceneEdit(edit); });
 }
@@ -442,7 +443,7 @@ void EditorApp::registerEditors() const
   registerModelRendererEditor(*m_componentEditor, m_assetCache, m_assetRegistry.get());
   registerLightRendererEditor(*m_componentEditor);
   registerColliderEditors(*m_componentEditor, m_assetCache, m_assetRegistry.get());
-  registerScriptEditor(*m_componentEditor, m_assetRegistry.get());
+  registerScriptEditor(*m_componentEditor, m_assetRegistry.get(), m_assetCache);
   registerPlayerControllerEditor(*m_componentEditor);
   registerCameraEditor(*m_componentEditor);
 }

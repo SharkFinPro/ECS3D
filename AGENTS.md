@@ -501,8 +501,9 @@ without the `tryGet` ceremony since `ScriptBase` constructs one for the script's
 against bound/notYetBound/nativeOnly; a new enumerator with no row fails the build, so adding a component
 without deciding its scripting story can't go unnoticed. A Script field entry may carry a `displayName`, the
 `[ExposeToEditor]` label the Inspector shows; a bare attribute shows the field name.
-It may also carry `"asset": "prefab"`, from `[PrefabReference]` on a string field. The Inspector and the Scene
-Scripts panel draw that as a prefab `AssetSlot`, and the value stays the uuid string. Script field edits are
+It may also carry `"asset"` set to prefab, model or texture, from `[PrefabReference]`, `[ModelReference]` or
+`[TextureReference]` (subclasses of `AssetReferenceAttribute`) on a string field. The Inspector and the Scene
+Scripts panel draw that as that type's `AssetSlot`, and the value stays the uuid string. Script field edits are
 validated (`ScriptFieldEdit.h`) against the instance's exposed fields before any setter runs; a mismatched field is
 refused with a warning and does not fault the script. Exposed fields may be float, int, bool, string or
 vector3: each type has a `getField*`/`setField*` export, and a string crosses as 8-bit Unicode text that the
