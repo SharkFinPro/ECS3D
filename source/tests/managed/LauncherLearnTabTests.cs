@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
@@ -67,21 +68,31 @@ public class LauncherLearnTabTests
   {
     var root = SourceRoot();
     var categories = Directory.GetFiles(Path.Combine(root, "templates"), "template.json", SearchOption.AllDirectories)
-      .Select(file => JsonDocument.Parse(File.ReadAllText(file)).RootElement.GetProperty("category").GetString())
+      .Select(file =>
+      {
+        using var document = JsonDocument.Parse(File.ReadAllText(file));
+        return document.RootElement.GetProperty("category").GetString();
+      })
       .ToArray();
     var starters = Directory.GetFiles(Path.Combine(root, "libs", "scripting", "UserScripts", "Starters"), "*.cs")
       .Select(Path.GetFileName)
-      .Where(name => !name!.StartsWith("Starter", StringComparison.Ordinal))
+      .Where(name => name is not ("StarterEvents.cs" or "StarterUtils.cs"))
       .ToArray();
+    var defaultProject = File.ReadAllText(Path.Combine(root, "apps", "server", "DefaultProject.cpp"));
+    var shapesStart = defaultProject.IndexOf("libraryShapes()", StringComparison.Ordinal);
+    var shapesText = defaultProject[shapesStart..defaultProject.IndexOf("return shapes;", shapesStart, StringComparison.Ordinal)];
+    var shapeNames = Regex.Matches(shapesText, "\\{ \"([^\"]+)\", \\w+Hull \\}").Select(match => match.Groups[1].Value).ToArray();
 
     Assert.Equal(LearnCatalog.SampleCount, categories.Count(item => item == "sample"));
     Assert.Equal(LearnCatalog.TemplateCount, categories.Count(item => item == "template"));
     Assert.Equal(LearnCatalog.StarterScriptCount, starters.Length);
-    foreach (var count in new[] { LearnCatalog.SampleCount, LearnCatalog.TemplateCount, LearnCatalog.StarterScriptCount,
-               LearnCatalog.ConvexShapeCount })
-    {
-      Assert.Contains(count.ToString(), LearnCatalog.BoxSummary);
-    }
+    Assert.Equal(LearnCatalog.ConvexShapeCount, shapeNames.Length);
+    Assert.Equal(
+      new[] { "D4", "D6", "D8", "D12", "D20", "Hex Prism", "Drum", "Gem", "Boulder" },
+      shapeNames);
+    Assert.Equal(
+      "Every install includes 2 samples, 2 templates, 17 starter scripts and 9 convex shapes.",
+      LearnCatalog.BoxSummary);
   }
 
   [Fact]

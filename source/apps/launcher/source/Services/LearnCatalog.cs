@@ -20,8 +20,8 @@ public static class LearnCatalog
 
     public static IReadOnlyList<LearnGuide> Guides { get; } =
     [
-        Guide(1, "Getting started",
-            "Open the launcher, start from the First-Person template, press Play and walk around with WASD.",
+        Guide(1, "Getting Started",
+            "Open the First-Person template in the editor, press Play and walk around with WASD.",
             "getting-started"),
         Guide(2, "Editor Basics",
             "Find your way around the hierarchy, inspector, gizmos, undo, keybinds and the Console panel.",
@@ -36,7 +36,7 @@ public static class LearnCatalog
             "Host Coin Rush, share your address, join a friend's game and get past the firewall.",
             "multiplayer"),
         Guide(6, "Starter Scripts",
-            "One line on each ready-made script and the showcase scene that shows it off.",
+            $"All {StarterScriptCount} ready-made scripts: what each does, its fields and events, and where the samples use them.",
             "starter-scripts"),
     ];
 
