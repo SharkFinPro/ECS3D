@@ -287,7 +287,8 @@ public class MainWindow : Window
     protected override void OnClosing(WindowClosingEventArgs e)
     {
         base.OnClosing(e);
-        if (DataContext is MainWindowViewModel viewModel && !viewModel.RequestClose())
+        var shuttingDown = e.CloseReason is WindowCloseReason.OSShutdown or WindowCloseReason.ApplicationShutdown;
+        if (DataContext is MainWindowViewModel viewModel && !viewModel.RequestClose(shuttingDown))
         {
             e.Cancel = true;
         }

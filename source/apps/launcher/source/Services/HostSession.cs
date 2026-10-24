@@ -27,6 +27,7 @@ public sealed class HostSession
 
     private ActiveSession? _active;
     private CancellationTokenSource? _pending;
+    private IRunningProcess? _pendingServer;
 
     public HostSession(EngineLauncher launcher, IPortProbe probe, UserDataDirectory userData)
         : this(launcher, probe, userData, TimeProvider.System, DefaultWindow, DefaultPollInterval, Task.Delay)
@@ -142,6 +143,7 @@ public sealed class HostSession
                 if (ReferenceEquals(_pending, start))
                 {
                     _pending = null;
+                    _pendingServer = null;
                 }
             }
 
@@ -149,11 +151,13 @@ public sealed class HostSession
         }
     }
 
-    // Ends the running session, or cancels a start in progress (which kills the server it launched).
+    // Ends the running session, or cancels a start in progress. The server a pending start launched is killed
+    // here, not by the start's continuation, which may never run once the caller quits.
     // Returns false when there was neither. Never raises Ended.
     public bool Stop()
     {
         ActiveSession? session;
+        IRunningProcess? launched = null;
         lock (_gate)
         {
             session = _active;
@@ -161,8 +165,14 @@ public sealed class HostSession
             if (session is null)
             {
                 _pending?.Cancel();
-                return _pending is not null;
+                launched = _pendingServer;
             }
+        }
+
+        if (session is null)
+        {
+            launched?.Kill();
+            return launched is not null || IsStarting;
         }
 
         // _active is already cleared, so the watch ignores the exit this kill causes and disposes the process.
@@ -205,6 +215,18 @@ public sealed class HostSession
         }
 
         var server = launch.Process!;
+        bool stopRequested;
+        lock (_gate)
+        {
+            _pendingServer = server;
+            stopRequested = start.IsCancellationRequested;
+        }
+
+        if (stopRequested)
+        {
+            server.Kill();
+        }
+
         var failure = await WaitUntilListeningAsync(server, port, cancellationToken);
         if (failure is not null)
         {
@@ -221,6 +243,7 @@ public sealed class HostSession
             {
                 _active = session;
                 _pending = null;
+                _pendingServer = null;
             }
         }
 

@@ -495,6 +495,12 @@ public class MainWindowViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(IsBackgroundEnabled));
             }
+            else if (args.PropertyName == nameof(HostingViewModel.IsHosting) && _quitPrompt is not null
+                && !Hosting.IsBusy)
+            {
+                _quitPrompt = null;
+                Prompt = null;
+            }
         };
         Settings = new SettingsViewModel(settings, ApplyUpdate, message => ApplyNotice(EarlyExitNotice.Failure(message)));
 
@@ -775,15 +781,23 @@ public class MainWindowViewModel : ObservableObject
 
     // True when the window may close now. While a game is hosted or starting it asks first and returns false:
     // Stop server and quit closes for real, Keep hosting minimizes, and Escape leaves the window as it is.
-    public bool RequestClose()
+    // When the system is shutting down there is no one to ask, so the server is stopped and the close allowed.
+    public bool RequestClose(bool systemShutdown = false)
     {
         if (_quitApproved || !Hosting.IsBusy)
         {
             return true;
         }
 
+        if (systemShutdown)
+        {
+            StopHosting();
+            return true;
+        }
+
         if (_quitPrompt is null || !ReferenceEquals(Prompt, _quitPrompt))
         {
+            JoinDialog = null;
             Ask(
                 new PromptRequest(
                     "Stop hosting?",
@@ -797,16 +811,33 @@ public class MainWindowViewModel : ObservableObject
         return false;
     }
 
+    // Stops a hosted server synchronously; the last thing the launcher does before it exits.
+    public void StopHosting()
+    {
+        try
+        {
+            Hosting.Stop();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The launcher is leaving; a server that cannot be stopped has nothing more to report.
+        }
+    }
+
     private void QuitAnswered(bool stopAndQuit)
     {
         _quitPrompt = null;
         if (!stopAndQuit)
         {
-            MinimizeWindow?.Invoke();
+            if (Hosting.IsBusy)
+            {
+                MinimizeWindow?.Invoke();
+            }
+
             return;
         }
 
-        Hosting.Stop();
+        StopHosting();
         _quitApproved = true;
         CloseWindow?.Invoke();
     }

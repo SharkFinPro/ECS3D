@@ -42,8 +42,10 @@
   stop a game that is already running), opens the hosting panel (running time, `address : port` rows with Copy, firewall
   note, Open another game window, Stop server, Hide) and shows a green pill naming the hosted project in the sidebar that
   reopens it. A server that exits on its own closes the panel and toasts the code and `server.log`. Closing the window
-  by any path while a game is hosted or starting asks first (`MainWindowViewModel.RequestClose`, called from the
-  window's `OnClosing`): Stop server and quit, or Keep hosting, which minimizes; Escape leaves the window as it is.
+  by the title-bar button or Alt+F4 while a game is hosted or starting asks first (`MainWindowViewModel.RequestClose`,
+  called from the window's `OnClosing`): Stop server and quit, or Keep hosting, which minimizes; Escape leaves the
+  window as it is. When the OS or the application is shutting down there is no one to ask, so the server is stopped
+  and the window closes; the lifetime's Exit stops it too as a backstop.
   The Samples Host button is not built yet.
   The Learn tab is real: six guide cards from `LearnCatalog` that open on GitHub in the browser, plus a "What's
   in the box" banner.

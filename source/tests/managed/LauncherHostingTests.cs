@@ -692,4 +692,90 @@ public class LauncherHostingTests
     Assert.True(rig.Main.RequestClose());
     Assert.False(rig.Main.HasPrompt);
   }
+
+  [Fact]
+  public void StopServerAndQuitWhileStartingKillsTheServerBeforeTheWindowCloses()
+  {
+    var rig = new Rig();
+    bool? killedAtClose = null;
+    rig.Main.CloseWindow = () => killedAtClose = rig.Runner.Processes[0].Killed;
+    rig.OnDelay = () =>
+    {
+      if (!rig.Main.HasPrompt)
+      {
+        rig.Main.RequestClose();
+        rig.Main.Prompt!.ConfirmCommand.Execute(null);
+      }
+    };
+
+    rig.Host(Alpha);
+
+    Assert.True(killedAtClose);
+    Assert.False(rig.Hosting.IsHosting);
+  }
+
+  [Fact]
+  public void ASystemShutdownStopsTheServerWithoutAsking()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+
+    Assert.True(rig.Main.RequestClose(true));
+
+    Assert.False(rig.Main.HasPrompt);
+    Assert.True(rig.Runner.Processes[0].Killed);
+    Assert.False(rig.Hosting.IsHosting);
+  }
+
+  [Fact]
+  public void ASystemShutdownWithNothingHostedChangesNothing()
+  {
+    var rig = new Rig();
+
+    Assert.True(rig.Main.RequestClose(true));
+    Assert.Empty(rig.Runner.Processes);
+  }
+
+  [Fact]
+  public void TheQuitQuestionReplacesAnOpenJoinDialog()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+    rig.Main.OpenJoinCommand.Execute(null);
+    Assert.NotNull(rig.Main.JoinDialog);
+
+    rig.Main.RequestClose();
+
+    Assert.Null(rig.Main.JoinDialog);
+    Assert.True(rig.Main.HasPrompt);
+  }
+
+  [Fact]
+  public void TheQuitQuestionGoesAwayWhenTheServerEndsOnItsOwn()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+    rig.Main.RequestClose();
+    Assert.True(rig.Main.HasPrompt);
+
+    rig.Runner.Processes[0].Exit(1);
+
+    Assert.False(rig.Main.HasPrompt);
+    Assert.True(rig.Main.RequestClose());
+  }
+
+  [Fact]
+  public void StopServerAndQuitStillClosesWhenTheServerCannotBeKilled()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    var closed = 0;
+    rig.Main.CloseWindow = () => closed++;
+    rig.Host(Alpha);
+    rig.Runner.Processes[0].KillThrows = true;
+    rig.Main.RequestClose();
+
+    rig.Main.Prompt!.ConfirmCommand.Execute(null);
+
+    Assert.Equal(1, closed);
+  }
 }

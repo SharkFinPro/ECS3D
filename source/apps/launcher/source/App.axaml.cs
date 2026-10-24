@@ -23,10 +23,12 @@ public class App : Application
         {
             // Wire the view to its view model explicitly - no ViewLocator needed
             // while there is a single window.
+            var viewModel = new MainWindowViewModel();
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel()
+                DataContext = viewModel
             };
+            desktop.Exit += (_, _) => viewModel.StopHosting();
         }
 
         base.OnFrameworkInitializationCompleted();

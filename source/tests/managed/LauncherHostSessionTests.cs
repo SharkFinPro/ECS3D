@@ -207,6 +207,22 @@ public class LauncherHostSessionTests
   }
 
   [Fact]
+  public async Task StopDuringStartupKillsTheServerBeforeTheStartContinues()
+  {
+    var rig = NewRig();
+    bool? killedWhenStopReturned = null;
+    rig.OnDelay = () =>
+    {
+      rig.Session.Stop();
+      killedWhenStopReturned ??= rig.Runner.Processes[0].Killed;
+    };
+
+    await rig.StartAsync();
+
+    Assert.True(killedWhenStopReturned);
+  }
+
+  [Fact]
   public async Task AProbeFailureKillsTheServerAndPropagates()
   {
     var rig = NewRig();
