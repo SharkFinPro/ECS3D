@@ -21,13 +21,13 @@ public class AvaloniaHeadlessCollection
 [Collection("AvaloniaHeadless")]
 public class LauncherCardMenuTests
 {
-  private static Task OnUiThread(Action action) =>
+  internal static Task OnUiThread(Action action) =>
     HeadlessUnitTestSession.GetOrStartForAssembly(typeof(LauncherCardMenuTests).Assembly)
       .Dispatch(action, CancellationToken.None);
 
   // Without a theme a Window has no template, so its content would never join the visual tree. The layer
   // manager supplies the overlay layer the context menu's popup opens in, as a theme's window template does.
-  private static Window ShowInWindow(Control content, Control attached)
+  internal static Window ShowInWindow(Control content, Control attached)
   {
     var window = new Window
     {
