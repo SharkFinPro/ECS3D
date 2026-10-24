@@ -237,7 +237,7 @@ public class MainWindowViewModel : ObservableObject
     public Action? MinimizeWindow { get; set; }
 
     // How long the New Project dialog waits after an edit before it looks at the disk.
-    public Func<TimeSpan, Task> CheckDelay { get; set; } = span => Task.Delay(span);
+    public Func<TimeSpan, Task> NewProjectCheckDelay { get; set; } = span => Task.Delay(span);
 
     public IRelayCommand CloseOverlayCommand { get; }
     public IRelayCommand<Project> HostProjectCommand { get; }
@@ -792,14 +792,19 @@ public class MainWindowViewModel : ObservableObject
     {
         if (!_quitApproved && NewProject is { IsCreating: true } creating)
         {
-            // A system shutdown cannot wait; the copy is cancelled and the hidden folder is left to the next create.
-            creating.CancelCreate(() =>
+            // A system shutdown cannot wait, and a second request means the user wants out: both close anyway and
+            // leave the hidden folder to the next create of that name.
+            if (systemShutdown)
             {
-                NewProject = null;
-                CloseWindow?.Invoke();
-            });
-            if (!systemShutdown)
+                creating.CancelCreate(() => { });
+            }
+            else if (!creating.IsCancelling)
             {
+                creating.CancelCreate(() =>
+                {
+                    NewProject = null;
+                    CloseWindow?.Invoke();
+                });
                 return false;
             }
         }
@@ -969,12 +974,9 @@ public class MainWindowViewModel : ObservableObject
             _creator,
             _settings.Current.ProjectsDirectory,
             () => PickAsync(PickProjectsFolder),
-            _runInBackground,
-            _post,
+            new DialogScheduling(_runInBackground, _post, NewProjectCheckDelay, RunCheckInBackground),
             (folder, openInEditor) => FinishCreate(entry, folder, openInEditor),
-            () => NewProject = null,
-            CheckDelay,
-            RunCheckInBackground);
+            () => NewProject = null);
     }
 
     private Task<TargetCheck> RunCheckInBackground(Func<TargetCheck> check)

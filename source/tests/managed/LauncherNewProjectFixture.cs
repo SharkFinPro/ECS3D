@@ -53,18 +53,20 @@ public abstract class NewProjectFixture
     Func<Task<string?>>? pick = null,
     TemplateEntry? template = null,
     Func<TimeSpan, Task>? delay = null,
-    Func<Func<TargetCheck>, Task<TargetCheck>>? runCheck = null) =>
+    Func<Func<TargetCheck>, Task<TargetCheck>>? runCheck = null,
+    Action<Action>? post = null) =>
     new(
       template ?? AddTemplate("first-person", "First-Person"),
       NewCreator(),
       location ?? Projects,
       pick ?? NoPick,
-      background ?? (work => work()),
-      work => work(),
+      new DialogScheduling(
+        background ?? (work => work()),
+        post ?? (work => work()),
+        delay ?? (_ => Task.CompletedTask),
+        runCheck ?? (work => Task.FromResult(work()))),
       created ?? ((_, _) => { }),
-      close ?? (() => { }),
-      delay ?? (_ => Task.CompletedTask),
-      runCheck ?? (work => Task.FromResult(work())));
+      close ?? (() => { }));
 
   internal MainWindowViewModel NewMain(SettingsEditor? editor = null, string version = "1.2.3", Action<Action>? background = null)
   {
@@ -90,7 +92,7 @@ public abstract class NewProjectFixture
       background ?? (work => work()),
       NewCreator())
     {
-      CheckDelay = _ => Task.CompletedTask
+      NewProjectCheckDelay = _ => Task.CompletedTask
     };
 
   internal string[] StoredPaths() =>

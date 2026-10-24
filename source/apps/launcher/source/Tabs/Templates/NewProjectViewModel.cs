@@ -11,12 +11,20 @@ namespace ECS3DLauncher.Tabs.Templates;
 // What the disk said about a location and the target folder inside it; Target is null when it was not looked at.
 public sealed record TargetCheck(string? LocationError, ProjectTargetState? Target);
 
+// How the dialog reaches other threads. RunInBackground runs the copy and Post brings its result back to the UI thread;
+// Delay is the pause before a disk check and RunCheck runs one off the UI thread.
+public sealed record DialogScheduling(
+    Action<Action> RunInBackground,
+    Action<Action> Post,
+    Func<TimeSpan, Task> Delay,
+    Func<Func<TargetCheck>, Task<TargetCheck>> RunCheck);
+
 // State of the New Project dialog: the name and location being edited, what the target folder allows, and the copy.
 // Name rules apply at once; the disk checks wait for typing to pause and run off the UI thread.
 public sealed class NewProjectViewModel : ObservableObject
 {
     private const string CheckingText = "Checking...";
-    private static readonly TimeSpan CheckDelay = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(250);
 
     private readonly TemplateEntry _template;
     private readonly ProjectCreator _creator;
@@ -179,6 +187,8 @@ public sealed class NewProjectViewModel : ObservableObject
 
     public bool IsCreating => IsBusy;
 
+    public bool IsCancelling => _cancelFinished is not null;
+
     public bool CanCreate => !IsBusy && !IsChecking && IsTargetFree;
 
     public string? TargetMessage => IsChecking ? CheckingText : TargetState switch
@@ -195,28 +205,26 @@ public sealed class NewProjectViewModel : ObservableObject
     public IRelayCommand BrowseCommand { get; }
 
     // created gets the new project folder and whether to open it; the shell closes the dialog then. runInBackground
-    // keeps the copy off the UI thread and post brings its result back. delay and runCheck default to a real timer and
-    // the thread pool; the disk checks wait delay after the last edit and their results come back through post.
+    // scheduling keeps the copy and the disk checks off the UI thread and brings their results back.
+    // The default name's scan of the disk stays here: it is a stat or two, and moving it would change the name
+    // under the user's cursor after the dialog opens.
     public NewProjectViewModel(
         TemplateEntry template,
         ProjectCreator creator,
         string location,
         Func<Task<string?>> pickLocation,
-        Action<Action> runInBackground,
-        Action<Action> post,
+        DialogScheduling scheduling,
         Action<string, bool> created,
-        Action close,
-        Func<TimeSpan, Task>? delay = null,
-        Func<Func<TargetCheck>, Task<TargetCheck>>? runCheck = null)
+        Action close)
     {
-        _delay = delay ?? (span => Task.Delay(span));
-        _runCheck = runCheck ?? (work => Task.Run(work));
+        _delay = scheduling.Delay;
+        _runCheck = scheduling.RunCheck;
         _template = template;
         _creator = creator;
         _location = location;
         _pickLocation = pickLocation;
-        _runInBackground = runInBackground;
-        _post = post;
+        _runInBackground = scheduling.RunInBackground;
+        _post = scheduling.Post;
         _created = created;
         _close = close;
         _projectName = ProjectNameRules.UniqueDefault(template.Manifest.Name, IsTaken);
@@ -261,13 +269,22 @@ public sealed class NewProjectViewModel : ObservableObject
 
     private async Task CheckAsync(int generation, string location, string name, bool nameValid)
     {
-        await _delay(CheckDelay).ConfigureAwait(false);
-        if (Volatile.Read(ref _generation) != generation)
+        TargetCheck result;
+        try
         {
-            return;
+            await _delay(Debounce).ConfigureAwait(false);
+            if (Volatile.Read(ref _generation) != generation)
+            {
+                return;
+            }
+
+            result = await _runCheck(() => LookAtDisk(location, name, nameValid)).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            result = new TargetCheck(null, ProjectTargetState.Unavailable);
         }
 
-        var result = await _runCheck(() => LookAtDisk(location, name, nameValid)).ConfigureAwait(false);
         _post(() => ApplyCheck(generation, location, name, result));
     }
 
@@ -332,7 +349,7 @@ public sealed class NewProjectViewModel : ObservableObject
     // Stops a running copy; finished is called once its cleanup is done. Does nothing when no copy is running.
     public void CancelCreate(Action finished)
     {
-        if (!IsBusy || _cancelFinished is not null)
+        if (!IsBusy || IsCancelling)
         {
             return;
         }
@@ -362,6 +379,11 @@ public sealed class NewProjectViewModel : ObservableObject
         {
             _cancelFinished = null;
             _isClosed = true;
+            if (result.Succeeded)
+            {
+                _created(result.ProjectFolder!, false);
+            }
+
             finished();
             return;
         }

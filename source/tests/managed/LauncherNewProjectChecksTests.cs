@@ -77,7 +77,7 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
   }
 
   [Fact]
-  public void TheNameIsValidatedAtOnceWithoutWaitingForTheDisk()
+  public void ANameErrorShowsAtOnceAndAValidNameWaitsForTheDisk()
   {
     var dialog = NewHeldDialog();
 
@@ -85,7 +85,18 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
 
     Assert.Contains("The name cannot contain", dialog.NameError);
     Assert.False(dialog.CanCreate);
+    Assert.True(dialog.IsChecking);
     Assert.Empty(_checks);
+
+    dialog.ProjectName = "Game";
+
+    Assert.Null(dialog.NameError);
+    Assert.False(dialog.CanCreate);
+    Assert.Empty(_checks);
+    FinishDelays();
+    Assert.Single(_checks);
+    FinishChecks();
+    Assert.True(dialog.CanCreate);
   }
 
   [Fact]
@@ -165,19 +176,40 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
   }
 
   [Fact]
-  public void CreateStillRefusesATargetThatFilledUpAfterTheCheck()
+  public void AThrowingCheckBecomesUnavailableAndClearsChecking()
   {
     var dialog = NewHeldDialog();
+
     dialog.ProjectName = "Game";
     FinishDelays();
+    _checks[0].Done.SetException(new InvalidOperationException("boom"));
+    _checks.Clear();
+
+    Assert.False(dialog.IsChecking);
+    Assert.Equal(ProjectTargetState.Unavailable, dialog.TargetState);
+    Assert.False(dialog.CanCreate);
+
+    dialog.ProjectName = "Game2";
+    FinishDelays();
     FinishChecks();
+    Assert.Equal(ProjectTargetState.Free, dialog.TargetState);
     Assert.True(dialog.CanCreate);
-    _files.Seed(Path.Combine(Folder("Game"), "x.txt"), "x");
+  }
 
-    dialog.CreateCommand.Execute(null);
+  [Fact]
+  public void AThrowingCheckForSupersededInputsIsIgnored()
+  {
+    var dialog = NewHeldDialog();
 
-    Assert.True(dialog.HasCreateError);
-    Assert.Contains("already exists", dialog.CreateError);
-    Assert.False(_files.FileExists(Path.Combine(Folder("Game"), "project.ecs3d")));
+    dialog.ProjectName = "Old";
+    FinishDelays();
+    var stale = _checks[0];
+    dialog.ProjectName = "New";
+
+    stale.Done.SetException(new InvalidOperationException("boom"));
+
+    Assert.True(dialog.IsChecking);
+    Assert.Null(dialog.TargetState);
+    Assert.False(dialog.CanCreate);
   }
 }

@@ -18,6 +18,8 @@ public sealed record ProjectCreationResult(string? ProjectFolder, string? Error)
 // Copies a template into <location>/<name> through a hidden sibling, so the final rename is the commit.
 public sealed class ProjectCreator
 {
+    public const string CanceledMessage = "Canceled.";
+
     // Only the engine's JSON parser reads this file, never a web page, so characters stay literal.
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -40,8 +42,6 @@ public sealed class ProjectCreator
         _log = log;
         _newUuid = newUuid;
     }
-
-    public const string CanceledMessage = "Canceled.";
 
     public static string HiddenFolderName(string name) => $".{name}.creating";
 
