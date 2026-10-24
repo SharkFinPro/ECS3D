@@ -248,6 +248,7 @@ public class MainWindowViewModel : ObservableObject
     public IRelayCommand<Project> LocateProjectCommand { get; }
     public IRelayCommand OpenExistingCommand { get; }
     public IRelayCommand<SampleCard> PlaySampleCommand { get; }
+    public IRelayCommand<SampleCard> HostSampleCommand { get; }
     public IRelayCommand<SampleCard> OpenSampleCopyCommand { get; }
     public IRelayCommand OpenJoinCommand { get; }
     public IRelayCommand CloseJoinCommand { get; }
@@ -436,6 +437,8 @@ public class MainWindowViewModel : ObservableObject
         LocateProjectCommand = new RelayCommand<Project>(project => _ = LocateAsync(project));
         OpenExistingCommand = new RelayCommand(() => _ = OpenExistingAsync());
         PlaySampleCommand = new RelayCommand<SampleCard>(PlaySample, _ => _actions.Play.Available);
+        HostSampleCommand = new RelayCommand<SampleCard>(
+            HostSample, card => _actions.Host.Available && card is { IsMultiplayer: true });
         OpenSampleCopyCommand = new RelayCommand<SampleCard>(OpenSampleCopy);
         OpenJoinCommand = new RelayCommand(OpenJoin, () => _actions.Play.Available);
         CloseJoinCommand = new RelayCommand(() => JoinDialog = null);
@@ -462,7 +465,9 @@ public class MainWindowViewModel : ObservableObject
         Projects.UpdateHostTooltip(_actions.Host.Tooltip);
         Refresh();
         Templates = new TemplatesViewModel(version, loadThumbnail, OpenTemplateCommand);
-        Samples = new SamplesViewModel(PlaySampleCommand, OpenSampleCopyCommand, _actions.Play.Tooltip, loadThumbnail);
+        Samples = new SamplesViewModel(
+            PlaySampleCommand, OpenSampleCopyCommand, _actions.Play.Tooltip, loadThumbnail,
+            HostSampleCommand, _actions.Host.Tooltip);
         ReloadCatalog(_engine);
 
         Learn = new LearnViewModel(
@@ -574,10 +579,12 @@ public class MainWindowViewModel : ObservableObject
         OpenProjectCommand.NotifyCanExecuteChanged();
         PlayProjectCommand.NotifyCanExecuteChanged();
         Samples.UpdatePlay(_actions.Play.Tooltip);
+        Samples.UpdateHost(_actions.Host.Tooltip);
         ReloadCatalog(engine);
         TemplatesNavItem.Count = TemplateCount();
         SamplesNavItem.Count = SampleCount();
         PlaySampleCommand.NotifyCanExecuteChanged();
+        HostSampleCommand.NotifyCanExecuteChanged();
         OpenJoinCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(JoinTooltip));
         OnPropertyChanged(nameof(EngineBannerText));
@@ -1107,6 +1114,14 @@ public class MainWindowViewModel : ObservableObject
         if (IsInteractive && card is not null && _actions.Play.Available)
         {
             _ = _coordinator.PlayProjectAsync(card.FolderPath);
+        }
+    }
+
+    private void HostSample(SampleCard? card)
+    {
+        if (IsInteractive && card is { IsMultiplayer: true } && _actions.Host.Available)
+        {
+            Hosting.Host(card.FolderPath, card.Name);
         }
     }
 

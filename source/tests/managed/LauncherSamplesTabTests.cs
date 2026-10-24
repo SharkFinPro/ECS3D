@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
@@ -56,6 +57,118 @@ public class LauncherSamplesTabTests
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Samples.VisibleSamples.Select(card => card.Name).ToArray();
+
+  private sealed class HostRig
+  {
+    public RecordingProcessRunner Runner { get; } = new();
+
+    public FakePortProbe Probe { get; } = new();
+
+    public MainWindowViewModel Main { get; }
+
+    public HostRig(LauncherRig rig)
+    {
+      var clock = new FakeClock();
+      var services = new HostingServices(
+        new FakeNetworkInfo(),
+        launcher => new HostSession(
+          launcher,
+          Probe,
+          ShellFixtures.UserData,
+          clock,
+          TimeSpan.FromSeconds(10),
+          TimeSpan.FromMilliseconds(200),
+          (span, _) =>
+          {
+            clock.Advance(span);
+            Probe.Accepts = true;
+            return Task.CompletedTask;
+          }));
+      Main = new MainWindowViewModel(
+        rig.NewEditor(),
+        rig.NewRecents(),
+        Runner,
+        new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
+        rig.NewCatalog(),
+        _ => null,
+        "1.2.3",
+        action => action(),
+        () => rig.Time.Now,
+        rig.Files,
+        action => action(),
+        services);
+    }
+  }
+
+  private sealed class FakeNetworkInfo : INetworkInfo
+  {
+    public IReadOnlyList<NetworkInterfaceInfo> GetInterfaces() => [];
+  }
+
+  [Fact]
+  public void OnlyAMultiplayerSampleOffersHost()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddStandardEntries(LauncherRig.LauncherDir);
+
+    var model = NewMain();
+    var rush = model.Samples.Samples.Single(card => card.Name == "Coin Rush");
+    var playground = model.Samples.Samples.Single(card => card.Name == "Physics Playground");
+
+    Assert.True(rush.IsMultiplayer);
+    Assert.True(model.HostSampleCommand.CanExecute(rush));
+    Assert.False(playground.IsMultiplayer);
+    Assert.False(model.HostSampleCommand.CanExecute(playground));
+    Assert.Null(model.Samples.HostTooltip);
+  }
+
+  [Fact]
+  public void HostingASampleStartsTheServerOnTheShippedFolderAndOpensThePanel()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddStandardEntries(LauncherRig.LauncherDir);
+    var host = new HostRig(_rig);
+    var rush = host.Main.Samples.Samples.Single(card => card.Name == "Coin Rush");
+
+    host.Main.HostSampleCommand.Execute(rush);
+
+    var launch = host.Runner.Launches[0];
+    Assert.Contains("ECS3DServer", launch.FileName);
+    Assert.Equal(new[] { "--project", FolderOf(LauncherRig.LauncherDir, "rush"), "--port", EnginePorts.Default.ToString(CultureInfo.InvariantCulture) }, launch.Arguments);
+    Assert.True(host.Main.Hosting.IsHosting);
+    Assert.True(host.Main.Hosting.IsPanelOpen);
+    Assert.Equal("Hosting Coin Rush", host.Main.Hosting.PillText);
+  }
+
+  [Fact]
+  public void HostingASinglePlayerSampleDoesNothing()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddStandardEntries(LauncherRig.LauncherDir);
+    var host = new HostRig(_rig);
+    var playground = host.Main.Samples.Samples.Single(card => card.Name == "Physics Playground");
+
+    host.Main.HostSampleCommand.Execute(playground);
+
+    Assert.Empty(host.Runner.Launches);
+    Assert.False(host.Main.Hosting.IsHosting);
+  }
+
+  [Fact]
+  public void HostIsDisabledWithATooltipWhenTheServerIsMissing()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir, EngineExecutable.Server);
+    AddStandardEntries(LauncherRig.LauncherDir);
+    var host = new HostRig(_rig);
+    var rush = host.Main.Samples.Samples.Single(card => card.Name == "Coin Rush");
+
+    Assert.False(host.Main.HostSampleCommand.CanExecute(rush));
+    Assert.Contains(EngineExecutableNames.FileName(EngineExecutable.Server, HostOs.Linux), host.Main.Samples.HostTooltip);
+
+    host.Main.HostSampleCommand.Execute(rush);
+
+    Assert.Empty(host.Runner.Launches);
+  }
 
   [Fact]
   public void OnlySamplesBecomeCards()
@@ -271,6 +384,28 @@ public class LauncherSamplesTabTests
     Assert.Equal(new[] { thumbnail }, requested.ToArray());
     Assert.False(cards.Single(card => card.Name == "Coin Rush").HasThumbnail);
     Assert.False(cards.Single(card => card.Name == "Physics Playground").HasThumbnail);
+  }
+
+  [Fact]
+  public void ChangingTheEngineFolderRefreshesHostAvailabilityAndItsTooltip()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir, EngineExecutable.Server);
+    AddStandardEntries(LauncherRig.LauncherDir);
+    _rig.AddEngine(LauncherRig.OtherDir);
+    AddSample(LauncherRig.OtherDir, "rush", "Coin Rush", "Grab every coin", "\"Arcade\"", ",\"players\":{\"min\":1,\"max\":4}");
+    var model = NewMain();
+    Assert.False(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single(card => card.IsMultiplayer)));
+    Assert.NotNull(model.Samples.HostTooltip);
+
+    model.Settings.EngineFolder = LauncherRig.OtherDir;
+
+    Assert.True(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single()));
+    Assert.Null(model.Samples.HostTooltip);
+
+    model.Settings.EngineFolder = LauncherRig.LauncherDir;
+
+    Assert.False(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single(card => card.IsMultiplayer)));
+    Assert.NotNull(model.Samples.HostTooltip);
   }
 
   [Fact]
