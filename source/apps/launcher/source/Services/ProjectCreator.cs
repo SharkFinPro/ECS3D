@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 
 namespace ECS3DLauncher.Services;
 
@@ -17,6 +18,8 @@ public sealed record ProjectCreationResult(string? ProjectFolder, string? Error)
 // Copies a template into <location>/<name> through a hidden sibling, so the final rename is the commit.
 public sealed class ProjectCreator
 {
+    public static string CanceledMessage => "Canceled.";
+
     // Only the engine's JSON parser reads this file, never a web page, so characters stay literal.
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -95,7 +98,16 @@ public sealed class ProjectCreator
         return empty ? ProjectTargetState.Free : ProjectTargetState.NotEmpty;
     }
 
-    public ProjectCreationResult Create(TemplateEntry template, string location, string name)
+    // Cancelling is checked between files and before the commit; a cancelled copy removes the hidden folder as a
+    // failed one does and reports Canceled.
+    public ProjectCreationResult Create(TemplateEntry template, string location, string name) =>
+        Create(template, location, name, CancellationToken.None);
+
+    public ProjectCreationResult Create(
+        TemplateEntry template,
+        string location,
+        string name,
+        CancellationToken cancel)
     {
         var invalid = ProjectNameRules.Validate(name);
         if (invalid is not null)
@@ -120,8 +132,13 @@ public sealed class ProjectCreator
                 return new ProjectCreationResult(null, blocked);
             }
 
-            Build(template, hidden, target);
+            Build(template, hidden, target, cancel);
             return new ProjectCreationResult(target, null);
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            RemoveHidden(hidden);
+            return new ProjectCreationResult(null, CanceledMessage);
         }
         catch (Exception ex) when (IsExpected(ex))
         {
@@ -176,21 +193,23 @@ public sealed class ProjectCreator
             _ => null
         };
 
-    private void Build(TemplateEntry template, string hidden, string target)
+    private void Build(TemplateEntry template, string hidden, string target, CancellationToken cancel)
     {
         if (_files.DirectoryExists(hidden))
         {
             _files.DeleteDirectory(hidden, true);
         }
 
-        CopyTree(template.FolderPath, hidden, true);
+        CopyTree(template.FolderPath, hidden, true, cancel);
         var projectFile = Path.Combine(hidden, RecentProjectPaths.ProjectFileName);
         if (!_files.FileExists(projectFile))
         {
             throw new InvalidDataException("The template has no project.ecs3d.");
         }
 
+        cancel.ThrowIfCancellationRequested();
         _files.WriteAllTextAtomic(projectFile, RewriteObjectUuids(_files.ReadAllText(projectFile), _newUuid));
+        cancel.ThrowIfCancellationRequested();
         if (_files.DirectoryExists(target))
         {
             _files.DeleteDirectory(target, false);
@@ -199,11 +218,12 @@ public sealed class ProjectCreator
         _files.MoveDirectory(hidden, target);
     }
 
-    private void CopyTree(string source, string destination, bool top)
+    private void CopyTree(string source, string destination, bool top, CancellationToken cancel)
     {
         _files.CreateDirectory(destination);
         foreach (var file in _files.EnumerateFiles(source))
         {
+            cancel.ThrowIfCancellationRequested();
             var fileName = Path.GetFileName(file);
             if (!(top && fileName == TemplateCatalog.ManifestFileName))
             {
@@ -213,7 +233,7 @@ public sealed class ProjectCreator
 
         foreach (var folder in _files.EnumerateDirectories(source))
         {
-            CopyTree(folder, Path.Combine(destination, Path.GetFileName(folder)), false);
+            CopyTree(folder, Path.Combine(destination, Path.GetFileName(folder)), false, cancel);
         }
     }
 

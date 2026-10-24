@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
@@ -43,6 +44,22 @@ public abstract class NewProjectFixture
     return new TemplateEntry(manifest, folder, null);
   }
 
+  // xUnit's own synchronization context stops a completed gate from running the awaiting code inline, so tests
+  // resolve gates with none current to get a deterministic, synchronous chain.
+  internal static void WithoutContext(Action action)
+  {
+    var saved = SynchronizationContext.Current;
+    SynchronizationContext.SetSynchronizationContext(null);
+    try
+    {
+      action();
+    }
+    finally
+    {
+      SynchronizationContext.SetSynchronizationContext(saved);
+    }
+  }
+
   internal static Task<string?> NoPick() => Task.FromResult<string?>(null);
 
   internal NewProjectViewModel NewDialog(
@@ -51,24 +68,33 @@ public abstract class NewProjectFixture
     Action<string, bool>? created = null,
     Action? close = null,
     Func<Task<string?>>? pick = null,
-    TemplateEntry? template = null) =>
+    TemplateEntry? template = null,
+    Func<TimeSpan, Task>? delay = null,
+    Func<Func<TargetCheck>, Task<TargetCheck>>? runCheck = null,
+    Action<Action>? post = null) =>
     new(
       template ?? AddTemplate("first-person", "First-Person"),
       NewCreator(),
       location ?? Projects,
       pick ?? NoPick,
-      background ?? (work => work()),
-      work => work(),
+      new DialogScheduling(
+        background ?? (work => work()),
+        post ?? (work => work()),
+        delay ?? (_ => Task.CompletedTask),
+        runCheck ?? (work => Task.FromResult(work()))),
       created ?? ((_, _) => { }),
       close ?? (() => { }));
 
-  internal MainWindowViewModel NewMain(SettingsEditor? editor = null, string version = "1.2.3")
+  internal MainWindowViewModel NewMain(SettingsEditor? editor = null, string version = "1.2.3", Action<Action>? background = null)
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
-    return NewMainWithCurrentEngine(editor, version);
+    return NewMainWithCurrentEngine(editor, version, background);
   }
 
-  internal MainWindowViewModel NewMainWithCurrentEngine(SettingsEditor? editor = null, string version = "1.2.3") =>
+  internal MainWindowViewModel NewMainWithCurrentEngine(
+    SettingsEditor? editor = null,
+    string version = "1.2.3",
+    Action<Action>? background = null) =>
     new(
       editor ?? _rig.NewEditor(),
       _rig.NewRecents(),
@@ -80,8 +106,11 @@ public abstract class NewProjectFixture
       action => action(),
       () => _rig.Time.Now,
       _files,
-      work => work(),
-      NewCreator());
+      background ?? (work => work()),
+      NewCreator())
+    {
+      NewProjectCheckDelay = _ => Task.CompletedTask
+    };
 
   internal string[] StoredPaths() =>
     ((JsonArray)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!["projects"]!)

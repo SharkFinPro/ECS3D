@@ -237,6 +237,9 @@ public class MainWindowViewModel : ObservableObject
 
     public Action? MinimizeWindow { get; set; }
 
+    // How long the New Project dialog waits after an edit before it looks at the disk.
+    public Func<TimeSpan, Task> NewProjectCheckDelay { get; set; } = span => Task.Delay(span);
+
     public IRelayCommand CloseOverlayCommand { get; }
     public IRelayCommand<Project> HostProjectCommand { get; }
     public IRelayCommand<Project> ShowInFolderCommand { get; }
@@ -783,13 +786,33 @@ public class MainWindowViewModel : ObservableObject
         }
     }
 
-    // True when the window may close now. While a game is hosted or starting it asks first and returns false:
+    // True when the window may close now. While a project is being created the copy is cancelled first and the window
+    // closes once its hidden folder is gone. While a game is hosted or starting it asks first and returns false:
     // Stop server and quit closes for real, Keep hosting minimizes, and Escape leaves the window as it is.
     // When the system is shutting down there is no one to ask, so the server is stopped and the close allowed.
     public bool RequestClose() => RequestClose(false);
 
     public bool RequestClose(bool systemShutdown)
     {
+        if (!_quitApproved && NewProject is { IsCreating: true } creating)
+        {
+            // A system shutdown cannot wait, and a second request means the user wants out: both close anyway and
+            // leave the hidden folder to the next create of that name.
+            if (systemShutdown)
+            {
+                creating.CancelCreate(() => { });
+            }
+            else if (!creating.IsCancelling)
+            {
+                creating.CancelCreate(() =>
+                {
+                    NewProject = null;
+                    CloseWindow?.Invoke();
+                });
+                return false;
+            }
+        }
+
         if (_quitApproved || !Hosting.IsBusy)
         {
             return true;
@@ -974,10 +997,26 @@ public class MainWindowViewModel : ObservableObject
             _creator,
             _settings.Current.ProjectsDirectory,
             () => PickAsync(PickProjectsFolder),
-            _runInBackground,
-            _post,
+            new DialogScheduling(_runInBackground, _post, NewProjectCheckDelay, RunCheckInBackground),
             (folder, openInEditor) => FinishCreate(entry, folder, openInEditor),
             () => NewProject = null);
+    }
+
+    private Task<TargetCheck> RunCheckInBackground(Func<TargetCheck> check)
+    {
+        var done = new TaskCompletionSource<TargetCheck>();
+        _runInBackground(() =>
+        {
+            try
+            {
+                done.SetResult(check());
+            }
+            catch (Exception exception)
+            {
+                done.SetException(exception);
+            }
+        });
+        return done.Task;
     }
 
     private void FinishCreate(TemplateEntry template, string folder, bool openInEditor)
