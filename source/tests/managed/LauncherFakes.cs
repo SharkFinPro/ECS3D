@@ -73,6 +73,14 @@ internal sealed class FakeFileSystem : IFileSystem
     _text[path] = contents;
   }
 
+  public IReadOnlyList<string> EnumerateFiles(string path) => [];
+
+  public void CopyFile(string source, string destination) => throw new NotSupportedException();
+
+  public void MoveDirectory(string source, string destination) => throw new NotSupportedException();
+
+  public void DeleteDirectory(string path, bool recursive) => throw new NotSupportedException();
+
   public void CreateDirectory(string path) => CreatedDirectories.Add(path);
 
   public void Seed(string path, string contents) => _text[path] = contents;

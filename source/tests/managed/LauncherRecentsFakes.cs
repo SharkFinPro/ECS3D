@@ -52,6 +52,14 @@ internal sealed class FakeTreeFileSystem : IFileSystem
     _text[path] = contents;
   }
 
+  public IReadOnlyList<string> EnumerateFiles(string path) => [];
+
+  public void CopyFile(string source, string destination) => throw new NotSupportedException();
+
+  public void MoveDirectory(string source, string destination) => throw new NotSupportedException();
+
+  public void DeleteDirectory(string path, bool recursive) => throw new NotSupportedException();
+
   public void CreateDirectory(string path) => CreatedDirectories.Add(path);
 
   // This fake knows no folders.
