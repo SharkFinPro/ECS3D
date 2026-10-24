@@ -19,9 +19,10 @@ public sealed class SettingsViewModel : ObservableObject
     private string _projectsFolder;
     private string _portText;
 
-    public SettingsViewModel(SettingsEditor editor, Action<SettingsUpdate> applied, Action<string> fail)
+    public SettingsViewModel(SettingsEditor editor, Action<SettingsUpdate> applied, Action<string> fail, string version)
     {
         _editor = editor;
+        Version = version;
         _applied = applied;
         _fail = fail;
         _engineFolder = editor.EngineFolderText;
@@ -31,6 +32,8 @@ public sealed class SettingsViewModel : ObservableObject
         BrowseProjectsCommand = new RelayCommand(() => _ = BrowseAsync(PickProjectsFolder, path => ProjectsFolder = path));
         ResetEngineCommand = new RelayCommand(() => EngineFolder = "");
     }
+
+    public string Version { get; }
 
     // Set by the view, which owns the OS folder picker.
     public Func<Task<string?>>? PickEngineFolder { get; set; }

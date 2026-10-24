@@ -54,7 +54,14 @@ public class LauncherMainWindowViewModelTests
     Assert.Equal(header.Subtitle, model.ViewSubtitle);
     Assert.Equal(header.SearchPlaceholder, model.SearchPlaceholder);
     Assert.Equal(header.ShowViewToggle, model.ShowViewToggle);
-    Assert.Equal(VersionLabel.Format("1.2.3"), model.Version);
+  }
+
+  [Fact]
+  public void SettingsShowsTheFormattedVersion()
+  {
+    var model = NewMain();
+
+    Assert.Equal(VersionLabel.Format("1.2.3"), model.Settings.Version);
   }
 
   [Theory]
