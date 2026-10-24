@@ -57,14 +57,19 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto" Margin="0,10,0,0">
+                                <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,10,0,0">
                                     <Border Grid.Column="0" IsVisible="{Binding HasPlayers}" Padding="9,3"
                                             CornerRadius="10" VerticalAlignment="Center"
                                             Background="{StaticResource AccDim}">
                                         <TextBlock Text="{Binding PlayersLabel}" FontSize="11" FontWeight="SemiBold"
                                                    Foreground="{StaticResource AccBrush}" />
                                     </Border>
-                                    <Button Grid.Column="2" Classes="cta" Theme="{StaticResource BareButton}"
+                                    <Button Grid.Column="2" Classes="secondary" Theme="{StaticResource BareButton}"
+                                            Margin="0,0,8,0"
+                                            Command="{Binding $parent[local:SamplesView].((local:SamplesViewModel)DataContext).OpenCopyCommand, FallbackValue={x:Null}}"
+                                            CommandParameter="{Binding}"
+                                            Content="Open a copy" />
+                                    <Button Grid.Column="3" Classes="cta" Theme="{StaticResource BareButton}"
                                             Command="{Binding $parent[local:SamplesView].((local:SamplesViewModel)DataContext).PlayCommand, FallbackValue={x:Null}}"
                                             CommandParameter="{Binding}"
                                             ToolTip.Tip="{Binding $parent[local:SamplesView].((local:SamplesViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"

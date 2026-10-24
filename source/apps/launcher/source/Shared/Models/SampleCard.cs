@@ -6,6 +6,7 @@ namespace ECS3DLauncher.Shared.Models;
 // A sample project card: the manifest fields the Samples tab shows, plus the shipped folder Play opens.
 public sealed class SampleCard
 {
+    public required string Id { get; init; }
     public required string Name { get; init; }
     public required string Description { get; init; }
     public required IReadOnlyList<string> Tags { get; init; }
