@@ -64,7 +64,12 @@ public class SamplesViewModel : ObservableObject
 
     public IRelayCommand<SampleCard> HostCommand { get; }
 
-    public SamplesViewModel(IRelayCommand<SampleCard> playCommand,
+    // Passed in by the shell, which owns the New Project dialog; the copy never touches the shipped folder.
+    public IRelayCommand<SampleCard> OpenCopyCommand { get; }
+
+    public SamplesViewModel(
+        IRelayCommand<SampleCard> playCommand,
+        IRelayCommand<SampleCard> openCopyCommand,
         string? playTooltip,
         Func<string, Bitmap?> loadThumbnail,
         IRelayCommand<SampleCard> hostCommand,
@@ -73,6 +78,7 @@ public class SamplesViewModel : ObservableObject
         HostCommand = hostCommand;
         _hostTooltip = hostTooltip;
         PlayCommand = playCommand;
+        OpenCopyCommand = openCopyCommand;
         _playTooltip = playTooltip;
         _loadThumbnail = loadThumbnail;
     }
@@ -88,6 +94,7 @@ public class SamplesViewModel : ObservableObject
         {
             Samples.Add(new SampleCard
             {
+                Id = entry.Manifest.Id,
                 Name = entry.Manifest.Name,
                 Description = entry.Manifest.Description,
                 Tags = entry.Manifest.Tags,

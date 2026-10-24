@@ -69,7 +69,8 @@ public static class DesignData
     private static SamplesViewModel NewSamples()
     {
         var model = new SamplesViewModel(
-            new RelayCommand<SampleCard>(_ => { }), null, _ => null, new RelayCommand<SampleCard>(_ => { }), null);
+            new RelayCommand<SampleCard>(_ => { }), new RelayCommand<SampleCard>(_ => { }), null, _ => null,
+            new RelayCommand<SampleCard>(_ => { }), null);
         var manifest = new TemplateManifest(
             "coin_rush", "Coin Rush", "Collect every coin before the timer runs out, alone or with friends.",
             "sample", ["multiplayer", "scripting"], "thumbnail.png", "Main", "0.1.0")

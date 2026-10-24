@@ -37,9 +37,10 @@
   `ProjectCreator` off the UI thread, records it with its template and, if asked, opens it in the editor. A failed
   copy keeps the dialog open with the reason. The Samples tab is real: `TemplateCatalog` reads
   `<engine>/templates`, each `sample` becomes a card, the header search filters them, and Play runs
-  `ECS3DClient --project <shipped folder>`. A multiplayer sample (`players.max` above 1) also has a Host button that
-  hosts the shipped folder in place through the same flow as a project card's Host a game...; Open a copy is not
-  built yet.
+  `ECS3DClient --project <shipped folder>`. Open a copy opens the New Project dialog for that sample
+  (named after it, the same `ProjectCreator` copy a template gets, always available) and records the sample's id, so
+  the shipped folder is never edited. A multiplayer sample (`players.max` above 1) also has a Host button that
+  hosts the shipped folder in place through the same flow as a project card's Host a game....
   Hosting is real: a project card's "Host a game..." starts `ECS3DServer` through `HostSession` (after asking whether to
   stop a game that is already running), opens the hosting panel (running time, `address : port` rows with Copy, firewall
   note, Open another game window, Stop server, Hide) and shows a green pill naming the hosted project in the sidebar that
