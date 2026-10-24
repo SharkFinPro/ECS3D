@@ -50,7 +50,7 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 | `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the Explore/Open commands), `NavItemViewModel`. |
 | `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch (e.g. Projects → Templates). |
 | `source/Services/` | UI-free services behind interfaces (`EngineLocator`, `EngineLauncher`, `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `IFileSystem`, `ILauncherLog`/`FileLauncherLog`, `LauncherSettings`/`LauncherSettingsStore`, `SettingsInput`, `EnginePorts`, `HostSession`, `IPortProbe`/`TcpPortProbe`, `LauncherTabs`, `EngineActions`, `EarlyExitNotice`, `LaunchCoordinator`, `VersionLabel`, `SearchMatch`, `INetworkInfo`/`SystemNetworkInfo`/`LanAddresses`, `JoinTarget`, `RecentProjectsStore` (the launcher side of `recent-projects.json`), `RecentProjectsView` (order, search, missing check and Edited text of that list), `ProjectPathKind` (classifies an Open existing... choice: folder, `project.ecs3d` or legacy `.json`), `RunningEditors` (editors started per project, for the In editor badge), `TemplateCatalog`/`TemplateManifest`, `LearnCatalog` (the Learn tab's guides and shipped-content counts), `EngineVersion`, `ProjectNameRules`, `SettingsEditor` - the Settings tab's decisions: apply, validate, re-locate and save). No Avalonia types. |
-| `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `ProjectTemplate`, `SampleCard` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
+| `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `ProjectTemplate`, `SampleCard` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`, `CardMenu` - opens a card's context menu from its ... button), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
 | `source/Assets/` | Bundled `AvaloniaResource`s: `Fonts/` (Geist, GeistMono) and `scene_render.png`. |
 
 **Shared files:** `recent-projects.json` is also written by the editor; its schema is in
@@ -83,9 +83,9 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - **Services stay free of Avalonia and CommunityToolkit references.** This is a convention, so they remain
   plain, testable logic; a type that needs those packages belongs in `Tabs` or `Shared`. `ECS3DManagedTests`
   links `source/Services/**`, the view models (`Shell/MainWindowViewModel.cs`, `Shell/NavItemViewModel.cs`,
-  `Tabs/**/*ViewModel.cs`), `Shared/Models` and `Shared/Converters`. A new shell view model, or one not named
-  `*ViewModel.cs`, must be added to that link list. Anything that touches the filesystem, processes or the
-  environment goes behind an interface or an injected function.
+  `Tabs/**/*ViewModel.cs`), `Shared/Models`, `Shared/Converters` and `Shared/Controls/CardMenu.cs`. A new shell
+  view model, or one not named `*ViewModel.cs`, must be added to that link list. Anything that touches the
+  filesystem, processes or the environment goes behind an interface or an injected function.
 - **Navigation is centralized.** `MainWindowViewModel.ActiveNav` (a string key) selects `CurrentTab`; the
   window's `ContentControl` maps the active view model to its view by type. Tabs never navigate directly —
   they call back into the shell (see `ProjectsViewModel`'s `openTemplates`).

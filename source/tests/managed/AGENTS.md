@@ -9,5 +9,6 @@ section of [docs/architecture/testing.md](../../../docs/architecture/testing.md)
 - New `.cs` files here are picked up by a glob, so there is no source list to edit.
 - Product logic reaches the tests through `internal` plus `InternalsVisibleTo`, not reflection.
 - `FakeNatives.Install()` points every native binding table at recording fakes. Suites that use it share the serial
-  `BridgeInstances` collection, and the loopback transport suites share the `Transport` collection.
+  `BridgeInstances` collection, the loopback transport suites share the `Transport` collection, and the headless
+  Avalonia tests share the `AvaloniaHeadless` collection.
 - A cold NuGet cache needs network access on the first run.

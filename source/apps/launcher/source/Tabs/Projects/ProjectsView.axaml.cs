@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
+using ECS3DLauncher.Shared.Controls;
 using ECS3DLauncher.Shared.Models;
 
 namespace ECS3DLauncher.Tabs.Projects;
@@ -21,14 +22,7 @@ public class ProjectsView : UserControl
     {
         if (sender is Control button)
         {
-            foreach (var ancestor in button.GetVisualAncestors())
-            {
-                if (ancestor is Control { ContextMenu: { } menu })
-                {
-                    menu.Open(button);
-                    break;
-                }
-            }
+            CardMenu.OpenFrom(button);
         }
     }
 

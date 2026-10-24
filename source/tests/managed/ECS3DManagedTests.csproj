@@ -17,6 +17,7 @@
         <PackageReference Include="xunit" Version="2.9.2" />
         <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
         <PackageReference Include="Avalonia" Version="12.0.5" />
+        <PackageReference Include="Avalonia.Headless" Version="12.0.5" />
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.1" />
     </ItemGroup>
 
@@ -46,9 +47,10 @@
                  Link="CoinRush/Scripts/%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
-    <!-- The launcher is an Avalonia WinExe, so it is not referenced. Its services, view models and models compile
-         into this assembly by link, over the two UI packages above. The window, views and DesignData stay out:
-         DesignData builds the real default view model against the user's data folder. -->
+    <!-- The launcher is an Avalonia WinExe, so it is not referenced. Its services, view models, models and the
+         XAML-free CardMenu helper compile into this assembly by link, over the two UI packages above. The window,
+         views and DesignData stay out: DesignData builds the real default view model against the user's data
+         folder. -->
     <ItemGroup>
         <Compile Include="../../apps/launcher/source/Services/**/*.cs"
                  Link="Launcher/Services/%(RecursiveDir)%(Filename)%(Extension)" />
@@ -60,6 +62,8 @@
                  Link="Launcher/Shared/Models/%(Filename)%(Extension)" />
         <Compile Include="../../apps/launcher/source/Shared/Converters/*.cs"
                  Link="Launcher/Shared/Converters/%(Filename)%(Extension)" />
+        <Compile Include="../../apps/launcher/source/Shared/Controls/CardMenu.cs"
+                 Link="Launcher/Shared/Controls/%(Filename)%(Extension)" />
     </ItemGroup>
 
     <!-- ShippedScriptsCompileTests finds the shipped scripts from the source tree this project lives in. -->
