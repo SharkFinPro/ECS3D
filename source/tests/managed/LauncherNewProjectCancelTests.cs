@@ -71,10 +71,8 @@ public class LauncherNewProjectCancelTests : NewProjectFixture
 
   private static void Drain(List<Action> work)
   {
-    foreach (var item in work.ToArray())
-    {
-      item();
-    }
+    var items = work.ToArray();
+    WithoutContext(() => Array.ForEach(items, item => item()));
 
     work.Clear();
   }
@@ -148,8 +146,22 @@ public class LauncherNewProjectCancelTests : NewProjectFixture
     var created = new List<(string Folder, bool Open)>();
     var finished = 0;
     var posted = new List<Action>();
-    var dialog = NewDialog(created: (folder, open) => created.Add((folder, open)), post: posted.Add);
+    var holding = false;
+    var dialog = NewDialog(
+      created: (folder, open) => created.Add((folder, open)),
+      post: action =>
+      {
+        if (holding)
+        {
+          posted.Add(action);
+        }
+        else
+        {
+          action();
+        }
+      });
     dialog.ProjectName = "Game";
+    holding = true;
     dialog.CreateCommand.Execute(null);
     Assert.True(_files.FileExists(Path.Combine(Folder("Game"), "project.ecs3d")));
 

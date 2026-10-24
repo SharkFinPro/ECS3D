@@ -37,17 +37,16 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
 
   private void FinishDelays()
   {
-    _delays.ForEach(gate => gate.TrySetResult());
+    var gates = _delays.ToArray();
+    _delays.Clear();
+    WithoutContext(() => Array.ForEach(gates, gate => gate.TrySetResult()));
   }
 
   private void FinishChecks()
   {
-    foreach (var (work, done) in _checks)
-    {
-      done.TrySetResult(work());
-    }
-
+    var pending = _checks.ToArray();
     _checks.Clear();
+    WithoutContext(() => Array.ForEach(pending, check => check.Done.TrySetResult(check.Work())));
   }
 
   [Fact]
@@ -132,14 +131,14 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
     FinishDelays();
     Assert.Equal(2, _checks.Count);
 
-    stale.Done.SetResult(stale.Work());
+    WithoutContext(() => stale.Done.SetResult(stale.Work()));
 
     Assert.True(dialog.IsChecking);
     Assert.Null(dialog.TargetState);
     Assert.False(dialog.CanCreate);
 
     var fresh = _checks[1];
-    fresh.Done.SetResult(fresh.Work());
+    WithoutContext(() => fresh.Done.SetResult(fresh.Work()));
 
     Assert.False(dialog.IsChecking);
     Assert.Equal(ProjectTargetState.Free, dialog.TargetState);
@@ -182,8 +181,9 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
 
     dialog.ProjectName = "Game";
     FinishDelays();
-    _checks[0].Done.SetException(new InvalidOperationException("boom"));
+    var failing = _checks[0];
     _checks.Clear();
+    WithoutContext(() => failing.Done.SetException(new InvalidOperationException("boom")));
 
     Assert.False(dialog.IsChecking);
     Assert.Equal(ProjectTargetState.Unavailable, dialog.TargetState);
@@ -206,7 +206,7 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
     var stale = _checks[0];
     dialog.ProjectName = "New";
 
-    stale.Done.SetException(new InvalidOperationException("boom"));
+    WithoutContext(() => stale.Done.SetException(new InvalidOperationException("boom")));
 
     Assert.True(dialog.IsChecking);
     Assert.Null(dialog.TargetState);

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
@@ -41,6 +42,22 @@ public abstract class NewProjectFixture
     _files.Seed(Path.Combine(folder, "scripts", "A.cs"), "class A {}");
     var manifest = new TemplateManifest(id, name, "About " + name, "template", [], "thumbnail.png", "Main", minEngine);
     return new TemplateEntry(manifest, folder, null);
+  }
+
+  // xUnit's own synchronization context stops a completed gate from running the awaiting code inline, so tests
+  // resolve gates with none current to get a deterministic, synchronous chain.
+  internal static void WithoutContext(Action action)
+  {
+    var saved = SynchronizationContext.Current;
+    SynchronizationContext.SetSynchronizationContext(null);
+    try
+    {
+      action();
+    }
+    finally
+    {
+      SynchronizationContext.SetSynchronizationContext(saved);
+    }
   }
 
   internal static Task<string?> NoPick() => Task.FromResult<string?>(null);
