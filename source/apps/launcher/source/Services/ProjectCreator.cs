@@ -42,8 +42,8 @@ public sealed class ProjectCreator
 
     public static string HiddenFolderName(string name) => $".{name}.creating";
 
-    // Free when <location>/<name> does not exist or is an empty folder; NotAFolder when a file has that path;
-    // Unavailable when the path is malformed or the folder cannot be read. Never throws.
+    // A missing or empty folder is Free, a file at that path is NotAFolder, and a malformed or unreadable path is
+    // Unavailable. Never throws.
     public ProjectTargetState CheckTarget(string location, string name)
     {
         if (!IsUsablePath(location) || !IsUsablePath(name))
@@ -90,12 +90,11 @@ public sealed class ProjectCreator
             return new ProjectCreationResult(null, "The location is not a valid folder path.");
         }
 
-        var target = name;
-        var hidden = name;
+        // Both parts are validated above, so combining them cannot throw.
+        var target = Path.Combine(location, name);
+        var hidden = Path.Combine(location, HiddenFolderName(name));
         try
         {
-            target = Path.Combine(location, name);
-            hidden = Path.Combine(location, HiddenFolderName(name));
             _files.CreateDirectory(location);
             var blocked = TargetError(location, name, target);
             if (blocked is not null)
