@@ -52,10 +52,10 @@
     </ItemGroup>
 
     <!-- The launcher is an Avalonia WinExe, so it is not referenced. Its services, view models, models and the
-         XAML-free CardMenu helper compile into this assembly by link, over the two UI packages above. The New Project
-         dialog compiles in with its XAML so a headless test drives the real bindings; its theme resources are
-         supplied by the test. The window, other views and DesignData stay out: DesignData builds the real default view model against the user's data
-         folder. -->
+         XAML-free CardMenu helper compile into this assembly by link, over the two UI packages above. The New
+         Project dialog compiles in with its XAML so a headless test drives the real bindings; its theme
+         resources are supplied by the test. The window, other views and DesignData stay out: DesignData builds
+         the real default view model against the user data folder. -->
     <ItemGroup>
         <Compile Include="../../apps/launcher/source/Services/**/*.cs"
                  Link="Launcher/Services/%(RecursiveDir)%(Filename)%(Extension)" />

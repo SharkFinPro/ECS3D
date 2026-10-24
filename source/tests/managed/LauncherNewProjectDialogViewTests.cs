@@ -20,48 +20,76 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
 {
   private const string NameRequired = "Enter a project name.";
 
-  private static bool _resourcesAdded;
-
-  // The dialog's StaticResource keys come from the launcher's Theme.axaml, which the test project does not link.
+  // The StaticResource keys the dialog uses come from the launcher theme, which the test project does not link.
   private static void EnsureThemeResources()
   {
-    if (_resourcesAdded)
-    {
-      return;
-    }
-
     var resources = Application.Current!.Resources;
     foreach (var key in new[] { "PanelBrush", "LineBrush", "T2Brush", "T3Brush", "DangerBrush", "OkBrush", "AccText" })
     {
-      resources[key] = Brushes.Gray;
+      if (!resources.ContainsKey(key))
+      {
+        resources[key] = Brushes.Gray;
+      }
     }
 
-    resources["MonoFontFamily"] = FontFamily.Default;
-    resources["BareButton"] = new ControlTheme(typeof(Button));
-    _resourcesAdded = true;
+    if (!resources.ContainsKey("MonoFontFamily"))
+    {
+      resources["MonoFontFamily"] = FontFamily.Default;
+    }
+
+    if (!resources.ContainsKey("BareButton"))
+    {
+      resources["BareButton"] = new ControlTheme(typeof(Button));
+    }
   }
 
   private static IEnumerable<T> All<T>(Visual root) where T : Visual => root.GetVisualDescendants().OfType<T>();
 
-  // The message under the name box; its text stays null while the name is valid.
-  private static TextBlock NameErrorBlock(NewProjectDialog dialog)
-  {
-    var nameBox = dialog.FindControl<TextBox>("NameBox")!;
-    var panel = (Panel)nameBox.GetVisualParent()!;
-    return (TextBlock)panel.Children[panel.Children.IndexOf(nameBox) + 1];
-  }
-
   private static Button ButtonOf(Visual root, ICommand command) =>
     All<Button>(root).Single(button => ReferenceEquals(button.Command, command));
 
-  private static (NewProjectDialog Dialog, Window Window) Show(NewProjectViewModel vm)
+  private static bool IsShown(TextBlock block, string cssClass) =>
+    block.Classes.Contains(cssClass) && block.IsEffectivelyVisible;
+
+  private sealed class ShownDialog : IDisposable
   {
-    EnsureThemeResources();
-    var dialog = new NewProjectDialog { DataContext = vm };
-    var window = LauncherCardMenuTests.ShowInWindow(dialog, dialog);
-    Assert.True(dialog.IsAttachedToVisualTree());
-    Assert.NotNull(dialog.FindControl<TextBox>("NameBox"));
-    return (dialog, window);
+    private readonly Window _window;
+
+    public NewProjectDialog Dialog { get; }
+
+    public ShownDialog(NewProjectViewModel vm)
+    {
+      EnsureThemeResources();
+      Dialog = new NewProjectDialog { DataContext = vm };
+      _window = LauncherCardMenuTests.ShowInWindow(Dialog, Dialog);
+    }
+
+    public TextBox NameBox => Dialog.FindControl<TextBox>("NameBox")!;
+
+    public TextBlock NameError => Dialog.FindControl<TextBlock>("NameErrorText")!;
+
+    public TextBox LocationBox => All<TextBox>(Dialog).Single(box => box.Name != "NameBox");
+
+    // The message under the location row, which has no name of its own.
+    public TextBlock LocationError
+    {
+      get
+      {
+        var row = (Panel)LocationBox.GetVisualParent()!;
+        var panel = (Panel)row.GetVisualParent()!;
+        return (TextBlock)panel.Children[panel.Children.IndexOf(row) + 1];
+      }
+    }
+
+    public void Dispose() => _window.Close();
+  }
+
+  private static ShownDialog Show(NewProjectViewModel vm)
+  {
+    var shown = new ShownDialog(vm);
+    Assert.True(shown.Dialog.IsAttachedToVisualTree());
+    Assert.NotNull(shown.NameBox);
+    return shown;
   }
 
   [Fact]
@@ -70,17 +98,40 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
     await LauncherCardMenuTests.OnUiThread(() =>
     {
       var vm = NewDialog();
-      var (dialog, window) = Show(vm);
-      var nameBox = dialog.FindControl<TextBox>("NameBox")!;
-      Assert.Equal("First-Person", nameBox.Text);
+      using var shown = Show(vm);
+      var dialog = shown.Dialog;
+      Assert.Equal("First-Person", shown.NameBox.Text);
 
-      nameBox.Text = "Game";
+      shown.NameBox.Text = "Game";
 
       var expected = Path.Combine(Projects, "Game", "project.ecs3d");
       Assert.Equal("Game", vm.ProjectName);
       Assert.Contains(All<TextBlock>(dialog), block => block.Text == expected);
-      Assert.Contains(All<TextBlock>(dialog), block => block.Classes.Contains("ok") && block.IsVisible);
-      window.Close();
+      Assert.Contains(All<TextBlock>(dialog), block => IsShown(block, "ok"));
+    });
+  }
+
+  [Fact]
+  public async Task ANameThatIsTakenShowsTheTargetProblemInsteadOfTheOkMessage()
+  {
+    await LauncherCardMenuTests.OnUiThread(() =>
+    {
+      _files.Seed(Path.Combine(Folder("Taken"), "project.ecs3d"), "{}");
+      using var shown = Show(NewDialog());
+      var dialog = shown.Dialog;
+
+      shown.NameBox.Text = "Taken";
+
+      Assert.DoesNotContain(All<TextBlock>(dialog), block => IsShown(block, "ok"));
+      var problem = All<TextBlock>(dialog).Single(block =>
+        IsShown(block, "error") && block.Text?.Contains("already exists") == true);
+      Assert.False(string.IsNullOrEmpty(problem.Text));
+
+      shown.NameBox.Text = "Free";
+
+      Assert.Contains(All<TextBlock>(dialog), block => IsShown(block, "ok"));
+      Assert.DoesNotContain(All<TextBlock>(dialog), block =>
+        IsShown(block, "error") && block.Text?.Contains("already exists") == true);
     });
   }
 
@@ -90,24 +141,51 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
     await LauncherCardMenuTests.OnUiThread(() =>
     {
       var vm = NewDialog();
-      var (dialog, window) = Show(vm);
-      var nameBox = dialog.FindControl<TextBox>("NameBox")!;
+      using var shown = Show(vm);
+      var dialog = shown.Dialog;
       var create = ButtonOf(dialog, vm.CreateCommand);
+      var preview = Path.Combine(Projects, "First-Person", "project.ecs3d");
       Assert.True(create.IsEnabled);
-      Assert.False(NameErrorBlock(dialog).IsVisible);
+      Assert.Contains(All<TextBlock>(dialog), block => block.Text == preview);
+      Assert.True(shown.NameError.Classes.Contains("error"));
+      Assert.False(shown.NameError.IsEffectivelyVisible);
 
-      nameBox.Text = "";
+      shown.NameBox.Text = "";
 
-      Assert.True(NameErrorBlock(dialog).IsVisible);
-      Assert.Equal(NameRequired, NameErrorBlock(dialog).Text);
+      Assert.True(shown.NameError.IsEffectivelyVisible);
+      Assert.Equal(NameRequired, shown.NameError.Text);
       Assert.False(create.IsEnabled);
-      Assert.DoesNotContain(All<TextBlock>(dialog), block => block.Text?.EndsWith("project.ecs3d") == true);
+      Assert.DoesNotContain(All<TextBlock>(dialog), block => block.Text == preview);
 
-      nameBox.Text = "Fine";
+      shown.NameBox.Text = "Fine";
 
-      Assert.False(NameErrorBlock(dialog).IsVisible);
+      Assert.False(shown.NameError.IsEffectivelyVisible);
       Assert.True(create.IsEnabled);
-      window.Close();
+    });
+  }
+
+  [Fact]
+  public async Task AnInvalidLocationShowsItsReason()
+  {
+    await LauncherCardMenuTests.OnUiThread(() =>
+    {
+      var vm = NewDialog();
+      using var shown = Show(vm);
+      var create = ButtonOf(shown.Dialog, vm.CreateCommand);
+      Assert.False(shown.LocationError.IsEffectivelyVisible);
+      Assert.True(create.IsEnabled);
+
+      shown.LocationBox.Text = "";
+
+      Assert.True(shown.LocationError.Classes.Contains("error"));
+      Assert.True(shown.LocationError.IsEffectivelyVisible);
+      Assert.Equal("Enter a location.", shown.LocationError.Text);
+      Assert.False(create.IsEnabled);
+
+      shown.LocationBox.Text = Projects;
+
+      Assert.False(shown.LocationError.IsEffectivelyVisible);
+      Assert.True(create.IsEnabled);
     });
   }
 
@@ -117,8 +195,8 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
     await LauncherCardMenuTests.OnUiThread(() =>
     {
       var vm = NewDialog();
-      var (dialog, window) = Show(vm);
-      var box = All<CheckBox>(dialog).Single();
+      using var shown = Show(vm);
+      var box = All<CheckBox>(shown.Dialog).Single();
       Assert.True(box.IsChecked);
 
       box.IsChecked = false;
@@ -126,7 +204,6 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
 
       vm.OpenInEditor = true;
       Assert.True(box.IsChecked);
-      window.Close();
     });
   }
 
@@ -137,27 +214,26 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
     {
       Action? pending = null;
       var vm = NewDialog(background: work => pending = work);
-      var (dialog, window) = Show(vm);
-      var nameBox = dialog.FindControl<TextBox>("NameBox")!;
+      using var shown = Show(vm);
+      var dialog = shown.Dialog;
       var box = All<CheckBox>(dialog).Single();
       var create = ButtonOf(dialog, vm.CreateCommand);
       var cancel = ButtonOf(dialog, vm.CancelCommand);
       var progress = All<ProgressBar>(dialog).Single();
-      Assert.True(nameBox.IsEffectivelyEnabled);
+      Assert.True(shown.NameBox.IsEffectivelyEnabled);
       Assert.True(cancel.IsEnabled);
-      Assert.False(progress.IsVisible);
+      Assert.False(progress.IsEffectivelyVisible);
 
       create.Command!.Execute(null);
 
       Assert.NotNull(pending);
-      Assert.False(nameBox.IsEffectivelyEnabled);
+      Assert.False(shown.NameBox.IsEffectivelyEnabled);
       Assert.False(box.IsEffectivelyEnabled);
       Assert.False(create.IsEnabled);
       Assert.False(cancel.IsEnabled);
-      Assert.True(progress.IsVisible);
+      Assert.True(progress.IsEffectivelyVisible);
 
       pending!();
-      window.Close();
     });
   }
 }
