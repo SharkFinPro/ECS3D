@@ -15,6 +15,9 @@ public sealed class SampleCard
     public string? PlayersLabel { get; init; }
     public bool HasPlayers => PlayersLabel is not null;
 
+    // True when the manifest allows more than one player, which is when the card offers Host.
+    public bool IsMultiplayer { get; init; }
+
     public Bitmap? Thumbnail { get; init; }
     public bool HasThumbnail => Thumbnail is not null;
 }

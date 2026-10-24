@@ -64,6 +64,16 @@
                                         <TextBlock Text="{Binding PlayersLabel}" FontSize="11" FontWeight="SemiBold"
                                                    Foreground="{StaticResource AccBrush}" />
                                     </Border>
+                                    <Button Grid.Column="1" IsVisible="{Binding IsMultiplayer}"
+                                            Classes="secondary" Theme="{StaticResource BareButton}"
+                                            HorizontalAlignment="Right" Margin="0,0,8,0"
+                                            Command="{Binding $parent[local:SamplesView].((local:SamplesViewModel)DataContext).HostCommand, FallbackValue={x:Null}}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip.Tip="{Binding $parent[local:SamplesView].((local:SamplesViewModel)DataContext).HostTooltip, FallbackValue={x:Null}}"
+                                            ToolTip.ShowOnDisabled="True">
+                                        <TextBlock Text="Host" FontSize="13" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </Button>
                                     <Button Grid.Column="2" Classes="cta" Theme="{StaticResource BareButton}"
                                             Command="{Binding $parent[local:SamplesView].((local:SamplesViewModel)DataContext).PlayCommand, FallbackValue={x:Null}}"
                                             CommandParameter="{Binding}"

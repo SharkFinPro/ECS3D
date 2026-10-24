@@ -37,7 +37,9 @@
   `ProjectCreator` off the UI thread, records it with its template and, if asked, opens it in the editor. A failed
   copy keeps the dialog open with the reason. The Samples tab is real: `TemplateCatalog` reads
   `<engine>/templates`, each `sample` becomes a card, the header search filters them, and Play runs
-  `ECS3DClient --project <shipped folder>`. Host and Open a copy are not built yet.
+  `ECS3DClient --project <shipped folder>`. A multiplayer sample (`players.max` above 1) also has a Host button that
+  hosts the shipped folder in place through the same flow as a project card's Host a game...; Open a copy is not
+  built yet.
   Hosting is real: a project card's "Host a game..." starts `ECS3DServer` through `HostSession` (after asking whether to
   stop a game that is already running), opens the hosting panel (running time, `address : port` rows with Copy, firewall
   note, Open another game window, Stop server, Hide) and shows a green pill naming the hosted project in the sidebar that
@@ -46,7 +48,6 @@
   called from the window's `OnClosing`): Stop server and quit, or Keep hosting, which minimizes; Escape leaves the
   window as it is. When the OS or the application is shutting down there is no one to ask, so the server is stopped
   and the window closes; the lifetime's Exit stops it too as a backstop.
-  The Samples Host button is not built yet.
   The Learn tab is real: six guide cards from `LearnCatalog` that open on GitHub in the browser, plus a "What's
   in the box" banner.
   The sidebar's Play section has a Join a game button: it opens an in-window dialog (`JoinDialogViewModel`) for the
@@ -128,7 +129,7 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - Read this file before changing the launcher. You should **not** need the root `AGENTS.md` or any C++
   engine knowledge for launcher work.
 - Engine location and launching, settings, the recent-projects store, the template catalog and project creation
-  are real; the Samples Host button is not. When asked to "load projects" and the like, confirm
+  and the Samples Host button are real. When asked to "load projects" and the like, confirm
   whether the task is to build the missing service and its wiring or to extend the mock UI.
 - Keep the MVVM split clean: no app logic in code-behind, no view construction in view models.
 - Add UI dependencies via `PackageReference` in `ECS3DLauncher.csproj`; keep Debug-only tooling under the

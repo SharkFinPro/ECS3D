@@ -15,6 +15,7 @@ public class SamplesViewModel : ObservableObject
     private readonly Func<string, Bitmap?> _loadThumbnail;
     private string _searchText = "";
     private string? _playTooltip;
+    private string? _hostTooltip;
     private string _emptyHeading = "";
 
     // Every sample the catalog found.
@@ -53,16 +54,32 @@ public class SamplesViewModel : ObservableObject
         private set => SetProperty(ref _playTooltip, value);
     }
 
+    public string? HostTooltip
+    {
+        get => _hostTooltip;
+        private set => SetProperty(ref _hostTooltip, value);
+    }
+
     public IRelayCommand<SampleCard> PlayCommand { get; }
 
-    public SamplesViewModel(IRelayCommand<SampleCard> playCommand, string? playTooltip, Func<string, Bitmap?> loadThumbnail)
+    public IRelayCommand<SampleCard> HostCommand { get; }
+
+    public SamplesViewModel(IRelayCommand<SampleCard> playCommand,
+        string? playTooltip,
+        Func<string, Bitmap?> loadThumbnail,
+        IRelayCommand<SampleCard> hostCommand,
+        string? hostTooltip)
     {
+        HostCommand = hostCommand;
+        _hostTooltip = hostTooltip;
         PlayCommand = playCommand;
         _playTooltip = playTooltip;
         _loadThumbnail = loadThumbnail;
     }
 
     public void UpdatePlay(string? playTooltip) => PlayTooltip = playTooltip;
+
+    public void UpdateHost(string? hostTooltip) => HostTooltip = hostTooltip;
 
     public void Reload(TemplateCatalogContents contents)
     {
@@ -76,6 +93,7 @@ public class SamplesViewModel : ObservableObject
                 Tags = entry.Manifest.Tags,
                 FolderPath = entry.FolderPath,
                 PlayersLabel = entry.Manifest.PlayersLabel,
+                IsMultiplayer = entry.Manifest.IsMultiplayer,
                 Thumbnail = entry.ThumbnailPath is { } path ? _loadThumbnail(path) : null,
             });
         }
