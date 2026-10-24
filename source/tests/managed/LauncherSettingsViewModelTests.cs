@@ -14,14 +14,20 @@ public class LauncherSettingsViewModelTests
   private readonly List<SettingsUpdate> _updates = [];
   private readonly List<string> _failures = [];
 
-  private SettingsViewModel NewModel(string? settingsJson = null)
+  private SettingsViewModel NewModel(string? settingsJson = null, string version = "v1.2.3")
   {
     if (settingsJson is not null)
     {
       _rig.Files.Seed(_rig.SettingsPath, settingsJson);
     }
 
-    return new SettingsViewModel(_rig.NewEditor(), _updates.Add, _failures.Add);
+    return new SettingsViewModel(_rig.NewEditor(), _updates.Add, _failures.Add, version);
+  }
+
+  [Fact]
+  public void ExposesTheVersionItWasGiven()
+  {
+    Assert.Equal("v9.8.7", NewModel(version: "v9.8.7").Version);
   }
 
   [Fact]

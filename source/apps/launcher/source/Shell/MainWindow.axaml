@@ -53,11 +53,6 @@
                            Foreground="{StaticResource T3Brush}"
                            VerticalAlignment="Center" Margin="11,0,0,0" />
 
-                <TextBlock Grid.Column="4" Text="{Binding Version}" FontSize="11"
-                           FontFamily="{StaticResource MonoFontFamily}"
-                           Foreground="{StaticResource T3Brush}"
-                           VerticalAlignment="Center" Margin="0,0,8,0" />
-
                 <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2"
                             VerticalAlignment="Center">
                     <Button Classes="win" Theme="{StaticResource BareButton}"

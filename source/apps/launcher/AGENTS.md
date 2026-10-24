@@ -20,7 +20,7 @@
   and toasts a failed start or an early exit. The launcher loads `launcher-settings.json` at startup and uses it:
   editor launches take their console flags from it, the engine folder override feeds `EngineLocator`, and the
   Projects grid/list choice starts from it. The Settings tab saves each change at once (text boxes when they lose focus or on Enter), and a changed engine folder
-  re-locates the engine and refreshes the banner and the Explore/Open actions.
+  re-locates the engine and refreshes the banner and the Explore/Open actions. Its About section shows the launcher version.
   The Projects tab lists the stored recent projects (pinned first, then newest). A card opens, plays, pins,
   removes (from the list only) and shows the project in the file manager. While the list is empty, three first-run
   cards replace it and the grid/list toggle is hidden. The list reloads when the window regains focus; a file that

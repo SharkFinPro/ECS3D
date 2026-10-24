@@ -20,6 +20,17 @@ public class LauncherWindowChromeTests
     return XDocument.Load(Path.Combine(root, "apps", "launcher", "source", "Shell", "MainWindow.axaml")).Root!;
   }
 
+  private static XElement SettingsView()
+  {
+    var root = typeof(LauncherWindowChromeTests).Assembly
+      .GetCustomAttributes<AssemblyMetadataAttribute>()
+      .Single(a => a.Key == "ECS3DSourceRoot").Value!;
+    return XDocument.Load(Path.Combine(root, "apps", "launcher", "source", "Tabs", "Settings", "SettingsView.axaml")).Root!;
+  }
+
+  private static bool ShowsVersion(XElement element) =>
+    element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "{Binding Version}";
+
   private static string? RoleOfButtonClicking(XElement window, string handler) =>
     (string?)window.Descendants()
       .Single(element => element.Name.LocalName == "Button" && (string?)element.Attribute("Click") == handler)
@@ -55,6 +66,23 @@ public class LauncherWindowChromeTests
     var titleBar = Assert.Single(titleBars);
     Assert.Equal("0", (string?)titleBar.Attribute("Grid.Row"));
     Assert.Null(titleBar.Attribute("PointerPressed"));
+  }
+
+  [Fact]
+  public void TitleBarDoesNotShowTheVersion()
+  {
+    Assert.DoesNotContain(MainWindow().Descendants(), ShowsVersion);
+  }
+
+  [Fact]
+  public void SettingsViewShowsTheVersionUnderAbout()
+  {
+    var panel = SettingsView().Descendants().Single(element => element.Name.LocalName == "StackPanel");
+    var about = panel.Elements().ToList();
+    var heading = about.FindIndex(element => (string?)element.Attribute("Text") == "ABOUT");
+
+    Assert.True(heading >= 0);
+    Assert.True(about.Skip(heading).Any(ShowsVersion));
   }
 
   [Theory]

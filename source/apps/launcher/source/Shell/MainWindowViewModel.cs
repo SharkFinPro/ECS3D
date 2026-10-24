@@ -51,8 +51,6 @@ public class MainWindowViewModel : ObservableObject
 
     private NewProjectViewModel? _newProject;
 
-    public string Version { get; }
-
     public ObservableCollection<NavItemViewModel> NavItems { get; }
 
     public ProjectsViewModel Projects { get; }
@@ -414,7 +412,6 @@ public class MainWindowViewModel : ObservableObject
         _engine = settings.Engine;
         _actions = new EngineActions(_engine);
         _coordinator = NewCoordinator(_engine);
-        Version = VersionLabel.Format(version);
 
         SelectNavCommand = new RelayCommand<string?>(key =>
         {
@@ -513,7 +510,8 @@ public class MainWindowViewModel : ObservableObject
                 Prompt = null;
             }
         };
-        Settings = new SettingsViewModel(settings, ApplyUpdate, message => ApplyNotice(EarlyExitNotice.Failure(message)));
+        Settings = new SettingsViewModel(settings, ApplyUpdate, message => ApplyNotice(EarlyExitNotice.Failure(message)),
+            VersionLabel.Format(version));
 
         CurrentTab = Projects;
         UpdateActiveFlags();

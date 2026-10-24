@@ -62,5 +62,10 @@
         <TextBlock Text="Last joined" FontWeight="SemiBold" Margin="0,8,0,0" />
         <TextBlock Text="{Binding LastJoinText}" FontFamily="{StaticResource MonoFontFamily}"
                    Foreground="{StaticResource T2Brush}" />
+
+        <TextBlock Classes="section" Text="ABOUT" />
+        <TextBlock Text="Version" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding Version}" FontFamily="{StaticResource MonoFontFamily}"
+                   Foreground="{StaticResource T2Brush}" />
     </StackPanel>
 </UserControl>
