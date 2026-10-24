@@ -49,6 +49,7 @@ public class MainWindowViewModel : ObservableObject
     public SamplesViewModel Samples { get; }
     public LearnViewModel Learn { get; }
     public SettingsViewModel Settings { get; }
+    public HostingViewModel Hosting { get; }
 
     // Which library section is showing. CurrentTab is the active tab's view
     // model; the window's ContentControl maps it to a view by type.
@@ -57,6 +58,7 @@ public class MainWindowViewModel : ObservableObject
     private string _searchText = "";
     private string? _toastMessage;
     private string? _toastLogPath;
+    private ConfirmPromptViewModel? _prompt;
 
     public string ActiveNav
     {
@@ -138,6 +140,21 @@ public class MainWindowViewModel : ObservableObject
         }
     }
 
+    // A modal question over the whole window; null when none is asked.
+    public ConfirmPromptViewModel? Prompt
+    {
+        get => _prompt;
+        private set
+        {
+            if (SetProperty(ref _prompt, value))
+            {
+                OnPropertyChanged(nameof(HasPrompt));
+            }
+        }
+    }
+
+    public bool HasPrompt => Prompt is not null;
+
     public bool HasToast => ToastMessage is not null;
     public bool HasToastLog => ToastLogPath is not null;
 
@@ -162,6 +179,7 @@ public class MainWindowViewModel : ObservableObject
     public IRelayCommand ExploreCommand { get; }
     public IRelayCommand<Project> OpenProjectCommand { get; }
     public IRelayCommand<Project> PlayProjectCommand { get; }
+    public IRelayCommand<Project> HostProjectCommand { get; }
     public IRelayCommand<Project> ShowInFolderCommand { get; }
     public IRelayCommand<Project> TogglePinCommand { get; }
     public IRelayCommand<Project> RemoveProjectCommand { get; }
@@ -210,7 +228,6 @@ public class MainWindowViewModel : ObservableObject
     {
     }
 
-    // runInBackground runs the disk checks off the UI thread; a dead network share can block them for seconds.
     public MainWindowViewModel(
         SettingsEditor settings,
         RecentProjectsStore recents,
@@ -223,6 +240,36 @@ public class MainWindowViewModel : ObservableObject
         Func<DateTimeOffset> now,
         IFileSystem fileSystem,
         Action<Action> runInBackground)
+        : this(
+            settings,
+            recents,
+            runner,
+            watcher,
+            catalog,
+            loadThumbnail,
+            version,
+            post,
+            now,
+            fileSystem,
+            runInBackground,
+            HostingServices.System)
+    {
+    }
+
+    // runInBackground runs the disk checks off the UI thread; a dead network share can block them for seconds.
+    public MainWindowViewModel(
+        SettingsEditor settings,
+        RecentProjectsStore recents,
+        IProcessRunner runner,
+        EarlyExitWatcher watcher,
+        TemplateCatalog catalog,
+        Func<string, Bitmap?> loadThumbnail,
+        string version,
+        Action<Action> post,
+        Func<DateTimeOffset> now,
+        IFileSystem fileSystem,
+        Action<Action> runInBackground,
+        HostingServices hosting)
     {
         _post = post;
         _fileSystem = fileSystem;
@@ -246,6 +293,7 @@ public class MainWindowViewModel : ObservableObject
         ExploreCommand = new RelayCommand(Explore, () => _actions.Explore.Available);
         OpenProjectCommand = new RelayCommand<Project>(OpenProject, project => _actions.Open.Available && IsPresent(project));
         PlayProjectCommand = new RelayCommand<Project>(PlayProject, project => _actions.Play.Available && IsPresent(project));
+        HostProjectCommand = new RelayCommand<Project>(HostProject, project => _actions.Host.Available && IsPresent(project));
         ShowInFolderCommand = new RelayCommand<Project>(project => _ = ShowInFolderAsync(project), IsPresent);
         TogglePinCommand = new RelayCommand<Project>(TogglePin);
         RemoveProjectCommand = new RelayCommand<Project>(RemoveProject);
@@ -264,6 +312,7 @@ public class MainWindowViewModel : ObservableObject
             [])
         {
             PlayProjectCommand = PlayProjectCommand,
+            HostProjectCommand = HostProjectCommand,
             ShowInFolderCommand = ShowInFolderCommand,
             TogglePinCommand = TogglePinCommand,
             RemoveProjectCommand = RemoveProjectCommand,
@@ -271,6 +320,7 @@ public class MainWindowViewModel : ObservableObject
             BrowseSamplesCommand = new RelayCommand(() => ActiveNav = "samples"),
         };
         Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip, _actions.Play.Tooltip);
+        Projects.UpdateHostTooltip(_actions.Host.Tooltip);
         Refresh();
         Templates = new TemplatesViewModel(version, loadThumbnail);
         Samples = new SamplesViewModel(PlaySampleCommand, _actions.Play.Tooltip, loadThumbnail);
@@ -298,6 +348,14 @@ public class MainWindowViewModel : ObservableObject
 
         Projects.IsGridView = settings.Current.ProjectsView != LauncherSettings.ListView;
         Projects.ViewChosen = grid => ApplyUpdate(_settings.SetProjectsView(grid));
+        Hosting = new HostingViewModel(
+            () => hosting.NewSession(new EngineLauncher(_runner, _engine)),
+            hosting.Network,
+            () => _settings.Current.HostPort,
+            _post,
+            ShowNotice,
+            Ask,
+            () => ActiveNav = "settings");
         Settings = new SettingsViewModel(settings, ApplyUpdate, message => ApplyNotice(EarlyExitNotice.Failure(message)));
 
         CurrentTab = Projects;
@@ -357,6 +415,8 @@ public class MainWindowViewModel : ObservableObject
         _actions = new EngineActions(engine);
         _coordinator = NewCoordinator(engine);
         Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip, _actions.Play.Tooltip);
+        Projects.UpdateHostTooltip(_actions.Host.Tooltip);
+        HostProjectCommand.NotifyCanExecuteChanged();
         Learn.UpdateTooltip(_actions.Explore.Tooltip);
         ExploreCommand.NotifyCanExecuteChanged();
         OpenProjectCommand.NotifyCanExecuteChanged();
@@ -524,6 +584,22 @@ public class MainWindowViewModel : ObservableObject
             ChangeStored(() => _recents.Remove(project.Path));
         }
     }
+
+    private void HostProject(Project? project)
+    {
+        if (project is { IsRealCard: true, IsMissing: false } && _actions.Host.Available)
+        {
+            Hosting.Host(project.Path, project.Name);
+        }
+    }
+
+    // One question at a time; asking again replaces the one on screen.
+    private void Ask(PromptRequest request, Action<bool> answered) =>
+        Prompt = new ConfirmPromptViewModel(request, confirmed =>
+        {
+            Prompt = null;
+            answered(confirmed);
+        });
 
     private void PlayProject(Project? project)
     {

@@ -4,9 +4,11 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace ECS3DLauncher.Shell;
@@ -21,6 +23,7 @@ public class MainWindow : Window
     private readonly Border _glyphMax;
     private readonly Panel _glyphRestore;
     private bool _activatedOnce;
+    private DispatcherTimer? _hostingClock;
 
     private const double ResizeBorder = 6;
 
@@ -57,7 +60,29 @@ public class MainWindow : Window
             viewModel.OpenUrl = OpenInBrowserAsync;
             viewModel.PickProjectFolder = PickProjectFolderAsync;
             viewModel.PickProjectFile = PickProjectFileAsync;
+            viewModel.Hosting.CopyToClipboard = CopyToClipboardAsync;
+            StartHostingClock(viewModel);
         }
+    }
+
+    // The hosting panel's running time is re-read once a second.
+    private void StartHostingClock(MainWindowViewModel viewModel)
+    {
+        _hostingClock?.Stop();
+        _hostingClock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _hostingClock.Tick += (_, _) => viewModel.Hosting.Tick();
+        _hostingClock.Start();
+    }
+
+    private async Task<bool> CopyToClipboardAsync(string text)
+    {
+        if (Clipboard is not { } clipboard)
+        {
+            return false;
+        }
+
+        await clipboard.SetTextAsync(text);
+        return true;
     }
 
     private async Task<bool> OpenWithDefaultAppAsync(string path)

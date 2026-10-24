@@ -54,7 +54,7 @@
     <ItemGroup>
         <Compile Include="../../apps/launcher/source/Services/**/*.cs"
                  Link="Launcher/Services/%(RecursiveDir)%(Filename)%(Extension)" />
-        <Compile Include="../../apps/launcher/source/Shell/MainWindowViewModel.cs;../../apps/launcher/source/Shell/NavItemViewModel.cs"
+        <Compile Include="../../apps/launcher/source/Shell/*ViewModel.cs"
                  Link="Launcher/Shell/%(Filename)%(Extension)" />
         <Compile Include="../../apps/launcher/source/Tabs/**/*ViewModel.cs"
                  Link="Launcher/Tabs/%(RecursiveDir)%(Filename)%(Extension)" />

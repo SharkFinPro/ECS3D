@@ -21,6 +21,7 @@ public class ProjectsViewModel : ObservableObject
     private string? _exploreTooltip;
     private string? _openTooltip;
     private string? _playTooltip;
+    private string? _hostTooltip;
     private bool _replacing;
 
     public ObservableCollection<Project> Projects { get; }
@@ -87,8 +88,15 @@ public class ProjectsViewModel : ObservableObject
         private set => SetProperty(ref _playTooltip, value);
     }
 
+    public string? HostTooltip
+    {
+        get => _hostTooltip;
+        private set => SetProperty(ref _hostTooltip, value);
+    }
+
     // The card menu and first-run commands are set by the shell, which owns the store and the engine.
     public IRelayCommand<Project> PlayProjectCommand { get; set; } = new RelayCommand<Project>(_ => { });
+    public IRelayCommand<Project> HostProjectCommand { get; set; } = new RelayCommand<Project>(_ => { });
     public IRelayCommand<Project> ShowInFolderCommand { get; set; } = new RelayCommand<Project>(_ => { });
     public IRelayCommand<Project> TogglePinCommand { get; set; } = new RelayCommand<Project>(_ => { });
     public IRelayCommand<Project> LocateProjectCommand { get; set; } = new RelayCommand<Project>(_ => { });
@@ -140,6 +148,8 @@ public class ProjectsViewModel : ObservableObject
         OpenTooltip = openTooltip;
         PlayTooltip = playTooltip;
     }
+
+    public void UpdateHostTooltip(string? hostTooltip) => HostTooltip = hostTooltip;
 
     // Replaces the whole list and rebuilds the tiles once, keeping the current search.
     public void SetProjects(IReadOnlyList<Project> projects)
