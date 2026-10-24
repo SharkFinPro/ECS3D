@@ -323,5 +323,13 @@ public class LauncherTemplatesTabTests
     public void WriteAllTextAtomic(string path, string contents) => inner.WriteAllTextAtomic(path, contents);
 
     public void CreateDirectory(string path) => inner.CreateDirectory(path);
+
+    public IReadOnlyList<string> EnumerateFiles(string path) => inner.EnumerateFiles(path);
+
+    public void CopyFile(string source, string destination) => inner.CopyFile(source, destination);
+
+    public void MoveDirectory(string source, string destination) => inner.MoveDirectory(source, destination);
+
+    public void DeleteDirectory(string path, bool recursive) => inner.DeleteDirectory(path, recursive);
   }
 }

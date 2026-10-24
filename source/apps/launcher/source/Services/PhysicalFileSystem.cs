@@ -19,6 +19,11 @@ public sealed class PhysicalFileSystem : IFileSystem
             ? Directory.GetDirectories(path).OrderBy(directory => directory, StringComparer.Ordinal).ToArray()
             : [];
 
+    public IReadOnlyList<string> EnumerateFiles(string path) =>
+        Directory.Exists(path)
+            ? Directory.GetFiles(path).OrderBy(file => file, StringComparer.Ordinal).ToArray()
+            : [];
+
     public string ReadAllText(string path) => File.ReadAllText(path, Utf8NoBom);
 
     public void WriteAllTextAtomic(string path, string contents)
@@ -38,6 +43,16 @@ public sealed class PhysicalFileSystem : IFileSystem
     }
 
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
+
+    public void CopyFile(string source, string destination)
+    {
+        File.Copy(source, destination, overwrite: false);
+        File.SetAttributes(destination, File.GetAttributes(destination) & ~FileAttributes.ReadOnly);
+    }
+
+    public void MoveDirectory(string source, string destination) => Directory.Move(source, destination);
+
+    public void DeleteDirectory(string path, bool recursive) => Directory.Delete(path, recursive);
 
     private static void DeleteQuietly(string path)
     {

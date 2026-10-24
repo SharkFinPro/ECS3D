@@ -24,6 +24,14 @@ internal sealed class PresentFileSystem : IFileSystem
 
   public void WriteAllTextAtomic(string path, string contents) => throw new NotSupportedException();
 
+  public IReadOnlyList<string> EnumerateFiles(string path) => [];
+
+  public void CopyFile(string source, string destination) => throw new NotSupportedException();
+
+  public void MoveDirectory(string source, string destination) => throw new NotSupportedException();
+
+  public void DeleteDirectory(string path, bool recursive) => throw new NotSupportedException();
+
   public void CreateDirectory(string path) => throw new NotSupportedException();
 }
 
@@ -58,6 +66,14 @@ internal sealed class ProjectTreeFileSystem : IFileSystem
   public string ReadAllText(string path) => throw new NotSupportedException();
 
   public void WriteAllTextAtomic(string path, string contents) => throw new NotSupportedException();
+
+  public IReadOnlyList<string> EnumerateFiles(string path) => [];
+
+  public void CopyFile(string source, string destination) => throw new NotSupportedException();
+
+  public void MoveDirectory(string source, string destination) => throw new NotSupportedException();
+
+  public void DeleteDirectory(string path, bool recursive) => throw new NotSupportedException();
 
   public void CreateDirectory(string path) => throw new NotSupportedException();
 }
