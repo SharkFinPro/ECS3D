@@ -145,7 +145,7 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
       var dialog = shown.Dialog;
       var create = ButtonOf(dialog, vm.CreateCommand);
       var preview = Path.Combine(Projects, "First-Person", "project.ecs3d");
-      Assert.True(create.IsEnabled);
+      Assert.True(create.IsEffectivelyEnabled);
       Assert.Contains(All<TextBlock>(dialog), block => block.Text == preview);
       Assert.True(shown.NameError.Classes.Contains("error"));
       Assert.False(shown.NameError.IsEffectivelyVisible);
@@ -154,13 +154,13 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
 
       Assert.True(shown.NameError.IsEffectivelyVisible);
       Assert.Equal(NameRequired, shown.NameError.Text);
-      Assert.False(create.IsEnabled);
+      Assert.False(create.IsEffectivelyEnabled);
       Assert.DoesNotContain(All<TextBlock>(dialog), block => block.Text == preview);
 
       shown.NameBox.Text = "Fine";
 
       Assert.False(shown.NameError.IsEffectivelyVisible);
-      Assert.True(create.IsEnabled);
+      Assert.True(create.IsEffectivelyEnabled);
     });
   }
 
@@ -173,19 +173,19 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
       using var shown = Show(vm);
       var create = ButtonOf(shown.Dialog, vm.CreateCommand);
       Assert.False(shown.LocationError.IsEffectivelyVisible);
-      Assert.True(create.IsEnabled);
+      Assert.True(create.IsEffectivelyEnabled);
 
       shown.LocationBox.Text = "";
 
       Assert.True(shown.LocationError.Classes.Contains("error"));
       Assert.True(shown.LocationError.IsEffectivelyVisible);
       Assert.Equal("Enter a location.", shown.LocationError.Text);
-      Assert.False(create.IsEnabled);
+      Assert.False(create.IsEffectivelyEnabled);
 
       shown.LocationBox.Text = Projects;
 
       Assert.False(shown.LocationError.IsEffectivelyVisible);
-      Assert.True(create.IsEnabled);
+      Assert.True(create.IsEffectivelyEnabled);
     });
   }
 
@@ -221,7 +221,7 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
       var cancel = ButtonOf(dialog, vm.CancelCommand);
       var progress = All<ProgressBar>(dialog).Single();
       Assert.True(shown.NameBox.IsEffectivelyEnabled);
-      Assert.True(cancel.IsEnabled);
+      Assert.True(cancel.IsEffectivelyEnabled);
       Assert.False(progress.IsEffectivelyVisible);
 
       create.Command!.Execute(null);
@@ -229,8 +229,8 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
       Assert.NotNull(pending);
       Assert.False(shown.NameBox.IsEffectivelyEnabled);
       Assert.False(box.IsEffectivelyEnabled);
-      Assert.False(create.IsEnabled);
-      Assert.False(cancel.IsEnabled);
+      Assert.False(create.IsEffectivelyEnabled);
+      Assert.False(cancel.IsEffectivelyEnabled);
       Assert.True(progress.IsEffectivelyVisible);
 
       pending!();
