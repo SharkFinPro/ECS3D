@@ -350,6 +350,7 @@ public class LauncherSamplesTabTests
     Assert.Contains("ECS3DClient", notice.Message);
   }
 
+  // The catalog reads the rig's file system; the shell and creator use the separate in-memory tree that holds the copy.
   private MainWindowViewModel NewCopyMain(MemoryTreeFileSystem files)
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
@@ -403,6 +404,24 @@ public class LauncherSamplesTabTests
 
     Assert.Same(first, model.NewProject);
     Assert.Equal("Coin Rush", model.NewProject!.ProjectName);
+  }
+
+  [Fact]
+  public void CreatingACopyWithTheEditorBoxCheckedLaunchesTheEditorAndRecordsTheSample()
+  {
+    var model = NewCopyMain(new MemoryTreeFileSystem());
+    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Coin Rush"));
+    Assert.True(model.NewProject!.OpenInEditor);
+
+    model.NewProject.CreateCommand.Execute(null);
+
+    var copy = Path.Combine(LauncherRig.DefaultProjects, "Coin Rush");
+    var launch = Assert.Single(_runner.Launches);
+    Assert.EndsWith("ECS3DEditor", launch.FileName);
+    Assert.Equal(new[] { "--project", copy }, launch.Arguments.ToArray());
+    var entry = Assert.Single(
+      (JsonArray)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!["projects"]!);
+    Assert.Equal("rush", (string)entry!["template"]!);
   }
 
   [Fact]

@@ -40,6 +40,7 @@
   `ECS3DClient --project <shipped folder>`. Open a copy opens the New Project dialog for that sample
   (named after it, the same `ProjectCreator` copy a template gets, always available) and records the sample's id, so
   the shipped folder is never edited.
+  The Samples Host button is not built yet.
   Hosting is real: a project card's "Host a game..." starts `ECS3DServer` through `HostSession` (after asking whether to
   stop a game that is already running), opens the hosting panel (running time, `address : port` rows with Copy, firewall
   note, Open another game window, Stop server, Hide) and shows a green pill naming the hosted project in the sidebar that
@@ -129,7 +130,7 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - Read this file before changing the launcher. You should **not** need the root `AGENTS.md` or any C++
   engine knowledge for launcher work.
 - Engine location and launching, settings, the recent-projects store, the template catalog and project creation
-  are real. When asked to "load projects" and the like, confirm
+  are real; the Samples Host button is not. When asked to "load projects" and the like, confirm
   whether the task is to build the missing service and its wiring or to extend the mock UI.
 - Keep the MVVM split clean: no app logic in code-behind, no view construction in view models.
 - Add UI dependencies via `PackageReference` in `ECS3DLauncher.csproj`; keep Debug-only tooling under the
