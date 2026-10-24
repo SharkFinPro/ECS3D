@@ -158,7 +158,7 @@ public class MainWindowViewModel : ObservableObject
     public bool HasPrompt => Prompt is not null;
 
     // The window behind a modal overlay takes no input.
-    public bool IsBackgroundEnabled => !HasPrompt && !Hosting.IsPanelOpen;
+    public bool IsBackgroundEnabled => !HasPrompt && JoinDialog is null && !Hosting.IsPanelOpen;
     // The open Join a game dialog, or null.
     public JoinDialogViewModel? JoinDialog
     {
