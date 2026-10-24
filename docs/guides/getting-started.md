@@ -28,9 +28,9 @@ Settings page. There you can point the launcher at a different engine folder, ch
 projects and choose whether the editor and its server open a console window. The launcher saves automatically, and
 a text field saves when you leave it.
 
-The sidebar lists Projects, Templates, Samples and Learn. On first run the Projects page has no projects yet and shows
-three cards instead: Explore the engine, Start a project and Try a sample. Explore the engine opens the editor on the built-in Welcome
-scene. That project is unsaved, so nothing is written until you choose to save it.
+The sidebar lists Projects, Templates, Samples and Learn. On first run the Projects page has no projects yet
+and shows three cards instead: Explore the engine, Start a project and Try a sample. Explore the engine opens the
+editor on the built-in Welcome scene. That project is unsaved, so nothing is written until you choose to save it.
 
 ## Start a project from the First-Person template
 
