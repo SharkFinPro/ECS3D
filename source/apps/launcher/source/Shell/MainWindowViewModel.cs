@@ -45,7 +45,7 @@ public class MainWindowViewModel : ObservableObject
     public ObservableCollection<NavItemViewModel> NavItems { get; }
 
     public ProjectsViewModel Projects { get; }
-    public TemplatesViewModel Templates { get; } = new();
+    public TemplatesViewModel Templates { get; }
     public SamplesViewModel Samples { get; }
     public LearnViewModel Learn { get; }
     public SettingsViewModel Settings { get; }
@@ -102,6 +102,7 @@ public class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _searchText, value))
             {
                 Projects.SearchText = value;
+                Templates.SearchText = value;
                 Samples.SearchText = value;
                 Learn.SearchText = value;
             }
@@ -271,8 +272,9 @@ public class MainWindowViewModel : ObservableObject
         };
         Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip, _actions.Play.Tooltip);
         Refresh();
+        Templates = new TemplatesViewModel(version, loadThumbnail);
         Samples = new SamplesViewModel(PlaySampleCommand, _actions.Play.Tooltip, loadThumbnail);
-        Samples.Reload(_catalog.Load(_engine.Folder));
+        ReloadCatalog(_engine);
 
         Learn = new LearnViewModel(
             url => _ = OpenUrlAsync(url),
@@ -283,7 +285,7 @@ public class MainWindowViewModel : ObservableObject
         NavItems =
         [
             new() { Key = "projects",  Label = "Projects",  Icon = "IconFolder", Count = ProjectCount() },
-            new() { Key = "templates", Label = "Templates", Icon = "IconLayers" },
+            new() { Key = "templates", Label = "Templates", Icon = "IconLayers", Count = TemplateCount() },
             new() { Key = "samples",   Label = "Samples",   Icon = "IconSparkle", Count = SampleCount() },
             new() { Key = "learn",     Label = "Learn",     Icon = "IconBook" },
         ];
@@ -360,11 +362,20 @@ public class MainWindowViewModel : ObservableObject
         OpenProjectCommand.NotifyCanExecuteChanged();
         PlayProjectCommand.NotifyCanExecuteChanged();
         Samples.UpdatePlay(_actions.Play.Tooltip);
-        Samples.Reload(_catalog.Load(engine.Folder));
+        ReloadCatalog(engine);
+        TemplatesNavItem.Count = TemplateCount();
         SamplesNavItem.Count = SampleCount();
         PlaySampleCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(EngineBannerText));
         OnPropertyChanged(nameof(HasEngineBanner));
+    }
+
+    // One read of the engine's templates folder feeds both tabs.
+    private void ReloadCatalog(EngineLocation engine)
+    {
+        var contents = _catalog.Load(engine.Folder);
+        Templates.Reload(contents);
+        Samples.Reload(contents);
     }
 
     // ----- Derived view state: the header table, per tab -----
@@ -380,6 +391,10 @@ public class MainWindowViewModel : ObservableObject
     private TabHeader Header => LauncherTabs.Header(LauncherTabs.Parse(ActiveNav), Projects.IsEmpty);
 
     private string ProjectCount() => Projects.Projects.Count.ToString();
+
+    private NavItemViewModel TemplatesNavItem => NavItems.Single(item => item.Key == "templates");
+
+    private string TemplateCount() => Templates.Templates.Count.ToString();
 
     private NavItemViewModel SamplesNavItem => NavItems.Single(item => item.Key == "samples");
 
