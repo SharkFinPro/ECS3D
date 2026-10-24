@@ -13,7 +13,7 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
   private readonly List<TaskCompletionSource> _delays = [];
   private readonly List<(Func<TargetCheck> Work, TaskCompletionSource<TargetCheck> Done)> _checks = [];
 
-  private Task WaitedDelay(TimeSpan _)
+  private Task WaitedDelay()
   {
     var gate = new TaskCompletionSource();
     _delays.Add(gate);
@@ -29,7 +29,7 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
 
   private NewProjectViewModel NewHeldDialog(Action<Action>? background = null)
   {
-    var dialog = NewDialog(background: background, delay: WaitedDelay, runCheck: HeldCheck);
+    var dialog = NewDialog(background: background, delay: _ => WaitedDelay(), runCheck: HeldCheck);
     FinishDelays();
     FinishChecks();
     return dialog;
