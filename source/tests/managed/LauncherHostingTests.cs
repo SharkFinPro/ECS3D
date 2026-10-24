@@ -541,4 +541,19 @@ public class LauncherHostingTests
     Assert.True(rig.Main.IsBackgroundEnabled);
     Assert.True(rig.Hosting.IsHosting);
   }
+
+  [Fact]
+  public void EscapeClosesTheJoinDialogAndTheWindowBehindItIsDisabledWhileItIsOpen()
+  {
+    var rig = new Rig();
+
+    rig.Main.OpenJoinCommand.Execute(null);
+    Assert.NotNull(rig.Main.JoinDialog);
+    Assert.False(rig.Main.IsBackgroundEnabled);
+
+    rig.Main.CloseOverlayCommand.Execute(null);
+
+    Assert.Null(rig.Main.JoinDialog);
+    Assert.True(rig.Main.IsBackgroundEnabled);
+  }
 }

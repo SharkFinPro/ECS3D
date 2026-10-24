@@ -38,9 +38,12 @@
   stop a game that is already running), opens the hosting panel (running time, `address : port` rows with Copy, firewall
   note, Open another game window, Stop server, Hide) and shows a green pill naming the hosted project in the sidebar that
   reopens it. A server that exits on its own closes the panel and toasts the code and `server.log`. The Samples Host
-  button, the Join dialog and the quit prompt are not built yet.
+  button and the quit prompt are not built yet.
   The Learn tab is real: six guide cards from `LearnCatalog` that open on GitHub in the browser, plus a "What's
   in the box" banner.
+  The sidebar's Play section has a Join a game button: it opens an in-window dialog (`JoinDialogViewModel`) for the
+  host address and port, runs `ECS3DClient --host <address> --port <port>`, and saves the last join. Escape closes
+  the Join dialog, the question prompt or the hosting panel, and the window behind them is disabled.
   "Close the launcher after opening a project" is saved but not honored yet.
 - Ships as a single-file `ECS3DLauncher.exe` beside the C++ executables in `bin/`. It is
   **framework-dependent** (shares the machine's installed .NET 10) and does **not** boot the CLR the way
@@ -54,7 +57,7 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 |------|----------------|
 | `source/Program.cs` | Avalonia entry point (`BuildAvaloniaApp`). Minimal — no app logic. |
 | `source/App.axaml{,.cs}` | Application composition: merges `Theme.axaml` + `Icons.axaml` resources and `AppStyles.axaml`; sets the dark `FluentTheme`; creates the single `MainWindow` with its `MainWindowViewModel`. Attaches Avalonia DevTools (F12) in DEBUG only. |
-| `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the question prompt, the Explore/Open commands), `NavItemViewModel`, `HostingViewModel` (the hosted game's session, panel and pill), `HostPanelViewModel`, `ConfirmPromptViewModel`. |
+| `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the question prompt, the Explore/Open commands), `NavItemViewModel`, `JoinDialogViewModel`, `HostingViewModel` (the hosted game's session, panel and pill), `HostPanelViewModel`, `ConfirmPromptViewModel`. |
 | `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch (e.g. Projects → Templates). |
 | `source/Services/` | UI-free services behind interfaces (`EngineLocator`, `EngineLauncher`, `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `IFileSystem`, `ILauncherLog`/`FileLauncherLog`, `LauncherSettings`/`LauncherSettingsStore`, `SettingsInput`, `EnginePorts`, `HostSession`, `IPortProbe`/`TcpPortProbe`, `LauncherTabs`, `EngineActions`, `EarlyExitNotice`, `LaunchCoordinator`, `VersionLabel`, `SearchMatch`, `INetworkInfo`/`SystemNetworkInfo`/`LanAddresses`, `JoinTarget`, `RecentProjectsStore` (the launcher side of `recent-projects.json`), `RecentProjectsView` (order, search, missing check and Edited text of that list), `ProjectPathKind` (classifies an Open existing... choice: folder, `project.ecs3d` or legacy `.json`), `RunningEditors` (editors started per project, for the In editor badge), `TemplateCatalog`/`TemplateManifest`, `ProjectCreator` (copies a template into a new project folder: hidden `.<name>.creating` copy, object-uuid rewrite, rename as the commit), `LearnCatalog` (the Learn tab's guides and shipped-content counts), `EngineVersion`, `ProjectNameRules`, `HostingServices` (network info and session factory for hosting), `SettingsEditor` - the Settings tab's decisions: apply, validate, re-locate and save). No Avalonia types. |
 | `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `SampleCard`, `TemplateCard` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`, `CardMenu` - opens a card's context menu from its ... button), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
@@ -117,7 +120,7 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - Read this file before changing the launcher. You should **not** need the root `AGENTS.md` or any C++
   engine knowledge for launcher work.
 - Engine location and launching, settings, the recent-projects store and the template catalog (Samples tab) are
-  real; the Join dialog, the Samples Host button and the quit prompt are not, and project creation has its service but no New Project dialog yet. When asked to "load projects" and the like, confirm
+  real; the Samples Host button and the quit prompt are not, and project creation has its service but no New Project dialog yet. When asked to "load projects" and the like, confirm
   whether the task is to build the missing service and its wiring or to extend the mock UI.
 - Keep the MVVM split clean: no app logic in code-behind, no view construction in view models.
 - Add UI dependencies via `PackageReference` in `ECS3DLauncher.csproj`; keep Debug-only tooling under the
