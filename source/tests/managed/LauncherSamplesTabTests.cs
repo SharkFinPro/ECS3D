@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
 using ECS3DLauncher.Services;
@@ -347,5 +348,102 @@ public class LauncherSamplesTabTests
     var notice = Assert.Single(exitRecorder.Notices);
     Assert.Equal(ShellFixtures.ExpectedLog("client"), notice.LogPath);
     Assert.Contains("ECS3DClient", notice.Message);
+  }
+
+  // The catalog reads the rig's file system; the shell and creator use the separate in-memory tree that holds the copy.
+  private MainWindowViewModel NewCopyMain(MemoryTreeFileSystem files)
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    AddStandardEntries(LauncherRig.LauncherDir);
+    var folder = FolderOf(LauncherRig.LauncherDir, "rush");
+    files.Seed(Path.Combine(folder, "template.json"), "{}");
+    files.Seed(Path.Combine(folder, "project.ecs3d"), "{\"assets\":{\"scenes\":[{\"objects\":[{\"uuid\":\"a\",\"children\":[]}]}]}}");
+    var counter = 0;
+    return new MainWindowViewModel(
+      _rig.NewEditor(),
+      _rig.NewRecents(),
+      _runner,
+      new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
+      _rig.NewCatalog(),
+      _ => null,
+      "1.2.3",
+      action => action(),
+      () => _rig.Time.Now,
+      files,
+      work => work(),
+      new ProjectCreator(files, _rig.Log, () => new Guid($"00000000-0000-0000-0000-{++counter:D12}")));
+  }
+
+  [Fact]
+  public void OpenACopyOpensNewProjectNamedAfterTheSample()
+  {
+    var model = NewCopyMain(new MemoryTreeFileSystem());
+    var card = model.Samples.Samples.Single(item => item.Name == "Coin Rush");
+
+    Assert.Equal("rush", card.Id);
+    Assert.True(model.Samples.OpenCopyCommand.CanExecute(card));
+    model.Samples.OpenCopyCommand.Execute(card);
+
+    Assert.NotNull(model.NewProject);
+    Assert.Equal("Coin Rush", model.NewProject.ProjectName);
+    Assert.False(model.IsInteractive);
+  }
+
+  [Fact]
+  public void OpenACopyDoesNothingForNoCardOrWhileTheDialogIsOpen()
+  {
+    var model = NewCopyMain(new MemoryTreeFileSystem());
+    model.Samples.OpenCopyCommand.Execute(null);
+    Assert.Null(model.NewProject);
+
+    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Coin Rush"));
+    var first = model.NewProject;
+    Assert.NotNull(first);
+
+    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Physics Playground"));
+
+    Assert.Same(first, model.NewProject);
+    Assert.Equal("Coin Rush", model.NewProject!.ProjectName);
+  }
+
+  [Fact]
+  public void CreatingACopyWithTheEditorBoxCheckedLaunchesTheEditorAndRecordsTheSample()
+  {
+    var model = NewCopyMain(new MemoryTreeFileSystem());
+    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Coin Rush"));
+    Assert.True(model.NewProject!.OpenInEditor);
+
+    model.NewProject.CreateCommand.Execute(null);
+
+    var copy = Path.Combine(LauncherRig.DefaultProjects, "Coin Rush");
+    var launch = Assert.Single(_runner.Launches);
+    Assert.EndsWith("ECS3DEditor", launch.FileName);
+    Assert.Equal(new[] { "--project", copy }, launch.Arguments.ToArray());
+    var entry = Assert.Single(
+      (JsonArray)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!["projects"]!);
+    Assert.Equal("rush", (string)entry!["template"]!);
+  }
+
+  [Fact]
+  public void CreatingACopyWritesToTheChosenLocationAndRecordsTheSample()
+  {
+    var files = new MemoryTreeFileSystem();
+    var model = NewCopyMain(files);
+    var shipped = FolderOf(LauncherRig.LauncherDir, "rush");
+    var before = files.EnumerateFiles(shipped).OrderBy(path => path).ToArray();
+    Assert.NotEmpty(before);
+    model.Samples.OpenCopyCommand.Execute(model.Samples.Samples.Single(item => item.Name == "Coin Rush"));
+    model.NewProject!.OpenInEditor = false;
+
+    model.NewProject.CreateCommand.Execute(null);
+
+    var copy = Path.Combine(LauncherRig.DefaultProjects, "Coin Rush");
+    Assert.Null(model.NewProject);
+    Assert.True(files.FileExists(Path.Combine(copy, "project.ecs3d")));
+    Assert.Equal(before, files.EnumerateFiles(shipped).OrderBy(path => path).ToArray());
+    var entry = Assert.Single(
+      (JsonArray)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!["projects"]!);
+    Assert.Equal(copy, (string)entry!["path"]!);
+    Assert.Equal("rush", (string)entry["template"]!);
   }
 }
