@@ -8,7 +8,6 @@ using ECS3DLauncher.Services;
 using ECS3DLauncher.Shared.Converters;
 using ECS3DLauncher.Shared.Models;
 using ECS3DLauncher.Shell;
-using ECS3DLauncher.Tabs.Templates;
 using Xunit;
 
 namespace ECS3DManagedTests;
@@ -47,17 +46,7 @@ public class LauncherTabViewModelTests
   }
 
   [Fact]
-  public void EveryTemplateHasADistinctNameAndADescription()
-  {
-    var templates = new TemplatesViewModel().Templates;
-
-    Assert.NotEmpty(templates);
-    Assert.Equal(templates.Count, templates.Select(template => template.Name).Distinct().Count());
-    Assert.All(templates, template => Assert.False(string.IsNullOrWhiteSpace(template.Description)));
-  }
-
-  [Fact]
-  public void EveryIconKeyTheShellAndTemplatesUseIsDefined()
+  public void EveryIconKeyTheShellUsesIsDefined()
   {
     var keys = IconKeys();
     var rig = new LauncherRig();
@@ -72,7 +61,6 @@ public class LauncherTabViewModelTests
       action => action(),
       () => rig.Time.Now);
     var used = shell.NavItems.Select(item => item.Icon)
-      .Concat(shell.Templates.Templates.Select(template => template.Icon))
       .Append(new Project { Name = "", Path = "", Edited = "" }.PlaceholderIcon)
       .Distinct()
       .ToArray();
