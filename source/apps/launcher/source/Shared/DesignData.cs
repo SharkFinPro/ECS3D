@@ -36,7 +36,33 @@ public static class DesignData
             },
         ]);
 
-    public static TemplatesViewModel Templates { get; } = new();
+    public static TemplatesViewModel Templates { get; } = NewTemplates();
+
+    private static TemplatesViewModel NewTemplates()
+    {
+        var model = new TemplatesViewModel("0.1.0", _ => null);
+        var empty = new TemplateManifest(
+            "empty_3d", "Empty 3D", "A blank scene with one camera and a directional light.",
+            "template", ["starter"], "thumbnail.png", "Main", "0.1.0");
+        var arena = new TemplateManifest(
+            "arena", "Arena", "A small multiplayer arena with spawn points.",
+            "template", ["multiplayer"], "thumbnail.png", "Main", "0.1.0")
+        {
+            Players = new TemplatePlayers(1, 4),
+        };
+        var future = new TemplateManifest(
+            "future", "Future Template", "Needs an engine that has not shipped yet.",
+            "template", ["preview"], "thumbnail.png", "Main", "9.0.0");
+        model.Reload(new TemplateCatalogContents(
+            "C:/ECS3D/templates", true,
+            [
+                new TemplateEntry(empty, "C:/ECS3D/templates/empty_3d", null),
+                new TemplateEntry(arena, "C:/ECS3D/templates/arena", null),
+                new TemplateEntry(future, "C:/ECS3D/templates/future", null),
+            ],
+            []));
+        return model;
+    }
 
     public static SamplesViewModel Samples { get; } = NewSamples();
 

@@ -28,8 +28,9 @@
   "Folder not found" and offers Locate (pick the new folder) and Remove instead of Open. The check runs on every
   refresh. Open existing... in the Projects header records a project folder (via its `project.ecs3d`) or a legacy
   `.json` file and opens it. While an editor the launcher started is running, its card shows "In editor"
-  (`RunningEditors`, counted per project; the launcher never kills an editor). The Templates tab still shows
-  hardcoded cards. The Samples tab is
+  (`RunningEditors`, counted per project; the launcher never kills an editor). The Templates tab is real: each
+  `template` entry of `TemplateCatalog` is a card, gated by `minEngineVersion` and filtered by the header search;
+  clicking one does nothing until the New Project dialog lands. The Samples tab is
   real: `TemplateCatalog` reads `<engine>/templates`, each `sample` becomes a card, the header search filters them,
   and Play runs `ECS3DClient --project <shipped folder>`. Host and Open a copy are not built yet.
   `ProjectCreator` copies a template into a new project folder; the New Project dialog that uses it is not built yet.
@@ -51,7 +52,7 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 | `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the Explore/Open commands), `NavItemViewModel`. |
 | `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch (e.g. Projects → Templates). |
 | `source/Services/` | UI-free services behind interfaces (`EngineLocator`, `EngineLauncher`, `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `IFileSystem`, `ILauncherLog`/`FileLauncherLog`, `LauncherSettings`/`LauncherSettingsStore`, `SettingsInput`, `EnginePorts`, `HostSession`, `IPortProbe`/`TcpPortProbe`, `LauncherTabs`, `EngineActions`, `EarlyExitNotice`, `LaunchCoordinator`, `VersionLabel`, `SearchMatch`, `INetworkInfo`/`SystemNetworkInfo`/`LanAddresses`, `JoinTarget`, `RecentProjectsStore` (the launcher side of `recent-projects.json`), `RecentProjectsView` (order, search, missing check and Edited text of that list), `ProjectPathKind` (classifies an Open existing... choice: folder, `project.ecs3d` or legacy `.json`), `RunningEditors` (editors started per project, for the In editor badge), `TemplateCatalog`/`TemplateManifest`, `ProjectCreator` (copies a template into a new project folder: hidden `.<name>.creating` copy, object-uuid rewrite, rename as the commit), `LearnCatalog` (the Learn tab's guides and shipped-content counts), `EngineVersion`, `ProjectNameRules`, `SettingsEditor` - the Settings tab's decisions: apply, validate, re-locate and save). No Avalonia types. |
-| `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `ProjectTemplate`, `SampleCard` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`, `CardMenu` - opens a card's context menu from its ... button), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
+| `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `SampleCard`, `TemplateCard` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`, `CardMenu` - opens a card's context menu from its ... button), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
 | `source/Assets/` | Bundled `AvaloniaResource`s: `Fonts/` (Geist, GeistMono) and `scene_render.png`. |
 
 **Shared files:** `recent-projects.json` is also written by the editor; its schema is in

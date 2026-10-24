@@ -51,11 +51,3 @@ public sealed class Project
             },
         };
 }
-
-// A starter template card.
-public sealed class ProjectTemplate
-{
-    public required string Name { get; init; }
-    public required string Description { get; init; }
-    public required string Icon { get; init; }
-}
