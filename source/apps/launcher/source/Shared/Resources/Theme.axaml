@@ -23,6 +23,7 @@
     <SolidColorBrush x:Key="DangerBrush"   Color="#E5565B" />
     <SolidColorBrush x:Key="DangerDim"     Color="#26E5565B" />
     <SolidColorBrush x:Key="OkBrush"       Color="#4ADE80" />
+    <SolidColorBrush x:Key="OkDim"         Color="#264ADE80" />
     <SolidColorBrush x:Key="ScrimBrush"    Color="#A60A0B0D" />
 
     <!-- Diagonal hatch used behind placeholder thumbnails -->

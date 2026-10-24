@@ -113,6 +113,11 @@
                                               CommandParameter="{Binding}"
                                               ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
                                               ToolTip.ShowOnDisabled="True" />
+                                    <MenuItem Header="Host a game..."
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).HostProjectCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}"
+                                              ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).HostTooltip, FallbackValue={x:Null}}"
+                                              ToolTip.ShowOnDisabled="True" />
                                     <MenuItem Header="Show in folder"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}" />
@@ -249,6 +254,11 @@
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
+                                              ToolTip.ShowOnDisabled="True" />
+                                    <MenuItem Header="Host a game..."
+                                              Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).HostProjectCommand, FallbackValue={x:Null}}"
+                                              CommandParameter="{Binding}"
+                                              ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).HostTooltip, FallbackValue={x:Null}}"
                                               ToolTip.ShowOnDisabled="True" />
                                     <MenuItem Header="Show in folder"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"

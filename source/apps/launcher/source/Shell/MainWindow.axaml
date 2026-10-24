@@ -23,7 +23,7 @@
         WindowDecorations="None">
 
     <Window.KeyBindings>
-        <KeyBinding Gesture="Escape" Command="{Binding CloseJoinCommand}" />
+        <KeyBinding Gesture="Escape" Command="{Binding CloseOverlayCommand}" />
     </Window.KeyBindings>
 
     <Grid Name="Root" Focusable="True" RowDefinitions="42,*">
@@ -86,8 +86,7 @@
         </Border>
 
         <!-- ===== BODY ===== -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*"
-              IsEnabled="{Binding JoinDialog, Converter={x:Static ObjectConverters.IsNull}}">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" IsEnabled="{Binding IsBackgroundEnabled}">
 
             <!-- ===== SIDEBAR ===== -->
             <Border Grid.Column="0" Width="212" IsEnabled="{Binding IsInteractive}" Background="{StaticResource PanelBrush}"
@@ -110,6 +109,27 @@
                                        Margin="11,0,0,0" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
+
+                    <!-- Hosting: the starting line and the green pill that reopens the panel, above Settings -->
+                    <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding Hosting.StartingText}" IsVisible="{Binding Hosting.IsStarting}"
+                                   Margin="10,0" FontSize="12" Foreground="{StaticResource T2Brush}" />
+                        <Button Theme="{StaticResource BareButton}" HorizontalAlignment="Stretch"
+                                IsVisible="{Binding Hosting.IsHosting}"
+                                Command="{Binding Hosting.ShowPanelCommand}"
+                                ToolTip.Tip="Show the hosting panel">
+                            <Border CornerRadius="8" Padding="11,8" Background="{StaticResource OkDim}"
+                                    BorderBrush="{StaticResource OkBrush}" BorderThickness="1">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Hosting.PillText}" FontWeight="SemiBold"
+                                               Foreground="{StaticResource OkBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Hosting.PillAddress}" FontSize="11"
+                                               FontFamily="{StaticResource MonoFontFamily}"
+                                               Foreground="{StaticResource T2Brush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Border>
+                        </Button>
+                    </StackPanel>
 
                     <!-- Nav items -->
                     <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding NavItems}">
@@ -259,27 +279,6 @@
                         </ContentControl.DataTemplates>
                     </ContentControl>
                 </ScrollViewer>
-
-                <!-- Toast: start failures and early exits, bottom right over the content -->
-                <Border Grid.Row="2" IsVisible="{Binding HasToast}" Width="360" Padding="14"
-                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,24"
-                        CornerRadius="10" Background="{StaticResource PanelBrush}"
-                        BorderBrush="{StaticResource DangerBrush}" BorderThickness="1">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel Grid.Column="0" Spacing="10">
-                            <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" />
-                            <Button Classes="secondary" Theme="{StaticResource BareButton}"
-                                    HorizontalAlignment="Left" Content="Open logs"
-                                    IsVisible="{Binding HasToastLog}"
-                                    Command="{Binding OpenLogsCommand}" />
-                        </StackPanel>
-                        <Button Grid.Column="1" Classes="win" Theme="{StaticResource BareButton}"
-                                VerticalAlignment="Top" Margin="8,-6,-6,0"
-                                Command="{Binding DismissToastCommand}" ToolTip.Tip="Dismiss">
-                            <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
-                        </Button>
-                    </Grid>
-                </Border>
             </Grid>
 
             <!-- ===== NEW PROJECT DIALOG: modal over the body; the title bar stays usable ===== -->
@@ -295,6 +294,86 @@
                 </ContentControl>
             </Grid>
         </Grid>
+
+        <!-- Hosting panel -->
+        <Border Grid.Row="1" IsVisible="{Binding Hosting.IsPanelOpen}" Background="#B0000000">
+            <Border DataContext="{Binding Hosting.Panel}" x:DataType="shell:HostPanelViewModel"
+                    Width="480" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    CornerRadius="12" Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="Bold"
+                                   Foreground="{StaticResource OkBrush}" />
+                        <TextBlock Text="{Binding RunningText}" Foreground="{StaticResource T2Brush}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="ADDRESSES TO SHARE" FontSize="11" FontWeight="SemiBold" LetterSpacing="1"
+                                   Foreground="{StaticResource T3Brush}" />
+                        <TextBlock Text="No network address was found. Friends on this computer can join 127.0.0.1."
+                                   IsVisible="{Binding HasNoAddresses}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource T2Brush}" />
+                        <ItemsControl ItemsSource="{Binding Addresses}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="shell:HostAddressRow">
+                                    <Grid ColumnDefinitions="90,*,Auto" Margin="0,0,0,6">
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource T2Brush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Text}" VerticalAlignment="Center"
+                                                   FontFamily="{StaticResource MonoFontFamily}" />
+                                        <Button Grid.Column="2" Classes="secondary" Theme="{StaticResource BareButton}"
+                                                Content="Copy" Command="{Binding CopyCommand}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding FirewallNote}" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{StaticResource T2Brush}" />
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding PortText}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource T2Brush}" />
+                        <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
+                                Content="Open Settings" Command="{Binding OpenSettingsCommand}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                        <Button Grid.Column="0" Classes="secondary" Theme="{StaticResource BareButton}"
+                                Content="Open another game window" Command="{Binding OpenWindowCommand}" />
+                        <Button Grid.Column="2" Classes="secondary" Theme="{StaticResource BareButton}"
+                                Content="Stop server" Margin="0,0,8,0" Command="{Binding StopCommand}" />
+                        <Button Grid.Column="3" Classes="cta" Theme="{StaticResource BareButton}"
+                                IsDefault="True" Command="{Binding HideCommand}">
+                            <TextBlock Text="Hide" FontWeight="Bold" Foreground="{StaticResource AccText}" />
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- Question -->
+        <Border Grid.Row="1" IsVisible="{Binding HasPrompt}" Background="#B0000000">
+            <Border DataContext="{Binding Prompt}" x:DataType="shell:ConfirmPromptViewModel"
+                    Width="420" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    CornerRadius="12" Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="Bold" />
+                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{StaticResource T2Brush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button Classes="secondary" Theme="{StaticResource BareButton}"
+                                Content="{Binding CancelLabel}" Command="{Binding CancelCommand}" />
+                        <Button Classes="cta" Theme="{StaticResource BareButton}" Command="{Binding ConfirmCommand}">
+                            <TextBlock Text="{Binding ConfirmLabel}" FontWeight="Bold"
+                                       Foreground="{StaticResource AccText}" />
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
 
         <!-- Join a game dialog: dims the window while a view model is set -->
         <Border Grid.Row="1" Background="#99000000"
@@ -329,6 +408,27 @@
                     </DataTemplate>
                 </ContentControl.DataTemplates>
             </ContentControl>
+        </Border>
+
+        <!-- Toast: start failures and early exits, bottom right over everything including the overlays -->
+        <Border Grid.Row="1" IsVisible="{Binding HasToast}" Width="360" Padding="14"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,24"
+                CornerRadius="10" Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource DangerBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="10">
+                    <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" />
+                    <Button Classes="secondary" Theme="{StaticResource BareButton}"
+                            HorizontalAlignment="Left" Content="Open logs"
+                            IsVisible="{Binding HasToastLog}"
+                            Command="{Binding OpenLogsCommand}" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="win" Theme="{StaticResource BareButton}"
+                        VerticalAlignment="Top" Margin="8,-6,-6,0"
+                        Command="{Binding DismissToastCommand}" ToolTip.Tip="Dismiss">
+                    <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
+                </Button>
+            </Grid>
         </Border>
     </Grid>
 </Window>
