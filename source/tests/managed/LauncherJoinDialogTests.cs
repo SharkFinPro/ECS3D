@@ -56,12 +56,11 @@ public class LauncherJoinDialogTests
     JoinTarget? joined = null;
     var dialog = NewDialog(null, target => joined = target);
 
-    var typed = "";
-    foreach (var letter in "host:3101")
+    const string text = "host:3101";
+    for (var length = 1; length <= text.Length; length++)
     {
-      typed += letter;
-      dialog.Address = typed;
-      Assert.Equal(typed, dialog.Address);
+      dialog.Address = text[..length];
+      Assert.Equal(text[..length], dialog.Address);
       Assert.Equal("3000", dialog.PortText);
     }
 
