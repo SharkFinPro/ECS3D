@@ -14,6 +14,7 @@ namespace ECS3DManagedTests;
 public class LauncherIconTests
 {
   private const string IconPath = "source/Assets/launcher.ico";
+  private const string MarkPath = "source/Assets/launcher-mark.png";
 
   private static string Launcher() =>
     Path.Combine(typeof(LauncherIconTests).Assembly
@@ -58,6 +59,30 @@ public class LauncherIconTests
 
     var icon = (string?)MainWindow().Attribute("Icon");
     Assert.Equal($"avares://{ProjectValue("AssemblyName")}/{IconPath}", icon);
+  }
+
+  // The old mark was a Border holding a Path with IconModel; an Image whose Source is the mark file replaces it.
+  [Fact]
+  public void TitleBarMarkIsTheLauncherMarkImage()
+  {
+    var grid = MainWindow().Descendants("Grid")
+      .Single(g => (string?)g.Attribute("ColumnDefinitions") == "Auto,Auto,Auto,*,Auto,Auto");
+    var first = grid.Elements().Where(e => (string?)e.Attribute("Grid.Column") == "0").ToList();
+
+    var image = Assert.Single(first, e => e.Name.LocalName == "Image");
+    Assert.Equal($"avares://{ProjectValue("AssemblyName")}/{MarkPath}", (string?)image.Attribute("Source"));
+    Assert.DoesNotContain(first.SelectMany(e => e.DescendantsAndSelf()), e =>
+      e.Name.LocalName == "Path" && ((string?)e.Attribute("Data"))?.Contains("IconModel") == true);
+  }
+
+  [Fact]
+  public void MarkFileIsAPngInTheAssetsFolder()
+  {
+    var file = Path.Combine(Launcher(), MarkPath.Replace('/', Path.DirectorySeparatorChar));
+
+    Assert.True(File.Exists(file));
+    Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A },
+      File.ReadAllBytes(file).Take(8).ToArray());
   }
 
   [Fact]
