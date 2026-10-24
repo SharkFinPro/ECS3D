@@ -8,6 +8,7 @@
 
 class ObjectManager;
 class SceneAsset;
+class SceneManager;
 
 // Derives the EditCommand for an edit the editor is ABOUT to send, reading the before state from the
 // editor's replicated view as it stands before that edit is applied or sent. Headless and side-effect
@@ -51,8 +52,11 @@ namespace edits {
 [[nodiscard]] std::optional<EditCommand> commandForRenameAsset(const nlohmann::json& op,
                                                                const AssetRegistry& view);
 
+// A scene record carries the whole scene (SceneAsset::serialize()) as its body, so undo re-adds it with its
+// objects and scripts; nullopt when the SceneManager has no scene under the uuid.
 [[nodiscard]] std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op,
-                                                               const AssetRegistry& view);
+                                                               const AssetRegistry& view,
+                                                               const SceneManager& sceneManager);
 
 }
 

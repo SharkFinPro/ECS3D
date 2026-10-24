@@ -6,6 +6,7 @@
 #include "objects/ObjectManager.h"
 #include "objects/components/Component.h"
 #include "scenes/SceneAsset.h"
+#include "scenes/SceneManager.h"
 #include "scenes/SceneScriptEdits.h"
 #include "objects/components/Script.h"
 #include <nlohmann/json.hpp>
@@ -557,7 +558,8 @@ std::optional<EditCommand> commandForRenameAsset(const nlohmann::json& op, const
                                   stringField(op, "displayName"));
 }
 
-std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const AssetRegistry& view)
+std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const AssetRegistry& view,
+                                                 const SceneManager& sceneManager)
 {
   if (!op.is_object())
   {
@@ -574,6 +576,18 @@ std::optional<EditCommand> commandForRemoveAsset(const nlohmann::json& op, const
   if (!record)
   {
     return std::nullopt;
+  }
+
+  if (record->type == AssetType::Scene)
+  {
+    const auto scene = sceneManager.getScene(assetUUID.value());
+    if (!scene)
+    {
+      return std::nullopt;
+    }
+
+    return EditCommand::removeAsset(assetUUID.value(), record->type, record->path, record->className,
+                                    scene->serialize().dump(), record->displayName);
   }
 
   return EditCommand::removeAsset(assetUUID.value(), record->type, record->path, record->className,

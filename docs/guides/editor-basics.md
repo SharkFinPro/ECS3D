@@ -107,6 +107,9 @@ and type filter chips.
   instantiate it, or onto an object row to instantiate it as a child.
 - Selecting an asset shows it in the Inspector. Models, textures, scripts and prefabs can be renamed
   there, which changes only the display name. Prefab contents are editable in place.
+- The Inspector's Delete Asset button removes an asset after a confirmation. For a scene it also deletes the
+  scene's objects and scene scripts; Edit > Undo restores the whole scene. You can't delete the active scene
+  or a project's only scene.
 
 ## The Console panel
 

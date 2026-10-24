@@ -237,7 +237,8 @@ TEST(EditHistory, UndoAndRedoRoundTripAnAddAsset)
   const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(undoOutcome.ok());
   ASSERT_TRUE(undoOutcome.messagePayload.has_value());
-  replication::applyRemoveAsset(scene.assetRegistry, replication::unpackRemoveAsset(*undoOutcome.messagePayload));
+  replication::applyRemoveAsset(scene.assetRegistry, sceneManager,
+                                replication::unpackRemoveAsset(*undoOutcome.messagePayload));
   EXPECT_EQ(scene.assetRegistry.getByUUID(assetUUID), nullptr);
 
   const auto redoOutcome = history.redo(*scene.objectManager, &scene.assetRegistry);
@@ -280,7 +281,7 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveAsset)
   const auto assetUUID = someOtherUUID();
 
   scene.assetRegistry.registerAsset({ .uuid = assetUUID, .type = AssetType::Model, .path = "models/thing.obj" });
-  replication::applyRemoveAsset(scene.assetRegistry, replication::buildRemoveAsset(assetUUID));
+  replication::applyRemoveAsset(scene.assetRegistry, sceneManager, replication::buildRemoveAsset(assetUUID));
   ASSERT_EQ(scene.assetRegistry.getByUUID(assetUUID), nullptr);
 
   edits::EditHistory history;
@@ -296,7 +297,8 @@ TEST(EditHistory, UndoAndRedoRoundTripARemoveAsset)
   const auto redoOutcome = history.redo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(redoOutcome.ok());
   ASSERT_TRUE(redoOutcome.messagePayload.has_value());
-  replication::applyRemoveAsset(scene.assetRegistry, replication::unpackRemoveAsset(*redoOutcome.messagePayload));
+  replication::applyRemoveAsset(scene.assetRegistry, sceneManager,
+                                replication::unpackRemoveAsset(*redoOutcome.messagePayload));
   EXPECT_EQ(scene.assetRegistry.getByUUID(assetUUID), nullptr);
 }
 
@@ -314,10 +316,10 @@ TEST(EditHistory, UndoOfARemoveAssetRestoresTheDisplayName)
   ASSERT_EQ(scene.assetRegistry.getByUUID(assetUUID)->displayName, "Rock");
 
   const auto removeCommand = edits::commandForRemoveAsset(replication::buildRemoveAsset(assetUUID),
-                                                           scene.assetRegistry);
+                                                           scene.assetRegistry, sceneManager);
   ASSERT_TRUE(removeCommand.has_value());
 
-  replication::applyRemoveAsset(scene.assetRegistry, replication::buildRemoveAsset(assetUUID));
+  replication::applyRemoveAsset(scene.assetRegistry, sceneManager, replication::buildRemoveAsset(assetUUID));
   ASSERT_EQ(scene.assetRegistry.getByUUID(assetUUID), nullptr);
 
   edits::EditHistory history;
@@ -340,6 +342,7 @@ TEST(EditHistory, UndoOfARemoveAssetRestoresTheDisplayName)
   const auto redoOutcome = history.redo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(redoOutcome.ok());
   ASSERT_TRUE(redoOutcome.messagePayload.has_value());
-  replication::applyRemoveAsset(scene.assetRegistry, replication::unpackRemoveAsset(*redoOutcome.messagePayload));
+  replication::applyRemoveAsset(scene.assetRegistry, sceneManager,
+                                replication::unpackRemoveAsset(*redoOutcome.messagePayload));
   EXPECT_EQ(scene.assetRegistry.getByUUID(assetUUID), nullptr);
 }

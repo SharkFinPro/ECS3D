@@ -292,3 +292,65 @@ TEST(SceneManager, UniqueSceneNameFallsBackForAnEmptyName)
 
   EXPECT_EQ(sceneManager.uniqueSceneName(firstUUID, ""), "Scene");
 }
+
+TEST(SceneManager, RemoveSceneDropsANonCurrentScene)
+{
+  const auto registry = makeRegistry();
+  SceneManager sceneManager;
+  const auto first = makeScene(firstUUID, "First", registry);
+  const auto second = makeScene(secondUUID, "Second", registry);
+  sceneManager.addScene(first);
+  sceneManager.addScene(second);
+  sceneManager.loadScene(first);
+
+  EXPECT_TRUE(sceneManager.removeScene(secondUUID));
+
+  EXPECT_EQ(sceneManager.getScene(secondUUID), nullptr);
+  EXPECT_EQ(sceneManager.getScene(firstUUID), first);
+  EXPECT_EQ(sceneManager.getCurrentScene(), first);
+}
+
+TEST(SceneManager, RemoveSceneRefusesTheCurrentSceneButNotAfterSwitchingAway)
+{
+  const auto registry = makeRegistry();
+  SceneManager sceneManager;
+  const auto first = makeScene(firstUUID, "First", registry);
+  const auto second = makeScene(secondUUID, "Second", registry);
+  sceneManager.addScene(first);
+  sceneManager.addScene(second);
+  sceneManager.loadScene(first);
+
+  EXPECT_FALSE(sceneManager.removeScene(firstUUID));
+  EXPECT_NE(sceneManager.getScene(firstUUID), nullptr);
+  EXPECT_EQ(sceneManager.getCurrentScene(), first);
+
+  sceneManager.loadScene(second);
+  EXPECT_TRUE(sceneManager.removeScene(firstUUID));
+  EXPECT_EQ(sceneManager.getScene(firstUUID), nullptr);
+}
+
+TEST(SceneManager, RemoveSceneRefusesTheOnlyScene)
+{
+  const auto registry = makeRegistry();
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "First", registry));
+
+  EXPECT_FALSE(sceneManager.removeScene(firstUUID));
+  EXPECT_NE(sceneManager.getScene(firstUUID), nullptr);
+
+  sceneManager.addScene(makeScene(secondUUID, "Second", registry));
+  EXPECT_TRUE(sceneManager.removeScene(firstUUID));
+}
+
+TEST(SceneManager, RemoveSceneRefusesAnUnknownUuid)
+{
+  const auto registry = makeRegistry();
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "First", registry));
+  sceneManager.addScene(makeScene(secondUUID, "Second", registry));
+
+  EXPECT_FALSE(sceneManager.removeScene(missingUUID));
+  EXPECT_EQ(sceneManager.getScenes().size(), 2u);
+
+  EXPECT_TRUE(sceneManager.removeScene(secondUUID));
+}

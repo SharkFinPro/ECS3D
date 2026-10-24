@@ -1636,8 +1636,42 @@ void applyAddAsset(AssetRegistry& assetRegistry,
     const std::string name = asset.value("name", std::string{ "New Scene" });
     // A new scene always defaults to the same fixed name, so a second one collides immediately - resolve
     // it here, before the AssetRegistry key is derived, rather than letting it silently drop out.
+    if (sceneManager.getScene(uuid))
+    {
+      return;
+    }
+
     const std::string uniqueName = sceneManager.uniqueSceneName(uuid, name);
-    sceneManager.addScene(std::make_shared<SceneAsset>(uuid, uniqueName, componentRegistry));
+    const auto scene = std::make_shared<SceneAsset>(uuid, uniqueName, componentRegistry);
+
+    // A body is a SceneAsset::serialize() blob: undo of a scene removal carries the removed scene whole.
+    // It loads before anything is added, so a bad body leaves the project untouched.
+    if (const std::string body = asset.value("body", std::string{}); !body.empty())
+    {
+      const auto sceneData = nlohmann::json::parse(body, nullptr, false);
+      if (!sceneData.is_object() || !sceneData.contains("objects"))
+      {
+        Log::warn(LogCategory::assets, "Ignored an addAsset for scene " + uniqueName + ": its body is not a scene.");
+        return;
+      }
+
+      try
+      {
+        scene->loadObjects(sceneData.at("objects"));
+
+        if (sceneData.contains("scripts"))
+        {
+          scene->loadScripts(sceneData.at("scripts"));
+        }
+      }
+      catch (const std::exception& e)
+      {
+        Log::warn(LogCategory::assets, "Ignored an addAsset for scene " + uniqueName + ": " + e.what());
+        return;
+      }
+    }
+
+    sceneManager.addScene(scene);
     // Also register it as an asset so it shows in the browser (double-click to load).
     assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = uniqueName });
   }
@@ -1702,15 +1736,29 @@ void applyRenameAsset(AssetRegistry& assetRegistry, const nlohmann::json& op)
   assetRegistry.renameAsset(parsed.value(), op.value("displayName", std::string{}));
 }
 
-void applyRemoveAsset(AssetRegistry& assetRegistry, const nlohmann::json& op)
+bool applyRemoveAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, const nlohmann::json& op)
 {
   const auto parsed = uuids::uuid::from_string(op.value("uuid", std::string{}));
   if (!parsed.has_value())
   {
-    return;
+    return false;
+  }
+
+  const auto* record = assetRegistry.getByUUID(parsed.value());
+  if (!record)
+  {
+    return false;
+  }
+
+  // A scene's record is regenerated from the SceneManager on every snapshot, so the scene has to go first.
+  if (record->type == AssetType::Scene && !sceneManager.removeScene(parsed.value()))
+  {
+    return false;
   }
 
   assetRegistry.removeAsset(parsed.value());
+
+  return true;
 }
 
 net::Message packRenameAsset(const nlohmann::json& op)

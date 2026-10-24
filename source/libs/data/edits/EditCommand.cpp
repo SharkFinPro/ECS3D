@@ -146,6 +146,10 @@ namespace {
         break;
       case AssetType::Scene:
         asset["name"] = path;
+        if (!body.empty())
+        {
+          asset["body"] = body;
+        }
         break;
       default:
         break;
@@ -1120,6 +1124,12 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
         return { ValidationFailure::targetMissing, data.assetUUID };
       }
 
+      // The server refuses to remove the scene it has loaded.
+      if (data.type == AssetType::Scene && scene && scene->getUUID() == data.assetUUID)
+      {
+        return { ValidationFailure::targetActive, data.assetUUID };
+      }
+
       return {};
     }
     case CommandKind::replaceAsset:
@@ -1444,10 +1454,17 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
         return { ValidationFailure::targetMissing, data.assetUUID };
       }
 
+      // A scene's registry record has no body; the recorded one is the scene itself.
+      const bool bodyMatches = data.type == AssetType::Scene || record->body == data.body;
       if (record->type != data.type || record->path != data.path || record->className != data.className
-          || record->body != data.body || record->displayName != data.displayName)
+          || !bodyMatches || record->displayName != data.displayName)
       {
         return { ValidationFailure::targetChanged, data.assetUUID };
+      }
+
+      if (data.type == AssetType::Scene && scene && scene->getUUID() == data.assetUUID)
+      {
+        return { ValidationFailure::targetActive, data.assetUUID };
       }
 
       return {};

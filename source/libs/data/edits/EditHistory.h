@@ -39,12 +39,13 @@ enum class HistoryResult {
   historyEmpty,  // nothing to undo/redo - not an error
   notUndoable,   // this command's kind has no faithful reverse with the builders that exist
   targetMissing, // the object/asset/component this command targets is gone
-  targetChanged  // it exists, but has drifted from what this command expects
+  targetChanged, // it exists, but has drifted from what this command expects
+  targetActive   // it targets the loaded scene, which cannot be removed; load another scene first
 };
 
 struct HistoryOutcome {
   HistoryResult result = HistoryResult::historyEmpty;
-  std::optional<uuids::uuid> conflict; // set for notUndoable/targetMissing/targetChanged
+  std::optional<uuids::uuid> conflict; // set for every result but applied/historyEmpty
 
   // Exactly one is set when result == applied, matching the command's payloadForm().
   std::optional<nlohmann::json> jsonPayload;

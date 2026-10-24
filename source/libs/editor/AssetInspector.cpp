@@ -77,6 +77,7 @@ void AssetInspector::setUpdatePrefabBodyCallback(UpdatePrefabBodyCallback callba
 
 void AssetInspector::setAssetRegistry(const AssetRegistry* registry)
 {
+  m_assetRegistry = registry;
   m_prefabInspector->setAssetRegistry(registry);
 }
 
@@ -88,6 +89,11 @@ namespace {
   {
     return type == AssetType::Model || type == AssetType::Texture
         || type == AssetType::Script || type == AssetType::Prefab;
+  }
+
+  bool isDeletable(const AssetType type)
+  {
+    return isRenamable(type) || type == AssetType::Scene;
   }
 }
 
@@ -126,9 +132,8 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
     default: break;
   }
 
-  // Delete lives at the foot of the panel, for the flat file assets only (a Scene's removal isn't a
-  // registry op - see isRenamable). The modal is drawn every frame the button is armed.
-  displayDeleteButton(record);
+  // Delete lives at the foot of the panel. The modal is drawn every frame the button is armed.
+  displayDeleteButton(record, activeSceneUUID);
   displayDeleteConfirmationModal(record);
 }
 
@@ -493,11 +498,28 @@ void AssetInspector::flushPrefabBody()
   m_prefabBody->markSynced(newBody);
 }
 
-void AssetInspector::displayDeleteButton(const AssetRecord& record)
+size_t AssetInspector::sceneCount() const
 {
-  // Only the flat file assets can be deleted from here (a Scene lives in the SceneManager, not a registry
-  // record we can drop - see isRenamable).
-  if (!isRenamable(record.type))
+  size_t count = 0;
+
+  if (m_assetRegistry)
+  {
+    for (const auto& [uuid, record] : m_assetRegistry->getAssets())
+    {
+      if (record.type == AssetType::Scene)
+      {
+        ++count;
+      }
+    }
+  }
+
+  return count;
+}
+
+void AssetInspector::displayDeleteButton(const AssetRecord& record,
+                                         const std::optional<uuids::uuid>& activeSceneUUID)
+{
+  if (!isDeletable(record.type))
   {
     return;
   }
@@ -506,7 +528,22 @@ void AssetInspector::displayDeleteButton(const AssetRecord& record)
   ImGui::Separator();
   ImGui::Spacing();
 
-  if (!canDeleteAsset(record))
+  if (record.type == AssetType::Scene)
+  {
+    // The server refuses both, so the button is replaced rather than offered and then ignored.
+    if (activeSceneUUID.has_value() && activeSceneUUID.value() == record.uuid)
+    {
+      gc::dashedBox("The active scene can't be deleted. Load another scene first.");
+      return;
+    }
+
+    if (sceneCount() < 2)
+    {
+      gc::dashedBox("A project needs at least one scene.");
+      return;
+    }
+  }
+  else if (!canDeleteAsset(record))
   {
     gc::dashedBox(record.path.empty() ? "Comes from a compiled script; remove its .cs file instead"
                                       : "Its class still compiles; remove the class from its .cs file first");
@@ -524,7 +561,7 @@ void AssetInspector::displayDeleteButton(const AssetRecord& record)
   {
     // Arm the modal and compute the reference count once, now, rather than every frame.
     m_assetPendingDeletion = record.uuid;
-    m_pendingRefCount = m_onReferenceCount ? m_onReferenceCount(record.uuid) : 0;
+    m_pendingRefCount = m_onReferenceCount && record.type != AssetType::Scene ? m_onReferenceCount(record.uuid) : 0;
   }
   ImGui::PopStyleColor(4);
 
@@ -553,14 +590,22 @@ void AssetInspector::displayDeleteConfirmationModal(const AssetRecord& record)
     ImGui::SameLine();
     ImGui::TextUnformatted("?");
 
-    // Deletion always succeeds; any references are left to dangle (the slots show "None") - warn how many.
-    if (m_pendingRefCount > 0)
+    if (record.type == AssetType::Scene)
+    {
+      ImGui::TextColored(theme::scriptAmber, "The scene's objects and scene scripts are deleted with it.");
+      ImGui::TextColored(theme::t3, "Edit > Undo restores the whole scene.");
+    }
+    // Any references are left to dangle (the slots show "None") - warn how many.
+    else if (m_pendingRefCount > 0)
     {
       ImGui::TextColored(theme::scriptAmber, "Referenced by %d object%s - those references will be left empty.",
                          m_pendingRefCount, m_pendingRefCount == 1 ? "" : "s");
     }
 
-    ImGui::TextColored(theme::t3, "You can undo this with Edit > Undo.");
+    if (record.type != AssetType::Scene)
+    {
+      ImGui::TextColored(theme::t3, "You can undo this with Edit > Undo.");
+    }
 
     ImGui::Spacing();
     ImGui::Separator();

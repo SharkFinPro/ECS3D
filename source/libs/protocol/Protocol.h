@@ -44,7 +44,7 @@ enum class MessageType : uint8_t {
                  // correlation (no per-connection send path): every client hears it, only the one whose
                  // join nonce matches keeps it.
   renameAsset,   // editor -> server: set an asset's display-name override (replication::packRenameAsset); server re-snapshots
-  removeAsset,   // editor -> server: drop an asset record by uuid (replication::packRemoveAsset); server re-snapshots
+  removeAsset,   // editor -> server: drop an asset by uuid; a scene unless active or the only one (packRemoveAsset); server re-snapshots
   serverLog,     // server -> editor connections only: a batch of the server's own log entries
                  // (net::packServerLog / net::unpackServerLog), so the editor's Console shows what the
                  // server (and the scripts running on it) printed - locally spawned or remote alike. Never

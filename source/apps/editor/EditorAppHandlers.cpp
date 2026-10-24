@@ -84,14 +84,18 @@ void EditorApp::onRenameAsset(const uuids::uuid& assetUUID, const std::string& d
   }
 }
 
-// Delete an asset: same local-apply-then-send shape. Deletion always succeeds; references dangle
-// (lookups null-tolerate a missing uuid).
+// Delete an asset: same local-apply-then-send shape. References dangle (lookups null-tolerate a missing
+// uuid). A scene the project cannot spare (the active or only one) is refused locally, so nothing is sent.
 void EditorApp::onRemoveAsset(const uuids::uuid& assetUUID)
 {
   const auto op = replication::buildRemoveAsset(assetUUID);
-  auto command = edits::commandForRemoveAsset(op, *m_assetRegistry);
+  auto command = edits::commandForRemoveAsset(op, *m_assetRegistry, *m_sceneManager);
 
-  replication::applyRemoveAsset(*m_assetRegistry, op);
+  if (!replication::applyRemoveAsset(*m_assetRegistry, *m_sceneManager, op))
+  {
+    logMessage("Info", "Can't delete that asset: it is unknown, or it is the active or only scene.");
+    return;
+  }
 
   m_netClient->send(replication::packRemoveAsset(op));
   m_saveUI->markEdited();

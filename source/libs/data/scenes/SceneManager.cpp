@@ -14,6 +14,23 @@ void SceneManager::clear()
   m_sceneStatus = SceneStatus::stopped;
 }
 
+bool SceneManager::removeScene(const uuids::uuid& uuid)
+{
+  if (!m_scenes.contains(uuid) || m_scenes.size() < 2)
+  {
+    return false;
+  }
+
+  if (m_currentScene && m_currentScene->getUUID() == uuid)
+  {
+    return false;
+  }
+
+  m_scenes.erase(uuid);
+
+  return true;
+}
+
 std::shared_ptr<SceneAsset> SceneManager::getScene(const uuids::uuid& uuid) const
 {
   const auto it = m_scenes.find(uuid);
