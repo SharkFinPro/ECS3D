@@ -106,13 +106,22 @@ internal sealed class FakeRunningProcess : IRunningProcess
 
   public bool Killed { get; private set; }
 
+  public bool KillThrows { get; set; }
+
   public int DisposeCount => Volatile.Read(ref _disposeCount);
 
   public void Exit(int code) => _exit.SetResult(code);
 
   public Task<int> WaitForExitAsync(CancellationToken cancellationToken) => _exit.Task.WaitAsync(cancellationToken);
 
-  public void Kill() => Killed = true;
+  public void Kill()
+  {
+    Killed = true;
+    if (KillThrows)
+    {
+      throw new InvalidOperationException("cannot kill");
+    }
+  }
 
   public void Dispose() => Interlocked.Increment(ref _disposeCount);
 }

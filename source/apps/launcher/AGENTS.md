@@ -41,8 +41,12 @@
   Hosting is real: a project card's "Host a game..." starts `ECS3DServer` through `HostSession` (after asking whether to
   stop a game that is already running), opens the hosting panel (running time, `address : port` rows with Copy, firewall
   note, Open another game window, Stop server, Hide) and shows a green pill naming the hosted project in the sidebar that
-  reopens it. A server that exits on its own closes the panel and toasts the code and `server.log`. The Samples Host
-  button and the quit prompt are not built yet.
+  reopens it. A server that exits on its own closes the panel and toasts the code and `server.log`. Closing the window
+  by the title-bar button or Alt+F4 while a game is hosted or starting asks first (`MainWindowViewModel.RequestClose`,
+  called from the window's `OnClosing`): Stop server and quit, or Keep hosting, which minimizes; Escape leaves the
+  window as it is. When the OS or the application is shutting down there is no one to ask, so the server is stopped
+  and the window closes; the lifetime's Exit stops it too as a backstop.
+  The Samples Host button is not built yet.
   The Learn tab is real: six guide cards from `LearnCatalog` that open on GitHub in the browser, plus a "What's
   in the box" banner.
   The sidebar's Play section has a Join a game button: it opens an in-window dialog (`JoinDialogViewModel`) for the
@@ -124,7 +128,7 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - Read this file before changing the launcher. You should **not** need the root `AGENTS.md` or any C++
   engine knowledge for launcher work.
 - Engine location and launching, settings, the recent-projects store, the template catalog and project creation
-  are real; the Samples Host button and the quit prompt are not. When asked to "load projects" and the like, confirm
+  are real; the Samples Host button is not. When asked to "load projects" and the like, confirm
   whether the task is to build the missing service and its wiring or to extend the mock UI.
 - Keep the MVVM split clean: no app logic in code-behind, no view construction in view models.
 - Add UI dependencies via `PackageReference` in `ECS3DLauncher.csproj`; keep Debug-only tooling under the
