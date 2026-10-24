@@ -79,6 +79,9 @@ public class HostingViewModel : ObservableObject
 
     public bool IsStarting => _startingName is not null;
 
+    // True while a game is hosted or a server is still coming up.
+    public bool IsBusy => _session.IsRunning || _session.IsStarting || IsStarting;
+
     public string StartingText => _startingName is null ? "" : $"Starting {_startingName}...";
 
     public void Tick() => Panel?.Tick();

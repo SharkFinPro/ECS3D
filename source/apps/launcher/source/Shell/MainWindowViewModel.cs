@@ -69,6 +69,8 @@ public class MainWindowViewModel : ObservableObject
     private string? _toastMessage;
     private string? _toastLogPath;
     private ConfirmPromptViewModel? _prompt;
+    private ConfirmPromptViewModel? _quitPrompt;
+    private bool _quitApproved;
     private JoinDialogViewModel? _joinDialog;
 
     public string ActiveNav
@@ -229,6 +231,11 @@ public class MainWindowViewModel : ObservableObject
     public IRelayCommand<TemplateCard> OpenTemplateCommand { get; }
     public IRelayCommand<Project> OpenProjectCommand { get; }
     public IRelayCommand<Project> PlayProjectCommand { get; }
+    // Set by the window, which owns closing and minimizing itself.
+    public Action? CloseWindow { get; set; }
+
+    public Action? MinimizeWindow { get; set; }
+
     public IRelayCommand CloseOverlayCommand { get; }
     public IRelayCommand<Project> HostProjectCommand { get; }
     public IRelayCommand<Project> ShowInFolderCommand { get; }
@@ -746,7 +753,15 @@ public class MainWindowViewModel : ObservableObject
 
         if (Prompt is { } prompt)
         {
-            prompt.CancelCommand.Execute(null);
+            if (ReferenceEquals(prompt, _quitPrompt))
+            {
+                _quitPrompt = null;
+                Prompt = null;
+            }
+            else
+            {
+                prompt.CancelCommand.Execute(null);
+            }
         }
         else if (JoinDialog is not null)
         {
@@ -756,6 +771,44 @@ public class MainWindowViewModel : ObservableObject
         {
             Hosting.HidePanel();
         }
+    }
+
+    // True when the window may close now. While a game is hosted or starting it asks first and returns false:
+    // Stop server and quit closes for real, Keep hosting minimizes, and Escape leaves the window as it is.
+    public bool RequestClose()
+    {
+        if (_quitApproved || !Hosting.IsBusy)
+        {
+            return true;
+        }
+
+        if (_quitPrompt is null || !ReferenceEquals(Prompt, _quitPrompt))
+        {
+            Ask(
+                new PromptRequest(
+                    "Stop hosting?",
+                    "A game is being hosted. Quitting stops the server and ends it for everyone in it.",
+                    "Stop server and quit",
+                    "Keep hosting"),
+                QuitAnswered);
+            _quitPrompt = Prompt;
+        }
+
+        return false;
+    }
+
+    private void QuitAnswered(bool stopAndQuit)
+    {
+        _quitPrompt = null;
+        if (!stopAndQuit)
+        {
+            MinimizeWindow?.Invoke();
+            return;
+        }
+
+        Hosting.Stop();
+        _quitApproved = true;
+        CloseWindow?.Invoke();
     }
 
     // One question at a time; asking again replaces the one on screen.

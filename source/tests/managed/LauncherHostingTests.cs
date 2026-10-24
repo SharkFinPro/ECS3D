@@ -556,4 +556,140 @@ public class LauncherHostingTests
     Assert.Null(rig.Main.JoinDialog);
     Assert.True(rig.Main.IsBackgroundEnabled);
   }
+
+  [Fact]
+  public void ClosingWhileNothingIsHostedIsAllowedWithoutAsking()
+  {
+    var rig = new Rig();
+
+    Assert.True(rig.Main.RequestClose());
+    Assert.False(rig.Main.HasPrompt);
+  }
+
+  [Fact]
+  public void ClosingWhileHostingAsksAndDoesNotClose()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+
+    Assert.False(rig.Main.RequestClose());
+
+    Assert.True(rig.Main.HasPrompt);
+    Assert.Equal("Stop server and quit", rig.Main.Prompt!.ConfirmLabel);
+    Assert.Equal("Keep hosting", rig.Main.Prompt.CancelLabel);
+    Assert.False(rig.Runner.Processes[0].Killed);
+  }
+
+  [Fact]
+  public void ClosingWhileTheServerIsStartingAsks()
+  {
+    var rig = new Rig();
+    bool? allowed = null;
+    rig.OnDelay = () =>
+    {
+      allowed ??= rig.Main.RequestClose();
+      rig.Probe.Accepts = true;
+    };
+
+    rig.Host(Alpha);
+
+    Assert.False(allowed);
+    Assert.True(rig.Main.HasPrompt);
+  }
+
+  [Fact]
+  public void StopServerAndQuitStopsTheGameAndClosesTheWindow()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    var closed = 0;
+    rig.Main.CloseWindow = () => closed++;
+    rig.Host(Alpha);
+    rig.Main.RequestClose();
+
+    rig.Main.Prompt!.ConfirmCommand.Execute(null);
+
+    Assert.True(rig.Runner.Processes[0].Killed);
+    Assert.False(rig.Hosting.IsHosting);
+    Assert.Equal(1, closed);
+    Assert.False(rig.Main.HasPrompt);
+    Assert.True(rig.Main.RequestClose());
+  }
+
+  [Fact]
+  public void KeepHostingMinimizesAndLeavesTheGameRunning()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    var minimized = 0;
+    var closed = 0;
+    rig.Main.MinimizeWindow = () => minimized++;
+    rig.Main.CloseWindow = () => closed++;
+    rig.Host(Alpha);
+    rig.Main.RequestClose();
+
+    rig.Main.Prompt!.CancelCommand.Execute(null);
+
+    Assert.Equal(1, minimized);
+    Assert.Equal(0, closed);
+    Assert.False(rig.Runner.Processes[0].Killed);
+    Assert.True(rig.Hosting.IsHosting);
+    Assert.False(rig.Main.RequestClose());
+  }
+
+  [Fact]
+  public void EscapeOnTheQuitPromptKeepsTheWindowAsItIsWithoutMinimizing()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    var minimized = 0;
+    rig.Main.MinimizeWindow = () => minimized++;
+    rig.Host(Alpha);
+    rig.Main.RequestClose();
+
+    rig.Main.CloseOverlayCommand.Execute(null);
+
+    Assert.False(rig.Main.HasPrompt);
+    Assert.Equal(0, minimized);
+    Assert.False(rig.Runner.Processes[0].Killed);
+    Assert.True(rig.Hosting.IsHosting);
+  }
+
+  [Fact]
+  public void AskingToCloseAgainWhileTheQuitPromptIsOpenKeepsTheSameQuestion()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+    rig.Main.RequestClose();
+    var prompt = rig.Main.Prompt;
+
+    Assert.False(rig.Main.RequestClose());
+
+    Assert.Same(prompt, rig.Main.Prompt);
+  }
+
+  [Fact]
+  public void StopServerAndQuitStillClosesWhenTheServerAlreadyExited()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    var closed = 0;
+    rig.Main.CloseWindow = () => closed++;
+    rig.Host(Alpha);
+    rig.Main.RequestClose();
+    var prompt = rig.Main.Prompt!;
+    rig.Runner.Processes[0].Exit(1);
+
+    prompt.ConfirmCommand.Execute(null);
+
+    Assert.Equal(1, closed);
+    Assert.True(rig.Main.RequestClose());
+  }
+
+  [Fact]
+  public void ClosingAfterTheServerEndedOnItsOwnNeedsNoQuestion()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+    rig.Runner.Processes[0].Exit(1);
+
+    Assert.True(rig.Main.RequestClose());
+    Assert.False(rig.Main.HasPrompt);
+  }
 }

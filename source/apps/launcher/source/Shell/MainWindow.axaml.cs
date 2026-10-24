@@ -65,6 +65,8 @@ public class MainWindow : Window
             viewModel.PickProjectFolder = () => PickFolderAsync("Locate the project folder");
             viewModel.PickProjectFile = PickProjectFileAsync;
             viewModel.Hosting.CopyToClipboard = CopyToClipboardAsync;
+            viewModel.CloseWindow = Close;
+            viewModel.MinimizeWindow = () => WindowState = WindowState.Minimized;
             StartHostingClock(viewModel);
             viewModel.PickProjectsFolder = () => PickFolderAsync("Choose where to create the project");
         }
@@ -280,4 +282,14 @@ public class MainWindow : Window
     private void OnMaximize(object? sender, RoutedEventArgs e) => ToggleMaximize();
 
     private void OnClose(object? sender, RoutedEventArgs e) => Close();
+
+    // Every close path (the title-bar button, Alt+F4, the OS) ends here; the view model decides.
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        base.OnClosing(e);
+        if (DataContext is MainWindowViewModel viewModel && !viewModel.RequestClose())
+        {
+            e.Cancel = true;
+        }
+    }
 }
