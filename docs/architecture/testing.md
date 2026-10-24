@@ -50,8 +50,9 @@ than a native executable. The launcher's `source/Services` (plain C#, no Avaloni
 link, and so are its view models, models and `IconKeyConverter`, over the Avalonia and
 CommunityToolkit.Mvvm packages; the window, views and `DesignData` stay out. Launcher view helpers with
 Avalonia behavior (`CardMenu`) are tested on Avalonia's headless platform through `HeadlessUnitTestSession`,
-in the serial `AvaloniaHeadless` collection; the tests give their windows a content template, since no theme
-is loaded. The suite covers pure, testable
+in the serial `AvaloniaHeadless` collection. No theme is loaded, so the tests give their windows a template
+with a content presenter and a `PART_VisualLayerManager` (popups need its overlay layer). The suite covers
+pure, testable
 logic via `ProjectReference`s to
 `Transport/ECS3DNetTransport.csproj` (wire framing/handshake) and `ScriptBridge/ScriptBridge.csproj`
 (the `[ExposeToEditor]` field reflection/JSON and value-conversion logic behind `getExposedFields`/
