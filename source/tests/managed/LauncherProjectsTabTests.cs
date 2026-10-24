@@ -327,16 +327,6 @@ public class LauncherProjectsTabTests
     Assert.Equal("samples", model.ActiveNav);
   }
 
-  [Fact]
-  public void FirstRunNewProjectSwitchesToTemplates()
-  {
-    var model = NewMain();
-
-    model.Projects.NewProjectCommand.Execute(null);
-
-    Assert.Same(model.Templates, model.CurrentTab);
-  }
-
   private MainWindowViewModel NewMain(List<string> requested)
   {
     _rig.AddEngine(LauncherRig.LauncherDir);

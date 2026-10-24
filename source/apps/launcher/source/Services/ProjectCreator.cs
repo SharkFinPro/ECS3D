@@ -61,6 +61,24 @@ public sealed class ProjectCreator
         }
     }
 
+    // Free when the location is a folder or can be made into one; NotAFolder when a file is in the way.
+    public ProjectTargetState CheckLocation(string location)
+    {
+        if (!IsUsablePath(location))
+        {
+            return ProjectTargetState.Unavailable;
+        }
+
+        try
+        {
+            return _files.FileExists(location) ? ProjectTargetState.NotAFolder : ProjectTargetState.Free;
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            return ProjectTargetState.Unavailable;
+        }
+    }
+
     private ProjectTargetState Classify(string target)
     {
         if (_files.FileExists(target))

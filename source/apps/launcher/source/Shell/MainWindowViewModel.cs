@@ -33,12 +33,22 @@ public class MainWindowViewModel : ObservableObject
     private readonly Func<string, Bitmap?> _loadThumbnail;
     private readonly IFileSystem _fileSystem;
     private readonly Action<Action> _runInBackground;
+    private readonly ProjectCreator _creator;
+    private IReadOnlyList<TemplateEntry> _templates = [];
+    private string _templatesFolder = "";
     private Dictionary<string, bool> _missing = [];
     private readonly RunningEditors _editors;
     private List<(RecentProject Entry, string Edited, bool Missing, bool InEditor)> _shown = [];
     private EngineLocation _engine;
     private EngineActions _actions;
     private LaunchCoordinator _coordinator;
+
+    // One instance, so the log file is truncated once per launch rather than by each user of it.
+    private static readonly FileLauncherLog SharedLog = new(new UserDataDirectory());
+
+    private const string DefaultTemplateId = "empty-3d";
+
+    private NewProjectViewModel? _newProject;
 
     public string Version { get; }
 
@@ -167,10 +177,30 @@ public class MainWindowViewModel : ObservableObject
 
     public Func<Task<string?>>? PickProjectFile { get; set; }
 
+    public Func<Task<string?>>? PickProjectsFolder { get; set; }
+
+    // The New Project dialog while it is open; null hides it.
+    public NewProjectViewModel? NewProject
+    {
+        get => _newProject;
+        private set
+        {
+            if (SetProperty(ref _newProject, value))
+            {
+                OnPropertyChanged(nameof(IsInteractive));
+            }
+        }
+    }
+
+    // False while the New Project dialog is open: the window disables everything behind it, and the commands
+    // below ignore calls that still reach them, such as a key press.
+    public bool IsInteractive => NewProject is null;
+
     public IRelayCommand<string?> SelectNavCommand { get; }
     public IRelayCommand NewProjectCommand { get; }
     public IRelayCommand OpenSettingsCommand { get; }
     public IRelayCommand ExploreCommand { get; }
+    public IRelayCommand<TemplateCard> OpenTemplateCommand { get; }
     public IRelayCommand<Project> OpenProjectCommand { get; }
     public IRelayCommand<Project> PlayProjectCommand { get; }
     public IRelayCommand<Project> ShowInFolderCommand { get; }
@@ -190,7 +220,7 @@ public class MainWindowViewModel : ObservableObject
             NewRecents(),
             new SystemProcessRunner(),
             new EarlyExitWatcher(new UserDataDirectory()),
-            new TemplateCatalog(new PhysicalFileSystem(), new FileLauncherLog(new UserDataDirectory())),
+            new TemplateCatalog(new PhysicalFileSystem(), SharedLog),
             LoadThumbnail,
             AppVersion.Current(),
             action => Dispatcher.UIThread.Post(action),
@@ -223,7 +253,6 @@ public class MainWindowViewModel : ObservableObject
     {
     }
 
-    // runInBackground runs the disk checks off the UI thread; a dead network share can block them for seconds.
     public MainWindowViewModel(
         SettingsEditor settings,
         RecentProjectsStore recents,
@@ -236,7 +265,39 @@ public class MainWindowViewModel : ObservableObject
         Func<DateTimeOffset> now,
         IFileSystem fileSystem,
         Action<Action> runInBackground)
+        : this(
+            settings,
+            recents,
+            runner,
+            watcher,
+            catalog,
+            loadThumbnail,
+            version,
+            post,
+            now,
+            fileSystem,
+            runInBackground,
+            new ProjectCreator(fileSystem, SharedLog))
     {
+    }
+
+    // runInBackground runs the disk checks and the project copy off the UI thread; a dead network share can block
+    // them for seconds.
+    public MainWindowViewModel(
+        SettingsEditor settings,
+        RecentProjectsStore recents,
+        IProcessRunner runner,
+        EarlyExitWatcher watcher,
+        TemplateCatalog catalog,
+        Func<string, Bitmap?> loadThumbnail,
+        string version,
+        Action<Action> post,
+        Func<DateTimeOffset> now,
+        IFileSystem fileSystem,
+        Action<Action> runInBackground,
+        ProjectCreator creator)
+    {
+        _creator = creator;
         _post = post;
         _fileSystem = fileSystem;
         _runInBackground = runInBackground;
@@ -253,8 +314,15 @@ public class MainWindowViewModel : ObservableObject
         _coordinator = NewCoordinator(_engine);
         Version = VersionLabel.Format(version);
 
-        SelectNavCommand = new RelayCommand<string?>(key => ActiveNav = key!);
-        NewProjectCommand = new RelayCommand(() => ActiveNav = "templates");
+        SelectNavCommand = new RelayCommand<string?>(key =>
+        {
+            if (IsInteractive)
+            {
+                ActiveNav = key!;
+            }
+        });
+        NewProjectCommand = new RelayCommand(OpenDefaultNewProject);
+        OpenTemplateCommand = new RelayCommand<TemplateCard>(OpenTemplate, card => card is { IsAvailable: true });
         OpenSettingsCommand = new RelayCommand(() => ActiveNav = "settings");
         ExploreCommand = new RelayCommand(Explore, () => _actions.Explore.Available);
         OpenProjectCommand = new RelayCommand<Project>(OpenProject, project => _actions.Open.Available && IsPresent(project));
@@ -271,7 +339,7 @@ public class MainWindowViewModel : ObservableObject
         OpenLogsCommand = new RelayCommand(() => _ = OpenLogsAsync(), () => HasToastLog);
 
         Projects = new ProjectsViewModel(
-            () => ActiveNav = "templates",
+            OpenDefaultNewProject,
             ExploreCommand,
             OpenProjectCommand,
             _actions.Explore.Tooltip,
@@ -287,7 +355,7 @@ public class MainWindowViewModel : ObservableObject
         };
         Projects.UpdateTooltips(_actions.Explore.Tooltip, _actions.Open.Tooltip, _actions.Play.Tooltip);
         Refresh();
-        Templates = new TemplatesViewModel(version, loadThumbnail);
+        Templates = new TemplatesViewModel(version, loadThumbnail, OpenTemplateCommand);
         Samples = new SamplesViewModel(PlaySampleCommand, _actions.Play.Tooltip, loadThumbnail);
         ReloadCatalog(_engine);
 
@@ -323,7 +391,7 @@ public class MainWindowViewModel : ObservableObject
     {
         var fileSystem = new PhysicalFileSystem();
         var userData = new UserDataDirectory();
-        var store = new LauncherSettingsStore(fileSystem, new FileLauncherLog(userData), userData);
+        var store = new LauncherSettingsStore(fileSystem, SharedLog, userData);
         return new SettingsEditor(store, new EngineLocator(fileSystem));
     }
 
@@ -331,7 +399,7 @@ public class MainWindowViewModel : ObservableObject
     {
         var userData = new UserDataDirectory();
         return new RecentProjectsStore(
-            new PhysicalFileSystem(), new FileLauncherLog(userData), userData, TimeProvider.System, HostOsDetector.Current());
+            new PhysicalFileSystem(), SharedLog, userData, TimeProvider.System, HostOsDetector.Current());
     }
 
     // A missing or unreadable image is no thumbnail; the card shows its placeholder.
@@ -391,6 +459,8 @@ public class MainWindowViewModel : ObservableObject
     private void ReloadCatalog(EngineLocation engine)
     {
         var contents = _catalog.Load(engine.Folder);
+        _templates = contents.Templates;
+        _templatesFolder = contents.TemplatesFolder;
         Templates.Reload(contents);
         Samples.Reload(contents);
     }
@@ -418,7 +488,13 @@ public class MainWindowViewModel : ObservableObject
     private string SampleCount() => Samples.Samples.Count.ToString();
 
     // The task is dropped on purpose: failures and early exits arrive through ShowNotice.
-    private void Explore() => _ = _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions());
+    private void Explore()
+    {
+        if (IsInteractive)
+        {
+            _ = _coordinator.ExploreEngineAsync(_settings.Current.ToLaunchOptions());
+        }
+    }
 
     // Reads the stored list again, as the editor may have recorded a project meanwhile.
     // A read that failed keeps the list on screen as it is.
@@ -528,7 +604,7 @@ public class MainWindowViewModel : ObservableObject
 
     private void TogglePin(Project? project)
     {
-        if (project is { IsRealCard: true })
+        if (IsInteractive && project is { IsRealCard: true })
         {
             ChangeStored(() => _recents.TogglePinned(project.Path));
         }
@@ -536,7 +612,7 @@ public class MainWindowViewModel : ObservableObject
 
     private void RemoveProject(Project? project)
     {
-        if (project is { IsRealCard: true })
+        if (IsInteractive && project is { IsRealCard: true })
         {
             ChangeStored(() => _recents.Remove(project.Path));
         }
@@ -544,7 +620,7 @@ public class MainWindowViewModel : ObservableObject
 
     private void PlayProject(Project? project)
     {
-        if (project is { IsRealCard: true } && _actions.Play.Available)
+        if (IsInteractive && project is { IsRealCard: true } && _actions.Play.Available)
         {
             _ = _coordinator.PlayProjectAsync(project.Path);
         }
@@ -553,7 +629,7 @@ public class MainWindowViewModel : ObservableObject
     // A legacy project is a file, so its folder is the one that holds it.
     private async Task ShowInFolderAsync(Project? project)
     {
-        if (project is not { IsRealCard: true })
+        if (!IsInteractive || project is not { IsRealCard: true })
         {
             return;
         }
@@ -590,26 +666,84 @@ public class MainWindowViewModel : ObservableObject
 
     private void OpenProject(Project? project)
     {
-        if (project is { IsRealCard: true, IsMissing: false } && _actions.Open.Available)
+        if (IsInteractive && project is { IsRealCard: true, IsMissing: false } && _actions.Open.Available)
         {
             OpenRecorded(project.Path);
         }
     }
 
-    private void OpenRecorded(string path)
+    private void OpenRecorded(string path, string? template = null)
     {
+        RecordOpened(path, template);
+        _ = _coordinator.OpenProjectAsync(path, _settings.Current.ToLaunchOptions());
+    }
+
+    private void RecordOpened(string path, string? template) =>
         ChangeStored(() =>
         {
-            _recents.RecordOpened(path);
+            _recents.RecordOpened(path, template);
             return true;
         });
-        _ = _coordinator.OpenProjectAsync(path, _settings.Current.ToLaunchOptions());
+
+    // The header button and the first-run card start from Empty 3D, or the first usable template without it.
+    private void OpenDefaultNewProject()
+    {
+        var usable = Templates.Templates.Where(card => card.IsAvailable).ToList();
+        var card = usable.FirstOrDefault(item => item.Id == DefaultTemplateId) ?? usable.FirstOrDefault();
+        if (card is null)
+        {
+            ApplyNotice(EarlyExitNotice.Failure(
+                Templates.IsEmpty
+                    ? $"No project templates were found in {_templatesFolder}. Check the engine's templates folder."
+                    : "Every template needs a newer engine than this launcher belongs to."));
+            return;
+        }
+
+        OpenTemplate(card);
+    }
+
+    private void OpenTemplate(TemplateCard? card)
+    {
+        var entry = card is { IsAvailable: true }
+            ? _templates.FirstOrDefault(item => item.Manifest.Id == card.Id)
+            : null;
+        if (entry is null || NewProject is not null)
+        {
+            return;
+        }
+
+        NewProject = new NewProjectViewModel(
+            entry,
+            _creator,
+            _settings.Current.ProjectsDirectory,
+            () => PickAsync(PickProjectsFolder),
+            _runInBackground,
+            _post,
+            (folder, openInEditor) => FinishCreate(entry, folder, openInEditor),
+            () => NewProject = null);
+    }
+
+    private void FinishCreate(TemplateEntry template, string folder, bool openInEditor)
+    {
+        NewProject = null;
+        if (openInEditor && _actions.Open.Available)
+        {
+            OpenRecorded(folder, template.Manifest.Id);
+            return;
+        }
+
+        RecordOpened(folder, template.Manifest.Id);
+        if (openInEditor)
+        {
+            ApplyNotice(EarlyExitNotice.Failure(
+                $"Created {folder}, but it was not opened. {_actions.Open.Tooltip ?? "The editor could not be found."}"));
+        }
     }
 
     // Points the card at the folder the project moved to; a choice that is not a project changes nothing.
     private async Task LocateAsync(Project? project)
     {
-        if (project is not { IsRealCard: true } || await PickAsync(PickProjectFolder) is not { } chosen)
+        if (!IsInteractive || project is not { IsRealCard: true } || await PickAsync(PickProjectFolder) is not { } chosen)
         {
             return;
         }
@@ -633,7 +767,7 @@ public class MainWindowViewModel : ObservableObject
 
     private async Task OpenExistingAsync()
     {
-        if (await PickAsync(PickProjectFile) is not { } chosen)
+        if (!IsInteractive || await PickAsync(PickProjectFile) is not { } chosen)
         {
             return;
         }
@@ -674,7 +808,7 @@ public class MainWindowViewModel : ObservableObject
 
     private void PlaySample(SampleCard? card)
     {
-        if (card is not null && _actions.Play.Available)
+        if (IsInteractive && card is not null && _actions.Play.Available)
         {
             _ = _coordinator.PlayProjectAsync(card.FolderPath);
         }
