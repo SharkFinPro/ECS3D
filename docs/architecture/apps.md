@@ -61,3 +61,19 @@ while playing) the same way it already undoes an edited Transform.
   those quotes; Windows hands it to the child's CRT (C runtime), which parses them the same way.
 - **ECS3DLauncher** (`apps/launcher`) — a standalone C# Avalonia project-management GUI. Independent of
   the C++ toolchain and the CLR-hosting path; built via `dotnet publish`. **See its own `AGENTS.md`.**
+
+## App icons
+
+The editor and client icons are the multi-size `.ico` files in `source/apps/icons/`. On Windows,
+`ecs3d_add_app_icon()` (`source/apps/AppIcon.cmake`) generates a short resource script (UTF-8, declared with a
+`code_page` pragma so non-ASCII checkout paths work) that embeds the file as `GLFW_ICON`. GLFW's Win32 backend loads that name for its window class, and Explorer shows the first icon resource,
+so one resource covers the executable file, the title bar and the taskbar, with no runtime code. The server is
+headless and has no icon.
+
+The cache variables `ECS3D_EDITOR_ICON` and `ECS3D_CLIENT_ICON` default to the shipped files. An application built on
+the engine sets them to its own `.ico` files; a relative path resolves against the top-level source directory. The resource script names the icon as an object dependency, so editing
+the file rebuilds the resource on generators that do not scan it. `AppIconTest` checks that both shipped files are
+well-formed icons with the standard sizes.
+
+The helper does nothing off Windows. Linux and macOS window icons are not done yet: X11 needs `glfwSetWindowIcon`
+with decoded pixels, Wayland ignores window icons, and macOS takes its icon from an app bundle.
