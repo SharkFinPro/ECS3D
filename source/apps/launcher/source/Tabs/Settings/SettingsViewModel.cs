@@ -121,6 +121,8 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string LastJoinText => _editor.LastJoinText;
 
+    public void RefreshLastJoin() => OnPropertyChanged(nameof(LastJoinText));
+
     private void Change(SettingsUpdate update, string property)
     {
         _applied(update);

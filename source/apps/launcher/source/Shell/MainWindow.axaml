@@ -22,6 +22,10 @@
         WindowStartupLocation="CenterScreen"
         WindowDecorations="None">
 
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Escape" Command="{Binding CloseJoinCommand}" />
+    </Window.KeyBindings>
+
     <Grid Name="Root" Focusable="True" RowDefinitions="42,*">
 
         <!-- ===== TITLE BAR ===== -->
@@ -82,7 +86,8 @@
         </Border>
 
         <!-- ===== BODY ===== -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*"
+              IsEnabled="{Binding JoinDialog, Converter={x:Static ObjectConverters.IsNull}}">
 
             <!-- ===== SIDEBAR ===== -->
             <Border Grid.Column="0" Width="212" Background="{StaticResource PanelBrush}"
@@ -137,6 +142,21 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <TextBlock DockPanel.Dock="Top" Text="PLAY"
+                               FontSize="11" FontWeight="SemiBold" LetterSpacing="1"
+                               Foreground="{StaticResource T3Brush}"
+                               Margin="10,18,10,10" />
+                    <Button DockPanel.Dock="Top" Classes="navbtn" Theme="{StaticResource BareButton}"
+                            Command="{Binding OpenJoinCommand}" ToolTip.Tip="{Binding JoinTooltip}">
+                        <Grid Margin="11,9" ColumnDefinitions="Auto,*">
+                            <Path Grid.Column="0" Classes="icon" Width="12" Height="12"
+                                  Data="{StaticResource IconPlus}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="Join a game" Classes="navlabel"
+                                       FontSize="13.5" FontWeight="Medium"
+                                       Margin="11,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
                 </DockPanel>
             </Border>
 
@@ -262,5 +282,40 @@
                 </Border>
             </Grid>
         </Grid>
+
+        <!-- Join a game dialog: dims the window while a view model is set -->
+        <Border Grid.Row="1" Background="#99000000"
+                IsVisible="{Binding JoinDialog, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <ContentControl Content="{Binding JoinDialog}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ContentControl.DataTemplates>
+                    <DataTemplate DataType="shell:JoinDialogViewModel">
+                        <Border Width="400" Padding="22" CornerRadius="12" Background="{StaticResource PanelBrush}"
+                                BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Join a game" FontSize="17" FontWeight="Bold" />
+                                <TextBlock Text="Enter the address the host shared with you."
+                                           Foreground="{StaticResource T2Brush}" />
+                                <TextBlock Text="Host address" FontWeight="SemiBold" Margin="0,8,0,0" />
+                                <TextBox Text="{Binding Address}" PlaceholderText="192.168.1.24"
+                                         AttachedToVisualTree="OnJoinAddressAttached" />
+                                <TextBlock Text="Port" FontWeight="SemiBold" />
+                                <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left" />
+                                <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
+                                           Foreground="{StaticResource DangerBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right"
+                                            Margin="0,12,0,0">
+                                    <Button Classes="secondary" Theme="{StaticResource BareButton}"
+                                            Content="Cancel" Command="{Binding CancelCommand}" />
+                                    <Button Classes="cta" Theme="{StaticResource BareButton}" IsDefault="True"
+                                            Command="{Binding JoinCommand}">
+                                        <TextBlock Text="Join" FontWeight="Bold" Foreground="{StaticResource AccText}" />
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ContentControl.DataTemplates>
+            </ContentControl>
+        </Border>
     </Grid>
 </Window>
