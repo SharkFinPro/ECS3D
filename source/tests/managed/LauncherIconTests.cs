@@ -2,15 +2,12 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 using System.Xml.Linq;
-using Avalonia.Controls;
 using Xunit;
 
 namespace ECS3DManagedTests;
 
 // The window and project files are not compiled into this assembly, so the icon wiring is read from the source tree.
-[Collection("AvaloniaHeadless")]
 public class LauncherIconTests
 {
   private const string IconPath = "source/Assets/launcher.ico";
@@ -38,16 +35,29 @@ public class LauncherIconTests
     Assert.True(File.Exists(IconFile()));
   }
 
+  // Entries are checked by header rather than loaded: the headless icon loader is a stub that never decodes.
   [Fact]
-  public void IconFileIsAnIcoWithSmallAndLargeSizes()
+  public void IconFileIsAnIcoWithSmallAndLargeSizesAndPngEntries()
   {
     var bytes = File.ReadAllBytes(IconFile());
     var count = BitConverter.ToUInt16(bytes, 4);
     var widths = Enumerable.Range(0, count).Select(i => bytes[6 + i * 16] == 0 ? 256 : (int)bytes[6 + i * 16]).ToList();
+    byte[] pngSignature = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
 
     Assert.Equal(new byte[] { 0, 0, 1, 0 }, bytes.Take(4).ToArray());
+    Assert.True(count > 0);
     Assert.Contains(16, widths);
     Assert.Contains(256, widths);
+
+    for (var i = 0; i < count; i++)
+    {
+      var entry = 6 + i * 16;
+      var size = BitConverter.ToUInt32(bytes, entry + 8);
+      var offset = BitConverter.ToUInt32(bytes, entry + 12);
+
+      Assert.True((long)offset + size <= bytes.Length);
+      Assert.Equal(pngSignature, bytes.Skip((int)offset).Take(8).ToArray());
+    }
   }
 
   // The positive control: the Assets glob is what makes the avares URI below resolvable at run time.
@@ -83,19 +93,5 @@ public class LauncherIconTests
     Assert.True(File.Exists(file));
     Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A },
       File.ReadAllBytes(file).Take(8).ToArray());
-  }
-
-  [Fact]
-  public async Task IconFileLoadsAsAWindowIcon()
-  {
-    await LauncherCardMenuTests.OnUiThread(() =>
-    {
-      Assert.Null(new Window().Icon);
-
-      using var stream = File.OpenRead(IconFile());
-      var window = new Window { Icon = new WindowIcon(stream) };
-
-      Assert.NotNull(window.Icon);
-    });
   }
 }
