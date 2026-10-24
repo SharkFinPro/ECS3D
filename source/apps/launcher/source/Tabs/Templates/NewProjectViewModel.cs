@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -7,9 +8,16 @@ using ECS3DLauncher.Services;
 
 namespace ECS3DLauncher.Tabs.Templates;
 
+// What the disk said about a location and the target folder inside it; Target is null when it was not looked at.
+public sealed record TargetCheck(string? LocationError, ProjectTargetState? Target);
+
 // State of the New Project dialog: the name and location being edited, what the target folder allows, and the copy.
+// Name rules apply at once; the disk checks wait for typing to pause and run off the UI thread.
 public sealed class NewProjectViewModel : ObservableObject
 {
+    private const string CheckingText = "Checking...";
+    private static readonly TimeSpan CheckDelay = TimeSpan.FromMilliseconds(250);
+
     private readonly TemplateEntry _template;
     private readonly ProjectCreator _creator;
     private readonly Func<Task<string?>> _pickLocation;
@@ -17,6 +25,10 @@ public sealed class NewProjectViewModel : ObservableObject
     private readonly Action<Action> _post;
     private readonly Action<string, bool> _created;
     private readonly Action _close;
+    private readonly Func<TimeSpan, Task> _delay;
+    private readonly Func<Func<TargetCheck>, Task<TargetCheck>> _runCheck;
+    private int _generation;
+    private bool _isChecking;
     private string _projectName;
     private string _location;
     private bool _openInEditor = true;
@@ -148,9 +160,24 @@ public sealed class NewProjectViewModel : ObservableObject
 
     public bool HasTargetProblem => TargetState is not null && TargetState != ProjectTargetState.Free;
 
-    public bool CanCreate => !IsBusy && IsTargetFree;
+    // True from an edit until the disk check for the current name and location has answered.
+    public bool IsChecking
+    {
+        get => _isChecking;
+        private set
+        {
+            if (SetProperty(ref _isChecking, value))
+            {
+                OnPropertyChanged(nameof(TargetMessage));
+                OnPropertyChanged(nameof(CanCreate));
+                CreateCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
 
-    public string? TargetMessage => TargetState switch
+    public bool CanCreate => !IsBusy && !IsChecking && IsTargetFree;
+
+    public string? TargetMessage => IsChecking ? CheckingText : TargetState switch
     {
         ProjectTargetState.Free => "Folder name is free",
         ProjectTargetState.NotEmpty => "A folder with this name already exists and is not empty.",
@@ -164,7 +191,8 @@ public sealed class NewProjectViewModel : ObservableObject
     public IRelayCommand BrowseCommand { get; }
 
     // created gets the new project folder and whether to open it; the shell closes the dialog then. runInBackground
-    // keeps the copy off the UI thread and post brings its result back.
+    // keeps the copy off the UI thread and post brings its result back. delay and runCheck default to a real timer and
+    // the thread pool; the disk checks wait delay after the last edit and their results come back through post.
     public NewProjectViewModel(
         TemplateEntry template,
         ProjectCreator creator,
@@ -173,8 +201,12 @@ public sealed class NewProjectViewModel : ObservableObject
         Action<Action> runInBackground,
         Action<Action> post,
         Action<string, bool> created,
-        Action close)
+        Action close,
+        Func<TimeSpan, Task>? delay = null,
+        Func<Func<TargetCheck>, Task<TargetCheck>>? runCheck = null)
     {
+        _delay = delay ?? (span => Task.Delay(span));
+        _runCheck = runCheck ?? (work => Task.Run(work));
         _template = template;
         _creator = creator;
         _location = location;
@@ -197,29 +229,71 @@ public sealed class NewProjectViewModel : ObservableObject
     private void Evaluate()
     {
         var location = _location.Trim();
+        var generation = Interlocked.Increment(ref _generation);
         NameError = ProjectNameRules.Validate(_projectName);
-        LocationError = LocationProblem(location);
-        var checkable = NameError is null && LocationError is null;
-        TargetState = checkable ? _creator.CheckTarget(location, _projectName) : null;
-        TargetPreview = checkable ? Path.Combine(location, _projectName, RecentProjectPaths.ProjectFileName) : "";
+        if (location.Length == 0)
+        {
+            LocationError = "Enter a location.";
+            TargetState = null;
+            TargetPreview = "";
+            IsChecking = false;
+            NotifyCanCreate();
+            return;
+        }
+
+        LocationError = null;
+        TargetState = null;
+        TargetPreview = CheckingText;
+        IsChecking = true;
+        NotifyCanCreate();
+        _ = CheckAsync(generation, location, _projectName, NameError is null);
+    }
+
+    private void NotifyCanCreate()
+    {
         OnPropertyChanged(nameof(CanCreate));
         CreateCommand.NotifyCanExecuteChanged();
     }
 
-    private string? LocationProblem(string location)
+    private async Task CheckAsync(int generation, string location, string name, bool nameValid)
     {
-        if (location.Length == 0)
+        await _delay(CheckDelay).ConfigureAwait(false);
+        if (Volatile.Read(ref _generation) != generation)
         {
-            return "Enter a location.";
+            return;
         }
 
-        return _creator.CheckLocation(location) switch
+        var result = await _runCheck(() => LookAtDisk(location, name, nameValid)).ConfigureAwait(false);
+        _post(() => ApplyCheck(generation, location, name, result));
+    }
+
+    private TargetCheck LookAtDisk(string location, string name, bool nameValid)
+    {
+        var problem = LocationProblem(location);
+        return new TargetCheck(problem, problem is null && nameValid ? _creator.CheckTarget(location, name) : null);
+    }
+
+    private void ApplyCheck(int generation, string location, string name, TargetCheck result)
+    {
+        if (generation != Volatile.Read(ref _generation))
+        {
+            return;
+        }
+
+        LocationError = result.LocationError;
+        TargetState = result.Target;
+        TargetPreview = result.Target is null ? "" : Path.Combine(location, name, RecentProjectPaths.ProjectFileName);
+        IsChecking = false;
+        NotifyCanCreate();
+    }
+
+    private string? LocationProblem(string location) =>
+        _creator.CheckLocation(location) switch
         {
             ProjectTargetState.Unavailable => "This location cannot be used.",
             ProjectTargetState.NotAFolder => "That location is a file, not a folder.",
             _ => null,
         };
-    }
 
     private void Cancel()
     {

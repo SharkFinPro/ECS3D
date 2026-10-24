@@ -51,7 +51,9 @@ public abstract class NewProjectFixture
     Action<string, bool>? created = null,
     Action? close = null,
     Func<Task<string?>>? pick = null,
-    TemplateEntry? template = null) =>
+    TemplateEntry? template = null,
+    Func<TimeSpan, Task>? delay = null,
+    Func<Func<TargetCheck>, Task<TargetCheck>>? runCheck = null) =>
     new(
       template ?? AddTemplate("first-person", "First-Person"),
       NewCreator(),
@@ -60,15 +62,20 @@ public abstract class NewProjectFixture
       background ?? (work => work()),
       work => work(),
       created ?? ((_, _) => { }),
-      close ?? (() => { }));
+      close ?? (() => { }),
+      delay ?? (_ => Task.CompletedTask),
+      runCheck ?? (work => Task.FromResult(work())));
 
-  internal MainWindowViewModel NewMain(SettingsEditor? editor = null, string version = "1.2.3")
+  internal MainWindowViewModel NewMain(SettingsEditor? editor = null, string version = "1.2.3", Action<Action>? background = null)
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
-    return NewMainWithCurrentEngine(editor, version);
+    return NewMainWithCurrentEngine(editor, version, background);
   }
 
-  internal MainWindowViewModel NewMainWithCurrentEngine(SettingsEditor? editor = null, string version = "1.2.3") =>
+  internal MainWindowViewModel NewMainWithCurrentEngine(
+    SettingsEditor? editor = null,
+    string version = "1.2.3",
+    Action<Action>? background = null) =>
     new(
       editor ?? _rig.NewEditor(),
       _rig.NewRecents(),
@@ -80,8 +87,11 @@ public abstract class NewProjectFixture
       action => action(),
       () => _rig.Time.Now,
       _files,
-      work => work(),
-      NewCreator());
+      background ?? (work => work()),
+      NewCreator())
+    {
+      CheckDelay = _ => Task.CompletedTask
+    };
 
   internal string[] StoredPaths() =>
     ((JsonArray)JsonNode.Parse(_rig.Files.TextOf(_rig.RecentsPath)!)!["projects"]!)

@@ -33,7 +33,8 @@
   clicking one opens the New Project dialog. The header New Project button and the Projects tab's New card open
   it too, with Empty 3D chosen, or the first usable template when that one is missing or needs a newer engine.
   The dialog is an in-window overlay (`NewProject` on the shell, null when closed) that disables everything behind
-  it. It takes a name and a location and shows whether the target folder is free. It creates the project with
+  it. It takes a name and a location. Name rules apply at once; the disk checks of the location and the target folder
+  run off the UI thread 250 ms after the last edit, with "Checking..." and Create disabled meanwhile. It creates the project with
   `ProjectCreator` off the UI thread, records it with its template and, if asked, opens it in the editor. A failed
   copy keeps the dialog open with the reason. The Samples tab is real: `TemplateCatalog` reads
   `<engine>/templates`, each `sample` becomes a card, the header search filters them, and Play runs

@@ -236,6 +236,9 @@ public class MainWindowViewModel : ObservableObject
 
     public Action? MinimizeWindow { get; set; }
 
+    // How long the New Project dialog waits after an edit before it looks at the disk.
+    public Func<TimeSpan, Task> CheckDelay { get; set; } = span => Task.Delay(span);
+
     public IRelayCommand CloseOverlayCommand { get; }
     public IRelayCommand<Project> HostProjectCommand { get; }
     public IRelayCommand<Project> ShowInFolderCommand { get; }
@@ -954,7 +957,26 @@ public class MainWindowViewModel : ObservableObject
             _runInBackground,
             _post,
             (folder, openInEditor) => FinishCreate(entry, folder, openInEditor),
-            () => NewProject = null);
+            () => NewProject = null,
+            CheckDelay,
+            RunCheckInBackground);
+    }
+
+    private Task<TargetCheck> RunCheckInBackground(Func<TargetCheck> check)
+    {
+        var done = new TaskCompletionSource<TargetCheck>();
+        _runInBackground(() =>
+        {
+            try
+            {
+                done.SetResult(check());
+            }
+            catch (Exception exception)
+            {
+                done.SetException(exception);
+            }
+        });
+        return done.Task;
     }
 
     private void FinishCreate(TemplateEntry template, string folder, bool openInEditor)
