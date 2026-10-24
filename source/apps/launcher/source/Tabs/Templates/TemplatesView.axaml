@@ -23,58 +23,56 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="m:TemplateCard">
-                    <Border Classes="card" Width="236" Margin="9" CornerRadius="11" ClipToBounds="True"
-                            IsEnabled="{Binding IsAvailable}" Classes.gated="{Binding NeedsNewerEngine}">
-                        <Border.Styles>
-                            <Style Selector="Border.gated">
-                                <Setter Property="Opacity" Value="0.5" />
-                            </Style>
-                        </Border.Styles>
-                        <StackPanel>
-                            <Panel Height="133" Background="{StaticResource InsetBrush}">
-                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
-                                       IsVisible="{Binding HasThumbnail}" />
-                                <Panel IsVisible="{Binding !HasThumbnail}">
-                                    <Border Background="{StaticResource ThumbStripes}" />
-                                    <Border Background="{StaticResource AccDim}" />
-                                    <Path Classes="icon" Width="30" Height="30"
-                                          Stroke="#2EFFFFFF" StrokeThickness="2.4"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          Data="{StaticResource IconLayers}" />
+                    <Button Theme="{StaticResource BareButton}" Margin="9"
+                            Command="{Binding $parent[local:TemplatesView].((local:TemplatesViewModel)DataContext).OpenCommand, FallbackValue={x:Null}}"
+                            CommandParameter="{Binding}">
+                        <Border Classes="card" Width="236" CornerRadius="11" ClipToBounds="True">
+                            <StackPanel>
+                                <Panel Height="133" Background="{StaticResource InsetBrush}">
+                                    <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                                           IsVisible="{Binding HasThumbnail}" />
+                                    <Panel IsVisible="{Binding !HasThumbnail}">
+                                        <Border Background="{StaticResource ThumbStripes}" />
+                                        <Border Background="{StaticResource AccDim}" />
+                                        <Path Classes="icon" Width="30" Height="30"
+                                              Stroke="#2EFFFFFF" StrokeThickness="2.4"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Data="{StaticResource IconLayers}" />
+                                    </Panel>
                                 </Panel>
-                            </Panel>
-                            <StackPanel Margin="16,14,16,16" Spacing="4">
-                                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding Description}" FontSize="12" LineHeight="18"
-                                           MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
-                                           Foreground="{StaticResource T2Brush}" />
-                                <ItemsControl ItemsSource="{Binding Tags}" Margin="0,8,0,0">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="x:String">
-                                            <Border Margin="0,0,6,6" Padding="8,2" CornerRadius="10"
-                                                    Background="{StaticResource InsetBrush}"
-                                                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
-                                                <TextBlock Text="{Binding}" FontSize="11"
-                                                           Foreground="{StaticResource T2Brush}" />
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Border IsVisible="{Binding HasPlayers}" Padding="9,3" CornerRadius="10"
-                                        HorizontalAlignment="Left" Background="{StaticResource AccDim}">
-                                    <TextBlock Text="{Binding PlayersLabel}" FontSize="11" FontWeight="SemiBold"
-                                               Foreground="{StaticResource AccBrush}" />
-                                </Border>
-                                <TextBlock IsVisible="{Binding NeedsNewerEngine}" Text="Needs a newer engine"
-                                           Margin="0,4,0,0" FontSize="11" FontWeight="SemiBold"
-                                           Foreground="{StaticResource DangerBrush}" />
+                                <StackPanel Margin="16,14,16,16" Spacing="4">
+                                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Description}" FontSize="12" LineHeight="18"
+                                               MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                               Foreground="{StaticResource T2Brush}" />
+                                    <ItemsControl ItemsSource="{Binding Tags}" Margin="0,8,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <Border Margin="0,0,6,6" Padding="8,2" CornerRadius="10"
+                                                        Background="{StaticResource InsetBrush}"
+                                                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+                                                    <TextBlock Text="{Binding}" FontSize="11"
+                                                               Foreground="{StaticResource T2Brush}" />
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Border IsVisible="{Binding HasPlayers}" Padding="9,3" CornerRadius="10"
+                                            HorizontalAlignment="Left" Background="{StaticResource AccDim}">
+                                        <TextBlock Text="{Binding PlayersLabel}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource AccBrush}" />
+                                    </Border>
+                                    <TextBlock IsVisible="{Binding NeedsNewerEngine}" Text="Needs a newer engine"
+                                               Margin="0,4,0,0" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{StaticResource DangerBrush}" />
+                                </StackPanel>
                             </StackPanel>
-                        </StackPanel>
-                    </Border>
+                        </Border>
+                    </Button>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>

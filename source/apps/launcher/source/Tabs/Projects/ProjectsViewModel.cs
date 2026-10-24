@@ -14,8 +14,8 @@ public class ProjectsViewModel : ObservableObject
 {
     private static readonly Project NewTile = new() { IsNewCard = true, Name = "", Path = "", Edited = "" };
 
-    // The shell owns navigation; the tab only asks it to open Templates.
-    private readonly Action _openTemplates;
+    // The shell owns the New Project dialog; the tab only asks it to open.
+    private readonly Action _openNewProject;
     private string _searchText = "";
     private bool _isGridView = true;
     private string? _exploreTooltip;
@@ -110,21 +110,21 @@ public class ProjectsViewModel : ObservableObject
     public IRelayCommand<Project> OpenProjectCommand { get; }
 
     public ProjectsViewModel(
-        Action openTemplates,
+        Action openNewProject,
         IRelayCommand exploreCommand,
         IRelayCommand<Project> openProjectCommand,
         string? exploreTooltip,
         string? openTooltip,
         IEnumerable<Project> projects)
     {
-        _openTemplates = openTemplates;
+        _openNewProject = openNewProject;
         ExploreCommand = exploreCommand;
         OpenProjectCommand = openProjectCommand;
         ExploreTooltip = exploreTooltip;
         OpenTooltip = openTooltip;
         SetGridCommand = new RelayCommand(() => IsGridView = true);
         SetListCommand = new RelayCommand(() => IsGridView = false);
-        NewProjectCommand = new RelayCommand(() => _openTemplates());
+        NewProjectCommand = new RelayCommand(() => _openNewProject());
 
         Projects = new ObservableCollection<Project>(projects);
         Projects.CollectionChanged += (_, _) =>

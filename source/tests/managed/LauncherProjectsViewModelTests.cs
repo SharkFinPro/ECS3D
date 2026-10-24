@@ -14,9 +14,9 @@ public class LauncherProjectsViewModelTests
 
   private static ProjectsViewModel NewModel(
     IEnumerable<Project>? projects = null,
-    Action? openTemplates = null) =>
+    Action? openNewProject = null) =>
     new(
-      openTemplates ?? (() => { }),
+      openNewProject ?? (() => { }),
       new RelayCommand(() => { }),
       new RelayCommand<Project>(_ => { }),
       "explore tip",
@@ -126,10 +126,10 @@ public class LauncherProjectsViewModelTests
   }
 
   [Fact]
-  public void NewProjectCommandOpensTemplates()
+  public void NewProjectCommandAsksTheShellForTheDialog()
   {
     var opened = 0;
-    var model = NewModel(openTemplates: () => opened++);
+    var model = NewModel(openNewProject: () => opened++);
 
     model.NewProjectCommand.Execute(null);
 

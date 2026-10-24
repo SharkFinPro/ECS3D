@@ -62,10 +62,11 @@ public class MainWindow : Window
             viewModel.OpenLogFile = OpenWithDefaultAppAsync;
             viewModel.ShowFolder = ShowFolderAsync;
             viewModel.OpenUrl = OpenInBrowserAsync;
-            viewModel.PickProjectFolder = PickProjectFolderAsync;
+            viewModel.PickProjectFolder = () => PickFolderAsync("Locate the project folder");
             viewModel.PickProjectFile = PickProjectFileAsync;
             viewModel.Hosting.CopyToClipboard = CopyToClipboardAsync;
             StartHostingClock(viewModel);
+            viewModel.PickProjectsFolder = () => PickFolderAsync("Choose where to create the project");
         }
     }
 
@@ -104,11 +105,11 @@ public class MainWindow : Window
         return Launcher is { } launcher && await launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(path));
     }
 
-    private async Task<string?> PickProjectFolderAsync()
+    private async Task<string?> PickFolderAsync(string title)
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Locate the project folder",
+            Title = title,
             AllowMultiple = false,
         });
         return folders.Count == 0 ? null : folders[0].TryGetLocalPath() ?? string.Empty;
