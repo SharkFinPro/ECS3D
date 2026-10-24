@@ -85,7 +85,7 @@
         <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
 
             <!-- ===== SIDEBAR ===== -->
-            <Border Grid.Column="0" Width="212" Background="{StaticResource PanelBrush}"
+            <Border Grid.Column="0" Width="212" IsEnabled="{Binding IsInteractive}" Background="{StaticResource PanelBrush}"
                     BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
                 <DockPanel Margin="12,16">
 
@@ -141,7 +141,7 @@
             </Border>
 
             <!-- ===== MAIN ===== -->
-            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
+            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" IsEnabled="{Binding IsInteractive}">
 
                 <!-- Toolbar -->
                 <Grid Grid.Row="0" Margin="28,20,28,16" ColumnDefinitions="*,Auto,Auto,Auto,Auto">

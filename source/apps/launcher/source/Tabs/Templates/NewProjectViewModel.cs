@@ -21,6 +21,7 @@ public sealed class NewProjectViewModel : ObservableObject
     private string _location;
     private bool _openInEditor = true;
     private bool _isBusy;
+    private bool _isClosed;
     private string? _createError;
     private string? _nameError;
     private string? _locationError;
@@ -224,6 +225,7 @@ public sealed class NewProjectViewModel : ObservableObject
     {
         if (!IsBusy)
         {
+            _isClosed = true;
             _close();
         }
     }
@@ -237,12 +239,13 @@ public sealed class NewProjectViewModel : ObservableObject
 
         var name = _projectName;
         var location = _location.Trim();
+        var openInEditor = OpenInEditor;
         CreateError = null;
         IsBusy = true;
         _runInBackground(() =>
         {
             var result = Run(name, location);
-            _post(() => Finish(result));
+            _post(() => Finish(result, openInEditor));
         });
     }
 
@@ -252,18 +255,19 @@ public sealed class NewProjectViewModel : ObservableObject
         {
             return _creator.Create(_template, location, name);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception)
         {
             return new ProjectCreationResult(null, $"Could not create the project: {exception.Message}");
         }
     }
 
-    private void Finish(ProjectCreationResult result)
+    private void Finish(ProjectCreationResult result, bool openInEditor)
     {
         IsBusy = false;
         if (result.Succeeded)
         {
-            _created(result.ProjectFolder!, OpenInEditor);
+            _isClosed = true;
+            _created(result.ProjectFolder!, openInEditor);
             return;
         }
 
@@ -279,7 +283,7 @@ public sealed class NewProjectViewModel : ObservableObject
         }
 
         var chosen = await _pickLocation();
-        if (chosen is null)
+        if (chosen is null || _isClosed)
         {
             return;
         }

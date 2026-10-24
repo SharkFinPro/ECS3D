@@ -47,11 +47,16 @@ public sealed class TemplatesViewModel : ObservableObject
         }
     }
 
-    // Set by the shell, which owns the New Project dialog; a card click runs it with that card.
+    // Passed in by the shell, which owns the New Project dialog; a card click runs it with that card.
     public IRelayCommand<TemplateCard> OpenCommand { get; }
 
+    public TemplatesViewModel(string launcherVersion, Func<string, Bitmap?> loadThumbnail)
+        : this(launcherVersion, loadThumbnail, null)
+    {
+    }
+
     public TemplatesViewModel(
-        string launcherVersion, Func<string, Bitmap?> loadThumbnail, IRelayCommand<TemplateCard>? openCommand = null)
+        string launcherVersion, Func<string, Bitmap?> loadThumbnail, IRelayCommand<TemplateCard>? openCommand)
     {
         _launcherVersion = launcherVersion;
         _loadThumbnail = loadThumbnail;
