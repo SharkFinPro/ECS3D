@@ -36,7 +36,7 @@
             <StackPanel Spacing="6" IsEnabled="{Binding !IsBusy}">
                 <TextBlock Classes="label" Text="Project name" />
                 <TextBox Name="NameBox" Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}" />
-                <TextBlock Classes="error" Text="{Binding NameError}" IsVisible="{Binding HasNameError}" />
+                <TextBlock Name="NameErrorText" Classes="error" Text="{Binding NameError}" IsVisible="{Binding HasNameError}" />
 
                 <TextBlock Classes="label" Text="Location" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">

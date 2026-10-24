@@ -35,6 +35,7 @@ public class MainWindowViewModel : ObservableObject
     private readonly Action<Action> _runInBackground;
     private readonly ProjectCreator _creator;
     private IReadOnlyList<TemplateEntry> _templates = [];
+    private IReadOnlyList<TemplateEntry> _samples = [];
     private string _templatesFolder = "";
     private Dictionary<string, bool> _missing = [];
     private readonly RunningEditors _editors;
@@ -247,6 +248,7 @@ public class MainWindowViewModel : ObservableObject
     public IRelayCommand<Project> LocateProjectCommand { get; }
     public IRelayCommand OpenExistingCommand { get; }
     public IRelayCommand<SampleCard> PlaySampleCommand { get; }
+    public IRelayCommand<SampleCard> OpenSampleCopyCommand { get; }
     public IRelayCommand OpenJoinCommand { get; }
     public IRelayCommand CloseJoinCommand { get; }
     public IRelayCommand DismissToastCommand { get; }
@@ -434,6 +436,7 @@ public class MainWindowViewModel : ObservableObject
         LocateProjectCommand = new RelayCommand<Project>(project => _ = LocateAsync(project));
         OpenExistingCommand = new RelayCommand(() => _ = OpenExistingAsync());
         PlaySampleCommand = new RelayCommand<SampleCard>(PlaySample, _ => _actions.Play.Available);
+        OpenSampleCopyCommand = new RelayCommand<SampleCard>(OpenSampleCopy);
         OpenJoinCommand = new RelayCommand(OpenJoin, () => _actions.Play.Available);
         CloseJoinCommand = new RelayCommand(() => JoinDialog = null);
         DismissToastCommand = new RelayCommand(DismissToast);
@@ -459,7 +462,7 @@ public class MainWindowViewModel : ObservableObject
         Projects.UpdateHostTooltip(_actions.Host.Tooltip);
         Refresh();
         Templates = new TemplatesViewModel(version, loadThumbnail, OpenTemplateCommand);
-        Samples = new SamplesViewModel(PlaySampleCommand, _actions.Play.Tooltip, loadThumbnail);
+        Samples = new SamplesViewModel(PlaySampleCommand, OpenSampleCopyCommand, _actions.Play.Tooltip, loadThumbnail);
         ReloadCatalog(_engine);
 
         Learn = new LearnViewModel(
@@ -586,6 +589,7 @@ public class MainWindowViewModel : ObservableObject
     {
         var contents = _catalog.Load(engine.Folder);
         _templates = contents.Templates;
+        _samples = contents.Samples;
         _templatesFolder = contents.TemplatesFolder;
         Templates.Reload(contents);
         Samples.Reload(contents);
@@ -964,7 +968,26 @@ public class MainWindowViewModel : ObservableObject
         var entry = card is { IsAvailable: true }
             ? _templates.FirstOrDefault(item => item.Manifest.Id == card.Id)
             : null;
-        if (entry is null || NewProject is not null)
+        if (entry is null)
+        {
+            return;
+        }
+
+        ShowNewProject(entry);
+    }
+
+    private void OpenSampleCopy(SampleCard? card)
+    {
+        var entry = card is null ? null : _samples.FirstOrDefault(item => item.Manifest.Id == card.Id);
+        if (entry is not null)
+        {
+            ShowNewProject(entry);
+        }
+    }
+
+    private void ShowNewProject(TemplateEntry entry)
+    {
+        if (NewProject is not null)
         {
             return;
         }
