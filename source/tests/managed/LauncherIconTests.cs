@@ -75,8 +75,8 @@ public class LauncherIconTests
   [Fact]
   public void TitleBarMarkIsTheLauncherMarkImage()
   {
-    var grid = MainWindow().Descendants("Grid")
-      .Single(g => (string?)g.Attribute("ColumnDefinitions") == "Auto,Auto,Auto,*,Auto,Auto");
+    var grid = MainWindow().Descendants()
+      .Single(g => g.Name.LocalName == "Grid" && (string?)g.Attribute("ColumnDefinitions") == "Auto,Auto,Auto,*,Auto,Auto");
     var first = grid.Elements().Where(e => (string?)e.Attribute("Grid.Column") == "0").ToList();
 
     var image = Assert.Single(first, e => e.Name.LocalName == "Image");
