@@ -44,7 +44,11 @@ public sealed class PhysicalFileSystem : IFileSystem
 
     public void CreateDirectory(string path) => Directory.CreateDirectory(path);
 
-    public void CopyFile(string source, string destination) => File.Copy(source, destination, overwrite: false);
+    public void CopyFile(string source, string destination)
+    {
+        File.Copy(source, destination, overwrite: false);
+        File.SetAttributes(destination, File.GetAttributes(destination) & ~FileAttributes.ReadOnly);
+    }
 
     public void MoveDirectory(string source, string destination) => Directory.Move(source, destination);
 

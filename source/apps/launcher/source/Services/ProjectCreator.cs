@@ -1,12 +1,13 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace ECS3DLauncher.Services;
 
-public enum ProjectTargetState { Free, NotEmpty, NotAFolder }
+public enum ProjectTargetState { Free, NotEmpty, NotAFolder, Unavailable }
 
 public sealed record ProjectCreationResult(string? ProjectFolder, string? Error)
 {
@@ -16,7 +17,13 @@ public sealed record ProjectCreationResult(string? ProjectFolder, string? Error)
 // Copies a template into <location>/<name> through a hidden sibling, so the final rename is the commit.
 public sealed class ProjectCreator
 {
-    private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true, IndentSize = 2 };
+    // Only the engine's JSON parser reads this file, never a web page, so characters stay literal.
+    private static readonly JsonSerializerOptions WriteOptions = new()
+    {
+        WriteIndented = true,
+        IndentSize = 2,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     private readonly IFileSystem _files;
     private readonly ILauncherLog _log;
@@ -35,10 +42,27 @@ public sealed class ProjectCreator
 
     public static string HiddenFolderName(string name) => $".{name}.creating";
 
-    // Free when <location>/<name> does not exist or is an empty folder; NotAFolder when a file has that path.
+    // Free when <location>/<name> does not exist or is an empty folder; NotAFolder when a file has that path;
+    // Unavailable when the path is malformed or the folder cannot be read. Never throws.
     public ProjectTargetState CheckTarget(string location, string name)
     {
-        var target = Path.Combine(location, name);
+        if (!IsUsablePath(location) || !IsUsablePath(name))
+        {
+            return ProjectTargetState.Unavailable;
+        }
+
+        try
+        {
+            return Classify(Path.Combine(location, name));
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            return ProjectTargetState.Unavailable;
+        }
+    }
+
+    private ProjectTargetState Classify(string target)
+    {
         if (_files.FileExists(target))
         {
             return ProjectTargetState.NotAFolder;
@@ -61,10 +85,17 @@ public sealed class ProjectCreator
             return new ProjectCreationResult(null, invalid);
         }
 
-        var target = Path.Combine(location, name);
-        var hidden = Path.Combine(location, HiddenFolderName(name));
+        if (!IsUsablePath(location))
+        {
+            return new ProjectCreationResult(null, "The location is not a valid folder path.");
+        }
+
+        var target = name;
+        var hidden = name;
         try
         {
+            target = Path.Combine(location, name);
+            hidden = Path.Combine(location, HiddenFolderName(name));
             _files.CreateDirectory(location);
             var blocked = TargetError(location, name, target);
             if (blocked is not null)
@@ -75,7 +106,7 @@ public sealed class ProjectCreator
             Build(template, hidden, target);
             return new ProjectCreationResult(target, null);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
+        catch (Exception ex) when (IsExpected(ex))
         {
             _log.Warn($"Creating project {target} failed: {ex.Message}");
             RemoveHidden(hidden);
@@ -113,11 +144,18 @@ public sealed class ProjectCreator
         }
     }
 
+    private static bool IsUsablePath(string? path) => !string.IsNullOrWhiteSpace(path) && !path.Contains('\0');
+
+    private static bool IsExpected(Exception ex) =>
+        ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException
+            or ArgumentException or NotSupportedException;
+
     private string? TargetError(string location, string name, string target) =>
         CheckTarget(location, name) switch
         {
             ProjectTargetState.NotEmpty => $"{target} already exists and is not empty.",
             ProjectTargetState.NotAFolder => $"{target} already exists as a file.",
+            ProjectTargetState.Unavailable => $"{target} cannot be used as a project folder.",
             _ => null
         };
 

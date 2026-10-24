@@ -22,7 +22,7 @@ public interface IFileSystem
 
     void CreateDirectory(string path);
 
-    // Never overwrites an existing destination.
+    // Never overwrites an existing destination; the copy is never read-only, whatever the source was.
     void CopyFile(string source, string destination);
 
     void MoveDirectory(string source, string destination);

@@ -13,9 +13,9 @@ namespace ECS3DManagedTests;
 internal sealed class FailingFileSystem : IFileSystem
 {
   private readonly PhysicalFileSystem _inner = new();
-  private int _copies;
+  public string? FailCopyOf { get; set; }
 
-  public int FailOnCopy { get; set; }
+  public bool FailEnumerateFiles { get; set; }
 
   public bool FailMove { get; set; }
 
@@ -29,7 +29,8 @@ internal sealed class FailingFileSystem : IFileSystem
 
   public IReadOnlyList<string> EnumerateDirectories(string path) => _inner.EnumerateDirectories(path);
 
-  public IReadOnlyList<string> EnumerateFiles(string path) => _inner.EnumerateFiles(path);
+  public IReadOnlyList<string> EnumerateFiles(string path) =>
+    FailEnumerateFiles ? throw new UnauthorizedAccessException("listing denied") : _inner.EnumerateFiles(path);
 
   public string ReadAllText(string path) => _inner.ReadAllText(path);
 
@@ -47,8 +48,7 @@ internal sealed class FailingFileSystem : IFileSystem
 
   public void CopyFile(string source, string destination)
   {
-    _copies++;
-    if (FailOnCopy > 0 && _copies == FailOnCopy)
+    if (FailCopyOf is not null && source.EndsWith(FailCopyOf, StringComparison.Ordinal))
     {
       throw new UnauthorizedAccessException("access to x is denied");
     }
@@ -105,6 +105,15 @@ public class LauncherProjectCreatorTests : IDisposable
 
   public void Dispose()
   {
+    var readOnly = Path.Combine(_root, "loc", "Game", "project.ecs3d");
+    foreach (var file in new[] { Path.Combine(_root, "template", "project.ecs3d"), readOnly })
+    {
+      if (File.Exists(file))
+      {
+        File.SetAttributes(file, FileAttributes.Normal);
+      }
+    }
+
     if (Directory.Exists(_root))
     {
       Directory.Delete(_root, true);
@@ -370,7 +379,7 @@ public class LauncherProjectCreatorTests : IDisposable
   {
     var files = new FailingFileSystem
     {
-      FailOnCopy = kind == "copy" ? 2 : 0,
+      FailCopyOf = kind == "copy" ? "A.cs" : null,
       FailMove = kind == "move",
       FailWrite = kind == "write"
     };
@@ -447,5 +456,74 @@ public class LauncherProjectCreatorTests : IDisposable
     File.WriteAllText(destination, "old");
     Assert.Throws<IOException>(() => files.CopyFile(source, destination));
     Assert.Equal("old", File.ReadAllText(destination));
+  }
+
+  [Theory]
+  [InlineData("")]
+  [InlineData("   ")]
+  [InlineData("a\0b")]
+  public void ABadLocationIsAnErrorNotAnException(string location)
+  {
+    var creator = NewCreator();
+
+    var result = creator.Create(MakeTemplate(), location, "Game");
+
+    Assert.False(result.Succeeded);
+    Assert.False(string.IsNullOrEmpty(result.Error));
+    Assert.Equal(ProjectTargetState.Unavailable, creator.CheckTarget(location, "Game"));
+    Assert.False(Directory.Exists(Path.Combine(Directory.GetCurrentDirectory(), "Game")));
+    Assert.Equal([Path.Combine(_root, "template")], Directory.GetDirectories(_root));
+  }
+
+  [Fact]
+  public void AnUnreadableTargetIsUnavailable()
+  {
+    Directory.CreateDirectory(Path.Combine(Location, "Game"));
+    var failing = new FailingFileSystem { FailEnumerateFiles = true };
+
+    Assert.Equal(ProjectTargetState.Unavailable, NewCreator(failing).CheckTarget(Location, "Game"));
+    Assert.Equal(ProjectTargetState.Free, NewCreator(new FailingFileSystem()).CheckTarget(Location, "Game"));
+
+    var result = NewCreator(failing).Create(MakeTemplate(), Location, "Game");
+    Assert.False(result.Succeeded);
+    Assert.False(File.Exists(Path.Combine(Location, "Game", "project.ecs3d")));
+  }
+
+  [Fact]
+  public void OutputKeepsCharactersLiteral()
+  {
+    var name = "Caf\u00E9 <A+B> & 'q'";
+    var json = "{\"assets\":{\"scenes\":[{\"uuid\":\"s\",\"objects\":[{\"name\":\"" + name + "\"}]}]}}";
+
+    var output = ProjectCreator.RewriteObjectUuids(json, NextUuid);
+
+    Assert.Contains("\"name\": \"" + name + "\"", output);
+  }
+
+  [Fact]
+  public void AReadOnlyProjectFileIsCopiedEditable()
+  {
+    var template = MakeTemplate();
+    File.SetAttributes(Path.Combine(template.FolderPath, "project.ecs3d"), FileAttributes.ReadOnly);
+
+    var result = NewCreator().Create(template, Location, "Game");
+
+    Assert.True(result.Succeeded);
+    var copied = Path.Combine(result.ProjectFolder!, "project.ecs3d");
+    Assert.False(File.GetAttributes(copied).HasFlag(FileAttributes.ReadOnly));
+    Assert.DoesNotContain("obj-1", File.ReadAllText(copied));
+  }
+
+  [Fact]
+  public void AFailedStaleCleanupIsAnErrorWithNoTarget()
+  {
+    var template = MakeTemplate();
+    Directory.CreateDirectory(HiddenOf(Location, "Game"));
+
+    var result = NewCreator(new FailingFileSystem { FailDelete = true }).Create(template, Location, "Game");
+
+    Assert.False(result.Succeeded);
+    Assert.Contains("delete failed", result.Error);
+    Assert.False(Directory.Exists(Path.Combine(Location, "Game")));
   }
 }
