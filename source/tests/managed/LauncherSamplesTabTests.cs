@@ -359,7 +359,7 @@ public class LauncherSamplesTabTests
     files.Seed(Path.Combine(folder, "template.json"), "{}");
     files.Seed(Path.Combine(folder, "project.ecs3d"), "{\"assets\":{\"scenes\":[{\"objects\":[{\"uuid\":\"a\",\"children\":[]}]}]}}");
     var counter = 0;
-    return new MainWindowViewModel(
+    var model = new MainWindowViewModel(
       _rig.NewEditor(),
       _rig.NewRecents(),
       _runner,
@@ -372,6 +372,8 @@ public class LauncherSamplesTabTests
       files,
       work => work(),
       new ProjectCreator(files, _rig.Log, () => new Guid($"00000000-0000-0000-0000-{++counter:D12}")));
+    model.NewProjectCheckDelay = _ => Task.CompletedTask;
+    return model;
   }
 
   [Fact]
