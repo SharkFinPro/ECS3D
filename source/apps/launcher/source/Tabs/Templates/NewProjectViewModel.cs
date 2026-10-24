@@ -11,7 +11,7 @@ namespace ECS3DLauncher.Tabs.Templates;
 // What the disk said about a location and the target folder inside it; Target is null when it was not looked at.
 public sealed record TargetCheck(string? LocationError, ProjectTargetState? Target);
 
-// How the dialog reaches other threads. RunInBackground runs the copy and Post brings its result back to the UI thread;
+// How the dialog reaches other threads. RunInBackground runs the copy and Post brings its result back to the UI thread.
 // Delay is the pause before a disk check and RunCheck runs one off the UI thread.
 public sealed record DialogScheduling(
     Action<Action> RunInBackground,

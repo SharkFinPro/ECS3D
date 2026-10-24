@@ -18,7 +18,7 @@ public sealed record ProjectCreationResult(string? ProjectFolder, string? Error)
 // Copies a template into <location>/<name> through a hidden sibling, so the final rename is the commit.
 public sealed class ProjectCreator
 {
-    public const string CanceledMessage = "Canceled.";
+    public static string CanceledMessage => "Canceled.";
 
     // Only the engine's JSON parser reads this file, never a web page, so characters stay literal.
     private static readonly JsonSerializerOptions WriteOptions = new()
@@ -100,11 +100,14 @@ public sealed class ProjectCreator
 
     // Cancelling is checked between files and before the commit; a cancelled copy removes the hidden folder as a
     // failed one does and reports Canceled.
+    public ProjectCreationResult Create(TemplateEntry template, string location, string name) =>
+        Create(template, location, name, CancellationToken.None);
+
     public ProjectCreationResult Create(
         TemplateEntry template,
         string location,
         string name,
-        CancellationToken cancel = default)
+        CancellationToken cancel)
     {
         var invalid = ProjectNameRules.Validate(name);
         if (invalid is not null)

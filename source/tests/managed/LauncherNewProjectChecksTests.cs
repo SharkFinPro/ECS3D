@@ -13,7 +13,7 @@ public class LauncherNewProjectChecksTests : NewProjectFixture
   private readonly List<TaskCompletionSource> _delays = [];
   private readonly List<(Func<TargetCheck> Work, TaskCompletionSource<TargetCheck> Done)> _checks = [];
 
-  private Task WaitedDelay(TimeSpan span)
+  private Task WaitedDelay(TimeSpan _)
   {
     var gate = new TaskCompletionSource();
     _delays.Add(gate);
