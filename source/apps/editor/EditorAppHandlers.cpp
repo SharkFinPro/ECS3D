@@ -63,13 +63,18 @@ void EditorApp::onAddAsset(const nlohmann::json& asset)
   }
 }
 
-// Rename an asset (display-name override only). Same local-apply-then-send shape as onAddAsset.
+// Rename an asset (a display-name override, or a scene's real name). Same local-apply-then-send shape as
+// onAddAsset, except a refused rename is neither sent nor recorded.
 void EditorApp::onRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName)
 {
   const auto op = replication::buildRenameAsset(assetUUID, displayName);
   auto command = edits::commandForRenameAsset(op, *m_assetRegistry);
 
-  replication::applyRenameAsset(*m_assetRegistry, op);
+  if (!replication::applyRenameAsset(*m_assetRegistry, *m_sceneManager, op))
+  {
+    Log::warn(LogCategory::editor, "Refused asset rename.");
+    return;
+  }
 
   m_netClient->send(replication::packRenameAsset(op));
   m_saveUI->markEdited();

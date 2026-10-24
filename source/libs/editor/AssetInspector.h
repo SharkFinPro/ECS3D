@@ -56,7 +56,8 @@ public:
   void setUpdatePrefabBodyCallback(UpdatePrefabBodyCallback callback);
 
   // The registry backs the reused prefab-body ObjectInspector's script drop zone (resolving a dropped
-  // script asset to its class name). Same pointer the panel hands the object inspector.
+  // script asset to its class name) and validates a scene rename against the names already in use. Same
+  // pointer the panel hands the object inspector.
   void setAssetRegistry(const AssetRegistry* registry);
 
   // When false (read-only server), the scene inspector's "Load Scene" button is disabled (mirroring the
@@ -79,6 +80,8 @@ private:
   RemoveCallback m_onRemove;
   ReferenceCountCallback m_onReferenceCount;
   UpdatePrefabBodyCallback m_onUpdatePrefabBody;
+
+  const AssetRegistry* m_assetRegistry = nullptr;
 
   bool m_editable = true;
 
@@ -126,9 +129,13 @@ private:
   bool m_haveScriptSource = false; // script .cs source read from disk
   std::string m_scriptSource;
 
-  // Display name (an editable rename field for the flat file assets, gated on editable; read-only text for
-  // scenes) + uuid + path/source rows common to every asset type.
+  // Display name (an editable rename field, gated on editable) + uuid + path/source rows common to every
+  // asset type.
   void displayHeader(const AssetRecord& record);
+
+  // A scene's name field. Unlike the live display-name field it commits once, when editing ends, because each
+  // scene rename re-snapshots the project and a half-typed name could collide with another asset's.
+  void displaySceneNameField(const AssetRecord& record);
 
   // Refreshes the file-metadata cache above for `record` (no-op work when its file isn't reachable).
   void refreshMeta(const AssetRecord& record);

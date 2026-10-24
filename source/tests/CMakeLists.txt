@@ -140,6 +140,7 @@ add_executable(${PROJECT_NAME}
   StateDeltaTest.cpp
   StatusPayloadTest.cpp
   SceneManagerTest.cpp
+  SceneRenameTest.cpp
   SceneScriptListTest.cpp
   SceneScriptEditTest.cpp
   SceneScriptUndoTest.cpp

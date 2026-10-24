@@ -264,6 +264,13 @@ namespace {
 
     return adopt;
   }
+
+  // A scene record is keyed by its name (path) and never carries a display override, so a scene rename
+  // reads and writes the path.
+  const std::string& renameValueOf(const AssetRecord& record)
+  {
+    return record.type == AssetType::Scene ? record.path : record.displayName;
+  }
 }
 
 EditCommand EditCommand::componentEdit(const uuids::uuid& objectUUID, const nlohmann::json& before,
@@ -1150,7 +1157,7 @@ Validation EditCommand::validateForUndo(const ObjectManager& objectManager,
         return { ValidationFailure::targetMissing, data.assetUUID };
       }
 
-      if (record->displayName != data.afterDisplayName)
+      if (renameValueOf(*record) != data.afterDisplayName)
       {
         return { ValidationFailure::targetChanged, data.assetUUID };
       }
@@ -1427,7 +1434,7 @@ Validation EditCommand::validateForRedo(const ObjectManager& objectManager,
         return { ValidationFailure::targetMissing, data.assetUUID };
       }
 
-      if (record->displayName != data.beforeDisplayName)
+      if (renameValueOf(*record) != data.beforeDisplayName)
       {
         return { ValidationFailure::targetChanged, data.assetUUID };
       }

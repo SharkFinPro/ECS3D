@@ -246,7 +246,8 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 
 [[nodiscard]] nlohmann::json unpackAddAsset(const net::Message& message);
 
-// Asset mutation ({ uuid, [displayName] }). Rename is a display-name override only; remove drops the
+// Asset mutation ({ uuid, [displayName] }). Rename is a display-name override for a file asset or prefab; for
+// a scene, displayName is the scene's new name (see applyRenameAsset). Remove drops the
 // record and lets references dangle. Both mirror addAsset's local-apply-then-send shape:
 // the editor applies locally for instant feedback and sends the op; the server applies it authoritatively
 // and re-snapshots. The build* helpers assemble the blob; pack*/unpack* carry it on the wire.
@@ -254,7 +255,10 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 
 [[nodiscard]] nlohmann::json buildRemoveAsset(const uuids::uuid& assetUUID);
 
-void applyRenameAsset(AssetRegistry& assetRegistry, const nlohmann::json& op);
+// Returns true when the op applied. A scene rename sets the SceneAsset's name and re-keys its registry record;
+// it is refused (false, nothing changed) for a blank name, an unknown scene, or a name another scene or
+// prefab already owns. Renaming a scene to its current name succeeds without change.
+bool applyRenameAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, const nlohmann::json& op);
 
 void applyRemoveAsset(AssetRegistry& assetRegistry, const nlohmann::json& op);
 

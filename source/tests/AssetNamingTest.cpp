@@ -201,6 +201,27 @@ TEST_F(AssetNamingTest, EmptyPrefabBodyInstantiatesAsOneObjectWithATransform)
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
 }
 
+TEST_F(AssetNamingTest, SceneNameAvailabilityRulesOutBlankAndOtherRecordsNames)
+{
+  addScene("Main");
+  addScene("Other");
+  addPrefab("Block");
+  addScene("Shown", "Alias");
+  const auto self = makeUUID(1);
+
+  EXPECT_TRUE(assetNaming::isSceneNameAvailable(m_registry, self, "Main"));
+  EXPECT_TRUE(assetNaming::isSceneNameAvailable(m_registry, self, "Free Name"));
+
+  EXPECT_FALSE(assetNaming::isSceneNameAvailable(m_registry, self, "Other"));
+  EXPECT_FALSE(assetNaming::isSceneNameAvailable(m_registry, self, "Block"));
+  EXPECT_FALSE(assetNaming::isSceneNameAvailable(m_registry, self, "Alias"));
+  EXPECT_FALSE(assetNaming::isSceneNameAvailable(m_registry, self, ""));
+  EXPECT_FALSE(assetNaming::isSceneNameAvailable(m_registry, self, "  \t"));
+
+  EXPECT_TRUE(assetNaming::isSceneNameAvailable(m_registry, makeUUID(2), "Other"));
+  EXPECT_FALSE(assetNaming::isSceneNameAvailable(m_registry, makeUUID(2), "Main"));
+}
+
 TEST_F(AssetNamingTest, ReRegisteringAPrefabNameKeepsTheUUIDAndUpdatesTheBody)
 {
   const auto first = makeUUID(1);

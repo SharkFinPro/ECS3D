@@ -1,5 +1,6 @@
 #include "AssetInspector.h"
 #include "AssetDisplay.h"
+#include "AssetNaming.h"
 #include "GuiComponents.h"
 #include "ObjectInspector.h"
 #include "TransientObject.h"
@@ -77,13 +78,14 @@ void AssetInspector::setUpdatePrefabBodyCallback(UpdatePrefabBodyCallback callba
 
 void AssetInspector::setAssetRegistry(const AssetRegistry* registry)
 {
+  m_assetRegistry = registry;
   m_prefabInspector->setAssetRegistry(registry);
 }
 
 namespace {
-  // A display-name rename is a display-only override the AssetRegistry packs (see AssetRegistry::pack): it
-  // survives a snapshot only for the flat file assets. A Scene record is regenerated from the SceneManager
-  // on every snapshot (and never packed), so its override wouldn't stick - keep the scene name read-only.
+  // Whether the asset is a flat file asset (or prefab) the registry owns, so it takes a live display-name
+  // override and can be deleted from here. A Scene record is regenerated from the SceneManager on every
+  // snapshot, so a scene rename changes the scene's real name instead (displaySceneNameField).
   bool isRenamable(const AssetType type)
   {
     return type == AssetType::Model || type == AssetType::Texture
@@ -145,9 +147,11 @@ void AssetInspector::displayHeader(const AssetRecord& record)
     m_nameEditBuffer[len] = '\0';
   }
 
-  // Display name: an editable rename field for the flat file assets (gated on editable), read-only text
-  // for scenes (their override wouldn't survive a snapshot - see isRenamable).
-  if (isRenamable(record.type))
+  if (record.type == AssetType::Scene)
+  {
+    displaySceneNameField(record);
+  }
+  else if (isRenamable(record.type))
   {
     ImGui::BeginDisabled(!m_editable);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
@@ -175,6 +179,50 @@ void AssetInspector::displayHeader(const AssetRecord& record)
   {
     gc::rowLabel("Path");
     ImGui::TextColored(theme::t2, "%s", record.path.c_str());
+  }
+}
+
+void AssetInspector::displaySceneNameField(const AssetRecord& record)
+{
+  const auto reseed = [&] {
+    const auto& name = record.path;
+    const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
+    name.copy(m_nameEditBuffer.data(), len);
+    m_nameEditBuffer[len] = '\0';
+  };
+
+  ImGui::BeginDisabled(!m_editable);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+  ImGui::InputText(("##assetName" + uuids::to_string(record.uuid)).c_str(),
+                   m_nameEditBuffer.data(), m_nameEditBuffer.size());
+  const bool committed = ImGui::IsItemDeactivatedAfterEdit();
+  ImGui::EndDisabled();
+
+  const std::string name = m_nameEditBuffer.data();
+  const bool available = !m_assetRegistry || assetNaming::isSceneNameAvailable(*m_assetRegistry, record.uuid, name);
+
+  if (committed)
+  {
+    if (available && name != record.path)
+    {
+      if (m_onRename)
+      {
+        m_onRename(record.uuid, name);
+      }
+    }
+    else if (!available)
+    {
+      reseed();
+    }
+
+    return;
+  }
+
+  if (!available)
+  {
+    const bool blank = name.find_first_not_of(" \t\r\n") == std::string::npos;
+    ImGui::TextColored(theme::scriptAmber, "%s",
+                       blank ? "A scene needs a name." : "A scene or prefab already uses that name.");
   }
 }
 

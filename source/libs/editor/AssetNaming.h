@@ -35,6 +35,28 @@ namespace assetNaming {
     return false;
   }
 
+  // Whether `name` can become the name of scene `self`: not blank, and not the key or display name of any other
+  // scene or prefab. The scene's own current name is available.
+  [[nodiscard]] inline bool isSceneNameAvailable(const AssetRegistry& registry, const uuids::uuid& self,
+                                                 const std::string& name)
+  {
+    if (name.find_first_not_of(" \t\r\n") == std::string::npos)
+    {
+      return false;
+    }
+
+    for (const auto& [uuid, record] : registry.getAssets())
+    {
+      if (uuid != self && sharesNameSpace(record.type, AssetType::Scene)
+          && (keyOf(record) == name || record.displayName == name))
+      {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   // Uses the same " (N)" suffix rule as SceneManager::uniqueSceneName, so the offered name matches the server.
   [[nodiscard]] inline std::string uniqueNameOfType(const AssetRegistry& registry, const AssetType type,
                                                     const std::string& base)
