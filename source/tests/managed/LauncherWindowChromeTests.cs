@@ -34,6 +34,17 @@ public class LauncherWindowChromeTests
     Assert.Equal("True", (string?)window.Attribute("ExtendClientAreaToDecorationsHint"));
   }
 
+  // Win32 sizes the caption band from the hint, so it has to match the title bar row.
+  [Fact]
+  public void TitleBarHeightHintMatchesTheTitleBarRow()
+  {
+    var window = MainWindow();
+    var root = window.Elements().Single(element => (string?)element.Attribute("Name") == "Root");
+    var titleRowHeight = ((string?)root.Attribute("RowDefinitions"))!.Split(',')[0];
+
+    Assert.Equal(titleRowHeight, (string?)window.Attribute("ExtendClientAreaTitleBarHeightHint"));
+  }
+
   [Fact]
   public void TitleBarIsTheOnlyCaptionDragArea()
   {
