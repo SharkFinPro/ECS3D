@@ -6,7 +6,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless;
-using Avalonia.VisualTree;
 using ECS3DLauncher.Shared.Controls;
 using Xunit;
 
@@ -39,7 +38,7 @@ public class LauncherCardMenuTests
       })
     };
     window.Show();
-    Assert.NotNull(attached.GetVisualRoot());
+    Assert.NotNull(TopLevel.GetTopLevel(attached));
     return window;
   }
 
