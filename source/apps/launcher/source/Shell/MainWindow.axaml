@@ -14,6 +14,7 @@
         x:Class="ECS3DLauncher.Shell.MainWindow"
         x:DataType="shell:MainWindowViewModel"
         Title="ECS3D Launcher"
+        Icon="avares://ECS3DLauncher/source/Assets/launcher.ico"
         Width="1120" Height="720" MinWidth="900" MinHeight="600"
         Background="{StaticResource BgBrush}"
         Foreground="{StaticResource T1Brush}"
@@ -40,12 +41,9 @@
                 WindowDecorationProperties.ElementRole="TitleBar">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="13,0,6,0">
 
-                <Border Grid.Column="0" Width="22" Height="22" CornerRadius="6"
-                        Background="{StaticResource AccDim}" VerticalAlignment="Center">
-                    <Path Classes="icon acc" Width="11" Height="11"
-                          Data="{StaticResource IconModel}"
-                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
+                <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center"
+                       Source="avares://ECS3DLauncher/source/Assets/launcher-mark.png"
+                       RenderOptions.BitmapInterpolationMode="HighQuality" />
 
                 <TextBlock Grid.Column="1" Text="ECS3D" FontWeight="Bold" FontSize="13.5"
                            VerticalAlignment="Center" Margin="11,0,0,0" />
