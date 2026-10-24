@@ -86,7 +86,8 @@
         </Border>
 
         <!-- ===== BODY ===== -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*"
+              IsEnabled="{Binding JoinDialog, Converter={x:Static ObjectConverters.IsNull}}">
 
             <!-- ===== SIDEBAR ===== -->
             <Border Grid.Column="0" Width="212" Background="{StaticResource PanelBrush}"
@@ -283,7 +284,7 @@
         </Grid>
 
         <!-- Join a game dialog: dims the window while a view model is set -->
-        <Border Grid.Row="0" Grid.RowSpan="2" Background="#99000000"
+        <Border Grid.Row="1" Background="#99000000"
                 IsVisible="{Binding JoinDialog, Converter={x:Static ObjectConverters.IsNotNull}}">
             <ContentControl Content="{Binding JoinDialog}" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ContentControl.DataTemplates>
@@ -295,7 +296,8 @@
                                 <TextBlock Text="Enter the address the host shared with you."
                                            Foreground="{StaticResource T2Brush}" />
                                 <TextBlock Text="Host address" FontWeight="SemiBold" Margin="0,8,0,0" />
-                                <TextBox Text="{Binding Address}" PlaceholderText="192.168.1.24" />
+                                <TextBox Text="{Binding Address}" PlaceholderText="192.168.1.24"
+                                         AttachedToVisualTree="OnJoinAddressAttached" />
                                 <TextBlock Text="Port" FontWeight="SemiBold" />
                                 <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left" />
                                 <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"

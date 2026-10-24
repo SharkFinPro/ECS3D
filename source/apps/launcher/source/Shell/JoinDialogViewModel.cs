@@ -28,19 +28,23 @@ public sealed class JoinDialogViewModel : ObservableObject
 
     public IRelayCommand CancelCommand { get; }
 
-    // A pasted "address:port" fills both fields.
+    // A pasted "address:port" fills both fields. Only a jump of more than one character counts as a paste, so
+    // typing "host:3101" by hand is left alone until Join splits it.
     public string Address
     {
         get => _address;
         set
         {
-            var (address, port) = JoinTarget.SplitPasted(value);
+            var (address, port) = value.Length - _address.Length > 1
+                ? JoinTarget.SplitPasted(value)
+                : (value, null);
             if (port is not null)
             {
                 SetProperty(ref _portText, port, nameof(PortText));
             }
 
-            SetProperty(ref _address, port is null ? value : address);
+            _address = address;
+            OnPropertyChanged();
             Changed();
         }
     }
@@ -62,7 +66,14 @@ public sealed class JoinDialogViewModel : ObservableObject
 
     public bool HasError => Error is not null;
 
-    private JoinTargetResult Parsed => JoinTarget.Parse(_address, _portText, _defaultPort);
+    private JoinTargetResult Parsed
+    {
+        get
+        {
+            var (address, port) = JoinTarget.SplitPasted(_address);
+            return JoinTarget.Parse(address, port ?? _portText, _defaultPort);
+        }
+    }
 
     private JoinTarget? Target => Parsed.Target;
 

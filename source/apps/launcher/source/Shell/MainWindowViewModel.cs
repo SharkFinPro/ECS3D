@@ -684,15 +684,19 @@ public class MainWindowViewModel : ObservableObject
         JoinDialog = new JoinDialogViewModel(
             _settings.Current.LastJoin, EnginePorts.Default, JoinGame, () => JoinDialog = null);
 
+    // The engine folder can change while the dialog is open, so the client is checked again.
     private void JoinGame(JoinTarget target)
     {
+        if (!_actions.Play.Available)
+        {
+            ApplyNotice(EarlyExitNotice.Failure(_actions.Play.Tooltip ?? "The client could not be found."));
+            return;
+        }
+
         ApplyUpdate(_settings.SetLastJoin(target));
         Settings.RefreshLastJoin();
         JoinDialog = null;
-        if (_actions.Play.Available)
-        {
-            _ = _coordinator.JoinGameAsync(target.Address, target.Port);
-        }
+        _ = _coordinator.JoinGameAsync(target.Address, target.Port);
     }
 
     // Notices come from background continuations, so they are handed to the UI thread explicitly.

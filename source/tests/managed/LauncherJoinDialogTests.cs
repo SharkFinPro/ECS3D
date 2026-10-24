@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using System.Threading;
+using System.Threading.Tasks;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
 using Xunit;
@@ -50,6 +50,63 @@ public class LauncherJoinDialogTests
     Assert.Equal("3101", dialog.PortText);
   }
 
+  [Fact]
+  public void TypingAddressAndPortByHandKeepsEveryCharacterWhereItWasTyped()
+  {
+    JoinTarget? joined = null;
+    var dialog = NewDialog(null, target => joined = target);
+
+    var typed = "";
+    foreach (var letter in "host:3101")
+    {
+      typed += letter;
+      dialog.Address = typed;
+      Assert.Equal(typed, dialog.Address);
+      Assert.Equal("3000", dialog.PortText);
+    }
+
+    dialog.JoinCommand.Execute(null);
+
+    Assert.Equal(new JoinTarget("host", 3101), joined);
+  }
+
+  [Fact]
+  public void PastingOverTheSameHostRaisesAddressChangedSoTheBoxIsRewritten()
+  {
+    var dialog = NewDialog(new LastJoin("host.example", 3000));
+    var log = new PropertyLog(dialog);
+
+    dialog.Address = "host.example:3005";
+
+    Assert.Equal("host.example", dialog.Address);
+    Assert.Equal("3005", dialog.PortText);
+    Assert.Contains(nameof(JoinDialogViewModel.Address), log.Names);
+  }
+
+  [Fact]
+  public void ABlankPortJoinsOnTheDefaultPort()
+  {
+    JoinTarget? joined = null;
+    var dialog = NewDialog(null, target => joined = target);
+
+    dialog.Address = "host";
+    dialog.PortText = "  ";
+    dialog.JoinCommand.Execute(null);
+
+    Assert.Equal(new JoinTarget("host", 3000), joined);
+  }
+
+  [Fact]
+  public void AnAddressThatLooksLikeAnOptionIsRejected()
+  {
+    var dialog = NewDialog(null);
+
+    dialog.Address = "-x";
+
+    Assert.Equal(JoinTarget.InvalidAddressError, dialog.Error);
+    Assert.False(dialog.JoinCommand.CanExecute(null));
+  }
+
   [Theory]
   [InlineData("", "3000", JoinTarget.AddressError)]
   [InlineData("host", "0", JoinTarget.PortError)]
@@ -87,6 +144,7 @@ public class LauncherJoinDialogTests
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
     var model = NewMain();
+    var settingsLog = new PropertyLog(model.Settings);
     model.OpenJoinCommand.Execute(null);
     Assert.NotNull(model.JoinDialog);
 
@@ -101,6 +159,25 @@ public class LauncherJoinDialogTests
     Assert.Equal("192.0.2.24", (string)saved["address"]!);
     Assert.Equal(3101, (int)saved["port"]!);
     Assert.Equal("192.0.2.24:3101", model.Settings.LastJoinText);
+    Assert.Contains(nameof(model.Settings.LastJoinText), settingsLog.Names);
+  }
+
+  [Fact]
+  public void JoiningAfterTheClientWentMissingShowsTheToastAndKeepsTheDialog()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir);
+    _rig.AddEngine(LauncherRig.OtherDir, EngineExecutable.Client);
+    var model = NewMain();
+    model.OpenJoinCommand.Execute(null);
+    model.JoinDialog!.Address = "host.example";
+
+    model.Settings.EngineFolder = LauncherRig.OtherDir;
+    model.JoinDialog.JoinCommand.Execute(null);
+
+    Assert.Empty(_runner.Launches);
+    Assert.NotNull(model.JoinDialog);
+    Assert.Contains("ECS3DClient", model.ToastMessage);
+    Assert.Null(_rig.Saved()?["lastJoin"]);
   }
 
   [Fact]
@@ -146,26 +223,31 @@ public class LauncherJoinDialogTests
   }
 
   [Fact]
-  public void AClientThatExitsEarlyRaisesTheToastWithItsLog()
+  public async Task AClientThatExitsEarlyRaisesTheToastWithItsLog()
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
+    var posted = new TaskCompletionSource();
     var model = new MainWindowViewModel(
       _rig.NewEditor(),
       _rig.NewRecents(),
       _runner,
-      new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromMinutes(1)),
+      new EarlyExitWatcher(ShellFixtures.UserData, TimeSpan.FromHours(1)),
       _rig.NewCatalog(),
       _ => null,
       "1.2.3",
-      action => action(),
+      action =>
+      {
+        action();
+        posted.TrySetResult();
+      },
       () => _rig.Time.Now);
     model.OpenJoinCommand.Execute(null);
     model.JoinDialog!.Address = "host.example";
 
     model.JoinDialog.JoinCommand.Execute(null);
     _runner.Last!.Exit(3);
+    await posted.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-    SpinWait.SpinUntil(() => model.HasToast, TimeSpan.FromSeconds(5));
     Assert.True(model.HasToast);
     Assert.Equal(ShellFixtures.ExpectedLog("client"), model.ToastLogPath);
   }
