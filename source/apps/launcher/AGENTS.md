@@ -40,6 +40,9 @@
   `ECS3DClient --project <shipped folder>`. Host and Open a copy are not built yet.
   The Learn tab is real: six guide cards from `LearnCatalog` that open on GitHub in the browser, plus a "What's
   in the box" banner.
+  The sidebar's Play section has a Join a game button: it opens an in-window dialog (`JoinDialogViewModel`) for the
+  host address and port, runs `ECS3DClient --host <address> --port <port>`, and saves the last join. Hosting has
+  no UI yet.
   "Close the launcher after opening a project" is saved but not honored yet.
 - Ships as a single-file `ECS3DLauncher.exe` beside the C++ executables in `bin/`. It is
   **framework-dependent** (shares the machine's installed .NET 10) and does **not** boot the CLR the way
@@ -53,7 +56,7 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 |------|----------------|
 | `source/Program.cs` | Avalonia entry point (`BuildAvaloniaApp`). Minimal — no app logic. |
 | `source/App.axaml{,.cs}` | Application composition: merges `Theme.axaml` + `Icons.axaml` resources and `AppStyles.axaml`; sets the dark `FluentTheme`; creates the single `MainWindow` with its `MainWindowViewModel`. Attaches Avalonia DevTools (F12) in DEBUG only. |
-| `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the Explore/Open commands, the New Project dialog host), `NavItemViewModel`. |
+| `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the Explore/Open commands, the New Project dialog host, the Join dialog), `JoinDialogViewModel`, `NavItemViewModel`. |
 | `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch or to open the New Project dialog. `Templates/` also holds `NewProjectDialog.axaml{,.cs}` and `NewProjectViewModel` - the dialog's fields, validation and create flow. |
 | `source/Services/` | UI-free services behind interfaces (`EngineLocator`, `EngineLauncher`, `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `IFileSystem`, `ILauncherLog`/`FileLauncherLog`, `LauncherSettings`/`LauncherSettingsStore`, `SettingsInput`, `EnginePorts`, `HostSession`, `IPortProbe`/`TcpPortProbe`, `LauncherTabs`, `EngineActions`, `EarlyExitNotice`, `LaunchCoordinator`, `VersionLabel`, `SearchMatch`, `INetworkInfo`/`SystemNetworkInfo`/`LanAddresses`, `JoinTarget`, `RecentProjectsStore` (the launcher side of `recent-projects.json`), `RecentProjectsView` (order, search, missing check and Edited text of that list), `ProjectPathKind` (classifies an Open existing... choice: folder, `project.ecs3d` or legacy `.json`), `RunningEditors` (editors started per project, for the In editor badge), `TemplateCatalog`/`TemplateManifest`, `ProjectCreator` (copies a template into a new project folder: hidden `.<name>.creating` copy, object-uuid rewrite, rename as the commit), `LearnCatalog` (the Learn tab's guides and shipped-content counts), `EngineVersion`, `ProjectNameRules`, `SettingsEditor` - the Settings tab's decisions: apply, validate, re-locate and save). No Avalonia types. |
 | `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `SampleCard`, `TemplateCard` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`, `CardMenu` - opens a card's context menu from its ... button), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
@@ -88,7 +91,7 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   give bindings an `x:DataType` so they compile. `Nullable` is enabled.
 - **Services stay free of Avalonia and CommunityToolkit references.** This is a convention, so they remain
   plain, testable logic; a type that needs those packages belongs in `Tabs` or `Shared`. `ECS3DManagedTests`
-  links `source/Services/**`, the view models (`Shell/MainWindowViewModel.cs`, `Shell/NavItemViewModel.cs`,
+  links `source/Services/**`, the view models (`Shell/MainWindowViewModel.cs`, `Shell/JoinDialogViewModel.cs`, `Shell/NavItemViewModel.cs`,
   `Tabs/**/*ViewModel.cs`), `Shared/Models`, `Shared/Converters` and `Shared/Controls/CardMenu.cs`. A new shell
   view model, or one not named `*ViewModel.cs`, must be added to that link list. Anything that touches the
   filesystem, processes or the environment goes behind an interface or an injected function.

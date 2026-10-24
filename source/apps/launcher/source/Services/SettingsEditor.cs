@@ -110,6 +110,12 @@ public sealed class SettingsEditor
         return port == _settings.HostPort ? SettingsUpdate.None : Commit(_settings with { HostPort = port }, null);
     }
 
+    public SettingsUpdate SetLastJoin(JoinTarget target)
+    {
+        var join = new LastJoin(target.Address, target.Port);
+        return join == _settings.LastJoin ? SettingsUpdate.None : Commit(_settings with { LastJoin = join }, null);
+    }
+
     public SettingsUpdate SetProjectsView(bool grid)
     {
         var view = grid ? LauncherSettings.GridView : LauncherSettings.ListView;
