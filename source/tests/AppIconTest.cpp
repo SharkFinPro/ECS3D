@@ -29,14 +29,19 @@ namespace
     return value;
   }
 
-  // Returns an empty string when the buffer is a well-formed ICO, otherwise the problem. Fills `sizes`
-  // with each entry's pixel width (a stored 0 means 256).
-  std::string validateIco(const std::vector<std::uint8_t>& bytes, std::set<int>& sizes)
-  {
-    constexpr std::size_t headerSize = 6;
-    constexpr std::size_t entrySize = 16;
+  constexpr std::size_t icoHeaderSize = 6;
+  constexpr std::size_t icoEntrySize = 16;
 
-    if (bytes.size() < headerSize)
+  // A stored 0 means 256.
+  int icoDimension(const std::uint8_t stored)
+  {
+    return stored == 0 ? 256 : stored;
+  }
+
+  // Returns an empty string when the header is sound, otherwise the problem. Sets `count` to the entry count.
+  std::string validateIcoHeader(const std::vector<std::uint8_t>& bytes, std::size_t& count)
+  {
+    if (bytes.size() < icoHeaderSize)
     {
       return "shorter than the ICONDIR header";
     }
@@ -45,36 +50,49 @@ namespace
       return "bad reserved or type field";
     }
 
-    const std::size_t count = readLe(bytes, 4, 2);
+    count = readLe(bytes, 4, 2);
     if (count == 0)
     {
       return "no entries";
     }
-    if (bytes.size() < headerSize + count * entrySize)
+    if (bytes.size() < icoHeaderSize + count * icoEntrySize)
     {
       return "entry table is cut off";
     }
+    return "";
+  }
 
-    for (std::size_t i = 0; i < count; ++i)
+  // Returns an empty string when the entry is sound, otherwise the problem. Adds its pixel width to `sizes`.
+  std::string validateIcoEntry(const std::vector<std::uint8_t>& bytes, const std::size_t index, std::set<int>& sizes)
+  {
+    const std::size_t entry = icoHeaderSize + index * icoEntrySize;
+    const std::uint32_t imageSize = readLe(bytes, entry + 8, 4);
+    const std::uint32_t offset = readLe(bytes, entry + 12, 4);
+    if (imageSize == 0 || static_cast<std::uint64_t>(offset) + imageSize > bytes.size())
     {
-      const std::size_t entry = headerSize + i * entrySize;
-      const std::uint32_t imageSize = readLe(bytes, entry + 8, 4);
-      const std::uint32_t offset = readLe(bytes, entry + 12, 4);
-      if (imageSize == 0 || static_cast<std::uint64_t>(offset) + imageSize > bytes.size())
-      {
-        return "entry " + std::to_string(i) + " lies outside the file";
-      }
-
-      const int width = bytes[entry] == 0 ? 256 : bytes[entry];
-      const int height = bytes[entry + 1] == 0 ? 256 : bytes[entry + 1];
-      if (width != height)
-      {
-        return "entry " + std::to_string(i) + " is not square";
-      }
-      sizes.insert(width);
+      return "entry " + std::to_string(index) + " lies outside the file";
     }
 
+    const int width = icoDimension(bytes[entry]);
+    if (width != icoDimension(bytes[entry + 1]))
+    {
+      return "entry " + std::to_string(index) + " is not square";
+    }
+    sizes.insert(width);
     return "";
+  }
+
+  // Returns an empty string when the buffer is a well-formed ICO, otherwise the problem. Fills `sizes`
+  // with each entry's pixel width.
+  std::string validateIco(const std::vector<std::uint8_t>& bytes, std::set<int>& sizes)
+  {
+    std::size_t count = 0;
+    std::string problem = validateIcoHeader(bytes, count);
+    for (std::size_t i = 0; problem.empty() && i < count; ++i)
+    {
+      problem = validateIcoEntry(bytes, i, sizes);
+    }
+    return problem;
   }
 
   void expectValidIcon(const std::string& fileName)
