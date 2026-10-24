@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless;
 using ECS3DLauncher.Shared.Controls;
@@ -24,17 +25,18 @@ public class LauncherCardMenuTests
     HeadlessUnitTestSession.GetOrStartForAssembly(typeof(LauncherCardMenuTests).Assembly)
       .Dispatch(action, CancellationToken.None);
 
-  // Without a theme a Window has no template, so its content would never join the visual tree.
+  // Without a theme a Window has no template, so its content would never join the visual tree. The layer
+  // manager supplies the overlay layer the context menu's popup opens in, as a theme's window template does.
   private static Window ShowInWindow(Control content, Control attached)
   {
     var window = new Window
     {
       Content = content,
-      Template = new FuncControlTemplate<Window>((w, _) =>
+      Template = new FuncControlTemplate<Window>((w, scope) =>
       {
-        var presenter = new ContentPresenter { Name = "PART_ContentPresenter" };
+        var presenter = new ContentPresenter { Name = "PART_ContentPresenter" }.RegisterInNameScope(scope);
         presenter.Bind(ContentPresenter.ContentProperty, w.GetObservable(ContentControl.ContentProperty));
-        return presenter;
+        return new VisualLayerManager { Name = "PART_VisualLayerManager", Child = presenter }.RegisterInNameScope(scope);
       })
     };
     window.Show();
