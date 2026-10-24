@@ -30,10 +30,13 @@
   `.json` file and opens it. While an editor the launcher started is running, its card shows "In editor"
   (`RunningEditors`, counted per project; the launcher never kills an editor). The Templates tab is real: each
   `template` entry of `TemplateCatalog` is a card, gated by `minEngineVersion` and filtered by the header search;
-  clicking one does nothing until the New Project dialog lands. The Samples tab is
+  clicking one opens the New Project dialog. The header New Project button and the Projects tab's New card open
+  it too, with Empty 3D chosen. The dialog is an in-window overlay (`NewProject` on the shell, null when closed):
+  it takes a name and a location, shows whether the target folder is free, and creates the project with
+  `ProjectCreator` off the UI thread. It then records the project with its template and, if asked, opens it in the
+  editor. A failed copy keeps the dialog open with the reason. The Samples tab is
   real: `TemplateCatalog` reads `<engine>/templates`, each `sample` becomes a card, the header search filters them,
   and Play runs `ECS3DClient --project <shipped folder>`. Host and Open a copy are not built yet.
-  `ProjectCreator` copies a template into a new project folder; the New Project dialog that uses it is not built yet.
   The Learn tab is real: six guide cards from `LearnCatalog` that open on GitHub in the browser, plus a "What's
   in the box" banner.
   "Close the launcher after opening a project" is saved but not honored yet.
@@ -50,7 +53,7 @@ All source lives under `source/` (mirrored by the `avares://ECS3DLauncher/source
 | `source/Program.cs` | Avalonia entry point (`BuildAvaloniaApp`). Minimal — no app logic. |
 | `source/App.axaml{,.cs}` | Application composition: merges `Theme.axaml` + `Icons.axaml` resources and `AppStyles.axaml`; sets the dark `FluentTheme`; creates the single `MainWindow` with its `MainWindowViewModel`. Attaches Avalonia DevTools (F12) in DEBUG only. |
 | `source/Shell/` | The window frame and navigation. `MainWindow.axaml{,.cs}` (frameless window — manual edge-resize/move/maximize in code-behind), `MainWindowViewModel` (sidebar nav, the active tab and its header, the engine banner, the toast, the Explore/Open commands), `NavItemViewModel`. |
-| `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch (e.g. Projects → Templates). |
+| `source/Tabs/` | One folder per library section: `Projects`, `Templates`, `Samples`, `Learn`, `Settings`. Each has a `*View.axaml{,.cs}` + `*ViewModel.cs`. The shell owns navigation; a tab only asks the shell to switch or to open the New Project dialog. `Templates/` also holds `NewProjectDialog.axaml{,.cs}` and `NewProjectViewModel` - the dialog's fields, validation and create flow. |
 | `source/Services/` | UI-free services behind interfaces (`EngineLocator`, `EngineLauncher`, `EarlyExitWatcher`, `UserDataDirectory`, `AppVersion`, `IFileSystem`, `ILauncherLog`/`FileLauncherLog`, `LauncherSettings`/`LauncherSettingsStore`, `SettingsInput`, `EnginePorts`, `HostSession`, `IPortProbe`/`TcpPortProbe`, `LauncherTabs`, `EngineActions`, `EarlyExitNotice`, `LaunchCoordinator`, `VersionLabel`, `SearchMatch`, `INetworkInfo`/`SystemNetworkInfo`/`LanAddresses`, `JoinTarget`, `RecentProjectsStore` (the launcher side of `recent-projects.json`), `RecentProjectsView` (order, search, missing check and Edited text of that list), `ProjectPathKind` (classifies an Open existing... choice: folder, `project.ecs3d` or legacy `.json`), `RunningEditors` (editors started per project, for the In editor badge), `TemplateCatalog`/`TemplateManifest`, `ProjectCreator` (copies a template into a new project folder: hidden `.<name>.creating` copy, object-uuid rewrite, rename as the commit), `LearnCatalog` (the Learn tab's guides and shipped-content counts), `EngineVersion`, `ProjectNameRules`, `SettingsEditor` - the Settings tab's decisions: apply, validate, re-locate and save). No Avalonia types. |
 | `source/Shared/` | Cross-cutting pieces: `Models/` (`Project`, `SampleCard`, `TemplateCard` — plain records), `Resources/` (`Theme.axaml` palette+fonts, `Icons.axaml` geometries), `Styles/AppStyles.axaml` (style selectors), `Controls/` (`EmptyState`, `CardMenu` - opens a card's context menu from its ... button), `Converters/` (`IconKeyConverter`), `DesignData.cs`. |
 | `source/Assets/` | Bundled `AvaloniaResource`s: `Fonts/` (Geist, GeistMono) and `scene_render.png`. |
@@ -90,7 +93,7 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   filesystem, processes or the environment goes behind an interface or an injected function.
 - **Navigation is centralized.** `MainWindowViewModel.ActiveNav` (a string key) selects `CurrentTab`; the
   window's `ContentControl` maps the active view model to its view by type. Tabs never navigate directly —
-  they call back into the shell (see `ProjectsViewModel`'s `openTemplates`).
+  they call back into the shell (see `ProjectsViewModel`'s `openNewProject`).
 - **Theming lives in `Shared/Resources` + `Shared/Styles`.** Colors, brushes, fonts → `Theme.axaml`;
   icon geometries → `Icons.axaml`; control/style selectors → `AppStyles.axaml`. Don't hardcode colors in
   views — reference the palette resources. Icons are chosen by string key resolved through
@@ -111,8 +114,8 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 
 - Read this file before changing the launcher. You should **not** need the root `AGENTS.md` or any C++
   engine knowledge for launcher work.
-- Engine location and launching, settings, the recent-projects store and the template catalog (Samples tab) are
-  real; the hosting UI is not, and project creation has its service but no New Project dialog yet. When asked to "load projects" and the like, confirm
+- Engine location and launching, settings, the recent-projects store, the template catalog and project creation
+  are real; the hosting UI is not. When asked to "load projects" and the like, confirm
   whether the task is to build the missing service and its wiring or to extend the mock UI.
 - Keep the MVVM split clean: no app logic in code-behind, no view construction in view models.
 - Add UI dependencies via `PackageReference` in `ECS3DLauncher.csproj`; keep Debug-only tooling under the

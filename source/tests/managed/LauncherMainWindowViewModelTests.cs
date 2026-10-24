@@ -89,7 +89,7 @@ public class LauncherMainWindowViewModelTests
   }
 
   [Fact]
-  public void AnUnknownKeyFallsBackToProjectsAndTheCommandsOpenTheirTabs()
+  public void AnUnknownKeyFallsBackToProjectsAndTheSettingsCommandOpensItsTab()
   {
     var model = NewMain();
 
@@ -97,9 +97,6 @@ public class LauncherMainWindowViewModelTests
     model.SelectNavCommand.Execute("bogus");
     Assert.Same(model.Projects, model.CurrentTab);
     Assert.Equal(LauncherTabs.Header(LauncherTab.Projects, true).Title, model.ViewTitle);
-
-    model.NewProjectCommand.Execute(null);
-    Assert.Same(model.Templates, model.CurrentTab);
 
     model.OpenSettingsCommand.Execute(null);
     Assert.Same(model.Settings, model.CurrentTab);

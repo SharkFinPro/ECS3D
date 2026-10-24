@@ -57,6 +57,7 @@ public class MainWindow : Window
             viewModel.OpenUrl = OpenInBrowserAsync;
             viewModel.PickProjectFolder = PickProjectFolderAsync;
             viewModel.PickProjectFile = PickProjectFileAsync;
+            viewModel.PickProjectsFolder = PickProjectsFolderAsync;
         }
     }
 
@@ -80,6 +81,16 @@ public class MainWindow : Window
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = "Locate the project folder",
+            AllowMultiple = false,
+        });
+        return folders.Count == 0 ? null : folders[0].TryGetLocalPath() ?? string.Empty;
+    }
+
+    private async Task<string?> PickProjectsFolderAsync()
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Choose where to create the project",
             AllowMultiple = false,
         });
         return folders.Count == 0 ? null : folders[0].TryGetLocalPath() ?? string.Empty;

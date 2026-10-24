@@ -261,6 +261,19 @@
                     </Grid>
                 </Border>
             </Grid>
+
+            <!-- ===== NEW PROJECT DIALOG: modal over the body; the title bar stays usable ===== -->
+            <Grid Grid.Column="0" Grid.ColumnSpan="2"
+                  IsVisible="{Binding NewProject, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <Border Background="{StaticResource ScrimBrush}" />
+                <ContentControl Content="{Binding NewProject}">
+                    <ContentControl.DataTemplates>
+                        <DataTemplate DataType="templates:NewProjectViewModel">
+                            <templates:NewProjectDialog />
+                        </DataTemplate>
+                    </ContentControl.DataTemplates>
+                </ContentControl>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

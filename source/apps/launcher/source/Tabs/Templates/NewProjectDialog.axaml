@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:ECS3DLauncher.Tabs.Templates"
+             x:Class="ECS3DLauncher.Tabs.Templates.NewProjectDialog"
+             x:DataType="local:NewProjectViewModel">
+
+    <UserControl.KeyBindings>
+        <KeyBinding Gesture="Escape" Command="{Binding CancelCommand}" />
+    </UserControl.KeyBindings>
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,8,0,0" />
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.ok">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="520" Padding="24" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center"
+            Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
+        <StackPanel Spacing="6">
+            <TextBlock Text="New project" FontSize="19" FontWeight="Bold" />
+            <TextBlock Text="{Binding TemplateName, StringFormat='From the {0} template'}" FontSize="12.5"
+                       Foreground="{StaticResource T2Brush}" />
+            <TextBlock Text="{Binding TemplateDescription}" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{StaticResource T3Brush}" />
+
+            <StackPanel Spacing="6" IsEnabled="{Binding !IsBusy}">
+                <TextBlock Classes="label" Text="Project name" />
+                <TextBox Name="NameBox" Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBlock Classes="error" Text="{Binding NameError}" IsVisible="{Binding HasNameError}" />
+
+                <TextBlock Classes="label" Text="Location" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBox Grid.Column="0" Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
+                            Content="Browse..." Command="{Binding BrowseCommand}" />
+                </Grid>
+                <TextBlock Classes="error" Text="{Binding LocationError}" IsVisible="{Binding HasLocationError}" />
+
+                <TextBlock Classes="label" Text="Will be created at" />
+                <TextBlock Text="{Binding TargetPreview}" TextWrapping="Wrap" FontSize="12"
+                           FontFamily="{StaticResource MonoFontFamily}" Foreground="{StaticResource T2Brush}" />
+                <TextBlock Classes="ok" Text="{Binding TargetMessage}" IsVisible="{Binding IsTargetFree}" />
+                <TextBlock Classes="error" Text="{Binding TargetMessage}" IsVisible="{Binding HasTargetProblem}" />
+
+                <CheckBox Margin="0,8,0,0" IsChecked="{Binding OpenInEditor}"
+                          Content="Open in the editor when it is created" />
+            </StackPanel>
+
+            <TextBlock Classes="error" Text="{Binding CreateError}" IsVisible="{Binding HasCreateError}" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding IsBusy}" Margin="0,8,0,0">
+                <ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" />
+                <TextBlock Text="Creating..." VerticalAlignment="Center" Foreground="{StaticResource T2Brush}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Cancel"
+                        Command="{Binding CancelCommand}" />
+                <Button Classes="cta" Theme="{StaticResource BareButton}" Command="{Binding CreateCommand}">
+                    <TextBlock Text="Create project" FontSize="13" FontWeight="Bold"
+                               Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
+                </Button>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

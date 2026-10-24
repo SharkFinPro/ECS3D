@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shared.Models;
 
@@ -46,10 +47,15 @@ public sealed class TemplatesViewModel : ObservableObject
         }
     }
 
-    public TemplatesViewModel(string launcherVersion, Func<string, Bitmap?> loadThumbnail)
+    // Set by the shell, which owns the New Project dialog; a card click runs it with that card.
+    public IRelayCommand<TemplateCard> OpenCommand { get; }
+
+    public TemplatesViewModel(
+        string launcherVersion, Func<string, Bitmap?> loadThumbnail, IRelayCommand<TemplateCard>? openCommand = null)
     {
         _launcherVersion = launcherVersion;
         _loadThumbnail = loadThumbnail;
+        OpenCommand = openCommand ?? new RelayCommand<TemplateCard>(_ => { });
     }
 
     public void Reload(TemplateCatalogContents contents)
