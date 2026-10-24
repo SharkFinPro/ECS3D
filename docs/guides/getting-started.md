@@ -15,7 +15,8 @@ The build writes everything to a `bin/` folder inside the CMake build folder, fo
 - `templates/`: the shipped templates and samples, one folder each (First-Person, Coin Rush and others).
 
 On Windows each program has an `.exe` extension. The programs read their assets, scripts and templates relative
-to the folder they are run from, so run them from `bin/`. The launcher does this for you. The commands in these guides use bare program names.
+to the folder they are run from, so run them from `bin/`. The launcher does this for you.
+The commands in these guides use bare program names.
 On Linux and macOS prefix a program with `./`, and in PowerShell with `.\`, for example
 `./ECS3DEditor --project templates/first-person`.
 
@@ -27,16 +28,16 @@ Settings page. There you can point the launcher at a different engine folder, ch
 projects and choose whether the editor and its server open a console window. The launcher saves automatically, and
 a text field saves when you leave it.
 
-The sidebar lists Projects, Templates, Samples and Learn. On first run the Projects page is empty ("No recent
-projects yet"). Its Explore the engine card opens the editor on the built-in Welcome scene. That project is
+The sidebar lists Projects, Templates, Samples and Learn. On first run the Projects page has no projects yet and shows
+three cards instead: Explore the engine, Start a project and Try a sample. Explore the engine opens the editor on the built-in Welcome scene. That project is
 unsaved, so nothing is written until you choose to save it.
 
 ## Start a project from the First-Person template
 
 The First-Person template is a lit ground with crates, ramps and four spawn points.
 
-1. Open the Templates page and click the First-Person card. The header's New Project button and the Projects
-   page's New Project card open the same dialog, with the Empty 3D template chosen.
+1. Open the Templates page and click the First-Person card. (The header's New Project button and the Projects
+   page's New Project card open the same dialog with the Empty 3D template chosen instead.)
 2. In the New project dialog, type a Project name. The Location starts in `ECS3D Projects` under your Documents
    folder; use Browse... to pick another. "Will be created at" shows the folder the dialog will make, and the
    dialog tells you when that folder already exists or the name cannot be used.
