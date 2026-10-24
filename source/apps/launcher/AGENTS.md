@@ -36,7 +36,7 @@
   `ProjectCreator` copies a template into a new project folder; the New Project dialog that uses it is not built yet.
   Hosting is real: a project card's "Host a game..." starts `ECS3DServer` through `HostSession` (after asking whether to
   stop a game that is already running), opens the hosting panel (running time, `address : port` rows with Copy, firewall
-  note, Open another game window, Stop server, Hide) and shows a green "Hosting <name>" pill in the sidebar that
+  note, Open another game window, Stop server, Hide) and shows a green pill naming the hosted project in the sidebar that
   reopens it. A server that exits on its own closes the panel and toasts the code and `server.log`. The Samples Host
   button, the Join dialog and the quit prompt are not built yet.
   The Learn tab is real: six guide cards from `LearnCatalog` that open on GitHub in the browser, plus a "What's

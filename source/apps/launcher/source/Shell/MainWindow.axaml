@@ -22,6 +22,10 @@
         WindowStartupLocation="CenterScreen"
         WindowDecorations="None">
 
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Escape" Command="{Binding CloseOverlayCommand}" />
+    </Window.KeyBindings>
+
     <Grid Name="Root" Focusable="True" RowDefinitions="42,*">
 
         <!-- ===== TITLE BAR ===== -->
@@ -82,7 +86,7 @@
         </Border>
 
         <!-- ===== BODY ===== -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" IsEnabled="{Binding IsBackgroundEnabled}">
 
             <!-- ===== SIDEBAR ===== -->
             <Border Grid.Column="0" Width="212" Background="{StaticResource PanelBrush}"
@@ -260,27 +264,6 @@
                         </ContentControl.DataTemplates>
                     </ContentControl>
                 </ScrollViewer>
-
-                <!-- Toast: start failures and early exits, bottom right over the content -->
-                <Border Grid.Row="2" IsVisible="{Binding HasToast}" Width="360" Padding="14"
-                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,24"
-                        CornerRadius="10" Background="{StaticResource PanelBrush}"
-                        BorderBrush="{StaticResource DangerBrush}" BorderThickness="1">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel Grid.Column="0" Spacing="10">
-                            <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" />
-                            <Button Classes="secondary" Theme="{StaticResource BareButton}"
-                                    HorizontalAlignment="Left" Content="Open logs"
-                                    IsVisible="{Binding HasToastLog}"
-                                    Command="{Binding OpenLogsCommand}" />
-                        </StackPanel>
-                        <Button Grid.Column="1" Classes="win" Theme="{StaticResource BareButton}"
-                                VerticalAlignment="Top" Margin="8,-6,-6,0"
-                                Command="{Binding DismissToastCommand}" ToolTip.Tip="Dismiss">
-                            <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
-                        </Button>
-                    </Grid>
-                </Border>
             </Grid>
         </Grid>
 
@@ -335,7 +318,7 @@
                         <Button Grid.Column="2" Classes="secondary" Theme="{StaticResource BareButton}"
                                 Content="Stop server" Margin="0,0,8,0" Command="{Binding StopCommand}" />
                         <Button Grid.Column="3" Classes="cta" Theme="{StaticResource BareButton}"
-                                Command="{Binding HideCommand}">
+                                IsDefault="True" Command="{Binding HideCommand}">
                             <TextBlock Text="Hide" FontWeight="Bold" Foreground="{StaticResource AccText}" />
                         </Button>
                     </Grid>
@@ -362,6 +345,27 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+        </Border>
+
+        <!-- Toast: start failures and early exits, bottom right over everything including the overlays -->
+        <Border Grid.Row="1" IsVisible="{Binding HasToast}" Width="360" Padding="14"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,24"
+                CornerRadius="10" Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource DangerBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="10">
+                    <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" />
+                    <Button Classes="secondary" Theme="{StaticResource BareButton}"
+                            HorizontalAlignment="Left" Content="Open logs"
+                            IsVisible="{Binding HasToastLog}"
+                            Command="{Binding OpenLogsCommand}" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="win" Theme="{StaticResource BareButton}"
+                        VerticalAlignment="Top" Margin="8,-6,-6,0"
+                        Command="{Binding DismissToastCommand}" ToolTip.Tip="Dismiss">
+                    <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
+                </Button>
+            </Grid>
         </Border>
     </Grid>
 </Window>

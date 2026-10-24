@@ -149,11 +149,15 @@ public class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _prompt, value))
             {
                 OnPropertyChanged(nameof(HasPrompt));
+                OnPropertyChanged(nameof(IsBackgroundEnabled));
             }
         }
     }
 
     public bool HasPrompt => Prompt is not null;
+
+    // The window behind a modal overlay takes no input.
+    public bool IsBackgroundEnabled => !HasPrompt && !Hosting.IsPanelOpen;
 
     public bool HasToast => ToastMessage is not null;
     public bool HasToastLog => ToastLogPath is not null;
@@ -179,6 +183,7 @@ public class MainWindowViewModel : ObservableObject
     public IRelayCommand ExploreCommand { get; }
     public IRelayCommand<Project> OpenProjectCommand { get; }
     public IRelayCommand<Project> PlayProjectCommand { get; }
+    public IRelayCommand CloseOverlayCommand { get; }
     public IRelayCommand<Project> HostProjectCommand { get; }
     public IRelayCommand<Project> ShowInFolderCommand { get; }
     public IRelayCommand<Project> TogglePinCommand { get; }
@@ -293,6 +298,7 @@ public class MainWindowViewModel : ObservableObject
         ExploreCommand = new RelayCommand(Explore, () => _actions.Explore.Available);
         OpenProjectCommand = new RelayCommand<Project>(OpenProject, project => _actions.Open.Available && IsPresent(project));
         PlayProjectCommand = new RelayCommand<Project>(PlayProject, project => _actions.Play.Available && IsPresent(project));
+        CloseOverlayCommand = new RelayCommand(CloseOverlay);
         HostProjectCommand = new RelayCommand<Project>(HostProject, project => _actions.Host.Available && IsPresent(project));
         ShowInFolderCommand = new RelayCommand<Project>(project => _ = ShowInFolderAsync(project), IsPresent);
         TogglePinCommand = new RelayCommand<Project>(TogglePin);
@@ -356,6 +362,13 @@ public class MainWindowViewModel : ObservableObject
             ShowNotice,
             Ask,
             () => ActiveNav = "settings");
+        Hosting.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(HostingViewModel.IsPanelOpen))
+            {
+                OnPropertyChanged(nameof(IsBackgroundEnabled));
+            }
+        };
         Settings = new SettingsViewModel(settings, ApplyUpdate, message => ApplyNotice(EarlyExitNotice.Failure(message)));
 
         CurrentTab = Projects;
@@ -590,6 +603,19 @@ public class MainWindowViewModel : ObservableObject
         if (project is { IsRealCard: true, IsMissing: false } && _actions.Host.Available)
         {
             Hosting.Host(project.Path, project.Name);
+        }
+    }
+
+    // Escape: cancels the question when one is asked, else hides the hosting panel.
+    private void CloseOverlay()
+    {
+        if (Prompt is { } prompt)
+        {
+            prompt.CancelCommand.Execute(null);
+        }
+        else
+        {
+            Hosting.HidePanel();
         }
     }
 

@@ -15,11 +15,17 @@ public class LauncherHostingTests
   private static readonly Project Alpha = new() { Name = "Alpha", Path = "/work/alpha", Edited = "today" };
   private static readonly Project Beta = new() { Name = "Beta", Path = "/work/beta", Edited = "today" };
 
+  private static readonly IPAddress Wifi = new(new byte[] { 192, 168, 1, 24 });
+  private static readonly IPAddress Wired = new(new byte[] { 10, 0, 0, 5 });
+
   private sealed class FakeNetworkInfo : INetworkInfo
   {
     public List<NetworkInterfaceInfo> Interfaces { get; } = [];
 
-    public IReadOnlyList<NetworkInterfaceInfo> GetInterfaces() => Interfaces;
+    public bool Throws { get; set; }
+
+    public IReadOnlyList<NetworkInterfaceInfo> GetInterfaces() =>
+      Throws ? throw new InvalidOperationException("no interfaces") : Interfaces;
   }
 
   private sealed class Rig
@@ -30,7 +36,7 @@ public class LauncherHostingTests
     {
       _launcher.AddEngine(LauncherRig.LauncherDir, missing);
       Network.Interfaces.Add(new NetworkInterfaceInfo(
-        "wlan0", NetworkInterfaceKind.Wireless, true, [IPAddress.Parse("192.168.1.24")]));
+        "wlan0", NetworkInterfaceKind.Wireless, true, [Wifi]));
       Main = NewMain();
     }
 
@@ -57,6 +63,10 @@ public class LauncherHostingTests
 
     public string? Toast => Main.ToastMessage;
 
+    public List<Action> Deferred { get; } = [];
+
+    public bool Defer { get; set; }
+
     private MainWindowViewModel NewMain()
     {
       var services = new HostingServices(
@@ -82,7 +92,17 @@ public class LauncherHostingTests
         _launcher.NewCatalog(),
         _ => null,
         "1.2.3",
-        action => action(),
+        action =>
+        {
+          if (Defer)
+          {
+            Deferred.Add(action);
+          }
+          else
+          {
+            action();
+          }
+        },
         () => _launcher.Time.Now,
         _launcher.Files,
         action => action(),
@@ -229,7 +249,7 @@ public class LauncherHostingTests
     Assert.False(rig.Hosting.IsPanelOpen);
     Assert.Equal("", rig.Hosting.PillText);
     Assert.Contains("code 7", rig.Toast);
-    Assert.Contains("port 3000", rig.Toast);
+    Assert.DoesNotContain("port", rig.Toast);
     Assert.Equal(ShellFixtures.ExpectedLog("server"), rig.Main.ToastLogPath);
   }
 
@@ -273,7 +293,7 @@ public class LauncherHostingTests
   {
     var rig = new Rig().ListenAfterFirstWait();
     rig.Network.Interfaces.Add(new NetworkInterfaceInfo(
-      "eth0", NetworkInterfaceKind.Ethernet, true, [IPAddress.Parse("10.0.0.5")]));
+      "eth0", NetworkInterfaceKind.Ethernet, true, [Wired]));
     rig.Network.Interfaces.Add(new NetworkInterfaceInfo(
       "lo", NetworkInterfaceKind.Loopback, true, [IPAddress.Loopback]));
 
@@ -416,5 +436,109 @@ public class LauncherHostingTests
     rig.Host(Beta);
 
     Assert.Equal("Hosting Beta", rig.Hosting.PillText);
+  }
+
+  private static void ExitLater(Rig rig, int code)
+  {
+    rig.Defer = true;
+    rig.Runner.Processes[0].Exit(code);
+    rig.Defer = false;
+  }
+
+  [Fact]
+  public void AnEndedEventThatArrivesAfterStopIsDropped()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+    ExitLater(rig, 7);
+    Assert.Single(rig.Deferred);
+
+    rig.Hosting.Panel!.StopCommand.Execute(null);
+    rig.Deferred.ForEach(action => action());
+
+    Assert.Null(rig.Toast);
+    Assert.False(rig.Hosting.IsHosting);
+  }
+
+  [Fact]
+  public void AnEndedEventFromAReplacedSessionLeavesTheNewGameAlone()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+    ExitLater(rig, 7);
+    rig.Probe.Accepts = false;
+    rig.Host(Beta);
+
+    rig.Deferred.ForEach(action => action());
+
+    Assert.Equal("Hosting Beta", rig.Hosting.PillText);
+    Assert.True(rig.Hosting.IsPanelOpen);
+    Assert.Null(rig.Toast);
+  }
+
+  [Fact]
+  public void HostingWhileAStartIsInProgressIsIgnored()
+  {
+    var rig = new Rig();
+    rig.OnDelay = () =>
+    {
+      rig.Host(Beta);
+      rig.Probe.Accepts = true;
+    };
+
+    rig.Host(Alpha);
+
+    Assert.False(rig.Main.HasPrompt);
+    Assert.Equal("Hosting Alpha", rig.Hosting.PillText);
+    Assert.Single(rig.Runner.Launches, launch => launch.Arguments.Contains("--project"));
+  }
+
+  [Fact]
+  public void AnInterfaceListThatCannotBeReadStillOpensThePanelWithoutAddresses()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Network.Throws = true;
+
+    rig.Host(Alpha);
+
+    Assert.True(rig.Hosting.IsPanelOpen);
+    Assert.True(rig.Hosting.Panel!.HasNoAddresses);
+    Assert.Equal("127.0.0.1 : 3000", rig.Hosting.PillAddress);
+    Assert.Null(rig.Toast);
+  }
+
+  [Fact]
+  public void AProbeThatThrowsToastsAndALaterHostStillWorks()
+  {
+    var rig = new Rig();
+    rig.Probe.Failure = new InvalidOperationException("probe broke");
+
+    rig.Host(Alpha);
+
+    Assert.Equal("probe broke", rig.Toast);
+    Assert.False(rig.Hosting.IsStarting);
+    rig.Probe.Failure = null;
+    rig.ListenAfterFirstWait();
+    rig.Host(Beta);
+    Assert.Equal("Hosting Beta", rig.Hosting.PillText);
+  }
+
+  [Fact]
+  public void EscapeCancelsAQuestionFirstAndThenHidesThePanel()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+    Assert.False(rig.Main.IsBackgroundEnabled);
+    rig.Host(Beta);
+    Assert.True(rig.Main.HasPrompt);
+
+    rig.Main.CloseOverlayCommand.Execute(null);
+    Assert.False(rig.Main.HasPrompt);
+    Assert.True(rig.Hosting.IsPanelOpen);
+
+    rig.Main.CloseOverlayCommand.Execute(null);
+    Assert.False(rig.Hosting.IsPanelOpen);
+    Assert.True(rig.Main.IsBackgroundEnabled);
+    Assert.True(rig.Hosting.IsHosting);
   }
 }

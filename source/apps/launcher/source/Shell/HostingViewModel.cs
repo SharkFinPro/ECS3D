@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -85,7 +86,12 @@ public class HostingViewModel : ObservableObject
     // Starts hosting the folder, after asking whether to stop a game that is already running or starting.
     public void Host(string folder, string name)
     {
-        if (_session.IsRunning || _session.IsStarting)
+        if (_session.IsStarting || _startingName is not null)
+        {
+            return;
+        }
+
+        if (_session.IsRunning)
         {
             _ask(
                 new PromptRequest(
@@ -115,42 +121,50 @@ public class HostingViewModel : ObservableObject
     private HostSession NewSession()
     {
         var session = _newSession();
-        session.Ended += OnEnded;
+        session.Ended += end => _post(() => Ended(session, end));
         return session;
     }
 
     private async Task ReplaceAsync(string folder, string name)
     {
         Stop();
-        await _starting;
+        await SettledAsync(_starting);
         _starting = StartAsync(folder, name);
         await _starting;
+    }
+
+    private static async Task SettledAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A failed start was already reported when it happened.
+        }
     }
 
     // The engine folder may have changed since the last session, so an idle one is replaced first.
     private async Task StartAsync(string folder, string name)
     {
-        if (!_session.IsRunning && !_session.IsStarting)
-        {
-            _session.Ended -= OnEnded;
-            _session = NewSession();
-        }
-
-        SetStarting(name);
-        HostStartResult result;
         try
         {
-            result = await _session.StartAsync(folder, name, _port(), CancellationToken.None);
+            if (!_session.IsRunning && !_session.IsStarting)
+            {
+                _session = NewSession();
+            }
+
+            SetStarting(name);
+            var result = await _session.StartAsync(folder, name, _port(), CancellationToken.None);
+            SetStarting(null);
+            Report(result, name);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             SetStarting(null);
             _notify(EarlyExitNotice.Failure(exception.Message));
-            return;
         }
-
-        SetStarting(null);
-        Report(result, name);
     }
 
     private void Report(HostStartResult result, string name)
@@ -180,10 +194,23 @@ public class HostingViewModel : ObservableObject
         Panel = new HostPanelViewModel(
             name,
             port,
-            LanAddresses.From(_network.GetInterfaces()),
+            ShareableAddresses(),
             () => session.Uptime,
-            new HostPanelActions(OpenWindow, Stop, Hide, OpenSettings, Copy));
+            new HostPanelActions(OpenWindow, Stop, HidePanel, OpenSettings, Copy));
         IsPanelOpen = true;
+    }
+
+    // An interface list that cannot be read leaves the panel without addresses rather than without a game.
+    private IReadOnlyList<LanAddress> ShareableAddresses()
+    {
+        try
+        {
+            return LanAddresses.From(_network.GetInterfaces());
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return [];
+        }
     }
 
     private void OpenWindow()
@@ -225,7 +252,7 @@ public class HostingViewModel : ObservableObject
         }
     }
 
-    private void Hide() => IsPanelOpen = false;
+    public void HidePanel() => IsPanelOpen = false;
 
     private void OpenSettings()
     {
@@ -246,17 +273,18 @@ public class HostingViewModel : ObservableObject
         OnPropertyChanged(nameof(StartingText));
     }
 
-    private void OnEnded(HostSessionEnd end) => _post(() => Ended(end));
-
-    private void Ended(HostSessionEnd end)
+    // A late event from a session that was stopped, replaced or never opened a panel is dropped.
+    private void Ended(HostSession session, HostSessionEnd end)
     {
-        var port = (Panel?.Port ?? _port()).ToString(CultureInfo.InvariantCulture);
+        if (!ReferenceEquals(session, _session) || Panel is null)
+        {
+            return;
+        }
+
         var code = end.ExitCode is { } value
             ? $"exited with code {value.ToString(CultureInfo.InvariantCulture)}"
             : "exited";
         Close();
-        _notify(new LaunchNotice(
-            $"The hosted server {code}. If port {port} is in use, choose another port in Settings. Log: {end.LogPath}",
-            end.LogPath));
+        _notify(new LaunchNotice($"The hosted server {code}. Log: {end.LogPath}", end.LogPath));
     }
 }
