@@ -57,6 +57,7 @@ public class MainWindowViewModel : ObservableObject
     private string _searchText = "";
     private string? _toastMessage;
     private string? _toastLogPath;
+    private JoinDialogViewModel? _joinDialog;
 
     public string ActiveNav
     {
@@ -138,6 +139,16 @@ public class MainWindowViewModel : ObservableObject
         }
     }
 
+    // The open Join a game dialog, or null.
+    public JoinDialogViewModel? JoinDialog
+    {
+        get => _joinDialog;
+        private set => SetProperty(ref _joinDialog, value);
+    }
+
+    // Names the missing client while Join a game is disabled.
+    public string? JoinTooltip => _actions.Play.Tooltip;
+
     public bool HasToast => ToastMessage is not null;
     public bool HasToastLog => ToastLogPath is not null;
 
@@ -168,6 +179,8 @@ public class MainWindowViewModel : ObservableObject
     public IRelayCommand<Project> LocateProjectCommand { get; }
     public IRelayCommand OpenExistingCommand { get; }
     public IRelayCommand<SampleCard> PlaySampleCommand { get; }
+    public IRelayCommand OpenJoinCommand { get; }
+    public IRelayCommand CloseJoinCommand { get; }
     public IRelayCommand DismissToastCommand { get; }
     public IRelayCommand OpenLogsCommand { get; }
 
@@ -252,6 +265,8 @@ public class MainWindowViewModel : ObservableObject
         LocateProjectCommand = new RelayCommand<Project>(project => _ = LocateAsync(project));
         OpenExistingCommand = new RelayCommand(() => _ = OpenExistingAsync());
         PlaySampleCommand = new RelayCommand<SampleCard>(PlaySample, _ => _actions.Play.Available);
+        OpenJoinCommand = new RelayCommand(OpenJoin, () => _actions.Play.Available);
+        CloseJoinCommand = new RelayCommand(() => JoinDialog = null);
         DismissToastCommand = new RelayCommand(DismissToast);
         OpenLogsCommand = new RelayCommand(() => _ = OpenLogsAsync(), () => HasToastLog);
 
@@ -366,6 +381,8 @@ public class MainWindowViewModel : ObservableObject
         TemplatesNavItem.Count = TemplateCount();
         SamplesNavItem.Count = SampleCount();
         PlaySampleCommand.NotifyCanExecuteChanged();
+        OpenJoinCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(JoinTooltip));
         OnPropertyChanged(nameof(EngineBannerText));
         OnPropertyChanged(nameof(HasEngineBanner));
     }
@@ -660,6 +677,21 @@ public class MainWindowViewModel : ObservableObject
         if (card is not null && _actions.Play.Available)
         {
             _ = _coordinator.PlayProjectAsync(card.FolderPath);
+        }
+    }
+
+    private void OpenJoin() =>
+        JoinDialog = new JoinDialogViewModel(
+            _settings.Current.LastJoin, EnginePorts.Default, JoinGame, () => JoinDialog = null);
+
+    private void JoinGame(JoinTarget target)
+    {
+        ApplyUpdate(_settings.SetLastJoin(target));
+        Settings.RefreshLastJoin();
+        JoinDialog = null;
+        if (_actions.Play.Available)
+        {
+            _ = _coordinator.JoinGameAsync(target.Address, target.Port);
         }
     }
 

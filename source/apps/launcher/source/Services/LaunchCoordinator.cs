@@ -43,6 +43,9 @@ public sealed class LaunchCoordinator
     public Task PlayProjectAsync(string projectFolder) =>
         ReportAsync(() => _launcher.PlayProject(projectFolder), EngineExecutable.Client, null);
 
+    public Task JoinGameAsync(string address, int port) =>
+        ReportAsync(() => _launcher.JoinGame(address, port), EngineExecutable.Client, null);
+
     // Callers drop the task, so nothing the start or the watch throws may escape it.
     private async Task ReportAsync(Func<LaunchResult> start, EngineExecutable executable, string? trackedProject)
     {
