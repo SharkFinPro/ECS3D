@@ -12,6 +12,9 @@
     <AssemblyName>ECS3DLauncher</AssemblyName>
     <RootNamespace>ECS3DLauncher</RootNamespace>
 
+    <!-- The exe icon Explorer and a pinned shortcut show. MainWindow sets its own Icon from the same file. -->
+    <ApplicationIcon>source/Assets/launcher.ico</ApplicationIcon>
+
     <!-- Views load through AvaloniaXamlLoader and look up named controls themselves, so the name
          generator (which needs a partial class) is pointed at a namespace nothing lives in. -->
     <AvaloniaNameGeneratorFilterByNamespace>ECS3DLauncher.NoGeneratedViews</AvaloniaNameGeneratorFilterByNamespace>

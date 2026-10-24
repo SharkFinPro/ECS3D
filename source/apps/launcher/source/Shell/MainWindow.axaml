@@ -14,6 +14,7 @@
         x:Class="ECS3DLauncher.Shell.MainWindow"
         x:DataType="shell:MainWindowViewModel"
         Title="ECS3D Launcher"
+        Icon="avares://ECS3DLauncher/source/Assets/launcher.ico"
         Width="1120" Height="720" MinWidth="900" MinHeight="600"
         Background="{StaticResource BgBrush}"
         Foreground="{StaticResource T1Brush}"
