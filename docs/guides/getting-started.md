@@ -21,18 +21,33 @@ On Linux and macOS prefix a program with `./`, and in PowerShell with `.\`, for 
 
 ## The launcher
 
-The launcher looks for the three engine programs in its own folder. If one is missing, a banner at the top
-names the missing file and the folder it looked in, and its Open Settings button goes to the Settings page.
-There you can point the launcher at a different engine folder and choose whether the editor and its server open
-a console window. The launcher saves automatically, and a text field saves when you leave it.
+The launcher is the front door. It looks for the three engine programs in its own folder. If one is missing, a
+banner at the top names the missing file and the folder it looked in, and its Open Settings button goes to the
+Settings page. There you can point the launcher at a different engine folder, change the default location for new
+projects and choose whether the editor and its server open a console window. The launcher saves automatically, and
+a text field saves when you leave it.
 
-On first run the Projects page is empty ("No recent projects yet"). Its Explore the engine button opens the editor on the built-in Welcome scene.
-That project is unsaved, so nothing is written until you choose to save it.
+The sidebar lists Projects, Templates, Samples and Learn. On first run the Projects page is empty ("No recent
+projects yet"). Its Explore the engine card opens the editor on the built-in Welcome scene. That project is
+unsaved, so nothing is written until you choose to save it.
 
 ## Start a project from the First-Person template
 
-The First-Person template is a lit ground with crates, ramps and four spawn points. Open it in the editor from
-`bin/`:
+The First-Person template is a lit ground with crates, ramps and four spawn points.
+
+1. Open the Templates page and click the First-Person card. The header's New Project button and the Projects
+   page's New Project card open the same dialog, with the Empty 3D template chosen.
+2. In the New project dialog, type a Project name. The Location starts in `ECS3D Projects` under your Documents
+   folder; use Browse... to pick another. "Will be created at" shows the folder the dialog will make, and the
+   dialog tells you when that folder already exists or the name cannot be used.
+3. Leave "Open in the editor when it is created" checked, then click Create project.
+
+The launcher copies the template into your new folder and opens it in the editor. From then on you are working in
+your own project: Save (Ctrl+S) writes into that folder, and the template itself is never changed. The project
+appears on the Projects page, where its card opens it in the editor again, and its menu plays or hosts it (see
+[Multiplayer](multiplayer.md)).
+
+Without the launcher, open the template straight from `bin/`:
 
 ```
 ECS3DEditor --project templates/first-person
@@ -40,8 +55,7 @@ ECS3DEditor --project templates/first-person
 
 A project folder that holds a `template.json` is a template, and the editor never writes into it. It opens as
 "Untitled (from First-Person)", and that name is in the window title. The first Save (Ctrl+S) asks you for a
-new folder and starts in `ECS3D Projects` under your Documents folder. After that you are working in your own
-project, and Save writes there.
+new folder and starts in `ECS3D Projects` under your Documents folder.
 
 ## The editor
 
@@ -72,7 +86,9 @@ Play, choose your player's camera in the View combo in Scene Status. Choosing a 
 points the View at that player's camera too. With the Editor Camera, the right-drag turns the editor's own
 camera instead.
 
-To play without the editing tools, run a client on the folder. It starts its own local server:
+To play without the editing tools, choose Play from the project card's menu (the ... button) in the launcher.
+It runs a client on the project folder, and the client starts its own local server. The command-line
+equivalent, from `bin/`, is:
 
 ```
 ECS3DClient --project templates/first-person
