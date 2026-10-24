@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
@@ -132,7 +133,7 @@ public class LauncherSamplesTabTests
 
     var launch = host.Runner.Launches[0];
     Assert.Contains("ECS3DServer", launch.FileName);
-    Assert.Equal(new[] { "--project", FolderOf(LauncherRig.LauncherDir, "rush"), "--port", "3000" }, launch.Arguments);
+    Assert.Equal(new[] { "--project", FolderOf(LauncherRig.LauncherDir, "rush"), "--port", EnginePorts.Default.ToString(CultureInfo.InvariantCulture) }, launch.Arguments);
     Assert.True(host.Main.Hosting.IsHosting);
     Assert.True(host.Main.Hosting.IsPanelOpen);
     Assert.Equal("Hosting Coin Rush", host.Main.Hosting.PillText);
@@ -382,6 +383,28 @@ public class LauncherSamplesTabTests
     Assert.Equal(new[] { thumbnail }, requested.ToArray());
     Assert.False(cards.Single(card => card.Name == "Coin Rush").HasThumbnail);
     Assert.False(cards.Single(card => card.Name == "Physics Playground").HasThumbnail);
+  }
+
+  [Fact]
+  public void ChangingTheEngineFolderRefreshesHostAvailabilityAndItsTooltip()
+  {
+    _rig.AddEngine(LauncherRig.LauncherDir, EngineExecutable.Server);
+    AddStandardEntries(LauncherRig.LauncherDir);
+    _rig.AddEngine(LauncherRig.OtherDir);
+    AddSample(LauncherRig.OtherDir, "rush", "Coin Rush", "Grab every coin", "\"Arcade\"", ",\"players\":{\"min\":1,\"max\":4}");
+    var model = NewMain();
+    Assert.False(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single(card => card.IsMultiplayer)));
+    Assert.NotNull(model.Samples.HostTooltip);
+
+    model.Settings.EngineFolder = LauncherRig.OtherDir;
+
+    Assert.True(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single()));
+    Assert.Null(model.Samples.HostTooltip);
+
+    model.Settings.EngineFolder = LauncherRig.LauncherDir;
+
+    Assert.False(model.HostSampleCommand.CanExecute(model.Samples.Samples.Single(card => card.IsMultiplayer)));
+    Assert.NotNull(model.Samples.HostTooltip);
   }
 
   [Fact]
