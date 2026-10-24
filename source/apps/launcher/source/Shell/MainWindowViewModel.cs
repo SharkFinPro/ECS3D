@@ -782,13 +782,28 @@ public class MainWindowViewModel : ObservableObject
         }
     }
 
-    // True when the window may close now. While a game is hosted or starting it asks first and returns false:
+    // True when the window may close now. While a project is being created the copy is cancelled first and the window
+    // closes once its hidden folder is gone. While a game is hosted or starting it asks first and returns false:
     // Stop server and quit closes for real, Keep hosting minimizes, and Escape leaves the window as it is.
     // When the system is shutting down there is no one to ask, so the server is stopped and the close allowed.
     public bool RequestClose() => RequestClose(false);
 
     public bool RequestClose(bool systemShutdown)
     {
+        if (!_quitApproved && NewProject is { IsCreating: true } creating)
+        {
+            // A system shutdown cannot wait; the copy is cancelled and the hidden folder is left to the next create.
+            creating.CancelCreate(() =>
+            {
+                NewProject = null;
+                CloseWindow?.Invoke();
+            });
+            if (!systemShutdown)
+            {
+                return false;
+            }
+        }
+
         if (_quitApproved || !Hosting.IsBusy)
         {
             return true;

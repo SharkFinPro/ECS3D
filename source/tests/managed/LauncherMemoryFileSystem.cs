@@ -15,6 +15,9 @@ internal sealed class MemoryTreeFileSystem : IFileSystem
   // Thrown when a file whose name ends with CopyFailureSuffix is copied.
   public Exception? CopyFailure { get; set; }
 
+  // Called after each file is copied.
+  public Action<string>? AfterCopy { get; set; }
+
   public string CopyFailureSuffix { get; set; } = "A.cs";
 
   // Looking at this folder or anything below it throws, as an unreadable share would.
@@ -87,6 +90,7 @@ internal sealed class MemoryTreeFileSystem : IFileSystem
     }
 
     Seed(destination, ReadAllText(source));
+    AfterCopy?.Invoke(Norm(destination));
   }
 
   public void MoveDirectory(string source, string destination)

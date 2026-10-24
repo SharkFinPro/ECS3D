@@ -28,6 +28,8 @@ public sealed class NewProjectViewModel : ObservableObject
     private readonly Func<TimeSpan, Task> _delay;
     private readonly Func<Func<TargetCheck>, Task<TargetCheck>> _runCheck;
     private int _generation;
+    private CancellationTokenSource? _createCancel;
+    private Action? _cancelFinished;
     private bool _isChecking;
     private string _projectName;
     private string _location;
@@ -175,6 +177,8 @@ public sealed class NewProjectViewModel : ObservableObject
         }
     }
 
+    public bool IsCreating => IsBusy;
+
     public bool CanCreate => !IsBusy && !IsChecking && IsTargetFree;
 
     public string? TargetMessage => IsChecking ? CheckingText : TargetState switch
@@ -316,18 +320,32 @@ public sealed class NewProjectViewModel : ObservableObject
         var openInEditor = OpenInEditor;
         CreateError = null;
         IsBusy = true;
+        var cancel = new CancellationTokenSource();
+        _createCancel = cancel;
         _runInBackground(() =>
         {
-            var result = Run(name, location);
+            var result = Run(name, location, cancel.Token);
             _post(() => Finish(result, openInEditor));
         });
     }
 
-    private ProjectCreationResult Run(string name, string location)
+    // Stops a running copy; finished is called once its cleanup is done. Does nothing when no copy is running.
+    public void CancelCreate(Action finished)
+    {
+        if (!IsBusy || _cancelFinished is not null)
+        {
+            return;
+        }
+
+        _cancelFinished = finished;
+        _createCancel?.Cancel();
+    }
+
+    private ProjectCreationResult Run(string name, string location, CancellationToken cancel)
     {
         try
         {
-            return _creator.Create(_template, location, name);
+            return _creator.Create(_template, location, name, cancel);
         }
         catch (Exception exception)
         {
@@ -338,6 +356,16 @@ public sealed class NewProjectViewModel : ObservableObject
     private void Finish(ProjectCreationResult result, bool openInEditor)
     {
         IsBusy = false;
+        _createCancel?.Dispose();
+        _createCancel = null;
+        if (_cancelFinished is { } finished)
+        {
+            _cancelFinished = null;
+            _isClosed = true;
+            finished();
+            return;
+        }
+
         if (result.Succeeded)
         {
             _isClosed = true;
