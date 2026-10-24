@@ -13,9 +13,7 @@ using Avalonia.VisualTree;
 
 namespace ECS3DLauncher.Shell;
 
-// Code-behind only handles window-chrome concerns. The window is fully frameless
-// (WindowDecorations="None") to match the mockup, so edge resizing is restored
-// manually via BeginResizeDrag.
+// Code-behind only handles window-chrome concerns.
 public class MainWindow : Window
 {
     private readonly Grid _root;
@@ -25,13 +23,6 @@ public class MainWindow : Window
     private bool _activatedOnce;
     private DispatcherTimer? _hostingClock;
 
-    private const double ResizeBorder = 6;
-
-    private static readonly Cursor s_ns = new(StandardCursorType.SizeNorthSouth);
-    private static readonly Cursor s_we = new(StandardCursorType.SizeWestEast);
-    private static readonly Cursor s_nwse = new(StandardCursorType.TopLeftCorner);
-    private static readonly Cursor s_nesw = new(StandardCursorType.TopRightCorner);
-
     public MainWindow()
     {
         AvaloniaXamlLoader.Load(this);
@@ -39,8 +30,6 @@ public class MainWindow : Window
         _maxButton = this.FindControl<Button>("MaxButton") ?? throw new InvalidOperationException("MaxButton not found");
         _glyphMax = this.FindControl<Border>("GlyphMax") ?? throw new InvalidOperationException("GlyphMax not found");
         _glyphRestore = this.FindControl<Panel>("GlyphRestore") ?? throw new InvalidOperationException("GlyphRestore not found");
-        AddHandler(PointerPressedEvent, OnEdgePressed, RoutingStrategies.Tunnel);
-        AddHandler(PointerMovedEvent, OnEdgeMoved, RoutingStrategies.Tunnel);
         // A press on a non-focusable element (title text, empty panels, ...) does not
         // pull keyboard focus off a TextBox, so its caret keeps blinking. Clear focus
         // whenever a press lands outside any TextBox. handledEventsToo so it still runs
@@ -156,108 +145,6 @@ public class MainWindow : Window
         if (FocusManager?.GetFocusedElement() is TextBox)
         {
             _root.Focus();
-        }
-    }
-
-    private WindowEdge? EdgeAt(Point p)
-    {
-        if (WindowState != WindowState.Normal)
-        {
-            return null;
-        }
-
-        bool l = p.X <= ResizeBorder, r = p.X >= Bounds.Width - ResizeBorder;
-        bool t = p.Y <= ResizeBorder, b = p.Y >= Bounds.Height - ResizeBorder;
-
-        return CornerEdge(l, r, t, b) ?? SideEdge(l, r, t, b);
-    }
-
-    private static WindowEdge? CornerEdge(bool l, bool r, bool t, bool b)
-    {
-        if (t && l)
-        {
-            return WindowEdge.NorthWest;
-        }
-
-        if (t && r)
-        {
-            return WindowEdge.NorthEast;
-        }
-
-        if (b && l)
-        {
-            return WindowEdge.SouthWest;
-        }
-
-        if (b && r)
-        {
-            return WindowEdge.SouthEast;
-        }
-
-        return null;
-    }
-
-    private static WindowEdge? SideEdge(bool l, bool r, bool t, bool b)
-    {
-        if (t)
-        {
-            return WindowEdge.North;
-        }
-
-        if (b)
-        {
-            return WindowEdge.South;
-        }
-
-        if (l)
-        {
-            return WindowEdge.West;
-        }
-
-        if (r)
-        {
-            return WindowEdge.East;
-        }
-
-        return null;
-    }
-
-    private void OnEdgePressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed &&
-            EdgeAt(e.GetPosition(this)) is { } edge)
-        {
-            BeginResizeDrag(edge, e);
-            e.Handled = true;
-        }
-    }
-
-    private void OnEdgeMoved(object? sender, PointerEventArgs e)
-    {
-        Cursor = EdgeAt(e.GetPosition(this)) switch
-        {
-            WindowEdge.North or WindowEdge.South => s_ns,
-            WindowEdge.East or WindowEdge.West => s_we,
-            WindowEdge.NorthWest or WindowEdge.SouthEast => s_nwse,
-            WindowEdge.NorthEast or WindowEdge.SouthWest => s_nesw,
-            _ => Cursor.Default,
-        };
-    }
-
-    private void OnTitleBarPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            return;
-        }
-
-        if (e.ClickCount == 2)
-        {
-            ToggleMaximize();
-        }
-        else
-        {
-            BeginMoveDrag(e);
         }
     }
 

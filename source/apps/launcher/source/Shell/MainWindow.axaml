@@ -20,8 +20,14 @@
         FontFamily="{StaticResource ContentFontFamily}"
         FontSize="13"
         WindowStartupLocation="CenterScreen"
-        WindowDecorations="None">
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="42">
 
+    <!-- The native resizable frame stays so Windows can snap, move and resize the window; the client area is
+         extended over it and the title bar below draws the chrome. BorderOnly rather than Full: Full makes
+         Avalonia draw its own title bar on top of this one. The ElementRole attributes route the OS hit test
+         to the title bar (move, double-click, drag-to-edge) and caption buttons (Snap Layouts on maximize). -->
     <Window.KeyBindings>
         <KeyBinding Gesture="Escape" Command="{Binding CloseOverlayCommand}" />
     </Window.KeyBindings>
@@ -31,7 +37,7 @@
         <!-- ===== TITLE BAR ===== -->
         <Border Grid.Row="0" Background="{StaticResource TitleBg}"
                 BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1"
-                PointerPressed="OnTitleBarPressed">
+                WindowDecorationProperties.ElementRole="TitleBar">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="13,0,6,0">
 
                 <Border Grid.Column="0" Width="22" Height="22" CornerRadius="6"
@@ -55,12 +61,14 @@
                 <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2"
                             VerticalAlignment="Center">
                     <Button Classes="win" Theme="{StaticResource BareButton}"
-                            Click="OnMinimize" ToolTip.Tip="Minimize">
+                            Click="OnMinimize" ToolTip.Tip="Minimize"
+                            WindowDecorationProperties.ElementRole="MinimizeButton">
                         <Rectangle Classes="wg" Width="10" Height="1.3" RadiusX="1" RadiusY="1"
                                    Fill="{StaticResource T2Brush}" />
                     </Button>
                     <Button Name="MaxButton" Classes="win" Theme="{StaticResource BareButton}"
-                            Click="OnMaximize" ToolTip.Tip="Maximize">
+                            Click="OnMaximize" ToolTip.Tip="Maximize"
+                            WindowDecorationProperties.ElementRole="MaximizeButton">
                         <Panel Width="11" Height="11">
                             <!-- maximize: single square -->
                             <Border Name="GlyphMax" Classes="wg" Width="9" Height="9" CornerRadius="2"
@@ -78,7 +86,8 @@
                         </Panel>
                     </Button>
                     <Button Classes="win close" Theme="{StaticResource BareButton}"
-                            Click="OnClose" ToolTip.Tip="Close">
+                            Click="OnClose" ToolTip.Tip="Close"
+                            WindowDecorationProperties.ElementRole="CloseButton">
                         <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
                     </Button>
                 </StackPanel>
