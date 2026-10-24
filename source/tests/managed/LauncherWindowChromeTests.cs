@@ -77,12 +77,12 @@ public class LauncherWindowChromeTests
   [Fact]
   public void SettingsViewShowsTheVersionUnderAbout()
   {
-    var panel = SettingsView().Descendants().Single(element => element.Name.LocalName == "StackPanel");
-    var about = panel.Elements().ToList();
-    var heading = about.FindIndex(element => (string?)element.Attribute("Text") == "ABOUT");
+    var heading = SettingsView().Descendants()
+      .Single(element => (string?)element.Attribute("Text") == "ABOUT");
+    var section = heading.Parent!.Elements().SkipWhile(element => element != heading).Skip(1).ToList();
 
-    Assert.True(heading >= 0);
-    Assert.True(about.Skip(heading).Any(ShowsVersion));
+    Assert.Equal("Version", (string?)section[0].Attribute("Text"));
+    Assert.True(ShowsVersion(section[1]));
   }
 
   [Theory]
