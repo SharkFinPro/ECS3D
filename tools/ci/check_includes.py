@@ -4,7 +4,8 @@ import concurrent.futures
 import json
 import os
 import shlex
-import subprocess
+# The compile commands it runs come from the build's own compile_commands.json, never from outside input.
+import subprocess  # nosec B404
 import sys
 
 # Options that name an output or dependency file and take the following argument as their value.
@@ -71,7 +72,7 @@ def check(item):
     """Compile one entry front end only and return (path, ok, output)."""
     path, entry = item
     arguments = strip_arguments(entry_arguments(entry))
-    result = subprocess.run(arguments, cwd=entry["directory"], capture_output=True, text=True)
+    result = subprocess.run(arguments, cwd=entry["directory"], capture_output=True, text=True)  # nosec B603
     return path, result.returncode == 0, result.stdout + result.stderr
 
 
