@@ -28,6 +28,7 @@ Click Open another game window to join your own game with a client on this machi
 green "Hosting Coin Rush" pill in the sidebar reopens it. Stop server ends the game for everyone in it. Quitting the
 launcher while a game is hosted asks whether to stop the server or keep hosting, in which case the launcher
 minimizes instead of closing.
+If the launcher is killed or crashes, Windows ends the hosted server with it, so the port is free again.
 
 Each player who joins gets a body at a spawn point. The controls are the same as in
 [Getting started](getting-started.md): W, A, S, D, Space, and the right mouse button to look.
