@@ -1,5 +1,6 @@
 #include "AssetInspector.h"
 #include "AssetDisplay.h"
+#include "AssetNaming.h"
 #include "GuiComponents.h"
 #include "ObjectInspector.h"
 #include "TransientObject.h"
@@ -77,13 +78,14 @@ void AssetInspector::setUpdatePrefabBodyCallback(UpdatePrefabBodyCallback callba
 
 void AssetInspector::setAssetRegistry(const AssetRegistry* registry)
 {
+  m_assetRegistry = registry;
   m_prefabInspector->setAssetRegistry(registry);
 }
 
 namespace {
-  // A display-name rename is a display-only override the AssetRegistry packs (see AssetRegistry::pack): it
-  // survives a snapshot only for the flat file assets. A Scene record is regenerated from the SceneManager
-  // on every snapshot (and never packed), so its override wouldn't stick - keep the scene name read-only.
+  // Whether the asset is a flat file asset (or prefab) the registry owns, so it takes a live display-name
+  // override and can be deleted from here. A Scene record is regenerated from the SceneManager on every
+  // snapshot, so a scene rename changes the scene's real name instead (displaySceneNameField).
   bool isRenamable(const AssetType type)
   {
     return type == AssetType::Model || type == AssetType::Texture
@@ -106,6 +108,8 @@ void AssetInspector::displayTypeChip(const AssetRecord& record) const
 
 void AssetInspector::display(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID)
 {
+  flushPendingSceneName(record.uuid);
+
   // Recompute the file metadata only when the selection changes, not every frame.
   if (!m_metaLoaded || m_metaUUID != record.uuid)
   {
@@ -130,6 +134,8 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
   // registry op - see isRenamable). The modal is drawn every frame the button is armed.
   displayDeleteButton(record);
   displayDeleteConfirmationModal(record);
+
+  sendQueuedSceneRenames();
 }
 
 void AssetInspector::displayHeader(const AssetRecord& record)
@@ -145,9 +151,11 @@ void AssetInspector::displayHeader(const AssetRecord& record)
     m_nameEditBuffer[len] = '\0';
   }
 
-  // Display name: an editable rename field for the flat file assets (gated on editable), read-only text
-  // for scenes (their override wouldn't survive a snapshot - see isRenamable).
-  if (isRenamable(record.type))
+  if (record.type == AssetType::Scene)
+  {
+    displaySceneNameField(record);
+  }
+  else if (isRenamable(record.type))
   {
     ImGui::BeginDisabled(!m_editable);
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
@@ -175,6 +183,91 @@ void AssetInspector::displayHeader(const AssetRecord& record)
   {
     gc::rowLabel("Path");
     ImGui::TextColored(theme::t2, "%s", record.path.c_str());
+  }
+}
+
+void AssetInspector::displaySceneNameField(const AssetRecord& record)
+{
+  ImGui::BeginDisabled(!m_editable);
+  ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+  ImGui::InputText(("##assetName" + uuids::to_string(record.uuid)).c_str(),
+                   m_nameEditBuffer.data(), m_nameEditBuffer.size());
+  const bool active = ImGui::IsItemActive();
+  const bool committed = ImGui::IsItemDeactivatedAfterEdit();
+  ImGui::EndDisabled();
+
+  const std::string name = m_nameEditBuffer.data();
+  const auto decision = assetNaming::decideSceneNameField(record.path, name, active, committed,
+                                                          isSceneNameAvailable(record.uuid, name));
+
+  if (decision.action == assetNaming::SceneNameAction::commit)
+  {
+    queueSceneRename(record.uuid, name);
+  }
+  else if (decision.action == assetNaming::SceneNameAction::reseed)
+  {
+    const auto len = std::min(record.path.size(), m_nameEditBuffer.size() - 1);
+    record.path.copy(m_nameEditBuffer.data(), len);
+    m_nameEditBuffer[len] = '\0';
+  }
+
+  if (active && !committed && name != record.path)
+  {
+    m_pendingSceneName = PendingSceneName{ record.uuid, name, ImGui::GetFrameCount() };
+  }
+  else
+  {
+    m_pendingSceneName.reset();
+  }
+
+  if (decision.warning != assetNaming::SceneNameWarning::none)
+  {
+    ImGui::TextColored(theme::scriptAmber, "%s",
+                       decision.warning == assetNaming::SceneNameWarning::blank
+                         ? "A scene needs a name." : "That name is already in use.");
+  }
+}
+
+bool AssetInspector::isSceneNameAvailable(const uuids::uuid& sceneUUID, const std::string& name) const
+{
+  return !m_assetRegistry || replication::isSceneNameAvailable(*m_assetRegistry, nullptr, sceneUUID, name);
+}
+
+void AssetInspector::queueSceneRename(const uuids::uuid& sceneUUID, const std::string& name)
+{
+  const auto* current = m_assetRegistry ? m_assetRegistry->getByUUID(sceneUUID) : nullptr;
+  if (!current || current->type != AssetType::Scene
+      || !assetNaming::shouldCommitSceneName(current->path, name, isSceneNameAvailable(sceneUUID, name)))
+  {
+    return;
+  }
+
+  m_queuedSceneRenames.emplace_back(sceneUUID, name);
+}
+
+void AssetInspector::flushPendingSceneName(const uuids::uuid& shownUUID)
+{
+  if (m_pendingSceneName
+      && assetNaming::shouldFlushPendingSceneName(m_pendingSceneName->uuid, m_pendingSceneName->frame, shownUUID,
+                                                  ImGui::GetFrameCount()))
+  {
+    queueSceneRename(m_pendingSceneName->uuid, m_pendingSceneName->name);
+    m_pendingSceneName.reset();
+  }
+}
+
+void AssetInspector::sendQueuedSceneRenames()
+{
+  // Applying a scene rename re-keys its registry record, so the record being drawn must not be used after it.
+  auto renames = std::move(m_queuedSceneRenames);
+  m_queuedSceneRenames.clear();
+
+  for (const auto& [sceneUUID, name] : renames)
+  {
+    if (m_onRename)
+    {
+      m_onRename(sceneUUID, name);
+    }
   }
 }
 

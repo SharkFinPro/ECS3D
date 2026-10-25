@@ -35,6 +35,73 @@ namespace assetNaming {
     return false;
   }
 
+  enum class SceneNameAction {
+    none,
+    commit, // send a rename to `commitName`
+    reseed  // discard the buffer and show the record's name again
+  };
+
+  enum class SceneNameWarning {
+    none,
+    blank,
+    taken
+  };
+
+  struct SceneNameDecision {
+    SceneNameAction action = SceneNameAction::none;
+    SceneNameWarning warning = SceneNameWarning::none;
+  };
+
+  [[nodiscard]] inline bool isBlank(const std::string& name)
+  {
+    return name.find_first_not_of(" \t\r\n") == std::string::npos;
+  }
+
+  // A rename is sent only for a name that is free and differs from the scene's current one.
+  [[nodiscard]] inline bool shouldCommitSceneName(const std::string& recordName, const std::string& name,
+                                                  const bool available)
+  {
+    return available && name != recordName;
+  }
+
+  // What a scene's name field does this frame. `available` is whether `buffer` can be the scene's name. An
+  // edit commits once, when the field deactivates; while idle the field follows the record, so an undo or
+  // another editor's rename shows through; while typing an unusable name it warns.
+  [[nodiscard]] inline SceneNameDecision decideSceneNameField(const std::string& recordName,
+                                                              const std::string& buffer, const bool active,
+                                                              const bool deactivatedAfterEdit, const bool available)
+  {
+    if (deactivatedAfterEdit)
+    {
+      if (shouldCommitSceneName(recordName, buffer, available))
+      {
+        return { SceneNameAction::commit, SceneNameWarning::none };
+      }
+
+      return { available ? SceneNameAction::none : SceneNameAction::reseed, SceneNameWarning::none };
+    }
+
+    if (!active)
+    {
+      return { buffer != recordName ? SceneNameAction::reseed : SceneNameAction::none, SceneNameWarning::none };
+    }
+
+    if (!available)
+    {
+      return { SceneNameAction::none, isBlank(buffer) ? SceneNameWarning::blank : SceneNameWarning::taken };
+    }
+
+    return {};
+  }
+
+  // An edit still pending when the field stops being drawn (another asset selected, or the inspector hidden
+  // for a frame) never sees its deactivation, so it is flushed the next time the inspector draws.
+  [[nodiscard]] inline bool shouldFlushPendingSceneName(const uuids::uuid& pendingUUID, const long pendingFrame,
+                                                        const uuids::uuid& shownUUID, const long currentFrame)
+  {
+    return pendingUUID != shownUUID || currentFrame - pendingFrame > 1;
+  }
+
   // Uses the same " (N)" suffix rule as SceneManager::uniqueSceneName, so the offered name matches the server.
   [[nodiscard]] inline std::string uniqueNameOfType(const AssetRegistry& registry, const AssetType type,
                                                     const std::string& base)

@@ -252,6 +252,7 @@ TEST(EditHistory, UndoAndRedoRoundTripAnAddAsset)
 TEST(EditHistory, UndoAndRedoRoundTripARenameAsset)
 {
   AssetScene scene;
+  SceneManager sceneManager;
   const auto assetUUID = someOtherUUID();
 
   scene.assetRegistry.registerAsset({ .uuid = assetUUID, .type = AssetType::Model, .path = "models/thing.obj" });
@@ -263,13 +264,15 @@ TEST(EditHistory, UndoAndRedoRoundTripARenameAsset)
   const auto undoOutcome = history.undo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(undoOutcome.ok());
   ASSERT_TRUE(undoOutcome.messagePayload.has_value());
-  replication::applyRenameAsset(scene.assetRegistry, replication::unpackRenameAsset(*undoOutcome.messagePayload));
+  EXPECT_TRUE(replication::applyRenameAsset(scene.assetRegistry, sceneManager,
+                                            replication::unpackRenameAsset(*undoOutcome.messagePayload)));
   EXPECT_EQ(scene.assetRegistry.getByUUID(assetUUID)->displayName, "");
 
   const auto redoOutcome = history.redo(*scene.objectManager, &scene.assetRegistry);
   ASSERT_TRUE(redoOutcome.ok());
   ASSERT_TRUE(redoOutcome.messagePayload.has_value());
-  replication::applyRenameAsset(scene.assetRegistry, replication::unpackRenameAsset(*redoOutcome.messagePayload));
+  EXPECT_TRUE(replication::applyRenameAsset(scene.assetRegistry, sceneManager,
+                                            replication::unpackRenameAsset(*redoOutcome.messagePayload)));
   EXPECT_EQ(scene.assetRegistry.getByUUID(assetUUID)->displayName, "New Name");
 }
 

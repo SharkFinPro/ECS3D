@@ -1691,15 +1691,92 @@ nlohmann::json buildRemoveAsset(const uuids::uuid& assetUUID)
   };
 }
 
-void applyRenameAsset(AssetRegistry& assetRegistry, const nlohmann::json& op)
+namespace {
+  bool isBlankName(const std::string& name)
+  {
+    return name.find_first_not_of(" \t\r\n") == std::string::npos;
+  }
+
+  bool renameScene(AssetRegistry& assetRegistry, SceneManager& sceneManager, const uuids::uuid& uuid,
+                   const std::string& name)
+  {
+    const auto scene = sceneManager.getScene(uuid);
+    if (!scene)
+    {
+      return false;
+    }
+
+    if (scene->getName() == name)
+    {
+      return !isBlankName(name);
+    }
+
+    if (!isSceneNameAvailable(assetRegistry, &sceneManager, uuid, name))
+    {
+      return false;
+    }
+
+    scene->setName(name);
+
+    // A scene record is keyed by its name, so it is re-registered under the new one.
+    assetRegistry.removeAsset(uuid);
+    assetRegistry.registerAsset({ .uuid = uuid, .type = AssetType::Scene, .path = name });
+
+    return true;
+  }
+}
+
+bool isSceneNameAvailable(const AssetRegistry& assetRegistry, const SceneManager* sceneManager,
+                          const uuids::uuid& self, const std::string& name)
+{
+  if (isBlankName(name))
+  {
+    return false;
+  }
+
+  if (const auto* owner = assetRegistry.getByPath(name); owner && owner->uuid != self)
+  {
+    return false;
+  }
+
+  if (sceneManager)
+  {
+    for (const auto& [uuid, scene] : sceneManager->getScenes())
+    {
+      if (uuid != self && scene->getName() == name)
+      {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+bool applyRenameAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, const nlohmann::json& op)
 {
   const auto parsed = uuids::uuid::from_string(op.value("uuid", std::string{}));
   if (!parsed.has_value())
   {
-    return;
+    return false;
   }
 
-  assetRegistry.renameAsset(parsed.value(), op.value("displayName", std::string{}));
+  const auto name = op.value("displayName", std::string{});
+
+  const auto* record = assetRegistry.getByUUID(parsed.value());
+  if (record && record->type == AssetType::Scene)
+  {
+    return renameScene(assetRegistry, sceneManager, parsed.value(), name);
+  }
+
+  if (!record)
+  {
+    return false;
+  }
+
+  assetRegistry.renameAsset(parsed.value(), name);
+
+  return true;
 }
 
 void applyRemoveAsset(AssetRegistry& assetRegistry, const nlohmann::json& op)

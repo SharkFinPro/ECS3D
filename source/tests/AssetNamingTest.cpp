@@ -201,6 +201,65 @@ TEST_F(AssetNamingTest, EmptyPrefabBodyInstantiatesAsOneObjectWithATransform)
   EXPECT_EQ(scene.objectManager->getAllObjects().size(), 1u);
 }
 
+TEST(SceneNameField, CommitsOnceWhenEditingEndsWithAFreeNewName)
+{
+  using namespace assetNaming;
+
+  // While typing nothing is sent, even for a usable name.
+  EXPECT_EQ(decideSceneNameField("Main", "Level", true, false, true).action, SceneNameAction::none);
+
+  const auto done = decideSceneNameField("Main", "Level", false, true, true);
+  EXPECT_EQ(done.action, SceneNameAction::commit);
+  EXPECT_EQ(done.warning, SceneNameWarning::none);
+
+  // The same name again is not a rename.
+  EXPECT_EQ(decideSceneNameField("Main", "Main", false, true, true).action, SceneNameAction::none);
+  EXPECT_TRUE(shouldCommitSceneName("Main", "Level", true));
+  EXPECT_FALSE(shouldCommitSceneName("Main", "Main", true));
+  EXPECT_FALSE(shouldCommitSceneName("Main", "Level", false));
+}
+
+TEST(SceneNameField, AnUnusableNameWarnsWhileTypingAndReseedsWhenEditingEnds)
+{
+  using namespace assetNaming;
+
+  EXPECT_EQ(decideSceneNameField("Main", "Other", true, false, false).warning, SceneNameWarning::taken);
+  EXPECT_EQ(decideSceneNameField("Main", "  ", true, false, false).warning, SceneNameWarning::blank);
+  EXPECT_EQ(decideSceneNameField("Main", "Other", true, false, false).action, SceneNameAction::none);
+
+  // Positive control: a usable name shows no warning.
+  EXPECT_EQ(decideSceneNameField("Main", "Level", true, false, true).warning, SceneNameWarning::none);
+
+  const auto done = decideSceneNameField("Main", "Other", false, true, false);
+  EXPECT_EQ(done.action, SceneNameAction::reseed);
+  EXPECT_EQ(done.warning, SceneNameWarning::none);
+}
+
+TEST(SceneNameField, AnIdleFieldFollowsTheRecordAfterAnExternalRename)
+{
+  using namespace assetNaming;
+
+  EXPECT_EQ(decideSceneNameField("Renamed Elsewhere", "Main", false, false, true).action, SceneNameAction::reseed);
+
+  // Positive control: an in-progress edit is not overwritten, and an up-to-date idle field is left alone.
+  EXPECT_EQ(decideSceneNameField("Renamed Elsewhere", "Main", true, false, true).action, SceneNameAction::none);
+  EXPECT_EQ(decideSceneNameField("Main", "Main", false, false, true).action, SceneNameAction::none);
+}
+
+TEST(SceneNameField, APendingEditIsFlushedWhenAnotherAssetIsShownOrTheInspectorWasHidden)
+{
+  using namespace assetNaming;
+
+  const auto scene = makeUUID(1);
+  const auto other = makeUUID(2);
+
+  EXPECT_TRUE(shouldFlushPendingSceneName(scene, 10, other, 11));
+  EXPECT_TRUE(shouldFlushPendingSceneName(scene, 10, scene, 15));
+
+  // Positive control: the next frame of the same scene keeps the edit pending.
+  EXPECT_FALSE(shouldFlushPendingSceneName(scene, 10, scene, 11));
+}
+
 TEST_F(AssetNamingTest, ReRegisteringAPrefabNameKeepsTheUUIDAndUpdatesTheBody)
 {
   const auto first = makeUUID(1);
