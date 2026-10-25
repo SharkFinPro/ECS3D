@@ -108,6 +108,8 @@ void AssetInspector::displayTypeChip(const AssetRecord& record) const
 
 void AssetInspector::display(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID)
 {
+  flushPendingSceneName(record.uuid);
+
   // Recompute the file metadata only when the selection changes, not every frame.
   if (!m_metaLoaded || m_metaUUID != record.uuid)
   {
@@ -132,6 +134,8 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
   // registry op - see isRenamable). The modal is drawn every frame the button is armed.
   displayDeleteButton(record);
   displayDeleteConfirmationModal(record);
+
+  sendQueuedSceneRenames();
 }
 
 void AssetInspector::displayHeader(const AssetRecord& record)
@@ -184,45 +188,86 @@ void AssetInspector::displayHeader(const AssetRecord& record)
 
 void AssetInspector::displaySceneNameField(const AssetRecord& record)
 {
-  const auto reseed = [&] {
-    const auto& name = record.path;
-    const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
-    name.copy(m_nameEditBuffer.data(), len);
-    m_nameEditBuffer[len] = '\0';
-  };
-
   ImGui::BeginDisabled(!m_editable);
   ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
   ImGui::InputText(("##assetName" + uuids::to_string(record.uuid)).c_str(),
                    m_nameEditBuffer.data(), m_nameEditBuffer.size());
+  const bool active = ImGui::IsItemActive();
   const bool committed = ImGui::IsItemDeactivatedAfterEdit();
   ImGui::EndDisabled();
 
   const std::string name = m_nameEditBuffer.data();
-  const bool available = !m_assetRegistry || assetNaming::isSceneNameAvailable(*m_assetRegistry, record.uuid, name);
+  const auto decision = assetNaming::decideSceneNameField(record.path, name, active, committed,
+                                                          isSceneNameAvailable(record.uuid, name));
 
-  if (committed)
+  if (decision.action == assetNaming::SceneNameAction::commit)
   {
-    if (available && name != record.path)
-    {
-      if (m_onRename)
-      {
-        m_onRename(record.uuid, name);
-      }
-    }
-    else if (!available)
-    {
-      reseed();
-    }
+    queueSceneRename(record.uuid, name);
+  }
+  else if (decision.action == assetNaming::SceneNameAction::reseed)
+  {
+    const auto len = std::min(record.path.size(), m_nameEditBuffer.size() - 1);
+    record.path.copy(m_nameEditBuffer.data(), len);
+    m_nameEditBuffer[len] = '\0';
+  }
 
+  if (active && !committed && name != record.path)
+  {
+    m_pendingSceneName = PendingSceneName{ record.uuid, name, ImGui::GetFrameCount() };
+  }
+  else
+  {
+    m_pendingSceneName.reset();
+  }
+
+  if (decision.warning != assetNaming::SceneNameWarning::none)
+  {
+    ImGui::TextColored(theme::scriptAmber, "%s",
+                       decision.warning == assetNaming::SceneNameWarning::blank
+                         ? "A scene needs a name." : "That name is already in use.");
+  }
+}
+
+bool AssetInspector::isSceneNameAvailable(const uuids::uuid& sceneUUID, const std::string& name) const
+{
+  return !m_assetRegistry || replication::isSceneNameAvailable(*m_assetRegistry, nullptr, sceneUUID, name);
+}
+
+void AssetInspector::queueSceneRename(const uuids::uuid& sceneUUID, const std::string& name)
+{
+  const auto* current = m_assetRegistry ? m_assetRegistry->getByUUID(sceneUUID) : nullptr;
+  if (!current || current->type != AssetType::Scene
+      || !assetNaming::shouldCommitSceneName(current->path, name, isSceneNameAvailable(sceneUUID, name)))
+  {
     return;
   }
 
-  if (!available)
+  m_queuedSceneRenames.emplace_back(sceneUUID, name);
+}
+
+void AssetInspector::flushPendingSceneName(const uuids::uuid& shownUUID)
+{
+  if (m_pendingSceneName
+      && assetNaming::shouldFlushPendingSceneName(m_pendingSceneName->uuid, m_pendingSceneName->frame, shownUUID,
+                                                  ImGui::GetFrameCount()))
   {
-    const bool blank = name.find_first_not_of(" \t\r\n") == std::string::npos;
-    ImGui::TextColored(theme::scriptAmber, "%s",
-                       blank ? "A scene needs a name." : "A scene or prefab already uses that name.");
+    queueSceneRename(m_pendingSceneName->uuid, m_pendingSceneName->name);
+    m_pendingSceneName.reset();
+  }
+}
+
+void AssetInspector::sendQueuedSceneRenames()
+{
+  // Applying a scene rename re-keys its registry record, so the record being drawn must not be used after it.
+  auto renames = std::move(m_queuedSceneRenames);
+  m_queuedSceneRenames.clear();
+
+  for (const auto& [sceneUUID, name] : renames)
+  {
+    if (m_onRename)
+    {
+      m_onRename(sceneUUID, name);
+    }
   }
 }
 

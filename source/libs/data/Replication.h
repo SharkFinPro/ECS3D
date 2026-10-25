@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <uuid.h>
 #include <vector>
@@ -255,9 +256,15 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 
 [[nodiscard]] nlohmann::json buildRemoveAsset(const uuids::uuid& assetUUID);
 
-// Returns true when the op applied. A scene rename sets the SceneAsset's name and re-keys its registry record;
-// it is refused (false, nothing changed) for a blank name, an unknown scene, or a name another scene or
-// prefab already owns. Renaming a scene to its current name succeeds without change.
+// Whether `name` can become scene `self`'s name: not blank, no registry record other than `self` owns that path
+// key (a model or prefab path, another scene), and no other scene in `sceneManager` (when given) has it.
+// The editor passes null, since every scene has a registry record keyed by its name.
+[[nodiscard]] bool isSceneNameAvailable(const AssetRegistry& assetRegistry, const SceneManager* sceneManager,
+                                        const uuids::uuid& self, const std::string& name);
+
+// Returns true when the op applied; an unknown uuid is refused (false). A scene rename sets the SceneAsset's
+// name and re-keys its registry record; it is refused (false, nothing changed) for an unknown scene or a name
+// isSceneNameAvailable rejects. Renaming a scene to its current name succeeds without change.
 bool applyRenameAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, const nlohmann::json& op);
 
 void applyRemoveAsset(AssetRegistry& assetRegistry, const nlohmann::json& op);

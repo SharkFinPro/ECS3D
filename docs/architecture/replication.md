@@ -85,9 +85,10 @@ through `serialize`/`loadFromJSON`/`pack`/`unpack` like every other field); the 
 registry key, and the name-key for prefabs/scenes) are untouched by it. **A scene rename changes the scene's
 real name** — the op's `displayName` is the new name, `applyRenameAsset` sets it on the `SceneAsset` and re-keys
 the scene's registry record, and the next snapshot replicates it. It is refused (the function returns false,
-nothing changes, the server logs a warning and still re-snapshots) for a blank name, a scene record with no
-`SceneAsset`, or a name another scene or prefab already owns; renaming to the current name is a successful
-no-op. **Delete succeeds and references
+nothing changes, the server logs a warning and still re-snapshots) for an unknown uuid, a scene record with no
+`SceneAsset`, or a name `replication::isSceneNameAvailable` rejects: blank, or the registry path key of any other
+record (another scene, a prefab, a model or texture path) or another scene's name. The editor's name field asks
+that same function, so the UI and the server agree. Renaming to the current name is a successful no-op. **Delete succeeds and references
 dangle** — `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` lookups already null-tolerate a
 missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
 replicated scenes + prefab bodies for the uuid ("referenced by N objects", `editor/AssetReferences.{h,cpp}`, headless); no server-side refusal or

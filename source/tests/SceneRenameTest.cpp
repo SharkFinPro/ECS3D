@@ -271,3 +271,50 @@ TEST(SceneRename, UndoIsRefusedWhenSomeoneRenamedTheSceneAgain)
   EXPECT_EQ(*outcome.conflict, mainUUID);
   EXPECT_FALSE(outcome.messagePayload.has_value());
 }
+
+TEST(SceneRename, ANameMatchingAnyRegistryPathIsUnavailableToTheUIAndRefusedByTheServer)
+{
+  Project project;
+  populate(project);
+
+  EXPECT_FALSE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, "models/thing.obj"));
+  EXPECT_FALSE(rename(project, mainUUID, "models/thing.obj"));
+  expectUntouched(project);
+
+  // Positive control: a free name passes both, and so does the scene's own name.
+  EXPECT_TRUE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, "models/other.obj"));
+  EXPECT_TRUE(rename(project, mainUUID, "models/other.obj"));
+  EXPECT_TRUE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, "models/other.obj"));
+}
+
+TEST(SceneRename, TheAvailabilityRuleMatchesWhatTheServerAccepts)
+{
+  Project project;
+  populate(project);
+
+  EXPECT_TRUE(replication::isSceneNameAvailable(project.assetRegistry, &project.sceneManager, mainUUID, "Main"));
+  EXPECT_TRUE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, "Free"));
+  EXPECT_FALSE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, "Other"));
+  EXPECT_FALSE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, "Block"));
+  EXPECT_FALSE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, ""));
+  EXPECT_FALSE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, "  "));
+
+  // A scene that has no registry record is still caught through the SceneManager.
+  project.sceneManager.addScene(std::make_shared<SceneAsset>(realUUID, "Unlisted", project.componentRegistry));
+  EXPECT_TRUE(replication::isSceneNameAvailable(project.assetRegistry, nullptr, mainUUID, "Unlisted"));
+  EXPECT_FALSE(replication::isSceneNameAvailable(project.assetRegistry, &project.sceneManager, mainUUID,
+                                                 "Unlisted"));
+  EXPECT_FALSE(rename(project, mainUUID, "Unlisted"));
+}
+
+TEST(SceneRename, AnUnknownUUIDIsRefused)
+{
+  Project project;
+  populate(project);
+
+  EXPECT_FALSE(rename(project, ghostUUID, "Anything"));
+  EXPECT_EQ(project.assetRegistry.getByUUID(ghostUUID), nullptr);
+
+  // Positive control: a known asset's rename still applies.
+  EXPECT_TRUE(rename(project, modelUUID, "Anything"));
+}

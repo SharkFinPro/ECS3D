@@ -107,7 +107,7 @@ and type filter chips.
   instantiate it, or onto an object row to instantiate it as a child.
 - Selecting an asset shows it in the Inspector. Models, textures, scripts and prefabs can be renamed
   there, which changes only the display name. A scene can be renamed too, which changes the scene's real name;
-  a name another scene or prefab already uses is refused. Prefab contents are editable in place.
+  a name another asset already uses is refused. Prefab contents are editable in place.
 
 ## The Console panel
 

@@ -1701,27 +1701,19 @@ namespace {
                    const std::string& name)
   {
     const auto scene = sceneManager.getScene(uuid);
-    if (!scene || isBlankName(name))
+    if (!scene)
     {
       return false;
     }
 
     if (scene->getName() == name)
     {
-      return true;
+      return !isBlankName(name);
     }
 
-    if (const auto* owner = assetRegistry.getByPath(name); owner && owner->uuid != uuid)
+    if (!isSceneNameAvailable(assetRegistry, &sceneManager, uuid, name))
     {
       return false;
-    }
-
-    for (const auto& [otherUUID, other] : sceneManager.getScenes())
-    {
-      if (otherUUID != uuid && other->getName() == name)
-      {
-        return false;
-      }
     }
 
     scene->setName(name);
@@ -1732,6 +1724,33 @@ namespace {
 
     return true;
   }
+}
+
+bool isSceneNameAvailable(const AssetRegistry& assetRegistry, const SceneManager* sceneManager,
+                          const uuids::uuid& self, const std::string& name)
+{
+  if (isBlankName(name))
+  {
+    return false;
+  }
+
+  if (const auto* owner = assetRegistry.getByPath(name); owner && owner->uuid != self)
+  {
+    return false;
+  }
+
+  if (sceneManager)
+  {
+    for (const auto& [uuid, scene] : sceneManager->getScenes())
+    {
+      if (uuid != self && scene->getName() == name)
+      {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 bool applyRenameAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, const nlohmann::json& op)
@@ -1748,6 +1767,11 @@ bool applyRenameAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, 
   if (record && record->type == AssetType::Scene)
   {
     return renameScene(assetRegistry, sceneManager, parsed.value(), name);
+  }
+
+  if (!record)
+  {
+    return false;
   }
 
   assetRegistry.renameAsset(parsed.value(), name);

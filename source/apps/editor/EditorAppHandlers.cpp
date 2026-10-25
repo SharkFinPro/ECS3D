@@ -72,7 +72,7 @@ void EditorApp::onRenameAsset(const uuids::uuid& assetUUID, const std::string& d
 
   if (!replication::applyRenameAsset(*m_assetRegistry, *m_sceneManager, op))
   {
-    Log::warn(LogCategory::editor, "Refused asset rename.");
+    logMessage("Info", "Refused the asset rename: that name is not available.");
     return;
   }
 

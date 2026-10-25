@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 #include <uuid.h>
 
@@ -110,6 +111,15 @@ private:
   std::array<char, 256> m_nameEditBuffer{};
   std::optional<uuids::uuid> m_nameEditUUID;
 
+  // A scene name being typed, kept so a selection change before the field deactivates does not drop it.
+  struct PendingSceneName {
+    uuids::uuid uuid;
+    std::string name;
+    int frame = 0;
+  };
+  std::optional<PendingSceneName> m_pendingSceneName;
+  std::vector<std::pair<uuids::uuid, std::string>> m_queuedSceneRenames;
+
   // The asset awaiting delete confirmation (set by the "Delete Asset" button). While set, the modal is
   // shown; m_pendingRefCount is the object count computed once when the prompt opened.
   std::optional<uuids::uuid> m_assetPendingDeletion;
@@ -134,8 +144,19 @@ private:
   void displayHeader(const AssetRecord& record);
 
   // A scene's name field. Unlike the live display-name field it commits once, when editing ends, because each
-  // scene rename re-snapshots the project and a half-typed name could collide with another asset's.
+  // scene rename re-snapshots the project and a half-typed name could collide with another asset's. The
+  // decisions are in AssetNaming.h.
   void displaySceneNameField(const AssetRecord& record);
+
+  [[nodiscard]] bool isSceneNameAvailable(const uuids::uuid& sceneUUID, const std::string& name) const;
+
+  // Queue a rename for the end of display(), when the drawn record is no longer needed.
+  void queueSceneRename(const uuids::uuid& sceneUUID, const std::string& name);
+
+  // Queue the edit left pending when the name field stopped being drawn before it deactivated.
+  void flushPendingSceneName(const uuids::uuid& shownUUID);
+
+  void sendQueuedSceneRenames();
 
   // Refreshes the file-metadata cache above for `record` (no-op work when its file isn't reachable).
   void refreshMeta(const AssetRecord& record);
