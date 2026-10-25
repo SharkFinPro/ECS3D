@@ -120,6 +120,11 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
 {
   flushPendingSceneName(record.uuid);
 
+  if (record.type != AssetType::Prefab)
+  {
+    settlePrefabEdits();
+  }
+
   // Recompute the file metadata only when the selection changes, not every frame.
   if (!m_metaLoaded || m_metaUUID != record.uuid)
   {
@@ -523,9 +528,9 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
 
   // Switching to a different prefab with an edit still pending: flush it against the asset it belongs to
   // (m_prefabRecord*, still the old one) before syncFromBody rebuilds to the new body below.
-  if (m_prefabBodyDirty && record.uuid != m_prefabRecordUUID)
+  if (record.uuid != m_prefabRecordUUID)
   {
-    flushPrefabBody();
+    settlePrefabEdits();
   }
 
   // (Re)build the detached object when the body changed under us (a different prefab selected, or an
@@ -551,6 +556,24 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
 
   m_prefabInspector->display(object);
 
+  applyPendingPrefabEdits();
+
+  // Coalesce the send: a prefab body update makes the server re-snapshot the whole project, so hold it
+  // until the user isn't dragging/typing. The detached object already reflects the edit, so local
+  // feedback stays instant.
+  if (m_prefabBodyDirty && !ImGui::IsAnyItemActive())
+  {
+    flushPrefabBody();
+  }
+}
+
+void AssetInspector::commitPendingEdit()
+{
+  settlePrefabEdits();
+}
+
+void AssetInspector::applyPendingPrefabEdits()
+{
   if (auto* manager = m_prefabBody->manager())
   {
     for (const auto& edit : m_pendingPrefabEdits)
@@ -563,15 +586,16 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
       }
     }
   }
-  m_pendingPrefabEdits.clear();
 
-  // Coalesce the send: a prefab body update makes the server re-snapshot the whole project, so hold it
-  // until the user isn't dragging/typing. The detached object already reflects the edit, so local
-  // feedback stays instant.
-  if (m_prefabBodyDirty && !ImGui::IsAnyItemActive())
-  {
-    flushPrefabBody();
-  }
+  m_pendingPrefabEdits.clear();
+}
+
+void AssetInspector::settlePrefabEdits()
+{
+  m_pendingPrefabEdits.clear();
+  m_prefabInspector->commitPendingEdit();
+  applyPendingPrefabEdits();
+  flushPrefabBody();
 }
 
 void AssetInspector::flushPrefabBody()

@@ -18,60 +18,64 @@
 namespace {
   using namespace editHistoryFixtures;
 
-  // Plays the part of the Inspector: owns the text buffer, feeds ObjectNameField what ImGui would report
-  // and collects every rename it asks to send.
+  // Plays the part of ImGui and the Inspector: it only supplies what ImGui would report each frame and
+  // collects the renames ObjectNameField::frame()/leave() ask to send. All decisions are the class's.
   class FieldDriver
   {
   public:
     FieldDriver(const uuids::uuid& objectUUID, std::string currentName)
-      : m_currentName(std::move(currentName))
+      : m_shown(objectUUID),
+        m_currentName(std::move(currentName))
     {
-      show(objectUUID);
+      idleFrame();
     }
 
-    // The selection-change step of ObjectInspector::display: flush for the old object, then reseed.
     void show(const uuids::uuid& objectUUID)
     {
-      if (!m_field.isShowing(objectUUID))
-      {
-        collect(m_field.flush(m_buffer));
-        apply(m_field.select(objectUUID, m_currentName));
-      }
+      m_shown = objectUUID;
+      idleFrame();
     }
 
     void type(const std::string& text)
     {
       for (const char c : text)
       {
-        m_buffer += c;
-        step(true, false, true);
+        run([&](std::string& buffer) {
+          buffer += c;
+          return ObjectNameField::Report{ true, true, false };
+        });
       }
     }
 
     void backspace()
     {
-      m_buffer.pop_back();
-      step(true, false, true);
+      run([](std::string& buffer) {
+        buffer.pop_back();
+        return ObjectNameField::Report{ true, true, false };
+      });
     }
 
     void leaveField(const bool edited = false)
     {
-      step(false, true, edited);
+      run([&](std::string&) { return ObjectNameField::Report{ edited, false, true }; });
     }
 
     void idleFrame()
     {
-      step(false, false, false);
+      run([](std::string&) { return ObjectNameField::Report{}; });
     }
 
     void activeFrame()
     {
-      step(true, false, false);
+      run([](std::string&) { return ObjectNameField::Report{ false, true, false }; });
     }
 
-    void panelFlush()
+    void panelLeave()
     {
-      collect(m_field.flush(m_buffer));
+      if (const auto rename = m_field.leave(m_buffer, m_canSend))
+      {
+        m_sent.push_back(*rename);
+      }
     }
 
     void serverRenames(const std::string& name)
@@ -79,37 +83,28 @@ namespace {
       m_currentName = name;
     }
 
+    void setCanSend(const bool canSend)
+    {
+      m_canSend = canSend;
+    }
+
     [[nodiscard]] const std::string& buffer() const { return m_buffer; }
 
     [[nodiscard]] const std::vector<ObjectNameField::Rename>& sent() const { return m_sent; }
 
-    ObjectNameField m_field;
-
   private:
+    ObjectNameField m_field;
+    uuids::uuid m_shown;
     std::string m_buffer;
     std::string m_currentName;
+    bool m_canSend = true;
     std::vector<ObjectNameField::Rename> m_sent;
 
-    void step(const bool active, const bool deactivatedAfterEdit, const bool edited)
+    template <typename DrawFn>
+    void run(DrawFn&& draw)
     {
-      apply(m_field.update(m_currentName, m_buffer, active, deactivatedAfterEdit, edited));
-    }
-
-    void apply(const ObjectNameField::Result& result)
-    {
-      collect(result.rename);
-      if (result.reseed)
-      {
-        m_buffer = *result.reseed;
-      }
-    }
-
-    void collect(const std::optional<ObjectNameField::Rename>& rename)
-    {
-      if (rename)
-      {
-        m_sent.push_back(*rename);
-      }
+      const auto renames = m_field.frame(m_shown, m_currentName, m_buffer, m_canSend, std::forward<DrawFn>(draw));
+      m_sent.insert(m_sent.end(), renames.begin(), renames.end());
     }
   };
 
@@ -179,8 +174,8 @@ TEST(ObjectNameField, EscapeRevertSendsNothing)
   reverted.backspace();
   reverted.backspace();
   reverted.leaveField(true);
+  reverted.panelLeave();
   EXPECT_TRUE(reverted.sent().empty());
-  EXPECT_FALSE(reverted.m_field.hasPendingName());
 
   // Positive control: without the revert the same typing sends.
   FieldDriver kept(sunUUID(), "Sun");
@@ -260,29 +255,31 @@ TEST(ObjectNameField, ADeactivationAndASelectionChangeOnOneFrameSendOnce)
   EXPECT_EQ(flushedFirst.sent().size(), 1u);
 }
 
-TEST(ObjectNameField, AFlushAfterTheCommitSendsNothingMore)
+TEST(ObjectNameField, ALeaveAfterTheCommitSendsNothingMore)
 {
   FieldDriver driver(sunUUID(), "Sun");
 
   driver.type("ny");
   driver.leaveField();
-  driver.panelFlush();
-  driver.panelFlush();
+  driver.panelLeave();
+  driver.panelLeave();
 
   EXPECT_EQ(driver.sent().size(), 1u);
 }
 
-TEST(ObjectNameField, ThePanelFlushSendsAPendingNameWhenTheObjectIsNoLongerShown)
+TEST(ObjectNameField, LeavingSendsAPendingNameWhenTheObjectIsNoLongerShown)
 {
   FieldDriver driver(sunUUID(), "Sun");
 
   driver.type("ny");
-  EXPECT_TRUE(driver.m_field.hasPendingName());
-  driver.panelFlush();
+  driver.panelLeave();
 
   ASSERT_EQ(driver.sent().size(), 1u);
   EXPECT_EQ(driver.sent().front(), (ObjectNameField::Rename{ sunUUID(), "Sunny" }));
-  EXPECT_FALSE(driver.m_field.hasPendingName());
+
+  // Positive control: the name was pending, and the flush used it up.
+  driver.panelLeave();
+  EXPECT_EQ(driver.sent().size(), 1u);
 }
 
 TEST(ObjectNameField, AFieldThatWentIdleWithoutItsDeactivationStillSends)
@@ -365,12 +362,81 @@ TEST(ObjectNameField, AnUntouchedFieldNeverSends)
   {
     driver.idleFrame();
   }
-  driver.panelFlush();
+  driver.panelLeave();
   EXPECT_TRUE(driver.sent().empty());
 
   // Positive control: the same driver does send once an edit is reported.
   driver.type("x");
   driver.leaveField();
+  EXPECT_EQ(driver.sent().size(), 1u);
+}
+
+TEST(ObjectNameField, RedrawingTheSameObjectWhileTypingNeverFlushes)
+{
+  FieldDriver driver(sunUUID(), "Sun");
+
+  driver.type("ny");
+  for (int i = 0; i < 3; ++i)
+  {
+    driver.activeFrame();
+  }
+  EXPECT_TRUE(driver.sent().empty());
+  EXPECT_EQ(driver.buffer(), "Sunny");
+
+  // Positive control: leaving is what sends.
+  driver.leaveField();
+  EXPECT_EQ(driver.sent().size(), 1u);
+}
+
+TEST(ObjectNameField, ARenameThatCannotBeSentIsAbandonedAndTheFieldShowsTheRealName)
+{
+  FieldDriver driver(sunUUID(), "Sun");
+
+  driver.setCanSend(false);
+  driver.type("ny");
+  driver.leaveField();
+  driver.idleFrame();
+  EXPECT_TRUE(driver.sent().empty());
+  EXPECT_EQ(driver.buffer(), "Sun");
+
+  // Positive control: the same gesture sends once sending is possible.
+  driver.setCanSend(true);
+  driver.type("ny");
+  driver.leaveField();
+  EXPECT_EQ(driver.sent().size(), 1u);
+}
+
+TEST(ObjectNameField, LeavingWithoutASinkSendsNothingAndDoesNotHoldTheTypedName)
+{
+  FieldDriver driver(sunUUID(), "Sun");
+
+  driver.setCanSend(false);
+  driver.type("ny");
+  driver.panelLeave();
+  driver.idleFrame();
+
+  EXPECT_TRUE(driver.sent().empty());
+  EXPECT_EQ(driver.buffer(), "Sun");
+}
+
+TEST(ObjectNameField, AHeldNameIsReleasedWhenTheServerNeverAnswers)
+{
+  FieldDriver driver(sunUUID(), "Sun");
+
+  driver.type("ny");
+  driver.leaveField();
+
+  for (int i = 0; i < ObjectNameField::echoHoldFrames - 2; ++i)
+  {
+    driver.idleFrame();
+  }
+  EXPECT_EQ(driver.buffer(), "Sunny");
+
+  for (int i = 0; i < 3; ++i)
+  {
+    driver.idleFrame();
+  }
+  EXPECT_EQ(driver.buffer(), "Sun");
   EXPECT_EQ(driver.sent().size(), 1u);
 }
 

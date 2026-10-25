@@ -10,7 +10,9 @@ whole current selection when it has 2+ objects, not just the row clicked: one at
 undo/redo entry - see [replication.md](replication.md) and [undo-redo.md](undo-redo.md)), `InspectorPanel` (the
 "Inspector" window — per-selection-kind dispatch) delegating the object kind to `ObjectInspector` (which, beside
 the per-frame value send, coalesces a whole continuous edit - a slider drag mutates the component in place every
-frame - into one before/after pair reported once no widget is active, and sends an object rename once, when the Name field is left or the object stops being shown, never per keystroke (the headless `ObjectNameField.h` decides when, and keeps the field in step with undo and outside renames); a multi-object selection
+frame - into one before/after pair reported once no widget is active; it sends an object rename once, when the
+Name field is left or the object stops being shown, never per keystroke - the headless `ObjectNameField.h`
+decides when, and keeps the field in step with undo and outside renames; a multi-object selection
 (`ObjectInspector::displayMulti`) shows the components shared across the selected objects - matched by
 `componentFieldDelta::componentSignature`, a collider's subtype or a script's class name counting as part of the
 "kind" - renders each shared component once against the first object, and propagates the top-level `serialize()`

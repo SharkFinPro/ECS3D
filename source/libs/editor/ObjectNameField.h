@@ -3,13 +3,18 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <uuid.h>
+#include <vector>
 
 // The decisions behind the Inspector's object Name field, with no ImGui: a typed name becomes one rename,
-// sent when the field is left, not one per keystroke. The field draws the text buffer and reports what
-// ImGui saw each frame; this class says when to send and when to refill the buffer.
+// sent when the field is left, not one per keystroke. The inspector hands frame() a callable that draws the
+// text field and reports what ImGui saw; frame() says which renames to send and keeps the text in step.
 class ObjectNameField {
 public:
+  // How many idle frames a just-sent name is kept on screen while waiting for the server to apply it.
+  static constexpr int echoHoldFrames = 120;
+
   struct Rename {
     uuids::uuid objectUUID;
     std::string name;
@@ -17,98 +22,68 @@ public:
     [[nodiscard]] bool operator==(const Rename&) const = default;
   };
 
-  struct Result {
-    std::optional<Rename> rename;
-    std::optional<std::string> reseed; // replace the buffer with this text
+  // What ImGui reported for the field this frame: InputText's return value, IsItemActive and
+  // IsItemDeactivatedAfterEdit (which fires for Enter, Tab, a click away and Escape alike).
+  struct Report {
+    bool edited = false;
+    bool active = false;
+    bool deactivatedAfterEdit = false;
   };
 
   [[nodiscard]] bool isShowing(const uuids::uuid& objectUUID) const { return m_objectUUID == objectUUID; }
 
-  // Starts tracking another object and refills the buffer. A name typed for the previous object is lost
-  // unless flush() ran first.
-  [[nodiscard]] Result select(const uuids::uuid& objectUUID, const std::string& currentName)
+  // One frame of the field for the object being shown. `draw` is called with the text buffer and returns
+  // the Report. `canSend` is false when a rename would be dropped (read-only, or no sink): the typed text is
+  // then abandoned and the field shows the object's real name again. Returns the renames to send: one for a
+  // name typed for the previously shown object, and one for this object.
+  template <typename DrawFn>
+  [[nodiscard]] std::vector<Rename> frame(const uuids::uuid& objectUUID, const std::string& currentName,
+                                          std::string& buffer, const bool canSend, DrawFn&& draw)
   {
-    m_objectUUID = objectUUID;
-    m_dirty = false;
-    m_seedName = currentName;
-    m_echo.reset();
+    std::vector<Rename> renames;
 
-    return { std::nullopt, currentName };
-  }
-
-  // Call after drawing the field. `edited` is the InputText return value; `deactivatedAfterEdit` is
-  // IsItemDeactivatedAfterEdit, which fires for Enter, Tab, a click away and Escape alike.
-  [[nodiscard]] Result update(const std::string& currentName, const std::string& buffer, const bool active,
-                              const bool deactivatedAfterEdit, const bool edited)
-  {
-    if (!m_objectUUID)
+    if (!isShowing(objectUUID))
     {
-      return {};
-    }
+      if (auto rename = leave(buffer, canSend))
+      {
+        renames.push_back(std::move(*rename));
+      }
 
-    if (edited)
-    {
-      m_dirty = true;
+      m_objectUUID = objectUUID;
+      m_dirty = false;
+      m_seedName = currentName;
       m_echo.reset();
+      buffer = currentName;
     }
 
-    if (deactivatedAfterEdit || (!active && m_dirty))
+    const Report report = draw(buffer);
+
+    if (auto rename = settle(currentName, buffer, report, canSend))
     {
-      return { finish(buffer, currentName), std::nullopt };
+      renames.push_back(std::move(*rename));
     }
 
-    if (active)
-    {
-      if (!m_dirty)
-      {
-        m_seedName = currentName;
-      }
-
-      return {};
-    }
-
-    m_seedName = currentName;
-
-    // Right after a send the object still has its old name until the server answers; keep showing what
-    // was typed rather than flashing the old name back.
-    if (m_echo)
-    {
-      if (currentName == m_echo->sent || currentName != m_echo->before)
-      {
-        m_echo.reset();
-      }
-      else
-      {
-        return {};
-      }
-    }
-
-    if (buffer != currentName)
-    {
-      return { std::nullopt, currentName };
-    }
-
-    return {};
+    return renames;
   }
 
-  // Resolves a name typed for the object last shown, for the frames that leave the field without ImGui
-  // reporting its deactivation: another object selected, nothing or an asset selected, the object gone.
-  [[nodiscard]] std::optional<Rename> flush(const std::string& buffer)
+  // Resolves a name typed for the object last shown, for the frames that stop drawing the field without
+  // ImGui reporting its deactivation: nothing or an asset selected, the object gone, another view shown.
+  // Never call it on a frame that is about to draw the same object: the field may be mid-typing.
+  [[nodiscard]] std::optional<Rename> leave(const std::string& buffer, const bool canSend)
   {
     if (!m_objectUUID || !m_dirty)
     {
       return std::nullopt;
     }
 
-    return finish(buffer, m_seedName);
+    return finish(buffer, m_seedName, canSend);
   }
-
-  [[nodiscard]] bool hasPendingName() const { return m_dirty; }
 
 private:
   struct Echo {
     std::string before;
     std::string sent;
+    int idleFrames = 0;
   };
 
   std::optional<uuids::uuid> m_objectUUID;
@@ -116,16 +91,62 @@ private:
   bool m_dirty = false;
   std::optional<Echo> m_echo;
 
-  [[nodiscard]] std::optional<Rename> finish(const std::string& buffer, const std::string& referenceName)
+  [[nodiscard]] std::optional<Rename> settle(const std::string& currentName, std::string& buffer,
+                                             const Report& report, const bool canSend)
+  {
+    if (report.edited)
+    {
+      m_dirty = true;
+      m_echo.reset();
+    }
+
+    if (report.deactivatedAfterEdit || (!report.active && m_dirty))
+    {
+      return finish(buffer, currentName, canSend);
+    }
+
+    if (report.active)
+    {
+      if (!m_dirty)
+      {
+        m_seedName = currentName;
+      }
+
+      return std::nullopt;
+    }
+
+    m_seedName = currentName;
+
+    // Right after a send the object still has its old name until the server answers; keep showing what
+    // was typed rather than flashing the old name back, but only for a bounded time.
+    if (m_echo)
+    {
+      if (currentName == m_echo->sent || currentName != m_echo->before || ++m_echo->idleFrames >= echoHoldFrames)
+      {
+        m_echo.reset();
+      }
+      else
+      {
+        return std::nullopt;
+      }
+    }
+
+    buffer = currentName;
+
+    return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<Rename> finish(const std::string& buffer, const std::string& referenceName,
+                                             const bool canSend)
   {
     m_dirty = false;
 
-    if (buffer == referenceName)
+    if (!canSend || buffer == referenceName)
     {
       return std::nullopt;
     }
 
-    m_echo = Echo{ referenceName, buffer };
+    m_echo = Echo{ referenceName, buffer, 0 };
     m_seedName = referenceName;
 
     return Rename{ *m_objectUUID, buffer };

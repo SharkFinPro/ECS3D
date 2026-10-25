@@ -77,6 +77,10 @@ public:
   // loaded scene (for the scene inspector's is-active indicator); nullopt when no scene is loaded.
   void display(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID);
 
+  // Sends a prefab body edit still pending (a name typed but not yet committed, a debounced component edit)
+  // for the frames that do not draw the prefab body: another selection, or no asset at all.
+  void commitPendingEdit();
+
 private:
   std::shared_ptr<GpuAssetCache> m_assetCache;
   std::shared_ptr<ComponentRegistry> m_componentRegistry;
@@ -188,6 +192,13 @@ private:
   // Send the pending prefab body edit (if any) under the asset it belongs to (m_prefabRecord*), then clear
   // the dirty flag. Serializes the detached object and re-registers it via UpdatePrefabBodyCallback.
   void flushPrefabBody();
+
+  // Applies the structural edits the prefab inspector queued to the detached body.
+  void applyPendingPrefabEdits();
+
+  // Resolves everything pending against the body it was made on, before that body is swapped or stops
+  // being drawn.
+  void settlePrefabEdits();
 
   [[nodiscard]] size_t sceneCount() const;
 
