@@ -231,10 +231,10 @@ void applyObjectComponentsChanged(ObjectManager& objectManager, const net::Messa
 // prefabs go into the AssetRegistry; a scene also gets a SceneAsset in the SceneManager - empty, or rebuilt
 // from `body` (a SceneAsset::serialize() blob) when one is given, which is how undo of a scene removal
 // restores its objects and scripts under their own uuids. A scene add whose uuid is already a scene, or
-// whose body does not load, adds nothing. A prefab carries its serialized-object `body` inline (there is no
-// file on disk). `displayName`, when present, restores a rename override on the record - undo of a
-// removeAsset carries the removed record's own displayName this way, so the asset comes back under whatever
-// name it was renamed to.
+// whose body does not load, adds nothing. A prefab carries its serialized-object `body` inline (there is
+// no file on disk). `displayName`, when present, restores a rename override on the record - undo of a
+// removeAsset carries the removed record's own displayName this way, so the asset comes back under
+// whatever name it was renamed to.
 void applyAddAsset(AssetRegistry& assetRegistry,
                    SceneManager& sceneManager,
                    const std::shared_ptr<ComponentRegistry>& componentRegistry,
@@ -250,8 +250,8 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 [[nodiscard]] nlohmann::json unpackAddAsset(const net::Message& message);
 
 // Asset mutation ({ uuid, [displayName] }). Rename is a display-name override only; remove drops the
-// record and lets references dangle, except a scene, which leaves the SceneManager too. Both mirror addAsset's local-apply-then-send shape:
-// the editor applies locally for instant feedback and sends the op; the server applies it authoritatively
+// record and lets references dangle, except a scene, which leaves the SceneManager too. Both mirror
+// addAsset's local-apply-then-send shape: the editor applies locally for instant feedback and sends the op; the server applies it authoritatively
 // and re-snapshots. The build* helpers assemble the blob; pack*/unpack* carry it on the wire.
 [[nodiscard]] nlohmann::json buildRenameAsset(const uuids::uuid& assetUUID, const std::string& displayName);
 
@@ -259,8 +259,8 @@ void applyAddAsset(AssetRegistry& assetRegistry,
 
 void applyRenameAsset(AssetRegistry& assetRegistry, const nlohmann::json& op);
 
-// True when a record was removed. A scene is refused (false, nothing changed) when it is the current scene or
-// the only one left - see SceneManager::removeScene.
+// True when a record was removed. A scene is refused (false, nothing changed) when it is the current scene,
+// the only one left, or the scene status is not stopped - see SceneManager::removeScene.
 bool applyRemoveAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, const nlohmann::json& op);
 
 [[nodiscard]] net::Message packRenameAsset(const nlohmann::json& op);

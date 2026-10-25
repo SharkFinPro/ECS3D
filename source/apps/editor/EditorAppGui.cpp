@@ -54,6 +54,7 @@ void EditorApp::updateGui()
   const auto* objectManager = scene ? scene->getObjectManager().get() : nullptr;
   const auto activeSceneUUID = scene ? std::optional(scene->getUUID()) : std::nullopt;
   m_objectGUIManager->displayGui(objectManager);
+  m_inspectorPanel->setSceneStopped(m_sceneStatus == SceneStatus::stopped);
   m_inspectorPanel->displayGui(objectManager, activeSceneUUID);
 
   // Draws nothing while closed. Preferences are local, so it needs no scene and no server.

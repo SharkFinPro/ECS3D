@@ -103,6 +103,11 @@ void AssetInspector::setEditable(const bool editable)
   m_prefabInspector->setEditable(editable);
 }
 
+void AssetInspector::setSceneStopped(const bool stopped)
+{
+  m_sceneStopped = stopped;
+}
+
 void AssetInspector::displayTypeChip(const AssetRecord& record) const
 {
   const char* label = assetDisplay::typeLabel(record.type);
@@ -540,6 +545,12 @@ void AssetInspector::displayDeleteButton(const AssetRecord& record,
     if (sceneCount() < 2)
     {
       gc::dashedBox("A project needs at least one scene.");
+      return;
+    }
+
+    if (!m_sceneStopped)
+    {
+      gc::dashedBox("Stop the scene to delete it.");
       return;
     }
   }

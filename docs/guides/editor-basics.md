@@ -109,7 +109,7 @@ and type filter chips.
   there, which changes only the display name. Prefab contents are editable in place.
 - The Inspector's Delete Asset button removes an asset after a confirmation. For a scene it also deletes the
   scene's objects and scene scripts; Edit > Undo restores the whole scene. You can't delete the active scene
-  or a project's only scene.
+  or a project's only scene, and scenes can only be deleted while the scene is stopped.
 
 ## The Console panel
 

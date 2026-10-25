@@ -27,8 +27,8 @@ public:
   // don't linger - addScene is keyed by uuid and won't replace an existing entry).
   void clear();
 
-  // Refuses (false, nothing changed) an unknown uuid, the current scene, and the only remaining scene, so a
-  // project always keeps a scene to load.
+  // Refuses (false, nothing changed) an unknown uuid, the current scene, the only remaining scene, and any
+  // removal while the scene is running or paused: Stop discards the play-session history holding the undo.
   bool removeScene(const uuids::uuid& uuid);
 
   [[nodiscard]] std::shared_ptr<SceneAsset> getScene(const uuids::uuid& uuid) const;

@@ -361,3 +361,17 @@ TEST(SceneDelete, RedoOfASceneRemovalIsRefusedWhileThatSceneIsActive)
   EXPECT_EQ(redo.result, edits::HistoryResult::targetActive);
   EXPECT_FALSE(redo.messagePayload.has_value());
 }
+
+TEST(SceneDelete, RemovingASceneIsRefusedWhileTheSceneIsRunningAndWorksAfterStop)
+{
+  Project project;
+  project.addTwoScenes();
+  project.sceneManager.startScene();
+
+  EXPECT_FALSE(replication::applyRemoveAsset(project.assetRegistry, project.sceneManager, removeOp(otherUUID)));
+  EXPECT_TRUE(hasScene(project, otherUUID));
+
+  project.sceneManager.resetScene();
+  EXPECT_TRUE(replication::applyRemoveAsset(project.assetRegistry, project.sceneManager, removeOp(otherUUID)));
+  EXPECT_FALSE(hasAnyTrace(project, otherUUID));
+}

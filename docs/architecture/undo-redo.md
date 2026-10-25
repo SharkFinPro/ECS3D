@@ -110,9 +110,10 @@ popped a stack entry (the in-flight gate, its injectable clock and the `gainedOn
 short timeout passes, since undo validates against the editor's replicated view, which only updates on that
 rebroadcast, and a second press inside one round trip would otherwise validate against a still-stale value.
 A refusal is logged the same way for a stale target (`targetMissing`/`targetChanged`, naming the conflicting
-uuid) or an empty stack. `targetActive` is the refusal for a scene asset op the server would reject because
-that scene is the loaded one: undoing a scene's `addAsset` (New Scene) or redoing its `removeAsset`. The editor
-reports "load another scene first". Undo of a scene `removeAsset` re-adds the scene whole, since the command
+uuid) or an empty stack. `targetActive` is a defensive guard for a scene asset op the server would reject
+because that scene is the loaded one: undoing a scene's `addAsset` (New Scene) or redoing its `removeAsset`.
+The history is cleared when the active scene changes, so it rarely fires. The editor reports "load another
+scene first". Undo of a scene `removeAsset` re-adds the scene whole, since the command
 records `SceneAsset::serialize()` as its body (`commandForRemoveAsset` reads the `SceneManager`); its redo
 validation compares only type, path and display name for a scene, as the registry record has no body. `EditHistory::
 reportUndoRejected()`/`reportRedoRejected()` exist for a server rejection of the edit undo()/redo() just

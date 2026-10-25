@@ -64,6 +64,10 @@ public:
   // browser's gated double-click) and the prefab body's editors are disabled (read-only inspection).
   void setEditable(bool editable);
 
+  // Whether the scene is stopped. A scene is not deletable otherwise: Stop discards the play-session history
+  // that holds the undo.
+  void setSceneStopped(bool stopped);
+
   // The right-aligned type chip in the panel header, drawn on the current header row.
   void displayTypeChip(const AssetRecord& record) const;
 
@@ -84,6 +88,7 @@ private:
   const AssetRegistry* m_assetRegistry = nullptr;
 
   bool m_editable = true;
+  bool m_sceneStopped = true;
 
   // The detached prefab body being edited + the object inspector that draws its component editors, reused
   // verbatim from the Object kind. The inspector's callbacks feed the buffers below rather than the network:

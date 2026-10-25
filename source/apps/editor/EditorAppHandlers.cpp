@@ -89,6 +89,16 @@ void EditorApp::onRenameAsset(const uuids::uuid& assetUUID, const std::string& d
 void EditorApp::onRemoveAsset(const uuids::uuid& assetUUID)
 {
   const auto op = replication::buildRemoveAsset(assetUUID);
+
+  // The editor's SceneManager does not track the run status, so the play gate is checked here; the server
+  // enforces it through SceneManager::removeScene.
+  const auto* record = m_assetRegistry->getByUUID(assetUUID);
+  if (record && record->type == AssetType::Scene && m_sceneStatus != SceneStatus::stopped)
+  {
+    logMessage("Info", "Can't delete a scene while the scene is running or paused; stop it first.");
+    return;
+  }
+
   auto command = edits::commandForRemoveAsset(op, *m_assetRegistry, *m_sceneManager);
 
   if (!replication::applyRemoveAsset(*m_assetRegistry, *m_sceneManager, op))

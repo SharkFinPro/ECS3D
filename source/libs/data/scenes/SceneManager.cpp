@@ -16,7 +16,7 @@ void SceneManager::clear()
 
 bool SceneManager::removeScene(const uuids::uuid& uuid)
 {
-  if (!m_scenes.contains(uuid) || m_scenes.size() < 2)
+  if (!m_scenes.contains(uuid) || m_scenes.size() < 2 || m_sceneStatus != SceneStatus::stopped)
   {
     return false;
   }

@@ -87,17 +87,20 @@ dangle** â€” `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` loo
 missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
 replicated scenes + prefab bodies for the uuid ("referenced by N objects", `editor/AssetReferences.{h,cpp}`, headless); no server-side refusal or
 cascade exists (a known gap, not yet scheduled). Rename is offered only for the flat file assets
-(Model/Texture/Script/Prefab) that `AssetRegistry` owns — a Scene record is regenerated from the
+(Model/Texture/Script/Prefab) that `AssetRegistry` owns â€” a Scene record is regenerated from the
 `SceneManager` on every snapshot, so an override on it wouldn't survive. Undoing a delete re-adds the whole
-record, rename override included — the `addAsset` payload carries an optional `displayName`.
+record, rename override included â€” the `addAsset` payload carries an optional `displayName`.
 **Deleting a scene** removes it from the `SceneManager` first (`SceneManager::removeScene`) and drops the
 registry record only if that succeeded, because the record would otherwise come back with the next
-snapshot. `applyRemoveAsset` returns false and changes nothing for the loaded scene and for the project's
-only scene; the server logs the refusal, and the editor applies the same check locally and sends nothing.
-The scene's objects and scene scripts go with it. Undo re-adds it: the recorded `removeAsset` carries
-`SceneAsset::serialize()` as its body, and the undo `addAsset` hands that body back so `applyAddAsset`
-rebuilds the scene under its own uuid with its objects (uuids preserved) and scripts. A body that does not
-parse or load adds nothing, and so does a scene add for a uuid the `SceneManager` already holds.
+snapshot. `removeScene` refuses (false, nothing changed) the loaded scene, the only scene of the project,
+and any scene while the run status is not stopped, because Stop discards the play-session history that
+holds the undo. The server logs a refused removal; the editor checks its own status and active scene first
+and sends nothing. The objects and scene scripts of the scene go with it. Undo re-adds it: the recorded
+`removeAsset` carries `SceneAsset::serialize()` as its body, and the undo `addAsset` hands that body back
+so `applyAddAsset` rebuilds the scene under its own uuid with its objects (uuids preserved) and scripts. A
+body that does not parse or load adds nothing, and so does a scene add for a uuid the `SceneManager`
+already holds. The history is cleared when the active scene changes, and a new scene becomes active, so
+the `targetActive` refusal on undoing a scene add is a defensive guard, not a common path.
 The Assets panel also creates scenes, scripts and empty prefabs.
 It offers them from a "+" button and an empty-space context menu, not only the menu bar.
 Each prefills a unique default name (`AssetNaming.h`).

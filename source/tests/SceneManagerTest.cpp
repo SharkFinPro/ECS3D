@@ -354,3 +354,23 @@ TEST(SceneManager, RemoveSceneRefusesAnUnknownUuid)
 
   EXPECT_TRUE(sceneManager.removeScene(secondUUID));
 }
+
+TEST(SceneManager, RemoveSceneRefusesWhileRunningOrPausedAndWorksOnceStopped)
+{
+  const auto registry = makeRegistry();
+  SceneManager sceneManager;
+  const auto first = makeScene(firstUUID, "First", registry);
+  sceneManager.addScene(first);
+  sceneManager.addScene(makeScene(secondUUID, "Second", registry));
+  sceneManager.loadScene(first);
+
+  sceneManager.startScene();
+  EXPECT_FALSE(sceneManager.removeScene(secondUUID));
+  sceneManager.pauseScene();
+  EXPECT_FALSE(sceneManager.removeScene(secondUUID));
+  EXPECT_NE(sceneManager.getScene(secondUUID), nullptr);
+
+  sceneManager.resetScene();
+  EXPECT_TRUE(sceneManager.removeScene(secondUUID));
+  EXPECT_EQ(sceneManager.getScene(secondUUID), nullptr);
+}
