@@ -12,6 +12,8 @@ public static class LanAddresses
 {
     // Link-local 169.254.x.x is left out: it appears when DHCP failed, and no friend can reach it.
     // Two interfaces with the same label get their interface name added so the rows stay apart.
+    // Interfaces with a default gateway come first: host-only, Hyper-V and WSL adapters have none and a friend cannot
+    // reach them, so the first row (also the sidebar pill) is the address that can be shared.
     public static IReadOnlyList<LanAddress> From(IEnumerable<NetworkInterfaceInfo> interfaces)
     {
         var usable = interfaces
@@ -27,9 +29,11 @@ public static class LanAddresses
 
         return usable
             .SelectMany(entry => entry.Addresses.Select(address =>
-                new LanAddress(FullLabel(entry.Item, shared), address.ToString())))
-            .OrderBy(item => item.Label, StringComparer.Ordinal)
-            .ThenBy(item => item.Address, StringComparer.Ordinal)
+                (entry.Item.HasGateway, Row: new LanAddress(FullLabel(entry.Item, shared), address.ToString()))))
+            .OrderByDescending(entry => entry.HasGateway)
+            .ThenBy(entry => entry.Row.Label, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Row.Address, StringComparer.Ordinal)
+            .Select(entry => entry.Row)
             .ToList();
     }
 

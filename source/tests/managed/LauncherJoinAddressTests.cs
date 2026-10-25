@@ -11,7 +11,10 @@ public class LauncherJoinAddressTests
   private static readonly string LinkLocal = new IPAddress(new byte[] { 169, 254, 7, 7 }).ToString();
 
   private static NetworkInterfaceInfo Nic(string name, NetworkInterfaceKind kind, bool up, params string[] addresses) =>
-    new(name, kind, up, addresses.Select(IPAddress.Parse).ToList());
+    new(name, kind, up, true, addresses.Select(IPAddress.Parse).ToList());
+
+  private static NetworkInterfaceInfo NoGatewayNic(string name, NetworkInterfaceKind kind, params string[] addresses) =>
+    new(name, kind, true, false, addresses.Select(IPAddress.Parse).ToList());
 
   [Fact]
   public void LanAddressesKeepOnlyUsableIpv4OnInterfacesThatAreUp()
@@ -58,6 +61,34 @@ public class LauncherJoinAddressTests
     Assert.Equal(
       new[] { "192.0.2.2", "198.51.100.10", "198.51.100.9" },
       found.Select(item => item.Address).ToArray());
+  }
+
+  [Fact]
+  public void InterfacesWithoutADefaultGatewayComeLast()
+  {
+    var found = LanAddresses.From(
+    [
+      NoGatewayNic("VirtualBox Host-Only Network", NetworkInterfaceKind.Ethernet, "192.0.2.1"),
+      NoGatewayNic("vEthernet (Default Switch)", NetworkInterfaceKind.Ethernet, "198.51.100.1"),
+      Nic("wlan0", NetworkInterfaceKind.Wireless, true, "203.0.113.24"),
+    ]);
+
+    Assert.Equal(
+      new[] { "203.0.113.24", "192.0.2.1", "198.51.100.1" },
+      found.Select(item => item.Address).ToArray());
+  }
+
+  [Fact]
+  public void GatewayInterfaceLeadsEvenWhenItsLabelSortsLater()
+  {
+    var found = LanAddresses.From(
+    [
+      NoGatewayNic("Docker", NetworkInterfaceKind.Other, "198.51.100.1"),
+      Nic("wlan0", NetworkInterfaceKind.Wireless, true, "203.0.113.24"),
+    ]);
+
+    Assert.Equal("Wi-Fi", found[0].Label);
+    Assert.Equal("Docker", found[1].Label);
   }
 
   [Theory]
