@@ -3,6 +3,7 @@
 
 #include <nlohmann/json_fwd.hpp>
 #include <array>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -65,6 +66,10 @@ public:
   // browser's gated double-click) and the prefab body's editors are disabled (read-only inspection).
   void setEditable(bool editable);
 
+  // Whether the scene is stopped. A scene is not deletable otherwise: Stop discards the play-session history
+  // that holds the undo.
+  void setSceneStopped(bool stopped);
+
   // The right-aligned type chip in the panel header, drawn on the current header row.
   void displayTypeChip(const AssetRecord& record) const;
 
@@ -85,6 +90,7 @@ private:
   const AssetRegistry* m_assetRegistry = nullptr;
 
   bool m_editable = true;
+  bool m_sceneStopped = true;
 
   // The detached prefab body being edited + the object inspector that draws its component editors, reused
   // verbatim from the Object kind. The inspector's callbacks feed the buffers below rather than the network:
@@ -183,11 +189,15 @@ private:
   // the dirty flag. Serializes the detached object and re-registers it via UpdatePrefabBodyCallback.
   void flushPrefabBody();
 
-  // A danger "Delete Asset" button (flat file assets only, gated on editable) that arms the modal below.
-  void displayDeleteButton(const AssetRecord& record);
+  [[nodiscard]] size_t sceneCount() const;
+
+  // A danger "Delete Asset" button (gated on editable) that arms the modal below. A scene is deletable too,
+  // unless it is the active scene or the project's only one - then a note stands in for the button.
+  void displayDeleteButton(const AssetRecord& record, const std::optional<uuids::uuid>& activeSceneUUID);
 
   // The "Delete Asset?" confirmation modal for m_assetPendingDeletion, warning how many objects reference
-  // it (references are left to dangle). Confirming fires the remove callback.
+  // it (references are left to dangle) or, for a scene, that its objects and scripts go with it. Confirming
+  // fires the remove callback.
   void displayDeleteConfirmationModal(const AssetRecord& record);
 };
 

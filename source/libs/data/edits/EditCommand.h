@@ -63,7 +63,8 @@ enum class ValidationFailure {
   none,
   notUndoable,
   targetMissing,
-  targetChanged
+  targetChanged,
+  targetActive // a scene asset op that the server would refuse because that scene is the loaded one
 };
 
 struct Validation {

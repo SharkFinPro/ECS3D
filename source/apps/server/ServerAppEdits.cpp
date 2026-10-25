@@ -254,8 +254,8 @@ void ServerApp::handleRenameAsset(const net::Message& message) const
 
 void ServerApp::handleRemoveAsset(const net::Message& message) const
 {
-  // An editor deleted an asset: drop the record and re-snapshot. References dangle by design (lookups
-  // null-tolerate a missing uuid).
+  // An editor deleted an asset: drop the record (a scene leaves the SceneManager too) and re-snapshot.
+  // References dangle by design (lookups null-tolerate a missing uuid).
   nlohmann::json op;
   try
   {
@@ -266,9 +266,14 @@ void ServerApp::handleRemoveAsset(const net::Message& message) const
     return;
   }
 
-  replication::applyRemoveAsset(*m_assetRegistry, op);
-
-  Log::info(LogCategory::server, "Removed asset.");
+  if (!replication::applyRemoveAsset(*m_assetRegistry, *m_sceneManager, op))
+  {
+    Log::warn(LogCategory::server, "Refused to remove an asset: it is unknown, or it is the active or only scene.");
+  }
+  else
+  {
+    Log::info(LogCategory::server, "Removed asset.");
+  }
 
   broadcastSnapshot();
 }

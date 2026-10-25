@@ -79,6 +79,9 @@ public:
   // by the scene inspector's is-active indicator (nullopt when no scene is loaded).
   void displayGui(const ObjectManager* objectManager, const std::optional<uuids::uuid>& activeSceneUUID);
 
+  // Whether the scene is stopped; scene deletion is only offered then.
+  void setSceneStopped(bool stopped);
+
   // The objects to highlight in the viewport: the whole object selection when the object inspector's
   // Highlight toggle is on, else empty (also empty for the None/Asset kinds).
   [[nodiscard]] std::span<const uuids::uuid> getHighlightUUIDs() const;

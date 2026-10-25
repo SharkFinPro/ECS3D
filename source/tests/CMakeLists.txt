@@ -139,6 +139,7 @@ add_executable(${PROJECT_NAME}
   ProjectSerializerLogTest.cpp
   StateDeltaTest.cpp
   StatusPayloadTest.cpp
+  SceneDeleteTest.cpp
   SceneManagerTest.cpp
   SceneRenameTest.cpp
   SceneScriptListTest.cpp

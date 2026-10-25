@@ -84,6 +84,11 @@ void InspectorPanel::setUpdatePrefabBodyCallback(std::function<void(const uuids:
   m_assetInspector->setUpdatePrefabBodyCallback(std::move(callback));
 }
 
+void InspectorPanel::setSceneStopped(const bool stopped)
+{
+  m_assetInspector->setSceneStopped(stopped);
+}
+
 void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::optional<uuids::uuid>& activeSceneUUID)
 {
   ImGui::Begin("Inspector");

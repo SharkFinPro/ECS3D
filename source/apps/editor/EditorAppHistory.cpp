@@ -184,5 +184,9 @@ void EditorApp::reportHistoryOutcome(const edits::HistoryOutcome& outcome, const
     case edits::HistoryResult::targetChanged:
       logMessage("Info", "Can't " + action + ": " + conflictLabel(outcome.conflict) + " has changed since that edit.");
       break;
+
+    case edits::HistoryResult::targetActive:
+      logMessage("Info", "Can't " + action + ": that scene is active; load another scene first.");
+      break;
   }
 }

@@ -216,6 +216,7 @@ TEST(RecordEdits, ApplyAddAssetOverAnExistingPrefabNameKeepsTheExistingDisplayNa
 TEST(RecordEdits, RenameAndRemoveAssetCarryTheCurrentRecord)
 {
   AssetScene scene;
+  SceneManager sceneManager;
 
   scene.assetRegistry.registerAsset({ .uuid = someOtherUUID(), .type = AssetType::Script,
                                       .path = "scripts/Player.cs", .className = "PlayerScript" });
@@ -227,7 +228,7 @@ TEST(RecordEdits, RenameAndRemoveAssetCarryTheCurrentRecord)
   EXPECT_EQ(*renamed, edits::EditCommand::renameAsset(someOtherUUID(), "Player", "Hero"));
 
   const auto removed = edits::commandForRemoveAsset(replication::buildRemoveAsset(someOtherUUID()),
-                                                    scene.assetRegistry);
+                                                    scene.assetRegistry, sceneManager);
   ASSERT_TRUE(removed.has_value());
   EXPECT_EQ(*removed, edits::EditCommand::removeAsset(someOtherUUID(), AssetType::Script,
                                                       "scripts/Player.cs", "PlayerScript", "", "Player"));
@@ -236,7 +237,7 @@ TEST(RecordEdits, RenameAndRemoveAssetCarryTheCurrentRecord)
   EXPECT_FALSE(edits::commandForRenameAsset(replication::buildRenameAsset(anotherUUID(), "Hero"),
                                             scene.assetRegistry).has_value());
   EXPECT_FALSE(edits::commandForRemoveAsset(replication::buildRemoveAsset(anotherUUID()),
-                                            scene.assetRegistry).has_value());
+                                            scene.assetRegistry, sceneManager).has_value());
 }
 
 // --- replaceAsset through the history: the undo payload re-registers the old record, the redo payload
@@ -376,28 +377,30 @@ TEST(RecordEdits, AnAddAssetOfAPrefabOverAFileAssetsPathIsNotRecorded)
 TEST(RecordEdits, RenameAndRemoveAssetRefuseMalformedOps)
 {
   AssetScene scene;
+  SceneManager sceneManager;
   scene.assetRegistry.registerAsset({ .uuid = someOtherUUID(), .type = AssetType::Model,
                                       .path = "models/thing.obj" });
 
   const auto validRename = replication::buildRenameAsset(someOtherUUID(), "Thing");
   const auto validRemove = replication::buildRemoveAsset(someOtherUUID());
   ASSERT_TRUE(edits::commandForRenameAsset(validRename, scene.assetRegistry).has_value());
-  ASSERT_TRUE(edits::commandForRemoveAsset(validRemove, scene.assetRegistry).has_value());
+  ASSERT_TRUE(edits::commandForRemoveAsset(validRemove, scene.assetRegistry, sceneManager).has_value());
 
   EXPECT_FALSE(edits::commandForRenameAsset(nlohmann::json::array(), scene.assetRegistry).has_value());
-  EXPECT_FALSE(edits::commandForRemoveAsset(nlohmann::json::array(), scene.assetRegistry).has_value());
+  EXPECT_FALSE(edits::commandForRemoveAsset(nlohmann::json::array(), scene.assetRegistry,
+                                            sceneManager).has_value());
 
   auto renameWithoutUUID = validRename;
   renameWithoutUUID.erase("uuid");
   auto removeWithoutUUID = validRemove;
   removeWithoutUUID.erase("uuid");
   EXPECT_FALSE(edits::commandForRenameAsset(renameWithoutUUID, scene.assetRegistry).has_value());
-  EXPECT_FALSE(edits::commandForRemoveAsset(removeWithoutUUID, scene.assetRegistry).has_value());
+  EXPECT_FALSE(edits::commandForRemoveAsset(removeWithoutUUID, scene.assetRegistry, sceneManager).has_value());
 
   auto renameWithBadUUID = validRename;
   renameWithBadUUID["uuid"] = "not-a-uuid";
   auto removeWithBadUUID = validRemove;
   removeWithBadUUID["uuid"] = "not-a-uuid";
   EXPECT_FALSE(edits::commandForRenameAsset(renameWithBadUUID, scene.assetRegistry).has_value());
-  EXPECT_FALSE(edits::commandForRemoveAsset(removeWithBadUUID, scene.assetRegistry).has_value());
+  EXPECT_FALSE(edits::commandForRemoveAsset(removeWithBadUUID, scene.assetRegistry, sceneManager).has_value());
 }

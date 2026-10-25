@@ -104,6 +104,7 @@ namespace {
       case ValidationFailure::notUndoable: return HistoryResult::notUndoable;
       case ValidationFailure::targetMissing: return HistoryResult::targetMissing;
       case ValidationFailure::targetChanged: return HistoryResult::targetChanged;
+      case ValidationFailure::targetActive: return HistoryResult::targetActive;
       case ValidationFailure::none: default: return HistoryResult::applied;
     }
   }
