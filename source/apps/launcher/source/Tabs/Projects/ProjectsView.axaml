@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:m="using:ECS3DLauncher.Shared.Models"
              xmlns:local="using:ECS3DLauncher.Tabs.Projects"
+             xmlns:controls="using:ECS3DLauncher.Shared.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:dd="using:ECS3DLauncher.Shared"
@@ -76,7 +77,8 @@
                         <!-- New Project card -->
                         <Button Classes="card-btn" Theme="{StaticResource BareButton}"
                                 IsVisible="{Binding IsNewCard}" CornerRadius="11"
-                                Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).NewProjectCommand, FallbackValue={x:Null}}">
+                                Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).NewProjectCommand, FallbackValue={x:Null}}"
+                                AutomationProperties.Name="New Project">
                             <Panel>
                                 <Rectangle Classes="dash" RadiusX="11" RadiusY="11"
                                            Fill="{StaticResource AccDim}"
@@ -105,32 +107,32 @@
                                 CornerRadius="11" ClipToBounds="True">
                             <Border.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Open in editor"
+                                    <controls:InvokableMenuItem Header="Open in editor"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}" />
-                                    <MenuItem Header="Play"
+                                    <controls:InvokableMenuItem Header="Play"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
                                               ToolTip.ShowOnDisabled="True" />
-                                    <MenuItem Header="Host a game..."
+                                    <controls:InvokableMenuItem Header="Host a game..."
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).HostProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).HostTooltip, FallbackValue={x:Null}}"
                                               ToolTip.ShowOnDisabled="True" />
-                                    <MenuItem Header="Show in folder"
+                                    <controls:InvokableMenuItem Header="Show in folder"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}" />
                                     <Separator />
-                                    <MenuItem Header="Pin to top"
+                                    <controls:InvokableMenuItem Header="Pin to top"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               IsVisible="{Binding !Pinned}" />
-                                    <MenuItem Header="Unpin"
+                                    <controls:InvokableMenuItem Header="Unpin"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               IsVisible="{Binding Pinned}" />
-                                    <MenuItem Header="Remove from list"
+                                    <controls:InvokableMenuItem Header="Remove from list"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}" />
                                 </ContextMenu>
@@ -200,7 +202,7 @@
                                                 Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
                                                 CommandParameter="{Binding}" />
                                         <Button Grid.Column="3" Classes="more" Theme="{StaticResource BareButton}" Click="OnMoreClick"
-                                                ToolTip.Tip="More" VerticalAlignment="Center" Margin="6,0,0,0">
+                                                ToolTip.Tip="More" AutomationProperties.Name="More actions" VerticalAlignment="Center" Margin="6,0,0,0">
                                             <TextBlock Text="..." FontSize="13" FontWeight="Bold" Foreground="{StaticResource T2Brush}" />
                                         </Button>
                                     </Grid>
@@ -221,7 +223,8 @@
                         <!-- New Project row -->
                         <Button Classes="card-btn" Theme="{StaticResource BareButton}"
                                 IsVisible="{Binding IsNewCard}" CornerRadius="9"
-                                Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).NewProjectCommand, FallbackValue={x:Null}}">
+                                Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).NewProjectCommand, FallbackValue={x:Null}}"
+                                AutomationProperties.Name="New Project">
                             <Panel>
                                 <Rectangle Classes="dash" RadiusX="9" RadiusY="9"
                                            Fill="{StaticResource AccDim}"
@@ -247,32 +250,32 @@
                         <Border Classes="card row" IsVisible="{Binding IsRealCard}" CornerRadius="9">
                             <Border.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Open in editor"
+                                    <controls:InvokableMenuItem Header="Open in editor"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}" />
-                                    <MenuItem Header="Play"
+                                    <controls:InvokableMenuItem Header="Play"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).PlayTooltip, FallbackValue={x:Null}}"
                                               ToolTip.ShowOnDisabled="True" />
-                                    <MenuItem Header="Host a game..."
+                                    <controls:InvokableMenuItem Header="Host a game..."
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).HostProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               ToolTip.Tip="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).HostTooltip, FallbackValue={x:Null}}"
                                               ToolTip.ShowOnDisabled="True" />
-                                    <MenuItem Header="Show in folder"
+                                    <controls:InvokableMenuItem Header="Show in folder"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).ShowInFolderCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}" />
                                     <Separator />
-                                    <MenuItem Header="Pin to top"
+                                    <controls:InvokableMenuItem Header="Pin to top"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               IsVisible="{Binding !Pinned}" />
-                                    <MenuItem Header="Unpin"
+                                    <controls:InvokableMenuItem Header="Unpin"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).TogglePinCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}"
                                               IsVisible="{Binding Pinned}" />
-                                    <MenuItem Header="Remove from list"
+                                    <controls:InvokableMenuItem Header="Remove from list"
                                               Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).RemoveProjectCommand, FallbackValue={x:Null}}"
                                               CommandParameter="{Binding}" />
                                 </ContextMenu>
@@ -330,7 +333,7 @@
                                       IsVisible="{Binding Pinned}" VerticalAlignment="Center"
                                       Data="{StaticResource IconStar}" />
                                 <Button Grid.Column="5" Classes="more" Theme="{StaticResource BareButton}" Click="OnMoreClick"
-                                        ToolTip.Tip="More" VerticalAlignment="Center" Margin="10,0,0,0">
+                                        ToolTip.Tip="More" AutomationProperties.Name="More actions" VerticalAlignment="Center" Margin="10,0,0,0">
                                     <TextBlock Text="..." FontSize="13" FontWeight="Bold" Foreground="{StaticResource T2Brush}" />
                                 </Button>
                             </Grid>

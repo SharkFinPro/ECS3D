@@ -23,7 +23,7 @@
                     <Button Classes="card-btn" Theme="{StaticResource BareButton}" Width="330" Margin="9"
                             CornerRadius="11" HorizontalContentAlignment="Stretch"
                             Command="{Binding $parent[local:LearnView].((local:LearnViewModel)DataContext).OpenGuideCommand, FallbackValue={x:Null}}"
-                            CommandParameter="{Binding}">
+                            CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title}">
                         <Border Classes="card" CornerRadius="11" Padding="18">
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
                                 <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9"

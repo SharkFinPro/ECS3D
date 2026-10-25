@@ -69,6 +69,8 @@
                  Link="Launcher/Shared/Converters/%(Filename)%(Extension)" />
         <Compile Include="../../apps/launcher/source/Shared/Controls/CardMenu.cs"
                  Link="Launcher/Shared/Controls/%(Filename)%(Extension)" />
+        <Compile Include="../../apps/launcher/source/Shared/Controls/InvokableMenuItem.cs"
+                 Link="Launcher/Shared/Controls/%(Filename)%(Extension)" />
         <Compile Include="../../apps/launcher/source/Tabs/Templates/NewProjectDialog.axaml.cs"
                  Link="Launcher/Tabs/Templates/%(Filename)%(Extension)" />
         <AvaloniaXaml Include="../../apps/launcher/source/Tabs/Templates/NewProjectDialog.axaml"

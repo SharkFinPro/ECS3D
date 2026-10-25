@@ -54,13 +54,13 @@
                 <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2"
                             VerticalAlignment="Center">
                     <Button Classes="win" Theme="{StaticResource BareButton}"
-                            Click="OnMinimize" ToolTip.Tip="Minimize"
+                            Click="OnMinimize" ToolTip.Tip="Minimize" AutomationProperties.Name="Minimize"
                             WindowDecorationProperties.ElementRole="MinimizeButton">
                         <Rectangle Classes="wg" Width="10" Height="1.3" RadiusX="1" RadiusY="1"
                                    Fill="{StaticResource T2Brush}" />
                     </Button>
                     <Button Name="MaxButton" Classes="win" Theme="{StaticResource BareButton}"
-                            Click="OnMaximize" ToolTip.Tip="Maximize"
+                            Click="OnMaximize" ToolTip.Tip="Maximize" AutomationProperties.Name="Maximize"
                             WindowDecorationProperties.ElementRole="MaximizeButton">
                         <Panel Width="11" Height="11">
                             <!-- maximize: single square -->
@@ -79,7 +79,7 @@
                         </Panel>
                     </Button>
                     <Button Classes="win close" Theme="{StaticResource BareButton}"
-                            Click="OnClose" ToolTip.Tip="Close"
+                            Click="OnClose" ToolTip.Tip="Close" AutomationProperties.Name="Close"
                             WindowDecorationProperties.ElementRole="CloseButton">
                         <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
                     </Button>
@@ -93,7 +93,7 @@
             <!-- ===== SIDEBAR ===== -->
             <Border Grid.Column="0" Width="212" IsEnabled="{Binding IsInteractive}" Background="{StaticResource PanelBrush}"
                     BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
-                <DockPanel Margin="12,16">
+                <DockPanel Margin="12,16" LastChildFill="False">
 
                     <TextBlock DockPanel.Dock="Top" Text="LIBRARY"
                                FontSize="11" FontWeight="SemiBold" LetterSpacing="1"
@@ -102,7 +102,8 @@
 
                     <!-- Settings pinned to the bottom -->
                     <Button DockPanel.Dock="Bottom" Classes="navbtn" Theme="{StaticResource BareButton}"
-                            Command="{Binding SelectNavCommand}" CommandParameter="settings">
+                            Command="{Binding SelectNavCommand}" CommandParameter="settings"
+                            AutomationProperties.Name="Settings">
                         <Grid Margin="11,9" ColumnDefinitions="Auto,*">
                             <Path Grid.Column="0" Classes="icon" Width="12" Height="12"
                                   Data="{StaticResource IconSettings}" VerticalAlignment="Center" />
@@ -119,7 +120,7 @@
                         <Button Theme="{StaticResource BareButton}" HorizontalAlignment="Stretch"
                                 IsVisible="{Binding Hosting.IsHosting}"
                                 Command="{Binding Hosting.ShowPanelCommand}"
-                                ToolTip.Tip="Show the hosting panel">
+                                ToolTip.Tip="Show the hosting panel" AutomationProperties.Name="Show the hosting panel">
                             <Border CornerRadius="8" Padding="11,8" Background="{StaticResource OkDim}"
                                     BorderBrush="{StaticResource OkBrush}" BorderThickness="1">
                                 <StackPanel Spacing="2">
@@ -139,7 +140,7 @@
                             <DataTemplate x:DataType="shell:NavItemViewModel">
                                 <Button Classes="navbtn" Theme="{StaticResource BareButton}" Margin="0,0,0,2"
                                         Command="{Binding $parent[Window].((shell:MainWindowViewModel)DataContext).SelectNavCommand, FallbackValue={x:Null}}"
-                                        CommandParameter="{Binding Key}">
+                                        CommandParameter="{Binding Key}" AutomationProperties.Name="{Binding Label}">
                                     <Panel>
                                         <Border IsVisible="{Binding IsActive}"
                                                 Background="{StaticResource AccDim}" CornerRadius="7"
@@ -170,7 +171,8 @@
                                Foreground="{StaticResource T3Brush}"
                                Margin="10,18,10,10" />
                     <Button DockPanel.Dock="Top" Classes="navbtn" Theme="{StaticResource BareButton}"
-                            Command="{Binding OpenJoinCommand}" ToolTip.Tip="{Binding JoinTooltip}">
+                            Command="{Binding OpenJoinCommand}" ToolTip.Tip="{Binding JoinTooltip}"
+                            AutomationProperties.Name="Join a game">
                         <Grid Margin="11,9" ColumnDefinitions="Auto,*">
                             <Path Grid.Column="0" Classes="icon" Width="12" Height="12"
                                   Data="{StaticResource IconPlus}" VerticalAlignment="Center" />
@@ -215,11 +217,13 @@
                             BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
                         <StackPanel Orientation="Horizontal" Spacing="3">
                             <Button Classes="seg" Classes.on="{Binding Projects.IsGridView}"
-                                    Theme="{StaticResource BareButton}" Command="{Binding Projects.SetGridCommand}">
+                                    Theme="{StaticResource BareButton}" Command="{Binding Projects.SetGridCommand}"
+                                    AutomationProperties.Name="Grid view">
                                 <Path Classes="icon" Width="11" Height="11" Data="{StaticResource IconGrid}" />
                             </Button>
                             <Button Classes="seg" Classes.on="{Binding Projects.IsListView}"
-                                    Theme="{StaticResource BareButton}" Command="{Binding Projects.SetListCommand}">
+                                    Theme="{StaticResource BareButton}" Command="{Binding Projects.SetListCommand}"
+                                    AutomationProperties.Name="List view">
                                 <Path Classes="icon" Width="11" Height="11" Data="{StaticResource IconList}" />
                             </Button>
                         </StackPanel>
@@ -233,7 +237,7 @@
 
                     <!-- New Project -->
                     <Button Grid.Column="4" Classes="cta" Theme="{StaticResource BareButton}"
-                            Command="{Binding NewProjectCommand}">
+                            Command="{Binding NewProjectCommand}" AutomationProperties.Name="New Project">
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Path Classes="icon dark" Width="12" Height="12" StrokeThickness="1.5"
                                   Data="{StaticResource IconPlus}" VerticalAlignment="Center" />
@@ -427,7 +431,7 @@
                 </StackPanel>
                 <Button Grid.Column="1" Classes="win" Theme="{StaticResource BareButton}"
                         VerticalAlignment="Top" Margin="8,-6,-6,0"
-                        Command="{Binding DismissToastCommand}" ToolTip.Tip="Dismiss">
+                        Command="{Binding DismissToastCommand}" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss">
                     <Path Classes="icon" Width="10" Height="10" Data="{StaticResource IconClose}" />
                 </Button>
             </Grid>
