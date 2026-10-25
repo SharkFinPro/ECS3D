@@ -66,7 +66,8 @@
             <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,16,0,0">
                 <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Cancel"
                         Command="{Binding CancelCommand}" />
-                <Button Classes="cta" Theme="{StaticResource BareButton}" Command="{Binding CreateCommand}">
+                <Button Classes="cta" Theme="{StaticResource BareButton}" IsDefault="True"
+                        Command="{Binding CreateCommand}">
                     <TextBlock Text="Create project" FontSize="13" FontWeight="Bold"
                                Foreground="{StaticResource AccText}" VerticalAlignment="Center" />
                 </Button>
