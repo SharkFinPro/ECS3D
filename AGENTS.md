@@ -70,7 +70,7 @@
 | `source/apps/launcher/` | The standalone C# Avalonia launcher. **Has its own `AGENTS.md`** - treat it as an independent project. |
 | `source/templates/` | Shipped project templates and samples, one folder each. Its `README.md` documents the manifest, the uuid rules and the ground-tile convention; `TemplateValidationTest` checks every folder. |
 | `source/tests/` | `ECS3DTests` (GoogleTest) and `managed/` `ECS3DManagedTests` (xUnit), both registered with CTest. |
-| `tools/ci/` | `check_includes.py`, the CI include check: compiles every first-party file without the precompiled header. |
+| `tools/ci/` | `check_includes.py`, the continuous integration (CI) include check: compiles every first-party file without the precompiled header. |
 | `tools/shapes/` | Python generator for the committed default models and textures in `source/apps/server/defaultAssets/`. |
 | `docs/guides/` | User-facing guides. Keep their claims true to the code when editor or scripting behavior changes. |
 | `docs/architecture/` | Design notes, one topic per file; see the [documentation map](#documentation-map). |

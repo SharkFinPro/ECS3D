@@ -10,14 +10,18 @@ import sys
 
 # Options that name an output or dependency file and take the following argument as their value.
 DROPPED_WITH_VALUE = {"-o", "-MF", "-MT", "-MQ"}
-DROPPED_FLAGS = {"-c", "-MD", "-MMD", "-Winvalid-pch"}
+DROPPED_FLAGS = {"-c", "-MD", "-MMD"}
+# A file compiled through CMake's precompiled header would pass on includes it does not make itself.
+PCH_MARKER = "cmake_pch"
+# Long enough for the heaviest translation unit's front end, short enough that a hung compile fails the row.
+COMPILE_TIMEOUT_SECONDS = 600
 
 
 def strip_arguments(arguments):
-    """Return the compile arguments without output, dependency and precompiled-header options."""
+    """Return the compile arguments without output and dependency options, with -fsyntax-only appended."""
     result = []
     skip_next = False
-    for index, argument in enumerate(arguments):
+    for argument in arguments:
         if skip_next:
             skip_next = False
             continue
@@ -26,12 +30,6 @@ def strip_arguments(arguments):
             continue
         if argument in DROPPED_FLAGS:
             continue
-        if argument == "-include":
-            # The forced include of a CMake precompiled header is the one thing this check must not use.
-            following = arguments[index + 1] if index + 1 < len(arguments) else ""
-            if "cmake_pch" in following:
-                skip_next = True
-                continue
         result.append(argument)
     result.append("-fsyntax-only")
     return result
@@ -72,7 +70,13 @@ def check(item):
     """Compile one entry front end only and return (path, ok, output)."""
     path, entry = item
     arguments = strip_arguments(entry_arguments(entry))
-    result = subprocess.run(arguments, cwd=entry["directory"], capture_output=True, text=True)  # nosec B603
+    if any(PCH_MARKER in argument for argument in arguments):
+        return path, False, "compiled with a precompiled header; configure with ECS3D_PRECOMPILED_HEADERS=OFF"
+    try:
+        result = subprocess.run(  # nosec B603
+            arguments, cwd=entry["directory"], capture_output=True, text=True, timeout=COMPILE_TIMEOUT_SECONDS)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return path, False, str(error)
     return path, result.returncode == 0, result.stdout + result.stderr
 
 
