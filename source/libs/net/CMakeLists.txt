@@ -16,6 +16,7 @@ add_library(${PROJECT_NAME}
   EditToken.h
   ServerLog.cpp
   ServerLog.h
+  ServerArguments.h
   ServerProcess.cpp
   ServerProcess.h
   TransportLog.cpp
