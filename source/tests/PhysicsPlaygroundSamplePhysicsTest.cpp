@@ -58,6 +58,8 @@ class PhysicsPlaygroundSamplePhysics : public ::testing::Test
 protected:
   static void SetUpTestSuite()
   {
+    s_simulated = false;
+    s_farthestTravel = 0.0f;
     s_loaded = std::make_unique<LoadedTemplate>(sampleFolder);
     if (!s_loaded->loaded)
     {
@@ -116,6 +118,8 @@ protected:
         s_farthestTravel = std::max(s_farthestTravel, planeTravel(s_far, s_farStart));
       }
     }
+
+    s_simulated = true;
   }
 
   static void TearDownTestSuite()
@@ -129,6 +133,7 @@ protected:
     s_feeder.reset();
     s_far.reset();
     s_loaded.reset();
+    s_simulated = false;
   }
 
   static const ObjectManager& objectManager()
@@ -136,12 +141,15 @@ protected:
     return *s_loaded->sceneManager.getCurrentScene()->getObjectManager();
   }
 
-  [[nodiscard]] static bool isLoaded()
+  [[nodiscard]] static bool isSimulated()
   {
-    return s_loaded != nullptr && s_loaded->loaded;
+    return s_simulated;
   }
 
   inline static std::unique_ptr<LoadedTemplate> s_loaded;
+  // Set only once the run completes, so a setup that throws partway fails every test rather than letting one
+  // pass on an unsimulated scene.
+  inline static bool s_simulated = false;
 
   inline static std::shared_ptr<Object> s_first;
   inline static std::shared_ptr<Object> s_second;
@@ -168,7 +176,7 @@ protected:
 
 TEST_F(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
 {
-  ASSERT_TRUE(isLoaded());
+  ASSERT_TRUE(isSimulated());
 
   for (const auto& object : objectManager().getAllObjects())
   {
@@ -181,7 +189,7 @@ TEST_F(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
 
 TEST_F(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsTowardTheSecond)
 {
-  ASSERT_TRUE(isLoaded());
+  ASSERT_TRUE(isSimulated());
   ASSERT_NE(s_first, nullptr);
   ASSERT_NE(s_second, nullptr);
 
@@ -195,7 +203,7 @@ TEST_F(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsTowardTheSecond
 
 TEST_F(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedOffTheLedge)
 {
-  ASSERT_TRUE(isLoaded());
+  ASSERT_TRUE(isSimulated());
   ASSERT_NE(s_last, nullptr);
   ASSERT_NE(s_sphere, nullptr);
 
@@ -212,7 +220,7 @@ TEST_F(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedO
 
 TEST_F(PhysicsPlaygroundSamplePhysics, ThePyramidStandsWhileTheCradleSpheresMove)
 {
-  ASSERT_TRUE(isLoaded());
+  ASSERT_TRUE(isSimulated());
 
   ASSERT_EQ(s_cubes.size(), 30u);
   EXPECT_NEAR(s_topStartHeight, 3.55f, 1e-4f);
