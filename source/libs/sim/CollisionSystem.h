@@ -1,6 +1,7 @@
 #ifndef COLLISIONSYSTEM_H
 #define COLLISIONSYSTEM_H
 
+#include "WorkerPool.h"
 #include "collisions/NarrowPhase.h"
 #include <compare>
 #include <memory>
@@ -40,6 +41,8 @@ struct CollisionPair {
 
 class CollisionSystem {
 public:
+  CollisionSystem();
+
   // dt is the tick length, which contact responses need to combine per-tick velocity with spin.
   void fixedUpdate(const ObjectManager& objectManager, float dt);
 
@@ -56,6 +59,7 @@ public:
 
 private:
   std::vector<CollisionEdge> m_collisionEdges;
+  WorkerPool m_workerPool;
 
   // Sorted set of colliding pairs from the previous tick, diffed against the current tick to produce
   // the enter/stay/exit lists.

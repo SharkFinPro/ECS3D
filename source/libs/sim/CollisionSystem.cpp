@@ -13,9 +13,14 @@
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <thread>
 #include <utility>
 
 namespace {
+  // Below this many edges the sweep is cheaper than waking the workers, so it runs on the calling thread.
+  constexpr size_t parallelSweepMinEdges = 64;
+  constexpr size_t maxSweepThreads = 6;
+
   // One candidate's narrow-phase result, kept beside its squared penetration depth so
   // CollisionSystem::handleCollisions can sort by depth and then resolve without recomputing the contact.
   struct ScoredContact {
@@ -41,6 +46,10 @@ namespace {
     return a.object->isAncestorOf(b.object) || b.object->isAncestorOf(a.object);
   }
 }
+
+CollisionSystem::CollisionSystem()
+  : m_workerPool(std::min<size_t>(maxSweepThreads, std::thread::hardware_concurrency()))
+{}
 
 void CollisionSystem::fixedUpdate(const ObjectManager& objectManager, const float dt)
 {
@@ -93,10 +102,17 @@ void CollisionSystem::checkCollisions(const float dt)
   // Losing either half of that (a collider left cold, or a response sneaking back into this loop) turns
   // it into two threads racing a write on m_boundingBox / m_transformedBoxVertices.
   // Dynamic scheduling because the work per edge depends on how many colliders overlap it in x.
-#pragma omp parallel for default(none) shared(forwardHits, isDynamic) schedule(dynamic, 8) num_threads(6)
-  for (int i = 0; i < m_collisionEdges.size(); ++i)
+  const auto sweepEdge = [&](const size_t i) { findCollisions(i, isDynamic, forwardHits[i]); };
+  if (m_collisionEdges.size() < parallelSweepMinEdges)
   {
-    findCollisions(i, isDynamic, forwardHits[i]);
+    for (size_t i = 0; i < m_collisionEdges.size(); ++i)
+    {
+      sweepEdge(i);
+    }
+  }
+  else
+  {
+    m_workerPool.parallelFor(m_collisionEdges.size(), 8, sweepEdge);
   }
 
   // Each side's own narrow-phase answer goes to that side's list. Walking i upward keeps every list in

@@ -82,7 +82,7 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
       add_link_options(/PROFILE /INCREMENTAL:NO)
     elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
       # .gcno/.gcda output, which gcovr reads (Clang needs gcovr's --gcov-executable "llvm-cov gcov").
-      # Atomic counter updates, since the suite runs OpenMP and test threads and the default
+      # Atomic counter updates, since the suite runs worker and test threads and the default
       # single-threaded updates leave inconsistent .gcda data that gcovr can abort on.
       add_compile_options(--coverage -fprofile-update=atomic)
       add_link_options(--coverage)

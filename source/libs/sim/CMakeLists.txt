@@ -9,6 +9,8 @@ add_library(${PROJECT_NAME}
   InertiaTensor.h
   CollisionSystem.cpp
   CollisionSystem.h
+  WorkerPool.cpp
+  WorkerPool.h
   collisions/NarrowPhase.cpp
   collisions/NarrowPhase.h
   collisions/Simplex.cpp
@@ -47,7 +49,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 # lifted from RigidBody.cpp, and CollisionSystem routes its detected collisions into
 # PhysicsSystem::handleCollision.
 
-find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-  target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
-endif()
+find_package(Threads REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC Threads::Threads)
