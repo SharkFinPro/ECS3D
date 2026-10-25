@@ -25,7 +25,7 @@
                 <DataTemplate x:DataType="m:TemplateCard">
                     <Button Theme="{StaticResource BareButton}" Margin="9"
                             Command="{Binding $parent[local:TemplatesView].((local:TemplatesViewModel)DataContext).OpenCommand, FallbackValue={x:Null}}"
-                            CommandParameter="{Binding}">
+                            CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
                         <Border Classes="card" Width="236" CornerRadius="11" ClipToBounds="True">
                             <StackPanel>
                                 <Panel Height="133" Background="{StaticResource InsetBrush}">

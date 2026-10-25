@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
@@ -160,7 +161,9 @@ public class MainWindow : Window
             var isMax = WindowState == WindowState.Maximized;
             _glyphMax.IsVisible = !isMax;
             _glyphRestore.IsVisible = isMax;
-            ToolTip.SetTip(_maxButton, isMax ? "Restore" : "Maximize");
+            var maximizeLabel = isMax ? "Restore" : "Maximize";
+            ToolTip.SetTip(_maxButton, maximizeLabel);
+            AutomationProperties.SetName(_maxButton, maximizeLabel);
         }
     }
 
