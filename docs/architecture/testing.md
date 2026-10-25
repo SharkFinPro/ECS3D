@@ -32,7 +32,7 @@ header-only `libs/net/EditToken.h` is reached through the `libs/net` include pat
 `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
 `PROJECT_IS_TOP_LEVEL` and `BUILD_TESTING` together — `BUILD_TESTING` is a cache variable a parent project may
 already have set, so the top-level check is what actually keeps an embedded ECS3D from fetching
-GoogleTest. `gtest_discover_tests` registers every case with CTest, and the `check` target builds the
+GoogleTest. `gtest_discover_tests` registers every case with CTest (see below for the per-suite mode), and the `check` target builds the
 suite and runs it: `cmake --build <build-dir> --target check`. That target is what CI runs too, so a
 defect in it is caught rather than shipped; it passes `--no-tests=error`, since ctest exits 0 on an
 empty test set and would otherwise report green for a suite that registered nothing. It also passes
@@ -41,6 +41,22 @@ Under the `ecs3d-coverage` preset (`ECS3D_COVERAGE`) the same target also leaves
 cobertura output in `<build-dir>/coverage/managed`; the native side is read with gcovr.
 `render/ThumbnailImage.cpp` is also compiled straight into the suite; it needs only stb_image_write.
 VulkanEngine fetches stb, so the suite reads its include directory from the global `stb` FetchContent property.
+
+## Per-suite registration
+
+Under the sanitize and coverage presets each process pays a large fixed startup cost, which dominates when ~2,200
+cases are separate CTest tests. When `ECS3D_TEST_PER_SUITE` is on, `tests/CMakeLists.txt` registers one CTest test
+per GoogleTest suite (`--gtest_filter=<Suite>.*`, brief output) instead of calling `gtest_discover_tests`, and the
+cases of a suite share one process. The option defaults to ON when `ECS3D_SANITIZE` or `ECS3D_COVERAGE` is on and
+OFF otherwise, so IDE test explorers keep per-case entries; pass `-DECS3D_TEST_PER_SUITE=ON` or `OFF` to override.
+
+A post-build step on `ECS3DTests` runs `cmake/RegisterTestSuites.cmake`, which lists the binary with
+`--gtest_list_tests` and writes a CTest file included through `TEST_INCLUDE_FILES`. It skips suites GoogleTest would
+not run (a `DISABLED_` name, or only `DISABLED_` cases) and fails the build if no suite remains. A suite that assumes
+a fresh process per case will fail in this mode, so a test must not depend on state a sibling case leaves behind.
+
+`ECS3DTestSuiteRegistration` is registered in every configuration. It runs the script over a canned listing
+(`cmake/RegisterTestSuitesTest.cmake`), so the parser is proven by the ordinary builds too.
 
 ## Managed suite
 
