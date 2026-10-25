@@ -20,10 +20,12 @@ public class LauncherInvokableMenuItemTests
 
     public bool Enabled { get; init; } = true;
 
+    private EventHandler? _canExecuteChanged;
+
     public event EventHandler? CanExecuteChanged
     {
-      add { }
-      remove { }
+      add => _canExecuteChanged += value;
+      remove => _canExecuteChanged -= value;
     }
 
     public bool CanExecute(object? parameter) => Enabled;
