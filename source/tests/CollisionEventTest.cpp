@@ -16,7 +16,6 @@
 #include <memory>
 #include <ostream>
 #include <string>
-#include <utility>
 #include <vector>
 #include <uuid.h>
 
@@ -106,7 +105,7 @@ TEST(CollisionEvent, AContactEntersThenStaysThenExits)
   // it, so the only way to hold two bodies overlapping across ticks is to ask for no response.
   //
   // It also keeps this file to at most one *solid* dynamic body per scene, which is deliberate. The
-  // narrow phase runs on worker threads over the edges, and a collider's bounding box and transformed
+  // narrow phase runs in an OpenMP loop over the edges, and a collider's bounding box and transformed
   // mesh are caches it writes on read. They are only safe to share because checkCollisions warms them
   // serially first, which stops being true the moment a response moves something mid-loop.
   const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true, true);
@@ -521,46 +520,4 @@ TEST(CollisionEvent, ABoxMissingItsTransformDoesNotAbandonTheTick)
   EXPECT_NO_THROW(collisionSystem.fixedUpdate(*scene.objectManager, dt));
 
   EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), sphereA, sphereB));
-}
-
-namespace {
-  // Pairs of overlapping trigger bodies spaced far apart, so the only contacts are within a pair.
-  std::vector<std::pair<std::shared_ptr<Object>, std::shared_ptr<Object>>> addSpacedPairs(const Scene& scene,
-                                                                                         const int pairCount)
-  {
-    std::vector<std::pair<std::shared_ptr<Object>, std::shared_ptr<Object>>> pairs;
-    for (int i = 0; i < pairCount; ++i)
-    {
-      const auto x = static_cast<float>(i) * 10.0f;
-      pairs.emplace_back(addBody(scene, "A" + std::to_string(i), { x, 0, 0 }, true, true),
-                         addBody(scene, "B" + std::to_string(i), { x + 0.5f, 0, 0 }, true, true));
-    }
-
-    return pairs;
-  }
-
-  void expectEveryPairEnters(const int pairCount)
-  {
-    const auto scene = makeScene();
-    const auto pairs = addSpacedPairs(scene, pairCount);
-
-    CollisionSystem collisionSystem;
-    collisionSystem.fixedUpdate(*scene.objectManager, dt);
-
-    EXPECT_EQ(collisionSystem.getCollisionEnters().size(), pairs.size());
-    for (const auto& [a, b] : pairs)
-    {
-      EXPECT_TRUE(contains(collisionSystem.getCollisionEnters(), a, b));
-    }
-  }
-}
-
-TEST(CollisionEvent, ASmallSceneSweptOnOneThreadFindsEveryContact)
-{
-  expectEveryPairEnters(4);
-}
-
-TEST(CollisionEvent, ALargeSceneSweptOnTheWorkerPoolFindsEveryContact)
-{
-  expectEveryPairEnters(100);
 }

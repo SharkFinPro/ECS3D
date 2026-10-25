@@ -235,7 +235,16 @@ void ServerApp::run()
     // this many ticks' worth of movement.
     constexpr int maxFixedStepsPerFrame = 3;
 
-    const auto plan = FixedTimestep::advance(m_timeAccumulator, dt, m_fixedUpdateDt, maxFixedStepsPerFrame);
+    // Time spent with no one connected is dropped rather than banked, so the first join doesn't replay it.
+    const bool simulating = shouldSimulate(m_netServer->connectionCount());
+    logSimulationChange(simulating);
+    if (!simulating)
+    {
+      m_timeAccumulator = 0.0f;
+    }
+
+    const auto plan = FixedTimestep::advance(m_timeAccumulator, simulating ? dt : 0.0f, m_fixedUpdateDt,
+                                             maxFixedStepsPerFrame);
     m_timeAccumulator = plan.remainingAccumulator;
 
     const bool ticked = plan.steps > 0;
@@ -271,6 +280,18 @@ void ServerApp::run()
     // Don't busy-spin a core between ticks.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
+}
+
+void ServerApp::logSimulationChange(const bool simulating)
+{
+  if (simulating == m_simulating)
+  {
+    return;
+  }
+
+  m_simulating = simulating;
+  Log::info(LogCategory::server, simulating ? "A client connected - simulation resumed."
+                                            : "No clients connected - simulation paused until one joins.");
 }
 
 bool ServerApp::scriptsLive() const

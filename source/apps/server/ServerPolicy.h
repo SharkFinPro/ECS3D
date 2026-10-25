@@ -31,6 +31,13 @@
   return editMode && hasScene && status == SceneStatus::stopped;
 }
 
+// Nobody can see or affect a scene while no one is connected, so the server stops ticking it rather than burning
+// CPU on a simulation no one observes. The scene resumes where it was when the next connection arrives.
+[[nodiscard]] constexpr bool shouldSimulate(const int connectionCount) noexcept
+{
+  return connectionCount > 0;
+}
+
 // What a scene-control op does. The order the steps run in lives in ServerApp::applySceneControl.
 struct SceneControlPlan
 {

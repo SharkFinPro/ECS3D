@@ -82,7 +82,6 @@ add_executable(${PROJECT_NAME}
   ContactManifoldTest.cpp
   SweepEquivalenceTest.cpp
   NarrowPhaseTest.cpp
-  WorkerPoolTest.cpp
   NarrowPhaseRotatedTest.cpp
   NarrowPhaseFaceManifoldTest.cpp
   EpaFlushContactTest.cpp

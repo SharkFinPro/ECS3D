@@ -82,6 +82,9 @@ private:
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
 
+  // Whether the last run() iteration ticked the scene, so the pause and resume are each logged once.
+  bool m_simulating = true;
+
   // For an exitWhenEmpty server: set once the first client has connected, so isActive() only starts
   // applying the "no connections left" exit check after the spawning app has actually connected (and
   // doesn't exit during the launch -> connect window when the count is still 0).
@@ -145,6 +148,8 @@ private:
 
   // Scripts are live from the scene's start until its stop, paused included.
   [[nodiscard]] bool scriptsLive() const;
+
+  void logSimulationChange(bool simulating);
 
   // Starts the scene's scripts, then tells its scene scripts about every player already bound.
   void startSceneScripts(SceneAsset& scene) const;
