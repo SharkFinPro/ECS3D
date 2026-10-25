@@ -236,7 +236,7 @@ void ServerApp::run()
     constexpr int maxFixedStepsPerFrame = 3;
 
     // Time spent with no one connected is dropped rather than banked, so the first join doesn't replay it.
-    const bool simulating = shouldSimulate(m_netServer->connectionCount());
+    const bool simulating = shouldSimulate(m_netServer->connectionCount(), m_options.simulateWhenEmpty);
     logSimulationChange(simulating);
     if (!simulating)
     {

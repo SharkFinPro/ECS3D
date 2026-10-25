@@ -163,7 +163,13 @@ TEST(ServerPolicyTest, ScriptsArePolledOnlyForAStoppedSceneOnAnEditServer)
 
 TEST(ServerPolicy, SimulatesOnlyWhileAClientIsConnected)
 {
-  EXPECT_FALSE(shouldSimulate(0));
-  EXPECT_TRUE(shouldSimulate(1));
-  EXPECT_TRUE(shouldSimulate(8));
+  EXPECT_FALSE(shouldSimulate(0, false));
+  EXPECT_TRUE(shouldSimulate(1, false));
+  EXPECT_TRUE(shouldSimulate(8, false));
+}
+
+TEST(ServerPolicy, SimulateWhenEmptyKeepsAnEmptyServerTicking)
+{
+  EXPECT_TRUE(shouldSimulate(0, true));
+  EXPECT_TRUE(shouldSimulate(1, true));
 }

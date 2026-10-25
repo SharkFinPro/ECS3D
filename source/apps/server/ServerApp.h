@@ -43,6 +43,8 @@ public:
     std::string authToken;
     // Development only: an --edit server that admits any editor without a token.
     bool openEdit = false;
+    // Keep ticking the scene with no one connected, instead of pausing until the next join.
+    bool simulateWhenEmpty = false;
   };
 
   explicit ServerApp(LaunchOptions options);
