@@ -83,12 +83,12 @@ public class LauncherJoinAddressTests
   {
     var found = LanAddresses.From(
     [
-      NoGatewayNic("vEthernet (WSL)", NetworkInterfaceKind.Other, "198.51.100.1"),
+      NoGatewayNic("Docker", NetworkInterfaceKind.Other, "198.51.100.1"),
       Nic("wlan0", NetworkInterfaceKind.Wireless, true, "203.0.113.24"),
     ]);
 
     Assert.Equal("Wi-Fi", found[0].Label);
-    Assert.Equal("vEthernet (WSL)", found[1].Label);
+    Assert.Equal("Docker", found[1].Label);
   }
 
   [Theory]

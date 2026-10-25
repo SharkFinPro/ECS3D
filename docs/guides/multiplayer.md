@@ -54,7 +54,7 @@ ECS3DClient --host 127.0.0.1 --port 3000
 Other players need your machine's address on your local network, and the port. The hosting panel lists the
 addresses it found under "Addresses to share" as `address : port`; Copy puts `address:port` on the clipboard.
 Adapters with a default gateway, such as your Wi-Fi or Ethernet connection, are listed first; virtual adapters from
-VirtualBox, Hyper-V or WSL have none, are listed last, and other computers cannot reach them.
+VirtualBox, Hyper-V or WSL have none, are listed last, and other computers on your network cannot reach them.
 Players on the same network can reach it. If the panel finds no network address, it says so, and only players on
 your own computer can join at 127.0.0.1.
 

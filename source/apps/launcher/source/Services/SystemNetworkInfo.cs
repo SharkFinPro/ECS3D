@@ -17,7 +17,8 @@ public sealed class SystemNetworkInfo : INetworkInfo
                 var properties = item.GetIPProperties();
                 var addresses = properties.UnicastAddresses.Select(address => address.Address).ToList();
                 var kind = KindOf(item.NetworkInterfaceType);
-                var hasGateway = properties.GatewayAddresses.Any(gateway => !gateway.Address.Equals(IPAddress.Any));
+                var hasGateway = properties.GatewayAddresses.Any(gateway =>
+                    !gateway.Address.Equals(IPAddress.Any) && !gateway.Address.Equals(IPAddress.IPv6Any));
                 result.Add(new NetworkInterfaceInfo(item.Name, kind, IsUsable(item), hasGateway, addresses));
             }
             catch (NetworkInformationException)
