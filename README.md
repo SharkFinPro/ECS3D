@@ -117,6 +117,16 @@ The managed suite writes its cobertura report to `cmake-build-ecs3d-coverage/cov
 run the test executable under `Microsoft.CodeCoverage.Console collect "<exe>" --output-format cobertura`.
 CI runs this preset on Linux gcc and uploads the reports as the `coverage-report` artifact.
 
+### Checking Includes
+
+The `ecs3d-includes` preset configures without precompiled headers, which can hide a missing include. Run
+the check after configuring; it compiles every first-party file front end only, and CI does the same:
+
+```bash
+cmake --preset ecs3d-includes
+python3 tools/ci/check_includes.py cmake-build-ecs3d-includes .
+```
+
 ### Profiling
 
 The `ecs3d-profile` preset builds with `RelWithDebInfo`: Release optimization plus full debug info and

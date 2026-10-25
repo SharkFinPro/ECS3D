@@ -52,6 +52,25 @@ TEST(PresetsTest, ProfilePresetIsAnOptimizedBuildWithDebugInfoAndTheProfileOptio
   EXPECT_EQ(cacheVariable(preset, "ECS3D_PROFILE"), "ON");
 }
 
+TEST(PresetsTest, SanitizePresetKeepsPrecompiledHeadersOn)
+{
+  const auto preset = findPreset("ecs3d-sanitize");
+  ASSERT_FALSE(preset.is_null());
+
+  EXPECT_EQ(cacheVariable(preset, "ECS3D_SANITIZE"), "ON");
+  EXPECT_NE(cacheVariable(preset, "ECS3D_PRECOMPILED_HEADERS"), "OFF");
+}
+
+TEST(PresetsTest, IncludesPresetIsADebugBuildWithoutPrecompiledHeaders)
+{
+  const auto preset = findPreset("ecs3d-includes");
+  ASSERT_FALSE(preset.is_null());
+
+  EXPECT_EQ(preset.value("inherits", ""), "ecs3d-base");
+  EXPECT_EQ(cacheVariable(preset, "CMAKE_BUILD_TYPE"), "Debug");
+  EXPECT_EQ(cacheVariable(preset, "ECS3D_PRECOMPILED_HEADERS"), "OFF");
+}
+
 TEST(PresetsTest, ReleasePresetStaysApartFromTheProfilePreset)
 {
   const auto preset = findPreset("ecs3d-release");

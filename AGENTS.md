@@ -54,7 +54,7 @@
 |------|----------------|
 | `.clang-format`, `.editorconfig` | The intended style: 2-space indent, 120 columns, braces on their own line for functions and control flow. **The tree has not been reformatted to match them yet**, so read them as intent. |
 | `CMakeLists.txt` (root) | C++23, `bin/` output when top-level, `include(CTest)`, the `ECS3D_SANITIZE`, `ECS3D_COVERAGE` and `ECS3D_PROFILE` options, Microsoft Visual C++ (MSVC) export-all-symbols. |
-| `CMakePresets.json` | Configure presets `ecs3d-debug`, `-release`, `-sanitize`, `-coverage`, `-profile`, each writing to `cmake-build-<preset>`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
+| `CMakePresets.json` | Configure presets `ecs3d-debug`, `-release`, `-sanitize`, `-includes`, `-coverage`, `-profile`, each writing to `cmake-build-<preset>`. `cmake --preset ecs3d-debug` then `cmake --build cmake-build-ecs3d-debug --target check` is the documented way in. |
 | `source/libs/` | The engine libraries. `libs/CMakeLists.txt` fetches the shared dependencies and the managed-assembly helpers, then adds each library. |
 | `source/libs/log/` | `ECS3DLog` - the `Log` facade, its sinks (console, file, ring buffer, remote), `LogFilter` and the per-user data directory. |
 | `source/libs/protocol/` | `ECS3DNetProtocol` (interface library): `Protocol.h`, the wire format (`MessageType`, `Message`/`MessageReader`, `Role`, ports). |
@@ -70,10 +70,11 @@
 | `source/apps/launcher/` | The standalone C# Avalonia launcher. **Has its own `AGENTS.md`** - treat it as an independent project. |
 | `source/templates/` | Shipped project templates and samples, one folder each. Its `README.md` documents the manifest, the uuid rules and the ground-tile convention; `TemplateValidationTest` checks every folder. |
 | `source/tests/` | `ECS3DTests` (GoogleTest) and `managed/` `ECS3DManagedTests` (xUnit), both registered with CTest. |
+| `tools/ci/` | `check_includes.py`, the CI include check: compiles every first-party file without the precompiled header. |
 | `tools/shapes/` | Python generator for the committed default models and textures in `source/apps/server/defaultAssets/`. |
 | `docs/guides/` | User-facing guides. Keep their claims true to the code when editor or scripting behavior changes. |
 | `docs/architecture/` | Design notes, one topic per file; see the [documentation map](#documentation-map). |
-| `.github/workflows/` | `cmake-multi-platform.yml` builds Release and Debug on Windows (MSVC), Linux (gcc, clang) and macOS (clang) and runs the `check` target, plus sanitizer and coverage rows on Linux. |
+| `.github/workflows/` | `cmake-multi-platform.yml` builds Release and Debug on Windows (MSVC), Linux (gcc, clang) and macOS (clang) and runs the `check` target, plus sanitizer, coverage and include-check rows on Linux. |
 
 ## Build System
 

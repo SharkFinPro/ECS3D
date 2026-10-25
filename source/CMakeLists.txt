@@ -9,8 +9,8 @@ endif()
 # #include count. Each target gets its own PCH because their compile definitions differ (VulkanEngine
 # adds GLM_FORCE_DEPTH_ZERO_TO_ONE and the VULKAN_HPP_* set publicly). windows.h and GLFW stay out:
 # four files define NOMINMAX/WIN32_LEAN_AND_MEAN/GLFW_INCLUDE_NONE before including them.
-# A PCH hides a missing include, so the sanitize preset turns it off and its CI rows still build the
-# suite's libraries on their own includes.
+# A PCH hides a missing include, so the ecs3d-includes preset turns it off and CI's include check
+# compiles every first-party file without it.
 option(ECS3D_PRECOMPILED_HEADERS "Build ECS3D targets with precompiled headers" ON)
 
 if (ECS3D_PRECOMPILED_HEADERS)

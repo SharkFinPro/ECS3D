@@ -33,9 +33,10 @@ multi-file ECS3D target gets its own PCH of the most-included standard and third
 Targets differ in compile definitions (VulkanEngine adds the `GLM_FORCE_*`/`VULKAN_HPP_*` set), so
 they do not share one. `windows.h` and GLFW stay out, since four files define macros before including
 them. A new multi-file target adds itself to that block. Turning the `ECS3D_PRECOMPILED_HEADERS`
-option off disables it. The `ecs3d-sanitize` preset does, so CI still catches a missing include in the
-libraries the test suite builds, though not in render, editor, net, scripting or the apps. **Still
-include what you use** - the PCH is not a substitute.
+option off disables it. The `ecs3d-includes` preset does, and CI's include check
+(`tools/ci/check_includes.py`) compiles every first-party translation unit under it, front end only, so a
+file that leans on the PCH for an include fails there. **Still include what you use** - the PCH is not a
+substitute.
 
 ## CLR host helpers
 
@@ -61,5 +62,8 @@ the flat-shaded models.
 `cmake-multi-platform.yml` — builds Release **and** Debug on Windows (MSVC), Linux (gcc+clang), macOS (clang)
 with the Vulkan SDK, then runs the suite through the `check` target; two more Linux rows (gcc, clang) run the
 `ecs3d-sanitize` preset's suite under ASan+UBSan, and one Linux gcc row runs `ecs3d-coverage` and uploads a
-gcovr/cobertura `coverage-report` artifact. A newer push to a pull request cancels that pull request's previous
+gcovr/cobertura `coverage-report` artifact. One Linux clang row configures `ecs3d-includes` and runs
+`tools/ci/check_includes.py`, which reads `compile_commands.json` and compiles every first-party translation
+unit (libraries, apps and tests; not `_deps` or the launcher) with `-fsyntax-only`, so nothing is built or
+linked. A newer push to a pull request cancels that pull request's previous
 run.

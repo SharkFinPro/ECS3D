@@ -36,6 +36,8 @@ jobs:
       # Sanitize (the ecs3d-sanitize preset: ASan, plus UBSan on gcc/clang) runs on Linux gcc and clang
       # only: MSVC's ASan needs its runtime DLL on PATH and macOS is not worth the flake risk.
       # Coverage (the ecs3d-coverage preset) runs on Linux gcc only and publishes a report artifact.
+      # Includes (the ecs3d-includes preset) runs on Linux clang only: it configures without the precompiled
+      # header and compiles every first-party file front end only, so a missing include fails the row.
       matrix:
         os: [ 'ubuntu-22.04', windows-latest, macos-latest ]
         build_type: [ Release, Debug, Sanitize, Coverage ]
@@ -75,6 +77,13 @@ jobs:
           - os: 'ubuntu-22.04'
             c_compiler: clang
             build_type: Coverage
+          - os: windows-latest
+            build_type: Includes
+          - os: macos-latest
+            build_type: Includes
+          - os: 'ubuntu-22.04'
+            c_compiler: gcc
+            build_type: Includes
 
     steps:
       - uses: actions/checkout@v6
@@ -157,16 +166,23 @@ jobs:
 
       - name: Build
         # Sanitize and Coverage skip the apps: the check target below builds the headless suite it runs.
-        if: ${{ matrix.build_type != 'Sanitize' && matrix.build_type != 'Coverage' }}
+        # Includes builds nothing: its step below only runs the compiler's front end.
+        if: ${{ matrix.build_type != 'Sanitize' && matrix.build_type != 'Coverage' && matrix.build_type != 'Includes' }}
         run: cmake --build ${{ steps.strings.outputs.build_dir }}
 
       - name: Test
+        # Includes produces no binaries to test.
+        if: ${{ matrix.build_type != 'Includes' }}
         # Run the suite through the check target rather than ctest directly, so CI exercises the target
         # developers use - its --test-dir scoping and its config handling included. A defect in check
         # otherwise lands on main green, which is how a broken generator expression in it got through.
         # check carries --output-on-failure and --no-tests=error, the latter being what makes a suite
         # that registers nothing fail instead of pass.
         run: cmake --build ${{ steps.strings.outputs.build_dir }} --target check
+
+      - name: Check includes
+        if: ${{ matrix.build_type == 'Includes' }}
+        run: python3 tools/ci/check_includes.py ${{ steps.strings.outputs.build_dir }} .
 
       - name: Install gcovr
         if: ${{ matrix.build_type == 'Coverage' }}
