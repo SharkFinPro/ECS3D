@@ -67,7 +67,15 @@ protected:
     }
 
     const auto& objectManager = *s_loaded->sceneManager.getCurrentScene()->getObjectManager();
+    recordDominoes(objectManager);
+    recordPyramidAndCradle(objectManager);
+    simulate(objectManager);
 
+    s_simulated = true;
+  }
+
+  static void recordDominoes(const ObjectManager& objectManager)
+  {
     s_first = objectNamedExactly(objectManager, "Domino 1");
     s_second = objectNamedExactly(objectManager, "Domino 2");
     if (s_first != nullptr && s_second != nullptr)
@@ -89,7 +97,10 @@ protected:
     {
       s_sphereStart = fixtures::positionOf(s_sphere);
     }
+  }
 
+  static void recordPyramidAndCradle(const ObjectManager& objectManager)
+  {
     s_cubes = pyramidCubes(objectManager);
     if (!s_cubes.empty())
     {
@@ -107,7 +118,10 @@ protected:
     {
       s_farStart = fixtures::positionOf(s_far);
     }
+  }
 
+  static void simulate(const ObjectManager& objectManager)
+  {
     CollisionSystem collisionSystem;
     for (int step = 0; step < 600; ++step)
     {
@@ -118,8 +132,6 @@ protected:
         s_farthestTravel = std::max(s_farthestTravel, planeTravel(s_far, s_farStart));
       }
     }
-
-    s_simulated = true;
   }
 
   static void TearDownTestSuite()
