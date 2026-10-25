@@ -19,30 +19,32 @@ public sealed class EngineLauncher
     {
         var arguments = new List<string> { "--project", projectFolder };
         AppendEditorOptions(arguments, options);
-        return Launch(EngineExecutable.Editor, arguments, false);
+        return Launch(EngineExecutable.Editor, arguments, false, false);
     }
 
     public LaunchResult ExploreEngine(LaunchOptions options)
     {
         var arguments = new List<string>();
         AppendEditorOptions(arguments, options);
-        return Launch(EngineExecutable.Editor, arguments, false);
+        return Launch(EngineExecutable.Editor, arguments, false, false);
     }
 
     public LaunchResult PlayProject(string projectFolder) =>
-        Launch(EngineExecutable.Client, new List<string> { "--project", projectFolder }, false);
+        Launch(EngineExecutable.Client, new List<string> { "--project", projectFolder }, false, false);
 
     // ECS3DServer is a console application, so it runs with its window hidden.
     public LaunchResult StartServer(string projectFolder, int port) =>
         Launch(
             EngineExecutable.Server,
             new List<string> { "--project", projectFolder, "--port", port.ToString(CultureInfo.InvariantCulture) },
+            true,
             true);
 
     public LaunchResult JoinGame(string address, int port) =>
         Launch(
             EngineExecutable.Client,
             new List<string> { "--host", address, "--port", port.ToString(CultureInfo.InvariantCulture) },
+            false,
             false);
 
     private static void AppendEditorOptions(List<string> arguments, LaunchOptions options)
@@ -58,7 +60,11 @@ public sealed class EngineLauncher
         }
     }
 
-    private LaunchResult Launch(EngineExecutable executable, IReadOnlyList<string> arguments, bool hideWindow)
+    private LaunchResult Launch(
+        EngineExecutable executable,
+        IReadOnlyList<string> arguments,
+        bool hideWindow,
+        bool endWithLauncher)
     {
         if (!_engine.Found.TryGetValue(executable, out var path))
         {
@@ -68,7 +74,8 @@ public sealed class EngineLauncher
 
         try
         {
-            return LaunchResult.Started(_runner.Start(new ProcessLaunch(path, arguments, _engine.Folder, hideWindow)));
+            var launch = new ProcessLaunch(path, arguments, _engine.Folder, hideWindow, endWithLauncher);
+            return LaunchResult.Started(_runner.Start(launch));
         }
         catch (ProcessStartException exception)
         {

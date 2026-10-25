@@ -8,6 +8,9 @@ namespace ECS3DLauncher.Services;
 
 public sealed class SystemProcessRunner : IProcessRunner
 {
+    // Held for the life of the launcher: the OS closes the handle when the launcher dies, which kills the members.
+    private static readonly Lazy<KillOnCloseJob> LauncherJob = new(() => new KillOnCloseJob());
+
     public IRunningProcess Start(ProcessLaunch launch)
     {
         var startInfo = new ProcessStartInfo(launch.FileName)
@@ -26,11 +29,34 @@ public sealed class SystemProcessRunner : IProcessRunner
         {
             var process = Process.Start(startInfo)
                 ?? throw new ProcessStartException($"{launch.FileName} could not be started.");
+            if (launch.EndWithLauncher)
+            {
+                TieToLauncher(process);
+            }
+
             return new SystemRunningProcess(process);
         }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
         {
             throw new ProcessStartException($"{launch.FileName} could not be started: {exception.Message}", exception);
+        }
+    }
+
+    // Best effort: a process that cannot be tied still runs, and the launcher's own Stop paths still end it.
+    private static void TieToLauncher(Process process)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            LauncherJob.Value.Assign(process);
+        }
+        catch (Win32Exception)
+        {
+            // The process exited first, or the OS refused the job; it simply is not tied.
         }
     }
 

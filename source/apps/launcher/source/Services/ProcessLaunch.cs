@@ -6,4 +6,5 @@ public sealed record ProcessLaunch(
     string FileName,
     IReadOnlyList<string> Arguments,
     string WorkingDirectory,
-    bool HideWindow);
+    bool HideWindow,
+    bool EndWithLauncher);
