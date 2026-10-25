@@ -11,6 +11,7 @@ public sealed class KillOnCloseJob : IDisposable
 {
     private const int ExtendedLimitInformationClass = 9;
     private const uint KillOnJobCloseFlag = 0x2000;
+    private const int LimitFlagsOffset = 16;
 
     private readonly IntPtr _handle;
 
@@ -51,17 +52,20 @@ public sealed class KillOnCloseJob : IDisposable
         CloseHandle(_handle);
     }
 
+    // JOBOBJECT_EXTENDED_LIMIT_INFORMATION is written as raw bytes: only LimitFlags, at offset 16 on both
+    // 32-bit and 64-bit Windows, is set, and the structure is 144 bytes on 64-bit and 112 on 32-bit.
     private void SetKillOnClose()
     {
-        var info = new ExtendedLimitInformation
-        {
-            BasicLimits = { LimitFlags = KillOnJobCloseFlag },
-        };
-        var size = Marshal.SizeOf<ExtendedLimitInformation>();
+        var size = IntPtr.Size == 8 ? 144 : 112;
         var buffer = Marshal.AllocHGlobal(size);
         try
         {
-            Marshal.StructureToPtr(info, buffer, false);
+            for (var offset = 0; offset < size; offset++)
+            {
+                Marshal.WriteByte(buffer, offset, 0);
+            }
+
+            Marshal.WriteInt32(buffer, LimitFlagsOffset, unchecked((int)KillOnJobCloseFlag));
             if (!SetInformationJobObject(_handle, ExtendedLimitInformationClass, buffer, (uint)size))
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -87,40 +91,4 @@ public sealed class KillOnCloseJob : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr handle);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BasicLimitInformation
-    {
-        public long PerProcessUserTimeLimit;
-        public long PerJobUserTimeLimit;
-        public uint LimitFlags;
-        public UIntPtr MinimumWorkingSetSize;
-        public UIntPtr MaximumWorkingSetSize;
-        public uint ActiveProcessLimit;
-        public UIntPtr Affinity;
-        public uint PriorityClass;
-        public uint SchedulingClass;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IoCounters
-    {
-        public ulong ReadOperationCount;
-        public ulong WriteOperationCount;
-        public ulong OtherOperationCount;
-        public ulong ReadTransferCount;
-        public ulong WriteTransferCount;
-        public ulong OtherTransferCount;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ExtendedLimitInformation
-    {
-        public BasicLimitInformation BasicLimits;
-        public IoCounters IoInfo;
-        public UIntPtr ProcessMemoryLimit;
-        public UIntPtr JobMemoryLimit;
-        public UIntPtr PeakProcessMemoryUsed;
-        public UIntPtr PeakJobMemoryUsed;
-    }
 }
