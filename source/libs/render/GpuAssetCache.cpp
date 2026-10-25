@@ -9,6 +9,7 @@
 #include <VulkanEngine/components/assets/objects/Model.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
+#include <array>
 #include <cstddef>
 #include <exception>
 #include <stdexcept>
@@ -81,34 +82,106 @@ std::shared_ptr<vke::Texture2D> GpuAssetCache::getTexture(const uuids::uuid& uui
   });
 }
 
+GpuAssetCache::GpuRenderAssets GpuAssetCache::resolveRenderAssets(const uuids::uuid& modelUUID,
+                                                                  const uuids::uuid& textureUUID,
+                                                                  const uuids::uuid& specularMapUUID)
+{
+  return { getModel(modelUUID), getTexture(textureUUID), getTexture(specularMapUUID) };
+}
+
+std::string GpuAssetCache::describeAsset(const uuids::uuid& uuid, const AssetType type) const
+{
+  const auto id = uuids::to_string(uuid);
+
+  if (const auto record = m_assetRegistry->getByUUIDOfType(uuid, type))
+  {
+    return record->path + " (" + id + ")";
+  }
+
+  return id + " (not in the asset registry)";
+}
+
+void GpuAssetCache::reportMissingAssets(const GpuRenderAssets& resolved, const uuids::uuid& modelUUID,
+                                        const uuids::uuid& textureUUID, const uuids::uuid& specularMapUUID)
+{
+  const auto report = [this](const bool missing, const uuids::uuid& uuid, const AssetType type) {
+    if (missing)
+    {
+      m_missingAssets.report(uuids::to_string(uuid), describeAsset(uuid, type));
+    }
+  };
+
+  report(!resolved.model, modelUUID, AssetType::Model);
+  report(!resolved.texture, textureUUID, AssetType::Texture);
+  report(!resolved.specularMap, specularMapUUID, AssetType::Texture);
+}
+
+GpuAssetCache::GpuRenderAssets GpuAssetCache::withMissingPlaceholders(const GpuRenderAssets& resolved)
+{
+  const auto placeholderModel = m_gizmoModels.get("assets/models/missing_model.glb", [this] {
+    return m_renderer->getAssetManager()->loadModel("assets/models/missing_model.glb");
+  });
+  const auto placeholderTexture = m_gizmoTextures.get("assets/textures/missing_texture.png", [this] {
+    return m_renderer->getAssetManager()->loadTexture("assets/textures/missing_texture.png");
+  });
+
+  return withPlaceholders(resolved, placeholderModel, placeholderTexture);
+}
+
+bool GpuAssetCache::hasUUIDs(const CachedRenderObject& cached, const uuids::uuid& modelUUID,
+                             const uuids::uuid& textureUUID, const uuids::uuid& specularMapUUID)
+{
+  return cached.modelUUID == modelUUID && cached.textureUUID == textureUUID &&
+         cached.specularMapUUID == specularMapUUID;
+}
+
+std::shared_ptr<vke::RenderObject> GpuAssetCache::storeRenderObject(const uuids::uuid& ownerUUID,
+                                                                    const std::array<uuids::uuid, 3>& uuids,
+                                                                    const GpuRenderAssets& drawn,
+                                                                    const GpuRenderAssets& resolved)
+{
+  const auto assetManager = m_renderer->getAssetManager();
+  auto renderObject = assetManager->loadRenderObject(drawn.texture, drawn.specularMap, drawn.model);
+
+  if (const auto it = m_renderObjects.find(ownerUUID); it != m_renderObjects.end())
+  {
+    assetManager->release(std::move(it->second.renderObject));
+  }
+
+  m_renderObjects[ownerUUID] = { renderObject, uuids[0], uuids[1], uuids[2], !resolved.complete(), resolved };
+
+  return renderObject;
+}
+
 std::shared_ptr<vke::RenderObject> GpuAssetCache::getRenderObject(const uuids::uuid& ownerUUID,
                                                                  const uuids::uuid& modelUUID,
                                                                  const uuids::uuid& textureUUID,
                                                                  const uuids::uuid& specularMapUUID)
 {
-  if (const auto it = m_renderObjects.find(ownerUUID);
-      it != m_renderObjects.end() &&
-      it->second.modelUUID == modelUUID &&
-      it->second.textureUUID == textureUUID &&
-      it->second.specularMapUUID == specularMapUUID)
+  const auto it = m_renderObjects.find(ownerUUID);
+  const bool sameUUIDs = it != m_renderObjects.end() &&
+                         hasUUIDs(it->second, modelUUID, textureUUID, specularMapUUID);
+
+  if (canReuseWithoutResolving(sameUUIDs, sameUUIDs && it->second.usedPlaceholder))
   {
     return it->second.renderObject;
   }
 
-  const auto model = getModel(modelUUID);
-  const auto texture = getTexture(textureUUID);
-  const auto specularMap = getTexture(specularMapUUID);
+  const auto assets = resolveRenderAssets(modelUUID, textureUUID, specularMapUUID);
+  if (sameUUIDs && canReuseAfterResolving(sameUUIDs, it->second.resolved, assets))
+  {
+    return it->second.renderObject;
+  }
 
-  if (!model || !texture || !specularMap)
+  reportMissingAssets(assets, modelUUID, textureUUID, specularMapUUID);
+
+  const auto drawn = withMissingPlaceholders(assets);
+  if (!drawn.complete())
   {
     return nullptr;
   }
 
-  auto renderObject = m_renderer->getAssetManager()->loadRenderObject(texture, specularMap, model);
-
-  m_renderObjects[ownerUUID] = { renderObject, modelUUID, textureUUID, specularMapUUID };
-
-  return renderObject;
+  return storeRenderObject(ownerUUID, { modelUUID, textureUUID, specularMapUUID }, drawn, assets);
 }
 
 std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::uuid& ownerUUID,
@@ -305,6 +378,7 @@ void GpuAssetCache::applyPendingReset()
     assetManager->release(std::move(entry.second.renderObject));
   }
   m_renderObjects.clear();
+  m_missingAssets.clear();
 
   m_models.drain([&assetManager](std::shared_ptr<vke::Model> model) { assetManager->release(std::move(model)); });
   m_textures.drain([&assetManager](std::shared_ptr<vke::Texture2D> texture) {

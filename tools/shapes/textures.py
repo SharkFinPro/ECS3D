@@ -8,6 +8,7 @@ GRID_HEAVY = (90, 90, 90)
 
 CHECKER_ORANGE = ((255, 150, 50), (200, 90, 15))
 CHECKER_BLUE = ((70, 130, 230), (30, 70, 170))
+CHECKER_MISSING = ((255, 0, 255), (0, 0, 0))
 
 PALETTE = {
     "red": (220, 50, 47),

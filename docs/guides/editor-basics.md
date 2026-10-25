@@ -111,6 +111,8 @@ and type filter chips.
 - The Inspector's Delete Asset button removes an asset after a confirmation. For a scene it also deletes the
   scene's objects and scene scripts; Edit > Undo restores the whole scene. You can't delete the active scene
   or a project's only scene, and scenes can only be deleted while the scene is stopped.
+- An object whose model or texture is missing, for example after its asset was deleted, draws as a magenta and black
+  checker. Undoing the delete or picking another asset brings the real one back.
 
 ## The Console panel
 

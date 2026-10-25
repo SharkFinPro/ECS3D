@@ -218,6 +218,7 @@ add_executable(${PROJECT_NAME}
   WireTruncation.h
   WireTruncationFixtures.h
   MessageQueueTest.cpp
+  MissingAssetFallbackTest.cpp
   TransportLogTest.cpp
   SharedAssetLoadsTest.cpp
   SmokeTest.cpp
