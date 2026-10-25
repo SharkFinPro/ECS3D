@@ -2,6 +2,7 @@
 #define GPUASSETCACHE_H
 
 #include "MissingAssetFallback.h"
+#include <array>
 #include "SharedAssetLoads.h"
 #include <cstddef>
 #include <filesystem>
@@ -114,6 +115,15 @@ private:
 
   void reportMissingAssets(const GpuRenderAssets& resolved, const uuids::uuid& modelUUID,
                            const uuids::uuid& textureUUID, const uuids::uuid& specularMapUUID);
+
+  [[nodiscard]] static bool hasUUIDs(const CachedRenderObject& cached, const uuids::uuid& modelUUID,
+                                     const uuids::uuid& textureUUID, const uuids::uuid& specularMapUUID);
+
+  // uuids is {model, texture, specular map}. Replaces and releases any previous entry for the owner.
+  [[nodiscard]] std::shared_ptr<vke::RenderObject> storeRenderObject(const uuids::uuid& ownerUUID,
+                                                                     const std::array<uuids::uuid, 3>& uuids,
+                                                                     const GpuRenderAssets& drawn,
+                                                                     const GpuRenderAssets& resolved);
 
   [[nodiscard]] GpuRenderAssets withMissingPlaceholders(const GpuRenderAssets& resolved);
 

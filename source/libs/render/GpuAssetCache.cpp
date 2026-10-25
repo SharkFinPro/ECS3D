@@ -9,6 +9,7 @@
 #include <VulkanEngine/components/assets/objects/Model.h>
 #include <VulkanEngine/components/assets/objects/RenderObject.h>
 #include <VulkanEngine/components/assets/textures/Texture2D.h>
+#include <array>
 #include <cstddef>
 #include <exception>
 #include <stdexcept>
@@ -127,25 +128,47 @@ GpuAssetCache::GpuRenderAssets GpuAssetCache::withMissingPlaceholders(const GpuR
   return withPlaceholders(resolved, placeholderModel, placeholderTexture);
 }
 
+bool GpuAssetCache::hasUUIDs(const CachedRenderObject& cached, const uuids::uuid& modelUUID,
+                             const uuids::uuid& textureUUID, const uuids::uuid& specularMapUUID)
+{
+  return cached.modelUUID == modelUUID && cached.textureUUID == textureUUID &&
+         cached.specularMapUUID == specularMapUUID;
+}
+
+std::shared_ptr<vke::RenderObject> GpuAssetCache::storeRenderObject(const uuids::uuid& ownerUUID,
+                                                                    const std::array<uuids::uuid, 3>& uuids,
+                                                                    const GpuRenderAssets& drawn,
+                                                                    const GpuRenderAssets& resolved)
+{
+  const auto assetManager = m_renderer->getAssetManager();
+  auto renderObject = assetManager->loadRenderObject(drawn.texture, drawn.specularMap, drawn.model);
+
+  if (const auto it = m_renderObjects.find(ownerUUID); it != m_renderObjects.end())
+  {
+    assetManager->release(std::move(it->second.renderObject));
+  }
+
+  m_renderObjects[ownerUUID] = { renderObject, uuids[0], uuids[1], uuids[2], !resolved.complete(), resolved };
+
+  return renderObject;
+}
+
 std::shared_ptr<vke::RenderObject> GpuAssetCache::getRenderObject(const uuids::uuid& ownerUUID,
                                                                  const uuids::uuid& modelUUID,
                                                                  const uuids::uuid& textureUUID,
                                                                  const uuids::uuid& specularMapUUID)
 {
   const auto it = m_renderObjects.find(ownerUUID);
-  const bool sameAssets = it != m_renderObjects.end() &&
-                          it->second.modelUUID == modelUUID &&
-                          it->second.textureUUID == textureUUID &&
-                          it->second.specularMapUUID == specularMapUUID;
+  const bool sameUUIDs = it != m_renderObjects.end() &&
+                         hasUUIDs(it->second, modelUUID, textureUUID, specularMapUUID);
 
-  if (sameAssets && !it->second.usedPlaceholder)
+  if (canReuseWithoutResolving(sameUUIDs, sameUUIDs && it->second.usedPlaceholder))
   {
     return it->second.renderObject;
   }
 
-  // An entry showing a placeholder is rebuilt when a real asset resolves later, for example after an undone delete.
   const auto assets = resolveRenderAssets(modelUUID, textureUUID, specularMapUUID);
-  if (sameAssets && assets == it->second.resolved)
+  if (sameUUIDs && canReuseAfterResolving(sameUUIDs, it->second.resolved, assets))
   {
     return it->second.renderObject;
   }
@@ -153,22 +176,12 @@ std::shared_ptr<vke::RenderObject> GpuAssetCache::getRenderObject(const uuids::u
   reportMissingAssets(assets, modelUUID, textureUUID, specularMapUUID);
 
   const auto drawn = withMissingPlaceholders(assets);
-  if (!drawn.model || !drawn.texture || !drawn.specularMap)
+  if (!drawn.complete())
   {
     return nullptr;
   }
 
-  const bool usedPlaceholder = !assets.model || !assets.texture || !assets.specularMap;
-  auto renderObject = m_renderer->getAssetManager()->loadRenderObject(drawn.texture, drawn.specularMap, drawn.model);
-
-  if (it != m_renderObjects.end())
-  {
-    m_renderer->getAssetManager()->release(std::move(it->second.renderObject));
-  }
-
-  m_renderObjects[ownerUUID] = { renderObject, modelUUID, textureUUID, specularMapUUID, usedPlaceholder, assets };
-
-  return renderObject;
+  return storeRenderObject(ownerUUID, { modelUUID, textureUUID, specularMapUUID }, drawn, assets);
 }
 
 std::shared_ptr<vke::RenderObject> GpuAssetCache::getColliderGizmo(const uuids::uuid& ownerUUID,

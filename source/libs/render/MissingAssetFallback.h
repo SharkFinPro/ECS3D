@@ -13,7 +13,28 @@ struct RenderAssets {
   std::shared_ptr<Texture> specularMap;
 
   [[nodiscard]] bool operator==(const RenderAssets&) const = default;
+
+  [[nodiscard]] bool complete() const
+  {
+    return model && texture && specularMap;
+  }
 };
+
+// A cached entry for the same uuids that showed no placeholder has nothing better to wait for, so it is reused
+// without resolving the assets again.
+[[nodiscard]] inline bool canReuseWithoutResolving(const bool sameUUIDs, const bool usedPlaceholder)
+{
+  return sameUUIDs && !usedPlaceholder;
+}
+
+// A placeholder entry is reused only while the uuids still resolve to what they did, so a real asset arriving
+// (for example after an undone delete) rebuilds it.
+template <typename Model, typename Texture>
+[[nodiscard]] bool canReuseAfterResolving(const bool sameUUIDs, const RenderAssets<Model, Texture>& cachedResolved,
+                                          const RenderAssets<Model, Texture>& nowResolved)
+{
+  return sameUUIDs && cachedResolved == nowResolved;
+}
 
 // Fills each missing slot with a placeholder. A missing model draws the placeholder model wearing the placeholder
 // texture, so it reads as missing whatever its own texture is. A placeholder that is itself null leaves its slot null.

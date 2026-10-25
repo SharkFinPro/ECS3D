@@ -127,3 +127,47 @@ TEST_F(MissingAssetFallbackTest, ClearLetsAKeyLogAgain)
   missing.report("a", "first");
   EXPECT_EQ(m_sink->snapshot().size(), 2u);
 }
+
+TEST_F(MissingAssetFallbackTest, CompleteNeedsEverySlot)
+{
+  EXPECT_TRUE((Assets{ m_model, m_texture, m_specular }.complete()));
+  EXPECT_FALSE((Assets{ nullptr, m_texture, m_specular }.complete()));
+  EXPECT_FALSE((Assets{ m_model, nullptr, m_specular }.complete()));
+  EXPECT_FALSE((Assets{ m_model, m_texture, nullptr }.complete()));
+}
+
+TEST_F(MissingAssetFallbackTest, AnEntryWithoutPlaceholdersIsReusedWithoutResolving)
+{
+  EXPECT_TRUE(canReuseWithoutResolving(true, false));
+  EXPECT_FALSE(canReuseWithoutResolving(false, false));
+}
+
+TEST_F(MissingAssetFallbackTest, AnEntryThatUsedAPlaceholderMustResolveAgain)
+{
+  EXPECT_FALSE(canReuseWithoutResolving(true, true));
+  EXPECT_FALSE(canReuseWithoutResolving(false, true));
+}
+
+TEST_F(MissingAssetFallbackTest, APlaceholderEntryIsReusedWhileNothingResolvesDifferently)
+{
+  const Assets cached{ nullptr, m_texture, m_specular };
+
+  EXPECT_TRUE(canReuseAfterResolving(true, cached, Assets{ nullptr, m_texture, m_specular }));
+}
+
+TEST_F(MissingAssetFallbackTest, APlaceholderEntryIsRebuiltWhenARealAssetResolves)
+{
+  const Assets cached{ nullptr, m_texture, m_specular };
+
+  EXPECT_FALSE(canReuseAfterResolving(true, cached, Assets{ m_model, m_texture, m_specular }));
+  EXPECT_FALSE(canReuseAfterResolving(true, Assets{ m_model, nullptr, m_specular },
+                                      Assets{ m_model, m_texture, m_specular }));
+}
+
+TEST_F(MissingAssetFallbackTest, DifferentUUIDsAlwaysRebuild)
+{
+  const Assets cached{ nullptr, m_texture, m_specular };
+
+  EXPECT_TRUE(canReuseAfterResolving(true, cached, cached));
+  EXPECT_FALSE(canReuseAfterResolving(false, cached, cached));
+}
