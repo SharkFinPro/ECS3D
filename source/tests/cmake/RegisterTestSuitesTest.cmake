@@ -1,4 +1,4 @@
-# Checks RegisterTestSuites.cmake against a canned `--gtest_list_tests` listing.
+# Checks RegisterTestSuites.cmake against canned `--gtest_list_tests` listings.
 #
 # Run with -P. Inputs (-D): REGISTER_SCRIPT (the script under test) and WORK_DIR (scratch directory).
 
@@ -8,6 +8,9 @@ endif()
 
 file(MAKE_DIRECTORY "${WORK_DIR}")
 
+string(ASCII 92 bs)
+
+# The comments carry list separators, brackets, quotes and a trailing backslash.
 set(listing
 "Running main() from /build/_deps/googletest-src/googletest/src/gtest_main.cc
 PlainSuite.
@@ -16,10 +19,15 @@ PlainSuite.
 Library/ShapeDrop.  # TypeParam =
   Falls/0  # GetParam() = (8, 0)
   Falls/1  # GetParam() = (16, 1)
+  Falls/2  # GetParam() = (\"a;b\", [x], 'q', C:${bs}dir${bs}
 Typed/0.  # TypeParam = float
   Works
 Typed/1.  # TypeParam = int
   Works
+OFF.
+  Case
+NO.
+  Case
 DISABLED_Whole.
   Case
 Mixed.
@@ -50,49 +58,73 @@ function(run_script listingText outName)
   set(scriptOutput "${out}${err}" PARENT_SCOPE)
 endfunction()
 
-run_script("${listing}" suites.cmake)
-if(NOT scriptResult EQUAL 0)
-  message(FATAL_ERROR "The script failed on a valid listing: ${scriptOutput}")
-endif()
+function(expect_registered label listingText)
+  run_script("${listingText}" suites.cmake)
+  if(NOT scriptResult EQUAL 0)
+    message(FATAL_ERROR "[${label}] The script failed on a valid listing: ${scriptOutput}")
+  endif()
 
-file(READ "${WORK_DIR}/suites.cmake" generated)
+  file(READ "${WORK_DIR}/suites.cmake" generated)
 
-set(expectedSuites PlainSuite Library/ShapeDrop Typed/0 Typed/1 Mixed)
-foreach(suite IN LISTS expectedSuites)
-  set(expectedLine
-    "add_test([==[${suite}]==] [==[/path/to/ECS3DTests]==] [==[--gtest_filter=${suite}.*]==] [==[--gtest_brief=1]==])\n")
-  string(FIND "${generated}" "${expectedLine}" position)
+  set(expectedSuites PlainSuite Library/ShapeDrop Typed/0 Typed/1 OFF NO Mixed)
+  foreach(suite IN LISTS expectedSuites)
+    set(expectedLine
+      "add_test([==[${suite}]==] [==[/path/to/ECS3DTests]==] [==[--gtest_filter=${suite}.*]==] [==[--gtest_brief=1]==])\n")
+    string(FIND "${generated}" "${expectedLine}" position)
+    if(position EQUAL -1)
+      message(FATAL_ERROR "[${label}] Missing registration for ${suite} in:\n${generated}")
+    endif()
+  endforeach()
+
+  string(FIND "${generated}" "WORKING_DIRECTORY [==[/path/to/work dir]==]" position)
   if(position EQUAL -1)
-    message(FATAL_ERROR "Missing registration for ${suite} in:\n${generated}")
+    message(FATAL_ERROR "[${label}] Missing working directory in:\n${generated}")
   endif()
-endforeach()
 
-string(FIND "${generated}" "WORKING_DIRECTORY [==[/path/to/work dir]==]" position)
-if(position EQUAL -1)
-  message(FATAL_ERROR "Missing working directory in:\n${generated}")
-endif()
-
-# The count is the positive control: it fails whether the parser returns everything or nothing.
-string(REGEX MATCHALL "add_test[(]" registrations "${generated}")
-list(LENGTH registrations registrationCount)
-list(LENGTH expectedSuites expectedCount)
-if(NOT registrationCount EQUAL expectedCount)
-  message(FATAL_ERROR "Expected ${expectedCount} registrations, got ${registrationCount}:\n${generated}")
-endif()
-
-foreach(absent DISABLED_Whole OnlyDisabledCases Inner Banner main gtest_main)
-  string(FIND "${generated}" "${absent}" position)
-  if(NOT position EQUAL -1)
-    message(FATAL_ERROR "${absent} must not be registered:\n${generated}")
+  # The count is the positive control: it fails whether the parser returns everything or nothing.
+  string(REGEX MATCHALL "add_test[(]" registrations "${generated}")
+  list(LENGTH registrations registrationCount)
+  list(LENGTH expectedSuites expectedCount)
+  if(NOT registrationCount EQUAL expectedCount)
+    message(FATAL_ERROR "[${label}] Expected ${expectedCount} registrations, got ${registrationCount}:\n${generated}")
   endif()
-endforeach()
 
-foreach(emptyListing "" "Running main() from gtest_main.cc\n" "DISABLED_Only.\n  Case\n")
-  run_script("${emptyListing}" empty.cmake)
+  # Case names and disabled suites must not become suites of their own.
+  foreach(absent DISABLED_Whole OnlyDisabledCases Inner Falls First)
+    string(FIND "${generated}" "[==[${absent}" position)
+    if(NOT position EQUAL -1)
+      message(FATAL_ERROR "[${label}] ${absent} must not be registered:\n${generated}")
+    endif()
+  endforeach()
+endfunction()
+
+function(expect_failure label listingText reason)
+  run_script("${listingText}" failed.cmake)
   if(scriptResult EQUAL 0)
-    message(FATAL_ERROR "The script accepted a listing with no runnable suites: [${emptyListing}]")
+    message(FATAL_ERROR "[${label}] The script accepted a bad listing")
   endif()
-  if(EXISTS "${WORK_DIR}/empty.cmake")
-    message(FATAL_ERROR "A failed run left an output file behind")
+  string(FIND "${scriptOutput}" "${reason}" position)
+  if(position EQUAL -1)
+    message(FATAL_ERROR "[${label}] The error does not mention '${reason}':\n${scriptOutput}")
   endif()
-endforeach()
+  if(EXISTS "${WORK_DIR}/failed.cmake")
+    message(FATAL_ERROR "[${label}] A failed run left an output file behind")
+  endif()
+endfunction()
+
+expect_registered("lf" "${listing}")
+
+string(REPLACE "\n" "\r\n" crlfListing "${listing}")
+expect_registered("crlf" "${crlfListing}")
+
+string(REGEX REPLACE "\n$" "" noNewlineListing "${listing}")
+expect_registered("no trailing newline" "${noNewlineListing}")
+
+expect_failure("empty" "" "No runnable")
+expect_failure("banner only" "Running main() from gtest_main.cc\n" "No runnable")
+expect_failure("disabled only" "DISABLED_Only.\n  Case\n" "No runnable")
+
+expect_failure("stray word" "Stray line\nPlainSuite.\n  Case\n" "Stray line")
+expect_failure("short token" "PlainSuite.\n  Case\nOk\n" "Ok")
+expect_failure("bracketed line" "PlainSuite.\n  Case\n[info] x\n" "info")
+expect_failure("bad header" "PlainSuite.\n  Case\nBad-Name.\n  Case\n" "Bad-Name")

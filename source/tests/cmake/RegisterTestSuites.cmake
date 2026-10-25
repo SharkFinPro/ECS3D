@@ -9,6 +9,8 @@
 
 # Returns the names of the suites that have at least one test GoogleTest will run. A suite whose name or
 # cases are all DISABLED_ is left out: a filter matching only disabled tests runs nothing and passes.
+# An unindented line that is neither a suite header nor gtest_main's banner is an error, because skipping
+# an unparseable header would credit its cases to the previous suite.
 function(ecs3d_parse_test_suites LISTING OUT_VAR)
   # Comments such as "# GetParam() = (8, 0)" can hold list separators, so they go first.
   string(REGEX REPLACE "[ \t]+#[^\n]*" "" text "${LISTING}")
@@ -16,37 +18,48 @@ function(ecs3d_parse_test_suites LISTING OUT_VAR)
   string(REPLACE ";" "_" text "${text}")
   string(REPLACE "[" "_" text "${text}")
   string(REPLACE "]" "_" text "${text}")
+  string(REPLACE "\\" "_" text "${text}")
   string(REPLACE "\n" ";" lines "${text}")
 
   set(suites "")
   set(current "")
+  set(haveSuite FALSE)
   set(hasEnabledCase FALSE)
 
   foreach(line IN LISTS lines)
     string(REGEX REPLACE "[ \t]+$" "" line "${line}")
 
-    if(line MATCHES "^([A-Za-z0-9_/]+)\.$")
-      if(current AND hasEnabledCase)
+    if(line STREQUAL "")
+      continue()
+    endif()
+
+    if(line MATCHES "^[ \t]")
+      if(haveSuite AND line MATCHES "^[ \t]+([A-Za-z0-9_/]+)$")
+        if(NOT CMAKE_MATCH_1 MATCHES "^DISABLED_")
+          set(hasEnabledCase TRUE)
+        endif()
+      endif()
+    elseif(line MATCHES "^([A-Za-z0-9_/]+)\\.$")
+      if(haveSuite AND hasEnabledCase)
         list(APPEND suites "${current}")
       endif()
 
       set(current "${CMAKE_MATCH_1}")
+      set(haveSuite TRUE)
       set(hasEnabledCase FALSE)
 
       string(REPLACE "/" ";" components "${current}")
       foreach(component IN LISTS components)
         if(component MATCHES "^DISABLED_")
-          set(current "")
+          set(haveSuite FALSE)
         endif()
       endforeach()
-    elseif(line MATCHES "^[ \t]+([A-Za-z0-9_/]+)$" AND current)
-      if(NOT CMAKE_MATCH_1 MATCHES "^DISABLED_")
-        set(hasEnabledCase TRUE)
-      endif()
+    elseif(NOT line MATCHES "^Running main\\(\\) from ")
+      message(FATAL_ERROR "Unrecognized line in the GoogleTest listing: [${line}]")
     endif()
   endforeach()
 
-  if(current AND hasEnabledCase)
+  if(haveSuite AND hasEnabledCase)
     list(APPEND suites "${current}")
   endif()
 

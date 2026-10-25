@@ -85,7 +85,8 @@ sanitizer options set before it starts. Treat an app crash under this preset as 
 setup, not as a finding, until the suite itself is clean.
 
 CI runs this preset's `check` target on Linux with both gcc and clang. Under this preset each GoogleTest suite
-runs as one process, so a failing CTest entry names the suite and its output names the failing case.
+runs as one process. For an assertion failure the CTest entry names the suite and its output names the failing
+case; a crash, or a LeakSanitizer report at exit, fails the whole suite's entry.
 
 Two things to know before the first run:
 
