@@ -303,6 +303,23 @@ TEST(ObjectNameField, AnIdleFieldFollowsTheObjectsName)
   EXPECT_TRUE(driver.sent().empty());
 }
 
+TEST(ObjectNameField, TheFieldShowsTheOldNameAgainAfterAnUndoOfItsOwnRename)
+{
+  FieldDriver driver(sunUUID(), "Sun");
+
+  driver.type("ny");
+  driver.leaveField();
+  driver.serverRenames("Sunny");
+  driver.idleFrame();
+  EXPECT_EQ(driver.buffer(), "Sunny");
+
+  driver.serverRenames("Sun");
+  driver.idleFrame();
+
+  EXPECT_EQ(driver.buffer(), "Sun");
+  EXPECT_EQ(driver.sent().size(), 1u);
+}
+
 TEST(ObjectNameField, AnActiveFieldIsNeverOverwritten)
 {
   FieldDriver driver(sunUUID(), "Sun");
