@@ -49,8 +49,11 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
       # -fno-sanitize-recover is what makes UBSan mean anything here: its default is to print and carry
       # on, so a suite run under the preset would report every finding and still exit 0.
+      # -O1 keeps instrumented physics fast, and -fno-optimize-sibling-calls keeps stack traces complete.
+      # Optimizing turns _FORTIFY_SOURCE on in some distributions, and its libc wrappers hide calls ASan
+      # intercepts. The build stays Debug, so assert() stays live.
       add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined
-                          -fno-omit-frame-pointer)
+                          -fno-omit-frame-pointer -O1 -fno-optimize-sibling-calls -U_FORTIFY_SOURCE)
       add_link_options(-fsanitize=address,undefined)
     else()
       message(WARNING "ECS3D_SANITIZE is on but ${CMAKE_CXX_COMPILER_ID} has no sanitizer flags here; building without them.")

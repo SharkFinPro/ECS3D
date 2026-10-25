@@ -105,6 +105,7 @@ add_executable(${PROJECT_NAME}
   ScriptFieldLabelTest.cpp
   AttachedScriptsTest.cpp
   ScriptClassAssetsTest.cpp
+  SanitizeBuildTest.cpp
   ScriptSystemLifecycleTest.cpp
   ScriptSystemSceneScriptTest.cpp
   ScriptSystemSceneEventsTest.cpp

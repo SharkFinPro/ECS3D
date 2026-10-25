@@ -72,7 +72,8 @@ cd cmake-build-ecs3d-debug/bin
 ### Building with Sanitizers
 
 The `ecs3d-sanitize` preset is `ecs3d-debug` plus AddressSanitizer, and UndefinedBehaviorSanitizer on the
-toolchains that have it (Clang and GCC; MSVC ships ASan only):
+toolchains that have it (Clang and GCC; MSVC ships ASan only). GCC and Clang code is compiled at -O1 so
+instrumented physics stays fast, and the build stays a Debug build so asserts are live:
 
 ```bash
 cmake --preset ecs3d-sanitize
