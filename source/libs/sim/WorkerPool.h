@@ -23,6 +23,7 @@ public:
 
   // Calls body(i) once for every i in [0, count), handing out chunkSize indices at a time, and returns when
   // all are done. The first exception a body throws is rethrown here once the other threads have stopped.
+  // Not reentrant and not thread-safe: one job at a time, from one thread, and a body must not call it.
   void parallelFor(size_t count, size_t chunkSize, const std::function<void(size_t)>& body);
 
 private:
