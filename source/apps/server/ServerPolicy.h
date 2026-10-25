@@ -31,6 +31,13 @@
   return editMode && hasScene && status == SceneStatus::stopped;
 }
 
+// Nobody can see or affect a scene while no one is connected, so by default the server stops ticking it rather
+// than burning CPU on a simulation no one observes. --simulate-when-empty keeps a dedicated server's world running.
+[[nodiscard]] constexpr bool shouldSimulate(const int connectionCount, const bool simulateWhenEmpty) noexcept
+{
+  return simulateWhenEmpty || connectionCount > 0;
+}
+
 // What a scene-control op does. The order the steps run in lives in ServerApp::applySceneControl.
 struct SceneControlPlan
 {

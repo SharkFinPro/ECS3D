@@ -21,6 +21,7 @@ namespace
   // main generates one for an --edit server given none. --open-edit implies --edit and skips that, so any
   // editor may edit (development only); an explicit --token still applies.
   // An empty project runs the built-in sample (Welcome and the demo scenes); --project loads a file.
+  // --simulate-when-empty keeps the scene ticking with no one connected; by default it pauses until a join.
   ServerApp::LaunchOptions parseOptions(const int argc, char** argv)
   {
     ServerApp::LaunchOptions options;
@@ -50,6 +51,10 @@ namespace
       {
         options.editMode = true;
         options.openEdit = true;
+      }
+      else if (arg == "--simulate-when-empty")
+      {
+        options.simulateWhenEmpty = true;
       }
       else if (isValueFlag(arg, "--token", i, argc))
       {

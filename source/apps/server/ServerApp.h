@@ -43,6 +43,8 @@ public:
     std::string authToken;
     // Development only: an --edit server that admits any editor without a token.
     bool openEdit = false;
+    // Keep ticking the scene with no one connected, instead of pausing until the next join.
+    bool simulateWhenEmpty = false;
   };
 
   explicit ServerApp(LaunchOptions options);
@@ -81,6 +83,9 @@ private:
   std::chrono::steady_clock::time_point m_previousTime;
   const float m_fixedUpdateDt = 1.0f / 50.0f;
   float m_timeAccumulator = 0.0f;
+
+  // Whether the last run() iteration ticked the scene, so the pause and resume are each logged once.
+  bool m_simulating = true;
 
   // For an exitWhenEmpty server: set once the first client has connected, so isActive() only starts
   // applying the "no connections left" exit check after the spawning app has actually connected (and
@@ -145,6 +150,8 @@ private:
 
   // Scripts are live from the scene's start until its stop, paused included.
   [[nodiscard]] bool scriptsLive() const;
+
+  void logSimulationChange(bool simulating);
 
   // Starts the scene's scripts, then tells its scene scripts about every player already bound.
   void startSceneScripts(SceneAsset& scene) const;

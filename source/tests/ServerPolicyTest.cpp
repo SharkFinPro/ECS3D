@@ -160,3 +160,16 @@ TEST(ServerPolicyTest, ScriptsArePolledOnlyForAStoppedSceneOnAnEditServer)
   EXPECT_FALSE(shouldPollScriptsWhileStopped(false, true, SceneStatus::stopped));
   EXPECT_FALSE(shouldPollScriptsWhileStopped(true, false, SceneStatus::stopped));
 }
+
+TEST(ServerPolicy, SimulatesOnlyWhileAClientIsConnected)
+{
+  EXPECT_FALSE(shouldSimulate(0, false));
+  EXPECT_TRUE(shouldSimulate(1, false));
+  EXPECT_TRUE(shouldSimulate(8, false));
+}
+
+TEST(ServerPolicy, SimulateWhenEmptyKeepsAnEmptyServerTicking)
+{
+  EXPECT_TRUE(shouldSimulate(0, true));
+  EXPECT_TRUE(shouldSimulate(1, true));
+}
