@@ -18,6 +18,7 @@ ASSETS = os.path.join(ROOT, "source", "apps", "server", "defaultAssets")
 MODELS = {
     "capsule": primitives.capsule,
     "ramp": primitives.ramp,
+    "missing_model": primitives.missing_cube,
     "plane_tile": primitives.plane_tile,
     "torus": primitives.torus,
     "d4": library.d4,
@@ -43,6 +44,7 @@ def main():
     textures.grid_checker(os.path.join(tex, "grid_checker.png"))
     textures.checker(os.path.join(tex, "checker_orange.png"), textures.CHECKER_ORANGE)
     textures.checker(os.path.join(tex, "checker_blue.png"), textures.CHECKER_BLUE)
+    textures.checker(os.path.join(tex, "missing_texture.png"), textures.CHECKER_MISSING)
     for name, color in textures.PALETTE.items():
         textures.solid(os.path.join(tex, "palette_%s.png" % name), color)
 

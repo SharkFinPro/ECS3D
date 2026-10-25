@@ -92,3 +92,19 @@ def ramp():
         [a, b, e],
         [d, c, f],
     ])
+
+
+def missing_cube():
+    """Cube spanning -1 to 1 with 0-1 UVs on every face, so a checker reads on all six sides."""
+    faces = []
+    for axis in range(3):
+        for sign in (-1.0, 1.0):
+            face = []
+            for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                p = [0.0, 0.0, 0.0]
+                p[axis] = sign
+                p[(axis + 1) % 3] = float(a)
+                p[(axis + 2) % 3] = float(b)
+                face.append(tuple(p))
+            faces.append(face)
+    return flat_faces(faces)

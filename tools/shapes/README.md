@@ -13,7 +13,7 @@ generator twice produces identical bytes. Re-run it and commit the result whenev
 - `glb.py` - one-mesh `.glb` writer (positions, normals, UVs, 16 or 32 bit indices) that refuses a triangle
   wound against its normals. `flat_faces` turns convex polygons into a flat-shaded mesh (one normal per face,
   vertices duplicated per face).
-- `primitives.py` - `capsule`, `ramp`, `plane_tile`, `torus`.
+- `primitives.py` - `capsule`, `ramp`, `plane_tile`, `torus`, `missing_cube`.
 - `textures.py` - the PNG writer and texture definitions.
 - `library.py` - the convex shape library (D4, D8, D12, D20, Hex Prism, Drum, Gem, Boulder): the vertex
   formulas, a brute-force convex hull for small point sets that merges coplanar triangles into polygons, and
@@ -40,7 +40,11 @@ generator twice produces identical bytes. Re-run it and commit the result whenev
 | `palette_purple` | 140, 70, 200 |
 | `checker_orange` | 255, 150, 50 and 200, 90, 15 |
 | `checker_blue` | 70, 130, 230 and 30, 70, 170 |
+| `missing_texture` | 255, 0, 255 and 0, 0, 0 |
 | `grid_checker` | background 214; thin lines 150; heavy lines (every 4 cells) 90 |
+
+`missing_model.glb` and `missing_texture.png` are the renderer's placeholders for a model or texture that is not
+on disk. They are never registered in a project, so they are not listed or selectable as project assets.
 
 ## Ground tiles
 
