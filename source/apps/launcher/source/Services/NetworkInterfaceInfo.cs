@@ -15,4 +15,5 @@ public sealed record NetworkInterfaceInfo(
     string Name,
     NetworkInterfaceKind Kind,
     bool IsUp,
+    bool HasGateway,
     IReadOnlyList<IPAddress> Addresses);

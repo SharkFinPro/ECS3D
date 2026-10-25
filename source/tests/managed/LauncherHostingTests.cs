@@ -36,7 +36,7 @@ public class LauncherHostingTests
     {
       _launcher.AddEngine(LauncherRig.LauncherDir, missing);
       Network.Interfaces.Add(new NetworkInterfaceInfo(
-        "wlan0", NetworkInterfaceKind.Wireless, true, [Wifi]));
+        "wlan0", NetworkInterfaceKind.Wireless, true, true, [Wifi]));
       Main = NewMain();
     }
 
@@ -154,6 +154,20 @@ public class LauncherHostingTests
     Assert.Equal("Hosting Alpha", rig.Hosting.Panel!.Title);
     Assert.False(rig.Hosting.IsStarting);
     Assert.Null(rig.Toast);
+  }
+
+  [Fact]
+  public void VirtualAdaptersWithoutAGatewayDoNotLeadThePillOrTheRows()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Network.Interfaces.Insert(0, new NetworkInterfaceInfo(
+      "VirtualBox Host-Only Network", NetworkInterfaceKind.Ethernet, true, false,
+      [new IPAddress(new byte[] { 192, 0, 2, 1 })]));
+
+    rig.Host(Alpha);
+
+    Assert.Equal("192.168.1.24 : 3000", rig.Hosting.PillAddress);
+    Assert.Equal("192.0.2.1 : 3000", rig.Hosting.Panel!.Addresses[^1].Text);
   }
 
   [Fact]
@@ -293,9 +307,9 @@ public class LauncherHostingTests
   {
     var rig = new Rig().ListenAfterFirstWait();
     rig.Network.Interfaces.Add(new NetworkInterfaceInfo(
-      "eth0", NetworkInterfaceKind.Ethernet, true, [Wired]));
+      "eth0", NetworkInterfaceKind.Ethernet, true, true, [Wired]));
     rig.Network.Interfaces.Add(new NetworkInterfaceInfo(
-      "lo", NetworkInterfaceKind.Loopback, true, [IPAddress.Loopback]));
+      "lo", NetworkInterfaceKind.Loopback, true, false, [IPAddress.Loopback]));
 
     rig.Host(Alpha);
 

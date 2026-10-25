@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.NetworkInformation;
 
 namespace ECS3DLauncher.Services;
@@ -13,9 +14,11 @@ public sealed class SystemNetworkInfo : INetworkInfo
         {
             try
             {
-                var addresses = item.GetIPProperties().UnicastAddresses.Select(address => address.Address).ToList();
+                var properties = item.GetIPProperties();
+                var addresses = properties.UnicastAddresses.Select(address => address.Address).ToList();
                 var kind = KindOf(item.NetworkInterfaceType);
-                result.Add(new NetworkInterfaceInfo(item.Name, kind, IsUsable(item), addresses));
+                var hasGateway = properties.GatewayAddresses.Any(gateway => !gateway.Address.Equals(IPAddress.Any));
+                result.Add(new NetworkInterfaceInfo(item.Name, kind, IsUsable(item), hasGateway, addresses));
             }
             catch (NetworkInformationException)
             {
