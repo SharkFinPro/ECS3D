@@ -48,6 +48,7 @@
 #include <components/PlayerControllerEditor.h>
 #include <components/CameraEditor.h>
 #include <NetClient.h>
+#include <ServerArguments.h>
 #include <ServerProcess.h>
 #include <EditToken.h>
 #include <ManagedHost.h>
@@ -295,6 +296,7 @@ void EditorApp::launchServer()
     {
       arguments += " --project " + quotedProjectArgument(m_options.project);
     }
+    arguments += net::serverPortArgument(m_options.port);
     arguments += " --token " + m_authToken;
     if (!m_serverProcess->launch("ECS3DServer", arguments, m_options.showServerConsole))
     {

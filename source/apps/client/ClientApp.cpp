@@ -14,6 +14,7 @@
 #include <RenderSystem.h>
 #include <InputCapture.h>
 #include <NetClient.h>
+#include <ServerArguments.h>
 #include <ServerProcess.h>
 #include <ManagedHost.h>
 #include <Log.h>
@@ -192,7 +193,7 @@ void ClientApp::connectToServer()
     // Its own log file rather than the server's default: a client and an editor on one machine would
     // otherwise truncate and interleave the same one. This app's --log-file/--no-log-file are not
     // forwarded - the child's log is the child's.
-    std::string arguments = "--ephemeral " + logFileArgument("client-server");
+    std::string arguments = "--ephemeral " + logFileArgument("client-server") + net::serverPortArgument(m_options.port);
     if (!m_options.project.empty())
     {
       arguments += " --project " + quotedProjectArgument(m_options.project);

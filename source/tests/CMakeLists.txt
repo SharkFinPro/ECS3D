@@ -208,6 +208,7 @@ add_executable(${PROJECT_NAME}
   EditTokenTest.cpp
   EditorConnectionsTest.cpp
   CommandLineSplitTest.cpp
+  ServerArgumentsTest.cpp
   ClientConnectionStateTest.cpp
   InputStatePayloadTest.cpp
   InputStateTest.cpp
