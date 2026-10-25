@@ -40,7 +40,7 @@ jobs:
       # header and compiles every first-party file front end only, so a missing include fails the row.
       matrix:
         os: [ 'ubuntu-22.04', windows-latest, macos-latest ]
-        build_type: [ Release, Debug, Sanitize, Coverage ]
+        build_type: [ Release, Debug, Sanitize, Coverage, Includes ]
         c_compiler: [ gcc, clang, cl ]
         include:
           - os: windows-latest

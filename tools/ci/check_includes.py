@@ -1,4 +1,4 @@
-"""Compiles every first-party translation unit with -fsyntax-only to catch a missing include."""
+"""Compile every first-party translation unit with -fsyntax-only to catch a missing include."""
 import argparse
 import concurrent.futures
 import json
@@ -7,13 +7,13 @@ import shlex
 import subprocess
 import sys
 
-# Options that name an output or a dependency file, with the number of arguments each one takes.
+# Options that name an output or dependency file and take the following argument as their value.
 DROPPED_WITH_VALUE = {"-o", "-MF", "-MT", "-MQ"}
 DROPPED_FLAGS = {"-c", "-MD", "-MMD", "-Winvalid-pch"}
 
 
 def strip_arguments(arguments):
-    """Returns the compile arguments without output, dependency and precompiled-header options."""
+    """Return the compile arguments without output, dependency and precompiled-header options."""
     result = []
     skip_next = False
     for index, argument in enumerate(arguments):
@@ -37,14 +37,14 @@ def strip_arguments(arguments):
 
 
 def entry_arguments(entry):
-    """Returns the argument list of a compile_commands.json entry."""
+    """Return the argument list of a compile_commands.json entry."""
     if "arguments" in entry:
         return list(entry["arguments"])
     return shlex.split(entry["command"])
 
 
 def is_first_party(path, source_root, launcher_root):
-    """Returns True for a file under source/ that is not fetched code or the C# launcher."""
+    """Return True for a file under source/ that is not fetched code or the C# launcher."""
     if not path.startswith(source_root + os.sep):
         return False
     if path.startswith(launcher_root + os.sep):
@@ -53,7 +53,7 @@ def is_first_party(path, source_root, launcher_root):
 
 
 def select_entries(entries, root):
-    """Returns the first-party entries, one per file, sorted by path."""
+    """Return the first-party entries, one per file, sorted by path."""
     source_root = os.path.normcase(os.path.realpath(os.path.join(root, "source")))
     launcher_root = os.path.join(source_root, "apps", "launcher")
     selected = {}
@@ -68,7 +68,7 @@ def select_entries(entries, root):
 
 
 def check(item):
-    """Compiles one entry front end only and returns (path, ok, output)."""
+    """Compile one entry front end only and return (path, ok, output)."""
     path, entry = item
     arguments = strip_arguments(entry_arguments(entry))
     result = subprocess.run(arguments, cwd=entry["directory"], capture_output=True, text=True)
@@ -76,7 +76,7 @@ def check(item):
 
 
 def main():
-    """Runs the check and returns the process exit code."""
+    """Run the check and return the process exit code."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("build_dir", help="build directory holding compile_commands.json")
     parser.add_argument("root", help="repository root")
