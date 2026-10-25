@@ -8,11 +8,12 @@ Related design notes: [camera-and-input.md](../../../docs/architecture/camera-an
 [viewport-gizmos.md](../../../docs/architecture/viewport-gizmos.md).
 
 - The server does not link this library. Logic worth testing goes in a headless header (`Billboard.h`,
-  `CapsuleGizmo.h`, `HullGizmoMesh.h`, `SharedAssetLoads.h`, `GridVisibility.h`, `LightGizmoVisibility.h`,
+  `CapsuleGizmo.h`, `HullGizmoMesh.h`, `SharedAssetLoads.h`, `MissingAssetFallback.h`, `GridVisibility.h`, `LightGizmoVisibility.h`,
   `OutlineColors.h`) that the test suite compiles without Vulkan.
 - The engine's loaders throw rather than return null. `GpuAssetCache` loads through `SharedAssetLoads.h`, which logs a
-  failed load once and remembers it, so `getModel`, `getTexture` and `getRenderObject` return null instead. Every
-  caller tolerates null, so a missing asset file shows nothing instead of ending the app.
+  failed load once and remembers it, so `getModel` and `getTexture` return null instead, and every caller tolerates
+  that. `getRenderObject` alone substitutes the magenta and black `missing_model.glb` and `missing_texture.png`
+  (built-in files, never registered in a project), so a missing asset is visible instead of ending the app.
 - `vke::raii` owns Vulkan handles. Release GPU objects through the engine's deferred release, which waits for the last
   frame that could use them; a project root change applies that way in `RenderSystem::variableUpdate`.
 - `setProjectionParameters` throws for a degenerate fov/near/far triple. `RenderSystem` pushes the projection only when

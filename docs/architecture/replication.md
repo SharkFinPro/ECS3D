@@ -90,7 +90,8 @@ nothing changes, the server logs a warning and still re-snapshots) for an unknow
 record (another scene, a prefab, a model or texture path) or another scene's name. The editor's name field asks
 that same function, so the UI and the server agree. Renaming to the current name is a successful no-op. **Delete succeeds and references
 dangle** — `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` lookups already null-tolerate a
-missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
+missing uuid so referencing slots just show "None" in the inspector and the viewport draws the missing-asset
+placeholder (a magenta and black checker; see `GpuAssetCache::getRenderObject`). The editor warns before deleting by scanning its
 replicated scenes + prefab bodies for the uuid ("referenced by N objects", `editor/AssetReferences.{h,cpp}`, headless); no server-side refusal or
 cascade exists (a known gap, not yet scheduled). A Scene record is regenerated from the `SceneManager` on every
 snapshot, so a display override on it would not survive; that is why a scene rename changes the name itself and a

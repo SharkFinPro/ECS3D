@@ -498,3 +498,26 @@ TEST(DefaultProject, TheShapeLibraryPrefabsAreRegisteredWithStableUuidsAndWeighT
   // The unit cube hull weighs what the Block does.
   EXPECT_NEAR(rigidBodyIn(prefabBody(project, "D6")).at("mass").get<float>(), unitBlockMass, 1e-3f);
 }
+
+TEST(DefaultProject, TheMissingAssetPlaceholdersShipButAreNeverRegistered)
+{
+  const auto project = buildDefaultProject();
+  const auto assets = std::filesystem::path(ECS3D_SOURCE_DIR) / "source" / "apps" / "server" / "defaultAssets";
+
+  EXPECT_TRUE(std::filesystem::is_regular_file(assets / "models" / "missing_model.glb"));
+  EXPECT_TRUE(std::filesystem::is_regular_file(assets / "textures" / "missing_texture.png"));
+
+  bool foundRegistered = false;
+  for (const char* list : { "models", "textures" })
+  {
+    for (const auto& asset : project.at("assets").at(list))
+    {
+      const auto filePath = asset.at("filePath").get<std::string>();
+      EXPECT_EQ(filePath.find("missing_"), std::string::npos) << filePath;
+      foundRegistered = foundRegistered || filePath == "assets/textures/grid_checker.png";
+    }
+  }
+
+  // Positive control: the scan reaches a registered texture.
+  EXPECT_TRUE(foundRegistered);
+}

@@ -83,7 +83,10 @@ when the hull's content changes, and released when the object stops drawing a hu
 outline color so the outline mask merges them; the collider gizmo's shared mesh and texture, and the model and
 texture assets that `getModel`/`getTexture` resolve by uuid, and only a record of that type (keyed by asset
 uuid, logged by path), load once through the headless `SharedAssetLoads.h`, which logs a throwing load once and
-remembers it, since the engine's loaders throw rather than return null; `getModel`, `getTexture` and
-`getRenderObject` then return null, which every caller tolerates, so a missing or corrupt asset file shows
-nothing instead of ending the app), `InputCapture`, `ThumbnailImage` (headless letterbox resize and PNG encode
+remembers it, since the engine's loaders throw rather than return null; `getModel` and
+`getTexture` then return null, which every caller tolerates. `getRenderObject` alone fills a slot it cannot resolve
+with a placeholder from the headless `MissingAssetFallback.h`: the magenta and black `missing_texture.png`, and for a
+missing model the `missing_model.glb` cube wearing that texture. Both are built-in files loaded once and kept across
+project resets, and are never registered in a project. A missing asset is logged once per uuid, and an entry showing
+a placeholder is rebuilt when the real asset resolves, so an undone delete draws on the next frame), `InputCapture`, `ThumbnailImage` (headless letterbox resize and PNG encode
 for project thumbnails, via stb_image_write; nothing calls it yet). Depends on `ECS3DData` + `VulkanEngine`.

@@ -1,6 +1,7 @@
 #ifndef GPUASSETCACHE_H
 #define GPUASSETCACHE_H
 
+#include "MissingAssetFallback.h"
 #include "SharedAssetLoads.h"
 #include <cstddef>
 #include <filesystem>
@@ -20,6 +21,7 @@ namespace vke {
 }
 
 class AssetRegistry;
+enum class AssetType;
 
 // Resolves AssetRegistry uuid->path records into vke resources and caches per-owner RenderObjects
 // for the RenderSystem.
@@ -50,7 +52,9 @@ public:
   std::shared_ptr<vke::Texture2D> getTexture(const uuids::uuid& uuid);
 
   // Keyed by owning object, not asset triple: two objects sharing a model get distinct render
-  // objects. Rebuilds when the owner's model/texture/specular UUIDs change.
+  // objects. Rebuilds when the owner's model/texture/specular UUIDs change. A model or texture that cannot be
+  // resolved is replaced by a magenta and black placeholder (logged once per asset), and the object rebuilds
+  // once the real asset resolves. Returns nullptr only if a needed placeholder failed to load.
   std::shared_ptr<vke::RenderObject> getRenderObject(const uuids::uuid& ownerUUID,
                                                      const uuids::uuid& modelUUID,
                                                      const uuids::uuid& textureUUID,
@@ -96,7 +100,22 @@ private:
     uuids::uuid modelUUID;
     uuids::uuid textureUUID;
     uuids::uuid specularMapUUID;
+    bool usedPlaceholder = false;
+    // What the uuids resolved to, before placeholders, so a placeholder entry notices a real asset arriving.
+    RenderAssets<vke::Model, vke::Texture2D> resolved;
   };
+
+  using GpuRenderAssets = RenderAssets<vke::Model, vke::Texture2D>;
+
+  [[nodiscard]] GpuRenderAssets resolveRenderAssets(const uuids::uuid& modelUUID, const uuids::uuid& textureUUID,
+                                                    const uuids::uuid& specularMapUUID);
+
+  [[nodiscard]] std::string describeAsset(const uuids::uuid& uuid, AssetType type) const;
+
+  void reportMissingAssets(const GpuRenderAssets& resolved, const uuids::uuid& modelUUID,
+                           const uuids::uuid& textureUUID, const uuids::uuid& specularMapUUID);
+
+  [[nodiscard]] GpuRenderAssets withMissingPlaceholders(const GpuRenderAssets& resolved);
 
   // The path to load for a registry record: the project folder's copy, else the built-in one. Throws for a
   // path that leaves the project folder, which the caller's shared load logs once and turns into null.
@@ -139,8 +158,11 @@ private:
   std::shared_ptr<vke::Texture2D> m_lightGizmoIcon;
   bool m_lightGizmoAssetsTried = false;
 
+  // Built-in files, loaded once and kept across project resets like the collider gizmo's white texture.
   SharedAssetLoads<vke::Model> m_gizmoModels;
   SharedAssetLoads<vke::Texture2D> m_gizmoTextures;
+
+  MissingAssetLog m_missingAssets;
 };
 
 
