@@ -88,7 +88,11 @@ def main():
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
     args = parser.parse_args()
 
-    with open(os.path.join(args.build_dir, "compile_commands.json"), encoding="utf-8") as file:
+    commands_path = os.path.join(args.build_dir, "compile_commands.json")
+    if not os.path.isfile(commands_path):
+        print(f"error: {commands_path} not found; configure with a Ninja or Makefile generator first", flush=True)
+        return 1
+    with open(commands_path, encoding="utf-8") as file:
         entries = json.load(file)
 
     selected = select_entries(entries, args.root)
