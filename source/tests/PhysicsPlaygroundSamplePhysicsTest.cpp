@@ -52,15 +52,125 @@ namespace
   }
 }
 
-TEST(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
+// The four tests check the same 600-tick run, and the run dominates the suite's time, so it happens once per suite.
+class PhysicsPlaygroundSamplePhysics : public ::testing::Test
 {
-  LoadedTemplate loaded(sampleFolder);
-  ASSERT_TRUE(loaded.loaded);
-  const auto& objectManager = *loaded.sceneManager.getCurrentScene()->getObjectManager();
+protected:
+  static void SetUpTestSuite()
+  {
+    s_loaded = std::make_unique<LoadedTemplate>(sampleFolder);
+    if (!s_loaded->loaded)
+    {
+      return;
+    }
 
-  tick(objectManager, 600);
+    const auto& objectManager = *s_loaded->sceneManager.getCurrentScene()->getObjectManager();
 
-  for (const auto& object : objectManager.getAllObjects())
+    s_first = objectNamedExactly(objectManager, "Domino 1");
+    s_second = objectNamedExactly(objectManager, "Domino 2");
+    if (s_first != nullptr && s_second != nullptr)
+    {
+      s_firstStart = fixtures::positionOf(s_first);
+      s_towardSecond = glm::normalize(glm::vec2(fixtures::positionOf(s_second).x - s_firstStart.x,
+                                                fixtures::positionOf(s_second).z - s_firstStart.z));
+      s_firstTiltBefore = tiltDegrees(s_first);
+    }
+
+    s_last = objectNamedExactly(objectManager, "Domino 30");
+    if (s_last != nullptr)
+    {
+      s_lastTiltBefore = tiltDegrees(s_last);
+    }
+
+    s_sphere = objectNamedExactly(objectManager, "Domino Sphere");
+    if (s_sphere != nullptr)
+    {
+      s_sphereStart = fixtures::positionOf(s_sphere);
+    }
+
+    s_cubes = pyramidCubes(objectManager);
+    if (!s_cubes.empty())
+    {
+      s_top = highest(s_cubes);
+      s_topStartHeight = fixtures::positionOf(s_top).y;
+    }
+
+    s_feeder = objectNamedExactly(objectManager, "Cradle Feeder Sphere");
+    s_far = objectNamedExactly(objectManager, "Cradle Sphere 7");
+    if (s_feeder != nullptr)
+    {
+      s_feederStart = fixtures::positionOf(s_feeder);
+    }
+    if (s_far != nullptr)
+    {
+      s_farStart = fixtures::positionOf(s_far);
+    }
+
+    CollisionSystem collisionSystem;
+    for (int step = 0; step < 600; ++step)
+    {
+      PhysicsSystem::fixedUpdate(objectManager, dt);
+      collisionSystem.fixedUpdate(objectManager, dt);
+      if (s_far != nullptr)
+      {
+        s_farthestTravel = std::max(s_farthestTravel, planeTravel(s_far, s_farStart));
+      }
+    }
+  }
+
+  static void TearDownTestSuite()
+  {
+    s_first.reset();
+    s_second.reset();
+    s_last.reset();
+    s_sphere.reset();
+    s_cubes.clear();
+    s_top.reset();
+    s_feeder.reset();
+    s_far.reset();
+    s_loaded.reset();
+  }
+
+  static const ObjectManager& objectManager()
+  {
+    return *s_loaded->sceneManager.getCurrentScene()->getObjectManager();
+  }
+
+  [[nodiscard]] static bool isLoaded()
+  {
+    return s_loaded != nullptr && s_loaded->loaded;
+  }
+
+  inline static std::unique_ptr<LoadedTemplate> s_loaded;
+
+  inline static std::shared_ptr<Object> s_first;
+  inline static std::shared_ptr<Object> s_second;
+  inline static glm::vec3 s_firstStart{ 0.0f };
+  inline static glm::vec2 s_towardSecond{ 0.0f };
+  inline static float s_firstTiltBefore = 0.0f;
+
+  inline static std::shared_ptr<Object> s_last;
+  inline static float s_lastTiltBefore = 0.0f;
+
+  inline static std::shared_ptr<Object> s_sphere;
+  inline static glm::vec3 s_sphereStart{ 0.0f };
+
+  inline static std::vector<std::shared_ptr<Object>> s_cubes;
+  inline static std::shared_ptr<Object> s_top;
+  inline static float s_topStartHeight = 0.0f;
+
+  inline static std::shared_ptr<Object> s_feeder;
+  inline static std::shared_ptr<Object> s_far;
+  inline static glm::vec3 s_feederStart{ 0.0f };
+  inline static glm::vec3 s_farStart{ 0.0f };
+  inline static float s_farthestTravel = 0.0f;
+};
+
+TEST_F(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
+{
+  ASSERT_TRUE(isLoaded());
+
+  for (const auto& object : objectManager().getAllObjects())
   {
     SCOPED_TRACE(object->getName());
     const auto position = fixtures::positionOf(object);
@@ -69,84 +179,50 @@ TEST(PhysicsPlaygroundSamplePhysics, SixHundredTicksStayFiniteAndAboveTheVoid)
   }
 }
 
-TEST(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsTowardTheSecond)
+TEST_F(PhysicsPlaygroundSamplePhysics, TheLeaningFirstDominoFallsTowardTheSecond)
 {
-  LoadedTemplate loaded(sampleFolder);
-  ASSERT_TRUE(loaded.loaded);
-  const auto& objectManager = *loaded.sceneManager.getCurrentScene()->getObjectManager();
-  const auto first = objectNamedExactly(objectManager, "Domino 1");
-  const auto second = objectNamedExactly(objectManager, "Domino 2");
-  ASSERT_NE(first, nullptr);
-  ASSERT_NE(second, nullptr);
-  const auto firstStart = fixtures::positionOf(first);
-  const auto towardSecond = glm::normalize(glm::vec2(fixtures::positionOf(second).x - firstStart.x,
-                                                     fixtures::positionOf(second).z - firstStart.z));
+  ASSERT_TRUE(isLoaded());
+  ASSERT_NE(s_first, nullptr);
+  ASSERT_NE(s_second, nullptr);
 
-  EXPECT_NEAR(tiltDegrees(first), 15.0f, 0.1f);
+  EXPECT_NEAR(s_firstTiltBefore, 15.0f, 0.1f);
 
-  tick(objectManager, 600);
-
-  EXPECT_GT(tiltDegrees(first), 45.0f);
+  EXPECT_GT(tiltDegrees(s_first), 45.0f);
   // Fallen toward the second rather than away from it, its center moved toward where the second stood.
-  const auto moved = fixtures::positionOf(first) - firstStart;
-  EXPECT_GT(glm::dot(glm::vec2(moved.x, moved.z), towardSecond), 0.3f);
+  const auto moved = fixtures::positionOf(s_first) - s_firstStart;
+  EXPECT_GT(glm::dot(glm::vec2(moved.x, moved.z), s_towardSecond), 0.3f);
 }
 
-TEST(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedOffTheLedge)
+TEST_F(PhysicsPlaygroundSamplePhysics, TheDominoChainFallsAndTheSphereIsKnockedOffTheLedge)
 {
-  LoadedTemplate loaded(sampleFolder);
-  ASSERT_TRUE(loaded.loaded);
-  const auto& objectManager = *loaded.sceneManager.getCurrentScene()->getObjectManager();
-  const auto last = objectNamedExactly(objectManager, "Domino 30");
-  const auto sphere = objectNamedExactly(objectManager, "Domino Sphere");
-  ASSERT_NE(last, nullptr);
-  ASSERT_NE(sphere, nullptr);
-  const auto sphereStart = fixtures::positionOf(sphere);
+  ASSERT_TRUE(isLoaded());
+  ASSERT_NE(s_last, nullptr);
+  ASSERT_NE(s_sphere, nullptr);
 
-  EXPECT_LT(tiltDegrees(last), 1.0f);
-
-  tick(objectManager, 600);
+  EXPECT_LT(s_lastTiltBefore, 1.0f);
 
   for (int index = 1; index <= 30; ++index)
   {
-    const auto domino = objectNamedExactly(objectManager, "Domino " + std::to_string(index));
+    const auto domino = objectNamedExactly(objectManager(), "Domino " + std::to_string(index));
     ASSERT_NE(domino, nullptr);
     EXPECT_GT(tiltDegrees(domino), 45.0f) << "Domino " << index << " is still standing";
   }
-  EXPECT_GT(planeTravel(sphere, sphereStart), 1.0f);
+  EXPECT_GT(planeTravel(s_sphere, s_sphereStart), 1.0f);
 }
 
-TEST(PhysicsPlaygroundSamplePhysics, ThePyramidStandsWhileTheCradleSpheresMove)
+TEST_F(PhysicsPlaygroundSamplePhysics, ThePyramidStandsWhileTheCradleSpheresMove)
 {
-  LoadedTemplate loaded(sampleFolder);
-  ASSERT_TRUE(loaded.loaded);
-  const auto& objectManager = *loaded.sceneManager.getCurrentScene()->getObjectManager();
+  ASSERT_TRUE(isLoaded());
 
-  const auto cubes = pyramidCubes(objectManager);
-  ASSERT_EQ(cubes.size(), 30u);
-  const auto top = highest(cubes);
-  const float startHeight = fixtures::positionOf(top).y;
-  EXPECT_NEAR(startHeight, 3.55f, 1e-4f);
+  ASSERT_EQ(s_cubes.size(), 30u);
+  EXPECT_NEAR(s_topStartHeight, 3.55f, 1e-4f);
 
-  const auto feeder = objectNamedExactly(objectManager, "Cradle Feeder Sphere");
-  const auto far = objectNamedExactly(objectManager, "Cradle Sphere 7");
-  ASSERT_NE(feeder, nullptr);
-  ASSERT_NE(far, nullptr);
-  const auto feederStart = fixtures::positionOf(feeder);
-  const auto farStart = fixtures::positionOf(far);
+  ASSERT_NE(s_feeder, nullptr);
+  ASSERT_NE(s_far, nullptr);
 
-  float farthestTravel = 0.0f;
-  CollisionSystem collisionSystem;
-  for (int step = 0; step < 600; ++step)
-  {
-    PhysicsSystem::fixedUpdate(objectManager, dt);
-    collisionSystem.fixedUpdate(objectManager, dt);
-    farthestTravel = std::max(farthestTravel, planeTravel(far, farStart));
-  }
-
-  EXPECT_NEAR(fixtures::positionOf(top).y, startHeight, 0.1f);
-  EXPECT_GT(planeTravel(feeder, feederStart), 3.0f);
+  EXPECT_NEAR(fixtures::positionOf(s_top).y, s_topStartHeight, 0.1f);
+  EXPECT_GT(planeTravel(s_feeder, s_feederStart), 3.0f);
   // How far the impact carries the last sphere varies with each platform's rounding, so this pins only that
   // it reached the far end of the row.
-  EXPECT_GT(farthestTravel, 0.1f);
+  EXPECT_GT(s_farthestTravel, 0.1f);
 }
