@@ -109,6 +109,12 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
     }
   }
 
+  // The prefab body is drawn only for a selected prefab; anything else settles an edit left pending on it.
+  if (m_selection->kind() != EditorSelection::Kind::Asset)
+  {
+    m_assetInspector->commitPendingEdit();
+  }
+
   // A multi-object selection: show/edit the components common to every selected object rather than only
   // the primary one (see ObjectInspector::displayMulti).
   if (m_selection->kind() == EditorSelection::Kind::Object && m_selection->size() > 1)
@@ -132,7 +138,7 @@ void InspectorPanel::displayGui(const ObjectManager* objectManager, const std::o
     {
       // Flushes a multi-selection gesture that may still be in flight from a prior frame (the rest of the
       // selection just dropped out from under it) before switching to the single-object display below.
-      m_objectInspector->commitPendingEdit();
+      m_objectInspector->commitPendingMultiEdit();
 
       gc::sectionLabel("Inspector");
       m_objectInspector->displayTypeChip(objects.front());
