@@ -14,6 +14,7 @@ add_library(${PROJECT_NAME}
   InspectorPanel.h
   ObjectInspector.cpp
   ObjectInspector.h
+  ObjectNameField.h
   AssetInspector.cpp
   AssetInspector.h
   TransientObject.cpp

@@ -197,19 +197,18 @@ void ObjectInspector::display(const std::shared_ptr<Object>& object)
   // Sync the name buffer when the selection changes. Also fold the shown object back to a closed
   // Add Component list, so a viewport pick (which writes the shared selection directly) matches the
   // tree click's reset.
-  if (m_nameEditObjectUUID != object->getUUID())
+  if (!m_nameField.isShowing(object->getUUID()))
   {
     commitPendingEdit();
 
-    m_nameEditObjectUUID = object->getUUID();
+    if (const auto selected = m_nameField.select(object->getUUID(), object->getName()); selected.reseed)
+    {
+      setNameBuffer(*selected.reseed);
+    }
     m_showComponentSelector = false;
     // Bounds the guard's lifetime: an entry can only accumulate while its object stays selected, and
     // this drops it (confirmed or not) the moment selection moves elsewhere.
     m_pendingRemovals.clear();
-    const auto name = object->getName();
-    const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
-    name.copy(m_nameEditBuffer.data(), len);
-    m_nameEditBuffer[len] = '\0';
   }
 
   // Forget guard entries whose component no longer occupies that slot on this object - either the
@@ -236,13 +235,19 @@ void ObjectInspector::display(const std::shared_ptr<Object>& object)
   ImGui::BeginDisabled(!m_editable);
   gc::rowLabel("Name");
   ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-  if (ImGui::InputText(std::string("##objectName" + to_string(object->getUUID())).c_str(), m_nameEditBuffer.data(), m_nameEditBuffer.size()) &&
-      m_sceneEditCallback)
-  {
-    // Immediately process the edit on key press so that when selecting another object, the name change is not lost.
-    m_sceneEditCallback(replication::buildRenameObject(object->getUUID(), m_nameEditBuffer.data()));
-  }
+  const bool edited = ImGui::InputText(std::string("##objectName" + to_string(object->getUUID())).c_str(),
+                                       m_nameEditBuffer.data(), m_nameEditBuffer.size());
+  const bool active = ImGui::IsItemActive();
+  const bool deactivatedAfterEdit = ImGui::IsItemDeactivatedAfterEdit();
   ImGui::EndDisabled();
+
+  const auto nameResult = m_nameField.update(object->getName(), m_nameEditBuffer.data(), active,
+                                             deactivatedAfterEdit, edited);
+  sendNameRename(nameResult.rename);
+  if (nameResult.reseed)
+  {
+    setNameBuffer(*nameResult.reseed);
+  }
 
   ImGui::Separator();
 
@@ -293,8 +298,25 @@ void ObjectInspector::display(const std::shared_ptr<Object>& object)
   }
 }
 
+void ObjectInspector::sendNameRename(const std::optional<ObjectNameField::Rename>& rename) const
+{
+  if (rename && m_editable && m_sceneEditCallback)
+  {
+    m_sceneEditCallback(replication::buildRenameObject(rename->objectUUID, rename->name));
+  }
+}
+
+void ObjectInspector::setNameBuffer(const std::string& name)
+{
+  const auto len = std::min(name.size(), m_nameEditBuffer.size() - 1);
+  name.copy(m_nameEditBuffer.data(), len);
+  m_nameEditBuffer[len] = '\0';
+}
+
 void ObjectInspector::commitPendingEdit()
 {
+  sendNameRename(m_nameField.flush(m_nameEditBuffer.data()));
+
   // Whichever selection kind (single or multi) had a gesture in flight, flush it - the caller just wants
   // any pending edit resolved before moving on.
   commitPendingMultiEdit();
@@ -349,6 +371,10 @@ void ObjectInspector::commitPendingMultiEdit()
 
 void ObjectInspector::displayMulti(const std::vector<std::shared_ptr<Object>>& objects)
 {
+  // The name field is not drawn here, so a name typed just before the selection grew never saw its
+  // deactivation.
+  sendNameRename(m_nameField.flush(m_nameEditBuffer.data()));
+
   // A fingerprint of the selected uuids in order: if it changed since last frame (a different set of
   // objects, even if still more than one), whatever gesture was gathering belongs to the old selection.
   std::string selectionKey;

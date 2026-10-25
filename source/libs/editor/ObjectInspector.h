@@ -1,6 +1,7 @@
 #ifndef OBJECTINSPECTOR_H
 #define OBJECTINSPECTOR_H
 
+#include "ObjectNameField.h"
 #include <nlohmann/json_fwd.hpp>
 #include <array>
 #include <functional>
@@ -69,7 +70,7 @@ public:
   // single-selection gesture and any multi-selection one in flight. display()/displayMulti() do this
   // themselves once a gesture ends; the panel has to call it on the frames it does NOT reach either (
   // nothing selected, an asset selected, the selected object gone), or the pair would sit there and be
-  // reported against whatever is inspected next.
+  // reported against whatever is inspected next. A name typed but not yet sent is sent here too.
   void commitPendingEdit();
 
   [[nodiscard]] bool highlightEnabled() const { return m_highlightObject; }
@@ -110,9 +111,9 @@ private:
   // False when the connected server is read-only (not in edit mode); gates the mutating UI.
   bool m_editable = true;
 
-  // Buffer for in-place name editing. Refreshed whenever the selected object changes.
+  // Buffer for in-place name editing. The rename is sent once, when the field is left (see ObjectNameField).
   std::array<char, 256> m_nameEditBuffer{};
-  std::optional<uuids::uuid> m_nameEditObjectUUID;
+  ObjectNameField m_nameField;
 
   bool m_highlightObject = true;
 
@@ -141,6 +142,10 @@ private:
   // ComponentFieldDelta.h). `objects` is the whole multi-selection, all of which are guaranteed to carry
   // `signature` (displayMulti only calls this for common signatures).
   void displayMultiComponent(const std::vector<std::shared_ptr<Object>>& objects, const std::string& signature);
+
+  void sendNameRename(const std::optional<ObjectNameField::Rename>& rename) const;
+
+  void setNameBuffer(const std::string& name);
 
   // Flushes m_multiPendingEdits: one EditCommittedCallback per object whose before/after actually differ.
   void commitPendingMultiEdit();

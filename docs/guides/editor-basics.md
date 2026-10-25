@@ -30,6 +30,8 @@ same place in the world.
 The "Inspector" shows the selected object: a Name field, its components, and its scripts.
 
 - Edit a component by changing its widgets. Dragging a slider is one undo step, not one per frame.
+- Rename an object in the Name field. The rename applies when you press Enter or click away, as one undo step,
+  and selecting another object first applies a name you were still typing.
 - Add Component lists Rigid Body, Model Renderer, Light Renderer, Box Collider, Sphere Collider, Capsule
   Collider, Convex Mesh Collider, Player Controller and Camera. A type the object already has is hidden.
   An object has at most one collider, so once it has one, the other collider kinds are hidden too.
