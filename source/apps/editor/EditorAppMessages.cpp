@@ -13,6 +13,7 @@
 #include <Log.h>
 #include <nlohmann/json.hpp>
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>

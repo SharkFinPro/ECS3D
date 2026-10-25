@@ -20,6 +20,7 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <cstdint>
+#include <memory>
 #include <optional>
 
 std::optional<uuids::uuid> EditorApp::findPickedObject(const std::shared_ptr<SceneAsset>& scene) const

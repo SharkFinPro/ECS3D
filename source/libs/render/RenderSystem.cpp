@@ -23,6 +23,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <Log.h>
 #include <algorithm>
+#include <cstddef>
 #include <stdexcept>
 #include <string>
 #include <VulkanEngine/VulkanEngine.h>

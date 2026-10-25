@@ -4,6 +4,7 @@
 #include "ScriptRuntime.h"
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 

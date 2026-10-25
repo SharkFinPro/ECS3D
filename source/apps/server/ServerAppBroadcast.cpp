@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <exception>
 #include <string>
+#include <vector>
 
 void ServerApp::broadcastSnapshot() const
 {

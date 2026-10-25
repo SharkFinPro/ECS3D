@@ -3,6 +3,7 @@
 
 #include "ObjectTreeSortMode.h"
 #include <nlohmann/json_fwd.hpp>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>

@@ -23,6 +23,7 @@
 #include <nlohmann/json.hpp>
 #include <uuid.h>
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>

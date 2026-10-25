@@ -61,6 +61,7 @@
 #include <uuid.h>
 #include <chrono>
 #include <exception>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <random>

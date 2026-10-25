@@ -5,6 +5,7 @@
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/components/PlayerController.h>
+#include <cstdint>
 #include <optional>
 #include <string>
 
