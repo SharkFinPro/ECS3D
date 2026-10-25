@@ -141,6 +141,7 @@ add_executable(${PROJECT_NAME}
   StatusPayloadTest.cpp
   SceneDeleteTest.cpp
   SceneManagerTest.cpp
+  SceneRenameTest.cpp
   SceneScriptListTest.cpp
   SceneScriptEditTest.cpp
   SceneScriptUndoTest.cpp

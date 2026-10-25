@@ -26,7 +26,8 @@ built on a stock widget; a residual "Mixed values" line still names the few fiel
 goes out and is recorded through the normal single-object path, so undo records one entry per object; Add/Remove
 Component and the name field are left out of this view for now, since wiring them up would mean deciding which
 object they act on) and the asset kind to `AssetInspector` (per-`AssetType` views — read-only detail plus a
-display-name rename field and a delete button with a reference-count warning for the flat file assets; the
+display-name rename field (a scene's name field commits once, when editing ends) and a delete button with a
+reference-count warning for the flat file assets; the
 **Prefab body is editable** — deserialized into a detached `TransientObject` and edited by a reused
 `ObjectInspector`, see [prefabs.md](prefabs.md)), `EditorSelection` (shared kind-tagged selection slot holding
 an ordered set of uuids rather than a single one, `Selection.h` - the back of the list is the primary, what the

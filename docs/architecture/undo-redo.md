@@ -49,7 +49,9 @@ nothing faithful can be derived for (a stale view, an op with no matching kind) 
 skipped rather than refused. The `replaceAsset` kind exists for that recording: an `addAsset` over a uuid - or a
 prefab name - the registry already holds replaces a record rather than adding one (a prefab body edit,
 "Save as Prefab" over an existing name, which mints a fresh uuid the name-keyed registry then discards),
-and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
+and `addAsset`'s reverse would delete the prefab instead of restoring its previous body. A `renameAsset` of a scene
+records the scene's name (its record's `path`) as the before value, since a scene has no display override, and
+its undo and redo validations compare against that name. Both stacks are cleared wherever the authored scene they refer to is replaced: load project
 (New/Open), scene switch, and (re)connect (any stashed authored history goes too). A snapshot clears them too when its active scene
 differs from the one the history was recorded against, as after another editor's load or scene switch.
 `edits/HistoryScope.h` tracks that scene. Play does not clear them:

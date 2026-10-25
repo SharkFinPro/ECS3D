@@ -554,7 +554,9 @@ std::optional<EditCommand> commandForRenameAsset(const nlohmann::json& op, const
     return std::nullopt;
   }
 
-  return EditCommand::renameAsset(assetUUID.value(), record->displayName,
+  // A scene's rename target is its real name, which its record holds in `path`.
+  return EditCommand::renameAsset(assetUUID.value(),
+                                  record->type == AssetType::Scene ? record->path : record->displayName,
                                   stringField(op, "displayName"));
 }
 

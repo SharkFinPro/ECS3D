@@ -43,7 +43,7 @@ enum class MessageType : uint8_t {
                  // join carried this nonce; also the answer to a possessSlot. Broadcast + nonce
                  // correlation (no per-connection send path): every client hears it, only the one whose
                  // join nonce matches keeps it.
-  renameAsset,   // editor -> server: set an asset's display-name override (replication::packRenameAsset); server re-snapshots
+  renameAsset,   // editor -> server: set an asset's display-name override, or a scene's name (replication::packRenameAsset); server re-snapshots
   removeAsset,   // editor -> server: drop an asset by uuid (replication::packRemoveAsset); server re-snapshots.
                  // A scene is refused while it is active, the only one, or the scene is not stopped.
   serverLog,     // server -> editor connections only: a batch of the server's own log entries

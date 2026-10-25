@@ -227,7 +227,8 @@ void ServerApp::handleAddAsset(const net::Message& message) const
 
 void ServerApp::handleRenameAsset(const net::Message& message) const
 {
-  // An editor renamed an asset (display-name override only): apply it authoritatively and re-snapshot.
+  // An editor renamed an asset (a display-name override, or a scene's real name): apply it authoritatively and
+  // re-snapshot.
   nlohmann::json op;
   try
   {
@@ -238,9 +239,15 @@ void ServerApp::handleRenameAsset(const net::Message& message) const
     return;
   }
 
-  replication::applyRenameAsset(*m_assetRegistry, op);
-
-  Log::info(LogCategory::server, "Renamed asset.");
+  if (replication::applyRenameAsset(*m_assetRegistry, *m_sceneManager, op))
+  {
+    Log::info(LogCategory::server, "Renamed asset.");
+  }
+  else
+  {
+    // Still re-snapshot below so an editor that applied the rename locally converges on the server's state.
+    Log::warn(LogCategory::server, "Refused asset rename.");
+  }
 
   broadcastSnapshot();
 }

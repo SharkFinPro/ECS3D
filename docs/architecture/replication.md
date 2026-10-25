@@ -79,16 +79,22 @@ list. `applySceneEdit` refuses them, so a batch holding one is malformed.
 
 The asset-mutation trio (`addAsset`/`renameAsset`/`removeAsset`, built/packed in `data/Replication.{h,cpp}`,
 applied by `AssetRegistry`) all follow the **local-apply-then-send** shape: the editor mutates its own
-registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only** —
-a `renameAsset` sets an optional `AssetRecord::displayName` override (threaded through
-`serialize`/`loadFromJSON`/`pack`/`unpack` like every other field); the file on disk and `path` (the
-registry key, and the name-key for prefabs/scenes) are untouched by a rename. **Delete succeeds and references
+registry for instant feedback, then sends the op and the server re-snapshots. **Rename is display-only for
+the file assets and prefabs** — a `renameAsset` sets an optional `AssetRecord::displayName` override (threaded
+through `serialize`/`loadFromJSON`/`pack`/`unpack` like every other field); the file on disk and `path` (the
+registry key, and the name-key for prefabs/scenes) are untouched by it. **A scene rename changes the scene's
+real name** — the op's `displayName` is the new name, `applyRenameAsset` sets it on the `SceneAsset` and re-keys
+the scene's registry record, and the next snapshot replicates it. It is refused (the function returns false,
+nothing changes, the server logs a warning and still re-snapshots) for an unknown uuid, a scene record with no
+`SceneAsset`, or a name `replication::isSceneNameAvailable` rejects: blank, or the registry path key of any other
+record (another scene, a prefab, a model or texture path) or another scene's name. The editor's name field asks
+that same function, so the UI and the server agree. Renaming to the current name is a successful no-op. **Delete succeeds and references
 dangle** — `removeAsset` drops the record; `GpuAssetCache`/`AssetRegistry` lookups already null-tolerate a
 missing uuid so referencing slots just show "None". The editor warns before deleting by scanning its
 replicated scenes + prefab bodies for the uuid ("referenced by N objects", `editor/AssetReferences.{h,cpp}`, headless); no server-side refusal or
-cascade exists (a known gap, not yet scheduled). Rename is offered only for the flat file assets
-(Model/Texture/Script/Prefab) that `AssetRegistry` owns — a Scene record is regenerated from the
-`SceneManager` on every snapshot, so an override on it wouldn't survive. Undoing a delete re-adds the whole
+cascade exists (a known gap, not yet scheduled). A Scene record is regenerated from the `SceneManager` on every
+snapshot, so a display override on it would not survive; that is why a scene rename changes the name itself and a
+scene delete removes the scene from the `SceneManager`. Undoing a delete re-adds the whole
 record, rename override included — the `addAsset` payload carries an optional `displayName`.
 **Deleting a scene** removes it from the `SceneManager` first (`SceneManager::removeScene`) and drops the
 registry record only if that succeeded, because the record would otherwise come back with the next
