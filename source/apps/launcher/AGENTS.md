@@ -36,7 +36,7 @@
   it. It takes a name and a location. Name rules apply at once; the disk checks of the location and the target
   folder run off the UI thread 250 ms after the last edit, with "Checking..." and Create disabled meanwhile. It
   creates the project with `ProjectCreator` off the UI thread, records it with its template and, if asked, opens it
-  in the editor. A failed copy keeps the dialog open with the reason. Closing the window mid-copy cancels the copy,
+  in the editor. Enter in either box presses Create project (its `IsDefault`), and does nothing while Create is disabled. A failed copy keeps the dialog open with the reason. Closing the window mid-copy cancels the copy,
   waits for it to remove its hidden `.<name>.creating` folder, then closes. The Samples tab is real: `TemplateCatalog`
   reads `<engine>/templates`, each `sample` becomes a card, the header search filters them, and Play runs
   `ECS3DClient --project <shipped folder>`. Open a copy opens the New Project dialog for that sample

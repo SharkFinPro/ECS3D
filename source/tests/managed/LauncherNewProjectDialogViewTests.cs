@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
@@ -56,6 +58,8 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
     private readonly Window _window;
 
     public NewProjectDialog Dialog { get; }
+
+    public void PressEnter() => _window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
 
     public ShownDialog(NewProjectViewModel vm)
     {
@@ -234,6 +238,42 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
       Assert.True(progress.IsEffectivelyVisible);
 
       pending!();
+    });
+  }
+
+  [Fact]
+  public async Task EnterInTheNameBoxCreatesTheProject()
+  {
+    await LauncherCardMenuTests.OnUiThread(() =>
+    {
+      var created = 0;
+      var vm = NewDialog(background: work => created++);
+      using var shown = Show(vm);
+      shown.NameBox.Focus();
+
+      shown.PressEnter();
+
+      Assert.Equal(1, created);
+      Assert.True(vm.IsBusy);
+    });
+  }
+
+  [Fact]
+  public async Task EnterDoesNothingWhileCreateIsDisabled()
+  {
+    await LauncherCardMenuTests.OnUiThread(() =>
+    {
+      var created = 0;
+      var vm = NewDialog(background: work => created++);
+      using var shown = Show(vm);
+      shown.NameBox.Focus();
+      shown.NameBox.Text = "";
+      Assert.False(ButtonOf(shown.Dialog, vm.CreateCommand).IsEffectivelyEnabled);
+
+      shown.PressEnter();
+
+      Assert.Equal(0, created);
+      Assert.False(vm.IsBusy);
     });
   }
 }
