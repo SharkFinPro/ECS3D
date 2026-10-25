@@ -84,7 +84,9 @@ under ASan is a different problem: they host CoreCLR, which does its own memory 
 sanitizer options set before it starts. Treat an app crash under this preset as a question about the
 setup, not as a finding, until the suite itself is clean.
 
-CI runs this preset's `check` target on Linux with both gcc and clang.
+CI runs this preset's `check` target on Linux with both gcc and clang. Under this preset each GoogleTest suite
+runs as one process. For an assertion failure the CTest entry names the suite and its output names the failing
+case; a crash, or a LeakSanitizer report at exit, fails the whole suite's entry.
 
 Two things to know before the first run:
 

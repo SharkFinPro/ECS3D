@@ -345,12 +345,73 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE ECS3D_SOURCE_DIR="${CMAKE_SOU
 
 include(GoogleTest)
 
-# DISCOVERY_TIMEOUT is raised from the five second default because discovery runs the freshly linked test
-# binary to list its cases, and a cold Windows Debug executable with a large PDB can spend longer than
-# that just starting. It surfaces as the *build* failing with "Process terminated due to timeout" and no
-# output, which reads like a test hanging rather than a binary that had not finished loading - and it is
-# borderline rather than deterministic, so it comes and goes with the size of the suite.
-gtest_discover_tests(${PROJECT_NAME} DISCOVERY_TIMEOUT 120)
+# Under the sanitize and coverage presets every process pays a large fixed startup cost (the sanitizer
+# runtime, coverage counters), so one process per case spends most of the run starting up. In that mode
+# the suite registers one CTest test per GoogleTest suite instead, and the cases of a suite share a
+# process. IDE test explorers want per-case entries, so every other build keeps gtest_discover_tests.
+if(ECS3D_SANITIZE OR ECS3D_COVERAGE)
+  set(ECS3D_TEST_PER_SUITE_DEFAULT ON)
+else()
+  set(ECS3D_TEST_PER_SUITE_DEFAULT OFF)
+endif()
+option(ECS3D_TEST_PER_SUITE "Register one CTest test per GoogleTest suite instead of one per case"
+  ${ECS3D_TEST_PER_SUITE_DEFAULT})
+
+if(ECS3D_TEST_PER_SUITE)
+  # Multi-config generators get one file per configuration, picked by the configuration ctest runs with
+  # (-C, which the check target passes). A single-config build uses one fixed name, since ctest run
+  # without -C leaves CTEST_CONFIGURATION_TYPE empty.
+  if(CMAKE_CONFIGURATION_TYPES)
+    set(ECS3D_SUITES_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_suites_$<CONFIG>.cmake")
+    set(ECS3D_SUITES_FILE_SUFFIX "_\${CTEST_CONFIGURATION_TYPE}")
+  else()
+    set(ECS3D_SUITES_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_suites.cmake")
+    set(ECS3D_SUITES_FILE_SUFFIX "")
+  endif()
+
+  # Same 120 second allowance as DISCOVERY_TIMEOUT in the per-case branch below, for the same reason. The
+  # working directory is gtest_discover_tests' default, so both modes run tests from the same place.
+  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+      -D "TEST_EXECUTABLE=$<TARGET_FILE:${PROJECT_NAME}>"
+      -D "OUTPUT_FILE=${ECS3D_SUITES_FILE}"
+      -D "WORKING_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}"
+      -D "TIMEOUT=120"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RegisterTestSuites.cmake"
+    BYPRODUCTS "${ECS3D_SUITES_FILE}"
+    COMMENT "Registering ${PROJECT_NAME} test suites"
+    VERBATIM
+  )
+
+  # Before the first build the file does not exist, so ctest sees a failing placeholder test that
+  # says the suite is not built.
+  set(ECS3D_SUITES_INCLUDE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_suites_include.cmake")
+  file(WRITE "${ECS3D_SUITES_INCLUDE}"
+    "set(suitesFile \"${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_suites${ECS3D_SUITES_FILE_SUFFIX}.cmake\")\n"
+    "if(EXISTS \"\${suitesFile}\")\n"
+    "  include(\"\${suitesFile}\")\n"
+    "else()\n"
+    "  add_test(${PROJECT_NAME}_NOT_BUILT ${PROJECT_NAME}_NOT_BUILT)\n"
+    "endif()\n")
+  set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${ECS3D_SUITES_INCLUDE}")
+else()
+  # DISCOVERY_TIMEOUT is raised from the five second default because discovery runs the freshly linked test
+  # binary to list its cases, and a cold Windows Debug executable with a large PDB can spend longer than
+  # that just starting. It surfaces as the *build* failing with "Process terminated due to timeout" and no
+  # output, which reads like a test hanging rather than a binary that had not finished loading - and it is
+  # borderline rather than deterministic, so it comes and goes with the size of the suite.
+  gtest_discover_tests(${PROJECT_NAME} DISCOVERY_TIMEOUT 120)
+endif()
+
+# Runs in every configuration so the suite parser is proven by the ordinary rows before the sanitize
+# and coverage rows depend on it.
+add_test(
+  NAME ECS3DTestSuiteRegistration
+  COMMAND ${CMAKE_COMMAND}
+    -D "REGISTER_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/cmake/RegisterTestSuites.cmake"
+    -D "WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/suite-registration"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RegisterTestSuitesTest.cmake"
+)
 
 # The managed (C#) test project, run through `dotnet test` rather than a native executable - registered
 # as its own CTest test so `check` (and CI) covers the managed assemblies the same way it covers the
@@ -406,8 +467,8 @@ endif()
 # when nothing registers: ctest exits 0 on an empty test set, which is how this step reported success
 # before the suite was wired up. COMMAND_EXPAND_LISTS is what splits the conditional --build-config into
 # two arguments; without it the pair arrives as one semicolon-joined argument that ctest rejects. The
-# suite runs in parallel because most of its time is per-process startup across the ~1,700 separately
-# registered test cases.
+# suite runs in parallel because most of its time is per-process startup across the ~2,200 test cases,
+# which the per-suite registration above cuts to one process per suite.
 add_custom_target(check
   COMMAND ${CMAKE_CTEST_COMMAND} --test-dir "${CMAKE_CURRENT_BINARY_DIR}" --output-on-failure
     --no-tests=error --parallel "$<$<BOOL:$<CONFIG>>:--build-config;$<CONFIG>>"
