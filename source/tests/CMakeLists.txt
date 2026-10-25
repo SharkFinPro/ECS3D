@@ -369,12 +369,13 @@ if(ECS3D_TEST_PER_SUITE)
     set(ECS3D_SUITES_FILE_SUFFIX "")
   endif()
 
-  # Same 120 second allowance as DISCOVERY_TIMEOUT in the per-case branch below, for the same reason.
+  # Same 120 second allowance as DISCOVERY_TIMEOUT in the per-case branch below, for the same reason. The
+  # working directory is gtest_discover_tests' default, so both modes run tests from the same place.
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND}
       -D "TEST_EXECUTABLE=$<TARGET_FILE:${PROJECT_NAME}>"
       -D "OUTPUT_FILE=${ECS3D_SUITES_FILE}"
-      -D "WORKING_DIRECTORY=$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+      -D "WORKING_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}"
       -D "TIMEOUT=120"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RegisterTestSuites.cmake"
     BYPRODUCTS "${ECS3D_SUITES_FILE}"
