@@ -21,6 +21,18 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
 
+  # Shared libraries are runtime output only on Windows. Elsewhere they use the library directory, and
+  # dependencies such as assimp otherwise leave theirs in _deps, out of reach of the executables in bin.
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
+
+  # Keeps bin runnable after it is copied elsewhere, since the absolute build RPATH would then point nowhere.
+  if (UNIX AND NOT APPLE)
+    list(APPEND CMAKE_BUILD_RPATH "$ORIGIN")
+  endif()
+
   # compile_commands.json, which is what gives clangd and the IDEs navigation across the whole tree, and
   # what clang-tidy would read if it is ever wired up. Only meaningful for the generators that emit it
   # (Ninja and Makefiles), and harmless elsewhere. Not forced: a build that asked for it off keeps it off.
