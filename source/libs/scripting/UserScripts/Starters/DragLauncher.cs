@@ -5,7 +5,7 @@ using ScriptBridge;
 
 public class DragLauncher : ScriptBase
 {
-    // Launch speed per unit of drag length.
+    // Launch speed in units per second per unit of drag length.
     [ExposeToEditor("Strength")]
     private float m_strength = 4.0f;
 
@@ -22,24 +22,39 @@ public class DragLauncher : ScriptBase
     [ExposeToEditor("Log Launches")]
     private bool m_logLaunches = true;
 
-    // InputUtils has no mouse edge query, so the previous state is tracked here.
+    private const float DefaultDt = 1.0f / 50.0f;
+
+    // InputUtils has no mouse edge query, so the previous state is tracked here. The first tick only records it,
+    // so a button already held at start is not a press.
     private bool m_wasDown = false;
+
+    private bool m_seenInput = false;
+
+    private float m_dt = DefaultDt;
 
     // The grabbed object's uuid, "" while nothing is held.
     private string m_target = "";
 
-    private Vector3 m_grabPoint;
+    // Distance along the cursor ray to the grab point, and the grab point relative to the object's position.
+    private float m_depth;
 
-    private Vector3 m_planeNormal;
+    private Vector3 m_grabOffset;
 
-    private Vector3 m_dragPoint;
+    // Where the cursor is at the grab depth, relative to the grab point.
+    private Vector3 m_pull;
 
     public override void fixedUpdate(float dt)
     {
+        if (dt > 0.0f)
+        {
+            m_dt = dt;
+        }
+
         bool down = input.mouseButton(MouseButton.Left);
-        bool pressed = down && !m_wasDown;
-        bool released = !down && m_wasDown;
+        bool pressed = m_seenInput && down && !m_wasDown;
+        bool released = m_seenInput && !down && m_wasDown;
         m_wasDown = down;
+        m_seenInput = true;
 
         if (!input.windowIsFocused() || (m_target.Length > 0 && !World.objectExists(m_target)))
         {
@@ -57,7 +72,7 @@ public class DragLauncher : ScriptBase
             return;
         }
 
-        updateDragPoint();
+        updatePull();
 
         if (released)
         {
@@ -71,48 +86,42 @@ public class DragLauncher : ScriptBase
         if (!input.tryGetCursorRay(out Vector3 origin, out Vector3 direction) ||
             direction.LengthSquared() < 1e-8f ||
             !raycast(origin, Vector3.Normalize(direction), m_maxDistance, out RaycastHit hit) ||
-            !World.tryGetRigidBody(hit.objectUuid, out _))
+            !World.tryGetRigidBody(hit.objectUuid, out _) ||
+            !World.tryGetTransform(hit.objectUuid, out Transform targetTransform))
         {
             return;
         }
 
         m_target = hit.objectUuid;
-        m_grabPoint = hit.point;
-        m_dragPoint = hit.point;
-        m_planeNormal = Vector3.Normalize(direction);
+        m_depth = hit.distance;
+        m_grabOffset = hit.point - targetTransform.getPosition();
+        m_pull = Vector3.Zero;
     }
 
-    // The point where the cursor ray crosses the plane through the grab point; the last good one is kept when
-    // the ray is parallel to the plane, points away from it or is unavailable.
-    private void updateDragPoint()
+    // Measured at the grab depth from the camera, so walking or turning while holding does not drag the point
+    // along; the last good pull is kept while the cursor ray is unavailable.
+    private void updatePull()
     {
-        if (!input.tryGetCursorRay(out Vector3 origin, out Vector3 direction))
+        if (!input.tryGetCursorRay(out Vector3 origin, out Vector3 direction) ||
+            direction.LengthSquared() < 1e-8f ||
+            !World.tryGetTransform(m_target, out Transform targetTransform))
         {
             return;
         }
 
-        float facing = Vector3.Dot(m_planeNormal, direction);
-        if (MathF.Abs(facing) < 1e-6f)
-        {
-            return;
-        }
-
-        float t = Vector3.Dot(m_planeNormal, m_grabPoint - origin) / facing;
-        if (t > 0.0f)
-        {
-            m_dragPoint = origin + direction * t;
-        }
+        Vector3 cursorPoint = origin + Vector3.Normalize(direction) * m_depth;
+        m_pull = cursorPoint - (targetTransform.getPosition() + m_grabOffset);
     }
 
     private void launch()
     {
-        Vector3 drag = m_dragPoint - m_grabPoint;
-        if (drag.Length() < m_minDrag || !World.tryGetRigidBody(m_target, out RigidBody body))
+        if (m_pull.Length() < m_minDrag || !World.tryGetRigidBody(m_target, out RigidBody body))
         {
             return;
         }
 
-        Vector3 velocity = -drag * m_strength;
+        // Strength and Max Speed are per second; the engine's velocity is per tick.
+        Vector3 velocity = -m_pull * m_strength;
         float speed = velocity.Length();
         if (speed > m_maxSpeed)
         {
@@ -120,7 +129,7 @@ public class DragLauncher : ScriptBase
             speed = m_maxSpeed;
         }
 
-        body.setVelocity(velocity);
+        body.setVelocity(velocity * StarterUtils.perTick(1.0f, m_dt));
         if (m_logLaunches)
         {
             Log.info(FormattableString.Invariant($"DragLauncher launched '{describe(m_target)}' at {speed:F1}"));

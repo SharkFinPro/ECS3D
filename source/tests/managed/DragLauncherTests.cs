@@ -14,6 +14,9 @@ namespace ECS3DManagedTests;
 [Collection("BridgeInstances")]
 public unsafe class DragLauncherTests : IDisposable
 {
+  // Not the 1/50 default, so the per-second to per-tick conversion is exercised.
+  private const float Dt = 0.04f;
+
   private readonly IDisposable _natives = FakeNatives.Install();
   private readonly LogBindings _originalLog = NativeBindings.Log;
 
@@ -46,6 +49,9 @@ public unsafe class DragLauncherTests : IDisposable
   private static List<string> Launches() =>
     FakeNatives.Calls.Where(c => c.StartsWith("RigidBody.setVelocity(", StringComparison.Ordinal)).ToList();
 
+  private static List<string> Raycasts() =>
+    FakeNatives.Calls.Where(c => c.StartsWith("World.raycast(", StringComparison.Ordinal)).ToList();
+
   private static float[] Velocity(string call) =>
     call.Substring(call.IndexOf('(') + 1).TrimEnd(')').Split(',').Skip(1)
       .Select(a => float.Parse(a, CultureInfo.InvariantCulture)).ToArray();
@@ -74,9 +80,12 @@ public unsafe class DragLauncherTests : IDisposable
     FakeNatives.SetString("World.getObjectName", "Ball");
     FakeNatives.Set("World.objectExists:ball", true);
     FakeNatives.Set("RigidBody.has:ball", rigid);
+    FakeNatives.Set("Transform.has", true);
+    FakeNatives.Set("Transform.getPosition:ball", Vector3.Zero);
   }
 
-  private static DragLauncher NewLauncher()
+  // Primed with one idle tick, since the first tick only records the button state.
+  private static DragLauncher NewLauncher(bool prime = true)
   {
     var launcher = new DragLauncher { EntityId = "player" };
     launcher.initComponents();
@@ -84,32 +93,38 @@ public unsafe class DragLauncherTests : IDisposable
     Mouse(false);
     Cursor(0f);
     HitBall();
+    if (prime)
+    {
+      launcher.fixedUpdate(Dt);
+    }
+
     return launcher;
   }
 
-  // Press on the ball with the cursor at x = 0, move the cursor to dragX and let go.
-  private static void Drag(DragLauncher launcher, float dragX)
-  {
-    Mouse(true);
-    Cursor(0f);
-    launcher.fixedUpdate(0.02f);
-    Cursor(dragX);
-    launcher.fixedUpdate(0.02f);
-    Mouse(false);
-    launcher.fixedUpdate(0.02f);
-  }
-
+  // Press on the ball with the cursor at x = 0 and move the cursor to dragX, still holding.
   private static void Press(DragLauncher launcher, float dragX)
   {
     Mouse(true);
     Cursor(0f);
-    launcher.fixedUpdate(0.02f);
+    launcher.fixedUpdate(Dt);
     Cursor(dragX);
-    launcher.fixedUpdate(0.02f);
+    launcher.fixedUpdate(Dt);
+  }
+
+  private static void Release(DragLauncher launcher)
+  {
+    Mouse(false);
+    launcher.fixedUpdate(Dt);
+  }
+
+  private static void Drag(DragLauncher launcher, float dragX)
+  {
+    Press(launcher, dragX);
+    Release(launcher);
   }
 
   [Fact]
-  public void Release_LaunchesOppositeTheDragWithSpeedProportionalToItsLength()
+  public void Release_LaunchesOppositeTheDragWithSpeedProportionalToItsLengthInUnitsPerTick()
   {
     var launcher = NewLauncher();
 
@@ -118,8 +133,8 @@ public unsafe class DragLauncherTests : IDisposable
 
     var launches = Launches();
     Assert.Equal(2, launches.Count);
-    AssertVec(new Vector3(8f, 0f, 0f), Velocity(launches[0]));
-    AssertVec(new Vector3(-12f, 0f, 0f), Velocity(launches[1]));
+    AssertVec(new Vector3(8f * Dt, 0f, 0f), Velocity(launches[0]));
+    AssertVec(new Vector3(-12f * Dt, 0f, 0f), Velocity(launches[1]));
     Assert.Equal(-1.5f, Velocity(launches[1])[0] / Velocity(launches[0])[0], 1e-3f);
   }
 
@@ -133,12 +148,12 @@ public unsafe class DragLauncherTests : IDisposable
     Drag(launcher, -1f);
 
     var launches = Launches();
-    AssertVec(new Vector3(6f, 0f, 0f), Velocity(launches[0]));
-    AssertVec(new Vector3(4f, 0f, 0f), Velocity(launches[1]));
+    AssertVec(new Vector3(6f * Dt, 0f, 0f), Velocity(launches[0]));
+    AssertVec(new Vector3(4f * Dt, 0f, 0f), Velocity(launches[1]));
   }
 
   [Fact]
-  public void Release_LogsOneInfoLineUnlessLogLaunchesIsOff()
+  public void Release_LogsOnePerSecondSpeedLineUnlessLogLaunchesIsOff()
   {
     var launcher = NewLauncher();
     Drag(launcher, -2f);
@@ -197,55 +212,133 @@ public unsafe class DragLauncherTests : IDisposable
     var launcher = NewLauncher();
     FakeNatives.Set("InputUtils.cursorRayForObject", false);
     Mouse(true);
-    launcher.fixedUpdate(0.02f);
-
+    launcher.fixedUpdate(Dt);
     Cursor(-2f);
-    launcher.fixedUpdate(0.02f);
-    Mouse(false);
-    launcher.fixedUpdate(0.02f);
-
+    launcher.fixedUpdate(Dt);
+    Release(launcher);
     Assert.Empty(Launches());
+
+    Drag(launcher, -2f);
+    Assert.Single(Launches());
   }
 
   [Fact]
   public void LosingFocusDropsTheGrab()
   {
     var launcher = NewLauncher();
-    Press(launcher, -2f);
+    Drag(launcher, -2f);
+    Assert.Single(Launches());
 
+    Press(launcher, -2f);
     Focus(false);
     Mouse(false);
-    launcher.fixedUpdate(0.02f);
+    launcher.fixedUpdate(Dt);
     Focus(true);
-    launcher.fixedUpdate(0.02f);
+    launcher.fixedUpdate(Dt);
+
+    Assert.Single(Launches());
+  }
+
+  [Fact]
+  public void FocusReturningWithTheButtonStillHeldDoesNotGrabAgain()
+  {
+    var launcher = NewLauncher();
+    Press(launcher, -2f);
+    Focus(false);
+    launcher.fixedUpdate(Dt);
+    Focus(true);
+    launcher.fixedUpdate(Dt);
+    Release(launcher);
 
     Assert.Empty(Launches());
+    Assert.Single(Raycasts());
   }
 
   [Fact]
   public void TargetDisappearingDropsTheGrab()
   {
     var launcher = NewLauncher();
+    Drag(launcher, -2f);
+    Assert.Single(Launches());
+
     Press(launcher, -2f);
-
     FakeNatives.Set("World.objectExists:ball", false);
-    Mouse(false);
-    launcher.fixedUpdate(0.02f);
+    Release(launcher);
 
-    Assert.Empty(Launches());
+    Assert.Single(Launches());
   }
 
   [Fact]
-  public void CursorRayLostMidDragKeepsTheLastGoodDragPoint()
+  public void TargetThatLostItsRigidBodyLaunchesNothing()
+  {
+    var launcher = NewLauncher();
+    Drag(launcher, -2f);
+    Assert.Single(Launches());
+
+    Press(launcher, -2f);
+    FakeNatives.Set("RigidBody.has:ball", false);
+    Release(launcher);
+
+    Assert.Single(Launches());
+  }
+
+  [Fact]
+  public void CursorRayLostMidDragKeepsTheLastGoodPull()
   {
     var launcher = NewLauncher();
     Press(launcher, -2f);
 
     FakeNatives.Set("InputUtils.cursorRayForObject", false);
-    Mouse(false);
-    launcher.fixedUpdate(0.02f);
+    Release(launcher);
 
-    AssertVec(new Vector3(8f, 0f, 0f), Velocity(Assert.Single(Launches())));
+    AssertVec(new Vector3(8f * Dt, 0f, 0f), Velocity(Assert.Single(Launches())));
+  }
+
+  [Fact]
+  public void CameraMovingWithTheCursorDirectionUnchangedChangesThePullOnlyByTheOriginShift()
+  {
+    var launcher = NewLauncher();
+    Mouse(true);
+    Cursor(0f);
+    launcher.fixedUpdate(Dt);
+
+    Cursor(1f);
+    launcher.fixedUpdate(Dt);
+    Release(launcher);
+
+    AssertVec(new Vector3(-4f * Dt, 0f, 0f), Velocity(Assert.Single(Launches())));
+  }
+
+  [Fact]
+  public void TargetMovingUnderAStillCursorChangesThePullByItsDisplacement()
+  {
+    var launcher = NewLauncher();
+    Mouse(true);
+    Cursor(0f);
+    launcher.fixedUpdate(Dt);
+
+    FakeNatives.Set("Transform.getPosition:ball", new Vector3(1f, 0f, 0f));
+    launcher.fixedUpdate(Dt);
+    Release(launcher);
+
+    AssertVec(new Vector3(4f * Dt, 0f, 0f), Velocity(Assert.Single(Launches())));
+  }
+
+  [Fact]
+  public void ButtonAlreadyHeldOnTheFirstTickIsNotAPress()
+  {
+    var launcher = NewLauncher(prime: false);
+    Mouse(true);
+    launcher.fixedUpdate(Dt);
+    Cursor(-2f);
+    launcher.fixedUpdate(Dt);
+    Release(launcher);
+
+    Assert.Empty(Raycasts());
+    Assert.Empty(Launches());
+
+    Drag(launcher, -2f);
+    Assert.Single(Launches());
   }
 
   [Fact]
@@ -254,10 +347,9 @@ public unsafe class DragLauncherTests : IDisposable
     var launcher = NewLauncher();
     Cursor(1.5f, 0.5f);
     Mouse(true);
-    launcher.fixedUpdate(0.02f);
+    launcher.fixedUpdate(Dt);
 
-    var args = Assert.Single(FakeNatives.Calls, c => c.StartsWith("World.raycast(", StringComparison.Ordinal))
-      .Substring("World.raycast(".Length).TrimEnd(')').Split(',');
+    var args = Assert.Single(Raycasts()).Substring("World.raycast(".Length).TrimEnd(')').Split(',');
     var ray = args.Take(7).Select(a => float.Parse(a, CultureInfo.InvariantCulture)).ToArray();
     Assert.Equal(new[] { 1.5f, 0.5f, 10f, 0f, 0f, -1f, 100f }, ray);
     Assert.Equal("player", args[8]);

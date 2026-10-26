@@ -237,20 +237,23 @@ none. Showcase use: used by Welcome (the Watcher, with a marker on whatever it l
 
 Object script for a player's body (the object needs a `PlayerController`). Pressing the left mouse button
 casts the ray under that player's cursor, ignoring the player's own object. If it hits an object with a
-`RigidBody`, that object is grabbed. While the button is held, the cursor ray is intersected with the plane
-through the grab point that faces the camera. Releasing sets the grabbed body's velocity to the drag, reversed
-and multiplied by Strength, so a longer pull is a faster launch, up to Max Speed. A drag shorter than Min Drag
-launches nothing. The grab is dropped if the object disappears or the window loses focus.
+`RigidBody`, that object is grabbed. While the button is held, the pull is where the cursor ray is at the
+grab depth (its distance from the camera at the press), relative to the grab point, which follows the object.
+Walking or turning while holding does not change the pull by itself. Releasing sets the grabbed body's
+velocity to the pull, reversed and multiplied by Strength, so a longer pull is a faster launch, up to Max
+Speed. A pull shorter than Min Drag launches nothing. The grab is dropped if the object disappears or the
+window loses focus. A button already held when the script starts is not a press.
 
 | Label | Type | Default |
 |-------|------|---------|
-| Strength | float (speed per unit of drag) | 4 |
-| Max Speed | float | 30 |
+| Strength | float (units per second per unit of pull) | 4 |
+| Max Speed | float (units per second) | 30 |
 | Max Distance | float | 100 |
 | Min Drag | float | 0.1 |
 | Log Launches | bool | true |
 
-The launch replaces the body's velocity. Events: none. Showcase use: used by Physics Playground (Player 0).
+The launch replaces the body's velocity. When played in the editor, a Ctrl+click or gizmo drag on a body is
+also forwarded as input and can grab it. Events: none. Showcase use: used by Physics Playground (Player 0).
 
 ### ColorOnHit
 
