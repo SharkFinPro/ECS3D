@@ -104,6 +104,27 @@ public class InputAndScriptBaseTests : IDisposable
     Assert.Equal("InputUtils.mouseButtonForObject(obj-1,2)", Last);
   }
 
+  [Fact]
+  public void PlayerInput_TryGetCursorRayMarshalsTheRayAndTheFoundFlag()
+  {
+    var input = new PlayerInput(Id);
+    FakeNatives.Set("InputUtils.cursorRayForObject", true);
+    FakeNatives.Set("InputUtils.cursorRayForObject.origin", new Vector3(1f, 2f, 3f));
+    FakeNatives.Set("InputUtils.cursorRayForObject.direction", new Vector3(0f, -1f, 0f));
+
+    Assert.True(input.tryGetCursorRay(out var origin, out var direction));
+    Assert.Equal(new Vector3(1f, 2f, 3f), origin);
+    Assert.Equal(new Vector3(0f, -1f, 0f), direction);
+    Assert.Equal("InputUtils.cursorRayForObject(obj-1)", Last);
+
+    FakeNatives.Set("InputUtils.cursorRayForObject", false);
+    FakeNatives.Set("InputUtils.cursorRayForObject.origin", Vector3.Zero);
+    FakeNatives.Set("InputUtils.cursorRayForObject.direction", Vector3.Zero);
+    Assert.False(input.tryGetCursorRay(out origin, out direction));
+    Assert.Equal(Vector3.Zero, origin);
+    Assert.Equal(Vector3.Zero, direction);
+  }
+
   // ---- ScriptBase ----
 
   private sealed class Probe : ScriptBase

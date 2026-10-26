@@ -379,6 +379,39 @@ TEST(WireTruncationSweep, EveryPrefixOfAnInputStateIsRefusedOrDegradesToNoMouse)
   });
 }
 
+TEST(WireTruncationSweep, EveryPrefixOfAnInputStateWithAViewKeepsTheMouseAndNeverReportsAHalfView)
+{
+  const replication::InputView view{ "camera-uuid", 1.0f, 2.0f, 3.0f, 4.0f };
+  const auto message = replication::buildInputState(true, {}, 10.0f, 20.0f, 1.0f, -1.0f, 0.5f, 5, view);
+
+  const auto full = replication::parseInputState(message);
+  ASSERT_TRUE(full.has_value());
+  ASSERT_TRUE(full->view.has_value());
+
+  // bool + key count, then the mouse block (five floats and the button byte), then the view block.
+  constexpr std::size_t mouseEnd = sizeof(uint8_t) + sizeof(uint32_t) + 5 * sizeof(float) + sizeof(uint8_t);
+
+  forEachProperPrefix(message, [&](const net::Message& prefix, const std::size_t length) {
+    if (length < sizeof(uint8_t) + sizeof(uint32_t))
+    {
+      return;
+    }
+
+    const auto parsed = replication::parseInputState(prefix);
+
+    if (length < mouseEnd)
+    {
+      ASSERT_TRUE(parsed.has_value());
+      EXPECT_FALSE(parsed->hasMouse);
+      return;
+    }
+
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_TRUE(parsed->hasMouse);
+    EXPECT_FALSE(parsed->view.has_value());
+  });
+}
+
 TEST(WireTruncationSweep, EveryPrefixOfAServerLogIsRefused)
 {
   const auto base = std::chrono::system_clock::time_point(std::chrono::milliseconds(1700000000000));

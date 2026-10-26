@@ -27,7 +27,9 @@ enum class MessageType : uint8_t {
   stateDelta,   // server -> client: per-tick transform stream, packed binary (replication::packStateDelta)
   inputState,    // client -> server: local input for the scripts to read. Payload: focused (bool),
                  // key count (uint32) + that many key codes (int32), then the mouse block: mouseX, mouseY,
-                 // mouseDeltaX, mouseDeltaY, scrollY (5x float), buttons (uint8 bitmask L/R/M). The
+                 // mouseDeltaX, mouseDeltaY, scrollY (5x float), buttons (uint8 bitmask L/R/M), then
+                 // an optional view block: the scene camera object's uuid (string, empty = none), the cursor
+                 // relative to the scene view (2x float) and that view's size (2x float), all pixels. The
                  // widths are fixed so a 32-bit peer and a 64-bit one agree; byte order is still the
                  // host's, so peers of differing endianness would not.
   editComponent, // editor -> server -> all: a single component value edit (replication::buildComponentEdit)

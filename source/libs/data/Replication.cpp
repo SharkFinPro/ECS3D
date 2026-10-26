@@ -1910,7 +1910,8 @@ nlohmann::json unpackRemoveAsset(const net::Message& message)
 
 net::Message buildInputState(const bool focused, const std::vector<int>& keysPressed,
                              const float mouseX, const float mouseY, const float mouseDeltaX,
-                             const float mouseDeltaY, const float scrollY, const uint8_t buttons)
+                             const float mouseDeltaY, const float scrollY, const uint8_t buttons,
+                             const std::optional<InputView>& view)
 {
   net::Message message(net::MessageType::inputState);
   message.write(focused);
@@ -1926,6 +1927,15 @@ net::Message buildInputState(const bool focused, const std::vector<int>& keysPre
   message.write(mouseDeltaY);
   message.write(scrollY);
   message.write(buttons);
+
+  if (view)
+  {
+    message.writeString(view->camera);
+    message.write(view->cursorX);
+    message.write(view->cursorY);
+    message.write(view->width);
+    message.write(view->height);
+  }
 
   return message;
 }
@@ -1968,6 +1978,26 @@ std::optional<InputStatePayload> parseInputState(const net::Message& message)
     payload.mouseDeltaY = reader.read<float>();
     payload.scrollY = reader.read<float>();
     payload.buttons = reader.read<uint8_t>();
+
+    // View block: a string, then four floats. Probed on a copy so a block cut short is left unread
+    // instead of throwing out of the reader.
+    constexpr size_t viewFloatBytes = 4 * sizeof(float);
+    auto probe = reader;
+    if (probe.remaining() >= sizeof(uint32_t))
+    {
+      const size_t cameraBytes = probe.read<uint32_t>();
+      if (probe.remaining() >= viewFloatBytes && cameraBytes <= probe.remaining() - viewFloatBytes
+          && cameraBytes <= maxViewCameraBytes)
+      {
+        InputView view;
+        view.camera = reader.readString();
+        view.cursorX = reader.read<float>();
+        view.cursorY = reader.read<float>();
+        view.width = reader.read<float>();
+        view.height = reader.read<float>();
+        payload.view = std::move(view);
+      }
+    }
   }
 
   return payload;

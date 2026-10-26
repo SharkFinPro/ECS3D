@@ -1,10 +1,12 @@
 #include "InputUtilsBindings.h"
 #include "InputState.h"
 #include "BindingContext.h"
+#include <objects/CameraSelection.h>
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
 #include <objects/components/PlayerController.h>
+#include <algorithm>
 #include <optional>
 #include <string>
 
@@ -53,7 +55,8 @@ InputUtilsBindings InputUtilsBindingsProvider::getBindings()
     .scrollForObject = &bindScrollForObject,
     .mouseButtonForObject = &bindMouseButtonForObject,
     .wasKeyPressedThisTickForObject = &bindWasKeyPressedThisTickForObject,
-    .wasKeyReleasedThisTickForObject = &bindWasKeyReleasedThisTickForObject
+    .wasKeyReleasedThisTickForObject = &bindWasKeyReleasedThisTickForObject,
+    .cursorRayForObject = &bindCursorRayForObject
   };
 }
 
@@ -125,4 +128,46 @@ bool InputUtilsBindingsProvider::bindWasKeyReleasedThisTickForObject(const char*
 {
   const auto slot = playerSlotOf(uuid);
   return slot.has_value() && InputState::wasKeyReleasedThisTick(slot.value(), key);
+}
+
+bool InputUtilsBindingsProvider::bindCursorRayForObject(const char* uuid, float* origin, float* direction)
+{
+  std::fill_n(origin, 3, 0.0f);
+  std::fill_n(direction, 3, 0.0f);
+
+  const auto slot = playerSlotOf(uuid);
+  const auto objectManager = BindingContext::getObjectManager();
+  if (!slot || !objectManager)
+  {
+    return false;
+  }
+
+  const auto view = InputState::getView(slot.value());
+  const auto cameraId = view ? uuids::uuid::from_string(view->camera) : std::nullopt;
+  if (!cameraId)
+  {
+    return false;
+  }
+
+  const auto cameraObject = objectManager->getObjectByUUID(cameraId.value());
+  const auto cameraView = cameraObject ? cameraViewOf(*cameraObject) : std::nullopt;
+  if (!cameraView)
+  {
+    return false;
+  }
+
+  const auto ray = cameraRayThrough(*cameraView, view->cursorX, view->cursorY, view->width, view->height);
+  if (!ray)
+  {
+    return false;
+  }
+
+  origin[0] = ray->origin.x;
+  origin[1] = ray->origin.y;
+  origin[2] = ray->origin.z;
+  direction[0] = ray->direction.x;
+  direction[1] = ray->direction.y;
+  direction[2] = ray->direction.z;
+
+  return true;
 }

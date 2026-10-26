@@ -2,6 +2,7 @@
 #define CLIENTAPP_H
 
 #include <Protocol.h>
+#include <Replication.h>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -69,6 +70,7 @@ private:
   uint8_t m_lastButtons = 0;
   float m_lastMouseX = 0.0f;
   float m_lastMouseY = 0.0f;
+  replication::InputView m_lastView;
   bool m_inputSent = false;
 
   // A per-session random tag sent in join; the server echoes it back in a playerSlot message so this

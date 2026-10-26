@@ -21,11 +21,13 @@ A shape's accessors fail safely on a collider of another shape. `CameraBindings`
 `Camera`; its setters clamp fov/near/far to the same valid range as the editor UI (`Camera::minFovDegrees`/
 `maxFovDegrees`/`minNearPlane`/`minFarPlaneFor`), so a script cannot produce a degenerate projection.
 `InputUtilsBindings` already covers everything `InputState` queries;
-`setKeysPressed`/`setFocused`/`setMouse`/`clearMouseDeltas`/`commitInputEdges`/`removeSlot` stay
+`setKeysPressed`/`setFocused`/`setMouse`/`setView`/`clearMouseDeltas`/`commitInputEdges`/`removeSlot` stay
 unexposed because they are the write side ServerApp feeds from the network and the per-tick bookkeeping
 that resets it - in this design scripts only consume input, so that side belongs to ServerApp - and
 there is no player-agnostic aggregate for mouse position/delta/scroll/buttons because, unlike a key or
 focus, a position has no sensible "any player" combination; only the per-object reads make sense there.
+`cursorRayForObject` turns the slot's view into a world ray from the camera object it names, and reports none
+when any link of that chain is missing.
 `PlayerControllerBindings` covers the component's only field, `playerSlot` - `getPlayerSlot`/`setPlayerSlot`
 plus `has` - reached via `World.tryGetPlayerController` (including a script's own object, by passing
 `ScriptBase.EntityId`). `PlayerController::setPlayerSlot` does not constrain the value it is given, so

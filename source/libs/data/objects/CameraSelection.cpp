@@ -6,6 +6,7 @@
 #include "components/PlayerController.h"
 #include "components/Transform.h"
 
+#include <cmath>
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -82,6 +83,36 @@ std::optional<CameraView> cameraViewOf(const Object& object)
     camera->getNearPlane(),
     camera->getFarPlane()
   };
+}
+
+std::optional<CameraRay> cameraRayThrough(const CameraView& camera, const float cursorX, const float cursorY,
+                                          const float viewWidth, const float viewHeight)
+{
+  if (!(viewWidth >= 1.0f) || !(viewHeight >= 1.0f) || !std::isfinite(viewWidth) || !std::isfinite(viewHeight)
+      || !(cursorX >= 0.0f && cursorX <= viewWidth) || !(cursorY >= 0.0f && cursorY <= viewHeight))
+  {
+    return std::nullopt;
+  }
+
+  const glm::mat4 projection = glm::perspective(glm::radians(camera.fov), viewWidth / viewHeight,
+                                                camera.nearPlane, camera.farPlane);
+  const glm::mat4 inverse = glm::inverse(projection * camera.view);
+
+  const float ndcX = (cursorX / viewWidth) * 2.0f - 1.0f;
+  const float ndcY = (1.0f - cursorY / viewHeight) * 2.0f - 1.0f;
+
+  glm::vec4 farPoint = inverse * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+  farPoint /= farPoint.w;
+
+  const glm::vec3 offset = glm::vec3(farPoint) - camera.position;
+  const float length = glm::length(offset);
+
+  if (!std::isfinite(length) || length < 1e-9f)
+  {
+    return std::nullopt;
+  }
+
+  return CameraRay{ camera.position, offset / length };
 }
 
 std::string cameraLabel(const Object& object)

@@ -211,3 +211,33 @@ namespace {
     EXPECT_FALSE(InputState::isAnyFocused());
   }
 }
+
+namespace {
+  TEST_F(InputStateTest, EachSlotKeepsItsOwnLatestViewAndRemovingASlotDropsIt)
+  {
+    EXPECT_FALSE(InputState::getView(slotA).has_value());
+
+    InputState::setView(slotA, { "cam-a", 1.0f, 2.0f, 300.0f, 200.0f });
+    InputState::setView(slotB, { "cam-b", 3.0f, 4.0f, 500.0f, 250.0f });
+
+    const auto a = InputState::getView(slotA);
+    ASSERT_TRUE(a.has_value());
+    EXPECT_EQ(a->camera, "cam-a");
+    EXPECT_FLOAT_EQ(a->cursorX, 1.0f);
+    EXPECT_FLOAT_EQ(a->width, 300.0f);
+    const auto b = InputState::getView(slotB);
+    ASSERT_TRUE(b.has_value());
+    EXPECT_EQ(b->camera, "cam-b");
+    EXPECT_FLOAT_EQ(b->height, 250.0f);
+
+    // Latest value, not accumulated.
+    InputState::setView(slotA, { "cam-a2", 9.0f, 8.0f, 100.0f, 100.0f });
+    EXPECT_EQ(InputState::getView(slotA)->camera, "cam-a2");
+    EXPECT_FLOAT_EQ(InputState::getView(slotA)->cursorX, 9.0f);
+
+    InputState::removeSlot(slotA);
+    EXPECT_FALSE(InputState::getView(slotA).has_value());
+    EXPECT_TRUE(InputState::getView(slotB).has_value());
+    EXPECT_FALSE(InputState::getView(unknownSlot).has_value());
+  }
+}

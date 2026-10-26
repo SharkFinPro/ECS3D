@@ -108,6 +108,23 @@ std::vector<int32_t> playerSlotsInScene(const ObjectManager& objectManager)
   return slots;
 }
 
+std::string permittedViewCamera(const ObjectManager& objectManager, const int32_t slot,
+                                const std::string& requested, const bool connectionIsEditor)
+{
+  const auto parsed = uuids::uuid::from_string(requested);
+  if (!parsed)
+  {
+    return {};
+  }
+
+  if (!connectionIsEditor && findPlayerCamera(objectManager, slot) != parsed)
+  {
+    return {};
+  }
+
+  return requested;
+}
+
 std::optional<uuids::uuid> findPlayerCamera(const ObjectManager& objectManager, const int32_t slot)
 {
   for (const auto& object : objectManager.getAllObjects())

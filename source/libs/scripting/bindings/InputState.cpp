@@ -28,6 +28,11 @@ void InputState::setMouse(const int32_t playerSlot, const float x, const float y
   slot.scrollY += scrollY;
 }
 
+void InputState::setView(const int32_t playerSlot, const View& view)
+{
+  s_slots[playerSlot].view = view;
+}
+
 void InputState::clearMouseDeltas()
 {
   for (auto& [slot, input] : s_slots)
@@ -108,6 +113,12 @@ bool InputState::isMouseButtonPressed(const int32_t playerSlot, const int button
 
   const auto it = s_slots.find(playerSlot);
   return it != s_slots.end() && (it->second.buttons & (1u << button)) != 0u;
+}
+
+std::optional<InputState::View> InputState::getView(const int32_t playerSlot)
+{
+  const auto it = s_slots.find(playerSlot);
+  return it != s_slots.end() ? it->second.view : std::nullopt;
 }
 
 bool InputState::isAnyKeyPressed(const int key)

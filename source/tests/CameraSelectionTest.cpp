@@ -9,7 +9,10 @@
 #include "objects/components/PlayerController.h"
 #include "objects/components/Transform.h"
 
+#include <algorithm>
+#include <cfloat>
 #include <cmath>
+#include <glm/geometric.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -283,4 +286,116 @@ TEST(CameraSelection, ViewMapsPointsAheadOfTheCameraToNegativeZ)
   EXPECT_NEAR(ahead.y, 0.0f, 1e-4f);
   EXPECT_NEAR(ahead.z, -5.0f, 1e-4f);
   EXPECT_NEAR(behind.z, 5.0f, 1e-4f);
+}
+
+namespace {
+  constexpr float pi = 3.14159265358979f;
+  constexpr float cameraFovDegrees = 60.0f;
+  constexpr float viewWidth = 800.0f;
+  constexpr float viewHeight = 400.0f;
+
+  CameraView viewOfCameraAt(const fixtures::Scene& scene, const glm::vec3& position, const glm::vec3& rotation)
+  {
+    const auto object = addObject(scene, "Cam", position);
+    addCamera(scene, object, true)->setFov(cameraFovDegrees);
+    fixtures::transformOf(object)->setRotation(rotation);
+
+    return cameraViewOf(*object).value();
+  }
+
+  float angleBetween(const glm::vec3& a, const glm::vec3& b)
+  {
+    return std::acos(std::clamp(glm::dot(glm::normalize(a), glm::normalize(b)), -1.0f, 1.0f));
+  }
+}
+
+TEST(CameraRayThrough, ViewCenterLooksAlongTheCameraForward)
+{
+  const auto scene = fixtures::makeScene();
+  const auto camera = viewOfCameraAt(scene, { 1.0f, 2.0f, 3.0f }, { 0.0f, 0.0f, 0.0f });
+
+  const auto ray = cameraRayThrough(camera, viewWidth / 2.0f, viewHeight / 2.0f, viewWidth, viewHeight);
+  ASSERT_TRUE(ray.has_value());
+  fixtures::expectNear(ray->origin, { 1.0f, 2.0f, 3.0f });
+  fixtures::expectNear(ray->direction, { 0.0f, 0.0f, -1.0f }, 1e-4f);
+  EXPECT_NEAR(glm::length(ray->direction), 1.0f, 1e-5f);
+}
+
+TEST(CameraRayThrough, RightEdgeTiltsByTheHorizontalHalfFieldOfView)
+{
+  const auto scene = fixtures::makeScene();
+  const auto camera = viewOfCameraAt(scene, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f });
+
+  const auto ray = cameraRayThrough(camera, viewWidth, viewHeight / 2.0f, viewWidth, viewHeight);
+  ASSERT_TRUE(ray.has_value());
+
+  const float aspect = viewWidth / viewHeight;
+  const float expected = std::atan(std::tan(cameraFovDegrees * pi / 360.0f) * aspect);
+  EXPECT_NEAR(angleBetween(ray->direction, { 0.0f, 0.0f, -1.0f }), expected, 1e-4f);
+  EXPECT_GT(ray->direction.x, 0.0f);
+  EXPECT_NEAR(ray->direction.y, 0.0f, 1e-5f);
+
+  // The left edge mirrors it, so the sign above comes from the cursor and not from a constant skew.
+  const auto left = cameraRayThrough(camera, 0.0f, viewHeight / 2.0f, viewWidth, viewHeight);
+  ASSERT_TRUE(left.has_value());
+  EXPECT_LT(left->direction.x, 0.0f);
+}
+
+TEST(CameraRayThrough, TopEdgeTiltsUpByHalfTheVerticalFieldOfView)
+{
+  const auto scene = fixtures::makeScene();
+  const auto camera = viewOfCameraAt(scene, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f });
+
+  const auto top = cameraRayThrough(camera, viewWidth / 2.0f, 0.0f, viewWidth, viewHeight);
+  ASSERT_TRUE(top.has_value());
+  EXPECT_NEAR(angleBetween(top->direction, { 0.0f, 0.0f, -1.0f }), cameraFovDegrees * pi / 360.0f, 1e-4f);
+  EXPECT_GT(top->direction.y, 0.0f);
+
+  const auto bottom = cameraRayThrough(camera, viewWidth / 2.0f, viewHeight, viewWidth, viewHeight);
+  ASSERT_TRUE(bottom.has_value());
+  EXPECT_LT(bottom->direction.y, 0.0f);
+}
+
+TEST(CameraRayThrough, ARotatedCameraTurnsTheRayWithIt)
+{
+  const auto scene = fixtures::makeScene();
+  const auto camera = viewOfCameraAt(scene, { 5.0f, 0.0f, 0.0f }, { 0.0f, 90.0f, 0.0f });
+
+  const auto center = cameraRayThrough(camera, viewWidth / 2.0f, viewHeight / 2.0f, viewWidth, viewHeight);
+  ASSERT_TRUE(center.has_value());
+  fixtures::expectNear(center->origin, { 5.0f, 0.0f, 0.0f });
+  fixtures::expectNear(center->direction, { -1.0f, 0.0f, 0.0f }, 1e-4f);
+
+  // Facing -x, the screen's right is -z.
+  const auto right = cameraRayThrough(camera, viewWidth, viewHeight / 2.0f, viewWidth, viewHeight);
+  ASSERT_TRUE(right.has_value());
+  EXPECT_LT(right->direction.z, 0.0f);
+  EXPECT_LT(right->direction.x, 0.0f);
+}
+
+TEST(CameraRayThrough, ADegenerateViewOrACursorOutsideItHasNoRay)
+{
+  const auto scene = fixtures::makeScene();
+  const auto camera = viewOfCameraAt(scene, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f });
+
+  // Positive control for every case below: the same cursor in a usable view.
+  EXPECT_TRUE(cameraRayThrough(camera, 10.0f, 10.0f, viewWidth, viewHeight).has_value());
+  EXPECT_TRUE(cameraRayThrough(camera, 0.0f, 0.0f, viewWidth, viewHeight).has_value());
+  EXPECT_TRUE(cameraRayThrough(camera, viewWidth, viewHeight, viewWidth, viewHeight).has_value());
+
+  EXPECT_FALSE(cameraRayThrough(camera, 0.0f, 0.0f, 0.0f, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 0.0f, 0.0f, viewWidth, 0.5f).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 0.0f, 0.0f, -viewWidth, viewHeight).has_value());
+
+  EXPECT_FALSE(cameraRayThrough(camera, -1.0f, 10.0f, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, -1.0f, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, viewWidth + 1.0f, 10.0f, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, viewHeight + 1.0f, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, std::nanf(""), 10.0f, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, -FLT_MAX, 10.0f, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, -FLT_MAX, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, 10.0f, std::nanf(""), viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, 10.0f, viewWidth, std::nanf("")).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, 10.0f, HUGE_VALF, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, 10.0f, viewWidth, HUGE_VALF).has_value());
 }
