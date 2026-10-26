@@ -1986,7 +1986,8 @@ std::optional<InputStatePayload> parseInputState(const net::Message& message)
     if (probe.remaining() >= sizeof(uint32_t))
     {
       const size_t cameraBytes = probe.read<uint32_t>();
-      if (probe.remaining() >= cameraBytes + viewFloatBytes)
+      if (probe.remaining() >= viewFloatBytes && cameraBytes <= probe.remaining() - viewFloatBytes
+          && cameraBytes <= maxViewCameraBytes)
       {
         InputView view;
         view.camera = reader.readString();

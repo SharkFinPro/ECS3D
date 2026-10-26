@@ -289,6 +289,9 @@ bool applyRemoveAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, 
 // The view block says what the cursor points at: the scene camera object the sender renders through
 // (empty = none, as in free-fly), the cursor relative to the top-left of the scene view, and that view's
 // size, all in pixels. The server builds the cursor ray from its own copy of the camera.
+// A uuid string is 36 bytes; a longer camera string is not one.
+inline constexpr std::size_t maxViewCameraBytes = 64;
+
 struct InputView {
   std::string camera;
   float cursorX = 0.0f;
@@ -324,7 +327,7 @@ struct InputStatePayload {
 // the same way every other wire read here does. The mouse block is optional on the wire (an older client
 // may predate it): fewer bytes than the block needs leaves hasMouse false rather than throwing, so those
 // bytes (if any) are simply left unread. The view block follows the mouse block and is optional the same
-// way: a block cut short leaves `view` empty.
+// way: a block cut short, or naming a camera longer than maxViewCameraBytes, leaves `view` empty.
 [[nodiscard]] std::optional<InputStatePayload> parseInputState(const net::Message& message);
 
 // editor -> server: bind this connection's input to a player slot (MessageType::possessSlot).

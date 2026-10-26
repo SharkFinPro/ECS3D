@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <uuid.h>
 #include <vector>
@@ -56,5 +57,11 @@ private:
 
 // The first object whose PlayerController holds the slot and that also carries a Camera.
 [[nodiscard]] std::optional<uuids::uuid> findPlayerCamera(const ObjectManager& objectManager, int32_t slot);
+
+// The camera a connection may report in its input view. A non-editor connection may look through only its
+// own slot's player camera, since the server builds cursor rays from whatever camera object it names; an
+// editor may name any scene camera. Empty when the request is empty, malformed or not permitted.
+[[nodiscard]] std::string permittedViewCamera(const ObjectManager& objectManager, int32_t slot,
+                                              const std::string& requested, bool connectionIsEditor);
 
 #endif //PLAYERSLOTS_H

@@ -5,6 +5,7 @@
 #include <Protocol.h>
 #include <cstdint>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 // parseInputState/buildInputState carry ServerApp::handleInputState's parse of the client's per-frame
@@ -238,4 +239,53 @@ TEST(InputStatePayload, ATruncatedViewBlockIsTreatedAsAbsentWhileTheMouseBlockSu
 
   // Positive control: the uncut message carries the view.
   ASSERT_TRUE(replication::parseInputState(full)->view.has_value());
+}
+
+TEST(InputStatePayload, ACameraStringPastTheUuidBoundIsNoViewWhileTheLongestAllowedOneParses)
+{
+  const std::string longest(replication::maxViewCameraBytes, 'a');
+  const auto accepted = replication::parseInputState(
+    replication::buildInputState(true, {}, 7.0f, 8.0f, 0.0f, 0.0f, 0.0f, 0,
+                                 replication::InputView{ longest, 1.0f, 2.0f, 3.0f, 4.0f }));
+  ASSERT_TRUE(accepted.has_value());
+  ASSERT_TRUE(accepted->view.has_value());
+  EXPECT_EQ(accepted->view->camera, longest);
+
+  const std::string huge(100000, 'a');
+  const auto refused = replication::parseInputState(
+    replication::buildInputState(true, {}, 7.0f, 8.0f, 0.0f, 0.0f, 0.0f, 0,
+                                 replication::InputView{ huge, 1.0f, 2.0f, 3.0f, 4.0f }));
+  ASSERT_TRUE(refused.has_value());
+  EXPECT_TRUE(refused->hasMouse);
+  EXPECT_EQ(refused->mouseX, 7.0f);
+  EXPECT_FALSE(refused->view.has_value());
+
+  const std::string justOver(replication::maxViewCameraBytes + 1, 'a');
+  const auto over = replication::parseInputState(
+    replication::buildInputState(true, {}, 7.0f, 8.0f, 0.0f, 0.0f, 0.0f, 0,
+                                 replication::InputView{ justOver, 1.0f, 2.0f, 3.0f, 4.0f }));
+  ASSERT_TRUE(over.has_value());
+  EXPECT_FALSE(over->view.has_value());
+}
+
+TEST(InputStatePayload, ACameraLengthClaimingMoreThanTheMessageHoldsIsNoViewWithoutThrowing)
+{
+  net::Message claim(net::MessageType::inputState);
+  claim.write<bool>(true);
+  claim.write<uint32_t>(0);
+  for (const float value : { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f })
+  {
+    claim.write<float>(value);
+  }
+  claim.write<uint8_t>(0);
+  claim.write<uint32_t>(0xFFFFFFFFu);
+  for (int i = 0; i < 4; ++i)
+  {
+    claim.write<float>(1.0f);
+  }
+
+  const auto payload = replication::parseInputState(claim);
+  ASSERT_TRUE(payload.has_value());
+  EXPECT_TRUE(payload->hasMouse);
+  EXPECT_FALSE(payload->view.has_value());
 }

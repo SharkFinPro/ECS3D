@@ -138,7 +138,8 @@ void ClientApp::sendInput()
 
   const auto rect = m_renderer->getRenderingManager()->getSceneViewRect();
   const auto& mousePos = ImGui::GetIO().MousePos;
-  input::setView(snapshot, mousePos.x, mousePos.y, { rect.x, rect.y, rect.width, rect.height }, viewCamera);
+  input::setView(snapshot, mousePos.x, mousePos.y, { rect.x, rect.y, rect.width, rect.height },
+                 snapshot.focused ? viewCamera : std::nullopt);
 
   // Discrete state we de-dup on (don't resend an unchanged keyboard/button/cursor every frame). Cursor
   // position is included so mouse movement triggers a send; delta rides along in the same message.

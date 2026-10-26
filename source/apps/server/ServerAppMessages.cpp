@@ -10,6 +10,7 @@
 #include <bindings/InputState.h>
 #include <NetServer.h>
 #include <Log.h>
+#include <PlayerSlots.h>
 #include <Replication.h>
 #include <nlohmann/json.hpp>
 #include <cstddef>
@@ -238,7 +239,13 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
 
   if (payload->view)
   {
-    InputState::setView(slot, { payload->view->camera, payload->view->cursorX, payload->view->cursorY,
+    // Validated here, where the connection's role is known, so the binding can trust what the slot holds.
+    const auto scene = m_sceneManager->getCurrentScene();
+    const std::string camera = scene
+      ? permittedViewCamera(*scene->getObjectManager(), slot, payload->view->camera, m_netServer->isEditor(senderId))
+      : std::string();
+
+    InputState::setView(slot, { camera, payload->view->cursorX, payload->view->cursorY,
                                 payload->view->width, payload->view->height });
   }
 }

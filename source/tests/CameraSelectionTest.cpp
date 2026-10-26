@@ -10,6 +10,7 @@
 #include "objects/components/Transform.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <glm/geometric.hpp>
 #include <glm/mat4x4.hpp>
@@ -391,4 +392,10 @@ TEST(CameraRayThrough, ADegenerateViewOrACursorOutsideItHasNoRay)
   EXPECT_FALSE(cameraRayThrough(camera, viewWidth + 1.0f, 10.0f, viewWidth, viewHeight).has_value());
   EXPECT_FALSE(cameraRayThrough(camera, 10.0f, viewHeight + 1.0f, viewWidth, viewHeight).has_value());
   EXPECT_FALSE(cameraRayThrough(camera, std::nanf(""), 10.0f, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, -FLT_MAX, 10.0f, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, -FLT_MAX, viewWidth, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, 10.0f, std::nanf(""), viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, 10.0f, viewWidth, std::nanf("")).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, 10.0f, HUGE_VALF, viewHeight).has_value());
+  EXPECT_FALSE(cameraRayThrough(camera, 10.0f, 10.0f, viewWidth, HUGE_VALF).has_value());
 }

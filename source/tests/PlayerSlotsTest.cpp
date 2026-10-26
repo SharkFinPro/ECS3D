@@ -11,6 +11,7 @@
 #include <Protocol.h>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace {
@@ -250,4 +251,45 @@ TEST(PlayerSlotTable, HeldSlotsListsEveryBoundSlotAscending)
   table.release(50);
   table.request(10, 20);
   EXPECT_EQ(table.heldSlots(), (std::vector<int32_t>{ 0, 1, 2, 3, 5, 6, 7, 20 }));
+}
+
+TEST(PermittedViewCamera, APlayerMayNameOnlyItsOwnSlotsCameraWhileAnEditorMayNameAny)
+{
+  const auto scene = fixtures::makeScene();
+  const auto mine = fixtures::addObject(scene, "Mine");
+  addController(mine, 1);
+  addCamera(mine);
+  const auto theirs = fixtures::addObject(scene, "Theirs");
+  addController(theirs, 2);
+  addCamera(theirs);
+  const auto plain = fixtures::addObject(scene, "Plain");
+  addCamera(plain);
+
+  const std::string own = uuids::to_string(mine->getUUID());
+  const std::string other = uuids::to_string(theirs->getUUID());
+  const std::string unowned = uuids::to_string(plain->getUUID());
+
+  // Positive controls: the slot's own camera passes, and an editor passes every one of these.
+  EXPECT_EQ(permittedViewCamera(*scene.objectManager, 1, own, false), own);
+  EXPECT_EQ(permittedViewCamera(*scene.objectManager, 1, other, true), other);
+  EXPECT_EQ(permittedViewCamera(*scene.objectManager, 1, unowned, true), unowned);
+
+  EXPECT_TRUE(permittedViewCamera(*scene.objectManager, 1, other, false).empty());
+  EXPECT_TRUE(permittedViewCamera(*scene.objectManager, 1, unowned, false).empty());
+  EXPECT_TRUE(permittedViewCamera(*scene.objectManager, 5, own, false).empty());
+}
+
+TEST(PermittedViewCamera, EmptyOrMalformedRequestsAreEmptyEvenForAnEditor)
+{
+  const auto scene = fixtures::makeScene();
+  const auto mine = fixtures::addObject(scene, "Mine");
+  addController(mine, 1);
+  addCamera(mine);
+
+  EXPECT_FALSE(permittedViewCamera(*scene.objectManager, 1, uuids::to_string(mine->getUUID()), false).empty());
+  for (const bool editor : { false, true })
+  {
+    EXPECT_TRUE(permittedViewCamera(*scene.objectManager, 1, "", editor).empty());
+    EXPECT_TRUE(permittedViewCamera(*scene.objectManager, 1, "not-a-uuid", editor).empty());
+  }
 }
