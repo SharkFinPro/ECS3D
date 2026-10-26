@@ -212,6 +212,7 @@ add_executable(${PROJECT_NAME}
   ServerArgumentsTest.cpp
   ClientConnectionStateTest.cpp
   InputStatePayloadTest.cpp
+  InputViewTest.cpp
   InputStateTest.cpp
   InputUtilsBindingsTest.cpp
   PlayerSlotsTest.cpp
@@ -300,6 +301,10 @@ add_executable(${PROJECT_NAME}
   # The billboard math depends only on glm, compiled in rather than linking ECS3DRender, which pulls in
   # Vulkan.
   ../libs/render/Billboard.cpp
+
+  # The view-block helper takes plain numbers and a uuid, so it compiles in without the capture code that
+  # needs GLFW.
+  ../libs/render/InputView.cpp
 
   # The thumbnail letterbox and PNG encode depend only on the standard library and stb_image_write.
   ../libs/render/ThumbnailImage.cpp

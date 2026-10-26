@@ -5,6 +5,7 @@
 #include <objects/components/Component.h>
 #include <RenderSystem.h>
 #include <InputCapture.h>
+#include <InputView.h>
 #include <Replication.h>
 #include <Selection.h>
 #include <EditorTheme.h>
@@ -115,6 +116,11 @@ input::InputSnapshot EditorApp::captureGatedInput() const
     snapshot.buttons = 0;
   }
 
+  // The same gate as the buttons: a free-fly or unfocused view carries no camera, so no ray can be cast.
+  const auto rect = m_renderer->getRenderingManager()->getSceneViewRect();
+  input::setView(snapshot, io.MousePos.x, io.MousePos.y, { rect.x, rect.y, rect.width, rect.height },
+                 mouseDrivesGame ? m_viewCameraObject : std::nullopt);
+
   return snapshot;
 }
 
@@ -125,7 +131,8 @@ bool EditorApp::hasInputChanged(const input::InputSnapshot& snapshot) const
     || snapshot.focused != m_lastInputFocused
     || snapshot.buttons != m_lastButtons
     || snapshot.mouseX != m_lastMouseX
-    || snapshot.mouseY != m_lastMouseY;
+    || snapshot.mouseY != m_lastMouseY
+    || snapshot.view != m_lastView;
 
   const bool scrolled = snapshot.scrollY != 0.0f;
 
@@ -146,11 +153,13 @@ void EditorApp::sendInput()
   m_lastButtons = snapshot.buttons;
   m_lastMouseX = snapshot.mouseX;
   m_lastMouseY = snapshot.mouseY;
+  m_lastView = snapshot.view;
   m_inputSent = true;
 
   const auto message = replication::buildInputState(snapshot.focused, snapshot.keys, snapshot.mouseX,
                                                      snapshot.mouseY, snapshot.mouseDeltaX,
-                                                     snapshot.mouseDeltaY, snapshot.scrollY, snapshot.buttons);
+                                                     snapshot.mouseDeltaY, snapshot.scrollY, snapshot.buttons,
+                                                     snapshot.view);
 
   m_netClient->send(message);
 }

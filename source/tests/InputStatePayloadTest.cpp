@@ -164,3 +164,78 @@ TEST(InputStatePayload, TrailingBytesPastAWellFormedMouseBlockAreIgnoredRatherTh
   ASSERT_TRUE(payload->hasMouse);
   EXPECT_EQ(payload->buttons, 0b1u);
 }
+
+TEST(InputStatePayload, TheViewBlockRoundTripsAfterTheMouseBlock)
+{
+  const replication::InputView view{ "0b0d0f6c-3f1c-4f3b-9d56-0d6f4b6a1c11", 12.5f, 99.0f, 640.0f, 360.0f };
+  const auto message = replication::buildInputState(true, { 87 }, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 0b10u, view);
+
+  const auto payload = replication::parseInputState(message);
+  ASSERT_TRUE(payload.has_value());
+  ASSERT_TRUE(payload->hasMouse);
+  EXPECT_EQ(payload->buttons, 0b10u);
+  ASSERT_TRUE(payload->view.has_value());
+  EXPECT_EQ(payload->view->camera, view.camera);
+  EXPECT_EQ(payload->view->cursorX, 12.5f);
+  EXPECT_EQ(payload->view->cursorY, 99.0f);
+  EXPECT_EQ(payload->view->width, 640.0f);
+  EXPECT_EQ(payload->view->height, 360.0f);
+}
+
+TEST(InputStatePayload, AMessageWrittenWithoutTheViewBlockKeepsItsMouseAndHasNoView)
+{
+  // The bytes the format had before the view block: keys, then the mouse block, nothing after.
+  net::Message older(net::MessageType::inputState);
+  older.write<bool>(true);
+  older.write<uint32_t>(1);
+  older.write<int32_t>(65);
+  for (const float value : { 10.0f, 20.0f, 1.0f, -1.0f, 0.5f })
+  {
+    older.write<float>(value);
+  }
+  older.write<uint8_t>(0b1u);
+
+  const auto payload = replication::parseInputState(older);
+  ASSERT_TRUE(payload.has_value());
+  ASSERT_TRUE(payload->hasMouse);
+  EXPECT_EQ(payload->mouseX, 10.0f);
+  EXPECT_EQ(payload->buttons, 0b1u);
+  EXPECT_FALSE(payload->view.has_value());
+
+  // Positive control: the same builder given a view reports it.
+  const auto withView = replication::parseInputState(
+    replication::buildInputState(true, { 65 }, 10.0f, 20.0f, 1.0f, -1.0f, 0.5f, 0b1u, replication::InputView{}));
+  ASSERT_TRUE(withView.has_value());
+  EXPECT_TRUE(withView->view.has_value());
+}
+
+TEST(InputStatePayload, AnEmptyCameraStringRoundTripsAsAViewWithNoCamera)
+{
+  const replication::InputView view{ "", 5.0f, 6.0f, 100.0f, 50.0f };
+  const auto payload = replication::parseInputState(
+    replication::buildInputState(true, {}, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0, view));
+
+  ASSERT_TRUE(payload.has_value());
+  ASSERT_TRUE(payload->view.has_value());
+  EXPECT_TRUE(payload->view->camera.empty());
+  EXPECT_EQ(payload->view->cursorX, 5.0f);
+  EXPECT_EQ(payload->view->height, 50.0f);
+}
+
+TEST(InputStatePayload, ATruncatedViewBlockIsTreatedAsAbsentWhileTheMouseBlockSurvives)
+{
+  const replication::InputView view{ "abc", 1.0f, 2.0f, 3.0f, 4.0f };
+  const auto full = replication::buildInputState(true, {}, 7.0f, 8.0f, 0.0f, 0.0f, 0.0f, 0, view);
+  const auto bytes = full.bytes();
+
+  const net::Message cut(net::MessageType::inputState, bytes.first(bytes.size() - 1));
+
+  const auto payload = replication::parseInputState(cut);
+  ASSERT_TRUE(payload.has_value());
+  ASSERT_TRUE(payload->hasMouse);
+  EXPECT_EQ(payload->mouseX, 7.0f);
+  EXPECT_FALSE(payload->view.has_value());
+
+  // Positive control: the uncut message carries the view.
+  ASSERT_TRUE(replication::parseInputState(full)->view.has_value());
+}

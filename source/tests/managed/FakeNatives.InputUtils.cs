@@ -78,6 +78,15 @@ internal static unsafe class FakeInputUtilsNatives
     return Flag("InputUtils.wasKeyReleasedThisTickForObject");
   }
 
+  [UnmanagedCallersOnly]
+  private static byte InputCursorRayForObject(IntPtr u, float* origin, float* direction)
+  {
+    Rec("InputUtils.cursorRayForObject", u);
+    OutVec3("InputUtils.cursorRayForObject.origin", origin, origin + 1, origin + 2);
+    OutVec3("InputUtils.cursorRayForObject.direction", direction, direction + 1, direction + 2);
+    return Flag("InputUtils.cursorRayForObject");
+  }
+
   internal static InputUtilsBindings Make() => new()
   {
     keyIsPressed = (delegate* unmanaged<int, bool>)(void*)(delegate* unmanaged<int, byte>)&InputKeyIsPressed,
@@ -94,6 +103,8 @@ internal static unsafe class FakeInputUtilsNatives
     wasKeyPressedThisTickForObject = (delegate* unmanaged<IntPtr, int, bool>)(void*)
       (delegate* unmanaged<IntPtr, int, byte>)&InputWasKeyPressedThisTickForObject,
     wasKeyReleasedThisTickForObject = (delegate* unmanaged<IntPtr, int, bool>)(void*)
-      (delegate* unmanaged<IntPtr, int, byte>)&InputWasKeyReleasedThisTickForObject
+      (delegate* unmanaged<IntPtr, int, byte>)&InputWasKeyReleasedThisTickForObject,
+    cursorRayForObject = (delegate* unmanaged<IntPtr, float*, float*, bool>)(void*)
+      (delegate* unmanaged<IntPtr, float*, float*, byte>)&InputCursorRayForObject
   };
 }

@@ -49,3 +49,15 @@ The editor follows only that answer.
 On a confirmed switch it resends its input for the new slot and points its View at that player's `Camera`.
 `findPlayerCamera` finds that camera and is shared with `ClientApp`; a player with no `Camera` leaves the view alone.
 The join reply just records the slot, and an unanswered request times out so the combo is not stuck disabled.
+
+**Cursor rays.** Each `inputState` ends with a view block so a script can tell what the player clicked: the uuid
+of the scene camera object the sender renders through (empty when there is none), the cursor relative to the top
+left of the scene view, and that view's size, all in pixels. The camera travels as a uuid rather than a pose so
+the server builds the ray from its own current copy of the camera: it stays right while the camera moves under a
+still cursor, and no extra input is sent for it. `ClientApp` sends `findActiveCamera` on its player camera; the
+editor sends `m_viewCameraObject` only while `mouseDrivesGame` holds, the same gate that zeroes its buttons, so
+free-fly or an unfocused scene yields no ray. Both pair `ImGui::GetIO().MousePos` with
+`RenderingManager::getSceneViewRect()` through `input::setView`. `InputState` keeps the latest view per slot,
+`cameraRayThrough` (`data/objects/CameraSelection`) turns it into a ray with the gizmo's projection math, and
+`PlayerInput.tryGetCursorRay` hands that ray to a script, which picks with `World.raycast`. The ray is absent
+without a view, a usable scene camera or a cursor inside the view.

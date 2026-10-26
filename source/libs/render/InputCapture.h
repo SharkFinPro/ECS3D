@@ -1,6 +1,7 @@
 #ifndef INPUTCAPTURE_H
 #define INPUTCAPTURE_H
 
+#include <Replication.h>
 #include <cstdint>
 #include <vector>
 
@@ -32,6 +33,10 @@ struct InputSnapshot {
   float mouseDeltaY = 0.0f;
   float scrollY = 0.0f;
   uint8_t buttons = 0;
+
+  // What the cursor points at, filled by setView; capture() leaves it empty because the scene view and its
+  // camera belong to the app.
+  replication::InputView view;
 };
 
 [[nodiscard]] InputSnapshot capture(const vke::VulkanEngine& renderer);

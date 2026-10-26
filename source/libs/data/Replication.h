@@ -283,8 +283,22 @@ bool applyRemoveAsset(AssetRegistry& assetRegistry, SceneManager& sceneManager, 
 [[nodiscard]] nlohmann::json unpackRemoveAsset(const net::Message& message);
 
 // The client/editor's per-frame local input, sent so the headless server (no GLFW window of its own) can
-// feed the scripts through InputState. focused/keysPressed/mouse are captured client-side; hasMouse is
-// false only when the parsed payload predates the mouse block (see parseInputState).
+// feed the scripts through InputState. focused/keysPressed/mouse/view are captured client-side; hasMouse
+// and view are absent only when the parsed payload predates those blocks (see parseInputState).
+//
+// The view block says what the cursor points at: the scene camera object the sender renders through
+// (empty = none, as in free-fly), the cursor relative to the top-left of the scene view, and that view's
+// size, all in pixels. The server builds the cursor ray from its own copy of the camera.
+struct InputView {
+  std::string camera;
+  float cursorX = 0.0f;
+  float cursorY = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
+
+  [[nodiscard]] bool operator==(const InputView&) const = default;
+};
+
 struct InputStatePayload {
   bool focused = false;
   std::vector<int> keysPressed;
@@ -296,17 +310,21 @@ struct InputStatePayload {
   float mouseDeltaY = 0.0f;
   float scrollY = 0.0f;
   uint8_t buttons = 0;
+
+  std::optional<InputView> view;
 };
 
 [[nodiscard]] net::Message buildInputState(bool focused, const std::vector<int>& keysPressed,
                                            float mouseX, float mouseY, float mouseDeltaX, float mouseDeltaY,
-                                           float scrollY, uint8_t buttons);
+                                           float scrollY, uint8_t buttons,
+                                           const std::optional<InputView>& view = std::nullopt);
 
 // nullopt only for a key count that claims more keys than the payload has bytes left to hold - every
 // other malformed shape (a truncated bool/count, or a reader run off the end) throws std::runtime_error
 // the same way every other wire read here does. The mouse block is optional on the wire (an older client
 // may predate it): fewer bytes than the block needs leaves hasMouse false rather than throwing, so those
-// bytes (if any) are simply left unread.
+// bytes (if any) are simply left unread. The view block follows the mouse block and is optional the same
+// way: a block cut short leaves `view` empty.
 [[nodiscard]] std::optional<InputStatePayload> parseInputState(const net::Message& message);
 
 // editor -> server: bind this connection's input to a player slot (MessageType::possessSlot).

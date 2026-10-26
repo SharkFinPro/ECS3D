@@ -7,9 +7,14 @@
 #include "InputState.h"
 #include "InputUtilsBindings.h"
 
+#include "ComponentRegistry.h"
+#include "objects/CameraSelection.h"
 #include "objects/Object.h"
+#include "objects/components/Camera.h"
 #include "objects/components/PlayerController.h"
+#include "objects/components/Transform.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
@@ -202,5 +207,103 @@ namespace {
       EXPECT_FALSE(bindings.keyIsPressed(keyW));
       EXPECT_FALSE(bindings.windowIsFocused());
     }
+  }
+}
+
+namespace {
+  constexpr float viewWidth = 640.0f;
+  constexpr float viewHeight = 360.0f;
+  constexpr float cursorX = 500.0f;
+  constexpr float cursorY = 100.0f;
+
+  TEST_F(InputUtilsBindingsTest, TheCursorRayMatchesTheCameraRayHelperForThePlayersView)
+  {
+    const auto cameraObject = fixtures::addObject(scene, "camera", { 1.0f, 2.0f, 3.0f });
+    cameraObject->addComponent(std::dynamic_pointer_cast<Camera>(scene.componentRegistry->create("Camera")));
+    fixtures::transformOf(cameraObject)->setRotation({ 10.0f, 30.0f, 0.0f });
+
+    InputState::setView(slotA, { uuidOf(cameraObject), cursorX, cursorY, viewWidth, viewHeight });
+
+    float origin[3] = { 9.0f, 9.0f, 9.0f };
+    float direction[3] = { 9.0f, 9.0f, 9.0f };
+    ASSERT_TRUE(bindings.cursorRayForObject(uuidA.c_str(), origin, direction));
+
+    const auto expected = cameraRayThrough(cameraViewOf(*cameraObject).value(), cursorX, cursorY, viewWidth, viewHeight);
+    ASSERT_TRUE(expected.has_value());
+    EXPECT_NEAR(origin[0], expected->origin.x, 1e-5f);
+    EXPECT_NEAR(origin[1], expected->origin.y, 1e-5f);
+    EXPECT_NEAR(origin[2], expected->origin.z, 1e-5f);
+    EXPECT_NEAR(direction[0], expected->direction.x, 1e-5f);
+    EXPECT_NEAR(direction[1], expected->direction.y, 1e-5f);
+    EXPECT_NEAR(direction[2], expected->direction.z, 1e-5f);
+
+    // The other player has no view, so the same call reports nothing for them.
+    float otherOrigin[3] = {};
+    float otherDirection[3] = {};
+    EXPECT_FALSE(bindings.cursorRayForObject(uuidB.c_str(), otherOrigin, otherDirection));
+  }
+
+  TEST_F(InputUtilsBindingsTest, TheCursorRayIsAbsentWithoutAPlayerAViewOrAUsableCamera)
+  {
+    const auto cameraObject = fixtures::addObject(scene, "camera");
+    cameraObject->addComponent(std::dynamic_pointer_cast<Camera>(scene.componentRegistry->create("Camera")));
+    const auto noCamera = fixtures::addObject(scene, "noCamera");
+    const auto bare = fixtures::addObject(scene, "bare");
+
+    const auto tryRay = [&](const char* uuid, float* origin, float* direction) {
+      return bindings.cursorRayForObject(uuid, origin, direction);
+    };
+    const auto viewOf = [&](const std::string& camera) {
+      InputState::setView(slotA, { camera, cursorX, cursorY, viewWidth, viewHeight });
+    };
+
+    float origin[3];
+    float direction[3];
+    const auto expectNoRay = [&](const char* uuid) {
+      std::fill_n(origin, 3, 7.0f);
+      std::fill_n(direction, 3, 7.0f);
+      EXPECT_FALSE(tryRay(uuid, origin, direction));
+      for (int i = 0; i < 3; ++i)
+      {
+        EXPECT_FLOAT_EQ(origin[i], 0.0f);
+        EXPECT_FLOAT_EQ(direction[i], 0.0f);
+      }
+    };
+
+    // Positive control: with a camera object and a view, the ray exists.
+    viewOf(uuidOf(cameraObject));
+    EXPECT_TRUE(tryRay(uuidA.c_str(), origin, direction));
+
+    // No view reported yet.
+    InputState::removeSlot(slotA);
+    expectNoRay(uuidA.c_str());
+
+    viewOf("");
+    expectNoRay(uuidA.c_str());
+
+    viewOf(uuids::to_string(objectManagerFixtures::unknownUUID()));
+    expectNoRay(uuidA.c_str());
+
+    viewOf("not-a-uuid");
+    expectNoRay(uuidA.c_str());
+
+    viewOf(uuidOf(noCamera));
+    expectNoRay(uuidA.c_str());
+
+    // A Camera with no Transform to look from.
+    const auto unplacedCamera = fixtures::addObject(scene, "unplacedCamera");
+    unplacedCamera->addComponent(std::dynamic_pointer_cast<Camera>(scene.componentRegistry->create("Camera")));
+    unplacedCamera->removeComponent(fixtures::transformOf(unplacedCamera));
+    viewOf(uuidOf(unplacedCamera));
+    expectNoRay(uuidA.c_str());
+
+    // The cursor outside the view.
+    InputState::setView(slotA, { uuidOf(cameraObject), -5.0f, cursorY, viewWidth, viewHeight });
+    expectNoRay(uuidA.c_str());
+
+    // The asking object is not a player.
+    viewOf(uuidOf(cameraObject));
+    expectNoRay(uuidOf(bare).c_str());
+    expectNoRay(nullptr);
   }
 }

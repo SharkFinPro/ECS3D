@@ -43,6 +43,7 @@ public unsafe struct InputUtilsBindings
     public delegate* unmanaged<IntPtr, int, bool> mouseButtonForObject;
     public delegate* unmanaged<IntPtr, int, bool> wasKeyPressedThisTickForObject;
     public delegate* unmanaged<IntPtr, int, bool> wasKeyReleasedThisTickForObject;
+    public delegate* unmanaged<IntPtr, float*, float*, bool> cursorRayForObject;
 }
 
 // Player-agnostic input: reads the aggregate across all players (a key is pressed if any player presses
@@ -103,4 +104,15 @@ public sealed unsafe class PlayerInput
     public float scroll() => NativeBindings.InputUtils.scrollForObject(_uuid);
 
     public bool mouseButton(MouseButton button) => NativeBindings.InputUtils.mouseButtonForObject(_uuid, (int)button);
+
+    // The world ray under the cursor, for World.raycast. False when the player's view has no scene camera
+    // or the cursor is outside it.
+    public bool tryGetCursorRay(out Vector3 origin, out Vector3 direction)
+    {
+        float* ray = stackalloc float[6];
+        var found = NativeBindings.InputUtils.cursorRayForObject(_uuid, ray, ray + 3);
+        origin = new Vector3(ray[0], ray[1], ray[2]);
+        direction = new Vector3(ray[3], ray[4], ray[5]);
+        return found;
+    }
 }

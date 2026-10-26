@@ -13,6 +13,8 @@
 #include <GpuAssetCache.h>
 #include <RenderSystem.h>
 #include <InputCapture.h>
+#include <InputView.h>
+#include <objects/CameraSelection.h>
 #include <NetClient.h>
 #include <ServerArguments.h>
 #include <ServerProcess.h>
@@ -21,6 +23,7 @@
 #include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
+#include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <imgui.h>
 #include <chrono>
 #include <exception>
@@ -122,7 +125,20 @@ void ClientApp::run()
 
 void ClientApp::sendInput()
 {
-  const auto snapshot = input::capture(*m_renderer);
+  auto snapshot = input::capture(*m_renderer);
+
+  std::optional<uuids::uuid> viewCamera;
+  if (const auto scene = m_sceneManager->getCurrentScene())
+  {
+    if (const auto camera = findActiveCamera(*scene->getObjectManager(), resolvePlayerCamera()))
+    {
+      viewCamera = camera->getUUID();
+    }
+  }
+
+  const auto rect = m_renderer->getRenderingManager()->getSceneViewRect();
+  const auto& mousePos = ImGui::GetIO().MousePos;
+  input::setView(snapshot, mousePos.x, mousePos.y, { rect.x, rect.y, rect.width, rect.height }, viewCamera);
 
   // Discrete state we de-dup on (don't resend an unchanged keyboard/button/cursor every frame). Cursor
   // position is included so mouse movement triggers a send; delta rides along in the same message.
@@ -131,7 +147,8 @@ void ClientApp::sendInput()
     || snapshot.focused != m_lastInputFocused
     || snapshot.buttons != m_lastButtons
     || snapshot.mouseX != m_lastMouseX
-    || snapshot.mouseY != m_lastMouseY;
+    || snapshot.mouseY != m_lastMouseY
+    || snapshot.view != m_lastView;
 
   // Scroll is a per-frame amount with no resting position, so it must be sent on any frame it's non-zero
   // (it isn't captured by the position comparison above).
@@ -147,11 +164,13 @@ void ClientApp::sendInput()
   m_lastButtons = snapshot.buttons;
   m_lastMouseX = snapshot.mouseX;
   m_lastMouseY = snapshot.mouseY;
+  m_lastView = snapshot.view;
   m_inputSent = true;
 
   const auto message = replication::buildInputState(snapshot.focused, snapshot.keys, snapshot.mouseX,
                                                      snapshot.mouseY, snapshot.mouseDeltaX,
-                                                     snapshot.mouseDeltaY, snapshot.scrollY, snapshot.buttons);
+                                                     snapshot.mouseDeltaY, snapshot.scrollY, snapshot.buttons,
+                                                     snapshot.view);
 
   m_netClient->send(message);
 }

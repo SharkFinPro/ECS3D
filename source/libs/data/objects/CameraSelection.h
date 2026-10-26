@@ -34,6 +34,17 @@ struct CameraView {
 // Empty when the object lacks a Camera or a Transform; does not check whether the Camera is active.
 [[nodiscard]] std::optional<CameraView> cameraViewOf(const Object& object);
 
+struct CameraRay {
+  glm::vec3 origin;
+  glm::vec3 direction;  // unit length
+};
+
+// The world-space ray through a pixel of the view the camera renders into. The cursor is in pixels from
+// the view's top-left corner. Empty for a view under 1x1 pixel, a cursor outside the view, or a
+// non-finite input.
+[[nodiscard]] std::optional<CameraRay> cameraRayThrough(const CameraView& camera, float cursorX, float cursorY,
+                                                        float viewWidth, float viewHeight);
+
 // How a camera reads in the editor's View combo: the object's name, the player slot when it has a
 // PlayerController, and a cue when its Camera is inactive.
 [[nodiscard]] std::string cameraLabel(const Object& object);

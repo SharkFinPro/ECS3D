@@ -235,6 +235,12 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
     InputState::setMouse(slot, payload->mouseX, payload->mouseY, payload->mouseDeltaX, payload->mouseDeltaY,
                          payload->scrollY, payload->buttons);
   }
+
+  if (payload->view)
+  {
+    InputState::setView(slot, { payload->view->camera, payload->view->cursorX, payload->view->cursorY,
+                                payload->view->width, payload->view->height });
+  }
 }
 
 void ServerApp::handleSceneControl(const net::Message& message) const

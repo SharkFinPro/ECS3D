@@ -24,6 +24,10 @@ struct InputUtilsBindings
   // Per-player key edges against last tick (see InputState::commitInputEdges).
   bool(*wasKeyPressedThisTickForObject)(const char* uuid, int key);
   bool(*wasKeyReleasedThisTickForObject)(const char* uuid, int key);
+  // The world-space ray under the player's cursor, from the camera object their client reported. Writes
+  // origin and a unit direction as three floats each; false (outputs zeroed) when there is nothing to
+  // point with: no slot, no view yet, no scene camera, or a cursor outside the view.
+  bool(*cursorRayForObject)(const char* uuid, float* origin, float* direction);
 };
 
 class InputUtilsBindingsProvider {
@@ -50,6 +54,8 @@ private:
   static bool bindWasKeyPressedThisTickForObject(const char* uuid, int key);
 
   static bool bindWasKeyReleasedThisTickForObject(const char* uuid, int key);
+
+  static bool bindCursorRayForObject(const char* uuid, float* origin, float* direction);
 };
 
 

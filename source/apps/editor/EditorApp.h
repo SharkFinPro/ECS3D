@@ -3,6 +3,7 @@
 
 #include <VulkanEngine/components/window/Window.h>
 #include <Protocol.h>
+#include <Replication.h>
 #include <edits/EditHistory.h>
 #include <edits/HistoryScope.h>
 #include <edits/PlaySessionHistory.h>
@@ -192,6 +193,7 @@ private:
   uint8_t m_lastButtons = 0;
   float m_lastMouseX = 0.0f;
   float m_lastMouseY = 0.0f;
+  replication::InputView m_lastView;
   bool m_inputSent = false;
 
   // A per-connection random tag sent in join; the server echoes it in a playerSlot message so this editor
