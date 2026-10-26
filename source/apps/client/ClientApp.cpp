@@ -23,6 +23,7 @@
 #include <LogSetup.h>
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/window/Window.h>
+#include <VulkanEngine/components/imGui/ImGuiInstance.h>
 #include <VulkanEngine/components/renderingManager/RenderingManager.h>
 #include <imgui.h>
 #include <chrono>
@@ -264,6 +265,9 @@ void ClientApp::createRenderer()
   };
 
   m_renderer = std::make_shared<vke::VulkanEngine>(engineConfig);
+
+  // ImGui lives in the VulkanEngine library, so this executable's copy of the context pointer starts null.
+  ImGui::SetCurrentContext(vke::ImGuiInstance::getImGuiContext());
 }
 
 void ClientApp::variableUpdate() const
