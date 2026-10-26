@@ -1,6 +1,6 @@
 # Starter Scripts
 
-ECS3D ships 17 ready-made C# scripts in `source/libs/scripting/UserScripts/Starters/`. Drop one on an object
+ECS3D ships 18 ready-made C# scripts in `source/libs/scripting/UserScripts/Starters/`. Drop one on an object
 (or add it to a scene) and it does something visible with no edits. Read them as examples, copy them, or use
 them as they are.
 
@@ -232,6 +232,25 @@ the hit object changes it logs the new object's name (or "nothing").
 
 The marker needs a `ModelRenderer` for hiding to work; with no Marker the script still logs changes. Events:
 none. Showcase use: used by Welcome (the Watcher, with a marker on whatever it looks at).
+
+### DragLauncher
+
+Object script for a player's body (the object needs a `PlayerController`). Pressing the left mouse button
+casts the ray under that player's cursor, ignoring the player's own object. If it hits an object with a
+`RigidBody`, that object is grabbed. While the button is held, the cursor ray is intersected with the plane
+through the grab point that faces the camera. Releasing sets the grabbed body's velocity to the drag, reversed
+and multiplied by Strength, so a longer pull is a faster launch, up to Max Speed. A drag shorter than Min Drag
+launches nothing. The grab is dropped if the object disappears or the window loses focus.
+
+| Label | Type | Default |
+|-------|------|---------|
+| Strength | float (speed per unit of drag) | 4 |
+| Max Speed | float | 30 |
+| Max Distance | float | 100 |
+| Min Drag | float | 0.1 |
+| Log Launches | bool | true |
+
+The launch replaces the body's velocity. Events: none. Showcase use: used by Physics Playground (Player 0).
 
 ### ColorOnHit
 

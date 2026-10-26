@@ -11,7 +11,7 @@ public static class LearnCatalog
 
     public static int SampleCount => 2;
     public static int TemplateCount => 2;
-    public static int StarterScriptCount => 17;
+    public static int StarterScriptCount => 18;
     public static int ConvexShapeCount => 9;
 
     public static string BoxSummary =>

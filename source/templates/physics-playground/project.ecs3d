@@ -8582,6 +8582,11 @@
                     "value": 15.0
                   }
                 ]
+              },
+              {
+                "type": "Script",
+                "className": "DragLauncher",
+                "fields": []
               }
             ],
             "uuid": "5b2b1c32-9980-46d6-8b3a-903ff1293332"

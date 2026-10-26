@@ -11,6 +11,7 @@ ECS3DClient --project <path to this folder>
 
 - **WASD** to move, **Space** to jump, **right-drag** to look.
 - **E** fires the explosion at the Explosion pit (any player's press counts).
+- **Left-drag** an object to fling it: pull back from it and let go, and it flies the opposite way.
 
 You start at the hub in the middle, facing north.
 

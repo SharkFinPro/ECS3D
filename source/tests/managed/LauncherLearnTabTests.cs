@@ -95,7 +95,7 @@ public class LauncherLearnTabTests
       new[] { "D4", "D6", "D8", "D12", "D20", "Hex Prism", "Drum", "Gem", "Boulder" },
       shapeNames);
     Assert.Equal(
-      "Every install includes 2 samples, 2 templates, 17 starter scripts and 9 convex shapes.",
+      "Every install includes 2 samples, 2 templates, 18 starter scripts and 9 convex shapes.",
       LearnCatalog.BoxSummary);
   }
 
