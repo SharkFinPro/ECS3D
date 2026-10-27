@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <signal.h>
+#include <sys/uio.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -42,7 +43,8 @@ namespace {
 
     close(readyPipe[1]);
     char ready = 0;
-    const ssize_t count = read(readyPipe[0], &ready, 1);
+    iovec readyBuffer{ &ready, 1 };
+    const ssize_t count = readv(readyPipe[0], &readyBuffer, 1);
     close(readyPipe[0]);
 
     return count == 1 ? pid : -1;
