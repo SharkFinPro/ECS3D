@@ -96,23 +96,24 @@ bool ServerApp::isMessageAuthorized(const net::Message& message, const int32_t s
 void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 {
   // A client joined: bind it to a player slot (so its input routes to that player), tell it whether this
-  // server is editable, then send the full project/scene as a Snapshot. Record that a connection has been
-  // seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
+  // server is editable, then send the full project/scene as a Snapshot to that connection alone - the others
+  // already hold the state, and a repeated join must not make the server re-send the whole project to
+  // everyone. Record that a connection has been seen so an ephemeral server (exitWhenEmpty) can later exit
+  // when the last one drops.
   m_hasConnected = true;
   assignPlayerSlot(senderId);
 
   // If the client tagged its join with a nonce (players and the editor do), tell it which slot it got so
-  // it can render through that player's camera. Broadcasting with nonce correlation avoids a
-  // per-connection send path - every client hears it, only the matching one keeps it.
+  // it can render through that player's camera. The answer goes to that connection alone; the nonce lets the
+  // client match it to its request.
   net::MessageReader reader(message);
   if (reader.remaining() >= sizeof(uint64_t))
   {
     m_joinNonces[senderId] = reader.read<uint64_t>();
-    broadcastPlayerSlot(senderId);
+    sendPlayerSlot(senderId);
   }
 
-  broadcastEditStatus();
-  broadcastSnapshot();
+  sendJoinReply(senderId);
 }
 
 std::optional<int32_t> ServerApp::assignPlayerSlot(const int32_t connId)
@@ -137,11 +138,11 @@ std::optional<int32_t> ServerApp::assignPlayerSlot(const int32_t connId)
   m_slotlessConnections.erase(connId);
   Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(*slot) + ".");
   notifyPlayerJoined(*slot);
-  broadcastPlayerSlot(connId);
+  sendPlayerSlot(connId);
   return slot;
 }
 
-void ServerApp::broadcastPlayerSlot(const int32_t connId)
+void ServerApp::sendPlayerSlot(const int32_t connId)
 {
   const auto nonce = m_joinNonces.find(connId);
   const auto slot = m_playerSlots.slotOf(connId);
@@ -150,7 +151,7 @@ void ServerApp::broadcastPlayerSlot(const int32_t connId)
     return;
   }
 
-  m_netServer->broadcast(replication::buildPlayerSlot(nonce->second, *slot));
+  m_netServer->sendTo(connId, replication::buildPlayerSlot(nonce->second, *slot));
 }
 
 void ServerApp::handlePossessSlot(const net::Message& message, const int32_t senderId)
@@ -201,7 +202,7 @@ void ServerApp::handlePossessSlot(const net::Message& message, const int32_t sen
       + ": outside 0.." + std::to_string(maxPlayerSlot) + ".");
   }
 
-  broadcastPlayerSlot(senderId);
+  sendPlayerSlot(senderId);
 }
 
 void ServerApp::handleDisconnect(const int32_t connId)
