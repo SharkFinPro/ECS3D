@@ -53,7 +53,12 @@ actually granted it `Role::editor`. `ManagedHost`
 boots CoreCLR and resolves
 managed statics as native function pointers; inbound frames are pushed from C# socket threads into a
 thread-safe `MessageQueue` and drained by the app loop. The transport backend (TCP/WebSocket) is
-selected by a single field in `Transport.cs`. The transport logs through a native `setLogCallback`
+selected by a single field in `Transport.cs`. `Transport.serverStart` never throws (an exception escaping an
+`[UnmanagedCallersOnly]` export terminates the process): it returns the bound port (the OS-picked one for port
+0) or a negative `ServerStartError` (-1 address in use, -2 port out of range, -3 anything else, logged on the
+transport side), mirrored by `net::ServerStartError` in `NetServer.cpp`. A backend whose listener fails to start
+is left not running, so a later start succeeds. `NetServer::start` turns a negative code into a
+`std::runtime_error` and leaves the server stopped. The transport logs through a native `setLogCallback`
 (`net::transportLog`, category `net`), falling back to the console before it is registered. A client
 connect attempt is bounded to `ConnectTimeoutMs` in each backend so the apps' retry loops keep their
 deadline instead of hanging on the OS connect timeout. Both backends

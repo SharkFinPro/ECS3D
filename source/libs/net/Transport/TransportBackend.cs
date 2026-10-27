@@ -68,7 +68,8 @@ internal abstract class TransportBackend
   internal bool EditMode;
   internal string ExpectedToken = "";
 
-  public abstract void ServerStart(int port, bool editMode, string expectedToken);
+  // Returns the port actually bound (differs from port when port is 0). Throws if the listener cannot start.
+  public abstract int ServerStart(int port, bool editMode, string expectedToken);
   public abstract void ServerStop();
   public abstract int ServerConnectionCount();
   public abstract void ServerBroadcast(byte type, nint data, int len);

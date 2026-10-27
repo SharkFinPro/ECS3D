@@ -2,10 +2,12 @@
 #include "ServerPolicy.h"
 #include <ProjectPaths.h>
 #include <EditToken.h>
+#include <ServerArguments.h>
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <LogSetup.h>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -14,6 +16,24 @@ namespace
   bool isValueFlag(const std::string& arg, const char* flag, const int index, const int argc)
   {
     return arg == flag && index + 1 < argc;
+  }
+
+  // Consumes the value after --port at index (advancing index past it).
+  int parsePortOption(const int argc, char** argv, int& index)
+  {
+    if (index + 1 >= argc)
+    {
+      throw std::invalid_argument("--port needs a value (0-65535).");
+    }
+
+    const std::string text = argv[++index];
+    const auto port = net::parsePortArgument(text);
+    if (!port)
+    {
+      throw std::invalid_argument("Invalid --port value '" + text + "': expected a number from 0 to 65535.");
+    }
+
+    return *port;
   }
 
   // --edit is the launch-capability gate that allows editor connections; absent it the server is a
@@ -33,9 +53,9 @@ namespace
       {
         options.project = absoluteProjectArgument(argv[++i]);
       }
-      else if (isValueFlag(arg, "--port", i, argc))
+      else if (arg == "--port")
       {
-        options.port = std::stoi(argv[++i]);
+        options.port = parsePortOption(argc, argv, i);
       }
       else if (arg == "--edit")
       {

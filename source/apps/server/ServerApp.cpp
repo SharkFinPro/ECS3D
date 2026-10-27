@@ -154,7 +154,7 @@ void ServerApp::startLoadedScene()
     // like it never started.
     Log::info(LogCategory::server, std::string(autoStart ? "Running" : "Loaded") + " scene '" + scene->getName()
       + "' (" + std::to_string(scene->getObjectManager()->getAllObjects().size()) + " objects) on port "
-      + std::to_string(m_options.port) + ".");
+      + std::to_string(m_netServer->port()) + ".");
   }
 }
 

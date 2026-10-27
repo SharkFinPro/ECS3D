@@ -17,10 +17,14 @@ public:
   explicit NetServer(std::shared_ptr<ManagedHost> host);
 
   // editMode enables granting Role::editor at the handshake; authToken (if non-empty) is the token an
-  // editor must then present to be authorized.
+  // editor must then present to be authorized. Throws std::runtime_error, leaving the server stopped, when
+  // the transport cannot listen on port (taken, out of range, or any other failure).
   void start(int port, bool editMode, const std::string& authToken);
 
   void stop();
+
+  // The port the transport is listening on - the OS-chosen one when start() was given 0; 0 before start().
+  [[nodiscard]] int port() const;
 
   void broadcast(const Message& message) const;
 
@@ -71,6 +75,7 @@ private:
 
   bool m_editMode = false;
   bool m_started = false;
+  int m_port = 0;
 
   // Resolved [UnmanagedCallersOnly] entrypoints in the C# transport assembly.
   void* m_startFn = nullptr;

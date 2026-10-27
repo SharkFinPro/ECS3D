@@ -74,11 +74,11 @@ public sealed unsafe class TransportExportsTests : IDisposable
     return serverConnectionCount();
   }
 
-  // Probed on Any because the backend binds Any, and a bind failure inside the export is fatal to the
-  // test host (it cannot be retried), so the window is kept small by probing right before the call.
+  // Probed on Any because the backend binds Any. The port could be taken between the probe and the call,
+  // which the export reports as -1, so the window is kept small by probing right before it.
   private static byte StartEditServerAndConnectPlayer(string serverTokenText)
   {
-    delegate* unmanaged<int, byte, IntPtr, void> serverStart = &Transport.serverStart;
+    delegate* unmanaged<int, byte, IntPtr, int> serverStart = &Transport.serverStart;
     delegate* unmanaged<IntPtr, int, byte, IntPtr, byte> clientConnect = &Transport.clientConnect;
 
     var port = FreePort();
@@ -87,7 +87,7 @@ public sealed unsafe class TransportExportsTests : IDisposable
     var host = Marshal.StringToCoTaskMemUTF8("127.0.0.1");
     try
     {
-      serverStart(port, 1, serverToken);
+      Assert.Equal(port, serverStart(port, 1, serverToken));
       return clientConnect(host, port, 0, clientToken);
     }
     finally
@@ -124,6 +124,40 @@ public sealed unsafe class TransportExportsTests : IDisposable
     fixed (byte* data = payload)
     {
       serverSendToMany((IntPtr)idData, ids.Length, type, (IntPtr)data, payload.Length);
+    }
+  }
+
+  [Fact]
+  public void ServerStart_ReportsTheBoundPortAndNamesWhyItFailedWithoutThrowing()
+  {
+    delegate* unmanaged<int, byte, IntPtr, int> serverStart = &Transport.serverStart;
+    delegate* unmanaged<void> serverStop = &Transport.serverStop;
+    delegate* unmanaged<IntPtr, int, byte, IntPtr, byte> clientConnect = &Transport.clientConnect;
+
+    var holder = new TcpListener(IPAddress.Any, 0);
+    holder.Start();
+    var heldPort = ((IPEndPoint)holder.LocalEndpoint).Port;
+
+    var token = Marshal.StringToCoTaskMemUTF8("");
+    var host = Marshal.StringToCoTaskMemUTF8("127.0.0.1");
+    try
+    {
+      Assert.Equal(-1, serverStart(heldPort, 0, token));
+      Assert.Equal(-2, serverStart(65536, 0, token));
+      Assert.Equal(-2, serverStart(-5, 0, token));
+
+      var bound = serverStart(0, 0, token);
+      Assert.True(bound > 0);
+      Assert.NotEqual(heldPort, bound);
+      Assert.Equal(1, clientConnect(host, bound, 0, token));
+      WaitFor(() => ConnectionCount() == 1, "a client to join the port the export reported");
+    }
+    finally
+    {
+      serverStop();
+      holder.Stop();
+      Marshal.FreeCoTaskMem(token);
+      Marshal.FreeCoTaskMem(host);
     }
   }
 
