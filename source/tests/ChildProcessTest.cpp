@@ -25,10 +25,8 @@ namespace {
     if (pid == 0)
     {
       close(readyPipe[0]);
-      if (ignoreSigterm)
-      {
-        signal(SIGTERM, SIG_IGN);
-      }
+      // Set both ways: the child inherits whatever disposition an earlier test left in this process.
+      signal(SIGTERM, ignoreSigterm ? SIG_IGN : SIG_DFL);
 
       const char ready = 1;
       if (write(readyPipe[1], &ready, 1) != 1)
