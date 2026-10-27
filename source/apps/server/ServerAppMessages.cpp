@@ -96,8 +96,10 @@ bool ServerApp::isMessageAuthorized(const net::Message& message, const int32_t s
 void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 {
   // A client joined: bind it to a player slot (so its input routes to that player), tell it whether this
-  // server is editable, then send the full project/scene as a Snapshot. Record that a connection has been
-  // seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
+  // server is editable, then send the full project/scene as a Snapshot to that connection alone - the others
+  // already hold the state, and a repeated join must not make the server re-send the whole project to
+  // everyone. Record that a connection has been seen so an ephemeral server (exitWhenEmpty) can later exit
+  // when the last one drops.
   m_hasConnected = true;
   assignPlayerSlot(senderId);
 
@@ -111,8 +113,7 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
     broadcastPlayerSlot(senderId);
   }
 
-  broadcastEditStatus();
-  broadcastSnapshot();
+  sendJoinReply(senderId);
 }
 
 std::optional<int32_t> ServerApp::assignPlayerSlot(const int32_t connId)

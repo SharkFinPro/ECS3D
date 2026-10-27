@@ -338,6 +338,38 @@ public sealed class TcpBackendLoopbackTests : IDisposable
   }
 
   [Fact]
+  public void SendToMany_DeliversASnapshotSizedFrameToOneConnectionOnly()
+  {
+    var server = new TcpBackend();
+    var port = Start(server);
+
+    ConnectAndAwait(server, port, 1);
+    ConnectAndAwait(server, port, 2);
+    var viewer = ConnectRaw(port);
+    WaitFor(() => server.ServerConnectionCount() == 3, "the third client to join");
+    var viewerId = Authorized()[2].ConnId;
+
+    var snapshot = new byte[256 * 1024];
+    for (var i = 0; i < snapshot.Length; ++i)
+    {
+      snapshot[i] = (byte)(i * 31 + 7);
+    }
+
+    TransportRecorder.ServerSendToMany(server, new[] { viewerId }, 11, snapshot);
+
+    Assert.True(TcpBackend.ReadFrame(viewer.Stream, out var type, out var payload));
+    Assert.Equal(11, type);
+    Assert.Equal(snapshot, payload);
+    AssertStays(() => TransportRecorder.ClientReceived.Count, 0, "messages the other clients received");
+
+    // The positive control: the same two clients do receive a broadcast, so the silence above is the
+    // named send leaving them out rather than them being unable to receive.
+    TransportRecorder.ServerBroadcast(server, 12, new byte[] { 2 });
+    WaitFor(() => TransportRecorder.ClientReceived.Count == 2, "both other clients to receive the broadcast");
+    Assert.All(TransportRecorder.ClientReceived.ToArray(), m => Assert.Equal(12, m.Type));
+  }
+
+  [Fact]
   public void StalledPeer_IsDroppedWhileTheOtherPeersKeepReceiving()
   {
     // 4000 ms leaves room for two healthy peers to drain a 4 MiB frame even on a loaded runner; the

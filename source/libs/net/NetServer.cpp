@@ -164,7 +164,7 @@ void NetServer::broadcast(const Message& message) const
     return;
   }
 
-  // Snapshots on join, state deltas per tick. The C# transport sends to every connected client.
+  // The C# transport sends to every connected client.
   reinterpret_cast<ServerBroadcastFn>(m_broadcastFn)(
     static_cast<uint8_t>(message.getType()),
     message.bytes().data(),
@@ -173,6 +173,20 @@ void NetServer::broadcast(const Message& message) const
 }
 
 void NetServer::sendToEditors(const Message& message) const
+{
+  // Copied out under the lock and the lock released before the transport is touched at all: this runs on
+  // the authoritative tick thread, and the transport send can block on a stalled socket. Holding the lock
+  // across that would let a stalled editor connection block authorize()/isEditor()/takeDisconnected() -
+  // none of which have anything to do with sending - for as long as the transport's own send budget runs.
+  sendToMany(m_connections.editorIds(), message);
+}
+
+void NetServer::sendTo(const int32_t connId, const Message& message) const
+{
+  sendToMany({connId}, message);
+}
+
+void NetServer::sendToMany(const std::vector<int32_t>& connIds, const Message& message) const
 {
   if (!m_started)
   {
@@ -188,19 +202,14 @@ void NetServer::sendToEditors(const Message& message) const
     return;
   }
 
-  // Copied out under the lock and the lock released before the transport is touched at all: this runs on
-  // the authoritative tick thread, and sendToMany below can block on a stalled socket. Holding the lock
-  // across that would let a stalled editor connection block authorize()/isEditor()/takeDisconnected() -
-  // none of which have anything to do with sending - for as long as the transport's own send budget runs.
-  const auto connIds = m_connections.editorIds();
   if (connIds.empty())
   {
     return;
   }
 
-  // One call for the whole fan-out (rather than one per editor) so the transport can apply a single
-  // shared time budget across every editor, the same way ServerBroadcast already does across every
-  // connection - a per-connection call here would let K stalled editors cost this tick K times the
+  // One call for the whole fan-out (rather than one per connection) so the transport can apply a single
+  // shared time budget across every target, the same way ServerBroadcast already does across every
+  // connection - a per-connection call here would let K stalled peers cost this tick K times the
   // transport's per-send timeout instead of that timeout once.
   reinterpret_cast<ServerSendToManyFn>(m_sendToManyFn)(
     connIds.data(),

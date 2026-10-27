@@ -205,9 +205,13 @@ private:
 
   void broadcastSnapshot() const;
 
-  // Tells clients whether this server accepts edits (true only for an edit-mode server), so an editor
-  // can show a read-only cue and disable its editing UI instead of looking broken/blank.
-  void broadcastEditStatus() const;
+  // The full project state as a snapshot message, after refreshing the script fields and script class assets
+  // it carries.
+  [[nodiscard]] net::Message buildSnapshot() const;
+
+  // Answers a join: the edit status (so an editor can show a read-only cue and disable its editing UI), the
+  // snapshot and the scene status, to connId alone.
+  void sendJoinReply(int32_t connId) const;
 
   void broadcastSceneStatus() const;
 

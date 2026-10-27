@@ -36,6 +36,10 @@ public:
   // than that one shared budget no matter how many editors are connected.
   void sendToEditors(const Message& message) const;
 
+  // Sends to one connection only - for a reply nobody else should see, like the snapshot a join asks for.
+  // A no-op if that connection has disconnected.
+  void sendTo(int32_t connId, const Message& message) const;
+
   // The number of clients currently connected to the transport. Used by an ephemeral (editor/client-
   // spawned) server to detect when its last connection drops; returns 0 before start().
   [[nodiscard]] int connectionCount() const;
@@ -66,6 +70,8 @@ public:
   [[nodiscard]] bool isEditor(int32_t connectionId) const;
 
 private:
+  void sendToMany(const std::vector<int32_t>& connIds, const Message& message) const;
+
   std::shared_ptr<ManagedHost> m_host;
 
   MessageQueue m_inbox;
