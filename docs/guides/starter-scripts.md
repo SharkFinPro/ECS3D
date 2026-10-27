@@ -1,6 +1,6 @@
 # Starter Scripts
 
-ECS3D ships 17 ready-made C# scripts in `source/libs/scripting/UserScripts/Starters/`. Drop one on an object
+ECS3D ships 18 ready-made C# scripts in `source/libs/scripting/UserScripts/Starters/`. Drop one on an object
 (or add it to a scene) and it does something visible with no edits. Read them as examples, copy them, or use
 them as they are.
 
@@ -232,6 +232,28 @@ the hit object changes it logs the new object's name (or "nothing").
 
 The marker needs a `ModelRenderer` for hiding to work; with no Marker the script still logs changes. Events:
 none. Showcase use: used by Welcome (the Watcher, with a marker on whatever it looks at).
+
+### DragLauncher
+
+Object script for a player's body (the object needs a `PlayerController`). Pressing the left mouse button
+casts the ray under that player's cursor, ignoring the player's own object. If it hits an object with a
+`RigidBody`, that object is grabbed. While the button is held, the pull is where the cursor ray is at the
+grab depth (its distance from the camera at the press), relative to the grab point, which follows the object.
+Walking or turning while holding does not change the pull by itself. Releasing sets the grabbed body's
+velocity to the pull, reversed and multiplied by Strength, so a longer pull is a faster launch, up to Max
+Speed. A pull shorter than Min Drag launches nothing. The grab is dropped if the object disappears or the
+window loses focus. A button already held when the script starts is not a press.
+
+| Label | Type | Default |
+|-------|------|---------|
+| Strength | float (units per second per unit of pull) | 4 |
+| Max Speed | float (units per second) | 30 |
+| Max Distance | float | 100 |
+| Min Drag | float | 0.1 |
+| Log Launches | bool | true |
+
+The launch replaces the body's velocity. When played in the editor, a Ctrl+click or gizmo drag on a body is
+also forwarded as input and can grab it. Events: none. Showcase use: used by Physics Playground (Player 0).
 
 ### ColorOnHit
 
