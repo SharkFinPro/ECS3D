@@ -1,5 +1,6 @@
 #include "ServerProcess.h"
 #include "CommandLineSplit.h"
+#include "ChildProcess.h"
 #include <filesystem>
 #include <string>
 #include <utility>
@@ -9,6 +10,7 @@
 #include <windows.h>
 #include <vector>
 #else
+#include <chrono>
 #include <climits>
 #include <csignal>
 #include <cstdint>
@@ -65,8 +67,8 @@ ServerProcess::~ServerProcess()
   if (m_handle)
   {
     const pid_t pid = static_cast<pid_t>(reinterpret_cast<intptr_t>(m_handle));
-    kill(pid, SIGTERM);
-    waitpid(pid, nullptr, 0);
+    // The child stops its scripts on SIGTERM, so a stuck one is killed after a grace rather than waited on.
+    terminateChildProcess(pid, std::chrono::seconds(3));
     m_handle = nullptr;
   }
 #endif

@@ -65,6 +65,8 @@ while playing) the same way it already undoes an edited Transform.
   uses the same generator for the server it spawns.
 - `--open-edit` (development only) implies `--edit` and skips that generation, so any editor that reaches the
   port may edit. It logs a warning, and an explicit `--token` still applies.
+- On POSIX `~ServerProcess` sends the child SIGTERM and waits up to 3 seconds (`net::terminateChildProcess`), then
+  SIGKILL, so a child stuck in an orderly shutdown cannot hang its parent's exit.
 - `net::ServerProcess::launch` takes the child's flags as one string; a token holding spaces may be
   double quoted (there is no escape for a quote inside one). POSIX (Linux and macOS) splits the string itself, honoring
   those quotes; Windows hands it to the child's CRT (C runtime), which parses them the same way.

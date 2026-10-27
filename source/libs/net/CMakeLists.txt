@@ -17,6 +17,8 @@ add_library(${PROJECT_NAME}
   ServerLog.cpp
   ServerLog.h
   ServerArguments.h
+  ChildProcess.cpp
+  ChildProcess.h
   ServerProcess.cpp
   ServerProcess.h
   TransportLog.cpp
