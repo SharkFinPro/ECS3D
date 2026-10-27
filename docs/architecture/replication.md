@@ -7,13 +7,15 @@ and update it in the same change when that behavior moves.
 
 Two paths. Structural state (project/scene/assets) goes as a full **snapshot** — a
 packed binary blob built by `ProjectPacker` (the wire counterpart of `ProjectSerializer`, which remains
-the JSON path for file save/load) — sent to the joining connection alone on join and rebroadcast to everyone after any structural edit; every view
-rebuilds from it, atomically (a malformed packet leaves the current project intact). Per-tick motion
+the JSON path for file save/load) — sent to the joining connection alone on join and rebroadcast to
+everyone after any structural edit; every view rebuilds from it, atomically (a malformed packet leaves the current project intact). Per-tick motion
 goes as a compact binary **stateDelta** (uuid + local transform per object; `data/Replication.{h,cpp}`).
 Edits flow the other way as typed commands (`editComponent`, `sceneEdit`, `sceneControl`, `loadProject`,
 `addAsset`, `renameAsset`, `removeAsset`) that only a connection authorized as `Role::editor` on an
 `--edit` server may send. A third direction exists for `serverLog` alone: server → editor connections
-only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see [logging.md](logging.md). The join reply (edit status, snapshot, scene status) is likewise unicast to the joiner via `NetServer::sendTo`, so a repeated join cannot make the server re-send the project to every peer. An `editComponent` a replicated view could not apply is reported through
+only, unicast via `NetServer::sendToEditors` rather than broadcast to every connection — see [logging.md](logging.md).
+The join reply (edit status, snapshot, scene status) is likewise unicast to the joiner via `NetServer::sendTo`,
+so a repeated join cannot make the server re-send the project to every peer. An `editComponent` a replicated view could not apply is reported through
 `replication::logMissedComponentEdit` — debug for an absent object/component (routine, since the server
 rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
 payload (a real divergence). Some components refuse a payload before assigning anything, as the convex
