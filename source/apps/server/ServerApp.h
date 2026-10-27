@@ -108,6 +108,12 @@ private:
   // than on every input message.
   std::unordered_set<int32_t> m_slotlessConnections;
 
+  // Connections whose join has been answered; a later join from one is ignored.
+  std::unordered_set<int32_t> m_joinedConnections;
+
+  // Connections whose repeat join has been logged, so a looping client logs once rather than per message.
+  std::unordered_set<int32_t> m_repeatJoinWarned;
+
   // Bind connId to the lowest free player slot (idempotent - returns the existing slot if already bound).
   // Empty when every slot is held.
   std::optional<int32_t> assignPlayerSlot(int32_t connId);

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace {
   // Exhaustive switch with no default so -Wswitch flags a new MessageType until it is stated here.
@@ -53,6 +54,47 @@ namespace {
   {
     return SceneControlPlan{startScene, pauseScene, resetScene, startScripts, stopScripts, resetCollisions};
   }
+}
+
+TEST(ServerPolicyTest, PlanJoinAnswersAFirstJoinRegardlessOfWarnedFlag)
+{
+  EXPECT_EQ(planJoin(false, false), (JoinPlan{true, false}));
+  EXPECT_EQ(planJoin(false, true), (JoinPlan{true, false}));
+}
+
+TEST(ServerPolicyTest, PlanJoinDropsARepeatAndWarnsOnlyOnce)
+{
+  EXPECT_EQ(planJoin(true, false), (JoinPlan{false, true}));
+  EXPECT_EQ(planJoin(true, true), (JoinPlan{false, false}));
+}
+
+// ServerApp cannot be linked into the suite, so the two per-connection sets are stood in for by bools updated
+// exactly as ServerApp::handleJoin updates them.
+TEST(ServerPolicyTest, PlanJoinSequenceAnswersFirstWarnsSecondAndSilencesThird)
+{
+  bool joined = false;
+  bool warned = false;
+  std::vector<JoinPlan> seen;
+
+  for (int i = 0; i < 3; ++i)
+  {
+    const auto joinPlan = planJoin(joined, warned);
+    seen.push_back(joinPlan);
+
+    if (joinPlan.warnRepeat)
+    {
+      warned = true;
+    }
+
+    if (joinPlan.answer)
+    {
+      joined = true;
+    }
+  }
+
+  EXPECT_EQ(seen[0], (JoinPlan{true, false}));
+  EXPECT_EQ(seen[1], (JoinPlan{false, true}));
+  EXPECT_EQ(seen[2], (JoinPlan{false, false}));
 }
 
 TEST(ServerPolicyTest, MutationSetMatchesIndependentlyStatedExpectation)

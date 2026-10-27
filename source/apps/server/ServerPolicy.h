@@ -96,6 +96,26 @@ struct SceneControlPlan
   return plan;
 }
 
+// What the server does with a join. A connection joins once; answering a repeat would rebuild and resend the
+// whole project on the tick thread, so a repeat is dropped and logged once per connection.
+struct JoinPlan
+{
+  bool answer = false;
+  bool warnRepeat = false;
+
+  [[nodiscard]] constexpr bool operator==(const JoinPlan&) const noexcept = default;
+};
+
+[[nodiscard]] constexpr JoinPlan planJoin(const bool alreadyJoined, const bool repeatWarned) noexcept
+{
+  if (!alreadyJoined)
+  {
+    return {true, false};
+  }
+
+  return {false, !repeatWarned};
+}
+
 // An edit server with no token would authorize any connection that claims the editor role, so one without a
 // token gets a generated one, unless it was explicitly launched open for development.
 [[nodiscard]] inline bool needsGeneratedEditToken(const bool editMode, const bool openEdit, const std::string& token)
