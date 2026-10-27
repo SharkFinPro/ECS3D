@@ -23,6 +23,12 @@ public abstract class NewProjectFixture
   internal readonly FakeProcessRunner _runner = new();
   internal int _counter;
 
+  // The default projects folder sits on a root the file system knows, as the user's real drive does.
+  protected NewProjectFixture()
+  {
+    _files.AddDirectory(Path.GetPathRoot(Projects)!);
+  }
+
   internal Guid NextUuid() => new($"00000000-0000-0000-0000-{++_counter:D12}");
 
   internal ProjectCreator NewCreator() => new(_files, _rig.Log, NextUuid);

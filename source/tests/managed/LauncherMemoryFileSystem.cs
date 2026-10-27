@@ -54,6 +54,9 @@ internal sealed class MemoryTreeFileSystem : IFileSystem
     }
   }
 
+  // Makes a drive or share vanish while the folders below it stay recorded, as an unplugged one would look.
+  public void RemoveRoot(string root) => _directories.Remove(Norm(root));
+
   public void Seed(string path, string contents)
   {
     _files[Norm(path)] = contents;

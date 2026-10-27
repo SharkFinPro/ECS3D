@@ -8,7 +8,7 @@ using System.Threading;
 
 namespace ECS3DLauncher.Services;
 
-public enum ProjectTargetState { Free, NotEmpty, NotAFolder, Unavailable }
+public enum ProjectTargetState { Free, NotEmpty, NotAFolder, Unavailable, Unreachable }
 
 public sealed record ProjectCreationResult(string? ProjectFolder, string? Error)
 {
@@ -19,6 +19,9 @@ public sealed record ProjectCreationResult(string? ProjectFolder, string? Error)
 public sealed class ProjectCreator
 {
     public static string CanceledMessage => "Canceled.";
+
+    public static string UnreachableMessage =>
+        "This location cannot be reached. Check that the drive or network share is available.";
 
     // Only the engine's JSON parser reads this file, never a web page, so characters stay literal.
     private static readonly JsonSerializerOptions WriteOptions = new()
@@ -64,7 +67,8 @@ public sealed class ProjectCreator
         }
     }
 
-    // Free when the location is a folder or can be made into one; NotAFolder when a file is in the way.
+    // Free when the location is a folder or can be made into one; NotAFolder when a file is in the way; Unreachable
+    // when its drive or network share does not exist. A relative path has no root to check. Never throws.
     public ProjectTargetState CheckLocation(string location)
     {
         if (!IsUsablePath(location))
@@ -74,6 +78,12 @@ public sealed class ProjectCreator
 
         try
         {
+            var root = Path.GetPathRoot(location);
+            if (!string.IsNullOrEmpty(root) && !_files.DirectoryExists(root))
+            {
+                return ProjectTargetState.Unreachable;
+            }
+
             return _files.FileExists(location) ? ProjectTargetState.NotAFolder : ProjectTargetState.Free;
         }
         catch (Exception ex) when (IsExpected(ex))
@@ -120,6 +130,11 @@ public sealed class ProjectCreator
             return new ProjectCreationResult(null, "The location is not a valid folder path.");
         }
 
+        if (CheckLocation(location) == ProjectTargetState.Unreachable)
+        {
+            return new ProjectCreationResult(null, UnreachableMessage);
+        }
+
         // Both parts are validated above, so combining them cannot throw.
         var target = Path.Combine(location, name);
         var hidden = Path.Combine(location, HiddenFolderName(name));
@@ -144,8 +159,27 @@ public sealed class ProjectCreator
         {
             _log.Warn($"Creating project {target} failed: {ex.Message}");
             RemoveHidden(hidden);
-            return new ProjectCreationResult(null, $"Could not create the project: {ex.Message}");
+            var unreachable = ex is IOException && CheckLocation(location) == ProjectTargetState.Unreachable;
+            return new ProjectCreationResult(null, unreachable ? UnreachableMessage : DescribeFailure(ex, location));
         }
+    }
+
+    // Plain words for a failed copy; the raw exception text belongs in the log.
+    public static string DescribeFailure(Exception ex, string location) => ex switch
+    {
+        UnauthorizedAccessException =>
+            $"Could not create the project in {location}. You do not have permission to write there.",
+        JsonException => "Could not create the project: the template's project file is not valid.",
+        InvalidDataException => $"Could not create the project: {ex.Message}",
+        _ => $"Could not create the project in {location}: {ShortReason(ex.Message)}"
+    };
+
+    // The first line of a .NET message without the quoted path some of them append after " : '".
+    private static string ShortReason(string message)
+    {
+        var line = message.Split('\n')[0].Trim();
+        var quoted = line.IndexOf(" : '", StringComparison.Ordinal);
+        return quoted > 0 ? line[..quoted].Trim() : line;
     }
 
     internal static string RewriteObjectUuids(string projectJson, Func<Guid> newUuid)

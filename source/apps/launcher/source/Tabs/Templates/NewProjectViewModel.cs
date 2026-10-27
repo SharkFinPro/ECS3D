@@ -197,6 +197,7 @@ public sealed class NewProjectViewModel : ObservableObject
         ProjectTargetState.NotEmpty => "A folder with this name already exists and is not empty.",
         ProjectTargetState.NotAFolder => "A file with this name already exists.",
         ProjectTargetState.Unavailable => "This location cannot be used.",
+        ProjectTargetState.Unreachable => ProjectCreator.UnreachableMessage,
         _ => null,
     };
 
@@ -313,6 +314,7 @@ public sealed class NewProjectViewModel : ObservableObject
         {
             ProjectTargetState.Unavailable => "This location cannot be used.",
             ProjectTargetState.NotAFolder => "That location is a file, not a folder.",
+            ProjectTargetState.Unreachable => ProjectCreator.UnreachableMessage,
             _ => null,
         };
 
@@ -366,7 +368,7 @@ public sealed class NewProjectViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            return new ProjectCreationResult(null, $"Could not create the project: {exception.Message}");
+            return new ProjectCreationResult(null, ProjectCreator.DescribeFailure(exception, location));
         }
     }
 

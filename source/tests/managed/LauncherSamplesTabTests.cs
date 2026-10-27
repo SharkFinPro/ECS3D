@@ -490,6 +490,7 @@ public class LauncherSamplesTabTests
   {
     _rig.AddEngine(LauncherRig.LauncherDir);
     AddStandardEntries(LauncherRig.LauncherDir);
+    files.AddDirectory(Path.GetPathRoot(LauncherRig.DefaultProjects)!);
     var folder = FolderOf(LauncherRig.LauncherDir, "rush");
     files.Seed(Path.Combine(folder, "template.json"), "{}");
     files.Seed(Path.Combine(folder, "project.ecs3d"), "{\"assets\":{\"scenes\":[{\"objects\":[{\"uuid\":\"a\",\"children\":[]}]}]}}");
