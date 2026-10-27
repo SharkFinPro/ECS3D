@@ -2,6 +2,7 @@
 #include "EditorTheme.h"
 #include "GuiComponents.h"
 #include "KeybindDispatcher.h"
+#include "SettingsPanelLayout.h"
 #include <EditorCameraSettings.h>
 #include <EditorGizmoSettings.h>
 #include <EditorViewportSettings.h>
@@ -10,6 +11,8 @@
 #include <VulkanEngine/VulkanEngine.h>
 #include <VulkanEngine/components/camera/Camera.h>
 #include <imgui.h>
+#include <algorithm>
+#include <array>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -18,7 +21,67 @@
 namespace {
   constexpr const char* windowName = "Settings";
   constexpr const char* openKey = "panels.settings.open";
-  constexpr float navWidth = 158.0f;
+  constexpr float minNavWidth = 158.0f;
+
+  constexpr const char* appearanceLabel = "Appearance";
+  constexpr const char* viewportLabel = "Viewport";
+  constexpr const char* keybindsLabel = "Keybinds";
+
+  // Mirrors the label's left inset in gc::menuRow when an icon is drawn.
+  constexpr float navLabelInset = 34.0f;
+
+  constexpr const char* capturePrompt = "Press a key... Esc to cancel";
+  constexpr const char* rebindLabel = "Rebind";
+  constexpr const char* cancelLabel = "Cancel";
+  constexpr const char* unbindLabel = "Unbind";
+  constexpr const char* resetLabel = "Reset";
+
+  [[nodiscard]] float textWidth(const char* text)
+  {
+    return ImGui::CalcTextSize(text).x;
+  }
+
+  [[nodiscard]] float navWidth()
+  {
+    const float widestLabel = std::max({ textWidth(appearanceLabel), textWidth(viewportLabel),
+                                         textWidth(keybindsLabel) });
+
+    return std::max(minNavWidth, navLabelInset * 2.0f + widestLabel + 2.0f * ImGui::GetStyle().WindowPadding.x);
+  }
+
+  [[nodiscard]] float bindingColumnWidth()
+  {
+    return textWidth(capturePrompt);
+  }
+
+  [[nodiscard]] float actionsColumnWidth()
+  {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const std::array<float, 3> labelWidths = {
+      std::max(textWidth(rebindLabel), textWidth(cancelLabel)),
+      textWidth(unbindLabel),
+      textWidth(resetLabel)
+    };
+
+    return buttonRowWidth(labelWidths, style.FramePadding.x, style.ItemSpacing.x);
+  }
+
+  // The narrowest window that shows the nav and a Keybinds table with nothing clipped.
+  [[nodiscard]] float settingsContentWidth()
+  {
+    const ImGuiStyle& style = ImGui::GetStyle();
+
+    float widestAction = 0.0f;
+    for (const auto& info : editorActions())
+    {
+      widestAction = std::max(widestAction, textWidth(info.label));
+    }
+
+    const float tableWidth = widestAction + bindingColumnWidth() + actionsColumnWidth() +
+                             4.0f * style.CellPadding.x;
+
+    return navWidth() + style.ItemSpacing.x + tableWidth + 2.0f * style.WindowPadding.x + style.ScrollbarSize;
+  }
 
   std::string themeKey(const char* token)
   {
@@ -95,6 +158,13 @@ void SettingsPanel::displayGui()
     m_focusRequested = false;
   }
 
+  // FirstUseEver, so a layout saved in imgui.ini wins over this default.
+  const ImGuiViewport* viewport = ImGui::GetMainViewport();
+  const auto defaultSize = settingsWindowDefaultSize(settingsContentWidth(), ImGui::GetFontSize(),
+                                                     viewport->Size.x, viewport->Size.y);
+  ImGui::SetNextWindowSize(ImVec2(defaultSize.x, defaultSize.y), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+
   // Begin's own close box, rather than a button in the panel: the window is dockable and a docked tab
   // shows that box, so anything else would be a second way to do the same thing.
   bool stayOpen = true;
@@ -140,19 +210,19 @@ void SettingsPanel::displayNav()
 {
   // Always drawn, so the set of sections is legible without opening one. The child's border is what
   // separates it from the content pane.
-  ImGui::BeginChild("SettingsNav", ImVec2(navWidth, 0.0f), true);
+  ImGui::BeginChild("SettingsNav", ImVec2(navWidth(), 0.0f), true);
 
-  if (gc::menuRow("Appearance", gc::SecIcon::image, 34.0f, m_section == Section::appearance))
+  if (gc::menuRow(appearanceLabel, gc::SecIcon::image, 34.0f, m_section == Section::appearance))
   {
     m_section = Section::appearance;
   }
 
-  if (gc::menuRow("Viewport", gc::SecIcon::pan, 34.0f, m_section == Section::viewport))
+  if (gc::menuRow(viewportLabel, gc::SecIcon::pan, 34.0f, m_section == Section::viewport))
   {
     m_section = Section::viewport;
   }
 
-  if (gc::menuRow("Keybinds", gc::SecIcon::block, 34.0f, m_section == Section::keybinds))
+  if (gc::menuRow(keybindsLabel, gc::SecIcon::block, 34.0f, m_section == Section::keybinds))
   {
     m_section = Section::keybinds;
   }
@@ -313,8 +383,8 @@ void SettingsPanel::displayKeybinds()
   if (ImGui::BeginTable("KeybindTable", 3, flags))
   {
     ImGui::TableSetupColumn("Action");
-    ImGui::TableSetupColumn("Binding", ImGuiTableColumnFlags_WidthFixed, 180.0f);
-    ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 210.0f);
+    ImGui::TableSetupColumn("Binding", ImGuiTableColumnFlags_WidthFixed, bindingColumnWidth());
+    ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, actionsColumnWidth());
     ImGui::TableHeadersRow();
 
     for (const auto& info : editorActions())
@@ -337,7 +407,7 @@ void SettingsPanel::displayKeybinds()
       const bool capturingThis = m_capturingAction == info.action;
       if (capturingThis)
       {
-        ImGui::TextColored(theme::accent, "Press a key... Esc to cancel");
+        ImGui::TextColored(theme::accent, "%s", capturePrompt);
       }
       else if (const auto chord = m_keybindTable->binding(info.action))
       {
@@ -349,7 +419,7 @@ void SettingsPanel::displayKeybinds()
       }
 
       ImGui::TableSetColumnIndex(2);
-      if (ImGui::Button(capturingThis ? "Cancel" : "Rebind"))
+      if (ImGui::Button(capturingThis ? cancelLabel : rebindLabel))
       {
         if (capturingThis)
         {
@@ -363,7 +433,7 @@ void SettingsPanel::displayKeybinds()
 
       ImGui::SameLine();
       ImGui::BeginDisabled(!m_keybindTable->binding(info.action));
-      if (ImGui::Button("Unbind"))
+      if (ImGui::Button(unbindLabel))
       {
         m_keybindTable->unbind(info.action, *m_settings);
         m_capturingAction.reset();
@@ -371,7 +441,7 @@ void SettingsPanel::displayKeybinds()
       ImGui::EndDisabled();
 
       ImGui::SameLine();
-      if (ImGui::Button("Reset"))
+      if (ImGui::Button(resetLabel))
       {
         const auto outcome = m_keybindTable->reset(info.action, *m_settings);
         if (outcome.result == KeybindTable::AssignResult::refused)
