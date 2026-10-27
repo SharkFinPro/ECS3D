@@ -140,6 +140,10 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   build the brush in the model instead of XAML — see `Project.GlowBrush` for the pattern and the why.
 - **The New Project dialog's wrapped text sets an explicit `LineHeight`.** At 125% display scale a font-derived
   line height made Avalonia drop the last wrapped line.
+  Its target preview is one line that trims in the middle (`PathSegmentEllipsis`) with a tooltip. Avalonia draws no
+  ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full instead.
+- **`EmptyState.Detail`** is the line under the heading; the Templates and Samples view models set it to null while a
+  search has no hits, which hides it.
 
 ## AI Agent Guidelines
 

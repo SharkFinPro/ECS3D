@@ -9,6 +9,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:dd="using:ECS3DLauncher.Shared"
+        xmlns:conv="using:ECS3DLauncher.Shared.Converters"
         mc:Ignorable="d"
         d:DataContext="{x:Static dd:DesignData.MainWindow}"
         x:Class="ECS3DLauncher.Shell.MainWindow"
@@ -196,7 +197,8 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,14,0">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,14,0"
+                                Grid.ColumnSpan="{Binding ShowSearch, Converter={x:Static conv:SearchSpanConverter.Instance}}">
                         <TextBlock Text="{Binding ViewTitle}" FontSize="19" FontWeight="Bold"
                                    LetterSpacing="-0.2" TextTrimming="CharacterEllipsis"
                                    ToolTip.Tip="{Binding ViewTitle}" />
