@@ -151,7 +151,7 @@ void ServerApp::sendPlayerSlot(const int32_t connId)
     return;
   }
 
-  m_netServer->broadcast(replication::buildPlayerSlot(nonce->second, *slot));
+  m_netServer->sendTo(connId, replication::buildPlayerSlot(nonce->second, *slot));
 }
 
 void ServerApp::handlePossessSlot(const net::Message& message, const int32_t senderId)
