@@ -352,12 +352,16 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
       snapshot[i] = (byte)(i * 31 + 7);
     }
 
+    // Reading starts before the send so a full socket buffer cannot stall the send past its timeout.
+    var read = Task.Run(() => viewer.Receive());
+
     TransportRecorder.ServerSendToMany(server, new[] { viewerId }, 11, snapshot);
 
     var expected = new byte[snapshot.Length + 1];
     expected[0] = 11;
     snapshot.CopyTo(expected, 1);
-    Assert.Equal(expected, viewer.Receive());
+    Assert.True(read.Wait(WaitMs), "the viewer to read the snapshot-sized message");
+    Assert.Equal(expected, read.Result);
     AssertStays(() => TransportRecorder.ClientReceived.Count, 0, "messages the other clients received");
 
     // The positive control: the same two clients do receive a broadcast, so the silence above is the

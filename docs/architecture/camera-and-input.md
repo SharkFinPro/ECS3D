@@ -24,10 +24,9 @@ the `Camera` setters already clamp to a valid range so it should not fire in pra
 One upstream caveat carries through: raster geometry is clipped at roughly twice the near plane,
 since the projection maps depth to -1..1 while Vulkan clips at 0. A client picks its
 *own* camera via the player↔object association (`PlayerController.playerSlot` + a `Camera` on the same
-object) using a **nonce-over-broadcast** handshake: the client tags its `join` with a random nonce, the
-server echoes `(nonce, slot)` back over the existing broadcast (`NetServer` has no targeted-send path), and
-only the client whose nonce matches keeps it — chosen over adding a targeted-send ABI to the C# transport,
-which would have meant touching both backends for one bit of routing. The handshake's build and parse live in
+object) using a **nonce** handshake: the client tags its `join` with a random nonce, the server answers
+`(nonce, slot)` to that connection alone (`NetServer::sendTo`), and the client keeps the answer whose nonce
+matches its own. The handshake's build and parse live in
 `data/Replication.{h,cpp}` (see [replication.md](replication.md)). `PlayerScript` mouse-look rotates the
 object's `Transform` from `input.mouseDelta()` while right-click is held (matching the free-fly camera's own
 gesture) and zeroes `RigidBody` angular velocity each tick so a collision-induced spin can't fight the look;

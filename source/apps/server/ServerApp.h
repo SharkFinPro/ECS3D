@@ -114,7 +114,7 @@ private:
 
   void handlePossessSlot(const net::Message& message, int32_t senderId);
 
-  void broadcastPlayerSlot(int32_t connId);
+  void sendPlayerSlot(int32_t connId);
 
   // Release a dropped connection's slot and clear its input.
   void handleDisconnect(int32_t connId);

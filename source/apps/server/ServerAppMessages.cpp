@@ -104,13 +104,13 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
   assignPlayerSlot(senderId);
 
   // If the client tagged its join with a nonce (players and the editor do), tell it which slot it got so
-  // it can render through that player's camera. Broadcasting with nonce correlation avoids a
-  // per-connection send path - every client hears it, only the matching one keeps it.
+  // it can render through that player's camera. The answer goes to that connection alone; the nonce lets the
+  // client match it to its request.
   net::MessageReader reader(message);
   if (reader.remaining() >= sizeof(uint64_t))
   {
     m_joinNonces[senderId] = reader.read<uint64_t>();
-    broadcastPlayerSlot(senderId);
+    sendPlayerSlot(senderId);
   }
 
   sendJoinReply(senderId);
@@ -138,11 +138,11 @@ std::optional<int32_t> ServerApp::assignPlayerSlot(const int32_t connId)
   m_slotlessConnections.erase(connId);
   Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(*slot) + ".");
   notifyPlayerJoined(*slot);
-  broadcastPlayerSlot(connId);
+  sendPlayerSlot(connId);
   return slot;
 }
 
-void ServerApp::broadcastPlayerSlot(const int32_t connId)
+void ServerApp::sendPlayerSlot(const int32_t connId)
 {
   const auto nonce = m_joinNonces.find(connId);
   const auto slot = m_playerSlots.slotOf(connId);
@@ -202,7 +202,7 @@ void ServerApp::handlePossessSlot(const net::Message& message, const int32_t sen
       + ": outside 0.." + std::to_string(maxPlayerSlot) + ".");
   }
 
-  broadcastPlayerSlot(senderId);
+  sendPlayerSlot(senderId);
 }
 
 void ServerApp::handleDisconnect(const int32_t connId)

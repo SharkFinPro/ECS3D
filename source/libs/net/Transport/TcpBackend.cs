@@ -209,7 +209,7 @@ internal sealed class TcpBackend : TransportBackend
     var idSet = new HashSet<int>(ids);
 
     // Same snapshot-outside-the-lock shape as ServerBroadcast, just filtered to the named connections
-    // (editor connections only) instead of every connection.
+    // instead of every connection.
     var targets = new List<Connection>(idSet.Count);
     lock (_clientsLock)
     {

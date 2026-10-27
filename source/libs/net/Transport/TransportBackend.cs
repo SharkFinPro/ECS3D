@@ -75,8 +75,8 @@ internal abstract class TransportBackend
   public abstract void ServerBroadcast(byte type, nint data, int len);
 
   // Sends to exactly the connIdCount connections named by connIds (a native int32 array), rather than
-  // every connection like ServerBroadcast - for data (the server's own log) that only authorized editor
-  // connections may see. One call for the whole fan-out: implementations apply the same shared time
+  // every connection like ServerBroadcast - for data only those connections may see (a join's snapshot, the
+  // server's own log for editors). One call for the whole fan-out: implementations apply the same shared time
   // budget across it that ServerBroadcast applies across every connection, so a stalled connection in the
   // list cannot cost the caller more than that one shared budget no matter how many are named. A connId
   // that has since disconnected is silently skipped.

@@ -355,9 +355,18 @@ public sealed class TcpBackendLoopbackTests : IDisposable
       snapshot[i] = (byte)(i * 31 + 7);
     }
 
+    // Reading starts before the send so a full socket buffer cannot stall the send past its timeout.
+    var read = Task.Run(() =>
+    {
+      var ok = TcpBackend.ReadFrame(viewer.Stream, out var frameType, out var framePayload);
+      return (ok, frameType, framePayload);
+    });
+
     TransportRecorder.ServerSendToMany(server, new[] { viewerId }, 11, snapshot);
 
-    Assert.True(TcpBackend.ReadFrame(viewer.Stream, out var type, out var payload));
+    Assert.True(read.Wait(WaitMs), "the viewer to read the snapshot-sized frame");
+    var (ok, type, payload) = read.Result;
+    Assert.True(ok);
     Assert.Equal(11, type);
     Assert.Equal(snapshot, payload);
     AssertStays(() => TransportRecorder.ClientReceived.Count, 0, "messages the other clients received");

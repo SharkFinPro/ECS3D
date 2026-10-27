@@ -31,7 +31,7 @@ namespace {
   using ServerStartFn = int32_t(*)(int32_t, uint8_t, const char*);
   using ServerStopFn = void(*)();
   using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
-  // connIds/connIdCount name the specific connections to send to (editor connections only, never every
+  // connIds/connIdCount name the specific connections to send to (never every
   // connection like ServerBroadcastFn) - one call for the whole fan-out, so the transport can apply one
   // shared deadline across it the same way it already does for a broadcast.
   using ServerSendToManyFn = void(*)(const int32_t*, int32_t, uint8_t, const uint8_t*, int32_t);
