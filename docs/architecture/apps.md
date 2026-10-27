@@ -32,6 +32,9 @@ while playing) the same way it already undoes an edited Transform.
   `--ephemeral` (exit when the last connection drops — a spawned local server), `--token`,
   `--simulate-when-empty` (keep ticking with no one connected rather than pausing until a join),
   `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
+  Ctrl+C and Ctrl+Break (SIGINT and SIGTERM on POSIX) request an orderly stop through `ShutdownSignal`, which
+  `run()` polls through `shouldKeepRunning`: the loop exits, live scripts are stopped and the shutdown is logged.
+  A second signal ends the process at once.
   Ships `defaultAssets/` (each file's source and license in `defaultAssets/LICENSES.md`) and generates a
   built-in `DefaultProject` when no `--project` is given. `DefaultShapes` builds the hulls of its Cylinder
   and Ramp prefabs from formula vertices through `buildConvexHull`. It also builds the nine shape library

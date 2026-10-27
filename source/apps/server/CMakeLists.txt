@@ -19,6 +19,8 @@ add_executable(${PROJECT_NAME}
   RestPose.cpp
   RestPose.h
   ServerPolicy.h
+  ShutdownSignal.cpp
+  ShutdownSignal.h
 )
 
 # The server does all the number crunching. It is headless: it must NOT link ECS3DRender or

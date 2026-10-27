@@ -43,7 +43,8 @@ The launcher runs the same programs you can start yourself. From `bin/`, start t
 ECS3DServer --project templates/coin-rush --port 3000
 ```
 
-Port 3000 is the default, so `--port` can be left out. The server prints its log in the terminal that started it.
+Port 3000 is the default, so `--port` can be left out. The server prints its log in the terminal that started it. Press Ctrl+C in that terminal to stop the
+server; a second Ctrl+C forces it closed.
 Then open your own window as a client of that server:
 
 ```
