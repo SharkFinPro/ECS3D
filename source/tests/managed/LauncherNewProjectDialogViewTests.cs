@@ -118,6 +118,22 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
   }
 
   [Fact]
+  public async Task TheTargetPathTrimsInsteadOfWrappingAndKeepsItsFullTextInATooltip()
+  {
+    await LauncherCardMenuTests.OnUiThread(() =>
+    {
+      var vm = NewDialog();
+      using var shown = Show(vm);
+
+      var preview = All<TextBlock>(shown.Dialog).Single(block => block.Text == vm.TargetPreview);
+
+      Assert.Equal(TextTrimming.PathSegmentEllipsis, preview.TextTrimming);
+      Assert.Equal(1, preview.MaxLines);
+      Assert.Equal(vm.TargetPreview, ToolTip.GetTip(preview));
+    });
+  }
+
+  [Fact]
   public async Task ANameThatIsTakenShowsTheTargetProblemInsteadOfTheOkMessage()
   {
     await LauncherCardMenuTests.OnUiThread(() =>

@@ -15,7 +15,8 @@
         <StackPanel Spacing="5">
             <TextBlock Text="{Binding #Root.Heading}" FontSize="14" FontWeight="SemiBold"
                        HorizontalAlignment="Center" />
-            <TextBlock Text="Nothing to show here yet" FontSize="12.5"
+            <TextBlock Text="{Binding #Root.Detail}" IsVisible="{Binding #Root.Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                       FontSize="12.5"
                        Foreground="{StaticResource T3Brush}" HorizontalAlignment="Center" />
         </StackPanel>
     </StackPanel>

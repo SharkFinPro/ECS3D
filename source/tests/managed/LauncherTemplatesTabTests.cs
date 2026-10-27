@@ -161,11 +161,13 @@ public class LauncherTemplatesTabTests
     Assert.True(model.Templates.HasNoMatches);
     Assert.True(model.Templates.ShowEmptyState);
     Assert.Equal("No templates match your search", model.Templates.EmptyHeading);
+    Assert.Null(model.Templates.EmptyDetail);
 
     model.SearchText = "";
 
     Assert.Equal(2, Names(model).Length);
     Assert.False(model.Templates.ShowEmptyState);
+    Assert.Equal("Nothing to show here yet", model.Templates.EmptyDetail);
   }
 
   [Fact]

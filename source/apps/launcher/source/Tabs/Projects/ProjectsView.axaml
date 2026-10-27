@@ -280,7 +280,7 @@
                                               CommandParameter="{Binding}" />
                                 </ContextMenu>
                             </Border.ContextMenu>
-                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="14,9">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,22,Auto" Margin="14,9">
                                 <Border Grid.Column="0" Width="60" Height="38" CornerRadius="6"
                                         ClipToBounds="True" Background="{StaticResource InsetBrush}">
                                     <Panel>
@@ -293,15 +293,16 @@
                                     </Panel>
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0" Spacing="2">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                         <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <Border IsVisible="{Binding IsInEditor}" CornerRadius="6" Padding="8,2"
+                                                   HorizontalAlignment="Left" TextTrimming="CharacterEllipsis"
+                                                   ToolTip.Tip="{Binding Name}" />
+                                        <Border Grid.Column="1" IsVisible="{Binding IsInEditor}" CornerRadius="6" Padding="8,2"
                                                 VerticalAlignment="Center" Background="{StaticResource AccDim2}">
                                             <TextBlock Text="In editor" FontSize="11" FontWeight="SemiBold"
                                                        Foreground="{StaticResource AccBrush}" />
                                         </Border>
-                                    </StackPanel>
+                                    </Grid>
                                     <TextBlock Text="{Binding Path}" FontSize="11.5"
                                                FontFamily="{StaticResource MonoFontFamily}"
                                                Foreground="{StaticResource T3Brush}"
@@ -330,7 +331,7 @@
                                                 Command="{Binding $parent[local:ProjectsView].((local:ProjectsViewModel)DataContext).OpenProjectCommand, FallbackValue={x:Null}}"
                                                 CommandParameter="{Binding}" />
                                 <Path Grid.Column="4" Classes="icon fill" Width="10.5" Height="10.5"
-                                      IsVisible="{Binding Pinned}" VerticalAlignment="Center"
+                                      IsVisible="{Binding Pinned}" VerticalAlignment="Center" HorizontalAlignment="Left"
                                       Data="{StaticResource IconStar}" />
                                 <Button Grid.Column="5" Classes="more" Theme="{StaticResource BareButton}" Click="OnMoreClick"
                                         ToolTip.Tip="More" AutomationProperties.Name="More actions" VerticalAlignment="Center" Margin="10,0,0,0">

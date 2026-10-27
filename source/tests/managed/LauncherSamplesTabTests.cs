@@ -247,11 +247,13 @@ public class LauncherSamplesTabTests
     Assert.True(model.Samples.HasNoMatches);
     Assert.True(model.Samples.ShowEmptyState);
     Assert.Equal("No samples match your search", model.Samples.EmptyHeading);
+    Assert.Null(model.Samples.EmptyDetail);
 
     model.SearchText = "";
 
     Assert.Equal(2, Names(model).Length);
     Assert.False(model.Samples.ShowEmptyState);
+    Assert.Equal("Nothing to show here yet", model.Samples.EmptyDetail);
   }
 
   [Fact]

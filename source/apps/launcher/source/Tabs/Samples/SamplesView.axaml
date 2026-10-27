@@ -15,7 +15,8 @@
     <Panel>
 
         <controls:EmptyState IsVisible="{Binding ShowEmptyState}"
-                             IconData="{StaticResource IconSparkle}" Heading="{Binding EmptyHeading}" />
+                             IconData="{StaticResource IconSparkle}" Heading="{Binding EmptyHeading}"
+                             Detail="{Binding EmptyDetail}" />
 
         <ItemsControl ItemsSource="{Binding VisibleSamples}">
             <ItemsControl.ItemTemplate>
@@ -38,8 +39,7 @@
                                 <TextBlock Grid.Row="0" Text="{Binding Name}" FontSize="16" FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis" />
                                 <TextBlock Grid.Row="1" Text="{Binding Description}" FontSize="12.5" Margin="0,6,0,0"
-                                           LineHeight="18" MaxLines="2" TextWrapping="Wrap"
-                                           TextTrimming="CharacterEllipsis"
+                                           LineHeight="18" TextWrapping="Wrap"
                                            Foreground="{StaticResource T2Brush}" />
                                 <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="0,12,0,0"
                                               VerticalAlignment="Top">

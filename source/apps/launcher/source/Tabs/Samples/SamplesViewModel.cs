@@ -30,6 +30,9 @@ public class SamplesViewModel : ObservableObject
 
     public bool ShowEmptyState => IsEmpty || HasNoMatches;
 
+    // The line under the heading; a search with no hits already says everything.
+    public string? EmptyDetail => HasNoMatches ? null : "Nothing to show here yet";
+
     public string EmptyHeading
     {
         get => _emptyHeading;
@@ -137,6 +140,7 @@ public class SamplesViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasNoMatches));
         OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(EmptyDetail));
     }
 
     private bool Matches(SampleCard card) =>

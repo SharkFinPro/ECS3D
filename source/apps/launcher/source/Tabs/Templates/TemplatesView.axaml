@@ -15,7 +15,8 @@
     <Panel>
 
         <controls:EmptyState IsVisible="{Binding ShowEmptyState}"
-                             IconData="{StaticResource IconLayers}" Heading="{Binding EmptyHeading}" />
+                             IconData="{StaticResource IconLayers}" Heading="{Binding EmptyHeading}"
+                             Detail="{Binding EmptyDetail}" />
 
         <ItemsControl ItemsSource="{Binding VisibleTemplates}">
             <ItemsControl.ItemsPanel>
@@ -43,8 +44,7 @@
                                 <StackPanel Margin="16,14,16,16" Spacing="4">
                                     <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding Description}" FontSize="12" LineHeight="18"
-                                               MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                    <TextBlock Text="{Binding Description}" FontSize="12" LineHeight="18" TextWrapping="Wrap"
                                                Foreground="{StaticResource T2Brush}" />
                                     <ItemsControl ItemsSource="{Binding Tags}" Margin="0,8,0,0">
                                         <ItemsControl.ItemsPanel>
