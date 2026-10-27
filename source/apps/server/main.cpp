@@ -18,6 +18,24 @@ namespace
     return arg == flag && index + 1 < argc;
   }
 
+  // Consumes the value after --port at index (advancing index past it).
+  int parsePortOption(const int argc, char** argv, int& index)
+  {
+    if (index + 1 >= argc)
+    {
+      throw std::invalid_argument("--port needs a value (0-65535).");
+    }
+
+    const std::string text = argv[++index];
+    const auto port = net::parsePortArgument(text);
+    if (!port)
+    {
+      throw std::invalid_argument("Invalid --port value '" + text + "': expected a number from 0 to 65535.");
+    }
+
+    return *port;
+  }
+
   // --edit is the launch-capability gate that allows editor connections; absent it the server is a
   // pure play server. --token, when set, is the secret an editor must present to be authorized;
   // main generates one for an --edit server given none. --open-edit implies --edit and skips that, so any
@@ -37,19 +55,7 @@ namespace
       }
       else if (arg == "--port")
       {
-        if (i + 1 >= argc)
-        {
-          throw std::invalid_argument("--port needs a value (0-65535).");
-        }
-
-        const auto port = net::parsePortArgument(argv[++i]);
-        if (!port)
-        {
-          throw std::invalid_argument(std::string("Invalid --port value '") + argv[i]
-            + "': expected a number from 0 to 65535.");
-        }
-
-        options.port = *port;
+        options.port = parsePortOption(argc, argv, i);
       }
       else if (arg == "--edit")
       {

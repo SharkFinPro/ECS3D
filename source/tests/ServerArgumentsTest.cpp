@@ -43,4 +43,3 @@ TEST(ServerArguments, ParsePortArgumentRejectsEverythingElse)
     EXPECT_FALSE(net::parsePortArgument(text).has_value()) << "'" << text << "'";
   }
 }
-

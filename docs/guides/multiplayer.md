@@ -91,8 +91,7 @@ firewall allows incoming TCP on the port you chose.
 
 - **The port is in use.** Another program, or an earlier server, already holds the port. The launcher says
   "Port 3000 is already in use; choose another port in Settings." Pick another port there. Started by hand, the
-  server stops right after it starts, with an error about the address being in use or with no clear message; pick
-  another with `--port`. Give the same number to every client.
+  server logs that the port is already in use and exits with an error; pick another with `--port`. Give the same number to every client.
 - **A client cannot connect.** Check the address and port, that the server is still running (the launcher toasts
   the exit code and `server.log` if it stopped), and that the firewall allows it.
 - **Use the same build.** Run the server and every client from the same build of ECS3D. The connection does not

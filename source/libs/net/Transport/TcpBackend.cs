@@ -20,6 +20,7 @@ internal sealed class TcpBackend : TransportBackend
   private TcpListener? _listener;
   private Thread? _acceptThread;
   private volatile bool _serverRunning;
+  private int _boundPort;
 
   private readonly List<Connection> _clients = new();
   // Accepted sockets that have not yet cleared the handshake. Tracked separately from _clients so an
@@ -85,7 +86,7 @@ internal sealed class TcpBackend : TransportBackend
   {
     if (_serverRunning)
     {
-      return BoundPort();
+      return _boundPort;
     }
 
     EditMode = editMode;
@@ -106,6 +107,7 @@ internal sealed class TcpBackend : TransportBackend
     }
 
     var boundPort = BoundPort();
+    _boundPort = boundPort;
     _serverRunning = true;
 
     _acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "ecs3d-net-accept" };

@@ -74,8 +74,8 @@ public sealed unsafe class TransportExportsTests : IDisposable
     return serverConnectionCount();
   }
 
-  // Probed on Any because the backend binds Any, and a bind failure inside the export is fatal to the
-  // test host (it cannot be retried), so the window is kept small by probing right before the call.
+  // Probed on Any because the backend binds Any. The port could be taken between the probe and the call,
+  // which the export reports as -1, so the window is kept small by probing right before it.
   private static byte StartEditServerAndConnectPlayer(string serverTokenText)
   {
     delegate* unmanaged<int, byte, IntPtr, int> serverStart = &Transport.serverStart;

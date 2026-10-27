@@ -58,6 +58,7 @@ internal sealed class WebSocketBackend : TransportBackend
   private TcpListener? _listener;
   private Thread? _acceptThread;
   private volatile bool _serverRunning;
+  private int _boundPort;
 
   private readonly List<Connection> _connections = new();
   private readonly object _clientsLock = new();
@@ -112,7 +113,7 @@ internal sealed class WebSocketBackend : TransportBackend
   {
     if (_serverRunning)
     {
-      return BoundPort();
+      return _boundPort;
     }
 
     EditMode = editMode;
@@ -133,6 +134,7 @@ internal sealed class WebSocketBackend : TransportBackend
     }
 
     var boundPort = BoundPort();
+    _boundPort = boundPort;
     _serverRunning = true;
 
     _acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "ecs3d-net-accept" };
