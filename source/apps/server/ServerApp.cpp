@@ -1,6 +1,7 @@
 #include "ServerApp.h"
 #include "DefaultProject.h"
 #include "ServerPolicy.h"
+#include "ShutdownSignal.h"
 #include <ComponentRegistry.h>
 #include <ComponentRegistration.h>
 #include <ProjectFingerprint.h>
@@ -173,15 +174,8 @@ ServerApp::~ServerApp()
 
 bool ServerApp::isActive() const
 {
-  // A dedicated server runs until killed.
-  if (!m_options.exitWhenEmpty)
-  {
-    return true;
-  }
-
-  // An ephemeral (editor/client-spawned) server exits once its last connection drops - but only after the
-  // first join (m_hasConnected), so it survives the launch -> connect window when the count is still 0.
-  return !m_hasConnected || m_netServer->connectionCount() > 0;
+  return shouldKeepRunning(shutdownRequested(), m_options.exitWhenEmpty, m_hasConnected,
+                           m_netServer->connectionCount());
 }
 
 void ServerApp::drainNetwork()
@@ -219,6 +213,13 @@ void ServerApp::drainNetwork()
 
 void ServerApp::run()
 {
+  // The runtime's boot may have replaced the handlers main installed; a signal that already arrived keeps the
+  // default action main's handler restored, so a second one still ends the process.
+  if (!shutdownRequested())
+  {
+    installShutdownSignalHandlers();
+  }
+
   while (isActive())
   {
     drainNetwork();
@@ -280,6 +281,21 @@ void ServerApp::run()
     // Don't busy-spin a core between ticks.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
+
+  shutDown();
+}
+
+void ServerApp::shutDown()
+{
+  Log::info(LogCategory::server, shutdownRequested() ? "Shutdown requested - stopping the server."
+                                                     : "No connections remain - stopping the server.");
+
+  if (scriptsLive())
+  {
+    stopScriptsLogged(*m_sceneManager->getCurrentScene());
+  }
+
+  forwardLogToEditors();
 }
 
 void ServerApp::logSimulationChange(const bool simulating)

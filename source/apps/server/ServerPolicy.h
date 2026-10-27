@@ -38,6 +38,20 @@
   return simulateWhenEmpty || connectionCount > 0;
 }
 
+// A dedicated server runs until a shutdown is requested. An exitWhenEmpty (editor/client-spawned) server also
+// stops once its last connection drops, but only after the first connect, so it survives the launch -> connect
+// window when the count is still 0.
+[[nodiscard]] constexpr bool shouldKeepRunning(const bool shutdownRequested, const bool exitWhenEmpty,
+                                               const bool hasConnected, const int connectionCount) noexcept
+{
+  if (shutdownRequested)
+  {
+    return false;
+  }
+
+  return !exitWhenEmpty || !hasConnected || connectionCount > 0;
+}
+
 // What a scene-control op does. The order the steps run in lives in ServerApp::applySceneControl.
 struct SceneControlPlan
 {

@@ -1,5 +1,6 @@
 #include "ServerApp.h"
 #include "ServerPolicy.h"
+#include "ShutdownSignal.h"
 #include <ProjectPaths.h>
 #include <EditToken.h>
 #include <ServerArguments.h>
@@ -93,6 +94,8 @@ int main(const int argc, char** argv)
     Log::addSink(std::make_shared<ConsoleSink>());
 
     addFileSinkFromArguments(argc, argv, "server", LogCategory::server);
+
+    installShutdownSignalHandlers();
 
     auto options = parseOptions(argc, argv);
 

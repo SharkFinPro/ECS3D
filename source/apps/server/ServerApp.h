@@ -128,6 +128,9 @@ private:
   // sim and scripting at the app level so neither library depends on the other.
   void dispatchCollisionEvents(ObjectManager& objectManager) const;
 
+  // Runs after the loop exits: stops live scripts and flushes the log to editors before the sockets close.
+  void shutDown();
+
   void loadStartupProject();
 
   void startLoadedScene();

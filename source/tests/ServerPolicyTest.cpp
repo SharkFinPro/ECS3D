@@ -173,3 +173,30 @@ TEST(ServerPolicy, SimulateWhenEmptyKeepsAnEmptyServerTicking)
   EXPECT_TRUE(shouldSimulate(0, true));
   EXPECT_TRUE(shouldSimulate(1, true));
 }
+
+TEST(ServerPolicy, DedicatedServerKeepsRunningWithOrWithoutConnections)
+{
+  EXPECT_TRUE(shouldKeepRunning(false, false, false, 0));
+  EXPECT_TRUE(shouldKeepRunning(false, false, true, 0));
+  EXPECT_TRUE(shouldKeepRunning(false, false, true, 3));
+}
+
+TEST(ServerPolicy, ShutdownRequestStopsEveryServer)
+{
+  EXPECT_FALSE(shouldKeepRunning(true, false, false, 0));
+  EXPECT_FALSE(shouldKeepRunning(true, false, true, 2));
+  EXPECT_FALSE(shouldKeepRunning(true, true, false, 0));
+  EXPECT_FALSE(shouldKeepRunning(true, true, true, 2));
+}
+
+TEST(ServerPolicy, EphemeralServerWaitsForItsFirstConnection)
+{
+  EXPECT_TRUE(shouldKeepRunning(false, true, false, 0));
+}
+
+TEST(ServerPolicy, EphemeralServerStopsAfterItsLastConnectionDrops)
+{
+  EXPECT_FALSE(shouldKeepRunning(false, true, true, 0));
+  EXPECT_TRUE(shouldKeepRunning(false, true, true, 1));
+  EXPECT_TRUE(shouldKeepRunning(false, true, true, 4));
+}

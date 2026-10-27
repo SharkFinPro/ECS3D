@@ -207,6 +207,8 @@ add_executable(${PROJECT_NAME}
   SceneEditFailurePathsTest.cpp
   ProtocolFramingTest.cpp
   ServerPolicyTest.cpp
+  ShutdownSignalTest.cpp
+  ChildProcessTest.cpp
   EditTokenTest.cpp
   EditorConnectionsTest.cpp
   CommandLineSplitTest.cpp
@@ -246,6 +248,7 @@ add_executable(${PROJECT_NAME}
   # ClientConnectionState.cpp and EditorConnections.cpp are the CLR-free pieces split out of ServerProcess,
   # NetClient and NetServer.
   ../libs/net/MessageQueue.cpp
+  ../libs/net/ChildProcess.cpp
   ../libs/net/CommandLineSplit.cpp
   ../libs/net/ClientConnectionState.cpp
   ../libs/net/EditorConnections.cpp
@@ -288,6 +291,7 @@ add_executable(${PROJECT_NAME}
   ../apps/server/DefaultShapes.cpp
   ../apps/server/DefaultWelcome.cpp
   ../apps/server/RestPose.cpp
+  ../apps/server/ShutdownSignal.cpp
 
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
   # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).
