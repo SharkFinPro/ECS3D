@@ -21,7 +21,14 @@
 namespace {
   constexpr const char* windowName = "Settings";
   constexpr const char* openKey = "panels.settings.open";
-  constexpr float navWidth = 158.0f;
+  constexpr float minNavWidth = 158.0f;
+
+  constexpr const char* appearanceLabel = "Appearance";
+  constexpr const char* viewportLabel = "Viewport";
+  constexpr const char* keybindsLabel = "Keybinds";
+
+  // Mirrors the label's left inset in gc::menuRow when an icon is drawn.
+  constexpr float navLabelInset = 34.0f;
 
   constexpr const char* capturePrompt = "Press a key... Esc to cancel";
   constexpr const char* rebindLabel = "Rebind";
@@ -32,6 +39,14 @@ namespace {
   [[nodiscard]] float textWidth(const char* text)
   {
     return ImGui::CalcTextSize(text).x;
+  }
+
+  [[nodiscard]] float navWidth()
+  {
+    const float widestLabel = std::max({ textWidth(appearanceLabel), textWidth(viewportLabel),
+                                         textWidth(keybindsLabel) });
+
+    return std::max(minNavWidth, navLabelInset * 2.0f + widestLabel + 2.0f * ImGui::GetStyle().WindowPadding.x);
   }
 
   [[nodiscard]] float bindingColumnWidth()
@@ -65,7 +80,7 @@ namespace {
     const float tableWidth = widestAction + bindingColumnWidth() + actionsColumnWidth() +
                              6.0f * style.CellPadding.x;
 
-    return navWidth + style.ItemSpacing.x + tableWidth + 2.0f * style.WindowPadding.x + style.ScrollbarSize;
+    return navWidth() + style.ItemSpacing.x + tableWidth + 2.0f * style.WindowPadding.x + style.ScrollbarSize;
   }
 
   std::string themeKey(const char* token)
@@ -195,19 +210,19 @@ void SettingsPanel::displayNav()
 {
   // Always drawn, so the set of sections is legible without opening one. The child's border is what
   // separates it from the content pane.
-  ImGui::BeginChild("SettingsNav", ImVec2(navWidth, 0.0f), true);
+  ImGui::BeginChild("SettingsNav", ImVec2(navWidth(), 0.0f), true);
 
-  if (gc::menuRow("Appearance", gc::SecIcon::image, 34.0f, m_section == Section::appearance))
+  if (gc::menuRow(appearanceLabel, gc::SecIcon::image, 34.0f, m_section == Section::appearance))
   {
     m_section = Section::appearance;
   }
 
-  if (gc::menuRow("Viewport", gc::SecIcon::pan, 34.0f, m_section == Section::viewport))
+  if (gc::menuRow(viewportLabel, gc::SecIcon::pan, 34.0f, m_section == Section::viewport))
   {
     m_section = Section::viewport;
   }
 
-  if (gc::menuRow("Keybinds", gc::SecIcon::block, 34.0f, m_section == Section::keybinds))
+  if (gc::menuRow(keybindsLabel, gc::SecIcon::block, 34.0f, m_section == Section::keybinds))
   {
     m_section = Section::keybinds;
   }
