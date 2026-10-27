@@ -38,7 +38,9 @@ selects the contiguous range between an anchor uuid and the clicked row in the t
 which `ObjectGUIManager` tracks itself each frame since collapsed nodes and the sort mode both affect what "on
 screen order" means; the range, row-action targets and sort rules live in the headless `ObjectTreeOrder.h`; the
 viewport has its own rule, described under Viewport gizmos below), `SettingsPanel` (the "Settings" window — a
-section nav beside the selected section's content, reading and writing `ECS3DSettings` directly since
+section nav beside the selected section's content, opening centered at a font-relative default size on first use
+(a saved `imgui.ini` layout wins; `SettingsPanelLayout.h` holds that math) with the Keybinds columns sized from
+their content, reading and writing `ECS3DSettings` directly since
 preferences are local, not replicated; Appearance edits the `EditorTheme.h` palette tokens live; Viewport drags
 the free-fly camera speed (`EditorCameraSettings`, applied to `vke::Camera::setSpeed` immediately) and the
 viewport gizmo's Snap toggle + translate/rotate/scale step sizes (`EditorGizmoSettings`); Keybinds lists every

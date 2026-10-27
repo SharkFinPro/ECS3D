@@ -34,6 +34,7 @@ add_library(${PROJECT_NAME}
   AssetReferences.h
   SettingsPanel.cpp
   SettingsPanel.h
+  SettingsPanelLayout.h
   ConsolePanel.cpp
   ConsolePanel.h
   SceneScriptsPanel.cpp
