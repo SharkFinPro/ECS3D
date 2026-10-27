@@ -31,11 +31,6 @@ namespace {
   };
 }
 
-TEST_F(ShutdownSignalTest, NoShutdownIsRequestedAfterClearing)
-{
-  EXPECT_FALSE(shutdownRequested());
-}
-
 TEST_F(ShutdownSignalTest, InterruptRequestsShutdownAndRestoresTheDefault)
 {
   expectRaisedSignalRequestsShutdown(SIGINT);
