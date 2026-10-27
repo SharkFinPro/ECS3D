@@ -33,8 +33,8 @@
   clicking one opens the New Project dialog. The header New Project button and the Projects tab's New card open
   it too, with Empty 3D chosen, or the first usable template when that one is missing or needs a newer engine.
   The dialog is an in-window overlay (`NewProject` on the shell, null when closed) that disables everything behind
-  it. It takes a name and a location. Name rules apply at once; the disk checks of the location (a missing drive or share is unreachable) and the target
-  folder run off the UI thread 250 ms after the last edit, with "Checking..." and Create disabled meanwhile. It
+  it. It takes a name and a location. Name rules apply at once; the disk checks of the location (a missing drive or
+  share is unreachable) and the target folder run off the UI thread 250 ms after the last edit, with "Checking..." and Create disabled meanwhile. It
   creates the project with `ProjectCreator` off the UI thread, records it with its template and, if asked, opens it
   in the editor. Enter in either box presses Create project (its `IsDefault`), and does nothing while Create is disabled. A failed copy keeps the dialog open with the reason in plain words. Closing the window mid-copy cancels the copy,
   waits for it to remove its hidden `.<name>.creating` folder, then closes. The Samples tab is real: `TemplateCatalog`
@@ -136,7 +136,8 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   pin both. A `DockPanel` that ends in a button sets `LastChildFill="False"`, or the button's bounds span the leftover space.
 - **Code-loaded brushes:** where a bound brush won't inherit the item `DataContext` (e.g. gradient stops),
   build the brush in the model instead of XAML — see `Project.GlowBrush` for the pattern and the why.
-- **Wrapped text sets `LineHeight`.** At a display scale such as 125% a font-derived line height does not survive rounding and Avalonia drops the last wrapped line (see the New Project dialog).
+- **Wrapped text sets `LineHeight`.** At a display scale such as 125% a font-derived line height does not survive
+  rounding and Avalonia drops the last wrapped line (see the New Project dialog).
 
 ## AI Agent Guidelines
 
