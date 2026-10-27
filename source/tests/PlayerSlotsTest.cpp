@@ -41,6 +41,27 @@ TEST(PlayerSlotTable, AssignsTheLowestFreeSlotAndIsIdempotent)
   EXPECT_EQ(table.slotOf(12), 2);
 }
 
+TEST(PlayerSlotTable, AssignRefusesOnceEverySlotIsHeld)
+{
+  PlayerSlotTable table;
+  for (int32_t conn = 0; conn <= maxPlayerSlot; ++conn)
+  {
+    ASSERT_EQ(table.assign(conn), conn);
+  }
+
+  const int32_t overflow = maxPlayerSlot + 1;
+  EXPECT_FALSE(table.assign(overflow).has_value());
+  EXPECT_FALSE(table.slotOf(overflow).has_value());
+  EXPECT_EQ(table.heldSlots().size(), static_cast<size_t>(maxPlayerSlot + 1));
+
+  EXPECT_EQ(table.assign(5), 5);
+  EXPECT_EQ(table.assign(maxPlayerSlot), maxPlayerSlot);
+
+  EXPECT_EQ(table.release(17), 17);
+  EXPECT_EQ(table.assign(overflow), 17);
+  EXPECT_EQ(table.slotOf(overflow), 17);
+}
+
 TEST(PlayerSlotTable, ReleaseFreesTheSlotForReuse)
 {
   PlayerSlotTable table;

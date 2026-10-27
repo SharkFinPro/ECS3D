@@ -8,8 +8,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <uuid.h>
 
@@ -102,8 +104,13 @@ private:
   // The nonce each connection's join carried, so a slot change can be answered with a playerSlot.
   std::unordered_map<int32_t, uint64_t> m_joinNonces;
 
+  // Connections refused a slot because every one is held, so the refusal logs once per connection rather
+  // than on every input message.
+  std::unordered_set<int32_t> m_slotlessConnections;
+
   // Bind connId to the lowest free player slot (idempotent - returns the existing slot if already bound).
-  int32_t assignPlayerSlot(int32_t connId);
+  // Empty when every slot is held.
+  std::optional<int32_t> assignPlayerSlot(int32_t connId);
 
   void handlePossessSlot(const net::Message& message, int32_t senderId);
 
