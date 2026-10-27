@@ -8,7 +8,7 @@ namespace
 
   static_assert(std::atomic<bool>::is_always_lock_free, "the flag is written from a signal handler");
 
-  extern "C" void handleShutdownSignal(const int signalNumber)
+  void handleShutdownSignal(const int signalNumber)
   {
     s_shutdownRequested.store(true);
     std::signal(signalNumber, SIG_DFL);
