@@ -32,8 +32,9 @@ struct PossessOutcome {
 // slot another live connection holds.
 class PlayerSlotTable {
 public:
-  // Binds connId to the lowest free slot, or returns the slot it already holds.
-  int32_t assign(int32_t connId);
+  // Binds connId to the lowest free slot, or returns the slot it already holds. Empty when every slot
+  // 0..maxPlayerSlot is held.
+  std::optional<int32_t> assign(int32_t connId);
 
   // Returns the slot that was freed, if the connection held one.
   std::optional<int32_t> release(int32_t connId);

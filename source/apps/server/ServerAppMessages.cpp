@@ -115,16 +115,29 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
   broadcastSnapshot();
 }
 
-int32_t ServerApp::assignPlayerSlot(const int32_t connId)
+std::optional<int32_t> ServerApp::assignPlayerSlot(const int32_t connId)
 {
   if (const auto existing = m_playerSlots.slotOf(connId))
   {
-    return *existing;
+    return existing;
   }
 
-  const int32_t slot = m_playerSlots.assign(connId);
-  Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(slot) + ".");
-  notifyPlayerJoined(slot);
+  const auto slot = m_playerSlots.assign(connId);
+  if (!slot)
+  {
+    if (m_slotlessConnections.insert(connId).second)
+    {
+      Log::warn(LogCategory::server, "Refused connection " + std::to_string(connId) + " a player slot: all "
+        + std::to_string(maxPlayerSlot + 1) + " slots (0.." + std::to_string(maxPlayerSlot) + ") are held.");
+    }
+
+    return std::nullopt;
+  }
+
+  m_slotlessConnections.erase(connId);
+  Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(*slot) + ".");
+  notifyPlayerJoined(*slot);
+  broadcastPlayerSlot(connId);
   return slot;
 }
 
@@ -194,6 +207,7 @@ void ServerApp::handlePossessSlot(const net::Message& message, const int32_t sen
 void ServerApp::handleDisconnect(const int32_t connId)
 {
   m_joinNonces.erase(connId);
+  m_slotlessConnections.erase(connId);
 
   const auto slot = m_playerSlots.release(connId);
   if (!slot)
@@ -215,7 +229,13 @@ void ServerApp::handleInputState(const net::Message& message, const int32_t send
   // other. assignPlayerSlot is idempotent (the slot usually exists from the join), but bind on demand in
   // case input arrives first - done before the parse below so even a malformed message still binds the
   // connection to a slot.
-  const int32_t slot = assignPlayerSlot(senderId);
+  const auto assigned = assignPlayerSlot(senderId);
+  if (!assigned)
+  {
+    return;
+  }
+
+  const int32_t slot = *assigned;
 
   // The parse itself (including the bound on the key count and the tolerance for a pre-mouse-block
   // client) lives in replication::parseInputState so it can be tested without booting the CLR; this is

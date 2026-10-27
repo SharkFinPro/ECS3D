@@ -6,21 +6,28 @@
 #include "objects/components/PlayerController.h"
 #include <algorithm>
 
-int32_t PlayerSlotTable::assign(const int32_t connId)
+std::optional<int32_t> PlayerSlotTable::assign(const int32_t connId)
 {
   if (const auto existing = slotOf(connId))
   {
-    return *existing;
+    return existing;
   }
 
-  int32_t slot = 0;
-  while (isHeld(slot))
+  if (m_connectionSlots.size() > static_cast<size_t>(maxPlayerSlot))
   {
-    ++slot;
+    return std::nullopt;
   }
 
-  m_connectionSlots.emplace(connId, slot);
-  return slot;
+  for (int32_t slot = 0; slot <= maxPlayerSlot; ++slot)
+  {
+    if (!isHeld(slot))
+    {
+      m_connectionSlots.emplace(connId, slot);
+      return slot;
+    }
+  }
+
+  return std::nullopt;
 }
 
 std::optional<int32_t> PlayerSlotTable::release(const int32_t connId)

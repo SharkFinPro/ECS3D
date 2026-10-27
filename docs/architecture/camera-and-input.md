@@ -40,6 +40,8 @@ camera, so forwarding it too would turn the player at the same time) **and** `Re
 is true — the same signal `vke` gates its free-fly camera on. The keyboard still gates on
 `io.WantCaptureKeyboard`, which only trips for text input, so WASD (the movement keys) reaches the game from either view.
 Connections are bound to slots by `PlayerSlotTable` (`data/PlayerSlots`).
+A join beyond the 256 slots (0..255) is left unbound: it still receives the snapshot and can watch, but gets no
+`playerSlot` and its input is dropped until a slot frees, when its next input binds it and it is told its slot.
 The editor joins with a nonce too, so it learns its slot the same way a client does.
 Its Scene Status "Player" combo (`EditorApp::displayPlayerSelector`) sends `possessSlot` to move its input to another slot.
 That is not a mutation message, but the server honors it only on an edit-mode server, from the authorized editor connection.
