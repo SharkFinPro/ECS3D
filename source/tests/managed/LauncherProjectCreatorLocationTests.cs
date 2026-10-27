@@ -88,7 +88,7 @@ public class LauncherProjectCreatorLocationTests : NewProjectFixture
     var result = NewCreator().Create(template, Projects, "Game");
 
     Assert.Equal(
-      $"Could not create the project in {Projects}. You do not have permission to write there.",
+      $"Could not create the project in {Projects}. You do not have permission to use that folder or the template.",
       result.Error);
     Assert.Contains(_rig.Log.Warnings, line => line.Contains("Access to the path 'x' is denied."));
   }
@@ -116,6 +116,13 @@ public class LauncherProjectCreatorLocationTests : NewProjectFixture
 
     Assert.Equal(ProjectCreator.UnreachableMessage, result.Error);
     Assert.Single(_rig.Log.Warnings);
+  }
+
+  [Fact]
+  public void AnEmptyExceptionMessageFallsBackToTheTypeName()
+  {
+    Assert.Equal("IOException", ProjectCreator.ShortReason(new IOException("")));
+    Assert.Equal("IOException", ProjectCreator.ShortReason(new IOException("\n second line")));
   }
 
   [Fact]

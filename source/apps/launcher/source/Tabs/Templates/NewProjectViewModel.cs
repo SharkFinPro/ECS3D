@@ -197,7 +197,6 @@ public sealed class NewProjectViewModel : ObservableObject
         ProjectTargetState.NotEmpty => "A folder with this name already exists and is not empty.",
         ProjectTargetState.NotAFolder => "A file with this name already exists.",
         ProjectTargetState.Unavailable => "This location cannot be used.",
-        ProjectTargetState.Unreachable => ProjectCreator.UnreachableMessage,
         _ => null,
     };
 

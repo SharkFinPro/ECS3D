@@ -372,8 +372,8 @@ public class LauncherProjectCreatorTests : IDisposable
   }
 
   [Theory]
-  [InlineData("copy", "You do not have permission to write there.")]
-  [InlineData("move", "You do not have permission to write there.")]
+  [InlineData("copy", "You do not have permission to use that folder or the template.")]
+  [InlineData("move", "You do not have permission to use that folder or the template.")]
   [InlineData("write", "disk write failed")]
   public void AFailureRemovesTheHiddenFolder(string kind, string message)
   {
@@ -400,7 +400,7 @@ public class LauncherProjectCreatorTests : IDisposable
 
     var result = NewCreator(files).Create(MakeTemplate(), Location, "Game");
 
-    Assert.Contains("You do not have permission to write there.", result.Error);
+    Assert.Contains("You do not have permission to use that folder or the template.", result.Error);
     Assert.DoesNotContain("delete failed", result.Error);
     Assert.Contains("move to x is denied", _log.Warnings[0]);
     Assert.Equal(2, _log.Warnings.Count);

@@ -168,18 +168,20 @@ public sealed class ProjectCreator
     public static string DescribeFailure(Exception ex, string location) => ex switch
     {
         UnauthorizedAccessException =>
-            $"Could not create the project in {location}. You do not have permission to write there.",
+            $"Could not create the project in {location}. " +
+            "You do not have permission to use that folder or the template.",
         JsonException => "Could not create the project: the template's project file is not valid.",
         InvalidDataException => $"Could not create the project: {ex.Message}",
-        _ => $"Could not create the project in {location}: {ShortReason(ex.Message)}"
+        _ => $"Could not create the project in {location}: {ShortReason(ex)}"
     };
 
     // The first line of a .NET message without the quoted path some of them append after " : '".
-    private static string ShortReason(string message)
+    internal static string ShortReason(Exception ex)
     {
-        var line = message.Split('\n')[0].Trim();
+        var line = ex.Message.Split('\n')[0].Trim();
         var quoted = line.IndexOf(" : '", StringComparison.Ordinal);
-        return quoted > 0 ? line[..quoted].Trim() : line;
+        var reason = quoted > 0 ? line[..quoted].Trim() : line;
+        return reason.Length > 0 ? reason : ex.GetType().Name;
     }
 
     internal static string RewriteObjectUuids(string projectJson, Func<Guid> newUuid)
