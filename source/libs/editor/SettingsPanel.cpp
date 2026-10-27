@@ -78,7 +78,7 @@ namespace {
     }
 
     const float tableWidth = widestAction + bindingColumnWidth() + actionsColumnWidth() +
-                             6.0f * style.CellPadding.x;
+                             4.0f * style.CellPadding.x;
 
     return navWidth() + style.ItemSpacing.x + tableWidth + 2.0f * style.WindowPadding.x + style.ScrollbarSize;
   }
@@ -407,7 +407,7 @@ void SettingsPanel::displayKeybinds()
       const bool capturingThis = m_capturingAction == info.action;
       if (capturingThis)
       {
-        ImGui::TextColored(theme::accent, capturePrompt);
+        ImGui::TextColored(theme::accent, "%s", capturePrompt);
       }
       else if (const auto chord = m_keybindTable->binding(info.action))
       {
