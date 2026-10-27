@@ -97,9 +97,22 @@ void ServerApp::handleJoin(const net::Message& message, const int32_t senderId)
 {
   // A client joined: bind it to a player slot (so its input routes to that player), tell it whether this
   // server is editable, then send the full project/scene as a Snapshot to that connection alone - the others
-  // already hold the state, and a repeated join must not make the server re-send the whole project to
-  // everyone. Record that a connection has been seen so an ephemeral server (exitWhenEmpty) can later exit
-  // when the last one drops.
+  // already hold the state. A connection joins once; a repeat is ignored. Record that a connection has been
+  // seen so an ephemeral server (exitWhenEmpty) can later exit when the last one drops.
+  const auto plan = planJoin(m_joinedConnections.contains(senderId), m_repeatJoinWarned.contains(senderId));
+  if (plan.warnRepeat)
+  {
+    m_repeatJoinWarned.insert(senderId);
+    Log::warn(LogCategory::server, "Ignored a repeat join from connection " + std::to_string(senderId)
+      + ": a connection joins once.");
+  }
+
+  if (!plan.answer)
+  {
+    return;
+  }
+
+  m_joinedConnections.insert(senderId);
   m_hasConnected = true;
   assignPlayerSlot(senderId);
 
@@ -209,6 +222,8 @@ void ServerApp::handleDisconnect(const int32_t connId)
 {
   m_joinNonces.erase(connId);
   m_slotlessConnections.erase(connId);
+  m_joinedConnections.erase(connId);
+  m_repeatJoinWarned.erase(connId);
 
   const auto slot = m_playerSlots.release(connId);
   if (!slot)
