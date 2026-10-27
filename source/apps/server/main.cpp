@@ -2,10 +2,12 @@
 #include "ServerPolicy.h"
 #include <ProjectPaths.h>
 #include <EditToken.h>
+#include <ServerArguments.h>
 #include <Log.h>
 #include <ConsoleSink.h>
 #include <LogSetup.h>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -33,9 +35,21 @@ namespace
       {
         options.project = absoluteProjectArgument(argv[++i]);
       }
-      else if (isValueFlag(arg, "--port", i, argc))
+      else if (arg == "--port")
       {
-        options.port = std::stoi(argv[++i]);
+        if (i + 1 >= argc)
+        {
+          throw std::invalid_argument("--port needs a value (0-65535).");
+        }
+
+        const auto port = net::parsePortArgument(argv[++i]);
+        if (!port)
+        {
+          throw std::invalid_argument(std::string("Invalid --port value '") + argv[i]
+            + "': expected a number from 0 to 65535.");
+        }
+
+        options.port = *port;
       }
       else if (arg == "--edit")
       {

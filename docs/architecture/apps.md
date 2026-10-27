@@ -25,7 +25,9 @@ while playing) the same way it already undoes an edited Transform.
 
 ## Applications
 
-- **ECS3DServer** (`apps/server`) — headless authoritative sim. `main.cpp` parses `--project` (a project folder, its `project.ecs3d`, or a legacy `.json` file; the server records the root), `--port`,
+- **ECS3DServer** (`apps/server`) — headless authoritative sim. `main.cpp` parses `--project` (a project folder, its `project.ecs3d`, or a legacy `.json` file; the server records the root), `--port`
+  (a whole number 0-65535, parsed by `net::parsePortArgument`; 0 lets the OS pick and the log reports the real port;
+  a missing or malformed value, a port another process holds, and an out-of-range port each log an error and exit 1),
   `--edit` (allow editor connections), `--open-edit` (`--edit` with no token required, development only),
   `--ephemeral` (exit when the last connection drops — a spawned local server), `--token`,
   `--simulate-when-empty` (keep ticking with no one connected rather than pausing until a join),

@@ -108,24 +108,44 @@ internal sealed class WebSocketBackend : TransportBackend
     public readonly int ConnId = connId;
   }
 
-  public override void ServerStart(int port, bool editMode, string expectedToken)
+  public override int ServerStart(int port, bool editMode, string expectedToken)
   {
     if (_serverRunning)
     {
-      return;
+      return BoundPort();
     }
 
     EditMode = editMode;
     ExpectedToken = expectedToken;
 
     _listener = new TcpListener(IPAddress.Any, port);
-    _listener.Start();
+
+    try
+    {
+      _listener.Start();
+    }
+    catch
+    {
+      // Leave the backend not running so a later ServerStart can succeed.
+      try { _listener.Stop(); } catch { /* never started */ }
+      _listener = null;
+      throw;
+    }
+
+    var boundPort = BoundPort();
     _serverRunning = true;
 
     _acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "ecs3d-net-accept" };
     _acceptThread.Start();
 
-    Transport.Log(TransportLogLevel.Info, $"WebSocket server listening on port {port} (editMode={EditMode}).");
+    Transport.Log(TransportLogLevel.Info, $"WebSocket server listening on port {boundPort} (editMode={EditMode}).");
+
+    return boundPort;
+  }
+
+  private int BoundPort()
+  {
+    return ((IPEndPoint)_listener!.LocalEndpoint).Port;
   }
 
   public override void ServerStop()

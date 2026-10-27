@@ -591,4 +591,43 @@ public sealed class TcpBackendLoopbackTests : IDisposable
     RunWithDeadline(client.ClientDisconnect, "ClientDisconnect");
     AssertStays(() => TransportRecorder.ClientDisconnects, 1, "client disconnect callbacks after ClientDisconnect");
   }
+
+  [Fact]
+  public void ServerStart_OnAPortAnotherBackendHolds_ThrowsAddressInUseAndLeavesTheBackendStartable()
+  {
+    var first = new TcpBackend();
+    var heldPort = Start(first);
+    var second = new TcpBackend();
+    _servers.Add(second);
+
+    var error = Assert.Throws<SocketException>(() => second.ServerStart(heldPort, false, ""));
+    Assert.Equal(SocketError.AddressAlreadyInUse, error.SocketErrorCode);
+    Assert.Equal(0, second.ServerConnectionCount());
+
+    var freePort = second.ServerStart(0, false, "");
+    Assert.True(freePort > 0);
+    Assert.NotEqual(heldPort, freePort);
+
+    Connect(freePort, RolePlayer);
+    WaitFor(() => second.ServerConnectionCount() == 1, "the restarted backend to accept a client");
+
+    Connect(heldPort, RolePlayer);
+    WaitFor(() => first.ServerConnectionCount() == 1, "the original holder to still accept a client");
+  }
+
+  [Fact]
+  public void ServerStart_WithPortZero_ReturnsThePortTheOsPickedAndListensOnIt()
+  {
+    var server = new TcpBackend();
+    _servers.Add(server);
+
+    var port = server.ServerStart(0, false, "");
+    Assert.True(port > 0);
+    Assert.True(TransportRecorder.LogContains($"TCP server listening on port {port} "));
+
+    Connect(port, RolePlayer);
+    WaitFor(() => server.ServerConnectionCount() == 1, "the client to join the OS-picked port");
+
+    Assert.Equal(port, server.ServerStart(0, false, ""));
+  }
 }

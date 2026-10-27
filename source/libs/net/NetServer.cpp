@@ -7,7 +7,9 @@
 #include <atomic>
 #include <cstddef>
 #include <limits>
+#include <stdexcept>
 #include <span>
+#include <string>
 #include <utility>
 
 namespace net {
@@ -17,7 +19,16 @@ namespace {
   const std::string kAssembly = "net/Transport/ECS3DNetTransport.dll";
   const std::string kType = "ECS3DNetTransport.Transport, ECS3DNetTransport";
 
-  using ServerStartFn = void(*)(int32_t, uint8_t, const char*);
+  // Matches ECS3DNetTransport.ServerStartError (Transport.cs): what serverStart returns on failure.
+  enum class ServerStartError : int32_t
+  {
+    addressInUse = -1,
+    invalidPort = -2,
+    failed = -3,
+  };
+
+  // Returns the bound port, or a ServerStartError.
+  using ServerStartFn = int32_t(*)(int32_t, uint8_t, const char*);
   using ServerStopFn = void(*)();
   using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
   // connIds/connIdCount name the specific connections to send to (editor connections only, never every
@@ -89,8 +100,32 @@ void NetServer::start(const int port, const bool editMode, const std::string& au
   reinterpret_cast<SetCallbackFn>(m_setAuthorizedCallbackFn)(reinterpret_cast<void*>(&ecs3dNetServerAuthorized));
   reinterpret_cast<SetCallbackFn>(m_setLogCallbackFn)(reinterpret_cast<void*>(&transportLog));
 
-  reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0, authToken.c_str());
+  const auto result = reinterpret_cast<ServerStartFn>(m_startFn)(static_cast<int32_t>(port), m_editMode ? 1 : 0,
+                                                                  authToken.c_str());
+  if (result < 0)
+  {
+    g_activeServer.store(nullptr, std::memory_order_release);
+
+    const auto portText = std::to_string(port);
+    switch (static_cast<ServerStartError>(result))
+    {
+      case ServerStartError::addressInUse:
+        throw std::runtime_error("Port " + portText + " is already in use by another process. "
+                                 "Start the server with --port <other port>.");
+      case ServerStartError::invalidPort:
+        throw std::runtime_error("Port " + portText + " is out of range (0-65535).");
+      default:
+        throw std::runtime_error("Could not listen on port " + portText + ".");
+    }
+  }
+
+  m_port = result;
   m_started = true;
+}
+
+int NetServer::port() const
+{
+  return m_port;
 }
 
 void NetServer::stop()
@@ -109,6 +144,7 @@ void NetServer::stop()
 
   g_activeServer.store(nullptr, std::memory_order_release);
   m_started = false;
+  m_port = 0;
 }
 
 void NetServer::broadcast(const Message& message) const

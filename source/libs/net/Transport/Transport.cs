@@ -1,7 +1,16 @@
 using System;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 
 namespace ECS3DNetTransport;
+
+// Matches net::ServerStartError (NetServer.cpp); serverStart returns the negative of these on failure.
+internal enum ServerStartError
+{
+  AddressInUse = -1,
+  InvalidPort = -2,
+  Failed = -3,
+}
 
 // Matches net::LogLevel's trace..error == 0..4 (asserted on the native side); passed as the int in
 // Transport.Log/setLogCallback.
@@ -116,9 +125,27 @@ public static unsafe class Transport
   }
 
   [UnmanagedCallersOnly]
-  public static void serverStart(int port, byte editMode, IntPtr expectedTokenUtf8)
+  public static int serverStart(int port, byte editMode, IntPtr expectedTokenUtf8)
   {
-    _backend.ServerStart(port, editMode != 0, Marshal.PtrToStringUTF8(expectedTokenUtf8) ?? "");
+    // Returns the bound port, or a ServerStartError. An exception escaping an UnmanagedCallersOnly
+    // method terminates the process, so nothing may propagate from here.
+    try
+    {
+      return _backend.ServerStart(port, editMode != 0, Marshal.PtrToStringUTF8(expectedTokenUtf8) ?? "");
+    }
+    catch (SocketException e) when (e.SocketErrorCode == SocketError.AddressAlreadyInUse)
+    {
+      return (int)ServerStartError.AddressInUse;
+    }
+    catch (ArgumentOutOfRangeException)
+    {
+      return (int)ServerStartError.InvalidPort;
+    }
+    catch (Exception e)
+    {
+      Log(TransportLogLevel.Error, $"Server start failed: {e.Message}");
+      return (int)ServerStartError.Failed;
+    }
   }
 
   [UnmanagedCallersOnly]
