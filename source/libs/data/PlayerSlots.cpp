@@ -13,6 +13,11 @@ std::optional<int32_t> PlayerSlotTable::assign(const int32_t connId)
     return existing;
   }
 
+  if (m_connectionSlots.size() > static_cast<size_t>(maxPlayerSlot))
+  {
+    return std::nullopt;
+  }
+
   for (int32_t slot = 0; slot <= maxPlayerSlot; ++slot)
   {
     if (!isHeld(slot))

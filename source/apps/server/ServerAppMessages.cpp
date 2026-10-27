@@ -137,6 +137,7 @@ std::optional<int32_t> ServerApp::assignPlayerSlot(const int32_t connId)
   m_slotlessConnections.erase(connId);
   Log::info(LogCategory::server, "Bound connection " + std::to_string(connId) + " to player slot " + std::to_string(*slot) + ".");
   notifyPlayerJoined(*slot);
+  broadcastPlayerSlot(connId);
   return slot;
 }
 
