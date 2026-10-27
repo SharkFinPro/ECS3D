@@ -20,9 +20,9 @@ only, unicast via `NetServer::sendToEditors` rather than broadcast to every conn
 The join reply (edit status, snapshot, scene status) and the `playerSlot` answer are likewise unicast to
 the joiner via `NetServer::sendTo`. A connection is answered on its first join only; a repeat join is ignored
 and logged once per connection (`planJoin` in `ServerPolicy.h`). An `editComponent` a replicated view could
-not apply is reported through `replication::logMissedComponentEdit` — debug for an absent object/component (routine, since the server
-rebroadcasts to views that may be a round trip behind), error for a malformed or partially applied
-payload (a real divergence). Some components refuse a payload before assigning anything, as the convex
+not apply is reported through `replication::logMissedComponentEdit` — debug for an absent object/component
+(routine, since the server rebroadcasts to views that may be a round trip behind), error for a malformed or
+partially applied payload (a real divergence). Some components refuse a payload before assigning anything, as the convex
 mesh collider does for an over-limit count, an invalid hull or a non-finite offset. That refusal throws a
 `RefusedPayload` from `Component.h`. The edit then reports `malformedPayload` instead of `partiallyApplied`.
 (`sceneEdit` carries the prefab-instantiation op too — see [prefabs.md](prefabs.md).)
