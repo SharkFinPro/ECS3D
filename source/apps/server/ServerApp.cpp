@@ -213,6 +213,13 @@ void ServerApp::drainNetwork()
 
 void ServerApp::run()
 {
+  // The runtime's boot may have replaced the handlers main installed; a signal that already arrived keeps the
+  // default action main's handler restored, so a second one still ends the process.
+  if (!shutdownRequested())
+  {
+    installShutdownSignalHandlers();
+  }
+
   while (isActive())
   {
     drainNetwork();

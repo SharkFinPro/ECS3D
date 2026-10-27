@@ -34,7 +34,8 @@ while playing) the same way it already undoes an edited Transform.
   `--log-file`/`--no-log-file`. Links Data+Sim+Scripting+Net+ClrHost+Log.
   Ctrl+C and Ctrl+Break (SIGINT and SIGTERM on POSIX) request an orderly stop through `ShutdownSignal`, which
   `run()` polls through `shouldKeepRunning`: the loop exits, live scripts are stopped and the shutdown is logged.
-  A second signal ends the process at once.
+  `main` installs the handlers before boot and `run()` installs them again once the CLR is up, in case the
+  runtime replaced them. A second signal ends the process at once.
   Ships `defaultAssets/` (each file's source and license in `defaultAssets/LICENSES.md`) and generates a
   built-in `DefaultProject` when no `--project` is given. `DefaultShapes` builds the hulls of its Cylinder
   and Ramp prefabs from formula vertices through `buildConvexHull`. It also builds the nine shape library
