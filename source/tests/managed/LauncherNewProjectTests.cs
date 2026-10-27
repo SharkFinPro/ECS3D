@@ -201,7 +201,7 @@ public class LauncherNewProjectTests : NewProjectFixture
     dialog.CreateCommand.Execute(null);
 
     Assert.Same(dialog, model.NewProject);
-    Assert.Contains("access denied", dialog.CreateError);
+    Assert.Contains("do not have permission", dialog.CreateError);
     Assert.False(dialog.IsBusy);
     Assert.Empty(_runner.Launches);
     Assert.Null(_rig.Files.TextOf(_rig.RecentsPath));

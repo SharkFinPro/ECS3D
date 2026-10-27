@@ -85,6 +85,8 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
       }
     }
 
+    public void SetRenderScaling(double scaling) => _window.SetRenderScaling(scaling);
+
     public void Dispose() => _window.Close();
   }
 
@@ -190,6 +192,32 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
 
       Assert.False(shown.LocationError.IsEffectivelyVisible);
       Assert.True(create.IsEffectivelyEnabled);
+    });
+  }
+
+  // Avalonia drops a wrapped line that does not fit the arranged height. A font-derived line height such as 15.6 does
+  // not survive rounding at a display scale of 125%, so the last line of a long error vanished while its space stayed.
+  // The stub font of headless mode cannot show that, so the wrapped text carries a line height of its own.
+  [Fact]
+  public async Task WrappedTextHasALineHeightOfItsOwnAndAFailedCreateShowsAllOfItsMessage()
+  {
+    await LauncherCardMenuTests.OnUiThread(() =>
+    {
+      const string message = "Could not create the project: The network path was not found. : '\\\\nosuchhost\\share\\x'";
+      var vm = NewDialog();
+      using var shown = Show(vm);
+      shown.SetRenderScaling(1.25);
+      typeof(NewProjectViewModel).GetProperty(nameof(NewProjectViewModel.CreateError))!.SetValue(vm, message);
+
+      shown.Dialog.UpdateLayout();
+
+      var wrapped = All<TextBlock>(shown.Dialog).Where(block => block.TextWrapping == TextWrapping.Wrap).ToList();
+      Assert.True(wrapped.Count >= 4);
+      Assert.All(wrapped, block => Assert.True(double.IsFinite(block.LineHeight) && block.LineHeight > 0, block.Text));
+      var error = wrapped.Single(block => block.Text == message);
+      Assert.True(error.IsEffectivelyVisible);
+      Assert.True(error.TextLayout.TextLines.Count > 1);
+      Assert.True(error.TextLayout.TextLines.Sum(line => line.Length) >= message.Length);
     });
   }
 

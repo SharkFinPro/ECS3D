@@ -138,6 +138,33 @@ public class LauncherNewProjectDialogTests : NewProjectFixture
   }
 
   [Fact]
+  public void AnUnreachableLocationIsReportedAndBlocksCreate()
+  {
+    var dialog = NewDialog();
+    Assert.True(dialog.CanCreate);
+    var other = Path.Combine(Projects, "other");
+    _files.RemoveRoot(Path.GetPathRoot(Projects)!);
+
+    dialog.Location = other;
+
+    Assert.Equal(ProjectCreator.UnreachableMessage, dialog.LocationError);
+    Assert.True(dialog.HasLocationError);
+    Assert.Null(dialog.TargetState);
+    Assert.False(dialog.IsTargetFree);
+    Assert.NotEqual("Folder name is free", dialog.TargetMessage);
+    Assert.Equal("", dialog.TargetPreview);
+    Assert.False(dialog.CanCreate);
+
+    _files.AddDirectory(Path.GetPathRoot(Projects)!);
+    dialog.Location = Projects;
+
+    Assert.Null(dialog.LocationError);
+    Assert.Equal(ProjectTargetState.Free, dialog.TargetState);
+    Assert.Equal("Folder name is free", dialog.TargetMessage);
+    Assert.True(dialog.CanCreate);
+  }
+
+  [Fact]
   public void ChangingTheLocationChecksTheNameThereAgain()
   {
     _files.Seed(Path.Combine("/docs/other", "Game", "x.txt"), "x");
@@ -214,7 +241,7 @@ public class LauncherNewProjectDialogTests : NewProjectFixture
     Assert.Equal(0, created);
     Assert.False(dialog.IsBusy);
     Assert.True(dialog.HasCreateError);
-    Assert.Contains(kind == "denied" ? "access denied" : "boom", dialog.CreateError);
+    Assert.Contains(kind == "denied" ? "do not have permission" : "boom", dialog.CreateError);
     Assert.True(dialog.CanCreate);
     Assert.True(dialog.CancelCommand.CanExecute(null));
     Assert.False(_files.DirectoryExists(Folder("Game")));

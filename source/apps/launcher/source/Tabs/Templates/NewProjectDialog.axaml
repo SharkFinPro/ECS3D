@@ -15,6 +15,7 @@
         </Style>
         <Style Selector="TextBlock.error">
             <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
             <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
@@ -30,7 +31,7 @@
             <TextBlock Text="New project" FontSize="19" FontWeight="Bold" />
             <TextBlock Text="{Binding TemplateName, StringFormat='From the {0} template'}" FontSize="12.5"
                        Foreground="{StaticResource T2Brush}" />
-            <TextBlock Text="{Binding TemplateDescription}" FontSize="12" TextWrapping="Wrap"
+            <TextBlock Text="{Binding TemplateDescription}" FontSize="12" LineHeight="16" TextWrapping="Wrap"
                        Foreground="{StaticResource T3Brush}" />
 
             <StackPanel Spacing="6" IsEnabled="{Binding !IsBusy}">
@@ -47,7 +48,7 @@
                 <TextBlock Classes="error" Text="{Binding LocationError}" IsVisible="{Binding HasLocationError}" />
 
                 <TextBlock Classes="label" Text="Will be created at" />
-                <TextBlock Text="{Binding TargetPreview}" TextWrapping="Wrap" FontSize="12"
+                <TextBlock Text="{Binding TargetPreview}" TextWrapping="Wrap" FontSize="12" LineHeight="16"
                            FontFamily="{StaticResource MonoFontFamily}" Foreground="{StaticResource T2Brush}" />
                 <TextBlock Classes="ok" Text="{Binding TargetMessage}" IsVisible="{Binding IsTargetFree}" />
                 <TextBlock Classes="error" Text="{Binding TargetMessage}" IsVisible="{Binding HasTargetProblem}" />
