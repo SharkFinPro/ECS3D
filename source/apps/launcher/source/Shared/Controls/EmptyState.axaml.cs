@@ -13,12 +13,21 @@ public class EmptyState : UserControl
     public static readonly StyledProperty<string?> HeadingProperty =
         AvaloniaProperty.Register<EmptyState, string?>(nameof(Heading));
 
+    public static readonly StyledProperty<string?> DetailProperty =
+        AvaloniaProperty.Register<EmptyState, string?>(nameof(Detail));
+
     public EmptyState() => AvaloniaXamlLoader.Load(this);
 
     public Geometry? IconData
     {
         get => GetValue(IconDataProperty);
         set => SetValue(IconDataProperty, value);
+    }
+
+    public string? Detail
+    {
+        get => GetValue(DetailProperty);
+        set => SetValue(DetailProperty, value);
     }
 
     public string? Heading

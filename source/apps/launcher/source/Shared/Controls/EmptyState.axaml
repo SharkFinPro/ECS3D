@@ -3,7 +3,7 @@
              x:Class="ECS3DLauncher.Shared.Controls.EmptyState"
              x:Name="Root">
 
-    <!-- Reusable "nothing here yet" placeholder. Tabs set IconData + Heading. -->
+    <!-- Reusable "nothing here yet" placeholder. Tabs set IconData + Heading, and Detail for the line under it (hidden when null). -->
     <StackPanel Margin="0,90,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" Spacing="14">
         <Border Width="54" Height="54" CornerRadius="14" HorizontalAlignment="Center"
                 Background="{StaticResource PanelBrush}"
@@ -15,7 +15,8 @@
         <StackPanel Spacing="5">
             <TextBlock Text="{Binding #Root.Heading}" FontSize="14" FontWeight="SemiBold"
                        HorizontalAlignment="Center" />
-            <TextBlock Text="Nothing to show here yet" FontSize="12.5"
+            <TextBlock Text="{Binding #Root.Detail}" IsVisible="{Binding #Root.Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                       FontSize="12.5"
                        Foreground="{StaticResource T3Brush}" HorizontalAlignment="Center" />
         </StackPanel>
     </StackPanel>

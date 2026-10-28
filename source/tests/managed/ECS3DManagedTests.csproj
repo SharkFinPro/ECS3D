@@ -73,6 +73,10 @@
                  Link="Launcher/Shared/Controls/%(Filename)%(Extension)" />
         <Compile Include="../../apps/launcher/source/Tabs/Templates/NewProjectDialog.axaml.cs"
                  Link="Launcher/Tabs/Templates/%(Filename)%(Extension)" />
+        <Compile Include="../../apps/launcher/source/Shared/Controls/EmptyState.axaml.cs"
+                 Link="Launcher/Shared/Controls/%(Filename)%(Extension)" />
+        <AvaloniaXaml Include="../../apps/launcher/source/Shared/Controls/EmptyState.axaml"
+                      Link="Launcher/Shared/Controls/%(Filename)%(Extension)" />
         <AvaloniaXaml Include="../../apps/launcher/source/Tabs/Templates/NewProjectDialog.axaml"
                       Link="Launcher/Tabs/Templates/%(Filename)%(Extension)" />
     </ItemGroup>

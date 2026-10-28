@@ -48,7 +48,8 @@
                 <TextBlock Classes="error" Text="{Binding LocationError}" IsVisible="{Binding HasLocationError}" />
 
                 <TextBlock Classes="label" Text="Will be created at" />
-                <TextBlock Text="{Binding TargetPreview}" TextWrapping="Wrap" FontSize="12" LineHeight="16"
+                <TextBlock Text="{Binding TargetPreview}" TextTrimming="PathSegmentEllipsis" MaxLines="1"
+                           ToolTip.Tip="{Binding TargetPreview}" FontSize="12" LineHeight="16"
                            FontFamily="{StaticResource MonoFontFamily}" Foreground="{StaticResource T2Brush}" />
                 <TextBlock Classes="ok" Text="{Binding TargetMessage}" IsVisible="{Binding IsTargetFree}" />
                 <TextBlock Classes="error" Text="{Binding TargetMessage}" IsVisible="{Binding HasTargetProblem}" />

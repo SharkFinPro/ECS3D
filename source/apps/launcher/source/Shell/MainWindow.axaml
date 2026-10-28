@@ -9,6 +9,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:dd="using:ECS3DLauncher.Shared"
+        xmlns:conv="using:ECS3DLauncher.Shared.Converters"
         mc:Ignorable="d"
         d:DataContext="{x:Static dd:DesignData.MainWindow}"
         x:Class="ECS3DLauncher.Shell.MainWindow"
@@ -188,16 +189,26 @@
             <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" IsEnabled="{Binding IsInteractive}">
 
                 <!-- Toolbar -->
-                <Grid Grid.Row="0" Margin="28,20,28,16" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                <Grid Grid.Row="0" Margin="28,20,28,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" MinWidth="170" />
+                        <ColumnDefinition Width="2*" MinWidth="120" MaxWidth="244" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,14,0"
+                                Grid.ColumnSpan="{Binding ShowSearch, Converter={x:Static conv:SearchSpanConverter.Instance}}">
                         <TextBlock Text="{Binding ViewTitle}" FontSize="19" FontWeight="Bold"
-                                   LetterSpacing="-0.2" />
+                                   LetterSpacing="-0.2" TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding ViewTitle}" />
                         <TextBlock Text="{Binding ViewSubtitle}" FontSize="12.5"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ViewSubtitle}"
                                    Foreground="{StaticResource T2Brush}" />
                     </StackPanel>
 
                     <!-- Search -->
-                    <Border Grid.Column="1" Width="230" Height="36" CornerRadius="8" Margin="0,0,14,0"
+                    <Border Grid.Column="1" Height="36" CornerRadius="8" Margin="0,0,14,0"
                             IsVisible="{Binding ShowSearch}"
                             Background="{StaticResource InsetBrush}"
                             BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
@@ -323,10 +334,13 @@
                         <ItemsControl ItemsSource="{Binding Addresses}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="shell:HostAddressRow">
-                                    <Grid ColumnDefinitions="90,*,Auto" Margin="0,0,0,6">
+                                    <Grid ColumnDefinitions="140,*,Auto" Margin="0,0,0,6">
                                         <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
+                                                   Margin="0,0,10,0" TextTrimming="CharacterEllipsis"
+                                                   ToolTip.Tip="{Binding Label}"
                                                    Foreground="{StaticResource T2Brush}" />
                                         <TextBlock Grid.Column="1" Text="{Binding Text}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Text}"
                                                    FontFamily="{StaticResource MonoFontFamily}" />
                                         <Button Grid.Column="2" Classes="secondary" Theme="{StaticResource BareButton}"
                                                 Content="Copy" Command="{Binding CopyCommand}" />
