@@ -53,7 +53,7 @@
 
     <!-- The launcher is an Avalonia WinExe, so it is not referenced. Its services, view models, models and the
          XAML-free CardMenu helper compile into this assembly by link, over the two UI packages above. The New
-         Project dialog compiles in with its XAML so a headless test drives the real bindings; its theme
+         Project and Join dialogs compile in with their XAML so a headless test drives the real bindings; their theme
          resources are supplied by the test. The window, other views and DesignData stay out: DesignData builds
          the real default view model against the user data folder. -->
     <ItemGroup>
@@ -77,6 +77,10 @@
                  Link="Launcher/Shared/Controls/%(Filename)%(Extension)" />
         <AvaloniaXaml Include="../../apps/launcher/source/Shared/Controls/EmptyState.axaml"
                       Link="Launcher/Shared/Controls/%(Filename)%(Extension)" />
+        <Compile Include="../../apps/launcher/source/Shell/JoinDialog.axaml.cs"
+                 Link="Launcher/Shell/%(Filename)%(Extension)" />
+        <AvaloniaXaml Include="../../apps/launcher/source/Shell/JoinDialog.axaml"
+                      Link="Launcher/Shell/%(Filename)%(Extension)" />
         <AvaloniaXaml Include="../../apps/launcher/source/Tabs/Templates/NewProjectDialog.axaml"
                       Link="Launcher/Tabs/Templates/%(Filename)%(Extension)" />
     </ItemGroup>

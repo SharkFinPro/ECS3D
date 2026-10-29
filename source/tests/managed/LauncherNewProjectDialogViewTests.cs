@@ -23,7 +23,7 @@ public class LauncherNewProjectDialogViewTests : NewProjectFixture
   private const string NameRequired = "Enter a project name.";
 
   // The StaticResource keys the dialog uses come from the launcher theme, which the test project does not link.
-  private static void EnsureThemeResources()
+  internal static void EnsureThemeResources()
   {
     var resources = Application.Current!.Resources;
     foreach (var key in new[] { "PanelBrush", "LineBrush", "T2Brush", "T3Brush", "DangerBrush", "OkBrush", "AccText" })
