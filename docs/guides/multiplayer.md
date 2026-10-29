@@ -19,13 +19,15 @@ text, so each score is a pillar in the player's color beside their spawn point, 
 to the log.
 
 From the launcher, open the Samples page and click Host on the Coin Rush card. The launcher starts
-`ECS3DServer` on the sample's folder and opens the hosting panel. (Host appears only on samples for more than one
-player. Open a copy makes your own editable project from a sample, and a project's card menu has Host a game...
-for any project you have created.) If a game is already being hosted, the launcher asks whether to stop it first.
+`ECS3DServer` on the sample's folder, opens a game window that joins it as your player, and opens the hosting
+panel. (Host appears only on samples for more than one player. Open a copy makes your own editable project from a
+sample, and a project's card menu has Host a game... for any project you have created.) If a game is already being
+hosted, the launcher asks whether to stop it first.
 
 The hosting panel shows how long the server has been running and the addresses to share, each with a Copy button.
-Click Open another game window to join your own game with a client on this machine. Hide closes the panel, and the
-green "Hosting Coin Rush" pill in the sidebar reopens it. Stop server ends the game for everyone in it. Quitting the
+Click Open another game window to add one more player on this machine, for example after closing the first window.
+Hide closes the panel, and the green "Hosting Coin Rush" pill in the sidebar reopens it. Stop server ends the game
+for everyone in it. Quitting the
 launcher while a game is hosted asks whether to stop the server or keep hosting, in which case the launcher
 minimizes instead of closing.
 If the launcher is killed or crashes, Windows ends the hosted server with it, so the port is free again.
