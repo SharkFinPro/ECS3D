@@ -43,7 +43,8 @@ const std::unordered_map<uuids::uuid, std::shared_ptr<SceneAsset>>& SceneManager
   return m_scenes;
 }
 
-std::string SceneManager::uniqueSceneName(const uuids::uuid& uuid, const std::string& desiredName) const
+std::string SceneManager::uniqueSceneName(const uuids::uuid& uuid, const std::string& desiredName,
+                                          const std::function<bool(const std::string&)>& isTakenElsewhere) const
 {
   const std::string base = desiredName.empty() ? "Scene" : desiredName;
 
@@ -67,7 +68,7 @@ std::string SceneManager::uniqueSceneName(const uuids::uuid& uuid, const std::st
         return true;
       }
     }
-    return false;
+    return isTakenElsewhere && isTakenElsewhere(candidate);
   };
 
   if (!ownedByOther(base))
@@ -119,7 +120,7 @@ void SceneManager::startScene()
 
 void SceneManager::pauseScene()
 {
-  if (!m_currentScene)
+  if (!m_currentScene || m_sceneStatus == SceneStatus::stopped)
   {
     return;
   }

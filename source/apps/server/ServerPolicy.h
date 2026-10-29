@@ -66,7 +66,7 @@ struct SceneControlPlan
 };
 
 // Scripts and contact history are only touched on a real transition: a resume from pause keeps the live
-// instances, and stopping a stopped scene does nothing. loadScene is handled before this is consulted.
+// instances, and pausing or stopping a stopped scene does nothing. loadScene is handled before this is consulted.
 [[nodiscard]] constexpr SceneControlPlan planSceneControl(const net::SceneControlOp op, const bool wasStopped) noexcept
 {
   SceneControlPlan plan;
@@ -80,7 +80,7 @@ struct SceneControlPlan
       break;
 
     case net::SceneControlOp::pause:
-      plan.pauseScene = true;
+      plan.pauseScene = !wasStopped;
       break;
 
     case net::SceneControlOp::stop:

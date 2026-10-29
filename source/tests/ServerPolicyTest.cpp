@@ -177,7 +177,11 @@ TEST(ServerPolicyTest, StartFromPausedResumesWithoutTouchingScriptsOrCollisions)
 TEST(ServerPolicyTest, PauseNeverTouchesScriptsOrCollisions)
 {
   EXPECT_EQ(planSceneControl(net::SceneControlOp::pause, false), plan(false, true));
-  EXPECT_EQ(planSceneControl(net::SceneControlOp::pause, true), plan(false, true));
+}
+
+TEST(ServerPolicyTest, PauseOnAStoppedSceneIsRefused)
+{
+  EXPECT_EQ(planSceneControl(net::SceneControlOp::pause, true), plan());
 }
 
 TEST(ServerPolicyTest, StopFromRunningStopsScriptsResetsSceneAndCollisions)

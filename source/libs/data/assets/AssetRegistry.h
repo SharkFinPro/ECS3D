@@ -81,6 +81,8 @@ public:
 
   [[nodiscard]] const AssetRecord* getByPath(const std::string& path) const;
 
+  [[nodiscard]] bool isPathOwnedByOther(const std::string& path, const uuids::uuid& self) const;
+
   [[nodiscard]] const std::unordered_map<uuids::uuid, AssetRecord>& getAssets() const;
 
   // The parsed body of a Prefab record, ready for ObjectManager::instantiate. Returns a null json when
