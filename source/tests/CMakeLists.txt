@@ -425,6 +425,15 @@ add_test(
     -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RegisterTestSuitesTest.cmake"
 )
 
+# Ninja and Makefile configures emit compile_commands.json unless the build explicitly turned it off.
+# sha256sum fails on a missing file and prints one short line, unlike cat of a multi-megabyte database.
+if(CMAKE_GENERATOR MATCHES "Ninja|Makefiles" AND NOT "${CMAKE_EXPORT_COMPILE_COMMANDS}" STREQUAL "OFF")
+  add_test(
+    NAME ECS3DCompileCommandsExported
+    COMMAND ${CMAKE_COMMAND} -E sha256sum "${CMAKE_BINARY_DIR}/compile_commands.json"
+  )
+endif()
+
 # The managed (C#) test project, run through `dotnet test` rather than a native executable - registered
 # as its own CTest test so `check` (and CI) covers the managed assemblies the same way it covers the
 # native ones. Guarded on DOTNET_EXE (set by find_package(Dotnet REQUIRED), which every
