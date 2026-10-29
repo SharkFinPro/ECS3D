@@ -3,6 +3,7 @@
 
 #include <Protocol.h>
 #include <scenes/SceneManager.h>
+#include <cstdint>
 #include <string>
 
 // ServerApp cannot be built into the headless test suite (its constructor boots the CLR), so the pure
@@ -127,6 +128,29 @@ struct JoinPlan
 [[nodiscard]] inline bool needsOpenEditWarning(const bool openEdit, const std::string& token)
 {
   return openEdit && token.empty();
+}
+
+// One tick's network drain. The dropped connections are taken before the inbox is drained and handled after it, so
+// every message a connection sent before its disconnect was queued is handled while that connection still exists;
+// a disconnect queued during the drain waits for the next tick, after that tick's drain. Handling it first would
+// let a late join or input bind a player slot to a connection id that is already gone and never freed.
+template <typename Message, typename TakeDisconnected, typename Poll, typename OnMessage, typename OnDisconnect>
+void drainInboxThenDisconnects(TakeDisconnected&& takeDisconnected, Poll&& poll, OnMessage&& onMessage,
+                               OnDisconnect&& onDisconnect)
+{
+  const auto disconnected = takeDisconnected();
+
+  Message message;
+  int32_t senderId = 0;
+  while (poll(message, senderId))
+  {
+    onMessage(message, senderId);
+  }
+
+  for (const auto connId : disconnected)
+  {
+    onDisconnect(connId);
+  }
 }
 
 #endif //SERVERPOLICY_H

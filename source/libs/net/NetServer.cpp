@@ -255,9 +255,12 @@ void NetServer::enqueueDisconnect(const int32_t connId)
 
 std::vector<int32_t> NetServer::takeDisconnected()
 {
-  // Called on the tick thread after that tick's inbox drain, so any message from a now-dropped
-  // connection has already been handled with its authorization intact.
   return m_connections.takeDisconnected();
+}
+
+void NetServer::revokeEditor(const int32_t connId)
+{
+  m_connections.revokeEditor(connId);
 }
 
 void NetServer::authorize(const int32_t connId, const uint8_t role)

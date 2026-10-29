@@ -91,6 +91,9 @@ TEST(EditorConnections, QueuingADisconnectKeepsTheEditorUntilItIsTaken)
   EXPECT_EQ(connections.editorIds(), (std::vector<int32_t>{ 1 }));
 
   EXPECT_EQ(connections.takeDisconnected(), (std::vector<int32_t>{ 1 }));
+  EXPECT_TRUE(connections.isEditor(1));
+
+  connections.revokeEditor(1);
   EXPECT_FALSE(connections.isEditor(1));
   EXPECT_TRUE(connections.editorIds().empty());
 }
@@ -116,6 +119,7 @@ TEST(EditorConnections, OnlyTheDisconnectedEditorsAreRevoked)
 
   connections.enqueueDisconnect(1);
   EXPECT_EQ(connections.takeDisconnected(), (std::vector<int32_t>{ 1 }));
+  connections.revokeEditor(1);
 
   EXPECT_FALSE(connections.isEditor(1));
   EXPECT_TRUE(connections.isEditor(2));
@@ -139,7 +143,7 @@ TEST(EditorConnections, ALaterAuthorizationIsUnaffectedByAnEarlierDisconnect)
   net::EditorConnections connections;
   connections.authorize(1, editorRole);
   connections.enqueueDisconnect(1);
-  static_cast<void>(connections.takeDisconnected());
+  connections.revokeEditor(connections.takeDisconnected().front());
 
   connections.authorize(2, editorRole);
 

@@ -23,11 +23,15 @@ public:
   [[nodiscard]] std::vector<int32_t> editorIds() const;
 
   // Buffers a dropped connection. Does not revoke editor status: a message the connection sent just
-  // before dropping may still be undrained, and must keep its authorization until takeDisconnected().
+  // before dropping may still be undrained, and must keep its authorization until revokeEditor().
   void enqueueDisconnect(int32_t connId);
 
-  // Returns the ids buffered since the last call, clears the buffer, and revokes their editor status.
+  // Returns the ids buffered since the last call and clears the buffer. Editor status is untouched, so the
+  // caller can drain those connections' messages first and revoke afterwards.
   [[nodiscard]] std::vector<int32_t> takeDisconnected();
+
+  // Revokes connId's editor status; a no-op for one that is not an editor.
+  void revokeEditor(int32_t connId);
 
 private:
   std::mutex m_disconnectMutex;

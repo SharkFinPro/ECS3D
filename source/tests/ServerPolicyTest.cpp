@@ -4,8 +4,10 @@
 #include <ServerPolicy.h>
 
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -245,4 +247,97 @@ TEST(ServerPolicy, EphemeralServerStopsAfterItsLastConnectionDrops)
   EXPECT_FALSE(shouldKeepRunning(false, true, true, 0));
   EXPECT_TRUE(shouldKeepRunning(false, true, true, 1));
   EXPECT_TRUE(shouldKeepRunning(false, true, true, 4));
+}
+
+namespace {
+  struct DrainRecorder
+  {
+    std::vector<std::pair<int, int>> inbox;
+    std::vector<int> disconnectQueue;
+    std::vector<std::string> events;
+    std::function<void(int)> onPoll;
+    std::function<void()> onDrained;
+
+    void drain()
+    {
+      drainInboxThenDisconnects<int>(
+        [this] { return std::exchange(disconnectQueue, {}); },
+        [this](int& message, int32_t& senderId)
+        {
+          if (inbox.empty())
+          {
+            if (onDrained)
+            {
+              std::exchange(onDrained, {})();
+            }
+            return false;
+          }
+
+          message = inbox.front().second;
+          senderId = inbox.front().first;
+          inbox.erase(inbox.begin());
+          if (onPoll)
+          {
+            onPoll(message);
+          }
+          return true;
+        },
+        [this](const int message, const int32_t senderId)
+        {
+          events.push_back("message " + std::to_string(senderId) + ":" + std::to_string(message));
+        },
+        [this](const int32_t connId)
+        {
+          events.push_back("disconnect " + std::to_string(connId));
+        });
+    }
+  };
+}
+
+TEST(ServerPolicy, ADisconnectIsHandledAfterTheMessagesQueuedBeforeIt)
+{
+  DrainRecorder net;
+  net.inbox = { { 5, 1 }, { 6, 2 } };
+  net.disconnectQueue = { 5 };
+
+  net.drain();
+
+  EXPECT_EQ(net.events, (std::vector<std::string>{ "message 5:1", "message 6:2", "disconnect 5" }));
+}
+
+TEST(ServerPolicy, ADisconnectQueuedDuringTheDrainWaitsForTheNextRoundAfterItsLastMessage)
+{
+  DrainRecorder net;
+  net.inbox = { { 4, 1 } };
+  net.onPoll = [&net](const int message)
+  {
+    if (message == 1)
+    {
+      net.inbox.push_back({ 5, 2 });
+      net.disconnectQueue.push_back(5);
+    }
+  };
+
+  net.drain();
+  EXPECT_EQ(net.events, (std::vector<std::string>{ "message 4:1", "message 5:2" }));
+
+  net.events.clear();
+  net.drain();
+  EXPECT_EQ(net.events, (std::vector<std::string>{ "disconnect 5" }));
+}
+
+TEST(ServerPolicy, ALastMessageAndItsDisconnectArrivingAfterTheDrainAreHandledTogetherNextRound)
+{
+  DrainRecorder net;
+  net.onDrained = [&net]
+  {
+    net.inbox.push_back({ 5, 9 });
+    net.disconnectQueue.push_back(5);
+  };
+
+  net.drain();
+  EXPECT_TRUE(net.events.empty());
+
+  net.drain();
+  EXPECT_EQ(net.events, (std::vector<std::string>{ "message 5:9", "disconnect 5" }));
 }
