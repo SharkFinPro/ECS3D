@@ -38,6 +38,7 @@ add_library(${PROJECT_NAME}
   SettingsPanelLayout.h
   ConsolePanel.cpp
   ConsolePanel.h
+  ConsolePanelLayout.h
   SceneScriptsPanel.cpp
   SceneScriptsPanel.h
   SceneScriptsPanelLogic.h

@@ -932,6 +932,12 @@ namespace gc {
     return clicked;
   }
 
+  // The width accentCheckboxCompact lays out for a label: box, gap and text.
+  [[nodiscard]] inline float accentCheckboxCompactWidth(const char* label)
+  {
+    return 17.0f + 8.0f + ImGui::CalcTextSize(label).x;
+  }
+
   // A compact accent checkbox that sizes to its own content (box + label), so several can sit on one row
   // with SameLine (the asset browser's filter chips). Returns true when toggled.
   inline bool accentCheckboxCompact(const char* label, bool* v)
@@ -939,7 +945,7 @@ namespace gc {
     const float box = 17.0f;
     const ImVec2 ts = ImGui::CalcTextSize(label);
     const float h = std::max(box, ImGui::GetFrameHeight());
-    const float w = box + 8.0f + ts.x;
+    const float w = accentCheckboxCompactWidth(label);
     const ImVec2 pos = ImGui::GetCursorScreenPos();
 
     ImGui::PushID(label);

@@ -1,4 +1,5 @@
 #include "ConsolePanel.h"
+#include "ConsolePanelLayout.h"
 #include "EditorTheme.h"
 #include "GuiComponents.h"
 #include <RingBufferSink.h>
@@ -107,6 +108,27 @@ void ConsolePanel::displayFilterRow()
     m_cacheDirty = true;
   }
 
+  const float availWidth = ImGui::GetContentRegionAvail().x;
+  float usedWidth = 0.0f;
+
+  // The search field fills its line, so toggles start on the next one and wrap at the panel's edge.
+  const auto toggle = [&](const char* label, bool& value, const float gap)
+  {
+    const auto placement = placeOnLine(usedWidth, gap, gc::accentCheckboxCompactWidth(label), availWidth);
+    if (placement.sameLine)
+    {
+      ImGui::SameLine(0.0f, gap);
+    }
+    usedWidth = placement.usedWidth;
+
+    bool selected = value;
+    if (gc::accentCheckboxCompact(label, &selected))
+    {
+      value = selected;
+      m_cacheDirty = true;
+    }
+  };
+
   static constexpr std::array<LogLevel, levelCount> levels = {
     LogLevel::trace, LogLevel::debug, LogLevel::info, LogLevel::warn, LogLevel::error
   };
@@ -114,18 +136,14 @@ void ConsolePanel::displayFilterRow()
   for (const auto level : levels)
   {
     const auto index = static_cast<std::size_t>(level);
-    bool selected = m_filter.levels[index];
 
     char label[32];
     std::snprintf(label, sizeof(label), "%s (%d)", toString(level).data(), m_levelCounts[index]);
 
-    ImGui::SameLine(0.0f, 16.0f);
-    if (gc::accentCheckboxCompact(label, &selected))
-    {
-      m_filter.levels[index] = selected;
-      m_cacheDirty = true;
-    }
+    toggle(label, m_filter.levels[index], 16.0f);
   }
+
+  usedWidth = 0.0f;
 
   static constexpr std::array<LogCategory, categoryCount> categories = {
     LogCategory::engine, LogCategory::assets, LogCategory::physics, LogCategory::net,
@@ -134,15 +152,7 @@ void ConsolePanel::displayFilterRow()
 
   for (const auto category : categories)
   {
-    const auto index = static_cast<std::size_t>(category);
-    bool selected = m_filter.categories[index];
-
-    ImGui::SameLine(0.0f, 12.0f);
-    if (gc::accentCheckboxCompact(toString(category).data(), &selected))
-    {
-      m_filter.categories[index] = selected;
-      m_cacheDirty = true;
-    }
+    toggle(toString(category).data(), m_filter.categories[static_cast<std::size_t>(category)], 12.0f);
   }
 }
 
