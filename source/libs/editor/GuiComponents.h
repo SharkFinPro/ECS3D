@@ -1,6 +1,7 @@
 #ifndef ECS3D_GUICOMPONENTS_H
 #define ECS3D_GUICOMPONENTS_H
 
+#include "DashedBoxLayout.h"
 #include "EditorTheme.h"
 #include <imgui.h>
 #include <Log.h>
@@ -10,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <string_view>
 
 // Small shared ImGui widgets for the component editors, living in ECS3DEditorLib next to the handlers
 // that use it.
@@ -1041,6 +1043,13 @@ namespace gc {
     dl->AddText(ImVec2(x, cy - ts.y * 0.5f), col, label);
   }
 
+  // Packed colors ignore the style alpha that BeginDisabled lowers, so draw-list callers scale it in here.
+  inline ImU32 u32Dimmed(ImVec4 c)
+  {
+    c.w *= ImGui::GetStyle().Alpha;
+    return theme::u32(c);
+  }
+
   // A full-width accent button (accent-dim fill + accent border/text, matching the mockup's "Create New
   // Object"). Returns true when clicked.
   inline bool accentButton(const char* label, const SecIcon icon = SecIcon::none, const float height = 40.0f)
@@ -1053,9 +1062,9 @@ namespace gc {
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p1(pos.x + w, pos.y + height);
-    dl->AddRectFilled(pos, p1, theme::u32(hovered ? theme::accSoft : theme::accdim), 7.0f);
-    dl->AddRect(pos, p1, theme::u32(theme::accSoft), 7.0f);
-    drawCenteredIconLabel(dl, pos, ImVec2(w, height), icon, label, theme::u32(theme::accent));
+    dl->AddRectFilled(pos, p1, u32Dimmed(hovered ? theme::accSoft : theme::accdim), 7.0f);
+    dl->AddRect(pos, p1, u32Dimmed(theme::accSoft), 7.0f);
+    drawCenteredIconLabel(dl, pos, ImVec2(w, height), icon, label, u32Dimmed(theme::accent));
 
     return clicked;
   }
@@ -1071,25 +1080,41 @@ namespace gc {
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p1(pos.x + w, pos.y + height);
-    dl->AddRectFilled(pos, p1, theme::u32(hovered ? theme::accdim : theme::v4(31, 184, 212, 22)), 7.0f);
-    drawDashedRect(dl, pos, p1, theme::u32(theme::accSoft), 6.0f, 4.0f, 1.2f);
-    drawCenteredIconLabel(dl, pos, ImVec2(w, height), icon, label, theme::u32(theme::accent));
+    dl->AddRectFilled(pos, p1, u32Dimmed(hovered ? theme::accdim : theme::v4(31, 184, 212, 22)), 7.0f);
+    drawDashedRect(dl, pos, p1, u32Dimmed(theme::accSoft), 6.0f, 4.0f, 1.2f);
+    drawCenteredIconLabel(dl, pos, ImVec2(w, height), icon, label, u32Dimmed(theme::accent));
 
     return clicked;
   }
 
-  // A dashed empty-state box with centered muted text (the mockup's "No scripts attached").
-  inline void dashedBox(const char* text, const float height = 60.0f)
+  // A dashed empty-state box with centered muted text (the mockup's "No scripts attached"). The text wraps to
+  // the available width and the box grows to fit it.
+  inline void dashedBox(const char* text, const float minHeight = 60.0f)
   {
+    constexpr float padding = 10.0f;
     const float w = ImGui::GetContentRegionAvail().x;
     const ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    const auto lines = wrapTextLines(text, std::max(1.0f, w - 2.0f * padding), [](const std::string_view s)
+    {
+      return ImGui::CalcTextSize(s.data(), s.data() + s.size()).x;
+    });
+
+    const float lineHeight = ImGui::GetTextLineHeight();
+    const float height = dashedBoxHeight(lines.size(), lineHeight, padding, minHeight);
     ImGui::Dummy(ImVec2(w, height));
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p1(pos.x + w, pos.y + height);
     drawDashedRect(dl, pos, p1, theme::u32(theme::line2), 5.0f, 4.0f, 1.0f);
-    const ImVec2 ts = ImGui::CalcTextSize(text);
-    dl->AddText(ImVec2(pos.x + (w - ts.x) * 0.5f, pos.y + (height - ts.y) * 0.5f), theme::u32(theme::t3), text);
+
+    float y = pos.y + (height - static_cast<float>(lines.size()) * lineHeight) * 0.5f;
+    for (const auto& line : lines)
+    {
+      const ImVec2 ts = ImGui::CalcTextSize(line.c_str());
+      dl->AddText(ImVec2(pos.x + (w - ts.x) * 0.5f, y), theme::u32(theme::t3), line.c_str());
+      y += lineHeight;
+    }
   }
 
   // A centered "all clear" empty state (the mockup's "No problems detected"): a green check inside a
