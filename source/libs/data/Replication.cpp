@@ -1645,8 +1645,7 @@ namespace {
     // it here, before the AssetRegistry key is derived, rather than letting it silently drop out.
     // Scenes share the registry's path-key space with prefabs and assets, and registerAsset is first-wins.
     const std::string uniqueName = sceneManager.uniqueSceneName(uuid, name, [&](const std::string& candidate) {
-      const auto* owner = assetRegistry.getByPath(candidate);
-      return owner && owner->uuid != uuid;
+      return assetRegistry.isPathOwnedByOther(candidate, uuid);
     });
 
     // A body is a SceneAsset::serialize() blob: undo of a scene removal carries the removed scene whole. It
@@ -1802,7 +1801,7 @@ bool isSceneNameAvailable(const AssetRegistry& assetRegistry, const SceneManager
     return false;
   }
 
-  if (const auto* owner = assetRegistry.getByPath(name); owner && owner->uuid != self)
+  if (assetRegistry.isPathOwnedByOther(name, self))
   {
     return false;
   }

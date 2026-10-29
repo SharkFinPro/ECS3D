@@ -90,8 +90,7 @@ void ProjectPacker::unpack(const net::Message& message)
     // second scene silently drop from the registry.
     if (auto uniqueName = m_sceneManager->uniqueSceneName(scene->getUUID(), scene->getName(),
           [&](const std::string& candidate) {
-            const auto* owner = m_assetRegistry->getByPath(candidate);
-            return owner && owner->uuid != scene->getUUID();
+            return m_assetRegistry->isPathOwnedByOther(candidate, scene->getUUID());
           });
         uniqueName != scene->getName())
     {

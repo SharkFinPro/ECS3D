@@ -205,6 +205,35 @@ TEST(SceneRename, TheNewNameSurvivesASnapshotRoundTrip)
   EXPECT_EQ(sceneName(client, otherUUID), "Other");
 }
 
+TEST(SceneRename, ASceneSharingAPrefabNameComesBackRenamedFromASnapshot)
+{
+  Project server;
+  server.assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Block",
+                                       .body = R"({"name":"Block"})" });
+  server.addScene(mainUUID, "Main");
+  server.sceneManager.addScene(std::make_shared<SceneAsset>(otherUUID, "Block", server.componentRegistry));
+
+  net::Message message(net::MessageType::snapshot);
+  server.packer->pack(message);
+
+  Project client;
+  client.packer->unpack(message);
+
+  ASSERT_NE(client.sceneManager.getScene(otherUUID), nullptr);
+  EXPECT_EQ(sceneName(client, otherUUID), "Block (2)");
+
+  const auto* record = client.assetRegistry.getByUUID(otherUUID);
+  ASSERT_NE(record, nullptr);
+  EXPECT_EQ(record->type, AssetType::Scene);
+  EXPECT_EQ(record->path, "Block (2)");
+
+  const auto* prefab = client.assetRegistry.getByPath("Block");
+  ASSERT_NE(prefab, nullptr);
+  EXPECT_EQ(prefab->uuid, prefabUUID);
+  EXPECT_EQ(prefab->type, AssetType::Prefab);
+  EXPECT_EQ(sceneName(client, mainUUID), "Main");
+}
+
 TEST(SceneRename, UndoRecordsTheOldNameAndRestoresIt)
 {
   Project project;
