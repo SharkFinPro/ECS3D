@@ -309,6 +309,20 @@ TEST(SceneManager, UniqueSceneNameDoesNotRenameTheSameSceneItAlreadyOwns)
   EXPECT_EQ(sceneManager.uniqueSceneName(firstUUID, "Level"), "Level");
 }
 
+TEST(SceneManager, UniqueSceneNameSkipsANameTheExtraPredicateRejects)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "Main", componentRegistry));
+
+  const auto taken = [](const std::string& name) { return name == "Level" || name == "Level (2)"; };
+
+  EXPECT_EQ(sceneManager.uniqueSceneName(secondUUID, "Level", taken), "Level (3)");
+  // Positive control: a name the predicate does not reject is kept.
+  EXPECT_EQ(sceneManager.uniqueSceneName(secondUUID, "Other", taken), "Other");
+}
+
 TEST(SceneManager, UniqueSceneNameFallsBackForAnEmptyName)
 {
   const auto componentRegistry = makeRegistry();

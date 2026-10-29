@@ -2,6 +2,7 @@
 #define SCENEMANAGER_H
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -40,8 +41,10 @@ public:
   // belongs to `uuid` itself (so re-registering an already-known scene never renames it); otherwise
   // appends " (2)", " (3)", ... - stripping an existing "(N)" suffix first, so colliding with an
   // already-suffixed name grows the number instead of stacking another one - picking the lowest number
-  // not already in use.
-  [[nodiscard]] std::string uniqueSceneName(const uuids::uuid& uuid, const std::string& desiredName) const;
+  // not already in use. `isTakenElsewhere`, when set, also rejects a name the scenes do not own (e.g. a
+  // registry path key held by a prefab).
+  [[nodiscard]] std::string uniqueSceneName(const uuids::uuid& uuid, const std::string& desiredName,
+                                            const std::function<bool(const std::string&)>& isTakenElsewhere = {}) const;
 
   void loadScene(const std::shared_ptr<SceneAsset>& scene);
 

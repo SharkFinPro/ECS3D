@@ -112,8 +112,10 @@ and sends nothing. The objects and scene scripts of the scene go with it. Undo r
 `removeAsset` carries `SceneAsset::serialize()` as its body, and the undo `addAsset` hands that body back
 so `applyAddAsset` rebuilds the scene under its own uuid with its objects (uuids preserved) and scripts. A
 body that does not parse or load adds nothing, and so does a scene add for a uuid the `SceneManager`
-already holds. The history is cleared when the active scene changes, and a new scene becomes active, so
-the `targetActive` refusal on undoing a scene add is a defensive guard, not a common path.
+already holds. A scene add whose name another scene or any registry path key (a prefab, say) already holds is
+renamed with a " (N)" suffix, and so is a scene loaded from a snapshot or file. The history is cleared when the
+active scene changes, and a new scene becomes active, so the `targetActive` refusal on undoing a scene add is a
+defensive guard, not a common path.
 The Assets panel also creates scenes, scripts and empty prefabs.
 It offers them from a "+" button and an empty-space context menu, not only the menu bar.
 Each prefills a unique default name (`AssetNaming.h`).
