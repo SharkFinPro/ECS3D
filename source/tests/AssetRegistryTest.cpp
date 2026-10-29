@@ -421,6 +421,63 @@ TEST(AssetRegistry, ApplyAddAssetGivesASecondSceneOfTheSameNameADistinctOne)
   EXPECT_EQ(registry.getByUUID(modelUUID)->path, "New Scene (2)");
 }
 
+TEST(AssetRegistry, ApplyAddAssetRenamesASceneThatCollidesWithAPrefabName)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Cylinder",
+                           .body = prefabBody("Cylinder") });
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                             { { "assetType", "scene" }, { "uuid", uuids::to_string(modelUUID) },
+                               { "name", "Main" } });
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                             { { "assetType", "scene" }, { "uuid", uuids::to_string(otherUUID) },
+                               { "name", "Cylinder" } });
+
+  const auto created = sceneManager.getScene(otherUUID);
+  ASSERT_NE(created, nullptr);
+  EXPECT_EQ(created->getName(), "Cylinder (2)");
+
+  const auto* record = registry.getByUUID(otherUUID);
+  ASSERT_NE(record, nullptr);
+  EXPECT_EQ(record->type, AssetType::Scene);
+  EXPECT_EQ(record->path, "Cylinder (2)");
+
+  const auto* prefab = registry.getByPath("Cylinder");
+  ASSERT_NE(prefab, nullptr);
+  EXPECT_EQ(prefab->uuid, prefabUUID);
+  EXPECT_EQ(prefab->type, AssetType::Prefab);
+
+  EXPECT_TRUE(replication::applyRenameAsset(registry, sceneManager,
+                                            replication::buildRenameAsset(otherUUID, "Arena")));
+  EXPECT_EQ(sceneManager.getScene(otherUUID)->getName(), "Arena");
+
+  replication::applyRemoveAsset(registry, sceneManager, replication::buildRemoveAsset(otherUUID));
+  EXPECT_EQ(sceneManager.getScene(otherUUID), nullptr);
+  EXPECT_EQ(registry.getByUUID(otherUUID), nullptr);
+  EXPECT_NE(registry.getByUUID(prefabUUID), nullptr);
+}
+
+TEST(AssetRegistry, ApplyAddAssetKeepsAFreeSceneNameNextToAPrefab)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  registry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Cylinder",
+                           .body = prefabBody("Cylinder") });
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                             { { "assetType", "scene" }, { "uuid", uuids::to_string(otherUUID) },
+                               { "name", "Arena" } });
+
+  ASSERT_NE(sceneManager.getScene(otherUUID), nullptr);
+  EXPECT_EQ(sceneManager.getScene(otherUUID)->getName(), "Arena");
+  ASSERT_NE(registry.getByUUID(otherUUID), nullptr);
+  EXPECT_EQ(registry.getByUUID(otherUUID)->path, "Arena");
+}
+
 TEST(AssetRegistry, ApplyAddAssetIgnoresAMalformedUuidAndAnUnknownType)
 {
   const fixtures::Scene scene;
