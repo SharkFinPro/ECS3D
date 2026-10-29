@@ -46,6 +46,7 @@ add_executable(${PROJECT_NAME}
   UnsavedChangesTest.cpp
   AssetFilterTest.cpp
   SettingsPanelLayoutTest.cpp
+  DashedBoxLayoutTest.cpp
   ObjectTreeOrderTest.cpp
   OutlineColorsTest.cpp
   ComponentEditTest.cpp

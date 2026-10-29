@@ -25,6 +25,7 @@ add_library(${PROJECT_NAME}
   AssetBrowserPanel.h
   AssetDragDrop.h
   AssetFilter.h
+  DashedBoxLayout.h
   SaveUI.cpp
   SaveUI.h
   UnsavedChanges.h
