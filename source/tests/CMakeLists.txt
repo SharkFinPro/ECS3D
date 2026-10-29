@@ -425,9 +425,9 @@ add_test(
     -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RegisterTestSuitesTest.cmake"
 )
 
-# Ninja and Makefile configures emit compile_commands.json unless the build explicitly turned it off.
+# Ninja and Makefile configures emit compile_commands.json when the top-level project enables the export.
 # sha256sum fails on a missing file and prints one short line, unlike cat of a multi-megabyte database.
-if(CMAKE_GENERATOR MATCHES "Ninja|Makefiles" AND NOT "${CMAKE_EXPORT_COMPILE_COMMANDS}" STREQUAL "OFF")
+if(CMAKE_EXPORT_COMPILE_COMMANDS AND CMAKE_GENERATOR MATCHES "^(Ninja|Unix Makefiles)$")
   add_test(
     NAME ECS3DCompileCommandsExported
     COMMAND ${CMAKE_COMMAND} -E sha256sum "${CMAKE_BINARY_DIR}/compile_commands.json"
