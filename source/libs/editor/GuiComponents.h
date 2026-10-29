@@ -1043,6 +1043,13 @@ namespace gc {
     dl->AddText(ImVec2(x, cy - ts.y * 0.5f), col, label);
   }
 
+  // Packed colors ignore the style alpha that BeginDisabled lowers, so draw-list callers scale it in here.
+  inline ImU32 u32Dimmed(ImVec4 c)
+  {
+    c.w *= ImGui::GetStyle().Alpha;
+    return theme::u32(c);
+  }
+
   // A full-width accent button (accent-dim fill + accent border/text, matching the mockup's "Create New
   // Object"). Returns true when clicked.
   inline bool accentButton(const char* label, const SecIcon icon = SecIcon::none, const float height = 40.0f)
@@ -1055,16 +1062,9 @@ namespace gc {
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p1(pos.x + w, pos.y + height);
-    // Packed colors ignore the style alpha that BeginDisabled lowers, so apply it here.
-    const float alpha = ImGui::GetStyle().Alpha;
-    const auto dim = [alpha](ImVec4 c)
-    {
-      c.w *= alpha;
-      return theme::u32(c);
-    };
-    dl->AddRectFilled(pos, p1, dim(hovered ? theme::accSoft : theme::accdim), 7.0f);
-    dl->AddRect(pos, p1, dim(theme::accSoft), 7.0f);
-    drawCenteredIconLabel(dl, pos, ImVec2(w, height), icon, label, dim(theme::accent));
+    dl->AddRectFilled(pos, p1, u32Dimmed(hovered ? theme::accSoft : theme::accdim), 7.0f);
+    dl->AddRect(pos, p1, u32Dimmed(theme::accSoft), 7.0f);
+    drawCenteredIconLabel(dl, pos, ImVec2(w, height), icon, label, u32Dimmed(theme::accent));
 
     return clicked;
   }
@@ -1080,9 +1080,9 @@ namespace gc {
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p1(pos.x + w, pos.y + height);
-    dl->AddRectFilled(pos, p1, theme::u32(hovered ? theme::accdim : theme::v4(31, 184, 212, 22)), 7.0f);
-    drawDashedRect(dl, pos, p1, theme::u32(theme::accSoft), 6.0f, 4.0f, 1.2f);
-    drawCenteredIconLabel(dl, pos, ImVec2(w, height), icon, label, theme::u32(theme::accent));
+    dl->AddRectFilled(pos, p1, u32Dimmed(hovered ? theme::accdim : theme::v4(31, 184, 212, 22)), 7.0f);
+    drawDashedRect(dl, pos, p1, u32Dimmed(theme::accSoft), 6.0f, 4.0f, 1.2f);
+    drawCenteredIconLabel(dl, pos, ImVec2(w, height), icon, label, u32Dimmed(theme::accent));
 
     return clicked;
   }

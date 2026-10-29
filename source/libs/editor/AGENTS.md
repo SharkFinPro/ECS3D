@@ -16,8 +16,8 @@ Related design notes: [undo-redo.md](../../../docs/architecture/undo-redo.md),
 - A continuous edit, such as a slider drag, sends as it moves but records one before/after pair once no widget is
   active. A prefab body edit flushes to the network only then, since each flush re-snapshots the whole project.
 - Keep decisions in headless headers (`ObjectTreeOrder.h`, `PlayControls.h`, `UnsavedChanges.h`, `UndoRequestGate.h`,
-  `Gizmo.h`, `AssetFilter.h`, `ObjectNameField.h`, `SettingsPanelLayout.h`) so the test suite compiles them without
-  ImGui. The ImGui code draws.
+  `Gizmo.h`, `AssetFilter.h`, `ObjectNameField.h`, `SettingsPanelLayout.h`,
+  `DashedBoxLayout.h`) so the test suite compiles them without ImGui. The ImGui code draws.
 - Numeric widgets come from `GuiComponents`, which refuse a non-finite entry.
 - Preferences read and write `ECS3DSettings` directly; they are local, not replicated.
 - A file that uses ImGui internals such as `ImGui::GetActiveID` includes `<imgui_internal.h>` itself. MSVC compiles

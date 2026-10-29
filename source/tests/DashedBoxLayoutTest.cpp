@@ -66,3 +66,48 @@ TEST(DashedBoxLayoutTest, BoxGrowsOnlyWhenTextNeedsIt)
   EXPECT_FLOAT_EQ(dashedBoxHeight(1, 16.0f, 10.0f, 60.0f), 60.0f);
   EXPECT_FLOAT_EQ(dashedBoxHeight(4, 16.0f, 10.0f, 60.0f), 84.0f);
 }
+
+TEST(DashedBoxLayoutTest, EmptyTextHasNoLines)
+{
+  EXPECT_TRUE(wrapTextLines("", 100.0f, measure).empty());
+}
+
+TEST(DashedBoxLayoutTest, ExtraSpacesCollapseWithoutLosingCharacters)
+{
+  const auto lines = wrapTextLines("  ab   cd  ", 500.0f, measure);
+
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(lines[0], "ab cd");
+}
+
+TEST(DashedBoxLayoutTest, ALineExactlyAsWideAsTheLimitStaysTogether)
+{
+  const auto lines = wrapTextLines("ab cd", 50.0f, measure);
+
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(lines[0], "ab cd");
+}
+
+TEST(DashedBoxLayoutTest, ZeroOrNegativeWidthTerminatesWithOneCharacterPerLine)
+{
+  for (const float width : { 0.0f, -5.0f })
+  {
+    const auto lines = wrapTextLines("ab cd", width, measure);
+
+    ASSERT_EQ(lines.size(), 4u);
+    for (const auto& line : lines)
+    {
+      EXPECT_EQ(line.size(), 1u);
+    }
+  }
+}
+
+TEST(DashedBoxLayoutTest, ALongWordAfterOthersFlushesThemThenSplitsAndLaterWordsJoinTheRemainder)
+{
+  const auto lines = wrapTextLines("hi abcdefgh y", 50.0f, measure);
+
+  ASSERT_EQ(lines.size(), 3u);
+  EXPECT_EQ(lines[0], "hi");
+  EXPECT_EQ(lines[1], "abcde");
+  EXPECT_EQ(lines[2], "fgh y");
+}

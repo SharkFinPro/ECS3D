@@ -8,7 +8,9 @@
 #include <vector>
 
 // Greedy word wrap of `text` into lines no wider than `maxWidth` as reported by `measure(std::string_view)`.
-// A word wider than the limit is split by characters; every line holds at least one character.
+// A word wider than the limit is split by characters; every line holds at least one character. Splits on spaces
+// only and collapses runs of them, so it expects single-line ASCII: a character split would cut a multi-byte
+// code point.
 template <typename Measure>
 [[nodiscard]] std::vector<std::string> wrapTextLines(const std::string_view text, const float maxWidth,
                                                      Measure&& measure)
