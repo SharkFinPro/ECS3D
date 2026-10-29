@@ -119,7 +119,7 @@ void SceneManager::startScene()
 
 void SceneManager::pauseScene()
 {
-  if (!m_currentScene)
+  if (!m_currentScene || m_sceneStatus == SceneStatus::stopped)
   {
     return;
   }
