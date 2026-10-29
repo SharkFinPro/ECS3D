@@ -24,6 +24,10 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   private const byte RoleEditor = 1;
   private const byte HandshakeType = 0xFF;
   private const int WaitMs = 5000;
+
+  // A stalled peer is dropped about SendTimeoutMs (4000 in the test that waits for it) after its sender thread
+  // blocks, so the wait must outlast that.
+  private const int DropWaitMs = 15000;
   private const int MaxStartAttempts = 5;
 
   private readonly List<WebSocketBackend> _servers = new();
@@ -374,8 +378,8 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
   [Fact]
   public void StalledPeer_IsDroppedWhileTheOtherPeersKeepReceiving()
   {
-    // 4000 ms leaves room for two healthy peers to drain a 4 MiB message even on a loaded runner; the
-    // stalled peer, last in the list, then spends the rest of the budget and is the only one dropped. The
+    // Each peer has its own queue and sender thread, so the broadcasts return at once; 4000 ms is how long
+    // the stalled peer's sender then blocks in a send before that peer, and only that peer, is dropped. The
     // server's accepted socket has a 1 MiB send buffer, so 4 MiB sent to a peer that never reads must
     // block; the loop is the backstop for platforms whose kernel buffers absorb more than that.
     var server = new WebSocketBackend { SendTimeoutMs = 4000 };
@@ -398,9 +402,10 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
       ++bigMessages;
     }
 
-    WaitFor(() => TransportRecorder.ServerDisconnected.Contains(stalledId), "the stalled peer to be dropped");
+    WaitFor(() => TransportRecorder.ServerDisconnected.Contains(stalledId), "the stalled peer to be dropped",
+      DropWaitMs);
     WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Length == bigBytes) == 2 * bigMessages,
-      "both healthy peers to receive every large message");
+      "both healthy peers to receive every large message", DropWaitMs);
 
     TransportRecorder.ServerBroadcast(server, 8, new byte[] { 1, 2, 3 });
     WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 8) == 2,
@@ -410,6 +415,80 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     Assert.DoesNotContain(healthyB, TransportRecorder.ServerDisconnected);
     Assert.Equal(0, TransportRecorder.ClientDisconnects);
     Assert.Equal(2, server.ServerConnectionCount());
+  }
+
+  [Fact]
+  public void StalledPeer_NeverBlocksTheBroadcastCaller()
+  {
+    // A send timeout of a whole minute: a broadcast that waited on the stalled peer would blow the deadline
+    // below many times over. Only the stalled peer's own sender thread waits on it.
+    var server = new WebSocketBackend { SendTimeoutMs = 60000 };
+    var port = Start(server);
+
+    var healthy = ConnectAndAwait(server, port, 1);
+
+    // A tiny receive buffer and no reads, so the messages below cannot fit in the kernel's buffers.
+    ConnectRaw(port, receiveBufferBytes: 1024);
+    WaitFor(() => server.ServerConnectionCount() == 2, "the stalled peer to join");
+    var stalledId = Authorized()[1].ConnId;
+
+    const int bigBytes = 4 * 1024 * 1024;
+    const int bigMessages = 8;
+    RunWithDeadline(() =>
+    {
+      for (var i = 0; i < bigMessages; ++i)
+      {
+        TransportRecorder.ServerBroadcast(server, 7, new byte[bigBytes]);
+      }
+    }, "broadcasting to a stalled peer");
+
+    WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 7) == bigMessages,
+      "the healthy peer to receive every large message", 15000);
+
+    // The positive proof that the broadcasts did not wait out the timeout: the stalled peer is still
+    // connected, because its sender is still inside its first send.
+    Assert.DoesNotContain(stalledId, TransportRecorder.ServerDisconnected);
+    Assert.DoesNotContain(healthy, TransportRecorder.ServerDisconnected);
+    Assert.Equal(2, server.ServerConnectionCount());
+  }
+
+  [Fact]
+  public void StalledPeer_WhoseQueueOverflows_IsDroppedWithoutWaitingForTheSendTimeout()
+  {
+    var server = new WebSocketBackend { SendTimeoutMs = 60000, MaxQueuedSendBytes = 1024 * 1024 };
+    var port = Start(server);
+
+    var healthy = ConnectAndAwait(server, port, 1);
+
+    ConnectRaw(port, receiveBufferBytes: 1024);
+    WaitFor(() => server.ServerConnectionCount() == 2, "the stalled peer to join");
+    var stalledId = Authorized()[1].ConnId;
+
+    // One message at a time, each read by the healthy peer before the next, so only the stalled peer's
+    // queue ever backs up.
+    const int messageBytes = 512 * 1024;
+    const int maxMessages = 64;
+    var sent = 0;
+    while (sent < maxMessages && !TransportRecorder.ServerDisconnected.Contains(stalledId))
+    {
+      TransportRecorder.ServerBroadcast(server, 7, new byte[messageBytes]);
+      ++sent;
+
+      var expected = sent;
+      WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 7) == expected,
+        "the healthy peer to receive the large message", 15000);
+    }
+
+    WaitFor(() => TransportRecorder.ServerDisconnected.Contains(stalledId), "the stalled peer to be dropped");
+    Assert.True(TransportRecorder.LogContains("bytes are already waiting to be sent to it"));
+
+    TransportRecorder.ServerBroadcast(server, 8, new byte[] { 1, 2, 3 });
+    WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 8) == 1,
+      "the healthy peer to receive the next broadcast");
+
+    Assert.DoesNotContain(healthy, TransportRecorder.ServerDisconnected);
+    Assert.Equal(0, TransportRecorder.ClientDisconnects);
+    Assert.Equal(1, server.ServerConnectionCount());
   }
 
   [Fact]

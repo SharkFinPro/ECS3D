@@ -12,8 +12,9 @@ namespace ECS3DNetTransport;
 
 // Raw-TCP backend. Each message is framed on the wire as a 4-byte big-endian length (1 type byte +
 // payload) followed by the bytes. Inbound delivery is push: a per-connection thread reads frames and
-// invokes the C++ callback (via Transport.DeliverServer/DeliverClient) on the socket thread. Outbound is
-// a direct call from the tick thread.
+// invokes the C++ callback (via Transport.DeliverServer/DeliverClient) on the socket thread. Server outbound
+// is queued per connection and written by that connection's own sender thread, so the tick thread never
+// blocks on a peer; the client sends directly from its caller.
 internal sealed class TcpBackend : TransportBackend
 {
   // -- Server --
@@ -37,10 +38,13 @@ internal sealed class TcpBackend : TransportBackend
   // broadcast path can name the connection it dropped. A class rather than a record on purpose: the
   // broadcast snapshot and the receive loop both drop a connection with List.Remove, which must match by
   // reference identity so it removes that one connection and nothing that merely looks like it.
-  private sealed class Connection(TcpClient client, int connId)
+  private sealed class Connection(TcpClient client, int connId, SendQueue outbox)
   {
     public readonly TcpClient Client = client;
     public readonly int ConnId = connId;
+    public readonly SendQueue Outbox = outbox;
+    // Drains Outbox onto the socket. Set once, before the connection joins the broadcast list.
+    public Thread? Sender;
   }
 
   // A stable, monotonically-increasing id handed to each accepted connection, surfaced to C++ on every
@@ -55,15 +59,15 @@ internal sealed class TcpBackend : TransportBackend
   // Instance copy of the default above, internal so ECS3DManagedTests can change it.
   internal int HandshakeTimeoutMs = DefaultHandshakeTimeoutMs;
 
-  // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
-  // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
-  // once rather than ten times over. Broadcasts run on the tick thread, so the bound is what physics and
-  // scripts can lose to the network in a tick. Only the connection whose own send ran out of budget is
-  // dropped; peers the broadcast never reached are skipped for that message and kept. Two seconds because
-  // a stall then costs at most one tick's worth before the peer responsible is dropped, while still being
-  // far longer than any plausible snapshot send takes on a healthy link.
+  // How long one message's send to one peer may block that peer's own sender thread before the peer is
+  // dropped. The tick thread never waits on it: it only queues. Two seconds because a peer that cannot take
+  // a message in that long has stopped draining its socket, while it is far longer than any plausible
+  // snapshot send takes on a healthy link.
   // Internal and mutable so ECS3DManagedTests can shorten it; the default is the production value.
   internal int SendTimeoutMs = 2000;
+
+  // Instance copy of the shared default, internal so ECS3DManagedTests can shrink it.
+  internal long MaxQueuedSendBytes = DefaultMaxQueuedSendBytes;
 
   // When set, accepted sockets get this send buffer size instead of the OS default, which some platforms
   // auto-tune large enough that a stalled peer never blocks a send. Left unset in production.
@@ -185,16 +189,14 @@ internal sealed class TcpBackend : TransportBackend
 
     var frame = Frame(type, data, len);
 
-    // The fan-out runs off a snapshot so the sends happen outside _clientsLock. This is the tick thread,
-    // and a Write to a peer that has stopped reading blocks until the budget below runs out; holding the
-    // lock across that would block the accept loop and every receive loop's cleanup along with it.
+    // The fan-out runs off a snapshot so queuing happens outside _clientsLock.
     Connection[] clients;
     lock (_clientsLock)
     {
       clients = _clients.ToArray();
     }
 
-    SendToTargets(clients, frame, "broadcast");
+    Enqueue(clients, frame);
   }
 
   public override void ServerSendToMany(nint connIds, int connIdCount, byte type, nint data, int len)
@@ -208,8 +210,8 @@ internal sealed class TcpBackend : TransportBackend
     Marshal.Copy(connIds, ids, 0, connIdCount);
     var idSet = new HashSet<int>(ids);
 
-    // Same snapshot-outside-the-lock shape as ServerBroadcast, just filtered to the named connections
-    // instead of every connection.
+    // Same snapshot shape as ServerBroadcast, just filtered to the named connections instead of every
+    // connection.
     var targets = new List<Connection>(idSet.Count);
     lock (_clientsLock)
     {
@@ -228,61 +230,56 @@ internal sealed class TcpBackend : TransportBackend
       return;
     }
 
-    SendToTargets(targets.ToArray(), Frame(type, data, len), "send");
+    Enqueue(targets.ToArray(), Frame(type, data, len));
   }
 
-  // Shared by ServerBroadcast (every connection) and ServerSendToMany (a named subset): sends frame to
-  // each of targets under one time budget for the whole fan-out, so K stalled peers cost this call the
-  // budget once rather than K times over - the tick thread this runs on could otherwise lose K times
-  // SendTimeoutMs to peers that have stopped reading. `what` names the operation in the log line so a
-  // stall is traceable to which path caused it.
-  private void SendToTargets(Connection[] targets, byte[] frame, string what)
+  // Shared by ServerBroadcast and ServerSendToMany. The one frame is shared by every queue, which is safe
+  // because it is never mutated after it is built. A peer whose queue is already backed up past the cap has
+  // fallen hopelessly behind and is dropped.
+  private void Enqueue(Connection[] targets, byte[] frame)
   {
-    var deadline = Environment.TickCount64 + SendTimeoutMs;
-    var skipped = 0;
-
     foreach (var conn in targets)
     {
-      var remaining = deadline - Environment.TickCount64;
-      if (remaining <= 0)
+      if (!conn.Outbox.TryEnqueue(frame) && Reap(conn))
       {
-        // An earlier peer spent the budget. Skip the rest rather than dropping them: they have done
-        // nothing wrong, and reaping them would punish healthy peers for their position in the list. They
-        // miss this one message and are sent the next one as usual.
-        ++skipped;
-        continue;
+        Transport.Log(TransportLogLevel.Warn,
+          $"Dropping connection {conn.ConnId}: {MaxQueuedSendBytes} bytes are already waiting to be sent to it.");
       }
+    }
+  }
 
+  // Runs on the connection's sender thread. Each write is bounded by the socket's SendTimeout, so a peer
+  // that stops reading costs only this thread until it is dropped.
+  private void SendLoop(Connection conn)
+  {
+    while (conn.Outbox.Take() is { } frame)
+    {
       var sent = false;
       try
       {
-        // Never zero: SocketOptionName.SendTimeout reads 0 as "no timeout", which is what this removes.
-        conn.Client.SendTimeout = (int)Math.Max(remaining, 1);
         conn.Client.GetStream().Write(frame, 0, frame.Length);
         sent = true;
       }
       catch
       {
-        // The connection dropped mid-send, or did not accept the frame inside the remaining budget.
+        // The connection dropped mid-send, or the peer did not accept the frame inside SendTimeoutMs.
       }
 
-      if (!sent && Reap(conn))
+      if (!sent)
       {
-        Transport.Log(TransportLogLevel.Warn,
-          $"Dropping connection {conn.ConnId}: the send failed or timed out.");
-      }
-    }
+        if (Reap(conn))
+        {
+          Transport.Log(TransportLogLevel.Warn,
+            $"Dropping connection {conn.ConnId}: the send failed or timed out.");
+        }
 
-    // One line per call rather than one per connection, so a peer stalling tick after tick is visible in
-    // the log without burying it.
-    if (skipped > 0)
-    {
-      Transport.Log(TransportLogLevel.Warn,
-        $"Skipped {skipped} connection(s): this {what} spent its whole {SendTimeoutMs} ms budget.");
+        return;
+      }
     }
   }
 
-  // Closes a connection and takes it off the broadcast list. True only when this call is the one that
+  // Closes a connection and takes it off the broadcast list. Called from the tick thread (queue overflow)
+  // and from the connection's sender thread (failed send). True only when this call is the one that
   // removed it: a peer that closed itself is reaped by its own receive loop, and that is an ordinary
   // disconnect rather than something to warn about.
   //
@@ -321,9 +318,8 @@ internal sealed class TcpBackend : TransportBackend
         client.SendBufferSize = AcceptedSendBufferBytes.Value;
       }
 
-      // A starting value only; each broadcast narrows this to whatever is left of its own budget. It
-      // matters because a socket defaults to no send timeout at all, and this one is set before any
-      // broadcast can reach the connection.
+      // A socket defaults to no send timeout at all; this bounds each write the connection's sender
+      // thread makes.
       client.SendTimeout = SendTimeoutMs;
 
       var connId = Interlocked.Increment(ref _nextConnId);
@@ -392,7 +388,10 @@ internal sealed class TcpBackend : TransportBackend
 
         client.ReceiveTimeout = 0;
 
-        conn = new Connection(client, connId);
+        var admitted = new Connection(client, connId, new SendQueue(MaxQueuedSendBytes));
+        admitted.Sender = new Thread(() => SendLoop(admitted)) { IsBackground = true, Name = "ecs3d-net-send" };
+        conn = admitted;
+        admitted.Sender.Start();
 
         lock (_clientsLock)
         {
@@ -431,6 +430,14 @@ internal sealed class TcpBackend : TransportBackend
     }
 
     try { client.Close(); } catch { /* ignore */ }
+
+    if (conn != null)
+    {
+      // After the socket close, which releases a sender blocked in Write. Joined here, before this thread
+      // leaves _connectionThreads, so ServerStop's join of this thread covers the sender too.
+      conn.Outbox.Close();
+      JoinThread(conn.Sender, "send");
+    }
 
     try
     {

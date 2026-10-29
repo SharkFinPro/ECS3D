@@ -41,6 +41,11 @@ internal abstract class TransportBackend
   // times over while it is assembled and copied out, so budget a multiple of this rather than this.
   protected const int MaxMessageBytes = 64 * 1024 * 1024;
 
+  // The most outbound bytes one connection may have queued before it is dropped. One maximum-size message
+  // always fits an empty queue, and a backlog past the size of one maximum message means the peer has
+  // fallen hopelessly behind.
+  protected const long DefaultMaxQueuedSendBytes = MaxMessageBytes;
+
   // The handshake is [role byte][token], so it has no business being large - and it is the one frame
   // read before the peer has been authorized at all. Capping it separately means the pre-auth surface is
   // a few kilobytes rather than the whole ceiling above, which everything after the handshake gets.
@@ -76,9 +81,8 @@ internal abstract class TransportBackend
 
   // Sends to exactly the connIdCount connections named by connIds (a native int32 array), rather than
   // every connection like ServerBroadcast - for data only those connections may see (a join's snapshot, the
-  // server's own log for editors). One call for the whole fan-out: implementations apply the same shared time
-  // budget across it that ServerBroadcast applies across every connection, so a stalled connection in the
-  // list cannot cost the caller more than that one shared budget no matter how many are named. A connId
+  // server's own log for editors). One call for the whole fan-out. Sends are queued per connection and
+  // written by each connection's own sender thread, so this never blocks the caller on a slow peer. A connId
   // that has since disconnected is silently skipped.
   public abstract void ServerSendToMany(nint connIds, int connIdCount, byte type, nint data, int len);
 

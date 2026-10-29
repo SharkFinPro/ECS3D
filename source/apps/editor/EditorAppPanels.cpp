@@ -374,7 +374,7 @@ void EditorApp::expirePlayerSlotRequest()
     return;
   }
 
-  // The reply is a broadcast, so a send that ran out of budget can drop it for this connection.
+  // The reply is a broadcast, so a connection whose queue overflowed or whose send failed can lose it.
   Log::warn(LogCategory::editor, "No answer to the request for player slot " + std::to_string(*m_requestedPlayerSlot)
     + "; giving up on it.");
   m_requestedPlayerSlot.reset();

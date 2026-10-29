@@ -14,11 +14,9 @@ everyone behind it) - and forwards what comes out as a `MessageType::serverLog` 
 `unpackServerLog`) via `NetServer::sendToEditors`, skipping the send entirely when there is nothing queued
 and no one to send it to. That copies out the current editor connection ids under `m_editorMutex` and
 releases the lock before calling the transport, then makes one call (`Transport.serverSendToMany`, alongside
-`serverBroadcast`) for the whole batch of editor connections rather than one call per editor, so a stalled
-editor connection costs this send one shared time budget no matter how many editors are connected - the same
-guarantee `ServerBroadcast` already gives its own per-connection sends across every connection. A
-per-connection loop on the authoritative tick thread would instead let K stalled editors block physics and
-state deltas for K times that budget. Only connections authorized as `Role::editor` are named, so play
+`serverBroadcast`) for the whole batch of editor connections rather than one call per editor. The transport
+queues the batch per connection, so a stalled editor connection never blocks the authoritative tick thread,
+the same as for `ServerBroadcast`. Only connections authorized as `Role::editor` are named, so play
 clients do not receive it. `RemoteLogSink::drain` also reports how many entries it had to evict (queue full, nobody
 draining fast enough); the editor surfaces that count as a warning instead of silently missing history.
 `EditorApp::handleServerLog` writes each forwarded entry straight into its own `RingBufferSink` (bypassing

@@ -97,10 +97,10 @@ uses at runtime. It finds the source tree through an `ECS3DSourceRoot` assembly 
 takes the addresses of `Transport`'s `[UnmanagedCallersOnly]` `set*Callback` exports as function pointers to
 register its own callbacks (and unregisters them afterward), and records what the backends deliver, so
 those tests share one non-parallel xUnit collection (`Transport`) and shorten `TcpBackend`'s internal
-`SendTimeoutMs`/`BodyReadTimeoutMs`/`HandshakeTimeoutMs` fields and set `AcceptedSendBufferBytes` rather
+`SendTimeoutMs`/`BodyReadTimeoutMs`/`HandshakeTimeoutMs`/`MaxQueuedSendBytes` fields and set `AcceptedSendBufferBytes` rather
 than waiting out production values.
-`WebSocketBackendLoopbackTests` drives the WebSocket backend the same way: its `SendTimeoutMs` is also an internal
-field, and an internal `ClientReceiveLoopExiting` hook lets a test reconnect inside the window between the
+`WebSocketBackendLoopbackTests` drives the WebSocket backend the same way: its `SendTimeoutMs` and `MaxQueuedSendBytes` are also internal
+fields, and an internal `ClientReceiveLoopExiting` hook lets a test reconnect inside the window between the
 client receive loop stopping and releasing its connection. Both loopback backends have an internal
 `ServerConnectionExiting` hook, which lets a test hold a connection thread just before its disconnect is
 delivered. `TransportExportsTests` calls `Transport`'s exports through function pointers.

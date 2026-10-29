@@ -32,8 +32,8 @@ namespace {
   using ServerStopFn = void(*)();
   using ServerBroadcastFn = void(*)(uint8_t, const uint8_t*, int32_t);
   // connIds/connIdCount name the specific connections to send to (never every
-  // connection like ServerBroadcastFn) - one call for the whole fan-out, so the transport can apply one
-  // shared deadline across it the same way it already does for a broadcast.
+  // connection like ServerBroadcastFn) - one call for the whole fan-out. The transport queues the message
+  // per connection, so the call never blocks on a slow peer.
   using ServerSendToManyFn = void(*)(const int32_t*, int32_t, uint8_t, const uint8_t*, int32_t);
   using ServerConnectionCountFn = int32_t(*)();
   using SetCallbackFn = void(*)(void*);
@@ -175,9 +175,9 @@ void NetServer::broadcast(const Message& message) const
 void NetServer::sendToEditors(const Message& message) const
 {
   // Copied out under the lock and the lock released before the transport is touched at all: this runs on
-  // the authoritative tick thread, and the transport send can block on a stalled socket. Holding the lock
-  // across that would let a stalled editor connection block authorize()/isEditor()/takeDisconnected() -
-  // none of which have anything to do with sending - for as long as the transport's own send budget runs.
+  // the authoritative tick thread, and the transport call is outside the editor-id bookkeeping. Holding the
+  // lock across it would make authorize()/isEditor()/takeDisconnected() wait on sending, which they have
+  // nothing to do with.
   sendToMany(m_connections.editorIds(), message);
 }
 
@@ -207,10 +207,8 @@ void NetServer::sendToMany(const std::vector<int32_t>& connIds, const Message& m
     return;
   }
 
-  // One call for the whole fan-out (rather than one per connection) so the transport can apply a single
-  // shared time budget across every target, the same way ServerBroadcast already does across every
-  // connection - a per-connection call here would let K stalled peers cost this tick K times the
-  // transport's per-send timeout instead of that timeout once.
+  // One call for the whole fan-out (rather than one per connection) so the transport snapshots its
+  // connection list once; the transport queues per connection and never blocks on a slow peer.
   reinterpret_cast<ServerSendToManyFn>(m_sendToManyFn)(
     connIds.data(),
     static_cast<int32_t>(connIds.size()),
