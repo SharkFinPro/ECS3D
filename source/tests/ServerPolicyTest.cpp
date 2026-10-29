@@ -256,6 +256,7 @@ namespace {
     std::vector<int> disconnectQueue;
     std::vector<std::string> events;
     std::function<void(int)> onPoll;
+    std::function<void()> onDrained;
 
     void drain()
     {
@@ -265,6 +266,10 @@ namespace {
         {
           if (inbox.empty())
           {
+            if (onDrained)
+            {
+              std::exchange(onDrained, {})();
+            }
             return false;
           }
 
@@ -319,4 +324,20 @@ TEST(ServerPolicy, ADisconnectQueuedDuringTheDrainWaitsForTheNextRoundAfterItsLa
   net.events.clear();
   net.drain();
   EXPECT_EQ(net.events, (std::vector<std::string>{ "disconnect 5" }));
+}
+
+TEST(ServerPolicy, ALastMessageAndItsDisconnectArrivingAfterTheDrainAreHandledTogetherNextRound)
+{
+  DrainRecorder net;
+  net.onDrained = [&net]
+  {
+    net.inbox.push_back({ 5, 9 });
+    net.disconnectQueue.push_back(5);
+  };
+
+  net.drain();
+  EXPECT_TRUE(net.events.empty());
+
+  net.drain();
+  EXPECT_EQ(net.events, (std::vector<std::string>{ "message 5:9", "disconnect 5" }));
 }

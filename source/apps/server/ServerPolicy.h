@@ -3,6 +3,7 @@
 
 #include <Protocol.h>
 #include <scenes/SceneManager.h>
+#include <cstdint>
 #include <string>
 
 // ServerApp cannot be built into the headless test suite (its constructor boots the CLR), so the pure
