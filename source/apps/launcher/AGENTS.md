@@ -140,10 +140,12 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   pin both. A `DockPanel` that ends in a button sets `LastChildFill="False"`, or the button's bounds span the leftover space.
 - **Code-loaded brushes:** where a bound brush won't inherit the item `DataContext` (e.g. gradient stops),
   build the brush in the model instead of XAML — see `Project.GlowBrush` for the pattern and the why.
-- **The New Project dialog's wrapped text sets an explicit `LineHeight`.** At 125% display scale a font-derived
-  line height made Avalonia drop the last wrapped line.
-  Its target preview is one line that trims in the middle (`PathSegmentEllipsis`) with a tooltip. Avalonia draws no
-  ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full instead.
+- **Every wrapped `TextBlock` sets an explicit `LineHeight`** (a `Style` that sets `TextWrapping` to `Wrap` sets it
+  too). At 125% display scale a font-derived line height made Avalonia drop the last wrapped line. Use 16 for
+  font size 12 and 18 for 12.5-13. `LauncherWrappedTextTests` pins it for every `.axaml` file.
+- **The New Project dialog's target preview** is one line that trims in the middle (`PathSegmentEllipsis`) with a
+  tooltip. Avalonia draws no ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full
+  instead.
 - **`EmptyState.Detail`** is the line under the heading; the Templates and Samples view models set it to null while a
   search has no hits, which hides it.
 

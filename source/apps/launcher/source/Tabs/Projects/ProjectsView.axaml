@@ -22,7 +22,7 @@
                 <StackPanel Spacing="14">
                     <StackPanel Spacing="5">
                         <TextBlock Text="Explore the engine" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock Text="Open the Welcome scene and look around before making anything." FontSize="12.5" TextWrapping="Wrap"
+                        <TextBlock Text="Open the Welcome scene and look around before making anything." FontSize="12.5" TextWrapping="Wrap" LineHeight="18"
                                    Foreground="{StaticResource T3Brush}" />
                     </StackPanel>
                     <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Open Welcome scene" HorizontalAlignment="Left"
@@ -36,7 +36,7 @@
                 <StackPanel Spacing="14">
                     <StackPanel Spacing="5">
                         <TextBlock Text="Start a project" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock Text="Begin from a template and make it your own." FontSize="12.5" TextWrapping="Wrap"
+                        <TextBlock Text="Begin from a template and make it your own." FontSize="12.5" TextWrapping="Wrap" LineHeight="18"
                                    Foreground="{StaticResource T3Brush}" />
                     </StackPanel>
                     <Button Classes="cta" Theme="{StaticResource BareButton}" HorizontalAlignment="Left"
@@ -52,7 +52,7 @@
                 <StackPanel Spacing="14">
                     <StackPanel Spacing="5">
                         <TextBlock Text="Try a sample" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock Text="Open a finished example project and see how it is built." FontSize="12.5" TextWrapping="Wrap"
+                        <TextBlock Text="Open a finished example project and see how it is built." FontSize="12.5" TextWrapping="Wrap" LineHeight="18"
                                    Foreground="{StaticResource T3Brush}" />
                     </StackPanel>
                     <Button Classes="secondary" Theme="{StaticResource BareButton}" Content="Browse samples" HorizontalAlignment="Left"

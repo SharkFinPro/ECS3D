@@ -14,11 +14,13 @@
         </Style>
         <Style Selector="TextBlock.hint">
             <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
             <Setter Property="Foreground" Value="{StaticResource T3Brush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
         <Style Selector="TextBlock.error">
             <Setter Property="FontSize" Value="12" />
+            <Setter Property="LineHeight" Value="16" />
             <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
