@@ -28,5 +28,7 @@ public static class EarlyExitNotice
             result.LogPath);
     }
 
-    public static LaunchNotice Failure(string error, NoticeTopic topic = NoticeTopic.None) => new(error, null, topic);
+    public static LaunchNotice Failure(string error) => Failure(error, NoticeTopic.None);
+
+    public static LaunchNotice Failure(string error, NoticeTopic topic) => new(error, null, topic);
 }
