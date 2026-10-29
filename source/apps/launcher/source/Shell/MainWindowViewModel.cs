@@ -68,6 +68,7 @@ public class MainWindowViewModel : ObservableObject
     private string _searchText = "";
     private string? _toastMessage;
     private string? _toastLogPath;
+    // The toast fields, the timer and its generation are touched on the UI thread only.
     private NoticeTopic _toastTopic;
     private CancellationTokenSource? _toastTimer;
     private int _toastGeneration;
@@ -1192,14 +1193,21 @@ public class MainWindowViewModel : ObservableObject
         }
     }
 
+    // A toast with a log link stays until dismissed, so the link is not lost while the user moves to it.
     private void StartToastTimer()
     {
         CancelToastTimer();
+        if (HasToastLog)
+        {
+            return;
+        }
+
         var timer = new CancellationTokenSource();
         _toastTimer = timer;
-        _ = DismissAfterTimeoutAsync(++_toastGeneration, timer.Token);
+        _ = DismissAfterTimeoutAsync(_toastGeneration, timer.Token);
     }
 
+    // Bumping the generation retires any timer already running.
     private void CancelToastTimer()
     {
         _toastGeneration++;

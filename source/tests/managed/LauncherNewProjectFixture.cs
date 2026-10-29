@@ -116,6 +116,7 @@ public abstract class NewProjectFixture
       background ?? (work => work()),
       NewCreator())
     {
+      ToastDelay = ToastDelays.Never,
       NewProjectCheckDelay = _ => Task.CompletedTask
     };
 

@@ -50,6 +50,12 @@ internal sealed class ThrowingProcessRunner : IProcessRunner
   }
 }
 
+// Shell builders in the suite use this so no test owns a real 15 second timer.
+internal static class ToastDelays
+{
+  public static Task Never(TimeSpan span, CancellationToken token) => Task.Delay(Timeout.Infinite, token);
+}
+
 internal sealed class NoticeRecorder
 {
   public List<LaunchNotice> Notices { get; } = [];

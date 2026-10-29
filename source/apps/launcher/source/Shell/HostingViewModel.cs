@@ -23,7 +23,7 @@ public class HostingViewModel : ObservableObject
     private readonly Action<LaunchNotice> _notify;
     private readonly Action<PromptRequest, Action<bool>> _ask;
     private readonly Action _openSettings;
-    private readonly Action<NoticeTopic>? _clearNotice;
+    private readonly Action<NoticeTopic> _clearNotice;
     private HostSession _session;
     private Task _starting = Task.CompletedTask;
     private string? _startingName;
@@ -38,7 +38,7 @@ public class HostingViewModel : ObservableObject
         Action<LaunchNotice> notify,
         Action<PromptRequest, Action<bool>> ask,
         Action openSettings,
-        Action<NoticeTopic>? clearNotice = null)
+        Action<NoticeTopic> clearNotice)
     {
         _newSession = newSession;
         _network = network;
@@ -187,7 +187,7 @@ public class HostingViewModel : ObservableObject
             return;
         }
 
-        _clearNotice?.Invoke(NoticeTopic.Hosting);
+        _clearNotice(NoticeTopic.Hosting);
         Open(name);
         if (result.Kind == HostStartKind.StartedWithoutWindow && result.Message is not null)
         {

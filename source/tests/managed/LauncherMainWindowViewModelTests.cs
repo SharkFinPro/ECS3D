@@ -26,7 +26,7 @@ public class LauncherMainWindowViewModelTests
       _ => null,
       "1.2.3",
       post ?? (action => action()),
-      () => _rig.Time.Now);
+      () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
 
   private static object TabModel(MainWindowViewModel model, LauncherTab tab) => tab switch
   {

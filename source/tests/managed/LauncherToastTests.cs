@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shell;
 using Xunit;
@@ -172,5 +175,38 @@ public class LauncherToastTests : NewProjectFixture
     model.ActiveNav = "samples";
 
     Assert.True(model.ShowBannerSettingsButton);
+  }
+
+  [Fact]
+  public void TheNewerEngineToastSurvivesAReloadThatFindsOnlyGatedTemplates()
+  {
+    AddTemplate("future", "Future", minEngine: "9.0");
+    var model = NewMain();
+    _rig.AddEngine(LauncherRig.OtherDir);
+    AddTemplate("later", "Later", minEngine: "9.0", templatesFolder: Path.Combine(LauncherRig.OtherDir, "templates"));
+    ShowToast(model);
+    Assert.Contains("newer engine", model.ToastMessage);
+
+    model.Settings.EngineFolder = LauncherRig.OtherDir;
+
+    Assert.Single(model.Templates.Templates);
+    Assert.Contains("newer engine", model.ToastMessage);
+  }
+
+  [Fact]
+  public void TheBannerSettingsButtonAndTheToastAreWiredInTheWindow()
+  {
+    var window = XDocument.Load(Path.Combine(
+      typeof(LauncherToastTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+        .Single(a => a.Key == "ECS3DSourceRoot").Value!,
+      "apps", "launcher", "source", "Shell", "MainWindow.axaml")).Root!;
+    var toast = window.Descendants()
+      .Single(e => e.Name.LocalName == "Border" && (string?)e.Attribute("IsVisible") == "{Binding HasToast}");
+    var button = window.Descendants()
+      .Single(e => e.Name.LocalName == "Button" && (string?)e.Attribute("Command") == "{Binding OpenSettingsCommand}"
+        && e.Attribute("IsVisible") is not null);
+
+    Assert.Equal("Assertive", (string?)toast.Attribute("AutomationProperties.LiveSetting"));
+    Assert.Equal("{Binding ShowBannerSettingsButton}", (string?)button.Attribute("IsVisible"));
   }
 }

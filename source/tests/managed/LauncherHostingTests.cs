@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using ECS3DLauncher.Services;
 using ECS3DLauncher.Shared.Models;
@@ -106,7 +107,7 @@ public class LauncherHostingTests
         () => _launcher.Time.Now,
         _launcher.Files,
         action => action(),
-        services);
+        services) { ToastDelay = ToastDelays.Never };
     }
 
     public void Host(Project project) => Main.HostProjectCommand.Execute(project);
@@ -843,5 +844,56 @@ public class LauncherHostingTests
 
     Assert.False(rig.Hosting.IsHosting);
     Assert.Contains("The hosted server exited with code 1", rig.Toast);
+  }
+
+  [Fact]
+  public void AWindowThatFailsToOpenToastsWhileTheServerStaysUpAndThePanelOpens()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Runner.FailFor = launch => launch.FileName.Contains("Client") ? "no window" : null;
+
+    rig.Host(Alpha);
+
+    Assert.True(rig.Hosting.IsHosting);
+    Assert.True(rig.Hosting.IsPanelOpen);
+    Assert.Contains("no window", rig.Toast);
+  }
+
+  [Fact]
+  public void AnExceptionWhileStartingIsAHostingToastThatALaterHostClears()
+  {
+    var rig = new Rig();
+    rig.Probe.Failure = new InvalidOperationException("probe broke");
+    rig.Host(Alpha);
+    Assert.Equal("probe broke", rig.Toast);
+
+    rig.Probe.Failure = null;
+    rig.ListenAfterFirstWait();
+    rig.Host(Alpha);
+
+    Assert.True(rig.Hosting.IsHosting);
+    Assert.Null(rig.Toast);
+  }
+
+  [Fact]
+  public void OnlyAToastWithoutALogLinkStartsTheTimeout()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    var timers = 0;
+    rig.Main.ToastDelay = (_, token) =>
+    {
+      timers++;
+      return Task.Delay(Timeout.Infinite, token);
+    };
+    rig.Host(Alpha);
+    rig.Runner.Processes[0].Exit(1);
+    Assert.Contains("The hosted server exited", rig.Toast);
+    Assert.True(rig.Main.HasToastLog);
+    Assert.Equal(0, timers);
+
+    rig.ShowUnrelatedToast();
+
+    Assert.False(rig.Main.HasToastLog);
+    Assert.Equal(1, timers);
   }
 }

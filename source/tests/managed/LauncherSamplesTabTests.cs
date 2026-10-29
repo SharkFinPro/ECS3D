@@ -53,7 +53,7 @@ public class LauncherSamplesTabTests
       loadThumbnail ?? (_ => null),
       "1.2.3",
       action => action(),
-      () => _rig.Time.Now);
+      () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Samples.VisibleSamples.Select(card => card.Name).ToArray();
@@ -96,7 +96,7 @@ public class LauncherSamplesTabTests
         () => rig.Time.Now,
         rig.Files,
         action => action(),
-        services);
+        services) { ToastDelay = ToastDelays.Never };
     }
   }
 
@@ -509,7 +509,7 @@ public class LauncherSamplesTabTests
       () => _rig.Time.Now,
       files,
       work => work(),
-      new ProjectCreator(files, _rig.Log, () => new Guid($"00000000-0000-0000-0000-{++counter:D12}")));
+      new ProjectCreator(files, _rig.Log, () => new Guid($"00000000-0000-0000-0000-{++counter:D12}"))) { ToastDelay = ToastDelays.Never };
     model.NewProjectCheckDelay = _ => Task.CompletedTask;
     return model;
   }
