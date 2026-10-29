@@ -141,7 +141,7 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
 - **Code-loaded brushes:** where a bound brush won't inherit the item `DataContext` (e.g. gradient stops),
   build the brush in the model instead of XAML — see `Project.GlowBrush` for the pattern and the why.
 - **Every wrapped `TextBlock` sets an explicit `LineHeight`** (a `Style` that sets `TextWrapping` to `Wrap` sets it
-  too). At 125% display scale a font-derived line height made Avalonia drop the last wrapped line. Use 16 for
+  too). At 125% display scale a font-derived line height made Avalonia drop the last wrapped line. Use 16-18 for
   font size 12 and 18 for 12.5-13. `LauncherWrappedTextTests` pins it for every `.axaml` file.
 - **The New Project dialog's target preview** is one line that trims in the middle (`PathSegmentEllipsis`) with a
   tooltip. Avalonia draws no ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full
