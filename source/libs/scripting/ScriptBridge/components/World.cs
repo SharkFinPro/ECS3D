@@ -219,7 +219,8 @@ public static unsafe class World
 
     // Spawn a minimal object (a Transform at the given position) and return its uuid. The object appears
     // on connected clients after the current tick. Hand the returned uuid to tryGetTransform to drive it.
-    // For an object with models/colliders/scripts, save it as a prefab and use spawnPrefab.
+    // For an object with models/colliders/scripts, save it as a prefab and use spawnPrefab. Returns "" and
+    // spawns nothing when the scene is not running (for example from a constructor in the editor before Play).
     public static string spawn(string name, float x, float y, float z)
     {
         var namePtr = Marshal.StringToCoTaskMemUTF8(name);
@@ -237,7 +238,8 @@ public static unsafe class World
 
     // Spawn a prefab asset - its whole object subtree, with fresh uuids - with the root at the given
     // position, and return the root's uuid. Returns "" when prefabUuid isn't a registered prefab or its
-    // body is malformed (the spawn is skipped and the server logs it; nothing throws). The prefab's asset
+    // body is malformed (the spawn is skipped and the server logs it; nothing throws), and when the scene is
+    // not running (for example from a constructor in the editor before Play). The prefab's asset
     // uuid is the one shown by the editor's asset browser.
     public static string spawnPrefab(string prefabUuid, float x, float y, float z)
     {

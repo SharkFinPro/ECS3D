@@ -1,6 +1,7 @@
 #include "ScriptSystemTestFixtures.h"
 
 #include "ComponentRegistry.h"
+#include "WorldBindings.h"
 #include "scenes/SceneAsset.h"
 
 #include <cstddef>
@@ -426,5 +427,50 @@ namespace {
     {
       EXPECT_NE(sceneObjects().getObjectByUUID(object->getUUID()), nullptr) << id(object);
     }
+  }
+
+  TEST_F(ScriptSpawnDuringLifecycleTest, BindingSpawnFromStopOnAStoppedSceneLeavesTheAuthoredTreeAlone)
+  {
+    addScriptedObjects();
+    const auto serializedBefore = sceneObjects().serialize();
+    std::size_t hookCalls = 0;
+    state.stopHook = [&hookCalls](const std::string&, const std::string&)
+    {
+      ++hookCalls;
+      (void)WorldBindingsProvider::getBindings().spawnObject("Leak", 0, 0, 0);
+    };
+
+    ASSERT_FALSE(sceneObjects().isStarted());
+    scriptSystem.attachAll(*spawnScene);
+    scriptSystem.stop(*spawnScene);
+
+    EXPECT_EQ(hookCalls, scripted.size());
+    EXPECT_TRUE(sceneObjects().getPendingAdditions().empty());
+    EXPECT_EQ(sceneObjects().getAllObjects().size(), sizeBefore);
+    EXPECT_TRUE(BindingContext::takeSpawned().empty());
+
+    sceneObjects().flushPendingAdditions();
+    EXPECT_EQ(sceneObjects().getAllObjects().size(), sizeBefore);
+    EXPECT_EQ(sceneObjects().serialize(), serializedBefore);
+  }
+
+  TEST_F(ScriptSpawnDuringLifecycleTest, BindingSpawnFromStopOnARunningSceneIsPending)
+  {
+    addScriptedObjects();
+    std::size_t hookCalls = 0;
+    state.stopHook = [&hookCalls](const std::string&, const std::string&)
+    {
+      ++hookCalls;
+      (void)WorldBindingsProvider::getBindings().spawnObject("Leak", 0, 0, 0);
+    };
+
+    spawnScene->start();
+    scriptSystem.start(*spawnScene);
+    scriptSystem.stop(*spawnScene);
+
+    EXPECT_EQ(hookCalls, scripted.size());
+    EXPECT_EQ(sceneObjects().getPendingAdditions().size(), scripted.size());
+    EXPECT_EQ(sceneObjects().getAllObjects().size(), sizeBefore);
+    EXPECT_EQ(BindingContext::takeSpawned().size(), scripted.size());
   }
 }
