@@ -189,7 +189,9 @@ void AssetInspector::displayHeader(const AssetRecord& record)
   ImGui::Spacing();
 
   gc::rowLabel("UUID");
-  ImGui::TextColored(theme::t3, "%s", uuids::to_string(record.uuid).c_str());
+  ImGui::PushStyleColor(ImGuiCol_Text, theme::t3);
+  ImGui::TextWrapped("%s", uuids::to_string(record.uuid).c_str());
+  ImGui::PopStyleColor();
 
   // Scenes and prefabs have no file on disk (their `path` holds the display name), so only the file-backed
   // types show a source path.

@@ -97,7 +97,10 @@ void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
     // Two scenes cannot share a display name - it is the AssetRegistry key a scene is looked up and
     // selected by - so resolve a collision here, before that key is derived, rather than letting the
     // second scene silently drop from the registry.
-    if (auto uniqueName = m_sceneManager->uniqueSceneName(scene->getUUID(), scene->getName());
+    if (auto uniqueName = m_sceneManager->uniqueSceneName(scene->getUUID(), scene->getName(),
+          [&](const std::string& candidate) {
+            return m_assetRegistry->isPathOwnedByOther(candidate, scene->getUUID());
+          });
         uniqueName != scene->getName())
     {
       scene->setName(std::move(uniqueName));

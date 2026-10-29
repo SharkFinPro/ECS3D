@@ -169,6 +169,12 @@ const AssetRecord* AssetRegistry::getByPath(const std::string& path) const
   return getByUUID(pathIt->second);
 }
 
+bool AssetRegistry::isPathOwnedByOther(const std::string& path, const uuids::uuid& self) const
+{
+  const auto* owner = getByPath(path);
+  return owner && owner->uuid != self;
+}
+
 const std::unordered_map<uuids::uuid, AssetRecord>& AssetRegistry::getAssets() const
 {
   return m_assets;

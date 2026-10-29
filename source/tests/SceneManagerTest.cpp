@@ -139,6 +139,31 @@ TEST(SceneManager, ResumingFromPauseDoesNotRestartTheRun)
   EXPECT_EQ(collider->getLocalScale(), glm::vec3(4));
 }
 
+TEST(SceneManager, PausingAStoppedSceneIsRefusedSoTheNextRunStillSnapshots)
+{
+  const auto componentRegistry = makeRegistry();
+
+  std::shared_ptr<BoxCollider> collider;
+  SceneManager sceneManager;
+  const auto scene = makeScene(firstUUID, "Main", componentRegistry, &collider);
+  sceneManager.addScene(scene);
+  sceneManager.loadScene(scene);
+
+  sceneManager.pauseScene();
+  EXPECT_EQ(sceneManager.getSceneStatus(), SceneStatus::stopped);
+
+  sceneManager.startScene();
+  collider->setScale(glm::vec3(4));
+  sceneManager.resetScene();
+
+  EXPECT_EQ(sceneManager.getSceneStatus(), SceneStatus::stopped);
+  EXPECT_EQ(collider->getLocalScale(), glm::vec3(1));
+
+  sceneManager.startScene();
+  sceneManager.pauseScene();
+  EXPECT_EQ(sceneManager.getSceneStatus(), SceneStatus::paused);
+}
+
 TEST(SceneManager, SwitchingScenesStopsTheOutgoingOne)
 {
   const auto componentRegistry = makeRegistry();
@@ -282,6 +307,20 @@ TEST(SceneManager, UniqueSceneNameDoesNotRenameTheSameSceneItAlreadyOwns)
   // Re-checking the name a scene already holds, by its own uuid, must not be treated as a collision
   // with itself - otherwise a snapshot that re-registers every scene would rename them forever.
   EXPECT_EQ(sceneManager.uniqueSceneName(firstUUID, "Level"), "Level");
+}
+
+TEST(SceneManager, UniqueSceneNameSkipsANameTheExtraPredicateRejects)
+{
+  const auto componentRegistry = makeRegistry();
+
+  SceneManager sceneManager;
+  sceneManager.addScene(makeScene(firstUUID, "Main", componentRegistry));
+
+  const auto taken = [](const std::string& name) { return name == "Level" || name == "Level (2)"; };
+
+  EXPECT_EQ(sceneManager.uniqueSceneName(secondUUID, "Level", taken), "Level (3)");
+  // Positive control: a name the predicate does not reject is kept.
+  EXPECT_EQ(sceneManager.uniqueSceneName(secondUUID, "Other", taken), "Other");
 }
 
 TEST(SceneManager, UniqueSceneNameFallsBackForAnEmptyName)
