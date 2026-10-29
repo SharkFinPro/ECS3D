@@ -110,6 +110,14 @@ public class LauncherHostingTests
     }
 
     public void Host(Project project) => Main.HostProjectCommand.Execute(project);
+
+    // A notice that has nothing to do with hosting.
+    public void ShowUnrelatedToast()
+    {
+      _launcher.Files.FailWrites = true;
+      Main.Settings.EditorConsole = true;
+      _launcher.Files.FailWrites = false;
+    }
   }
 
   [Fact]
@@ -791,5 +799,49 @@ public class LauncherHostingTests
     rig.Main.Prompt!.ConfirmCommand.Execute(null);
 
     Assert.Equal(1, closed);
+  }
+
+  [Fact]
+  public void AHostingFailureToastClearsWhenALaterHostSucceeds()
+  {
+    var rig = new Rig();
+    rig.Probe.Accepts = true;
+    rig.Host(Alpha);
+    Assert.Contains("already in use", rig.Toast);
+    Assert.False(rig.Hosting.IsHosting);
+
+    rig.Probe.Accepts = false;
+    rig.ListenAfterFirstWait();
+    rig.Host(Alpha);
+
+    Assert.True(rig.Hosting.IsHosting);
+    Assert.Null(rig.Toast);
+    Assert.False(rig.Main.HasToast);
+  }
+
+  [Fact]
+  public void AToastAboutSomethingElseSurvivesASuccessfulHost()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.ShowUnrelatedToast();
+    var message = rig.Toast;
+    Assert.NotNull(message);
+
+    rig.Host(Alpha);
+
+    Assert.True(rig.Hosting.IsHosting);
+    Assert.Equal(message, rig.Toast);
+  }
+
+  [Fact]
+  public void AHostedServerThatExitsOnItsOwnKeepsItsToast()
+  {
+    var rig = new Rig().ListenAfterFirstWait();
+    rig.Host(Alpha);
+
+    rig.Runner.Processes[0].Exit(1);
+
+    Assert.False(rig.Hosting.IsHosting);
+    Assert.Contains("The hosted server exited with code 1", rig.Toast);
   }
 }

@@ -34,13 +34,14 @@ public abstract class NewProjectFixture
   internal ProjectCreator NewCreator() => new(_files, _rig.Log, NextUuid);
 
   // The manifest goes to the catalog's file system and the files to be copied to the creator's.
-  internal TemplateEntry AddTemplate(string id, string name, string minEngine = "0.0.1")
+  internal TemplateEntry AddTemplate(string id, string name, string minEngine = "0.0.1", string? templatesFolder = null)
   {
-    var folder = Path.Combine(Templates, id);
+    templatesFolder ??= Templates;
+    var folder = Path.Combine(templatesFolder, id);
     var json = "{\"id\":\"" + id + "\",\"name\":\"" + name + "\",\"description\":\"About " + name
       + "\",\"category\":\"template\",\"tags\":[],\"thumbnail\":\"thumbnail.png\",\"entryScene\":\"Main\","
       + "\"minEngineVersion\":\"" + minEngine + "\"}";
-    _rig.Files.AddDirectory(Templates);
+    _rig.Files.AddDirectory(templatesFolder);
     _rig.Files.AddDirectory(folder);
     _rig.Files.Seed(Path.Combine(folder, "template.json"), json);
     _files.Seed(Path.Combine(folder, "template.json"), json);

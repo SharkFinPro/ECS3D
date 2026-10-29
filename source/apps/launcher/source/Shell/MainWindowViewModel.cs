@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -67,6 +68,9 @@ public class MainWindowViewModel : ObservableObject
     private string _searchText = "";
     private string? _toastMessage;
     private string? _toastLogPath;
+    private NoticeTopic _toastTopic;
+    private CancellationTokenSource? _toastTimer;
+    private int _toastGeneration;
     private ConfirmPromptViewModel? _prompt;
     private ConfirmPromptViewModel? _quitPrompt;
     private bool _quitApproved;
@@ -99,6 +103,7 @@ public class MainWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(ShowSearch));
             OnPropertyChanged(nameof(ShowViewToggle));
             OnPropertyChanged(nameof(ShowOpenExisting));
+            OnPropertyChanged(nameof(ShowBannerSettingsButton));
         }
     }
 
@@ -127,6 +132,9 @@ public class MainWindowViewModel : ObservableObject
     // Re-located when the Settings tab changes the engine folder.
     public string? EngineBannerText => _engine.Describe();
     public bool HasEngineBanner => EngineBannerText is not null;
+
+    // The banner points at Settings, which is no help while that tab is showing.
+    public bool ShowBannerSettingsButton => LauncherTabs.Parse(ActiveNav) != LauncherTab.Settings;
 
     public string? ToastMessage
     {
@@ -234,6 +242,12 @@ public class MainWindowViewModel : ObservableObject
     public Action? CloseWindow { get; set; }
 
     public Action? MinimizeWindow { get; set; }
+
+    // How long a toast stays before it dismisses itself.
+    public static readonly TimeSpan ToastTimeout = TimeSpan.FromSeconds(15);
+
+    // The pause behind the toast timeout; cancelled when the toast is dismissed or replaced.
+    public Func<TimeSpan, CancellationToken, Task> ToastDelay { get; set; } = Task.Delay;
 
     // How long the New Project dialog waits after an edit before it looks at the disk.
     public Func<TimeSpan, Task> NewProjectCheckDelay { get; set; } = span => Task.Delay(span);
@@ -496,7 +510,8 @@ public class MainWindowViewModel : ObservableObject
             _post,
             ShowNotice,
             Ask,
-            () => ActiveNav = "settings");
+            () => ActiveNav = "settings",
+            topic => _post(() => ClearToast(topic)));
         Hosting.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(HostingViewModel.IsPanelOpen))
@@ -598,6 +613,10 @@ public class MainWindowViewModel : ObservableObject
         _templatesFolder = contents.TemplatesFolder;
         Templates.Reload(contents);
         Samples.Reload(contents);
+        if (contents.Templates.Count > 0)
+        {
+            ClearToast(NoticeTopic.Templates);
+        }
     }
 
     // ----- Derived view state: the header table, per tab -----
@@ -961,7 +980,8 @@ public class MainWindowViewModel : ObservableObject
             ApplyNotice(EarlyExitNotice.Failure(
                 Templates.IsEmpty
                     ? $"No project templates were found in {_templatesFolder}. Check the engine's templates folder."
-                    : "Every template needs a newer engine than this launcher belongs to."));
+                    : "Every template needs a newer engine than this launcher belongs to.",
+                Templates.IsEmpty ? NoticeTopic.Templates : NoticeTopic.None));
             return;
         }
 
@@ -1147,16 +1167,66 @@ public class MainWindowViewModel : ObservableObject
 
     private void ApplyNotice(LaunchNotice notice)
     {
+        _toastTopic = notice.Topic;
         ToastLogPath = notice.LogPath;
         ToastMessage = notice.Message;
         OpenLogsCommand.NotifyCanExecuteChanged();
+        StartToastTimer();
     }
 
     private void DismissToast()
     {
+        CancelToastTimer();
+        _toastTopic = NoticeTopic.None;
         ToastMessage = null;
         ToastLogPath = null;
         OpenLogsCommand.NotifyCanExecuteChanged();
+    }
+
+    // A toast about something else, or one raised after the event, stays.
+    private void ClearToast(NoticeTopic topic)
+    {
+        if (HasToast && _toastTopic == topic)
+        {
+            DismissToast();
+        }
+    }
+
+    private void StartToastTimer()
+    {
+        CancelToastTimer();
+        var timer = new CancellationTokenSource();
+        _toastTimer = timer;
+        _ = DismissAfterTimeoutAsync(++_toastGeneration, timer.Token);
+    }
+
+    private void CancelToastTimer()
+    {
+        _toastGeneration++;
+        _toastTimer?.Cancel();
+        _toastTimer?.Dispose();
+        _toastTimer = null;
+    }
+
+    // The generation check drops a timer that finished after its toast was replaced or dismissed.
+    private async Task DismissAfterTimeoutAsync(int generation, CancellationToken token)
+    {
+        try
+        {
+            await ToastDelay(ToastTimeout, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        _post(() =>
+        {
+            if (generation == _toastGeneration)
+            {
+                DismissToast();
+            }
+        });
     }
 
     private async Task OpenLogsAsync()

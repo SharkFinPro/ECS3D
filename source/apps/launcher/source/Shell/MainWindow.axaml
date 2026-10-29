@@ -267,7 +267,8 @@
                                    VerticalAlignment="Center" />
                         <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
                                 Content="Open Settings" Margin="14,0,0,0"
-                                Command="{Binding OpenSettingsCommand}" />
+                                Command="{Binding OpenSettingsCommand}"
+                                IsVisible="{Binding ShowBannerSettingsButton}" />
                     </Grid>
                 </Border>
 
