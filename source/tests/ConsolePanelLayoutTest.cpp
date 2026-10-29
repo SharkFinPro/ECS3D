@@ -3,23 +3,23 @@
 #include <vector>
 
 namespace {
-  // Lays items out left to right the way ConsolePanel does and returns how many land on each line.
+  // Lays items out left to right with the panel's placement rule and returns how many land on each line.
   std::vector<int> lineCounts(const std::vector<float>& widths, const float gap, const float avail)
   {
     std::vector<int> counts;
     float used = 0.0f;
     for (const float width : widths)
     {
-      if (counts.empty() || !fitsOnLine(used, gap, width, avail))
+      const auto placement = placeOnLine(used, gap, width, avail);
+      if (placement.sameLine)
       {
-        counts.push_back(1);
-        used = width;
+        ++counts.back();
       }
       else
       {
-        ++counts.back();
-        used += gap + width;
+        counts.push_back(1);
       }
+      used = placement.usedWidth;
     }
     return counts;
   }
@@ -27,13 +27,20 @@ namespace {
 
 TEST(ConsolePanelLayoutTest, FirstItemOnALineAlwaysFits)
 {
-  EXPECT_TRUE(fitsOnLine(0.0f, 16.0f, 900.0f, 100.0f));
+  const auto placement = placeOnLine(0.0f, 16.0f, 900.0f, 100.0f);
+  EXPECT_FALSE(placement.sameLine);
+  EXPECT_EQ(placement.usedWidth, 900.0f);
 }
 
 TEST(ConsolePanelLayoutTest, ItemFitsWhenGapAndWidthStayWithinAvailable)
 {
-  EXPECT_TRUE(fitsOnLine(100.0f, 16.0f, 84.0f, 200.0f));
-  EXPECT_FALSE(fitsOnLine(100.0f, 16.0f, 85.0f, 200.0f));
+  const auto fits = placeOnLine(100.0f, 16.0f, 84.0f, 200.0f);
+  EXPECT_TRUE(fits.sameLine);
+  EXPECT_EQ(fits.usedWidth, 200.0f);
+
+  const auto wraps = placeOnLine(100.0f, 16.0f, 85.0f, 200.0f);
+  EXPECT_FALSE(wraps.sameLine);
+  EXPECT_EQ(wraps.usedWidth, 85.0f);
 }
 
 TEST(ConsolePanelLayoutTest, NarrowPanelWrapsInsteadOfRunningPastTheEdge)

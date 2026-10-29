@@ -13,12 +13,6 @@
 namespace {
   constexpr const char* windowName = "Console";
 
-  // Matches the box plus label width gc::accentCheckboxCompact lays out.
-  float checkboxWidth(const char* label)
-  {
-    return 17.0f + 8.0f + ImGui::CalcTextSize(label).x;
-  }
-
   // The color a row is drawn in, by level - error/warn stand out, debug/trace recede.
   const ImVec4& colorForLevel(const LogLevel level)
   {
@@ -120,20 +114,12 @@ void ConsolePanel::displayFilterRow()
   // The search field fills its line, so toggles start on the next one and wrap at the panel's edge.
   const auto toggle = [&](const char* label, bool& value, const float gap)
   {
-    const float width = checkboxWidth(label);
-    if (fitsOnLine(usedWidth, gap, width, availWidth))
+    const auto placement = placeOnLine(usedWidth, gap, gc::accentCheckboxCompactWidth(label), availWidth);
+    if (placement.sameLine)
     {
-      if (usedWidth > 0.0f)
-      {
-        ImGui::SameLine(0.0f, gap);
-        usedWidth += gap;
-      }
-      usedWidth += width;
+      ImGui::SameLine(0.0f, gap);
     }
-    else
-    {
-      usedWidth = width;
-    }
+    usedWidth = placement.usedWidth;
 
     bool selected = value;
     if (gc::accentCheckboxCompact(label, &selected))
