@@ -45,10 +45,11 @@
   (named after it, the same `ProjectCreator` copy a template gets, always available) and records the sample's id, so
   the shipped folder is never edited. A multiplayer sample (`players.max` above 1) also has a Host button that
   hosts the shipped folder in place through the same flow as a project card's Host a game....
-  Hosting is real: a project card's "Host a game..." starts `ECS3DServer` through `HostSession` (after asking whether to
-  stop a game that is already running), opens the hosting panel (running time, `address : port` rows with Copy, firewall
-  note, Open another game window, Stop server, Hide) and shows a green pill naming the hosted project in the sidebar that
-  reopens it. A server that exits on its own closes the panel and toasts the code and `server.log`. Closing the window
+  Hosting is real: a project card's "Host a game..." starts `ECS3DServer` through `HostSession`, after asking whether to
+  stop a game that is already running. Once the server listens, `HostSession` opens a game window joined to it; a window
+  that fails to start leaves the server running. The launcher then opens the hosting panel (running time,
+  `address : port` rows with Copy, firewall note, Open another game window, Stop server, Hide) and shows a green pill
+  naming the hosted project in the sidebar that reopens it. A server that exits on its own closes the panel and toasts the code and `server.log`. Closing the window
   by the title-bar button or Alt+F4 while a game is hosted or starting asks first (`MainWindowViewModel.RequestClose`,
   called from the window's `OnClosing`): Stop server and quit, or Keep hosting, which minimizes; Escape leaves the
   window as it is. When the OS or the application is shutting down there is no one to ask, so the server is stopped
