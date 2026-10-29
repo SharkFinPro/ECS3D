@@ -43,8 +43,9 @@ object instead (still immediately parented/started/`getObjectByUUID`-able) and `
 splices it into `m_allObjects`/`m_objects` once the pass ends - called from `ServerApp::
 broadcastStructuralChanges` at the same point `deleteObjectsMarkedForDeletion` drains a removal, so a
 script-spawned object joins the scene the same way a script-destroyed one leaves it: after the pass, not
-mid-iteration. The spawn bindings refuse while the `ObjectManager` is not started, so attach (constructor) and
-stop passes on a stopped scene can never add to the authored tree; (3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
+mid-iteration. The spawn bindings refuse while the `ObjectManager` is not started (a stopped scene; a paused
+one stays started), so a constructor or `stop()` on a stopped scene cannot add to the authored tree;
+(3) **sim→script events cross at the app, as plain data.** `CollisionSystem` records each tick's colliding
 pairs and diffs them into enter/stay/exit uuid-pair lists; `ServerApp` hands those to
 `ScriptSystem::dispatchCollisionEvent` (→ `onCollisionEnter/Stay/Exit` script virtuals) after the collision
 pass — the same "buffer plain data, let the app carry it" shape as pending forces, so `sim` does not link

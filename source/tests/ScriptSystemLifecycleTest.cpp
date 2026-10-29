@@ -431,6 +431,9 @@ namespace {
 
   TEST_F(ScriptSpawnDuringLifecycleTest, BindingSpawnFromStopOnAStoppedSceneLeavesTheAuthoredTreeAlone)
   {
+    // The spawn buffer is static, so a spawn another test left undrained must not count here.
+    [[maybe_unused]] const auto stale = BindingContext::takeSpawned();
+
     addScriptedObjects();
     const auto serializedBefore = sceneObjects().serialize();
     std::size_t hookCalls = 0;
@@ -456,6 +459,9 @@ namespace {
 
   TEST_F(ScriptSpawnDuringLifecycleTest, BindingSpawnFromStopOnARunningSceneIsPending)
   {
+    // The spawn buffer is static, so a spawn another test left undrained must not count here.
+    [[maybe_unused]] const auto stale = BindingContext::takeSpawned();
+
     addScriptedObjects();
     std::size_t hookCalls = 0;
     state.stopHook = [&hookCalls](const std::string&, const std::string&)
