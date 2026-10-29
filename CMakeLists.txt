@@ -36,7 +36,8 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   # compile_commands.json, which is what gives clangd and the IDEs navigation across the whole tree, and
   # what clang-tidy would read if it is ever wired up. Only meaningful for the generators that emit it
   # (Ninja and Makefiles), and harmless elsewhere. Not forced: a build that asked for it off keeps it off.
-  if (NOT DEFINED CMAKE_EXPORT_COMPILE_COMMANDS)
+  # Those generators create the cache entry empty before this point, so empty counts as not asked.
+  if ("${CMAKE_EXPORT_COMPILE_COMMANDS}" STREQUAL "")
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
   endif()
 

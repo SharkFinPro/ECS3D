@@ -67,6 +67,9 @@ expression is set, since one skipped case would mark the whole suite skipped and
 (`cmake/RegisterTestSuitesTest.cmake`), including hostile comments, CRLF line endings and malformed input, so the
 parser is proven by the ordinary builds too.
 
+`ECS3DCompileCommandsExported` checks that `compile_commands.json` exists in the build directory. It registers only
+when the export is enabled and the generator is Ninja or Unix Makefiles.
+
 ## Managed suite
 
 Managed tests (`source/tests/managed/`) build as `ECS3DManagedTests`, an xUnit project registered

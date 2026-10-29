@@ -7,7 +7,8 @@ and update it in the same change when that behavior moves.
 
 Top-level config: C++23, `bin/` output (executables and shared libraries) when top-level, `compile_commands.json`, `include(CTest)`, the
 `ECS3D_SANITIZE`, `ECS3D_COVERAGE` and `ECS3D_PROFILE` options, `CMAKE_CXX_SCAN_FOR_MODULES` off by default,
-MSVC (the Microsoft Visual C++ compiler) export-all-symbols. Then `add_subdirectory(source)`.
+MSVC (the Microsoft Visual C++ compiler) export-all-symbols. `compile_commands.json` is exported by default for the
+Ninja and Makefile generators, and an explicit false value such as `-DCMAKE_EXPORT_COMPILE_COMMANDS=OFF` opts out. Then `add_subdirectory(source)`.
 
 Module scanning is off (`CMAKE_CXX_SCAN_FOR_MODULES`, root `CMakeLists.txt`). Nothing uses C++20
 modules, and on MSVC the scan cost about an eighth of a clean build.
