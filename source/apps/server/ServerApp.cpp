@@ -180,35 +180,37 @@ bool ServerApp::isActive() const
 
 void ServerApp::drainNetwork()
 {
-  net::Message message;
-  int32_t senderId = 0;
-  while (m_netServer->poll(message, senderId))
-  {
-    // A bad/malicious message (or a script-bridge hiccup while building a snapshot) must not take the
-    // whole server down - that would look like "client connected, then nothing".
-    try
+  drainInboxThenDisconnects<net::Message>(
+    [this] { return m_netServer->takeDisconnected(); },
+    [this](net::Message& message, int32_t& senderId) { return m_netServer->poll(message, senderId); },
+    [this](const net::Message& message, const int32_t senderId)
     {
-      handleClientMessage(message, senderId);
-    }
-    catch (const std::exception& e)
+      // A bad/malicious message (or a script-bridge hiccup while building a snapshot) must not take the
+      // whole server down - that would look like "client connected, then nothing".
+      try
+      {
+        handleClientMessage(message, senderId);
+      }
+      catch (const std::exception& e)
+      {
+        Log::error(LogCategory::server, std::string("Failed to handle client message: ") + e.what());
+      }
+    },
+    [this](const int32_t connId)
     {
-      Log::error(LogCategory::server, std::string("Failed to handle client message: ") + e.what());
-    }
-  }
+      // Release the player slot of any connection that dropped, so a departed player's input doesn't linger
+      // and its slot is free for the next joiner.
+      m_netServer->revokeEditor(connId);
 
-  // Release the player slot of any connection that dropped, so a departed player's input doesn't linger
-  // and its slot is free for the next joiner.
-  for (const auto connId : m_netServer->takeDisconnected())
-  {
-    try
-    {
-      handleDisconnect(connId);
-    }
-    catch (const std::exception& e)
-    {
-      Log::error(LogCategory::server, std::string("Failed to handle disconnect: ") + e.what());
-    }
-  }
+      try
+      {
+        handleDisconnect(connId);
+      }
+      catch (const std::exception& e)
+      {
+        Log::error(LogCategory::server, std::string("Failed to handle disconnect: ") + e.what());
+      }
+    });
 }
 
 void ServerApp::run()

@@ -35,23 +35,16 @@ void EditorConnections::enqueueDisconnect(const int32_t connId)
 
 std::vector<int32_t> EditorConnections::takeDisconnected()
 {
-  std::vector<int32_t> disconnected;
-  {
-    std::lock_guard lock(m_disconnectMutex);
-    disconnected = std::exchange(m_disconnected, {});
-  }
+  std::lock_guard lock(m_disconnectMutex);
+  return std::exchange(m_disconnected, {});
+}
 
+void EditorConnections::revokeEditor(const int32_t connId)
+{
   // Connection ids are never reused (both transport backends assign them via Interlocked.Increment),
   // so a deferred erase cannot let a new connection inherit a stale editor entry.
-  {
-    std::lock_guard lock(m_editorMutex);
-    for (const auto connId : disconnected)
-    {
-      m_editorConnections.erase(connId);
-    }
-  }
-
-  return disconnected;
+  std::lock_guard lock(m_editorMutex);
+  m_editorConnections.erase(connId);
 }
 
 }

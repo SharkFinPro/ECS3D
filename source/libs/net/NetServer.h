@@ -54,11 +54,17 @@ public:
   void enqueue(int32_t connId, uint8_t type, const uint8_t* data, int32_t len);
 
   // Called from the C# socket thread when a connection drops; the connId is buffered for the tick thread
-  // to drain via takeDisconnected() so it can release the player slot bound to that connection.
+  // to drain via takeDisconnected() so it can release the player slot bound to that connection. A
+  // connection's messages are always enqueued before its disconnect, so the tick thread takes the
+  // disconnects before it drains the inbox and handles them after, never ahead of a message.
   void enqueueDisconnect(int32_t connId);
 
-  // Drain the connection ids that have dropped since the last call (clears the buffer).
+  // Drain the connection ids that have dropped since the last call (clears the buffer). Does not revoke
+  // editor status; the caller calls revokeEditor() once the connection's messages are handled.
   [[nodiscard]] std::vector<int32_t> takeDisconnected();
+
+  // Revokes a dropped connection's editor authorization. A no-op for one that is not an editor.
+  void revokeEditor(int32_t connId);
 
   // Called from the C# socket thread (via the registered native callback), once, right after the
   // transport's TryAuthorizeHandshake() grants a connection its role at the handshake. Records connId as an editor
