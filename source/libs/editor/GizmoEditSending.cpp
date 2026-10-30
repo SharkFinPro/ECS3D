@@ -28,13 +28,20 @@ void GizmoEditSending::apply(const gizmo::Frame& frame, const uuids::uuid& targe
 
   if (frame.local)
   {
-    const auto previous = transform->serialize();
+    // The per-frame edit packs the live values, so change is read from the live getters. Exact equality is
+    // intended: it detects whether the setters wrote anything, not numeric closeness.
+    const auto position = transform->getLocalPosition();
+    const auto rotation = transform->getLocalRotation();
+    const auto scale = transform->getLocalScale();
 
     transform->setPosition(frame.local->position);
     transform->setRotation(frame.local->rotation);
     transform->setScale(frame.local->scale);
 
-    if (m_editCallback && transform->serialize() != previous)
+    const bool changed = transform->getLocalPosition() != position || transform->getLocalRotation() != rotation
+      || transform->getLocalScale() != scale;
+
+    if (m_editCallback && changed)
     {
       m_editCallback(target, transform);
     }

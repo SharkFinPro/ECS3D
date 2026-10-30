@@ -22,6 +22,9 @@ namespace {
     std::vector<std::pair<nlohmann::json, nlohmann::json>> commits;
     std::vector<uuids::uuid> committedTargets;
 
+    Rig(const Rig&) = delete;
+    Rig& operator=(const Rig&) = delete;
+
     Rig()
     {
       object = addObject(scene, "Object");
@@ -108,6 +111,32 @@ TEST(GizmoEditSendingTest, RepeatedPoseSendsNoFrameEditButStillCommitsOnce)
 
   EXPECT_EQ(rig.perFrame.size(), 1u);
   EXPECT_EQ(rig.commits.size(), 1u);
+}
+
+TEST(GizmoEditSendingTest, ReturningToTheStartPoseSendsFrameEditsButNoCommit)
+{
+  Rig rig;
+  const auto start = rig.transform->getLocalPosition();
+
+  rig.frame(start + glm::vec3(1.0f, 0.0f, 0.0f), true);
+  rig.frame(start);
+  rig.frame(start, false, true);
+
+  EXPECT_EQ(rig.perFrame.size(), 2u);
+  EXPECT_TRUE(rig.commits.empty());
+}
+
+TEST(GizmoEditSendingTest, StartAndFinishOnTheSameFrameSendsOneEditAndOneCommit)
+{
+  Rig rig;
+  const auto beforeJson = rig.transform->serialize();
+
+  rig.frame(glm::vec3(2.0f, 0.0f, 0.0f), true, true);
+
+  EXPECT_EQ(rig.perFrame.size(), 1u);
+  ASSERT_EQ(rig.commits.size(), 1u);
+  EXPECT_EQ(rig.commits[0].first, beforeJson);
+  EXPECT_EQ(rig.commits[0].second, rig.transform->serialize());
 }
 
 TEST(GizmoEditSendingTest, AbandoningAfterMovementCommitsOnce)

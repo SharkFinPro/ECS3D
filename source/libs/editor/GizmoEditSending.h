@@ -13,8 +13,9 @@ class Transform;
 
 // Turns the viewport gizmo's drag frames into edits, the way the Inspector reports a slider drag: a per-frame
 // edit while the Transform changes, and one committed before/after edit once the drag ends. A drag that never
-// changed the Transform, such as a click on a handle, sends nothing. Changed means Transform::serialize()
-// differs, the same comparison EditorApp uses to drop a no-op committed edit.
+// changed the Transform, such as a click on a handle, sends nothing. Changed means the live local pose
+// differs for a per-frame edit, and Transform::serialize() differs for a commit (the comparison EditorApp uses to
+// drop a no-op committed edit).
 class GizmoEditSending {
 public:
   using EditCallback = std::function<void(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)>;
