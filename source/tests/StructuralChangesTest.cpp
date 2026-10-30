@@ -87,33 +87,40 @@ namespace {
           events.emplace_back("takeChanged");
           return takeFrom(changed);
         },
-        [this](const net::Message& message)
-        {
-          net::MessageReader reader(message);
-          const auto id = uuids::uuid::from_string(reader.readString());
-          events.push_back(typeName(message.getType()));
-          if (!id.has_value())
-          {
-            ADD_FAILURE() << "broadcast " << events.back() << " does not lead with a uuid string";
-            return;
-          }
-
-          sent.emplace_back(message.getType(), id.value());
-          if (onBroadcast)
-          {
-            onBroadcast(message);
-          }
-        },
+        [this](const net::Message& message) { recordBroadcast(message); },
         [this](const std::vector<uuids::uuid>& spawnedUUIDs, const std::vector<uuids::uuid>& destroyedUUIDs)
         {
-          events.push_back(notifyState ? "notify(" + notifyState() + ")" : "notify");
-          notifiedSpawned = spawnedUUIDs;
-          notifiedDestroyed = destroyedUUIDs;
-          if (onNotify)
-          {
-            onNotify();
-          }
+          recordNotify(spawnedUUIDs, destroyedUUIDs);
         });
+    }
+
+    void recordBroadcast(const net::Message& message)
+    {
+      net::MessageReader reader(message);
+      const auto id = uuids::uuid::from_string(reader.readString());
+      events.push_back(typeName(message.getType()));
+      if (!id.has_value())
+      {
+        ADD_FAILURE() << "broadcast " << events.back() << " does not lead with a uuid string";
+        return;
+      }
+
+      sent.emplace_back(message.getType(), id.value());
+      if (onBroadcast)
+      {
+        onBroadcast(message);
+      }
+    }
+
+    void recordNotify(const std::vector<uuids::uuid>& spawnedUUIDs, const std::vector<uuids::uuid>& destroyedUUIDs)
+    {
+      events.push_back(notifyState ? "notify(" + notifyState() + ")" : "notify");
+      notifiedSpawned = spawnedUUIDs;
+      notifiedDestroyed = destroyedUUIDs;
+      if (onNotify)
+      {
+        onNotify();
+      }
     }
 
     [[nodiscard]] std::vector<net::MessageType> sentTypes() const
