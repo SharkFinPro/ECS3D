@@ -201,6 +201,13 @@ const char* WorldBindingsProvider::bindSpawnObject(const char* name, const float
     return store("");
   }
 
+  // A stopped scene's tree is the authored one, so a spawn from a constructor or stop() there would be saved.
+  if (!objectManager->isStarted())
+  {
+    Log::warn(LogCategory::script, "World.spawnObject ignored: the scene is not running.");
+    return store("");
+  }
+
   // The default Object ctor already attaches a Transform. addObject assigns the manager + a fresh uuid,
   // and starts the newborn - a script only runs while the scene is running, so its transform is
   // positioned below with live component state rather than the stopped values physics would read.
@@ -224,6 +231,13 @@ const char* WorldBindingsProvider::bindSpawnPrefab(const char* prefabUuid, const
   const auto assetRegistry = BindingContext::getAssetRegistry();
   if (!objectManager || !assetRegistry || !prefabUuid)
   {
+    return store("");
+  }
+
+  // A stopped scene's tree is the authored one, so a spawn from a constructor or stop() there would be saved.
+  if (!objectManager->isStarted())
+  {
+    Log::warn(LogCategory::script, "World.spawnPrefab ignored: the scene is not running.");
     return store("");
   }
 

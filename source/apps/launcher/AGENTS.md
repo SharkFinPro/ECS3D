@@ -50,7 +50,13 @@
   that fails to start leaves the server running and toasts the error. The launcher then opens the hosting panel
   (running time, `address : port` rows with Copy, firewall note, Open another game window, Stop server, Hide) and shows
   a green pill naming the hosted project in the sidebar that reopens it.
-  A server that exits on its own closes the panel and toasts the code and `server.log`. Closing the window
+  A server that exits on its own closes the panel and toasts the code and `server.log`.
+  The toast is one slot. One without a log link dismisses itself after 15 seconds (`ToastDelay` is the injectable
+  pause; a newer notice restarts it, a manual dismiss cancels it); one with an Open logs link stays until dismissed.
+  A `LaunchNotice` may carry a `NoticeTopic`: a Hosting failure toast clears when a later host starts listening, and
+  the no-templates toast clears when a catalog reload finds templates. A toast of another topic stays. The toast
+  is an assertive live region for screen readers. The engine banner hides its Open Settings button while
+  the Settings tab is active. Closing the window
   by the title-bar button or Alt+F4 while a game is hosted or starting asks first (`MainWindowViewModel.RequestClose`,
   called from the window's `OnClosing`): Stop server and quit, or Keep hosting, which minimizes; Escape leaves the
   window as it is. When the OS or the application is shutting down there is no one to ask, so the server is stopped
@@ -143,10 +149,12 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   which breaks sibling navigation for the whole window. `LauncherJoinDialogViewTests` pins it for the Join dialog.
 - **Code-loaded brushes:** where a bound brush won't inherit the item `DataContext` (e.g. gradient stops),
   build the brush in the model instead of XAML — see `Project.GlowBrush` for the pattern and the why.
-- **The New Project dialog's wrapped text sets an explicit `LineHeight`.** At 125% display scale a font-derived
-  line height made Avalonia drop the last wrapped line.
-  Its target preview is one line that trims in the middle (`PathSegmentEllipsis`) with a tooltip. Avalonia draws no
-  ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full instead.
+- **Every wrapped `TextBlock` sets an explicit `LineHeight`** (a `Style` that sets `TextWrapping` to `Wrap` sets it
+  too). At 125% display scale a font-derived line height made Avalonia drop the last wrapped line. Use 16-18 for
+  font size 12 and 18 for 12.5-13. `LauncherWrappedTextTests` pins it for every `.axaml` file.
+- **The New Project dialog's target preview** is one line that trims in the middle (`PathSegmentEllipsis`) with a
+  tooltip. Avalonia draws no ellipsis where `MaxLines` cuts wrapped text, so card and dialog descriptions wrap in full
+  instead.
 - **`EmptyState.Detail`** is the line under the heading; the Templates and Samples view models set it to null while a
   search has no hits, which hides it.
 

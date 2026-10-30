@@ -57,7 +57,7 @@ public class LauncherTemplatesTabTests
       loadThumbnail ?? (_ => null),
       version,
       action => action(),
-      () => _rig.Time.Now);
+      () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Templates.VisibleTemplates.Select(card => card.Name).ToArray();

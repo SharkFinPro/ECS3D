@@ -31,7 +31,7 @@ public class LauncherLearnTabTests
       _ => null,
       "1.2.3",
       action => action(),
-      () => _rig.Time.Now);
+      () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
 
   private static string[] Titles(MainWindowViewModel model) => model.Learn.Guides.Select(item => item.Title).ToArray();
 

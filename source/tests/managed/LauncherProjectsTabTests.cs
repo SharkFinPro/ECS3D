@@ -53,7 +53,7 @@ public class LauncherProjectsTabTests
       action => action(),
       () => _rig.Time.Now,
       new PresentFileSystem(),
-      work => work());
+      work => work()) { ToastDelay = ToastDelays.Never };
 
   private static string[] Names(MainWindowViewModel model) =>
     model.Projects.Projects.Select(project => project.Name).ToArray();

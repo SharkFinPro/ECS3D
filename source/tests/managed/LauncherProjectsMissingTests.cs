@@ -122,7 +122,7 @@ public class LauncherProjectsMissingTests
       },
       () => _rig.Time.Now,
       _tree,
-      runInBackground ?? (work => work()));
+      runInBackground ?? (work => work())) { ToastDelay = ToastDelays.Never };
   }
 
   private static Project Card(MainWindowViewModel model, string name) =>
