@@ -1,5 +1,7 @@
 <Project>
 
+  <Import Project="../../apps/launcher/Version.props" />
+
   <!-- Build-output locations for the managed test project.
 
        These live here (not in ECS3DManagedTests.csproj) for the same reason as the launcher's:

@@ -1,0 +1,9 @@
+<Project>
+
+  <!-- The engine's single version source is the repo-root VERSION file. The launcher reports it in Settings > About,
+       and the Templates tab compares each template's minEngineVersion against it. -->
+  <PropertyGroup>
+    <Version>$([System.IO.File]::ReadAllText('$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', '..', '..', 'VERSION'))').Trim())</Version>
+  </PropertyGroup>
+
+</Project>
