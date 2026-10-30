@@ -8,7 +8,7 @@ forwarded to connected editors rather than only reaching its console window/log 
 a `RemoteLogSink` with `Log` alongside its file/console sinks, but only in edit mode: a play server admits an
 editor without a token, so forwarding there would leak its log. Each `run()` iteration (not gated on a fixed
 tick, so a line still gets out while the scene is stopped/paused) drains it - capped by both entry count and
-an estimated byte size (`RemoteLogSink::drain`'s two limits; a single oversized message is truncated with a
+an estimated byte size (`RemoteLogSink::drain`'s two limits, set in `ServerPolicy.h` with `forwardDrainedLog`; a single oversized message is truncated with a
 marker at `write()` time, so one huge entry can neither dominate the sink's memory nor stall the queue for
 everyone behind it) - and forwards what comes out as a `MessageType::serverLog` (`net::packServerLog`/
 `unpackServerLog`) via `NetServer::sendToEditors`, skipping the send entirely when there is nothing queued

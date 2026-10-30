@@ -1,4 +1,5 @@
 #include "ServerApp.h"
+#include "ServerPolicy.h"
 #include <assets/AssetRegistry.h>
 #include <assets/ScriptClassAssets.h>
 #include <ProjectSerializer.h>
@@ -192,23 +193,11 @@ void ServerApp::forwardLogToEditors() const
     return;
   }
 
-  // Caps what one call can hand to the network, so a log storm costs bounded work per loop iteration
-  // instead of one send sized by however much piled up; anything past either cap is picked up on the
-  // next iteration (or evicted by RemoteLogSink's own capacity first, and counted in `dropped` below).
-  // maxBatchBytes stays well under TransportBackend::MaxMessageBytes (64 MiB) - RemoteLogSink::drain's
-  // estimate is rough, and a batch that actually hit that ceiling would be refused and lost outright
-  // rather than sent short.
-  constexpr std::size_t maxEntriesPerBatch = 200;
-  constexpr std::size_t maxBatchBytes = 256 * 1024;
-
-  const auto drained = m_remoteLogSink->drain(maxEntriesPerBatch, maxBatchBytes);
-  if (drained.entries.empty() && drained.dropped == 0)
-  {
-    return;
-  }
-
   // packServerLog itself never logs, and sendToEditors only does on the pathological oversized-message
   // case (handled by the next drain, not recursively here) - so this cannot feed back into an ever-growing
   // stream of "forwarded a log" entries about itself.
-  m_netServer->sendToEditors(net::packServerLog(drained.entries, drained.dropped));
+  forwardDrainedLog(*m_remoteLogSink, [this](const net::Message& message)
+  {
+    m_netServer->sendToEditors(message);
+  });
 }
