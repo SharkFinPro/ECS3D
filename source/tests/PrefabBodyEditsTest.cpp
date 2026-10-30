@@ -104,6 +104,7 @@ TEST_F(PrefabBodyEditsTest, SelectingAnotherPrefabSendsThePendingEditUnderTheOld
 {
   select(m_bodyA, "pathA");
   moveTo(glm::vec3(4, 5, 6));
+  const auto editedBodyA = m_edits.object()->serialize().dump();
   m_edits.endFrame(true);
   ASSERT_TRUE(m_sent.empty());
 
@@ -112,6 +113,9 @@ TEST_F(PrefabBodyEditsTest, SelectingAnotherPrefabSendsThePendingEditUnderTheOld
   ASSERT_EQ(m_sent.size(), 1u);
   EXPECT_EQ(m_sent[0].uuid, uuidOf(m_bodyA));
   EXPECT_EQ(m_sent[0].name, "pathA");
+  EXPECT_EQ(m_sent[0].body, editedBodyA);
+  EXPECT_NE(m_sent[0].body, m_bodyA);
+  EXPECT_NE(m_sent[0].body, m_bodyB);
   EXPECT_EQ(m_edits.object()->getUUID(), uuidOf(m_bodyB));
   EXPECT_EQ(m_edits.object()->getName(), "B");
 }
@@ -142,4 +146,38 @@ TEST_F(PrefabBodyEditsTest, TheEchoOfASentBodyDoesNotRebuildButADifferentBodyDoe
 
   EXPECT_TRUE(m_edits.select(uuidOf(m_bodyA), "pathA", m_bodyA));
   EXPECT_NE(m_edits.object(), before);
+}
+
+TEST_F(PrefabBodyEditsTest, SettleWithNothingDirtySendsNothing)
+{
+  select(m_bodyA, "pathA");
+  m_edits.settle();
+  EXPECT_TRUE(m_sent.empty());
+
+  moveTo(glm::vec3(3, 3, 3));
+  m_edits.settle();
+  EXPECT_EQ(m_sent.size(), 1u);
+
+  m_edits.settle();
+  EXPECT_EQ(m_sent.size(), 1u);
+}
+
+TEST_F(PrefabBodyEditsTest, SettleDiscardsEditsQueuedBeforeItRunsTheCommitCallback)
+{
+  select(m_bodyA, "pathA");
+  const auto objectUUID = m_edits.object()->getUUID();
+
+  m_edits.queueStructuralEdit(replication::buildRenameObject(objectUUID, "Stale"));
+  m_edits.settle();
+
+  EXPECT_EQ(m_edits.object()->getName(), "A");
+  EXPECT_TRUE(m_sent.empty());
+
+  m_edits.setCommitCallback([&] {
+    m_edits.queueStructuralEdit(replication::buildRenameObject(objectUUID, "Committed"));
+  });
+  m_edits.settle();
+
+  EXPECT_EQ(m_edits.object()->getName(), "Committed");
+  EXPECT_EQ(m_sent.size(), 1u);
 }

@@ -116,7 +116,8 @@ SettingsPanel::SettingsPanel(SettingsStore& settings, std::shared_ptr<vke::Vulka
                              std::shared_ptr<KeybindTable> keybindTable,
                              std::shared_ptr<KeybindDispatcher> keybindDispatcher)
   : m_settings(&settings), m_renderer(std::move(renderer)), m_keybindTable(std::move(keybindTable)),
-    m_keybindDispatcher(std::move(keybindDispatcher)), m_rebindFlow(*m_keybindTable, settings), m_open(settings.get<bool>(openKey, false))
+    m_keybindDispatcher(std::move(keybindDispatcher)), m_rebindFlow(*m_keybindTable, settings),
+    m_open(settings.get<bool>(openKey, false))
 {}
 
 void SettingsPanel::applyStoredTheme(const SettingsStore& settings)

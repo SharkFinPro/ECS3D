@@ -4,6 +4,7 @@
 #include <Keybinds.h>
 #include <SettingsStore.h>
 #include <optional>
+#include <utility>
 
 // The Settings panel's Keybinds state machine, without any drawing or key capture: which action is waiting
 // for a chord, the refusal being shown, and where the list should scroll next. The panel arms the key
