@@ -16,8 +16,8 @@ public class LauncherWrappedTextTests
 {
   private static readonly string[] FilesWithWrappedText =
   {
-    "LearnView.axaml", "MainWindow.axaml", "NewProjectDialog.axaml", "ProjectsView.axaml", "SamplesView.axaml",
-    "SettingsView.axaml", "TemplatesView.axaml"
+    "JoinDialog.axaml", "LearnView.axaml", "MainWindow.axaml", "NewProjectDialog.axaml", "ProjectsView.axaml",
+    "SamplesView.axaml", "SettingsView.axaml", "TemplatesView.axaml"
   };
 
   private static string LauncherSource() =>

@@ -40,10 +40,6 @@ public class MainWindow : Window
         Activated += OnActivated;
     }
 
-    // The dialog opens on its first field.
-    private void OnJoinAddressAttached(object? sender, VisualTreeAttachmentEventArgs e) =>
-        (sender as TextBox)?.Focus();
-
     // Opening a file with the OS default app is a view concern; the view model only decides when.
     private void OnDataContextChanged(object? sender, EventArgs e)
     {

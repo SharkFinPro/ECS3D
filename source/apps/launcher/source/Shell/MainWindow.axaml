@@ -402,30 +402,7 @@
             <ContentControl Content="{Binding JoinDialog}" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ContentControl.DataTemplates>
                     <DataTemplate DataType="shell:JoinDialogViewModel">
-                        <Border Width="400" Padding="22" CornerRadius="12" Background="{StaticResource PanelBrush}"
-                                BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
-                            <StackPanel Spacing="8">
-                                <TextBlock Text="Join a game" FontSize="17" FontWeight="Bold" />
-                                <TextBlock Text="Enter the address the host shared with you."
-                                           Foreground="{StaticResource T2Brush}" />
-                                <TextBlock Text="Host address" FontWeight="SemiBold" Margin="0,8,0,0" />
-                                <TextBox Text="{Binding Address}" PlaceholderText="192.168.1.24"
-                                         AttachedToVisualTree="OnJoinAddressAttached" />
-                                <TextBlock Text="Port" FontWeight="SemiBold" />
-                                <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left" />
-                                <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" LineHeight="18"
-                                           Foreground="{StaticResource DangerBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right"
-                                            Margin="0,12,0,0">
-                                    <Button Classes="secondary" Theme="{StaticResource BareButton}"
-                                            Content="Cancel" Command="{Binding CancelCommand}" />
-                                    <Button Classes="cta" Theme="{StaticResource BareButton}" IsDefault="True"
-                                            Command="{Binding JoinCommand}">
-                                        <TextBlock Text="Join" FontWeight="Bold" Foreground="{StaticResource AccText}" />
-                                    </Button>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
+                        <shell:JoinDialog />
                     </DataTemplate>
                 </ContentControl.DataTemplates>
             </ContentControl>
