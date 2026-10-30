@@ -2,16 +2,13 @@
 #define VIEWPORTGIZMO_H
 
 #include "Gizmo.h"
-#include <nlohmann/json_fwd.hpp>
-#include <functional>
+#include "GizmoEditSending.h"
 #include <memory>
 #include <optional>
-#include <string>
 #include <uuid.h>
 
 struct ImDrawList;
 class ObjectManager;
-class Component;
 class ImGuiGizmoRenderer;
 
 // Drives the viewport translate/rotate/scale gizmo for the editor's current selection: builds a
@@ -20,9 +17,8 @@ class ImGuiGizmoRenderer;
 // per-frame componentEdit while it moves, one committed before/after edit once it ends.
 class ViewportGizmo {
 public:
-  using EditCallback = std::function<void(const uuids::uuid& objectUUID, const std::shared_ptr<Component>& component)>;
-  using EditCommittedCallback = std::function<void(const uuids::uuid& objectUUID, const nlohmann::json& before,
-                                                    const nlohmann::json& after)>;
+  using EditCallback = GizmoEditSending::EditCallback;
+  using EditCommittedCallback = GizmoEditSending::EditCommittedCallback;
 
   ViewportGizmo();
   ~ViewportGizmo();
@@ -56,14 +52,7 @@ private:
   gizmo::State m_state;
   std::unique_ptr<ImGuiGizmoRenderer> m_renderer;
 
-  EditCallback m_editCallback;
-  EditCommittedCallback m_editCommittedCallback;
-
-  // The in-flight drag's target and its Transform::serialize() before the drag started, so an abandoned
-  // drag (see update()) can still report the committed edit's before/after pair. Set on dragStarted,
-  // cleared once the drag ends one way or another.
-  std::optional<uuids::uuid> m_dragTarget;
-  std::string m_dragBefore;
+  GizmoEditSending m_editSending;
 
   // The gizmo::Input update() last built, kept so capturesMouseAt can re-test a hover without the caller
   // having to rebuild a View/Snap it doesn't otherwise need. Reset whenever update() draws nothing.

@@ -56,7 +56,8 @@ the current scene's scripts, docked on the Inspector's side; its pure decisions 
 `SceneScriptsPanelLogic.h`, and the field widgets are `ScriptEditor.h`'s `drawScriptFieldWidgets`, shared with
 the object Script handler), `ConsolePanel` (the "Console" window — reads the editor's `RingBufferSink` through a
 `LogFilter`: level and category toggles with per-level counts, a text search, Copy (the filtered rows through
-`formatEntry` to the clipboard), Clear (remembers a sequence number rather than mutating the shared sink), and
+`formatEntry` to the clipboard), Clear (remembers a sequence number rather than mutating the shared sink; the rows and per-level counts come
+from the headless `ConsoleView.h`), and
 Auto-scroll; entries the connected server forwards land in this same sink, message-prefixed `"[server] "`, so
 they show and filter alongside the editor's own — see [logging.md](logging.md)), `AssetBrowserPanel` (its type
 filter is a union of toggled chips, with an "All" chip to clear: `AssetFilter.h`), `AssetDisplay` (shared asset
