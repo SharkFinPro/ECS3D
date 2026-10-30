@@ -74,7 +74,6 @@
 // and does not, a prefab it cannot resolve, an edit that threw part way through. Those are exactly the cases a
 // snapshot repairs, and there is no client-initiated resync to fall back on - a structural edit was the only thing
 // that rebuilt a drifted view.
-// #lizard forgives
 [[nodiscard]] constexpr bool sceneEditRefusalNeedsResync(const replication::SceneEditResult result) noexcept
 {
   switch (result)
