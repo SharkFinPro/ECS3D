@@ -263,7 +263,7 @@
                         CornerRadius="8" Background="{StaticResource DangerDim}"
                         BorderBrush="{StaticResource DangerBrush}" BorderThickness="1">
                     <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0" Text="{Binding EngineBannerText}" TextWrapping="Wrap"
+                        <TextBlock Grid.Column="0" Text="{Binding EngineBannerText}" TextWrapping="Wrap" LineHeight="18"
                                    VerticalAlignment="Center" />
                         <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
                                 Content="Open Settings" Margin="14,0,0,0"
@@ -330,7 +330,7 @@
                         <TextBlock Text="ADDRESSES TO SHARE" FontSize="11" FontWeight="SemiBold" LetterSpacing="1"
                                    Foreground="{StaticResource T3Brush}" />
                         <TextBlock Text="No network address was found. Friends on this computer can join 127.0.0.1."
-                                   IsVisible="{Binding HasNoAddresses}" TextWrapping="Wrap"
+                                   IsVisible="{Binding HasNoAddresses}" TextWrapping="Wrap" LineHeight="18"
                                    Foreground="{StaticResource T2Brush}" />
                         <ItemsControl ItemsSource="{Binding Addresses}">
                             <ItemsControl.ItemTemplate>
@@ -351,7 +351,7 @@
                         </ItemsControl>
                     </StackPanel>
 
-                    <TextBlock Text="{Binding FirewallNote}" TextWrapping="Wrap" FontSize="12"
+                    <TextBlock Text="{Binding FirewallNote}" TextWrapping="Wrap" FontSize="12" LineHeight="16"
                                Foreground="{StaticResource T2Brush}" />
 
                     <Grid ColumnDefinitions="*,Auto">
@@ -383,7 +383,7 @@
                     BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
                 <StackPanel Spacing="14">
                     <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="Bold" />
-                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{StaticResource T2Brush}" />
+                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" LineHeight="18" Foreground="{StaticResource T2Brush}" />
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button Classes="secondary" Theme="{StaticResource BareButton}"
                                 Content="{Binding CancelLabel}" Command="{Binding CancelCommand}" />
@@ -413,7 +413,7 @@
                                          AttachedToVisualTree="OnJoinAddressAttached" />
                                 <TextBlock Text="Port" FontWeight="SemiBold" />
                                 <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left" />
-                                <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
+                                <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" LineHeight="18"
                                            Foreground="{StaticResource DangerBrush}" />
                                 <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right"
                                             Margin="0,12,0,0">
@@ -439,7 +439,7 @@
                 AutomationProperties.LiveSetting="Assertive">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" Spacing="10">
-                    <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" LineHeight="18" />
                     <Button Classes="secondary" Theme="{StaticResource BareButton}"
                             HorizontalAlignment="Left" Content="Open logs"
                             IsVisible="{Binding HasToastLog}"
