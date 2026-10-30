@@ -126,6 +126,8 @@ public class LauncherJoinDialogViewTests
       Assert.Empty(faults);
       Assert.True(shown.FocusPeers > 0, "the address box took focus, so the provider built its peer");
       Assert.Equal(2, peers.Count(peer => peer.GetClassName() == "TextBox"));
+      Assert.Single(Named(peers, "TextBox", "Host address"));
+      Assert.Single(Named(peers, "TextBox", "Port"));
       Assert.Single(Named(peers, "Button", "Cancel"));
       Assert.Single(Named(peers, "Button", "Join"));
       Assert.Single(Named(peers, "Button", "Card"));

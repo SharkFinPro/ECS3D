@@ -138,6 +138,9 @@ written atomically, keeps unknown fields, and falls back to defaults with a line
   Context menus use `InvokableMenuItem`, never `MenuItem`: Avalonia's menu item peer has no invoke pattern, so UI
   Automation could list the entries but not run them. `LauncherAccessibleNameTests` and `LauncherInvokableMenuItemTests`
   pin both. A `DockPanel` that ends in a button sets `LastChildFill="False"`, or the button's bounds span the leftover space.
+- **A dialog focuses its first field with `Dispatcher.UIThread.Post` after `AttachedToVisualTree`,** never inside it:
+  focus makes the Windows UI Automation provider build peers mid-attach, and a peer built then loses its parent,
+  which breaks sibling navigation for the whole window. `LauncherJoinDialogViewTests` pins it for the Join dialog.
 - **Code-loaded brushes:** where a bound brush won't inherit the item `DataContext` (e.g. gradient stops),
   build the brush in the model instead of XAML — see `Project.GlowBrush` for the pattern and the why.
 - **The New Project dialog's wrapped text sets an explicit `LineHeight`.** At 125% display scale a font-derived

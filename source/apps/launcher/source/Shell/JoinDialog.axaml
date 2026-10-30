@@ -11,9 +11,11 @@
             <TextBlock Text="Enter the address the host shared with you."
                        Foreground="{StaticResource T2Brush}" />
             <TextBlock Text="Host address" FontWeight="SemiBold" Margin="0,8,0,0" />
-            <TextBox Name="AddressBox" Text="{Binding Address}" PlaceholderText="192.168.1.24" />
+            <TextBox Name="AddressBox" Text="{Binding Address}" PlaceholderText="192.168.1.24"
+                     AutomationProperties.Name="Host address" />
             <TextBlock Text="Port" FontWeight="SemiBold" />
-            <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left" />
+            <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left"
+                     AutomationProperties.Name="Port" />
             <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" LineHeight="18"
                        Foreground="{StaticResource DangerBrush}" />
             <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right"
