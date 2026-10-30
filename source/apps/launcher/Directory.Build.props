@@ -1,5 +1,7 @@
 <Project>
 
+  <Import Project="Version.props" />
+
   <!-- Build-output locations for the launcher.
 
        These live here (not in ECS3DLauncher.csproj) on purpose: BaseIntermediateOutputPath must be

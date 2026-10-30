@@ -420,4 +420,48 @@ public class LauncherEngineServicesTests
     Assert.False(string.IsNullOrEmpty(informational));
     Assert.Equal(informational!.Split('+')[0], AppVersion.From(assembly));
   }
+
+  private static string SourceRoot() =>
+    typeof(LauncherEngineServicesTests).Assembly
+      .GetCustomAttributes<AssemblyMetadataAttribute>()
+      .Single(a => a.Key == "ECS3DSourceRoot").Value!;
+
+  private static string EngineVersionFile() =>
+    File.ReadAllText(Path.Combine(SourceRoot(), "..", "VERSION")).Trim();
+
+  [Fact]
+  public void VersionIsTheEngineVersionFile()
+  {
+    Assert.Equal(EngineVersionFile(), AppVersion.From(typeof(LauncherEngineServicesTests).Assembly));
+  }
+
+  [Fact]
+  public void EngineVersionFileIsAVersion()
+  {
+    Assert.True(EngineVersion.TryParse(EngineVersionFile(), out _));
+  }
+
+  [Fact]
+  public void NoShippedTemplateNeedsANewerEngine()
+  {
+    var engine = EngineVersionFile();
+    var manifests = Directory.GetFiles(Path.Combine(SourceRoot(), "templates"), "template.json", SearchOption.AllDirectories);
+
+    Assert.NotEmpty(manifests);
+    foreach (var manifest in manifests)
+    {
+      using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest));
+      var minimum = document.RootElement.GetProperty("minEngineVersion").GetString()!;
+      Assert.False(TemplateCompatibility.NeedsNewerEngine(minimum, engine), manifest);
+    }
+  }
+
+  [Fact]
+  public void AMinimumOneMajorAboveTheEngineIsGated()
+  {
+    var engine = EngineVersionFile();
+    var major = int.Parse(engine.Split('.')[0]);
+
+    Assert.True(TemplateCompatibility.NeedsNewerEngine($"{major + 1}.0.0", engine));
+  }
 }
