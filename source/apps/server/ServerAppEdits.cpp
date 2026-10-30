@@ -1,4 +1,5 @@
 #include "ServerApp.h"
+#include "ServerPolicy.h"
 #include <Replication.h>
 #include <assets/AssetRegistry.h>
 #include <scenes/SceneManager.h>
@@ -74,18 +75,7 @@ namespace {
 
     Log::error(LogCategory::server, "Discarded a scene edit (" + op + "): " + describe(result) + ".");
 
-    // A refusal the sender could have predicted needs no snapshot: rejected means the authority and the
-    // sender agree about the scene and the op simply changes nothing, and a malformed edit is a payload
-    // problem that resending the scene would not fix - and is the one a client can send on demand. The
-    // exception is a creating op refused for the uuid it chose: the sender gets neither the object nor
-    // an error, so it has to notice the missing object itself rather than being resynced here.
-    //
-    // Everything else means the sender's view disagrees with the authority: an object or component it
-    // believes exists and does not, a prefab it cannot resolve, an edit that threw part way through.
-    // Those are exactly the cases a snapshot repairs, and there is no client-initiated resync to fall
-    // back on - a structural edit was the only thing that rebuilt a drifted view.
-    return result != replication::SceneEditResult::rejected &&
-           result != replication::SceneEditResult::malformedEdit;
+    return sceneEditRefusalNeedsResync(result);
   }
 }
 
@@ -106,9 +96,7 @@ void ServerApp::handleEditComponent(const net::Message& message) const
       Log::error(LogCategory::server, "Discarded a component edit of " + std::to_string(message.size()) +
                           " bytes: " + std::string(replication::describe(result)) + ".");
 
-      // A half-written component has no delta stream to correct it for most types, so the only way back
-      // to agreement is a fresh snapshot.
-      if (result == replication::ComponentEditResult::partiallyApplied)
+      if (componentEditRefusalNeedsResync(result))
       {
         broadcastSnapshot();
       }

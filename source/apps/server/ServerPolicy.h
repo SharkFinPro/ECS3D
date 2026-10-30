@@ -2,7 +2,11 @@
 #define SERVERPOLICY_H
 
 #include <Protocol.h>
+#include <Replication.h>
+#include <RemoteLogSink.h>
+#include <ServerLog.h>
 #include <scenes/SceneManager.h>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -51,6 +55,64 @@
   }
 
   return !exitWhenEmpty || !hasConnected || connectionCount > 0;
+}
+
+// A half-written component has no delta stream to correct it for most types, so the only way back
+// to agreement is a fresh snapshot.
+[[nodiscard]] constexpr bool componentEditRefusalNeedsResync(const replication::ComponentEditResult result) noexcept
+{
+  return result == replication::ComponentEditResult::partiallyApplied;
+}
+
+// A refusal the sender could have predicted needs no snapshot: rejected means the authority and the sender agree
+// about the scene and the op simply changes nothing, and a malformed edit is a payload problem that resending the
+// scene would not fix - and is the one a client can send on demand. The exception is a creating op refused for
+// the uuid it chose: the sender gets neither the object nor an error, so it has to notice the missing object
+// itself rather than being resynced here.
+//
+// Everything else means the sender's view disagrees with the authority: an object or component it believes exists
+// and does not, a prefab it cannot resolve, an edit that threw part way through. Those are exactly the cases a
+// snapshot repairs, and there is no client-initiated resync to fall back on - a structural edit was the only thing
+// that rebuilt a drifted view.
+[[nodiscard]] constexpr bool sceneEditRefusalNeedsResync(const replication::SceneEditResult result) noexcept
+{
+  switch (result)
+  {
+    case replication::SceneEditResult::rejected:
+    case replication::SceneEditResult::malformedEdit:
+      return false;
+
+    case replication::SceneEditResult::applied:
+    case replication::SceneEditResult::unknownObject:
+    case replication::SceneEditResult::unknownComponent:
+    case replication::SceneEditResult::unknownAsset:
+    case replication::SceneEditResult::failed:
+      return true;
+  }
+
+  return true;
+}
+
+// Caps what one forward can hand to the network, so a log storm costs bounded work per loop iteration instead of
+// one send sized by however much piled up; anything past either cap is picked up on the next iteration (or evicted
+// by RemoteLogSink's own capacity first, and counted in the batch's dropped count). The byte cap stays well under
+// TransportBackend::MaxMessageBytes (64 MiB) - RemoteLogSink::drain's estimate is rough, and a batch that actually
+// hit that ceiling would be refused and lost outright rather than sent short.
+inline constexpr std::size_t maxLogEntriesPerBatch = 200;
+inline constexpr std::size_t maxLogBatchBytes = 256 * 1024;
+
+// Drains one capped batch and hands it to send as a packed serverLog message; sends nothing when the drain has no
+// entries and no evictions to report.
+template <typename Send>
+void forwardDrainedLog(RemoteLogSink& sink, Send&& send)
+{
+  const auto drained = sink.drain(maxLogEntriesPerBatch, maxLogBatchBytes);
+  if (drained.entries.empty() && drained.dropped == 0)
+  {
+    return;
+  }
+
+  send(net::packServerLog(drained.entries, drained.dropped));
 }
 
 // What a scene-control op does. The order the steps run in lives in ServerApp::applySceneControl.

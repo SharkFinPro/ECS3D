@@ -1,8 +1,13 @@
 #include <gtest/gtest.h>
 
 #include <Protocol.h>
+#include <RemoteLogSink.h>
+#include <Replication.h>
+#include <ServerLog.h>
 #include <ServerPolicy.h>
 
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -49,6 +54,21 @@ namespace {
     return "type=" + std::to_string(static_cast<int>(type)) + " editMode=" + std::to_string(editMode)
       + " isEditor=" + std::to_string(isEditor);
   }
+
+  LogEntry logEntry(const std::string& message)
+  {
+    return LogEntry{ std::chrono::system_clock::now(), LogLevel::info, LogCategory::server, message };
+  }
+
+  struct ForwardedLog
+  {
+    std::vector<net::ServerLogBatch> sends;
+
+    void operator()(const net::Message& message)
+    {
+      sends.push_back(net::unpackServerLog(message));
+    }
+  };
 
   [[nodiscard]] SceneControlPlan plan(const bool startScene = false, const bool pauseScene = false,
                                       const bool resetScene = false, const bool startScripts = false,
@@ -340,4 +360,117 @@ TEST(ServerPolicy, ALastMessageAndItsDisconnectArrivingAfterTheDrainAreHandledTo
 
   net.drain();
   EXPECT_EQ(net.events, (std::vector<std::string>{ "message 5:9", "disconnect 5" }));
+}
+
+TEST(ServerPolicy, ComponentEditRefusalResyncsOnlyAHalfWrittenComponent)
+{
+  using replication::ComponentEditResult;
+
+  EXPECT_FALSE(componentEditRefusalNeedsResync(ComponentEditResult::applied));
+  EXPECT_FALSE(componentEditRefusalNeedsResync(ComponentEditResult::malformedPayload));
+  EXPECT_TRUE(componentEditRefusalNeedsResync(ComponentEditResult::partiallyApplied));
+  EXPECT_FALSE(componentEditRefusalNeedsResync(ComponentEditResult::unknownObject));
+  EXPECT_FALSE(componentEditRefusalNeedsResync(ComponentEditResult::unknownComponent));
+}
+
+TEST(ServerPolicy, SceneEditRefusalResyncsEverythingButPredictableRefusals)
+{
+  using replication::SceneEditResult;
+
+  EXPECT_TRUE(sceneEditRefusalNeedsResync(SceneEditResult::applied));
+  EXPECT_FALSE(sceneEditRefusalNeedsResync(SceneEditResult::malformedEdit));
+  EXPECT_TRUE(sceneEditRefusalNeedsResync(SceneEditResult::unknownObject));
+  EXPECT_TRUE(sceneEditRefusalNeedsResync(SceneEditResult::unknownComponent));
+  EXPECT_TRUE(sceneEditRefusalNeedsResync(SceneEditResult::unknownAsset));
+  EXPECT_FALSE(sceneEditRefusalNeedsResync(SceneEditResult::rejected));
+  EXPECT_TRUE(sceneEditRefusalNeedsResync(SceneEditResult::failed));
+}
+
+TEST(ServerPolicy, LogForwardingSendsNothingForAnEmptySink)
+{
+  RemoteLogSink sink;
+  ForwardedLog forwarded;
+
+  forwardDrainedLog(sink, forwarded);
+  EXPECT_TRUE(forwarded.sends.empty());
+
+  sink.write(logEntry("hello"));
+  forwardDrainedLog(sink, forwarded);
+
+  ASSERT_EQ(forwarded.sends.size(), 1u);
+  ASSERT_EQ(forwarded.sends[0].entries.size(), 1u);
+  EXPECT_EQ(forwarded.sends[0].entries[0].message, "hello");
+  EXPECT_EQ(forwarded.sends[0].dropped, 0u);
+
+  forwardDrainedLog(sink, forwarded);
+  EXPECT_EQ(forwarded.sends.size(), 1u);
+}
+
+TEST(ServerPolicy, LogForwardingCarriesTheEvictionCount)
+{
+  // An eviction always leaves the queue full, so a batch never has a dropped count without entries.
+  RemoteLogSink sink(3);
+  for (int i = 0; i < 5; ++i)
+  {
+    sink.write(logEntry("line " + std::to_string(i)));
+  }
+
+  ForwardedLog forwarded;
+  forwardDrainedLog(sink, forwarded);
+
+  ASSERT_EQ(forwarded.sends.size(), 1u);
+  EXPECT_EQ(forwarded.sends[0].dropped, 2u);
+  ASSERT_EQ(forwarded.sends[0].entries.size(), 3u);
+  EXPECT_EQ(forwarded.sends[0].entries.front().message, "line 2");
+
+  forwardDrainedLog(sink, forwarded);
+  EXPECT_EQ(forwarded.sends.size(), 1u);
+}
+
+TEST(ServerPolicy, LogForwardingCapsEntriesPerCall)
+{
+  RemoteLogSink sink(1000);
+  for (std::size_t i = 0; i < maxLogEntriesPerBatch + 50; ++i)
+  {
+    sink.write(logEntry("line " + std::to_string(i)));
+  }
+
+  ForwardedLog forwarded;
+  forwardDrainedLog(sink, forwarded);
+
+  ASSERT_EQ(forwarded.sends.size(), 1u);
+  EXPECT_EQ(forwarded.sends[0].entries.size(), 200u);
+  EXPECT_EQ(forwarded.sends[0].entries.front().message, "line 0");
+
+  forwardDrainedLog(sink, forwarded);
+
+  ASSERT_EQ(forwarded.sends.size(), 2u);
+  EXPECT_EQ(forwarded.sends[1].entries.size(), 50u);
+  EXPECT_EQ(forwarded.sends[1].entries.front().message, "line 200");
+  EXPECT_EQ(forwarded.sends[1].entries.back().message, "line 249");
+}
+
+TEST(ServerPolicy, LogForwardingCapsBytesPerCall)
+{
+  // Forty 8 KiB entries are 320 KiB, past the 256 KiB cap while staying under the entry cap.
+  constexpr std::size_t entryCount = 40;
+  RemoteLogSink sink(100);
+  for (std::size_t i = 0; i < entryCount; ++i)
+  {
+    sink.write(logEntry(std::string(8 * 1024, static_cast<char>('a' + i % 26))));
+  }
+
+  ForwardedLog forwarded;
+  forwardDrainedLog(sink, forwarded);
+
+  ASSERT_EQ(forwarded.sends.size(), 1u);
+  const auto first = forwarded.sends[0].entries.size();
+  EXPECT_GT(first, 0u);
+  EXPECT_LT(first, entryCount);
+  EXPECT_LE(first * 8 * 1024, maxLogBatchBytes);
+
+  forwardDrainedLog(sink, forwarded);
+
+  ASSERT_EQ(forwarded.sends.size(), 2u);
+  EXPECT_EQ(first + forwarded.sends[1].entries.size(), entryCount);
 }
