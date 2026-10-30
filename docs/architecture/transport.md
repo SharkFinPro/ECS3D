@@ -75,9 +75,10 @@ Shutdown joins every socket thread it started before returning: `ServerStop` fli
 takes its snapshot of started threads in the same lock the accept loop checks that flag and registers a
 new thread under, so a thread that starts is one this call goes on to join; it then closes the listener
 and all connection sockets and joins the accept thread and each per-connection thread.
-A connection thread closes its socket, then closes its send queue and joins its sender thread, and removes
-itself from that list only after it has delivered its disconnect, so a stop that returns has no sender or
-disconnect callback still to come.
+A connection thread closes its socket, delivers its disconnect, then closes its send queue and joins its
+sender thread, and only then removes itself from that list, so a stop that returns has no disconnect
+callback still to come. The disconnect goes first so a sender slow to leave a blocked send cannot hold it
+past the stop's bounded join.
 `ClientDisconnect` closes the connection then joins the receive thread the same way. Each join is bounded
 by `ShutdownJoinTimeoutMs`, logging a warning if a thread has not exited by then instead of waiting past
 it, and skips a thread that is the caller (joining that thread would deadlock). `NetServer::stop`/

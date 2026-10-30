@@ -431,14 +431,6 @@ internal sealed class TcpBackend : TransportBackend
 
     try { client.Close(); } catch { /* ignore */ }
 
-    if (conn != null)
-    {
-      // After the socket close, which releases a sender blocked in Write. Joined here, before this thread
-      // leaves _connectionThreads, so ServerStop's join of this thread covers the sender too.
-      conn.Outbox.Close();
-      JoinThread(conn.Sender, "send");
-    }
-
     try
     {
       ServerConnectionExiting?.Invoke(connId);
@@ -449,6 +441,15 @@ internal sealed class TcpBackend : TransportBackend
     }
     finally
     {
+      if (conn != null)
+      {
+        // After the delivery, so a sender slow to leave a blocked Write cannot hold the disconnect past
+        // ServerStop's bounded join. Still before this thread leaves _connectionThreads, so that join
+        // covers the sender too.
+        conn.Outbox.Close();
+        JoinThread(conn.Sender, "send");
+      }
+
       // Last, so ServerStop's join covers this thread through the delivery above. Removed any earlier, a
       // stop that raced the exit would return before the callback, which could then land in the next
       // registrant of the transport callbacks (the next test, or a NetServer after it cleared its

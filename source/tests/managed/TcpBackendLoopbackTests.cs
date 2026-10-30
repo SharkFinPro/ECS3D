@@ -485,8 +485,10 @@ public sealed class TcpBackendLoopbackTests : IDisposable
         "the healthy peer to receive the large message", 15000);
     }
 
-    WaitFor(() => TransportRecorder.ServerDisconnected.Contains(stalledId), "the stalled peer to be dropped");
-    Assert.True(TransportRecorder.LogContains("bytes are already waiting to be sent to it"));
+    WaitFor(() => TransportRecorder.ServerDisconnected.Contains(stalledId), "the stalled peer to be dropped",
+      state: RecorderState);
+    Assert.True(TransportRecorder.LogContains("bytes are already waiting to be sent to it"),
+      $"Expected the queue cap to drop the stalled peer after {sent} message(s): {RecorderState()}");
 
     TransportRecorder.ServerBroadcast(server, 8, new byte[] { 1, 2, 3 });
     WaitFor(() => TransportRecorder.ClientReceived.Count(m => m.Type == 8) == 1,
