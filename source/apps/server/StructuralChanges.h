@@ -7,6 +7,8 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/Component.h>
+#include <memory>
+#include <utility>
 #include <uuid.h>
 #include <vector>
 

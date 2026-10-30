@@ -35,6 +35,7 @@ namespace {
     std::vector<uuids::uuid> notifiedSpawned;
     std::vector<uuids::uuid> notifiedDestroyed;
     std::function<void()> onNotify;
+    std::function<std::string()> notifyState;
     std::function<void(const net::Message&)> onBroadcast;
 
     template <typename Buffer>
@@ -90,8 +91,14 @@ namespace {
         {
           net::MessageReader reader(message);
           const auto id = uuids::uuid::from_string(reader.readString());
-          sent.emplace_back(message.getType(), id.value());
           events.push_back(typeName(message.getType()));
+          if (!id.has_value())
+          {
+            ADD_FAILURE() << "broadcast " << events.back() << " does not lead with a uuid string";
+            return;
+          }
+
+          sent.emplace_back(message.getType(), id.value());
           if (onBroadcast)
           {
             onBroadcast(message);
@@ -99,7 +106,7 @@ namespace {
         },
         [this](const std::vector<uuids::uuid>& spawnedUUIDs, const std::vector<uuids::uuid>& destroyedUUIDs)
         {
-          events.emplace_back("notify");
+          events.push_back(notifyState ? "notify(" + notifyState() + ")" : "notify");
           notifiedSpawned = spawnedUUIDs;
           notifiedDestroyed = destroyedUUIDs;
           if (onNotify)
@@ -158,11 +165,17 @@ TEST(StructuralChanges, RunsInTheContractedOrder)
   harness.destroyed.push_back(doomed->getUUID());
   harness.changed.push_back(live->getUUID());
 
+  harness.notifyState = [&]
+  {
+    return std::string("spawnedMember=") + (isMember(scene, spawned) ? "1" : "0")
+      + ",doomedMember=" + (isMember(scene, doomed) ? "1" : "0");
+  };
+
   harness.run(scene.objectManager.get());
 
   const std::vector<std::string> expected = {
     "takeComponentEdits", "componentEdit", "takeSpawned", "spawned", "takeDestroyed", "destroyed",
-    "notify", "takeChanged", "componentsChanged"
+    "notify(spawnedMember=1,doomedMember=0)", "takeChanged", "componentsChanged"
   };
   EXPECT_EQ(harness.events, expected);
   EXPECT_TRUE(harness.sentFor(net::MessageType::editComponent, live->getUUID()));
