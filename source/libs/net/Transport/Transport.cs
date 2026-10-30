@@ -167,8 +167,8 @@ public static unsafe class Transport
   }
 
   // connIds points to connIdCount native int32s - the specific connections to send to (never every
-  // connection like serverBroadcast). One call for the whole fan-out, so
-  // the backend can apply one shared time budget across it rather than one per connection.
+  // connection like serverBroadcast). One call for the whole fan-out; the backend
+  // queues the message per connection, so the call never blocks on a slow peer.
   [UnmanagedCallersOnly]
   public static void serverSendToMany(IntPtr connIds, int connIdCount, byte type, IntPtr data, int len)
   {

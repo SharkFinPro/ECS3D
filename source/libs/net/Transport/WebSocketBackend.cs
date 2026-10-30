@@ -19,7 +19,9 @@ namespace ECS3DNetTransport;
 // The server speaks WebSocket over a raw TCP accept: it performs the RFC 6455 upgrade handshake by hand
 // (so it can bind IPAddress.Any without an HttpListener URL reservation) and then wraps the stream with
 // WebSocket.CreateFromStream. The client uses ClientWebSocket against ws://host:port/. Inbound delivery is
-// push (Transport.DeliverServer/DeliverClient); outbound is a direct call from the tick thread.
+// push (Transport.DeliverServer/DeliverClient). Server outbound is queued per connection and written by that
+// connection's own sender thread, so the tick thread never blocks on a peer; the client sends directly from
+// its caller.
 internal sealed class WebSocketBackend : TransportBackend
 {
   // RFC 6455 magic GUID, concatenated with the client's Sec-WebSocket-Key to compute the accept token.
@@ -38,15 +40,15 @@ internal sealed class WebSocketBackend : TransportBackend
   //    still goes async, so it degrades to plain bandwidth cost (same as TCP) instead of a 15ms hitch.
   private const int SocketBufferSize = 1 << 20; // 1 MiB per direction.
 
-  // What one whole broadcast may spend blocking on peers that have stopped draining their sockets, not
-  // what each peer may spend: the budget is shared across the fan-out, so ten stalled peers cost this
-  // once rather than ten times over. SendAsync completes only once the message has reached the socket's
-  // send buffer, and broadcasts run on the tick thread, so the bound is what physics and scripts can lose
-  // to the network in a tick. Only the connection whose own send ran out of budget is dropped; peers the
-  // broadcast never reached are skipped for that message and kept. Two seconds because a stall then costs
-  // at most one tick's worth before the peer responsible is dropped, while still being far longer than any
-  // plausible snapshot send takes on a healthy link. Internal and mutable so ECS3DManagedTests can shorten it.
+  // How long one message's send to one peer may block that peer's own sender thread before the peer is
+  // dropped. SendAsync completes only once the message has reached the socket's send buffer. The tick
+  // thread never waits on it: it only queues. Two seconds because a peer that cannot take a message in that
+  // long has stopped draining its socket, while it is far longer than any plausible snapshot send takes on
+  // a healthy link. Internal and mutable so ECS3DManagedTests can shorten it.
   internal int SendTimeoutMs = 2000;
+
+  // Instance copy of the shared default, internal so ECS3DManagedTests can shrink it.
+  internal long MaxQueuedSendBytes = DefaultMaxQueuedSendBytes;
 
   static WebSocketBackend()
   {
@@ -99,14 +101,17 @@ internal sealed class WebSocketBackend : TransportBackend
   private const int ConnectTimeoutMs = 3000;
 
   // A WebSocket is safe for one concurrent send and one concurrent receive, but not for concurrent sends.
-  // The send lock serializes broadcasts (and any future sender) onto a single connection.
-  private sealed class Connection(WebSocket socket, CancellationTokenSource cts, int connId)
+  // Only the connection's sender thread sends server-side; the send lock keeps any future sender honest.
+  private sealed class Connection(WebSocket socket, CancellationTokenSource cts, int connId, SendQueue outbox)
   {
     public readonly WebSocket Socket = socket;
     public readonly CancellationTokenSource Cts = cts;
     public readonly SemaphoreSlim SendLock = new(1, 1);
     // The id C++ knows this connection by, so a send that fails on the broadcast path can name it.
     public readonly int ConnId = connId;
+    public readonly SendQueue Outbox = outbox;
+    // Drains Outbox onto the socket. Set once, before the connection joins the broadcast list.
+    public Thread? Sender;
   }
 
   public override int ServerStart(int port, bool editMode, string expectedToken)
@@ -205,16 +210,14 @@ internal sealed class WebSocketBackend : TransportBackend
 
     var message = BuildMessage(type, data, len);
 
-    // The fan-out runs off a snapshot so the sends happen outside _clientsLock. This is the tick thread,
-    // and a send to a peer that has stopped reading blocks until the budget below runs out; holding the
-    // lock across that would block the accept path and every receive loop's cleanup along with it.
+    // The fan-out runs off a snapshot so queuing happens outside _clientsLock.
     Connection[] connections;
     lock (_clientsLock)
     {
       connections = _connections.ToArray();
     }
 
-    SendToTargets(connections, message, "broadcast");
+    Enqueue(connections, message);
   }
 
   public override void ServerSendToMany(nint connIds, int connIdCount, byte type, nint data, int len)
@@ -228,8 +231,8 @@ internal sealed class WebSocketBackend : TransportBackend
     Marshal.Copy(connIds, ids, 0, connIdCount);
     var idSet = new HashSet<int>(ids);
 
-    // Same snapshot-outside-the-lock shape as ServerBroadcast, just filtered to the named connections
-    // instead of every connection.
+    // Same snapshot shape as ServerBroadcast, just filtered to the named connections instead of every
+    // connection.
     var targets = new List<Connection>(idSet.Count);
     lock (_clientsLock)
     {
@@ -248,64 +251,66 @@ internal sealed class WebSocketBackend : TransportBackend
       return;
     }
 
-    SendToTargets(targets.ToArray(), BuildMessage(type, data, len), "send");
+    Enqueue(targets.ToArray(), BuildMessage(type, data, len));
   }
 
-  // Shared by ServerBroadcast (every connection) and ServerSendToMany (a named subset): sends message to
-  // each of targets under one time budget for the whole fan-out, so K stalled peers cost this call the
-  // budget once rather than K times over - the tick thread this runs on could otherwise lose K times
-  // SendTimeoutMs to peers that have stopped reading. `what` names the operation in the log line so a
-  // stall is traceable to which path caused it.
-  private void SendToTargets(Connection[] targets, byte[] message, string what)
+  // Shared by ServerBroadcast and ServerSendToMany. The one message is shared by every queue, which is safe
+  // because it is never mutated after it is built. A peer whose queue is already backed up past the cap has
+  // fallen hopelessly behind and is dropped.
+  private void Enqueue(Connection[] targets, byte[] message)
   {
-    var deadline = Environment.TickCount64 + SendTimeoutMs;
-    var skipped = 0;
-
     foreach (var conn in targets)
     {
-      var remaining = deadline - Environment.TickCount64;
-      if (remaining <= 0)
-      {
-        // An earlier peer spent the budget. Skip the rest rather than dropping them: they have done
-        // nothing wrong, and reaping them would punish healthy peers for their position in the list. They
-        // miss this one message and are sent the next one as usual.
-        ++skipped;
-        continue;
-      }
-
-      // The connection dropped mid-send, or did not accept the message inside the remaining budget.
-      if (!SendMessage(conn, message, (int)remaining) && Reap(conn))
+      if (!conn.Outbox.TryEnqueue(message) && Reap(conn))
       {
         Transport.Log(TransportLogLevel.Warn,
-          $"Dropping connection {conn.ConnId}: the send failed or timed out.");
+          $"Dropping connection {conn.ConnId}: {MaxQueuedSendBytes} bytes are already waiting to be sent to it.");
       }
-    }
-
-    // One line per call rather than one per connection, so a peer stalling tick after tick is visible in
-    // the log without burying it.
-    if (skipped > 0)
-    {
-      Transport.Log(TransportLogLevel.Warn,
-        $"Skipped {skipped} connection(s): this {what} spent its whole {SendTimeoutMs} ms budget.");
     }
   }
 
-  // Closes a connection and takes it off the broadcast list. True only when this call is the one that
+  // Runs on the connection's sender thread. Each send is bounded by SendTimeoutMs, so a peer that stops
+  // reading costs only this thread until it is dropped.
+  private void SendLoop(Connection conn)
+  {
+    while (conn.Outbox.Take() is { } message)
+    {
+      if (!SendMessage(conn, message, SendTimeoutMs))
+      {
+        if (Reap(conn))
+        {
+          Transport.Log(TransportLogLevel.Warn,
+            $"Dropping connection {conn.ConnId}: the send failed or timed out.");
+        }
+
+        return;
+      }
+    }
+  }
+
+  // Closes a connection and takes it off the broadcast list. Called from the tick thread (queue overflow)
+  // and from the connection's sender thread (failed send). True only when this call is the one that
   // removed it: a peer that closed itself is reaped by its own receive loop, and that is an ordinary
   // disconnect rather than something to warn about.
   //
   // Closing makes the connection's blocked receive return, and HandleClient's cleanup owns the
   // DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing an
   // already-closed connection is harmless.
+  //
+  // Removed before closing: the close wakes the sender and the receive loop, and either of them removing
+  // the connection first would make this call return false and lose the reason it was dropped.
   private bool Reap(Connection conn)
   {
-    Close(conn.Socket, conn.Cts);
-
+    bool removed;
     lock (_clientsLock)
     {
       // By reference rather than by index: the list may have changed since the broadcast's snapshot.
-      return _connections.Remove(conn);
+      removed = _connections.Remove(conn);
     }
+
+    Close(conn.Socket, conn.Cts);
+
+    return removed;
   }
 
   private void AcceptLoop()
@@ -394,7 +399,11 @@ internal sealed class WebSocketBackend : TransportBackend
       // can enforce that role on every later message rather than trusting one the sender claims.
       Transport.DeliverServerAuthorized(connId, grantedRole);
 
-      conn = new Connection(ws, cts, connId);
+      var admitted = new Connection(ws, cts, connId, new SendQueue(MaxQueuedSendBytes));
+      admitted.Sender = new Thread(() => SendLoop(admitted)) { IsBackground = true, Name = "ecs3d-net-send" };
+      conn = admitted;
+      admitted.Sender.Start();
+
       lock (_clientsLock)
       {
         _connections.Add(conn);
@@ -448,6 +457,14 @@ internal sealed class WebSocketBackend : TransportBackend
         }
 
         try { tcp.Close(); } catch { /* ignore */ }
+
+        if (conn != null)
+        {
+          // After the socket close, which releases a sender blocked in SendAsync. Joined here, before this
+          // thread leaves _connectionThreads, so ServerStop's join of this thread covers the sender too.
+          conn.Outbox.Close();
+          JoinThread(conn.Sender, "send");
+        }
 
         // Last, so ServerStop's join covers this thread through the disconnect delivery above.
         lock (_clientsLock)
@@ -832,9 +849,8 @@ internal sealed class WebSocketBackend : TransportBackend
     return message.Length > 1 ? message[1..] : Array.Empty<byte>();
   }
 
-  // Bounded by a linked source so a peer that has stopped reading cannot hold the tick thread: the send is
-  // cancelled once timeoutMs (what is left of the broadcast's budget) elapses, which fails it and takes
-  // the caller's close-and-reap path.
+  // Bounded by a linked source so a peer that has stopped reading cannot hold its sender thread forever:
+  // the send is cancelled once timeoutMs elapses, which fails it and takes the caller's close-and-reap path.
   private static bool SendMessage(Connection conn, byte[] message, int timeoutMs)
   {
     CancellationTokenSource? linked = null;
