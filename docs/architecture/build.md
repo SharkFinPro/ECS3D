@@ -16,7 +16,8 @@ modules, and on MSVC the scan cost about an eighth of a clean build.
 ## Versioning
 
 The repo-root `VERSION` file is the engine's single version source. Root CMake reads it for `project(VERSION)`, and the
-launcher's `Version.props` (also imported by the managed test project) reads it for the .NET `Version`. Bump it there.
+launcher's `Version.props` (also imported by the managed test project) reads it for the .NET `Version`. Bump it there. The value must be dotted numeric (one to four parts, such as
+`1.2.3`), because CMake's `project(VERSION)` accepts nothing else; root CMake fails the configure otherwise.
 
 ## Managed assemblies
 

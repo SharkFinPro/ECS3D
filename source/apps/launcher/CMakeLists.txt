@@ -73,7 +73,7 @@ file(GLOB_RECURSE _launcher_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/source/*"
   "${CMAKE_CURRENT_SOURCE_DIR}/*.csproj"
   "${CMAKE_CURRENT_SOURCE_DIR}/Directory.Build.props")
-list(APPEND _launcher_sources "${CMAKE_CURRENT_SOURCE_DIR}/Version.props" "${CMAKE_SOURCE_DIR}/VERSION")
+list(APPEND _launcher_sources "${CMAKE_CURRENT_SOURCE_DIR}/Version.props" "${ECS3D_SOURCE_DIR}/VERSION")
 set_source_files_properties("${_stub}" PROPERTIES OBJECT_DEPENDS "${_launcher_sources}")
 
 # Overwrite the stub exe with the real single-file .NET app. PublishSingleFile +

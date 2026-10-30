@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.29)
 # VERSION is the engine's single version source; the launcher's Version.props reads the same file.
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" _ecs3d_version LIMIT_COUNT 1)
 string(STRIP "${_ecs3d_version}" _ecs3d_version)
+if(NOT _ecs3d_version MATCHES "^[0-9]+(\\.[0-9]+)?(\\.[0-9]+)?(\\.[0-9]+)?$")
+  message(FATAL_ERROR "VERSION must hold a dotted numeric version such as 1.2.3, got '${_ecs3d_version}'")
+endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
 
 project(ECS3D VERSION ${_ecs3d_version})

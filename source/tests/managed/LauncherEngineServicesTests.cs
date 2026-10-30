@@ -445,13 +445,17 @@ public class LauncherEngineServicesTests
   public void NoShippedTemplateNeedsANewerEngine()
   {
     var engine = EngineVersionFile();
-    var manifests = Directory.GetFiles(Path.Combine(SourceRoot(), "templates"), "template.json", SearchOption.AllDirectories);
+    var manifests = Directory.GetFiles(
+      Path.Combine(SourceRoot(), "templates"),
+      "template.json",
+      SearchOption.AllDirectories);
 
     Assert.NotEmpty(manifests);
     foreach (var manifest in manifests)
     {
       using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifest));
       var minimum = document.RootElement.GetProperty("minEngineVersion").GetString()!;
+      Assert.True(EngineVersion.TryParse(minimum, out _), manifest);
       Assert.False(TemplateCompatibility.NeedsNewerEngine(minimum, engine), manifest);
     }
   }
