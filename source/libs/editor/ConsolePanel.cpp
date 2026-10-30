@@ -1,5 +1,6 @@
 #include "ConsolePanel.h"
 #include "ConsolePanelLayout.h"
+#include "ConsoleView.h"
 #include "EditorTheme.h"
 #include "GuiComponents.h"
 #include <RingBufferSink.h>
@@ -69,35 +70,9 @@ void ConsolePanel::refreshCacheIfNeeded()
   m_cacheDirty = false;
 
   const auto entries = m_sink->snapshot();
-  const auto count = entries.size();
-
-  // The sink does not tag entries with their write sequence, so the first retained entry's sequence is
-  // derived from the current total and the retained count. A write racing this pair of calls can shift it
-  // by one; that only risks a just-cleared or just-kept entry landing on the wrong side of the line for a
-  // single frame, which is not worth a lock shared with the sink to avoid.
-  const std::uint64_t firstSequence = currentSequence >= count
-    ? currentSequence - static_cast<std::uint64_t>(count) + 1
-    : 1;
-
-  m_levelCounts.fill(0);
-  m_filtered.clear();
-  m_filtered.reserve(count);
-
-  for (std::size_t i = 0; i < count; ++i)
-  {
-    const std::uint64_t entrySequence = firstSequence + i;
-    if (entrySequence <= m_clearedBefore)
-    {
-      continue;
-    }
-
-    ++m_levelCounts[static_cast<std::size_t>(entries[i].level)];
-
-    if (m_filter.matches(entries[i]))
-    {
-      m_filtered.push_back(entries[i]);
-    }
-  }
+  auto view = buildConsoleView(entries, currentSequence, m_clearedBefore, m_filter);
+  m_levelCounts = view.levelCounts;
+  m_filtered = std::move(view.rows);
 }
 
 void ConsolePanel::displayFilterRow()

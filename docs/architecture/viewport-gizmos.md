@@ -12,7 +12,10 @@ testing and drag math, `source/libs/editor/Gizmo.{h,cpp}`; a world-space drag is
 parent's world frame, which `Input` carries), and draws the result through `GizmoRenderer` -
 an interface so a native backend could replace `ImGuiGizmoRenderer` later without `ViewportGizmo` changing.
 A drag sends a per-frame `editComponent` while it moves (matching the Inspector's own slider drags, so
-other connected views see it move smoothly) and one committed edit - one undo entry - on release.
+other connected views see it move smoothly) and one committed edit - one undo entry - on release; a click on a
+handle without movement sends nothing. That bookkeeping is `GizmoEditSending` (headless, in `ECS3DTests`):
+a frame sends only when it changed the Transform's live local pose, and the commit fires only
+when the final `serialize()` differs from the drag's start.
 `EditorApp::handlePicking` runs from `run()`, in its original spot after `sendInput()` - not from the
 overlay callback, because picking reads `RenderSystem::isSelected`, vke's `MousePicker` flags, which
 `variableUpdate()` clears at the start of every frame and only sets again inside `render()`, after the

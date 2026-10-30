@@ -49,7 +49,7 @@ copying them.
 | `tags` | array of strings | yes | Filter tags. May be empty. |
 | `thumbnail` | string | yes | Image path relative to the folder. |
 | `entryScene` | string | yes | Name of the scene in `project.ecs3d` that opens first. |
-| `minEngineVersion` | string | yes | Oldest engine version that can open the project. |
+| `minEngineVersion` | string | yes | Oldest engine version that can open the project, compared with the engine version in the repo-root `VERSION` file. |
 | `players` | object | no | `{ "min": int, "max": int }` with `1 <= min <= max`. Absent means single-player. |
 
 Unknown fields are ignored. The parser is `parseTemplateManifest` in `source/libs/data/templates/`.
