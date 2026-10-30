@@ -296,15 +296,21 @@ internal sealed class WebSocketBackend : TransportBackend
   // Closing makes the connection's blocked receive return, and HandleClient's cleanup owns the
   // DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing an
   // already-closed connection is harmless.
+  //
+  // Removed before closing: the close wakes the sender and the receive loop, and either of them removing
+  // the connection first would make this call return false and lose the reason it was dropped.
   private bool Reap(Connection conn)
   {
-    Close(conn.Socket, conn.Cts);
-
+    bool removed;
     lock (_clientsLock)
     {
       // By reference rather than by index: the list may have changed since the broadcast's snapshot.
-      return _connections.Remove(conn);
+      removed = _connections.Remove(conn);
     }
+
+    Close(conn.Socket, conn.Cts);
+
+    return removed;
   }
 
   private void AcceptLoop()

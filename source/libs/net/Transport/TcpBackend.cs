@@ -286,15 +286,21 @@ internal sealed class TcpBackend : TransportBackend
   // Closing the socket makes the connection's blocked read throw, and ServerReceiveLoop's exit path owns
   // the DeliverServerDisconnect for it - delivering one here too would free the player slot twice. Closing
   // an already-closed socket is harmless.
+  //
+  // Removed before closing: the close wakes the sender and the receive loop, and either of them removing
+  // the connection first would make this call return false and lose the reason it was dropped.
   private bool Reap(Connection conn)
   {
-    try { conn.Client.Close(); } catch { /* ignore */ }
-
+    bool removed;
     lock (_clientsLock)
     {
       // By reference rather than by index: the list may have changed since the broadcast's snapshot.
-      return _clients.Remove(conn);
+      removed = _clients.Remove(conn);
     }
+
+    try { conn.Client.Close(); } catch { /* ignore */ }
+
+    return removed;
   }
 
   private void AcceptLoop()
