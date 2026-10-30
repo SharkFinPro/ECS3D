@@ -8,7 +8,7 @@ full notes are in [docs/architecture/apps.md](../../../docs/architecture/apps.md
   editor.
 - `ServerApp` accepts a mutation message only on an `--edit` server and only from a connection the transport
   authorized as `Role::editor`, through `isMutationAuthorized` in `ServerPolicy.h`. The test suite includes that
-  header, so policy decisions belong there.
+  header, so policy decisions belong there; so does `StructuralChanges.h`, the order `broadcastStructuralChanges` runs in.
 - A loaded scene starts stopped until the editor presses play; a play server starts its scene itself.
 - Structural changes from a tick replicate after it: `broadcastStructuralChanges` flushes queued script spawns and
   deletions, then sends the incremental messages.
