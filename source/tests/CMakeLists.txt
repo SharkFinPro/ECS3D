@@ -41,6 +41,7 @@ add_executable(${PROJECT_NAME}
   AssetRegistryTest.cpp
   AssetDragDropTest.cpp
   UndoRequestGateTest.cpp
+  ConsoleViewTest.cpp
   KeyHoldRepeatTest.cpp
   AssetReferencesTest.cpp
   UnsavedChangesTest.cpp
@@ -132,6 +133,7 @@ add_executable(${PROJECT_NAME}
   GridVisibilityTest.cpp
   EditorViewportSettingsTest.cpp
   GizmoTest.cpp
+  GizmoEditSendingTest.cpp
   GizmoDragTest.cpp
   GizmoDragParentedTest.cpp
   EditorSelectionTest.cpp
@@ -299,6 +301,9 @@ add_executable(${PROJECT_NAME}
   # The gizmo core depends only on glm, so it is compiled in the same way rather than linking the whole
   # of ECS3DEditorLib (which pulls in ImGui/Vulkan through ECS3DRender).
   ../libs/editor/Gizmo.cpp
+
+  # The gizmo's edit sending depends only on ECS3DData, Gizmo.h and json.
+  ../libs/editor/GizmoEditSending.cpp
 
   # TransientObject depends only on ECS3DData and json.
   ../libs/editor/TransientObject.cpp

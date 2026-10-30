@@ -39,6 +39,7 @@ add_library(${PROJECT_NAME}
   ConsolePanel.cpp
   ConsolePanel.h
   ConsolePanelLayout.h
+  ConsoleView.h
   SceneScriptsPanel.cpp
   SceneScriptsPanel.h
   SceneScriptsPanelLogic.h
@@ -53,6 +54,8 @@ add_library(${PROJECT_NAME}
   ImGuiGizmoRenderer.h
   ViewportGizmo.cpp
   ViewportGizmo.h
+  GizmoEditSending.cpp
+  GizmoEditSending.h
   components/TransformEditor.cpp
   components/TransformEditor.h
   components/RigidBodyEditor.cpp

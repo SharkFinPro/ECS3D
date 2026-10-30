@@ -4,7 +4,6 @@
 #include <objects/Object.h>
 #include <objects/components/Component.h>
 #include <objects/components/Transform.h>
-#include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <utility>
 
@@ -62,12 +61,12 @@ ViewportGizmo::~ViewportGizmo() = default;
 
 void ViewportGizmo::setEditCallback(EditCallback callback)
 {
-  m_editCallback = std::move(callback);
+  m_editSending.setEditCallback(std::move(callback));
 }
 
 void ViewportGizmo::setEditCommittedCallback(EditCommittedCallback callback)
 {
-  m_editCommittedCallback = std::move(callback);
+  m_editSending.setEditCommittedCallback(std::move(callback));
 }
 
 bool ViewportGizmo::capturesMouseAt(const glm::vec2 mouse) const
@@ -117,36 +116,14 @@ void ViewportGizmo::setSpace(const gizmo::Space space)
 
 void ViewportGizmo::abandonDrag(ObjectManager* objectManager)
 {
-  if (!m_dragTarget)
+  const auto target = m_editSending.dragTarget();
+  if (!target)
   {
     return;
   }
 
-  const auto target = *m_dragTarget;
-  const auto before = m_dragBefore;
-
-  m_dragTarget.reset();
-  m_dragBefore.clear();
   gizmo::cancel(m_state);
-
-  if (!m_editCommittedCallback)
-  {
-    return;
-  }
-
-  const auto transform = transformFor(objectManager, target);
-  if (!transform)
-  {
-    return;
-  }
-
-  auto beforeJson = nlohmann::json::parse(before, nullptr, false);
-  if (beforeJson.is_discarded())
-  {
-    return;
-  }
-
-  m_editCommittedCallback(target, beforeJson, transform->serialize());
+  m_editSending.abandon(transformFor(objectManager, target));
 }
 
 void ViewportGizmo::update(ObjectManager* objectManager, const std::optional<uuids::uuid> target,
@@ -154,7 +131,7 @@ void ViewportGizmo::update(ObjectManager* objectManager, const std::optional<uui
                            const gizmo::Snap& snap, const bool sceneHovered)
 {
   const auto transform = transformFor(objectManager, target);
-  const bool targetChanged = m_dragTarget.has_value() && target != m_dragTarget;
+  const bool targetChanged = m_editSending.dragTarget().has_value() && target != m_editSending.dragTarget();
 
   if (!transform || !editable || targetChanged)
   {
@@ -187,36 +164,5 @@ void ViewportGizmo::update(ObjectManager* objectManager, const std::optional<uui
     m_renderer->draw(frame, view);
   }
 
-  if (frame.dragStarted)
-  {
-    m_dragTarget = target;
-    m_dragBefore = transform->serialize().dump();
-  }
-
-  if (frame.local)
-  {
-    transform->setPosition(frame.local->position);
-    transform->setRotation(frame.local->rotation);
-    transform->setScale(frame.local->scale);
-
-    if (m_editCallback)
-    {
-      m_editCallback(*target, transform);
-    }
-  }
-
-  if (frame.dragFinished)
-  {
-    if (m_editCommittedCallback)
-    {
-      auto beforeJson = nlohmann::json::parse(m_dragBefore, nullptr, false);
-      if (!beforeJson.is_discarded())
-      {
-        m_editCommittedCallback(*target, beforeJson, transform->serialize());
-      }
-    }
-
-    m_dragTarget.reset();
-    m_dragBefore.clear();
-  }
+  m_editSending.apply(frame, *target, transform);
 }
