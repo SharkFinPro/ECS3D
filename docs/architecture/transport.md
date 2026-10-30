@@ -64,10 +64,13 @@ connect attempt is bounded to `ConnectTimeoutMs` in each backend so the apps' re
 deadline instead of hanging on the OS connect timeout. Both backends
 broadcast from a snapshot of the connection list taken under the lock and enqueue the one built message on
 each connection's `SendQueue`; the tick thread never writes to a socket. Each authorized connection has its
-own sender thread (`ecs3d-net-send`) that drains its queue, bounding each message's send by `SendTimeoutMs`.
-A peer is dropped when its own send fails or times out, or when its queue already holds more than
-`MaxQueuedSendBytes` (one maximum-size message by default; an empty queue always accepts one message). So a
-peer that stops reading disconnects only itself and the tick never blocks on it.
+own sender thread (`ecs3d-net-send`) that drains its queue. A peer is dropped when its own send fails or
+times out, or when its queue already holds more than `MaxQueuedSendBytes` (one maximum-size message by
+default; an empty queue always accepts one message). `SendTimeoutMs` bounds a whole WebSocket message, but
+on TCP it bounds each underlying socket send, so it drops a peer that stops reading outright while one that
+drips a few bytes at a time is caught by the queue cap instead. Either way a peer that stops reading
+disconnects only itself and the tick never blocks on it. Messages still queued when a connection closes or
+the server stops are discarded, not flushed.
 Shutdown joins every socket thread it started before returning: `ServerStop` flips `_serverRunning` and
 takes its snapshot of started threads in the same lock the accept loop checks that flag and registers a
 new thread under, so a thread that starts is one this call goes on to join; it then closes the listener

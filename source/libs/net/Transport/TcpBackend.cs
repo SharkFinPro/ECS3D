@@ -59,10 +59,10 @@ internal sealed class TcpBackend : TransportBackend
   // Instance copy of the default above, internal so ECS3DManagedTests can change it.
   internal int HandshakeTimeoutMs = DefaultHandshakeTimeoutMs;
 
-  // How long one message's send to one peer may block that peer's own sender thread before the peer is
-  // dropped. The tick thread never waits on it: it only queues. Two seconds because a peer that cannot take
-  // a message in that long has stopped draining its socket, while it is far longer than any plausible
-  // snapshot send takes on a healthy link.
+  // How long one socket send to one peer may block that peer's own sender thread before the peer is
+  // dropped. It applies per underlying send, not per message, so a peer that drips a few bytes at a time is
+  // caught by MaxQueuedSendBytes instead. The tick thread never waits on it: it only queues. Two seconds
+  // because a peer that takes nothing for that long has stopped draining its socket.
   // Internal and mutable so ECS3DManagedTests can shorten it; the default is the production value.
   internal int SendTimeoutMs = 2000;
 

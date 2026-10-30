@@ -202,12 +202,12 @@ public sealed class WebSocketBackendLoopbackTests : IDisposable
     return peer;
   }
 
-  private static void WaitFor(Func<bool> condition, string what)
+  private static void WaitFor(Func<bool> condition, string what, int timeoutMs = WaitMs)
   {
-    var deadline = Environment.TickCount64 + WaitMs;
+    var deadline = Environment.TickCount64 + timeoutMs;
     while (!condition())
     {
-      Assert.True(Environment.TickCount64 < deadline, $"Timed out waiting for {what}.");
+      Assert.True(Environment.TickCount64 < deadline, $"Timed out waiting for {what} after {timeoutMs} ms.");
       Thread.Sleep(5);
     }
   }
