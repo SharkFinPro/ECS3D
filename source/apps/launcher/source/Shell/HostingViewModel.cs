@@ -23,6 +23,7 @@ public class HostingViewModel : ObservableObject
     private readonly Action<LaunchNotice> _notify;
     private readonly Action<PromptRequest, Action<bool>> _ask;
     private readonly Action _openSettings;
+    private readonly Action<NoticeTopic> _clearNotice;
     private HostSession _session;
     private Task _starting = Task.CompletedTask;
     private string? _startingName;
@@ -36,7 +37,8 @@ public class HostingViewModel : ObservableObject
         Action<Action> post,
         Action<LaunchNotice> notify,
         Action<PromptRequest, Action<bool>> ask,
-        Action openSettings)
+        Action openSettings,
+        Action<NoticeTopic> clearNotice)
     {
         _newSession = newSession;
         _network = network;
@@ -45,6 +47,7 @@ public class HostingViewModel : ObservableObject
         _notify = notify;
         _ask = ask;
         _openSettings = openSettings;
+        _clearNotice = clearNotice;
         _session = NewSession();
         ShowPanelCommand = new RelayCommand(ShowPanel);
     }
@@ -166,7 +169,7 @@ public class HostingViewModel : ObservableObject
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             SetStarting(null);
-            _notify(EarlyExitNotice.Failure(exception.Message));
+            _notify(EarlyExitNotice.Failure(exception.Message, NoticeTopic.Hosting));
         }
     }
 
@@ -179,10 +182,12 @@ public class HostingViewModel : ObservableObject
 
         if (!result.Succeeded)
         {
-            _notify(new LaunchNotice(result.Message ?? "The server could not be started.", result.LogPath));
+            _notify(new LaunchNotice(
+                result.Message ?? "The server could not be started.", result.LogPath, NoticeTopic.Hosting));
             return;
         }
 
+        _clearNotice(NoticeTopic.Hosting);
         Open(name);
         if (result.Kind == HostStartKind.StartedWithoutWindow && result.Message is not null)
         {

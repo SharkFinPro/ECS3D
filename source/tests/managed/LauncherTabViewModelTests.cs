@@ -59,7 +59,7 @@ public class LauncherTabViewModelTests
       _ => null,
       "1.2.3",
       action => action(),
-      () => rig.Time.Now);
+      () => rig.Time.Now) { ToastDelay = ToastDelays.Never };
     var used = shell.NavItems.Select(item => item.Icon)
       .Append(new Project { Name = "", Path = "", Edited = "" }.PlaceholderIcon)
       .Distinct()

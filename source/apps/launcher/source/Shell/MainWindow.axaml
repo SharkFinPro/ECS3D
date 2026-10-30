@@ -267,7 +267,8 @@
                                    VerticalAlignment="Center" />
                         <Button Grid.Column="1" Classes="secondary" Theme="{StaticResource BareButton}"
                                 Content="Open Settings" Margin="14,0,0,0"
-                                Command="{Binding OpenSettingsCommand}" />
+                                Command="{Binding OpenSettingsCommand}"
+                                IsVisible="{Binding ShowBannerSettingsButton}" />
                     </Grid>
                 </Border>
 
@@ -434,7 +435,8 @@
         <Border Grid.Row="1" IsVisible="{Binding HasToast}" Width="360" Padding="14"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,24"
                 CornerRadius="10" Background="{StaticResource PanelBrush}"
-                BorderBrush="{StaticResource DangerBrush}" BorderThickness="1">
+                BorderBrush="{StaticResource DangerBrush}" BorderThickness="1"
+                AutomationProperties.LiveSetting="Assertive">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" Spacing="10">
                     <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" />

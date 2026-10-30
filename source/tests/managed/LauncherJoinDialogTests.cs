@@ -22,7 +22,7 @@ public class LauncherJoinDialogTests
       _ => null,
       "1.2.3",
       post ?? (action => action()),
-      () => _rig.Time.Now);
+      () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
 
   private static JoinDialogViewModel NewDialog(LastJoin? last, Action<JoinTarget>? join = null) =>
     new(last, 3000, join ?? (_ => { }), () => { });
@@ -239,7 +239,7 @@ public class LauncherJoinDialogTests
         action();
         posted.TrySetResult();
       },
-      () => _rig.Time.Now);
+      () => _rig.Time.Now) { ToastDelay = ToastDelays.Never };
     model.OpenJoinCommand.Execute(null);
     model.JoinDialog!.Address = "host.example";
 
