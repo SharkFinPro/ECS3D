@@ -10,7 +10,7 @@
 #include <objects/components/Component.h>
 #include <objects/Object.h>
 #include <ScriptSystem.h>
-#include <SceneObjectDiff.h>
+#include "StructuralChanges.h"
 #include <bindings/BindingContext.h>
 #include <NetServer.h>
 #include <Log.h>
@@ -114,75 +114,19 @@ void ServerApp::broadcastStateDelta() const
 
 void ServerApp::broadcastStructuralChanges() const
 {
-  // A script's component edit (e.g. ModelRendererBindings swapping a model/texture) isn't covered by the
-  // per-tick state delta, which only carries Transform - so it replicates like an editor edit instead:
-  // rebuild the wire message from the mutated component and broadcast it the same way applyComponentEdit's
-  // caller does above.
-  for (const auto& [objectUUID, component] : BindingContext::takeComponentEdits())
-  {
-    m_netServer->broadcast(replication::buildComponentEdit(objectUUID, component));
-  }
+  const auto scene = m_sceneManager->getCurrentScene();
 
-  // The spawn/destroy bindings buffered what the scripts did on BindingContext (scripting can't reach the
-  // net layer). Broadcast spawns before destroys, then remove the marked objects from the authoritative
-  // scene. A spawned object is still live here, so its packed blob carries current transform/components.
-  const auto spawned = BindingContext::takeSpawned();
-  for (const auto& object : spawned)
-  {
-    m_netServer->broadcast(replication::buildObjectSpawned(*object));
-  }
-
-  const auto destroyed = BindingContext::takeDestroyed();
-  for (const auto& uuid : destroyed)
-  {
-    m_netServer->broadcast(replication::buildObjectDestroyed(uuid));
-  }
-
-  // Both flushes run here, once per frame, regardless of which (if either) fired this frame: a spawn-only
-  // frame still has to admit its pending objects into the scene, and flushing additions before deletions
-  // means an object spawned then destroyed in the same frame's script passes is a real member of the list
-  // by the time the delete pass looks for it.
-  std::vector<uuids::uuid> spawnedUUIDs;
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    const auto objectManager = scene->getObjectManager();
-    objectManager->flushPendingAdditions();
-    objectManager->deleteObjectsMarkedForDeletion();
-
-    // An object spawned and destroyed in the same pass is gone by now and is not reported as spawned.
-    for (const auto& uuid : sceneObjectDiff::flattenSubtrees(spawned))
+  replicateStructuralChanges(
+    scene ? scene->getObjectManager().get() : nullptr,
+    BindingContext::takeComponentEdits,
+    BindingContext::takeSpawned,
+    BindingContext::takeDestroyed,
+    BindingContext::takeStructuralComponentChanges,
+    [this](const net::Message& message) { m_netServer->broadcast(message); },
+    [this](const std::vector<uuids::uuid>& spawned, const std::vector<uuids::uuid>& destroyed)
     {
-      if (objectManager->getObjectByUUID(uuid))
-      {
-        spawnedUUIDs.push_back(uuid);
-      }
-    }
-  }
-
-  // Handlers run here can spawn or destroy too; those land in the buffers for the next call rather than
-  // recursing.
-  notifyObjectEvents(spawnedUUIDs, destroyed);
-
-  // A script's addComponent/removeComponent (ComponentOpsBindings) already applied to each object listed
-  // here - unlike spawn/destroy there is nothing further to apply locally - but the change isn't covered
-  // by the per-tick state delta or a single-component buildComponentEdit either, so each changed object's
-  // current packed state goes out as its own objectComponentsChanged message: cheaper than the editor's
-  // own sceneEdit addComponent/removeComponent ops, which re-snapshot the whole project, since only the
-  // objects that actually changed need to reach a client. Read after the deletion pass above, so a uuid
-  // whose object left the scene this same tick (already covered by an objectDestroyed above) is silently
-  // skipped rather than resent for an object that no longer exists.
-  const auto changedUUIDs = BindingContext::takeStructuralComponentChanges();
-  if (const auto scene = m_sceneManager->getCurrentScene())
-  {
-    const auto objectManager = scene->getObjectManager();
-    for (const auto& objectUUID : changedUUIDs)
-    {
-      if (const auto object = objectManager->getObjectByUUID(objectUUID))
-      {
-        m_netServer->broadcast(replication::buildObjectComponentsChanged(*object));
-      }
-    }
-  }
+      notifyObjectEvents(spawned, destroyed);
+    });
 }
 
 void ServerApp::forwardLogToEditors() const
