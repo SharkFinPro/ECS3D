@@ -90,6 +90,9 @@ public:
 
   void stop();
 
+  // True between start() and stop(); a paused scene stays started.
+  [[nodiscard]] bool isStarted() const;
+
   // Rebuild the manager's objects from a save-shaped objects array (the "objects" field ObjectManager::
   // serialize() writes), replacing whatever it currently holds and preserving each object's uuid - unlike
   // instantiate, which assigns fresh ones. Used to put a scene back to its authored structure after a run

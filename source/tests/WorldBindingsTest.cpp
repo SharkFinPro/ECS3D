@@ -219,6 +219,8 @@ namespace {
 
   TEST_F(WorldBindingsTest, SpawnObjectCreatesAPositionedObjectAndRecordsIt)
   {
+    scene.objectManager->start();
+
     const auto uuidText = copyOut(bindings.spawnObject("Spawned", 1.0f, 2.0f, 3.0f));
 
     const auto parsed = uuids::uuid::from_string(uuidText);
@@ -236,6 +238,8 @@ namespace {
 
   TEST_F(WorldBindingsTest, SpawnObjectWithoutANameUsesTheDefaultName)
   {
+    scene.objectManager->start();
+
     const auto parsed = uuids::uuid::from_string(copyOut(bindings.spawnObject(nullptr, 0.0f, 0.0f, 0.0f)));
     ASSERT_TRUE(parsed.has_value());
     EXPECT_EQ(scene.objectManager->getObjectByUUID(parsed.value())->getName(), "Object");
@@ -243,6 +247,8 @@ namespace {
 
   TEST_F(WorldBindingsTest, SpawnPrefabInstantiatesTheBodyWithFreshUuidsAndRecordsIt)
   {
+    scene.objectManager->start();
+
     const auto source = fixtures::addObject(scene, "PrefabSource", glm::vec3(9, 9, 9));
     const auto sourceChild = fixtures::addChildObject(scene, "PrefabChild", source);
 
@@ -279,6 +285,8 @@ namespace {
 
   TEST_F(WorldBindingsTest, SpawnPrefabRefusesWhatIsNotAUsablePrefab)
   {
+    scene.objectManager->start();
+
     const auto source = fixtures::addObject(scene, "PrefabSource");
     const auto prefabUUID = scene.objectManager->createUUID();
     const auto modelUUID = scene.objectManager->createUUID();
@@ -306,6 +314,8 @@ namespace {
 
   TEST_F(WorldBindingsTest, SpawnPrefabWithAnUnknownComponentSpawnsNothing)
   {
+    scene.objectManager->start();
+
     const auto source = fixtures::addObject(scene, "PrefabSource");
     auto body = source->serialize();
     body["components"].push_back({ { "type", "NoSuchComponent" } });
@@ -318,6 +328,77 @@ namespace {
     EXPECT_EQ(copyOut(bindings.spawnPrefab(uuids::to_string(prefabUUID).c_str(), 0, 0, 0)), "");
     EXPECT_TRUE(BindingContext::takeSpawned().empty());
     EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+  }
+
+  TEST_F(WorldBindingsTest, SpawnObjectIsRefusedWhileTheSceneIsStopped)
+  {
+    const auto before = scene.objectManager->getAllObjects().size();
+
+    EXPECT_EQ(copyOut(bindings.spawnObject("Leak", 1.0f, 2.0f, 3.0f)), "");
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+    EXPECT_TRUE(scene.objectManager->getPendingAdditions().empty());
+    EXPECT_TRUE(BindingContext::takeSpawned().empty());
+
+    scene.objectManager->start();
+
+    const auto parsed = uuids::uuid::from_string(copyOut(bindings.spawnObject("Leak", 1.0f, 2.0f, 3.0f)));
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_NE(scene.objectManager->getObjectByUUID(parsed.value()), nullptr);
+    EXPECT_EQ(BindingContext::takeSpawned().size(), 1u);
+  }
+
+  TEST_F(WorldBindingsTest, SpawnObjectIsRefusedAfterTheSceneStops)
+  {
+    scene.objectManager->start();
+    scene.objectManager->stop();
+
+    const auto before = scene.objectManager->getAllObjects().size();
+
+    EXPECT_EQ(copyOut(bindings.spawnObject("Leak", 0, 0, 0)), "");
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+    EXPECT_TRUE(scene.objectManager->getPendingAdditions().empty());
+    EXPECT_TRUE(BindingContext::takeSpawned().empty());
+  }
+
+  TEST_F(WorldBindingsTest, SpawnPrefabIsRefusedWhileTheSceneIsStopped)
+  {
+    const auto source = fixtures::addObject(scene, "PrefabSource");
+    const auto prefabUUID = scene.objectManager->createUUID();
+    registry.registerAsset({ prefabUUID, AssetType::Prefab, "Thing", "", source->serialize().dump(), "" });
+    BindingContext::setAssetRegistry(&registry);
+    const auto prefabText = uuids::to_string(prefabUUID);
+
+    const auto before = scene.objectManager->getAllObjects().size();
+
+    EXPECT_EQ(copyOut(bindings.spawnPrefab(prefabText.c_str(), 4.0f, 5.0f, 6.0f)), "");
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+    EXPECT_TRUE(scene.objectManager->getPendingAdditions().empty());
+    EXPECT_TRUE(BindingContext::takeSpawned().empty());
+
+    scene.objectManager->start();
+
+    const auto parsed = uuids::uuid::from_string(copyOut(bindings.spawnPrefab(prefabText.c_str(), 4.0f, 5.0f, 6.0f)));
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_NE(scene.objectManager->getObjectByUUID(parsed.value()), nullptr);
+    EXPECT_EQ(BindingContext::takeSpawned().size(), 1u);
+  }
+
+  TEST_F(WorldBindingsTest, SpawnPrefabIsRefusedAfterTheSceneStops)
+  {
+    const auto source = fixtures::addObject(scene, "PrefabSource");
+    const auto prefabUUID = scene.objectManager->createUUID();
+    registry.registerAsset({ prefabUUID, AssetType::Prefab, "Thing", "", source->serialize().dump(), "" });
+    BindingContext::setAssetRegistry(&registry);
+
+    scene.objectManager->start();
+    scene.objectManager->stop();
+
+    const auto before = scene.objectManager->getAllObjects().size();
+
+    EXPECT_EQ(copyOut(bindings.spawnPrefab(uuids::to_string(prefabUUID).c_str(), 0, 0, 0)), "");
+    EXPECT_EQ(scene.objectManager->getAllObjects().size(), before);
+    EXPECT_TRUE(scene.objectManager->getPendingAdditions().empty());
+    EXPECT_TRUE(BindingContext::takeSpawned().empty());
   }
 
   TEST_F(WorldBindingsTest, DestroyObjectMarksForDeletionAndRecordsOnce)

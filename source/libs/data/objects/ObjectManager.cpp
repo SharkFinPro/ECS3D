@@ -310,6 +310,11 @@ void ObjectManager::start()
   }
 }
 
+bool ObjectManager::isStarted() const
+{
+  return m_started;
+}
+
 void ObjectManager::stop()
 {
   m_started = false;

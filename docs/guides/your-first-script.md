@@ -61,7 +61,8 @@ Vectors are `System.Numerics.Vector3`. To reach other objects, use `World`:
 - `World.tryGetTransform(uuid, out transform)` returns false when the object is gone. `tryGetRigidBody`,
   `tryGetCollider` and `tryGetPlayerController` work the same way.
 - `World.spawnPrefab(prefabUuid, position)` and `World.destroy(uuid)` change the scene. A destroy takes
-  effect at the end of the tick.
+  effect at the end of the tick. A spawn returns an empty string while the scene is stopped, for example
+  from a constructor before you press Play.
 
 Log with `Log.trace`, `Log.debug`, `Log.info`, `Log.warn` and `Log.error`. The output appears in the
 editor's Console with a "[server] " prefix.
