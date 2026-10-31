@@ -287,12 +287,13 @@ namespace {
 
 TEST(PhysicsIntegration, ABoxLandingWithSidewaysSpeedStopsSlidingWithinAShortDistance)
 {
-  // The landing's own impulse takes a share of the slide, and each resting tick after it takes friction times
-  // the weight that tick: the box stops about a unit and a half from where it came down, lying flat.
+  // It reaches the ground at x = 1.5 (five ticks at three units a second) and slides only about 0.06 further
+  // before friction stops it. That is too short to tell from sticking on landing, so the window catches a box that
+  // loses its slide before landing (x near 1.2) or keeps it (past 8), not a stick at the landing point.
   const auto landed = landSliding(0.5f);
 
-  EXPECT_GT(landed.position.x, 0.5f);
-  EXPECT_LT(landed.position.x, 2.0f);
+  EXPECT_GT(landed.position.x, 1.45f);
+  EXPECT_LT(landed.position.x, 1.7f);
   EXPECT_LT(glm::length(glm::vec2(landed.velocity.x, landed.velocity.z)), 1e-4f);
   fixtures::expectNear("up", landed.up, { 0, 1, 0 }, 1e-3f);
   EXPECT_NEAR(landed.position.y, 2.0f, 0.05f);
@@ -336,16 +337,14 @@ TEST(PhysicsIntegration, ABoxRestingOnAFaceWithinTheManifoldsToleranceIsLaidFlus
 TEST(PhysicsIntegration, ARealTiltOrAContactFromAboveIsNotLaidFlush)
 {
   // Two degrees is past anything the manifold rounds to a whole face, so it is a real tilt, left alone.
-  fixtures::expectNear("tilted", rotationAfterRestingOn({ 0, 0, 2 }, { 0, 0.01f, 0 }, flatUnderside), { 0, 0, 2 },
-                       1e-4f);
+  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 2 }, { 0, 0.01f, 0 }, flatUnderside), glm::vec3(0, 0, 2));
 
   // A face pressed down on from above is not what the body rests on.
   const std::array<glm::vec3, 4> topside{
     glm::vec3{ -0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
     glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, 0.5f }
   };
-  fixtures::expectNear("from above", rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, -0.01f, 0 }, topside),
-                       { 0, 0, 0.016f }, 1e-4f);
+  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, -0.01f, 0 }, topside), glm::vec3(0, 0, 0.016f));
 
   // Positive control: the same small tilt resting on the face below is laid flush.
   fixtures::expectNear("up", localUpOf(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, 0.01f, 0 }, flatUnderside)),
@@ -363,7 +362,8 @@ TEST(PhysicsIntegration, ATiltJustInsideTheFlushWindowIsLaidFlatAndJustOutsideIt
 
   const auto kept = rotationAfterRestingOn(outside, { 0, 0.01f, 0 }, flatUnderside);
   fixtures::expectNear("outside", kept, outside, 1e-4f);
-  EXPECT_GT(std::fabs(localUpOf(kept).x), 0.017f);
+  // The tilt stays: its sine is above the 0.0175 window, where the 0.99 degrees above (0.0173) is below it.
+  EXPECT_GT(std::fabs(localUpOf(kept).x), 0.0175f);
 }
 
 TEST(PhysicsIntegration, AChildOfATurnedParentIsLaidFlushWithoutTakingOnTheParentsTurn)
@@ -403,6 +403,7 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
   // Spin left about the vertical after the landing is only damped, so it takes a while to fall under the rest
   // threshold; the rotation is sampled once it has.
   glm::vec3 settledRotation{ 0 };
+  glm::vec3 settledSpin{ 1 };
   for (int tick = 0; tick < 300; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
@@ -411,13 +412,17 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
     if (tick == 200)
     {
       settledRotation = transformOf(falling)->getRotation();
+      settledSpin = body->getAngularVelocity();
     }
   }
 
-  // The complaint is a rotation that never stops changing, so the last hundred ticks must not move it by
-  // even a hundredth of a degree, nor leave any spin.
-  fixtures::expectNear("rotation", transformOf(falling)->getRotation(), settledRotation, 0.01f);
-  EXPECT_LT(glm::length(body->getAngularVelocity()), 1e-4f);
+  // Both ends of the last hundred ticks are at rest, and a body at rest has exactly no spin and is not rewritten,
+  // so its rotation is compared exactly: the complaint is a rotation that never stops changing, however slightly.
+  EXPECT_EQ(glm::length(settledSpin), 0.0f);
+  EXPECT_EQ(glm::length(body->getAngularVelocity()), 0.0f);
+  EXPECT_EQ(transformOf(falling)->getRotation().x, settledRotation.x);
+  EXPECT_EQ(transformOf(falling)->getRotation().y, settledRotation.y);
+  EXPECT_EQ(transformOf(falling)->getRotation().z, settledRotation.z);
 
   // Lying flat, not frozen at whatever small tilt the manifold already counts as a whole face.
   fixtures::expectNear("up", localUpOf(transformOf(falling)->getRotation()), { 0, 1, 0 }, 1e-5f);

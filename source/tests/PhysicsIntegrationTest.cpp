@@ -13,7 +13,6 @@
 #include "WireTypes.h"
 
 #include <Protocol.h>
-
 #include <glm/ext/scalar_constants.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -319,6 +318,7 @@ TEST(PhysicsIntegration, SetMassRefusesToLeaveTheBodyAtZeroOrNegativeMass)
 }
 
 namespace {
+  // Pins the floor RigidBody.cpp applies (kMinMass), which is not exposed.
   constexpr float minimumMass = 0.001f;
 
   nlohmann::json rigidBodyJsonWithMass(const float mass)
