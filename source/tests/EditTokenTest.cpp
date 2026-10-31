@@ -72,6 +72,7 @@ TEST(EditToken, EveryPositionOfTheTokenCanShowEveryHexDigit)
     for (std::size_t i = 0; i < token.length(); ++i)
     {
       const char c = token[i];
+      ASSERT_TRUE(isLowerHex(std::string(1, c))) << "unexpected character at position " << i;
       seen[i][c <= '9' ? c - '0' : c - 'a' + 10] = true;
     }
   }

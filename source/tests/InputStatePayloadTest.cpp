@@ -243,7 +243,8 @@ TEST(InputStatePayload, ATruncatedViewBlockIsTreatedAsAbsentWhileTheMouseBlockSu
 
 TEST(InputStatePayload, ACameraStringPastTheMaxViewCameraBytesIsNoViewWhileTheLongestAllowedOneParses)
 {
-  static_assert(replication::maxViewCameraBytes == 64);
+  static_assert(replication::maxViewCameraBytes == 64,
+                "the camera string bound is pinned at 64 bytes on purpose");
 
   const std::string longest(64, 'a');
   const auto accepted = replication::parseInputState(

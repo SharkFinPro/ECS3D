@@ -133,9 +133,9 @@ namespace {
     InputState::setMouse(slotA, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0xFFu);
     EXPECT_TRUE(InputState::isMouseButtonPressed(slotA, 7));
     EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, -1));
+    EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 8));
 
     // Past 31 the shift count wraps on x86, so without the range check button 32 would read bit 0.
-    EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 8));
     EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 32));
     EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 64));
   }
