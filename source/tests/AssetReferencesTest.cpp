@@ -7,9 +7,12 @@
 #include <objects/Object.h>
 #include <objects/ObjectManager.h>
 #include <objects/components/ModelRenderer.h>
+#include <objects/components/Script.h>
 #include <objects/components/collisions/ConvexMeshCollider.h>
 #include <scenes/SceneAsset.h>
 #include <scenes/SceneManager.h>
+
+#include <nlohmann/json.hpp>
 
 #include <memory>
 #include <string>
@@ -35,6 +38,16 @@ namespace {
     object->addComponent(renderer);
 
     return object;
+  }
+
+  void addScriptWithAssetField(const std::shared_ptr<Object>& object, const uuids::uuid& asset)
+  {
+    auto script = std::make_shared<Script>("Spawner");
+    script->setFields(nlohmann::json::array({
+      { { "name", "speed" }, { "type", "float" }, { "value", 2.0 } },
+      { { "name", "model" }, { "type", "string" }, { "asset", "model" }, { "value", uuids::to_string(asset) } }
+    }));
+    object->addComponent(script);
   }
 
   AssetRecord prefabRecord(const std::string& name, const std::string& body)
@@ -194,4 +207,48 @@ TEST_F(AssetReferencesTest, CountsAConvexMeshColliderInsideAPrefabBody)
 
   EXPECT_EQ(count(modelUUID), 1);
   EXPECT_EQ(count(unusedUUID), 0);
+}
+
+TEST_F(AssetReferencesTest, CountsAScriptFieldOnALiveObject)
+{
+  const auto scene = addScene("11111111-1111-1111-1111-111111111111", "Scene");
+  auto object = std::make_shared<Object>("Spawner");
+  addScriptWithAssetField(object, modelUUID);
+  scene->getObjectManager()->addObject(object);
+
+  EXPECT_EQ(count(modelUUID), 1);
+  EXPECT_EQ(count(unusedUUID), 0);
+}
+
+TEST_F(AssetReferencesTest, CountsAScriptFieldInsideAPrefabBodyAtTheTopAndInAChild)
+{
+  const auto root = std::make_shared<Object>("Root");
+  addScriptWithAssetField(root, modelUUID);
+  const auto child = std::make_shared<Object>("Child");
+  addScriptWithAssetField(child, modelUUID);
+  const auto bystander = std::make_shared<Object>("Bystander");
+  addScriptWithAssetField(bystander, unusedUUID);
+  root->addChild(child);
+  root->addChild(bystander);
+
+  m_assetRegistry.registerAsset(prefabRecord("Prefab", root->serialize().dump()));
+
+  EXPECT_EQ(count(modelUUID), 2);
+  EXPECT_EQ(count(unusedUUID), 1);
+}
+
+TEST_F(AssetReferencesTest, ScriptAndComponentReferencesOnOneObjectCountOnce)
+{
+  const auto scene = addScene("11111111-1111-1111-1111-111111111111", "Scene");
+  auto both = makeModelObject("Both", modelUUID);
+  addScriptWithAssetField(both, modelUUID);
+  scene->getObjectManager()->addObject(both);
+  auto scriptOnly = std::make_shared<Object>("ScriptOnly");
+  addScriptWithAssetField(scriptOnly, modelUUID);
+  scene->getObjectManager()->addObject(scriptOnly);
+  scene->getObjectManager()->addObject(makeModelObject("ComponentOnly", modelUUID));
+
+  m_assetRegistry.registerAsset(prefabRecord("Prefab", scriptOnly->serialize().dump()));
+
+  EXPECT_EQ(count(modelUUID), 4);
 }

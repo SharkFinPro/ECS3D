@@ -7,11 +7,21 @@
 #include <scenes/SceneManager.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+
 bool objectReferencesAsset(const std::shared_ptr<Object>& object, const std::string& uuidString)
 {
   for (const auto& [type, component] : object->getComponents())
   {
     if (component->serialize().dump().find(uuidString) != std::string::npos)
+    {
+      return true;
+    }
+  }
+
+  for (const auto& script : object->getScripts())
+  {
+    if (script->serialize().dump().find(uuidString) != std::string::npos)
     {
       return true;
     }
@@ -24,16 +34,23 @@ int countReferencesInPrefabNode(const nlohmann::json& node, const std::string& u
 {
   int count = 0;
 
-  if (const auto components = node.find("components"); components != node.end() && components->is_array())
+  const auto arrayMentions = [&node, &uuidString](const char* key)
   {
-    for (const auto& component : *components)
+    const auto entries = node.find(key);
+    if (entries == node.end() || !entries->is_array())
     {
-      if (component.dump().find(uuidString) != std::string::npos)
-      {
-        ++count;
-        break;
-      }
+      return false;
     }
+
+    return std::ranges::any_of(*entries, [&uuidString](const nlohmann::json& entry)
+    {
+      return entry.dump().find(uuidString) != std::string::npos;
+    });
+  };
+
+  if (arrayMentions("components") || arrayMentions("scripts"))
+  {
+    ++count;
   }
 
   if (const auto children = node.find("children"); children != node.end() && children->is_array())
