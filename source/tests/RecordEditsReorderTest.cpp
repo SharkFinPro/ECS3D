@@ -350,7 +350,8 @@ TEST(RecordEdits, ABatchThatCannotBeFullyRecordedIsNotRecorded)
   const auto parentUUID = scene.object->getUUID();
 
   const auto rename = replication::buildRenameObject(scene.object->getUUID(), "Renamed");
-  const auto addObjectOp = replication::buildAddObject("New");
+  const auto createdUUID = someOtherUUID();
+  const auto addObjectOp = replication::buildAddObject("New", nullptr, &createdUUID);
 
   const auto valid = replication::buildBatch({ rename, addObjectOp });
   const auto recorded = edits::commandsForSceneEdit(valid, *scene.objectManager);
@@ -371,6 +372,10 @@ TEST(RecordEdits, ABatchThatCannotBeFullyRecordedIsNotRecorded)
   const auto unknownTarget = replication::buildBatch(
     { rename, replication::buildRenameObject(someOtherUUID(), "Ghost") });
   EXPECT_FALSE(edits::commandsForSceneEdit(unknownTarget, *scene.objectManager).has_value());
+
+  // A creating op that names no uuid has no faithful undo, so it spoils the whole batch.
+  const auto unnamedCreate = replication::buildBatch({ rename, replication::buildAddObject("New") });
+  EXPECT_FALSE(edits::commandsForSceneEdit(unnamedCreate, *scene.objectManager).has_value());
 
   // One op that records but that the authority would refuse: index 5 is past the end of the list.
   const auto pastTheEnd = replication::buildReorderObject(child->getUUID(), &parentUUID, 5);

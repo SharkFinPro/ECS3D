@@ -15,8 +15,9 @@ class SceneManager;
 // free, so a mutation callback records what it sends without learning how a command is shaped.
 //
 // std::nullopt means nothing faithful can be recorded: an op nothing here handles, a uuid that will not
-// parse, or a target the view does not have (a view a round trip behind the authority). The edit itself
-// still goes out - only the history entry is skipped.
+// parse, a creating op (addObject, duplicateObject, instantiatePrefab) that names no usable uuid for what it
+// creates (absent, unparseable or nil), or a target the view does not have (a view a round trip behind the
+// authority). The edit itself still goes out - only the history entry is skipped.
 namespace edits {
 
 // assetRegistry is only read for instantiatePrefab, to capture the prefab's current body alongside the
