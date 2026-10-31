@@ -283,12 +283,116 @@ TEST(SceneQuery, RaycastReportsTheFaceNormalOfARotatedBox)
 
   // Turned 45 degrees about y, the ray enters through the +x face of the box's own frame. In that
   // frame the entry is at (10.5 - sqrt(2)) along the ray, and the face normal comes back rotated with
-  // it. Nothing else here rotates a box, so this is the only test that exercises the rotation order
-  // boxWorldMatrix has to share with the collision mesh - or the inverse-transpose on the normal.
+  // it. A single axis cannot tell one composition order from another, so this pins the rotation itself
+  // and the inverse-transpose on the normal; the order is pinned by the multi-axis tests.
   EXPECT_NEAR(hit.distance, 10.5f - std::sqrt(2.0f), 1e-4f);
 
   const float halfRootTwo = std::sqrt(2.0f) / 2.0f;
   expectNear("normal", hit.normal, { halfRootTwo, 0, -halfRootTwo });
+}
+
+TEST(SceneQuery, RaycastPassingBesideABoxMisses)
+{
+  const auto scene = makeScene();
+  const auto box = addBox(scene, { 0, 0, 10 }, glm::vec3(1));
+
+  // The box spans x -1 to 1. Passing just outside the +x face misses, and the same ray nudged just inside
+  // hits, so the miss is the lateral offset and not a ray that cannot reach the box at all.
+  QueryHit hit;
+  EXPECT_FALSE(castRay(scene, { 1.05f, 0, 0 }, { 0, 0, 1 }, 100.0f, hit));
+  ASSERT_TRUE(castRay(scene, { 0.95f, 0, 0 }, { 0, 0, 1 }, 100.0f, hit));
+  EXPECT_EQ(hit.object, box->getUUID());
+  EXPECT_NEAR(hit.distance, 9.0f, 1e-4f);
+}
+
+TEST(SceneQuery, RaycastRunningParallelToABoxFaceJustOutsideMisses)
+{
+  const auto scene = makeScene();
+  addBox(scene, { 0, 0, 10 }, glm::vec3(1));
+
+  // Travelling along x, parallel to the +y face: the y and z slabs are both parallel to the ray, so the
+  // result rests on the starting-side check alone. Just above the face misses; just below runs through the
+  // box and enters at its -x face, 9 along.
+  QueryHit hit;
+  EXPECT_FALSE(castRay(scene, { -10, 1.01f, 10 }, { 1, 0, 0 }, 100.0f, hit));
+  ASSERT_TRUE(castRay(scene, { -10, 0.99f, 10 }, { 1, 0, 0 }, 100.0f, hit));
+  EXPECT_NEAR(hit.distance, 9.0f, 1e-4f);
+}
+
+TEST(SceneQuery, RaycastPassingBesideASphereMisses)
+{
+  const auto scene = makeScene();
+  const auto sphere = addSphere(scene, { 0, 0, 10 }, 2.0f);
+
+  QueryHit hit;
+  EXPECT_FALSE(castRay(scene, { 2.05f, 0, 0 }, { 0, 0, 1 }, 100.0f, hit));
+  ASSERT_TRUE(castRay(scene, { 1.95f, 0, 0 }, { 0, 0, 1 }, 100.0f, hit));
+  EXPECT_EQ(hit.object, sphere->getUUID());
+}
+
+TEST(SceneQuery, RaycastIgnoresAShapeEntirelyBehindTheOrigin)
+{
+  const auto scene = makeScene();
+  const auto sphere = addSphere(scene, { 0, 0, -10 }, 2.0f);
+  const auto box = addBox(scene, { 0, 0, -30 }, glm::vec3(1));
+
+  // Both lie dead along the ray's line, but behind it. Turned around, the same ray hits each in turn.
+  QueryHit hit;
+  EXPECT_FALSE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 100.0f, hit));
+
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, -1 }, 100.0f, hit));
+  EXPECT_EQ(hit.object, sphere->getUUID());
+  EXPECT_NEAR(hit.distance, 8.0f, 1e-4f);
+
+  ASSERT_TRUE(castRay(scene, { 0, 0, -20 }, { 0, 0, -1 }, 100.0f, hit));
+  EXPECT_EQ(hit.object, box->getUUID());
+}
+
+TEST(SceneQuery, RaycastMaxDistanceSeparatesNonRoundHitDistances)
+{
+  const auto scene = makeScene();
+  addBox(scene, { 0, 0, 10.3f }, glm::vec3(1));
+
+  // The near face is at 9.3. A limit a hair under it misses and a hair over it hits, so the comparison is
+  // against the real distance and not a rounded one.
+  QueryHit hit;
+  EXPECT_FALSE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 9.299f, hit));
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 9.301f, hit));
+  EXPECT_NEAR(hit.distance, 9.3f, 1e-4f);
+}
+
+TEST(SceneQuery, RaycastMaxDistanceSeparatesNonRoundSphereHitDistances)
+{
+  const auto scene = makeScene();
+  addSphere(scene, { 0, 0, 12.37f }, 2.1f);
+
+  // The near surface is at 12.37 - 2.1 = 10.27.
+  QueryHit hit;
+  EXPECT_FALSE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 10.269f, hit));
+  ASSERT_TRUE(castRay(scene, { 0, 0, 0 }, { 0, 0, 1 }, 10.271f, hit));
+  EXPECT_NEAR(hit.distance, 10.27f, 1e-4f);
+}
+
+TEST(SceneQuery, RaycastMatchesTheRzRyRxBoxRotationOnAllThreeAxes)
+{
+  const auto scene = makeScene();
+
+  // All three angles non-zero and not multiples of 90, with distinct scales, so the six possible
+  // composition orders of the three rotations give six different boxes. The expected distances are the
+  // center-line exits of the box A = Rz(50) * Ry(40) * Rx(30) * diag(1, 2, 3), worked out independently;
+  // the other five orders differ from them by at least 0.4 on one of the three rays.
+  const auto box = addBox(scene, { 0, 0, 0 }, { 1, 2, 3 });
+  box->getComponent<Transform>(ComponentType::transform)->setRotation({ 30, 40, 50 });
+
+  QueryHit hit;
+  ASSERT_TRUE(castRay(scene, { 10, 0, 0 }, { -1, 0, 0 }, 100.0f, hit));
+  EXPECT_NEAR(hit.distance, 7.96915f, 1e-3f);
+
+  ASSERT_TRUE(castRay(scene, { 0, 10, 0 }, { 0, -1, 0 }, 100.0f, hit));
+  EXPECT_NEAR(hit.distance, 8.29591f, 1e-3f);
+
+  ASSERT_TRUE(castRay(scene, { 0, 0, 10 }, { 0, 0, -1 }, 100.0f, hit));
+  EXPECT_NEAR(hit.distance, 8.44428f, 1e-3f);
 }
 
 TEST(SceneQuery, RaycastSeesASphereAtItsScaledRadius)
@@ -340,6 +444,92 @@ TEST(SceneQuery, OverlapSphereCountsAContactThatOnlyGrazes)
   // than flickering on the last bit of the radius.
   EXPECT_EQ(sphereOverlaps(scene, { 3, 0, 0 }, 2.0f).size(), 1u);
   EXPECT_TRUE(sphereOverlaps(scene, { 3.01f, 0, 0 }, 2.0f).empty());
+}
+
+TEST(SceneQuery, OverlapSphereJustOutsideABoxFaceMisses)
+{
+  const auto scene = makeScene();
+  const auto box = addBox(scene, { 0, 0, 0 }, glm::vec3(1));
+
+  // The sphere's near edge is at 1.01 against a face at 1, and at 0.99 for the control.
+  EXPECT_TRUE(sphereOverlaps(scene, { 1.51f, 0, 0 }, 0.5f).empty());
+
+  const auto results = sphereOverlaps(scene, { 1.49f, 0, 0 }, 0.5f);
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), box->getUUID());
+}
+
+TEST(SceneQuery, OverlapSphereNearABoxEdgeIsMeasuredToTheEdgeNotTheFaces)
+{
+  const auto scene = makeScene();
+  const auto box = addBox(scene, { 0, 0, 0 }, glm::vec3(1));
+
+  // Centered 0.5 off the +x and +y faces, so each face is within the radius on its own axis. The nearest
+  // point on the box is the edge at (1, 1, 0), 0.707 away: a radius of 0.6 falls short of it and 0.72
+  // reaches it.
+  EXPECT_TRUE(sphereOverlaps(scene, { 1.5f, 1.5f, 0 }, 0.6f).empty());
+
+  const auto results = sphereOverlaps(scene, { 1.5f, 1.5f, 0 }, 0.72f);
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), box->getUUID());
+}
+
+TEST(SceneQuery, OverlapSphereNearABoxCornerIsMeasuredToTheCorner)
+{
+  const auto scene = makeScene();
+  const auto box = addBox(scene, { 0, 0, 0 }, glm::vec3(1));
+
+  // Within 0.4 of all three faces, but the corner (1, 1, 1) is 0.693 away.
+  EXPECT_TRUE(sphereOverlaps(scene, { 1.4f, 1.4f, 1.4f }, 0.65f).empty());
+
+  const auto results = sphereOverlaps(scene, { 1.4f, 1.4f, 1.4f }, 0.75f);
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), box->getUUID());
+}
+
+TEST(SceneQuery, OverlapSphereAgainstARotatedBoxUsesTheRotatedShape)
+{
+  const auto scene = makeScene();
+  const auto box = addBox(scene, { 0, 0, 0 }, glm::vec3(1));
+  box->getComponent<Transform>(ComponentType::transform)->setRotation({ 0, 0, 45 });
+
+  // Turned 45 degrees about z the box is a diamond with its tips at (+-1.414, 0) and (0, +-1.414). A sphere
+  // off the unrotated corner is inside the old square's reach but well clear of the diamond's edge...
+  EXPECT_TRUE(sphereOverlaps(scene, { 1.2f, 1.2f, 0 }, 0.3f).empty());
+
+  // ...and one at the diamond's tip is outside the old square's reach but touches the tip.
+  const auto results = sphereOverlaps(scene, { 1.4f, 0, 0 }, 0.3f);
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_EQ(results.front(), box->getUUID());
+}
+
+TEST(SceneQuery, OverlapSphereMatchesTheRzRyRxBoxRotationAtItsCorners)
+{
+  const auto scene = makeScene();
+
+  // The box of the raycast test above. Its corners A * (+-1, +-1, +-1) are worked out independently; a
+  // small sphere on each of four of them touches the box, and the same corners pushed 30% further out do
+  // not. Every other composition order puts at least one of these corners well outside its box.
+  const auto box = addBox(scene, { 0, 0, 0 }, { 1, 2, 3 });
+  box->getComponent<Transform>(ComponentType::transform)->setRotation({ 30, 40, 50 });
+
+  const std::vector<glm::vec3> corners{
+    { 1.80128f, 2.50769f, 2.11350f },
+    { -2.64378f, 1.87745f, -1.86699f },
+    { 3.62859f, -0.70380f, 0.58141f },
+    { -0.81647f, -1.33404f, -3.39907f }
+  };
+
+  for (const auto& corner : corners)
+  {
+    SCOPED_TRACE(::testing::Message() << "corner (" << corner.x << ", " << corner.y << ", " << corner.z << ")");
+
+    const auto touching = sphereOverlaps(scene, corner, 0.1f);
+    ASSERT_EQ(touching.size(), 1u);
+    EXPECT_EQ(touching.front(), box->getUUID());
+
+    EXPECT_TRUE(sphereOverlaps(scene, corner * 1.3f, 0.1f).empty());
+  }
 }
 
 TEST(SceneQuery, OverlapSphereRespectsTheLayerMaskAndTheIgnoredObject)

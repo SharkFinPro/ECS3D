@@ -16,6 +16,7 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <utility>
 #include <vector>
 #include <uuid.h>
 
@@ -48,6 +49,76 @@ namespace {
                 const std::shared_ptr<Object>& b)
   {
     return std::ranges::find(pairs, CollisionPair::make(a->getUUID(), b->getUUID())) != pairs.end();
+  }
+
+  struct SingleContactResult {
+    bool entered;
+    glm::vec3 moverPosition;
+  };
+
+  // A dynamic body one unit into a static one: the single-candidate path of handleCollisions.
+  SingleContactResult runSingleContact(const bool moverIsTrigger, const bool restingIsTrigger)
+  {
+    const auto scene = makeScene();
+    const auto mover = addBody(scene, "Mover", { 0, 0, 0 }, true, moverIsTrigger);
+    const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, restingIsTrigger);
+
+    CollisionSystem collisionSystem;
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+
+    return { contains(collisionSystem.getCollisionEnters(), mover, resting), positionOf(mover) };
+  }
+
+  struct ApproachingBodiesResult {
+    bool entered;
+    glm::vec3 firstPosition;
+    glm::vec3 secondPosition;
+    glm::vec3 firstVelocity;
+    glm::vec3 secondVelocity;
+  };
+
+  constexpr glm::vec3 firstApproach{ 0.1f, 0, 0 };
+  constexpr glm::vec3 secondApproach{ -0.1f, 0, 0 };
+
+  // Two dynamic bodies overlapping by one unit and moving toward each other: both edges are collision
+  // sources, and a response would change positions and velocities on both sides.
+  ApproachingBodiesResult runApproachingBodies(const bool firstIsTrigger, const bool secondIsTrigger)
+  {
+    const auto scene = makeScene();
+    const auto first = addBody(scene, "First", { 0, 0, 0 }, true, firstIsTrigger);
+    const auto second = addBody(scene, "Second", { 1, 0, 0 }, true, secondIsTrigger);
+    first->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity(firstApproach);
+    second->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity(secondApproach);
+
+    CollisionSystem collisionSystem;
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+
+    return { contains(collisionSystem.getCollisionEnters(), first, second), positionOf(first), positionOf(second),
+             first->getComponent<RigidBody>(ComponentType::rigidBody)->getVelocity(),
+             second->getComponent<RigidBody>(ComponentType::rigidBody)->getVelocity() };
+  }
+
+  struct MultiContactResult {
+    bool enteredShallow;
+    bool enteredDeep;
+    glm::vec3 moverPosition;
+  };
+
+  // The geometry of TwoGenuineContactsInOneTickBothPushTheBodyClear: Shallow overlaps by 0.5 on x and Deep
+  // by 1.0 on y, so the multi-candidate path resolves Deep first.
+  MultiContactResult runTwoContacts(const bool moverIsTrigger, const bool shallowIsTrigger,
+                                    const bool deepIsTrigger)
+  {
+    const auto scene = makeScene();
+    const auto mover = addBody(scene, "Mover", { 0, 0, 0 }, true, moverIsTrigger);
+    const auto shallow = addBody(scene, "Shallow", { 1.5f, 0, 0 }, false, shallowIsTrigger);
+    const auto deep = addBody(scene, "Deep", { 0, 1.0f, 0 }, false, deepIsTrigger);
+
+    CollisionSystem collisionSystem;
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+
+    return { contains(collisionSystem.getCollisionEnters(), mover, shallow),
+             contains(collisionSystem.getCollisionEnters(), mover, deep), positionOf(mover) };
   }
 }
 
@@ -103,11 +174,6 @@ TEST(CollisionEvent, AContactEntersThenStaysThenExits)
 
   // Triggers on purpose: a solid contact is pushed apart by the response in the same tick that reports
   // it, so the only way to hold two bodies overlapping across ticks is to ask for no response.
-  //
-  // It also keeps this file to at most one *solid* dynamic body per scene, which is deliberate. The
-  // narrow phase runs in an OpenMP loop over the edges, and a collider's bounding box and transformed
-  // mesh are caches it writes on read. They are only safe to share because checkCollisions warms them
-  // serially first, which stops being true the moment a response moves something mid-loop.
   const auto moving = addBody(scene, "Moving", { 0, 0, 0 }, true, true);
   const auto resting = addBody(scene, "Resting", { 1, 0, 0 }, false, true);
 
@@ -420,6 +486,76 @@ TEST(CollisionEvent, AContactTheFirstResponseAlreadyClearedIsNotAppliedAgain)
   ASSERT_TRUE(contains(collisionSystem.getCollisionEnters(), moving, shallow));
 
   expectNear(positionOf(moving), { 0, 0.5f, 0 }, 1e-3f);
+}
+
+TEST(CollisionEvent, AOneSidedTriggerReportsTheContactButAppliesNoResponse)
+{
+  // The positive control: neither side a trigger, and the same overlap is corrected.
+  const auto solid = runSingleContact(false, false);
+  ASSERT_TRUE(solid.entered);
+  expectNear(solid.moverPosition, { -1.0f, 0, 0 }, 1e-3f);
+
+  // Either side being a trigger is enough, whichever one is the moving body.
+  const auto triggerMover = runSingleContact(true, false);
+  EXPECT_TRUE(triggerMover.entered);
+  expectNear(triggerMover.moverPosition, { 0, 0, 0 }, 1e-6f);
+
+  const auto triggerResting = runSingleContact(false, true);
+  EXPECT_TRUE(triggerResting.entered);
+  expectNear(triggerResting.moverPosition, { 0, 0, 0 }, 1e-6f);
+}
+
+TEST(CollisionEvent, OneSidedTriggersAmongSeveralContactsSkipOnlyTheirOwnResponse)
+{
+  // The positive control: all solid, and both contacts are resolved (see the combined test above).
+  const auto solid = runTwoContacts(false, false, false);
+  ASSERT_TRUE(solid.enteredShallow);
+  ASSERT_TRUE(solid.enteredDeep);
+  expectNear(solid.moverPosition, { -0.5f, -1.0f, 0 }, 1e-3f);
+
+  // The deeper contact is a trigger: it still reports, and only the shallow one pushes.
+  const auto deepTrigger = runTwoContacts(false, false, true);
+  EXPECT_TRUE(deepTrigger.enteredShallow);
+  EXPECT_TRUE(deepTrigger.enteredDeep);
+  expectNear(deepTrigger.moverPosition, { -0.5f, 0, 0 }, 1e-3f);
+
+  // The shallower contact is a trigger: it still reports, and only the deep one pushes.
+  const auto shallowTrigger = runTwoContacts(false, true, false);
+  EXPECT_TRUE(shallowTrigger.enteredShallow);
+  EXPECT_TRUE(shallowTrigger.enteredDeep);
+  expectNear(shallowTrigger.moverPosition, { 0, -1.0f, 0 }, 1e-3f);
+
+  // The moving body itself is the trigger: both contacts report and neither pushes.
+  const auto triggerMover = runTwoContacts(true, false, false);
+  EXPECT_TRUE(triggerMover.enteredShallow);
+  EXPECT_TRUE(triggerMover.enteredDeep);
+  expectNear(triggerMover.moverPosition, { 0, 0, 0 }, 1e-6f);
+}
+
+TEST(CollisionEvent, AOneSidedTriggerBetweenTwoMovingBodiesChangesNeitherOfThem)
+{
+  // The positive control: neither a trigger, and both bodies are pushed apart and have their velocity
+  // changed.
+  const auto solid = runApproachingBodies(false, false);
+  ASSERT_TRUE(solid.entered);
+  EXPECT_LT(solid.firstPosition.x, -1e-3f);
+  EXPECT_GT(solid.secondPosition.x, 1.0f + 1e-3f);
+  EXPECT_NE(solid.firstVelocity, firstApproach);
+  EXPECT_NE(solid.secondVelocity, secondApproach);
+
+  // One trigger side, whichever it is, leaves both bodies exactly as they were: no push on the partner and
+  // no impulse on either.
+  for (const auto& [firstIsTrigger, secondIsTrigger] : { std::pair{ true, false }, std::pair{ false, true } })
+  {
+    SCOPED_TRACE(::testing::Message() << "first trigger: " << firstIsTrigger);
+
+    const auto result = runApproachingBodies(firstIsTrigger, secondIsTrigger);
+    EXPECT_TRUE(result.entered);
+    expectNear(result.firstPosition, { 0, 0, 0 }, 1e-6f);
+    expectNear(result.secondPosition, { 1, 0, 0 }, 1e-6f);
+    expectNear(result.firstVelocity, firstApproach, 1e-6f);
+    expectNear(result.secondVelocity, secondApproach, 1e-6f);
+  }
 }
 
 TEST(CollisionEvent, ResetForgetsThePreviousTick)

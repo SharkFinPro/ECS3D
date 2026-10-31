@@ -157,6 +157,24 @@ TEST(NarrowPhase, ContactPointForUnequalRadiusSpheresLandsInsideBoth)
 
   EXPECT_LE(distanceFromFirst, first->getRadius() + tolerance);
   EXPECT_LE(distanceFromSecond, second->getRadius() + tolerance);
+
+  // And exactly the midpoint of that overlap: (-0.5 + 1) / 2 along the center line.
+  expectNear("point", contact->point, { 0.25f, 0, 0 });
+}
+
+TEST(NarrowPhase, ContactPointForUnequalRadiusSpheresFollowsWhichSphereIsLarger)
+{
+  const auto [firstObject, first] = makeCollider<SphereCollider>({ 0, 0, 0 });
+  const auto [secondObject, second] = makeCollider<SphereCollider>({ 1.5f, 0, 0 });
+
+  // The mirror of the pair above: the first sphere now has radius 2 and the second 1, so the overlap runs
+  // from 0.5 to 2 and its midpoint moves to 1.25 rather than 0.25.
+  first->setRadius(2.0f);
+
+  const auto contact = collisions::findContact(*first, *second);
+  ASSERT_TRUE(contact.has_value());
+
+  expectNear("point", contact->point, { 1.25f, 0, 0 });
 }
 
 TEST(NarrowPhase, PushesConcentricSpheresApartAlongY)
