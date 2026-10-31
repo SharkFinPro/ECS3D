@@ -64,17 +64,21 @@ TEST_F(TransportLogTest, MapsEachInRangeLevelToTheMatchingLogLevel)
 TEST_F(TransportLogTest, MapsAnOutOfRangeLevelToInfo)
 {
   net::transportLog(-1, "too low");
+  net::transportLog(5, "just above");
   net::transportLog(99, "too high");
 
   const auto entries = m_sink->snapshot();
-  ASSERT_EQ(entries.size(), 2u);
+  ASSERT_EQ(entries.size(), 3u);
 
   EXPECT_EQ(entries[0].level, LogLevel::info);
   EXPECT_EQ(entries[0].category, LogCategory::net);
   EXPECT_EQ(entries[0].message, "too low");
 
   EXPECT_EQ(entries[1].level, LogLevel::info);
-  EXPECT_EQ(entries[1].message, "too high");
+  EXPECT_EQ(entries[1].message, "just above");
+
+  EXPECT_EQ(entries[2].level, LogLevel::info);
+  EXPECT_EQ(entries[2].message, "too high");
 }
 
 TEST_F(TransportLogTest, IgnoresANullMessage)

@@ -66,6 +66,11 @@ std::string logFileArgument(const std::string_view appName)
     file = defaultLogFile(appName);
   }
 
+  return logFileArgumentForPath(file);
+}
+
+std::string logFileArgumentForPath(const std::filesystem::path& file)
+{
   const auto path = file.string();
 
   if (path.find('"') != std::string::npos)

@@ -92,8 +92,8 @@ public:
 
   // Restores the action's compiled-in default chord, refusing (leaving both actions' bindings and the
   // store untouched) when a different action currently holds that chord - same semantics as assign().
-  // An action whose default is unbound (the gizmo actions) always succeeds, simply clearing whatever
-  // chord it held.
+  // An action with no default chord (none in the catalogue today) always succeeds, simply clearing
+  // whatever chord it held.
   AssignOutcome reset(EditorAction action, SettingsStore& settings);
 
   void resetAll(SettingsStore& settings);

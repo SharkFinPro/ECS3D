@@ -72,9 +72,35 @@ namespace {
       return sink;
     }
 
+    [[nodiscard]] static bool logged(const RingBufferSink& sink, const LogLevel level, const std::string& text)
+    {
+      const auto entries = sink.snapshot();
+
+      return std::ranges::any_of(entries, [&](const LogEntry& entry)
+      {
+        return entry.level == level && entry.category == LogCategory::editor &&
+               entry.message.find(text) != std::string::npos;
+      });
+    }
+
     std::filesystem::path m_directory;
     std::filesystem::path m_file;
     std::vector<std::shared_ptr<LogSink>> m_addedSinks;
+  };
+
+  // A manually advanced steady clock for the debounce.
+  struct FakeClock {
+    std::chrono::steady_clock::time_point now = std::chrono::steady_clock::time_point{} + std::chrono::hours(1);
+
+    void advance(const std::chrono::milliseconds amount)
+    {
+      now += amount;
+    }
+
+    [[nodiscard]] SettingsStore::NowFunction function()
+    {
+      return [this] { return now; };
+    }
   };
 
   // Walks every decision in get<T> and set<T> for one value type: absent key, wrong json type, right type,
@@ -180,7 +206,24 @@ TEST_F(SettingsStoreTest, WritesAVersion)
   store.set("anything", 1);
   store.flush();
 
-  EXPECT_TRUE(readFile().contains("version"));
+  EXPECT_EQ(readFile().at("version"), 1);
+}
+
+TEST_F(SettingsStoreTest, RaisesAStoredVersionBelowThisBuildsOrOfTheWrongType)
+{
+  writeFile(R"({"version": 0})");
+  {
+    SettingsStore store(m_file);
+    store.set("anything", 1);
+  }
+  EXPECT_EQ(readFile().at("version"), 1);
+
+  writeFile(R"({"version": "x"})");
+  {
+    SettingsStore store(m_file);
+    store.set("anything", 1);
+  }
+  EXPECT_EQ(readFile().at("version"), 1);
 }
 
 TEST_F(SettingsStoreTest, LeavesANewerVersionStampAlone)
@@ -223,21 +266,25 @@ TEST_F(SettingsStoreTest, LoadingInvalidJsonLogsAWarningAndFallsBackToDefaults)
 
   const SettingsStore store(m_file);
 
-  bool foundWarning = false;
-  for (const auto& entry : sink->snapshot())
-  {
-    if (entry.level == LogLevel::warn && entry.category == LogCategory::editor)
-    {
-      foundWarning = true;
-      break;
-    }
-  }
-
-  EXPECT_TRUE(foundWarning);
+  // The set-aside notice is also a warning in this category, so the text is what tells the two apart.
+  EXPECT_TRUE(logged(*sink, LogLevel::warn, "is not valid JSON"));
+  EXPECT_TRUE(logged(*sink, LogLevel::warn, "Moved the unreadable settings file"));
 
   // Positive control: the defaults were actually used, so the warning above reflects the fallback path
   // rather than some unrelated warning happening to be logged.
   EXPECT_EQ(store.get<int>("anything", 5), 5);
+}
+
+TEST_F(SettingsStoreTest, LoadingANonObjectLogsAWarningNamingTheProblem)
+{
+  writeFile("[1, 2, 3]");
+
+  const auto sink = addRingBuffer();
+
+  const SettingsStore store(m_file);
+
+  EXPECT_TRUE(logged(*sink, LogLevel::warn, "is not a JSON object"));
+  EXPECT_FALSE(logged(*sink, LogLevel::warn, "is not valid JSON"));
 }
 
 TEST_F(SettingsStoreTest, MovesAsideAFileThatParsesButIsNotAnObject)
@@ -265,21 +312,72 @@ TEST_F(SettingsStoreTest, TreatsAKeyOfTheWrongTypeAsAbsent)
 
 TEST_F(SettingsStoreTest, DefersTheWriteUntilTheDebounceElapses)
 {
-  SettingsStore store(m_file);
+  FakeClock clock;
+  SettingsStore store(m_file, std::chrono::milliseconds(1000), clock.function());
 
   store.set("count", 1);
   store.set("count", 2);
 
-  // Well inside the debounce window, so the edits are still collapsed into one pending write.
+  clock.advance(std::chrono::milliseconds(999));
   store.update();
 
   EXPECT_TRUE(store.hasPendingWrite());
   EXPECT_FALSE(std::filesystem::exists(m_file));
 
-  store.flush();
+  clock.advance(std::chrono::milliseconds(1));
+  store.update();
 
   EXPECT_FALSE(store.hasPendingWrite());
   EXPECT_EQ(readFile().at("count"), 2);
+}
+
+TEST_F(SettingsStoreTest, ALaterEditPushesTheDueTimeOut)
+{
+  FakeClock clock;
+  SettingsStore store(m_file, std::chrono::milliseconds(1000), clock.function());
+
+  store.set("count", 1);
+
+  clock.advance(std::chrono::milliseconds(500));
+  store.set("count", 2);
+
+  // Past the first edit's due time, but not the second's.
+  clock.advance(std::chrono::milliseconds(600));
+  store.update();
+  EXPECT_TRUE(store.hasPendingWrite());
+  EXPECT_FALSE(std::filesystem::exists(m_file));
+
+  clock.advance(std::chrono::milliseconds(400));
+  store.update();
+  EXPECT_FALSE(store.hasPendingWrite());
+  EXPECT_EQ(readFile().at("count"), 2);
+}
+
+TEST_F(SettingsStoreTest, ForcesTheWriteOnceItHasWaitedTheMaximumDelayDespiteContinuousEdits)
+{
+  FakeClock clock;
+  SettingsStore store(m_file, std::chrono::milliseconds(1000), clock.function());
+
+  store.set("count", 0);
+
+  // An edit every 900 ms keeps resetting the debounce, so nothing is written yet.
+  for (int i = 1; i <= 5; ++i)
+  {
+    clock.advance(std::chrono::milliseconds(900));
+    store.set("count", i);
+    store.update();
+
+    EXPECT_TRUE(store.hasPendingWrite());
+  }
+  EXPECT_FALSE(std::filesystem::exists(m_file));
+
+  // 5400 ms after the first request, past the 5000 ms maximum, with the debounce freshly reset again.
+  clock.advance(std::chrono::milliseconds(900));
+  store.set("count", 6);
+  store.update();
+
+  EXPECT_FALSE(store.hasPendingWrite());
+  EXPECT_EQ(readFile().at("count"), 6);
 }
 
 TEST_F(SettingsStoreTest, UpdateWritesOnceTheDebounceHasElapsed)
@@ -390,6 +488,39 @@ TEST_F(SettingsStoreTest, AFailedWriteLogsAnError)
   // Positive control: the write really did fail (still pending), so the error above reflects that
   // failure rather than some unrelated error being logged.
   EXPECT_TRUE(store.hasPendingWrite());
+}
+
+TEST_F(SettingsStoreTest, SavesAStringThatIsNotValidUtf8)
+{
+  {
+    SettingsStore store(m_file);
+    store.set<std::string>("path", "bad\xFF" "byte");
+    store.set("other", 3);
+    store.flush();
+
+    EXPECT_FALSE(store.hasPendingWrite());
+  }
+
+  ASSERT_TRUE(std::filesystem::exists(m_file));
+  EXPECT_EQ(readFile().at("other"), 3);
+  EXPECT_TRUE(readFile().contains("path"));
+}
+
+TEST_F(SettingsStoreTest, AnUnopenableTemporaryFileLogsAnErrorAndKeepsTheWritePending)
+{
+  auto temporary = m_file;
+  temporary += ".tmp";
+  std::filesystem::create_directories(temporary);
+
+  const auto sink = addRingBuffer();
+
+  SettingsStore store(m_file);
+  store.set("count", 1);
+  store.flush();
+
+  EXPECT_TRUE(logged(*sink, LogLevel::error, "Could not write settings file"));
+  EXPECT_TRUE(store.hasPendingWrite());
+  EXPECT_FALSE(std::filesystem::exists(m_file));
 }
 
 TEST_F(SettingsStoreTest, LeavesNoTemporaryFileBehind)

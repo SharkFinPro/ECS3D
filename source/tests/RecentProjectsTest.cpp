@@ -2,11 +2,15 @@
 
 #include "RecentProjects.h"
 
+#include "Log.h"
+#include "RingBufferSink.h"
+
 #include <nlohmann/json.hpp>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <random>
 #include <regex>
 #include <string>
@@ -120,6 +124,23 @@ namespace {
       recent.recordOpened(project("New"), at(baseTime));
 
       return contains(recent, generic(project("Old7")));
+    }
+
+    // Fifty entries far newer than the pair, with the pair at indexes 7 and 30. Once one more project is
+    // recorded, exactly one of the pair goes: returns true when it is the older one (the earlier index),
+    // false when the newer one (the later index, which is also where an equal-time tie would land) goes.
+    [[nodiscard]] bool theOlderOfTwoIsEvicted(const std::string& older, const std::string& newer)
+    {
+      auto entries = fiftyEntries("2030-01-01T00:00:00Z");
+      entries[7] = makeEntry(generic(project("Old7")), older);
+      entries[30] = makeEntry(generic(project("Old30")), newer);
+      writeEntries(entries);
+
+      RecentProjects recent(m_file);
+      recent.load();
+      recent.recordOpened(project("New"), at(baseTime));
+
+      return !contains(recent, generic(project("Old7"))) && contains(recent, generic(project("Old30")));
     }
 
     std::filesystem::path m_directory;
@@ -419,6 +440,17 @@ TEST_F(RecentProjectsTest, MalformedTimesSortAsOldest)
   EXPECT_FALSE(old7SurvivesWithTime("2026-13-01T00:00:00Z"));
   EXPECT_FALSE(old7SurvivesWithTime("2026-10-18T24:00:00Z"));
   EXPECT_FALSE(old7SurvivesWithTime("2026-10-18T00:00:60Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026-10-18T19:60:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2030-00-10T00:00:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2030-01-00T00:00:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026-04-31T00:00:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026-06-31T00:00:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026-09-31T00:00:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026-11-31T00:00:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026-10-18 19:02:11Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026/10/18T19:02:11Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026-10-18T19.02.11Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2026-10-18T19:02:11"));
 
   EXPECT_FALSE(old7SurvivesWithTime("2027-02-29T00:00:00Z"));
   EXPECT_FALSE(old7SurvivesWithTime("2100-02-29T00:00:00Z"));
@@ -426,6 +458,30 @@ TEST_F(RecentProjectsTest, MalformedTimesSortAsOldest)
   // Real leap days parse, so they are newer than the rest and survive.
   EXPECT_TRUE(old7SurvivesWithTime("2028-02-29T00:00:00Z"));
   EXPECT_TRUE(old7SurvivesWithTime("2400-02-29T00:00:00Z"));
+
+  // The last valid value of each field parses too, so none of the limits above sits one too low.
+  EXPECT_TRUE(old7SurvivesWithTime("2026-03-31T23:59:59Z"));
+  EXPECT_TRUE(old7SurvivesWithTime("2026-04-30T23:59:59Z"));
+  EXPECT_TRUE(old7SurvivesWithTime("2026-06-30T23:59:59Z"));
+  EXPECT_TRUE(old7SurvivesWithTime("2026-09-30T23:59:59Z"));
+  EXPECT_TRUE(old7SurvivesWithTime("2026-11-30T23:59:59Z"));
+  EXPECT_TRUE(old7SurvivesWithTime("2026-12-31T23:59:59Z"));
+  EXPECT_TRUE(old7SurvivesWithTime("2026-02-28T23:59:59Z"));
+}
+
+TEST_F(RecentProjectsTest, EvictionOrdersEntriesByEveryTimeField)
+{
+  // Each pair differs by one tick of its field, with the lower fields carrying over, so a field that
+  // stopped counting (or counted with the wrong weight) would reverse or tie the pair.
+  EXPECT_TRUE(theOlderOfTwoIsEvicted("2026-06-15T00:00:10Z", "2026-06-15T00:00:11Z"));
+  EXPECT_TRUE(theOlderOfTwoIsEvicted("2026-06-15T00:00:59Z", "2026-06-15T00:01:00Z"));
+  EXPECT_TRUE(theOlderOfTwoIsEvicted("2026-06-15T00:59:59Z", "2026-06-15T01:00:00Z"));
+  EXPECT_TRUE(theOlderOfTwoIsEvicted("2026-06-15T23:59:59Z", "2026-06-16T00:00:00Z"));
+  EXPECT_TRUE(theOlderOfTwoIsEvicted("2026-05-31T23:59:59Z", "2026-06-01T00:00:00Z"));
+  EXPECT_TRUE(theOlderOfTwoIsEvicted("2025-12-31T23:59:59Z", "2026-01-01T00:00:00Z"));
+
+  // Control: the helper reports the other outcome when the pair is the other way round.
+  EXPECT_FALSE(theOlderOfTwoIsEvicted("2026-06-16T00:00:00Z", "2026-06-15T23:59:59Z"));
 }
 
 TEST_F(RecentProjectsTest, TieOnEqualTimesEvictsTheLaterEntry)
@@ -491,6 +547,46 @@ TEST_F(RecentProjectsTest, CorruptFileIsEmptyAndReplacedOnSave)
     ASSERT_TRUE(saved.at("projects").is_array());
     EXPECT_EQ(saved.at("projects").size(), 1u);
   }
+}
+
+TEST_F(RecentProjectsTest, SaveOnlyRaisesTheVersion)
+{
+  writeFile(R"({"version":5,"projects":[]})");
+  {
+    RecentProjects recent(m_file);
+    recent.load();
+    recent.recordOpened(project("A"), at(baseTime));
+    ASSERT_TRUE(recent.save());
+  }
+  EXPECT_EQ(readFile().at("version"), 5);
+
+  for (const char* stored : { R"({"version":0,"projects":[]})", R"({"version":"x","projects":[]})" })
+  {
+    writeFile(stored);
+
+    RecentProjects recent(m_file);
+    recent.load();
+    recent.recordOpened(project("A"), at(baseTime));
+    ASSERT_TRUE(recent.save());
+
+    EXPECT_EQ(readFile().at("version"), 1) << stored;
+  }
+}
+
+TEST_F(RecentProjectsTest, ANonBooleanPinnedValueCountsAsNotPinned)
+{
+  Json entry = makeEntry(generic(project("Odd")), "2026-01-01T00:00:00Z");
+  entry["pinned"] = "yes";
+  writeEntries({ entry, makeEntry(generic(project("Real")), "2026-01-02T00:00:00Z", true) });
+
+  RecentProjects recent(m_file);
+  recent.load();
+
+  std::vector<RecentProjectEntry> entries;
+  ASSERT_NO_THROW(entries = recent.entries());
+  ASSERT_EQ(entries.size(), 2u);
+  EXPECT_FALSE(entries[0].pinned);
+  EXPECT_TRUE(entries[1].pinned);
 }
 
 TEST_F(RecentProjectsTest, MalformedEntriesAreDroppedAndValidNeighborsKept)
@@ -561,10 +657,79 @@ TEST_F(RecentProjectsTest, TimestampFormatIsUtcAndExact)
   EXPECT_TRUE(std::regex_match(RecentProjects::formatUtc(Clock::now()), shape));
   EXPECT_EQ(RecentProjects::formatUtc(at(baseTime)), "2026-10-18T19:02:11Z");
   EXPECT_EQ(RecentProjects::formatUtc(at(0)), "1970-01-01T00:00:00Z");
+  EXPECT_EQ(RecentProjects::formatUtc(at(-1)), "1969-12-31T23:59:59Z");
+  EXPECT_EQ(RecentProjects::formatUtc(at(-86400)), "1969-12-31T00:00:00Z");
   EXPECT_EQ(RecentProjects::formatUtc(at(1709251199)), "2024-02-29T23:59:59Z");
   EXPECT_EQ(RecentProjects::formatUtc(at(4107542400)), "2100-03-01T00:00:00Z");
 
   RecentProjects recent(m_file);
   recent.recordOpened(project("Timed"), at(baseTime));
   EXPECT_EQ(recent.entries()[0].lastOpenedUtc, "2026-10-18T19:02:11Z");
+}
+
+TEST_F(RecentProjectsTest, SaveReturnsFalseAndLogsWhenTheDirectoryCannotBeCreated)
+{
+  std::filesystem::create_directories(m_directory);
+  {
+    std::ofstream blocker(m_directory / "blocked");
+    blocker << "not a directory";
+  }
+
+  const auto sink = std::make_shared<RingBufferSink>();
+  Log::addSink(sink);
+
+  RecentProjects recent((m_directory / "blocked") / "recent-projects.json");
+  recent.recordOpened(project("A"), at(baseTime));
+  const bool saved = recent.save();
+
+  Log::removeSink(sink);
+
+  EXPECT_FALSE(saved);
+
+  const auto entries = sink->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_EQ(entries[0].level, LogLevel::warn);
+  EXPECT_NE(entries[0].message.find("Could not create the directory"), std::string::npos);
+
+  // Positive control: the same list saves where the directory can be made.
+  RecentProjects working(m_file);
+  working.recordOpened(project("A"), at(baseTime));
+  EXPECT_TRUE(working.save());
+}
+
+TEST_F(RecentProjectsTest, SaveReturnsFalseAndLeavesNoTemporaryFileWhenTheFileCannotBeReplaced)
+{
+  // A non-empty directory where the file belongs, so the final move cannot succeed.
+  std::filesystem::create_directories(m_file);
+  {
+    std::ofstream keeper(m_file / "keep");
+    keeper << "x";
+  }
+
+  const auto sink = std::make_shared<RingBufferSink>();
+  Log::addSink(sink);
+
+  RecentProjects recent(m_file);
+  recent.recordOpened(project("A"), at(baseTime));
+  const bool saved = recent.save();
+
+  Log::removeSink(sink);
+
+  EXPECT_FALSE(saved);
+
+  const auto entries = sink->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_EQ(entries[0].level, LogLevel::warn);
+  EXPECT_NE(entries[0].message.find("Could not move recent projects file"), std::string::npos);
+
+  int temporaries = 0;
+  for (const auto& item : std::filesystem::directory_iterator(m_directory))
+  {
+    if (item.path().extension() == ".tmp")
+    {
+      ++temporaries;
+    }
+  }
+  EXPECT_EQ(temporaries, 0);
+  EXPECT_TRUE(std::filesystem::is_directory(m_file));
 }
