@@ -222,6 +222,54 @@ namespace {
     EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
   }
 
+  TEST_F(ScriptBindingGapsTest, RigidBodyGravitySettersWriteTheValueAndRecordAnEditEach)
+  {
+    const auto object = fixtures::addObject(scene, "object");
+    const auto rigidBody = fixtures::addRigidBody(object);
+    const auto bindings = RigidBodyBindingsProvider::getBindings();
+    const auto uuid = uuidOf(object);
+    const auto defaultGravity = rigidBody->getGravity();
+    ASSERT_TRUE(rigidBody->getDoGravity());
+
+    bindings.setGravity(uuid.c_str(), defaultGravity + 3.0f);
+    EXPECT_FLOAT_EQ(bindings.getGravity(uuid.c_str()), defaultGravity + 3.0f);
+    EXPECT_FLOAT_EQ(rigidBody->getGravity(), defaultGravity + 3.0f);
+    EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+    bindings.setDoGravity(uuid.c_str(), false);
+    EXPECT_FALSE(bindings.getDoGravity(uuid.c_str()));
+    EXPECT_FALSE(rigidBody->getDoGravity());
+    EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+    bindings.setDoGravity(uuid.c_str(), true);
+    EXPECT_TRUE(rigidBody->getDoGravity());
+    EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+    bindings.setDoGravity(uuid.c_str(), true);
+    EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+  }
+
+  TEST_F(ScriptBindingGapsTest, TwoComponentsOfOneObjectEditedInATickRecordTwoEdits)
+  {
+    const auto object = fixtures::addObject(scene, "object");
+    const auto rigidBody = fixtures::addRigidBody(object);
+    const auto camera = std::make_shared<Camera>();
+    object->addComponent(camera);
+    const auto uuid = uuidOf(object);
+
+    const auto gravity = rigidBody->getGravity();
+    RigidBodyBindingsProvider::getBindings().setGravity(uuid.c_str(), gravity + 1.0f);
+    CameraBindingsProvider::getBindings().setFov(uuid.c_str(), 90.0f);
+    RigidBodyBindingsProvider::getBindings().setGravity(uuid.c_str(), gravity + 2.0f);
+
+    const auto edits = BindingContext::takeComponentEdits();
+    ASSERT_EQ(edits.size(), 2u);
+    EXPECT_EQ(edits[0].first, object->getUUID());
+    EXPECT_EQ(edits[1].first, object->getUUID());
+    EXPECT_EQ(edits[0].second, rigidBody);
+    EXPECT_EQ(edits[1].second, camera);
+  }
+
   TEST_F(ScriptBindingGapsTest, RigidBodyNonFiniteSetRecordsNoEditWithPositiveControl)
   {
     const auto object = fixtures::addObject(scene, "object");
@@ -272,7 +320,7 @@ namespace {
     const auto object = fixtures::addObject(scene, "object");
     const auto camera = std::make_shared<Camera>();
     object->addComponent(camera);
-    camera->setDirection(glm::vec3(1, 0, 0));
+    camera->setDirection(glm::vec3(1, 2, 3));
     camera->setFov(60.0f);
     camera->setNearPlane(0.5f);
     camera->setFarPlane(500.0f);
@@ -283,7 +331,7 @@ namespace {
 
     float x = 0, y = 0, z = 0;
     bindings.getDirection(uuid.c_str(), &x, &y, &z);
-    fixtures::expectNear("direction", glm::vec3(x, y, z), glm::vec3(1, 0, 0));
+    fixtures::expectNear("direction", glm::vec3(x, y, z), glm::vec3(1, 2, 3));
 
     EXPECT_FLOAT_EQ(bindings.getFov(uuid.c_str()), 60.0f);
     EXPECT_FLOAT_EQ(bindings.getNearPlane(uuid.c_str()), 0.5f);
@@ -306,8 +354,8 @@ namespace {
     bindings.setFov(uuid.c_str(), std::numeric_limits<float>::quiet_NaN());
     EXPECT_FLOAT_EQ(camera->getFov(), 90.0f);
 
-    bindings.setDirection(uuid.c_str(), 0.0f, 1.0f, 0.0f);
-    fixtures::expectNear("direction", camera->getDirection(), glm::vec3(0, 1, 0));
+    bindings.setDirection(uuid.c_str(), 1.0f, 2.0f, 3.0f);
+    fixtures::expectNear("direction", camera->getDirection(), glm::vec3(1, 2, 3));
 
     bindings.setNearPlane(uuid.c_str(), 1.0f);
     bindings.setFarPlane(uuid.c_str(), 200.0f);
@@ -324,6 +372,33 @@ namespace {
     ASSERT_EQ(edits.size(), 1u);
     EXPECT_EQ(edits[0].first, object->getUUID());
     EXPECT_EQ(edits[0].second, camera);
+  }
+
+  TEST_F(ScriptBindingGapsTest, EachCameraSetterRecordsAnEditOnItsOwn)
+  {
+    const auto object = fixtures::addObject(scene, "object");
+    const auto camera = std::make_shared<Camera>();
+    object->addComponent(camera);
+    const auto bindings = CameraBindingsProvider::getBindings();
+    const auto uuid = uuidOf(object);
+
+    bindings.setNearPlane(uuid.c_str(), 1.0f);
+    EXPECT_FLOAT_EQ(camera->getNearPlane(), 1.0f);
+    EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+    bindings.setFarPlane(uuid.c_str(), 200.0f);
+    EXPECT_FLOAT_EQ(camera->getFarPlane(), 200.0f);
+    EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+    bindings.setActive(uuid.c_str(), false);
+    EXPECT_FALSE(camera->isActive());
+    EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+    // Same values again change nothing, so nothing is recorded.
+    bindings.setNearPlane(uuid.c_str(), 1.0f);
+    bindings.setFarPlane(uuid.c_str(), 200.0f);
+    bindings.setActive(uuid.c_str(), false);
+    EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
   }
 
   TEST_F(ScriptBindingGapsTest, CameraNonFiniteSetRecordsNoEditWithPositiveControl)

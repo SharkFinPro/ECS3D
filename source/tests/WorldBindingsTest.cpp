@@ -73,7 +73,7 @@ namespace {
 
     hitObject = g_hitObject;
     hitPoint = glm::vec3(1.5f, 2.5f, 3.5f);
-    hitNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+    hitNormal = glm::vec3(0.1f, 0.2f, 0.3f);
     hitDistance = 4.25f;
     return true;
   };
@@ -523,12 +523,12 @@ namespace {
     g_hitObject = target->getUUID();
     BindingContext::setRaycast(fakeRaycast);
 
-    const auto result = copyOut(bindings.raycast(1.0f, 2.0f, 3.0f, 0.0f, -1.0f, 0.0f, 50.0f, 0x5u,
+    const auto result = copyOut(bindings.raycast(1.0f, 2.0f, 3.0f, 4.0f, -5.0f, 6.0f, 50.0f, 0x5u,
                                                  uuidOf(ignored).c_str()));
 
     ASSERT_EQ(g_raycast.calls, 1);
     fixtures::expectNear("origin", g_raycast.origin, glm::vec3(1, 2, 3));
-    fixtures::expectNear("direction", g_raycast.direction, glm::vec3(0, -1, 0));
+    fixtures::expectNear("direction", g_raycast.direction, glm::vec3(4, -5, 6));
     EXPECT_FLOAT_EQ(g_raycast.maxDistance, 50.0f);
     EXPECT_EQ(g_raycast.layerMask, 0x5u);
     EXPECT_EQ(g_raycast.ignore, ignored->getUUID());
@@ -536,7 +536,7 @@ namespace {
     const auto parts = splitCommas(result);
     ASSERT_EQ(parts.size(), 8u);
     EXPECT_EQ(parts[0], uuidOf(target));
-    const float expected[] = { 4.25f, 1.5f, 2.5f, 3.5f, 0.0f, 1.0f, 0.0f };
+    const float expected[] = { 4.25f, 1.5f, 2.5f, 3.5f, 0.1f, 0.2f, 0.3f };
     for (std::size_t i = 0; i < 7; ++i)
     {
       EXPECT_NEAR(std::stof(parts[i + 1]), expected[i], 1e-5f) << "field " << i + 1;
