@@ -2,6 +2,7 @@
 #define USERDATADIRECTORY_H
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -14,6 +15,10 @@
 // ~/.config) /ECS3D elsewhere. With no home directory in the environment this is the relative path
 // "ECS3D", so an app can still start and persist under its working directory.
 [[nodiscard]] std::filesystem::path userDataDirectory();
+
+// Same resolution against a caller-supplied environment lookup (null for unset), so it can be tested
+// without touching the real environment.
+[[nodiscard]] std::filesystem::path userDataDirectory(const std::function<const char*(const char*)>& lookup);
 
 [[nodiscard]] std::filesystem::path defaultLogFile(std::string_view appName);
 

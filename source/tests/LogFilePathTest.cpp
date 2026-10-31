@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <random>
 #include <string>
@@ -208,4 +209,59 @@ TEST_F(LogFilePathTest, ALogFileArgumentNamesEveryAppsDefaultFile)
     EXPECT_EQ(argument, "--log-file \"" + file.string() + "\"") << appName;
     EXPECT_NE(argument.find(std::string(appName) + ".log"), std::string::npos) << appName;
   }
+}
+
+namespace {
+  std::filesystem::path resolveWith(const std::map<std::string, std::string>& environment)
+  {
+    return userDataDirectory([&environment](const char* name) -> const char*
+    {
+      const auto it = environment.find(name);
+
+      return it == environment.end() ? nullptr : it->second.c_str();
+    });
+  }
+}
+
+TEST(UserDataDirectory, UsesThePlatformsPreferredVariable)
+{
+#ifdef _WIN32
+  EXPECT_EQ(resolveWith({ { "APPDATA", "/data/roaming" } }), std::filesystem::path("/data/roaming") / "ECS3D");
+#elif defined(__APPLE__)
+  EXPECT_EQ(resolveWith({ { "HOME", "/Users/me" } }),
+            std::filesystem::path("/Users/me") / "Library" / "Application Support" / "ECS3D");
+#else
+  EXPECT_EQ(resolveWith({ { "XDG_CONFIG_HOME", "/cfg" }, { "HOME", "/home/me" } }),
+            std::filesystem::path("/cfg") / "ECS3D");
+#endif
+}
+
+TEST(UserDataDirectory, FallsBackToHomeWhereThePlatformHasASecondChoice)
+{
+#if !defined(_WIN32) && !defined(__APPLE__)
+  EXPECT_EQ(resolveWith({ { "HOME", "/home/me" } }), std::filesystem::path("/home/me") / ".config" / "ECS3D");
+  EXPECT_EQ(resolveWith({ { "XDG_CONFIG_HOME", "" }, { "HOME", "/home/me" } }),
+            std::filesystem::path("/home/me") / ".config" / "ECS3D");
+#else
+  GTEST_SKIP() << "This platform resolves from a single variable";
+#endif
+}
+
+TEST(UserDataDirectory, TreatsAnEmptyValueAsUnset)
+{
+#ifdef _WIN32
+  const char* variable = "APPDATA";
+#else
+  const char* variable = "HOME";
+#endif
+
+  EXPECT_EQ(resolveWith({ { variable, "" } }), std::filesystem::path("ECS3D"));
+}
+
+TEST(UserDataDirectory, IsTheRelativeDirectoryWhenNothingIsSet)
+{
+  const auto directory = resolveWith({});
+
+  EXPECT_EQ(directory, std::filesystem::path("ECS3D"));
+  EXPECT_TRUE(directory.is_relative());
 }
