@@ -156,7 +156,8 @@ TEST_F(ProjectSerializerLogTest, ACurrentSceneUuidThatDoesNotResolveSelectsNothi
   EXPECT_EQ(m_sceneManager.getScenes().size(), 1u);
   EXPECT_EQ(m_sceneManager.getCurrentScene(), nullptr);
 
-  m_serializer->deserialize(projectBlob(nlohmann::json::array({ sceneBlob() }), "88888888-8888-8888-8888-888888888888"));
+  m_serializer->deserialize(projectBlob(nlohmann::json::array({ sceneBlob() }),
+                                        "88888888-8888-8888-8888-888888888888"));
   EXPECT_EQ(m_sceneManager.getScenes().size(), 1u);
   EXPECT_EQ(m_sceneManager.getCurrentScene(), nullptr);
 

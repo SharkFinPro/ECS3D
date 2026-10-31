@@ -356,8 +356,8 @@ TEST(ProtocolFraming, EveryMessageTypeIsClassifiedAsExactlyTheDocumentedMutation
   // possessSlot changes no project data, so it is deliberately outside the set.
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::possessSlot));
 
-  const auto last = static_cast<unsigned>(net::MessageType::possessSlot);
-  for (unsigned value = 0; value <= last; ++value)
+  // Every byte value, not just the named enumerators, so a type appended later fails here until the set is updated.
+  for (unsigned value = 0; value <= std::numeric_limits<uint8_t>::max(); ++value)
   {
     const auto type = static_cast<net::MessageType>(value);
     const bool expected = std::ranges::find(mutations, type) != mutations.end();
