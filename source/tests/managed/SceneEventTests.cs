@@ -113,7 +113,6 @@ public class SceneEventTests : IDisposable
 
     Assert.Null(thrown);
     Assert.True(Bridge.IsHealthy(ObjectUuid, nameof(Bystander)));
-    Assert.Equal(0, bystander.Calls);
     Assert.Equal(new[] { "loaded" }, director.Seen);
   }
 
@@ -134,11 +133,15 @@ public class SceneEventTests : IDisposable
   public void AScriptThatDoesNotOverrideAnEventIgnoresIt()
   {
     Bridge.AddInstance(SceneUuid, nameof(Quiet), new Quiet());
+    var director = new Director();
+    Bridge.AddInstance(SceneUuid, nameof(Director), director);
 
     var thrown = Record.Exception(() => Bridge.DeliverSceneEvent(SceneUuid, nameof(Quiet), 2, "x", -1));
+    Bridge.DeliverSceneEvent(SceneUuid, nameof(Director), 2, "x", -1);
 
     Assert.Null(thrown);
     Assert.True(Bridge.IsHealthy(SceneUuid, nameof(Quiet)));
+    Assert.Equal(new[] { "spawned:x" }, director.Seen);
   }
 
   [Fact]

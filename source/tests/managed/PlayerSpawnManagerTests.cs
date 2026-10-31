@@ -27,7 +27,7 @@ public class PlayerSpawnManagerTests : StarterWorldFixture
   private static PlayerSpawnManager NewManager() => new();
 
   [Fact]
-  public void Spawns_AtPointsRoundRobinSortedByName_OfThePlayerPrefab()
+  public void Spawns_AtTheLeastLoadedPointInNameOrder_OfThePlayerPrefab()
   {
     AddSpawnPoints();
     var manager = NewManager();
@@ -138,6 +138,38 @@ public class PlayerSpawnManagerTests : StarterWorldFixture
 
     manager.onPlayerLeft(1);
     Assert.Equal(new[] { "spawned-1" }, _world.Destroyed);
+  }
+
+  [Theory]
+  [InlineData(0.9f, 20f, 2f)]
+  [InlineData(1.0f, 20f, 2f)]
+  [InlineData(1.1f, 10f, 1f)]
+  public void APlacedBodyOccupiesAPointOnlyWithinOneUnitHorizontally(float distance, float spawnX, float spawnZ)
+  {
+    AddSpawnPoints();
+    _world.Add("placed", "Player 0", new Vector3(10f + distance, 1f, 1f));
+    FakeNatives.Set("PlayerController.has:placed", true);
+    FakeNatives.Set("PlayerController.getPlayerSlot:placed", 0);
+    var manager = NewManager();
+    manager.onPlayerJoined(0);
+
+    manager.onPlayerJoined(1);
+
+    AssertVec(new Vector3(spawnX, 1f, spawnZ), _world.Spawns.Single().At);
+  }
+
+  [Fact]
+  public void ADestroyedBodyNoLongerCountsAsLivingOnItsPoint()
+  {
+    AddSpawnPoints();
+    var manager = NewManager();
+    manager.onPlayerJoined(0);
+    AssertVec(new Vector3(10f, 1f, 1f), _world.Spawns[0].At);
+    _world.Remove("spawned-1");
+
+    manager.onPlayerJoined(1);
+
+    AssertVec(new Vector3(10f, 1f, 1f), _world.Spawns[1].At);
   }
 
   [Fact]

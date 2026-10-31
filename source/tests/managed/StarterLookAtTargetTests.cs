@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using ScriptBridge;
 using Xunit;
@@ -46,15 +47,18 @@ public class StarterLookAtTargetTests : StarterMotionTargetsFixture
   public void LookAtTarget_TakesTheShortWayRoundWhenTheTargetIsBehind()
   {
     AddObject("me", Vector3.Zero);
-    AddNamed("Target", "t1", new Vector3(-1f, 0f, 1f));
+    // The goal yaw is -170 degrees: 20 away through 180, 340 away through 0, and the quaternion dot is negative.
+    AddNamed("Target", "t1", new Vector3(MathF.Sin(10f * MathF.PI / 180f), 0f, MathF.Cos(10f * MathF.PI / 180f)));
     var script = Make<LookAtTarget>(("m_target", "Target"), ("m_turnSpeed", 90f));
     Rotations["me"] = new Vector3(0f, 170f, 0f);
 
     Tick(script, 0.1f);
 
-    // The goal yaw is 135 degrees, 35 away, so one step turns the 9 degrees toward it, never the long way. Compared
-    // as a facing because an Euler yaw past 90 degrees reads back as an equivalent pitch/roll flip.
-    AssertVec(StarterUtils.rotate(new Vector3(0f, 161f, 0f), new Vector3(0f, 0f, -1f)), Facing("me"));
+    // One step turns 9 degrees toward 180, never back through 0. Compared as a facing because an Euler yaw past 90
+    // degrees reads back as an equivalent pitch/roll flip.
+    var forward = new Vector3(0f, 0f, -1f);
+    AssertVec(StarterUtils.rotate(new Vector3(0f, 179f, 0f), forward), Facing("me"));
+    Assert.True(Vector3.Distance(StarterUtils.rotate(new Vector3(0f, 161f, 0f), forward), Facing("me")) > 0.1f);
   }
 
   [Fact]
@@ -80,12 +84,14 @@ public class StarterLookAtTargetTests : StarterMotionTargetsFixture
     AddPlayers(("p0", 0, Vector3.Zero));
     var target = new TargetRef("Test script") { Slot = 3 };
 
-    for (var tick = 0; tick < 8; tick++)
+    var scansAfterTick = new List<int>();
+    for (var tick = 0; tick < 16; tick++)
     {
-      Assert.False(target.tryResolve(0.25f, out _));
+      Assert.False(target.tryResolve(0.125f, out _));
+      scansAfterTick.Add(PlayerScans());
     }
 
-    Assert.Equal(2, PlayerScans());
+    Assert.Equal(new[] { 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2 }, scansAfterTick);
     var warnings = Warnings();
     Assert.Single(warnings);
     Assert.Contains("slot 3", warnings[0]);
