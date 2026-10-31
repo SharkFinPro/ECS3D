@@ -92,6 +92,11 @@ namespace {
   struct FakeClock {
     std::chrono::steady_clock::time_point now = std::chrono::steady_clock::time_point{} + std::chrono::hours(1);
 
+    void advance(const std::chrono::milliseconds amount)
+    {
+      now += amount;
+    }
+
     [[nodiscard]] SettingsStore::NowFunction function()
     {
       return [this] { return now; };
@@ -313,13 +318,13 @@ TEST_F(SettingsStoreTest, DefersTheWriteUntilTheDebounceElapses)
   store.set("count", 1);
   store.set("count", 2);
 
-  clock.now += std::chrono::milliseconds(999);
+  clock.advance(std::chrono::milliseconds(999));
   store.update();
 
   EXPECT_TRUE(store.hasPendingWrite());
   EXPECT_FALSE(std::filesystem::exists(m_file));
 
-  clock.now += std::chrono::milliseconds(1);
+  clock.advance(std::chrono::milliseconds(1));
   store.update();
 
   EXPECT_FALSE(store.hasPendingWrite());
@@ -333,16 +338,16 @@ TEST_F(SettingsStoreTest, ALaterEditPushesTheDueTimeOut)
 
   store.set("count", 1);
 
-  clock.now += std::chrono::milliseconds(500);
+  clock.advance(std::chrono::milliseconds(500));
   store.set("count", 2);
 
   // Past the first edit's due time, but not the second's.
-  clock.now += std::chrono::milliseconds(600);
+  clock.advance(std::chrono::milliseconds(600));
   store.update();
   EXPECT_TRUE(store.hasPendingWrite());
   EXPECT_FALSE(std::filesystem::exists(m_file));
 
-  clock.now += std::chrono::milliseconds(400);
+  clock.advance(std::chrono::milliseconds(400));
   store.update();
   EXPECT_FALSE(store.hasPendingWrite());
   EXPECT_EQ(readFile().at("count"), 2);
@@ -358,7 +363,7 @@ TEST_F(SettingsStoreTest, ForcesTheWriteOnceItHasWaitedTheMaximumDelayDespiteCon
   // An edit every 900 ms keeps resetting the debounce, so nothing is written yet.
   for (int i = 1; i <= 5; ++i)
   {
-    clock.now += std::chrono::milliseconds(900);
+    clock.advance(std::chrono::milliseconds(900));
     store.set("count", i);
     store.update();
 
@@ -367,7 +372,7 @@ TEST_F(SettingsStoreTest, ForcesTheWriteOnceItHasWaitedTheMaximumDelayDespiteCon
   EXPECT_FALSE(std::filesystem::exists(m_file));
 
   // 5400 ms after the first request, past the 5000 ms maximum, with the debounce freshly reset again.
-  clock.now += std::chrono::milliseconds(900);
+  clock.advance(std::chrono::milliseconds(900));
   store.set("count", 6);
   store.update();
 
