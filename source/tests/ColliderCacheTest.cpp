@@ -7,6 +7,7 @@
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <cmath>
+#include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
 
@@ -141,6 +142,28 @@ TEST(ColliderCache, ReparentingUnderAChainWithAnOlderStampRefreshesTheCache)
   EXPECT_NEAR(box->findFurthestPoint({1, 0, 0}).x, box->getBoundingBox().maxX, 1e-4f);
 }
 
+TEST(ColliderCache, ReparentingAChildStampedAfterBothParentsStillRefreshesTheCache)
+{
+  const auto first = std::make_shared<Object>("First");
+  const auto second = std::make_shared<Object>("Second");
+  const auto child = std::make_shared<Object>("Child");
+
+  transformOf(first)->setPosition(glm::vec3(10, 0, 0));
+  transformOf(second)->setPosition(glm::vec3(20, 0, 0));
+
+  const auto box = std::make_shared<BoxCollider>();
+  child->addComponent(box);
+  child->setParent(first);
+  transformOf(child)->setPosition(glm::vec3(1, 0, 0));
+
+  // The child's own stamp is the newest in both chains, so only the reparent can move the world id.
+  EXPECT_NEAR(centerX(box->getBoundingBox()), 11.0f, 1e-4f);
+
+  child->setParent(second);
+
+  EXPECT_NEAR(centerX(box->getBoundingBox()), 21.0f, 1e-4f);
+}
+
 TEST(ColliderCache, ReparentingNeverRepeatsAWorldUpdateID)
 {
   const auto first = std::make_shared<Object>("First");
@@ -167,20 +190,55 @@ TEST(ColliderCache, NothingChangingKeepsTheCache)
   Chain chain;
   transformOf(chain.parent)->setPosition(glm::vec3(1, 0, 0));
 
-  const BoundingBox first = chain.box->getBoundingBox();
-  const auto worldID = transformOf(chain.child)->getWorldUpdateID();
+  const BoundingBox& cached = chain.box->getBoundingBox();
+  const float realMinX = cached.minX;
 
-  const BoundingBox& second = chain.box->getBoundingBox();
+  // A recompute rewrites every extent from findFurthestPoint, so a planted sentinel survives only a cache hit.
+  const float sentinel = -12345.0f;
+  const_cast<BoundingBox&>(cached).minX = sentinel;
 
-  EXPECT_EQ(second.lastUpdateID, first.lastUpdateID);
-  EXPECT_EQ(second.lastUpdateID, worldID);
-  EXPECT_EQ(transformOf(chain.child)->getWorldUpdateID(), worldID);
-  EXPECT_FLOAT_EQ(second.minX, first.minX);
-  EXPECT_FLOAT_EQ(second.maxX, first.maxX);
+  EXPECT_FLOAT_EQ(chain.box->getBoundingBox().minX, sentinel);
 
   transformOf(chain.parent)->setPosition(glm::vec3(2, 0, 0));
+  EXPECT_NEAR(chain.box->getBoundingBox().minX, realMinX + 1.0f, 1e-4f);
+}
 
-  EXPECT_NE(chain.box->getBoundingBox().lastUpdateID, first.lastUpdateID);
+TEST(ColliderCache, ChangingTheColliderItselfRecomputesTheBounds)
+{
+  Chain chain;
+  const BoundingBox& cached = chain.box->getBoundingBox();
+  const float sentinel = -12345.0f;
+  const_cast<BoundingBox&>(cached).minX = sentinel;
+  ASSERT_FLOAT_EQ(chain.box->getBoundingBox().minX, sentinel);
+
+  chain.box->setPosition(glm::vec3(3, 0, 0));
+
+  EXPECT_NEAR(chain.box->getBoundingBox().minX, 2.0f, 1e-4f);
+}
+
+TEST(ColliderCache, ABoxScaledAndTurnedUnderATurnedParentUsesTheComposedRotation)
+{
+  Chain chain;
+  chain.box->setScale(glm::vec3(2, 1, 1));
+
+  // Half extents are 2 and 1 about z. Width along x is 2 * (2|cos| + 1|sin|) at the total angle.
+  const auto widthAt = [](const float degrees)
+  {
+    const float radians = glm::radians(degrees);
+    return 2.0f * (2.0f * std::fabs(std::cos(radians)) + std::fabs(std::sin(radians)));
+  };
+
+  EXPECT_NEAR(width(chain.box->getBoundingBox()), widthAt(0.0f), 1e-4f);
+
+  transformOf(chain.parent)->setRotation(glm::vec3(0, 0, 60));
+  EXPECT_NEAR(width(chain.box->getBoundingBox()), widthAt(60.0f), 1e-4f);
+
+  chain.box->setRotation(glm::vec3(0, 0, 30));
+
+  // 60 alone gives 3.73 and 30 alone gives 4.46; only the composed 90 degrees gives 2.
+  EXPECT_NEAR(width(chain.box->getBoundingBox()), widthAt(90.0f), 1e-4f);
+  EXPECT_NEAR(chain.box->findFurthestPoint({1, 0, 0}).x, 1.0f, 1e-4f);
+  EXPECT_NEAR(chain.box->findFurthestPoint({0, 1, 0}).y, 2.0f, 1e-4f);
 }
 
 TEST(ColliderCache, RemovingTheParentTransformRefreshesAChildBoxBounds)
