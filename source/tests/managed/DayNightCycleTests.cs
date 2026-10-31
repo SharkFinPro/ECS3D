@@ -54,7 +54,7 @@ public class DayNightCycleTests : StarterWorldFixture
   }
 
   [Fact]
-  public void TheDayWrapsAfterAFullPeriod()
+  public void ElapsedTimeAccumulatesPastOneFullPeriod()
   {
     var cycle = NewCycle(0.0f);
 
@@ -115,6 +115,21 @@ public class DayNightCycleTests : StarterWorldFixture
     var expected = Vector3.Lerp(new Vector3(1.0f, 0.5f, 0.2f), new Vector3(1.0f, 0.96f, 0.88f), 0.5f);
     AssertVec(expected, new Vector3(color[0], color[1], color[2]));
     Assert.Equal(0.06f + (0.3f - 0.06f) * 0.15f, ArgsOf("LightRenderer.setAmbient")[0], 1e-3f);
+  }
+
+  [Fact]
+  public void BetweenNightAndDuskTheColorBlendsOverTheTenthBelowTheHorizon()
+  {
+    // Height -0.05 is halfway between the night (-0.1) and dusk (0) thresholds.
+    var phase = MathF.Asin(-0.05f) / (2.0f * MathF.PI);
+    var cycle = NewCycle(phase);
+
+    cycle.fixedUpdate(0.0f);
+
+    var color = ArgsOf("LightRenderer.setColor");
+    var expected = Vector3.Lerp(new Vector3(0.1f, 0.15f, 0.4f), new Vector3(1.0f, 0.5f, 0.2f), 0.5f);
+    AssertVec(expected, new Vector3(color[0], color[1], color[2]));
+    Assert.Equal(0.06f, ArgsOf("LightRenderer.setAmbient")[0], 1e-4f);
   }
 
   [Fact]
@@ -213,13 +228,15 @@ public class DayNightCycleTests : StarterWorldFixture
     Assert.Equal(0.8f, LastDiffuseSetOn("sun"), 1e-4f);
   }
 
-  [Fact]
-  public void ANonPositivePeriod_HoldsTheStartTimeInsteadOfDividingByZero()
+  [Theory]
+  [InlineData(0.0f)]
+  [InlineData(-10.0f)]
+  public void ANonPositivePeriod_HoldsTheStartTimeInsteadOfDividingByZeroOrRunningBackwards(float period)
   {
     var cycle = NewCycle(0.25f);
-    SetField(cycle, "m_periodSeconds", 0.0f);
+    SetField(cycle, "m_periodSeconds", period);
 
-    cycle.fixedUpdate(10.0f);
+    cycle.fixedUpdate(5.0f);
 
     AssertVec(new Vector3(0f, 40f, 0f), _world.PositionOf("sun"));
   }

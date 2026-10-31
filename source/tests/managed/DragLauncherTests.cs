@@ -150,6 +150,7 @@ public unsafe class DragLauncherTests : IDisposable
     var launches = Launches();
     AssertVec(new Vector3(6f * Dt, 0f, 0f), Velocity(launches[0]));
     AssertVec(new Vector3(4f * Dt, 0f, 0f), Velocity(launches[1]));
+    Assert.Equal(new[] { "DragLauncher launched 'Ball' at 6.0", "DragLauncher launched 'Ball' at 4.0" }, Infos());
   }
 
   [Fact]
@@ -171,10 +172,10 @@ public unsafe class DragLauncherTests : IDisposable
   {
     var launcher = NewLauncher();
 
-    Drag(launcher, -0.05f);
+    Drag(launcher, -0.09f);
     Assert.Empty(Launches());
 
-    Drag(launcher, -0.5f);
+    Drag(launcher, -0.11f);
     Assert.Single(Launches());
   }
 

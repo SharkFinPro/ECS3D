@@ -267,6 +267,23 @@ public unsafe class StarterSpawningTests : IDisposable
   }
 
   [Fact]
+  public void Spawner_OffsetsFillTheDiscUniformlyAndTurnInEveryDirection()
+  {
+    FakeNatives.Set("Transform.getPosition", new Vector3(10f, 5f, -3f));
+
+    var positions = SpawnPositions(11, 200);
+
+    var offsets = positions.Select(p => new Vector2(p.X - 10f, p.Z + 3f)).ToList();
+    // The area-uniform distance has E[(d/r)^2] = 0.5; a missing square root gives 1/3 and a fixed half radius 0.25.
+    var meanSquare = offsets.Average(o => o.LengthSquared() / 9f);
+    Assert.InRange(meanSquare, 0.42f, 0.58f);
+    Assert.Contains(offsets, o => o.X > 1f);
+    Assert.Contains(offsets, o => o.X < -1f);
+    Assert.Contains(offsets, o => o.Y > 1f);
+    Assert.Contains(offsets, o => o.Y < -1f);
+  }
+
+  [Fact]
   public void Spawner_SpawnOnStartFalseWaitsOneInterval()
   {
     var waiting = NewSpawner(onStart: false);
@@ -300,6 +317,20 @@ public unsafe class StarterSpawningTests : IDisposable
     withoutBody.start();
     Assert.Single(CallsTo("World.spawnPrefab"));
     Assert.Empty(CallsTo("RigidBody.setVelocity"));
+  }
+
+  [Fact]
+  public void Spawner_ConvertsTheInitialVelocityWithTheStepTheServerReports()
+  {
+    var spawner = NewSpawner(onStart: false);
+    SetField(spawner, "m_initialVelocity", new Vector3(50f, 0f, -25f));
+    FakeNatives.SetString("World.spawnPrefab", "ball");
+    FakeNatives.Set("RigidBody.has", true);
+    spawner.start();
+
+    NextSpawn(spawner, "ball");
+
+    AssertVec(new Vector3(25f, 0f, -12.5f), Args(CallsTo("RigidBody.setVelocity").Single()));
   }
 
   [Fact]

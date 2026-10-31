@@ -75,13 +75,15 @@ public unsafe class StarterUtilsTests : IDisposable
   {
     var ghost = new NamedObject("Test script on Door") { Name = "Ghost" };
 
+    var lookupsAfterTick = new List<int>();
     for (var tick = 0; tick < 12; tick++)
     {
       Assert.False(ghost.tryResolve(0.25f, out var uuid));
       Assert.Equal("", uuid);
+      lookupsAfterTick.Add(Lookups());
     }
 
-    Assert.Equal(3, Lookups());
+    Assert.Equal(new[] { 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3 }, lookupsAfterTick);
     var warnings = Warnings();
     Assert.Single(warnings);
     Assert.Contains("Ghost", warnings[0]);
@@ -346,6 +348,36 @@ public unsafe class StarterUtilsTests : IDisposable
     Step(player);
     Assert.True(LastSteer().X > 0f);
     Assert.Empty(Warnings());
+  }
+
+  [Theory]
+  [InlineData(Key.S, 0f, 0f, 0.09f)]
+  [InlineData(Key.DOWN, 0f, 0f, 0.09f)]
+  [InlineData(Key.A, -0.09f, 0f, 0f)]
+  [InlineData(Key.LEFT, -0.09f, 0f, 0f)]
+  [InlineData(Key.UP, 0f, 0f, -0.09f)]
+  [InlineData(Key.RIGHT, 0.09f, 0f, 0f)]
+  public void PlayerScript_EveryDefaultAndArrowKeySteersItsOwnWay(Key key, float x, float y, float z)
+  {
+    var player = NewPlayer();
+
+    Press(key);
+    Step(player);
+
+    AssertVec(new Vector3(x, y, z), LastSteer());
+    Assert.Empty(Warnings());
+  }
+
+  [Fact]
+  public void PlayerScript_HeadingTurnsWithTheBodysYaw()
+  {
+    var player = NewPlayer();
+    FakeNatives.Set("Transform.getRotation", new Vector3(0f, 90f, 0f));
+
+    Press(Key.W);
+    Step(player);
+
+    AssertVec(new Vector3(-0.09f, 0f, 0f), LastSteer());
   }
 
   [Fact]
