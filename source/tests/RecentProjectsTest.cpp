@@ -441,8 +441,8 @@ TEST_F(RecentProjectsTest, MalformedTimesSortAsOldest)
   EXPECT_FALSE(old7SurvivesWithTime("2026-10-18T24:00:00Z"));
   EXPECT_FALSE(old7SurvivesWithTime("2026-10-18T00:00:60Z"));
   EXPECT_FALSE(old7SurvivesWithTime("2026-10-18T19:60:00Z"));
-  EXPECT_FALSE(old7SurvivesWithTime("2026-00-10T00:00:00Z"));
-  EXPECT_FALSE(old7SurvivesWithTime("2026-01-00T00:00:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2030-00-10T00:00:00Z"));
+  EXPECT_FALSE(old7SurvivesWithTime("2030-01-00T00:00:00Z"));
   EXPECT_FALSE(old7SurvivesWithTime("2026-04-31T00:00:00Z"));
   EXPECT_FALSE(old7SurvivesWithTime("2026-06-31T00:00:00Z"));
   EXPECT_FALSE(old7SurvivesWithTime("2026-09-31T00:00:00Z"));
