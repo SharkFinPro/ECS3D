@@ -24,7 +24,7 @@ namespace {
   }
 
   template <typename T>
-  std::shared_ptr<T> throughTheWire(const std::shared_ptr<T>& source)
+  void unpackInto(const std::shared_ptr<T>& source, const std::shared_ptr<T>& target)
   {
     // The framing is what matters here, not the message type: pack writes the component alone.
     net::Message message(net::MessageType::undefined);
@@ -34,10 +34,59 @@ namespace {
     // pack writes the type discriminator first; unpack expects the reader positioned after it.
     static_cast<void>(reader.read<ComponentType>());
 
+    target->unpack(reader);
+  }
+
+  template <typename T>
+  std::shared_ptr<T> throughTheWire(const std::shared_ptr<T>& source)
+  {
     auto loaded = std::make_shared<T>();
-    loaded->unpack(reader);
+    unpackInto(source, loaded);
 
     return loaded;
+  }
+
+  constexpr uint32_t distinctiveMask = 0x5A5Au;
+
+  std::shared_ptr<SphereCollider> sphereFromWireWithLayer(const uint32_t layer)
+  {
+    net::Message message(net::MessageType::undefined);
+    message.write(ComponentType::SubComponentType_sphereCollider);
+    message.write(false);
+    message.write(glm::vec3(0));
+    message.write(1.0f);
+    message.write(true);
+    message.write(layer);
+    message.write(distinctiveMask);
+
+    net::MessageReader reader(message);
+    static_cast<void>(reader.read<ComponentType>());
+
+    auto collider = std::make_shared<SphereCollider>();
+    collider->unpack(reader);
+
+    return collider;
+  }
+
+  std::shared_ptr<BoxCollider> boxFromWireWithLayer(const uint32_t layer)
+  {
+    net::Message message(net::MessageType::undefined);
+    message.write(ComponentType::SubComponentType_boxCollider);
+    message.write(false);
+    message.write(glm::vec3(0));
+    message.write(glm::vec3(1));
+    message.write(glm::vec3(0));
+    message.write(true);
+    message.write(layer);
+    message.write(distinctiveMask);
+
+    net::MessageReader reader(message);
+    static_cast<void>(reader.read<ComponentType>());
+
+    auto collider = std::make_shared<BoxCollider>();
+    collider->unpack(reader);
+
+    return collider;
   }
 }
 
@@ -71,14 +120,9 @@ TEST(ColliderPersistence, ABoxClearsItsGizmoFlagThroughBothPaths)
   json->loadFromJSON(collider->serialize());
   EXPECT_FALSE(json->getRenderCollider());
 
-  net::Message message(net::MessageType::undefined);
-  collider->pack(message);
-  net::MessageReader reader(message);
-  static_cast<void>(reader.read<ComponentType>());
-
   const auto wire = std::make_shared<BoxCollider>();
   wire->setRenderCollider(true);
-  wire->unpack(reader);
+  unpackInto(collider, wire);
   EXPECT_FALSE(wire->getRenderCollider());
 }
 
@@ -93,14 +137,9 @@ TEST(ColliderPersistence, ASphereClearsItsGizmoFlagThroughBothPaths)
   json->loadFromJSON(collider->serialize());
   EXPECT_FALSE(json->getRenderCollider());
 
-  net::Message message(net::MessageType::undefined);
-  collider->pack(message);
-  net::MessageReader reader(message);
-  static_cast<void>(reader.read<ComponentType>());
-
   const auto wire = std::make_shared<SphereCollider>();
   wire->setRenderCollider(true);
-  wire->unpack(reader);
+  unpackInto(collider, wire);
   EXPECT_FALSE(wire->getRenderCollider());
 }
 
@@ -166,22 +205,16 @@ TEST(ColliderPersistence, AnOutOfRangeLayerIsClampedOnLoad)
 
 TEST(ColliderPersistence, AnOutOfRangeLayerIsClampedOffTheWire)
 {
-  net::Message message(net::MessageType::undefined);
-  message.write(ComponentType::SubComponentType_sphereCollider);
-  message.write(false);
-  message.write(glm::vec3(0));
-  message.write(1.0f);
-  message.write(false);
-  message.write(uint32_t{ 99 });
-  message.write(uint32_t{ 0xFFFFFFFFu });
+  const auto past = sphereFromWireWithLayer(32);
+  EXPECT_EQ(past->getLayer(), 31u);
+  EXPECT_EQ(past->getMask(), distinctiveMask);
+  EXPECT_TRUE(past->isTrigger());
 
-  net::MessageReader reader(message);
-  static_cast<void>(reader.read<ComponentType>());
+  const auto last = sphereFromWireWithLayer(31);
+  EXPECT_EQ(last->getLayer(), 31u);
+  EXPECT_EQ(last->getMask(), distinctiveMask);
 
-  const auto collider = std::make_shared<SphereCollider>();
-  collider->unpack(reader);
-
-  EXPECT_EQ(collider->getLayer(), 31u);
+  EXPECT_EQ(sphereFromWireWithLayer(30)->getLayer(), 30u);
 }
 
 TEST(ColliderPersistence, ASphereRoundTripsItsLayerMaskAndTrigger)
@@ -274,7 +307,7 @@ TEST(ColliderPersistence, ALayerAtTheBoundaryLoadsUnchangedAndOnePastItClamps)
   EXPECT_EQ(sphere->getLayer(), 31u);
 
   boxSaved["layer"] = 32u;
-  sphereSaved["layer"] = 99u;
+  sphereSaved["layer"] = 32u;
   box->setLayer(2);
   sphere->setLayer(2);
   box->loadFromJSON(boxSaved);
@@ -285,23 +318,16 @@ TEST(ColliderPersistence, ALayerAtTheBoundaryLoadsUnchangedAndOnePastItClamps)
 
 TEST(ColliderPersistence, AnOutOfRangeBoxLayerIsClampedOffTheWire)
 {
-  net::Message message(net::MessageType::undefined);
-  message.write(ComponentType::SubComponentType_boxCollider);
-  message.write(false);
-  message.write(glm::vec3(0));
-  message.write(glm::vec3(1));
-  message.write(glm::vec3(0));
-  message.write(false);
-  message.write(uint32_t{ 32 });
-  message.write(uint32_t{ 0xFFFFFFFFu });
+  const auto past = boxFromWireWithLayer(32);
+  EXPECT_EQ(past->getLayer(), 31u);
+  EXPECT_EQ(past->getMask(), distinctiveMask);
+  EXPECT_TRUE(past->isTrigger());
 
-  net::MessageReader reader(message);
-  static_cast<void>(reader.read<ComponentType>());
+  const auto last = boxFromWireWithLayer(31);
+  EXPECT_EQ(last->getLayer(), 31u);
+  EXPECT_EQ(last->getMask(), distinctiveMask);
 
-  const auto collider = std::make_shared<BoxCollider>();
-  collider->unpack(reader);
-
-  EXPECT_EQ(collider->getLayer(), 31u);
+  EXPECT_EQ(boxFromWireWithLayer(30)->getLayer(), 30u);
 }
 
 TEST(ColliderPersistence, AConvexMeshKeepsItsGizmoFlagThroughBothPaths)

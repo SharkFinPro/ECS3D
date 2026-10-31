@@ -7,7 +7,6 @@
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <cmath>
-#include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 #include <memory>
 
@@ -221,24 +220,19 @@ TEST(ColliderCache, ABoxScaledAndTurnedUnderATurnedParentUsesTheComposedRotation
   Chain chain;
   chain.box->setScale(glm::vec3(2, 1, 1));
 
-  // Half extents are 2 and 1 about z. Width along x is 2 * (2|cos| + 1|sin|) at the total angle.
-  const auto widthAt = [](const float degrees)
-  {
-    const float radians = glm::radians(degrees);
-    return 2.0f * (2.0f * std::fabs(std::cos(radians)) + std::fabs(std::sin(radians)));
-  };
+  EXPECT_NEAR(width(chain.box->getBoundingBox()), 4.0f, 1e-4f);
 
-  EXPECT_NEAR(width(chain.box->getBoundingBox()), widthAt(0.0f), 1e-4f);
+  // Parent about y, collider about z: the axes do not commute. Parent * child sends the long local x axis to
+  // world y; child * parent (also what adding the Euler angles gives) sends it to world z.
+  transformOf(chain.parent)->setRotation(glm::vec3(0, 90, 0));
+  chain.box->setRotation(glm::vec3(0, 0, 90));
 
-  transformOf(chain.parent)->setRotation(glm::vec3(0, 0, 60));
-  EXPECT_NEAR(width(chain.box->getBoundingBox()), widthAt(60.0f), 1e-4f);
-
-  chain.box->setRotation(glm::vec3(0, 0, 30));
-
-  // 60 alone gives 3.73 and 30 alone gives 4.46; only the composed 90 degrees gives 2.
-  EXPECT_NEAR(width(chain.box->getBoundingBox()), widthAt(90.0f), 1e-4f);
-  EXPECT_NEAR(chain.box->findFurthestPoint({1, 0, 0}).x, 1.0f, 1e-4f);
+  const BoundingBox& bounds = chain.box->getBoundingBox();
+  EXPECT_NEAR(bounds.maxX - bounds.minX, 2.0f, 1e-4f);
+  EXPECT_NEAR(bounds.maxY - bounds.minY, 4.0f, 1e-4f);
+  EXPECT_NEAR(bounds.maxZ - bounds.minZ, 2.0f, 1e-4f);
   EXPECT_NEAR(chain.box->findFurthestPoint({0, 1, 0}).y, 2.0f, 1e-4f);
+  EXPECT_NEAR(chain.box->findFurthestPoint({0, 0, 1}).z, 1.0f, 1e-4f);
 }
 
 TEST(ColliderCache, RemovingTheParentTransformRefreshesAChildBoxBounds)
