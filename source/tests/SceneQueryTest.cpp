@@ -373,23 +373,26 @@ TEST(SceneQuery, RaycastMaxDistanceSeparatesNonRoundSphereHitDistances)
   EXPECT_NEAR(hit.distance, 10.27f, 1e-4f);
 }
 
-TEST(SceneQuery, RaycastComposesAMultiAxisBoxRotationInTheCollisionMeshOrder)
+TEST(SceneQuery, RaycastMatchesTheRzRyRxBoxRotationOnAllThreeAxes)
 {
   const auto scene = makeScene();
 
-  // Stretched 3x along its own y. Turned 90 degrees about x and then about z (the matrix is Rz * Ry * Rx,
-  // so x is applied first), the box's local y points along world +z and its local z along world +x: the
-  // long axis lies on z and the box is only 1 deep on x. Composed the other way round the long axis would
-  // land on x instead, which is what each ray below tells apart.
-  const auto box = addBox(scene, { 0, 0, 0 }, { 1, 3, 1 });
-  box->getComponent<Transform>(ComponentType::transform)->setRotation({ 90, 0, 90 });
+  // All three angles non-zero and not multiples of 90, with distinct scales, so the six possible
+  // composition orders of the three rotations give six different boxes. The expected distances are the
+  // center-line exits of the box A = Rz(50) * Ry(40) * Rx(30) * diag(1, 2, 3), worked out independently;
+  // the other five orders differ from them by at least 0.4 on one of the three rays.
+  const auto box = addBox(scene, { 0, 0, 0 }, { 1, 2, 3 });
+  box->getComponent<Transform>(ComponentType::transform)->setRotation({ 30, 40, 50 });
 
   QueryHit hit;
-  ASSERT_TRUE(castRay(scene, { 0, 0, 10 }, { 0, 0, -1 }, 100.0f, hit));
-  EXPECT_NEAR(hit.distance, 7.0f, 1e-3f);
-
   ASSERT_TRUE(castRay(scene, { 10, 0, 0 }, { -1, 0, 0 }, 100.0f, hit));
-  EXPECT_NEAR(hit.distance, 9.0f, 1e-3f);
+  EXPECT_NEAR(hit.distance, 7.96915f, 1e-3f);
+
+  ASSERT_TRUE(castRay(scene, { 0, 10, 0 }, { 0, -1, 0 }, 100.0f, hit));
+  EXPECT_NEAR(hit.distance, 8.29591f, 1e-3f);
+
+  ASSERT_TRUE(castRay(scene, { 0, 0, 10 }, { 0, 0, -1 }, 100.0f, hit));
+  EXPECT_NEAR(hit.distance, 8.44428f, 1e-3f);
 }
 
 TEST(SceneQuery, RaycastSeesASphereAtItsScaledRadius)
@@ -500,20 +503,33 @@ TEST(SceneQuery, OverlapSphereAgainstARotatedBoxUsesTheRotatedShape)
   EXPECT_EQ(results.front(), box->getUUID());
 }
 
-TEST(SceneQuery, OverlapSphereComposesAMultiAxisBoxRotationInTheCollisionMeshOrder)
+TEST(SceneQuery, OverlapSphereMatchesTheRzRyRxBoxRotationAtItsCorners)
 {
   const auto scene = makeScene();
 
-  // Same box as the raycast composition test: 3x along its own y, which Rz * Ry * Rx puts on world z after
-  // turning 90 degrees about x and then z. Composed the other way round it would lie on x.
-  const auto box = addBox(scene, { 0, 0, 0 }, { 1, 3, 1 });
-  box->getComponent<Transform>(ComponentType::transform)->setRotation({ 90, 0, 90 });
+  // The box of the raycast test above. Its corners A * (+-1, +-1, +-1) are worked out independently; a
+  // small sphere on each of four of them touches the box, and the same corners pushed 30% further out do
+  // not. Every other composition order puts at least one of these corners well outside its box.
+  const auto box = addBox(scene, { 0, 0, 0 }, { 1, 2, 3 });
+  box->getComponent<Transform>(ComponentType::transform)->setRotation({ 30, 40, 50 });
 
-  const auto alongLongAxis = sphereOverlaps(scene, { 0, 0, 2.5f }, 0.5f);
-  ASSERT_EQ(alongLongAxis.size(), 1u);
-  EXPECT_EQ(alongLongAxis.front(), box->getUUID());
+  const std::vector<glm::vec3> corners{
+    { 1.80128f, 2.50769f, 2.11350f },
+    { -2.64378f, 1.87745f, -1.86699f },
+    { 3.62859f, -0.70380f, 0.58141f },
+    { -0.81647f, -1.33404f, -3.39907f }
+  };
 
-  EXPECT_TRUE(sphereOverlaps(scene, { 2.5f, 0, 0 }, 0.5f).empty());
+  for (const auto& corner : corners)
+  {
+    SCOPED_TRACE(::testing::Message() << "corner (" << corner.x << ", " << corner.y << ", " << corner.z << ")");
+
+    const auto touching = sphereOverlaps(scene, corner, 0.1f);
+    ASSERT_EQ(touching.size(), 1u);
+    EXPECT_EQ(touching.front(), box->getUUID());
+
+    EXPECT_TRUE(sphereOverlaps(scene, corner * 1.3f, 0.1f).empty());
+  }
 }
 
 TEST(SceneQuery, OverlapSphereRespectsTheLayerMaskAndTheIgnoredObject)

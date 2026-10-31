@@ -168,8 +168,7 @@ TEST(NarrowPhase, ContactPointForUnequalRadiusSpheresFollowsWhichSphereIsLarger)
   const auto [secondObject, second] = makeCollider<SphereCollider>({ 1.5f, 0, 0 });
 
   // The mirror of the pair above: the first sphere now has radius 2 and the second 1, so the overlap runs
-  // from 0.5 to 2 and its midpoint moves to 1.25. A midpoint that mixed up which radius belongs to which
-  // sphere gives 0.25 here and passes the pair above for the same reason.
+  // from 0.5 to 2 and its midpoint moves to 1.25 rather than 0.25.
   first->setRadius(2.0f);
 
   const auto contact = collisions::findContact(*first, *second);

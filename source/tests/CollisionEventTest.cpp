@@ -16,6 +16,7 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <utility>
 #include <vector>
 #include <uuid.h>
 
@@ -66,6 +67,35 @@ namespace {
     collisionSystem.fixedUpdate(*scene.objectManager, dt);
 
     return { contains(collisionSystem.getCollisionEnters(), mover, resting), positionOf(mover) };
+  }
+
+  struct ApproachingBodiesResult {
+    bool entered;
+    glm::vec3 firstPosition;
+    glm::vec3 secondPosition;
+    glm::vec3 firstVelocity;
+    glm::vec3 secondVelocity;
+  };
+
+  constexpr glm::vec3 firstApproach{ 0.1f, 0, 0 };
+  constexpr glm::vec3 secondApproach{ -0.1f, 0, 0 };
+
+  // Two dynamic bodies overlapping by one unit and moving toward each other: both edges are collision
+  // sources, and a response would change positions and velocities on both sides.
+  ApproachingBodiesResult runApproachingBodies(const bool firstIsTrigger, const bool secondIsTrigger)
+  {
+    const auto scene = makeScene();
+    const auto first = addBody(scene, "First", { 0, 0, 0 }, true, firstIsTrigger);
+    const auto second = addBody(scene, "Second", { 1, 0, 0 }, true, secondIsTrigger);
+    first->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity(firstApproach);
+    second->getComponent<RigidBody>(ComponentType::rigidBody)->setVelocity(secondApproach);
+
+    CollisionSystem collisionSystem;
+    collisionSystem.fixedUpdate(*scene.objectManager, dt);
+
+    return { contains(collisionSystem.getCollisionEnters(), first, second), positionOf(first), positionOf(second),
+             first->getComponent<RigidBody>(ComponentType::rigidBody)->getVelocity(),
+             second->getComponent<RigidBody>(ComponentType::rigidBody)->getVelocity() };
   }
 
   struct MultiContactResult {
@@ -500,6 +530,32 @@ TEST(CollisionEvent, OneSidedTriggersAmongSeveralContactsSkipOnlyTheirOwnRespons
   EXPECT_TRUE(triggerMover.enteredShallow);
   EXPECT_TRUE(triggerMover.enteredDeep);
   expectNear(triggerMover.moverPosition, { 0, 0, 0 }, 1e-6f);
+}
+
+TEST(CollisionEvent, AOneSidedTriggerBetweenTwoMovingBodiesChangesNeitherOfThem)
+{
+  // The positive control: neither a trigger, and both bodies are pushed apart and have their velocity
+  // changed.
+  const auto solid = runApproachingBodies(false, false);
+  ASSERT_TRUE(solid.entered);
+  EXPECT_LT(solid.firstPosition.x, -1e-3f);
+  EXPECT_GT(solid.secondPosition.x, 1.0f + 1e-3f);
+  EXPECT_NE(solid.firstVelocity, firstApproach);
+  EXPECT_NE(solid.secondVelocity, secondApproach);
+
+  // One trigger side, whichever it is, leaves both bodies exactly as they were: no push on the partner and
+  // no impulse on either.
+  for (const auto& [firstIsTrigger, secondIsTrigger] : { std::pair{ true, false }, std::pair{ false, true } })
+  {
+    SCOPED_TRACE(::testing::Message() << "first trigger: " << firstIsTrigger);
+
+    const auto result = runApproachingBodies(firstIsTrigger, secondIsTrigger);
+    EXPECT_TRUE(result.entered);
+    expectNear(result.firstPosition, { 0, 0, 0 }, 1e-6f);
+    expectNear(result.secondPosition, { 1, 0, 0 }, 1e-6f);
+    expectNear(result.firstVelocity, firstApproach, 1e-6f);
+    expectNear(result.secondVelocity, secondApproach, 1e-6f);
+  }
 }
 
 TEST(CollisionEvent, ResetForgetsThePreviousTick)
