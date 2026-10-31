@@ -82,7 +82,9 @@ public unsafe class StarterMotionBasicTests : IDisposable
 
   // Runs fixedUpdate ticks, feeding each written rotation back as the next read, as the engine would. A nonzero
   // readNoise offsets every read component, standing in for a store that does not return exactly what was set.
-  private static void SpinTicks(Spinner spinner, int ticks, float dt, float readNoise = 0f)
+  private static void SpinTicks(Spinner spinner, int ticks, float dt) => SpinTicks(spinner, ticks, dt, 0f);
+
+  private static void SpinTicks(Spinner spinner, int ticks, float dt, float readNoise)
   {
     for (var tick = 0; tick < ticks; tick++)
     {

@@ -277,6 +277,9 @@ public unsafe class StarterSpawningTests : IDisposable
     // The area-uniform distance has E[(d/r)^2] = 0.5; a missing square root gives 1/3 and a fixed half radius 0.25.
     var meanSquare = offsets.Average(o => o.LengthSquared() / 9f);
     Assert.InRange(meanSquare, 0.42f, 0.58f);
+    // The seeded sequence starts in these quadrants; swapping Cos and Sin onto the other axes flips them.
+    Assert.Equal(new[] { (-1, 1), (-1, 1), (1, 1), (1, -1) },
+      offsets.Take(4).Select(o => (Math.Sign(o.X), Math.Sign(o.Y))).ToArray());
     Assert.Contains(offsets, o => o.X > 1f);
     Assert.Contains(offsets, o => o.X < -1f);
     Assert.Contains(offsets, o => o.Y > 1f);

@@ -5,6 +5,7 @@ using Xunit;
 
 namespace ECS3DManagedTests;
 
+[Collection("BridgeInstances")]
 public class SchedulerTests
 {
   private readonly Scheduler _scheduler = new();

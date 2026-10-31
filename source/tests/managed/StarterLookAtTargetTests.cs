@@ -85,13 +85,13 @@ public class StarterLookAtTargetTests : StarterMotionTargetsFixture
     var target = new TargetRef("Test script") { Slot = 3 };
 
     var scansAfterTick = new List<int>();
-    for (var tick = 0; tick < 8; tick++)
+    for (var tick = 0; tick < 16; tick++)
     {
-      Assert.False(target.tryResolve(0.25f, out _));
+      Assert.False(target.tryResolve(0.125f, out _));
       scansAfterTick.Add(PlayerScans());
     }
 
-    Assert.Equal(new[] { 1, 1, 1, 1, 2, 2, 2, 2 }, scansAfterTick);
+    Assert.Equal(new[] { 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2 }, scansAfterTick);
     var warnings = Warnings();
     Assert.Single(warnings);
     Assert.Contains("slot 3", warnings[0]);

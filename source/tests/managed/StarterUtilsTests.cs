@@ -76,14 +76,14 @@ public unsafe class StarterUtilsTests : IDisposable
     var ghost = new NamedObject("Test script on Door") { Name = "Ghost" };
 
     var lookupsAfterTick = new List<int>();
-    for (var tick = 0; tick < 12; tick++)
+    for (var tick = 0; tick < 24; tick++)
     {
-      Assert.False(ghost.tryResolve(0.25f, out var uuid));
+      Assert.False(ghost.tryResolve(0.125f, out var uuid));
       Assert.Equal("", uuid);
       lookupsAfterTick.Add(Lookups());
     }
 
-    Assert.Equal(new[] { 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3 }, lookupsAfterTick);
+    Assert.Equal(new[] { 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3 }, lookupsAfterTick);
     var warnings = Warnings();
     Assert.Single(warnings);
     Assert.Contains("Ghost", warnings[0]);
