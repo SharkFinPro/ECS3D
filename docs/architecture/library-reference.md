@@ -13,10 +13,11 @@ panel), `RemoteLogSink` (a bounded queue a server drains to forward its log to e
 ImGui) and `formatEntry` (the shared `[level][category] message` rendering, prefixed with the time of day, used
 by the panel and its copy button), and the process-wide `Log` facade; `ConsoleWindow`'s `openConsoleWindow`
 allocates and attaches a console for GUI (graphical user interface) subsystem apps; `UserDataDirectory`'s
-`userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there);
-`LogSetup`'s `addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing
-but the standard library and, on Windows, the console API (for `openConsoleWindow`). Apps register a
-`ConsoleSink` and a `FileSink` at startup.
+`userDataDirectory`/`defaultLogFile` resolve the per-user, per-machine directory (settings and logs live there),
+and an overload takes the environment lookup so tests need not touch the real environment; `LogSetup`'s
+`addFileSinkFromArguments` registers an app's `FileSink` from its command line. Depends on nothing but the standard
+library and, on Windows, the console API (for `openConsoleWindow`). Apps register a `ConsoleSink` and a `FileSink`
+at startup.
 
 ## ECS3DSettings
 

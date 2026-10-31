@@ -77,6 +77,47 @@ namespace {
     std::vector<std::shared_ptr<LogSink>> m_addedSinks;
   };
 
+  // Walks every decision in get<T> and set<T> for one value type: absent key, wrong json type, right type,
+  // and a new, an unchanged and a changed value on the write side.
+  template <typename T>
+  void expectTypedDecisions(const std::filesystem::path& file, const T& first, const T& second,
+                            const T& fallback, const nlohmann::json& wrongTyped)
+  {
+    ASSERT_NE(first, second);
+    ASSERT_NE(first, fallback);
+
+    SettingsStore store(file, std::chrono::milliseconds(0));
+
+    EXPECT_EQ(store.get<T>("typed", fallback), fallback);
+
+    store.set<T>("typed", first);
+    EXPECT_TRUE(store.hasPendingWrite());
+    EXPECT_EQ(store.get<T>("typed", fallback), first);
+
+    store.flush();
+    ASSERT_FALSE(store.hasPendingWrite());
+
+    store.set<T>("typed", first);
+    EXPECT_FALSE(store.hasPendingWrite());
+
+    store.set<T>("typed", second);
+    EXPECT_TRUE(store.hasPendingWrite());
+    EXPECT_EQ(store.get<T>("typed", fallback), second);
+
+    store.flush();
+    store.clear("typed");
+    store.flush();
+
+    {
+      std::ofstream out(file, std::ios::trunc);
+      out << nlohmann::json{ { "typed", wrongTyped }, { "control", first } }.dump();
+    }
+
+    const SettingsStore reloaded(file);
+    EXPECT_EQ(reloaded.get<T>("typed", fallback), fallback);
+    EXPECT_EQ(reloaded.get<T>("control", fallback), first);
+  }
+
   bool hasAHomeDirectory()
   {
     for (const char* name : { "APPDATA", "XDG_CONFIG_HOME", "HOME" })
@@ -642,4 +683,29 @@ TEST_F(SettingsStoreTest, ASettingsPathThatIsADirectoryLoadsAsDefaults)
 
   EXPECT_EQ(store.get<int>("anything", 5), 5);
   EXPECT_FALSE(store.hasPendingWrite());
+}
+
+TEST_F(SettingsStoreTest, BoolGetAndSetTakeEveryDecisionSide)
+{
+  expectTypedDecisions<bool>(m_file, true, false, false, "text");
+}
+
+TEST_F(SettingsStoreTest, IntGetAndSetTakeEveryDecisionSide)
+{
+  expectTypedDecisions<int>(m_file, 3, 4, 9, "text");
+}
+
+TEST_F(SettingsStoreTest, FloatGetAndSetTakeEveryDecisionSide)
+{
+  expectTypedDecisions<float>(m_file, 0.5f, 1.5f, 2.5f, "text");
+}
+
+TEST_F(SettingsStoreTest, StringGetAndSetTakeEveryDecisionSide)
+{
+  expectTypedDecisions<std::string>(m_file, "one", "two", "fallback", 7);
+}
+
+TEST_F(SettingsStoreTest, FloatVectorGetAndSetTakeEveryDecisionSide)
+{
+  expectTypedDecisions<std::vector<float>>(m_file, { 1.0f, 2.0f }, { 3.0f }, { 9.0f }, "text");
 }
