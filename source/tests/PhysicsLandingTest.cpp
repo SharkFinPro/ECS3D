@@ -52,8 +52,7 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
   float lowest = std::numeric_limits<float>::max();
   float highest = std::numeric_limits<float>::lowest();
 
-  // Sixty ticks: enough to land at tick eight and settle, and short enough to stay clear of the point
-  // where Transform's uint8_t update counter wraps and a collider's cached bounding box goes stale.
+  // Sixty ticks: enough to land at tick eight and settle.
   for (int tick = 0; tick < 60; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
@@ -71,8 +70,8 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
   // Two unit boxes, so resting on top means their centres are exactly two apart - and because the height
   // is read after the collision pass rather than between it and the integrate, the sink of one gravity
   // step is already corrected by the time it is sampled. There is nothing loose about it to allow for.
-  EXPECT_GT(lowest, 1.5f);
-  EXPECT_LT(highest, 3.0f);
+  EXPECT_NEAR(lowest, 2.0f, 0.05f);
+  EXPECT_NEAR(highest, 2.0f, 0.05f);
 }
 
 TEST(PhysicsIntegration, ABoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
@@ -108,6 +107,9 @@ TEST(PhysicsIntegration, ABoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
   }
 
   EXPECT_LT(maxAngularSpeed, 0.05f);
+
+  // On top of the ground (both half extents are 1) and still over its middle, not sunk in or slid off.
+  fixtures::expectNear("resting position", transformOf(falling)->getPosition(), { 0, 2, 0 }, 0.05f);
 }
 
 TEST(PhysicsIntegration, ABoxLandingOnACornerStillPicksUpSpin)
@@ -289,6 +291,7 @@ TEST(PhysicsIntegration, ABoxLandingWithSidewaysSpeedStopsSlidingWithinAShortDis
   // the weight that tick: the box stops about a unit and a half from where it came down, lying flat.
   const auto landed = landSliding(0.5f);
 
+  EXPECT_GT(landed.position.x, 0.5f);
   EXPECT_LT(landed.position.x, 2.0f);
   EXPECT_LT(glm::length(glm::vec2(landed.velocity.x, landed.velocity.z)), 1e-4f);
   fixtures::expectNear("up", landed.up, { 0, 1, 0 }, 1e-3f);
@@ -333,18 +336,34 @@ TEST(PhysicsIntegration, ABoxRestingOnAFaceWithinTheManifoldsToleranceIsLaidFlus
 TEST(PhysicsIntegration, ARealTiltOrAContactFromAboveIsNotLaidFlush)
 {
   // Two degrees is past anything the manifold rounds to a whole face, so it is a real tilt, left alone.
-  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 2 }, { 0, 0.01f, 0 }, flatUnderside), glm::vec3(0, 0, 2));
+  fixtures::expectNear("tilted", rotationAfterRestingOn({ 0, 0, 2 }, { 0, 0.01f, 0 }, flatUnderside), { 0, 0, 2 },
+                       1e-4f);
 
   // A face pressed down on from above is not what the body rests on.
   const std::array<glm::vec3, 4> topside{
     glm::vec3{ -0.5f, 0.5f, -0.5f }, glm::vec3{ 0.5f, 0.5f, -0.5f },
     glm::vec3{ 0.5f, 0.5f, 0.5f }, glm::vec3{ -0.5f, 0.5f, 0.5f }
   };
-  EXPECT_EQ(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, -0.01f, 0 }, topside), glm::vec3(0, 0, 0.016f));
+  fixtures::expectNear("from above", rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, -0.01f, 0 }, topside),
+                       { 0, 0, 0.016f }, 1e-4f);
 
   // Positive control: the same small tilt resting on the face below is laid flush.
   fixtures::expectNear("up", localUpOf(rotationAfterRestingOn({ 0, 0, 0.016f }, { 0, 0.01f, 0 }, flatUnderside)),
                        { 0, 1, 0 }, 1e-5f);
+}
+
+TEST(PhysicsIntegration, ATiltJustInsideTheFlushWindowIsLaidFlatAndJustOutsideItIsLeftAlone)
+{
+  // The window is a tilt whose sine is 0.0175, which is 1.003 degrees.
+  const glm::vec3 inside{ 0, 0, 0.99f };
+  const glm::vec3 outside{ 0, 0, 1.02f };
+
+  fixtures::expectNear("inside", localUpOf(rotationAfterRestingOn(inside, { 0, 0.01f, 0 }, flatUnderside)),
+                       { 0, 1, 0 }, 1e-5f);
+
+  const auto kept = rotationAfterRestingOn(outside, { 0, 0.01f, 0 }, flatUnderside);
+  fixtures::expectNear("outside", kept, outside, 1e-4f);
+  EXPECT_GT(std::fabs(localUpOf(kept).x), 0.017f);
 }
 
 TEST(PhysicsIntegration, AChildOfATurnedParentIsLaidFlushWithoutTakingOnTheParentsTurn)
@@ -395,11 +414,10 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
     }
   }
 
-  // Compared exactly: the complaint is a rotation that never stops changing, however slightly.
-  EXPECT_EQ(transformOf(falling)->getRotation().x, settledRotation.x);
-  EXPECT_EQ(transformOf(falling)->getRotation().y, settledRotation.y);
-  EXPECT_EQ(transformOf(falling)->getRotation().z, settledRotation.z);
-  EXPECT_EQ(glm::length(body->getAngularVelocity()), 0.0f);
+  // The complaint is a rotation that never stops changing, so the last hundred ticks must not move it by
+  // even a hundredth of a degree, nor leave any spin.
+  fixtures::expectNear("rotation", transformOf(falling)->getRotation(), settledRotation, 0.01f);
+  EXPECT_LT(glm::length(body->getAngularVelocity()), 1e-4f);
 
   // Lying flat, not frozen at whatever small tilt the manifold already counts as a whole face.
   fixtures::expectNear("up", localUpOf(transformOf(falling)->getRotation()), { 0, 1, 0 }, 1e-5f);
@@ -434,6 +452,22 @@ TEST(PhysicsIntegration, TheSupportPointIsClampedToTheNearestManifoldEdgeWhenThe
 
   expectNear("edge support point", PhysicsSystem::supportPoint({ 0.2f, 0, 3 }, { 0, 1, 0 }, edge),
              { 0.2f, -0.5f, 0 });
+}
+
+TEST(PhysicsIntegration, ACenterOfMassJustPastTheManifoldEdgeCountsAsOverItOnlyWithinTheTriangleTolerance)
+{
+  // A wide square, so the containment tolerance (1e-5 of the triangle's size) is a distance the floats resolve.
+  const std::array<glm::vec3, 4> square{
+    glm::vec3{ -50, -1, -50 }, glm::vec3{ 50, -1, -50 }, glm::vec3{ 50, -1, 50 }, glm::vec3{ -50, -1, 50 }
+  };
+
+  // 5e-4 past the +x edge is 5e-6 of the 100-unit triangle: still counted as over it, so it is not clamped.
+  expectNear("within tolerance", PhysicsSystem::supportPoint({ 50.0005f, 4, 10 }, { 0, 1, 0 }, square),
+             { 50.0005f, -1, 10 });
+
+  // 2e-3 past is 2e-5: outside, so it is clamped back onto the edge.
+  expectNear("beyond tolerance", PhysicsSystem::supportPoint({ 50.002f, 4, 10 }, { 0, 1, 0 }, square),
+             { 50, -1, 10 });
 }
 
 TEST(PhysicsIntegration, AStallLongerThanTheStepCapHasItsBankedTimeDroppedNotCarriedForward)

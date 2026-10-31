@@ -99,6 +99,8 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
   CollisionSystem collisionSystem;
 
   float fastestSideways = 0.0f;
+  float lowestCenter = std::numeric_limits<float>::max();
+  float highestCenter = std::numeric_limits<float>::lowest();
   for (int tick = 0; tick < 300; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, serverDt);
@@ -111,10 +113,25 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
     }
   }
 
+  for (const auto& body : bodies)
+  {
+    const auto position = body->getOwner()->getComponent<Transform>(ComponentType::transform)->getPosition();
+    lowestCenter = std::min(lowestCenter, position.y);
+    highestCenter = std::max(highestCenter, position.y);
+  }
+
   // Units per second. The bodies land at up to 35 falling straight down, and knock each other sideways at up to
   // about 30. A heavy body used to squeeze a light one out at hundreds, and spin it to thousands of degrees a
   // second, which flung it further still.
   EXPECT_LT(fastestSideways, 60.0f);
+
+  // Positive control: the pile does knock bodies sideways, so the bound above is measuring something.
+  EXPECT_GT(fastestSideways, 1.0f);
+
+  // Everything ended resting on the ground (its top is at 1, the smallest body is a quarter tall) and nothing is
+  // still in the air or perched high: the pile spreads out rather than staying up.
+  EXPECT_GT(lowestCenter, 1.0f);
+  EXPECT_LT(highestCenter, 5.0f);
 }
 
 TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)
