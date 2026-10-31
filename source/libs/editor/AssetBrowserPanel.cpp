@@ -75,8 +75,11 @@ namespace {
 
 AssetBrowserPanel::AssetBrowserPanel(const AssetRegistry* assetRegistry, std::shared_ptr<GpuAssetCache> assetCache)
   : m_assetRegistry(assetRegistry),
-    m_assetCache(std::move(assetCache))
+    m_assetCache(std::move(assetCache)),
+    m_flow(std::make_unique<AssetCreateFlow>())
 {}
+
+AssetBrowserPanel::~AssetBrowserPanel() = default;
 
 void AssetBrowserPanel::setLoadSceneCallback(LoadSceneCallback callback)
 {
@@ -323,7 +326,7 @@ void AssetBrowserPanel::displayGui()
 
   // Open + draw the create-asset modal at the top level (the menu only flags it). Opening it from
   // inside the main menu bar is unreliable.
-  if (m_flow.takeOpenRequest())
+  if (m_flow->takeOpenRequest())
   {
     ImGui::OpenPopup("Create Asset");
   }
@@ -407,7 +410,7 @@ void AssetBrowserPanel::displayCreateItems()
 {
   const auto beginCreate = [this](const AssetCreateFlow::Type type, const std::string& source,
                                   const std::string& defaultName) {
-    m_flow.begin(type, source, defaultName);
+    m_flow->begin(type, source, defaultName);
   };
 
   auto labeledSeparator = [](const char* label)
@@ -472,7 +475,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   // Reserve a consistent width so the auto-resized popup doesn't jump between sources/names.
   ImGui::Dummy(ImVec2(320.0f, 0.0f));
 
-  auto& pending = m_flow.pending();
+  auto& pending = m_flow->pending();
 
   if (!pending.sourcePath.empty())
   {
@@ -488,9 +491,9 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   }
   ImGui::InputText("##name", pending.name, sizeof(pending.name), ImGuiInputTextFlags_AutoSelectAll);
 
-  if (!m_flow.error().empty())
+  if (!m_flow->error().empty())
   {
-    ImGui::TextColored(theme::danger, "%s", m_flow.error().c_str());
+    ImGui::TextColored(theme::danger, "%s", m_flow->error().c_str());
   }
 
   ImGui::Spacing();
@@ -508,7 +511,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
       return scriptFileExists(m_assetCache->getProjectRoot(), name);
     };
 
-    if (m_flow.validate(*m_assetRegistry, fileExists))
+    if (m_flow->validate(*m_assetRegistry, fileExists))
     {
       try
       {
@@ -517,7 +520,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
       }
       catch (const std::exception& e)
       {
-        m_flow.commitFailed(e.what());
+        m_flow->commitFailed(e.what());
       }
 
       // Outside the boundary: the asset is created and sent by now, so a failure here is not a failed
@@ -530,7 +533,7 @@ void AssetBrowserPanel::displayCreateAssetPopup()
   ImGui::SameLine();
   if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
   {
-    m_flow.cancel();
+    m_flow->cancel();
     ImGui::CloseCurrentPopup();
   }
 
@@ -544,10 +547,10 @@ void AssetBrowserPanel::commitAsset()
     return;
   }
 
-  const auto type = m_flow.pending().type;
+  const auto type = m_flow->pending().type;
   if (AssetCreateFlow::writesFiles(type) && m_blockWrites && m_blockWrites())
   {
-    m_flow.cancel();
+    m_flow->cancel();
     return;
   }
 
@@ -556,7 +559,7 @@ void AssetBrowserPanel::commitAsset()
     return;
   }
 
-  const std::string name = m_flow.pending().name;
+  const std::string name = m_flow->pending().name;
   const auto assetUUID = newUUID();
   const auto& root = m_assetCache->getProjectRoot();
 
@@ -572,7 +575,7 @@ void AssetBrowserPanel::commitAsset()
         "The project has no folder yet: imports are copied next to the editor, not into a project. Save it to a folder first.");
     }
 
-    const auto& sourcePath = m_flow.pending().sourcePath;
+    const auto& sourcePath = m_flow->pending().sourcePath;
     const auto destination = importDestination(root, sourcePath, name, kind);
     std::filesystem::create_directories(destination.absolute.parent_path());
     std::filesystem::copy_file(sourcePath, destination.absolute, std::filesystem::copy_options::overwrite_existing);
@@ -613,13 +616,13 @@ void AssetBrowserPanel::commitAsset()
       break;
   }
 
-  m_onAddAsset(m_flow.addAssetJson(assetUUID, importedPath, root, uuids::to_string(newUUID())));
-  m_flow.committed(assetUUID);
+  m_onAddAsset(m_flow->addAssetJson(assetUUID, importedPath, root, uuids::to_string(newUUID())));
+  m_flow->committed(assetUUID);
 }
 
 void AssetBrowserPanel::activateCreatedScene()
 {
-  const auto scene = m_flow.takeSceneToActivate();
+  const auto scene = m_flow->takeSceneToActivate();
   if (!scene.has_value())
   {
     return;

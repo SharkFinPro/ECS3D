@@ -1,17 +1,16 @@
 #ifndef ASSETBROWSERPANEL_H
 #define ASSETBROWSERPANEL_H
 
-#include "AssetCreateFlow.h"
 #include "AssetFilter.h"
 #include <assets/AssetRegistry.h>
 #include <nlohmann/json_fwd.hpp>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 #include <uuid.h>
 
+class AssetCreateFlow;
 class AssetRegistry;
 class GpuAssetCache;
 class EditorSelection;
@@ -26,6 +25,8 @@ public:
   using AddAssetCallback = std::function<void(const nlohmann::json& addAsset)>;
 
   AssetBrowserPanel(const AssetRegistry* assetRegistry, std::shared_ptr<GpuAssetCache> assetCache);
+
+  ~AssetBrowserPanel();
 
   void setLoadSceneCallback(LoadSceneCallback callback);
 
@@ -68,7 +69,7 @@ private:
 
   char m_search[128] = {};
 
-  AssetCreateFlow m_flow;
+  std::unique_ptr<AssetCreateFlow> m_flow;
 
   enum class SortType { NameAscending, NameDescending, Type };
   SortType m_sortType = SortType::NameAscending;
