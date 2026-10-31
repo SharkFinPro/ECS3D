@@ -20,8 +20,8 @@ public:
 
   [[nodiscard]] nlohmann::json serialize() const;
 
-  // Throws std::runtime_error (before touching the live project) when the blob is not an object with an
-  // "assets" key, so an empty or blanked file is an error rather than an empty project.
+  // Throws std::runtime_error (before touching the live project) when the blob is not an object whose
+  // "assets" is an object, so an empty or blanked file is an error rather than an empty project.
   void deserialize(const nlohmann::json& saveData) const;
 
   // Returns false (and logs why) if the file could not be written, so callers can avoid discarding

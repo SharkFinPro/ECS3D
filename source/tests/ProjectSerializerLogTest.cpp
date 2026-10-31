@@ -210,8 +210,10 @@ TEST_F(ProjectSerializerLogTest, LoadingAnEmptyOrNonObjectProjectFailsAndLogsAnE
   ASSERT_TRUE(m_serializer->load(m_file));
   m_sceneManager.addScene(std::make_shared<SceneAsset>(
     uuids::uuid::from_string(branchSceneUUID).value(), "Keep", m_componentRegistry));
+  const auto keptAsset = uuids::uuid::from_string("88888888-8888-8888-8888-888888888888").value();
+  m_assetRegistry.registerAsset({ .uuid = keptAsset, .type = AssetType::Model, .path = "kept.obj" });
 
-  for (const std::string content : { "{}", "[]", "null" })
+  for (const std::string content : { "{}", "[]", "null", R"({"assets":null})", R"({"assets":5})" })
   {
     {
       std::ofstream out(m_file);
@@ -219,10 +221,12 @@ TEST_F(ProjectSerializerLogTest, LoadingAnEmptyOrNonObjectProjectFailsAndLogsAnE
     }
 
     const auto sink = addRingBuffer();
+    ASSERT_EQ(sink->sequence(), 0u) << content;
 
     EXPECT_FALSE(m_serializer->load(m_file)) << content;
     EXPECT_TRUE(hasEntry(sink, LogLevel::error, LogCategory::assets)) << content;
     EXPECT_EQ(m_sceneManager.getScenes().size(), 1u) << content;
+    EXPECT_NE(m_assetRegistry.getByUUID(keptAsset), nullptr) << content;
   }
 }
 
