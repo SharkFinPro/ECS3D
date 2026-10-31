@@ -374,11 +374,20 @@ internal sealed class WebSocketBackend : TransportBackend
       tcp.ReceiveBufferSize = SocketBufferSize;
       var stream = tcp.GetStream();
 
+      // One deadline bounds the upgrade request and the first message together. ReceiveTimeout unblocks a
+      // blocking read against a peer that sends nothing, and the deadline caps the total against a peer that
+      // trickles bytes just fast enough that no single read times out.
+      var handshakeTimeoutMs = HandshakeTimeoutMs;
+      tcp.ReceiveTimeout = handshakeTimeoutMs;
+      var handshakeDeadline = Environment.TickCount64 + handshakeTimeoutMs;
+
       // Upgrade the raw TCP connection to WebSocket, then let the BCL handle framing from here on.
-      if (!PerformServerHandshake(stream))
+      if (!PerformServerHandshake(stream, handshakeDeadline))
       {
         return;
       }
+
+      tcp.ReceiveTimeout = 0;
 
       ws = WebSocket.CreateFromStream(stream, isServer: true, subProtocol: null, keepAliveInterval: KeepAlive);
       cts = new CancellationTokenSource();
@@ -386,7 +395,13 @@ internal sealed class WebSocketBackend : TransportBackend
       // The first message must be the connection handshake. Authorize from it (e.g. reject an editor
       // against a play-only server, or one with a bad token) before delivering any protocol message.
       // The handshake gets the tighter ceiling: it is the one message read before the peer is authorized.
-      var first = ReceiveMessage(ws, cts.Token, MaxHandshakeBytes);
+      byte[]? first;
+      using (var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token))
+      {
+        handshakeCts.CancelAfter((int)Math.Max(1, handshakeDeadline - Environment.TickCount64));
+        first = ReceiveMessage(ws, handshakeCts.Token, MaxHandshakeBytes);
+      }
+
       if (first is null || first.Length < 1 || !TryAuthorizeHandshake(first[0], Payload(first), out var grantedRole))
       {
         Transport.Log(TransportLogLevel.Warn, "Rejected a connection that failed the handshake.");
@@ -682,10 +697,11 @@ internal sealed class WebSocketBackend : TransportBackend
   //
   // Takes Stream rather than NetworkStream (its only caller passes a NetworkStream, which is one) and is
   // internal rather than private so ECS3DManagedTests can drive it off an in-memory duplex stream via
-  // InternalsVisibleTo (see Transport/AssemblyInfo.cs), without a real socket.
-  internal static bool PerformServerHandshake(Stream stream)
+  // InternalsVisibleTo (see Transport/AssemblyInfo.cs), without a real socket. deadline is an
+  // Environment.TickCount64 value the request must be fully read by, or null for no outer bound.
+  internal static bool PerformServerHandshake(Stream stream, long? deadline = null)
   {
-    var request = ReadHttpHeaders(stream);
+    var request = ReadHttpHeaders(stream, deadline);
     if (request is null)
     {
       return false;
@@ -729,7 +745,7 @@ internal sealed class WebSocketBackend : TransportBackend
   //
   // Internal (rather than private) so ECS3DManagedTests can exercise it directly - including the exact
   // stream position it leaves behind - via InternalsVisibleTo (see Transport/AssemblyInfo.cs).
-  internal static List<string>? ReadHttpHeaders(Stream stream)
+  internal static List<string>? ReadHttpHeaders(Stream stream, long? deadline = null)
   {
     var lines = new List<string>();
     var line = new StringBuilder();
@@ -737,6 +753,13 @@ internal sealed class WebSocketBackend : TransportBackend
 
     while (true)
     {
+      // Checked before each read: a per-read timeout alone never trips on a peer that sends one byte just
+      // inside it each time.
+      if (deadline.HasValue && Environment.TickCount64 >= deadline.Value)
+      {
+        return null;
+      }
+
       var n = stream.Read(buffer, 0, 1);
       if (n <= 0)
       {
