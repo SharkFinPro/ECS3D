@@ -126,6 +126,7 @@ add_executable(${PROJECT_NAME}
   LogFilePathTest.cpp
   RemoteLogSinkTest.cpp
   KeybindsTest.cpp
+  KeybindRebindFlowTest.cpp
   BillboardTest.cpp
   ThumbnailImageTest.cpp
   LightGizmoVisibilityTest.cpp
@@ -138,6 +139,7 @@ add_executable(${PROJECT_NAME}
   GizmoDragParentedTest.cpp
   EditorSelectionTest.cpp
   TransientObjectTest.cpp
+  PrefabBodyEditsTest.cpp
   ObjectSpawnTest.cpp
   ObjectDestroyedTest.cpp
   SerializationRoundTripTest.cpp

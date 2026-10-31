@@ -1,9 +1,9 @@
 #ifndef SETTINGSPANEL_H
 #define SETTINGSPANEL_H
 
+#include "KeybindRebindFlow.h"
 #include <Keybinds.h>
 #include <memory>
-#include <optional>
 
 class SettingsStore;
 class KeybindTable;
@@ -50,33 +50,18 @@ private:
     keybinds
   };
 
-  // A refused rebind or reset: the chord `requested` for `action` is already held by `heldBy`. Shown as
-  // a modal with no reassign option, per spec - displacing the holder would leave it silently unbound.
-  // offerChooseAnother is false for a refused reset: there is no in-progress capture to redirect into a
-  // new key, so the modal offers only "Go to binding" and a close button.
-  struct KeybindConflict {
-    EditorAction action;
-    EditorAction heldBy;
-    KeyChord requested;
-    bool offerChooseAnother = true;
-  };
-
   SettingsStore* m_settings;
 
   std::shared_ptr<vke::VulkanEngine> m_renderer;
 
   std::shared_ptr<KeybindTable> m_keybindTable;
   std::shared_ptr<KeybindDispatcher> m_keybindDispatcher;
+  KeybindRebindFlow m_rebindFlow;
 
   Section m_section = Section::appearance;
 
   bool m_open;
   bool m_focusRequested = false;
-
-  // Rebind-in-progress state for the Keybinds section.
-  std::optional<EditorAction> m_capturingAction;
-  std::optional<EditorAction> m_scrollToAction;
-  std::optional<KeybindConflict> m_conflict;
 
   void displayNav();
 
@@ -88,7 +73,8 @@ private:
 
   void displayKeybindConflictModal();
 
-  void beginCaptureFor(EditorAction action);
+  // Arms the dispatcher key capture; the chord it produces goes to m_rebindFlow.
+  void armCaptureFor(EditorAction action);
 };
 
 #endif  // SETTINGSPANEL_H

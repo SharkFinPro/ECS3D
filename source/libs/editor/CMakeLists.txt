@@ -19,6 +19,7 @@ add_library(${PROJECT_NAME}
   AssetInspector.h
   TransientObject.cpp
   TransientObject.h
+  PrefabBodyEdits.h
   AssetDisplay.h
   Selection.h
   AssetBrowserPanel.cpp
@@ -46,6 +47,7 @@ add_library(${PROJECT_NAME}
   AssetNaming.h
   KeybindDispatcher.cpp
   KeybindDispatcher.h
+  KeybindRebindFlow.h
   KeyHoldRepeat.h
   Gizmo.cpp
   Gizmo.h

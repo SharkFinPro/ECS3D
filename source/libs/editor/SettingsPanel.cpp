@@ -116,7 +116,8 @@ SettingsPanel::SettingsPanel(SettingsStore& settings, std::shared_ptr<vke::Vulka
                              std::shared_ptr<KeybindTable> keybindTable,
                              std::shared_ptr<KeybindDispatcher> keybindDispatcher)
   : m_settings(&settings), m_renderer(std::move(renderer)), m_keybindTable(std::move(keybindTable)),
-    m_keybindDispatcher(std::move(keybindDispatcher)), m_open(settings.get<bool>(openKey, false))
+    m_keybindDispatcher(std::move(keybindDispatcher)), m_rebindFlow(*m_keybindTable, settings),
+    m_open(settings.get<bool>(openKey, false))
 {}
 
 void SettingsPanel::applyStoredTheme(const SettingsStore& settings)
@@ -373,8 +374,7 @@ void SettingsPanel::displayKeybinds()
 
   if (ImGui::Button("Reset all to defaults"))
   {
-    m_keybindTable->resetAll(*m_settings);
-    m_capturingAction.reset();
+    m_rebindFlow.resetAll();
   }
 
   ImGui::Spacing();
@@ -387,15 +387,16 @@ void SettingsPanel::displayKeybinds()
     ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, actionsColumnWidth());
     ImGui::TableHeadersRow();
 
+    const auto scrollTarget = m_rebindFlow.takeScrollTarget();
+
     for (const auto& info : editorActions())
     {
       ImGui::PushID(info.id);
       ImGui::TableNextRow();
 
-      if (m_scrollToAction == info.action)
+      if (scrollTarget == info.action)
       {
         ImGui::SetScrollHereY();
-        m_scrollToAction.reset();
       }
 
       ImGui::TableSetColumnIndex(0);
@@ -404,7 +405,7 @@ void SettingsPanel::displayKeybinds()
 
       ImGui::TableSetColumnIndex(1);
       ImGui::AlignTextToFramePadding();
-      const bool capturingThis = m_capturingAction == info.action;
+      const bool capturingThis = m_rebindFlow.capturingAction() == info.action;
       if (capturingThis)
       {
         ImGui::TextColored(theme::accent, "%s", capturePrompt);
@@ -423,11 +424,12 @@ void SettingsPanel::displayKeybinds()
       {
         if (capturingThis)
         {
-          m_capturingAction.reset();
+          m_rebindFlow.cancelCapture();
         }
         else
         {
-          beginCaptureFor(info.action);
+          m_rebindFlow.beginCapture(info.action);
+          armCaptureFor(info.action);
         }
       }
 
@@ -435,20 +437,14 @@ void SettingsPanel::displayKeybinds()
       ImGui::BeginDisabled(!m_keybindTable->binding(info.action));
       if (ImGui::Button(unbindLabel))
       {
-        m_keybindTable->unbind(info.action, *m_settings);
-        m_capturingAction.reset();
+        m_rebindFlow.unbind(info.action);
       }
       ImGui::EndDisabled();
 
       ImGui::SameLine();
       if (ImGui::Button(resetLabel))
       {
-        const auto outcome = m_keybindTable->reset(info.action, *m_settings);
-        if (outcome.result == KeybindTable::AssignResult::refused)
-        {
-          m_conflict = KeybindConflict{ info.action, *outcome.heldBy, *actionInfo(info.action).defaultChord, false };
-        }
-        m_capturingAction.reset();
+        m_rebindFlow.reset(info.action);
       }
 
       ImGui::PopID();
@@ -460,41 +456,34 @@ void SettingsPanel::displayKeybinds()
   displayKeybindConflictModal();
 }
 
-void SettingsPanel::beginCaptureFor(const EditorAction action)
+void SettingsPanel::armCaptureFor(const EditorAction action)
 {
-  m_capturingAction = action;
-
   m_keybindDispatcher->beginCapture([this, action](const KeyChord& chord) {
-    m_capturingAction.reset();
-
-    const auto outcome = m_keybindTable->assign(action, chord, *m_settings);
-    if (outcome.result == KeybindTable::AssignResult::refused)
-    {
-      m_conflict = KeybindConflict{ action, *outcome.heldBy, chord };
-    }
+    m_rebindFlow.captureChord(action, chord);
   });
 }
 
 void SettingsPanel::displayKeybindConflictModal()
 {
-  if (!m_conflict.has_value())
+  const auto& conflict = m_rebindFlow.conflict();
+  if (!conflict.has_value())
   {
     return;
   }
 
   constexpr const char* popupName = "Keybind Conflict";
 
-  // Captured before any button below can reset m_conflict, so the second button's visibility check never
+  // Captured before any button below can clear the conflict, so the second button's visibility check never
   // reads through a cleared optional.
-  const bool offerChooseAnother = m_conflict->offerChooseAnother;
+  const bool offerChooseAnother = conflict->offerChooseAnother;
 
   ImGui::OpenPopup(popupName);
 
   if (ImGui::BeginPopupModal(popupName, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
   {
-    ImGui::Text("%s is already bound to", formatChord(m_conflict->requested).c_str());
+    ImGui::Text("%s is already bound to", formatChord(conflict->requested).c_str());
     ImGui::SameLine();
-    ImGui::TextColored(theme::accent, "%s", actionInfo(m_conflict->heldBy).label);
+    ImGui::TextColored(theme::accent, "%s", actionInfo(conflict->heldBy).label);
     ImGui::TextColored(theme::t3, "Choose a different key, or go there to change it first.");
 
     ImGui::Spacing();
@@ -505,8 +494,7 @@ void SettingsPanel::displayKeybindConflictModal()
     // unbound, and the person who caused it is the least likely to notice.
     if (ImGui::Button("Go to binding", ImVec2(150, 0)))
     {
-      m_scrollToAction = m_conflict->heldBy;
-      m_conflict.reset();
+      m_rebindFlow.goToBinding();
       ImGui::CloseCurrentPopup();
     }
 
@@ -516,15 +504,16 @@ void SettingsPanel::displayKeybindConflictModal()
     {
       if (ImGui::Button("Choose another key", ImVec2(150, 0)))
       {
-        const auto action = m_conflict->action;
-        m_conflict.reset();
         ImGui::CloseCurrentPopup();
-        beginCaptureFor(action);
+        if (const auto action = m_rebindFlow.chooseAnotherKey())
+        {
+          armCaptureFor(*action);
+        }
       }
     }
     else if (ImGui::Button("Close", ImVec2(150, 0)))
     {
-      m_conflict.reset();
+      m_rebindFlow.closeConflict();
       ImGui::CloseCurrentPopup();
     }
 

@@ -3,7 +3,7 @@
 #include "AssetNaming.h"
 #include "GuiComponents.h"
 #include "ObjectInspector.h"
-#include "TransientObject.h"
+#include "PrefabBodyEdits.h"
 #include <GpuAssetCache.h>
 #include <ProjectPaths.h>
 #include <Replication.h>
@@ -30,18 +30,22 @@ AssetInspector::AssetInspector(std::shared_ptr<GpuAssetCache> assetCache,
                                std::shared_ptr<ComponentEditor> componentEditor)
   : m_assetCache(std::move(assetCache)),
     m_componentRegistry(std::move(componentRegistry)),
-    m_prefabBody(std::make_unique<TransientObject>(m_componentRegistry)),
+    m_prefabEdits(std::make_unique<PrefabBodyEdits>(m_componentRegistry)),
     m_prefabInspector(std::make_unique<ObjectInspector>(std::move(componentEditor)))
 {
   // The reused inspector edits a detached object, so its edits must apply locally rather than travel to the
   // server. A value edit already mutated the component in place - just mark the body dirty. A structural
   // edit is queued and applied after display() returns (applying it now would mutate the component map
-  // mid-iteration). Neither sends immediately; displayPrefabBody coalesces the send (see m_prefabBodyDirty).
+  // mid-iteration). Neither sends immediately; displayPrefabBody coalesces the send (see PrefabBodyEdits).
   m_prefabInspector->setEditCallback([this](const uuids::uuid&, const std::shared_ptr<Component>&) {
-    m_prefabBodyDirty = true;
+    m_prefabEdits->markValueEdit();
   });
   m_prefabInspector->setSceneEditCallback([this](const nlohmann::json& edit) {
-    m_pendingPrefabEdits.push_back(edit);
+    m_prefabEdits->queueStructuralEdit(edit);
+  });
+
+  m_prefabEdits->setCommitCallback([this] {
+    m_prefabInspector->commitPendingEdit();
   });
 
   // No viewport highlight for a detached prefab body.
@@ -73,7 +77,7 @@ void AssetInspector::setReferenceCountCallback(ReferenceCountCallback callback)
 
 void AssetInspector::setUpdatePrefabBodyCallback(UpdatePrefabBodyCallback callback)
 {
-  m_onUpdatePrefabBody = std::move(callback);
+  m_prefabEdits->setSendCallback(std::move(callback));
 }
 
 void AssetInspector::setAssetRegistry(const AssetRegistry* registry)
@@ -122,7 +126,7 @@ void AssetInspector::display(const AssetRecord& record, const std::optional<uuid
 
   if (record.type != AssetType::Prefab)
   {
-    settlePrefabEdits();
+    m_prefabEdits->settle();
   }
 
   // Recompute the file metadata only when the selection changes, not every frame.
@@ -528,23 +532,11 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
   gc::sectionLabel("Contents");
   ImGui::Spacing();
 
-  // Switching to a different prefab with an edit still pending: flush it against the asset it belongs to
-  // (m_prefabRecord*, still the old one) before syncFromBody rebuilds to the new body below.
-  if (record.uuid != m_prefabRecordUUID)
-  {
-    settlePrefabEdits();
-  }
-
   // (Re)build the detached object when the body changed under us (a different prefab selected, or an
-  // external snapshot). A flushed edit markSyncs the sent body, so its own echo won't rebuild.
-  if (m_prefabBody->syncFromBody(record.body))
-  {
-    // The pending edit (if any) belongs to whatever we just loaded.
-    m_prefabRecordUUID = record.uuid;
-    m_prefabRecordName = record.path;
-  }
+  // external snapshot); an edit still pending for the previous prefab is sent first.
+  m_prefabEdits->select(record.uuid, record.path, record.body);
 
-  const auto& object = m_prefabBody->object();
+  const auto& object = m_prefabEdits->object();
   if (!object)
   {
     // Empty/malformed body (an older or hand-edited record) - nothing to deserialize.
@@ -554,71 +546,18 @@ void AssetInspector::displayPrefabBody(const AssetRecord& record)
 
   // Draw the body with the same component editors an object uses. Apply the queued structural edits after
   // display() returns, so they don't mutate the component map ObjectInspector::display is iterating.
-  m_pendingPrefabEdits.clear();
+  m_prefabEdits->clearQueuedEdits();
 
   m_prefabInspector->display(object);
 
-  applyPendingPrefabEdits();
-
-  // Coalesce the send: a prefab body update makes the server re-snapshot the whole project, so hold it
-  // until the user isn't dragging/typing. The detached object already reflects the edit, so local
-  // feedback stays instant.
-  if (m_prefabBodyDirty && !ImGui::IsAnyItemActive())
-  {
-    flushPrefabBody();
-  }
+  // Hold the send until the user isn't dragging/typing. The detached object already reflects the edit, so
+  // local feedback stays instant.
+  m_prefabEdits->endFrame(ImGui::IsAnyItemActive());
 }
 
 void AssetInspector::commitPendingEdit()
 {
-  settlePrefabEdits();
-}
-
-void AssetInspector::applyPendingPrefabEdits()
-{
-  if (auto* manager = m_prefabBody->manager())
-  {
-    for (const auto& edit : m_pendingPrefabEdits)
-    {
-      // Only a change that took makes the body dirty. Flagging it regardless re-sent an unchanged prefab
-      // body to the server, and a prefab body update makes it re-snapshot the whole project.
-      if (replication::applySceneEdit(*manager, edit) == replication::SceneEditResult::applied)
-      {
-        m_prefabBodyDirty = true;
-      }
-    }
-  }
-
-  m_pendingPrefabEdits.clear();
-}
-
-void AssetInspector::settlePrefabEdits()
-{
-  m_pendingPrefabEdits.clear();
-  m_prefabInspector->commitPendingEdit();
-  applyPendingPrefabEdits();
-  flushPrefabBody();
-}
-
-void AssetInspector::flushPrefabBody()
-{
-  if (!m_prefabBodyDirty)
-  {
-    return;
-  }
-
-  m_prefabBodyDirty = false;
-
-  if (!m_onUpdatePrefabBody || !m_prefabBody->object())
-  {
-    return;
-  }
-
-  // Re-register under the prefab's name: this updates the body in place and keeps the uuid. markSynced so
-  // the resulting registry update (and the server's snapshot echo) doesn't rebuild the object.
-  const auto newBody = m_prefabBody->serialize();
-  m_onUpdatePrefabBody(m_prefabRecordUUID, m_prefabRecordName, newBody);
-  m_prefabBody->markSynced(newBody);
+  m_prefabEdits->settle();
 }
 
 size_t AssetInspector::sceneCount() const
