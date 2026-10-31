@@ -133,7 +133,11 @@ namespace {
     InputState::setMouse(slotA, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0xFFu);
     EXPECT_TRUE(InputState::isMouseButtonPressed(slotA, 7));
     EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, -1));
-    EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 8));  // bit 8 does not exist in a uint8_t either way
+    EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 8));
+
+    // Past 31 the shift count wraps on x86, so without the range check button 32 would read bit 0.
+    EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 32));
+    EXPECT_FALSE(InputState::isMouseButtonPressed(slotA, 64));
   }
 
   TEST_F(InputStateTest, AnUnknownSlotReadsNeutralNotAnotherSlotsState)
@@ -209,6 +213,13 @@ namespace {
     InputState::setFocused(slotB, false);
     EXPECT_FALSE(InputState::isAnyKeyPressed(keyW));
     EXPECT_FALSE(InputState::isAnyFocused());
+
+    // The holder is the other slot now, so a loop that only looks at the first slot it visits fails
+    // whichever order the slots are stored in.
+    InputState::setKeysPressed(slotA, { keyW });
+    InputState::setFocused(slotA, true);
+    EXPECT_TRUE(InputState::isAnyKeyPressed(keyW));
+    EXPECT_TRUE(InputState::isAnyFocused());
   }
 }
 

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <new>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -343,6 +344,7 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::playerSlot));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::serverLog));
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectComponentsChanged));
+  EXPECT_FALSE(net::isMutationMessage(net::MessageType::possessSlot));
 }
 
 TEST(ProtocolFraming, EveryMessageTypeIsClassifiedAsExactlyTheDocumentedMutationSet)
@@ -568,8 +570,8 @@ TEST(ServerLogMessage, RoundTripsEveryFieldOfEachEntry)
 
 TEST(ServerLogMessage, CarriesTheDroppedCountAlongsideAnEmptyBatch)
 {
-  // The forwarder sends a batch for a drop count alone, with no entries, so an editor still learns that
-  // history was lost even on a tick where nothing new came in to replace it.
+  // A codec property only: RemoteLogSink always leaves an entry behind when it evicts, so the forwarder
+  // never actually produces a drop count without entries.
   const auto message = net::packServerLog({}, 7);
 
   const auto batch = net::unpackServerLog(message);
@@ -588,4 +590,66 @@ TEST(ServerLogMessage, AnEntryCountPastWhatThePayloadHoldsThrowsRatherThanOverre
   message.write<uint32_t>(1000000);
 
   EXPECT_THROW(static_cast<void>(net::unpackServerLog(message)), std::runtime_error);
+}
+
+namespace {
+  [[nodiscard]] net::Message serverLogWithEmptyEntries(const uint32_t claimedCount, const uint32_t actualCount)
+  {
+    net::Message message(net::MessageType::serverLog);
+    message.write<uint64_t>(0);
+    message.write<uint32_t>(claimedCount);
+    for (uint32_t i = 0; i < actualCount; ++i)
+    {
+      message.write(LogLevel::info);
+      message.write(LogCategory::server);
+      message.write<int64_t>(0);
+      message.write<uint32_t>(0);
+    }
+
+    return message;
+  }
+}
+
+TEST(ServerLogMessage, AHugeEntryCountIsRefusedBeforeAnythingIsReserved)
+{
+  // Without the guard a count this large makes reserve() throw length_error or bad_alloc, which is not the
+  // runtime_error the guard raises, so the exact type shows the guard fired first.
+  const auto message = serverLogWithEmptyEntries(0xFFFFFFFFu, 0);
+
+  try
+  {
+    static_cast<void>(net::unpackServerLog(message));
+    FAIL() << "expected a refusal";
+  }
+  catch (const std::length_error&)
+  {
+    FAIL() << "reserve() ran before the count was checked";
+  }
+  catch (const std::bad_alloc&)
+  {
+    FAIL() << "reserve() ran before the count was checked";
+  }
+  catch (const std::runtime_error& error)
+  {
+    EXPECT_NE(std::string(error.what()).find("entry count"), std::string::npos);
+  }
+}
+
+TEST(ServerLogMessage, EntriesExactlyFillingThePayloadAreAcceptedAndOneMoreClaimedIsRefused)
+{
+  // An entry with an empty message is the smallest one, so three of them sit exactly at the guard's budget.
+  const auto batch = net::unpackServerLog(serverLogWithEmptyEntries(3, 3));
+
+  ASSERT_EQ(batch.entries.size(), 3u);
+  EXPECT_TRUE(batch.entries[2].message.empty());
+
+  try
+  {
+    static_cast<void>(net::unpackServerLog(serverLogWithEmptyEntries(4, 3)));
+    FAIL() << "expected a refusal";
+  }
+  catch (const std::runtime_error& error)
+  {
+    EXPECT_NE(std::string(error.what()).find("entry count"), std::string::npos);
+  }
 }

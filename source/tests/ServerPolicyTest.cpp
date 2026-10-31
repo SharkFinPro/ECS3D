@@ -16,7 +16,8 @@
 #include <vector>
 
 namespace {
-  // Exhaustive switch with no default so -Wswitch flags a new MessageType until it is stated here.
+  // Every MessageType is stated here, independently of isMutationMessage; the build sets no warning flags,
+  // so the every-byte-value test below is what catches a type that drifts.
   // #lizard forgives
   [[nodiscard]] constexpr bool expectedMutation(const net::MessageType type)
   {
@@ -43,6 +44,7 @@ namespace {
       case net::MessageType::playerSlot:
       case net::MessageType::serverLog:
       case net::MessageType::objectComponentsChanged:
+      case net::MessageType::possessSlot:
         return false;
     }
 
