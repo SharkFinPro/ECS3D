@@ -3,6 +3,7 @@
 
 #include "FileSink.h"
 #include "LogEntry.h"
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -23,5 +24,9 @@ std::shared_ptr<FileSink> addFileSinkFromArguments(int argc, char** argv, std::s
 // There is no escape for a quote inside the path, so a path containing one yields an empty string: no
 // flag, and the child falls back to its own default rather than being handed a truncated path.
 [[nodiscard]] std::string logFileArgument(std::string_view appName);
+
+// The quoting rule of logFileArgument for an explicit path, so it can be tested without depending on where
+// the user data directory happens to be.
+[[nodiscard]] std::string logFileArgumentForPath(const std::filesystem::path& file);
 
 #endif  // LOGSETUP_H

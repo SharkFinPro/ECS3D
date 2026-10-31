@@ -134,6 +134,19 @@ TEST(RemoteLogSink, AMessageOverTheCapIsTruncatedAtWriteTime)
   EXPECT_NE(drained.entries[0].message.find("truncated"), std::string::npos);
 }
 
+TEST(RemoteLogSink, AMessageOneByteOverTheCapIsTruncated)
+{
+  RemoteLogSink sink(10);
+
+  sink.write(entry(std::string(RemoteLogSink::maxMessageBytes + 1, 'x')));
+
+  const auto drained = sink.drain(10);
+
+  ASSERT_EQ(drained.entries.size(), 1u);
+  EXPECT_EQ(drained.entries[0].message,
+            std::string(RemoteLogSink::maxMessageBytes, 'x') + " ... [truncated]");
+}
+
 TEST(RemoteLogSink, AMessageAtOrUnderTheCapIsNotTruncated)
 {
   RemoteLogSink sink(10);
@@ -221,6 +234,31 @@ TEST(RemoteLogSink, DrainStopsEarlyOnceTheByteBudgetWouldBeExceeded)
   const auto second = sink.drain(10, mid.size() + 64);
   ASSERT_EQ(second.entries.size(), 1u);
   EXPECT_EQ(second.dropped, 0u);
+}
+
+TEST(RemoteLogSink, DrainByteBudgetCountsThirtyTwoBytesOfWireOverheadPerEntry)
+{
+  const std::string mid(1000, 'a');
+  constexpr std::size_t twoEntries = 2 * (1000 + 32);
+
+  {
+    RemoteLogSink sink(10);
+    sink.write(entry(mid));
+    sink.write(entry(mid));
+    sink.write(entry(mid));
+
+    // A budget exactly equal to two entries' cost takes both: the limit is inclusive.
+    EXPECT_EQ(sink.drain(10, twoEntries).entries.size(), 2u);
+  }
+
+  {
+    RemoteLogSink sink(10);
+    sink.write(entry(mid));
+    sink.write(entry(mid));
+    sink.write(entry(mid));
+
+    EXPECT_EQ(sink.drain(10, twoEntries - 1).entries.size(), 1u);
+  }
 }
 
 TEST(RemoteLogSink, DrainAlwaysTakesAtLeastOneEntryEvenUnderABudgetItAloneExceeds)

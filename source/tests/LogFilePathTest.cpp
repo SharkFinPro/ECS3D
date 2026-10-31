@@ -50,7 +50,8 @@ namespace {
     }
 
     // addFileSinkFromArguments takes a C-style argv, so the strings have to outlive the call.
-    std::shared_ptr<FileSink> addSink(const std::vector<std::string>& arguments)
+    std::shared_ptr<FileSink> addSink(const std::vector<std::string>& arguments,
+                                      const LogCategory category = LogCategory::engine)
     {
       removeSink();
 
@@ -65,7 +66,7 @@ namespace {
       }
 
       m_addedSink = addFileSinkFromArguments(static_cast<int>(argv.size()), argv.data(), "testapp",
-                                             LogCategory::engine);
+                                             category);
 
       return m_addedSink;
     }
@@ -106,27 +107,35 @@ TEST_F(LogFilePathTest, SettingsAndLogsShareTheUserDataDirectory)
 
 TEST_F(LogFilePathTest, ALogFileArgumentQuotesAnAbsolutePathForAChildCommandLine)
 {
-  const auto file = std::filesystem::absolute(defaultLogFile("editor-server"));
-  const auto argument = logFileArgument("editor-server");
+  const auto file = std::filesystem::absolute(std::filesystem::path("data") / "my logs" / "editor.log");
 
-  if (file.string().find('"') != std::string::npos)
-  {
-    // No escape exists for a quote inside the path, so the flag is dropped rather than truncated.
-    EXPECT_TRUE(argument.empty());
-    return;
-  }
+  EXPECT_EQ(logFileArgumentForPath(file), "--log-file \"" + file.string() + "\"");
+}
 
-  EXPECT_EQ(argument, "--log-file \"" + file.string() + "\"");
-  EXPECT_TRUE(file.is_absolute());
+TEST_F(LogFilePathTest, ALogFileArgumentIsDroppedWhenThePathContainsAQuote)
+{
+  // No escape exists for a quote inside the path, so the flag is dropped rather than truncated.
+  EXPECT_TRUE(logFileArgumentForPath(std::filesystem::path("data") / "my\"logs" / "editor.log").empty());
 }
 
 TEST_F(LogFilePathTest, LogFileArgumentOverridesTheDefaultAndReceivesEntries)
 {
-  const auto sink = addSink({ "--log-file", m_file.string() });
+  const auto ring = std::make_shared<RingBufferSink>();
+  Log::addSink(ring);
+
+  const auto sink = addSink({ "--log-file", m_file.string() }, LogCategory::net);
+
+  Log::removeSink(ring);
 
   ASSERT_NE(sink, nullptr);
   EXPECT_TRUE(sink->isOpen());
   ASSERT_TRUE(std::filesystem::exists(m_file));
+
+  const auto announced = ring->snapshot();
+  ASSERT_EQ(announced.size(), 1u);
+  EXPECT_EQ(announced[0].level, LogLevel::info);
+  EXPECT_EQ(announced[0].category, LogCategory::net);
+  EXPECT_EQ(announced[0].message, "Logging to " + m_file.string());
 
   Log::info(LogCategory::engine, "through the registered sink");
 
@@ -173,22 +182,17 @@ TEST_F(LogFilePathTest, ALogFileThatCannotBeOpenedWarnsAndRegistersNothing)
   const auto ring = std::make_shared<RingBufferSink>();
   Log::addSink(ring);
 
-  const auto sink = addSink({ "--log-file", directoryPath.string() });
+  const auto sink = addSink({ "--log-file", directoryPath.string() }, LogCategory::net);
 
   Log::removeSink(ring);
 
   EXPECT_EQ(sink, nullptr);
 
-  bool warned = false;
-  for (const auto& entry : ring->snapshot())
-  {
-    if (entry.level == LogLevel::warn && entry.category == LogCategory::engine &&
-        entry.message.find(directoryPath.string()) != std::string::npos)
-    {
-      warned = true;
-    }
-  }
-  EXPECT_TRUE(warned);
+  const auto entries = ring->snapshot();
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_EQ(entries[0].level, LogLevel::warn);
+  EXPECT_EQ(entries[0].category, LogCategory::net);
+  EXPECT_EQ(entries[0].message, "Could not open log file " + directoryPath.string());
 
   // Positive control: a usable path through the same call registers a sink.
   EXPECT_NE(addSink({ "--log-file", m_file.string() }), nullptr);
@@ -198,16 +202,17 @@ TEST_F(LogFilePathTest, ALogFileArgumentNamesEveryAppsDefaultFile)
 {
   for (const char* appName : { "editor", "client", "server", "editor-server", "client-server" })
   {
-    const auto file = std::filesystem::absolute(defaultLogFile(appName));
     const auto argument = logFileArgument(appName);
 
-    if (file.string().find('"') != std::string::npos)
+    // A quote in the real user data path yields no flag; the quoting itself is pinned above.
+    if (argument.empty())
     {
-      GTEST_SKIP() << "A quote in the path yields no flag; nothing to compare for " << appName;
+      continue;
     }
 
-    EXPECT_EQ(argument, "--log-file \"" + file.string() + "\"") << appName;
-    EXPECT_NE(argument.find(std::string(appName) + ".log"), std::string::npos) << appName;
+    EXPECT_EQ(argument.rfind("--log-file \"", 0), 0u) << appName;
+    EXPECT_TRUE(argument.ends_with(std::string(appName) + ".log\"")) << appName;
+    EXPECT_TRUE(std::filesystem::path(argument.substr(12, argument.size() - 13)).is_absolute()) << appName;
   }
 }
 

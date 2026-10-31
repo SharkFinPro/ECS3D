@@ -3,6 +3,8 @@
 #include "LogFilter.h"
 
 #include <chrono>
+#include <regex>
+#include <string>
 
 namespace {
   LogEntry makeEntry(const LogLevel level, const LogCategory category, const std::string& message)
@@ -56,6 +58,9 @@ TEST(LogFilterTest, SearchIsACaseInsensitiveSubstring)
   filter.search = "ERR";
 
   EXPECT_TRUE(filter.matches(makeEntry(LogLevel::error, LogCategory::engine, "an error occurred")));
+
+  filter.search = "error";
+  EXPECT_TRUE(filter.matches(makeEntry(LogLevel::error, LogCategory::engine, "An ERROR occurred")));
 }
 
 TEST(LogFilterTest, EmptySearchMatchesEverything)
@@ -79,15 +84,12 @@ TEST(LogFilterTest, SearchWithNoHitExcludesTheEntry)
   EXPECT_TRUE(filter.matches(makeEntry(LogLevel::info, LogCategory::engine, "an error occurred")));
 }
 
-TEST(LogFilterTest, FormatEntryContainsTheLevelCategoryAndMessage)
+TEST(LogFilterTest, FormatEntryLaysOutClockLevelCategoryAndMessage)
 {
   const auto entry = makeEntry(LogLevel::warn, LogCategory::net, "connection dropped");
-  const auto formatted = formatEntry(entry);
 
-  EXPECT_NE(formatted.find("[warn][net]"), std::string::npos);
-  EXPECT_NE(formatted.find("connection dropped"), std::string::npos);
-
-  // The timestamp comes first: the "[warn][net]" tag must appear after some leading characters (the
-  // HH:MM:SS clock), without asserting on the actual digits, which are local time and not reproducible.
-  EXPECT_GT(formatted.find("[warn][net]"), 0u);
+  // The clock is local time, so only its shape is pinned.
+  EXPECT_TRUE(std::regex_match(formatEntry(entry),
+                               std::regex(R"(\d\d:\d\d:\d\d \[warn\]\[net\] connection dropped)")))
+      << formatEntry(entry);
 }
