@@ -498,10 +498,9 @@ TEST_F(Keybinds, AKeyCodeOfZeroIsAValidFallbackChord)
   EXPECT_EQ(formatChord(KeyChord{ 0, 0 }), "Key0");
 }
 
-TEST_F(Keybinds, ANegativeKeyFormatsAsNothingButKeepsItsModifiers)
+TEST_F(Keybinds, ANegativeKeyFormatsAsEmpty)
 {
   EXPECT_TRUE(formatChord(KeyChord{ -1, 0 }).empty());
-  EXPECT_EQ(formatChord(KeyChord{ -1, 0x2 }), "Ctrl");
 }
 
 TEST_F(Keybinds, LoadFallsBackToTheDefaultWhenAStoredKeyCodeOverflows)

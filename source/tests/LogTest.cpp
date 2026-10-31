@@ -218,6 +218,8 @@ TEST_F(LogTest, AConsoleSinkRoutesInfoToStdoutAndWarningsToStderr)
 
 TEST_F(LogTest, ConcurrentSinkChangesDoNotDisturbWriters)
 {
+  // Without the lock the damage is a data race on the sink list, so this reliably fails only under the sanitize
+  // preset (ThreadSanitizer/AddressSanitizer); a plain Release run catches it only by a lucky crash.
   constexpr int writerCount = 4;
   constexpr int perWriter = 400;
 
