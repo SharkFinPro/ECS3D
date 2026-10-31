@@ -38,11 +38,17 @@ namespace {
     return entry != source.end() && entry->is_string() ? entry->get<std::string>() : std::string{};
   }
 
-  // The ops that create an object do not carry the uuid the authority will mint for it, so a command for
-  // one records a nil uuid unless the op happens to name it - read defensively, never required.
-  uuids::uuid createdUUID(const nlohmann::json& edit)
+  // An op that creates an object only has a faithful undo when it names the uuid the authority will use: the
+  // reverse edit targets that uuid. A missing, unparseable or nil uuid leaves nothing to target.
+  std::optional<uuids::uuid> createdUUID(const nlohmann::json& edit)
   {
-    return parseUUIDField(edit, "uuid").value_or(uuids::uuid{});
+    const auto parsed = parseUUIDField(edit, "uuid");
+    if (!parsed.has_value() || parsed->is_nil())
+    {
+      return std::nullopt;
+    }
+
+    return parsed;
   }
 
   std::optional<uuids::uuid> uuidOf(const std::shared_ptr<Object>& object)
@@ -277,6 +283,12 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
 
   if (op == "addObject")
   {
+    const auto created = createdUUID(edit);
+    if (!created.has_value())
+    {
+      return std::nullopt;
+    }
+
     std::shared_ptr<Object> parent;
     if (!resolveParent(edit, view, parent))
     {
@@ -289,14 +301,15 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
     std::string createdName = name != edit.end() && name->is_string() ? name->get<std::string>()
                                                                       : std::string{ "Object" };
 
-    return EditCommand::addObject(createdUUID(edit), uuidOf(parent), std::move(createdName),
+    return EditCommand::addObject(created.value(), uuidOf(parent), std::move(createdName),
                                   appendedIndex(view, parent));
   }
 
   if (op == "instantiatePrefab")
   {
     const auto prefabUUID = parseUUIDField(edit, "prefab");
-    if (!prefabUUID.has_value())
+    const auto instanceUUID = createdUUID(edit);
+    if (!prefabUUID.has_value() || !instanceUUID.has_value())
     {
       return std::nullopt;
     }
@@ -317,7 +330,7 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
       return std::nullopt;
     }
 
-    return EditCommand::instantiatePrefab(prefabUUID.value(), createdUUID(edit), uuidOf(parent),
+    return EditCommand::instantiatePrefab(prefabUUID.value(), instanceUUID.value(), uuidOf(parent),
                                           appendedIndex(view, parent), prefab->body);
   }
 
@@ -410,9 +423,15 @@ std::optional<EditCommand> commandForSceneEdit(const nlohmann::json& edit, const
 
   if (op == "duplicateObject")
   {
+    const auto duplicateUUID = createdUUID(edit);
+    if (!duplicateUUID.has_value())
+    {
+      return std::nullopt;
+    }
+
     const auto parent = object->getParent();
 
-    return EditCommand::duplicateObject(objectUUID.value(), createdUUID(edit), uuidOf(parent),
+    return EditCommand::duplicateObject(objectUUID.value(), duplicateUUID.value(), uuidOf(parent),
                                         appendedIndex(view, parent));
   }
 
