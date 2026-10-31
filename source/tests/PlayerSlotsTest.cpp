@@ -343,7 +343,11 @@ TEST(PlayerControllerComponent, SerializeWritesTheAuthoredSlotNotTheLiveOne)
 TEST(PlayerControllerComponent, PackAndUnpackRoundTripTheCurrentSlot)
 {
   PlayerController source;
+  source.setPlayerSlot(2);
+  source.start();
   source.setPlayerSlot(4);
+
+  ASSERT_EQ(source.serialize().at("playerSlot"), 2);
 
   net::Message message(net::MessageType::objectSpawned);
   source.pack(message);
@@ -355,6 +359,7 @@ TEST(PlayerControllerComponent, PackAndUnpackRoundTripTheCurrentSlot)
   target.setPlayerSlot(9);
   target.unpack(reader);
 
+  // The wire carries the live slot, which differs from the authored one serialize() writes.
   EXPECT_EQ(target.getPlayerSlot(), 4);
   EXPECT_EQ(reader.remaining(), 0u);
 }

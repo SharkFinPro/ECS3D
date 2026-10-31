@@ -168,7 +168,11 @@ TEST_F(ProjectSerializerLogTest, ACurrentSceneUuidThatDoesNotResolveSelectsNothi
 
 TEST_F(ProjectSerializerLogTest, ASceneThatFailsToLoadIsNamedInTheError)
 {
+  m_serializer->deserialize(projectBlob(nlohmann::json::array({ sceneBlob() }), branchSceneUUID));
+  ASSERT_NE(m_sceneManager.getCurrentScene(), nullptr);
+
   auto broken = sceneBlob("Broken");
+  broken["uuid"] = "99999999-9999-9999-9999-999999999999";
   broken.erase("objects");
 
   try
@@ -181,7 +185,10 @@ TEST_F(ProjectSerializerLogTest, ASceneThatFailsToLoadIsNamedInTheError)
     EXPECT_NE(std::string(e.what()).find("scene 'Broken': "), std::string::npos) << e.what();
   }
 
-  EXPECT_TRUE(m_sceneManager.getScenes().empty());
+  // The failed load must not have touched the project that was already there.
+  ASSERT_EQ(m_sceneManager.getScenes().size(), 1u);
+  ASSERT_NE(m_sceneManager.getCurrentScene(), nullptr);
+  EXPECT_EQ(uuids::to_string(m_sceneManager.getCurrentScene()->getUUID()), branchSceneUUID);
 }
 
 TEST_F(ProjectSerializerLogTest, LoadingMalformedJsonFailsAndLogsAnError)
