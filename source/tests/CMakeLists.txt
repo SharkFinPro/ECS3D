@@ -154,6 +154,7 @@ add_executable(${PROJECT_NAME}
   SceneScriptUndoTest.cpp
   SceneScriptsPanelTest.cpp
   AssetNamingTest.cpp
+  AssetCreateFlowTest.cpp
   ObjectNameFieldTest.cpp
   PrefabTest.cpp
   FixedTimestepTest.cpp
