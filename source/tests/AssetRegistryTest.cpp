@@ -162,6 +162,44 @@ TEST(AssetRegistry, RemovingFreesThePathForReuse)
   EXPECT_NE(registry.getByUUID(otherUUID), nullptr);
 }
 
+TEST(AssetRegistry, ARepeatedUuidUnderANewPathLeavesNoPathKeyBehindAfterRemoval)
+{
+  const auto thirdUUID = uuidFrom("44444444-4444-4444-4444-444444444444");
+
+  AssetRegistry registry;
+  registry.registerAsset(model(modelUUID, "x.glb"));
+  registry.registerAsset(model(modelUUID, "y.glb"));
+
+  registry.removeAsset(modelUUID);
+
+  // The second path was never the record's, so it must not have been reserved for it.
+  registry.registerAsset(model(otherUUID, "y.glb"));
+
+  ASSERT_NE(registry.getByUUID(otherUUID), nullptr);
+  ASSERT_NE(registry.getByPath("y.glb"), nullptr);
+  EXPECT_EQ(registry.getByPath("y.glb")->uuid, otherUUID);
+
+  // Positive control: a never-used path registers as before.
+  registry.registerAsset(model(thirdUUID, "z.glb"));
+  EXPECT_NE(registry.getByUUID(thirdUUID), nullptr);
+}
+
+TEST(AssetRegistry, ARepeatedUuidUnderANewPathChangesNothing)
+{
+  AssetRegistry registry;
+  registry.registerAsset(model(modelUUID, "x.glb"));
+  const auto version = registry.getVersion();
+
+  registry.registerAsset(model(modelUUID, "y.glb"));
+
+  EXPECT_EQ(registry.getByPath("y.glb"), nullptr);
+  ASSERT_NE(registry.getByPath("x.glb"), nullptr);
+  EXPECT_EQ(registry.getByPath("x.glb")->uuid, modelUUID);
+  EXPECT_EQ(registry.getByUUID(modelUUID)->path, "x.glb");
+  EXPECT_EQ(registry.getAssets().size(), 1u);
+  EXPECT_EQ(registry.getVersion(), version);
+}
+
 TEST(AssetRegistry, RemovingAnUnknownUuidDoesNothing)
 {
   AssetRegistry registry;
@@ -494,5 +532,24 @@ TEST(AssetRegistry, ApplyAddAssetIgnoresAMalformedUuidAndAnUnknownType)
   replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
                              { { "assetType", "texture" }, { "uuid", uuids::to_string(otherUUID) },
                                { "path", "a.png" } });
+  EXPECT_EQ(registry.getAssets().size(), 1u);
+}
+
+TEST(AssetRegistry, ApplyAddAssetKeepsOnlyTheFirstPathOfARepeatedUuid)
+{
+  const fixtures::Scene scene;
+  AssetRegistry registry;
+  SceneManager sceneManager;
+
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                             { { "assetType", "model" }, { "uuid", uuids::to_string(modelUUID) },
+                               { "path", "x.glb" } });
+  replication::applyAddAsset(registry, sceneManager, scene.componentRegistry,
+                             { { "assetType", "model" }, { "uuid", uuids::to_string(modelUUID) },
+                               { "path", "y.glb" } });
+
+  EXPECT_EQ(registry.getByPath("y.glb"), nullptr);
+  ASSERT_NE(registry.getByPath("x.glb"), nullptr);
+  EXPECT_EQ(registry.getByPath("x.glb")->uuid, modelUUID);
   EXPECT_EQ(registry.getAssets().size(), 1u);
 }
