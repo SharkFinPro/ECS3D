@@ -346,3 +346,40 @@ TEST(CameraRange, LoadFromJSONWithAFiniteDirectionAppliesIt)
 
   EXPECT_EQ(camera->getDirection(), glm::vec3(0.0f, 0.0f, 1.0f));
 }
+
+TEST(CameraRange, LoadFromJSONWithoutADirectionKeepsThePriorDirection)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+  camera->setDirection({ 1.0f, 0.0f, 0.0f });
+
+  nlohmann::json data;
+  data["type"] = "Camera";
+  data["fov"] = 60.0f;
+  camera->loadFromJSON(data);
+
+  EXPECT_EQ(camera->getDirection(), glm::vec3(1.0f, 0.0f, 0.0f));
+  EXPECT_FLOAT_EQ(camera->getFov(), 60.0f);
+}
+
+TEST(CameraRange, LoadFromJSONWithADirectionOfTheWrongSizeIsIgnored)
+{
+  const auto camera = makeCamera();
+  ASSERT_NE(camera, nullptr);
+  camera->setDirection({ 0.0f, 1.0f, 0.0f });
+
+  nlohmann::json data;
+  data["type"] = "Camera";
+  data["fov"] = 60.0f;
+
+  data["direction"] = { 0.0f, 0.0f };
+  camera->loadFromJSON(data);
+  EXPECT_EQ(camera->getDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  data["direction"] = { 0.0f, 0.0f, 1.0f, 0.0f };
+  camera->loadFromJSON(data);
+  EXPECT_EQ(camera->getDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  // The rest of the component still loads, so only the direction was skipped.
+  EXPECT_FLOAT_EQ(camera->getFov(), 60.0f);
+}
