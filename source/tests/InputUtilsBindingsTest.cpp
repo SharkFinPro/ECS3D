@@ -97,6 +97,22 @@ namespace {
     EXPECT_FALSE(bindings.wasKeyReleasedThisTickForObject(uuidB.c_str(), keyS));
   }
 
+  TEST_F(InputUtilsBindingsTest, AKeyHeldAcrossATickIsNeitherPressedNorReleasedThatTick)
+  {
+    InputState::setKeysPressed(slotA, { keyW });
+    ASSERT_TRUE(bindings.wasKeyPressedThisTickForObject(uuidA.c_str(), keyW));
+    InputState::commitInputEdges();
+
+    EXPECT_TRUE(bindings.keyIsPressedForObject(uuidA.c_str(), keyW));
+    EXPECT_FALSE(bindings.wasKeyPressedThisTickForObject(uuidA.c_str(), keyW));
+    EXPECT_FALSE(bindings.wasKeyReleasedThisTickForObject(uuidA.c_str(), keyW));
+
+    // A key that was never down is not released either, though it is not pressed.
+    EXPECT_FALSE(bindings.keyIsPressedForObject(uuidA.c_str(), keyS));
+    EXPECT_FALSE(bindings.wasKeyPressedThisTickForObject(uuidA.c_str(), keyS));
+    EXPECT_FALSE(bindings.wasKeyReleasedThisTickForObject(uuidA.c_str(), keyS));
+  }
+
   TEST_F(InputUtilsBindingsTest, EachObjectReadsItsOwnPlayersMouse)
   {
     InputState::setMouse(slotA, 10.0f, 20.0f, 1.5f, -2.0f, 0.5f, 0b001u);

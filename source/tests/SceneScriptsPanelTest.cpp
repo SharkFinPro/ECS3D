@@ -25,7 +25,7 @@ namespace {
   const auto sceneUUID = uuids::uuid::from_string("66666666-6666-6666-6666-666666666666").value();
 
   void addScriptAsset(AssetRegistry& registry, const std::string& path, const std::string& className,
-                      const AssetType type = AssetType::Script)
+                      const AssetType type = AssetType::Script, const ScriptKind kind = ScriptKind::Either)
   {
     AssetRecord record;
     static int counter = 0;
@@ -35,6 +35,7 @@ namespace {
     record.type = type;
     record.path = path;
     record.className = className;
+    record.scriptKind = kind;
     registry.registerAsset(record);
   }
 
@@ -86,10 +87,12 @@ TEST(SceneScriptsPanelTest, AvailableClassesSkipNonScriptAssetsAndBlankClassName
   addScriptAsset(assets, "scripts/Real.cs", "Real");
   addScriptAsset(assets, "models/Thing.obj", "NotAScript", AssetType::Model);
   addScriptAsset(assets, "scripts/Blank.cs", "");
+  addScriptAsset(assets, "scripts/OnlyObjects.cs", "OnlyObjects", AssetType::Script, ScriptKind::Object);
+  addScriptAsset(assets, "scripts/OnlyScenes.cs", "OnlyScenes", AssetType::Script, ScriptKind::Scene);
 
   const auto scene = makeScene({});
 
-  EXPECT_EQ(sceneScriptPanel::availableClasses(assets, scene->getScripts()), (Names{ "Real" }));
+  EXPECT_EQ(sceneScriptPanel::availableClasses(assets, scene->getScripts()), (Names{ "OnlyScenes", "Real" }));
 }
 
 TEST(SceneScriptsPanelTest, ReorderTargetIsTheNeighborAndNothingAtTheEdges)
@@ -229,6 +232,7 @@ TEST(SceneScriptsPanelTest, CopyIsDroppedWhenTheReplicatedBlobEqualsIt)
 TEST(SceneScriptsPanelTest, CopyIsDroppedWhenTheTimeoutPasses)
 {
   FakeClock clock;
+  clock.advance(10s);
   sceneScriptPanel::FieldEditTracker tracker(500ms, clock.function());
   tracker.edit("Alpha", fieldsV1);
   ASSERT_EQ(tracker.poll(lookupOf(fieldsV0), false).size(), 1u);
@@ -310,6 +314,7 @@ TEST(SceneScriptsPanelTest, StructuralGateBlocksUntilTheOrderChanges)
 TEST(SceneScriptsPanelTest, StructuralGateReleasesOnTimeoutAndOnClear)
 {
   FakeClock clock;
+  clock.advance(10s);
   sceneScriptPanel::StructuralEditGate gate(500ms, clock.function());
   const Names order = { "Alpha" };
 

@@ -75,6 +75,17 @@ TEST_F(PlayerControllerBindingsTest, SetChangesTheComponentAndRecordsOneEdit)
   EXPECT_EQ(edits[0].second, m_playerController);
 }
 
+TEST_F(PlayerControllerBindingsTest, ANegativeUnassignedSlotIsStoredAsIs)
+{
+  const auto id = uuid();
+
+  m_bindings.setPlayerSlot(id.c_str(), -1);
+
+  EXPECT_EQ(m_playerController->getPlayerSlot(), -1);
+  EXPECT_EQ(m_bindings.getPlayerSlot(id.c_str()), -1);
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+}
+
 TEST_F(PlayerControllerBindingsTest, SetToItsCurrentValueRecordsNothing)
 {
   const auto id = uuid();

@@ -42,6 +42,18 @@ TEST(UnresolvedScriptsTest, AddRecordsThePairForThatComponentOnly)
   EXPECT_FALSE(unresolved.empty());
 }
 
+TEST(UnresolvedScriptsTest, ANullComponentIsNeverUnresolvedEvenWhenTheRecordedOneExpired)
+{
+  UnresolvedScripts unresolved;
+  auto script = std::make_shared<Script>("Mover");
+  ASSERT_TRUE(unresolved.add(objectA, "Mover", script));
+  ASSERT_TRUE(unresolved.isUnresolved(objectA, "Mover", script.get()));
+
+  script.reset();
+
+  EXPECT_FALSE(unresolved.isUnresolved(objectA, "Mover", nullptr));
+}
+
 TEST(UnresolvedScriptsTest, AddingTheSameComponentAgainReportsNoNewFailure)
 {
   UnresolvedScripts unresolved;

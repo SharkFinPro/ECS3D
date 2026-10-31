@@ -6,6 +6,7 @@
 #include "bindings/ColliderBindings.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
+#include "objects/components/Component.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "objects/components/collisions/CapsuleCollider.h"
 #include "objects/components/collisions/ConvexHull.h"
@@ -13,6 +14,7 @@
 #include "objects/components/collisions/SphereCollider.h"
 
 #include <glm/vec3.hpp>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
@@ -288,20 +290,79 @@ TEST_F(ColliderBindingsTest, ANonFiniteSetIsAcceptedButRecordsNoComponentEdit)
   EXPECT_FALSE(BindingContext::takeComponentEdits().empty());
 }
 
+TEST_F(ColliderBindingsTest, EveryFiniteSetterRecordsExactlyOneEditForItsComponent)
+{
+  const auto hullObject = fixtures::addObject(m_scene, "Hull");
+  const auto hull = std::make_shared<ConvexMeshCollider>();
+  hullObject->addComponent(hull);
+
+  const auto box = uuidOf(m_boxObject);
+  const auto sphere = uuidOf(m_sphereObject);
+  const auto capsule = uuidOf(m_capsuleObject);
+  const auto hullUUID = uuidOf(hullObject);
+
+  struct Case {
+    const char* name;
+    std::function<bool()> set;
+    uuids::uuid object;
+    std::shared_ptr<Component> component;
+  };
+  const std::vector<Case> cases = {
+    { "setIsTrigger", [&] { return m_bindings.setIsTrigger(box.c_str(), true); }, m_boxObject->getUUID(), m_box },
+    { "setLayer", [&] { return m_bindings.setLayer(box.c_str(), 5u); }, m_boxObject->getUUID(), m_box },
+    { "setMask", [&] { return m_bindings.setMask(box.c_str(), 0x1u); }, m_boxObject->getUUID(), m_box },
+    { "setBoxOffset", [&] { return m_bindings.setBoxOffset(box.c_str(), 1.0f, 2.0f, 3.0f); },
+      m_boxObject->getUUID(), m_box },
+    { "setBoxSize", [&] { return m_bindings.setBoxSize(box.c_str(), 2.0f, 3.0f, 4.0f); },
+      m_boxObject->getUUID(), m_box },
+    { "setSphereOffset", [&] { return m_bindings.setSphereOffset(sphere.c_str(), 1.0f, 2.0f, 3.0f); },
+      m_sphereObject->getUUID(), m_sphere },
+    { "setSphereRadius", [&] { return m_bindings.setSphereRadius(sphere.c_str(), 2.5f); },
+      m_sphereObject->getUUID(), m_sphere },
+    { "setCapsuleOffset", [&] { return m_bindings.setCapsuleOffset(capsule.c_str(), 1.0f, 2.0f, 3.0f); },
+      m_capsuleObject->getUUID(), m_capsule },
+    { "setCapsuleRadius", [&] { return m_bindings.setCapsuleRadius(capsule.c_str(), 0.75f); },
+      m_capsuleObject->getUUID(), m_capsule },
+    { "setCapsuleHeight", [&] { return m_bindings.setCapsuleHeight(capsule.c_str(), 3.0f); },
+      m_capsuleObject->getUUID(), m_capsule },
+    { "setConvexMeshOffset", [&] { return m_bindings.setConvexMeshOffset(hullUUID.c_str(), 1.0f, 2.0f, 3.0f); },
+      hullObject->getUUID(), hull }
+  };
+
+  ASSERT_TRUE(BindingContext::takeComponentEdits().empty());
+  for (const auto& entry : cases)
+  {
+    SCOPED_TRACE(entry.name);
+
+    EXPECT_TRUE(entry.set());
+
+    const auto edits = BindingContext::takeComponentEdits();
+    EXPECT_EQ(edits.size(), 1u);
+    if (edits.size() == 1u)
+    {
+      EXPECT_EQ(edits[0].first, entry.object);
+      EXPECT_EQ(edits[0].second, entry.component);
+    }
+  }
+}
+
 TEST_F(ColliderBindingsTest, ALayerClampedToItsAlreadyStoredValueRecordsNoEditButADifferentClampDoes)
 {
   const auto boxUUID = uuidOf(m_boxObject);
 
-  // Layer starts at 0; clamping an out-of-range request down to the value already in effect (0) is a
-  // no-op on the stored state and must not queue an edit.
-  EXPECT_TRUE(m_bindings.setLayer(boxUUID.c_str(), 0u));
-  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
-
-  // An out-of-range request that clamps to a value different from the one already stored still records,
-  // even though the stored value (31) differs from the requested one (999).
+  // Positive control: the first clamp changes the stored layer from 0 to 31, so it records.
   EXPECT_TRUE(m_bindings.setLayer(boxUUID.c_str(), 999u));
   EXPECT_EQ(m_bindings.getLayer(boxUUID.c_str()), 31u);
-  EXPECT_FALSE(BindingContext::takeComponentEdits().empty());
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
+
+  // The same out-of-range request now clamps to the value already stored (31), so it records nothing.
+  EXPECT_TRUE(m_bindings.setLayer(boxUUID.c_str(), 999u));
+  EXPECT_EQ(m_bindings.getLayer(boxUUID.c_str()), 31u);
+  EXPECT_TRUE(BindingContext::takeComponentEdits().empty());
+
+  // A request that resolves to a different value than the one stored records again.
+  EXPECT_TRUE(m_bindings.setLayer(boxUUID.c_str(), 7u));
+  EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
 }
 
 TEST_F(ColliderBindingsTest, AGetOrARefusedSetRecordsNoComponentEdit)
