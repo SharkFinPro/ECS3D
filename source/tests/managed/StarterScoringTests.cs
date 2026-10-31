@@ -493,6 +493,44 @@ public unsafe class StarterScoringTests : IDisposable
   }
 
   [Fact]
+  public void RoundTimer_BeginRoundDuringTheIntermissionLeavesTheScheduledNextRoundAlone()
+  {
+    var recorder = AddRecorder();
+    var timer = AddTimer(3);
+
+    Run(3f);
+    Assert.Equal(new[] { 1 }, recorder.Overs);
+
+    timer.beginRound();
+    Run(5f);
+
+    Assert.Equal(new[] { 2 }, recorder.Starts);
+    Assert.Equal(new[] { 2, 1, 0, 2, 1, 0 }, recorder.Ticks);
+    Assert.Equal(new[] { 1, 2 }, recorder.Overs);
+  }
+
+  [Theory]
+  [InlineData(-1f)]
+  [InlineData(0f)]
+  public void RoundTimer_ANonPositiveIntermissionStartsTheNextRoundOnTheNextTickWithoutAWarning(float intermission)
+  {
+    var recorder = AddRecorder();
+    AddTimer(3, intermission);
+
+    Run(3f);
+    Assert.Equal(new[] { 1 }, recorder.Overs);
+    Assert.Empty(recorder.Starts);
+
+    Run(0.5f);
+
+    Assert.Equal(new[] { 2 }, recorder.Starts);
+    Assert.Empty(Warnings());
+
+    Run(3f);
+    Assert.Equal(new[] { 2, 1, 0, 2, 1, 0 }, recorder.Ticks);
+  }
+
+  [Fact]
   public void ScoreKeeper_ANegativeTopScoreStillNamesAWinner()
   {
     AddKeeper();

@@ -51,6 +51,14 @@ internal abstract class TransportBackend
   // a few kilobytes rather than the whole ceiling above, which everything after the handshake gets.
   protected const int MaxHandshakeBytes = 4 * 1024;
 
+  // Bounds how long an accepted socket may sit unauthorized before it is dropped. Without this, a peer
+  // that opens a connection and sends nothing holds a thread and a socket forever. One deadline covers the
+  // whole pre-auth stage in both backends.
+  protected const int DefaultHandshakeTimeoutMs = 5000;
+
+  // Instance copy of the default above, internal so ECS3DManagedTests can change it.
+  internal int HandshakeTimeoutMs = DefaultHandshakeTimeoutMs;
+
   // An outbound message over the ceiling would be refused by every peer that received it, and refused
   // silently - the receiving loop cannot tell an over-long frame from a closed socket. Caught at the
   // sender instead, where there is something useful to say about it.

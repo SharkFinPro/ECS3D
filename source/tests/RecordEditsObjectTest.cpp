@@ -41,18 +41,19 @@ namespace {
   }
 }
 
-// --- Object creation: the created uuid is only recorded when the op happens to carry one, and the
-// sibling index is always the appended position.
+// --- Object creation: the op has to name the created uuid (undo targets it), and the sibling index is
+// always the appended position.
 
 TEST(RecordEdits, AddObjectAtTheRootRecordsAnAppendedIndex)
 {
   const auto scene = makeScene();
+  const auto created = someOtherUUID();
 
-  const auto command = edits::commandForSceneEdit(replication::buildAddObject("Thing"),
+  const auto command = edits::commandForSceneEdit(replication::buildAddObject("Thing", nullptr, &created),
                                                   *scene.objectManager);
 
   ASSERT_TRUE(command.has_value());
-  EXPECT_EQ(*command, edits::EditCommand::addObject(uuids::uuid{}, std::nullopt, "Thing", 1));
+  EXPECT_EQ(*command, edits::EditCommand::addObject(created, std::nullopt, "Thing", 1));
 }
 
 TEST(RecordEdits, AddObjectUnderAParentCountsThatParentsChildren)
@@ -62,24 +63,51 @@ TEST(RecordEdits, AddObjectUnderAParentCountsThatParentsChildren)
   addChildObject(scene, "Second", scene.object);
 
   const auto parentUUID = scene.object->getUUID();
-  const auto command = edits::commandForSceneEdit(replication::buildAddObject("Thing", &parentUUID),
+  const auto created = someOtherUUID();
+  const auto command = edits::commandForSceneEdit(replication::buildAddObject("Thing", &parentUUID, &created),
                                                   *scene.objectManager);
 
   ASSERT_TRUE(command.has_value());
-  EXPECT_EQ(*command, edits::EditCommand::addObject(uuids::uuid{}, parentUUID, "Thing", 2));
+  EXPECT_EQ(*command, edits::EditCommand::addObject(created, parentUUID, "Thing", 2));
 }
 
-TEST(RecordEdits, AddObjectTakesTheCreatedUUIDWhenTheOpCarriesOne)
+TEST(RecordEdits, AddObjectUndoTargetsTheCreatedUUID)
 {
   const auto scene = makeScene();
+  const auto created = someOtherUUID();
 
-  nlohmann::json edit = replication::buildAddObject("Thing");
-  edit["uuid"] = uuidString(someOtherUUID());
-
-  const auto command = edits::commandForSceneEdit(edit, *scene.objectManager);
+  const auto command = edits::commandForSceneEdit(replication::buildAddObject("Thing", nullptr, &created),
+                                                  *scene.objectManager);
 
   ASSERT_TRUE(command.has_value());
-  EXPECT_EQ(*command, edits::EditCommand::addObject(someOtherUUID(), std::nullopt, "Thing", 1));
+  const auto undo = command->buildUndoJSON(*scene.objectManager);
+  EXPECT_EQ(undo.at("op"), "removeObject");
+  EXPECT_EQ(undo.at("object"), uuidString(created));
+}
+
+TEST(RecordEdits, AddObjectWithoutAUsableCreatedUUIDIsNotRecorded)
+{
+  const auto scene = makeScene();
+  const auto created = someOtherUUID();
+
+  const auto missing = replication::buildAddObject("Thing");
+  EXPECT_FALSE(edits::commandForSceneEdit(missing, *scene.objectManager).has_value());
+
+  nlohmann::json unparseable = missing;
+  unparseable["uuid"] = "not-a-uuid";
+  EXPECT_FALSE(edits::commandForSceneEdit(unparseable, *scene.objectManager).has_value());
+
+  nlohmann::json nonString = missing;
+  nonString["uuid"] = 7;
+  EXPECT_FALSE(edits::commandForSceneEdit(nonString, *scene.objectManager).has_value());
+
+  nlohmann::json nil = missing;
+  nil["uuid"] = uuidString(uuids::uuid{});
+  EXPECT_FALSE(edits::commandForSceneEdit(nil, *scene.objectManager).has_value());
+
+  // Positive control: the same op naming a real uuid is recorded.
+  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildAddObject("Thing", nullptr, &created),
+                                         *scene.objectManager).has_value());
 }
 
 TEST(RecordEdits, AddObjectUnderAParentTheViewDoesNotHaveIsNotRecorded)
@@ -87,12 +115,13 @@ TEST(RecordEdits, AddObjectUnderAParentTheViewDoesNotHaveIsNotRecorded)
   const auto scene = makeScene();
 
   const auto missingParent = someOtherUUID();
-  EXPECT_FALSE(edits::commandForSceneEdit(replication::buildAddObject("Thing", &missingParent),
+  const auto created = anotherUUID();
+  EXPECT_FALSE(edits::commandForSceneEdit(replication::buildAddObject("Thing", &missingParent, &created),
                                           *scene.objectManager).has_value());
 
   // Positive control: the same op under a parent the view does have is recorded.
   const auto parentUUID = scene.object->getUUID();
-  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildAddObject("Thing", &parentUUID),
+  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildAddObject("Thing", &parentUUID, &created),
                                          *scene.objectManager).has_value());
 }
 
@@ -256,19 +285,44 @@ TEST(RecordEdits, DuplicateObjectRecordsTheSourcesParentAndAnAppendedIndex)
   const auto scene = makeScene();
   const auto child = addChildObject(scene, "Child", scene.object);
 
+  const auto rootCopy = anotherUUID();
   const auto rootDuplicate = edits::commandForSceneEdit(
-    replication::buildDuplicateObject(scene.object->getUUID()), *scene.objectManager);
+    replication::buildDuplicateObject(scene.object->getUUID(), &rootCopy), *scene.objectManager);
   ASSERT_TRUE(rootDuplicate.has_value());
-  EXPECT_EQ(*rootDuplicate, edits::EditCommand::duplicateObject(scene.object->getUUID(), uuids::uuid{},
+  EXPECT_EQ(*rootDuplicate, edits::EditCommand::duplicateObject(scene.object->getUUID(), rootCopy,
                                                                 std::nullopt, 1));
 
-  nlohmann::json childEdit = replication::buildDuplicateObject(child->getUUID());
-  childEdit["uuid"] = uuidString(someOtherUUID());
-
-  const auto childDuplicate = edits::commandForSceneEdit(childEdit, *scene.objectManager);
+  const auto childCopy = someOtherUUID();
+  const auto childDuplicate = edits::commandForSceneEdit(
+    replication::buildDuplicateObject(child->getUUID(), &childCopy), *scene.objectManager);
   ASSERT_TRUE(childDuplicate.has_value());
-  EXPECT_EQ(*childDuplicate, edits::EditCommand::duplicateObject(child->getUUID(), someOtherUUID(),
+  EXPECT_EQ(*childDuplicate, edits::EditCommand::duplicateObject(child->getUUID(), childCopy,
                                                                  scene.object->getUUID(), 1));
+
+  const auto undo = childDuplicate->buildUndoJSON(*scene.objectManager);
+  EXPECT_EQ(undo.at("op"), "removeSubtree");
+  EXPECT_EQ(undo.at("object"), uuidString(childCopy));
+}
+
+TEST(RecordEdits, DuplicateObjectWithoutAUsableCreatedUUIDIsNotRecorded)
+{
+  const auto scene = makeScene();
+  const auto copy = someOtherUUID();
+
+  const auto missing = replication::buildDuplicateObject(scene.object->getUUID());
+  EXPECT_FALSE(edits::commandForSceneEdit(missing, *scene.objectManager).has_value());
+
+  nlohmann::json unparseable = missing;
+  unparseable["uuid"] = "not-a-uuid";
+  EXPECT_FALSE(edits::commandForSceneEdit(unparseable, *scene.objectManager).has_value());
+
+  nlohmann::json nil = missing;
+  nil["uuid"] = uuidString(uuids::uuid{});
+  EXPECT_FALSE(edits::commandForSceneEdit(nil, *scene.objectManager).has_value());
+
+  // Positive control: the same op naming a real uuid is recorded.
+  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildDuplicateObject(scene.object->getUUID(), &copy),
+                                         *scene.objectManager).has_value());
 }
 
 TEST(RecordEdits, InstantiatePrefabRecordsThePrefabParentAppendedIndexAndCurrentBody)
@@ -281,20 +335,51 @@ TEST(RecordEdits, InstantiatePrefabRecordsThePrefabParentAppendedIndexAndCurrent
   scene.assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Prefab",
                                       .body = body });
 
-  const auto atRoot = edits::commandForSceneEdit(replication::buildInstantiatePrefab(prefabUUID),
-                                                 *scene.objectManager, &scene.assetRegistry);
+  const auto rootInstance = uuids::uuid::from_string("00000000-0000-0000-0000-000000000002").value();
+  const auto atRoot = edits::commandForSceneEdit(
+    replication::buildInstantiatePrefab(prefabUUID, nullptr, &rootInstance), *scene.objectManager,
+    &scene.assetRegistry);
   ASSERT_TRUE(atRoot.has_value());
   EXPECT_EQ(*atRoot,
-            edits::EditCommand::instantiatePrefab(prefabUUID, uuids::uuid{}, std::nullopt, 1, body));
+            edits::EditCommand::instantiatePrefab(prefabUUID, rootInstance, std::nullopt, 1, body));
 
   const auto parentUUID = object->getUUID();
-  nlohmann::json underParent = replication::buildInstantiatePrefab(prefabUUID, &parentUUID);
-  underParent["uuid"] = uuidString(anotherUUID());
-
-  const auto command = edits::commandForSceneEdit(underParent, *scene.objectManager, &scene.assetRegistry);
+  const auto instance = anotherUUID();
+  const auto command = edits::commandForSceneEdit(
+    replication::buildInstantiatePrefab(prefabUUID, &parentUUID, &instance), *scene.objectManager,
+    &scene.assetRegistry);
   ASSERT_TRUE(command.has_value());
-  EXPECT_EQ(*command,
-            edits::EditCommand::instantiatePrefab(prefabUUID, anotherUUID(), parentUUID, 0, body));
+  EXPECT_EQ(*command, edits::EditCommand::instantiatePrefab(prefabUUID, instance, parentUUID, 0, body));
+
+  const auto undo = command->buildUndoJSON(*scene.objectManager);
+  EXPECT_EQ(undo.at("op"), "removeSubtree");
+  EXPECT_EQ(undo.at("object"), uuidString(instance));
+}
+
+TEST(RecordEdits, InstantiatePrefabWithoutAUsableCreatedUUIDIsNotRecorded)
+{
+  AssetScene scene;
+
+  const auto prefabUUID = someOtherUUID();
+  scene.assetRegistry.registerAsset({ .uuid = prefabUUID, .type = AssetType::Prefab, .path = "Prefab",
+                                      .body = R"({"name":"Prefab"})" });
+
+  const auto missing = replication::buildInstantiatePrefab(prefabUUID);
+  EXPECT_FALSE(edits::commandForSceneEdit(missing, *scene.objectManager, &scene.assetRegistry).has_value());
+
+  nlohmann::json unparseable = missing;
+  unparseable["uuid"] = "not-a-uuid";
+  EXPECT_FALSE(edits::commandForSceneEdit(unparseable, *scene.objectManager, &scene.assetRegistry)
+                 .has_value());
+
+  nlohmann::json nil = missing;
+  nil["uuid"] = uuidString(uuids::uuid{});
+  EXPECT_FALSE(edits::commandForSceneEdit(nil, *scene.objectManager, &scene.assetRegistry).has_value());
+
+  // Positive control: the same op naming a real uuid is recorded.
+  const auto instance = anotherUUID();
+  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildInstantiatePrefab(prefabUUID, nullptr, &instance),
+                                         *scene.objectManager, &scene.assetRegistry).has_value());
 }
 
 TEST(RecordEdits, InstantiatePrefabIsNotRecordedWithoutTheAssetRegistry)
@@ -334,7 +419,8 @@ TEST(RecordEdits, AnUnknownOpIsNotRecorded)
   EXPECT_FALSE(edits::commandForSceneEdit(edit, *scene.objectManager).has_value());
 
   // Positive control: the same object under an op that does have a command kind.
-  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildDuplicateObject(scene.object->getUUID()),
+  const auto copy = someOtherUUID();
+  EXPECT_TRUE(edits::commandForSceneEdit(replication::buildDuplicateObject(scene.object->getUUID(), &copy),
                                          *scene.objectManager).has_value());
 }
 

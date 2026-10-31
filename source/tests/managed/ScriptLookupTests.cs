@@ -54,6 +54,12 @@ public class ScriptLookupTests : IDisposable
 
     public void Ping() => Calls++;
 
+    public T? OpenGeneric<T>()
+    {
+      Calls += 100;
+      return default;
+    }
+
     public int Add(int a, int b) => a + b;
 
     public float Scale(float value) => value * 2f;
@@ -314,6 +320,20 @@ public class ScriptLookupTests : IDisposable
     Assert.False(handle.tryInvoke("ToString"));
     Assert.Equal(0, target.StartCalls);
     Assert.Equal(0, target.FixedCalls);
+  }
+
+  [Fact]
+  public void TryInvoke_RefusesAnOpenGenericMethodWithoutFaultingTheTarget()
+  {
+    var target = Add(new Target());
+    var handle = Handle();
+
+    Assert.False(handle.tryInvoke("OpenGeneric"));
+
+    Assert.True(handle.isAlive);
+    Assert.Equal(0, target.Calls);
+    Assert.True(handle.tryInvoke("Ping"));
+    Assert.Equal(1, target.Calls);
   }
 
   [Fact]

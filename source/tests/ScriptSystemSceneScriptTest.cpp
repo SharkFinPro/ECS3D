@@ -230,7 +230,7 @@ namespace {
     EXPECT_FLOAT_EQ(findField(mainScene->findScript("Alpha"), "speed").at("value").get<float>(), 9.0f);
   }
 
-  TEST_F(SceneScriptSystemTest, AReplacedUnresolvedSceneScriptIsRetriedAndWarnedAgain)
+  TEST_F(SceneScriptSystemTest, AReplacedUnresolvedSceneScriptIsRetriedAndAttaches)
   {
     state.unresolvedClasses.insert("Ghost");
     addSceneScript(*mainScene, "Ghost");
@@ -247,6 +247,43 @@ namespace {
     EXPECT_EQ(count(mainCall("start", "Ghost")), 1);
     EXPECT_EQ(count(mainCall("fixed", "Ghost")), 1);
     EXPECT_EQ(warningsAbout("Scene script 'Ghost' in scene 'Main'"), 1);
+  }
+
+  TEST_F(SceneScriptSystemTest, AReplacedSceneScriptThatStaysUnresolvedIsRetriedAndWarnedAgain)
+  {
+    state.unresolvedClasses.insert("Ghost");
+    addSceneScript(*mainScene, "Ghost");
+    scriptSystem.start(*mainScene);
+    scriptSystem.fixedUpdate(*mainScene, 0.02f);
+    ASSERT_EQ(warningsAbout("Scene script 'Ghost' in scene 'Main'"), 1);
+
+    ASSERT_TRUE(mainScene->removeScript("Ghost"));
+    addSceneScript(*mainScene, "Ghost");
+    scriptSystem.fixedUpdate(*mainScene, 0.02f);
+    scriptSystem.fixedUpdate(*mainScene, 0.02f);
+
+    EXPECT_EQ(count(mainCall("attachScene", "Ghost")), 2);
+    EXPECT_EQ(warningsAbout("Scene script 'Ghost' in scene 'Main'"), 2);
+    EXPECT_EQ(count(mainCall("start", "Ghost")), 0);
+  }
+
+  TEST_F(SceneScriptSystemTest, AVariableUpdateStartsASceneScriptThatAttachAllAttachedFirst)
+  {
+    addSceneScript(*mainScene, "Alpha");
+    const auto a = addObjectTo(*mainScene, "A", { "Mover" });
+    scriptSystem.attachAll(*mainScene);
+    ASSERT_EQ(count(mainCall("attachScene", "Alpha")), 1);
+    ASSERT_EQ(count(mainCall("start", "Alpha")), 0);
+    ASSERT_EQ(count(call("start", a, "Mover")), 0);
+
+    scriptSystem.variableUpdate(*mainScene);
+    scriptSystem.variableUpdate(*mainScene);
+
+    EXPECT_EQ(count(mainCall("start", "Alpha")), 1);
+    EXPECT_EQ(count(mainCall("variable", "Alpha")), 2);
+    EXPECT_LT(indexOf(mainCall("start", "Alpha")), indexOf(mainCall("variable", "Alpha")));
+    EXPECT_EQ(count(call("start", a, "Mover")), 1);
+    EXPECT_EQ(count(call("variable", a, "Mover")), 2);
   }
 
   TEST_F(SceneScriptSystemTest, RemovingASceneScriptStopsAndDetachesItWhileObjectScriptsKeepTicking)
@@ -431,6 +468,23 @@ namespace {
     ASSERT_EQ(alpha->getFields().size(), 4u);
     EXPECT_FLOAT_EQ(findField(alpha, "speed").at("value").get<float>(), 7.5f);
     EXPECT_EQ(beta->getFields(), saved);
+  }
+
+  TEST_F(SceneScriptSystemTest, SyncFieldsToDataKeepsASceneScriptsSavedValuesWhenAGetterFaultsIt)
+  {
+    state.exposedByClass["Alpha"] = exposedFieldsJson;
+    const auto alpha = addSceneScript(*mainScene, "Alpha");
+    scriptSystem.start(*mainScene);
+    state.floats["speed"] = 4.0f;
+    scriptSystem.syncFieldsToData(*mainScene);
+    ASSERT_FLOAT_EQ(findField(alpha, "speed").at("value").get<float>(), 4.0f);
+    const auto saved = alpha->getFields();
+
+    state.floats["speed"] = 9.0f;
+    state.readFieldHook = [this](const std::string&) { state.unhealthyClasses.insert("Alpha"); };
+    scriptSystem.syncFieldsToData(*mainScene);
+
+    EXPECT_EQ(alpha->getFields(), saved);
   }
 
   TEST_F(SceneScriptSystemTest, SyncFieldsToDataAlsoRefreshesTheScenesObjectScripts)

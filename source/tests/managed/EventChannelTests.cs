@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using ScriptBridge;
 using Xunit;
 
 namespace ECS3DManagedTests;
 
-public class EventChannelTests
+[Collection("BridgeInstances")]
+public unsafe class EventChannelTests
 {
+  private static readonly List<(int Level, string Message)> LogCalls = new();
+
   private readonly HashSet<string> _faulted = new();
   private readonly List<(string Owner, string Event, Exception Ex)> _faults = new();
   private readonly EventChannel _channel;
@@ -19,6 +23,28 @@ public class EventChannelTests
       _faulted.Add(owner);
       _faults.Add((owner, name, ex));
     });
+  }
+
+  [UnmanagedCallersOnly]
+  private static void RecordLog(int level, IntPtr message)
+    => LogCalls.Add((level, Marshal.PtrToStringUTF8(message) ?? ""));
+
+  // Points the log binding at a recorder and returns the warnings (level 3) the action logged.
+  private static List<string> CaptureWarnings(Action action)
+  {
+    var original = NativeBindings.Log;
+    LogCalls.Clear();
+    NativeBindings.Log = new LogBindings { write = &RecordLog };
+    try
+    {
+      action();
+      return LogCalls.FindAll(call => call.Level == 3).ConvertAll(call => call.Message);
+    }
+    finally
+    {
+      NativeBindings.Log = original;
+      LogCalls.Clear();
+    }
   }
 
   [Fact]
@@ -67,12 +93,19 @@ public class EventChannelTests
     var got = new List<int>();
     var sub = _channel.subscribe<int>("a", "score", got.Add);
 
-    _channel.publish("score", "not an int");
-    _channel.publish("score", 2.5);
+    var warnings = CaptureWarnings(() =>
+    {
+      _channel.publish("score", "not an int");
+      _channel.publish("score", 2.5);
+    });
     Assert.Empty(got);
+    var warning = Assert.Single(warnings);
+    Assert.Contains("score", warning);
+    Assert.Contains("Int32", warning);
 
-    _channel.publish("score", 7);
+    var later = CaptureWarnings(() => _channel.publish("score", 7));
     Assert.Equal(new[] { 7 }, got);
+    Assert.Empty(later);
     Assert.True(sub.isActive);
     Assert.Empty(_faults);
   }
@@ -175,6 +208,22 @@ public class EventChannelTests
     var ex = Record.Exception(() => _channel.publish("go", null));
 
     Assert.Null(ex);
+  }
+
+  [Fact]
+  public void AThrowingFaultCallbackDoesNotReachThePublisherOrLaterSubscribers()
+  {
+    var channel = new EventChannel(_ => false, (_, _, _) => throw new InvalidOperationException("fault sink"));
+    var received = new List<string>();
+    channel.subscribe("bad", "go", _ => throw new InvalidOperationException("boom"));
+    channel.subscribe("good", "go", _ => received.Add("good"));
+
+    var ran = -1;
+    var ex = Record.Exception(() => ran = channel.publish("go", null));
+
+    Assert.Null(ex);
+    Assert.Equal(2, ran);
+    Assert.Equal(new[] { "good" }, received);
   }
 
   [Fact]

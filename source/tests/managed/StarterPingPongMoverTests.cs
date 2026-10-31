@@ -251,6 +251,10 @@ public class StarterPingPongMoverTests : StarterMotionTargetsFixture
     var script = SidewaysPlatform(true);
     FakeNatives.Set("Collider.has", true);
     FakeNatives.Set("Collider.getShape", (int)ColliderShape.Sphere);
+    FakeNatives.Set("Collider.getBoxOffset", new Vector3(0f, 1f, 0f));
+    FakeNatives.Set("Collider.getBoxOffset.ok", true);
+    FakeNatives.Set("Collider.getBoxSize", new Vector3(1f, 2f, 1f));
+    FakeNatives.Set("Collider.getBoxSize.ok", true);
 
     Tick(script, 0.25f);
 

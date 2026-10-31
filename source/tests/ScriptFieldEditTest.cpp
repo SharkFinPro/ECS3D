@@ -88,6 +88,17 @@ namespace {
               "field 'count' value is out of range for int");
   }
 
+  TEST(ScriptFieldEditTest, ParsedPositiveIntegersAreCheckedAgainstIntsRange)
+  {
+    // json::parse stores a non-negative integer as unsigned, the form a wire edit arrives in.
+    const auto parsed = [](const char* text) { return makeField("count", "int", nlohmann::json::parse(text)); };
+    ASSERT_TRUE(parsed("2147483647").at("value").is_number_unsigned());
+
+    EXPECT_EQ(reject(parsed("2147483647"), "int"), "");
+    EXPECT_EQ(reject(parsed("2147483648"), "int"), "field 'count' value is out of range for int");
+    EXPECT_EQ(reject(parsed("18446744073709551615"), "int"), "field 'count' value is out of range for int");
+  }
+
   TEST(ScriptFieldEditTest, RejectsAValueOfTheWrongJsonType)
   {
     EXPECT_EQ(reject(makeField("speed", "float", "fast"), "float"), "field 'speed' value does not match type float");

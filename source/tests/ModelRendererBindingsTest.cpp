@@ -147,6 +147,11 @@ namespace {
     ASSERT_EQ(edits.size(), 1u);
     EXPECT_EQ(edits[0].first, object->getUUID());
     EXPECT_EQ(edits[0].second, renderer);
+
+    bindings.setShouldRender(uuid.c_str(), false);
+    EXPECT_FALSE(renderer->getShouldRender());
+    EXPECT_FALSE(bindings.getShouldRender(uuid.c_str()));
+    EXPECT_EQ(BindingContext::takeComponentEdits().size(), 1u);
   }
 
   TEST_F(ModelRendererBindingsTest, UnknownObjectReadsNeutralDefaultsAndRecordsNothing)

@@ -2,6 +2,7 @@
 
 #include "ComponentOpsBindings.h"
 #include "BindingContext.h"
+#include "ComponentRegistry.h"
 #include "TestScene.h"
 #include "ObjectManagerFixtures.h"
 #include "objects/Object.h"
@@ -146,6 +147,29 @@ TEST_F(ScriptComponentOpsTest, AddRefusesADuplicateOfAUniqueType)
 
   EXPECT_FALSE(add(object, "RigidBody"));
   EXPECT_EQ(object->getComponent<RigidBody>(ComponentType::rigidBody), first);
+}
+
+TEST_F(ScriptComponentOpsTest, AddRefusesASecondColliderShapeThatSharesTheSlot)
+{
+  const auto object = fixtures::addObject(scene, "Object");
+  ASSERT_TRUE(add(object, "Box"));
+  (void)BindingContext::takeStructuralComponentChanges();
+
+  EXPECT_FALSE(add(object, "Sphere"));
+  EXPECT_FALSE(has(object, "Sphere"));
+  EXPECT_TRUE(has(object, "Box"));
+  EXPECT_TRUE(BindingContext::takeStructuralComponentChanges().empty());
+}
+
+TEST_F(ScriptComponentOpsTest, AddRefusesScriptEvenThoughTheRegistryCanCreateIt)
+{
+  const auto object = fixtures::addObject(scene, "Object");
+  ASSERT_NE(scene.componentRegistry->create("Script"), nullptr);
+  (void)BindingContext::takeStructuralComponentChanges();
+
+  EXPECT_FALSE(add(object, "Script"));
+  EXPECT_TRUE(object->getScripts().empty());
+  EXPECT_TRUE(BindingContext::takeStructuralComponentChanges().empty());
 }
 
 TEST_F(ScriptComponentOpsTest, AddAndRemoveBothRefuseTransform)

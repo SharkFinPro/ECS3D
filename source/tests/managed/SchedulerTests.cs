@@ -5,6 +5,7 @@ using Xunit;
 
 namespace ECS3DManagedTests;
 
+[Collection("BridgeInstances")]
 public class SchedulerTests
 {
   private readonly Scheduler _scheduler = new();
@@ -65,6 +66,23 @@ public class SchedulerTests
     Assert.Equal(1, calls);
 
     _scheduler.tick(1f);
+    Assert.Equal(2, calls);
+  }
+
+  [Fact]
+  public void EveryThatLaggedByWholeIntervalsSkipsAheadToTheNextFutureDueTime()
+  {
+    var calls = 0;
+    _scheduler.every(0.125f, () => calls++);
+
+    _scheduler.tick(1f);
+    Assert.Equal(1, calls);
+
+    // Due moved to 1.125 (not 0.25), so the short ticks below do not burst.
+    _scheduler.tick(0.0625f);
+    Assert.Equal(1, calls);
+
+    _scheduler.tick(0.0625f);
     Assert.Equal(2, calls);
   }
 

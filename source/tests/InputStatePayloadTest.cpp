@@ -241,9 +241,12 @@ TEST(InputStatePayload, ATruncatedViewBlockIsTreatedAsAbsentWhileTheMouseBlockSu
   ASSERT_TRUE(replication::parseInputState(full)->view.has_value());
 }
 
-TEST(InputStatePayload, ACameraStringPastTheUuidBoundIsNoViewWhileTheLongestAllowedOneParses)
+TEST(InputStatePayload, ACameraStringPastTheMaxViewCameraBytesIsNoViewWhileTheLongestAllowedOneParses)
 {
-  const std::string longest(replication::maxViewCameraBytes, 'a');
+  static_assert(replication::maxViewCameraBytes == 64,
+                "the camera string bound is pinned at 64 bytes on purpose");
+
+  const std::string longest(64, 'a');
   const auto accepted = replication::parseInputState(
     replication::buildInputState(true, {}, 7.0f, 8.0f, 0.0f, 0.0f, 0.0f, 0,
                                  replication::InputView{ longest, 1.0f, 2.0f, 3.0f, 4.0f }));
@@ -260,7 +263,7 @@ TEST(InputStatePayload, ACameraStringPastTheUuidBoundIsNoViewWhileTheLongestAllo
   EXPECT_EQ(refused->mouseX, 7.0f);
   EXPECT_FALSE(refused->view.has_value());
 
-  const std::string justOver(replication::maxViewCameraBytes + 1, 'a');
+  const std::string justOver(65, 'a');
   const auto over = replication::parseInputState(
     replication::buildInputState(true, {}, 7.0f, 8.0f, 0.0f, 0.0f, 0.0f, 0,
                                  replication::InputView{ justOver, 1.0f, 2.0f, 3.0f, 4.0f }));
