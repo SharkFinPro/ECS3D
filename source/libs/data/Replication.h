@@ -183,7 +183,7 @@ enum class SceneEditResult {
   unknownAsset,      // instantiatePrefab named an asset with no usable body
   rejected,          // well formed and refused: a reparent or reorder that would cycle or that changes
                      // nothing, a reorder whose index is out of range for its target list, a restoreObject
-                     // whose body names a uuid already live or would exceed maxObjectDepth, a restoreObject
+                     // whose body names a uuid already live or the nil uuid, or would exceed maxObjectDepth, a restoreObject
                      // whose adopt list names a uuid twice (or one the body also names) or a uuid living
                      // under a different parent than the one it is being restored under, or a creating
                      // op naming the nil uuid or one the scene is already using

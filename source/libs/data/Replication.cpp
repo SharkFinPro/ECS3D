@@ -548,7 +548,7 @@ namespace {
 
   // Result of walking a restoreObject body before anything is built: whether any node's uuid is missing
   // or failed to parse (malformed - the wire and the sender disagree about the payload), whether any
-  // node's uuid already names a live object (collides - refuse rather than corrupt the uuid-keyed
+  // node's uuid is nil or already names a live object (collides - refuse rather than corrupt the uuid-keyed
   // lookups everything else relies on), and the body's own height (0 for a leaf), so the caller can add
   // it to a target depth before building anything.
   struct RestoreBodyWalk {

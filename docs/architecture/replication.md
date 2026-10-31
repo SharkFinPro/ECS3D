@@ -41,7 +41,7 @@ a still-live uuid, the sibling index it should hold under the restored object, a
 Transform blob — undo of a `removeObject`, which needs to reclaim the still-live children
 `deleteObjectsMarkedForDeletion` promoted to the removed object's own parent back under it in the same
 atomic op (the body alone cannot carry them back: their uuids are already live, which the body-walk
-collision check would refuse). The op validates the adopt entries before it changes the scene: it resolves
+collision check would refuse; the same check refuses a nil uuid anywhere in the body). The op validates the adopt entries before it changes the scene: it resolves
 each uuid to a live object and checks its current parent against `restoreObject`'s own target parent,
 checks for a repeated uuid or one the body itself already names, and computes the combined depth (the
 body's own height, or one more than the tallest adopted subtree when any are given) - a mismatch, a
@@ -53,7 +53,8 @@ puts the detached children back where they were before returning `failed`. The
 three `sceneEdit` ops that create an object (`addObject`, `duplicateObject`, `instantiatePrefab`) may carry
 a client-chosen `"uuid"` for what they create; the server honors it and picks its own when the field is
 absent. A uuid that does not parse is a `malformedEdit`; the nil uuid, or one already in use, is
-`rejected` with the scene untouched. It exists so the sender knows which object its own edit produced -
+`rejected` with the scene untouched (a `restoreObject` body is held to the same rule for every uuid it
+carries, root or descendant). It exists so the sender knows which object its own edit produced -
 the undo history records the reverse edit against that uuid.
 A `duplicateObject` made while the scene runs seeds the copy's live values from the source's live values
 (`ObjectManager.cpp`'s `copyLiveValues`, through each component's `pack`/`unpack`; scripts excluded; components with no live/authored split are simply copied) and leaves the
