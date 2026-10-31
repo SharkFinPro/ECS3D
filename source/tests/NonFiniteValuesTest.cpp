@@ -4,6 +4,7 @@
 #include "ComponentRegistry.h"
 #include "ProjectSerializer.h"
 #include "TestScene.h"
+#include "WireTypes.h"
 #include "assets/AssetRegistry.h"
 #include "objects/Object.h"
 #include "objects/ObjectManager.h"
@@ -21,6 +22,8 @@
 
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
+#include <Protocol.h>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -70,6 +73,79 @@ namespace {
         set(candidate);
         fixtures::expectNear(what, get(), finiteValue);
       }
+    }
+  }
+
+  // The payload RigidBody::pack writes, with every field the caller's own so one can be non-finite.
+  struct RigidBodyFields {
+    glm::vec3 velocity{ 1.0f, 2.0f, 3.0f };
+    float friction = 0.25f;
+    bool doGravity = false;
+    float gravity = -4.5f;
+    glm::vec3 angularVelocity{ -1.0f, 0.5f, 2.0f };
+    float mass = 7.5f;
+  };
+
+  net::Message packedRigidBody(const RigidBodyFields& fields)
+  {
+    net::Message message(net::MessageType::undefined);
+    message.write(ComponentType::rigidBody);
+    message.write(fields.velocity);
+    message.write(fields.friction);
+    message.write(fields.doGravity);
+    message.write(fields.gravity);
+    message.write(fields.angularVelocity);
+    message.write(fields.mass);
+    return message;
+  }
+
+  void unpackRigidBody(RigidBody& rigidBody, const RigidBodyFields& fields)
+  {
+    const auto message = packedRigidBody(fields);
+    net::MessageReader reader(message);
+    // pack writes the type discriminator first; unpack expects the reader positioned after it.
+    static_cast<void>(reader.read<ComponentType>());
+    rigidBody.unpack(reader);
+  }
+
+  // Applies a finite payload first - the positive control - then one whose field is non-finite, and requires
+  // every field, the corrupted one included, to keep the finite payload's value.
+  void expectUnpackDropsNonFinite(const char* what, const std::function<void(RigidBodyFields&, float)>& corrupt)
+  {
+    for (const float value : nonFiniteValues)
+    {
+      RigidBody rigidBody;
+      const RigidBodyFields finiteFields;
+      unpackRigidBody(rigidBody, finiteFields);
+      fixtures::expectNear(what, rigidBody.getVelocity(), finiteFields.velocity);
+      EXPECT_FLOAT_EQ(rigidBody.getMass(), finiteFields.mass) << what;
+
+      RigidBodyFields next;
+      next.velocity = { 9.0f, 9.0f, 9.0f };
+      next.friction = 0.9f;
+      next.doGravity = true;
+      next.gravity = -1.0f;
+      next.angularVelocity = { 8.0f, 8.0f, 8.0f };
+      next.mass = 20.0f;
+      corrupt(next, value);
+      unpackRigidBody(rigidBody, next);
+
+      // The corrupted field keeps the earlier value; every other field takes the new payload, which also pins
+      // that the reader stayed aligned past the dropped value.
+      const bool velocityDropped = !std::isfinite(next.velocity.x) || !std::isfinite(next.velocity.y)
+        || !std::isfinite(next.velocity.z);
+      const bool angularDropped = !std::isfinite(next.angularVelocity.x) || !std::isfinite(next.angularVelocity.y)
+        || !std::isfinite(next.angularVelocity.z);
+
+      fixtures::expectNear(what, rigidBody.getVelocity(), velocityDropped ? finiteFields.velocity : next.velocity);
+      fixtures::expectNear(what, rigidBody.getAngularVelocity(),
+                           angularDropped ? finiteFields.angularVelocity : next.angularVelocity);
+      EXPECT_FLOAT_EQ(rigidBody.getFriction(), std::isfinite(next.friction) ? next.friction : finiteFields.friction)
+        << what;
+      EXPECT_FLOAT_EQ(rigidBody.getGravity(), std::isfinite(next.gravity) ? next.gravity : finiteFields.gravity)
+        << what;
+      EXPECT_FLOAT_EQ(rigidBody.getMass(), std::isfinite(next.mass) ? next.mass : finiteFields.mass) << what;
+      EXPECT_EQ(rigidBody.getDoGravity(), next.doGravity) << what;
     }
   }
 
@@ -197,6 +273,60 @@ TEST(NonFiniteValues, RigidBodySettersIgnoreThem)
   expectFloatSetterIgnoresNonFinite("RigidBody gravity", -9.81f,
     [&](const float value) { rigidBody.setGravity(value); },
     [&] { return rigidBody.getGravity(); });
+}
+
+TEST(NonFiniteValues, RigidBodyUnpackDropsANonFiniteVelocity)
+{
+  expectUnpackDropsNonFinite("velocity x", [](RigidBodyFields& fields, const float value) { fields.velocity.x = value; });
+  expectUnpackDropsNonFinite("velocity z", [](RigidBodyFields& fields, const float value) { fields.velocity.z = value; });
+}
+
+TEST(NonFiniteValues, RigidBodyUnpackDropsANonFiniteAngularVelocity)
+{
+  expectUnpackDropsNonFinite("angular velocity y",
+    [](RigidBodyFields& fields, const float value) { fields.angularVelocity.y = value; });
+}
+
+TEST(NonFiniteValues, RigidBodyUnpackDropsANonFiniteFriction)
+{
+  expectUnpackDropsNonFinite("friction", [](RigidBodyFields& fields, const float value) { fields.friction = value; });
+}
+
+TEST(NonFiniteValues, RigidBodyUnpackDropsANonFiniteGravity)
+{
+  expectUnpackDropsNonFinite("gravity", [](RigidBodyFields& fields, const float value) { fields.gravity = value; });
+}
+
+TEST(NonFiniteValues, RigidBodyUnpackDropsANonFiniteMass)
+{
+  expectUnpackDropsNonFinite("mass", [](RigidBodyFields& fields, const float value) { fields.mass = value; });
+}
+
+TEST(NonFiniteValues, RigidBodyLoadFromJsonDropsNonFiniteInsteadOfThrowing)
+{
+  RigidBody rigidBody;
+  rigidBody.setVelocity({ 1.0f, 2.0f, 3.0f });
+  rigidBody.setGravity(-3.0f);
+
+  // A non-finite float saved as json null.
+  const nlohmann::json data = {
+    { "type", "RigidBody" },
+    { "velocity", { nullptr, 5.0f, 6.0f } },
+    { "angularVelocity", { 0.0f, 0.0f, 4.0f } },
+    { "friction", 0.75f },
+    { "doGravity", true },
+    { "gravity", nullptr },
+    { "mass", 3.0f }
+  };
+
+  EXPECT_NO_THROW(rigidBody.loadFromJSON(data));
+
+  fixtures::expectNear("velocity", rigidBody.getVelocity(), glm::vec3(1.0f, 2.0f, 3.0f));
+  EXPECT_FLOAT_EQ(rigidBody.getGravity(), -3.0f);
+  // Positive control: the finite fields of the same document were applied.
+  EXPECT_FLOAT_EQ(rigidBody.getFriction(), 0.75f);
+  EXPECT_FLOAT_EQ(rigidBody.getMass(), 3.0f);
+  fixtures::expectNear("angular velocity", rigidBody.getAngularVelocity(), glm::vec3(0.0f, 0.0f, 4.0f));
 }
 
 TEST(NonFiniteValues, CameraSettersIgnoreThem)
