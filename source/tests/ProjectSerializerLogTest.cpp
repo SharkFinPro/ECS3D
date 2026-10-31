@@ -204,6 +204,41 @@ TEST_F(ProjectSerializerLogTest, LoadingMalformedJsonFailsAndLogsAnError)
   EXPECT_TRUE(hasEntry(sink, LogLevel::error, LogCategory::assets));
 }
 
+TEST_F(ProjectSerializerLogTest, LoadingAnEmptyOrNonObjectProjectFailsAndLogsAnError)
+{
+  ASSERT_TRUE(m_serializer->save(m_file));
+  ASSERT_TRUE(m_serializer->load(m_file));
+  m_sceneManager.addScene(std::make_shared<SceneAsset>(
+    uuids::uuid::from_string(branchSceneUUID).value(), "Keep", m_componentRegistry));
+
+  for (const std::string content : { "{}", "[]", "null" })
+  {
+    {
+      std::ofstream out(m_file);
+      out << content;
+    }
+
+    const auto sink = addRingBuffer();
+
+    EXPECT_FALSE(m_serializer->load(m_file)) << content;
+    EXPECT_TRUE(hasEntry(sink, LogLevel::error, LogCategory::assets)) << content;
+    EXPECT_EQ(m_sceneManager.getScenes().size(), 1u) << content;
+  }
+}
+
+TEST_F(ProjectSerializerLogTest, LoadingAMinimalProjectObjectStillSucceeds)
+{
+  {
+    std::ofstream out(m_file);
+    out << R"({"assets":{}})";
+  }
+
+  const auto sink = addRingBuffer();
+
+  EXPECT_TRUE(m_serializer->load(m_file));
+  EXPECT_FALSE(hasEntry(sink, LogLevel::error, LogCategory::assets));
+}
+
 TEST_F(ProjectSerializerLogTest, SavingToAnUnopenablePathFailsAndLogsAnError)
 {
   const auto sink = addRingBuffer();

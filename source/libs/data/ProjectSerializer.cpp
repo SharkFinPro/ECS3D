@@ -43,9 +43,9 @@ nlohmann::json ProjectSerializer::serialize() const
 
 void ProjectSerializer::deserialize(const nlohmann::json& saveData) const
 {
-  if (saveData.empty())
+  if (!saveData.is_object() || !saveData.contains("assets"))
   {
-    return;
+    throw std::runtime_error("not a project: expected an object with an \"assets\" key");
   }
 
   const auto& assets = saveData.at("assets");
