@@ -63,6 +63,50 @@ TEST_F(Keybinds, ParsesAndFormatsRoundTripForVariousChords)
   }
 }
 
+TEST_F(Keybinds, EveryNamedKeyMapsToItsGlfwKeyCode)
+{
+  struct Named {
+    const char* name;
+    int key;
+  };
+
+  // GLFW's numeric key codes, written out independently of the table under test.
+  const Named expected[] = {
+    { "A", 65 }, { "B", 66 }, { "C", 67 }, { "D", 68 }, { "E", 69 }, { "F", 70 }, { "G", 71 }, { "H", 72 },
+    { "I", 73 }, { "J", 74 }, { "K", 75 }, { "L", 76 }, { "M", 77 }, { "N", 78 }, { "O", 79 }, { "P", 80 },
+    { "Q", 81 }, { "R", 82 }, { "S", 83 }, { "T", 84 }, { "U", 85 }, { "V", 86 }, { "W", 87 }, { "X", 88 },
+    { "Y", 89 }, { "Z", 90 },
+    { "0", 48 }, { "1", 49 }, { "2", 50 }, { "3", 51 }, { "4", 52 },
+    { "5", 53 }, { "6", 54 }, { "7", 55 }, { "8", 56 }, { "9", 57 },
+    { "F1", 290 }, { "F2", 291 }, { "F3", 292 }, { "F4", 293 }, { "F5", 294 }, { "F6", 295 },
+    { "F7", 296 }, { "F8", 297 }, { "F9", 298 }, { "F10", 299 }, { "F11", 300 }, { "F12", 301 },
+    { "Escape", 256 }, { "Enter", 257 }, { "Tab", 258 }, { "Backspace", 259 }, { "Insert", 260 },
+    { "Delete", 261 }, { "Right", 262 }, { "Left", 263 }, { "Down", 264 }, { "Up", 265 },
+    { "PageUp", 266 }, { "PageDown", 267 }, { "Home", 268 }, { "End", 269 }, { "Space", 32 }
+  };
+
+  for (const auto& [name, key] : expected)
+  {
+    EXPECT_EQ(parseChord(name), (KeyChord{ key, 0 })) << name;
+    EXPECT_EQ(formatChord(KeyChord{ key, 0 }), name) << name;
+  }
+}
+
+TEST_F(Keybinds, EachModifierMapsToItsGlfwBit)
+{
+  EXPECT_EQ(parseChord("Shift+A"), (KeyChord{ 65, 0x1 }));
+  EXPECT_EQ(parseChord("Ctrl+A"), (KeyChord{ 65, 0x2 }));
+  EXPECT_EQ(parseChord("Alt+A"), (KeyChord{ 65, 0x4 }));
+  EXPECT_EQ(parseChord("Super+A"), (KeyChord{ 65, 0x8 }));
+  EXPECT_EQ(parseChord("Ctrl+Shift+Alt+Super+A"), (KeyChord{ 65, 0xF }));
+
+  EXPECT_EQ(formatChord(KeyChord{ 65, 0x1 }), "Shift+A");
+  EXPECT_EQ(formatChord(KeyChord{ 65, 0x2 }), "Ctrl+A");
+  EXPECT_EQ(formatChord(KeyChord{ 65, 0x4 }), "Alt+A");
+  EXPECT_EQ(formatChord(KeyChord{ 65, 0x8 }), "Super+A");
+  EXPECT_EQ(formatChord(KeyChord{ 65, 0xF }), "Ctrl+Shift+Alt+Super+A");
+}
+
 TEST_F(Keybinds, ParsingIsCaseInsensitiveButFormattingIsCanonical)
 {
   const auto lower = parseChord("ctrl+shift+z");
@@ -136,6 +180,35 @@ TEST_F(Keybinds, AssignRefusesAChordAlreadyHeldByAnotherAction)
   // Neither action's binding moved: the refusal must not have half-applied.
   EXPECT_EQ(table.binding(EditorAction::focusSelection), parseChord("F"));
   EXPECT_EQ(table.binding(EditorAction::saveProject), saveChord);
+
+  EXPECT_FALSE(settings.hasPendingWrite());
+  EXPECT_EQ(settings.get<std::string>("keybinds.focusSelection", "absent"), "absent");
+}
+
+TEST_F(Keybinds, AssigningAnActionItsCurrentChordSucceeds)
+{
+  SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  const auto outcome = table.assign(EditorAction::saveProject, *parseChord("Ctrl+S"), settings);
+
+  EXPECT_EQ(outcome.result, KeybindTable::AssignResult::assigned);
+  EXPECT_FALSE(outcome.heldBy.has_value());
+  EXPECT_EQ(table.binding(EditorAction::saveProject), parseChord("Ctrl+S"));
+}
+
+TEST_F(Keybinds, ResettingAnActionAlreadyAtItsDefaultSucceeds)
+{
+  SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  const auto outcome = table.reset(EditorAction::saveProject, settings);
+
+  EXPECT_EQ(outcome.result, KeybindTable::AssignResult::assigned);
+  EXPECT_FALSE(outcome.heldBy.has_value());
+  EXPECT_EQ(table.binding(EditorAction::saveProject), parseChord("Ctrl+S"));
 }
 
 TEST_F(Keybinds, PositiveControlAssigningAFreeChordSucceeds)
@@ -259,10 +332,8 @@ TEST_F(Keybinds, ResetRestoresTheDefaultAfterUnbinding)
 
 TEST_F(Keybinds, ResetRestoresAGizmoActionsDefaultChord)
 {
-  // The gizmo actions ship with real defaults (1/2/3) now rather than unbound, so resetting one after
-  // unbinding it follows the same path as any other action's default - unlike the old unbound-default
-  // case (removed: no catalogue action ships with an unbound default anymore, so that reset path has no
-  // instance to exercise it through the public API).
+  // The gizmo actions ship with real defaults (1/2/3), so resetting one after unbinding it follows the
+  // same path as any other action's default.
   SettingsStore settings(m_file);
   KeybindTable table;
   table.load(settings);
@@ -355,6 +426,24 @@ TEST_F(Keybinds, AHandEditedDuplicateResolvesToAValidBijectionOnLoad)
   }
 }
 
+TEST_F(Keybinds, AStoredChordBeatsAnotherActionsDefaultOnTheSameChord)
+{
+  // saveProject comes first in the catalogue and defaults to Ctrl+S, but only focusSelection's value was
+  // actually written, so it wins and the default holder is left unbound.
+  writeFile(R"({"keybinds.focusSelection": "Ctrl+S"})");
+
+  const SettingsStore settings(m_file);
+  KeybindTable table;
+  table.load(settings);
+
+  EXPECT_EQ(table.binding(EditorAction::focusSelection), parseChord("Ctrl+S"));
+  EXPECT_FALSE(table.binding(EditorAction::saveProject).has_value());
+  EXPECT_EQ(table.actionFor(*parseChord("Ctrl+S")), EditorAction::focusSelection);
+
+  // Positive control: an action whose default nothing contests keeps it.
+  EXPECT_EQ(table.binding(EditorAction::undo), parseChord("Ctrl+Z"));
+}
+
 TEST_F(Keybinds, AHandEditedGarbageValueFallsBackToTheDefault)
 {
   writeFile(R"({"keybinds.saveProject": "not a real chord"})");
@@ -393,6 +482,26 @@ TEST_F(Keybinds, PositiveControlKeyCodeFallbackRoundTripsAValidCode)
 
   ASSERT_TRUE(chord.has_value());
   EXPECT_EQ(chord->key, 65);
+}
+
+TEST_F(Keybinds, AKeyOutsideTheNamedSetFormatsAsItsCode)
+{
+  EXPECT_EQ(formatChord(KeyChord{ 96, 0 }), "Key96");
+  EXPECT_EQ(formatChord(KeyChord{ 96, 0x2 }), "Ctrl+Key96");
+  EXPECT_EQ(parseChord("Key96"), (KeyChord{ 96, 0 }));
+  EXPECT_EQ(parseChord("Ctrl+Key96"), (KeyChord{ 96, 0x2 }));
+}
+
+TEST_F(Keybinds, AKeyCodeOfZeroIsAValidFallbackChord)
+{
+  EXPECT_EQ(parseChord("Key0"), (KeyChord{ 0, 0 }));
+  EXPECT_EQ(formatChord(KeyChord{ 0, 0 }), "Key0");
+}
+
+TEST_F(Keybinds, ANegativeKeyFormatsAsNothingButKeepsItsModifiers)
+{
+  EXPECT_TRUE(formatChord(KeyChord{ -1, 0 }).empty());
+  EXPECT_EQ(formatChord(KeyChord{ -1, 0x2 }), "Ctrl");
 }
 
 TEST_F(Keybinds, LoadFallsBackToTheDefaultWhenAStoredKeyCodeOverflows)

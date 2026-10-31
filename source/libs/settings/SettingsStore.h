@@ -5,6 +5,7 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <string>
 
 // Per-user, per-machine editor preferences, held outside project data on purpose: project state is
@@ -21,11 +22,15 @@ public:
   // settings.json in the directory userDataDirectory() resolves (see ECS3DLog's UserDataDirectory.h).
   [[nodiscard]] static std::filesystem::path defaultFile();
 
+  // The clock drives the debounce and is injectable so tests need no real waiting.
+  using NowFunction = std::function<std::chrono::steady_clock::time_point()>;
+
   // Reads the file if it is there, so a store is never half-initialized: writing without having read
   // first would drop every key this build does not set. A file that fails to parse is renamed aside
   // rather than overwritten, and the defaults are used, so the editor always starts.
   explicit SettingsStore(std::filesystem::path file,
-                         std::chrono::milliseconds writeDelay = std::chrono::milliseconds(1000));
+                         std::chrono::milliseconds writeDelay = std::chrono::milliseconds(1000),
+                         NowFunction now = &std::chrono::steady_clock::now);
 
   ~SettingsStore();
 
@@ -90,6 +95,8 @@ private:
   std::filesystem::path m_file;
 
   std::chrono::milliseconds m_writeDelay;
+
+  NowFunction m_now;
 
   nlohmann::json m_values = nlohmann::json::object();
 

@@ -65,6 +65,9 @@ TEST_F(RecentProjectRecordingTest, TemplateIsRecordedOnceSavedToAFolder)
 TEST_F(RecentProjectRecordingTest, BuiltInDefaultIsNotRecorded)
 {
   EXPECT_FALSE(recentProjectToRecord(locateProject({}), false).has_value());
+
+  // Once a save into a folder has unblocked template writes, the empty project file alone must still decide.
+  EXPECT_FALSE(recentProjectToRecord(locateProject({}), true).has_value());
   EXPECT_TRUE(recentProjectToRecord(makeProject("Plain", false), false).has_value());
 }
 

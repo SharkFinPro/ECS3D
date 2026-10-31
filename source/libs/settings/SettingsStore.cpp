@@ -31,8 +31,9 @@ std::filesystem::path SettingsStore::defaultFile()
   return userDataDirectory() / "settings.json";
 }
 
-SettingsStore::SettingsStore(std::filesystem::path file, const std::chrono::milliseconds writeDelay)
-  : m_file(std::move(file)), m_writeDelay(writeDelay)
+SettingsStore::SettingsStore(std::filesystem::path file, const std::chrono::milliseconds writeDelay,
+                             NowFunction now)
+  : m_file(std::move(file)), m_writeDelay(writeDelay), m_now(std::move(now))
 {
   load();
 }
@@ -109,7 +110,7 @@ void SettingsStore::update()
     return;
   }
 
-  const auto now = std::chrono::steady_clock::now();
+  const auto now = m_now();
 
   if (now >= m_writeDue || now - m_writeFirstRequested >= maxWriteDelay)
   {
@@ -139,11 +140,11 @@ void SettingsStore::scheduleWrite()
 {
   if (!m_writePending)
   {
-    m_writeFirstRequested = std::chrono::steady_clock::now();
+    m_writeFirstRequested = m_now();
   }
 
   m_writePending = true;
-  m_writeDue = std::chrono::steady_clock::now() + m_writeDelay;
+  m_writeDue = m_now() + m_writeDelay;
 }
 
 void SettingsStore::write()
