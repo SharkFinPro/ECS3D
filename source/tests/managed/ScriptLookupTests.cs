@@ -54,7 +54,11 @@ public class ScriptLookupTests : IDisposable
 
     public void Ping() => Calls++;
 
-    public void OpenGeneric<T>() => Calls += 100;
+    public T? OpenGeneric<T>()
+    {
+      Calls += 100;
+      return default;
+    }
 
     public int Add(int a, int b) => a + b;
 
