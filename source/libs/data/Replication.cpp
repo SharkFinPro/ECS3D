@@ -575,8 +575,10 @@ namespace {
       return { .malformed = true };
     }
 
+    // The nil uuid is never a usable identity: the root would keep it (restoreSubtree does not register it)
+    // while a descendant would be silently renumbered, so refuse it anywhere in the body, like the create ops.
     RestoreBodyWalk result;
-    result.collides = objectManager.getObjectByUUID(nodeUUID.value()) != nullptr
+    result.collides = nodeUUID->is_nil() || objectManager.getObjectByUUID(nodeUUID.value()) != nullptr
       || !seenInThisBody.insert(nodeUUID.value()).second;
 
     if (node.contains("children"))
