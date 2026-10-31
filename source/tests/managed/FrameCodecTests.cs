@@ -90,6 +90,81 @@ public class FrameCodecTests
   }
 
   [Fact]
+  public void ReadFrame_AcceptsABodyOfExactlyMaxBytesAndRefusesOneMore()
+  {
+    // The body is the type byte plus the payload, so a 4-byte payload makes bodyLen 5.
+    var frame = TcpBackend.FrameBytes(0x01, new byte[] { 1, 2, 3, 4 });
+
+    using var atMax = new MemoryStream(frame);
+    Assert.True(TcpBackend.ReadFrame(atMax, out var type, out var payload, maxBytes: 5));
+    Assert.Equal(0x01, type);
+    Assert.Equal(new byte[] { 1, 2, 3, 4 }, payload);
+
+    using var overMax = new MemoryStream(frame);
+    Assert.False(TcpBackend.ReadFrame(overMax, out _, out _, maxBytes: 4));
+  }
+
+  [Fact]
+  public void ReadFrame_DecodesAFrameWithAnEmptyPayload()
+  {
+    var frame = TcpBackend.FrameBytes(0x09, Array.Empty<byte>());
+
+    using var stream = new MemoryStream(frame);
+    var ok = TcpBackend.ReadFrame(stream, out var type, out var payload);
+
+    Assert.True(ok);
+    Assert.Equal(0x09, type);
+    Assert.Empty(payload);
+  }
+
+  [Fact]
+  public void ReadFrame_RefusesAZeroLengthBody()
+  {
+    using var stream = new MemoryStream(new byte[] { 0, 0, 0, 0 });
+
+    Assert.False(TcpBackend.ReadFrame(stream, out _, out _));
+  }
+
+  [Fact]
+  public void ReadFrame_GivesUpOnceTheDeadlineHasPassed()
+  {
+    var frame = TcpBackend.FrameBytes(0x01, new byte[] { 1, 2, 3, 4 });
+
+    // Positive control: the same frame decodes under a deadline that is still ahead.
+    using var ahead = new MemoryStream(frame);
+    Assert.True(TcpBackend.ReadFrame(ahead, out _, out _, deadline: Environment.TickCount64 + 60000));
+
+    using var expired = new MemoryStream(frame);
+    Assert.False(TcpBackend.ReadFrame(expired, out _, out _, deadline: Environment.TickCount64 - 1));
+  }
+
+  [Fact]
+  public void ReadFrame_GivesUpOnABodyReadOnceTheDeadlineHasPassed()
+  {
+    // A deadline that expires between the header and the body: the stream hands the header over, then
+    // sleeps past the deadline before the body read begins.
+    var frame = TcpBackend.FrameBytes(0x01, new byte[] { 1, 2, 3, 4 });
+    var deadline = Environment.TickCount64 + 200;
+
+    using var stream = new SlowAfterHeaderStream(frame, 400);
+    Assert.False(TcpBackend.ReadFrame(stream, out _, out _, deadline: deadline));
+  }
+
+  private sealed class SlowAfterHeaderStream(byte[] bytes, int delayMs) : MemoryStream(bytes)
+  {
+    public override int Read(Span<byte> buffer)
+    {
+      var read = base.Read(buffer);
+      if (Position == 4)
+      {
+        System.Threading.Thread.Sleep(delayMs);
+      }
+
+      return read;
+    }
+  }
+
+  [Fact]
   public void ReadFrame_FailsOnATruncatedStream()
   {
     // Positive control for the two tests above: a stream that ends before the declared body length is

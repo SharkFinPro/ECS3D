@@ -43,6 +43,7 @@ public class BridgeLifecycleTests : IDisposable
     try
     {
       Bridge.ResetForTests();
+      Bridge.Events.clear();
     }
     finally
     {
@@ -203,7 +204,18 @@ public class BridgeLifecycleTests : IDisposable
   {
     Assert.Null(Bridge.JoinedScriptClassNames());
 
+    Directory.CreateDirectory(_dir);
     Bridge.Initialize(_dir);
+
+    Assert.Equal("", Bridge.JoinedScriptClassNames());
+  }
+
+  [Fact]
+  public void JoinedScriptClassNames_IsEmptyNotNullOnceAMissingDirectoryHasCompiled()
+  {
+    Assert.Null(Bridge.JoinedScriptClassNames());
+
+    Bridge.Initialize(Path.Combine(_dir, "missing"));
 
     Assert.Equal("", Bridge.JoinedScriptClassNames());
   }
@@ -337,6 +349,44 @@ public class BridgeLifecycleTests : IDisposable
     Assert.True(Bridge.RunGuarded(Uuid, ClassName, "test", () => instance.fixedUpdate(0.1f)));
     Assert.Equal(1, instance.Updates);
     Assert.Equal(0.1f, instance.LastDt);
+  }
+
+  [Fact]
+  public void Reload_DropsEventSubscriptionsOnceTheNewScriptsReplaceTheOld()
+  {
+    WriteScript("script.cs", ScriptSource("FirstScript"));
+    Bridge.Initialize(_dir);
+    var fired = 0;
+    Bridge.Events.subscribe("owner", "ping", _ => fired++);
+
+    // Positive control: the subscription is live until the reload.
+    Assert.Equal(1, Bridge.Events.publish("ping", null));
+    Assert.Equal(1, fired);
+
+    WriteScript("script.cs", ScriptSource("SecondScript"));
+    Assert.True(Bridge.Reload());
+
+    Assert.Equal(0, Bridge.Events.publish("ping", null));
+    Assert.Equal(1, fired);
+  }
+
+  [Fact]
+  public void Reload_CompileErrorLeavesInstancesRunningAndSubscriptionsLive()
+  {
+    WriteScript("script.cs", ScriptSource(ClassName));
+    Bridge.Initialize(_dir);
+    var instance = new StopCounter();
+    Bridge.AddInstance(Uuid, ClassName, instance);
+    var fired = 0;
+    Bridge.Events.subscribe("owner", "ping", _ => fired++);
+
+    WriteScript("script.cs", "using ScriptBridge;\npublic class Broken : ScriptBase { int x = ; }\n");
+    Assert.False(Bridge.Reload());
+
+    Assert.Equal(0, instance.StopCalls);
+    Assert.True(Bridge.TryFindScript(Uuid, ClassName, out _));
+    Assert.Equal(1, Bridge.Events.publish("ping", null));
+    Assert.Equal(1, fired);
   }
 
   [Fact]

@@ -63,6 +63,20 @@ public class AuthorizeTests
   }
 
   [Fact]
+  public void TryAuthorizeHandshake_IgnoresTheTokenWhenTheServerIsNotInEditMode()
+  {
+    // The token only guards edit rights, so a play-only server that happens to hold one still admits an
+    // editor as read-only whatever it presents.
+    var backend = new TcpBackend { EditMode = false, ExpectedToken = "secret" };
+
+    Assert.True(Try(backend, Handshake(RoleEditor, "wrong"), out var role));
+    Assert.Equal(RoleEditor, role);
+
+    Assert.True(Try(backend, Handshake(RoleEditor), out role));
+    Assert.Equal(RoleEditor, role);
+  }
+
+  [Fact]
   public void TryAuthorizeHandshake_AdmitsAnEditorWithNoExpectedTokenInEditMode()
   {
     var backend = new TcpBackend { EditMode = true, ExpectedToken = "" };

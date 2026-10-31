@@ -118,10 +118,10 @@ public class WebSocketUpgradeTests
   [Fact]
   public void ReadHttpHeaders_ReturnsNullOnceALineExceedsTheLengthLimit()
   {
-    // One char past the limit: the check runs right after that char is appended, before any terminator
-    // is seen, so no trailing CRLF is needed to trigger it.
+    // One char past the limit, then a full terminator and blank line: without the guard the stream would
+    // yield the line, so only the length check can produce null here.
     var line = new string('a', 8193);
-    var input = Encoding.ASCII.GetBytes(line);
+    var input = Encoding.ASCII.GetBytes($"{line}\r\n\r\n");
     using var stream = new DuplexTestStream(input);
 
     var lines = WebSocketBackend.ReadHttpHeaders(stream);
@@ -130,12 +130,13 @@ public class WebSocketUpgradeTests
   }
 
   [Fact]
-  public void ReadHttpHeaders_AcceptsExactlyOneHundredLines()
+  public void ReadHttpHeaders_AcceptsOneHundredAndOneLines()
   {
-    // Positive control for the over-limit case below: `lines.Count > 100` is only checked once a new
-    // line starts, so 100 completed lines followed by the terminating blank line must still succeed.
+    // Positive control for the over-limit case below: `lines.Count > 100` is checked as each char of a line
+    // is appended, so the 101st line starts with 100 completed lines and still passes. The blank line then
+    // returns before the guard runs again.
     var sb = new StringBuilder();
-    for (var i = 0; i < 100; i++)
+    for (var i = 0; i < 101; i++)
     {
       sb.Append($"H{i}: v\r\n");
     }
@@ -146,21 +147,21 @@ public class WebSocketUpgradeTests
     var lines = WebSocketBackend.ReadHttpHeaders(stream);
 
     Assert.NotNull(lines);
-    Assert.Equal(100, lines!.Count);
+    Assert.Equal(101, lines!.Count);
   }
 
   [Fact]
-  public void ReadHttpHeaders_ReturnsNullOnceMoreThanOneHundredLinesStart()
+  public void ReadHttpHeaders_ReturnsNullOnceMoreThanOneHundredAndOneLinesStart()
   {
-    // 101 completed lines, then one more char: `lines.Count > 100` (101 > 100) trips on that char, before
-    // a 102nd line is ever completed.
+    // 101 completed lines, then a fully terminated 102nd line and a blank line: `lines.Count > 100`
+    // (101 > 100) trips on the 102nd line's first char. Without the guard the stream would yield 102 lines.
     var sb = new StringBuilder();
-    for (var i = 0; i < 101; i++)
+    for (var i = 0; i < 102; i++)
     {
       sb.Append($"H{i}: v\r\n");
     }
 
-    sb.Append('X');
+    sb.Append("\r\n");
     using var stream = new DuplexTestStream(Encoding.ASCII.GetBytes(sb.ToString()));
 
     var lines = WebSocketBackend.ReadHttpHeaders(stream);

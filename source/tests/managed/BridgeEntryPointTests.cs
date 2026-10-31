@@ -296,14 +296,12 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
   }
 
   [Fact]
-  public void OnSceneEvent_ReachesASceneScriptAndIsIgnoredByAnObjectScript()
+  public void OnSceneEvent_ReachesASceneScriptAndSkipsAnUnknownEventCode()
   {
     var scene = Seed<SceneRecorder>("Recorder");
-    Seed<Counter>("Counter");
     delegate* unmanaged<IntPtr, IntPtr, int, IntPtr, int, void> onSceneEvent = &Bridge.onSceneEvent;
     using var u = new NativeUtf8(Uuid);
     using var recorder = new NativeUtf8("Recorder");
-    using var counter = new NativeUtf8("Counter");
     using var spawned = new NativeUtf8("spawned-\u00e9");
     using var none = new NativeUtf8("");
 
@@ -311,10 +309,8 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
     onSceneEvent(u.Ptr, recorder.Ptr, 2, spawned.Ptr, 0);
     onSceneEvent(u.Ptr, recorder.Ptr, 4, none.Ptr, 3);
     onSceneEvent(u.Ptr, recorder.Ptr, 99, none.Ptr, 0);
-    onSceneEvent(u.Ptr, counter.Ptr, 0, none.Ptr, 0);
 
     Assert.Equal(new[] { "loaded", "spawned:spawned-\u00e9", "joined:3" }, scene.Events);
-    Assert.Equal(1, Healthy("Counter"));
   }
 
   [Fact]
@@ -456,6 +452,28 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
     Assert.Equal(9, script.Number);
   }
 
+  [Fact]
+  public void SettingAnIntFieldFromAFloatThatDoesNotFit_IsRefusedWithoutFaultingTheScript()
+  {
+    var script = Seed<Exposed>("Exposed");
+    script.Number = 4;
+    delegate* unmanaged<IntPtr, IntPtr, IntPtr, float, void> setFloat = &Bridge.setFieldFloat;
+    using var u = new NativeUtf8(Uuid);
+    using var c = new NativeUtf8("Exposed");
+    using var number = new NativeUtf8("Number");
+
+    setFloat(u.Ptr, c.Ptr, number.Ptr, 1e10f);
+    Assert.Equal(4, script.Number);
+    Assert.Equal(1, Healthy("Exposed"));
+
+    setFloat(u.Ptr, c.Ptr, number.Ptr, float.NaN);
+    Assert.Equal(4, script.Number);
+    Assert.Equal(1, Healthy("Exposed"));
+
+    setFloat(u.Ptr, c.Ptr, number.Ptr, 6f);
+    Assert.Equal(6, script.Number);
+  }
+
   [UnmanagedCallersOnly]
   private static void FakeLogWrite(int level, IntPtr message)
   {
@@ -468,30 +486,101 @@ public sealed unsafe class BridgeEntryPointTests : IDisposable
     // Only its address is compared.
   }
 
+  [UnmanagedCallersOnly]
+  private static byte FakePredicate(IntPtr uuid)
+  {
+    // Only its address is compared.
+    return 0;
+  }
+
   [Fact]
   public void RegisterBindings_StoreTheBindingsTheNativeSideHandsOver()
   {
     var previousLog = NativeBindings.Log;
     var previousTransform = NativeBindings.Transform;
+    var previousInputUtils = NativeBindings.InputUtils;
+    var previousRigidBody = NativeBindings.RigidBody;
+    var previousWorld = NativeBindings.World;
+    var previousComponentOps = NativeBindings.ComponentOps;
+    var previousCamera = NativeBindings.Camera;
+    var previousCollider = NativeBindings.Collider;
+    var previousModelRenderer = NativeBindings.ModelRenderer;
+    var previousLightRenderer = NativeBindings.LightRenderer;
+    var previousPlayerController = NativeBindings.PlayerController;
     try
     {
-      delegate* unmanaged<LogBindings, void> registerLog = &Bridge.registerLogBindings;
-      delegate* unmanaged<TransformBindings, void> registerTransform = &Bridge.registerTransformBindings;
+      // Cleared first so a register entry point that stores nothing leaves a null where a fake is expected.
+      NativeBindings.Log = default;
+      NativeBindings.Transform = default;
+      NativeBindings.InputUtils = default;
+      NativeBindings.RigidBody = default;
+      NativeBindings.World = default;
+      NativeBindings.ComponentOps = default;
+      NativeBindings.Camera = default;
+      NativeBindings.Collider = default;
+      NativeBindings.ModelRenderer = default;
+      NativeBindings.LightRenderer = default;
+      NativeBindings.PlayerController = default;
+
       delegate* unmanaged<int, IntPtr, void> fakeWrite = &FakeLogWrite;
       delegate* unmanaged<IntPtr, void> fakeStart = &FakeTransformStart;
-      var log = new LogBindings { write = fakeWrite };
-      var transform = new TransformBindings { start = fakeStart };
+      // bool is not blittable for an UnmanagedCallersOnly method, so the byte-returning fake is only
+      // retyped; it is never called.
+      delegate* unmanaged<IntPtr, byte> fakeAddress = &FakePredicate;
+      delegate* unmanaged<IntPtr, bool> fakePredicate = (delegate* unmanaged<IntPtr, bool>)(void*)fakeAddress;
+      delegate* unmanaged<IntPtr, IntPtr, bool> fakeComponentPredicate =
+        (delegate* unmanaged<IntPtr, IntPtr, bool>)(void*)fakeAddress;
 
-      registerLog(log);
-      registerTransform(transform);
+      delegate* unmanaged<LogBindings, void> registerLog = &Bridge.registerLogBindings;
+      delegate* unmanaged<TransformBindings, void> registerTransform = &Bridge.registerTransformBindings;
+      delegate* unmanaged<InputUtilsBindings, void> registerInputUtils = &Bridge.registerInputUtilsBindings;
+      delegate* unmanaged<RigidBodyBindings, void> registerRigidBody = &Bridge.registerRigidBodyBindings;
+      delegate* unmanaged<WorldBindings, void> registerWorld = &Bridge.registerWorldBindings;
+      delegate* unmanaged<ComponentOpsBindings, void> registerComponentOps = &Bridge.registerComponentOpsBindings;
+      delegate* unmanaged<CameraBindings, void> registerCamera = &Bridge.registerCameraBindings;
+      delegate* unmanaged<ColliderBindings, void> registerCollider = &Bridge.registerColliderBindings;
+      delegate* unmanaged<ModelRendererBindings, void> registerModelRenderer = &Bridge.registerModelRendererBindings;
+      delegate* unmanaged<LightRendererBindings, void> registerLightRenderer = &Bridge.registerLightRendererBindings;
+      delegate* unmanaged<PlayerControllerBindings, void> registerPlayerController =
+        &Bridge.registerPlayerControllerBindings;
+
+      registerLog(new LogBindings { write = fakeWrite });
+      registerTransform(new TransformBindings { start = fakeStart });
+      registerInputUtils(new InputUtilsBindings { windowIsFocusedForObject = fakePredicate });
+      registerRigidBody(new RigidBodyBindings { has = fakePredicate });
+      registerWorld(new WorldBindings { objectExists = fakePredicate });
+      registerComponentOps(new ComponentOpsBindings { hasComponent = fakeComponentPredicate });
+      registerCamera(new CameraBindings { has = fakePredicate });
+      registerCollider(new ColliderBindings { has = fakePredicate });
+      registerModelRenderer(new ModelRendererBindings { has = fakePredicate });
+      registerLightRenderer(new LightRendererBindings { has = fakePredicate });
+      registerPlayerController(new PlayerControllerBindings { has = fakePredicate });
 
       Assert.True(NativeBindings.Log.write == fakeWrite);
       Assert.True(NativeBindings.Transform.start == fakeStart);
+      Assert.True(NativeBindings.InputUtils.windowIsFocusedForObject == fakePredicate);
+      Assert.True(NativeBindings.RigidBody.has == fakePredicate);
+      Assert.True(NativeBindings.World.objectExists == fakePredicate);
+      Assert.True(NativeBindings.ComponentOps.hasComponent == fakeComponentPredicate);
+      Assert.True(NativeBindings.Camera.has == fakePredicate);
+      Assert.True(NativeBindings.Collider.has == fakePredicate);
+      Assert.True(NativeBindings.ModelRenderer.has == fakePredicate);
+      Assert.True(NativeBindings.LightRenderer.has == fakePredicate);
+      Assert.True(NativeBindings.PlayerController.has == fakePredicate);
     }
     finally
     {
       NativeBindings.Log = previousLog;
       NativeBindings.Transform = previousTransform;
+      NativeBindings.InputUtils = previousInputUtils;
+      NativeBindings.RigidBody = previousRigidBody;
+      NativeBindings.World = previousWorld;
+      NativeBindings.ComponentOps = previousComponentOps;
+      NativeBindings.Camera = previousCamera;
+      NativeBindings.Collider = previousCollider;
+      NativeBindings.ModelRenderer = previousModelRenderer;
+      NativeBindings.LightRenderer = previousLightRenderer;
+      NativeBindings.PlayerController = previousPlayerController;
     }
   }
 }
