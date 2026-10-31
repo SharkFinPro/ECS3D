@@ -381,6 +381,15 @@ TEST(PhysicsIntegration, TwoBodiesMeetingSlowlyDoNotBounce)
   const auto [fastLeft, fastRight] = velocitiesAfterMeeting(30.0f);
   expectNear("fast left", fastLeft, { 0, 0, 0 });
   expectNear("fast right", fastRight, { 30.0f, 0, 0 });
+
+  // The bounce threshold is two units a second: just under it they still move on together, just over it they trade.
+  const auto [belowLeft, belowRight] = velocitiesAfterMeeting(1.99f);
+  expectNear("below left", belowLeft, { 0.995f, 0, 0 });
+  expectNear("below right", belowRight, { 0.995f, 0, 0 });
+
+  const auto [aboveLeft, aboveRight] = velocitiesAfterMeeting(2.01f);
+  expectNear("above left", aboveLeft, { 0, 0, 0 });
+  expectNear("above right", aboveRight, { 2.01f, 0, 0 });
 }
 
 TEST(PhysicsIntegration, ARestingBodyPushedFromTheSideMovesByItsMass)

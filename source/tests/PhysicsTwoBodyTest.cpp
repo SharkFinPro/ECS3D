@@ -63,6 +63,8 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
   // heavy as its volume, so the pile they fall into mixes masses a hundred times apart.
   PileRandom random;
   std::vector<std::shared_ptr<RigidBody>> bodies;
+  // The radius of the largest sphere inside each body: its center cannot rest closer than this to the ground.
+  std::vector<float> insideRadii;
   for (int level = 0; level < 4; ++level)
   {
     for (int row = 0; row < 4; ++row)
@@ -80,6 +82,7 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
           fixtures::addSphereCollider(sphere, 1.0f);
           bodies.push_back(addBody(sphere, true));
           bodies.back()->setMass(4.0f / 3.0f * glm::pi<float>() * radius * radius * radius);
+          insideRadii.push_back(radius);
           continue;
         }
 
@@ -90,6 +93,7 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
         fixtures::addBoxCollider(box);
         bodies.push_back(addBody(box, true));
         bodies.back()->setMass(8.0f * scale.x * scale.y * scale.z);
+        insideRadii.push_back(std::min({ scale.x, scale.y, scale.z }));
       }
     }
   }
@@ -99,6 +103,7 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
   CollisionSystem collisionSystem;
 
   float fastestSideways = 0.0f;
+  float shallowestClearance = std::numeric_limits<float>::max();
   for (int tick = 0; tick < 300; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, serverDt);
@@ -111,10 +116,24 @@ TEST(PhysicsIntegration, APileOfUnevenBodiesSettlesWithoutFlingingAnyOfThemOut)
     }
   }
 
+  // How far each center is above the ground top (at 1) beyond its inside radius: negative means sunk into it.
+  for (size_t index = 0; index < bodies.size(); ++index)
+  {
+    const auto position = bodies[index]->getOwner()->getComponent<Transform>(ComponentType::transform)->getPosition();
+    shallowestClearance = std::min(shallowestClearance, position.y - 1.0f - insideRadii[index]);
+  }
+
   // Units per second. The bodies land at up to 35 falling straight down, and knock each other sideways at up to
   // about 30. A heavy body used to squeeze a light one out at hundreds, and spin it to thousands of degrees a
   // second, which flung it further still.
   EXPECT_LT(fastestSideways, 60.0f);
+
+  // Positive control: the pile does knock bodies sideways, so the bound above is measuring something.
+  EXPECT_GT(fastestSideways, 1.0f);
+
+  // No body sank into the ground. There is no upper bound: how tall the pile ends up depends on how the
+  // bodies happen to fall, which differs between compilers.
+  EXPECT_GT(shallowestClearance, -0.05f);
 }
 
 TEST(PhysicsIntegration, ABodyIsIntegratedOnceEvenWhenItsChildInheritsIt)

@@ -10,7 +10,9 @@
 #include "objects/components/Transform.h"
 #include "objects/components/collisions/BoxCollider.h"
 #include "PhysicsTestHelpers.h"
+#include "WireTypes.h"
 
+#include <Protocol.h>
 #include <glm/ext/scalar_constants.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -25,6 +27,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <utility>
 #include <vector>
@@ -312,6 +315,79 @@ TEST(PhysicsIntegration, SetMassRefusesToLeaveTheBodyAtZeroOrNegativeMass)
   // Positive control: an ordinary positive mass is kept as given, not silently floored too.
   body->setMass(20.0f);
   EXPECT_FLOAT_EQ(body->getMass(), 20.0f);
+}
+
+namespace {
+  // Pins the floor RigidBody.cpp applies (kMinMass), which is not exposed.
+  constexpr float minimumMass = 0.001f;
+
+  nlohmann::json rigidBodyJsonWithMass(const float mass)
+  {
+    return {
+      { "type", "RigidBody" },
+      { "velocity", { 0, 0, 0 } },
+      { "angularVelocity", { 0, 0, 0 } },
+      { "friction", 0.5f },
+      { "doGravity", true },
+      { "gravity", -9.81f },
+      { "mass", mass }
+    };
+  }
+
+  float massAfterUnpacking(const float mass)
+  {
+    net::Message message(net::MessageType::undefined);
+    message.write(ComponentType::rigidBody);
+    message.write(glm::vec3(0.0f));
+    message.write(0.5f);
+    message.write(true);
+    message.write(-9.81f);
+    message.write(glm::vec3(0.0f));
+    message.write(mass);
+
+    net::MessageReader reader(message);
+    static_cast<void>(reader.read<ComponentType>());
+
+    RigidBody body;
+    body.unpack(reader);
+
+    return body.getMass();
+  }
+}
+
+TEST(PhysicsIntegration, SetMassKeepsAMassAtTheFloorAndRaisesOneJustUnderIt)
+{
+  RigidBody body;
+
+  body.setMass(minimumMass);
+  EXPECT_FLOAT_EQ(body.getMass(), minimumMass);
+
+  body.setMass(minimumMass * 0.9f);
+  EXPECT_FLOAT_EQ(body.getMass(), minimumMass);
+}
+
+TEST(PhysicsIntegration, LoadingABodyFromJsonFloorsAMassOfZeroOrLess)
+{
+  RigidBody body;
+
+  body.loadFromJSON(rigidBodyJsonWithMass(0.0f));
+  EXPECT_FLOAT_EQ(body.getMass(), minimumMass);
+
+  body.loadFromJSON(rigidBodyJsonWithMass(-5.0f));
+  EXPECT_FLOAT_EQ(body.getMass(), minimumMass);
+
+  // Positive control: an ordinary mass loads as given.
+  body.loadFromJSON(rigidBodyJsonWithMass(12.5f));
+  EXPECT_FLOAT_EQ(body.getMass(), 12.5f);
+}
+
+TEST(PhysicsIntegration, UnpackingABodyFloorsAMassOfZeroOrLess)
+{
+  EXPECT_FLOAT_EQ(massAfterUnpacking(0.0f), minimumMass);
+  EXPECT_FLOAT_EQ(massAfterUnpacking(-5.0f), minimumMass);
+
+  // Positive control: an ordinary mass unpacks as given.
+  EXPECT_FLOAT_EQ(massAfterUnpacking(12.5f), 12.5f);
 }
 
 TEST(PhysicsIntegration, ACollisionAlongTheTranslationVectorCancelsTheVelocityIntoIt)

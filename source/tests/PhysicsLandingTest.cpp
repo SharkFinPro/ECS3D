@@ -52,8 +52,7 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
   float lowest = std::numeric_limits<float>::max();
   float highest = std::numeric_limits<float>::lowest();
 
-  // Sixty ticks: enough to land at tick eight and settle, and short enough to stay clear of the point
-  // where Transform's uint8_t update counter wraps and a collider's cached bounding box goes stale.
+  // Sixty ticks: enough to land at tick eight and settle.
   for (int tick = 0; tick < 60; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
@@ -71,8 +70,8 @@ TEST(PhysicsIntegration, ABodyFallingOntoAStaticBoxComesToRestOnTopOfIt)
   // Two unit boxes, so resting on top means their centres are exactly two apart - and because the height
   // is read after the collision pass rather than between it and the integrate, the sink of one gravity
   // step is already corrected by the time it is sampled. There is nothing loose about it to allow for.
-  EXPECT_GT(lowest, 1.5f);
-  EXPECT_LT(highest, 3.0f);
+  EXPECT_NEAR(lowest, 2.0f, 0.05f);
+  EXPECT_NEAR(highest, 2.0f, 0.05f);
 }
 
 TEST(PhysicsIntegration, ABoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
@@ -108,6 +107,9 @@ TEST(PhysicsIntegration, ABoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
   }
 
   EXPECT_LT(maxAngularSpeed, 0.05f);
+
+  // On top of the ground (both half extents are 1) and still over its middle, not sunk in or slid off.
+  fixtures::expectNear("resting position", transformOf(falling)->getPosition(), { 0, 2, 0 }, 0.05f);
 }
 
 TEST(PhysicsIntegration, ABoxLandingOnACornerStillPicksUpSpin)
@@ -285,11 +287,13 @@ namespace {
 
 TEST(PhysicsIntegration, ABoxLandingWithSidewaysSpeedStopsSlidingWithinAShortDistance)
 {
-  // The landing's own impulse takes a share of the slide, and each resting tick after it takes friction times
-  // the weight that tick: the box stops about a unit and a half from where it came down, lying flat.
+  // It reaches the ground at x = 1.5 (five ticks at three units a second) and slides only about 0.06 further
+  // before friction stops it. That is too short to tell from sticking on landing, so the window catches a box that
+  // loses its slide before landing (x near 1.2) or keeps it (past 8), not a stick at the landing point.
   const auto landed = landSliding(0.5f);
 
-  EXPECT_LT(landed.position.x, 2.0f);
+  EXPECT_GT(landed.position.x, 1.45f);
+  EXPECT_LT(landed.position.x, 1.7f);
   EXPECT_LT(glm::length(glm::vec2(landed.velocity.x, landed.velocity.z)), 1e-4f);
   fixtures::expectNear("up", landed.up, { 0, 1, 0 }, 1e-3f);
   EXPECT_NEAR(landed.position.y, 2.0f, 0.05f);
@@ -347,6 +351,21 @@ TEST(PhysicsIntegration, ARealTiltOrAContactFromAboveIsNotLaidFlush)
                        { 0, 1, 0 }, 1e-5f);
 }
 
+TEST(PhysicsIntegration, ATiltJustInsideTheFlushWindowIsLaidFlatAndJustOutsideItIsLeftAlone)
+{
+  // The window is a tilt whose sine is 0.0175, which is 1.003 degrees.
+  const glm::vec3 inside{ 0, 0, 0.99f };
+  const glm::vec3 outside{ 0, 0, 1.02f };
+
+  fixtures::expectNear("inside", localUpOf(rotationAfterRestingOn(inside, { 0, 0.01f, 0 }, flatUnderside)),
+                       { 0, 1, 0 }, 1e-5f);
+
+  const auto kept = rotationAfterRestingOn(outside, { 0, 0.01f, 0 }, flatUnderside);
+  fixtures::expectNear("outside", kept, outside, 1e-4f);
+  // The tilt stays: its sine is above the 0.0175 window, where the 0.99 degrees above (0.0173) is below it.
+  EXPECT_GT(std::fabs(localUpOf(kept).x), 0.0175f);
+}
+
 TEST(PhysicsIntegration, AChildOfATurnedParentIsLaidFlushWithoutTakingOnTheParentsTurn)
 {
   const auto scene = makeScene();
@@ -384,6 +403,7 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
   // Spin left about the vertical after the landing is only damped, so it takes a while to fall under the rest
   // threshold; the rotation is sampled once it has.
   glm::vec3 settledRotation{ 0 };
+  glm::vec3 settledSpin{ 1 };
   for (int tick = 0; tick < 300; ++tick)
   {
     PhysicsSystem::fixedUpdate(*scene.objectManager, dt);
@@ -392,14 +412,17 @@ TEST(PhysicsIntegration, AFlatBoxLandingSlightlyTiltedComesToRestAndStopsTurning
     if (tick == 200)
     {
       settledRotation = transformOf(falling)->getRotation();
+      settledSpin = body->getAngularVelocity();
     }
   }
 
-  // Compared exactly: the complaint is a rotation that never stops changing, however slightly.
+  // Both ends of the last hundred ticks are at rest, and a body at rest has exactly no spin and is not rewritten,
+  // so its rotation is compared exactly: the complaint is a rotation that never stops changing, however slightly.
+  EXPECT_EQ(glm::length(settledSpin), 0.0f);
+  EXPECT_EQ(glm::length(body->getAngularVelocity()), 0.0f);
   EXPECT_EQ(transformOf(falling)->getRotation().x, settledRotation.x);
   EXPECT_EQ(transformOf(falling)->getRotation().y, settledRotation.y);
   EXPECT_EQ(transformOf(falling)->getRotation().z, settledRotation.z);
-  EXPECT_EQ(glm::length(body->getAngularVelocity()), 0.0f);
 
   // Lying flat, not frozen at whatever small tilt the manifold already counts as a whole face.
   fixtures::expectNear("up", localUpOf(transformOf(falling)->getRotation()), { 0, 1, 0 }, 1e-5f);
@@ -434,6 +457,22 @@ TEST(PhysicsIntegration, TheSupportPointIsClampedToTheNearestManifoldEdgeWhenThe
 
   expectNear("edge support point", PhysicsSystem::supportPoint({ 0.2f, 0, 3 }, { 0, 1, 0 }, edge),
              { 0.2f, -0.5f, 0 });
+}
+
+TEST(PhysicsIntegration, ACenterOfMassJustPastTheManifoldEdgeCountsAsOverItOnlyWithinTheTriangleTolerance)
+{
+  // A wide square, so the containment tolerance (1e-5 of the triangle's size) is a distance the floats resolve.
+  const std::array<glm::vec3, 4> square{
+    glm::vec3{ -50, -1, -50 }, glm::vec3{ 50, -1, -50 }, glm::vec3{ 50, -1, 50 }, glm::vec3{ -50, -1, 50 }
+  };
+
+  // 5e-4 past the +x edge is 5e-6 of the 100-unit triangle: still counted as over it, so it is not clamped.
+  expectNear("within tolerance", PhysicsSystem::supportPoint({ 50.0005f, 4, 10 }, { 0, 1, 0 }, square),
+             { 50.0005f, -1, 10 });
+
+  // 2e-3 past is 2e-5: outside, so it is clamped back onto the edge.
+  expectNear("beyond tolerance", PhysicsSystem::supportPoint({ 50.002f, 4, 10 }, { 0, 1, 0 }, square),
+             { 50, -1, 10 });
 }
 
 TEST(PhysicsIntegration, AStallLongerThanTheStepCapHasItsBankedTimeDroppedNotCarriedForward)

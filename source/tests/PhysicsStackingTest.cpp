@@ -149,7 +149,9 @@ TEST(PhysicsIntegration, ABallRollingAlongTheGroundComesToRest)
   // it within a few of its own widths.
   const auto [position, velocity] = ballAfterRolling(0.5f);
 
+  EXPECT_GT(position.x, 1.0f);
   EXPECT_LT(position.x, 8.0f);
+  EXPECT_NEAR(position.y, 2.0f, 0.05f);
   EXPECT_LT(glm::length(velocity), 1e-3f);
 
   // Positive control: frictionless, it slides the whole way at the speed it started with.
@@ -208,6 +210,9 @@ TEST(PhysicsIntegration, ASmallerBoxRestingNearTheEdgeOfALargerOneDoesNotSpin)
   }
 
   EXPECT_LT(maxAngularSpeed, 0.05f);
+
+  // On the larger box (top at 1, half height 1) and still near the edge it landed by, not slid off or sunk in.
+  fixtures::expectNear("resting position", transformOf(falling)->getPosition(), { 1.5f, 2, 0 }, 0.1f);
 }
 
 TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStaysSupportedRatherThanFallingThroughOrOff)
@@ -248,9 +253,12 @@ TEST(PhysicsIntegration, ABoxOverhangingTheEdgeOfALargerBoxStaysSupportedRatherT
     }
   }
 
-  EXPECT_GT(lowest, 1.5f);
-  EXPECT_LT(highest, 3.0f);
+  EXPECT_NEAR(lowest, 2.0f, 0.1f);
+  EXPECT_NEAR(highest, 2.0f, 0.1f);
   EXPECT_LT(maxAngularSpeed, 0.05f);
+
+  // Still over the ground: it neither tipped off the edge (x = 3) nor slid far from where it landed.
+  EXPECT_NEAR(transformOf(falling)->getPosition().x, 2.2f, 0.1f);
 }
 
 TEST(PhysicsIntegration, AYawedBoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
@@ -286,6 +294,8 @@ TEST(PhysicsIntegration, AYawedBoxLandingFlatOnAStaticBoxSettlesWithoutSpinning)
   }
 
   EXPECT_LT(maxAngularSpeed, 0.05f);
+
+  fixtures::expectNear("resting position", transformOf(falling)->getPosition(), { 0, 2, 0 }, 0.05f);
 }
 
 namespace {
