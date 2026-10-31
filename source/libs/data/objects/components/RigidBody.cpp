@@ -212,24 +212,12 @@ nlohmann::json RigidBody::serialize()
 
 void RigidBody::loadFromJSON(const nlohmann::json& componentData)
 {
-  const auto& velocity = componentData.at("velocity");
-  m_velocity.set(glm::vec3(
-    velocity.at(0),
-    velocity.at(1),
-    velocity.at(2)
-  ));
-
-  const auto& angularVelocity = componentData.at("angularVelocity");
-  m_angularVelocity.set(glm::vec3(
-    angularVelocity.at(0),
-    angularVelocity.at(1),
-    angularVelocity.at(2)
-  ));
-
-  m_friction.set(componentData.at("friction"));
-  m_doGravity.set(componentData.at("doGravity"));
-  m_gravity.set(componentData.at("gravity"));
-  setMass(componentData.at("mass"));
+  setVelocity(finiteCheck::readVec3OrNaN(componentData.at("velocity")));
+  setAngularVelocity(finiteCheck::readVec3OrNaN(componentData.at("angularVelocity")));
+  setFriction(finiteCheck::readFloatOrNaN(componentData.at("friction")));
+  setDoGravity(componentData.at("doGravity"));
+  setGravity(finiteCheck::readFloatOrNaN(componentData.at("gravity")));
+  setMass(finiteCheck::readFloatOrNaN(componentData.at("mass")));
 }
 
 void RigidBody::pack(net::Message& message) const
@@ -246,10 +234,11 @@ void RigidBody::pack(net::Message& message) const
 
 void RigidBody::unpack(net::MessageReader& messageReader)
 {
-  m_velocity.set(messageReader.read<glm::vec3>());
-  m_friction.set(messageReader.read<float>());
-  m_doGravity.set(messageReader.read<bool>());
-  m_gravity.set(messageReader.read<float>());
-  m_angularVelocity.set(messageReader.read<glm::vec3>());
+  // Each value is always read, even when its setter drops it, so the reader stays aligned.
+  setVelocity(messageReader.read<glm::vec3>());
+  setFriction(messageReader.read<float>());
+  setDoGravity(messageReader.read<bool>());
+  setGravity(messageReader.read<float>());
+  setAngularVelocity(messageReader.read<glm::vec3>());
   setMass(messageReader.read<float>());
 }
