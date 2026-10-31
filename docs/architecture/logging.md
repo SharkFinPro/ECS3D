@@ -8,15 +8,15 @@ forwarded to connected editors rather than only reaching its console window/log 
 a `RemoteLogSink` with `Log` alongside its file/console sinks, but only in edit mode: a play server admits an
 editor without a token, so forwarding there would leak its log. Each `run()` iteration (not gated on a fixed
 tick, so a line still gets out while the scene is stopped/paused) drains it - capped by both entry count and
-an estimated byte size (`RemoteLogSink::drain`'s two limits, set in `ServerPolicy.h` with `forwardDrainedLog`;
-a single oversized message is truncated with a marker at `write()` time, so one huge entry can neither dominate
-the sink's memory nor stall the queue for everyone behind it) -
-and forwards what comes out as a `MessageType::serverLog` (`net::packServerLog`/
-`unpackServerLog`) via `NetServer::sendToEditors`, skipping the send entirely when there is nothing queued
-and no one to send it to. That copies out the current editor connection ids under `m_editorMutex` and
-releases the lock before calling the transport, then makes one call (`Transport.serverSendToMany`, alongside
-`serverBroadcast`) for the whole batch of editor connections rather than one call per editor. The transport
-queues the batch per connection, so a stalled editor connection never blocks the authoritative tick thread,
+an estimated byte size (`RemoteLogSink::drain`'s two limits, set in `ServerPolicy.h` with `forwardDrainedLog`; a
+single oversized message is truncated with a marker at `write()` time, so one huge entry can neither dominate the
+sink's memory nor stall the queue for everyone behind it) - and forwards what comes out as a
+`MessageType::serverLog` (`net::packServerLog`/`unpackServerLog`) via `NetServer::sendToEditors`, skipping the send
+entirely when there is nothing queued and no one to send it to. That copies out the current editor connection ids
+under `m_editorMutex` and releases the lock before calling the transport, then makes one call
+(`Transport.serverSendToMany`, alongside `serverBroadcast`) for the whole batch of editor connections rather than
+one call per editor. The transport queues the batch per connection, so a stalled editor connection never blocks the
+authoritative tick thread,
 the same as for `ServerBroadcast`. Only connections authorized as `Role::editor` are named, so play
 clients do not receive it. `RemoteLogSink::drain` also reports how many entries it had to evict (queue full, nobody
 draining fast enough); the editor surfaces that count as a warning instead of silently missing history.

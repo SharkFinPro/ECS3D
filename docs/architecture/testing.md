@@ -27,7 +27,7 @@ way, as is
 json), so the suite gets them without pulling in the rest of `ECS3DEditorLib` and the ImGui/Vulkan it
 carries), `editor/AssetReferences.cpp` (depends only on ECS3DData and json), `editor/components/ConvexHullRebuild.cpp` (depends only on ECS3DData, glm and log); header-only editor headers such as `ObjectTreeOrder.h`, `ConsoleView.h`, `KeyHoldRepeat.h`, `ProjectLoadTracker.h`, `RecentProjectRecording.h`, `ScriptFieldAsset.h` and `ScriptFieldLabel.h` are reached
 through the `libs/editor` include path alone. The header-only `apps/server/ServerPolicy.h`
-(mutation authorization, scene-control plans, token generation check, inbox and disconnect drain order) and `StructuralChanges.h` (the order a tick's spawns, destroys and component changes replicate in) are covered the same way, by including them, and the
+(mutation authorization, scene-control plans, token generation check, inbox and disconnect drain order, edit-refusal resync, capped log forwarding) and `StructuralChanges.h` (the order a tick's spawns, destroys and component changes replicate in) are covered the same way, by including them, and the
 header-only `libs/net/EditToken.h` is reached through the `libs/net` include path. `PresetsTest` reads `CMakePresets.json` from the repo root via the `ECS3D_SOURCE_DIR` compile definition. It builds into `<build-dir>/tests`, not `bin/`. GoogleTest is fetched in
 `tests/CMakeLists.txt` rather than with the shared deps, and the directory is gated on
 `PROJECT_IS_TOP_LEVEL` and `BUILD_TESTING` together — `BUILD_TESTING` is a cache variable a parent project may

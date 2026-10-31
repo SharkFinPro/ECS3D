@@ -429,8 +429,9 @@ TEST(ServerPolicy, LogForwardingCarriesTheEvictionCount)
 
 TEST(ServerPolicy, LogForwardingCapsEntriesPerCall)
 {
+  constexpr std::size_t extra = 50;
   RemoteLogSink sink(1000);
-  for (std::size_t i = 0; i < maxLogEntriesPerBatch + 50; ++i)
+  for (std::size_t i = 0; i < maxLogEntriesPerBatch + extra; ++i)
   {
     sink.write(logEntry("line " + std::to_string(i)));
   }
@@ -439,25 +440,27 @@ TEST(ServerPolicy, LogForwardingCapsEntriesPerCall)
   forwardDrainedLog(sink, forwarded);
 
   ASSERT_EQ(forwarded.sends.size(), 1u);
-  EXPECT_EQ(forwarded.sends[0].entries.size(), 200u);
+  EXPECT_EQ(forwarded.sends[0].entries.size(), maxLogEntriesPerBatch);
   EXPECT_EQ(forwarded.sends[0].entries.front().message, "line 0");
 
   forwardDrainedLog(sink, forwarded);
 
   ASSERT_EQ(forwarded.sends.size(), 2u);
-  EXPECT_EQ(forwarded.sends[1].entries.size(), 50u);
-  EXPECT_EQ(forwarded.sends[1].entries.front().message, "line 200");
-  EXPECT_EQ(forwarded.sends[1].entries.back().message, "line 249");
+  EXPECT_EQ(forwarded.sends[1].entries.size(), extra);
+  EXPECT_EQ(forwarded.sends[1].entries.front().message, "line " + std::to_string(maxLogEntriesPerBatch));
+  EXPECT_EQ(forwarded.sends[1].entries.back().message, "line " + std::to_string(maxLogEntriesPerBatch + extra - 1));
 }
 
 TEST(ServerPolicy, LogForwardingCapsBytesPerCall)
 {
   // Forty 8 KiB entries are 320 KiB, past the 256 KiB cap while staying under the entry cap.
   constexpr std::size_t entryCount = 40;
+  constexpr std::size_t messageBytes = 8 * 1024;
+  // RemoteLogSink::drain charges each entry its message size plus 32 bytes of wire overhead (8224 here).
   RemoteLogSink sink(100);
   for (std::size_t i = 0; i < entryCount; ++i)
   {
-    sink.write(logEntry(std::string(8 * 1024, static_cast<char>('a' + i % 26))));
+    sink.write(logEntry(std::string(messageBytes, static_cast<char>('a' + i % 26))));
   }
 
   ForwardedLog forwarded;
@@ -465,9 +468,9 @@ TEST(ServerPolicy, LogForwardingCapsBytesPerCall)
 
   ASSERT_EQ(forwarded.sends.size(), 1u);
   const auto first = forwarded.sends[0].entries.size();
-  EXPECT_GT(first, 0u);
+  // floor(256 KiB / 8224): spelled out so a changed cap fails here instead of moving the expectation with it.
+  EXPECT_EQ(first, 31u);
   EXPECT_LT(first, entryCount);
-  EXPECT_LE(first * 8 * 1024, maxLogBatchBytes);
 
   forwardDrainedLog(sink, forwarded);
 
