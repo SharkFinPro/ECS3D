@@ -110,11 +110,12 @@ namespace {
 
     {
       std::ofstream out(file, std::ios::trunc);
-      out << nlohmann::json{ { "typed", wrongTyped } }.dump();
+      out << nlohmann::json{ { "typed", wrongTyped }, { "control", first } }.dump();
     }
 
     const SettingsStore reloaded(file);
     EXPECT_EQ(reloaded.get<T>("typed", fallback), fallback);
+    EXPECT_EQ(reloaded.get<T>("control", fallback), first);
   }
 
   bool hasAHomeDirectory()
