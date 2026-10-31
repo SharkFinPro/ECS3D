@@ -345,6 +345,89 @@ TEST(ProtocolFraming, IsMutationMessageIsFalseForEverythingElse)
   EXPECT_FALSE(net::isMutationMessage(net::MessageType::objectComponentsChanged));
 }
 
+TEST(ProtocolFraming, EveryMessageTypeIsClassifiedAsExactlyTheDocumentedMutationSet)
+{
+  const std::vector<net::MessageType> mutations{
+    net::MessageType::editComponent, net::MessageType::sceneEdit, net::MessageType::sceneControl,
+    net::MessageType::loadProject, net::MessageType::addAsset, net::MessageType::renameAsset,
+    net::MessageType::removeAsset
+  };
+
+  // Every byte value, not just the named enumerators, so a mutation type appended without updating the set
+  // fails here (a new non-mutation type correctly passes). possessSlot changes no project data, so it is
+  // deliberately outside the set.
+  for (unsigned value = 0; value <= std::numeric_limits<uint8_t>::max(); ++value)
+  {
+    const auto type = static_cast<net::MessageType>(value);
+    const bool expected = std::ranges::find(mutations, type) != mutations.end();
+
+    EXPECT_EQ(net::isMutationMessage(type), expected) << value;
+  }
+}
+
+TEST(ProtocolFraming, FitsInWireFrameLengthStopsAtTheInt32Maximum)
+{
+  constexpr auto maximum = static_cast<std::size_t>(std::numeric_limits<int32_t>::max());
+
+  EXPECT_TRUE(net::fitsInWireFrameLength(0));
+  EXPECT_TRUE(net::fitsInWireFrameLength(maximum));
+  EXPECT_FALSE(net::fitsInWireFrameLength(maximum + 1));
+}
+
+TEST(ProtocolFraming, EveryScalarReadReportsAnUnderflowWhenOneByteShort)
+{
+  const auto expectUnderflow = [](auto sample)
+  {
+    using T = decltype(sample);
+
+    net::Message message(net::MessageType::stateDelta);
+    message.write(sample);
+
+    // One byte short of the value, then exactly enough: the throw is the strict boundary, not a blanket refusal.
+    const net::Message shortMessage(net::MessageType::stateDelta, message.bytes().first(message.size() - 1));
+    net::MessageReader shortReader(shortMessage);
+    EXPECT_THROW(static_cast<void>(shortReader.read<T>()), std::runtime_error) << sizeof(T);
+
+    net::MessageReader fullReader(message);
+    EXPECT_NO_THROW(static_cast<void>(fullReader.read<T>())) << sizeof(T);
+  };
+
+  expectUnderflow(uint16_t{ 1 });
+  expectUnderflow(uint32_t{ 1 });
+  expectUnderflow(uint64_t{ 1 });
+  expectUnderflow(int32_t{ -1 });
+  expectUnderflow(1.0f);
+  expectUnderflow(1.0);
+  expectUnderflow(net::MessageType::snapshot);
+  expectUnderflow(net::Role::editor);
+}
+
+TEST(ProtocolFraming, AZeroLengthStringRoundTripsAndConsumesOnlyItsPrefix)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.writeString("").write<uint8_t>(7);
+
+  net::MessageReader reader(message);
+
+  EXPECT_EQ(reader.readString(), "");
+  EXPECT_EQ(reader.remaining(), 1u);
+  EXPECT_EQ(reader.read<uint8_t>(), 7u);
+}
+
+TEST(ProtocolFraming, AStringOneByteShortOfItsPrefixedLengthThrows)
+{
+  net::Message message(net::MessageType::sceneEdit);
+  message.writeString("abcd");
+
+  const net::Message shortMessage(net::MessageType::sceneEdit, message.bytes().first(message.size() - 1));
+  net::MessageReader shortReader(shortMessage);
+
+  EXPECT_THROW(static_cast<void>(shortReader.readString()), std::runtime_error);
+
+  net::MessageReader fullReader(message);
+  EXPECT_EQ(fullReader.readString(), "abcd");
+}
+
 TEST(ProtocolFraming, ConstructingFromABufferFramesItExactlyAsTheWritePathWould)
 {
   net::Message written(net::MessageType::snapshot);

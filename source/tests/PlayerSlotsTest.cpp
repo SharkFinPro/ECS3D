@@ -11,6 +11,7 @@
 #include <Protocol.h>
 #include <cstdint>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -313,4 +314,52 @@ TEST(PermittedViewCamera, EmptyOrMalformedRequestsAreEmptyEvenForAnEditor)
     EXPECT_TRUE(permittedViewCamera(*scene.objectManager, 1, "", editor).empty());
     EXPECT_TRUE(permittedViewCamera(*scene.objectManager, 1, "not-a-uuid", editor).empty());
   }
+}
+
+TEST(PlayerControllerComponent, LoadFromJSONReadsTheSlotAndDefaultsToZeroWhenAbsent)
+{
+  PlayerController controller;
+  controller.setPlayerSlot(5);
+
+  controller.loadFromJSON(nlohmann::json{ { "type", "PlayerController" }, { "playerSlot", 3 } });
+  EXPECT_EQ(controller.getPlayerSlot(), 3);
+
+  controller.loadFromJSON(nlohmann::json{ { "type", "PlayerController" } });
+  EXPECT_EQ(controller.getPlayerSlot(), 0);
+}
+
+TEST(PlayerControllerComponent, SerializeWritesTheAuthoredSlotNotTheLiveOne)
+{
+  PlayerController controller;
+  controller.setPlayerSlot(2);
+  controller.start();
+  controller.setPlayerSlot(6);
+
+  ASSERT_EQ(controller.getPlayerSlot(), 6);
+  EXPECT_EQ(controller.serialize().at("playerSlot"), 2);
+  EXPECT_EQ(controller.serialize().at("type"), "PlayerController");
+}
+
+TEST(PlayerControllerComponent, PackAndUnpackRoundTripTheCurrentSlot)
+{
+  PlayerController source;
+  source.setPlayerSlot(2);
+  source.start();
+  source.setPlayerSlot(4);
+
+  ASSERT_EQ(source.serialize().at("playerSlot"), 2);
+
+  net::Message message(net::MessageType::objectSpawned);
+  source.pack(message);
+
+  net::MessageReader reader(message);
+  EXPECT_EQ(reader.read<ComponentType>(), ComponentType::playerController);
+
+  PlayerController target;
+  target.setPlayerSlot(9);
+  target.unpack(reader);
+
+  // The wire carries the live slot, which differs from the authored one serialize() writes.
+  EXPECT_EQ(target.getPlayerSlot(), 4);
+  EXPECT_EQ(reader.remaining(), 0u);
 }

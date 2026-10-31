@@ -44,6 +44,7 @@ add_executable(${PROJECT_NAME}
   ConsoleViewTest.cpp
   KeyHoldRepeatTest.cpp
   AssetReferencesTest.cpp
+  AssetWireTypeTest.cpp
   UnsavedChangesTest.cpp
   AssetFilterTest.cpp
   ConsolePanelLayoutTest.cpp
